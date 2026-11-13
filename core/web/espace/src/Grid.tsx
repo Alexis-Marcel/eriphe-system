@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Adapter } from "./a2ui/adapter";
+import { OnStage } from "./a2ui/code";
 import { SurfaceView } from "./a2ui/Surfaces";
 import { chipLabel, shownChips, surfaceTitle } from "./chips";
 import { useWords } from "./i18n";
@@ -289,7 +290,9 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
                 </div>
                 <div className="mod-body">
                   <div className="mod-fit">
-                    <SurfaceView surface={byID.get(tile.id)!} />
+                    <OnStage.Provider value={focus}>
+                      <SurfaceView surface={byID.get(tile.id)!} />
+                    </OnStage.Provider>
                   </div>
                 </div>
                 {tile.size !== "s" && (tile.why || tile.related) && <p className="why">{tile.why || t("espace.related")}</p>}

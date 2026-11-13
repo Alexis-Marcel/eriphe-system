@@ -822,6 +822,107 @@
   {
    "version": "1.0",
    "createSurface": {
+    "surfaceId": "gallery-review",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Relire : la terrasse agrandie",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "about",
+       "diff",
+       "checks",
+       "sum",
+       "open",
+       "links"
+      ]
+     },
+     {
+      "id": "about",
+      "component": "Markdown",
+      "text": "Sam propose **deux mètres carrés de plus** et un parasol. Rien d'autre ne change."
+     },
+     {
+      "id": "diff",
+      "component": "Code",
+      "mode": "diff",
+      "text": {
+       "@path": "/diff"
+      }
+     },
+     {
+      "id": "sum",
+      "component": "Code",
+      "language": "python",
+      "text": "surface = 26\nprice = surface * 32.5\nprint(price)"
+     },
+     {
+      "id": "checks",
+      "component": "Timeline",
+      "items": {
+       "@path": "/checks"
+      }
+     },
+     {
+      "id": "open",
+      "component": "Link",
+      "label": "Ouvrir dans le suivi du projet",
+      "url": "https://example.org/sam/terrasse/changes/12"
+     },
+     {
+      "id": "links",
+      "component": "List",
+      "direction": "horizontal",
+      "children": {
+       "path": "/related",
+       "componentId": "related"
+      }
+     },
+     {
+      "id": "related",
+      "component": "Link",
+      "url": {
+       "@path": "url"
+      }
+     }
+    ],
+    "dataModel": {
+     "diff": "diff --git a/terrasse/plan.md b/terrasse/plan.md\nindex 3b18e51..a9c2f04 100644\n--- a/terrasse/plan.md\n+++ b/terrasse/plan.md\n@@ -1,5 +1,5 @@\n # Terrasse\n \n-Dalles : 24 m²\n+Dalles : 26 m²\n+Parasol : pied lesté de 40 kg\n Bordures : 18 m\n--- Ancienne note\n\\ No newline at end of file",
+     "checks": [
+      {
+       "label": "Orthographe",
+       "state": "done"
+      },
+      {
+       "label": "Plan à l'échelle",
+       "state": "done"
+      },
+      {
+       "label": "Accord du voisin",
+       "state": "pending",
+       "detail": "Demandé hier"
+      }
+     ],
+     "related": [
+      {
+       "url": "https://example.org/sam/terrasse"
+      },
+      {
+       "url": "https://docs.example.org/dalles"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
     "surfaceId": "gallery-pending",
     "catalogId": "urn:eriphe:a2ui:workspace:v1",
     "components": [
@@ -1651,6 +1752,107 @@
     ],
     "dataModel": {
      "updated": "2026-11-12T08:00:00+01:00"
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-review",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Review: the bigger terrace",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "about",
+       "diff",
+       "checks",
+       "sum",
+       "open",
+       "links"
+      ]
+     },
+     {
+      "id": "about",
+      "component": "Markdown",
+      "text": "Sam suggests **two more square metres** and a parasol. Nothing else changes."
+     },
+     {
+      "id": "diff",
+      "component": "Code",
+      "mode": "diff",
+      "text": {
+       "@path": "/diff"
+      }
+     },
+     {
+      "id": "sum",
+      "component": "Code",
+      "language": "python",
+      "text": "surface = 26\nprice = surface * 32.5\nprint(price)"
+     },
+     {
+      "id": "checks",
+      "component": "Timeline",
+      "items": {
+       "@path": "/checks"
+      }
+     },
+     {
+      "id": "open",
+      "component": "Link",
+      "label": "Open in the project's tracker",
+      "url": "https://example.org/sam/terrasse/changes/12"
+     },
+     {
+      "id": "links",
+      "component": "List",
+      "direction": "horizontal",
+      "children": {
+       "path": "/related",
+       "componentId": "related"
+      }
+     },
+     {
+      "id": "related",
+      "component": "Link",
+      "url": {
+       "@path": "url"
+      }
+     }
+    ],
+    "dataModel": {
+     "diff": "diff --git a/terrace/plan.md b/terrace/plan.md\nindex 3b18e51..a9c2f04 100644\n--- a/terrace/plan.md\n+++ b/terrace/plan.md\n@@ -1,5 +1,5 @@\n # Terrace\n \n-Slabs: 24 m²\n+Slabs: 26 m²\n+Parasol: 40 kg weighted base\n Edging: 18 m\n--- Old note\n\\ No newline at end of file",
+     "checks": [
+      {
+       "label": "Spelling",
+       "state": "done"
+      },
+      {
+       "label": "Plan to scale",
+       "state": "done"
+      },
+      {
+       "label": "Neighbour's agreement",
+       "state": "pending",
+       "detail": "Asked yesterday"
+      }
+     ],
+     "related": [
+      {
+       "url": "https://example.org/sam/terrasse"
+      },
+      {
+       "url": "https://docs.example.org/dalles"
+      }
+     ]
     }
    }
   },

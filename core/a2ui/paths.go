@@ -22,6 +22,9 @@ type Bound struct {
 	// Media: the value is the address of an image or a video the page
 	// would load (Image's url).
 	Media bool
+	// Link: the value is the address a Link opens (its url): it must be an
+	// address as a whole, never one built from the data (links.go).
+	Link bool
 }
 
 // mediaProps are the properties whose value is an address the page loads,
@@ -83,7 +86,7 @@ func (c *Catalog) BoundPaths(components json.RawMessage) []Bound {
 					prop = b.loc[1]
 				}
 				out = append(out, Bound{Path: resolvePath(b.path, scope), Component: id, Type: name, Prop: prop,
-					At: pointer(b.loc), Media: IsMedia(name, prop) && len(b.loc) == 3})
+					At: pointer(b.loc), Media: IsMedia(name, prop) && len(b.loc) == 3, Link: IsLink(name, prop) && len(b.loc) == 3})
 			}
 			for _, e := range edges[id] {
 				if e.tmpl {

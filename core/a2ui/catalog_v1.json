@@ -5,7 +5,7 @@
   "title": "Eriphe workspace catalog",
   "description": "The shapes a surface of Eriphe's workspace is made of. Shapes only: no component belongs to a tool.",
   "catalogId": "urn:eriphe:a2ui:workspace:v1",
-  "instructions": "Une surface est une tuile de l'espace de travail : un titre, et dedans des composants de ce catalogue. Elle s'écrit comme une liste plate de composants ; chacun a un `id` unique (lettres, chiffres et `_`, ni tiret ni chiffre au début), un `component` (un nom ci-dessous) et ses propriétés. Un seul composant a l'id `root` : la racine. Un composant désigne ses enfants par leur id (`child`, `children`, `tabs`), jamais en les écrivant dedans.\n\n**Valeurs.** Une propriété de type texte, nombre, booléen ou valeur prend un littéral (`\"Bonjour\"`, `42`), une liaison vers les données de la surface `{\"@path\": \"/ventes/total\"}` (un pointeur JSON) ou un appel de fonction `{\"@call\": \"formatNumber\", \"args\": {\"value\": {\"@path\": \"/total\"}}}`. Une propriété marquée « ou liaison » prend une liste littérale ou une liaison vers une liste de même forme.\n\n**Listes répétées.** `children` prend une liste d'ids `[\"a\", \"b\"]` ou un modèle `{\"path\": \"/mails\", \"componentId\": \"ligne\"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{\"@path\": \"sujet\"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.\n\n**Règles.**\n- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day).\n- Une surface dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.\n- Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et la surface reste à jour.\n- Un bouton ne fait qu'une action, d'une liste fermée ; il n'écrit jamais dans un outil. `ask` demande quelque chose à Eriphe avec tes propres mots : `{\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Relance la sauvegarde\"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code y ajoute la surface et le bouton, et Eriphe le reçoit comme un message de l'utilisateur. Les noms locaux `open`, `expand` et `tab` sont les gestes de la page, sans contexte : un bouton n'en a presque jamais besoin. Une proposition se montre avec un composant Proposal, qui seul envoie le oui ou le non (`answer`) ; jamais un bouton. Tout autre nom est refusé.\n- N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.\n\n## Exemple : des mails, liés aux données\n```json\n[\n  {\"id\": \"root\", \"component\": \"Card\", \"title\": \"Mails à traiter\", \"child\": \"mails\"},\n  {\"id\": \"mails\", \"component\": \"List\", \"children\": {\"path\": \"/messages\", \"componentId\": \"mail\"}, \"emptyText\": \"Rien à traiter\"},\n  {\"id\": \"mail\", \"component\": \"Message\", \"from\": {\"@path\": \"from\"}, \"date\": {\"@path\": \"date\"}, \"subject\": {\"@path\": \"subject\"}, \"excerpt\": {\"@path\": \"snippet\"}}\n]\n```\nDonnées : `{\"messages\": [{\"from\": \"Sam\", \"date\": \"2026-11-12T08:10:00Z\", \"subject\": \"Devis\", \"snippet\": \"Voici le devis…\"}]}`\n\n## Exemple : des chiffres composés une fois\n```json\n[\n  {\"id\": \"root\", \"component\": \"Row\", \"children\": [\"cpu\", \"disque\"]},\n  {\"id\": \"cpu\", \"component\": \"Metric\", \"label\": \"Processeur\", \"value\": 37, \"unit\": \"%\", \"delta\": -5, \"better\": \"down\"},\n  {\"id\": \"disque\", \"component\": \"Metric\", \"label\": \"Disque libre\", \"value\": 1.2, \"unit\": \"To\"}\n]\n```",
+  "instructions": "Une surface est une tuile de l'espace de travail : un titre, et dedans des composants de ce catalogue. Elle s'écrit comme une liste plate de composants ; chacun a un `id` unique (lettres, chiffres et `_`, ni tiret ni chiffre au début), un `component` (un nom ci-dessous) et ses propriétés. Un seul composant a l'id `root` : la racine. Un composant désigne ses enfants par leur id (`child`, `children`, `tabs`), jamais en les écrivant dedans.\n\n**Valeurs.** Une propriété de type texte, nombre, booléen ou valeur prend un littéral (`\"Bonjour\"`, `42`), une liaison vers les données de la surface `{\"@path\": \"/ventes/total\"}` (un pointeur JSON) ou un appel de fonction `{\"@call\": \"formatNumber\", \"args\": {\"value\": {\"@path\": \"/total\"}}}`. Une propriété marquée « ou liaison » prend une liste littérale ou une liaison vers une liste de même forme.\n\n**Listes répétées.** `children` prend une liste d'ids `[\"a\", \"b\"]` ou un modèle `{\"path\": \"/mails\", \"componentId\": \"ligne\"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{\"@path\": \"sujet\"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.\n\n**Règles.**\n- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day ; un lien vers une page : Link ; du code ou un diff : Code).\n- Une surface dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.\n- Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et la surface reste à jour.\n- Un bouton ne fait qu'une action, d'une liste fermée ; il n'écrit jamais dans un outil. `ask` demande quelque chose à Eriphe avec tes propres mots : `{\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Relance la sauvegarde\"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code y ajoute la surface et le bouton, et Eriphe le reçoit comme un message de l'utilisateur. Les noms locaux `open`, `expand` et `tab` sont les gestes de la page, sans contexte : un bouton n'en a presque jamais besoin. Une proposition se montre avec un composant Proposal, qui seul envoie le oui ou le non (`answer`) ; jamais un bouton. Tout autre nom est refusé.\n- Un Link montre son adresse en clair et ne s'ouvre que si l'utilisateur clique. Son `url` est une adresse http(s) écrite telle quelle, ou une liaison vers un champ que l'outil rend déjà comme une adresse (`{\"@path\": \"url\"}` dans un modèle) ; jamais une adresse construite à partir des données : pas de formatString, rien d'ajouté à la requête, pas d'identifiant ni de mot de passe dans l'adresse. Une adresse qui ne suit pas cette règle est refusée, ou n'est pas montrée.\n- Du code se montre avec Code, tel quel ; un diff unifié avec `\"mode\": \"diff\"`. Pour relire des modifications : leur description (Markdown), le diff (Code), les vérifications (Timeline) et un Link « Ouvrir dans … » vers leur page, pour aller plus loin là où elles sont.\n- N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.\n\n## Exemple : des mails, liés aux données\n```json\n[\n  {\"id\": \"root\", \"component\": \"Card\", \"title\": \"Mails à traiter\", \"child\": \"mails\"},\n  {\"id\": \"mails\", \"component\": \"List\", \"children\": {\"path\": \"/messages\", \"componentId\": \"mail\"}, \"emptyText\": \"Rien à traiter\"},\n  {\"id\": \"mail\", \"component\": \"Message\", \"from\": {\"@path\": \"from\"}, \"date\": {\"@path\": \"date\"}, \"subject\": {\"@path\": \"subject\"}, \"excerpt\": {\"@path\": \"snippet\"}}\n]\n```\nDonnées : `{\"messages\": [{\"from\": \"Sam\", \"date\": \"2026-11-12T08:10:00Z\", \"subject\": \"Devis\", \"snippet\": \"Voici le devis…\"}]}`\n\n## Exemple : des chiffres composés une fois\n```json\n[\n  {\"id\": \"root\", \"component\": \"Row\", \"children\": [\"cpu\", \"disque\"]},\n  {\"id\": \"cpu\", \"component\": \"Metric\", \"label\": \"Processeur\", \"value\": 37, \"unit\": \"%\", \"delta\": -5, \"better\": \"down\"},\n  {\"id\": \"disque\", \"component\": \"Metric\", \"label\": \"Disque libre\", \"value\": 1.2, \"unit\": \"To\"}\n]\n```",
   "components": {
     "Text": {
       "type": "object",
@@ -45,6 +45,33 @@
         "name": {"$ref": "#/$defs/IconName"}
       },
       "required": ["component", "name"]
+    },
+    "Link": {
+      "type": "object",
+      "description": "Un lien vers une page web, son adresse montrée en clair ; il s'ouvre dans un nouvel onglet quand l'utilisateur clique, jamais de lui-même.",
+      "properties": {
+        "component": {"const": "Link"},
+        "url": {"$ref": "#/$defs/LinkUrl", "description": "L'adresse http(s), écrite telle quelle, ou une liaison vers un champ qui est déjà une adresse ; jamais construite."},
+        "label": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Ce que le lien ouvre, en quelques mots ; son hôte se voit à côté."}
+      },
+      "required": ["component", "url"],
+      "examples": [
+        {"id": "ouvrir", "component": "Link", "label": "Ouvrir la page du projet", "url": "https://example.org/projets/terrasse"}
+      ]
+    },
+    "Code": {
+      "type": "object",
+      "description": "Du code ou un texte à chasse fixe, tel quel ; en mode diff, un diff unifié : ses fichiers, ses blocs @@, ses lignes ajoutées et retirées.",
+      "properties": {
+        "component": {"const": "Code"},
+        "text": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Le code, ou le diff unifié entier."},
+        "language": {"type": "string", "description": "Le langage, montré en étiquette (« go », « json »)."},
+        "mode": {"type": "string", "enum": ["code", "diff"], "default": "code", "description": "diff pour un diff unifié ; code par défaut."}
+      },
+      "required": ["component", "text"],
+      "examples": [
+        {"id": "modif", "component": "Code", "mode": "diff", "text": {"@path": "/diff"}}
+      ]
     },
     "Row": {
       "type": "object",
@@ -394,6 +421,8 @@
         {"$ref": "#/components/Markdown"},
         {"$ref": "#/components/Image"},
         {"$ref": "#/components/Icon"},
+        {"$ref": "#/components/Link"},
+        {"$ref": "#/components/Code"},
         {"$ref": "#/components/Row"},
         {"$ref": "#/components/Column"},
         {"$ref": "#/components/List"},
@@ -433,6 +462,12 @@
       "type": "string",
       "enum": ["start", "center", "end", "stretch"],
       "default": "stretch"
+    },
+    "LinkUrl": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"$ref": "common_types.json#/$defs/DataBinding"}
+      ]
     },
     "TextOrNumber": {
       "anyOf": [

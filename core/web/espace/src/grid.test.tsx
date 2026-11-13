@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAdapter, type Adapter, type Message } from "./a2ui/adapter";
 import { CATALOG } from "./a2ui/catalog";
+import { GRID_LINES } from "./a2ui/code";
 import { Grid, stacked, type Spot } from "./Grid";
 import type { Layout } from "./types";
 
@@ -314,5 +315,33 @@ describe("a tile and its content", () => {
     await render({ ...pairs, items: pairs.items.map((i) => ({ ...i, h: 2 })) });
     expect(pay.classList.contains("cut")).toBe(false);
     expect(pay.querySelectorAll(".fit-out")).toHaveLength(0);
+  });
+
+  it("shows a long code's first lines whole on the grid, and all of it open, where it scrolls", async () => {
+    const lines = Array.from({ length: GRID_LINES + 20 }, (_, i) => `ligne ${i + 1}`);
+    const code = (id: string): Message => ({
+      version: "1.0",
+      createSurface: { surfaceId: id, catalogId: CATALOG.id, components: [{ id: "root", component: "Code", language: "text", text: lines.join("\n") }] },
+    });
+    await act(async () => adapter.applyMessages([code("pair"), code("more")]));
+    // Each line shown is 20 px; the body holds 60.
+    const shown = (fit: HTMLElement) => 20 * Array.from(fit.querySelectorAll(".a2-code-line")).filter((b) => !b.closest(".fit-out")).length;
+    sizes({ canvas: 720, tile: 90, body: 60, fit: shown });
+    await render({ ...pairs, focus: "more" });
+    await render({ ...pairs, focus: "more", items: pairs.items.map((i) => ({ ...i, why: "Du code" })) });
+    // On the grid: GRID_LINES drawn at most, the rest counted; the last hidden whole, the tile says so.
+    const grid = tile("pair")!;
+    expect(grid.querySelectorAll(".a2-code-line")).toHaveLength(GRID_LINES);
+    expect(grid.querySelector(".a2-code-rest")?.textContent).toBe("espace.a2.code.rest");
+    expect(grid.classList.contains("cut")).toBe(true);
+    expect(Array.from(grid.querySelectorAll(".a2-code-line:not(.fit-out)")).map((l) => l.textContent)).toEqual(["ligne 1", "ligne 2", "ligne 3"]);
+    expect(grid.querySelector(".mod-body > .mod-fit .a2-code-body")).not.toBeNull();
+    // Open: every line, none hidden, nothing counted; its body is the one that scrolls (espace.css, .mod.focus).
+    const open = tile("more")!;
+    expect(open.classList.contains("focus")).toBe(true);
+    expect(open.querySelectorAll(".a2-code-line")).toHaveLength(lines.length);
+    expect(open.querySelectorAll(".fit-out")).toHaveLength(0);
+    expect(open.querySelector(".a2-code-rest")).toBeNull();
+    expect(open.classList.contains("cut")).toBe(false);
   });
 });

@@ -373,6 +373,32 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .a2-fit-cover { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
 .a2-image-off { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px dashed #1a1f2733; border-radius: 10px; font-size: 13px; color: var(--ink-soft); }
 
+/* Link: a page outside, its address in clear beside the label. */
+.a2-link { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px 6px; min-width: 0; max-width: 100%; font-size: 14px; color: #2b5a94; text-decoration: none; }
+.a2-link > .a2-icon { align-self: center; }
+.a2-link-label { text-decoration: underline; text-underline-offset: 3px; }
+.a2-link-host { min-width: 0; font-size: 12px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.a2-link:not(:has(.a2-link-label)) .a2-link-host { font-size: 13px; color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.a2-link:hover .a2-link-label { text-decoration-thickness: 2px; }
+.a2-link-off { color: var(--ink-soft); }
+
+/* Code: as it is, one block per line (a tile hides its last lines whole).
+   A tile never scrolls: long lines wrap. Open, they keep their place and
+   the block scrolls sideways. A diff colours its lines by class. */
+.a2-code { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.a2-code-lang { align-self: flex-start; padding: 0 8px; border-radius: 999px; font: 11px/18px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-soft); background: #1a1f2710; }
+.a2-code-body { margin: 0; padding: 6px 0; border-radius: 10px; background: #1a1f270b; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
+.a2-code-body > code { display: block; font: inherit; }
+.a2-code-line { display: block; min-height: 1.45em; padding: 0 10px; }
+.mod.focus .a2-code-body { white-space: pre; overflow-wrap: normal; overflow-x: auto; scrollbar-width: thin; }
+.mod.focus .a2-code-body > code { min-width: max-content; }
+.a2-diff-file { font-weight: 650; background: #1a1f2712; }
+.a2-diff-hunk { color: #2b5a94; background: color-mix(in oklab, var(--decision) 14%, transparent); }
+.a2-diff-add { background: color-mix(in oklab, var(--calm) 34%, transparent); }
+.a2-diff-del { background: color-mix(in oklab, var(--late) 18%, transparent); }
+.a2-diff-note { color: var(--ink-soft); font-style: italic; }
+.a2-code-rest { margin: 0; font-size: 12px; color: var(--ink-soft); }
+
 /* Fields: what the user enters goes to the surface's data. */
 .a2-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .a2-field-label { padding: 0; font-size: 12px; font-weight: 500; color: var(--ink-soft); }

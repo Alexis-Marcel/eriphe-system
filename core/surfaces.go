@@ -350,6 +350,9 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 	if errs := actionGuard(in.ID, in.Components, len(in.Tainted) > 0); len(errs) > 0 {
 		return surface{}, errs, nil
 	}
+	if errs := a2ui.CheckLinks(in.ID, in.Components); len(errs) > 0 {
+		return surface{}, errs, nil
+	}
 	// The author's own surface only (the brain writes any, which stays its
 	// author's); the id of another's is taken.
 	if old, err := c.surface(in.ID); err == nil && !mayChange(author, old.Author) {
@@ -724,6 +727,10 @@ func (c *core) checkBindings(id string, comps json.RawMessage, data map[string]a
 		errs = append(errs, a2ui.ValidationError{Code: a2ui.CodeValidationFailed, SurfaceID: id, Path: "/components" + b.At, Message: msg})
 	}
 	for _, b := range a2ui.Eriphe().BoundPaths(comps) {
+		if b.Link && !linksOK(valuesAt(data, tokens(b.Path))) {
+			fail(b, fmt.Sprintf("a Link opens a field that is already an http(s) address as a whole, and %s holds something else: bind the address a tool gives, or write it as it is", b.Path))
+			continue
+		}
 		ptr, rest := sourceCovering(b.Path, srcs)
 		if ptr == "" {
 			if ok, hint := lookup(data, tokens(b.Path), b.List); !ok {
@@ -752,6 +759,17 @@ func (c *core) checkBindings(id string, comps json.RawMessage, data map[string]a
 		}
 	}
 	return errs
+}
+
+// linksOK tells whether the values bound to a Link's url are addresses it
+// may open (a2ui.LinkURLOK), or empty: no link.
+func linksOK(vs []any) bool {
+	for _, v := range vs {
+		if u, ok := v.(string); (!ok && v != nil) || (ok && u != "" && !a2ui.LinkURLOK(u)) {
+			return false
+		}
+	}
+	return true
 }
 
 // lookup tells whether a path leads somewhere in v ("*": in an item of a
@@ -1303,6 +1321,10 @@ type surfaceViewed struct {
 // the surface is tainted: then a model that read something from outside
 // may have written it, to carry what it read out in its address (A2UI
 // #4045), and it is dropped. Anything but http(s) is dropped.
+//
+// A Link's address goes as it is, never through core: it opens only on
+// the user's click, shown in clear. One that is not an address a Link may
+// open (a2ui.LinkURLOK; a source may give anything) goes as "": no link.
 func (c *core) surfaceView(s surface) surfaceViewed {
 	var v surfaceViewed
 	var list []map[string]any
@@ -1313,6 +1335,9 @@ func (c *core) surfaceView(s surface) surfaceViewed {
 		for prop, val := range comp {
 			if str, ok := val.(string); ok && a2ui.IsMedia(kind, prop) {
 				comp[prop] = c.mediaOrDrop(str, authorOK)
+			}
+			if str, ok := val.(string); ok && a2ui.IsLink(kind, prop) {
+				comp[prop] = linkOrDrop(str)
 			}
 		}
 	}
@@ -1326,6 +1351,9 @@ func (c *core) surfaceView(s surface) surfaceViewed {
 		v.data = map[string]any{}
 	}
 	for _, b := range a2ui.Eriphe().BoundPaths(s.Components) {
+		if b.Link {
+			rewriteAt(v.data, tokens(b.Path), linkOrDrop)
+		}
 		if !b.Media {
 			continue
 		}
@@ -1334,6 +1362,14 @@ func (c *core) surfaceView(s surface) surfaceViewed {
 		rewriteAt(v.data, tokens(b.Path), func(u string) string { return c.mediaOrDrop(u, ok) })
 	}
 	return v
+}
+
+// linkOrDrop is a Link's address as the page gets it: as it is, or "".
+func linkOrDrop(u string) string {
+	if a2ui.LinkURLOK(u) {
+		return u
+	}
+	return ""
 }
 
 // rewriteAt applies fn to the strings at a path, "*" for each item.
