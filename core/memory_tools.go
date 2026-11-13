@@ -27,9 +27,7 @@ type memoryView struct {
 	When       string   `json:"when,omitempty"`       // an episode's date
 	ValidFrom  string   `json:"valid_from,omitempty"` // a fact's
 	ValidTo    string   `json:"valid_to,omitempty"`   // set when it is no longer true
-	Due        string   `json:"due,omitempty"`
 	State      string   `json:"state,omitempty"`
-	Overdue    bool     `json:"overdue,omitempty"`
 	Recorded   string   `json:"recorded"`
 	Source     string   `json:"source"`
 	Trust      string   `json:"trust"`
@@ -46,7 +44,7 @@ func viewMemory(x *Memory, now time.Time) memoryView {
 		return t.Local().Format("2006-01-02 15:04")
 	}
 	v := memoryView{ID: x.ID, Kind: x.Kind, Subject: x.Subject, Text: x.Text, Links: x.Links, Recorded: day(x.RecordedAt),
-		Trust: x.Trust, Pinned: x.Pinned, State: x.State, Superseded: x.SupersededBy, Due: day(x.DueAt), ValidTo: day(x.ValidTo)}
+		Trust: x.Trust, Pinned: x.Pinned, State: x.State, Superseded: x.SupersededBy, ValidTo: day(x.ValidTo)}
 	v.Source = x.SourceKind
 	if x.SourceRef != "" {
 		v.Source += " " + x.SourceRef
@@ -59,7 +57,6 @@ func viewMemory(x *Memory, now time.Time) memoryView {
 	if x.Status != memActive {
 		v.Status = x.Status
 	}
-	v.Overdue = x.Kind == kindCommitment && x.State == stateOpen && !x.DueAt.IsZero() && x.DueAt.Before(now)
 	return v
 }
 
@@ -96,13 +93,12 @@ func parseEnd(s string) (time.Time, error) {
 
 type rememberIn struct {
 	Text       string   `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact (not as an instruction)"`
-	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, commitment, lesson, decision (a choice and its reason), progress (the current state of a project or goal: done, under way, blocked, left) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
+	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, lesson, decision (a choice and its reason), progress (the current state of a project or goal: done, under way, blocked, left) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
 	Subject    string   `json:"subject,omitempty" jsonschema:"owner, person:<slug>, client:<slug>, project:<name>, home, workspace (how the user wants the composed workspace: a preference), or a short free subject"`
 	Links      []string `json:"links,omitempty" jsonschema:"where the details are: vault wikilinks or paths, URLs without tokens; never copy the vault"`
 	ValidFrom  string   `json:"valid_from,omitempty" jsonschema:"when it became true, YYYY-MM-DD; now by default"`
 	ValidTo    string   `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD (the whole day) or YYYY-MM-DDTHH:MM; required for a situation"`
 	OccurredAt string   `json:"occurred_at,omitempty" jsonschema:"for an episode, when it happened; now by default"`
-	DueAt      string   `json:"due_at,omitempty" jsonschema:"for a commitment, when it is due"`
 	Supersedes int64    `json:"supersedes,omitempty" jsonschema:"id of the memory this one replaces: it is kept, dated, never overwritten"`
 	SourceRef  string   `json:"source_ref,omitempty" jsonschema:"the message it comes from: msg:N for the user's message #N. Required for profile, preference and lesson"`
 	Keywords   string   `json:"keywords,omitempty" jsonschema:"a few other words someone could use to look for it (synonyms, variants: 'voiture auto bagnole'), indexed with the text"`
@@ -130,8 +126,7 @@ type updateIn struct {
 	Subject    *string   `json:"subject,omitempty"`
 	Links      *[]string `json:"links,omitempty"`
 	ValidTo    string    `json:"valid_to,omitempty" jsonschema:"when it stopped being true, YYYY-MM-DD, or 'now'"`
-	DueAt      string    `json:"due_at,omitempty"`
-	State      string    `json:"state,omitempty" jsonschema:"for a commitment: open, done or dropped; for a progress card: active, blocked, done or paused"`
+	State      string    `json:"state,omitempty" jsonschema:"for a progress card: active, blocked, done or paused"`
 	Pinned     *bool     `json:"pinned,omitempty" jsonschema:"in the profile or not; needs source_ref"`
 	Keywords   *string   `json:"keywords,omitempty" jsonschema:"other words to find it by"`
 	Importance *int      `json:"importance,omitempty" jsonschema:"1 to 5"`
@@ -154,7 +149,7 @@ func registerMemoryTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in recallIn) (map[string]any, error) {
 			return c.brainRecall(in)
 		})
-	tool(s, "update_memory", "Correct a memory in place (a typo, a wrong subject), close a commitment (state done or dropped), or say it is no longer true (valid_to). Changes of the profile, preferences and lessons need the user's message (source_ref).",
+	tool(s, "update_memory", "Correct a memory in place (a typo, a wrong subject), move a progress card (state), or say it is no longer true (valid_to). Changes of the profile, preferences and lessons need the user's message (source_ref).",
 		func(ctx context.Context, in updateIn) (map[string]any, error) {
 			return c.brainUpdate(in)
 		})
@@ -287,18 +282,6 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	if c.mem == nil {
 		return nil, errMemoryOff
 	}
-	// What is owed is an intention now, with its lifecycle.
-	if strings.TrimSpace(in.Kind) == kindCommitment && in.Supersedes != 0 {
-		return nil, errors.New("what is owed is an intention: change it with update_intention")
-	}
-	if strings.TrimSpace(in.Kind) == kindCommitment {
-		out, err := c.brainIntend(intendIn{Text: in.Text, Subject: in.Subject, DueAt: in.DueAt, SourceRef: in.SourceRef})
-		if err == nil {
-			note, _ := out["note"].(string)
-			out["note"] = strings.TrimSpace(note + " Recorded as an intention: use intend, intentions and update_intention for what is owed.")
-		}
-		return out, err
-	}
 	// How the user wants the workspace is a preference the composer reads,
 	// whatever its words (workspace.go).
 	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation && normalizeSubject(in.Subject) != workspaceSubject {
@@ -314,9 +297,6 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 		return nil, err
 	}
 	if x.OccurredAt, err = parseWhen(in.OccurredAt); err != nil {
-		return nil, err
-	}
-	if x.DueAt, err = parseWhen(in.DueAt); err != nil {
 		return nil, err
 	}
 	scan := scanMemoryText(x.Text, x.Subject, strings.Join(x.Links, "\n"), x.Keywords)
@@ -407,13 +387,6 @@ func (c *core) updatePatch(in updateIn) (memoryPatch, error) {
 			}
 		}
 		p.ValidTo = &t
-	}
-	if in.DueAt != "" {
-		t, err := parseWhen(in.DueAt)
-		if err != nil {
-			return p, err
-		}
-		p.DueAt = &t
 	}
 	return p, nil
 }

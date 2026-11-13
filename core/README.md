@@ -4426,10 +4426,10 @@ are never shown back nor logged.
 
 Eriphe's own memory, separate from the vault, in `memory.db` next to the database (SQLite, full
 text search with FTS5, accents ignored). It points at the vault (`links`) rather than copying it.
-A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `commitment`,
-`lesson`, `decision`, `progress`, `situation`), a subject (`owner`, `person:<slug>`, `client:<slug>`,
+A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `lesson`,
+`decision`, `progress`, `situation`; what is owed is an intention, never a memory), a subject (`owner`, `person:<slug>`, `client:<slug>`,
 `project:<name>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
-what is temporary; `occurred_at` for an episode; `due_at` and `state` for a commitment), where it
+what is temporary; `occurred_at` for an episode; `state` for a progress card), where it
 comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`), a trust level (`owner`,
 `first_party`, `external`), and for what the extraction derived a `basis`: `stated` (said in so
 many words), `inferred` (deduced) or `ambiguous`, with a matching confidence (0.9, 0.7, 0.3). A
@@ -4481,7 +4481,8 @@ is still due; never periodically. An intention drawn from external content stays
 the user approves it; approved, it may remind, never act: the wake turn that reads it is tainted
 (`intention.external`), and so is a turn whose `intentions` tool returns one. The Memory page lists
 them (Intentions) with done, snooze (an hour, tomorrow 9:00), cancel and reopen; proposed ones are
-approved or rejected in À valider (a card in the conversation). A `commitment` written becomes an intention.
+approved or rejected in À valider (a card in the conversation). `remember` refuses
+what is owed (`commitment`, `promise`, `reminder`…) with a hint to `intend`.
 An assistant whose spec lists its `triggers` gets the clock only if `clock` is among them.
 
 **Search.** The full-text index holds each memory's text, subject, `keywords` (other words to find
@@ -4523,7 +4524,7 @@ as its own conclusion.
 
 **What it knows about the user.** The Memory page opens on "Ce que Jarvis sait de toi" (the
 assistant's name): the profile and the other current memories about the user (subject `owner`,
-episodes and commitments aside), the pinned ones first and marked, with the cards' usual actions,
+episodes aside), the pinned ones first and marked, with the cards' usual actions,
 and the button that does the [first-run interview](#workspace-web) again. The list below leaves them out
 (each memory shows once); a search or a filter finds them there too.
 

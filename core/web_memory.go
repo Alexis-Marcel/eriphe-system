@@ -34,7 +34,6 @@ func (w *web) memoryRoutes(mux *webMux) {
 	mux.Handle("POST /memory/{id}", w.auth(w.handleMemoryEdit))
 	mux.Handle("POST /memory/{id}/pin", w.auth(w.handleMemoryPin))
 	mux.Handle("POST /memory/{id}/obsolete", w.auth(w.handleMemoryObsolete))
-	mux.Handle("POST /memory/{id}/state", w.auth(w.handleMemoryState))
 	mux.Handle("POST /memory/{id}/forget", w.auth(w.handleMemoryForget))
 	mux.Handle("POST /memory/{id}/restore", w.auth(w.handleMemoryRestore))
 	mux.Handle("POST /memory/{id}/approve", w.auth(w.handleMemoryApprove))
@@ -138,7 +137,6 @@ func (w *web) memCard(x *Memory, withSource bool) memCard {
 			c.FlagList = append(c.FlagList, f)
 		}
 	}
-	c.Overdue = x.Kind == kindCommitment && x.State == stateOpen && !x.DueAt.IsZero() && x.DueAt.Before(now)
 	if withSource {
 		c.SourceWho, c.SourceText, c.SourceLink = w.memorySource(x.SourceRef)
 	}
@@ -378,14 +376,6 @@ func (w *web) handleMemoryEdit(rw http.ResponseWriter, r *http.Request, s *sessi
 		return
 	}
 	p := memoryPatch{Text: &text, Subject: &subject, Links: &links, Kind: &kind}
-	if due := r.PostFormValue("due"); x.Kind == kindCommitment || kind == kindCommitment {
-		t, err := parseWhen(due)
-		if err != nil {
-			fail(err)
-			return
-		}
-		p.DueAt = &t
-	}
 	if _, err := w.c.mem.update(x.ID, p, "owner", ""); err != nil {
 		fail(err)
 		return
@@ -401,9 +391,6 @@ func (w *web) handleMemoryAdd(rw http.ResponseWriter, r *http.Request, s *sessio
 	x := &Memory{Kind: r.PostFormValue("kind"), Subject: r.PostFormValue("subject"), Text: r.PostFormValue("text"),
 		Links: formLinks(r.PostFormValue("links")), SourceKind: srcOwner, SourceRef: "workspace", Trust: trustOwner, Status: memActive,
 		Pinned: r.PostFormValue("pin") == "1"}
-	if due, err := parseWhen(r.PostFormValue("due")); err == nil {
-		x.DueAt = due
-	}
 	if err := ownerScan(x.Text, x.Subject, strings.Join(x.Links, "\n")); err != nil {
 		w.toast(rw, err.Error(), false)
 		return
@@ -463,23 +450,6 @@ func (w *web) handleMemoryObsolete(rw http.ResponseWriter, r *http.Request, s *s
 		return
 	}
 	w.cardAfter(rw, r, s, x.ID, "mem.obsoleted")
-}
-
-func (w *web) handleMemoryState(rw http.ResponseWriter, r *http.Request, s *session) {
-	x := w.memoryFor(rw, r)
-	if x == nil {
-		return
-	}
-	state := r.PostFormValue("state")
-	if x.Kind != kindCommitment || !containsStr([]string{stateOpen, stateDone, stateDropped}, state) {
-		http.Error(rw, "open, done or dropped, for a commitment", http.StatusBadRequest)
-		return
-	}
-	if _, err := w.c.mem.update(x.ID, memoryPatch{State: &state}, "owner", ""); err != nil {
-		w.toast(rw, err.Error(), false)
-		return
-	}
-	w.cardAfter(rw, r, s, x.ID, "mem.state."+state)
 }
 
 // gone answers an action after which the card leaves the list.
@@ -702,7 +672,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.subjectph":        "owner, person:paul, project:eriphe…",
 		"mem.links":            "Liens (un par ligne)",
 		"mem.linksph":          "[[Note du coffre]]",
-		"mem.due":              "Échéance",
 		"mem.pinit":            "Épingler au profil",
 		"mem.save":             "Enregistrer",
 		"mem.cancel":           "Annuler",
@@ -717,11 +686,7 @@ var memoryStrings = map[string]map[string]string{
 		"mem.restore":          "Restaurer",
 		"mem.approve":          "Approuver",
 		"mem.reject":           "Rejeter",
-		"mem.done":             "Fait",
-		"mem.drop":             "Abandonner",
 		"mem.st.done":          "Tenu",
-		"mem.st.dropped":       "Abandonné",
-		"mem.reopen":           "Rouvrir",
 		"mem.pinned":           "Épinglé au profil.",
 		"mem.unpinned":         "Retiré du profil.",
 		"mem.saved":            "Enregistré.",
@@ -733,9 +698,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.rejected":         "Rejeté.",
 		"mem.notactive":        "Seul un souvenir actif peut aller au profil.",
 		"mem.notproposed":      "Ce souvenir n'attend plus d'approbation.",
-		"mem.state.done":       "Engagement tenu.",
-		"mem.state.dropped":    "Engagement abandonné.",
-		"mem.state.open":       "Engagement rouvert.",
 		"mem.nothing":          "Rien de nouveau à extraire aujourd'hui.",
 		"mem.extracting":       "Extraction lancée (tâche %s).",
 		"mem.extract":          "Extraire aujourd'hui",
@@ -751,7 +713,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.recorded":         "Noté %s",
 		"mem.validfrom":        "vrai depuis le %s",
 		"mem.validto":          "plus vrai depuis le %s",
-		"mem.dueon":            "pour le %s",
 		"mem.overdue":          "En retard",
 		"mem.supersededby":     "remplacé par n°%d",
 		"mem.used":             "rappelé %d fois",
@@ -765,7 +726,6 @@ var memoryStrings = map[string]map[string]string{
 		"kind.fact":            "Fait",
 		"kind.person":          "Personne",
 		"kind.episode":         "Épisode",
-		"kind.commitment":      "Engagement",
 		"kind.lesson":          "Leçon",
 		"kind.decision":        "Décision",
 		"kind.progress":        "Avancement",
@@ -842,7 +802,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.subjectph":        "owner, person:paul, project:eriphe…",
 		"mem.links":            "Links (one per line)",
 		"mem.linksph":          "[[Vault note]]",
-		"mem.due":              "Due",
 		"mem.pinit":            "Pin to the profile",
 		"mem.save":             "Save",
 		"mem.cancel":           "Cancel",
@@ -857,11 +816,7 @@ var memoryStrings = map[string]map[string]string{
 		"mem.restore":          "Restore",
 		"mem.approve":          "Approve",
 		"mem.reject":           "Reject",
-		"mem.done":             "Done",
-		"mem.drop":             "Drop",
 		"mem.st.done":          "Kept",
-		"mem.st.dropped":       "Dropped",
-		"mem.reopen":           "Reopen",
 		"mem.pinned":           "Pinned to the profile.",
 		"mem.unpinned":         "Removed from the profile.",
 		"mem.saved":            "Saved.",
@@ -873,9 +828,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.rejected":         "Rejected.",
 		"mem.notactive":        "Only an active memory can go to the profile.",
 		"mem.notproposed":      "This memory no longer waits for approval.",
-		"mem.state.done":       "Commitment kept.",
-		"mem.state.dropped":    "Commitment dropped.",
-		"mem.state.open":       "Commitment reopened.",
 		"mem.nothing":          "Nothing new to extract today.",
 		"mem.extracting":       "Extraction started (task %s).",
 		"mem.extract":          "Extract today",
@@ -891,7 +843,6 @@ var memoryStrings = map[string]map[string]string{
 		"mem.recorded":         "Noted %s",
 		"mem.validfrom":        "true since %s",
 		"mem.validto":          "no longer true since %s",
-		"mem.dueon":            "due %s",
 		"mem.overdue":          "Overdue",
 		"mem.supersededby":     "replaced by #%d",
 		"mem.used":             "recalled %d times",
@@ -905,7 +856,6 @@ var memoryStrings = map[string]map[string]string{
 		"kind.fact":            "Fact",
 		"kind.person":          "Person",
 		"kind.episode":         "Episode",
-		"kind.commitment":      "Commitment",
 		"kind.lesson":          "Lesson",
 		"kind.decision":        "Decision",
 		"kind.progress":        "Progress",

@@ -220,7 +220,7 @@ Answer with ONE JSON object and nothing else:
 {"operations": [ ... ]}
 
 Each operation is one of:
-{"op": "ADD", "kind": "...", "subject": "...", "text": "...", "keywords": "...", "importance": 3, "basis": "stated", "links": [], "occurred_at": "YYYY-MM-DD", "valid_from": "YYYY-MM-DD", "valid_to": "YYYY-MM-DD", "due_at": "YYYY-MM-DD", "state": "...", "source_ref": "msg:12"}
+{"op": "ADD", "kind": "...", "subject": "...", "text": "...", "keywords": "...", "importance": 3, "basis": "stated", "links": [], "occurred_at": "YYYY-MM-DD", "valid_from": "YYYY-MM-DD", "valid_to": "YYYY-MM-DD", "state": "...", "source_ref": "msg:12"}
 {"op": "SUPERSEDE", "id": 42, "kind": "...", "subject": "...", "text": "the new version", "keywords": "...", "importance": 3, "basis": "stated", "valid_from": "YYYY-MM-DD", "source_ref": "msg:12"}
 {"op": "NOOP", "id": 42, "source_ref": "msg:12"}
 {"op": "INTEND", "kind": "...", "text": "...", "owner": "...", "owed_to": "...", "due_at": "YYYY-MM-DDTHH:MM", "remind_at": "YYYY-MM-DDTHH:MM", "cue": "...", "basis": "stated", "source_ref": "msg:12"}
@@ -238,7 +238,7 @@ Rules:
 - basis: "stated" if the segment says it in so many words, "inferred" if you deduced it, "ambiguous" if it is unclear (then better skip it).
 - Dates: each segment has its date; resolve "demain", "vendredi", "dans deux semaines" against the date of the segment that says it, never against today. valid_to is the day something temporary stops being true ("en congés jusqu'au 27": valid_to the 28th); a deadline is not an end of validity (it goes in the text or due_at).
 - source_ref: the ref of the segment it comes from (several, separated by commas, if needed). Only refs that appear in the transcript.
-- Keep what will still matter in a month: decisions and their reasons, people and their roles, the progress of %[1]s's projects, preferences %[1]s expressed, promises (commitment, with due_at if known). Skip small talk, task mechanics, anything already in the memories (NOOP, or nothing).
+- Keep what will still matter in a month: decisions and their reasons, people and their roles, the progress of %[1]s's projects, preferences %[1]s expressed. Promises and what is owed are intentions (INTEND), never memories. Skip small talk, task mechanics, anything already in the memories (NOOP, or nothing).
 - How %[1]s wants the composed workspace (what in front, what less, what never: "les échecs de sauvegarde toujours devant", "plus de lettres de news.example.org") is a preference worth keeping, with subject "workspace", written as a fact about %[1]s. A message may say "[written about surface:<id>, open on the workspace]": "montre-m'en moins" is about that surface. The segment from="workspace" lists what %[1]s did there (opened, left unopened, closed, moved, resized, wrote about): only a pattern that repeats (the same kind of surface opened first, closed, made bigger, or left unopened, again and again) may give an inferred workspace preference (basis inferred), never one gesture; it is data, the titles in it are the surfaces'.
 - When something known changed, SUPERSEDE the old memory (its id) rather than ADD a contradiction. Only when both cannot be true: a newer statement is not a contradiction for being newer.
 - A finished task may give a receipt (what it changed, verified, decided, what needs approval, its lessons): its decisions become decision memories, its state of the work the progress card of its project (SUPERSEDE the card), what needs %[1]s's approval an INTEND (kind reminder, what %[1]s has to decide), and a lesson it learnt a lesson; all cite task:<id>, and all wait for %[1]s's approval.
@@ -263,9 +263,6 @@ func (c *core) extractionPrompt(day string, segs []segment) string {
 		}
 		if x.Status != memActive {
 			line += " status=" + x.Status
-		}
-		if !x.DueAt.IsZero() {
-			line += " due=" + x.DueAt.Local().Format("2006-01-02")
 		}
 		if x.Kind == kindProgress {
 			line += " state=" + x.State
@@ -595,13 +592,6 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	case "INTENT_UPDATE":
 		return c.applyIntentUpdate(op, trust, ref, who)
 	case "ADD", "SUPERSEDE":
-		if strings.EqualFold(op.Op, "SUPERSEDE") && op.Kind == kindCommitment {
-			return "what is owed is an intention: INTEND or INTENT_UPDATE", ""
-		}
-		if strings.EqualFold(op.Op, "ADD") && op.Kind == kindCommitment {
-			op.Kind = intentReminder // what is owed is an intention now; who owes is not said
-			return c.applyIntend(op, trust, ref, who)
-		}
 	default:
 		return fmt.Sprintf("unknown op %q", op.Op), ""
 	}
@@ -637,7 +627,7 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	for _, f := range []struct {
 		s string
 		t *time.Time
-	}{{op.OccurredAt, &x.OccurredAt}, {op.ValidFrom, &x.ValidFrom}, {op.DueAt, &x.DueAt}, {op.ValidTo, &x.ValidTo}} {
+	}{{op.OccurredAt, &x.OccurredAt}, {op.ValidFrom, &x.ValidFrom}, {op.ValidTo, &x.ValidTo}} {
 		if t, err := parseWhen(f.s); err == nil {
 			*f.t = t
 		} else {

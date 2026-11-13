@@ -83,6 +83,11 @@ var conceptBench = []benchRow{
 			return c.brainIntend(intendIn{Text: "Rendre le rapport à Lina", Kind: intentPromise, OwedTo: "person:lina", DueAt: "2026-11-06", SourceRef: ref(seq)})
 		},
 		rememberCall("promise", "Doit rendre le rapport à Lina vendredi"), "intend"},
+	{"Rappelle-moi vendredi que je t'ai promis le compte rendu", "intention",
+		func(c *core, seq int) (map[string]any, error) {
+			return c.brainIntend(intendIn{Text: "Envoyer le compte rendu", Kind: intentCommitment, DueAt: "2026-11-06", SourceRef: ref(seq)})
+		},
+		rememberCall("commitment", "Doit envoyer le compte rendu vendredi"), "intend"},
 }
 
 func TestConceptBench(t *testing.T) {
