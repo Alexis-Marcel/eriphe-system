@@ -17,7 +17,9 @@ import type { Composition, Layout, Obj, Ref } from "./types";
 //   a2ui=1, its "a2ui" events carry the surfaces' A2UI messages, in order,
 //   a snapshot that resets the page first (surfaces_stream.go), and its
 //   "layout" events where each surface is on the grid, which code decides
-//   (workspace_layout.go). One stream per page, shared;
+//   (workspace_layout.go), and its "proposals" events the refs of the
+//   proposals made or decided since (surface_proposals.go), for what shows
+//   them to read them again. One stream per page, shared;
 // - POST /api/espace/action and /api/espace/error: what the user did on a
 //   surface, and what went wrong rendering one, as A2UI v1.0 messages. An
 //   action is ask (a Button's request to Eriphe), answer (a Proposal's yes
@@ -29,7 +31,9 @@ import type { Composition, Layout, Obj, Ref } from "./types";
 // - POST /api/espace/gesture: what the user opened, or what left the screen
 //   unopened, which memory's extraction reads (workspace.go);
 // - GET /api/proposals/{ref}: a proposal a surface shows (the catalog's
-//   Proposal), answered by an "answer" action (answerProposal).
+//   Proposal), answered by an "answer" action (answerProposal);
+// - GET /api/proposals?day=: the dated proposals that wait that day, which
+//   a Day shows as ghosts (dayProposals).
 // No control of the page keeps a rule or a preference: the user says it to
 // Eriphe, who remembers it.
 // A request without a session gets 401: the page goes to the sign-in. Only
@@ -281,12 +285,41 @@ export type ProposalView = {
   why?: string;
   tainted?: boolean;
   fields?: { name: string; value: string }[];
+  // When it takes place, if it has a time: times with the user's offset, a
+  // date for a whole day.
+  when?: Span[];
 };
+
+export type Span = { start: string; end?: string; allDay?: boolean };
 
 // proposal reads a proposal by its own ref (kind:id); null when no card
 // carries it.
 export async function proposal(ref: string): Promise<ProposalView | null> {
   return getJSON<ProposalView>(`/api/proposals/${encodeURIComponent(ref)}`);
+}
+
+// dayProposals reads the proposals that wait and take place on a day
+// (YYYY-MM-DD), each with its times that day.
+export async function dayProposals(date: string): Promise<ProposalView[]> {
+  const got = await getJSON<{ proposals: ProposalView[] }>(`/api/proposals?day=${encodeURIComponent(date)}`);
+  return got?.proposals ?? [];
+}
+
+// What moved: the refs of the proposals made or decided, or all of them
+// when the stream fell behind (proposalsEvent, surface_proposals.go).
+export type Moved = { refs: string[]; all?: boolean };
+
+// followProposals calls back when proposals moved. It listens on the
+// workspace's stream, which the surfaces keep open.
+export function followProposals(on: (m: Moved) => void): () => void {
+  return listen("proposals", (e) => {
+    try {
+      const m = JSON.parse(e.data) as Moved;
+      on({ refs: Array.isArray(m.refs) ? m.refs : [], all: Boolean(m.all) });
+    } catch {
+      /* not a proposals event */
+    }
+  });
 }
 
 // answerProposal says yes or no to the proposal a Proposal component

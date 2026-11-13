@@ -265,7 +265,7 @@
     },
     "Day": {
       "type": "object",
-      "description": "Une journée et ses événements, dans l'ordre des heures.",
+      "description": "Une journée et ses événements, dans l'ordre des heures. Les propositions datées qui attendent un oui ou un non s'y montrent d'elles-mêmes en fantôme à leur heure, avec ce qu'elles chevauchent ; on y répond par leur carte ou un Proposal.",
       "properties": {
         "component": {"const": "Day"},
         "date": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Le jour, AAAA-MM-JJ."},
@@ -274,7 +274,8 @@
             {"type": "array", "items": {"$ref": "#/$defs/DayEvent"}},
             {"$ref": "common_types.json#/$defs/DataBinding"}
           ]
-        }
+        },
+        "proposals": {"type": "boolean", "default": true, "description": "Montrer les propositions datées de ce jour (oui par défaut) ; false pour une journée qui n'est pas celle de l'utilisateur."}
       },
       "required": ["component", "date", "events"],
       "examples": [
@@ -283,12 +284,15 @@
     },
     "Proposal": {
       "type": "object",
-      "description": "Une proposition d'Eriphe qui attend un oui ou un non ; ses boutons Oui et Non envoient `answer`, que le code lie à cette proposition. Sur une surface au contenu extérieur, elle se répond dans la conversation.",
+      "description": "Une proposition d'Eriphe qui attend un oui ou un non (créer un événement, répondre à un message, lancer une tâche…), montrée là où elle compte : ses boutons Oui et Non envoient `answer`, que le code lie à cette proposition et à aucune autre. Sa référence est l'une de celles que workspace_read liste (proposals), écrite telle quelle ou liée à la donnée. Elle se met à jour quand on y répond ailleurs. Sur une surface au contenu extérieur, elle se répond dans la conversation.",
       "properties": {
         "component": {"const": "Proposal"},
-        "proposalId": {"$ref": "common_types.json#/$defs/DynamicString", "description": "L'identifiant de la proposition."}
+        "proposalId": {"$ref": "common_types.json#/$defs/DynamicString", "description": "La référence de la proposition, type:numéro."}
       },
-      "required": ["component", "proposalId"]
+      "required": ["component", "proposalId"],
+      "examples": [
+        {"id": "accord", "component": "Proposal", "proposalId": "intention:12"}
+      ]
     },
     "Alert": {
       "type": "object",

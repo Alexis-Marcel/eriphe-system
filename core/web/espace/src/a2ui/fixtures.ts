@@ -3,7 +3,7 @@ import type { Layout } from "../types";
 import type { Message } from "./adapter";
 import { CATALOG } from "./catalog";
 import gallery from "./gallery.json";
-import type { Proposals, ProposalView } from "./proposals";
+import type { Moved, Proposals, ProposalView } from "./proposals";
 
 // Made-up A2UI messages, in the shape eriphe-core sends, for the dev server
 // and the tests, when no eriphe-core is behind. No real name, address or
@@ -77,23 +77,45 @@ export function galleryFixtures(lang: Lang): Message[] {
 
 export const gallerySurfaces = (lang: Lang) => galleryFixtures(lang).map((m) => ("createSurface" in m ? m.createSurface.surfaceId : ""));
 
-// A made-up proposal for the gallery's Proposal: answering it changes
-// nothing but its state on the page.
+// Made-up proposals for the gallery: its Proposal's, and a dated one its
+// Day shows as a ghost. Answering one changes nothing but its state on the
+// page, and says it moved, as eriphe-core's stream would.
 export function sampleProposals(lang: Lang): Proposals {
-  const view: ProposalView = {
-    ref: "rule:7",
-    card: 7,
-    state: "pending",
-    text: lang === "en" ? "Stop telling me about invoices before the brief?" : "Ne plus te prévenir des factures avant le brief ?",
-    why: lang === "en" ? "You opened none of the last five." : "Tu n'as ouvert aucune des cinq dernières.",
-  };
+  const en = lang === "en";
+  const views: ProposalView[] = [
+    {
+      ref: "rule:7",
+      card: 7,
+      state: "pending",
+      text: en ? "Stop telling me about invoices before the brief?" : "Ne plus te prévenir des factures avant le brief ?",
+      why: en ? "You opened none of the last five." : "Tu n'as ouvert aucune des cinq dernières.",
+    },
+    {
+      ref: "intention:3",
+      card: 8,
+      state: "pending",
+      text: en ? "An hour to read the quote again" : "Une heure pour relire le devis",
+      when: [{ start: "2026-11-12T14:30:00+01:00", end: "2026-11-12T15:30:00+01:00" }],
+    },
+  ];
   const states = new Map<string, string>();
+  const followers = new Set<(m: Moved) => void>();
+  const read = (ref: string) => {
+    const v = views.find((v) => v.ref === ref);
+    return v ? { ...v, state: states.get(ref) ?? v.state } : null;
+  };
   return {
-    read: async (ref) => (ref === view.ref ? { ...view, state: states.get(ref) ?? view.state } : null),
+    read: async (ref) => read(ref),
     answer: async ({ ref, yes }) => {
-      if (ref !== view.ref) return false;
-      states.set(view.ref, yes ? "approved" : "rejected");
+      if (read(ref)?.state !== "pending") return false;
+      states.set(ref, yes ? "approved" : "rejected");
+      for (const f of followers) f({ refs: [ref] });
       return true;
+    },
+    day: async (date) => views.map((v) => read(v.ref)!).filter((v) => v.state === "pending" && v.when?.some((w) => w.start.startsWith(date))),
+    follow: (on) => {
+      followers.add(on);
+      return () => followers.delete(on);
     },
   };
 }

@@ -4,11 +4,11 @@ import { Catalog, CommonSchemas } from "@a2ui/web_core/v1_0";
 import { z } from "zod";
 import { useWords, type Lang } from "../i18n";
 import { Chart as ChartView, cleanSeries } from "./chart";
-import { Day as DayView, cleanEvents } from "./day";
+import { Day as DayView, cleanEvents, type Ghost } from "./day";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
-import { useProposals, type ProposalView } from "./proposals";
+import { useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
 // eriphe-core owns the catalog (its JSON Schema, which validates what a
@@ -591,13 +591,47 @@ const Day = createComponentImplementation(
       events: listOr(
         z.object({ title: z.string(), start: z.string(), end: z.string().optional(), place: z.string().optional(), allDay: z.boolean().optional() }),
       ),
+      proposals: z.boolean().optional(),
     }),
   },
   ({ props }) => {
     const { t, lang } = useWords();
-    return <DayView date={str(props.date)} events={cleanEvents(props.events)} lang={lang} t={t} />;
+    const date = str(props.date);
+    const ghosts = useGhosts(date.slice(0, 10), props.proposals !== false);
+    return <DayView date={date} events={cleanEvents(props.events)} ghosts={ghosts} lang={lang} t={t} />;
   },
 );
+
+// useGhosts are the proposals that wait on a day, as ghosts: read from
+// eriphe-core, and again whenever a proposal moved (one made, one
+// answered anywhere).
+function useGhosts(date: string, show: boolean): Ghost[] {
+  const src = useProposals();
+  const moved = useMoved(src, show ? null : []);
+  const [ghosts, setGhosts] = useState<Ghost[]>([]);
+  useEffect(() => {
+    if (!show || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      setGhosts([]);
+      return;
+    }
+    let live = true;
+    src.day(date).then(
+      (ps) => live && setGhosts(ghostsOf(ps)),
+      () => {},
+    );
+    return () => {
+      live = false;
+    };
+  }, [src, date, show, moved]);
+  return ghosts;
+}
+
+// ghostsOf: one ghost per time of a pending proposal.
+export function ghostsOf(ps: ProposalView[]): Ghost[] {
+  return ps
+    .filter((p) => p.state === "pending")
+    .flatMap((p) => (p.when ?? []).map((w) => ({ ref: p.ref, title: p.text, start: w.start, end: w.end, allDay: w.allDay, tainted: p.tainted })));
+}
 
 // onlyAsks tells whether a surface shows external content (createSurface's
 // metadata, extensions.eriphe.tainted) and was written by a model: it can
@@ -610,7 +644,7 @@ const onlyAsks = (s: unknown) => {
 };
 
 // Proposal shows one proposal of Eriphe's, read from eriphe-core by its ref
-// (kind:id); its Oui and Non send an "answer" action naming this surface,
+// (kind:id), and again when it moved; its Oui and Non send an "answer" action naming this surface,
 // this component and that proposal: eriphe-core decides it only if the
 // surface shows it and it still waits, as its card in the conversation. A
 // surface showing external content can only ask: there, no Oui or Non, the
@@ -635,6 +669,19 @@ const Proposal = createComponentImplementation(
         live = false;
       };
     }, [src, ref]);
+    // Answered elsewhere (its card, a channel, another surface): read again.
+    const moved = useMoved(src, [ref]);
+    useEffect(() => {
+      if (!moved) return;
+      let live = true;
+      src.read(ref).then(
+        (v) => live && setP(v),
+        () => {},
+      );
+      return () => {
+        live = false;
+      };
+    }, [src, ref, moved]);
     const answer = async (yes: boolean) => {
       if (!p || busy) return;
       setBusy(true);

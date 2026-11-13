@@ -441,6 +441,7 @@ func (c *core) cardProposed(kind string, id int64) {
 	c.cardAgain(p)
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, turn, text, created) VALUES (?, ?, 1, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET turn = 1 WHERE seq = 0`, proposalRef(kind, id), kind, p.Text("fr"), time.Now().Unix())
+	c.proposalMoved(proposalRef(kind, id))
 }
 
 // cardNow shows the card of a proposal made outside a brain turn at once:
@@ -470,6 +471,7 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 		c.cardAgain(p)
 		c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)
 			ON CONFLICT (ref) DO UPDATE SET turn = 0 WHERE seq = 0`, ref, kind, p.Text("fr"), now)
+		c.proposalMoved(ref)
 		if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
 			c.attendCard(x[0], p, text, source)
 		}
@@ -485,6 +487,7 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, seq, text, created, attached) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET seq = excluded.seq, turn = 0, attached = excluded.attached WHERE seq = 0`,
 		ref, kind, seq, p.Text("fr"), now, now)
+	c.proposalMoved(ref)
 	if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
 		c.attendCard(x[0], p, text, source)
 	}
@@ -506,8 +509,11 @@ func (c *core) cardAgain(p proposal) {
 func (c *core) syncCards() {
 	for _, p := range c.pendingProposals() {
 		c.cardAgain(p)
-		c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)`,
+		res, err := c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)`,
 			proposalRef(p.Kind, p.ID), p.Kind, p.Text("fr"), time.Now().Unix())
+		if n, _ := rowsOf(res, err); n > 0 {
+			c.proposalMoved(proposalRef(p.Kind, p.ID))
+		}
 	}
 }
 
@@ -586,7 +592,10 @@ func (c *core) liveCard(x convoCard) (convoCard, proposal) {
 	p := c.proposalOf(kind, id)
 	if x.State == cardPending && !p.Pending {
 		x.State = p.Outcome
-		c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ? WHERE id = ? AND state = ?`, x.State, time.Now().Unix(), x.ID, cardPending)
+		res, err := c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ? WHERE id = ? AND state = ?`, x.State, time.Now().Unix(), x.ID, cardPending)
+		if n, _ := rowsOf(res, err); n > 0 {
+			c.proposalMoved(x.Ref)
+		}
 	}
 	return x, p
 }
@@ -618,6 +627,7 @@ func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string
 	}
 	c.attentionDone(cardItemRef(x.ID))
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ?`, x.State, x.Decided.Unix(), by, id)
+	c.proposalMoved(x.Ref)
 	log.Printf("cards: %s %s by %s", x.Ref, x.State, by)
 	return x, nil
 }
@@ -630,6 +640,7 @@ func (c *core) proposalDecided(kind string, id int64, approved bool) {
 	}
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = 'page' WHERE ref = ? AND state = ?`,
 		state, time.Now().Unix(), proposalRef(kind, id), cardPending)
+	c.proposalMoved(proposalRef(kind, id))
 }
 
 // The right moment.

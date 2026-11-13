@@ -8,7 +8,7 @@ import { createAdapter, type ActionMessage, type Adapter, type ErrorMessage, typ
 import { CATALOG } from "./catalog";
 import { galleryFixtures, sampleProposals } from "./fixtures";
 import { safeHref } from "./markdown";
-import { ProposalsContext, type Answer, type Proposals } from "./proposals";
+import { ProposalsContext, type Answer, type Moved, type Proposals } from "./proposals";
 import { Surfaces } from "./Surfaces";
 
 // Every component of the catalog, rendered from the gallery's data
@@ -28,15 +28,21 @@ let answers: Answer[];
 // The page's words in a language, as /espace/boot gives them.
 const words = (lang: Lang) => ({ t: makeT(strings[lang]), lang });
 
-async function mount(lang: Lang, msgs: Message[] = galleryFixtures(lang), proposals?: Proposals) {
+// No proposal moves and no day has ghosts, unless a test says so.
+const quiet = { day: async () => [], follow: () => () => {} };
+
+async function mount(lang: Lang, msgs: Message[] = galleryFixtures(lang), proposals?: Partial<Proposals>) {
   const sample = sampleProposals(lang);
-  const src = proposals ?? {
-    read: sample.read,
-    answer: async (a: Answer) => {
-      answers.push(a);
-      return sample.answer(a);
-    },
-  };
+  const src: Proposals = {
+    ...quiet,
+    ...(proposals ?? {
+      read: sample.read,
+      answer: async (a: Answer) => {
+        answers.push(a);
+        return sample.answer(a);
+      },
+    }),
+  } as Proposals;
   adapter = createAdapter(lang);
   adapter.onError((e) => errors.push(e));
   adapter.onAction((a) => actions.push(a));
@@ -327,6 +333,85 @@ describe("the catalog's components", () => {
     expect(answers).toEqual([{ surfaceId: "gallery-more", componentId: "proposal", ref: "rule:7", yes: true }]);
     expect($(".a2-proposal-actions")).toBeNull();
     expect(text(".a2-proposal-kicker")).toBe("Validé");
+  });
+
+  it("show a day's dated proposals as ghosts, and what they overlap", async () => {
+    const src = sampleProposals("fr");
+    await mount("fr", galleryFixtures("fr"), src);
+    await act(async () => {});
+    const ghost = $(".a2-day-grid .a2-ev-ghost");
+    expect(ghost.getAttribute("data-proposal")).toBe("intention:3");
+    expect(ghost.querySelector(".a2-ev-kicker")?.textContent).toBe("Proposé");
+    expect(ghost.querySelector(".a2-ev-title")?.textContent).toBe("Une heure pour relire le devis");
+    expect(ghost.querySelector(".a2-ev-time")?.textContent).toBe("14 h 30–15 h 30");
+    // It overlaps the dentist (14:00–15:00): both say so, side by side.
+    expect(ghost.className).toMatch(/a2-r-11 a2-span-2 a2-lane-1 a2-ev-ghost a2-ev-clash/);
+    expect(ghost.querySelector(".a2-ev-clash-what")?.textContent).toBe("chevauche « Dentiste »");
+    const dentist = $$(".a2-day-grid .a2-ev").find((e) => e.querySelector(".a2-ev-title")?.textContent === "Dentiste")!;
+    expect(dentist.className).toMatch(/a2-lane-0 a2-ev-overlap a2-ev-clashed/);
+    // An event is never a ghost; the hours reach the ghost's end.
+    expect($$(".a2-ev-ghost")).toHaveLength(1);
+    expect($$(".a2-hour").map((h) => h.textContent).at(-1)).toBe("15");
+
+    // Answered anywhere, it leaves the day, and the dentist is alone again.
+    await act(async () => void (await src.answer({ surfaceId: "", componentId: "", ref: "intention:3", yes: false })));
+    await act(async () => {});
+    expect($$(".a2-ev-ghost")).toHaveLength(0);
+    const after = $$(".a2-day-grid .a2-ev").find((e) => e.querySelector(".a2-ev-title")?.textContent === "Dentiste")!;
+    expect(after.className).not.toMatch(/clash|overlap/);
+  });
+
+  it("show no ghost on a day that is not the user's", async () => {
+    let asked = 0;
+    await mount("en", one([{ id: "root", component: "Day", date: "2026-11-12", events: [], proposals: false }]), {
+      ...sampleProposals("en"),
+      day: async () => (asked++, []),
+    });
+    await act(async () => {});
+    expect(asked).toBe(0);
+    expect(text(".a2-empty")).toBe("Nothing planned");
+  });
+
+  it("say a ghost drawn from external content is one, all day above", async () => {
+    const view = { ref: "intention:5", card: 5, state: "pending", text: "Pay the supplier", tainted: true, when: [{ start: "2026-11-12", allDay: true }] };
+    await mount("en", one([{ id: "root", component: "Day", date: "2026-11-12", events: [] }]), {
+      read: async () => view,
+      answer: async () => false,
+      day: async (date) => (date === "2026-11-12" ? [view] : []),
+    });
+    await act(async () => {});
+    const ghost = $(".a2-day-allday .a2-ev-ghost");
+    expect(ghost.querySelector(".a2-ev-kicker")?.textContent).toBe("Proposed · external content");
+    expect(ghost.querySelector(".a2-ev-title")?.textContent).toBe("Pay the supplier");
+    expect($(".a2-empty")).toBeNull();
+  });
+
+  it("update a proposal answered elsewhere, and only on its own move", async () => {
+    let state = "pending";
+    let reads = 0;
+    const followers = new Set<(m: Moved) => void>();
+    const move = (m: Moved) => act(async () => followers.forEach((f) => f(m)));
+    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "rule:9" }]), {
+      read: async () => (reads++, { ref: "rule:9", card: 9, state, text: "Ranger les mails ?" }),
+      answer: async () => false,
+      follow: (on) => (followers.add(on), () => followers.delete(on)),
+    });
+    await act(async () => {});
+    expect($(".a2-proposal-actions")).not.toBeNull();
+    const before = reads;
+    await move({ refs: ["rule:10"] });
+    expect(reads).toBe(before);
+    // Decided in the conversation: the stream says so, the surface reads it again.
+    state = "approved";
+    await move({ refs: ["rule:9"] });
+    await act(async () => {});
+    expect($(".a2-proposal-actions")).toBeNull();
+    expect(text(".a2-proposal-kicker")).toBe("Validé");
+    // A stream that fell behind: everything is read again.
+    state = "rejected";
+    await move({ refs: [], all: true });
+    await act(async () => {});
+    expect(text(".a2-proposal-kicker")).toBe("Refusé");
   });
 
   it("say when a proposal is gone, or an answer did not leave", async () => {
