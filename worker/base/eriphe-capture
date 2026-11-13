@@ -1,0 +1,240 @@
+#!/usr/bin/env node
+// eriphe-capture: takes a picture of a web page for a surface of the
+// workspace, and gives it to eriphe-core (core/surfaces_capture.go).
+//
+//   eriphe-capture <url> <surface> [out.png]   capture the page, then give it
+//   eriphe-capture --file <image> <surface>    give a PNG or a JPEG already made
+//
+// It prints {"src": "media:med_…", …}: write src as the url of an Image of
+// that surface. The page is opened in a headless Chromium (Debian's
+// chromium-headless-shell, installed on first use through apt and the
+// machine's cache), with a fixed window (1280×800), a time limit, a profile
+// of its own thrown away after (no cookie, no sign-in), downloads refused,
+// no dialog answered, http(s) only, through the task's egress relay. Only
+// the image goes to eriphe-core, through the node (ERIPHE_MEDIA_URL), with
+// the task's secret: never the page itself.
+'use strict';
+
+const { spawn, spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const WIDTH = 1280;
+const HEIGHT = 800;
+const LOAD_WAIT = 20_000; // the page's load event, at most
+const SETTLE = 1_500; // then what it draws late
+const TOTAL = 45_000; // the whole capture, once the browser is there
+const INSTALL = 10 * 60_000;
+const BROWSERS = ['/usr/bin/chromium-headless-shell', '/usr/bin/chromium'];
+
+function fail(msg) {
+  process.stderr.write('eriphe-capture: ' + msg + '\n');
+  process.exit(1);
+}
+
+function usage() {
+  fail('usage: eriphe-capture <url> <surface> [out.png]  |  eriphe-capture --file <image> <surface>');
+}
+
+function checkSurface(id) {
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id || '')) fail('the surface is its id: lowercase letters, digits and -');
+}
+
+function checkURL(raw) {
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    fail('not an address: ' + raw);
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') fail('http or https only');
+  if (u.username || u.password) fail('no credentials in the address');
+  return u.href;
+}
+
+function browser() {
+  const found = () => BROWSERS.find((p) => fs.existsSync(p));
+  if (found()) return found();
+  process.stderr.write('eriphe-capture: installing chromium-headless-shell (once per machine: the cache keeps it)\n');
+  const pkgs = ['install', '-y', '--no-install-recommends', 'chromium-headless-shell', 'fonts-liberation'];
+  const run = (args) => spawnSync('apt-get', args, { stdio: ['ignore', 2, 2], timeout: INSTALL }).status === 0;
+  if (!run(pkgs) && !(run(['update']) && run(pkgs))) fail('could not install chromium-headless-shell');
+  return found() || fail('chromium-headless-shell is not there after its install');
+}
+
+// proxy is the task's egress relay, if any: Chromium takes no credentials
+// in --proxy-server, so they are given when it asks (Fetch.authRequired).
+function proxy() {
+  const raw = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return {
+      server: u.protocol + '//' + u.host,
+      user: decodeURIComponent(u.username),
+      pass: decodeURIComponent(u.password),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// cdp talks to the browser over its pipe (--remote-debugging-pipe): JSON
+// messages, each ended by a NUL.
+function cdp(child) {
+  let next = 0;
+  let buf = '';
+  const waiting = new Map();
+  const listeners = [];
+  child.stdio[4].on('data', (chunk) => {
+    buf += chunk.toString('utf8');
+    let end;
+    while ((end = buf.indexOf('\0')) >= 0) {
+      const msg = JSON.parse(buf.slice(0, end));
+      buf = buf.slice(end + 1);
+      if (msg.id !== undefined && waiting.has(msg.id)) {
+        const { resolve, reject } = waiting.get(msg.id);
+        waiting.delete(msg.id);
+        if (msg.error) reject(new Error(msg.error.message));
+        else resolve(msg.result);
+      } else if (msg.method) {
+        for (const l of listeners) l(msg);
+      }
+    }
+  });
+  return {
+    send(method, params = {}, sessionId) {
+      const id = ++next;
+      const msg = { id, method, params };
+      if (sessionId) msg.sessionId = sessionId;
+      return new Promise((resolve, reject) => {
+        waiting.set(id, { resolve, reject });
+        child.stdio[3].write(JSON.stringify(msg) + '\0');
+      });
+    },
+    on(fn) {
+      listeners.push(fn);
+    },
+  };
+}
+
+async function capture(url, out) {
+  const exe = browser();
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'eriphe-capture-'));
+  const px = proxy();
+  const args = [
+    '--headless', '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
+    '--remote-debugging-pipe', '--user-data-dir=' + profile,
+    '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-sync',
+    '--disable-background-networking', '--disable-component-update', '--disable-default-apps',
+    '--mute-audio', '--hide-scrollbars', '--disable-features=IsolateOrigins,site-per-process', '--window-size=' + WIDTH + ',' + HEIGHT,
+  ];
+  if (px) args.push('--proxy-server=' + px.server, '--proxy-bypass-list=<-loopback>');
+  // A process group of its own: the browser and its helpers end together.
+  const child = spawn(exe, args, { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], detached: true });
+  const exited = new Promise((resolve) => child.once('exit', resolve));
+  const done = async () => {
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch {
+      child.kill('SIGKILL');
+    }
+    child.stdio[3].destroy();
+    child.stdio[4].destroy();
+    await Promise.race([exited, new Promise((r) => setTimeout(r, 3000))]);
+    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 3 });
+  };
+  const timer = setTimeout(() => {
+    done().finally(() => fail('the page took too long (' + TOTAL / 1000 + ' s)'));
+  }, TOTAL);
+  try {
+    const b = cdp(child);
+    let loaded;
+    const load = new Promise((resolve) => (loaded = resolve));
+    let session;
+    b.on((msg) => {
+      if (msg.sessionId !== session) return;
+      const p = msg.params || {};
+      switch (msg.method) {
+        case 'Page.loadEventFired':
+          loaded();
+          break;
+        case 'Page.javascriptDialogOpening':
+          b.send('Page.handleJavaScriptDialog', { accept: false }, session).catch(() => {});
+          break;
+        case 'Fetch.requestPaused': {
+          const scheme = p.request.url.split(':')[0];
+          const ok = ['http', 'https', 'data', 'blob'].includes(scheme);
+          b.send(ok ? 'Fetch.continueRequest' : 'Fetch.failRequest',
+            ok ? { requestId: p.requestId } : { requestId: p.requestId, errorReason: 'BlockedByClient' }, session).catch(() => {});
+          break;
+        }
+        case 'Fetch.authRequired': {
+          // The relay's credentials, never a site's: a sign-in is refused.
+          const proxyAsks = p.authChallenge && p.authChallenge.source === 'Proxy' && px;
+          b.send('Fetch.continueWithAuth', {
+            requestId: p.requestId,
+            authChallengeResponse: proxyAsks ? { response: 'ProvideCredentials', username: px.user, password: px.pass } : { response: 'CancelAuth' },
+          }, session).catch(() => {});
+          break;
+        }
+      }
+    });
+    await b.send('Browser.setDownloadBehavior', { behavior: 'deny' });
+    const { targetId } = await b.send('Target.createTarget', { url: 'about:blank' });
+    ({ sessionId: session } = await b.send('Target.attachToTarget', { targetId, flatten: true }));
+    await b.send('Fetch.enable', { handleAuthRequests: true }, session);
+    await b.send('Page.enable', {}, session);
+    await b.send('Emulation.setDeviceMetricsOverride', { width: WIDTH, height: HEIGHT, deviceScaleFactor: 1, mobile: false }, session);
+    const nav = await b.send('Page.navigate', { url }, session);
+    if (nav.errorText) throw new Error('the page could not be opened: ' + nav.errorText);
+    await Promise.race([load, new Promise((r) => setTimeout(r, LOAD_WAIT))]);
+    await new Promise((r) => setTimeout(r, SETTLE));
+    const shot = await b.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false }, session);
+    fs.writeFileSync(out, Buffer.from(shot.data, 'base64'));
+  } finally {
+    clearTimeout(timer);
+    await done();
+  }
+}
+
+async function give(file, surface) {
+  const where = process.env.ERIPHE_MEDIA_URL;
+  const secret = process.env.ERIPHE_TASK_SECRET;
+  if (!where || !secret) fail('this task is not lent the workspace (eriphe-workspace): the image stays in ' + file);
+  const data = fs.readFileSync(file);
+  const isPNG = data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isJPEG = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+  if (!isPNG && !isJPEG) fail('a PNG or a JPEG only');
+  const res = await fetch(where + '?surface=' + encodeURIComponent(surface), {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + secret, 'Content-Type': isPNG ? 'image/png' : 'image/jpeg' },
+    body: data,
+    signal: AbortSignal.timeout(60_000),
+  });
+  const text = await res.text();
+  if (!res.ok) fail('eriphe-core refused the image (' + res.status + '): ' + text.trim());
+  return JSON.parse(text);
+}
+
+async function main() {
+  const argv = process.argv.slice(2);
+  if (argv[0] === '--file') {
+    if (argv.length !== 3) usage();
+    checkSurface(argv[2]);
+    const got = await give(argv[1], argv[2]);
+    process.stdout.write(JSON.stringify({ ...got, file: argv[1] }) + '\n');
+    return;
+  }
+  if (argv.length < 2 || argv.length > 3) usage();
+  const url = checkURL(argv[0]);
+  checkSurface(argv[1]);
+  const out = argv[2] || path.join(os.tmpdir(), 'eriphe-capture-' + Date.now() + '.png');
+  await capture(url, out);
+  const got = await give(out, argv[1]);
+  process.stdout.write(JSON.stringify({ ...got, url, file: out }) + '\n');
+}
+
+// Exits once done: nothing of the browser keeps it waiting.
+main().then(() => process.exit(0), (e) => fail(e.message));

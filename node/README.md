@@ -359,7 +359,10 @@ start and every hour. A `work` event says what was done: `{commits, branch, push
 The only ports the node listens on are for its task containers, each with its own secret: the task
 listener (`-listen`, 8790), where a Claude Code task calls its permission endpoint `/perm/{id}/mcp`,
 its catalog servers at `/mcp/{server}`, a model behind a node at `/model/v1/{path}`, its
-credentials at `/v1/task/credential` and its toolchains at `/v1/task/toolchains`, and the egress relay (`-egress-listen`, 8791, see
+credentials at `/v1/task/credential`, its toolchains at `/v1/task/toolchains` and, lent
+`eriphe-workspace`, its images for a surface at `/v1/task/media` (`media.go`, named by
+`ERIPHE_MEDIA_URL`: 8 MiB at most, relayed to eriphe-core's `/v1/node/tasks/{id}/media` with the
+node's secret, see core/README.md, Captured pages), and the egress relay (`-egress-listen`, 8791, see
 Egress). It binds only the node's address on the task network: its interface there when
 the node is a container on it (the NAS), the network's gateway when the node runs on the Docker
 host (WSL), or else the loopback (Docker Desktop). `-listen 10.0.0.2:8790` forces an address,

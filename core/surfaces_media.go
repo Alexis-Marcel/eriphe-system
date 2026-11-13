@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +30,9 @@ import (
 // (the same dialer as an access: never its own network, the cloud's
 // metadata or the LAN), 3 redirects at most, no cookie nor credential,
 // 8 MiB at most, an image (not SVG, which carries scripts) or a video, kept
-// 10 minutes by the browser.
+// 10 minutes by the browser. An image a task gave for a surface
+// (media:<id>, surfaces_capture.go) is read from eriphe-core's own data,
+// served the same way.
 
 const (
 	mediaMax       = 8 << 20
@@ -85,16 +88,41 @@ func (c *core) mediaOrDrop(raw string, allowed bool) string {
 	return mediaPath + "?" + url.Values{"u": {raw}, "s": {c.mediaSign(raw)}}.Encode()
 }
 
+// viewMedia is a media address of the surface id as the page gets it. An
+// image a task gave for this surface (media:<id>, surfaces_capture.go) is
+// eriphe-core's own: it carries nothing out, so it is kept even when the
+// author is tainted, but only on the surface it was given for. Any other
+// goes through mediaOrDrop.
+func (c *core) viewMedia(surfaceID, raw string, allowed bool) string {
+	if strings.HasPrefix(strings.TrimSpace(raw), surfaceMediaScheme) {
+		id := surfaceMediaRef(raw)
+		if m, err := c.surfaceMediaGet(id); err != nil || m.Surface != surfaceID {
+			return ""
+		}
+		ref := surfaceMediaScheme + id
+		return mediaPath + "?" + url.Values{"u": {ref}, "s": {c.mediaSign(ref)}}.Encode()
+	}
+	return c.mediaOrDrop(raw, allowed)
+}
+
 // handleMedia is GET /espace/media: a surface's image or video, fetched by
 // eriphe-core. 403 for an address it did not sign, 502 for one that is not
-// a media it serves.
+// a media it serves. An image a task gave (media:<id>) is read from
+// eriphe-core's data folder, never fetched.
 func (w *web) handleMedia(rw http.ResponseWriter, r *http.Request, _ *session) {
 	raw, sig := r.URL.Query().Get("u"), r.URL.Query().Get("s")
 	if raw == "" || !hmac.Equal([]byte(sig), []byte(w.c.mediaSign(raw))) {
 		http.Error(rw, "not an address of a surface", http.StatusForbidden)
 		return
 	}
-	body, kind, err := fetchMedia(r, raw)
+	var body []byte
+	var kind string
+	var err error
+	if id := surfaceMediaRef(raw); id != "" {
+		body, kind, err = w.c.readSurfaceMedia(id)
+	} else {
+		body, kind, err = fetchMedia(r, raw)
+	}
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadGateway)
 		return
@@ -144,4 +172,17 @@ func fetchMedia(r *http.Request, raw string) ([]byte, string, error) {
 		return nil, "", errors.New("too large")
 	}
 	return body, kind, nil
+}
+
+// readSurfaceMedia reads an image a task gave for a surface.
+func (c *core) readSurfaceMedia(id string) ([]byte, string, error) {
+	m, err := c.surfaceMediaGet(id)
+	if err != nil {
+		return nil, "", err
+	}
+	body, err := os.ReadFile(c.store.surfaceMediaPath(m.ID))
+	if err != nil {
+		return nil, "", errors.New("the image is gone")
+	}
+	return body, m.Type, nil
 }

@@ -455,6 +455,7 @@ func (c *core) surfaceRemove(id, by string) error {
 	}
 	c.sendSurface(a2ui.Message{Version: a2ui.Version, DeleteSurface: &a2ui.DeleteSurface{SurfaceID: id}})
 	c.surf.mu.Unlock()
+	c.dropSurfaceMedia(id) // surfaces_capture.go
 	log.Printf("surface %s removed by %s", id, by)
 	if s.Author == surfaceAuthorCore && by == surfaceByUser {
 		c.queueSurfaceDismissed(id) // its item leaves the queue too (workspace_queue.go)
@@ -964,6 +965,7 @@ func (c *core) tickSurfaces(ctx context.Context, now time.Time) {
 			c.refreshLater(ctx, s.ID, now, func() { c.surf.due.Delete(s.ID) })
 		}
 	}
+	c.sweepSurfaceMedia(all, now) // surfaces_capture.go
 	c.followSurfaceResources()
 }
 
@@ -1320,7 +1322,8 @@ type surfaceViewed struct {
 // through eriphe-core's media endpoint; one the author wrote too, unless
 // the surface is tainted: then a model that read something from outside
 // may have written it, to carry what it read out in its address (A2UI
-// #4045), and it is dropped. Anything but http(s) is dropped.
+// #4045), and it is dropped. Anything but http(s) is dropped, but for an
+// image a task gave for this surface (viewMedia, surfaces_capture.go).
 //
 // A Link's address goes as it is, never through core: it opens only on
 // the user's click, shown in clear. One that is not an address a Link may
@@ -1334,7 +1337,7 @@ func (c *core) surfaceView(s surface) surfaceViewed {
 		kind, _ := comp["component"].(string)
 		for prop, val := range comp {
 			if str, ok := val.(string); ok && a2ui.IsMedia(kind, prop) {
-				comp[prop] = c.mediaOrDrop(str, authorOK)
+				comp[prop] = c.viewMedia(s.ID, str, authorOK)
 			}
 			if str, ok := val.(string); ok && a2ui.IsLink(kind, prop) {
 				comp[prop] = linkOrDrop(str)
@@ -1359,7 +1362,7 @@ func (c *core) surfaceView(s surface) surfaceViewed {
 		}
 		fromSource, _ := sourceCovering(b.Path, s.Sources)
 		ok := fromSource != "" || authorOK
-		rewriteAt(v.data, tokens(b.Path), func(u string) string { return c.mediaOrDrop(u, ok) })
+		rewriteAt(v.data, tokens(b.Path), func(u string) string { return c.viewMedia(s.ID, u, ok) })
 	}
 	return v
 }

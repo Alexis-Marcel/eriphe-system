@@ -313,6 +313,9 @@ func (n *node) taskEnv(t *Task, agentEnv map[string]string) map[string]string {
 	if n.toolchainsFor(t) {
 		env["ERIPHE_TOOLCHAIN_URL"] = n.callbackFor(t) + toolchainPath // toolchain.go
 	}
+	for k, v := range n.mediaEnv(t) { // media.go
+		env[k] = v
+	}
 	// The env reaches the container through the docker CLI's own (-e NAME),
 	// and the CLI honours the proxy variables too: it must reach its daemon
 	// directly, never through the relay, which refuses its private address.
