@@ -31,6 +31,22 @@ Who writes the tiles:
 - **Eriphe itself, for what waits for you**: a proposal to approve, an alert, a message held for
   later. These come and go with what they show.
 
+What waits for you is grouped by what it asks, one tile per group, each listing its items with
+their buttons, the most important first, and its title counting them:
+
+- **To decide** (« À décider »): something Eriphe would do once you say **Yes** (use a tool, start
+  a task, change a setting, add a skill or a monitor…). The card says what will be done.
+- **Reminders to keep** (« Rappels à garder »): **Keep** keeps the reminder, **Forget** drops it.
+  Keeping it runs nothing: "add the event to the calendar" is only kept as a reminder.
+- **Memories to keep** (« Souvenirs à garder »): something Eriphe noticed and would remember;
+  **Keep** or **Forget**.
+- **To see** (« À voir »): alerts and messages held for you.
+
+Something urgent (a task waiting on you, an alert, a proposal for today) gets a tile of its own,
+titled with what it is about. Closing a group's tile hides it for the session; its cards still
+wait for your answer (Eriphe offers them in the conversation), and the tile is back next session.
+Folded tiles with the same title share one chip, with their count.
+
 ### Let an AI arrange it
 
 Choosing what is in front is done by the **workspace composer**, a small AI turn each time

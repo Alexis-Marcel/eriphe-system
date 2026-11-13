@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, 
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Adapter } from "./a2ui/adapter";
 import { SurfaceView } from "./a2ui/Surfaces";
+import { chipLabel, shownChips, surfaceTitle } from "./chips";
 import { useWords } from "./i18n";
 import type { FoldedChip, Layout, Tile, TileSize } from "./types";
 
@@ -176,10 +177,10 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
 
   const strip = (
     <div className={`chips${narrow ? " stacked" : ""}`} role="list" aria-label={t("espace.chips")}>
-      {chips.map((c) => (
+      {shownChips(chips, (id) => surfaceTitle(byID.get(id)), t("espace.chip.untitled")).map((c) => (
         <div key={c.id} role="listitem" className={`chip${c.closed ? " closed" : ""}`} data-surface={c.id}>
-          <button className="chip-open" onClick={() => onOpen(c.id)} title={t("espace.chip.open", c.title)}>
-            <span className="chip-text">{c.title}</span>
+          <button className="chip-open" onClick={() => onOpen(c.id)} title={t("espace.chip.open", chipLabel(c))}>
+            <span className="chip-text">{chipLabel(c)}</span>
             {c.closed ? <span className="chip-from">{t("espace.chip.closed")}</span> : c.why && <span className="chip-from">{c.why}</span>}
           </button>
         </div>

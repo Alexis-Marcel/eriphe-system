@@ -16,6 +16,7 @@ import (
 type proposalView struct {
 	Ref     string      `json:"ref"`
 	Card    int64       `json:"card"`  // the card that answers it
+	Kind    string      `json:"kind"`  // what it is: memory and intention only ask to keep something
 	State   string      `json:"state"` // pending, approved, rejected, gone
 	Text    string      `json:"text"`
 	Why     string      `json:"why,omitempty"`
@@ -27,7 +28,7 @@ type proposalView struct {
 
 // view is a card and its proposal as the workspace shows them, in lang.
 func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
-	v := proposalView{Ref: x.Ref, Card: x.ID, State: x.State, Text: x.Text, Why: p.Why, Tainted: p.Tainted != "", Created: x.Created}
+	v := proposalView{Ref: x.Ref, Card: x.ID, Kind: x.Kind, State: x.State, Text: x.Text, Why: p.Why, Tainted: p.Tainted != "", Created: x.Created}
 	if t := p.Text(lang); t != "" {
 		v.Text = t
 	}

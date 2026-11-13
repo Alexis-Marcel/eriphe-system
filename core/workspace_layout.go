@@ -444,9 +444,9 @@ type layoutState struct {
 	missingSent map[string]time.Time // surface.missing told, by text
 	staleSent   map[string]time.Time // surface.stale told, by id: the surface's version it was told for
 
-	user       userPlacement   // what the user closed and placed this session (workspace_gestures.go)
-	userLoaded bool            // user was read from the store
-	read       map[string]bool // queue surfaces the user opened: their item ends once they leave it
+	user       userPlacement       // what the user closed and placed this session (workspace_gestures.go)
+	userLoaded bool                // user was read from the store
+	read       map[string][]string // queue surfaces the user opened: the refs of the items other than cards they showed, which end once the user leaves it
 }
 
 // workspaceChoiceNow is the choice laid out: the last kept, or by weight.

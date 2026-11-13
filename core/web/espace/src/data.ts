@@ -286,6 +286,9 @@ async function post(path: string, body: URLSearchParams): Promise<boolean> {
 export type ProposalView = {
   ref: string;
   card: number;
+  // kind is what the proposal is (memory, intention, access…): what its
+  // card asks depends on it.
+  kind?: string;
   state: string; // pending, approved, rejected, gone
   text: string;
   why?: string;

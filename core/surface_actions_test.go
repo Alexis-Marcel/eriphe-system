@@ -309,6 +309,8 @@ func TestSurfaceActionAnswerQueue(t *testing.T) {
 	other := proposedRule(t, c, "banque", "")
 	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
 	x := cardOf(t, c, cardRule, r.ID)
+	// Urgent: a surface of its own (in a group otherwise: TestQueueGroupAnswer).
+	c.store.db.Exec(`UPDATE attention SET weight = ? WHERE ref = ?`, weightBlocksATask, cardItemRef(x.ID))
 	c.syncQueueSurfaces()
 	id := queueSurfaceID(cardItemRef(x.ID))
 	if s, err := c.surface(id); err != nil || s.Author != surfaceAuthorCore {

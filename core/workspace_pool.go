@@ -147,8 +147,8 @@ func (c *core) poolSnapshot(moment, remark string) poolSnapshot {
 		s.Pool = append(s.Pool, entryOf(x))
 		words = append(words, x.Title, x.Why)
 	}
-	for _, it := range c.attentionOpen() {
-		s.Queue = append(s.Queue, poolQueued{attentionItem: it, Surface: queueSurfaceID(it.Ref)})
+	for _, e := range c.queuePlan(now) {
+		s.Queue = append(s.Queue, poolQueued{attentionItem: e.it, Surface: e.surface}) // its group, or its own when urgent
 	}
 	var topic string
 	c.store.db.QueryRow(`SELECT text FROM messages WHERE role = ? ORDER BY seq DESC LIMIT 1`, roleUser).Scan(&topic)
