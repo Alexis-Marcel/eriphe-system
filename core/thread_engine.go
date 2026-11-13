@@ -106,7 +106,7 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 
 // checkStepAgent tells whether a task step's agent is one.
 func (c *core) checkStepAgent(st stepSpec) error {
-	if st.Kind != stepTask {
+	if !st.runsTask() {
 		return nil
 	}
 	if _, _, err := c.conf().agent(st.Agent); err != nil {
@@ -125,10 +125,14 @@ func (c *core) advanceThread(ctx context.Context, id int64) {
 
 func (c *core) advanceLocked(ctx context.Context, id int64) {
 	s, err := c.thread(id)
-	if err != nil || s.Phase != phaseRunning {
+	switch {
+	case err != nil:
 		return
-	}
-	if s.overBudget(time.Now()) {
+	case !s.led() && !s.active():
+		return
+	case s.led() && s.Phase != phaseRunning:
+		return
+	case s.led() && s.overBudget(time.Now()):
 		c.holdForBudget(s)
 		return
 	}
@@ -165,7 +169,11 @@ func (c *core) advanceLocked(ctx context.Context, id int64) {
 			log.Printf("thread %d: step %s: %v", id, st.Key, err)
 			c.setStep(id, st.Key, map[string]any{"status": stepBlocked, "note": truncate(err.Error(), threadTextMax), "ended": time.Now().Unix()})
 			c.logThread(id, "engine", fmt.Sprintf("L'étape « %s » n'a pas pu démarrer : %v", st.Title, err))
-			c.tellLead(s, fmt.Sprintf("L'étape « %s » (%s) n'a pas pu démarrer : %v\nRéessaie-la avec settle_step (retry), corrige le plan avec amend_thread, ou arrête le thread.", st.Title, st.Key, err), nil)
+			fix := "corrige le plan avec amend_thread"
+			if !s.led() {
+				fix = "ajoute une autre étape avec add_step"
+			}
+			c.tellLead(s, fmt.Sprintf("L'étape « %s » (%s) n'a pas pu démarrer : %v\nRéessaie-la avec settle_step (retry), %s, ou arrête le thread.", st.Title, st.Key, err, fix), nil)
 			status[st.Key] = stepBlocked
 			continue
 		}
@@ -175,8 +183,8 @@ func (c *core) advanceLocked(ctx context.Context, id int64) {
 		c.setThread(id, map[string]any{"told": ""})
 		s.told = ""
 	}
-	if busy {
-		return
+	if busy || !s.led() {
+		return // a light thread's holder hears of each step: nothing more to tell
 	}
 	complete := !slices.ContainsFunc(steps, func(st Step) bool {
 		return st.Key != finalStep && st.Status != stepAccepted && st.Status != stepDropped
@@ -206,9 +214,13 @@ func closeNote(s Thread) string {
 	return " : un agent neuf vérifiera d'abord l'objectif (« " + s.DoneWhen + " »)."
 }
 
-// startStep starts one step: its task, or its question to the user.
+// startStep starts one step: its task, its question to the user, its
+// call, or its wait (thread_steps.go).
 func (c *core) startStep(ctx context.Context, s Thread, st Step, steps []Step) error {
 	now := time.Now().Unix()
+	if other, err := c.startOther(s, st); other {
+		return err
+	}
 	switch st.Kind {
 	case stepApproval:
 		if _, err := c.ask(s.ID, askApproval, st.Key, "", nil, "engine"); err != nil {
@@ -221,6 +233,9 @@ func (c *core) startStep(ctx context.Context, s Thread, st Step, steps []Step) e
 			return err
 		}
 		c.logThread(s.ID, "engine", fmt.Sprintf("L'étape « %s » attend le choix de %s.", st.Title, c.conf().User))
+		if !s.led() && len(st.After) == 0 {
+			return nil // the brain just added it: it asks
+		}
 		c.tellBrain(s, fmt.Sprintf("L'étape « %s » (%s) attend le choix de %s : %s\nOptions : %s.\nPose-lui la question ; sa réponse s'enregistre avec choose_step, ou sur la page du thread.",
 			st.Title, st.Key, c.conf().User, st.Question, strings.Join(st.Options, " · ")), nil)
 		return nil
@@ -258,16 +273,17 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 	if s.Tainted != "" {
 		taint = strings.Split(s.Tainted, ", ")
 	}
+	planned := st.Planned && s.Phase == phaseRunning // a plan the user approved, still running: never one reopened light
 	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract,
-		askStart: true, cleanStart: st.Planned, approvedInAdvance: st.Planned}
-	if !st.Planned {
+		askStart: true, cleanStart: planned, approvedInAdvance: planned}
+	if !planned {
 		r.taint = taint
 	}
 	t, err := c.runTask(ctx, r)
 	if err != nil {
 		return nil, err
 	}
-	if st.Planned {
+	if planned {
 		c.grantLent(t) // the user approved it with the plan (access_card.go)
 		c.store.set(lentByUserKey(t.ID), "1")
 	} else if len(taint) > 0 {
@@ -314,6 +330,10 @@ func (c *core) threadTaskChanged(id, state string, outcome turnOutcome) bool {
 		}
 		if st.Key == finalStep {
 			c.judgeFinal(s, st, r, strings.TrimSpace(tst.LastText)) // thread_lead.go
+			return true
+		}
+		if st.Kind == stepCheck {
+			c.judgeCheck(s, st, r, strings.TrimSpace(tst.LastText), taint) // thread_steps.go
 			return true
 		}
 		failed := !r.missing() && (len(r.failedChecks()) > 0 || r.Unsupported)
@@ -404,11 +424,20 @@ func (c *core) settleStep(ctx context.Context, id int64, key, verdict, note, out
 	if err != nil {
 		return Step{}, err
 	}
-	if st.Kind != stepTask {
-		return st, fmt.Errorf("step %s is a %s: %s answers it, not you", key, st.Kind, c.conf().User)
-	}
 	note = strings.TrimSpace(note)
 	now := time.Now().Unix()
+	switch st.Kind {
+	case stepTask:
+	case stepUser, stepDeadline:
+		return c.settleWait(ctx, s, st, verdict, note, by)
+	case stepCall, stepCheck:
+		if verdict == verdictRetry {
+			return c.restartStep(ctx, s, st, note, by)
+		}
+		return st, fmt.Errorf("step %s is a %s: its outcome settles it, not you; one blocked or rejected may be retried", key, st.Kind)
+	default:
+		return st, fmt.Errorf("step %s is a %s: %s answers it, not you", key, st.Kind, c.conf().User)
+	}
 	switch verdict {
 	case verdictAccept:
 		switch {
@@ -449,6 +478,44 @@ func (c *core) settleStep(ctx context.Context, id int64, key, verdict, note, out
 	}
 	c.advanceLocked(ctx, id)
 	return c.step(id, key)
+}
+
+// settleWait is the holder's word on a step that waits: a user step it
+// sees done (its evidence in note), a deadline no longer to wait for.
+func (c *core) settleWait(ctx context.Context, s Thread, st Step, verdict, note, by string) (Step, error) {
+	if st.Status != stepRunning {
+		return st, fmt.Errorf("step %s is %s: it waits for nothing", st.Key, st.Status)
+	}
+	status := stepAccepted
+	switch {
+	case verdict == verdictReject:
+		status = stepRejected
+	case verdict != verdictAccept:
+		return st, fmt.Errorf("verdict %q: a %s step is accepted or rejected", verdict, st.Kind)
+	case st.Kind == stepUser && note == "":
+		return st, fmt.Errorf("say in note what shows it is done: otherwise %s answers it", c.conf().User)
+	}
+	c.setStep(s.ID, st.Key, map[string]any{"status": status, "note": truncate(note, threadTextMax), "ended": time.Now().Unix()})
+	c.logThread(s.ID, by, fmt.Sprintf("Étape « %s » : %s.%s", st.Title, stepWord(status), withNote(note)))
+	c.advanceLocked(ctx, s.ID)
+	return c.step(s.ID, st.Key)
+}
+
+// restartStep starts again a call or a check that was blocked or
+// rejected: its call asks a new card, its task is a new one.
+func (c *core) restartStep(ctx context.Context, s Thread, st Step, note, by string) (Step, error) {
+	switch {
+	case st.Status != stepBlocked && st.Status != stepRejected:
+		return st, fmt.Errorf("step %s is %s: nothing to retry", st.Key, st.Status)
+	case st.Tries >= stepRetries:
+		return st, fmt.Errorf("step %s was retried %d times, the limit", st.Key, st.Tries)
+	}
+	c.stopStepTask(ctx, st)
+	c.setStep(s.ID, st.Key, map[string]any{"status": stepWaiting, "tries": st.Tries + 1, "card": "", "task": "", "failed": false,
+		"evidence": "", "output": "", "tainted": "", "note": truncate(note, threadTextMax), "ended": 0})
+	c.logThread(s.ID, by, fmt.Sprintf("Étape « %s » reprise.%s", st.Title, withNote(note)))
+	c.advanceLocked(ctx, s.ID)
+	return c.step(s.ID, st.Key)
 }
 
 func withNote(note string) string {
@@ -604,7 +671,7 @@ func (c *core) stopThread(ctx context.Context, id int64, by string) error {
 		return fmt.Errorf("the thread is %s already", s.State)
 	}
 	if !s.led() {
-		c.endLight(s, threadDropped, "")
+		c.endLight(ctx, s, threadDropped, "")
 		c.logThread(id, by, "Thread abandonné.")
 		return nil
 	}
@@ -638,13 +705,15 @@ func (c *core) closeLight(id int64, summary, by string) error {
 	if summary = strings.TrimSpace(summary); summary == "" {
 		return errors.New("a summary is needed: how its goal was reached. A thread closes only on its goal; to give up, stop it")
 	}
-	c.endLight(s, threadDone, summary)
+	c.endLight(context.Background(), s, threadDone, summary)
 	c.logThread(id, by, "Thread clos : "+summary)
 	return nil
 }
 
-// endLight ends a light thread: done or dropped.
-func (c *core) endLight(s Thread, state, summary string) {
+// endLight ends a light thread: done or dropped; what still waits or
+// runs in it ends too.
+func (c *core) endLight(ctx context.Context, s Thread, state, summary string) {
+	c.endSteps(ctx, s) // thread_steps.go
 	fields := map[string]any{"state": state, "ended": time.Now().Unix()}
 	if summary != "" {
 		fields["summary"] = truncate(summary, 2000)
@@ -671,6 +740,7 @@ func (c *core) reopenThread(id int64, why, by string) (Thread, error) {
 	if why = oneLine(why); why == "" {
 		return s, errors.New("why is needed: what brings its subject back")
 	}
+	c.endSteps(context.Background(), s) // what its old plan left undone never starts by itself
 	c.setThread(id, map[string]any{"mode": modeLight, "phase": "", "state": threadOpen, "held": "", "lead": "", "told": "", "since": 0, "ended": 0})
 	c.logThread(id, by, "Thread rouvert : "+why)
 	return c.thread(id)
@@ -684,9 +754,9 @@ func (c *core) closeLocked(s Thread, state, summary string) {
 		fields["summary"] = summary
 	}
 	c.setThread(s.ID, fields)
-	c.closeAsks(s.ID)
-	c.dropLead(s)              // thread_lead.go
-	c.dropThreadSurfaces(s.ID) // surface_authors.go
+	c.endSteps(context.Background(), s) // thread_steps.go
+	c.dropLead(s)                       // thread_lead.go
+	c.dropThreadSurfaces(s.ID)          // surface_authors.go
 	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: fmt.Sprintf("thread:%d", s.ID), Source: "thread",
 		Payload: map[string]any{"thread": s.ID, "state": stateOf(state), "phase": state}})
 }
@@ -764,17 +834,18 @@ func (c *core) holdForBudget(s Thread) {
 	}
 }
 
-// threadsTick is the engine's pass, every 15 seconds: the budgets, the
-// steps whose task ended without being told (eriphe-core restarted), and
-// what may start.
+// threadsTick is the engine's pass, every 15 seconds: the deadlines that
+// came, the budgets, the steps whose task ended without being told
+// (eriphe-core restarted), and what may start.
 func (c *core) threadsTick(now time.Time) {
-	ss, err := c.threadsWhere(`mode = ? AND `+activeThreads+` ORDER BY id DESC LIMIT 50`, modeLed)
+	c.threadDeadlines(now) // thread_steps.go
+	ss, err := c.threadsWhere(activeThreads + ` ORDER BY id DESC LIMIT 50`)
 	if err != nil {
 		return
 	}
 	ctx := context.Background()
 	for _, s := range ss {
-		if s.Phase != phaseRunning {
+		if s.led() && s.Phase != phaseRunning {
 			continue
 		}
 		steps, _ := c.steps(s.ID)
@@ -862,8 +933,18 @@ func stepFields(steps []Step, keep func(Step) bool) []cardField {
 			}
 		case stepChoice:
 			parts = append(parts, st.Question+" ("+strings.Join(st.Options, " · ")+")")
-		case stepApproval:
+		case stepApproval, stepUser:
 			parts = append(parts, st.Question)
+		case stepCall:
+			parts = append(parts, callVerb(st.Tool, "fr"))
+		case stepCheck:
+			if st.Tool != "" {
+				parts = append(parts, callVerb(st.Tool, "fr"))
+			} else {
+				parts = append(parts, orStr(st.Agent, "agent"))
+			}
+		case stepDeadline:
+			parts = append(parts, orStr(st.Due, fmt.Sprintf("intention %d", st.Intention)))
 		}
 		if len(st.After) > 0 {
 			parts = append(parts, "← "+strings.Join(st.After, ", "))

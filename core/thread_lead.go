@@ -201,7 +201,7 @@ func (c *core) leadOnly(id int64) error {
 		return err
 	}
 	if !s.led() {
-		return fmt.Errorf("thread %d is light: it has no plan nor steps to judge", id)
+		return fmt.Errorf("thread %d is light: add its steps with add_step", id)
 	}
 	if c.hasLead(s) {
 		return fmt.Errorf("thread %d has its lead (%s): it judges the steps and changes the plan. Tell it what %s wants with tell_lead", id, s.Lead, c.conf().User)

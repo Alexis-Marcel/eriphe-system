@@ -44,6 +44,9 @@ func (c *core) intentionsTick() {
 	for _, x := range became {
 		log.Printf("memory: intention %d is due", x.ID)
 	}
+	if len(became) > 0 {
+		c.threadDeadlines(time.Now()) // a thread that follows one wakes (thread_steps.go)
+	}
 	if xs, err := c.mem.toSurface(); err == nil && len(xs) > 0 {
 		c.ping()
 	}
