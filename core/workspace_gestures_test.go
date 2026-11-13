@@ -479,3 +479,28 @@ func TestWebGestures(t *testing.T) {
 		t.Fatalf("gestures %v", whats)
 	}
 }
+
+// The user's gestures on the workspace are activity, but a tile left
+// unopened: a return that only opens or closes tiles is a return
+// (user.returned, which the arrival skill follows).
+func TestGesturesAreActivity(t *testing.T) {
+	c, _ := surfaceCore(t)
+	writeTestSurface(t, c, surfaceIn{ID: "agenda", Title: "Agenda"})
+	now := time.Now()
+	c.noteGesture(gestureOpened, "surface:agenda", now.Add(-5*time.Hour))
+	c.noteGesture(gestureIgnored, "surface:agenda", now.Add(-time.Hour))
+	if last, ok := c.lastSeen(now); !ok || last.Unix() != now.Add(-5*time.Hour).Unix() {
+		t.Fatalf("last seen %v %v: an ignored tile is activity", last, ok)
+	}
+	c.tickReturned(now)
+	if got := eventsOf(t, c, evUserReturned); len(got) != 0 {
+		t.Fatalf("still away, yet: %+v", got)
+	}
+	c.noteGesture(gestureClosed, "surface:agenda", now.Add(-2*time.Minute))
+	c.tickReturned(now)
+	c.tickReturned(now.Add(time.Minute))
+	got := eventsOf(t, c, evUserReturned)
+	if len(got) != 1 || got[0].Payload["away_minutes"].(float64) < 290 {
+		t.Fatalf("%+v", got)
+	}
+}

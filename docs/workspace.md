@@ -149,8 +149,8 @@ itself after 15 minutes.
 ## Buttons and proposals
 
 - **A button asks Eriphe.** Clicking it sends the words written on it as your message, as if you
-  had typed them ("Draft a reply", "Look into this error"). Eriphe answers in the conversation and
-  does what you would have asked. No button writes, sends or deletes anything by itself.
+  had typed them ("Draft a reply", "Look into this error"). Eriphe answers in the conversation
+  (its answer shows under the workspace's field too) and does what you would have asked. No button writes, sends or deletes anything by itself.
 - **A proposal runs only after your yes.** When Eriphe proposes something (an event to add, a
   reply to send, a new skill), it shows as a card with **Yes** and **No**, in the conversation and,
   where it fits, in the tile it concerns. A proposed appointment shows on the day's tile as a
@@ -189,8 +189,14 @@ overview** and the field to write about it at the top.
 
 The conversation with Eriphe stays, with its history, the tasks and Settings, at
 `/conversation`: **Open the conversation**, in the workspace's column, goes there. What you write
-in the workspace's column is a message of that conversation, and Eriphe's answer comes there; the
-column only says it was sent.
+in the workspace's column is a message of that conversation. Under the field, **Last exchange**
+shows your last message and Eriphe's answer as it writes it; click it to fold or unfold it, and
+**The whole conversation** for the rest. When the page opens it is folded; it unfolds when you
+write and when Eriphe answers. Questions Eriphe needs you to answer come as tiles on the workspace.
+
+While the workspace is open in front of you, Eriphe knows you are there, as with the conversation:
+a notification shows as a small notice in the page rather than on your phone, and a return after
+an absence counts, even if you only open or close tiles. Clicking a notice goes where it says.
 
 If the workspace cannot open on a device (an old browser, a script blocked, Eriphe out of reach
 for a while), the page offers the conversation instead, and **Always open the conversation here**.

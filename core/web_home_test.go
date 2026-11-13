@@ -181,13 +181,16 @@ func TestLinksIntoTheConversation(t *testing.T) {
 }
 
 // The workspace's stream does not carry the conversation's past messages:
-// it starts after the last one.
+// it starts after the last one, with the last exchange as JSON.
 func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 	tw, _ := homeWeb(t)
 	for range 3 {
 		if _, err := tw.c.store.addMessage(roleUser, "un message passé", true); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if _, err := tw.c.store.addMessage(roleUser, "le dernier", true); err != nil {
+		t.Fatal(err)
 	}
 	events := func(query string) string {
 		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
@@ -206,7 +209,8 @@ func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 		}
 		return b.String()
 	}
-	if got := events("?a2ui=1"); strings.Contains(got, "un message passé") || !strings.Contains(got, "event: a2ui") {
+	if got := events("?a2ui=1"); strings.Contains(got, "un message passé") || !strings.Contains(got, "event: a2ui") ||
+		strings.Contains(got, "event: message") || !strings.Contains(got, `"text":"le dernier"`) {
 		t.Errorf("the workspace's stream:\n%s", got)
 	}
 	if got := events(""); !strings.Contains(got, "un message passé") {

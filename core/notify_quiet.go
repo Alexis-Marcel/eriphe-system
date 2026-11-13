@@ -7,8 +7,9 @@ import (
 )
 
 // The quiet hours adapt, but never by themselves. eriphe-core keeps cheap
-// signals of when the user is active (their messages, a workspace tab in
-// front of them, their reactions to notifications) and of when they did not
+// signals of when the user is active (their messages, a tab of theirs in
+// front of them, their reactions to notifications, their gestures on the
+// workspace's surfaces) and of when they did not
 // want to be told (« pas maintenant »), and suggests a window from the last
 // two weeks, without a model: the typical last activity of the evening
 // and first of the morning, with a margin. The brain sees the suggestion
@@ -43,7 +44,7 @@ type activitySignal struct {
 type activitySource func(c *core, since time.Time) ([]activitySignal, error)
 
 // activitySources feed the suggestion; a new signal is one more here.
-var activitySources = []activitySource{messageActivity, presenceActivity, feedbackActivity}
+var activitySources = []activitySource{messageActivity, presenceActivity, feedbackActivity, gestureActivity}
 
 // messageActivity: the user's messages, but not their home's automations.
 func messageActivity(c *core, since time.Time) ([]activitySignal, error) {
@@ -64,7 +65,8 @@ func messageActivity(c *core, since time.Time) ([]activitySignal, error) {
 	return out, rows.Err()
 }
 
-// presenceActivity: a workspace tab in front of the user.
+// presenceActivity: a tab in front of the user, the conversation's or the
+// workspace's.
 func presenceActivity(c *core, since time.Time) ([]activitySignal, error) {
 	rows, err := c.store.db.Query(`SELECT at FROM presence_seen WHERE at >= ?`, since.Unix())
 	if err != nil {
@@ -102,6 +104,26 @@ func feedbackActivity(c *core, since time.Time) ([]activitySignal, error) {
 		if fb == "later" {
 			out = append(out, activitySignal{At: time.Unix(created, 0), Unwelcome: true})
 		}
+	}
+	return out, rows.Err()
+}
+
+// gestureActivity: what the user did on the workspace's surfaces
+// (workspace_log): opened, closed, moved, resized, wrote about. Not
+// ignored: a tile left unopened is the layout's doing as often as theirs.
+func gestureActivity(c *core, since time.Time) ([]activitySignal, error) {
+	rows, err := c.store.db.Query(`SELECT time FROM workspace_log WHERE time >= ? AND what != ?`, since.Unix(), gestureIgnored)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []activitySignal
+	for rows.Next() {
+		var at int64
+		if err := rows.Scan(&at); err != nil {
+			return nil, err
+		}
+		out = append(out, activitySignal{At: time.Unix(at, 0)})
 	}
 	return out, rows.Err()
 }

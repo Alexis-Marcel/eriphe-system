@@ -10,8 +10,13 @@ import type { Layout } from "./types";
 //   first (surfaces_stream.go), its "layout" events where each surface is
 //   on the grid, which code decides (workspace_layout.go), and its
 //   "proposals" events the refs of the proposals made or decided since
-//   (surface_proposals.go), for what shows them to read them again. One
-//   stream per page, shared;
+//   (surface_proposals.go), for what shows them to read them again; its
+//   "exchange" events the conversation's last exchange (exchangeEvent,
+//   web_espace_exchange.go), when it opens and whenever it changes; its
+//   "notice" events the notifications routed to this tab (route_send.go).
+//   One stream per page, shared, with the page's tab id;
+// - POST /presence: whether this tab is in front of the user, and its
+//   browser's push subscription (presence.ts, web_push.go);
 // - POST /api/espace/action and /api/espace/error: what the user did on a
 //   surface, and what went wrong rendering one, as A2UI v1.0 messages. An
 //   action is ask (a Button's request to Eriphe), answer (a Proposal's yes
@@ -39,6 +44,11 @@ export type Boot = { lang: Lang; name: string; csrf: string; strings: Record<str
 const json = { Accept: "application/json" };
 
 let csrf = ""; // from the boot
+
+// This page's tab id: it tells eriphe-core whether it is in front of the
+// user (presence.ts), and gets the notifications routed to it, by the
+// event stream or the answer to its presence (route.go).
+export const tab = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 class SignedOut extends Error {}
 
@@ -105,11 +115,15 @@ export function streamDown(h: StreamHealth, now: number): boolean {
   return !h.open && now - h.since > STREAM_GRACE;
 }
 
+export function streamURL(surfaces: boolean): string {
+  return `/events?${surfaces ? "a2ui=1&" : ""}tab=${tab}`;
+}
+
 function open() {
   source?.close();
   if (retry) clearTimeout(retry);
   retry = null;
-  const es = new EventSource(handlers.has("a2ui") ? "/events?a2ui=1" : "/events");
+  const es = new EventSource(streamURL(handlers.has("a2ui")));
   source = es;
   es.onopen = () => {
     health = { open: true, since: Date.now() };
@@ -151,12 +165,56 @@ function listen(type: string, h: Handler): () => void {
 // reset: the surfaces the page has are dropped first.
 export type SurfaceEvent = { seq: number; reset?: boolean; messages: Message[] };
 
+// A line of the conversation's last exchange (exchangeLine,
+// web_espace_exchange.go): the user's (via: where they said it, when not
+// here or in the conversation), Eriphe's, or an error, without its text.
+export type ExchangeLine = { seq: number; role: "user" | "brain" | "error"; text?: string; via?: string; time: string };
+
+// The "exchange" event: the user's last message and Eriphe's lines after
+// it, the message Eriphe is writing, and whether it is at work.
+export type Exchange = { lines: ExchangeLine[]; draft?: string; thinking?: boolean };
+
+// A notification routed to this tab (inApp, route_send.go): shown in the
+// page, no system notification; its url opens it.
+export type Note = { id: number; body: Record<string, string>; url: string };
+
+// What the stream also feeds, besides the surfaces: the exchange, and the
+// notifications routed to this tab.
+export type Follow = { onExchange?: (x: Exchange) => void; onNotes?: (n: Note[]) => void };
+
 // stream feeds the adapter the surfaces eriphe-core sends, and onLayout
 // where they go; it sends back what the user did on them and what went
 // wrong rendering them.
-export function stream(b: Boot, adapter: Adapter, onLayout: (l: Layout) => void = () => {}): () => void {
+export function stream(b: Boot, adapter: Adapter, onLayout: (l: Layout) => void = () => {}, follow: Follow = {}): () => void {
   csrf = b.csrf;
   let seq = -1;
+  const offs: (() => void)[] = [];
+  if (follow.onExchange) {
+    const on = follow.onExchange;
+    offs.push(
+      listen("exchange", (e) => {
+        try {
+          const x = JSON.parse(e.data) as Exchange;
+          on({ ...x, lines: Array.isArray(x.lines) ? x.lines : [] });
+        } catch {
+          /* not an exchange */
+        }
+      }),
+    );
+  }
+  if (follow.onNotes) {
+    const on = follow.onNotes;
+    offs.push(
+      listen("notice", (e) => {
+        try {
+          const n = JSON.parse(e.data) as Note[];
+          if (Array.isArray(n)) on(n);
+        } catch {
+          /* not notes */
+        }
+      }),
+    );
+  }
   // Listened to first: the stream opens with the surfaces, the layout right after.
   const offLayout = listen("layout", (e) => {
     try {
@@ -187,6 +245,7 @@ export function stream(b: Boot, adapter: Adapter, onLayout: (l: Layout) => void 
     offLayout();
     offAction();
     offError();
+    for (const o of offs) o();
   };
 }
 

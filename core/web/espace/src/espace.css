@@ -80,6 +80,47 @@ button, input, select { font: inherit; }
   background: color-mix(in oklab, var(--paper) 6%, transparent); color: var(--paper);
 }
 .eriphe-input input::placeholder { color: color-mix(in oklab, var(--paper) 50%, transparent); }
+/* The conversation's last exchange, under the input (Exchange.tsx): folded
+   to one line, unfolded it scrolls within a few lines' height. */
+.exchange { display: grid; gap: 6px; font-size: 14px; }
+.exchange-toggle {
+  justify-self: start; display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none;
+  color: color-mix(in oklab, var(--paper) 75%, transparent); font: inherit; font-size: 13px; cursor: pointer;
+}
+.exchange-toggle::before { content: "▸"; transition: rotate 0.15s; }
+.exchange.open .exchange-toggle::before { rotate: 90deg; }
+.exchange-body {
+  display: grid; gap: 8px; max-height: 40vh; overflow: auto; padding: 10px 12px; border-radius: 14px;
+  background: color-mix(in oklab, var(--paper) 6%, transparent); overscroll-behavior: contain;
+}
+.exchange-user { margin: 0; color: color-mix(in oklab, var(--paper) 80%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; }
+.exchange-who { display: block; font-size: 12px; color: color-mix(in oklab, var(--paper) 55%, transparent); }
+.exchange-brain { overflow-wrap: anywhere; }
+.exchange-brain .a2-markdown > :first-child { margin-top: 0; }
+.exchange-brain .a2-markdown > :last-child { margin-bottom: 0; }
+.exchange-brain.draft { opacity: 0.75; }
+.exchange-error { margin: 0; padding: 6px 10px; border-radius: 10px; color: var(--ink); background: var(--urgent); }
+.exchange-dots { display: flex; gap: 4px; margin: 0; }
+.exchange-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--glow); animation: exchange-dot 1.2s infinite ease-in-out; }
+.exchange-dots i:nth-child(2) { animation-delay: 0.2s; }
+.exchange-dots i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes exchange-dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .exchange-dots i { animation: none; opacity: 0.6; } }
+.exchange-all { justify-self: start; font-size: 13px; color: color-mix(in oklab, var(--paper) 75%, transparent); }
+
+/* The notifications routed to this tab (Exchange.tsx's Notices): over the
+   page, bottom right, each for a while. */
+.notices { position: fixed; right: 16px; bottom: 76px; z-index: 21; display: grid; gap: 8px; width: min(360px, calc(100vw - 32px)); }
+.notice {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px 10px 14px; border-radius: 14px;
+  background: var(--paper); color: var(--ink); box-shadow: 0 10px 30px -10px #000a;
+  border-left: 4px solid var(--glow);
+}
+.notice-text { flex: 1; min-width: 0; color: inherit; overflow-wrap: anywhere; }
+a.notice-text { text-decoration: none; }
+a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
+.notice-close { flex: none; padding: 0 4px; border: 0; background: none; color: var(--ink-soft); font-size: 18px; line-height: 1; cursor: pointer; }
+
 .eriphe-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-size: 13px; }
 .eriphe-links a, .eriphe-links .linkish { color: color-mix(in oklab, var(--paper) 75%, transparent); }
 
@@ -204,6 +245,8 @@ button, input, select { font: inherit; }
 .narrow.focused .eriphe-panel { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 12px; }
 .narrow.focused .eriphe-name, .narrow.focused .eriphe-text, .narrow.focused .eriphe-links, .narrow.focused .eriphe-sample:not(.eriphe-offline) { display: none; }
 .narrow.focused .eriphe-input { flex: 1; min-width: 12em; }
+.narrow.focused .exchange { flex-basis: 100%; }
+.narrow.focused .exchange:not(.open) { display: none; }
 .narrow.focused .stage { min-height: 0; }
 .canvas.column.full { flex: 1; min-height: 0; }
 .canvas.column.full .mod { flex: 1; min-height: 0; }

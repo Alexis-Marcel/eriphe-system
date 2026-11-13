@@ -24,7 +24,8 @@ const (
 )
 
 // activityTimes are the user's activities before now within the lookback,
-// oldest first: their messages, a tab in front of them, their reactions.
+// oldest first: their messages, a tab in front of them, their reactions,
+// their gestures on the workspace (activitySources, notify_quiet.go).
 func (c *core) activityTimes(now time.Time) []time.Time {
 	var out []time.Time
 	for _, src := range activitySources {
