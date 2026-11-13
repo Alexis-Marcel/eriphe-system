@@ -1488,10 +1488,20 @@ user's like any other once installed. Each is installed at the first start of er
 it, approved and on (source `default`), recorded in the learning journal (the brain tells it, and
 `unlearn` takes it away), then never again: the store remembers it (`default_skill:<name>`), so a
 skill the user removed, changed or turned off stays as they left it, and a skill of theirs with the
-same name is left alone. A default skill names no tool, server or person
+same name is left alone. A release may change a default skill: at start, one the user has not
+changed (its approved version is one Eriphe shipped, whose hashes the store keeps under
+`default_skill_sha:<name>`; nothing pending; on) is updated to the shipped version (source
+`default`), recorded in the journal as « mis à jour par défaut » / "updated by default", which
+undoes it. Each shipped version is offered once: an update undone or refused is not offered again.
+An update that adds only servers Eriphe provides (`eriphe-workspace`, `eriphe-folders`, which
+grant nothing beyond the access policy) is installed as any update; one that asks for more (another
+tool, a `can`, an `urgent` text, a script) waits on the skill's card for the user's yes. An install
+made before the hashes were kept counts as unchanged while its skill is still the one installed by
+default (source `default`). A default skill names no tool, server or person
 (`TestNoToolInDefaultSkills`): it works from whatever is linked, and is lent only
-`eriphe-workspace`, which grants nothing beyond the access policy (its writes are its own
-surfaces; its live sources are read by code, free reads only). A tool it should read itself (to
+`eriphe-workspace` and `eriphe-folders`, which grant nothing beyond the access policy (its writes
+are its own surfaces; its live sources are read by code, free reads only; each folder call is held
+to that folder's rights). A tool it should read itself (to
 digest mails, say) is lent the normal way: its surface offers a button (`ask`), the brain proposes
 a new version with those `tools`, and the user says yes or no on its card; until then it writes
 what it can.

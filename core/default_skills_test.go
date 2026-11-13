@@ -378,3 +378,190 @@ func TestNoToolInDefaultSkills(t *testing.T) {
 		}
 	}
 }
+
+// shippedMatin is a default skill as a release ships it: its tools and
+// its instructions.
+func shippedMatin(tools, body string) map[string][]skillFile {
+	md := "---\nname: matin\ndescription: Le matin.\nwhen: time daily 06:00\ntools: [" + tools + "]\n---\n\n" + body + "\n"
+	return map[string][]skillFile{"matin": {{Path: "SKILL.md", Data: []byte(md)}}}
+}
+
+func shippedSHA(t *testing.T, shipped map[string][]skillFile) string {
+	t.Helper()
+	files, err := cleanSkillFiles(shipped["matin"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, sha, err := packSkill(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sha
+}
+
+// lastSkillEntry is the newest journal entry of a skill: its id and reason.
+func lastSkillEntry(c *core, name string) (id int64, reason string) {
+	c.mem.db.QueryRow(`SELECT id, reason FROM learning_log WHERE kind = 'skill' AND skill = ? ORDER BY id DESC LIMIT 1`, name).Scan(&id, &reason)
+	return
+}
+
+// A default skill the user has not changed is updated to the version a
+// release ships, in the journal, which undoes it; an update undone is not
+// offered again, the next release's is. One installed before the versions
+// were recorded is updated too.
+func TestDefaultSkillUpdatedWhenUnchanged(t *testing.T) {
+	c, _ := skillCore(t)
+	c.mem, _ = testMemory(t)
+	v1 := shippedMatin(workspaceServer, "Prépare la journée.")
+	v2 := shippedMatin(workspaceServer+", "+foldersServer, "Prépare la journée, avec ses notes.")
+	c.installShippedSkills(v1)
+	c.installShippedSkills(v2)
+	k, err := c.store.skill("matin")
+	if err != nil || k.Approved != shippedSHA(t, v2) || k.Pending != "" || !k.Enabled || k.Source != skillFromDefault {
+		t.Fatalf("not updated: %+v %v", k, err)
+	}
+	id, reason := lastSkillEntry(c, "matin")
+	if reason != defaultSkillUpdated {
+		t.Fatalf("journal reason %q", reason)
+	}
+	for lang, want := range map[string]string{"fr": "mis à jour par défaut", "en": "updated by default"} {
+		if got := templateFuncs(lang)["reason"].(func(string) string)(reason); got != want {
+			t.Fatalf("%s %q", lang, got)
+		}
+	}
+	c.installShippedSkills(v2)
+	if n, _ := lastSkillEntry(c, "matin"); n != id {
+		t.Fatal("updated twice")
+	}
+
+	// Undone, it stays the version before, the next start too.
+	if _, err := c.unlearn(id, "owner", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	c.installShippedSkills(v2)
+	if k, _ := c.store.skill("matin"); k.Approved != shippedSHA(t, v1) {
+		t.Fatalf("undone update offered again: %+v", k)
+	}
+	// The next release's version comes.
+	v3 := shippedMatin(workspaceServer+", "+foldersServer, "Prépare la journée, avec ses notes et ses projets.")
+	c.installShippedSkills(v3)
+	if k, _ := c.store.skill("matin"); k.Approved != shippedSHA(t, v3) {
+		t.Fatalf("v3 not installed: %+v", k)
+	}
+	// A release that goes back to an earlier version brings it back; undone,
+	// that stays too.
+	c.installShippedSkills(v2)
+	if k, _ := c.store.skill("matin"); k.Approved != shippedSHA(t, v2) {
+		t.Fatalf("rolled back version not installed: %+v", k)
+	}
+	id, _ = lastSkillEntry(c, "matin")
+	if _, err := c.unlearn(id, "owner", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	c.installShippedSkills(v2)
+	if k, _ := c.store.skill("matin"); k.Approved != shippedSHA(t, v3) {
+		t.Fatalf("undone rollback offered again: %+v", k)
+	}
+
+	// Installed before the versions were recorded: updated while it is the
+	// one installed by default.
+	c2, _ := skillCore(t)
+	c2.installShippedSkills(v1)
+	c2.store.set(defaultSkillSHAKey+"matin", "")
+	c2.installShippedSkills(v2)
+	if k, _ := c2.store.skill("matin"); k.Approved != shippedSHA(t, v2) {
+		t.Fatalf("legacy install not updated: %+v", k)
+	}
+}
+
+// Changed by the user, turned off, removed, or with a version waiting for
+// the user's yes, a default skill is left as the user left it.
+func TestDefaultSkillNotUpdatedWhenTheUsers(t *testing.T) {
+	v1 := shippedMatin(workspaceServer, "Prépare la journée.")
+	v2 := shippedMatin(workspaceServer+", "+foldersServer, "Prépare la journée, avec ses notes.")
+	mine := "---\nname: matin\ndescription: Le mien.\nwhen: time daily 07:00\ntools: [eriphe-workspace]\n---\n\nÀ ma façon.\n"
+	for _, tc := range []struct {
+		name  string
+		touch func(t *testing.T, c *core)
+		check func(t *testing.T, k *Skill, err error)
+	}{
+		{"changed", func(t *testing.T, c *core) { addTriggered(t, c, mine) }, func(t *testing.T, k *Skill, err error) {
+			if err != nil || k.Description != "Le mien." || k.Pending != "" {
+				t.Fatalf("the user's version replaced: %+v", k)
+			}
+		}},
+		{"off", func(t *testing.T, c *core) { c.store.enableSkill("matin", false) }, func(t *testing.T, k *Skill, err error) {
+			if err != nil || k.Approved != shippedSHA(t, v1) || k.Pending != "" || k.Enabled {
+				t.Fatalf("a skill turned off updated: %+v", k)
+			}
+		}},
+		{"removed", func(t *testing.T, c *core) { c.deleteSkill("matin", "owner") }, func(t *testing.T, k *Skill, err error) {
+			if err != errNoSkill {
+				t.Fatalf("a removed skill back: %+v", k)
+			}
+		}},
+		{"pending", func(t *testing.T, c *core) {
+			if _, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte(mine)}}, skillFromEriphe); err != nil {
+				t.Fatal(err)
+			}
+		}, func(t *testing.T, k *Skill, err error) {
+			if err != nil || k.Approved != shippedSHA(t, v1) || k.Pending == "" || k.Pending == shippedSHA(t, v2) || k.Source != skillFromEriphe {
+				t.Fatalf("the waiting version replaced: %+v", k)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := skillCore(t)
+			c.installShippedSkills(v1)
+			tc.touch(t, c)
+			c.installShippedSkills(v2)
+			k, err := c.store.skill("matin")
+			tc.check(t, k, err)
+		})
+	}
+}
+
+// A version that asks for more than a server Eriphe provides (here a
+// catalog tool) is not installed: it waits on the skill's card, which says
+// what it asks. Refused, it is not offered again; approved, it is the
+// skill's.
+func TestDefaultSkillUpdateAsksOnACard(t *testing.T) {
+	v1 := shippedMatin(workspaceServer, "Prépare la journée.")
+	v2 := shippedMatin(workspaceServer+", mail", "Prépare la journée, avec les messages.")
+	for _, approve := range []bool{false, true} {
+		c, _ := skillCore(t)
+		c.installShippedSkills(v1)
+		c.installShippedSkills(v2)
+		k, _ := c.store.skill("matin")
+		if k.Approved != shippedSHA(t, v1) || k.Pending != shippedSHA(t, v2) {
+			t.Fatalf("installed without a yes: %+v", k)
+		}
+		id := c.skillRowID("matin")
+		if p := c.proposalOf(cardSkill, id); !p.Pending {
+			t.Fatalf("no card: %+v", p)
+		}
+		var say string
+		c.store.db.QueryRow(`SELECT say FROM attention WHERE source = 'eriphe'`).Scan(&say)
+		if !strings.Contains(say, "« matin »") || !strings.Contains(say, "mail") {
+			t.Fatalf("the card does not say what it asks: %q", say)
+		}
+		if err := c.decideSkill(id, approve); err != nil {
+			t.Fatal(err)
+		}
+		c.installShippedSkills(v2)
+		want := shippedSHA(t, v1)
+		if approve {
+			want = shippedSHA(t, v2)
+		}
+		if k, _ := c.store.skill("matin"); k.Approved != want || k.Pending != "" {
+			t.Fatalf("approve %v: %+v", approve, k)
+		}
+	}
+	// A provided server goes without a yes; a can or a script does not.
+	old := &skillVersion{Manifest: skillManifest{Trigger: &skillTrigger{Tools: []string{workspaceServer}}}}
+	next := &skillVersion{Manifest: skillManifest{Trigger: &skillTrigger{Tools: []string{workspaceServer, foldersServer}, Can: []string{canSession}}},
+		Files: []skillFile{{Path: "run.sh", Data: []byte("#!/bin/sh\n")}}}
+	if got := strings.Join(askedMore(old, next), ","); got != "can: start-session,run.sh" {
+		t.Fatalf("asked more: %q", got)
+	}
+}
