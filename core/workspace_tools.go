@@ -108,7 +108,7 @@ func surfaceWriteHelp() string {
 		"Call catalog_read once for the properties and examples before your first surface. " +
 		"A wrong surface comes back as A2UI errors with their path: fix it and write it again. " +
 		"A source slow to answer leaves the surface waiting, filled when it comes; a binding it does not give is told to you then (workspace_read, and your next surface_write). " +
-		"A button asks the brain (action {event: {name: ask, context: {text}}}) in your own words only, never bound data; the other names are the page's own (open, expand, tab), anything else is refused. A proposal is answered through a Proposal component, never a button."
+		"A button asks the brain (action {event: {name: ask, context: {text}}}) in your own words only, never bound data; the other names are the page's own (open, expand, tab), anything else is refused. A proposal is answered through a Proposal component (proposalId: a ref workspace_read lists), never a button."
 }
 
 // registerSurfaceTools adds the workspace's tools to an MCP server, those
@@ -128,7 +128,7 @@ func (c *core) registerSurfaceTools(s *mcp.Server, who func() surfaceCaller, all
 			})
 	}
 	if ok("workspace_read") {
-		tool(s, "workspace_read", "What the workspace holds: each surface (id, title, author, sources, lifetime, last update, what waits, the last error found on yours), and what the user did there lately (opened, ignored). Read it before writing, to update a surface rather than add one.",
+		tool(s, "workspace_read", "What the workspace holds: each surface (id, title, author, sources, lifetime, last update, what waits, the last error found on yours), what the user did there lately (opened, ignored), and the proposals that wait for the user's answer (ref, text, when). Read it before writing, to update a surface rather than add one.",
 			func(ctx context.Context, _ struct{}) (map[string]any, error) { return c.toolWorkspaceRead(who()), nil })
 	}
 	if ok("catalog_read") {
@@ -432,6 +432,10 @@ func (c *core) toolWorkspaceRead(who surfaceCaller) map[string]any {
 	}
 	if show, _ := c.shown(now); show != nil {
 		out["in_front"] = show.Refs
+	}
+	if ps := c.proposalsSeen(); len(ps) > 0 {
+		out["proposals"] = ps
+		out["proposals_note"] = "What waits for the user's yes or no. To show one where it matters, place a Proposal component with its ref as proposalId: its Oui and Non answer that one only. A dated one shows by itself as a ghost in the Day of its day. The text of one drawn from external content is not quoted."
 	}
 	return out
 }

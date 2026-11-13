@@ -22,7 +22,10 @@ import (
 // surfaces_stream.go), a snapshot that resets the page first, and
 // "layout": where each surface is on the grid (JSON, workspaceLayout in
 // workspace_layout.go), sent after the "a2ui" event of the surfaces it
-// names and whenever it changes. Every
+// names and whenever it changes, and "proposals": the refs of the
+// proposals whose card was made or decided since, all of them first
+// (JSON, proposalsEvent in surface_proposals.go), for the surfaces that
+// show them to read them again. Every
 // event carries the last message's seq as its id, so a reconnecting
 // browser picks up where it left; its surfaces start again from a
 // snapshot.
@@ -69,12 +72,30 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			lastLayout = string(raw)
 		}
 	}
+	// The proposals that moved, for what shows them: their refs. The first
+	// one of a connection says all: what the page shows may have been
+	// decided while it was away.
+	var proposalsMoved <-chan struct{} // nil when not asked: never ready
+	var proposalsSeq int64
+	sendProposals := func() {
+		ev, seq, ch := w.c.watchProposals(proposalsSeq)
+		if proposalsMoved == nil {
+			ev = proposalsEvent{Refs: []string{}, All: true}
+		}
+		if ev.All || len(ev.Refs) > 0 {
+			if raw, err := json.Marshal(ev); err == nil {
+				writeEvent(rw, "proposals", after, string(raw))
+			}
+		}
+		proposalsSeq, proposalsMoved = seq, ch
+	}
 	if r.URL.Query().Get("a2ui") == "1" {
 		var first a2uiEvent
 		feed, first = w.c.feedSurfaces()
 		defer feed.close()
 		sendSurfaces(first)
 		sendLayout()
+		sendProposals()
 		flusher.Flush()
 	}
 
@@ -194,6 +215,10 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			quiet = time.Now()
 		case <-layoutChanged:
 			sendLayout()
+			flusher.Flush()
+			quiet = time.Now()
+		case <-proposalsMoved:
+			sendProposals()
 			flusher.Flush()
 			quiet = time.Now()
 		}

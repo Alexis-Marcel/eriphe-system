@@ -2949,14 +2949,15 @@ through `a2ui.Validate`).
   series, a tooltip on each mark, the numbers in a table for screen readers), Table (columns
   `text`, `number`, `date`), Timeline (`done`, `current`, `pending`, `failed`), Message
   (short: the excerpt; full: the body, opened in place), Day (`day.tsx`: events on a grid of
-  half-hour rows, overlaps side by side and marked, all-day ones above), Alert (four
-  levels), Placeholder (« En préparation », a slow shimmer).
+  half-hour rows, overlaps side by side and marked, all-day ones above, and the day's
+  [dated proposals as ghosts](#proposals-in-the-surfaces-they-concern-surface_proposalsgo)),
+  Alert (four levels), Placeholder (« En préparation », a slow shimmer).
 - *Proposal* shows one proposal of Eriphe's by its own ref (`kind:id`, the `proposal` of a
   card): `GET /api/proposals/{ref}` (`web_espace_proposal.go`) gives its text, why, fields
   and state in the user's language, and the card that answers it (404 when no card carries
   it); Oui and Non send an `answer` action on the surface (`POST /api/espace/action`, see
   [the actions](#the-actions-of-a-surface)), never the card endpoint, then the proposal is read
-  again. On a surface showing external content (its createSurface's `extensions.eriphe.tainted`)
+  again, as it is whenever the stream says it moved (answered anywhere). On a surface showing external content (its createSurface's `extensions.eriphe.tainted`)
   that code did not write (`author` other than `core`) it shows no Oui or Non: such a surface can only ask, the proposal is answered in the
   conversation.
 
@@ -3139,7 +3140,9 @@ surface, possibly none): the page drops the surfaces it has and applies it. So i
 stream fell 256 changes behind, transparently. A `layout` event follows the first `a2ui` event
 and each later one, and is sent at once whenever the layout changes (`watchLayout`), only when it
 differs from the last sent: where each surface is
-([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)). The SSE `id` stays the conversation's. Back from
+([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)). A
+`proposals` event (`{"refs": [...]}`) says which proposals were made or decided since
+([proposals in surfaces](#proposals-in-the-surfaces-they-concern-surface_proposalsgo)). The SSE `id` stays the conversation's. Back from
 the page, with the session's cookie and CSRF token (401 without a session):
 
 | Endpoint | Takes | Answers |
@@ -3167,6 +3170,37 @@ to the surface's author (`surfaceError`, code `ACTION_REFUSED`), which reads it 
 `workspace_read` and its next `surface_write`. A tainted surface can only ask: a proposal shown
 there is answered in the conversation.
 
+#### Proposals in the surfaces they concern (`surface_proposals.go`)
+
+A proposal shows where it matters (#428), with no code for any tool:
+
+- **Embedded.** `workspace_read` lists the proposals that wait, newest first (`proposals`:
+  `ref`, the text unless it was drawn from external content, `when`); an author places a `Proposal` whose
+  `proposalId` is one of those refs (`kind:id`), written or bound to the data. Its Oui and Non
+  answer that proposal and no other ([`answer`](#the-actions-of-a-surface)).
+- **Dated.** A proposal that has a time shows as a ghost in every `Day` of its day (unless the
+  Day says `"proposals": false`, for a day that is not the user's): drawn apart (« Proposé », « Proposé ·
+  contenu extérieur » for one drawn from external content), placed by the hour with the events, saying which events it overlaps, which are marked too. A
+  ghost only shows: the card or a `Proposal` answers. The time is generic: an intention's due
+  date, or, for a call a card keeps (a held write, a run's calls), its arguments that are a date
+  or a date-time, by the tool's input schema (`format` `date-time` or `date`), or, the schema
+  saying no format, enum or pattern, by the whole value (RFC 3339, `YYYY-MM-DDTHH:MM[:SS]` in
+  the user's zone, `YYYY-MM-DD` for a whole day); the earliest starts it, the latest ends it. No
+  name of a tool or of an argument is read. A run's card keeps several calls: each dated one is a
+  ghost, all answering the one card. `GET /api/proposals?day=YYYY-MM-DD` gives the day's
+  (`{"day", "proposals": [<proposal view with when>]}`, the times with the user's offset; 400
+  without a day); `GET /api/proposals/{ref}` gives `when` too.
+- **Moved.** A card made (`cardProposed`, `cardNow`, `syncCards`), decided (`decideCard`, from
+  its buttons, a channel, a plain "oui" or a surface; `proposalDecided`, from a page) or found
+  decided when read (`liveCard`) notes its ref (`proposalMoved`, the last 64 kept). The
+  workspace's stream sends them as a `proposals` event, `{"refs": [...]}` (`{"all": true}` for
+  a stream further behind), at once (`watchProposals`); the page reads again each `Proposal` of
+  those refs, and every Day's ghosts. The first `proposals` event of a connection, after the
+  snapshot, is `{"all": true}`: what the page shows may have been decided while it was away.
+  The limits of a time read from values: an unrelated date argument (a recurrence's end, say)
+  stretches the span, and a call with a start and a duration but no end shows a half-hour
+  ghost.
+
 ### The assistants' workspace tools (`workspace_tools.go`)
 
 Any assistant writes the workspace with four tools; the **author is the caller**, never a field:
@@ -3175,7 +3209,7 @@ Any assistant writes the workspace with four tools; the **author is the caller**
 |---|---|
 | `surface_write` | create or update a surface: `id` (empty: a new one), `title`, `components`, `data`, `sources`, `refresh {every}`, `lifetime {until \| while \| kept}`, `weight`, `why`. Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong surface comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `waiting` (sources still reading), `failed`, `previous_error` (the last error found on it, which this write clears) |
 | `surface_remove` | remove one of the caller's surfaces |
-| `workspace_read` | each surface (id, title, author, sources, lifetime, weight, why, last update, `waiting`, the user's `last_action` on it; for the caller's own, `failed` and the last `error`), the user's gestures of the last hour (what, ref, time) and what the brain put in front. A title or why written in a tainted turn is never quoted |
+| `workspace_read` | each surface (id, title, author, sources, lifetime, weight, why, last update, `waiting`, the user's `last_action` on it; for the caller's own, `failed` and the last `error`), the user's gestures of the last hour (what, ref, time), what the brain put in front, and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title or why written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
 | `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand |
 
 - **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A

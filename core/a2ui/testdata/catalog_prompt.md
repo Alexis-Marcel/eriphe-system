@@ -76,11 +76,12 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
   Exemple : `{"id": "deploiement", "component": "Timeline", "items": [{"label": "Construire", "state": "done"}, {"label": "Tester", "state": "current"}, {"label": "Publier", "state": "pending"}]}`
 - **Message** : Un message : un mail, un message d'une messagerie, une note reçue.
   from* texte · body texte (Le texte entier, quand il compte) · date texte (Date ISO 8601) · excerpt texte (Le début, en une ou deux lignes) · subject texte
-- **Day** : Une journée et ses événements, dans l'ordre des heures.
-  date* texte (Le jour, AAAA-MM-JJ) · events* [{title* texte fixe · start* texte fixe (Date et heure ISO 8601, ou la date seule pour toute la journée) · allDay booléen fixe · end texte fixe · place texte fixe}, …] ou liaison
+- **Day** : Une journée et ses événements, dans l'ordre des heures. Les propositions datées qui attendent un oui ou un non s'y montrent d'elles-mêmes en fantôme à leur heure, avec ce qu'elles chevauchent ; on y répond par leur carte ou un Proposal.
+  date* texte (Le jour, AAAA-MM-JJ) · events* [{title* texte fixe · start* texte fixe (Date et heure ISO 8601, ou la date seule pour toute la journée) · allDay booléen fixe · end texte fixe · place texte fixe}, …] ou liaison · proposals booléen fixe (Montrer les propositions datées de ce jour (oui par défaut) ; false pour une journée qui n'est pas celle de l'utilisateur)
   Exemple : `{"id": "demain", "component": "Day", "date": "2026-11-13", "events": [{"end": "2026-11-13T10:00:00+01:00", "place": "Centre", "start": "2026-11-13T09:30:00+01:00", "title": "Dentiste"}]}`
-- **Proposal** : Une proposition d'Eriphe qui attend un oui ou un non ; ses boutons Oui et Non envoient `answer`, que le code lie à cette proposition. Sur une surface au contenu extérieur, elle se répond dans la conversation.
-  proposalId* texte (L'identifiant de la proposition)
+- **Proposal** : Une proposition d'Eriphe qui attend un oui ou un non (créer un événement, répondre à un message, lancer une tâche…), montrée là où elle compte : ses boutons Oui et Non envoient `answer`, que le code lie à cette proposition et à aucune autre. Sa référence est l'une de celles que workspace_read liste (proposals), écrite telle quelle ou liée à la donnée. Elle se met à jour quand on y répond ailleurs. Sur une surface au contenu extérieur, elle se répond dans la conversation.
+  proposalId* texte (La référence de la proposition, type:numéro)
+  Exemple : `{"id": "accord", "component": "Proposal", "proposalId": "intention:12"}`
 - **Alert** : Un avertissement qui doit se voir.
   text* texte · level info|success|warning|error · title texte
 - **Placeholder** : Une place réservée pendant que la surface se prépare.
