@@ -1,0 +1,63 @@
+{
+  "id": "pr-open",
+  "what": "Où en est une PR pas encore fusionnée, demandé depuis l'espace : un thread léger ouvert (après l'avoir cherché) avec un sujet, sa surface au centre avec la partie du cerveau, une étape de fusion dont la carte est le oui, une ligne de réponse ; la fusion faite, l'étape de Sam (il déploie lui-même) puis la vérification, sans clore.",
+  "lang": "fr",
+  "memory": [
+    "Sam déploie lui-même la supervision après une fusion (« make deploy » sur son serveur).",
+    "Sam préfère des réponses courtes."
+  ],
+  "servers": [
+    {"name": "forge", "use": "les dépôts de code de Sam", "trusted": true, "tools": [
+      {"name": "pull", "description": "Read a pull request: its state, whether it is merged, its checks, its diff.",
+        "input_schema": {"type": "object", "properties": {"repo": {"type": "string"}, "number": {"type": "integer"}}, "required": ["repo", "number"]},
+        "result": {"repo": "sam/supervision", "number": 42, "title": "Règles d'alerte de latence", "state": "open", "merged": false, "mergeable": true,
+          "url": "https://code.example.org/sam/supervision/pull/42",
+          "checks": [
+            {"name": "yaml", "status": "pass", "summary": "Fichiers de règles valides"},
+            {"name": "replay", "status": "pass", "summary": "Rejouées sur les pics du mois : 3 alertes, aucune fausse"}],
+          "diff": "--- a/rules/latence.yml\n+++ b/rules/latence.yml\n+- alert: latence-p95\n+  expr: p95_ms > 800\n+  for: 10m"}},
+      {"name": "merge", "description": "Merge a pull request.", "changes": true,
+        "input_schema": {"type": "object", "properties": {"repo": {"type": "string"}, "number": {"type": "integer"}}, "required": ["repo", "number"]},
+        "result": {"merged": true, "sha": "4f2c9e1"}}
+    ]},
+    {"name": "vigie", "use": "la supervision de Sam", "trusted": true, "tools": [
+      {"name": "rules", "description": "List the alert rules the monitoring has loaded.",
+        "input_schema": {"type": "object", "properties": {}},
+        "result": {"version": "2026-11-10", "rules": [{"name": "erreurs-5xx", "state": "active"}]}}
+    ]}
+  ],
+  "request": "Où en est la PR 42 des règles d'alerte ?",
+  "expect": {"subject": ["42"], "merge": "mcp__forge__merge"},
+  "answer": {
+    "calls": [
+      {"tool": "find_thread", "args": {"subject": "pr:sam/supervision#42"}},
+      {"tool": "open_thread", "args": {"title": "PR 42 · règles d'alerte", "goal": "Les règles d'alerte de latence sont fusionnées, déployées et actives.", "subject": "pr:sam/supervision#42"}},
+      {"tool": "surface_write", "args": {"id": "thread-7", "title": "PR 42 · règles d'alerte",
+        "data": {"etat": "Ouverte, prête à fusionner",
+          "points": [{"point": "Fichiers de règles valides"}, {"point": "Rejouées sur les pics du mois : 3 alertes, aucune fausse"}],
+          "diff": "+- alert: latence-p95\n+  expr: p95_ms > 800\n+  for: 10m",
+          "url": "https://code.example.org/sam/supervision/pull/42"},
+        "components": [
+          {"id": "root", "component": "Column", "children": ["etat", "points", "diff", "lien"]},
+          {"id": "etat", "component": "Metric", "label": "État", "value": {"@path": "/etat"}},
+          {"id": "points", "component": "List", "children": {"path": "/points", "componentId": "ligne"}},
+          {"id": "ligne", "component": "Text", "text": {"@path": "point"}},
+          {"id": "diff", "component": "Code", "mode": "diff", "text": {"@path": "/diff"}},
+          {"id": "lien", "component": "Link", "label": "Ouvrir la PR", "url": {"@path": "/url"}}
+        ]}},
+      {"tool": "add_step", "args": {"thread_id": 7, "step": {"key": "fusion", "title": "Fusionner la PR", "kind": "call", "tool": "mcp__forge__merge", "input": {"repo": "sam/supervision", "number": 42}}}},
+      {"tool": "workspace_focus", "args": {"id": "thread-7"}}
+    ],
+    "reply": "Ouverte et prête, ses vérifications passent : la fusion n'attend que ton oui, au centre."
+  },
+  "wake": {
+    "answer": {
+      "calls": [
+        {"tool": "add_step", "args": {"thread_id": 7, "step": {"key": "deploiement", "title": "Déployer la supervision", "kind": "user", "question": "Déploie la supervision (make deploy) pour charger la nouvelle règle.", "after": ["fusion"]}}},
+        {"tool": "add_step", "args": {"thread_id": 7, "step": {"key": "verification", "title": "Vérifier que la règle est active", "kind": "check", "tool": "mcp__vigie__rules", "input": {}, "expect": "latence-p95", "after": ["deploiement"]}}},
+        {"tool": "link_thread", "args": {"thread_id": 7, "summary": "Fusionnée ; reste à déployer la supervision, puis à vérifier que la règle est active."}}
+      ],
+      "reply": "La PR 42 est fusionnée : à toi de déployer la supervision."
+    }
+  }
+}

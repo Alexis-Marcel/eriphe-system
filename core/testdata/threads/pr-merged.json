@@ -1,0 +1,43 @@
+{
+  "id": "pr-merged",
+  "what": "La même question sur une PR déjà fusionnée : un thread ouvert au centre comme pour l'autre, mais seulement une vérification proposée, ni fusion ni autre étape.",
+  "lang": "fr",
+  "memory": [
+    "Sam déploie lui-même la supervision après une fusion (« make deploy » sur son serveur)."
+  ],
+  "servers": [
+    {"name": "forge", "use": "les dépôts de code de Sam", "trusted": true, "tools": [
+      {"name": "pull", "description": "Read a pull request: its state, whether it is merged, its checks, its diff.",
+        "input_schema": {"type": "object", "properties": {"repo": {"type": "string"}, "number": {"type": "integer"}}, "required": ["repo", "number"]},
+        "result": {"repo": "sam/supervision", "number": 42, "title": "Règles d'alerte de latence", "state": "closed", "merged": true,
+          "merged_at": "2026-11-12T17:40:00Z", "url": "https://code.example.org/sam/supervision/pull/42",
+          "checks": [{"name": "yaml", "status": "pass", "summary": "Fichiers de règles valides"}]}},
+      {"name": "merge", "description": "Merge a pull request.", "changes": true,
+        "input_schema": {"type": "object", "properties": {"repo": {"type": "string"}, "number": {"type": "integer"}}, "required": ["repo", "number"]},
+        "result": {"merged": true, "sha": "4f2c9e1"}}
+    ]},
+    {"name": "vigie", "use": "la supervision de Sam", "trusted": false, "tools": [
+      {"name": "rules", "description": "List the alert rules the monitoring has loaded.",
+        "input_schema": {"type": "object", "properties": {}},
+        "result": {"version": "2026-11-12", "rules": [{"name": "erreurs-5xx", "state": "active"}, {"name": "latence-p95", "state": "active"}]}}
+    ]}
+  ],
+  "request": "Où en est la PR 42 des règles d'alerte ?",
+  "expect": {"subject": ["42"], "check": true},
+  "answer": {
+    "calls": [
+      {"tool": "find_thread", "args": {"subject": "pr:sam/supervision#42"}},
+      {"tool": "open_thread", "args": {"title": "PR 42 · règles d'alerte", "goal": "Les règles d'alerte de latence sont actives.", "subject": "pr:sam/supervision#42"}},
+      {"tool": "surface_write", "args": {"id": "thread-7", "title": "PR 42 · règles d'alerte",
+        "data": {"etat": "Fusionnée le 12 novembre à 18 h 40", "url": "https://code.example.org/sam/supervision/pull/42"},
+        "components": [
+          {"id": "root", "component": "Column", "children": ["etat", "lien"]},
+          {"id": "etat", "component": "Metric", "label": "État", "value": {"@path": "/etat"}},
+          {"id": "lien", "component": "Link", "label": "Ouvrir la PR", "url": {"@path": "/url"}}
+        ]}},
+      {"tool": "add_step", "args": {"thread_id": 7, "step": {"key": "verification", "title": "Vérifier que la règle est active", "kind": "check", "tool": "mcp__vigie__rules", "input": {}, "expect": "latence-p95"}}},
+      {"tool": "workspace_focus", "args": {"id": "thread-7"}}
+    ],
+    "reply": "Fusionnée hier soir : je vérifie que la règle est bien active, c'est au centre."
+  }
+}

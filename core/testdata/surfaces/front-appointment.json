@@ -1,0 +1,51 @@
+{
+  "id": "front-appointment",
+  "what": "Une question depuis l'espace sur une chose qui ne se suit pas (un rendez-vous à regarder), une proposition en attente : la réponse est une surface au centre (le sujet en titre, son état, les points à voir, la proposition intégrée) et une ligne de texte, sans thread.",
+  "lang": "fr",
+  "request": "Et le rendez-vous de révision du vélo, il est calé ?",
+  "kind": "composed",
+  "front": {
+    "proposal": "access:12",
+    "text": "Accepter l'invitation « Révision du vélo » jeudi à 14 h ?",
+    "subject": ["révision", "vélo"]
+  },
+  "servers": [{"name": "agenda", "use": "l'agenda de Sam", "tools": [{
+    "name": "event",
+    "description": "Read an event of the calendar: its time, place, who invited, and the answer given.",
+    "input_schema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]},
+    "output_schema": {"type": "object", "properties": {
+      "title": {"type": "string"}, "start": {"type": "string"}, "end": {"type": "string"}, "place": {"type": "string"},
+      "organizer": {"type": "string"}, "answer": {"type": "string"}, "notes": {"type": "string"}}},
+    "result": {"title": "Révision du vélo", "start": "2026-11-19T14:00:00+01:00", "end": "2026-11-19T15:00:00+01:00",
+      "place": "Atelier Rayons, 12 rue des Lilas", "organizer": "atelier@example.org", "answer": "none",
+      "notes": "Prévoir le vélo propre, compter une heure ; plaquettes de frein à changer."}
+  }]}],
+  "expect": {},
+  "answer": {
+    "surface": {
+      "id": "rdv-revision-velo",
+      "title": "Révision du vélo · jeudi 14 h",
+      "why": "Sam demande si le rendez-vous est calé",
+      "data": {
+        "etat": "Proposé, pas encore accepté",
+        "points": [
+          {"point": "Jeudi 19 novembre, de 14 h à 15 h"},
+          {"point": "À l'atelier, rue des Lilas"},
+          {"point": "Plaquettes de frein à changer, vélo propre"}],
+        "au": "État au 13 novembre, 9 h.",
+        "proposition": "access:12"
+      },
+      "components": [
+        {"id": "root", "component": "Column", "children": ["etat", "points", "accepter", "date"]},
+        {"id": "etat", "component": "Metric", "label": "État", "value": {"@path": "/etat"}},
+        {"id": "points", "component": "List", "children": {"path": "/points", "componentId": "ligne"}},
+        {"id": "ligne", "component": "Text", "text": {"@path": "point"}},
+        {"id": "accepter", "component": "Proposal", "proposalId": {"@path": "/proposition"}},
+        {"id": "date", "component": "Text", "text": {"@path": "/au"}, "variant": "caption"}
+      ],
+      "weight": 70
+    },
+    "focus": true,
+    "reply": "Pas encore : l'atelier propose jeudi 14 h, il ne manque que ton oui, au centre."
+  }
+}
