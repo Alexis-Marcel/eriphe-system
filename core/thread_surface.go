@@ -242,6 +242,48 @@ func (c *core) linkedWaiting(thread int64, steps []threadSurfaceStep) []string {
 	return out
 }
 
+// threadCardsWaiting are the refs of the cards waiting for the user that
+// a thread's surface shows: its own (asks), the ones linked to it, its
+// steps'.
+func threadCardsWaiting(steps []threadSurfaceStep, asks []int64, linked []string) []string {
+	out := make([]string, 0, len(asks)+len(linked))
+	for _, id := range asks {
+		out = append(out, proposalRef(cardThread, id))
+	}
+	out = append(out, linked...)
+	for _, st := range steps {
+		if st.Waits && st.Card != "" {
+			out = append(out, st.Card)
+		}
+	}
+	return out
+}
+
+// threadShownCards are the cards waiting for the user that an active
+// thread's surface shows, by ref, with the thread (the newest, should two
+// show one): answered there, they leave the attention queue's surfaces
+// (queuePlace, workspace_queue.go).
+func (c *core) threadShownCards() map[string]int64 {
+	out := map[string]int64{}
+	ss, err := c.threadsWhere(activeThreads + ` ORDER BY id DESC LIMIT 50`)
+	if err != nil {
+		return out
+	}
+	for _, s := range ss {
+		all, err := c.steps(s.ID)
+		if err != nil {
+			continue
+		}
+		steps := c.threadSurfaceSteps(s, all)
+		for _, ref := range threadCardsWaiting(steps, c.wholeThreadAsks(s.ID), c.linkedWaiting(s.ID, steps)) {
+			if _, ok := out[ref]; !ok {
+				out[ref] = s.ID
+			}
+		}
+	}
+	return out
+}
+
 // threadPart is the part the thread's holder added to its surface.
 type threadPart struct {
 	Author     string          `json:"author"`
@@ -319,7 +361,12 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		yours = yours || st.Waits
 	}
 	if yours && s.active() {
+		// Its cards leave the attention queue for it: it takes their weight.
 		in.Weight = threadWeightYours
+		for _, ref := range threadCardsWaiting(steps, asks, linked) {
+			kind, _, _ := parseProposalRef(ref)
+			in.Weight = max(in.Weight, queueSurfaceWeight(cardWeight(kind)))
+		}
 		add(comp{"id": "thread_yours", "component": "Text", "variant": "subtitle", "text": w("thread.surface.yours")})
 		for _, id := range asks {
 			add(comp{"id": "thread_ask_" + strconv.FormatInt(id, 10), "component": "Proposal", "proposalId": proposalRef(cardThread, id)})

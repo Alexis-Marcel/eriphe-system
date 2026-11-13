@@ -39,6 +39,12 @@ import (
 // today (proposalSpans). The ids stay the same while a group lives, so the
 // composer and the brain keep naming them.
 //
+// A card an active thread's surface shows (a step's, one linked to it, the
+// thread's own: threadShownCards) is answered there and in no surface of
+// the queue: the thread's surface takes its weight (threadSurfaceIn). Only
+// one that interrupts (weight 5) or takes place today keeps a surface of
+// its own as well.
+//
 // A surface's weight is its first item's (queueSurfaceWeight: 4 and 5 are
 // urgent, placed first by code). It lives while it has an item: the user
 // removing it takes its items out of the queue; closing it hides it for
@@ -120,23 +126,33 @@ func (c *core) queuePlan(now time.Time) []queueEntry {
 	today := time.Date(y, m, d, 0, 0, 0, 0, loc)
 	items := c.attentionOpen()
 	out := make([]queueEntry, 0, len(items))
+	var threads map[string]int64
+	if len(items) > 0 {
+		threads = c.threadShownCards()
+	}
 	for _, it := range items {
-		out = append(out, c.queuePlace(it, today))
+		out = append(out, c.queuePlace(it, today, threads))
 	}
 	return out
 }
 
-// queuePlace is where an item shows: alone when urgent, in its group
-// otherwise.
-func (c *core) queuePlace(it attentionItem, today time.Time) queueEntry {
+// queuePlace is where an item shows: on the surface of the thread that
+// shows it, unless urgent; alone when urgent; in its group otherwise.
+// threads are the cards an active thread's surface shows, by ref.
+func (c *core) queuePlace(it attentionItem, today time.Time, threads map[string]int64) queueEntry {
 	e := queueEntry{it: it}
 	if id, ok := strings.CutPrefix(it.Ref, refSurface+":"); ok {
 		e.surface, e.about = id, true
 		return e
 	}
 	e.p, e.shown = c.queuedProposal(it.Ref)
+	todays := e.shown && c.proposalToday(e.p, today)
+	if thread, ok := threads[e.p.ref()]; ok && e.shown && it.Weight < weightInterrupts && !todays {
+		e.surface, e.about = threadSurfaceID(thread), true // answered there (thread_surface.go)
+		return e
+	}
 	switch {
-	case it.Weight >= weightBlocksATask || e.shown && c.proposalToday(e.p, today):
+	case it.Weight >= weightBlocksATask || todays:
 		e.surface = queueSurfaceID(it.Ref)
 	case e.shown:
 		e.surface = queueGroupOf(e.p.Kind)
@@ -259,7 +275,7 @@ func (p proposal) ref() string { return proposalRef(p.Kind, p.ID) }
 func queueAlert(id string, it attentionItem) (map[string]any, string, bool) {
 	level, title := "info", "espace.queue.note"
 	switch {
-	case it.Weight >= 5:
+	case it.Weight >= weightInterrupts:
 		level, title = "error", "espace.queue.urgent"
 	case it.Weight >= weightBlocksATask:
 		level, title = "warning", "espace.queue.waits"

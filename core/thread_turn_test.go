@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -174,7 +176,9 @@ func TestCardsOfThreadTurnLinked(t *testing.T) {
 		t.Errorf("the start card is not the brand's: %q", refs)
 	}
 
-	// A new delivery about nothing: the next card is no thread's.
+	// A new delivery about nothing: the next card is no thread's. (The no
+	// above was told as the PR's event, read in a turn of its own.)
+	c.store.markDelivered(c.store.lastMessageSeq())
 	seq, _ := c.store.addMessage(roleUser, "Et la météo ?", true)
 	c.turn.start(int(seq), int(seq), 0)
 	msgs, _ := c.store.undelivered()
@@ -382,4 +386,109 @@ func TestBrainPromptThreads(t *testing.T) {
 func foundThreads(out map[string]any) []any {
 	xs, _ := out["threads"].([]any)
 	return xs
+}
+
+// cardItem is a card's item in the attention queue.
+func cardItem(x convoCard) string { return "card:" + strconv.FormatInt(x.ID, 10) }
+
+// A card raised for a thread is answered on its surface, not again in the
+// attention queue: the thread's surface takes its weight. Once the thread
+// ended, the card still waiting comes back to the queue.
+func TestThreadCardsLeaveTheQueue(t *testing.T) {
+	c := stepsCore(t)
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	pr := lightThread(t, c)
+	callBrainTool(t, c, "read_thread", map[string]any{"thread_id": pr.ID})
+	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})
+	merge := accessCard(t, c, "merge")
+	// A card of no thread, for comparison: it keeps its own surface.
+	c.turn.about(0)
+	brainCalls(t, c, "p-2", mergeTool, map[string]any{"number": 99})
+	var alone convoCard
+	xs, _ := c.cardsWhere(`kind = ? AND state = ? ORDER BY id`, cardAccess, cardPending)
+	for _, x := range xs {
+		if x.ID != merge.ID {
+			alone = x
+		}
+	}
+
+	c.syncQueueSurfaces()
+	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(merge))); ok {
+		t.Error("the thread's card has a surface of its own in the queue")
+	}
+	if g, ok := surfaceByID(t, c, queueDecide); ok && slices.Contains(groupRefs(t, g), merge.Ref) {
+		t.Error("the thread's card is listed in the queue's group")
+	}
+	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(alone))); !ok {
+		t.Error("a card of no thread left the queue")
+	}
+	s, _, _ := threadSurfaceOf(t, c, pr.ID)
+	if !strings.Contains(string(s.Components), `"proposalId":"`+merge.Ref+`"`) {
+		t.Fatalf("the card is not on the thread's surface: %s", s.Components)
+	}
+	if want := queueSurfaceWeight(weightBlocksATask); s.Weight != want {
+		t.Errorf("the thread's surface weighs %d, not its card's %d", s.Weight, want)
+	}
+	for _, e := range c.queuePlan(time.Now()) {
+		if e.it.Ref == cardItem(merge) && e.surface != threadSurfaceID(pr.ID) {
+			t.Errorf("the composer reads the card on %q", e.surface)
+		}
+	}
+
+	// The thread stopped: the card still waits, back in the queue.
+	if err := c.stopThread(context.Background(), pr.ID, "brain"); err != nil {
+		t.Fatal(err)
+	}
+	c.syncQueueSurfaces()
+	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(merge))); !ok {
+		t.Error("a card of an ended thread shows nowhere")
+	}
+}
+
+// The result of a call approved on a card linked to a thread comes back as
+// that thread's event: the turn that reads it is about the thread. A card
+// of no thread gives a turn about none.
+func TestLinkedCallResultAboutThread(t *testing.T) {
+	c := stepsCore(t)
+	ctx := context.Background()
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	pr := lightThread(t, c)
+	callBrainTool(t, c, "read_thread", map[string]any{"thread_id": pr.ID})
+	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})
+	merge := accessCard(t, c, "merge")
+	c.turn.about(0)
+	brainCalls(t, c, "p-2", mergeTool, map[string]any{"number": 99})
+	var alone convoCard
+	xs, _ := c.cardsWhere(`kind = ? AND state = ? ORDER BY id`, cardAccess, cardPending)
+	for _, x := range xs {
+		if x.ID != merge.ID {
+			alone = x
+		}
+	}
+
+	deliver := func(x convoCard, approve bool, what string) string {
+		t.Helper()
+		c.store.markDelivered(c.store.lastMessageSeq())
+		c.turn.about(0)
+		if _, err := c.decideCard(ctx, x.ID, approve, "web"); err != nil {
+			t.Fatal(err)
+		}
+		var msgs []Message
+		waitFor(t, func() bool {
+			msgs, _ = c.store.undelivered()
+			return len(msgs) == 1 && strings.Contains(msgs[0].Text, what)
+		})
+		c.threadsDelivered(msgs)
+		return msgs[0].Text
+	}
+	text := deliver(merge, true, "est exécutée")
+	if c.turn.aboutThread() != pr.ID {
+		t.Errorf("the result's turn is about %d, not the thread %d", c.turn.aboutThread(), pr.ID)
+	}
+	if !strings.HasPrefix(text, fmt.Sprintf("[thread %d « PR alerting »] ", pr.ID)) {
+		t.Errorf("the result does not name its thread: %q", text)
+	}
+	if text := deliver(alone, false, "a refusé sur la carte"); strings.HasPrefix(text, "[thread") || c.turn.aboutThread() != 0 {
+		t.Errorf("a card of no thread made the turn about %d: %q", c.turn.aboutThread(), text)
+	}
 }

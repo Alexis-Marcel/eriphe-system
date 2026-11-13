@@ -140,7 +140,7 @@ func TestQueueSurfaces(t *testing.T) {
 	}
 	// A card whose proposal the Proposal cannot show is an Alert.
 	c.store.db.Exec(`INSERT INTO attention (ref, weight, why, source, time) VALUES ('card:999999', 4, 'Une présence à suivre', 'brain', ?)`, time.Now().Unix())
-	e := c.queuePlace(attentionItem{Ref: "card:999999", Weight: 4, Why: "Une présence à suivre"}, time.Now())
+	e := c.queuePlace(attentionItem{Ref: "card:999999", Weight: 4, Why: "Une présence à suivre"}, time.Now(), nil)
 	if in, ok := c.queueSurface(e.surface, []queueEntry{e}, "fr"); !ok ||
 		!strings.Contains(string(in.Components), `"component":"Alert"`) || in.Title != "Attend ta réponse" {
 		t.Fatalf("a card without a proposal: %+v %s", in, in.Components)

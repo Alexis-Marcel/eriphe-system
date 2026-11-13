@@ -320,16 +320,15 @@ func (c *core) runApprovedCall(a accessQuestion) {
 		return
 	}
 	if name == webFetchTool || name == webSearchTool {
-		c.store.addMessage(roleEvent, c.allowPage(a), false)
-		c.ping()
+		c.callToBrain(a, c.allowPage(a), "")
 		return
 	}
 	text, server := c.trackedCall(ctx, a, name)
-	seq, err := c.store.addMessage(roleEvent, text, false)
-	if err == nil && server != "" && !c.trustsServer(server) {
-		c.store.set(taintKey(int(seq)), name) // delivered, it taints the turn that reads it
+	taint := ""
+	if server != "" && !c.trustsServer(server) {
+		taint = name // delivered, it taints the turn that reads it
 	}
-	c.ping()
+	c.callToBrain(a, text, taint)
 }
 
 // trackedCall is approvedCall, its proposal showing it running, then
@@ -628,8 +627,7 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 			c.runCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name))
 			return nil
 		}
-		c.store.addMessage(roleEvent, fmt.Sprintf("%s a refusé sur la carte : %s n'est pas exécutée.", c.conf().User, name), false)
-		c.ping()
+		c.callToBrain(a, fmt.Sprintf("%s a refusé sur la carte : %s n'est pas exécutée.", c.conf().User, name), "")
 		return nil
 	}
 	if approve {
