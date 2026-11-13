@@ -180,6 +180,36 @@ func TestClockWakesBrain(t *testing.T) {
 	}
 }
 
+// The clock's wake goes on with the brain's turn but is about no thread:
+// a card it raises is no thread's until it names one.
+func TestClockWakeAboutNoThread(t *testing.T) {
+	c, clock := testMemoryCore(t)
+	setBrain(c, &BrainConfig{Agent: "small"})
+	ctx := context.Background()
+	s, err := c.openThread(threadIn{Title: "PR de l'alerte", Goal: "Fusionnée.", Subject: "pr:example/infra#12"}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tendBrain(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	c.turn.about(s.ID) // the turn named the thread
+	mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Appeler le garage", RemindAt: clock.t.Add(time.Minute)})
+	clock.add(2 * time.Minute)
+	c.intentionsTick()
+	c.store.updateTask("t-brain", map[string]any{"state": stateIdle})
+	if err := tendBrain(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	items, _ := c.store.inbox("t-brain")
+	if text, _ := items[len(items)-1].Data["text"].(string); !strings.Contains(text, "Appeler le garage") {
+		t.Fatalf("no wake: %s", text)
+	}
+	if c.turn.aboutThread() != 0 || c.turnSource() != "" {
+		t.Errorf("the wake is about thread %d", c.turn.aboutThread())
+	}
+}
+
 // My message that names a person brings up the intention cued on them,
 // in the same delivery.
 func TestCueInDelivery(t *testing.T) {

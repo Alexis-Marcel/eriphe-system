@@ -977,7 +977,10 @@ what still waits or runs in it: its tasks stop, its step cards are withdrawn (`c
 called on it, or the delivered event of one of its steps, `thread_msg:<seq>`) is about it until it
 names another. The cards it raises meanwhile (one of its own calls' access cards, a task's start)
 are that thread's and show in its timeline; while one waits, the thread's surface shows it under
-« À toi », answered in place, and a decision moves the thread (`linkedCardMoved`). A new delivery
+« À toi », answered in place (and not again in the attention queue's surfaces), and a decision
+moves the thread (`linkedCardMoved`). How a call kept on a linked card went (run on a yes, or
+refused) comes back as that thread's event (`callToBrain`: `[thread N « title »] …`, marked
+`thread_msg:<seq>`), so the turn that reads it is about the thread. A new delivery
 (or a heartbeat) starts about no thread; a thread tool on an id that is no thread changes nothing. The prompt
 (`brain-prompt.md`, « Les threads ») says when the brain opens or resumes a thread (a question about
 a matter, a request of more than one step, an alert worth following: `find_thread` by subject
@@ -1103,7 +1106,8 @@ by code from the thread's data (#468): it never depends on a model remembering t
   chip shows it beside its title.
 - **Lifetime**: `while: thread:<id>`; once done or dropped, rewritten with `until` the end of its
   day in the user's zone (an hour at least), then it leaves and never comes back unless the thread
-  is reopened. Weight 50, 70 while something waits for the user, 30 once ended.
+  is reopened. Weight 50, 70 while something waits for the user (80 while one of its cards does:
+  they leave the attention queue for it), 30 once ended.
 - **« C'est fait »** sends `stepDone` with `{"thread": <id>, "step": "<key>"}`
   ([the actions of a surface](#the-actions-of-a-surface)); code checks it against the button it
   wrote, then `settleUserStep` settles the step through `userStepDone` (`thread_steps.go`), as
@@ -2990,7 +2994,12 @@ card may carry external content). An **urgent** item has a surface of its own, `
 (a hash of the ref when its id cannot be a surface's): weight 4 or 5 (a card a task waits on, an
 alert), or a proposal that takes place today (its time, `proposalSpans`, never a tool's name); a
 card alone is a `Proposal` titled by its subject, an `Alert` by its weight (« Urgent »,
-« Attend ta réponse »). The group ids stay the same while they live, so the composer and the
+« Attend ta réponse »). A card an active thread's surface shows (a step's, one linked to it, the
+thread's own: `threadShownCards`) is answered there and in no surface of the queue, even of weight
+4; the thread's surface takes its weight (× 20, at least 70). A tainted thread's surface does not
+answer its cards in place: they stay in the queue too. Only one of weight 5, or that takes
+place today, keeps a surface of its own too; once the thread ended, a card still waiting comes back
+to the queue (`threadMoved` kicks it). The group ids stay the same while they live, so the composer and the
 brain's workspace block keep naming them; the composer's queue lists each item with the surface
 showing it. A surface's weight is its first item's × 20 (`queueSurfaceWeight`), its taint any of
 its items'; its words are in the user's language (`userLang`, see below). It lives while it has

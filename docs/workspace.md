@@ -36,7 +36,8 @@ Who writes the tiles:
   thread comes to the center; ask Eriphe to launch something ("while I review it, look for a brand
   name") and its thread opens on the side, its tile updating as it goes, without taking the center
   from what you are reading. What Eriphe asks you about a thread (a merge to approve, say) waits
-  in that thread's tile too;
+  in that thread's tile, not again among the tiles below, unless it is urgent; a thread that read
+  something from outside keeps its questions there too, to answer in the conversation;
 - **Eriphe itself, for what waits for you**: a proposal to approve, an alert, a message held for
   later. These come and go with what they show.
 

@@ -240,8 +240,11 @@ type threadFeed struct {
 // threadMoved notes that a thread changed: its state, a step, its log, a
 // card linked to it. Its surface on the workspace is written again
 // (keepThreadSurface, thread_surface.go); its page follows it with
-// watchThreads, and reads it again with threadTimeline.
+// watchThreads, and reads it again with threadTimeline. The attention
+// queue's surfaces are made again: a card it shows leaves them, and comes
+// back once it ended (queuePlace).
 func (c *core) threadMoved(id int64) {
+	defer c.kickWorkspace()
 	defer c.keepThreadSurface(id)
 	f := &c.threadsFeed
 	f.mu.Lock()

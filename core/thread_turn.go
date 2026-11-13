@@ -89,3 +89,38 @@ func (c *core) turnSource() string {
 	}
 	return ""
 }
+
+// linkedThread is the thread a card was last linked to (thread_cards); 0
+// if none.
+func (c *core) linkedThread(ref string) int64 {
+	var id int64
+	c.store.db.QueryRow(`SELECT thread FROM thread_cards WHERE ref = ? ORDER BY created DESC, thread DESC LIMIT 1`, ref).Scan(&id)
+	return id
+}
+
+// callToBrain tells the brain how a call kept on its card went (run on a
+// yes, or refused), taint being what its words make the turn. A card
+// linked to a thread makes it an event of that thread: the turn that reads
+// it is about the thread (threadsDelivered), and what it raises next is
+// the thread's. Written delivered, its marks set, then handed to the
+// brain, as tellBrain does: it is never delivered before its marks.
+func (c *core) callToBrain(a accessQuestion, text, taint string) {
+	id := c.linkedThread(proposalRef(cardAccess, a.ID))
+	if s, err := c.thread(id); id > 0 && err == nil {
+		text = fmt.Sprintf("[thread %d « %s »] %s", s.ID, s.Title, text)
+	} else {
+		id = 0
+	}
+	seq, err := c.store.addMessage(roleEvent, text, true)
+	if err != nil {
+		return
+	}
+	if taint != "" {
+		c.store.set(taintKey(int(seq)), taint)
+	}
+	if id > 0 {
+		c.store.set(threadEventKey(int(seq)), strconv.FormatInt(id, 10))
+	}
+	c.store.undeliver(int(seq), int(seq))
+	c.ping()
+}

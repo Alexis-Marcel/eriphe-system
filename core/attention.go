@@ -97,6 +97,7 @@ func attentionColumns(db *sql.DB) error {
 const (
 	attentionWhyMax   = 300
 	attentionInBrain  = 10 // the open items a brain's turn lists, the heaviest first
+	weightInterrupts  = 5  // what interrupts
 	weightBlocksATask = 4  // a card a task or a thread waits on
 	weightProposal    = 3  // any other card
 	weightHeldNote    = 2  // a notification held for the brief

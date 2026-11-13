@@ -152,7 +152,7 @@ func TestThreadSurfaceFollowsSteps(t *testing.T) {
 	if !strings.Contains(string(s.Components), `"id":"`+plan+`"`) || !strings.Contains(string(s.Components), `"proposalId":"`+proposalRef(cardThread, asks[0])+`"`) {
 		t.Fatalf("no plan card on it: %s", s.Components)
 	}
-	if states["Find names"] != "pending" || states["Sam's pick"] != "pending" || meta.Summary != "une carte à toi" || s.Weight != threadWeightYours {
+	if states["Find names"] != "pending" || states["Sam's pick"] != "pending" || meta.Summary != "une carte à toi" || s.Weight != queueSurfaceWeight(weightBlocksATask) {
 		t.Errorf("proposed: %v %+v %d", states, meta, s.Weight)
 	}
 
@@ -381,7 +381,7 @@ func TestThreadSurfaceHeldStartAndTick(t *testing.T) {
 	start, _ := res.LastInsertId()
 	c.keepThreadSurface(th.ID)
 	s, _, meta := threadSurfaceOf(t, c, th.ID)
-	if !strings.Contains(string(s.Components), proposalRef(cardTaskStart, start)) || meta.Summary != "Find names à toi" || s.Weight != threadWeightYours {
+	if !strings.Contains(string(s.Components), proposalRef(cardTaskStart, start)) || meta.Summary != "Find names à toi" || s.Weight != queueSurfaceWeight(weightBlocksATask) {
 		t.Fatalf("held start: %s %+v", s.Components, meta)
 	}
 	if err := c.decideTaskStart(start, true); err != nil {
@@ -460,7 +460,7 @@ func TestThreadSurfaceCallStep(t *testing.T) {
 	s, _, meta := threadSurfaceOf(t, c, th.ID)
 	comps := string(s.Components)
 	if !strings.Contains(comps, `"id":"thread_card_0","proposalId":"`+st.Card+`"`) || strings.Index(comps, "thread_card_0") > strings.Index(comps, `"thread_steps"`) ||
-		meta.Summary != "Merge the PR à toi" || s.Weight != threadWeightYours || !meta.Answers {
+		meta.Summary != "Merge the PR à toi" || s.Weight != queueSurfaceWeight(weightBlocksATask) || !meta.Answers {
 		t.Fatalf("call card: %s %+v", comps, meta)
 	}
 	answer := actionOn("answer", s.ID, "thread_card_0", `{"proposal":"`+st.Card+`","answer":"yes"}`)
