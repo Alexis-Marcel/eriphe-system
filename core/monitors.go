@@ -289,7 +289,6 @@ func (c *core) runMonitors(ctx context.Context) {
 	for {
 		now := c.notifyTime()
 		c.tickMonitors(ctx, now)
-		c.tickSurfaces(ctx, now) // their sources' intervals and lifetimes (surfaces.go)
 		select {
 		case <-ctx.Done():
 			return

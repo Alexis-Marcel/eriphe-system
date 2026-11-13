@@ -145,6 +145,7 @@ func main() {
 	go c.runEvents(context.Background())    // event_sources.go
 	go c.runSkills(context.Background())    // skill_runs.go
 	go c.runMonitors(context.Background())  // monitors.go
+	go c.runSurfaces(context.Background())  // surfaces.go
 	go c.runComposer(context.Background())  // composer.go
 	go c.runWorkspace(context.Background()) // workspace_queue.go
 	go c.updates.run(context.Background())

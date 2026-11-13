@@ -43,7 +43,7 @@ import (
 //
 // Code refreshes the sources, never a model: on a resource's update (the
 // server tells, pool_follow.go), every N minutes (1 to 1440, on the
-// monitors' loop), and when the user opens the surface (surfaceOpened).
+// surfaces' own loop, runSurfaces), and when the user opens the surface (surfaceOpened).
 // Only a path whose value changed goes out (updateDataModel). Code removes
 // a surface when its lifetime ends: a date (until), a ref no longer
 // pending or running (while), or its author gone (kept).
@@ -74,7 +74,10 @@ const (
 	surfaceJSONMax     = 64 << 10  // components, composed data
 	surfaceValueMax    = 256 << 10 // a source's result
 	surfaceTimeout     = 20 * time.Second
-	surfaceEveryDef    = 5 // minutes, when a surface has sources
+	surfacesTickEvery  = 15 * time.Second
+	surfaceReaders     = 4               // refreshes reading at once
+	surfaceRefreshCap  = 8 * time.Second // a scheduled refresh's reads, well under the tick
+	surfaceEveryDef    = 5               // minutes, when a surface has sources
 	surfaceUntilDef    = 24 * time.Hour
 	surfaceUntilMax    = 90 * 24 * time.Hour
 	surfaceOpenFresh   = 30 * time.Second // opened again sooner: no new read
@@ -208,6 +211,14 @@ type surfaceHub struct {
 	subs map[chan surfaceChange]struct{}
 
 	reading sync.Map // surface id → a refresh in progress
+
+	// The refresh worker (runSurfaces): due holds the surfaces whose
+	// scheduled refresh is queued or running, slots bounds the refreshes
+	// reading at once, refreshing counts those not over (tests wait on it).
+	due        sync.Map
+	slotsOnce  sync.Once
+	slots      chan struct{}
+	refreshing sync.WaitGroup
 
 	keyOnce sync.Once
 	key     []byte // signs the media addresses (surfaces_media.go)
@@ -899,9 +910,24 @@ func isIndex(t string) bool {
 
 // A surface's life: refresh and removal.
 
-// tickSurfaces runs on the monitors' loop: it removes the surfaces whose
-// lifetime ended, reads again the sources whose interval came, and keeps
-// the resources followed.
+// runSurfaces is the surfaces' loop, apart from the monitors': a slow
+// source never delays a monitor's look.
+func (c *core) runSurfaces(ctx context.Context) {
+	tick := time.NewTicker(surfacesTickEvery)
+	defer tick.Stop()
+	for {
+		c.tickSurfaces(ctx, c.notifyTime())
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
+	}
+}
+
+// tickSurfaces removes the surfaces whose lifetime ended, hands the
+// sources whose interval came to the refresh worker, and keeps the
+// resources followed. It never waits for a read.
 func (c *core) tickSurfaces(ctx context.Context, now time.Time) {
 	all, err := c.surfaces()
 	if err != nil {
@@ -914,10 +940,32 @@ func (c *core) tickSurfaces(ctx context.Context, now time.Time) {
 			continue
 		}
 		if s.Refresh.Every > 0 && len(s.Sources) > 0 && !s.NextAt.After(now) {
-			c.refreshSurface(ctx, s.ID, nil, now)
+			if _, queued := c.surf.due.LoadOrStore(s.ID, true); queued {
+				continue // still waiting for a slot, or reading
+			}
+			c.refreshLater(ctx, s.ID, now, func() { c.surf.due.Delete(s.ID) })
 		}
 	}
 	c.followSurfaceResources()
+}
+
+// refreshLater runs a scheduled refreshSurface on the worker: in its own
+// goroutine, once one of surfaceReaders slots is free, its reads cut at
+// surfaceRefreshCap. done runs after it.
+func (c *core) refreshLater(ctx context.Context, id string, now time.Time, done func()) {
+	c.surf.slotsOnce.Do(func() { c.surf.slots = make(chan struct{}, surfaceReaders) })
+	c.surf.refreshing.Add(1)
+	go func() {
+		defer c.surf.refreshing.Done()
+		defer done()
+		select {
+		case c.surf.slots <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		defer func() { <-c.surf.slots }()
+		c.refreshWithin(ctx, id, nil, now, surfaceRefreshCap)
+	}()
 }
 
 // surfaceEnded tells whether a surface's lifetime is over.
@@ -1005,7 +1053,7 @@ func (c *core) surfaceResourceUpdated(server, uri string) {
 				only = append(only, ptr)
 			}
 		}
-		if len(only) > 0 {
+		if len(only) > 0 { // one at a time a surface: one asked meanwhile returns at once
 			go c.refreshSurface(context.Background(), s.ID, only, time.Now())
 		}
 	}
@@ -1041,15 +1089,30 @@ func (c *core) followSurfaceResources() {
 // time: one asked meanwhile runs once the current one is over (all its
 // sources), so an update told during a read is not lost.
 func (c *core) refreshSurface(ctx context.Context, id string, only []string, now time.Time) {
+	c.refreshWithin(ctx, id, only, now, 0)
+}
+
+// refreshWithin is refreshSurface with each pass's reads cut at limit (0:
+// each read's own surfaceTimeout only).
+func (c *core) refreshWithin(ctx context.Context, id string, only []string, now time.Time, limit time.Duration) {
 	again := new(atomic.Bool)
 	if v, busy := c.surf.reading.LoadOrStore(id, again); busy {
 		v.(*atomic.Bool).Store(true)
 		return
 	}
 	defer c.surf.reading.Delete(id)
-	c.refreshOnce(ctx, id, only, now)
+	pass := func(only []string, now time.Time) {
+		ctx := ctx
+		if limit > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, limit)
+			defer cancel()
+		}
+		c.refreshOnce(ctx, id, only, now)
+	}
+	pass(only, now)
 	for again.Swap(false) {
-		c.refreshOnce(ctx, id, nil, time.Now())
+		pass(nil, time.Now())
 	}
 }
 

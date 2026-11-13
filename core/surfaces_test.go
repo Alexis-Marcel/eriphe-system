@@ -28,6 +28,9 @@ type fakeLedger struct {
 	latest   string
 	calls    int
 	hold     chan struct{} // the next read of the resource waits on it
+	gate     chan struct{} // while set, every read of the resource waits on it
+	inflight int           // reads of the resource waiting on the gate
+	most     int           // the most of them at once
 	srv      *mcp.Server
 }
 
@@ -68,11 +71,19 @@ func newFakeLedger() *fakeLedger {
 			l.mu.Lock()
 			l.calls++
 			raw, _ := json.Marshal(map[string]any{"entry": l.latest})
-			hold := l.hold
+			hold, gate := l.hold, l.gate
 			l.hold = nil
+			if gate != nil {
+				l.inflight++
+				l.most = max(l.most, l.inflight)
+			}
 			l.mu.Unlock()
 			if hold != nil {
 				<-hold // the test holds this read
+			}
+			if gate != nil {
+				<-gate
+				l.set(func(l *fakeLedger) { l.inflight-- })
 			}
 			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: "ledger://latest", Text: string(raw)}}}, nil
 		})
@@ -127,6 +138,13 @@ func surfaceCore(t *testing.T) (*core, *fakeLedger) {
 	waitFor(t, func() bool { return len(c.pool.get("ledger").resourceURIs()) > 0 })
 	setBrain(c, &BrainConfig{Agent: "small", Tools: []string{"ledger"}})
 	return c, l
+}
+
+// tickSurfacesWait ticks the surfaces and waits for the refreshes it
+// handed to the worker.
+func tickSurfacesWait(c *core, at time.Time) {
+	c.tickSurfaces(context.Background(), at)
+	c.surf.refreshing.Wait()
 }
 
 func waitFor(t *testing.T, ok func() bool) {
@@ -214,7 +232,7 @@ func TestSurfaceFromAnyTool(t *testing.T) {
 
 	// Its interval comes: a new account goes out as the source's path only.
 	l.set(func(l *fakeLedger) { l.accounts = append(l.accounts, ledgerAccount{Name: "Livret", Balance: 30}) })
-	c.tickSurfaces(context.Background(), time.Now().Add(time.Duration(surfaceEveryDef)*time.Minute))
+	tickSurfacesWait(c, time.Now().Add(time.Duration(surfaceEveryDef)*time.Minute))
 	upd := received(t, ch, 1)[0]
 	if u := upd.Message.UpdateDataModel; u == nil || u.Path != "/ledger" || !strings.Contains(string(u.Value), `"total":150`) || upd.Seq != create.Seq+1 {
 		t.Fatalf("update %d %+v", upd.Seq, upd.Message)
@@ -223,7 +241,7 @@ func TestSurfaceFromAnyTool(t *testing.T) {
 	// Read again with nothing new: nothing goes out; not its time: no call.
 	c.refreshSurface(context.Background(), s.ID, nil, time.Now())
 	calls := l.count()
-	c.tickSurfaces(context.Background(), time.Now())
+	tickSurfacesWait(c, time.Now())
 	if l.count() != calls {
 		t.Fatal("read before its time")
 	}
@@ -308,7 +326,7 @@ func TestSurfaceSourceGuards(t *testing.T) {
 	u.srv.Access = accessAsk
 	u.mu.Unlock()
 	calls := l.count()
-	c.tickSurfaces(context.Background(), time.Now().Add(time.Hour))
+	tickSurfacesWait(c, time.Now().Add(time.Hour))
 	s, _ = c.surface(s.ID)
 	if l.count() != calls || s.Look.Sources["/ledger"].Waiting == "" {
 		t.Fatalf("calls %d → %d, look %+v", calls, l.count(), s.Look)
@@ -507,7 +525,7 @@ func TestSurfaceLifetime(t *testing.T) {
 	_, ch, cancel := c.surfaceSubscribe()
 	defer cancel()
 
-	c.tickSurfaces(context.Background(), time.Now())
+	tickSurfacesWait(c, time.Now())
 	all, _ := c.surfaces()
 	if len(all) != 3 { // the skill is not there: its kept surface goes
 		t.Fatalf("surfaces %v", all)
@@ -516,7 +534,7 @@ func TestSurfaceLifetime(t *testing.T) {
 		t.Fatalf("delete %+v", d)
 	}
 	c.store.updateTask("t-1", map[string]any{"state": stateStopped})
-	c.tickSurfaces(context.Background(), time.Now().Add(2*time.Hour))
+	tickSurfacesWait(c, time.Now().Add(2*time.Hour))
 	all, _ = c.surfaces()
 	if len(all) != 1 || all[0].ID != mine.ID {
 		t.Fatalf("surfaces %v", all)

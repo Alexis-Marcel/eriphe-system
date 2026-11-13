@@ -3149,7 +3149,7 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   a monitor runs its look (`sourceWhy`, `readSource` in `monitors.go`): a tool must be one of the
   brain's, read-only by its own annotation and a free read in the user's grid (with its
   arguments); a resource must be listed by its server. Checked when written and before every
-  read (refused, it waits with why, nothing called). 20 s per read, 256 KiB per result, 8 sources.
+  read (refused, it waits with why, nothing called). 20 s per read (8 s for a refresh on schedule), 256 KiB per result, 8 sources.
   The result is put at the pointer as it came (structured content, else text read as JSON),
   never understood. A server not trusted taints the surface (`tainted`: its sources, and the
   author's turn taint it is written with).
@@ -3162,15 +3162,18 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   the author wrote, dated by `data_at`); both at once is allowed.
 - **Refresh, never by a model**: on a resource's update (the pool subscribes to the resources
   surfaces read, `resources/subscribe`, again after each reconnection; `pool_follow.go`), every
-  `refresh.every` minutes (1 to 1440; 5 by default with sources) on the monitors' loop
-  (`runMonitors` → `tickSurfaces`), and when the user opens it (`surfaceOpened`, not within 30 s
+  `refresh.every` minutes (1 to 1440; 5 by default with sources) on the surfaces' own loop
+  (`runSurfaces` → `tickSurfaces`, every 15 s, apart from the monitors' so that a slow source
+  never delays a look), and when the user opens it (`surfaceOpened`, not within 30 s
   of the last read). One refresh of a surface at a time; one asked meanwhile runs right after, and
-  a read whose source was replaced meanwhile is dropped. Only a source whose value changed goes
-  out, as `updateDataModel` at its pointer; a taint that appears or goes sends the surface again.
+  a read whose source was replaced meanwhile is dropped. The tick never waits for a read: it hands
+  each due surface (once, until its refresh is over) to a worker that reads 4 surfaces at once at
+  most, each pass within 8 s (`refreshLater`, `surfaceReaders`, `surfaceRefreshCap`). Only a
+  source whose value changed goes out, as `updateDataModel` at its pointer; a taint that appears or goes sends the surface again.
 - **Lifetime**, one of: `until` a date (90 days at most), `while` a ref is pending or running
   (`task:<id>` not over nor idle, `session:<id>` not ended, `card:<id>` waiting), or `kept` while
   its author is there (a skill that exists, a lead's session not ended, a task running; the brain
-  always). None given: until a day later. Code removes an ended one on the monitors' loop.
+  always). None given: until a day later. Code removes an ended one on the surfaces' loop.
 - **Who writes**: only its author writes it again (another author's id is refused) or removes
   it; the brain writes and removes any (it stays its author's: a skill's next run still writes
   it); the user and code remove any. 100 surfaces, components and data of 64 KiB each.
