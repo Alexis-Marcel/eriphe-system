@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -197,6 +198,40 @@ func TestClaudeUsage(t *testing.T) {
 	if u["input_tokens"] != int64(12) || u["output_tokens"] != int64(340) || u["cache_write_tokens"] != int64(2000) ||
 		u["cache_read_tokens"] != int64(15000) || end["cost_usd"] != 0.0421 || end["duration_ms"] != int64(1234) {
 		t.Errorf("turn_end = %v", end)
+	}
+}
+
+// A turn's context_tokens is its last main-thread call's prompt, not the
+// sum its usage gives: a subagent's calls and an API error are not the
+// session's.
+func TestClaudeContextTokens(t *testing.T) {
+	task := &Task{ID: "t-1", perms: map[string]*permission{}}
+	agentOut, fromAgent := io.Pipe()
+	s := claudeCode{}.attach(task, nopCloser{io.Discard})
+	done := make(chan error, 1)
+	go func() { done <- s.run("hello", agentOut) }()
+	call := func(parent, model string, in, read, write int) string {
+		return fmt.Sprintf(`{"type":"assistant","parent_tool_use_id":%s,"message":{"model":%q,"content":[],`+
+			`"usage":{"input_tokens":%d,"cache_read_input_tokens":%d,"cache_creation_input_tokens":%d}}}`+"\n", parent, model, in, read, write)
+	}
+	result := `{"type":"result","subtype":"success","result":"ok","usage":{"input_tokens":9,"output_tokens":1,` +
+		`"cache_creation_input_tokens":5000,"cache_read_input_tokens":200000}}` + "\n"
+	fromAgent.Write([]byte(call("null", "m", 3, 40000, 1000) + call("null", "m", 3, 41000, 2000) +
+		call(`"toolu_1"`, "m", 3, 90000, 0) + call("null", "<synthetic>", 0, 0, 0) + result + result))
+	fromAgent.Close()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	ends := eventsOf(task, "turn_end")
+	if len(ends) != 2 {
+		t.Fatalf("turn_end = %v", ends)
+	}
+	if u := ends[0].Data["usage"].(map[string]any); u["context_tokens"] != int64(43003) {
+		t.Errorf("first turn's usage = %v", u)
+	}
+	// A turn without an assistant message has none.
+	if u := ends[1].Data["usage"].(map[string]any); u["context_tokens"] != nil {
+		t.Errorf("second turn's usage = %v", u)
 	}
 }
 

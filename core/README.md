@@ -840,7 +840,8 @@ it with the stop, even a stop of its own when the work was kept.
 ### Usage and measures (`task_stats.go`)
 
 A turn's `turn_end` carries its `usage` (`input_tokens`, `output_tokens`, `cache_read_tokens`,
-`cache_write_tokens`) and `cost_usd` where the harness reports them (Claude Code both, Codex its
+`cache_write_tokens`, and Claude Code's `context_tokens`: its last call's prompt, the session's size)
+and `cost_usd` where the harness reports them (Claude Code both, Codex its
 tokens, OpenCode and other ACP agents nothing yet). Claude Code's `cost_usd` is the session's total
 so far (carried over a resumed session), so it is never summed: a cost comes from the tokens at the
 task's model list price (`task_cost.go`: Opus, Sonnet and Haiku, found in the model's name; another
@@ -1893,10 +1894,18 @@ It gets one turn per event: my messages (`POST /v1/messages {text}`) and what ha
 resume that keeps failing is dropped for a fresh session.
 
 eriphe-core, not the harness, holds the thread: the harness session (`--resume`) is only a cache.
-A fresh session (the first one, a dropped resume, a resume the node could not do, another harness)
-gets a context pack in its first turn, never in its system prompt: what waits for a decision, the
+Each resumed call reads the whole history, and a cache left for over an hour is written again in
+full: a new brain task resumes its session only while its last turn's context was under 150,000
+tokens per call and, above 60,000 tokens, that turn ended less than 55 minutes ago
+(`brainResumeTokens`, `brainResumeIdle`, `brainResumeIdleFloor`; the role card's `ResumeTokens`,
+`ResumeIdle` and `ResumeIdleFloor`): a smaller session costs little to write again and holds more
+than the pack. The measure is the session's
+last `turn_end`, whichever task ran it: its `usage.context_tokens` (the node's, Claude Code's last
+call), or else the turn's input, cache reads and writes. Past either bound, the task starts a fresh
+session. A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
+node could not do, another harness) gets a context pack in its first turn, never in its system prompt: what waits for a decision, the
 tasks under way, the intentions under way (the due ones first), the last day's episodes, and the last
-messages between the user and the brain, the newest kept, within about 8,000 tokens (`brain_context.go`). It is quoted
+messages between the user and the brain, the newest kept, within about 16,000 tokens (`brain_context.go`). It is quoted
 data; events are left out, since they carry what tasks said. eriphe-core logs its size.
 
 ## API accesses the user adds (Home Assistant, shortcuts, scripts)

@@ -15,6 +15,15 @@ import (
 // with only MCP tools. eriphe-core gives it one turn per event: my messages,
 // and what happens to its workers. It never polls.
 
+// The brain's session bounds (assistantRole.ResumeTokens, ResumeIdle).
+const (
+	brainResumeTokens = 150_000
+	brainResumeIdle   = 55 * time.Minute
+	// Under it, the pause rule does not apply: the pack would save little
+	// and lose the session's detail.
+	brainResumeIdleFloor = 60_000
+)
+
 const brainStartPrompt = "Tu démarres. Lis tes consignes, ne fais rien d'autre pour l'instant et réponds seulement « Prêt. »."
 
 // notifyBrain queues an event for the brain when a worker task changes state
@@ -170,6 +179,11 @@ func init() {
 		// It works through MCP tools: of its harness's own, only the web and
 		// the search for its catalog's deferred tools.
 		HarnessTools: []string{"WebSearch", "WebFetch", "ToolSearch"},
+		// Its session is resumed while it is small and its cache warm (an
+		// hour, less a margin): past that, a fresh one with the context
+		// pack costs a fraction of writing the whole history again.
+		// A small session is resumed after a pause all the same.
+		ResumeTokens: brainResumeTokens, ResumeIdle: brainResumeIdle, ResumeIdleFloor: brainResumeIdleFloor,
 		instructions: func(c *core, _ Assistant, prompt string) string {
 			// The profile, from the memory: data about the user, quoted.
 			if profile := c.profileBlock(false); profile != "" {

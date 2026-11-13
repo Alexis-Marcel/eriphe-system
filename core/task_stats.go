@@ -42,6 +42,24 @@ func (s *Store) usageOf(id string) taskUsage {
 	return u
 }
 
+// lastSessionTurn is when a harness session's last turn ended and its
+// context then, per call: the node's context_tokens (Claude Code's last
+// call), or else the turn's input, cache reads and writes, a sum over its
+// calls that only errs high.
+func (s *Store) lastSessionTurn(session string) (at time.Time, tokens int64, ok bool) {
+	var when int64
+	err := s.db.QueryRow(`SELECT e.time, COALESCE(json_extract(e.data, '$.usage.context_tokens'),
+		COALESCE(json_extract(e.data, '$.usage.input_tokens'), 0)
+		+ COALESCE(json_extract(e.data, '$.usage.cache_read_tokens'), 0)
+		+ COALESCE(json_extract(e.data, '$.usage.cache_write_tokens'), 0))
+		FROM events e JOIN tasks t ON t.id = e.task_id
+		WHERE t.session_id = ? AND e.type = 'turn_end' ORDER BY e.time DESC, e.seq DESC LIMIT 1`, session).Scan(&when, &tokens)
+	if err != nil {
+		return time.Time{}, 0, false
+	}
+	return time.Unix(when, 0), tokens, true
+}
+
 // taskStats are the measures over the last statsDays.
 type taskStats struct {
 	Finished  int // worker tasks that ended
