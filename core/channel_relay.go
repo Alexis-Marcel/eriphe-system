@@ -30,8 +30,6 @@ import (
 const (
 	detailFull  = "full"
 	detailAlert = "alert"
-
-	channelLangKey = "channel_lang" // the language of what the channels send: the user's last in the settings
 )
 
 func channelDetailKey(ch string) string       { return "channel_detail:" + ch }

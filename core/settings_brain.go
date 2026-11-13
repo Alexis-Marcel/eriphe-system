@@ -196,7 +196,7 @@ var settingRequest = sync.OnceValue(func() *regexp.Regexp {
 type settingIn struct {
 	Name      string `json:"name" jsonschema:"device_order (lines first to last: inapp, computer, voice, phone, then the channels' own lines as notifications lists them), lines_off (lines never used, or none), move_on_after_minutes (before a now not seen goes to the next line), daily_cap (now notifications a day, 0 to 20), time_zone (IANA, e.g. Europe/Paris, or default), channel_detail (a channel and full: the text, or alert: only that something waits; '<channel> alert'), voice_for_urgent (on: an urgent skill's fixed message is said aloud in the user's room too, even at night; off)"`
 	Value     string `json:"value" jsonschema:"the new value, as the name describes"`
-	Why       string `json:"why" jsonschema:"why, in French, one sentence: what the user said, or the feedback it comes from"`
+	Why       string `json:"why" jsonschema:"why, in the user's language, one sentence: what the user said, or the feedback it comes from"`
 	SourceRef string `json:"source_ref,omitempty" jsonschema:"the user's message of this turn that asks for it, msg:N; without it the setting is only proposed"`
 }
 

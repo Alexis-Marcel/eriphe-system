@@ -57,9 +57,12 @@ func init() {
 		deliver: (*core).deliverLead,
 	}
 	assistantRoles[assistantRoleLead] = assistantRole{
-		Powers:       []string{powerReports},
-		Wakes:        []string{triggerSession},
-		StartPrompt:  leadStartPrompt,
+		Powers:      []string{powerReports},
+		Wakes:       []string{triggerSession},
+		StartPrompt: leadStartPrompt,
+		firstPrompt: func(c *core, _ Assistant, _ bool) string {
+			return langLine(c.userLang()) + "\n\n" + leadStartPrompt // its surface is written in this turn
+		},
 		HarnessTools: []string{"ToolSearch"},
 		instructions: leadInstructions,
 		ownTools:     registerLeadTools,
@@ -178,7 +181,7 @@ func (c *core) deliverLead(ctx context.Context, a Assistant, t *TaskRow) (bool, 
 			}
 		})
 	}
-	text := nowLine(c.notifyTime()) + "\n\n" + strings.Join(texts, "\n\n")
+	text := nowLine(c.notifyTime()) + "\n" + langLine(c.userLang()) + "\n\n" + strings.Join(texts, "\n\n")
 	if nudge := c.leadSurfaceNudge(id); nudge != "" {
 		text += "\n\n" + nudge // surface_authors.go
 	}
@@ -265,7 +268,7 @@ type leadAmendIn struct {
 }
 
 type leadEndIn struct {
-	Summary string `json:"summary" jsonschema:"what the session did, where its results are and what is left, for the user, in French"`
+	Summary string `json:"summary" jsonschema:"what the session did, where its results are and what is left, for the user, in the user's language"`
 }
 
 // The final objective check.

@@ -17,9 +17,9 @@ import (
 // preferences, written with them or only proposed).
 
 type notifyIn struct {
-	Text  string `json:"text" jsonschema:"what to tell the user, in French, one or two sentences, plain text"`
+	Text  string `json:"text" jsonschema:"what to tell the user, in the user's language, one or two sentences, plain text"`
 	Level string `json:"level" jsonschema:"now (worth interrupting: within the hour) or brief (can wait for the next brief)"`
-	Why   string `json:"why" jsonschema:"why you tell it, in French, one sentence the user sees on opening it (the source, what triggered it)"`
+	Why   string `json:"why" jsonschema:"why you tell it, in the user's language, one sentence the user sees on opening it (the source, what triggered it)"`
 	Where string `json:"where,omitempty" jsonschema:"the line to try first, from where_now: inapp, computer, voice, phone, or a channel's own line (where_now lists them); empty lets the router choose (best, unless you have a reason). Lines off, the quiet hours and the user's rules still apply"`
 	Ref   string `json:"ref,omitempty" jsonschema:"what it is about, the key rules match: a known topic (notifications lists them) before a new one; project:<name> and person:<slug> as in the memory, source:<server>, a one-word topic (facture), task:<id>, intention:<id>"`
 }
@@ -42,7 +42,7 @@ type ruleIn struct {
 	Days      string `json:"days,omitempty" jsonschema:"for quiet: all, weekdays (the nights before a weekday) or weekend (Friday and Saturday nights); all by default"`
 	From      string `json:"from,omitempty" jsonschema:"for quiet: when the quiet hours start, HH:MM"`
 	To        string `json:"to,omitempty" jsonschema:"for quiet: when they end, HH:MM"`
-	Why       string `json:"why" jsonschema:"why this rule, in French, one sentence: what the user said, or the feedback or activity it comes from"`
+	Why       string `json:"why" jsonschema:"why this rule, in the user's language, one sentence: what the user said, or the feedback or activity it comes from"`
 	SourceRef string `json:"source_ref,omitempty" jsonschema:"the user's message of this turn that asks for it, msg:N; without it the rule is only proposed"`
 }
 

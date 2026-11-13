@@ -87,9 +87,7 @@ func (w *web) handleChannelSettings(rw http.ResponseWriter, r *http.Request, s *
 		w.c.setChannelDetail(id, d)
 	}
 	w.c.store.set(notifyChannelsKey, channels)
-	if lang == "fr" || lang == "en" {
-		w.c.store.set(channelLangKey, lang)
-	}
+	w.c.noteUserLang(lang)
 	rw.Header().Set("HX-Trigger", hxTrigger(tr(lang, "channels.saved"), true, true))
 	w.render(rw, r, s, "settings", "channels-frag", page{Data: w.channelsPage()})
 }

@@ -133,7 +133,7 @@ func entryOf(s surface) poolEntry {
 // poolSnapshot reads the pool, the queue and the moment.
 func (c *core) poolSnapshot(moment, remark string) poolSnapshot {
 	now := time.Now()
-	s := poolSnapshot{Moment: moment, Remark: remark, Now: now, Lang: c.workspaceLang()}
+	s := poolSnapshot{Moment: moment, Remark: remark, Now: now, Lang: c.userLang()}
 	s.Focus, s.FocusSince = c.focusNow(now)
 	if moment == momentArrival {
 		_, s.Away = c.awaySince(c.notifyTime())

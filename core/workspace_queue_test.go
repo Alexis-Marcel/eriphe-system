@@ -75,7 +75,7 @@ func TestQueueSurfaces(t *testing.T) {
 	}
 
 	// In the user's language, once the workspace is opened in it.
-	c.noteWorkspaceLang("en")
+	c.noteUserLang("en")
 	c.syncQueueSurfaces()
 	if s, _ := surfaceByID(t, c, mailID); s.Title != "To see" {
 		t.Fatalf("english title %q", s.Title)

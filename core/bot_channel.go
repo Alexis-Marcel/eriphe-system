@@ -303,12 +303,7 @@ func (b *botChannel) token() string {
 	return tok
 }
 
-func (b *botChannel) lang() string {
-	if b.c.store.get(channelLangKey) == "en" {
-		return "en"
-	}
-	return "fr"
-}
+func (b *botChannel) lang() string { return b.c.userLang() }
 
 func (b *botChannel) ignore() { b.set("ignored", strconv.FormatInt(b.getInt("ignored")+1, 10)) }
 
@@ -393,9 +388,7 @@ func (b *botChannel) newCode(lang string) string {
 	}
 	code := string(buf)
 	b.set("code", fmt.Sprintf("%s|%d|0", code, time.Now().Add(botCodeTTL).Unix()))
-	if lang == "en" || lang == "fr" {
-		b.c.store.set(channelLangKey, lang)
-	}
+	b.c.noteUserLang(lang)
 	return code
 }
 

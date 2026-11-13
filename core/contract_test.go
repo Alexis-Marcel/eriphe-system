@@ -54,7 +54,7 @@ func TestRunTaskContract(t *testing.T) {
 	c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, task.ID).Scan(&raw)
 	var spec nodeTaskSpec
 	json.Unmarshal([]byte(raw), &spec)
-	if !strings.HasPrefix(spec.AppendSystemPrompt, workerVoice(defaultDisplayName)+"\n\n## Task contract\nObjective: The contact form sends mail") {
+	if !strings.HasPrefix(spec.AppendSystemPrompt, workerVoice(defaultDisplayName, "fr")+"\n\n## Task contract\nObjective: The contact form sends mail") {
 		t.Errorf("system prompt %q", spec.AppendSystemPrompt)
 	}
 	for _, want := range []string{"- keep the public API", "- tests: `go test ./...` in core exits 0 within 300s", "- report: out/report.pdf exists",
