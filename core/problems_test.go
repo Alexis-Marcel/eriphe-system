@@ -17,6 +17,7 @@ func TestMain(m *testing.M) {
 	for kind := range checkEndpoints {
 		checkEndpoints[kind] = "http://127.0.0.1:1/"
 	}
+	keepOffTheNetwork()
 	os.Exit(m.Run())
 }
 

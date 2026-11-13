@@ -19,9 +19,18 @@ export async function pushID(endpoint: string): Promise<string> {
   return Array.from(h.slice(0, 16), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// localURL tells whether a notification's url is a path of this site.
+// localURL tells whether a notification's url is a path of this site: not
+// protocol-relative, even as a browser reads it (a backslash for a slash,
+// tabs and newlines dropped), and still on this origin once resolved.
 export function localURL(url: string | undefined): url is string {
-  return typeof url === "string" && url.startsWith("/") && !url.startsWith("//");
+  if (typeof url !== "string" || !url.startsWith("/") || url.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(url)) {
+    return false;
+  }
+  try {
+    return new URL(url, location.origin).origin === location.origin;
+  } catch {
+    return false;
+  }
 }
 
 export type PresenceOptions = {

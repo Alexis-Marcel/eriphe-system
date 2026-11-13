@@ -13,7 +13,7 @@ import (
 // and, in a dialog, how to share one: on the machine that holds it, never
 // from here.
 
-func (w *web) folderRoutes(mux *http.ServeMux) {
+func (w *web) folderRoutes(mux *webMux) {
 	mux.Handle("GET /settings/folders", w.auth(w.handleFolders))
 	mux.Handle("POST /settings/folders/delete", w.auth(w.handleDeleteFolder))
 	mux.Handle("GET /settings/folders/grid", w.auth(w.handleFolderGrid))

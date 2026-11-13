@@ -123,11 +123,6 @@ func TestBrainWebFetch(t *testing.T) {
 	}
 }
 
-func lastSeq(c *core) int {
-	task, _ := c.store.task("t-brain")
-	return task.LastSeq
-}
-
 func TestBrainWebFetchLocal(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	ownerSays(c, "Regarde http://localhost:8080 et http://192.168.0.2/admin")

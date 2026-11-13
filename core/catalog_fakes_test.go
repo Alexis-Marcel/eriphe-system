@@ -29,12 +29,6 @@ type fakeMonitor struct {
 	got     []map[string]any // monitor://received: messages, each id, subject
 }
 
-func (m *fakeMonitor) set(state, version string) {
-	m.mu.Lock()
-	m.state, m.version = state, version
-	m.mu.Unlock()
-}
-
 func (m *fakeMonitor) server() *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "monitor", Version: "1"}, nil)
 	mcp.AddTool(s, &mcp.Tool{Name: "status", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}},
@@ -143,19 +137,6 @@ func sign(secret string, body []byte) string {
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 
-// brainCallsTool is the brain asking for a catalog tool; true if allowed.
-func brainCallsTool(t *testing.T, c *core, id, tool string, input map[string]any) bool {
-	t.Helper()
-	c.store.insertTask(&TaskRow{ID: id, Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateWaitingPermission})
-	c.store.addEvents(id, []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
-		Data: map[string]any{"id": "p1", "tool_name": tool, "input": input}}})
-	task, _ := c.store.task(id)
-	if err := c.brainPermission(context.Background(), task); err != nil {
-		t.Fatal(err)
-	}
-	items, _ := c.store.inbox(id)
-	return len(items) == 1 && items[0].Data["allow"] == true
-}
 func callBrainTool(t *testing.T, c *core, name string, args map[string]any) (map[string]any, bool) {
 	t.Helper()
 	ctx := context.Background()

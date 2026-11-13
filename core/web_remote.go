@@ -18,7 +18,7 @@ import (
 // address and its QR code for the phone; its state follows tsnet live, over
 // an event stream.
 
-func (w *web) remoteRoutes(mux *http.ServeMux) {
+func (w *web) remoteRoutes(mux *webMux) {
 	mux.Handle("GET /settings/remote/events", w.auth(w.handleRemoteEvents))
 	mux.Handle("POST /settings/remote/enable", w.auth(w.remoteAction(func(r *remoteAccess, _ *http.Request) error { return r.enable() })))
 	mux.Handle("POST /settings/remote/disable", w.auth(w.remoteAction(func(r *remoteAccess, _ *http.Request) error { return r.disable() })))

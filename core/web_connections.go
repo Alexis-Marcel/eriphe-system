@@ -15,7 +15,7 @@ import (
 // tools it has, or remove it with its tools. The tools list shows each
 // account as a card (web_tools_groups.go); these are its buttons.
 
-func (w *web) connectionRoutes(mux *http.ServeMux) {
+func (w *web) connectionRoutes(mux *webMux) {
 	mux.Handle("GET /settings/connections/{provider}", w.auth(w.handleConnectionPage))
 	mux.Handle("POST /settings/connections/{provider}/connect", w.auth(w.handleConnectionConnect))
 	mux.Handle("POST /settings/connections/{provider}/remove", w.auth(w.handleConnectionRemove))

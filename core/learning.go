@@ -79,7 +79,6 @@ const (
 
 var (
 	learnStatuses = []string{learnTrial, learnConfirmed, learnDormant, learnReverted}
-	learnActions  = []string{learnAdded, learnChanged, learnRemoved, learnReverted}
 	learnKinds    = []string{kindProfile, kindPreference, kindLesson, kindDecision, kindSkill}
 )
 

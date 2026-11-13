@@ -81,7 +81,7 @@ type botSpec struct {
 	// channel is removed. Token is then nil.
 	Account func(b *botChannel) string
 	Setup   func(b *botChannel, lang string) template.HTML
-	Routes  func(w *web, mux *http.ServeMux, h func(botHandler) http.Handler)
+	Routes  func(w *web, mux *webMux, h func(botHandler) http.Handler)
 	Removed func(b *botChannel)
 	// OpenLink is a link that opens the bot with the code typed, "" when
 	// the service has none.
@@ -166,7 +166,7 @@ func registerBot(s botSpec) {
 		},
 		reply:  func(c *core, m Message) { c.bot(id).reply(m) },
 		card:   func(c *core, x convoCard, p proposal) { c.bot(id).card(x, p) },
-		routes: func(w *web, mux *http.ServeMux) { botRoutes(w, mux, id) },
+		routes: func(w *web, mux *webMux) { botRoutes(w, mux, id) },
 		start:  func(w *web) { startBot(w, id) },
 		entry:  func(w *web) (entryRow, bool) { return botEntry(w, id) },
 	})

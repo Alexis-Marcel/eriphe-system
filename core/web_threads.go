@@ -15,7 +15,7 @@ import (
 // The page follows the thread live, through its own event stream. The
 // threads running also sit on top of the tasks panel.
 
-func (w *web) threadRoutes(mux *http.ServeMux) {
+func (w *web) threadRoutes(mux *webMux) {
 	mux.Handle("GET /threads", w.auth(w.handleThreads))
 	mux.Handle("GET /threads/{id}", w.auth(w.handleThread))
 	mux.Handle("GET /threads/{id}/events", w.auth(w.handleThreadEvents))

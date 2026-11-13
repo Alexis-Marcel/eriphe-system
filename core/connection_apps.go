@@ -131,7 +131,7 @@ func appBack(p *signInProvider, back string) bool {
 	return slices.Contains(appBacks, back) || back == connectPage(p.Name)
 }
 
-func (w *web) appRoutes(mux *http.ServeMux) {
+func (w *web) appRoutes(mux *webMux) {
 	mux.Handle("GET /settings/apps/{provider}", w.auth(w.handleApp))
 	mux.Handle("POST /settings/apps/{provider}", w.auth(w.handleAppSave))
 	mux.Handle("POST /settings/apps/{provider}/test", w.auth(w.handleAppTest))

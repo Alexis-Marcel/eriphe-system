@@ -49,8 +49,6 @@
     <span class="kind k-{{.Kind}}"><i aria-hidden="true"></i>{{t (printf "kind.%s" .Kind)}}</span>
     {{if .Subject}}<a class="mem-subj" href="/memory?subject={{.Subject}}">{{.Subject}}</a>{{end}}
     {{if .Pinned}}<span class="pinned" title="{{t "mem.view.profile"}}">{{template "i-pin"}}<span class="sr-only">{{t "mem.view.profile"}}</span></span>{{end}}
-    {{if .Overdue}}<span class="tag tag-no">{{t "mem.overdue"}}</span>{{end}}
-    {{if eq .Kind "commitment"}}{{if ne .State "open"}}<span class="tag {{if eq .State "done"}}tag-ok{{end}}">{{t (printf "mem.st.%s" .State)}}</span>{{end}}{{end}}
     {{if eq .Kind "progress"}}<span class="tag {{if eq .State "done"}}tag-ok{{end}}">{{t (printf "mem.st.%s" .State)}}</span>{{end}}
     <span class="trust t-{{.Trust}}">{{t (printf "trust.%s" .Trust)}}</span>
   </div>
@@ -58,7 +56,6 @@
   {{if .Links}}<p class="mem-links">{{range .Links}}<span class="mono">{{template "i-link"}}{{.}}</span>{{end}}</p>{{end}}
   <p class="mem-meta">
     {{if eq .Kind "episode"}}<time datetime="{{iso .OccurredAt}}">{{date .OccurredAt}}</time>{{else}}<span>{{tf "mem.recorded" (ago .RecordedAt)}}</span>{{end}}
-    {{if not .DueAt.IsZero}}<span class="{{if .Overdue}}due-late{{end}}">{{tf "mem.dueon" (date .DueAt)}}</span>{{end}}
     {{if .Past}}<span>{{tf "mem.validto" (date .ValidTo)}}</span>{{end}}
     {{if .SupersededBy}}<span>{{tf "mem.supersededby" .SupersededBy}}</span>{{end}}
     <span>{{t (printf "src.%s" .SourceKind)}}{{if .SourceRef}} <span class="mono">{{.SourceRef}}</span>{{end}}</span>
@@ -78,12 +75,6 @@
   <div class="mem-actions"><button class="btn btn-soft sm" hx-post="/memory/{{.ID}}/restore" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.restore"}}</button></div>
   {{else}}
   <div class="mem-actions">
-    {{if and (eq .Kind "commitment") (eq .State "open")}}
-    <button class="btn btn-soft sm" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"done"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{template "i-check"}}{{t "mem.done"}}</button>
-    <button class="link-btn" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"dropped"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.drop"}}</button>
-    {{else if eq .Kind "commitment"}}
-    <button class="link-btn" hx-post="/memory/{{.ID}}/state" hx-vals='{"state":"open"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.reopen"}}</button>
-    {{end}}
     <button class="link-btn" hx-get="/memory/{{.ID}}/edit" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.edit"}}</button>
     {{if not .Past}}{{if .Pinned}}{{if ne .Kind "profile"}}<button class="link-btn" hx-post="/memory/{{.ID}}/pin" hx-vals='{"pin":"0"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.unpin"}}</button>{{end}}
     {{else}}<button class="link-btn" hx-post="/memory/{{.ID}}/pin" hx-vals='{"pin":"1"}' hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.pin"}}</button>{{end}}{{end}}
@@ -105,7 +96,6 @@
     <label class="field"><span>{{t "mem.subject"}}</span><input type="text" name="subject" value="{{.Subject}}" maxlength="100" class="mono" spellcheck="false" autocomplete="off"></label>
     <label class="field"><span>{{t "mem.links"}}</span><textarea name="links" rows="2" class="mono">{{range .Links}}{{.}}
 {{end}}</textarea></label>
-    <label class="field"><span>{{t "mem.due"}}</span><input type="date" name="due" value="{{if not .DueAt.IsZero}}{{.DueAt.Local.Format "2006-01-02"}}{{end}}"></label>
     <div class="mem-form-end span2">
       <button class="btn btn-ghost" type="button" hx-get="/memory/{{.ID}}/card" hx-target="#mem-{{.ID}}" hx-swap="outerHTML">{{t "mem.cancel"}}</button>
       <button class="btn btn-primary" type="submit">{{t "mem.save"}}</button>

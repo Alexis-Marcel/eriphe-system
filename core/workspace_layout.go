@@ -358,13 +358,10 @@ type tileSpot struct {
 	col, row int
 }
 
-// packTiles puts each tile, in order, at the first place where it fits, top
-// left first; one that fits nowhere shrinks, then is left out (nil).
-func packTiles(sizes []string) []*tileSpot { return packTilesAt(sizes, nil) }
-
-// packTilesAt is packTiles with places asked: a tile with one (at[i]: col,
-// row) goes there first, at its size, when it is on the grid and free;
-// else it is packed with the others, in order.
+// packTilesAt puts each tile, in order, at the first place where it fits,
+// top left first; one that fits nowhere shrinks, then is left out (nil). A
+// tile with a place asked (at[i]: col, row) goes there first, at its size,
+// when it is on the grid and free; else it is packed with the others.
 func packTilesAt(sizes []string, at []*[2]int) []*tileSpot {
 	var grid [layoutRows][layoutCols]bool
 	free := func(col, row, w, h int) bool {
@@ -466,14 +463,6 @@ type layoutState struct {
 	user       userPlacement       // what the user closed and placed this session (workspace_gestures.go)
 	userLoaded bool                // user was read from the store
 	read       map[string][]string // queue surfaces the user opened: the refs of the items other than cards they showed, which end once the user leaves it
-}
-
-// workspaceChoiceNow is the choice laid out: the last kept, or by weight.
-func (c *core) workspaceChoiceNow() workspaceChoice {
-	st := &c.layout
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	return c.choiceLocked()
 }
 
 func (c *core) choiceLocked() workspaceChoice {

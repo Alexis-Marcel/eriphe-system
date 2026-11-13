@@ -548,7 +548,9 @@ inbox. The node injects the agent of `claude-code`, `opencode`, `codex` and `vib
 
 A `turn_end` carries the turn's usage where the harness reports it (`usage.go`), in one shape:
 `usage` `{input_tokens, output_tokens, cache_read_tokens, cache_write_tokens}`, and `cost_usd`.
-Claude Code's result gives both, with `duration_ms`; Codex its tokens
+Claude Code's result gives both, with `duration_ms`, and the node adds `usage.context_tokens`: the
+last main-thread API call's input, cache reads and writes (from its `assistant` messages), the
+session's size, which the turn's sum over its calls is not; Codex its tokens
 (`thread/tokenUsage/updated`: the turn's share of the thread's total, its cached input counted as
 cache reads); OpenCode and other ACP agents nothing yet.
 

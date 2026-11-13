@@ -89,7 +89,8 @@ func TestApplyExtraction(t *testing.T) {
 	}
 	answer := fmt.Sprintf(`{"operations": [
 	  {"op": "SUPERSEDE", "id": %[1]d, "text": "Paul est l'associé de Sam", "source_ref": "%[3]s"},
-	  {"op": "ADD", "kind": "commitment", "subject": "project:site", "text": "Préparer le devis du site pour jeudi", "due_at": "2026-10-29", "source_ref": "%[3]s"},
+	  {"op": "INTEND", "kind": "commitment", "owner": "assistant", "text": "Préparer le devis du site pour jeudi", "due_at": "2026-10-29", "source_ref": "%[3]s"},
+	  {"op": "ADD", "kind": "commitment", "text": "Rappeler le client lundi", "source_ref": "%[3]s"},
 	  {"op": "ADD", "kind": "fact", "subject": "project:site", "text": "Le devis est dans devis.md", "source_ref": "task:%[5]s"},
 	  {"op": "ADD", "kind": "episode", "subject": "journal", "text": "Sam a parlé du devis avec Eriphe ; la tâche l'a préparé.", "source_ref": "%[3]s, %[4]s, task:%[5]s"},
 	  {"op": "ADD", "kind": "preference", "text": "Sam aime les devis courts", "source_ref": "%[3]s"},
@@ -112,7 +113,7 @@ func TestApplyExtraction(t *testing.T) {
 	if runs[0].State != runDone || runs[0].Applied != 5 {
 		t.Fatalf("run: %+v", runs[0])
 	}
-	for _, want := range []string{"lesson", "profile", "cannot replace a lesson", "refused", "msg:9999", "no source_ref", "unknown op"} {
+	for _, want := range []string{"lesson", "profile", "cannot replace a lesson", "refused", "kind must be one of", "msg:9999", "no source_ref", "unknown op"} {
 		if !strings.Contains(runs[0].Error, want) {
 			t.Errorf("rejections lack %q: %s", want, runs[0].Error)
 		}
@@ -136,7 +137,7 @@ func TestApplyExtraction(t *testing.T) {
 	if status["fact:Le devis e"] != memProposed || status["episode:Sam a parl"] != memActive || status["preference:Sam aime l"] != memProposed {
 		t.Fatalf("statuses: %v", status)
 	}
-	// A commitment is an intention now, open since it is my word.
+	// What is owed is an intention, open since it is my word; a commitment memory is no kind.
 	if in, _ := c.mem.intentions(); len(in) != 1 || in[0].Text != "Préparer le devis du site pour jeudi" || in[0].State != intentOpen ||
 		in[0].DueAt.Format("2006-01-02") != "2026-10-29" {
 		t.Fatalf("intentions: %+v", in)

@@ -106,7 +106,7 @@ func TestTaskStatusAndEvents(t *testing.T) {
 
 	// A long poll returns as soon as an event arrives.
 	go func() {
-		time.Sleep(300 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond) // the poll waiting, most likely
 		c.store.addEvents("t-1", []EventRow{{Seq: 3, Time: time.Now(), Type: "state", Data: map[string]any{"state": "idle"}}})
 	}()
 	start := time.Now()
@@ -243,7 +243,7 @@ func TestWaitForChange(t *testing.T) {
 	}
 	// Running, not moving: until the deadline.
 	addTask(t, c, "t-running", stateRunning)
-	if d := quick("t-running", 1500*time.Millisecond); d < 1500*time.Millisecond || d > 5*time.Second {
+	if d := quick("t-running", 300*time.Millisecond); d < 300*time.Millisecond || d > 5*time.Second {
 		t.Fatalf("deadline: %s", d)
 	}
 	cancelled, cancel := context.WithCancel(ctx)

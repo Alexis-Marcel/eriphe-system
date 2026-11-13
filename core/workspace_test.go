@@ -112,8 +112,9 @@ func TestComposerReadsWorkspacePreferences(t *testing.T) {
 	}
 
 	// The stamp the composer watches moves when one enters memory, with its words.
+	// updated_at counts seconds: the ones there move back two, not the clock.
+	c.mem.db.Exec(`UPDATE memories SET updated_at = updated_at - 2 WHERE kind = ? AND subject = ?`, kindPreference, workspaceSubject)
 	stamp, changed, _ := c.workspacePrefStamp()
-	time.Sleep(1100 * time.Millisecond) // updated_at counts seconds
 	x := mustAdd(t, c.mem, &Memory{Kind: kindPreference, Subject: workspaceSubject, Text: "Sam ne veut plus les lettres de news.example.org."})
 	s2, changed2, words := c.workspacePrefStamp()
 	if s2 == stamp || changed2 < changed || words != x.Text {
@@ -276,7 +277,7 @@ func TestRefCompositionGone(t *testing.T) {
 			t.Errorf("tool %s is still there", tl.Name)
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond) // the snapshot, and none of the events gone
 	defer cancel()
 	tw.c.attend(attentionItem{Ref: "mail:7", Weight: 3, Why: "a reply"})
 	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)

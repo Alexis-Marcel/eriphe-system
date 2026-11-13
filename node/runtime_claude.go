@@ -126,6 +126,9 @@ type claudeSession struct {
 	mu    sync.Mutex
 	stdin io.WriteCloser
 	busy  bool
+	// context is the last main-thread API call's prompt size in the turn
+	// (usage.go): what the session's next call reads at least.
+	context int64
 }
 
 func (c *claudeSession) send(text string) error {
@@ -171,6 +174,11 @@ func (c *claudeSession) run(first string, stdout io.Reader) error {
 			// from a model of its own: it is marked so that it is never
 			// shown as the agent's answer.
 			apiError := ev["error"] != nil && ev["error"] != "" || msg["model"] == "<synthetic>"
+			if parent, _ := ev["parent_tool_use_id"].(string); parent == "" && !apiError {
+				if n := callContext(msg); n > 0 {
+					c.context = n
+				}
+			}
 			for _, b := range blocks {
 				bm, _ := b.(map[string]any)
 				switch bm["type"] {
@@ -188,6 +196,10 @@ func (c *claudeSession) run(first string, stdout io.Reader) error {
 			text, _ := ev["result"].(string)
 			data := map[string]any{"subtype": ev["subtype"], "result": text, "denials": ev["permission_denials"]}
 			claudeUsage(ev, data) // usage.go
+			if u, ok := data["usage"].(map[string]any); ok && c.context > 0 {
+				u["context_tokens"] = c.context
+			}
+			c.context = 0
 			if isErr, _ := ev["is_error"].(bool); isErr {
 				data["is_error"] = true // an API error still ends with subtype "success"
 			}

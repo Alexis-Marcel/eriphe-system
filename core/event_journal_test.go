@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func eventsOf(t *testing.T, c *core, kind string) []journalEvent {
@@ -218,17 +216,4 @@ func TestUserReturnedEvent(t *testing.T) {
 	if got := eventsOf(t, c, evUserReturned); len(got) != 1 {
 		t.Fatalf("away, yet: %+v", got)
 	}
-}
-
-func monSession(t *testing.T, mon *fakeMonitor) *mcp.ClientSession {
-	ct, st := mcp.NewInMemoryTransports()
-	if _, err := mon.server().Connect(context.Background(), st, nil); err != nil {
-		t.Fatal(err)
-	}
-	sess, err := mcp.NewClient(&mcp.Implementation{Name: "eriphe-core"}, nil).Connect(context.Background(), ct, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { sess.Close() })
-	return sess
 }
