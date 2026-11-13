@@ -1,0 +1,28 @@
+{
+  "id": "live-balances",
+  "what": "Sam veut voir ses comptes : une demande de données vivantes, à lier à l'outil plutôt qu'à recopier.",
+  "lang": "fr",
+  "request": "Montre-moi le solde de mes comptes.",
+  "kind": "live",
+  "servers": [{"name": "ledger", "use": "les comptes bancaires de Sam", "tools": [{
+    "name": "balances",
+    "description": "List the accounts with their balance, and the total.",
+    "input_schema": {"type": "object", "properties": {}},
+    "output_schema": {"type": "object", "properties": {
+      "accounts": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "balance": {"type": "number"}}}},
+      "total": {"type": "number"}, "currency": {"type": "string"}}},
+    "result": {"accounts": [{"name": "Compte joint Orme", "balance": 1834.27}, {"name": "Livret Tilleul", "balance": 5120.5}], "total": 6954.77, "currency": "EUR"}
+  }]}],
+  "expect": {},
+  "answer": {
+    "title": "Mes comptes",
+    "why": "Sam veut suivre ses soldes",
+    "sources": {"/comptes": {"tool": "ledger/balances"}},
+    "components": [
+      {"id": "root", "component": "Column", "children": ["total", "liste"]},
+      {"id": "total", "component": "Metric", "label": "Total", "value": {"@path": "/comptes/total"}, "unit": "€"},
+      {"id": "liste", "component": "List", "children": {"path": "/comptes/accounts", "componentId": "compte"}},
+      {"id": "compte", "component": "Metric", "label": {"@path": "name"}, "value": {"@path": "balance"}, "unit": "€"}
+    ]
+  }
+}

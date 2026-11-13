@@ -1,0 +1,33 @@
+{
+  "id": "live-error-rate",
+  "what": "Une série vivante : le taux d'erreurs du site, en courbe liée à l'outil.",
+  "lang": "fr",
+  "request": "Affiche le taux d'erreurs du site sur les dernières 24 h.",
+  "kind": "live",
+  "servers": [{"name": "metrics", "use": "les mesures du site de Sam (www.example.org)", "tools": [{
+    "name": "query",
+    "description": "Run a query over a time range. Returns the series, each a list of points.",
+    "input_schema": {"type": "object", "properties": {
+      "expr": {"type": "string", "description": "what to measure, e.g. error_rate{site=\"www\"}"},
+      "range": {"type": "string", "description": "how far back: 1h, 24h, 7d"}},
+      "required": ["expr"]},
+    "output_schema": {"type": "object", "properties": {
+      "series": {"type": "array", "items": {"type": "object", "properties": {
+        "name": {"type": "string"},
+        "points": {"type": "array", "items": {"type": "object", "properties": {"x": {"type": "string"}, "y": {"type": "number"}}}}}}},
+      "unit": {"type": "string"}}},
+    "result": {"series": [{"name": "erreurs www", "points": [
+      {"x": "2026-11-12T10:00:00Z", "y": 0.42}, {"x": "2026-11-12T16:00:00Z", "y": 1.37},
+      {"x": "2026-11-12T22:00:00Z", "y": 0.18}, {"x": "2026-11-13T04:00:00Z", "y": 0.09}]}], "unit": "%"}
+  }]}],
+  "expect": {"args": ["expr"]},
+  "answer": {
+    "title": "Erreurs du site, 24 h",
+    "why": "Sam suit les erreurs du site",
+    "sources": {"/erreurs": {"tool": "metrics/query", "args": {"expr": "error_rate{site=\"www\"}", "range": "24h"}}},
+    "refresh": {"every": 10},
+    "components": [
+      {"id": "root", "component": "Chart", "kind": "line", "series": {"@path": "/erreurs/series"}, "unit": "%"}
+    ]
+  }
+}
