@@ -119,7 +119,7 @@ func surfaceUseOf(spans []frontSpan, gs []gesture) surfaceUse {
 				} else if opened.IsZero() {
 					opened = g.Time
 				}
-			case gestureIgnored, "closed": // closed: the page's close (#426)
+			case gestureIgnored, gestureClosed:
 				if dismissed.IsZero() {
 					dismissed = g.Time
 				}

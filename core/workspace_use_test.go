@@ -31,7 +31,7 @@ func TestSurfaceUseOf(t *testing.T) {
 	gs := []gesture{
 		g(gestureOpened, "a", 3*time.Minute),
 		g(gestureIgnored, "c", time.Minute),
-		g("closed", "d", 2*time.Minute), g(gestureOpened, "d", 5*time.Minute),
+		g(gestureClosed, "d", 2*time.Minute), g(gestureOpened, "d", 5*time.Minute),
 		g(gestureOpened, "e", 29*time.Second),
 		g(gestureOpened, "g", 9*time.Minute),
 		g(gestureOpened, "h", 5*time.Minute),
