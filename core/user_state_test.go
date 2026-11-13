@@ -67,12 +67,13 @@ func TestUserStateLine(t *testing.T) {
 	}
 }
 
-// The head of a turn is the time, then the state.
+// The head of a turn is the time, the user's language, then the state.
 func TestTurnHead(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "15:00"))
 	ownerSays(c, "Salut")
 	head := strings.Split(c.turnHead(time.Now()), "\n")
-	if len(head) != 2 || !strings.HasPrefix(head[0], "[maintenant ") || !strings.HasPrefix(head[1], "[état de Sam : ") {
+	if len(head) != 3 || !strings.HasPrefix(head[0], "[maintenant ") || !strings.HasPrefix(head[1], "[langue de l'utilisateur : ") ||
+		!strings.HasPrefix(head[2], "[état de Sam : ") {
 		t.Fatalf("%q", head)
 	}
 }

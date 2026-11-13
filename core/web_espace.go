@@ -169,7 +169,7 @@ type espaceBoot struct {
 
 func (w *web) handleEspaceBoot(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
-	w.c.noteWorkspaceLang(lang) // the queue's surfaces and Eriphe's line follow it
+	w.c.noteUserLang(lang) // the queue's surfaces and Eriphe's lines follow it
 	b := espaceBoot{Lang: lang, Name: assistantName(), CSRF: s.CSRF, Strings: espaceWords(lang, assistantName())}
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Cache-Control", "no-store")

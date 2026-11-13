@@ -312,10 +312,11 @@ type runRequest struct {
 }
 
 // workerVoice is a worker's standing instruction: its last message reaches
-// the user through the assistant they named, so it speaks like it.
-func workerVoice(name string) string {
-	return "Your final message is relayed to the user as " + name + "'s. Write it in the language of your instructions; " +
-		"in French, use tutoiement (« tu »), never « vous ». Be concise: the result, without preamble.\n\n" + receiptInstruction
+// the user through the assistant they named, so it speaks like it, in the
+// user's language (user_lang.go).
+func workerVoice(name, lang string) string {
+	return "Your final message is relayed to the user as " + name + "'s. Write it, and anything else the user reads, " + userLangEN(lang) +
+		", whatever the language of your instructions. Be concise: the result, without preamble.\n\n" + receiptInstruction
 }
 
 // taskUntrusted: a task started on what came from outside, which may leave
@@ -330,7 +331,7 @@ func taskUntrusted(kind string, taint []string) bool {
 
 // runTask schedules a worker task, sends it to its node and starts following it.
 func (c *core) runTask(ctx context.Context, r runRequest) (*TaskRow, error) {
-	return c.startTask(ctx, "worker", r, nodeTaskSpec{AppendSystemPrompt: workerVoice(c.conf().assistantName())})
+	return c.startTask(ctx, "worker", r, nodeTaskSpec{AppendSystemPrompt: workerVoice(c.conf().assistantName(), c.userLang())})
 }
 
 // startTask is runTask for any kind of task; extra carries the fields only

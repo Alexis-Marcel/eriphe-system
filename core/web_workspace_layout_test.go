@@ -128,7 +128,7 @@ func TestWorkspaceLangFromBoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if got := tw.c.workspaceLang(); got != "en" {
+	if got := tw.c.userLang(); got != "en" {
 		t.Fatalf("lang %q", got)
 	}
 	if turn := composerTurn(tw.c.poolSnapshot(momentChange, "")); !strings.Contains(turn, "en anglais") {

@@ -585,6 +585,14 @@ func templateFuncs(lang string) template.FuncMap {
 		// name is what the user calls their assistant: the pages' title and brand.
 		"name": assistantName,
 		"tf":   func(key string, args ...any) string { return fmt.Sprintf(tr(lang, key), args...) },
+		// reason is a learned entry's reason: code's own words in lang,
+		// anyone else's as written.
+		"reason": func(s string) string {
+			if k, ok := learnedReasonKeys[s]; ok {
+				return tr(lang, k)
+			}
+			return s
+		},
 		// botIcon is a bot channel's mark in Settings → Access (bot_channel.go).
 		"botIcon": func(id string) string { return botSpecs[id].Icon },
 		"ago": func(t time.Time) string {

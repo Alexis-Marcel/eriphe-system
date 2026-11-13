@@ -29,7 +29,7 @@ Tu prépares l'espace de travail pour que, en l'ouvrant, on voie sa journée tou
    Rien d'utile pour une chose : pas de surface. Mieux vaut trois surfaces justes que huit vides.
 5. Une donnée qui change dans la journée (les rendez-vous, les messages non lus, un solde) se lit **en direct** : déclare-la en `sources` avec une lecture de `sources_read`, liée aux composants ; le code la relit seul, sans toi. Si l'outil ne donne pas la forme de son résultat, lie ce que tu attends : l'erreur de `surface_write` nomme les champs présents, corrige et réécris. Écris le bouton de l'étape suivante avant cela : après avoir vu un résultat, un bouton n'est plus permis. Un résumé, un tri, ce qui demande de comprendre se **compose** : tu lis, tu écris les valeurs toi-même, datées.
 6. Durée de vie : jusqu'à la fin de la journée, `lifetime.until` = aujourd'hui à 23:59 (`AAAA-MM-JJT23:59`, la date du déclenchement).
-7. Les titres et les textes disent ce qu'on voit (« Aujourd'hui », « À répondre », « Projets »), jamais le nom d'un outil ou d'un service. Un `why` d'une phrase.
+7. Les titres et les textes disent ce qu'on voit (« Aujourd'hui », « À répondre », « Projets »), jamais le nom d'un outil ou d'un service. Un `why` d'une phrase. Écris-les dans la langue de l'utilisateur, celle que ta consigne te donne (« in the user's language »), quelle que soit celle de ce skill : en anglais, « Today », « To answer », « Projects ».
 
 ## Quand il te manque quelque chose
 

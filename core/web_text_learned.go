@@ -11,6 +11,15 @@ func init() {
 	}
 }
 
+// learnedReasonKeys are the reasons code itself gives a learned entry
+// (learning.go, memory.go, default_skills.go), shown in the user's language.
+var learnedReasonKeys = map[string]string{
+	defaultSkillReason: "learned.reason.default",
+	"approved":         "learned.reason.approved",
+	"deleted":          "learned.reason.deleted",
+	"restored":         "learned.reason.restored",
+}
+
 var learnedStrings = map[string]map[string]string{
 	"fr": {
 		"learned.title":                   "Ce que {{name}} a appris",
@@ -42,6 +51,10 @@ var learnedStrings = map[string]map[string]string{
 		"learned.src.external":            "un contenu extérieur",
 		"learned.src.extraction":          "l'extraction de la nuit",
 		"learned.src.consolidation":       "la consolidation",
+		"learned.reason.default":          "installé par défaut",
+		"learned.reason.approved":         "approuvé",
+		"learned.reason.deleted":          "supprimé",
+		"learned.reason.restored":         "restauré",
 		"learned.confirm":                 "Annuler ce changement ?",
 		"learned.undo":                    "Annuler",
 		"learned.keep":                    "Garder",
@@ -93,6 +106,10 @@ var learnedStrings = map[string]map[string]string{
 		"learned.src.external":            "external content",
 		"learned.src.extraction":          "the nightly extraction",
 		"learned.src.consolidation":       "the consolidation",
+		"learned.reason.default":          "installed by default",
+		"learned.reason.approved":         "approved",
+		"learned.reason.deleted":          "deleted",
+		"learned.reason.restored":         "restored",
 		"learned.confirm":                 "Undo this change?",
 		"learned.undo":                    "Undo",
 		"learned.keep":                    "Keep",

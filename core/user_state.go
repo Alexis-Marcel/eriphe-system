@@ -194,10 +194,11 @@ func span(d time.Duration) string {
 	return fmt.Sprintf("%d j %d h", m/(24*60), m%(24*60)/60)
 }
 
-// turnHead opens each of the brain's turns: the time, the user's state,
-// then what holds for them now (situations.go).
+// turnHead opens each of the brain's turns: the time, the user's language
+// (user_lang.go), the user's state, then what holds for them now
+// (situations.go).
 func (c *core) turnHead(now time.Time) string {
-	head := nowLine(now)
+	head := nowLine(now) + "\n" + langLine(c.userLang())
 	s, err := c.userState()
 	if err != nil {
 		log.Printf("brain: user state: %v", err)

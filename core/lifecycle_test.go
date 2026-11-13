@@ -72,7 +72,7 @@ func TestDeclarativeLifecycle(t *testing.T) {
 	call("GET", "/v1/node/assignments?rev=0&wait=0", nil, &a)
 	if len(a.Tasks) != 1 || a.Tasks[0].Desired != desiredRunning || a.Tasks[0].Spec.Prompt != "count the lines" ||
 		a.Tasks[0].Spec.AgentEnv["CLAUDE_CODE_OAUTH_TOKEN"] != "tok" || a.Tasks[0].Spec.Model != "sonnet" ||
-		a.Tasks[0].Spec.TZ != "Europe/Paris" || a.Tasks[0].Spec.AppendSystemPrompt != workerVoice(defaultDisplayName) ||
+		a.Tasks[0].Spec.TZ != "Europe/Paris" || a.Tasks[0].Spec.AppendSystemPrompt != workerVoice(defaultDisplayName, "fr") ||
 		a.Tasks[0].Spec.Egress == nil {
 		t.Fatalf("assignment = %+v", a)
 	}

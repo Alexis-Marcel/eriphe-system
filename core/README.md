@@ -2629,6 +2629,20 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 | `cert_file`, `key_file` | a certificate to serve; without them, a self-signed one |
 | `hostnames` | names and addresses for the self-signed certificate, besides `public_url`'s host, the machine's name, `localhost` and its interfaces' addresses |
 | `lang` | `fr` or `en`; without it, the browser's language (`Accept-Language`: French when it prefers French, English otherwise); each browser can switch in Settings, which wins |
+
+**The user's language.** What Eriphe writes for the user follows one language, `fr` or `en`
+(`userLang`, `core/user_lang.go`, kv `user_lang`): the language of the last signed-in page that set
+it, that is the workspace opening (`/espace/boot`), the language switch in Settings, the channel
+settings or a channel's link code; before any, `web.lang`, else French. The fixed texts use it (the
+workspace queue's surfaces, the bot channels' messages), and so do the models' lines: a skill run's
+and a task's final message, a task's surface (`skillVoice`, `workerVoice`, `delegateSurfaceText`
+name it), the composer's turn, and a `[langue de l'utilisateur : …]` line at the head of each turn of
+the brain, the assistants and a session's lead, for their notifications, cards, surfaces and
+summaries (the brain answers a message in the language it is written in). The fields of the tools
+the user reads (`notify`'s text and why, a rule's or a setting's why, an intention, attention's why
+and say, a session's summary) ask for "the user's language". What only the models read (their
+prompts, packets, receipts, reports) stays in French, and so does the memory, whose index stems
+French.
 | `session_days` | how long a login lasts, 30 by default (a week without use ends it sooner) |
 | `auth` | how one signs in: see [Signing in](#signing-in); without it, Settings → Access → Web workspace says |
 | `external_url` | the workspace's address, e.g. `https://eriphe.example.org`: see [the reverse proxy guide](../docs/reverse-proxy.md); `auth.external_url` works too, this one wins |
@@ -2745,8 +2759,8 @@ kind of item: a card is a `Proposal` bound to its proposal (`kind:id`, read and 
 held for the brief, an alert) is an `Alert` with what Eriphe would say of it (else its why),
 titled « Urgent », « Attend ta réponse » or « À voir » by its weight. Its id is `q-<kind>-<id>`
 (a hash of the ref when its id cannot be a surface's), its weight the item's × 20 (`queueSurfaceWeight`),
-its why the item's, its taint the item's; its words follow the language the workspace was last
-opened in (`workspace_lang`, set by `/espace/boot`). It lives while its item is open:
+its why the item's, its taint the item's; its words are in the user's language (`userLang`, see
+below). It lives while its item is open:
 `syncQueueSurfaces` makes the queue's surfaces again whenever the queue changes (`attend` and
 `attentionDone` kick `runWorkspace`, never inline) and every 2 s, writing only what changed and
 removing what left. Code's surfaces are outside the pool's cap (100), and no assistant writes or

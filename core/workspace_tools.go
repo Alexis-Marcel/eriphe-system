@@ -209,15 +209,16 @@ func (c *core) delegateSurface(in *runRequest) error {
 		return fmt.Errorf("surface %s: write its placeholder with surface_write first", in.Surface)
 	}
 	in.Resources = append(in.Resources, ResourceRef{Kind: resTool, Ref: workspaceServer})
-	in.Prompt = strings.TrimSpace(in.Prompt) + "\n\n" + delegateSurfaceText(in.Surface)
+	in.Prompt = strings.TrimSpace(in.Prompt) + "\n\n" + delegateSurfaceText(in.Surface, c.userLang())
 	return nil
 }
 
-// delegateSurfaceText tells a task the surface it fills for the brain.
-func delegateSurfaceText(id string) string {
+// delegateSurfaceText tells a task the surface it fills for the brain, and
+// the user's language to write it in.
+func delegateSurfaceText(id, lang string) string {
 	return "Ton résultat s'affiche dans l'espace de travail : écris-le dans la surface « " + id +
 		" » avec surface_write (" + workspaceServer + "), avec cet id, en remplaçant ce qu'elle montre en attendant (catalog_read donne les composants). " +
-		"Ce sont des formes, jamais des noms d'outils. Tu n'écris que celle-là."
+		"Ce sont des formes, jamais des noms d'outils ; ses titres et ses textes, " + userLangFR(lang) + ". Tu n'écris que celle-là."
 }
 
 // providedInfo is what list_tools says of the servers Eriphe provides.

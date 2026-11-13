@@ -31,14 +31,13 @@ import (
 // workspace_gestures.go):
 // syncQueueSurfaces makes the surfaces again from the queue whenever it
 // changes (attend and attentionDone kick it) and every queueSyncEvery, so a
-// card decided elsewhere leaves too. Its words are in the workspace's
-// language (workspaceLang).
+// card decided elsewhere leaves too. Its words are in the user's language
+// (userLang).
 
 const (
 	queueSurfacePrefix = "q-"
 	queueSyncEvery     = 2 * time.Second
 	queueTitleMax      = 80
-	workspaceLangKey   = "workspace_lang" // the language the workspace page was last opened in
 )
 
 var queueIDPart = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,40}$`)
@@ -59,26 +58,6 @@ func queueSurfaceID(ref string) string {
 		id = hex.EncodeToString(sum[:6])
 	}
 	return queueSurfacePrefix + kind + "-" + id
-}
-
-// workspaceLang is the language the workspace was last opened in: fr or en.
-func (c *core) workspaceLang() string {
-	if c.store.get(workspaceLangKey) == "en" {
-		return "en"
-	}
-	return "fr"
-}
-
-// noteWorkspaceLang keeps the workspace's language; its queue's surfaces
-// are written in it again when it changes.
-func (c *core) noteWorkspaceLang(lang string) {
-	if lang != "en" {
-		lang = "fr"
-	}
-	if c.store.get(workspaceLangKey) != lang {
-		c.store.set(workspaceLangKey, lang)
-		c.kickWorkspace()
-	}
 }
 
 // queueSurface is the surface of an open item; false when it has none (a
@@ -154,7 +133,7 @@ func (c *core) syncQueueSurfaces() {
 	st := &c.layout
 	st.syncMu.Lock()
 	defer st.syncMu.Unlock()
-	lang := c.workspaceLang()
+	lang := c.userLang()
 	want := map[string]surfaceIn{}
 	for _, it := range c.attentionOpen() {
 		if in, ok := c.queueSurface(it, lang); ok {

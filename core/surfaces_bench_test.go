@@ -597,7 +597,7 @@ func surfaceTurn(x surfaceCase) string {
 	if x.Kind == surfaceKindComposed {
 		// A summary is a task's work: the brain wrote a placeholder and
 		// started a task to fill it; the task has read the tools.
-		fmt.Fprintf(&b, "\nTa tâche : Sam a demandé « %s ». Tu as lu les outils ci-dessus.\n%s\n\n", x.Request, delegateSurfaceText(benchPlaceholder))
+		fmt.Fprintf(&b, "\nTa tâche : Sam a demandé « %s ». Tu as lu les outils ci-dessus.\n%s\n\n", x.Request, delegateSurfaceText(benchPlaceholder, "fr"))
 	} else {
 		fmt.Fprintf(&b, "\nSam te demande : « %s »\n\n", x.Request)
 	}

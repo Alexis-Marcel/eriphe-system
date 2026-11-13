@@ -827,6 +827,7 @@ func (w *web) handleLang(rw http.ResponseWriter, r *http.Request, s *session) {
 	}
 	http.SetCookie(rw, &http.Cookie{Name: "lang", Value: lang, Path: "/", MaxAge: 400 * 24 * 3600,
 		Secure: true, SameSite: http.SameSiteStrictMode})
+	w.c.noteUserLang(lang) // what Eriphe writes follows it (user_lang.go)
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
 }
