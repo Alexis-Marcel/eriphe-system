@@ -56,6 +56,12 @@ func brainCore(t *testing.T, b *BrainConfig) *catalogCore {
 	})
 	c.store.registerNode("pc", hashSecret("node-secret"))
 	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	// The catalog's servers start in the background: until they are ready
+	// the brain's tools have no hash, and the hash they take then would
+	// restart the brain for its tools in the middle of a test.
+	if b := c.conf().brain(); b != nil {
+		waitFor(t, func() bool { return c.assistantToolsHash(*b) != "" })
+	}
 	return c
 }
 
