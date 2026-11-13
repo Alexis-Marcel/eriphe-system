@@ -209,13 +209,6 @@ func newServer(f *Files, version string) *mcp.Server {
 	return s
 }
 
-func nonNil[T any](s []T) []T {
-	if s == nil {
-		return []T{}
-	}
-	return s
-}
-
 // list lists a place's top level or one of its folders, each item with its
 // place. A whole account's top level is the provider's top places: the
 // user's own drive, Shared with me, the shared drives.

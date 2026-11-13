@@ -110,16 +110,6 @@ func lineChannels() []channelKind {
 	return out
 }
 
-// channelByVia is the channel the user wrote a message from, by its mark.
-func channelByVia(via string) (channelKind, bool) {
-	for _, k := range channelKinds {
-		if k.Label != "" && k.Label == via && k.reply != nil {
-			return k, true
-		}
-	}
-	return channelKind{}, false
-}
-
 func (k channelKind) in() bool  { return k.Dir&dirIn != 0 }
 func (k channelKind) out() bool { return k.Dir&dirOut != 0 }
 

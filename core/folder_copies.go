@@ -292,21 +292,6 @@ func (c *core) setCopies(ctx context.Context, name string, machines []string) er
 	return nil
 }
 
-// dropCopies forgets every copy of a folder (unshared, or no longer
-// copyable): their machines delete them.
-func (c *core) dropCopies(ctx context.Context, f *Folder) {
-	copies, err := c.store.copies()
-	if err != nil {
-		return
-	}
-	for _, fc := range copies {
-		if fc.Node == f.Node && fc.Folder == f.ID {
-			c.store.removeCopy(fc.Node, fc.Folder, fc.Copy)
-		}
-	}
-	c.syncAll(ctx)
-}
-
 // forgetMachineCopies forgets the copies a machine kept or sent.
 func (s *Store) forgetMachineCopies(node string) {
 	s.db.Exec(`DELETE FROM folder_copies WHERE node = ? OR copy = ?`, node, node)
