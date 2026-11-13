@@ -1,0 +1,32 @@
+{
+  "id": "live-unread-week",
+  "what": "Les mails non lus de la semaine : une lecture vivante avec ses arguments (non lus, depuis lundi), montrée en messages.",
+  "lang": "fr",
+  "request": "Montre-moi les mails non lus de la semaine.",
+  "kind": "live",
+  "now": "2026-11-13 09:00",
+  "servers": [{"name": "mailbox", "use": "la boîte de réception de Sam", "tools": [{
+    "name": "search",
+    "description": "Search the inbox. Returns the matching messages, newest first.",
+    "input_schema": {"type": "object", "properties": {
+      "query": {"type": "string", "description": "words to look for"},
+      "since": {"type": "string", "description": "a date, YYYY-MM-DD: messages received since"},
+      "unread": {"type": "boolean", "description": "unread messages only"}}},
+    "output_schema": {"type": "object", "properties": {
+      "messages": {"type": "array", "items": {"type": "object", "properties": {
+        "from": {"type": "string"}, "subject": {"type": "string"}, "date": {"type": "string"}, "snippet": {"type": "string"}}}}}},
+    "result": {"messages": [
+      {"from": "Camille <camille@example.org>", "subject": "Devis cuisine n°4471", "date": "2026-11-12T16:20:00+01:00", "snippet": "Voici le devis révisé pour les meubles hauts"},
+      {"from": "Club de voile <bureau@club.example.org>", "subject": "Assemblée générale du 28 novembre", "date": "2026-11-10T09:05:00+01:00", "snippet": "Merci de confirmer votre présence"}]}
+  }]}],
+  "expect": {"args": ["unread"]},
+  "answer": {
+    "title": "Non lus de la semaine",
+    "why": "Sam veut voir ce qu'il n'a pas lu depuis lundi",
+    "sources": {"/boite": {"tool": "mailbox/search", "args": {"unread": true, "since": "2026-11-09"}}},
+    "components": [
+      {"id": "root", "component": "List", "children": {"path": "/boite/messages", "componentId": "mail"}, "emptyText": "Tout est lu"},
+      {"id": "mail", "component": "Message", "from": {"@path": "from"}, "subject": {"@path": "subject"}, "date": {"@path": "date"}, "excerpt": {"@path": "snippet"}}
+    ]
+  }
+}

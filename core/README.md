@@ -2830,17 +2830,18 @@ weight.
 
 **Bench** (`testdata/composer/`): invented moments of a fictional user (an arrival after a night,
 a busy noon, a new « never » preference, several sessions running, a quiet evening, a mail that
-tries to order the composer), each with its queue and what a good choice does, by ref: `front`
-(must be tiles), `back` (must not be tiles, chips are fine), `hidden` (must not be chosen nor
-tiles), and `fallback_front` (whether the layout by weight already puts `front` in front). Each
-item is an open item and the surface showing it (`q-<kind>-<id>`), its title the object's; the
-reference `answer` is in the composer's format. `composer_bench_test.go` runs in CI with no
-model: every case is valid, its turn names its ids and its preferences, its answer passes
-`checkChoice` and, laid out by `layoutOf`, meets the case, invented ids are cleaned, and the
-layout by weight does what `fallback_front` says. The composer can no longer hide a surface
-(what it leaves out is folded): whether a preference may hide one, and cases about surfaces
-written by authors, move to the surfaces' bench (#431). `composer_live_test.go` runs the cases on
-a real model when a model or the prompt changes:
+tries to order the composer, surfaces written by authors at an arrival, a preference that hides
+one of them), each with its pool and what a good choice does, by ref: `front` (must be tiles),
+`back` (must not be tiles, chips are fine), `hidden` (must not be chosen: the composer leaves it
+out and code folds it, a chip, never a tile), and `fallback_front` (whether the layout by weight
+already puts `front` in front). An item is an open item of the queue and the surface showing it
+(`q-<kind>-<id>`), its title the object's; or, with an `author`, a surface that author wrote
+(`surface:<id>`, weight 1 to 100), outside the queue. The reference `answer` is in the composer's
+format. `composer_bench_test.go` runs in CI with no model: every case is valid, its turn names its
+ids and its preferences, its answer passes `checkChoice` and, laid out by `layoutOf`, meets the
+case (a hidden surface folded), invented ids are cleaned, and the layout by weight does what
+`fallback_front` says. `composer_live_test.go` runs the cases on a real model when a model or the
+prompt changes:
 
 ```sh
 cd core
@@ -3332,7 +3333,47 @@ Any assistant writes the workspace with five tools; the **author is the caller**
   meanwhile is not told about.
 - **Settings → Surfaces** (`/settings/surfaces`, `web_surfaces.go`): every surface with its title,
   author, sources, lifetime, last update, waiting and external tags, its last error; the user
-  removes any.
+  removes any. Above them, how the workspace served the user these last 7 days (below).
+- **The measure of use** (`workspace_use.go`). Each time a surface becomes a tile of the layout
+  its time in front starts, and it ends when the surface leaves the tiles (`noteFront` on each
+  new layout, in `workspace_front`, kept 30 days, read from the store so a restart starts none
+  twice). With the gestures (`workspace_log`), each time in front is opened (an `opened` gesture
+  while there), ignored (it left the tiles unopened, or an `ignored` or `closed` gesture came
+  first) or still in front; a surface the user opened from the fold (opened at most 2 s before it
+  became a tile) was not put in front by code and is not counted (`surfaceUseOf`, pure). The page
+  says how many were put in front, opened, ignored (and their share of those settled), still in
+  front, and the median time to open. No model, and nothing fed back: it is for reading.
+
+**The surfaces' bench** (`testdata/surfaces/`, `surfaces_bench_test.go`). Invented requests of a
+fictional user, Sam, to see something, each with the tools linked for it (invented servers:
+their description, `inputSchema`, `outputSchema` and what a read gave) and a reference answer,
+`surface_write`'s arguments: live data (balances, the week's unread mails with their arguments,
+an error rate as a chart) and summaries (a supervision summary, a week in English, a channel
+whose messages carry an injection). An answer is scored by writing it as production does
+(`surfaceWrite` as the brain, its turn tainted, on a core linked to the case's fake servers: valid
+A2UI, catalog components, bindings that exist in the result or the `outputSchema`, the button
+guard), then: components of the catalog, no server or `server/tool` name shown, sane sizes, a
+case's forbidden words absent, no button where the case says so, and by kind: **live**, every
+source a tool of the case's (with the arguments it expects) and no value a read gave copied into
+the surface; **composed**, values written in `data`. In CI with no model, every case is valid,
+its reference answer scores clean, and each fault is caught on a spoilt copy (a component off
+the catalog, a tool's name, too many components, a copied value, a binding the tool does not
+give, no source or another tool's, no data, a forbidden word, a button). `surfaces_live_test.go`
+runs the cases on a real model the way the composer's bench does: the brain's paragraph on
+surfaces (`brain-prompt.md`), `surface_write` as an MCP client lists it (description and
+arguments' schema) and the catalog (`a2ui.CatalogPrompt`) appended to the system prompt, the
+request and the tools as the turn, no tool, low effort:
+
+```sh
+cd core
+ERIPHE_LIVE_SURFACES=1 go test -run TestSurfacesLive -v .
+# ERIPHE_LIVE_SURFACES_RUNS=1 (default), ERIPHE_LIVE_SURFACES_MODEL=sonnet (default),
+# ERIPHE_LIVE_SURFACES_CLI=claude (default), ERIPHE_LIVE_SURFACES_CASES=<id>,<id> (all by default)
+```
+
+It reports per case and in all: validity, catalog adherence, sources declared, values copied,
+composed data, tool names shown, agreement, latency and cost (about 1 to 4 cents a case with
+Sonnet). It fails only when the CLI does.
 
 **Who keeps which surface** (`surface_authors.go`, #423). Nothing is recurring by default.
 

@@ -1,0 +1,33 @@
+{
+  "id": "composed-supervision",
+  "what": "Un résumé : l'auteur a lu les alertes et compose ce qui compte, en données écrites, sans nommer l'outil.",
+  "lang": "fr",
+  "request": "Fais-moi un résumé de la supervision.",
+  "kind": "composed",
+  "servers": [{"name": "metrics", "use": "la supervision des serveurs de Sam", "tools": [{
+    "name": "alerts",
+    "description": "List the alert rules and their state (firing, pending, normal).",
+    "input_schema": {"type": "object", "properties": {}},
+    "output_schema": {"type": "object", "properties": {
+      "alerts": {"type": "array", "items": {"type": "object", "properties": {
+        "name": {"type": "string"}, "state": {"type": "string"}, "since": {"type": "string"}, "summary": {"type": "string"}}}}}},
+    "result": {"alerts": [
+      {"name": "disk-db2", "state": "firing", "since": "2026-11-13T06:40:00Z", "summary": "Disque à 93 % sur db-2"},
+      {"name": "latency-www", "state": "pending", "since": "2026-11-13T08:10:00Z", "summary": "Latence p95 à 870 ms sur www"},
+      {"name": "backup-nightly", "state": "normal", "since": "2026-11-12T03:00:00Z", "summary": "Sauvegarde passée"},
+      {"name": "cert-expiry", "state": "normal", "since": "2026-11-01T00:00:00Z", "summary": "Certificats valides 60 jours"}]}
+  }]}],
+  "expect": {},
+  "answer": {
+    "title": "Santé des serveurs",
+    "why": "Résumé demandé par Sam",
+    "data": {"enCours": 1, "aSurveiller": 1, "texte": "Le disque de **db-2** est plein à 93 % depuis 7 h 40. La latence de www monte (870 ms) et pourrait alerter. La sauvegarde de la nuit est passée."},
+    "components": [
+      {"id": "root", "component": "Column", "children": ["chiffres", "resume"]},
+      {"id": "chiffres", "component": "Row", "children": ["feu", "veille"]},
+      {"id": "feu", "component": "Metric", "label": "En alerte", "value": {"@path": "/enCours"}, "better": "down"},
+      {"id": "veille", "component": "Metric", "label": "À surveiller", "value": {"@path": "/aSurveiller"}, "better": "down"},
+      {"id": "resume", "component": "Markdown", "text": {"@path": "/texte"}}
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "arrival-authored",
+  "what": "Sam revient le matin : le skill d'arrivée a préparé sa surface, une tâche prépare un comparatif, une surface vivante suit les erreurs du site, une carte attend une réponse et un projet dort. La surface d'arrivée et la carte vont devant.",
+  "now": "2026-11-13 08:05",
+  "moment": "arrival",
+  "away_minutes": 720,
+  "items": [
+    {"ref": "surface:arrivee", "author": "skill:arrivee", "weight": 70, "age_minutes": 15, "title": "Ce qui t'attend ce matin", "why": "Deux réponses à donner, une réunion à 10 h"},
+    {"ref": "surface:erreurs-site", "author": "brain", "weight": 50, "age_minutes": 600, "title": "Erreurs du site", "why": "Suivi demandé après la mise en ligne"},
+    {"ref": "surface:comparatif-assurances", "author": "task:t-77", "weight": 40, "age_minutes": 5, "title": "Comparatif des assurances", "why": "En préparation"},
+    {"ref": "card:c-90", "weight": 4, "age_minutes": 40, "title": "Répondre à la crèche", "why": "Une réponse prête attend ton accord", "say": "La réponse à la crèche attend ton accord."},
+    {"ref": "project:jardin", "weight": 1, "age_minutes": 2000, "title": "Jardin", "why": "Rien de neuf depuis une semaine"}
+  ],
+  "expect": {"front": ["surface:arrivee", "card:c-90"], "back": ["project:jardin"], "fallback_front": true},
+  "answer": {"eriphe": "Bonjour Sam : une réponse à la crèche attend ton accord, et ta matinée est prête.",
+    "items": [
+      {"id": "arrivee", "size": "xl", "why": "Ta matinée"},
+      {"id": "q-card-c-90", "size": "l", "why": "Ton accord pour la crèche"},
+      {"id": "erreurs-site", "size": "m", "why": "Suivi après la mise en ligne"},
+      {"id": "comparatif-assurances", "size": "s", "why": "En préparation"}
+    ],
+    "missing": [], "stale": []}
+}

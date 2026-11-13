@@ -32,6 +32,10 @@ var surfaceStrings = map[string]map[string]string{
 		"surfaces.error":         "Dernière erreur : %s",
 		"surfaces.remove":        "Retirer",
 		"surfaces.removeconfirm": "Retirer la surface « %s » de ton espace ?",
+		"surfaces.use":           "Ces 7 derniers jours : %d mises devant, %d ouvertes, %d laissées sans être ouvertes (%d %%), %d encore devant.",
+		"surfaces.use.open":      "Ouvertes en %s en médiane.",
+		"surfaces.use.none":      "Rien n'a été mis devant ces 7 derniers jours.",
+		"surfaces.use.day":       "j",
 	},
 	"en": {
 		"settings.surfaces":      "Surfaces",
@@ -54,5 +58,9 @@ var surfaceStrings = map[string]map[string]string{
 		"surfaces.error":         "Last error: %s",
 		"surfaces.remove":        "Remove",
 		"surfaces.removeconfirm": "Remove the surface “%s” from your workspace?",
+		"surfaces.use":           "These last 7 days: %d put in front, %d opened, %d left unopened (%d%%), %d still in front.",
+		"surfaces.use.open":      "Opened after %s, median.",
+		"surfaces.use.none":      "Nothing was put in front these last 7 days.",
+		"surfaces.use.day":       "d",
 	},
 }

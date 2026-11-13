@@ -18,12 +18,12 @@ import (
 // invented ids are cleaned, and the layout by weight is measured against
 // "in front". composer_live_test.go runs the same cases on a real model.
 //
-// Since #422 the composer chooses among surfaces: each item of a case is
-// an open item of the queue and the surface showing it (queueSurfaceID),
-// its title the object's. The composer can no longer hide a surface: what
-// it leaves out waits folded, so "hidden" means "not chosen"; whether a
-// preference may hide a surface, and the cases about surfaces written by
-// authors rather than the queue, move to the surfaces' bench (#431).
+// Since #422 the composer chooses among surfaces: an item of a case is an
+// open item of the queue and the surface showing it (queueSurfaceID), its
+// title the object's; or, with an author, a surface that author wrote
+// (ref surface:<id>, weight 1 to 100), outside the queue. The composer can
+// no longer hide a surface: what it leaves out waits folded, so "hidden"
+// means "not chosen", and code folds it (a chip, never a tile).
 
 const composerBenchZone = "Europe/Paris"
 
@@ -46,7 +46,12 @@ type composerCase struct {
 }
 
 type composerItem struct {
-	Ref        string `json:"ref"`
+	Ref string `json:"ref"`
+	// Author is who wrote the surface (brain, skill:<name>, lead:<id>,
+	// task:<id>), for a surface outside the queue: its ref is
+	// surface:<id>, its weight 1 to 100. Empty for an item of the queue
+	// (weight 1 to 5).
+	Author     string `json:"author"`
 	Weight     int    `json:"weight"`
 	AgeMinutes int    `json:"age_minutes"`
 	Title      string `json:"title"`
@@ -90,6 +95,9 @@ func loadComposerCases(t *testing.T) []composerCase {
 // benchSurface is a case's item as a surface of the pool.
 func benchSurface(it composerItem, now time.Time) surface {
 	at := now.Add(-time.Duration(it.AgeMinutes) * time.Minute)
+	if it.Author != "" {
+		return surface{ID: queueSurfaceID(it.Ref), Title: it.Title, Author: it.Author, Weight: it.Weight, Why: it.Why, Created: at, Updated: at}
+	}
 	return surface{ID: queueSurfaceID(it.Ref), Title: it.Title, Author: surfaceAuthorCore, Weight: queueSurfaceWeight(it.Weight),
 		Why: it.Why, Created: at, Updated: at}
 }
@@ -117,6 +125,9 @@ func (x composerCase) snapshot(t *testing.T) poolSnapshot {
 	for _, it := range x.Items {
 		sf := benchSurface(it, now)
 		s.Pool = append(s.Pool, entryOf(sf))
+		if it.Author != "" {
+			continue
+		}
 		s.Queue = append(s.Queue, poolQueued{attentionItem: attentionItem{Ref: it.Ref, Weight: it.Weight, Why: it.Why, Say: it.Say,
 			Source: "bench", Time: sf.Created}, Surface: sf.ID})
 	}
@@ -155,7 +166,15 @@ func (x composerCase) check() string {
 		if refs[it.Ref] {
 			return "a ref twice: " + it.Ref
 		}
-		if it.Weight < 1 || it.Weight > 5 || it.AgeMinutes < 0 {
+		top := 5
+		if it.Author != "" {
+			id, ok := strings.CutPrefix(it.Ref, "surface:")
+			if !ok || !surfaceIDRe.MatchString(id) {
+				return "an author's surface needs a ref surface:<id>: " + it.Ref
+			}
+			top = 100
+		}
+		if it.Weight < 1 || it.Weight > top || it.AgeMinutes < 0 {
 			return "weight or age out of range: " + it.Ref
 		}
 		refs[it.Ref] = true
@@ -296,6 +315,12 @@ func TestComposerBenchCases(t *testing.T) {
 			l := layoutOf(pool, ch, "")
 			if sc := scoreChoice(x, s, raw, l); !sc.agrees() || len(sc.Invented) > 0 {
 				t.Errorf("answer: %s", sc)
+			}
+			// What the user's preferences hide is folded by code: a chip.
+			for _, id := range surfaceIDsOf(x.Expect.Hidden) {
+				if !slices.ContainsFunc(l.Chips, func(c layoutChip) bool { return c.ID == id }) {
+					t.Errorf("hidden %s not folded: chips %v", id, l.Chips)
+				}
 			}
 			// Nothing of the pool goes unseen: a tile or a chip.
 			if n := len(l.Items) + len(l.Chips); n != min(len(pool), len(l.Items)+layoutChipsMax) {

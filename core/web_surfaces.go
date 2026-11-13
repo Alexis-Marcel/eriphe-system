@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -82,7 +83,40 @@ func (w *web) handleSurfaces(rw http.ResponseWriter, r *http.Request, s *session
 		sort.Strings(row.Sources)
 		rows = append(rows, row)
 	}
-	w.render(rw, r, s, "settings", "", page{Title: "settings.surfaces", Nav: "settings", Tab: "surfaces", Data: rows})
+	use := useWords(w.c.surfaceUseSince(now.Add(-surfaceUseWindow), now), lang)
+	w.render(rw, r, s, "settings", "", page{Title: "settings.surfaces", Nav: "settings", Tab: "surfaces",
+		Data: surfacesPage{Rows: rows, Use: use}})
+}
+
+// surfacesPage is what Settings → Surfaces shows: the surfaces, and how
+// those put in front fared (workspace_use.go).
+type surfacesPage struct {
+	Rows []surfaceRow
+	Use  string
+}
+
+// useWords says the measure of use in the user's language.
+func useWords(u surfaceUse, lang string) string {
+	if u.Shown == 0 {
+		return tr(lang, "surfaces.use.none")
+	}
+	out := fmt.Sprintf(tr(lang, "surfaces.use"), u.Shown, u.Opened, u.Ignored, int(math.Round(100*u.IgnoredShare())), u.Front)
+	if u.Opened > 0 {
+		out += " " + fmt.Sprintf(tr(lang, "surfaces.use.open"), useSpan(u.ToOpen, lang))
+	}
+	return out
+}
+
+// useSpan words a wait: 40 s, 12 min, 3 h 05, 2 j 4 h.
+func useSpan(d time.Duration, lang string) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%d s", int(d.Seconds()))
+	case d < 24*time.Hour:
+		return span(d)
+	}
+	h := int(d.Hours())
+	return fmt.Sprintf("%d %s %d h", h/24, tr(lang, "surfaces.use.day"), h%24)
 }
 
 func (w *web) handleRemoveSurface(rw http.ResponseWriter, r *http.Request, s *session) {

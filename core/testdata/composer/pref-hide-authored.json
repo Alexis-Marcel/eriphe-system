@@ -1,0 +1,21 @@
+{
+  "id": "pref-hide-authored",
+  "what": "Des surfaces écrites par Eriphe, un skill et une session, et un mail de la file ; Sam a dit ne plus vouloir voir les cours des marchés sur son espace : le compositeur la laisse de côté, le code la replie.",
+  "now": "2026-11-12 11:10",
+  "moment": "change",
+  "preferences": ["Sam ne veut plus voir les cours des marchés sur son espace."],
+  "items": [
+    {"ref": "surface:cours-marches", "author": "brain", "weight": 50, "age_minutes": 30, "title": "Cours des marchés", "why": "Demandé hier pour suivre l'indice"},
+    {"ref": "surface:journee", "author": "skill:matin", "weight": 60, "age_minutes": 190, "title": "Ta journée", "why": "Trois rendez-vous, le premier à 14 h"},
+    {"ref": "surface:migration-base", "author": "lead:52", "weight": 45, "age_minutes": 12, "title": "Migration de la base : étape 2 sur 4", "why": "Avance seule, rien à faire pour toi"},
+    {"ref": "mail:m-401", "weight": 3, "age_minutes": 20, "title": "Devis de la toiture", "why": "Le couvreur attend ta réponse avant lundi"}
+  ],
+  "expect": {"front": ["surface:journee", "mail:m-401"], "hidden": ["surface:cours-marches"], "fallback_front": true},
+  "answer": {"eriphe": "Le couvreur attend ta réponse sur le devis ; ta journée commence à 14 h.",
+    "items": [
+      {"id": "q-mail-m-401", "size": "l", "why": "Réponse attendue avant lundi"},
+      {"id": "journee", "size": "l", "why": "Premier rendez-vous à 14 h"},
+      {"id": "migration-base", "size": "m", "why": "Avance seule"}
+    ],
+    "missing": [], "stale": []}
+}

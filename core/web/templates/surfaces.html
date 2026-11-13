@@ -3,9 +3,10 @@
 
 {{define "surfaces"}}
 <header class="page-head"><h2>{{t "settings.surfaces"}}</h2><p>{{t "surfaces.lead"}}</p></header>
-{{if .Data}}
+<p class="muted small" id="surfaces-use">{{.Data.Use}}</p>
+{{if .Data.Rows}}
 <ul class="grid">
-{{range .Data}}
+{{range .Data.Rows}}
   <li class="tile surface" id="surface-{{.ID}}">
     <div class="tile-head">
       {{if .Waiting}}<span class="tag tag-warn">{{t "surfaces.waiting"}}</span>{{end}}
