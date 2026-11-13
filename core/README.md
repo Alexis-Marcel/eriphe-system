@@ -841,8 +841,11 @@ it with the stop, even a stop of its own when the work was kept.
 
 A turn's `turn_end` carries its `usage` (`input_tokens`, `output_tokens`, `cache_read_tokens`,
 `cache_write_tokens`) and `cost_usd` where the harness reports them (Claude Code both, Codex its
-tokens, OpenCode and other ACP agents nothing yet). A task's drawer shows its tokens (cache reads
-aside) and cost. The side panel of tasks shows a few measures over the last 30 days of finished
+tokens, OpenCode and other ACP agents nothing yet). Claude Code's `cost_usd` is the session's total
+so far (carried over a resumed session), so it is never summed: a cost comes from the tokens at the
+task's model list price (`task_cost.go`: Opus, Sonnet and Haiku, found in the model's name; another
+model has no known cost). The amounts are list-price equivalents, quota with a subscription. A
+task's drawer shows its tokens (cache reads aside) and cost. The side panel of tasks shows a few measures over the last 30 days of finished
 worker tasks, read from what eriphe-core keeps (no service of their own):
 
 - **accepted**: the last receipt says `done`, no check failed, no unsupported claim;
@@ -850,7 +853,9 @@ worker tasks, read from what eriphe-core keeps (no service of their own):
 - **unsupported claims**: receipts that said more than eriphe-core saw (done with a failed check, a
   change the diff does not have), and how many `done` receipts claim verifications no check covered;
 - **cost per accepted task**: tokens, dollars where known, and minutes;
-- **failures by class** (see Retries and budgets).
+- **failures by class** (see Retries and budgets);
+- **cost by role**: what every task (workers, the brain, the assistants) cost each of the last 7
+  days, by its kind.
 
 ### Receipts (`receipt.go`)
 

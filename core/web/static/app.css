@@ -494,6 +494,11 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .tstats-grid dd { margin: 2px 0 0; font-size: .92rem; }
 .tstats-grid .warn strong { color: var(--danger); }
 .tstats-fail { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.tstats-spend { width: 100%; border-collapse: collapse; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.tstats-spend caption { text-align: left; padding-bottom: 4px; }
+.tstats-spend th, .tstats-spend td { padding: 2px 6px 2px 0; text-align: right; white-space: nowrap; }
+.tstats-spend th:first-child { text-align: left; font-weight: 600; }
+.tstats-spend thead th { color: var(--muted); font-weight: 600; }
 .section-label { font-size: .8rem; color: var(--faint); font-weight: 600; }
 .timeline { list-style: none; margin: 0; padding: 0 0 0 16px; display: grid; gap: 10px; border-left: 1px solid var(--border); }
 .ev { position: relative; font-size: .9rem; min-width: 0; }
