@@ -197,7 +197,7 @@ func (c *core) contextPack() (string, contextPackStats) {
 			}
 			intentions = append(intentions, truncate(line, packLineMax))
 			for _, s := range []string{x.Subject, x.Owner, x.OwedTo} { // person:<slug> for whom owes or is owed
-				subjects[normalizeSubject(s)] = true
+				subjects[subjectOf(s)] = true
 			}
 		}
 		p.section("related", "Personnes et faits de ces sujets (ta mémoire) :", c.packRelated(subjects, now), share(100))
@@ -233,7 +233,7 @@ func (c *core) packThreads() (lines []string, subjects map[string]bool) {
 	}
 	for _, s := range ts {
 		if s.Subject != "" {
-			subjects[normalizeSubject(s.Subject)] = true
+			subjects[subjectOf(s.Subject)] = true
 		}
 		if s.Tainted != "" {
 			lines = append(lines, truncate(fmt.Sprintf("- fil %d [%s, %s] : son plan peut porter ce qu'un autre a écrit (%s) : read_thread le relit",
@@ -288,7 +288,7 @@ func packMemoryLines(xs []*Memory, subjects map[string]bool) []string {
 	var lines []string
 	for _, x := range xs {
 		if x.Subject != "" {
-			subjects[normalizeSubject(x.Subject)] = true
+			subjects[subjectOf(x.Subject)] = true
 		}
 		if packExternal(x) {
 			lines = append(lines, truncate("- "+externalLine(x), packLineMax))

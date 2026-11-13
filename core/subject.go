@@ -226,3 +226,9 @@ func subjectLabel(key string) string {
 	}
 	return key
 }
+
+// subjectOf is a stored value's key, "" if it gives none: for a lookup.
+func subjectOf(s string) string {
+	k, _ := subjectKey(s)
+	return k
+}
