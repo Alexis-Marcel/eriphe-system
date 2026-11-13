@@ -163,7 +163,7 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 	// What needs me first, then what works, then what waits.
 	sort.SliceStable(out.Active, func(i, j int) bool { return cardRank(out.Active[i]) < cardRank(out.Active[j]) })
 	out.Threads = w.threadRows(true, 6)
-	if st := w.c.store.stats(time.Now().AddDate(0, 0, -statsDays)); st.Finished > 0 {
+	if st := w.c.store.stats(time.Now().AddDate(0, 0, -statsDays)); st.Finished > 0 || len(st.Spend) > 0 {
 		out.Stats = &st // task_stats.go
 	}
 	return out, perms, nil
