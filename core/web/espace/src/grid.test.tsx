@@ -222,6 +222,14 @@ describe("the workspace on a phone", () => {
     expect([...el.querySelectorAll<HTMLElement>("article")].map((a) => a.dataset.surface)).toEqual(["week", "pay"]);
   });
 
+  it("keeps the column while a chip opened is not placed yet", async () => {
+    const waiting: Layout = { ...ordered, focus: "news" };
+    expect(stacked(waiting, new Set(["pay", "week", "news"]))).toMatchObject({ full: false });
+    await phone(waiting);
+    expect(el.querySelector<HTMLElement>("main.canvas")!.className).toBe("canvas column");
+    expect([...el.querySelectorAll<HTMLElement>("article")].map((a) => a.dataset.surface)).toEqual(["week", "pay"]);
+  });
+
   it("keeps the wide grid's order and tools off a phone", async () => {
     await render(ordered);
     const strip = el.querySelector<HTMLElement>(".chips")!;

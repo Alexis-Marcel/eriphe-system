@@ -12,8 +12,9 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
-// The composed workspace, /espace: a page next to the conversation where
-// Eriphe's composition is laid out (#381). It is a React app (web/espace),
+// The composed workspace, Eriphe's home page (/, and always at /espace;
+// the conversation is at /conversation, web_pages.go): where Eriphe's
+// composition is laid out (#381, #430). It is a React app (web/espace),
 // built into web/static/espace and embedded with the other static files;
 // eriphe-core serves it from a small HTML shell (templates/espace.html).
 // The app gets its words, the CSRF token and the assistant's name from

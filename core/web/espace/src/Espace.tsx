@@ -6,7 +6,7 @@ import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
 import { CONVO } from "./Fallback";
-import { DIMS, Grid, useNarrow, type Spot } from "./Grid";
+import { DIMS, Grid, stacked, useNarrow, type Spot } from "./Grid";
 import { useWords } from "./i18n";
 import type { Layout } from "./types";
 
@@ -116,6 +116,9 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const onSurfaces = !gallery && !!layout && (pool.length > 0 || layout.items.length + layout.chips.length > 0);
   const sfocus = onSurfaces ? layout?.focus ?? null : null;
   const sfocusTitle = sfocus ? layout?.items.find((i) => i.id === sfocus)?.title ?? sfocus : null;
+  // On a phone the screen is the open surface's once it is drawn alone (stacked), not before:
+  // a chip opened waits in the column until core places it.
+  const full = narrow && onSurfaces && stacked(layout!, new Set(pool.map((s) => s.id))).full;
   const sbefore = useRef<Layout | null>(null); // the layout before the focus, with no eriphe-core behind
   const openSurface = (id: string) => {
     setSaid(null);
@@ -202,7 +205,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className={`espace ambient-${ambient}${wide ? " wide" : ""}${narrow ? " narrow" : ""}${narrow && sfocus ? " focused" : ""}`}>
+      <div className={`espace ambient-${ambient}${wide ? " wide" : ""}${narrow ? " narrow" : ""}${full ? " focused" : ""}`}>
         <aside className="eriphe-panel" aria-live="polite">
           <p className="eriphe-name">{boot.name}</p>
           <div className="eriphe-text">{text && <p>{text}</p>}</div>
