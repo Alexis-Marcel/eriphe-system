@@ -10,14 +10,15 @@ advance and works with the ones you linked.
 
 ## What you see
 
-Open it with the **Composed workspace** button at the top of the conversation.
+It is Eriphe's home page: open Eriphe's address and it is there. From the conversation, the
+**Composed workspace** button at the top, or Eriphe's name, brings you back to it.
 
 A grid of **tiles**, Eriphe calls them surfaces, each showing one thing: today's appointments,
 mails to answer, a project's next step, an error rate as a chart. Above the grid, a strip of
 **chips**: what is there but folded, out of the way. Next to them, a narrow column with one line
 from Eriphe about the moment and a field to write to it.
 
-The screen never scrolls. Eriphe chooses what is in front and how big: what waits for your answer
+On a computer the screen never scrolls. Eriphe chooses what is in front and how big: what waits for your answer
 first, then what matters now, the rest folded. When nothing needs you, it says so in a sentence
 rather than showing an empty grid.
 
@@ -178,14 +179,24 @@ you link appointments, a mailbox or notes. Link one and ask.
 
 ## On a phone
 
-On a narrow screen the tiles follow each other in one column, in the order Eriphe chose, and the
-list scrolls. Talking works the same: say what you want first, or open a tile to focus on it.
+On a narrow screen the page scrolls, in one column: Eriphe's line and the field to write to it
+first, then the tiles one under the other, most important first (the order Eriphe chose, not their
+place on a computer's grid), then the folded chips at the end. A tile keeps only its cross: to make
+one bigger or move it, say so. Open a tile and it takes the whole screen, with **Back to the
+overview** and the field to write about it at the top.
 
 ## Where the conversation is
 
-The conversation with Eriphe stays, with its history, the tasks and Settings: **Open the
-conversation**, in the workspace's column, goes there. What you write in the workspace's column is a
-message of that conversation, and Eriphe's answer comes there; the column only says it was sent.
+The conversation with Eriphe stays, with its history, the tasks and Settings, at
+`/conversation`: **Open the conversation**, in the workspace's column, goes there. What you write
+in the workspace's column is a message of that conversation, and Eriphe's answer comes there; the
+column only says it was sent.
+
+If the workspace cannot open on a device (an old browser, a script blocked, Eriphe out of reach
+for a while), the page offers the conversation instead, and **Always open the conversation here**.
+That choice is per browser, in Settings → My workspace → Home page (Réglages → Mon espace → Page
+d'accueil), where you can give the workspace back its place. While Eriphe has no AI set up yet, its
+address opens the conversation, which says how to set one up.
 
 ## Privacy and safety
 

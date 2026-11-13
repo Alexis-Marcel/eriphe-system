@@ -25,7 +25,14 @@ body { font-family: var(--font); font-size: 16px; line-height: 1.5; color: var(-
 button, input, select { font: inherit; }
 :focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
 .espace-loading { margin: 0; padding: 28px; color: color-mix(in oklab, var(--paper) 70%, transparent); }
-.espace-loading a { color: inherit; }
+.espace-loading a, .espace-loading .linkish { color: inherit; }
+.espace-loading p { margin: 0 0 10px; }
+/* The way to the conversation, in the shell: shown when the app has not
+   drawn after a while, at once when it gave up (.failed). */
+.espace-fallback { visibility: hidden; animation: espace-reveal 0s linear 8s forwards; }
+.espace-loading.failed .espace-fallback { visibility: visible; animation: none; }
+.espace-loading.failed .espace-wait { display: none; }
+@keyframes espace-reveal { to { visibility: visible; } }
 
 @property --gx { syntax: "<percentage>"; inherits: true; initial-value: 70%; }
 @property --gy { syntax: "<percentage>"; inherits: true; initial-value: 20%; }
@@ -65,6 +72,7 @@ button, input, select { font: inherit; }
 .eriphe-text { min-height: 3em; }
 .eriphe-text p { margin: 0; font-size: 18px; line-height: 1.4; letter-spacing: -0.01em; }
 .eriphe-sample { margin: 0; padding: 6px 10px; border-radius: 10px; font-size: 12px; color: var(--ink); background: var(--urgent); }
+.eriphe-sample a { color: inherit; }
 .eriphe-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .eriphe-input input {
   width: 100%; padding: 10px 14px; border-radius: 14px;
@@ -168,17 +176,38 @@ button, input, select { font: inherit; }
   border-radius: 999px; background: var(--paper); color: var(--ink); font-weight: 500; box-shadow: 0 10px 30px -10px #000a;
 }
 
-/* A narrow screen: one column; the tiles follow each other and the
-   canvas scrolls inside the page, which still does not. */
+/* A narrow screen, a phone (.narrow, set by the app with the same width as
+   NARROW in Grid.tsx): one column, Eriphe first, then the surfaces one
+   under the other in the composer's order, then the chips; the page
+   scrolls. A surface open takes the whole screen, under a bar with the
+   way back and the line to write to Eriphe about it. */
 @media (max-width: 900px) {
-  .espace, .espace.wide { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); padding: 12px; gap: 12px; }
-  .eriphe-panel { padding: 14px; max-height: 40vh; }
-  .canvas { display: flex; flex-direction: column; overflow: auto; }
-  .surfaces { flex-direction: column; }
-  .a2-surface { flex: none; overflow: visible; }
-  .canvas .mod { flex: none; min-height: 64px; }
-  .canvas .mod-body { flex: none; overflow: visible; }
+  html, body, #root { height: auto; min-height: 100%; }
+  body { overflow: auto; }
 }
+.espace.narrow, .espace.narrow.wide {
+  height: auto; min-height: 100dvh; overflow: visible;
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; align-content: start; padding: 12px; gap: 12px;
+}
+.narrow .eriphe-panel { padding: 14px; max-height: none; overflow: visible; }
+.narrow .stage { display: flex; flex-direction: column; gap: 12px; }
+.narrow .chips, .narrow .surfaces { margin-bottom: 0; }
+.chips.stacked { flex-wrap: wrap; overflow: visible; }
+.chips.stacked .chip { max-width: 100%; }
+.canvas.column { height: auto; display: flex; flex-direction: column; overflow: visible; }
+.canvas.column .mod { flex: none; min-height: 64px; }
+.canvas.column .mod-body { flex: none; overflow: visible; }
+.narrow .surfaces { flex-direction: column; max-height: none; }
+.narrow .a2-surface { flex: none; overflow: visible; }
+/* A surface open on a phone: the screen is its own. */
+.espace.narrow.focused { height: 100dvh; min-height: 0; overflow: hidden; grid-template-rows: auto minmax(0, 1fr); }
+.narrow.focused .eriphe-panel { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 12px; }
+.narrow.focused .eriphe-name, .narrow.focused .eriphe-text, .narrow.focused .eriphe-links, .narrow.focused .eriphe-sample:not(.eriphe-offline) { display: none; }
+.narrow.focused .eriphe-input { flex: 1; min-width: 12em; }
+.narrow.focused .stage { min-height: 0; }
+.canvas.column.full { flex: 1; min-height: 0; }
+.canvas.column.full .mod { flex: 1; min-height: 0; }
+.canvas.column.full .mod-body { flex: 1; min-height: 0; overflow: auto; }
 
 /* A2UI surfaces (a2ui/): what an author wrote, with the catalog's components.
    On the workspace each is a tile of the canvas; the gallery (?gallery)

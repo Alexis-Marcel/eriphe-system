@@ -254,7 +254,7 @@ func (w *web) pushWaiting() {
 			}
 			st.set(key, "1")
 			short := strings.TrimSpace(pv.Tool + " " + truncate(strings.Join(strings.Fields(pv.Subject), " "), 100))
-			note := waitingNote(short, "/#perm-"+pv.Task.ID+"-"+pv.ID, "perm-"+pv.Task.ID+"-"+pv.ID)
+			note := waitingNote(short, convoAt("perm-"+pv.Task.ID+"-"+pv.ID), "perm-"+pv.Task.ID+"-"+pv.ID)
 			note.Perm = &notePerm{Task: pv.Task.ID, ID: pv.ID}
 			w.c.tell(note)
 		}
@@ -276,7 +276,7 @@ func (w *web) pushWaiting() {
 			continue // a notification went through notify, and was decided there
 		}
 		if q, ok := asksUser(m.Text); ok {
-			note := waitingNote(q, fmt.Sprintf("/#m%d", m.Seq), "ask")
+			note := waitingNote(q, convoAt(fmt.Sprintf("m%d", m.Seq)), "ask")
 			note.Waiting = true // on a channel the user writes from, a reply there may carry it already
 			w.c.tell(note)
 		}
@@ -291,6 +291,6 @@ func taskLink(rw http.ResponseWriter, r *http.Request) bool {
 	if r.Header.Get("HX-Request") != "" || r.Header.Get("Sec-Fetch-Mode") != "navigate" {
 		return false
 	}
-	http.Redirect(rw, r, "/?task="+url.QueryEscape(r.PathValue("id")), http.StatusSeeOther)
+	http.Redirect(rw, r, convoPath+"?task="+url.QueryEscape(r.PathValue("id")), http.StatusSeeOther)
 	return true
 }

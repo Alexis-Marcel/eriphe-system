@@ -255,6 +255,10 @@ var webStrings = map[string]map[string]string{
 		"by.policy":                "Règle",
 		"account.lead":             "Ta langue, ton mot de passe et tes secrets. L'adresse de l'espace et la façon de s'y connecter sont dans Accès → Espace web.",
 		"account.lang":             "Langue",
+		"account.home":             "Page d'accueil",
+		"account.home.lead":        "Ce qui s'ouvre en premier sur ce navigateur. La conversation reste à portée depuis l'espace.",
+		"account.home.espace":      "L'espace",
+		"account.home.convo":       "La conversation",
 		"account.password":         "Changer le mot de passe",
 		"account.current":          "Mot de passe actuel",
 		"account.new":              "Nouveau mot de passe",
@@ -510,6 +514,10 @@ var webStrings = map[string]map[string]string{
 		"by.policy":                "Rule",
 		"account.lead":             "Your language, your password and your secrets. The workspace's address and how to sign in to it are in Access → Web workspace.",
 		"account.lang":             "Language",
+		"account.home":             "Home page",
+		"account.home.lead":        "What opens first in this browser. The conversation stays one click away from the workspace.",
+		"account.home.espace":      "The workspace",
+		"account.home.convo":       "The conversation",
 		"account.password":         "Change the password",
 		"account.current":          "Current password",
 		"account.new":              "New password",
@@ -908,7 +916,7 @@ func trimURL(u string) (string, string) {
 // workspacePages are the pages a message may link to inside the workspace,
 // e.g. [Connecter un appareil](/settings/devices#connect): they open in the
 // same tab. Anything else that is not http(s) stays plain text.
-var workspacePages = []string{"/settings", "/memory", "/tasks/", "/welcome", "/espace"}
+var workspacePages = []string{"/settings", "/memory", "/tasks/", "/welcome", "/espace", convoPath}
 
 func link(u, text string) string {
 	if strings.HasPrefix(u, "/") && !strings.HasPrefix(u, "//") && !strings.Contains(u, "\\") {

@@ -87,6 +87,11 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		proposalsSeq, proposalsMoved = seq, ch
 	}
 	if r.URL.Query().Get("a2ui") == "1" {
+		// The workspace, the home page, does not show the conversation's
+		// messages: its stream starts after the last one, not with them all.
+		if after == 0 {
+			after = int(w.c.store.lastMessageSeq())
+		}
 		var first a2uiEvent
 		feed, first = w.c.feedSurfaces()
 		defer feed.close()

@@ -373,7 +373,7 @@ func TestWebPagesRender(t *testing.T) {
 	// English.
 	u, _ := url.Parse(tw.srv.URL)
 	tw.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "lang", Value: "en", Path: "/"}})
-	if _, body, _ := tw.do("GET", "/", nil, nil); !strings.Contains(body, "This decision is yours") || !strings.Contains(body, `lang="en"`) {
+	if _, body, _ := tw.do("GET", convoPath, nil, nil); !strings.Contains(body, "This decision is yours") || !strings.Contains(body, `lang="en"`) {
 		t.Error("the English page is not in English")
 	}
 }
@@ -523,7 +523,7 @@ func TestWebAnswerAsUser(t *testing.T) {
 	if len(rows) == 0 || rows[0].By != byUser || rows[0].Decision != decideDeny || rows[0].Subject != "npm publish" {
 		t.Fatalf("decisions = %+v", rows)
 	}
-	if _, body, _ := tw.do("GET", "/", nil, nil); strings.Contains(body, `value="p-1"`) {
+	if _, body, _ := tw.do("GET", convoPath, nil, nil); strings.Contains(body, `value="p-1"`) {
 		t.Fatal("an answered permission is still shown")
 	}
 	// The brain could not have answered it: only the user may.
@@ -829,7 +829,7 @@ func TestHelloWithoutName(t *testing.T) {
 		}
 		tw := newTestWebFor(t, newCore(&Config{User: user, Listen: "127.0.0.1:8800"}, s))
 		tw.setup()
-		_, body, _ := tw.do("GET", "/", nil, map[string]string{"Accept-Language": "fr"})
+		_, body, _ := tw.do("GET", convoPath, nil, map[string]string{"Accept-Language": "fr"})
 		if !strings.Contains(body, want) {
 			t.Errorf("user %q: no %q in the conversation", user, want)
 		}

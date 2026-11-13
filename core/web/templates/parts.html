@@ -312,7 +312,7 @@ list that its ✕ closes; each page then has its way up to it (settings-up).
 The ways back follow the pages, never the browser's history. */}}
 {{define "settings-nav"}}
 <nav class="settings-nav" aria-label="{{t "settings.title"}}">
-  <a class="back to-chat" href="/">{{template "i-back"}}{{t "nav.chat"}}</a>
+  <a class="back to-chat" href="/conversation">{{template "i-back"}}{{t "nav.chat"}}</a>
   <div class="settings-head">
     <a class="icon-btn settings-close" href="/" aria-label="{{t "settings.close"}}" title="{{t "settings.close"}}">{{template "i-x"}}</a>
     <h1 class="settings-title">{{t "settings.title"}}</h1>
@@ -358,7 +358,7 @@ to the page it belongs to (its .back). */}}
 
 {{/* What the brain sets when asked (a rule, a watch): the page says how to
 ask it, in the conversation, rather than a form. */}}
-{{define "ask"}}<p class="ask">{{template "i-chat"}}<span>{{t .}}</span> <a href="/">{{t "ask.go"}}</a></p>{{end}}
+{{define "ask"}}<p class="ask">{{template "i-chat"}}<span>{{t .}}</span> <a href="/conversation">{{t "ask.go"}}</a></p>{{end}}
 
 {{/* One mark per step, in the plan's order, coloured by its status. */}}
 {{define "sess-strip"}}<span class="sess-strip" aria-hidden="true">{{range .}}<i class="st-{{.}}"></i>{{end}}</span>{{end}}

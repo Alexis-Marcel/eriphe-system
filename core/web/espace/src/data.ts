@@ -51,20 +51,18 @@ function signedOut(r: Response) {
   }
 }
 
+// boot reads what the app needs from eriphe-core. With no boot to read (the
+// dev server), the app runs on its fixtures; a boot that cannot be read
+// fails: the shell then offers the conversation (main.tsx), never made-up
+// data in place of the user's.
 export async function boot(url: string | undefined): Promise<Boot> {
   if (url) {
-    try {
-      const r = await fetch(url, { credentials: "same-origin", headers: json });
-      signedOut(r);
-      if (r.ok) {
-        const b: Boot = { ...(await r.json()), live: true };
-        csrf = b.csrf;
-        return b;
-      }
-    } catch (e) {
-      if (e instanceof SignedOut) throw e;
-      /* no eriphe-core: the dev server */
-    }
+    const r = await fetch(url, { credentials: "same-origin", headers: json });
+    signedOut(r);
+    if (!r.ok) throw new Error(`${url}: ${r.status}`);
+    const b: Boot = { ...(await r.json()), live: true };
+    csrf = b.csrf;
+    return b;
   }
   const asked = new URLSearchParams(location.search).get("lang");
   const lang: Lang = asked === "en" || (!asked && !navigator.language.startsWith("fr")) ? "en" : "fr";
@@ -86,10 +84,47 @@ type Handler = (e: MessageEvent) => void;
 const handlers = new Map<string, Set<Handler>>();
 let source: EventSource | null = null;
 
+// The stream's health: whether it is open, and since when it is not. The
+// browser opens it again by itself after a drop; one it closed for good
+// (an error status) is opened again here, once the session is known to
+// hold.
+export type StreamHealth = { open: boolean; since: number };
+let health: StreamHealth = { open: false, since: Date.now() };
+let retry: ReturnType<typeof setTimeout> | null = null;
+
+export function streamHealth(): StreamHealth {
+  return health;
+}
+
+// STREAM_GRACE is how long the stream may stay down before the page offers
+// the conversation: a restart of eriphe-core or a phone waking takes less.
+export const STREAM_GRACE = 20_000;
+
+// streamDown tells whether the stream has been down too long.
+export function streamDown(h: StreamHealth, now: number): boolean {
+  return !h.open && now - h.since > STREAM_GRACE;
+}
+
 function open() {
   source?.close();
-  source = new EventSource(handlers.has("a2ui") ? "/events?a2ui=1" : "/events");
-  for (const [type, set] of handlers) for (const h of set) source.addEventListener(type, h as EventListener);
+  if (retry) clearTimeout(retry);
+  retry = null;
+  const es = new EventSource(handlers.has("a2ui") ? "/events?a2ui=1" : "/events");
+  source = es;
+  es.onopen = () => {
+    health = { open: true, since: Date.now() };
+  };
+  es.onerror = () => {
+    if (health.open) health = { open: false, since: Date.now() };
+    if (es.readyState !== 2 || source !== es) return; // 2: CLOSED; else the browser tries again
+    retry = setTimeout(() => {
+      fetch("/espace/boot", { credentials: "same-origin", headers: json })
+        .then(signedOut)
+        .catch(() => undefined)
+        .finally(() => source === es && open());
+    }, 3000);
+  };
+  for (const [type, set] of handlers) for (const h of set) es.addEventListener(type, h as EventListener);
 }
 
 function listen(type: string, h: Handler): () => void {
@@ -105,6 +140,8 @@ function listen(type: string, h: Handler): () => void {
     if (handlers.size === 0) {
       source?.close();
       source = null;
+      if (retry) clearTimeout(retry);
+      retry = null;
     }
   };
 }

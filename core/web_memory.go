@@ -155,7 +155,7 @@ func (w *web) memorySource(ref string) (who, text, link string) {
 			if who == "" {
 				who = "event"
 			}
-			return who, truncate(msgs[0].Text, 400), "/#m" + strconv.Itoa(seq)
+			return who, truncate(msgs[0].Text, 400), convoAt("m" + strconv.Itoa(seq))
 		}
 	}
 	if id, ok := strings.CutPrefix(first, "task:"); ok {

@@ -53,7 +53,7 @@
   <p class="ok-note">{{tf "welcome.agentok" .Model}}</p>
   {{if .Ready}}
   <p>{{t "welcome.ready"}}</p>
-  <a class="btn btn-primary wide" href="/">{{t "welcome.open"}}</a>
+  <a class="btn btn-primary wide" href="/conversation">{{t "welcome.open"}}</a>
   {{else if eq .Devices 0}}
   <p class="notice">{{t "welcome.nomachine"}}</p>
   <a class="btn btn-soft" href="/settings/devices#connect">{{t "machines.add"}}</a>

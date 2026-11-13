@@ -83,7 +83,7 @@ func learnedHref(ref string) string {
 	kind, id, _ := strings.Cut(ref, ":")
 	switch kind {
 	case "msg":
-		return "/#m" + id
+		return convoAt("m" + id)
 	case "learned":
 		return "/settings/learned#learned-" + id
 	}

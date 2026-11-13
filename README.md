@@ -50,7 +50,10 @@ built-in instructions are in French.
 
 ## What works today
 
-- **Conversation** in the web workspace (`https://<address>:8443`), with attachments, and from the
+- **Composed workspace**, the home page (`https://<address>:8443`): a screen Eriphe composes from
+  your tools, which you shape by talking to it; one column on a phone
+  ([docs/workspace.md](docs/workspace.md)).
+- **Conversation** at `/conversation`, one click from the workspace, with attachments, and from the
   terminal (`eriphe`).
 - **Memory**: people, facts, preferences and a nightly journal, kept by eriphe-core in SQLite and
   recalled by the brain; what it learns from outside content is only proposed until you approve it.
@@ -63,8 +66,6 @@ built-in instructions are in French.
   On by default when the full install is possible.
 - **Tools**: mail (IMAP/SMTP), calendars (CalDAV, Microsoft Graph), Google Drive folders, folders of
   your devices, Home Assistant, GitHub and any MCP server, from a catalog in the workspace.
-- **Composed workspace**: a screen Eriphe composes from your tools, which you shape by talking to
-  it ([docs/workspace.md](docs/workspace.md)).
 - **Voice** through Home Assistant's Assist pipeline (`ha/`).
 - **Remote access** through Tailscale, built in, outbound only.
 

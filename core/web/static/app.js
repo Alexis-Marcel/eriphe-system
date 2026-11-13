@@ -513,7 +513,7 @@ function eripheInApp(notes) {
     const task = new URLSearchParams(location.search).get("task");
     if (task && $("#drawer")) {
       htmx.ajax("GET", "/tasks/" + encodeURIComponent(task), { target: "#drawer", swap: "innerHTML" });
-      history.replaceState(null, "", "/" + location.hash);
+      history.replaceState(null, "", location.pathname + location.hash);
     }
     const id = decodeURIComponent(location.hash.slice(1));
     const el = id && /^(perm-|m\d)/.test(id) && document.getElementById(id);

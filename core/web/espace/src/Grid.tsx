@@ -20,6 +20,10 @@ import type { FoldedChip, Layout, Tile, TileSize } from "./types";
 // resize as the tile's place for the session (onPlace) and a close as not
 // shown again (onClose); the page shows it at once, core's next layout
 // follows.
+//
+// On a phone (narrow) the grid does not hold: one column, the tiles in the
+// composer's order, the chips after them, only the cross on a tile; a
+// surface open is drawn alone, on the whole screen (stacked).
 
 const spring = { type: "spring", stiffness: 260, damping: 30 } as const;
 
@@ -62,24 +66,61 @@ export function cellAt(r: { left: number; top: number; width: number; height: nu
   };
 }
 
+// A narrow screen (a phone): the page scrolls, the grid does not hold. The
+// same width as espace.css's.
+export const NARROW = "(max-width: 900px)";
+
+function narrowQuery(): MediaQueryList | null {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(NARROW) : null;
+}
+
+// useNarrow tells whether the screen is narrow, and follows it.
+export function useNarrow(): boolean {
+  return useSyncExternalStore(
+    (on) => {
+      const q = narrowQuery();
+      q?.addEventListener("change", on);
+      return () => q?.removeEventListener("change", on);
+    },
+    () => narrowQuery()?.matches ?? false,
+  );
+}
+
+// What the grid draws: the tiles whose surface is there, and the chips:
+// what the layout folds, then the surfaces it does not name yet.
+export function drawn(layout: Layout, have: Set<string>): { tiles: Tile[]; chips: FoldedChip[] } {
+  const named = new Set([...layout.items.map((i) => i.id), ...layout.chips.map((c) => c.id)]);
+  return {
+    tiles: layout.items.filter((i) => have.has(i.id)),
+    chips: [...layout.chips.filter((c) => have.has(c.id)), ...[...have].filter((id) => !named.has(id)).map((id) => ({ id, title: id }))],
+  };
+}
+
+// stacked is the workspace on a phone: one column, the tiles in the
+// composer's order (the layout's items, never their place on the grid),
+// the chips after them; with a surface open, that surface alone, on the
+// whole screen.
+export function stacked(layout: Layout, have: Set<string>): { tiles: Tile[]; chips: FoldedChip[]; full: boolean } {
+  const { tiles, chips } = drawn(layout, have);
+  const open = layout.focus ? tiles.find((i) => i.id === layout.focus) : undefined;
+  return open ? { tiles: [open], chips: [], full: true } : { tiles, chips, full: false };
+}
+
 type Props = {
   adapter: Adapter;
   layout: Layout;
+  narrow?: boolean; // a phone: one column (stacked)
   onOpen: (id: string) => void;
   onClose?: (id: string) => void;
   onPlace?: (id: string, what: "moved" | "resized", to: Spot) => void;
 };
 
-export function Grid({ adapter, layout, onOpen, onClose = () => {}, onPlace = () => {} }: Props) {
+export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => {}, onPlace = () => {} }: Props) {
   const { t } = useWords();
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   const byID = new Map(surfaces.map((s) => [s.id, s]));
-  const tiles = layout.items.filter((i) => byID.has(i.id));
-  const named = new Set([...layout.items.map((i) => i.id), ...layout.chips.map((c) => c.id)]);
-  const chips: FoldedChip[] = [
-    ...layout.chips.filter((c) => byID.has(c.id)),
-    ...surfaces.filter((s) => !named.has(s.id)).map((s) => ({ id: s.id, title: s.id })),
-  ];
+  const have = new Set(byID.keys());
+  const { tiles, chips, full } = narrow ? stacked(layout, have) : { ...drawn(layout, have), full: false };
 
   // A drag of a tile's grip: the cell it would go to, shown by a ghost.
   const canvas = useRef<HTMLElement>(null);
@@ -133,41 +174,43 @@ export function Grid({ adapter, layout, onOpen, onClose = () => {}, onPlace = ()
   };
   const ghost = drag && DIMS[drag.size];
 
-  return (
-    <>
-      <div className="chips" role="list" aria-label={t("espace.chips")}>
-        {chips.map((c) => (
-          <div key={c.id} role="listitem" className={`chip${c.closed ? " closed" : ""}`} data-surface={c.id}>
-            <button className="chip-open" onClick={() => onOpen(c.id)} title={t("espace.chip.open", c.title)}>
-              <span className="chip-text">{c.title}</span>
-              {c.closed ? <span className="chip-from">{t("espace.chip.closed")}</span> : c.why && <span className="chip-from">{c.why}</span>}
-            </button>
-          </div>
-        ))}
-      </div>
-      <main className="canvas" aria-label={t("espace.canvas")} ref={canvas}>
-        <LayoutGroup>
-          {/* Not mode="popLayout": it injects a <style> element, which the CSP refuses. */}
-          <AnimatePresence>
-            {tiles.map((tile) => {
-              const focus = layout.focus === tile.id;
-              const open = (e: MouseEvent) => {
-                if (!focus && !(e.target as HTMLElement).closest(interactive)) onOpen(tile.id);
-              };
-              return (
-                <motion.article
-                  key={tile.id}
-                  layout
-                  transition={spring}
-                  exit={{ opacity: 0 }}
-                  data-surface={tile.id}
-                  aria-label={tile.title}
-                  className={`mod tile size-${tile.size} at-c${tile.col} at-r${tile.row} w-${tile.w} h-${tile.h}${focus ? " focus" : ""}${tile.related && !focus ? " related" : ""}${tile.pinned ? " pinned" : ""}${drag?.id === tile.id ? " dragging" : ""}`}
-                  onClick={open}
-                >
-                  <div className="tile-head">
-                    <h2 className="tile-title">{tile.title}</h2>
-                    <div className="tile-tools">
+  const strip = (
+    <div className={`chips${narrow ? " stacked" : ""}`} role="list" aria-label={t("espace.chips")}>
+      {chips.map((c) => (
+        <div key={c.id} role="listitem" className={`chip${c.closed ? " closed" : ""}`} data-surface={c.id}>
+          <button className="chip-open" onClick={() => onOpen(c.id)} title={t("espace.chip.open", c.title)}>
+            <span className="chip-text">{c.title}</span>
+            {c.closed ? <span className="chip-from">{t("espace.chip.closed")}</span> : c.why && <span className="chip-from">{c.why}</span>}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+  const board = (
+    <main className={`canvas${narrow ? " column" : ""}${full ? " full" : ""}`} aria-label={t("espace.canvas")} ref={canvas}>
+      <LayoutGroup>
+        {/* Not mode="popLayout": it injects a <style> element, which the CSP refuses. */}
+        <AnimatePresence>
+          {tiles.map((tile) => {
+            const focus = layout.focus === tile.id;
+            const open = (e: MouseEvent) => {
+              if (!focus && !(e.target as HTMLElement).closest(interactive)) onOpen(tile.id);
+            };
+            return (
+              <motion.article
+                key={tile.id}
+                layout
+                transition={spring}
+                exit={{ opacity: 0 }}
+                data-surface={tile.id}
+                aria-label={tile.title}
+                className={`mod tile size-${tile.size} at-c${tile.col} at-r${tile.row} w-${tile.w} h-${tile.h}${focus ? " focus" : ""}${tile.related && !focus ? " related" : ""}${tile.pinned ? " pinned" : ""}${drag?.id === tile.id ? " dragging" : ""}`}
+                onClick={open}
+              >
+                <div className="tile-head">
+                  <h2 className="tile-title">{tile.title}</h2>
+                  <div className="tile-tools">
+                    {!narrow && (<>
                       <button type="button" className="tile-tool tile-move" aria-label={t("espace.tile.move", tile.title)} title={t("espace.tile.move", tile.title)}
                         onPointerDown={startDrag(tile)} onKeyDown={moveKeys(tile)}>
                         <span aria-hidden="true">⠿</span>
@@ -176,23 +219,25 @@ export function Grid({ adapter, layout, onOpen, onClose = () => {}, onPlace = ()
                         onClick={() => { const to = resized(tile, 1, true); if (to) onPlace(tile.id, "resized", to); }} onKeyDown={sizeKeys(tile)}>
                         <span aria-hidden="true">⤡</span>
                       </button>
-                      <button type="button" className="tile-tool tile-close" aria-label={t("espace.tile.close", tile.title)} title={t("espace.tile.close", tile.title)}
-                        onClick={() => onClose(tile.id)}>
-                        <span aria-hidden="true">×</span>
-                      </button>
-                    </div>
+                    </>)}
+                    <button type="button" className="tile-tool tile-close" aria-label={t("espace.tile.close", tile.title)} title={t("espace.tile.close", tile.title)}
+                      onClick={() => onClose(tile.id)}>
+                      <span aria-hidden="true">×</span>
+                    </button>
                   </div>
-                  <div className="mod-body">
-                    <SurfaceView surface={byID.get(tile.id)!} />
-                  </div>
-                  {tile.size !== "s" && (tile.why || tile.related) && <p className="why">{tile.why || t("espace.related")}</p>}
-                </motion.article>
-              );
-            })}
-          </AnimatePresence>
-        </LayoutGroup>
-        {drag && ghost && <div className={`tile-ghost at-c${drag.col} at-r${drag.row} w-${ghost.w} h-${ghost.h}`} aria-hidden="true" />}
-      </main>
-    </>
+                </div>
+                <div className="mod-body">
+                  <SurfaceView surface={byID.get(tile.id)!} />
+                </div>
+                {tile.size !== "s" && (tile.why || tile.related) && <p className="why">{tile.why || t("espace.related")}</p>}
+              </motion.article>
+            );
+          })}
+        </AnimatePresence>
+      </LayoutGroup>
+      {drag && ghost && <div className={`tile-ghost at-c${drag.col} at-r${drag.row} w-${ghost.w} h-${ghost.h}`} aria-hidden="true" />}
+    </main>
   );
+  // On a phone the chips come after the tiles: what is folded waits below.
+  return narrow ? <>{board}{strip}</> : <>{strip}{board}</>;
 }

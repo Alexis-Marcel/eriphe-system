@@ -70,11 +70,11 @@ func TestSurfaceActionAsk(t *testing.T) {
 	}
 
 	// In the conversation, with its marker, in the user's language.
-	_, page, _ := tw.do("GET", "/", nil, nil)
+	_, page, _ := tw.do("GET", convoPath, nil, nil)
 	if !strings.Contains(page, "bouton de l&#39;espace · ") {
 		t.Error("the conversation does not mark the ask")
 	}
-	_, page, _ = tw.do("GET", "/", nil, map[string]string{"Accept-Language": "en"})
+	_, page, _ = tw.do("GET", convoPath, nil, map[string]string{"Accept-Language": "en"})
 	if !strings.Contains(page, "workspace button · ") {
 		t.Error("no English marker")
 	}

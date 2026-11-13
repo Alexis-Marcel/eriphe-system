@@ -5,7 +5,8 @@ import { SAMPLE_SURFACE, galleryFixtures, gallerySurfaces, sampleLayout, sampleP
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
-import { DIMS, Grid, type Spot } from "./Grid";
+import { CONVO } from "./Fallback";
+import { DIMS, Grid, stacked, useNarrow, type Spot } from "./Grid";
 import { useWords } from "./i18n";
 import type { Layout } from "./types";
 
@@ -83,6 +84,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const [said, setSaid] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [wide, setWide] = useState(false);
+  const narrow = useNarrow();
 
   const say = (m: string) => {
     setToast(m);
@@ -114,6 +116,9 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const onSurfaces = !gallery && !!layout && (pool.length > 0 || layout.items.length + layout.chips.length > 0);
   const sfocus = onSurfaces ? layout?.focus ?? null : null;
   const sfocusTitle = sfocus ? layout?.items.find((i) => i.id === sfocus)?.title ?? sfocus : null;
+  // On a phone the screen is the open surface's once it is drawn alone (stacked), not before:
+  // a chip opened waits in the column until core places it.
+  const full = narrow && onSurfaces && stacked(layout!, new Set(pool.map((s) => s.id))).full;
   const sbefore = useRef<Layout | null>(null); // the layout before the focus, with no eriphe-core behind
   const openSurface = (id: string) => {
     setSaid(null);
@@ -186,17 +191,31 @@ export function Espace({ boot }: { boot: data.Boot }) {
     send(v, t("espace.sent"));
   };
 
+  // The event stream down too long: the conversation is offered, the
+  // workspace stays as it was.
+  const [down, setDown] = useState(false);
+  useEffect(() => {
+    if (!live || gallery) return;
+    const tick = setInterval(() => setDown(data.streamDown(data.streamHealth(), Date.now())), 5000);
+    return () => clearInterval(tick);
+  }, [live, gallery]);
+
   const hint = sfocusTitle ? t("espace.input.about", sfocusTitle) : t("espace.input");
   const ambient = (onSurfaces ? layout!.ambient : undefined) ?? "calm";
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className={`espace ambient-${ambient} ${wide ? "wide" : ""}`}>
+      <div className={`espace ambient-${ambient}${wide ? " wide" : ""}${narrow ? " narrow" : ""}${full ? " focused" : ""}`}>
         <aside className="eriphe-panel" aria-live="polite">
           <p className="eriphe-name">{boot.name}</p>
           <div className="eriphe-text">{text && <p>{text}</p>}</div>
           {live && nothing && <p className="eriphe-sample quiet">{t("espace.empty")}</p>}
           {!live && <p className="eriphe-sample">{t("espace.sample")}</p>}
+          {down && (
+            <p className="eriphe-sample eriphe-offline" role="alert">
+              {t("espace.offline")} <a href={CONVO}>{t("espace.convo")}</a>
+            </p>
+          )}
           <div className="eriphe-actions">
             {sfocus && <button className="btn ghost" onClick={backSurface}>{t("espace.back")}</button>}
           </div>
@@ -204,15 +223,15 @@ export function Espace({ boot }: { boot: data.Boot }) {
             <input name="text" autoComplete="off" placeholder={hint} aria-label={hint} />
           </form>
           <div className="eriphe-links">
-            <a href="/">{t("espace.convo")}</a>
-            <button className="linkish" onClick={() => setWide(!wide)} aria-pressed={wide}>{t(wide ? "espace.narrow" : "espace.wide")}</button>
+            <a href={CONVO}>{t("espace.convo")}</a>
+            {!narrow && <button className="linkish" onClick={() => setWide(!wide)} aria-pressed={wide}>{t(wide ? "espace.narrow" : "espace.wide")}</button>}
           </div>
         </aside>
 
         <div className="stage">
           <ProposalsContext.Provider value={proposals}>
             {onSurfaces ? (
-              <Grid adapter={surfaces} layout={layout!} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} />
+              <Grid adapter={surfaces} layout={layout!} narrow={narrow} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} />
             ) : gallery ? (
               <div className="surfaces">
                 <Surfaces adapter={surfaces} />

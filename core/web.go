@@ -170,7 +170,9 @@ func (w *web) routes() http.Handler {
 	mux.HandleFunc("GET /auth/callback", w.handleSSOCallback)
 	mux.Handle("POST /lang", w.auth(w.handleLang))
 
-	mux.Handle("GET /{$}", w.auth(w.handleHome))
+	mux.Handle("GET /{$}", w.auth(w.handleHome)) // the workspace, or the conversation (web_pages.go)
+	mux.Handle("GET "+convoPath, w.auth(w.handleConvo))
+	mux.Handle("POST /settings/home", w.auth(w.handleHomeChoice))
 	mux.Handle("GET /events", w.auth(w.handleEvents))
 	// A message carries its attachments: the body may hold them all, and a little more.
 	mux.Handle("POST /messages", http.MaxBytesHandler(w.auth(w.handleSend), maxAttachments*maxAttachmentSize+1<<20))

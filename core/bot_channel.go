@@ -676,7 +676,7 @@ func (b *botChannel) test(ctx context.Context) error {
 // the channel (channel_relay.go).
 func (b *botChannel) reply(m Message) {
 	if b.detail() == detailAlert {
-		b.post(botMessage{Text: joinLines(tr(b.lang(), "bot.replied"), b.link(fmt.Sprintf("/#m%d", m.Seq)))})
+		b.post(botMessage{Text: joinLines(tr(b.lang(), "bot.replied"), b.link(convoAt(fmt.Sprintf("m%d", m.Seq))))})
 		return
 	}
 	b.post(botMessage{Text: m.Text})

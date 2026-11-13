@@ -309,7 +309,7 @@ func TestReceiptOnCard(t *testing.T) {
 	if strings.Contains(body, `&#34;receipt&#34;`) || strings.Contains(body, "needs_approval") {
 		t.Error("the drawer shows the raw receipt")
 	}
-	_, body, _ = tw.do("GET", "/", nil, nil)
+	_, body, _ = tw.do("GET", convoPath, nil, nil)
 	if !strings.Contains(body, `rc rc-done`) || !strings.Contains(body, "non vérifié(s)") {
 		t.Error("the card has no receipt line")
 	}

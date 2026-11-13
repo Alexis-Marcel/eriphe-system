@@ -53,7 +53,7 @@ func TestCardBoundToItsProposal(t *testing.T) {
 	if x.Seq != seq || x.State != cardPending {
 		t.Fatalf("card %+v, want on message %d", x, seq)
 	}
-	_, body, _ := tw.do("GET", "/", nil, nil)
+	_, body, _ := tw.do("GET", convoPath, nil, nil)
 	for _, want := range []string{fmt.Sprintf(`id="card-%d"`, x.ID), fmt.Sprintf(`hx-post="/cards/%d/yes"`, x.ID),
 		fmt.Sprintf(`hx-post="/cards/%d/no"`, x.ID), "data-card-edit=", "facture → au brief", `href="/settings/approve"`} {
 		if !strings.Contains(body, want) {
@@ -446,7 +446,7 @@ func TestDigestAndWhy(t *testing.T) {
 	}
 	seq, _ := c.store.addMessage(roleBrain, n.Text, true)
 	c.store.db.Exec(`UPDATE notifications SET msg = ? WHERE id = ?`, seq, n.ID)
-	_, body, _ := tw.do("GET", "/", nil, nil)
+	_, body, _ := tw.do("GET", convoPath, nil, nil)
 	for _, want := range []string{`class="pcard pdigest"`, "Range les factures", `hx-get="/tasks/t-9"`, `href="/settings/journal"`,
 		`class="msg-why"`, "Pourquoi ?", "La veille du site a vu trois erreurs.", "project:site"} {
 		if !strings.Contains(body, want) {

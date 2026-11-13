@@ -113,7 +113,7 @@ func TestWebWelcomeFlow(t *testing.T) {
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
 	setBrainTask(c.core, "b-1")
 	_, body, _ = tw.do("GET", "/welcome/status", nil, nil)
-	if !strings.Contains(body, "Jarvis est prêt") || !strings.Contains(body, `href="/"`) || strings.Contains(body, "hx-trigger") {
+	if !strings.Contains(body, "Jarvis est prêt") || !strings.Contains(body, `href="/conversation"`) || strings.Contains(body, "hx-trigger") {
 		t.Fatalf("ready: %s", body)
 	}
 }
@@ -188,7 +188,7 @@ func TestWebWelcomeSkip(t *testing.T) {
 		t.Fatalf("skip: %d %s", code, h.Get("Location"))
 	}
 	// It says the assistant has no AI yet, and leads back to the wizard.
-	if code, body, _ := tw.do("GET", "/", nil, nil); code != http.StatusOK || !strings.Contains(body, "pas encore d&#39;IA") || !strings.Contains(body, `href="/welcome"`) {
+	if code, body, _ := tw.do("GET", convoPath, nil, nil); code != http.StatusOK || !strings.Contains(body, "pas encore d&#39;IA") || !strings.Contains(body, `href="/welcome"`) {
 		t.Fatalf("after skip: %d", code)
 	}
 	if code, _, _ := tw.do("GET", "/welcome", nil, nil); code != http.StatusOK {
