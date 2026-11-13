@@ -40,8 +40,7 @@ import (
 //
 // Nothing waits on a held item: the brain reads the open items in its turn
 // (attentionBlock), the held ones marked so, and answers as usual. The
-// workspace reads the queue (GET /api/attention, the event stream's
-// "attention"), each item with whether it is held.
+// workspace shows the queue as surfaces (workspace_queue.go).
 
 const attentionSchema = `CREATE TABLE IF NOT EXISTS attention (
 	ref       TEXT PRIMARY KEY,

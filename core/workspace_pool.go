@@ -180,8 +180,6 @@ func composerTurn(s poolSnapshot) string {
 		fmt.Fprintf(&b, "Moment : son arrivée, après %s d'absence. Choisis ce qu'il verra en revenant.\n", span(s.Away))
 	case momentRemark:
 		fmt.Fprintf(&b, "Moment : il est là ; une nouvelle préférence de sa part pour l'espace : « %s »\n", packQuote(truncate(s.Remark, workspacePrefMax)))
-	case momentShow:
-		fmt.Fprintf(&b, "Moment : il est là ; on met des objets devant pour lui : « %s »\n", packQuote(truncate(s.Remark, compositionWhyMax)))
 	default:
 		b.WriteString("Moment : il est là, au travail ; l'espace a changé.\n")
 	}

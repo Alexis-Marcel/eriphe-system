@@ -36,18 +36,6 @@ type toolCard struct {
 	// Account is its account's form (account_forms.go); nil: its accounts
 	// are connections only.
 	Account *accountShape
-	// Objects are the workspace's objects it reads (objects.go), each by a
-	// read-only tool.
-	Objects []objectRead
-}
-
-// objectRead is how a tool reads one kind of object: the tool, the
-// argument the ref's id goes in, and fixed arguments.
-type objectRead struct {
-	Ref  string // the kind of ref: refMail, refAgenda, refEvent
-	Tool string
-	Arg  string
-	Args map[string]any
 }
 
 // cases are the categories of its grid.
@@ -76,20 +64,14 @@ var (
 			// Eriphe holds the account's level itself.
 			{Provider: "google", Read: []string{scopeMail}, AccountProvider: "gmail", AccountFields: []string{"address"}},
 		},
-		Account: &mailShape,
-		// read_message peeks: reading never marks a message read.
-		Objects: []objectRead{{Ref: refMail, Tool: "read_message", Arg: "id"}}}
+		Account: &mailShape}
 	calendarService = toolCard{ID: toolCalendar, Base: "agenda", Image: "ghcr.io/alexis-marcel/eriphe-calendar", Preset: "calendar",
 		OwnVersion: true, AccountLevels: true, SameBy: []string{"provider", "url"},
 		SignIns: []toolSignIn{
 			// Google Calendar over CalDAV.
 			{Provider: "google", Read: []string{scopeCalendar}, AccountProvider: "google", AccountFields: []string{"username"}},
 		},
-		Account: &calendarShape,
-		Objects: []objectRead{
-			{Ref: refAgenda, Tool: "list_events", Arg: "from", Args: map[string]any{"days": 1}},
-			{Ref: refEvent, Tool: "get_event", Arg: "id"},
-		}}
+		Account: &calendarShape}
 	filesService = toolCard{ID: toolFiles, Base: "fichiers", Image: "ghcr.io/alexis-marcel/eriphe-files", Preset: "gdrive",
 		OwnVersion: true, Scopes: true, AccountLevels: true,
 		SignIns: []toolSignIn{

@@ -449,9 +449,6 @@ func (c *core) toolWorkspaceRead(who surfaceCaller) map[string]any {
 		}
 		out["gestures"] = list
 	}
-	if show, _ := c.shown(now); show != nil {
-		out["in_front"] = show.Refs
-	}
 	if ps := c.proposalsSeen(); len(ps) > 0 {
 		out["proposals"] = ps
 		out["proposals_note"] = "What waits for the user's yes or no. To show one where it matters, place a Proposal component with its ref as proposalId: its Oui and Non answer that one only. A dated one shows by itself as a ghost in the Day of its day. The text of one drawn from external content is not quoted."

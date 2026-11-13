@@ -14,15 +14,15 @@ import (
 
 // proposalView is a proposal as the workspace's Proposal component shows it.
 type proposalView struct {
-	Ref     string     `json:"ref"`
-	Card    int64      `json:"card"`  // the card that answers it
-	State   string     `json:"state"` // pending, approved, rejected, gone
-	Text    string     `json:"text"`
-	Why     string     `json:"why,omitempty"`
-	Tainted bool       `json:"tainted,omitempty"`
-	Fields  []Field    `json:"fields,omitempty"`
-	When    []spanView `json:"when,omitempty"` // when it takes place, if it has a time
-	Created time.Time  `json:"created"`
+	Ref     string      `json:"ref"`
+	Card    int64       `json:"card"`  // the card that answers it
+	State   string      `json:"state"` // pending, approved, rejected, gone
+	Text    string      `json:"text"`
+	Why     string      `json:"why,omitempty"`
+	Tainted bool        `json:"tainted,omitempty"`
+	Fields  []cardField `json:"fields,omitempty"`
+	When    []spanView  `json:"when,omitempty"` // when it takes place, if it has a time
+	Created time.Time   `json:"created"`
 }
 
 // view is a card and its proposal as the workspace shows them, in lang.
@@ -31,9 +31,7 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 	if t := p.Text(lang); t != "" {
 		v.Text = t
 	}
-	for _, f := range p.FieldsIn(lang) {
-		v.Fields = append(v.Fields, Field{f.Name, f.Value})
-	}
+	v.Fields = p.FieldsIn(lang)
 	if x.State == cardPending {
 		for _, s := range w.c.proposalSpans(p.Kind, p.ID, w.c.userZone()) {
 			v.When = append(v.When, s.view())

@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // The composed workspace's memory and tools (#409). The workspace keeps no
@@ -22,18 +18,14 @@ import (
 //     preferences, and the user's other preferences that bear on the queue,
 //     with every snapshot (workspacePreferences), and composes again when
 //     one enters memory (workspacePrefStamp).
-//   - What the user does on it feeds memory, implicitly: a module opened, a
-//     module that left the screen unopened, a tile closed, moved or resized,
+//   - What the user does on it feeds memory, implicitly: a surface opened, a
+//     tile that left the grid unopened, a tile closed, moved or resized,
 //     a message written about it, are gestures (workspace_log) the
 //     extraction reads as one segment of the day's transcript. No counter
 //     and no score: the extraction infers, the user approves. What they do
 //     to the layout holds for their session (workspace_gestures.go).
-//   - A message written while a module is open carries its ref
+//   - A message written while a surface is open carries its ref
 //     (messageAbout): « montre-m'en moins » is said to Eriphe in words.
-//   - The brain has two tools: workspace_show puts objects in front at once
-//     (the composer composes again with them required), and
-//     workspace_walkthrough walks the user through objects on the page
-//     (the event stream's "walkthrough").
 
 const (
 	workspaceSubject = "workspace" // the subject of a preference about the workspace
@@ -42,12 +34,8 @@ const (
 	workspaceRecallMax = 3  // other preferences recalled from the queue's words
 	workspacePrefMax   = 300
 
-	workspaceShowFor    = time.Hour // what workspace_show puts in front stays there this long at most
-	workspaceWalkMax    = 12        // refs a walkthrough goes through
-	workspaceWalkReplay = 20 * time.Second
-
-	gestureOpened  = "opened"  // the user opened a module (a focus)
-	gestureIgnored = "ignored" // a module left the screen without being opened
+	gestureOpened  = "opened"  // the user opened a surface (a focus)
+	gestureIgnored = "ignored" // a tile left the grid without being opened
 	gestureClosed  = "closed"  // the user closed a tile: not shown again this session (workspace_gestures.go)
 	gestureMoved   = "moved"   // the user moved a tile: pinned there this session
 	gestureResized = "resized" // the user changed a tile's size: pinned at it this session
@@ -70,18 +58,34 @@ func displayRulesGone(db *sql.DB) error {
 	return err
 }
 
+// The composition by ref and its canvas of objects (#424) are gone: the
+// last composition kept, and the gestures and messages about an object
+// rather than a surface.
+func refCompositionGone(db *sql.DB) error {
+	for _, q := range []string{
+		`DELETE FROM kv WHERE key = 'composition'`,
+		`DELETE FROM kv WHERE key LIKE 'about_msg:%' AND value NOT LIKE 'surface:%'`,
+		`DELETE FROM workspace_log WHERE ref NOT LIKE 'surface:%'`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 const workspaceLogSchema = `CREATE TABLE IF NOT EXISTS workspace_log (
 	id    INTEGER PRIMARY KEY AUTOINCREMENT,
 	time  INTEGER NOT NULL,
 	what  TEXT NOT NULL,             -- opened, ignored, closed, moved, resized, about
-	ref   TEXT NOT NULL,
-	title TEXT NOT NULL DEFAULT ''   -- the object's title, as the page showed it (external)
+	ref   TEXT NOT NULL,             -- surface:<id>
+	title TEXT NOT NULL DEFAULT ''   -- the surface's title, from a clean turn of its author
 );
 CREATE INDEX IF NOT EXISTS workspace_log_time ON workspace_log (time);`
 
 func init() {
 	extraSchema = append(extraSchema, workspaceLogSchema)
-	schemaFixes = append(schemaFixes, displayRulesGone)
+	schemaFixes = append(schemaFixes, displayRulesGone, refCompositionGone)
 }
 
 // Preferences.
@@ -150,23 +154,21 @@ var gestureKinds = map[string]struct{ en, fr string }{
 	gestureAbout:   {"wrote a message about", "écrit à propos de"},
 }
 
-var errGesture = errors.New("a gesture is opened, ignored, closed, moved, resized or about, with a ref")
+var errGesture = errors.New("a gesture is opened, ignored, closed, moved, resized or about, with a surface:<id>")
 
-// noteGesture keeps a gesture; opened, ignored and about once per ref in
-// gestureRepeat; each close counts, and each move or resize but those that
-// go on the one just before (gestureSteps); those older than gestureKeep
-// go. A surface's title is the one core has, and only when its
-// author wrote it in a clean turn: never the page's.
-func (c *core) noteGesture(what, ref, title string, now time.Time) error {
+// noteGesture keeps a gesture on a surface (surface:<id>); opened, ignored
+// and about once per surface in gestureRepeat; each close counts, and each
+// move or resize but those that go on the one just before (gestureSteps);
+// those older than gestureKeep go. Its title is the one core has, and only
+// when its author wrote it in a clean turn: never the page's.
+func (c *core) noteGesture(what, ref string, now time.Time) error {
 	if _, ok := gestureKinds[what]; !ok {
 		return errGesture
 	}
 	if !gestureRef(ref) {
 		return errGesture
 	}
-	if id, ok := strings.CutPrefix(ref, "surface:"); ok {
-		title = c.surfaceCleanTitle(id)
-	}
+	title := c.surfaceCleanTitle(strings.TrimPrefix(ref, "surface:"))
 	if what == gestureOpened || what == gestureIgnored || what == gestureAbout {
 		var n int
 		c.store.db.QueryRow(`SELECT COUNT(*) FROM workspace_log WHERE ref = ? AND what = ? AND time > ?`,
@@ -192,14 +194,11 @@ func (c *core) noteGesture(what, ref, title string, now time.Time) error {
 	return err
 }
 
-// gestureRef tells whether a gesture is about something the workspace
-// shows: an object's ref, or a surface (surface:<id>).
+// gestureRef tells whether a gesture is about a surface (surface:<id>),
+// the one thing the workspace shows.
 func gestureRef(ref string) bool {
-	if id, ok := strings.CutPrefix(ref, "surface:"); ok {
-		return surfaceIDRe.MatchString(id)
-	}
-	_, err := parseRef(ref)
-	return err == nil
+	id, ok := strings.CutPrefix(ref, "surface:")
+	return ok && surfaceIDRe.MatchString(id)
 }
 
 // gestures are the gestures between from and to, the oldest first.
@@ -225,10 +224,10 @@ func (c *core) gestures(from, to time.Time) ([]gesture, error) {
 
 // gestureSegment is the gestures of a window as one segment of the
 // extraction's transcript: what the user did, not what they said. The
-// titles are the objects' (a mail's subject): external.
+// titles are the surfaces', as their authors wrote them: external.
 func gestureSegment(gs []gesture, user string) segment {
 	var b strings.Builder
-	fmt.Fprintf(&b, "What %s did on the composed workspace (gestures, not words; the titles are the objects', external):", user)
+	fmt.Fprintf(&b, "What %s did on the composed workspace (gestures, not words; the titles are the surfaces', external):", user)
 	for _, g := range gs {
 		what := g.What
 		if k, ok := gestureKinds[g.What]; ok {
@@ -247,153 +246,16 @@ func gestureSegment(gs []gesture, user string) segment {
 
 func aboutKey(seq int64) string { return fmt.Sprintf("about_msg:%d", seq) }
 
-// noteAbout keeps the ref a message of the user's was written about (the
-// module or the surface open on the workspace, surface:<id>), and the
-// gesture; a ref that does not parse is not kept.
+// noteAbout keeps the surface a message of the user's was written about
+// (the one open on the workspace, surface:<id>), and the gesture; anything
+// else is not kept.
 func (c *core) noteAbout(seq int64, ref string) {
 	ref = strings.TrimSpace(ref)
 	if gestureRef(ref) {
 		c.store.set(aboutKey(seq), ref)
-		c.noteGesture(gestureAbout, ref, "", time.Now())
+		c.noteGesture(gestureAbout, ref, time.Now())
 	}
 }
 
 // messageAbout is the ref a message was written about, "" for none.
 func (c *core) messageAbout(seq int) string { return c.store.get(aboutKey(int64(seq))) }
-
-// The brain's tools.
-
-// workspaceShow is what the brain put in front (workspace_show), until
-// Until: every snapshot holds those refs and every composition shows them
-// as modules.
-type workspaceShow struct {
-	Seq   int64
-	Refs  []string
-	Why   string
-	At    time.Time
-	Until time.Time
-}
-
-// workspaceWalk is a walkthrough the brain asked for: the page goes
-// through Refs, or what it shows when there are none.
-type workspaceWalk struct {
-	ID   int64     `json:"id"`
-	Refs []string  `json:"refs"`
-	At   time.Time `json:"at"`
-}
-
-func cleanRefs(in []string, max int) ([]string, error) {
-	var out []string
-	for _, r := range in {
-		ref, err := parseRef(r)
-		if err != nil {
-			return nil, fmt.Errorf("%q: %w", r, err)
-		}
-		if !slices.Contains(out, ref.String()) {
-			out = append(out, ref.String())
-		}
-	}
-	if len(out) > max {
-		return nil, fmt.Errorf("at most %d refs", max)
-	}
-	return out, nil
-}
-
-// showOnWorkspace puts refs in front, for workspaceShowFor at most; none
-// gives the front back to the composer. The composer composes again at
-// once (runComposer).
-func (c *core) showOnWorkspace(refs []string, why string, now time.Time) error {
-	refs, err := cleanRefs(refs, compositionItemsMax)
-	if err != nil {
-		return err
-	}
-	s := &c.composer
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.showSeq++
-	if len(refs) == 0 {
-		s.show = nil
-		return nil
-	}
-	s.show = &workspaceShow{Seq: s.showSeq, Refs: refs, Why: truncate(oneLine(why), compositionWhyMax), At: now, Until: now.Add(workspaceShowFor)}
-	return nil
-}
-
-// shown is what the brain put in front and still is at now, nil for none;
-// seq changes with each workspace_show.
-func (c *core) shown(now time.Time) (show *workspaceShow, seq int64) {
-	s := &c.composer
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.show != nil && now.After(s.show.Until) {
-		s.show = nil
-	}
-	if s.show == nil {
-		return nil, s.showSeq
-	}
-	cp := *s.show
-	return &cp, s.showSeq
-}
-
-// walkWorkspace asks the open pages to walk the user through refs (none:
-// through what they show).
-func (c *core) walkWorkspace(refs []string, now time.Time) (workspaceWalk, error) {
-	refs, err := cleanRefs(refs, workspaceWalkMax)
-	if err != nil {
-		return workspaceWalk{}, err
-	}
-	s := &c.composer
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.walk = workspaceWalk{ID: s.walk.ID + 1, Refs: append([]string{}, refs...), At: now}
-	return s.walk, nil
-}
-
-// lastWalk is the last walkthrough asked, ID 0 before the first.
-func (c *core) lastWalk() workspaceWalk {
-	s := &c.composer
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.walk
-}
-
-// walkSeenAt is the walkthrough an event stream opened at now has already
-// seen: the last one, unless it was asked just before (a page opened to
-// be walked through).
-func (c *core) walkSeenAt(now time.Time) int64 {
-	w := c.lastWalk()
-	if w.ID > 0 && now.Sub(w.At) < workspaceWalkReplay {
-		return w.ID - 1
-	}
-	return w.ID
-}
-
-type workspaceShowIn struct {
-	Refs []string `json:"refs" jsonschema:"the objects to put in front, the most important first (6 at most): mail:<id>, agenda:YYYY-MM-DD, event:<id>, session:<n>, card:<n>, task:<id>, project:<name>, alert:<n>; none gives the front back to the composer"`
-	Why  string   `json:"why,omitempty" jsonschema:"why they are in front, a few words the user reads under them, in French"`
-}
-
-type workspaceWalkIn struct {
-	Refs []string `json:"refs,omitempty" jsonschema:"the objects to walk the user through, in order (12 at most); none walks through what the workspace shows"`
-}
-
-func registerWorkspaceTools(s *mcp.Server, c *core) {
-	tool(s, "workspace_show", "Put objects in front of the user's composed workspace now: it composes again at once with them as modules, and keeps them in front for an hour at most, or until you call it again (no refs: the composer decides again). For « montre-moi … », « mets … devant ». How the user wants the workspace in general is not this: remember it as a preference with subject workspace, which the composer reads every time.",
-		func(ctx context.Context, in workspaceShowIn) (map[string]any, error) {
-			if err := c.showOnWorkspace(in.Refs, in.Why, time.Now()); err != nil {
-				return nil, err
-			}
-			if len(in.Refs) == 0 {
-				return map[string]any{"result": "the composer decides what is in front again"}, nil
-			}
-			return map[string]any{"result": "shown", "note": "The workspace composes again with them in front, for an hour at most."}, nil
-		})
-	tool(s, "workspace_walkthrough", "Walk the user through objects on their composed workspace, one at a time, as they asked (« présente-moi », « fais-moi le tour »): the open workspace pages start at once. Without refs, it goes through what the workspace shows, the most important first.",
-		func(ctx context.Context, in workspaceWalkIn) (map[string]any, error) {
-			w, err := c.walkWorkspace(in.Refs, time.Now())
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{"result": "started", "refs": w.Refs, "note": "Only a workspace page open now shows it."}, nil
-		})
-}

@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // The attention signal: what an assistant (a skill's run, a session lead)
@@ -41,8 +43,65 @@ const attentionInstruction = "When something deserves the user's attention, add 
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
 	"Leave it out when nothing does. A ref of another form, or a weight outside 1 to 5, is dropped."
 
-// validAttentionRef tells a ref of a known form (parseRef, objects.go),
-// short and on one line.
+// The kinds of refs an attention item may be about: kind:id.
+const (
+	refMail    = "mail"    // mail:<message id>, as the mail server gives it
+	refAgenda  = "agenda"  // agenda:<YYYY-MM-DD>, the user's day
+	refEvent   = "event"   // event:<event id>, as the calendar server gives it
+	refSession = "session" // session:<id>
+	refCard    = "card"    // card:<id>, a card of the conversation
+	refTask    = "task"    // task:<id>
+	refProject = "project" // project:<name>
+	refAlert   = "alert"   // alert:<id>, a notification held for the brief
+	refSurface = "surface" // surface:<id>, a surface of the workspace (surfaces.go)
+)
+
+// itemRef is a ref, parsed.
+type itemRef struct {
+	Kind string
+	ID   string
+}
+
+func (r itemRef) String() string { return r.Kind + ":" + r.ID }
+
+// errBadRef is a ref that does not parse.
+type errBadRef struct{ why string }
+
+func (e errBadRef) Error() string { return "bad ref: " + e.why }
+
+// parseRef reads a ref: a known kind, a colon, an id. An agenda's id is a
+// date, a session's and a card's a number, a surface's its id.
+func parseRef(s string) (itemRef, error) {
+	kind, id, ok := strings.Cut(strings.TrimSpace(s), ":")
+	if !ok || id == "" {
+		return itemRef{}, errBadRef{"a ref is kind:id"}
+	}
+	r := itemRef{Kind: kind, ID: id}
+	switch kind {
+	case refAgenda:
+		if _, err := time.Parse(time.DateOnly, id); err != nil {
+			return r, errBadRef{"an agenda is a date, YYYY-MM-DD"}
+		}
+	case refSession, refCard:
+		if n, err := strconv.ParseInt(id, 10, 64); err != nil || n <= 0 {
+			return r, errBadRef{"a " + kind + " is a number"}
+		}
+	case refSurface:
+		if !surfaceIDRe.MatchString(id) {
+			return r, errBadRef{"a surface is its id"}
+		}
+	case refMail, refEvent, refTask, refProject, refAlert:
+	default:
+		return r, errBadRef{"no kind " + strconv.Quote(kind)}
+	}
+	if len(id) > 1000 {
+		return r, errBadRef{"too long"}
+	}
+	return r, nil
+}
+
+// validAttentionRef tells a ref of a known form (parseRef), short and on
+// one line.
 func validAttentionRef(ref string) bool {
 	_, err := parseRef(ref)
 	return err == nil && ref == strings.TrimSpace(ref) && len(ref) <= signalRefMax && !strings.ContainsAny(ref, "\r\n")

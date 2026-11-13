@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/x509"
-	"encoding/json"
 	"errors"
 	"html"
 	"io"
@@ -593,27 +592,11 @@ func TestWebEventsStream(t *testing.T) {
 	t.Fatalf("no message event: %v", sc.Err())
 }
 
-// The attention queue: a JSON snapshot behind the workspace's session, and
-// the event stream's "attention" when it changes. A card made outside a
-// brain turn comes with its message and in the queue, no user message
-// needed.
+// A card made outside a brain turn comes with its message on the event
+// stream, and in the attention queue, no user message needed.
 func TestWebAttention(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	anon := &testWeb{t: t, srv: tw.srv, hc: &http.Client{Transport: tw.hc.Transport, CheckRedirect: tw.hc.CheckRedirect}}
-	if code, _, _ := anon.do("GET", "/api/attention", nil, nil); code != http.StatusUnauthorized {
-		t.Fatalf("attention without a session: %d", code)
-	}
-	tw.c.attend(attentionItem{Ref: "mail:7", Weight: 2, Why: "a reply from example.org", Source: "skill:mail"})
-	code, body, h := tw.do("GET", "/api/attention", nil, nil)
-	var snap attentionView
-	if code != 200 || !strings.HasPrefix(h.Get("Content-Type"), "application/json") || json.Unmarshal([]byte(body), &snap) != nil {
-		t.Fatalf("attention: %d %q %s", code, h.Get("Content-Type"), body)
-	}
-	if len(snap.Items) != 1 || snap.Items[0].Ref != "mail:7" || snap.Items[0].Weight != 2 || snap.Items[0].Source != "skill:mail" || snap.Items[0].Time.IsZero() {
-		t.Fatalf("snapshot %+v", snap)
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events?after="+strconv.Itoa(tw.c.store.lastMessageSeq()), nil)
@@ -628,7 +611,7 @@ func TestWebAttention(t *testing.T) {
 		tw.c.holdTask(&TaskRow{ID: "t-held", Title: "Fix the menu"}, []startNeed{{Server: "nas", Category: "use"}}, nil, false)
 	}()
 	sc := bufio.NewScanner(resp.Body)
-	event, sawText, sawCard, sawItem := "", false, false, false
+	event, sawText, sawCard := "", false, false
 	for sc.Scan() {
 		line := sc.Text()
 		if v, ok := strings.CutPrefix(line, "event: "); ok {
@@ -642,20 +625,19 @@ func TestWebAttention(t *testing.T) {
 		case "message":
 			sawText = sawText || strings.Contains(data, "Fix the menu")
 			sawCard = sawCard || strings.Contains(data, `id="card-`)
-		case "attention":
-			var v attentionView
-			if json.Unmarshal([]byte(data), &v) != nil {
-				t.Fatalf("attention event %q", data)
-			}
-			sawItem = sawItem || slices.ContainsFunc(v.Items, func(it attentionItem) bool {
-				return strings.HasPrefix(it.Ref, "card:") && it.Weight == weightBlocksATask
-			})
 		}
-		if sawText && sawCard && sawItem {
-			return
+		if sawText && sawCard {
+			break
 		}
 	}
-	t.Fatalf("message %v, card %v, item %v: %v", sawText, sawCard, sawItem, sc.Err())
+	if !sawText || !sawCard {
+		t.Fatalf("message %v, card %v: %v", sawText, sawCard, sc.Err())
+	}
+	if !slices.ContainsFunc(tw.c.attentionOpen(), func(it attentionItem) bool {
+		return strings.HasPrefix(it.Ref, "card:") && it.Weight == weightBlocksATask
+	}) {
+		t.Fatalf("queue %+v", tw.c.attentionOpen())
+	}
 }
 
 func TestMarkdownEscapes(t *testing.T) {

@@ -89,21 +89,18 @@ describe("the surfaces' stream", () => {
     expect(posts).toEqual([]);
   });
 
-  it("shares one stream with follow, opened again to get the snapshot", () => {
-    const changed = vi.fn();
-    const stopFollow = data.follow(changed);
+  it("shares one stream with what follows the proposals, opened again to get the snapshot", () => {
+    const moved = vi.fn();
+    const stopFollow = data.followProposals(moved);
     expect(FakeSource.open().map((s) => s.url)).toEqual(["/events"]);
     const stop = data.stream(boot, adapter);
     const open = FakeSource.open();
     expect(open.map((s) => s.url)).toEqual(["/events?a2ui=1"]);
     open[0].emit("a2ui", { seq: 1, reset: true, messages: [create("one", "Un")] });
     expect(ids()).toEqual(["one"]);
-    // follow's listeners moved to the new stream.
-    vi.useFakeTimers();
-    open[0].emit("composition", {});
-    vi.advanceTimersByTime(500);
-    vi.useRealTimers();
-    expect(changed).toHaveBeenCalledOnce();
+    // The proposals' listener moved to the new stream.
+    open[0].emit("proposals", { refs: ["rule:7"] });
+    expect(moved).toHaveBeenCalledWith({ refs: ["rule:7"], all: false });
     stop();
     expect(FakeSource.open()).toHaveLength(1);
     stopFollow();

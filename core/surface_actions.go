@@ -93,7 +93,7 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		// Code places what the user opened first (workspace_layout.go),
 		// and keeps the gesture for the composer and memory.
 		c.focusSurface(id, now)
-		c.noteGesture(gestureOpened, "surface:"+id, s.Title, now)
+		c.noteGesture(gestureOpened, "surface:"+id, now)
 		go c.surfaceOpened(context.WithoutCancel(ctx), id)
 	case a2ui.ActionBack:
 		if c.workspaceFocus(now) == id {
