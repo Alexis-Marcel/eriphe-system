@@ -16,9 +16,7 @@ import (
 // setLevel changes a catalog server's access level and waits for it.
 func setLevel(t *testing.T, c *core, name, level string) {
 	t.Helper()
-	servers := c.conf().Servers
-	servers[name] = servers[name].withLevel(level)
-	c.pool.sync(servers)
+	c.pool.sync(setServer(c, name, func(s *Server) { *s = s.withLevel(level) }))
 	waitStatus(t, c.pool.get(name), statusReady)
 }
 
@@ -313,9 +311,7 @@ func TestOAuthScopeFollowsLevel(t *testing.T) {
 }
 
 func setLevelNoWait(c *core, name, level string) {
-	servers := c.conf().Servers
-	servers[name] = servers[name].withLevel(level)
-	c.pool.sync(servers)
+	c.pool.sync(setServer(c, name, func(s *Server) { *s = s.withLevel(level) }))
 }
 
 func contains(s []string, v string) bool {
@@ -391,10 +387,10 @@ func TestAccountLevels(t *testing.T) {
 	c := newCatalogCore(t)
 	setBrain(c, &BrainConfig{})
 	read, write := "mcp__github__get_issue", "mcp__github__create_issue"
-	servers := c.conf().Servers
+	servers := setServer(c, "github", func(s *Server) {
+		s.AccountAccess = map[string]string{"pro@example.org": accessReadOnly, "perso@example.org": accessFree}
+	})
 	gh := servers["github"]
-	gh.AccountAccess = map[string]string{"pro@example.org": accessReadOnly, "perso@example.org": accessFree}
-	servers["github"] = gh
 	c.pool.sync(servers)
 	waitStatus(t, c.pool.get("github"), statusReady)
 	if gh.level() != accessReads {
@@ -458,11 +454,9 @@ func TestAccountLevels(t *testing.T) {
 func TestRememberedPerAccount(t *testing.T) {
 	c := newCatalogCore(t)
 	write := "mcp__github__create_issue"
-	servers := c.conf().Servers
-	gh := servers["github"]
-	gh.AccountAccess = map[string]string{"pro@example.org": accessReads, "perso@example.org": accessReads}
-	servers["github"] = gh
-	c.pool.sync(servers)
+	c.pool.sync(setServer(c, "github", func(s *Server) {
+		s.AccountAccess = map[string]string{"pro@example.org": accessReads, "perso@example.org": accessReads}
+	}))
 	waitStatus(t, c.pool.get("github"), statusReady)
 	perso := map[string]any{"account": "perso@example.org", "title": "x"}
 	pro := map[string]any{"account": "pro@example.org", "title": "x"}
