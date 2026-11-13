@@ -24,7 +24,8 @@ import (
 
 // Surfaces (#417): the tiles of the workspace, in A2UI v1.0 (core/a2ui).
 // A surface is written by an author (the brain, a skill, a thread's lead,
-// a task) and kept by code: a title, components from the catalog, data,
+// a task; or code itself: the attention queue's, a thread's,
+// thread_surface.go) and kept by code: a title, components from the catalog, data,
 // sources, a refresh, a lifetime, a weight and a why.
 //
 // A source is a read the author declares, at a JSON pointer of the data
@@ -156,6 +157,15 @@ type surfaceIn struct {
 	// background, and its bindings checked when it comes
 	// (workspace_tools.go: an author's turn is never held long).
 	wait time.Duration
+	// What code writes of a surface it keeps (a thread's,
+	// thread_surface.go): composed by code from parts each checked alone
+	// (its actions are not checked again as an author's); why its own
+	// parts may come from outside; whether its Proposals answer in place
+	// despite them; its one-line summary.
+	composed  bool
+	codeTaint []string
+	answers   bool
+	summary   string
 }
 
 // surface is one stored surface.
@@ -187,6 +197,12 @@ type surfaceLook struct {
 	// action on it, the last error for its author to fix.
 	Action    *surfaceActed     `json:"action,omitempty"`
 	LastError *surfaceLastError `json:"last_error,omitempty"`
+	// What code keeps of a surface it writes (thread_surface.go): why its
+	// own parts may come from outside, whether its Proposals answer in
+	// place all the same, and its one-line summary for a small tile.
+	CodeTaint []string `json:"code_taint,omitempty"`
+	Answers   bool     `json:"answers,omitempty"`
+	Summary   string   `json:"summary,omitempty"`
 }
 
 // sourceState is a source's last read: when, and why it failed or waits.
@@ -292,9 +308,9 @@ func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.Valida
 	return c.writeSurface(author, in)
 }
 
-// writeSurface is surfaceWrite for any author, code's own (surfaceAuthorCore)
-// too: its surfaces do not count in surfacesMax, so a full pool never
-// refuses what the queue needs to show.
+// writeSurface is surfaceWrite for any author, code's own (surfaceAuthorCore,
+// thread:<id>) too: its surfaces do not count in surfacesMax, so a full pool
+// never refuses what the queue or a thread needs to show.
 func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.ValidationError, error) {
 	in.ID = strings.TrimSpace(in.ID)
 	if in.ID == "" {
@@ -347,11 +363,15 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 	if errs := a2ui.ValidateSurface(a2ui.Surface{ID: in.ID, Components: in.Components, DataModel: rawComposed}); len(errs) > 0 {
 		return surface{}, errs, nil
 	}
-	if errs := actionGuard(in.ID, in.Components, len(in.Tainted) > 0); len(errs) > 0 {
+	if errs := actionGuard(in.ID, in.Components, len(in.Tainted) > 0); len(errs) > 0 && !in.composed {
 		return surface{}, errs, nil
 	}
 	if errs := a2ui.CheckLinks(in.ID, in.Components); len(errs) > 0 {
 		return surface{}, errs, nil
+	}
+	// A thread's surface id is its thread's (thread_surface.go).
+	if n, ok := threadOfSurface(in.ID); ok && author != threadAuthor(n) {
+		return surface{}, nil, fmt.Errorf("the surface %s is its thread's, kept by code: write another id", in.ID)
 	}
 	// The author's own surface only (the brain writes any, which stays its
 	// author's); the id of another's is taken.
@@ -369,7 +389,8 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 	if errs := c.checkBindings(in.ID, in.Components, data, in.Sources, reads); len(errs) > 0 {
 		return surface{}, errs, nil
 	}
-	look := surfaceLook{AuthorTaint: slices.Compact(slices.Sorted(slices.Values(in.Tainted))), Read: now.Unix()}
+	look := surfaceLook{AuthorTaint: slices.Compact(slices.Sorted(slices.Values(in.Tainted))), Read: now.Unix(),
+		CodeTaint: slices.Compact(slices.Sorted(slices.Values(in.codeTaint))), Answers: in.answers, Summary: in.summary}
 	noteReads(&look, reads, now)
 	rawData, _ := json.Marshal(data)
 	sources, _ := json.Marshal(orEmpty(in.Sources))
@@ -384,7 +405,7 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 	if in.Refresh.Every > 0 {
 		next = now.Add(time.Duration(in.Refresh.Every) * time.Minute).Unix()
 	}
-	tainted := c.surfaceTaint(look.AuthorTaint, in.Sources)
+	tainted := c.surfaceTaint(look, in.Sources)
 
 	c.surf.mu.Lock()
 	old, err := c.surface(in.ID)
@@ -394,8 +415,8 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 		return surface{}, nil, fmt.Errorf("the surface %s is %s's: write another id", in.ID, old.Author)
 	case errors.Is(err, errNoSurface):
 		var n int
-		c.store.db.QueryRow(`SELECT COUNT(*) FROM surfaces WHERE author != ?`, surfaceAuthorCore).Scan(&n)
-		if n >= surfacesMax && author != surfaceAuthorCore {
+		c.store.db.QueryRow(`SELECT COUNT(*) FROM surfaces WHERE author != ? AND author NOT LIKE 'thread:%'`, surfaceAuthorCore).Scan(&n)
+		if n >= surfacesMax && !keptByCode(author) {
 			c.surf.mu.Unlock()
 			return surface{}, nil, fmt.Errorf("%d surfaces at most: remove one first", surfacesMax)
 		}
@@ -431,9 +452,10 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 
 // mayChange tells whether an author may write or remove a surface of
 // owner's: its own; the brain any but code's (the attention queue's, kept
-// by code while its item is open: workspace_queue.go).
+// by code while its item is open: workspace_queue.go; a thread's, kept
+// while it lives: thread_surface.go).
 func mayChange(author, owner string) bool {
-	return author == owner || (author == surfaceAuthorBrain && owner != surfaceAuthorCore)
+	return author == owner || (author == surfaceAuthorBrain && !keptByCode(owner))
 }
 
 // surfaceRemove removes a surface: by its author, the user (surfaceByUser)
@@ -603,9 +625,10 @@ func noteReads(look *surfaceLook, reads map[string]sourceRead, now time.Time) {
 }
 
 // surfaceTaint is why a surface's content comes from outside: its author's
-// turn, and each source on a server not trusted.
-func (c *core) surfaceTaint(author []string, srcs map[string]surfaceSource) string {
-	out := slices.Clone(author)
+// turn, what code wrote from outside (a thread's step), and each source on
+// a server not trusted.
+func (c *core) surfaceTaint(look surfaceLook, srcs map[string]surfaceSource) string {
+	out := append(slices.Clone(look.AuthorTaint), look.CodeTaint...)
 	for _, s := range srcs {
 		if !c.trustsServer(s.spec().Server) {
 			out = append(out, s.String())
@@ -1187,7 +1210,7 @@ func (c *core) applyReads(id string, readFrom map[string]surfaceSource, reads ma
 	if only == nil && s.Refresh.Every > 0 {
 		next = now.Add(time.Duration(s.Refresh.Every) * time.Minute).Unix()
 	}
-	tainted := c.surfaceTaint(s.Look.AuthorTaint, s.Sources)
+	tainted := c.surfaceTaint(s.Look, s.Sources)
 	updated := s.Updated.Unix()
 	if len(changed) > 0 {
 		updated = now.Unix()
@@ -1275,6 +1298,8 @@ type surfaceMeta struct {
 	Weight  int       `json:"weight"`
 	Why     string    `json:"why,omitempty"`
 	Tainted bool      `json:"tainted,omitempty"`
+	Answers bool      `json:"answers,omitempty"` // tainted, its Proposals answer in place all the same: code placed them (thread_surface.go)
+	Summary string    `json:"summary,omitempty"` // one line, for a small tile or a chip
 	Updated time.Time `json:"updated"`
 }
 
@@ -1282,7 +1307,8 @@ type surfaceMeta struct {
 func (c *core) createMessage(s surface) a2ui.Message {
 	view := c.surfaceView(s)
 	meta, _ := json.Marshal(map[string]any{"extensions": map[string]any{surfaceExtension: surfaceMeta{Title: s.Title,
-		Author: s.Author, Weight: s.Weight, Why: s.Why, Tainted: s.Tainted != "", Updated: s.Updated.UTC()}}})
+		Author: s.Author, Weight: s.Weight, Why: s.Why, Tainted: s.Tainted != "", Answers: s.Look.Answers, Summary: s.Look.Summary,
+		Updated: s.Updated.UTC()}}})
 	data, _ := json.Marshal(view.data)
 	return a2ui.Message{Version: a2ui.Version, CreateSurface: &a2ui.CreateSurface{SurfaceID: s.ID, CatalogID: a2ui.Eriphe().ID(),
 		Components: view.components, DataModel: data, Metadata: meta}}
@@ -1301,7 +1327,8 @@ func (c *core) rewriteMessages(old, s surface) []a2ui.Message {
 		return out
 	}
 	gone := slices.ContainsFunc(ids(oldView.components), func(id string) bool { return !slices.Contains(ids(view.components), id) })
-	if gone || old.Title != s.Title || old.Weight != s.Weight || old.Why != s.Why || (old.Tainted == "") != (s.Tainted == "") {
+	if gone || old.Title != s.Title || old.Weight != s.Weight || old.Why != s.Why || (old.Tainted == "") != (s.Tainted == "") ||
+		old.Look.Answers != s.Look.Answers || old.Look.Summary != s.Look.Summary {
 		return []a2ui.Message{{Version: a2ui.Version, DeleteSurface: &a2ui.DeleteSurface{SurfaceID: s.ID}}, c.createMessage(s)}
 	}
 	data, _ := json.Marshal(view.data)

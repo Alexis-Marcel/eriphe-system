@@ -26,7 +26,12 @@ import (
 //   - answer: yes or no to the one proposal a Proposal component of the
 //     surface shows, decided like its card's Oui or Non; refused on a
 //     tainted surface, unless code wrote it (the attention queue's, whose
-//     Proposal shows the proposal's own taint, as its card does).
+//     Proposal shows the proposal's own taint, as its card does; a
+//     thread's, whose Proposals code bound to its own cards, as long as
+//     the thread itself is not tainted: surfaceLook.Answers).
+//   - stepDone: « C'est fait » on a thread's surface, for a step the user
+//     does: the Button code wrote there, its thread and step as stored
+//     (thread_surface.go, settleUserStep).
 //   - local (open, back, expand, tab): recorded; "open" (a tile or a chip)
 //     places the surface first on the layout, keeps the gesture and reads
 //     its sources again, in the background; "back" gives the layout back.
@@ -58,17 +63,20 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 	if err != nil {
 		return err
 	}
-	var text, ref string
+	var text, ref, step string
 	var yes bool
+	var thread int64
 	var refused *errActionRefused
 	switch a2ui.ActionKind(a.Name) {
 	case a2ui.KindAsk:
 		text, refused = askOf(s, a)
 	case a2ui.KindAnswer:
 		ref, yes, refused = c.answerOf(s, a)
+	case a2ui.KindStep:
+		thread, step, refused = c.stepDoneOf(s, a) // thread_surface.go
 	case a2ui.KindLocal:
 	default:
-		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
+		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), stepDone (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
 	}
 	if refused != nil {
 		refused.Message = "the user's action " + strconv.Quote(truncate(a.Name, 64)) + " on " + truncate(a.SourceComponentID, 64) + " was refused: " + refused.Message
@@ -87,6 +95,8 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		return c.askFromSurface(s, text)
 	case a2ui.KindAnswer:
 		return c.answerFromSurface(ctx, ref, yes)
+	case a2ui.KindStep:
+		return c.settleUserStep(ctx, thread, step)
 	}
 	switch a.Name {
 	case a2ui.ActionOpen:
@@ -132,12 +142,15 @@ func askOf(s surface, a a2ui.Action) (string, *errActionRefused) {
 // answerOf is the proposal an answer decides, and how: the one the
 // clicked Proposal component shows, on a surface that is not tainted.
 func (c *core) answerOf(s surface, a a2ui.Action) (string, bool, *errActionRefused) {
-	if s.Tainted != "" && s.Author != surfaceAuthorCore {
+	if s.Tainted != "" && s.Author != surfaceAuthorCore && !s.Look.Answers {
 		return "", false, &errActionRefused{Message: "the surface shows external content: it can only ask, a proposal is answered in the conversation"}
 	}
 	comp, at, ok := componentOf(s, a.SourceComponentID)
 	if !ok || comp["component"] != "Proposal" {
 		return "", false, &errActionRefused{Path: at, Message: "an answer comes from a Proposal component of the surface"}
+	}
+	if s.Look.Answers && len(s.Look.AuthorTaint) > 0 && !strings.HasPrefix(a.SourceComponentID, threadCompPrefix) {
+		return "", false, &errActionRefused{Path: at, Message: "a part written after reading external content can only ask: its proposal is answered in the conversation"}
 	}
 	var ref, answer string
 	json.Unmarshal(a.Context["proposal"], &ref)

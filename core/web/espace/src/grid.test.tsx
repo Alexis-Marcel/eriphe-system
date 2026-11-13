@@ -66,6 +66,31 @@ describe("the grid of surfaces", () => {
     expect(document.querySelectorAll("style")).toHaveLength(styles);
   });
 
+  it("shows a surface's one-line summary on a small tile and a chip, its content when larger", async () => {
+    const line = (id: string, summary: string): Message => ({
+      version: "1.0",
+      createSurface: {
+        surfaceId: id,
+        catalogId: CATALOG.id,
+        components: [{ id: "root", component: "Text", text: "La frise entière" }],
+        metadata: { extensions: { eriphe: { title: "PR 12", summary } } },
+      },
+    });
+    await act(async () =>
+      adapter.applyMessages([line("ghost", "Fusion ✓ · Déploiement à toi"), { version: "1.0", deleteSurface: { surfaceId: "news" } }, line("news", "Recherche …")]),
+    );
+    await render(layout);
+    expect(tile("ghost")?.querySelector(".tile-line")?.textContent).toBe("Fusion ✓ · Déploiement à toi");
+    expect(tile("ghost")?.querySelector(".a2-text")).toBeNull();
+    expect(el.querySelector('.chip[data-surface="news"] .chip-from')?.textContent).toBe("Recherche …");
+    // Larger, or open: the surface itself.
+    await render({ ...layout, items: layout.items.map((i) => (i.id === "ghost" ? { ...i, size: "m" as const, h: 2 } : i)) });
+    expect(tile("ghost")?.querySelector(".tile-line")).toBeNull();
+    expect(tile("ghost")?.querySelector(".a2-text")?.textContent).toBe("La frise entière");
+    await render({ ...layout, focus: "ghost" });
+    expect(tile("ghost")?.querySelector(".tile-line")).toBeNull();
+  });
+
   it("folds what the layout folds, and what it does not name yet, into chips", async () => {
     await render(layout);
     const chips = [...el.querySelectorAll<HTMLElement>(".chips .chip")].map((c) => c.dataset.surface);

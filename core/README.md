@@ -1014,12 +1014,11 @@ at the next move, as `watchProposals` does.
 and goes when the thread ends. Its trigger `thread:<id>` wakes it with what happened to its steps
 (`thread_inbox`), one turn at a time; its own tools are `thread`, `settle_step`,
 `amend_thread`, `close_thread`, `report` and the [workspace's tools](#the-assistants-workspace-tools-workspace_toolsgo).
-It keeps **its thread's surface** (`lead-prompt.md`): one surface, as `lead:<id>`, with the plan,
-the steps as a `Timeline`, a pending choice with its pros and cons, its proposals, rewritten by its
-id when a step changes. What it writes without a lifetime follows its thread (`while:
-thread:<id>`); each wake reminds it while it has none (`leadSurfaceNudge`), a `surface.stale`
-about it reaches it in its inbox, and the thread's end removes it at once
-(`dropThreadSurfaces`, with every surface kept `while` the thread). It never talks to the user nor starts a task. The
+It does not write **its thread's surface**: code does ([below](#a-threads-surface-thread_surfacego));
+it may add its part to it (`lead-prompt.md`: a state block, points to see, a diff, a link). What
+else it writes without a lifetime follows its thread (`while: thread:<id>`), and the thread's end
+removes it at once (`dropThreadSurfaces`, with every surface kept `while` the thread, the thread's
+own aside). It never talks to the user nor starts a task. The
 brain no longer judges a thread that has a lead: it passes the user's words with `tell_lead`, and
 hears the lead's reports, the choices to ask, the budget's card and the end. A report may carry an
 [attention signal](#attention-signals-attention_signalgo) (`attention`, the same block as a skill's
@@ -1044,6 +1043,55 @@ wears a mark for how far its evidence goes: a ring for what the agent claims, a 
 the checks verified, filled once the lead accepted, a red cross for a failed check or a rejection.
 Under the live part, a line to the lead (`POST /threads/{id}/lead`) is queued on its inbox as the
 user's words. The tasks panel of the conversation shows the threads open first.
+
+#### A thread's surface (`thread_surface.go`)
+
+Every thread, light or led, has its live surface on the workspace, `thread-<id>`, written and kept
+by code from the thread's data (#468): it never depends on a model remembering to write it.
+
+- **Its author is `thread:<id>`**, code's for that thread (not `core`, the attention queue's):
+  nobody else writes or removes it as a whole (`mayChange`), no other author may take its id, and
+  it does not count in the 100 surfaces at most.
+- **Code's section**: the goal; the state and who holds it (« Ouvert · tenu par Eriphe », « En
+  cours · mené par son chef »); what waits for the user, « À toi »: the thread's own cards (its
+  plan, a change of it, more time) and each step's (an approval's card, a task step's held start)
+  as `Proposal` components bound to their refs, a choice to make, and for a step the user does
+  (kind `user`) a « C'est fait » button; the steps as a `Timeline` (each with its state, its time, its kind, its checks and
+  the last word on it); the summary. Its component ids start with `thread_`, its data is under
+  `/thread`.
+- **Rewritten at each change** of the thread: the store's `setThread`, `setStep`, `insertSteps`,
+  a card asked, decided or withdrawn call `keepThreadSurface`, which writes only when what the
+  surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active
+  thread that has none its surface (a surface another author wrote at its id goes). Steps are
+  shown through a generic list (`threadSurfaceStep`: key, label, kind, state, time, card ref,
+  checks, note, external, waits, yours: a card shown while it waits; a call's card stays after
+  with how its run went; a card gone is not shown), so
+  a new kind of step plugs in by its mapping (`threadSurfaceSteps`).
+- **The holder's part**: who holds the thread (the brain, or its lead) may add one with
+  `surface_write` on `thread-<id>`: a state block, points to see, a diff (`Code`), a `Link`. It is
+  kept apart (`thread_part:<id>`), checked alone (A2UI, actions, links, bindings; no `thread_` id,
+  no `/thread` data, no sources: a change of the thread rewrites the surface at once, never
+  waiting for a tool), and shown under code's section, its root renamed `thread_part`, with who
+  added it. Writing it again replaces it, `surface_remove` takes it away; the surface stays. A
+  `surface.stale` about the surface wakes the lead that wrote the part; code keeps the rest.
+- **Taint, per part**: a step whose task read external content shows « extérieur » in its detail,
+  a part written after reading some says so beside who added it (and may not hold a `Proposal`,
+  its media dropped as for any tainted author). For the models that read the workspace the surface
+  is tainted as soon as one part is (`look.code_taint`, `look.author_taint`). Its Proposals still
+  answer in place (`look.answers`, the page's `extensions.eriphe.answers`), as the attention
+  queue's do: code bound each to one of the thread's own cards, unless the thread itself is
+  tainted, which the surface then says, and its cards are answered in the conversation.
+- **Small**: a one-line summary (`look.summary`, the page's `extensions.eriphe.summary`): the last
+  step done, then what waits (« Fusion ✓ · Déploiement à toi »), the state when nothing moves,
+  « Fait ✓ » once done. A small tile (`s`) shows that line rather than a slice of the surface, a
+  chip shows it beside its title.
+- **Lifetime**: `while: thread:<id>`; once done or dropped, rewritten with `until` the end of its
+  day in the user's zone (an hour at least), then it leaves and never comes back unless the thread
+  is reopened. Weight 50, 70 while something waits for the user, 30 once ended.
+- **« C'est fait »** sends `stepDone` with `{"thread": <id>, "step": "<key>"}`
+  ([the actions of a surface](#the-actions-of-a-surface)); code checks it against the button it
+  wrote, then `settleUserStep` settles the step through `userStepDone` (`thread_steps.go`), as
+  the thread's page does; 409 for a step that no longer waits.
 
 ## Permission policy
 
@@ -3394,7 +3442,8 @@ and update the commit in the two `NOTICE` files.
 ### Surfaces and their sources (`surfaces.go`)
 
 A surface is one tile of the workspace, stored with its **author** (`brain`, `skill:<name>`,
-`lead:<thread>`, `task:<id>`, or `core` for [the attention queue's](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo);
+`lead:<thread>`, `task:<id>`, `core` for [the attention queue's](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo),
+or `thread:<id>` for [a thread's](#a-threads-surface-thread_surfacego);
 a task the brain [delegated a surface to](#the-assistants-workspace-tools-workspace_toolsgo) fills
 the brain's): a title, A2UI components, data, **sources**, a refresh, a
 **lifetime**, a weight (1 to 100, 50 by default) and a why. A model writes it; code keeps its
@@ -3513,7 +3562,7 @@ the page, with the session's cookie and CSRF token (401 without a session):
 
 | Endpoint | Takes | Answers |
 |---|---|---|
-| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`), of [the grammar](#the-actions-of-a-surface) | 204; 400 not a valid action, or one refused (told to the surface's author); 404 no such surface, or an answer to a proposal no card carries; 409 a proposal that no longer waits |
+| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`), of [the grammar](#the-actions-of-a-surface) | 204; 400 not a valid action, or one refused (told to the surface's author); 404 no such surface, or an answer to a proposal no card carries; 409 a proposal, or a user step, that no longer waits |
 | `POST /api/espace/error` | an A2UI v1.0 `error` naming its surface | 204, kept for the author (`surfaceError`); 400, 404 |
 
 #### The actions of a surface
@@ -3527,7 +3576,8 @@ writes.
 | Kind | Written as | Done |
 |---|---|---|
 | `ask` | a Button's `{"event": {"name": "ask", "context": {"text": "…"}}}`: literal words, nothing else, never bound data; none at all from an author whose turn read external content | the text written on the clicked Button becomes a message of the user's to the brain, as if typed (`Via` `workspace:ask`, shown as « bouton de l'espace » / "workspace button"; `about` = `surface:<id>`, which the brain reads as `[Sam 10:02 #12 · bouton de l'espace · à propos de surface:…]`); a plain "oui" so sent decides no card. The brain is woken, never waited for. On a tainted surface the message taints the brain's turn (`surface:<id>`) and its line adds « surface au contenu extérieur »: what it shows is data |
-| `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
+| `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does; a thread's, unless the thread itself is tainted or the Proposal is in a part written after reading external content), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
+| `stepDone` | never by an author: code places it on a thread's surface, the « C'est fait » of a step the user does, `{"thread": <id>, "step": "<key>"}` | checked against the Button code wrote there (its thread and step), for a step of kind `user` that waits; then `settleUserStep`, the engine's `userStepDone` (409 once it no longer waits) |
 | local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer |
 
 Anything else (another name, a function call, a component that carries no such action, an answer
@@ -3662,8 +3712,9 @@ Sonnet). It fails only when the CLI does.
 
 **Who keeps which surface** (`surface_authors.go`, #423). Nothing is recurring by default.
 
-- **A thread's lead** keeps its thread's surface while the thread lives (see
-  [the thread's lead](#threads-threadsgo-thread_enginego)).
+- **A thread's surface is code's** ([a thread's surface](#a-threads-surface-thread_surfacego)):
+  who holds the thread (the brain, or its lead) adds its part to it, and a `surface.stale` about
+  it wakes the lead that wrote that part.
 - **A skill** writes its surface on its trigger: `tools: [eriphe-workspace]` in its front matter
   lends it the workspace, its runs write as `skill:<name>` (the same surface each run, by its id,
   `lifetime: kept` while the skill exists), and its run's prompt says so (`skillCanText`). It reacts

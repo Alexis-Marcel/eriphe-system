@@ -57,7 +57,7 @@ func readEvent(rw http.ResponseWriter, r *http.Request) (a2ui.Event, bool) {
 // anything but a valid action, and for one the grammar or the surface
 // refuses (reported to its author); 404 for a surface there is not, or an
 // answer to a proposal no card carries; 409 for a proposal that no longer
-// waits.
+// waits, and for a thread's step that no longer waits for the user.
 func (w *web) handleSurfaceAction(rw http.ResponseWriter, r *http.Request, _ *session) {
 	ev, ok := readEvent(rw, r)
 	if !ok {
@@ -73,7 +73,7 @@ func (w *web) handleSurfaceAction(rw http.ResponseWriter, r *http.Request, _ *se
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
 	case errors.Is(err, errNoSurface), errors.Is(err, errNoCard):
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": err.Error()})
-	case errors.Is(err, errCardDecided):
+	case errors.Is(err, errCardDecided), errors.Is(err, errStepSettled):
 		writeJSON(rw, http.StatusConflict, map[string]string{"error": err.Error()})
 	case err != nil:
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})

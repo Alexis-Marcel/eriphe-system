@@ -251,6 +251,8 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .size-s .mod-fit > .a2-proposal .a2-proposal-text { font-size: 15px; }
 .why { margin: 6px 0 0; font-size: 12px; color: color-mix(in oklab, currentColor 55%, transparent); }
 .size-s .why { display: none; }
+/* A small tile's one-line summary (a thread's): one line, an ellipsis when too long. */
+.tile-line { margin: 0; font-size: 13px; line-height: 1.35; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .btn { padding: 6px 14px; border-radius: 999px; border: 1px solid #1a1f2733; background: transparent; color: inherit; cursor: pointer; font-size: 14px; transition: background 0.15s, border-color 0.15s, transform 0.1s; }
 .btn:active { transform: scale(0.97); }

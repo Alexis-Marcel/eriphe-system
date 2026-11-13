@@ -216,6 +216,9 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 	if n, _ := res.RowsAffected(); n != 1 || !c.heldTask(s.TaskID) {
 		return errCardDecided
 	}
+	if st, ok := c.stepOfTask(s.TaskID); ok {
+		defer c.keepThreadSurface(st.Thread) // its card leaves the thread's surface (thread_surface.go)
+	}
 	if !approve {
 		c.store.updateTask(s.TaskID, map[string]any{"desired": desiredStopped, "state": stateStopped, "pending_reason": "its start was declined"})
 		log.Printf("task %s: start declined by the user", s.TaskID)
