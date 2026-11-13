@@ -290,10 +290,6 @@ func (c *core) folderFilesOn(ctx context.Context, node string, f *Folder, req fo
 }
 
 // Its tools' inputs.
-type folderIn struct {
-	Folder string `json:"folder" jsonschema:"the folder's name, as list_folders gives it"`
-}
-
 type folderPathIn struct {
 	Folder string `json:"folder" jsonschema:"the folder's name, as list_folders gives it"`
 	Path   string `json:"path,omitempty" jsonschema:"a path inside the folder, with /; empty for the folder itself"`

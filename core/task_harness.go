@@ -125,14 +125,3 @@ func (c *core) settleTurn(t *TaskRow) turnOutcome {
 	c.bump()
 	return turnOutcome{receipt: cr, hold: true}
 }
-
-// turnFailed tells whether the last turn ended on an error.
-func turnFailed(events []EventRow) bool {
-	for i := len(events) - 1; i >= 0; i-- {
-		if events[i].Type == "turn_end" {
-			_, bad := turnFailure(events[i])
-			return bad
-		}
-	}
-	return false
-}

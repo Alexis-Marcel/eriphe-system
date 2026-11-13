@@ -200,11 +200,6 @@ func (r *notifyRule) check() error {
 	return nil
 }
 
-// same tells the rule another replaces: the same topic, or the same nights.
-func (r notifyRule) same(o notifyRule) bool {
-	return r.Kind == o.Kind && r.Match == o.Match && r.Days == o.Days
-}
-
 func (c *core) notifyRules(states ...string) ([]notifyRule, error) {
 	q := `SELECT id, spec, state, why, source_ref, tainted, by, created FROM rules WHERE source = ?`
 	args := []any{sourceNotification}
