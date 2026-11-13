@@ -223,6 +223,30 @@ func TestOpenWorldIsNoSource(t *testing.T) {
 	}
 }
 
+// A server the user trusts keeps its reads of the open web free: allowed
+// in advance, on a tainted turn, and as a monitor's or surface's source.
+func TestTrustedOpenWorldReadIsFree(t *testing.T) {
+	c := newMailCore(t, accessFree)
+	fetch := "mcp__mail__fetch_page"
+	if err := c.setServerTrust("mail", true, trustByUser); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(c.brainFreeReads(), fetch) || !c.freeAhead(fetch, nil) {
+		t.Error("a trusted server's open-web read is not free")
+	}
+	c.turn.taint("web.fetch")
+	if got, why := c.decideBrainCall(fetch, nil, nil); got != decideAllow {
+		t.Errorf("tainted: %q (%s)", got, why)
+	}
+	m, _, _ := pollCore(t)
+	if err := m.setServerTrust("monitor", true, trustByUser); err != nil {
+		t.Fatal(err)
+	}
+	if why := m.sourceWhy(monitorSpec{Server: "monitor", Tool: "page"}); why != "" {
+		t.Errorf("a trusted source: %s", why)
+	}
+}
+
 // A task: the rule is read at launch, and holds whatever it reads since.
 func TestTaskFreeWriteFollowsItsStart(t *testing.T) {
 	c := newMailCore(t, accessFree)

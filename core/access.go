@@ -134,8 +134,9 @@ type catalogFacts struct {
 	// granted: the user approved this category for the task (access_card.go).
 	granted bool
 	// openWorld: a read that reaches the open web, by its annotations
-	// (openWorldHint not false): on an unclean turn it is the user's, as
-	// WebFetch is, and it is never allowed in advance.
+	// (openWorldHint not false), of a server the user does not trust: on
+	// an unclean turn it is the user's, as WebFetch is, and it is never
+	// allowed in advance.
 	openWorld bool
 }
 
@@ -155,7 +156,8 @@ func (p *pool) facts(claudeName string, input map[string]any) catalogFacts {
 	}
 	t := u.toolByClaudeName(tool)
 	f := u.srv.toolFacts(t, input)
-	f.openWorld = f.read && openWorld(t)
+	// A server the user trusts reads freely, the web too (tool_trust.go).
+	f.openWorld = f.read && openWorld(t) && (p.trusted == nil || !p.trusted(server))
 	return f
 }
 

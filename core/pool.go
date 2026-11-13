@@ -53,6 +53,9 @@ type pool struct {
 	// resourceUpdated is told when a server says one of the resources
 	// followed changed (pool_follow.go); it must return fast.
 	resourceUpdated func(server, uri string)
+	// trusted tells a server the user trusts (tool_trust.go): its reads of
+	// the open web are free like its others (access.go).
+	trusted func(server string) bool
 
 	mu      sync.Mutex
 	ctx     context.Context // set by run; servers added later start in it
