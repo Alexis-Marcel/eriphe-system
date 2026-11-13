@@ -184,6 +184,12 @@ func toolCategory(t *mcp.Tool) string {
 	return catChange
 }
 
+// openWorld tells whether a tool says it may reach the open web: MCP's
+// default, unless its openWorldHint is false.
+func openWorld(t *mcp.Tool) bool {
+	return t == nil || t.Annotations == nil || t.Annotations.OpenWorldHint == nil || *t.Annotations.OpenWorldHint
+}
+
 // serverAccess is what holds for a server, or for one of its accounts.
 type serverAccess struct {
 	grid       accessGrid

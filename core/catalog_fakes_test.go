@@ -31,7 +31,7 @@ type fakeMonitor struct {
 
 func (m *fakeMonitor) server() *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "monitor", Version: "1"}, nil)
-	mcp.AddTool(s, &mcp.Tool{Name: "status", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+	mcp.AddTool(s, &mcp.Tool{Name: "status", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}},
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 			Service string `json:"service"`
 		}) (*mcp.CallToolResult, map[string]any, error) {
@@ -43,7 +43,7 @@ func (m *fakeMonitor) server() *mcp.Server {
 			}
 			return nil, map[string]any{"service": in.Service, "data": map[string]any{"state": m.state, "version": m.version, "cpu": m.cpu}}, nil
 		})
-	mcp.AddTool(s, &mcp.Tool{Name: "alerts", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+	mcp.AddTool(s, &mcp.Tool{Name: "alerts", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}},
 		func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
 			m.mu.Lock()
 			defer m.mu.Unlock()
@@ -74,6 +74,11 @@ func (m *fakeMonitor) server() *mcp.Server {
 			Version string `json:"version"`
 		}) (*mcp.CallToolResult, map[string]any, error) {
 			return nil, map[string]any{"ok": true}, nil
+		})
+	// page reads the open web: no openWorldHint.
+	mcp.AddTool(s, &mcp.Tool{Name: "page", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+		func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"text": "a page"}, nil
 		})
 	return s
 }

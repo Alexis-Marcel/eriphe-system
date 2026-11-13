@@ -56,7 +56,7 @@ func (c *core) readOffers(only string) []readOffer {
 		if t == nil {
 			continue
 		}
-		o := readOffer{Tool: r.server + "/" + r.tool, Description: truncate(oneLine(t.Description), sourceDescMax), Free: c.freeRead(name)}
+		o := readOffer{Tool: r.server + "/" + r.tool, Description: truncate(oneLine(t.Description), sourceDescMax), Free: c.freeAhead(name, nil)}
 		o.Shape = shownSchema(t.OutputSchema) != nil
 		if only != "" {
 			o.Args, o.Output, o.Shape = shownSchema(t.InputSchema), shownSchema(t.OutputSchema), false
