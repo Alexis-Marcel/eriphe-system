@@ -2797,7 +2797,7 @@ runs on its own goroutine (`runComposer`), the brain reads the queue itself.
   6 hours;
 - `surface.stale`, key and payload `id`, payload `author` and `title`: a surface whose data is too
   old for the moment, or in error; told once per version of the surface. `when: surface.stale
-  id=week` or `author=skill:arrival`.
+  id=week` or `author=skill:arrivee`.
 
 Both are external when the pool or the queue held content from outside.
 
@@ -2847,7 +2847,7 @@ compare its numbers before switching the composer's model.
 
 The workspace keeps no rule and has no fixed control but a card's Oui / Non (the user's answer
 under the access policy). How the user wants it is memory; what the brain can do with it are
-tools.
+tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspace.md).
 
 - **Preferences are memory.** « Les échecs de sauvegarde toujours devant », « plus de lettres de
   news.example.org », « montre-m'en moins » are [memories](#memory) of kind `preference` with
@@ -3094,7 +3094,9 @@ and update the commit in the two `NOTICE` files.
 ### Surfaces and their sources (`surfaces.go`)
 
 A surface is one tile of the workspace, stored with its **author** (`brain`, `skill:<name>`,
-`lead:<session>`, `task:<id>`): a title, A2UI components, data, **sources**, a refresh, a
+`lead:<session>`, `task:<id>`, or `core` for [the attention queue's](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo);
+a task the brain [delegated a surface to](#the-assistants-workspace-tools-workspace_toolsgo) fills
+the brain's): a title, A2UI components, data, **sources**, a refresh, a
 **lifetime**, a weight (1 to 100, 50 by default) and a why. A model writes it; code keeps its
 data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
 author declares, so a tool linked tomorrow is a source with no code (`TestNoToolInSurfaces` holds
