@@ -123,7 +123,7 @@ func (c *core) skillProposal(p proposal) proposal {
 	if err == sql.ErrNoRows || err != nil {
 		return p
 	}
-	if pending == "" || source != skillFromEriphe {
+	if pending == "" || (source != skillFromEriphe && source != skillFromDefault) { // written by the brain, or brought by Eriphe (default_skills.go)
 		if approved != "" {
 			p.Outcome = cardApproved
 		}

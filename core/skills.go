@@ -132,6 +132,17 @@ func cleanSkillFiles(in []skillFile) ([]skillFile, error) {
 	return out, nil
 }
 
+// skillHash is a skill's parts checked, and the hash addSkillVersion
+// would name its version.
+func skillHash(parts []skillFile) ([]skillFile, string, error) {
+	files, err := cleanSkillFiles(parts)
+	if err != nil {
+		return nil, "", err
+	}
+	_, sha, err := packSkill(files)
+	return files, sha, err
+}
+
 // packSkill makes a skill's bundle and its hash: the same files always
 // give the same bytes.
 func packSkill(files []skillFile) ([]byte, string, error) {

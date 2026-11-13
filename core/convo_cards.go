@@ -334,7 +334,7 @@ func (c *core) pendingProposals() []proposal {
 	for _, id := range c.proposedSessionAsks() {
 		add(cardSession, id)
 	}
-	if rows, err := c.store.db.Query(`SELECT rowid FROM skills WHERE pending != '' AND source = ?`, skillFromEriphe); err == nil {
+	if rows, err := c.store.db.Query(`SELECT rowid FROM skills WHERE pending != '' AND source IN (?, ?)`, skillFromEriphe, skillFromDefault); err == nil {
 		var ids []int64
 		for rows.Next() {
 			var id int64
