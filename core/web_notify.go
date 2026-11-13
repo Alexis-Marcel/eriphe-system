@@ -11,7 +11,7 @@ import (
 // the user and why, with 👍 / 👎 / « pas maintenant »; what waits for the
 // brief; the rules, the proposed ones to approve; the zone and the cap.
 
-func (w *web) notifyRoutes(mux *http.ServeMux) {
+func (w *web) notifyRoutes(mux *webMux) {
 	mux.Handle("POST /notify/{id}/feedback", w.auth(w.handleNotifyFeedback))
 	mux.Handle("POST /notify/rules", w.auth(w.handleRuleSave))
 	mux.Handle("POST /notify/rules/{id}/{action}", w.auth(w.handleRuleAction))

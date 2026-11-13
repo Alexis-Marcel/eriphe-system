@@ -69,11 +69,29 @@ type web struct {
 
 	mu   sync.Mutex
 	wake chan struct{} // closed and replaced when something happens here
+
+	patterns []string // what routes registered, for the CSRF test (web_csrf_test.go)
+}
+
+// webMux is the workspace's mux; it keeps the patterns registered, so a
+// test can walk every route.
+type webMux struct {
+	*http.ServeMux
+	patterns []string
+}
+
+func (m *webMux) Handle(pattern string, h http.Handler) {
+	m.patterns = append(m.patterns, pattern)
+	m.ServeMux.Handle(pattern, h)
+}
+
+func (m *webMux) HandleFunc(pattern string, h func(http.ResponseWriter, *http.Request)) {
+	m.Handle(pattern, http.HandlerFunc(h))
 }
 
 // providerRoutes are the pages a connection's provider brings, registered
 // from its own file (web_github.go).
-var providerRoutes []func(*web, *http.ServeMux)
+var providerRoutes []func(*web, *webMux)
 
 func newWeb(c *core, cfg WebConfig) (*web, error) {
 	if cfg.Listen == "" {
@@ -155,7 +173,7 @@ func (w *web) waker() <-chan struct{} {
 }
 
 func (w *web) routes() http.Handler {
-	mux := http.NewServeMux()
+	mux := &webMux{ServeMux: http.NewServeMux()}
 	static, _ := fs.Sub(webFS, "web/static")
 	files := http.FileServerFS(static)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(files, 24*time.Hour)))
@@ -264,6 +282,7 @@ func (w *web) routes() http.Handler {
 	for _, routes := range providerRoutes {
 		routes(w, mux)
 	}
+	w.patterns = mux.patterns
 	return w.headers(mux)
 }
 

@@ -11,7 +11,7 @@ import (
 // Settings → Devices → a device: "Eriphe may wake this device", "Wake now"
 // and whether it came back (wake.go).
 
-func (w *web) wakeRoutes(mux *http.ServeMux) {
+func (w *web) wakeRoutes(mux *webMux) {
 	mux.Handle("POST /settings/devices/{name}/wake/allow", w.auth(w.handleWakeAllow))
 	mux.Handle("POST /settings/devices/{name}/wake", w.auth(w.handleWakeNow))
 	mux.Handle("GET /settings/devices/{name}/wake", w.auth(w.handleWakeState))

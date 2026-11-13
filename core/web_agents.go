@@ -21,7 +21,7 @@ import (
 // a card, follows its steps to get the credential, tests it, and gets the
 // usual agents created with it.
 
-func (w *web) agentRoutes(mux *http.ServeMux) {
+func (w *web) agentRoutes(mux *webMux) {
 	mux.Handle("GET /settings/agents", w.auth(w.handleAgents))
 	mux.Handle("GET /settings/agents/new", w.auth(w.handleNewAgent))
 	mux.Handle("POST /settings/agents", w.auth(w.handleSaveAgent))
@@ -1087,7 +1087,7 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 // The ChatGPT sign-in (chatgpt.go): POST starts one and shows its code, GET
 // shows where it is, every few seconds until it is done.
 
-func (w *web) loginRoutes(mux *http.ServeMux) {
+func (w *web) loginRoutes(mux *webMux) {
 	mux.Handle("POST /settings/chatgpt-login", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {
 		w.render(rw, r, s, "settings", "login-fragment", page{Data: chatgptLogins.start(s.ID)})
 	}))

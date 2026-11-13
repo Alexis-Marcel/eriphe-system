@@ -17,7 +17,7 @@ import (
 // correct, pin to the profile, mark obsolete, forget, and the proposals
 // waiting for my approval. What I write here is mine (trust owner).
 
-func (w *web) memoryRoutes(mux *http.ServeMux) {
+func (w *web) memoryRoutes(mux *webMux) {
 	mux.Handle("GET /memory", w.auth(w.handleMemory))
 	// The memory is the settings' first entry; its address stays /memory.
 	mux.Handle("GET /settings/memory", w.auth(func(rw http.ResponseWriter, r *http.Request, s *session) {

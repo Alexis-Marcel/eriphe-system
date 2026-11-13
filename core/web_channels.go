@@ -11,7 +11,7 @@ import (
 // Notifications, the default channels of notify and how much each channel
 // that carries text is told (channel_relay.go).
 
-func (w *web) channelRoutes(mux *http.ServeMux) {
+func (w *web) channelRoutes(mux *webMux) {
 	for _, k := range channelKinds {
 		if k.routes != nil {
 			k.routes(w, mux)

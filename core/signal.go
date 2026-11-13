@@ -359,7 +359,7 @@ var sgTemplate = template.Must(template.New("signal-setup").Funcs(templateFuncs(
 </form>
 {{end}}`))
 
-func sgRoutes(w *web, mux *http.ServeMux, h func(botHandler) http.Handler) {
+func sgRoutes(w *web, mux *webMux, h func(botHandler) http.Handler) {
 	base := "POST /channels/" + sgChannel + "/"
 	mux.Handle(base+"add", h(w.handleSignalAdd))
 	mux.Handle(base+"register", http.MaxBytesHandler(h(w.handleSignalRegister), 8<<10))

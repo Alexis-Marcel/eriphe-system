@@ -18,7 +18,7 @@ import (
 
 const happenedPageMax = 200
 
-func (w *web) activityRoutes(mux *http.ServeMux) {
+func (w *web) activityRoutes(mux *webMux) {
 	mux.Handle("GET /settings/journal", w.auth(w.handleActivity))
 	mux.Handle("GET /settings/approve", w.auth(w.handleApprovals))
 	mux.Handle("POST /settings/proposals/{id}/{action}", w.auth(w.handleSettingProposal))
