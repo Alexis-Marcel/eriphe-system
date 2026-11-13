@@ -2847,7 +2847,7 @@ compare its numbers before switching the composer's model.
 
 The workspace keeps no rule and has no fixed control but a card's Oui / Non (the user's answer
 under the access policy). How the user wants it is memory; what the brain can do with it are
-tools.
+tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspace.md).
 
 - **Preferences are memory.** « Les échecs de sauvegarde toujours devant », « plus de lettres de
   news.example.org », « montre-m'en moins » are [memories](#memory) of kind `preference` with
@@ -2922,10 +2922,7 @@ when an older database opens (`refCompositionGone`).
 ### The composed workspace (`/espace`)
 
 A page next to the conversation, which stays, where what Eriphe composes is laid out
-(`web_espace.go`, the app in `web/espace`). It never scrolls: a fixed grid of 12 × 8 cells. On a
-narrow screen (900 px or less) the tiles follow each other in one column, in the layout's order,
-and that column scrolls inside the page. How the user shapes it by talking is in the user guide,
-[docs/workspace.md](../docs/workspace.md).
+(`web_espace.go`, the app in `web/espace`). It never scrolls: a fixed grid of 12 × 8 cells.
 
 **The surfaces, where core says** (`web/espace/src/Grid.tsx`). The page draws each surface where
 the event stream's `layout` puts it ([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)):

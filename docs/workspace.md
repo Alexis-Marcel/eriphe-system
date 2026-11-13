@@ -10,6 +10,8 @@ advance and works with the ones you linked.
 
 ## What you see
 
+Open it with the **Composed workspace** button at the top of the conversation.
+
 A grid of **tiles**, Eriphe calls them surfaces, each showing one thing: today's appointments,
 mails to answer, a project's next step, an error rate as a chart. Above the grid, a strip of
 **chips**: what is there but folded, out of the way. Next to them, a narrow column with one line
@@ -73,8 +75,9 @@ A tile you ask for once lasts about a day, then goes. Titles say what you see ("
 "To answer"), never the name of the tool behind it.
 
 A live tile only reads what you let Eriphe read freely: a tool whose reading needs your approval
-each time, or that you blocked, cannot feed a live tile. The tile then waits and says why; change
-the tool's access in Settings if you want it, or ask for a summary instead.
+each time, or that you blocked, cannot feed a live tile. Eriphe tells you, and Settings → Surfaces
+shows what each tile reads and its last error; change the tool's access if you want it, or ask for
+a summary instead.
 
 ## Make it come back
 
@@ -135,8 +138,8 @@ fresh, with your preferences.
 ## Focus on one thing
 
 Click a tile or a chip to **open** it. The workspace recomposes around it: the tile large, what
-relates to it around (the same source, the same project or session, the same day), the rest
-folded. Opening a tile also reads its data again. Eriphe may add one line above about what matters
+relates to it around, the rest folded. What relates is found from what the tiles show, never from a tool's name: the same source,
+the same work session or skill, the same day. Opening a tile also reads its data again. Eriphe may add one line above about what matters
 there, or say nothing.
 
 **Back to the overview** (or Escape) restores the workspace as it was. The focus also ends by
@@ -151,10 +154,13 @@ itself after 15 minutes.
   reply to send, a new skill), it shows as a card with **Yes** and **No**, in the conversation and,
   where it fits, in the tile it concerns. A proposed appointment shows on the day's tile as a
   ghost marked **Proposed**, with what it overlaps. Answering in one place answers everywhere.
-- **Content from outside is marked and cannot act.** A tile that shows content from outside (a
-  mail, a web page, a message from someone else) is treated as data: it carries no Yes / No and
-  no button written after that content was read. A proposal shown there says "answer it in the
-  conversation". A mail that says "click here to approve" cannot make anything happen.
+- **Content from outside cannot act.** A tile that shows content from outside (a mail, a web
+  page, a message from someone else) is treated as data: it carries no button written after that
+  content was read, and a proposal shown there has no Yes / No but says "answer it in the
+  conversation". The tiles Eriphe keeps for what waits for you are the exception: their Yes / No
+  stay, with the warning "Comes from external content: check what is about to be done." A ghost on
+  a day reads "Proposed · external content", and Settings → Surfaces tags such tiles external. A
+  mail that says "click here to approve" cannot make anything happen.
 
 ## A new tool, no code
 
@@ -191,7 +197,7 @@ message of that conversation, and Eriphe's answer comes there; the column only s
   style from a tile, no inline code. Links in a tile open in a new tab, only on your click, and
   only to web or mail addresses.
 - **Outside content is data.** Whatever a mail or a page says, Eriphe reads it as information,
-  never as instructions; tiles that show it are marked and cannot trigger actions (above).
+  never as instructions; tiles that show it cannot trigger actions (above).
 - **Tiles read only what you allow.** A live tile reads a tool only if its access lets Eriphe read
   it freely; a skill reads only the tools you approved on its card. Settings → Surfaces lists every
   tile with who wrote it, what it reads and when it last changed; remove any from there.
