@@ -1408,7 +1408,7 @@ turn is not tainted. Its front matter:
 
 | Key | |
 |---|---|
-| `when` | an event kind of the [journal](#events) (`monitor.new key=mails`, `monitor.changed key=getout-prod`), with filters on its key or payload (`monitor.received key=getout status=firing`); or up to 5 kinds, by commas, that share the filters (`monitor.failed, monitor.recovered key=getout-prod`: one skill for one way of reacting, its run says each event's kind); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules) |
+| `when` | an event kind of the [journal](#events) (`monitor.new key=mails`, `monitor.changed key=getout-prod`), with filters on its key or payload (`monitor.received key=getout status=firing`), or a payload number compared (`user.returned away_minutes>=180`, `<=` too); or up to 5 kinds, by commas, that share the filters (`monitor.failed, monitor.recovered key=getout-prod`: one skill for one way of reacting, its run says each event's kind); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules); or both, the schedule then `;` and the events (`time daily 06:00; user.returned away_minutes>=180`): it runs at its times and on its events |
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
@@ -1483,6 +1483,35 @@ servers). Its card (kind `skill`) says the trigger in words and the instructions
 exactly that version, the no drops it. Written on a tainted turn, the card says so. A triggered
 task has no such tool.
 
+**Default skills** (`default_skills.go`, `default_skills/`). Eriphe brings skills that are the
+user's like any other once installed. Each is installed at the first start of eriphe-core that has
+it, approved and on (source `default`), recorded in the learning journal (the brain tells it, and
+`unlearn` takes it away), then never again: the store remembers it (`default_skill:<name>`), so a
+skill the user removed, changed or turned off stays as they left it, and a skill of theirs with the
+same name is left alone. A default skill names no tool, server or person
+(`TestNoToolInDefaultSkills`): it works from whatever is linked, and is lent only
+`eriphe-workspace`, which grants nothing beyond the access policy (its writes are its own
+surfaces; its live sources are read by code, free reads only). A tool it should read itself (to
+digest mails, say) is lent the normal way: its surface offers a button (`ask`), the brain proposes
+a new version with those `tools`, and the user says yes or no on its card; until then it writes
+what it can.
+
+- **`arrivee`** prepares the workspace for the user's arrival, so opening it shows the day at
+  once: `when: time daily 06:00; user.returned away_minutes>=180`. In the morning it runs before
+  the user arrives; on a return after three hours or more it runs at the first sign of them (a
+  message, a tab in front: `user.returned`, within a minute), and the composer shows at once what
+  is there while it updates. Three hours, not the hour `user.returned` needs: after a meal or a
+  meeting the day's surfaces are still right, and live sources refresh themselves; after half a
+  day away, the day has moved. Its French instructions: read `workspace_read` first and keep the
+  same ids (the morning and return runs overlap: update, never add), `sources_read` and
+  `catalog_read`; write a `Placeholder` for each surface at once, then fill them; decide what is
+  worth a surface (the day's appointments, the messages that need an answer, the projects with
+  their deadline and next task, wealth when a tool for it is linked, the sessions and what waits
+  for the user, without copying the surfaces their authors keep); live sources for what changes
+  during the day, composed values for digests; `lifetime.until` the end of the day; with nothing
+  linked, one surface saying what it could show; it changes nothing outside the workspace and ends
+  with `[rien]`.
+
 ## Events
 
 **Four roles, no tool by name.** eriphe-core knows roles, not tools; any tool or system holds one
@@ -1516,7 +1545,7 @@ the rest dropped.
 | `monitor.changed`, `monitor.new`, `monitor.crossed`, `monitor.failed`, `monitor.recovered`, `monitor.received` | a [monitor](#monitors) (`monitor.received`: an incoming address was called, `status` from the body's top-level `status` when it is a short word: `firing`, `resolved`) | the monitor's name | unless its server is trusted |
 | `task.ended` | a worker task's end | the task | no |
 | `session.ended` | a work session's end | `session:<id>` | no |
-| `user.returned` | the user's first activity after an absence of an hour or more | | no |
+| `user.returned` | the user's first activity after an absence of an hour or more; payload `left`, `back`, `away_minutes` | | no |
 
 ### Monitors
 
@@ -3256,7 +3285,7 @@ A proposal shows where it matters (#428), with no code for any tool:
 
 ### The assistants' workspace tools (`workspace_tools.go`)
 
-Any assistant writes the workspace with four tools; the **author is the caller**, never a field:
+Any assistant writes the workspace with five tools; the **author is the caller**, never a field:
 
 | Tool | Does |
 |---|---|
@@ -3264,6 +3293,7 @@ Any assistant writes the workspace with four tools; the **author is the caller**
 | `surface_remove` | remove one of the caller's surfaces |
 | `workspace_read` | each surface (id, title, author, sources, lifetime, weight, why, last update, `waiting`, the user's `last_action` on it; for the caller's own, `failed` and the last `error`), the user's gestures of the last hour (what, ref, time), what the brain put in front, the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title or why written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
 | `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand |
+| `sources_read` | what code may read for a surface (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: a run lent only the workspace learns which sources it may declare, and code reads them under the access policy (`sourceWhy`). Without a shape, the author binds what it expects and `surface_write`'s error names the fields the result has. With nothing linked, it says so |
 
 - **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A
   session's lead, on its own tools (`registerLeadTools`), as `lead:<session>`. A task or a skill's
@@ -3276,6 +3306,14 @@ Any assistant writes the workspace with four tools; the **author is the caller**
   `skill:<name>`, so its next run rewrites the same surface; any other task as `task:<id>`.
 - **No approval.** Writing a surface is not an external write: the lent tools are allowed in
   advance (the spec's `allowedTools`), and each caller writes its own surfaces only.
+- **Taint.** Calling `eriphe-workspace` does not taint a task by itself, as eriphe-core's own tools
+  do not (`eventsTaint`): `workspace_read` quotes nothing written after external content, and
+  `sources_read`'s descriptions are the catalog's, which the brain reads untainted in its own
+  tool list (a tool's description is never counted as read content), and the proposals it lists
+  leave out the text of one drawn from external content. What tells a task what a source gave
+  does: a binding's error naming a result's fields, a source's failure, the last error
+  of its surface (`workspaceSourceRead` in its reads). A run that wrote its placeholders keeps its
+  buttons (`ask`) until then.
 - **Delegation.** For work that takes time, the brain writes a placeholder at once (a
   `Placeholder`) and starts a task with `run_task`'s `surface` (its id): the surface must exist,
   the task is lent `eriphe-workspace` and told in its prompt which surface to fill. That task

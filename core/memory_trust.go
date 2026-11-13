@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -353,6 +354,11 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 		}
 		switch {
 		case strings.HasPrefix(name, "mcp__eriphe-core__"):
+		case slices.ContainsFunc(providedServers, func(s string) bool { return strings.HasPrefix(name, "mcp__"+s+"__") }):
+			// Eriphe's own (the workspace), as eriphe-core's: what it tells
+			// of a source's result or error taints by its own record
+			// (workspaceSourceRead); tools' descriptions are read as any lent
+			// tool's are.
 		case strings.HasPrefix(name, "mcp__"):
 			if k := callKey(name, e.Data["input"]); pending[k] > 0 || unrun[k] > 0 {
 				if pending[k] > 0 {

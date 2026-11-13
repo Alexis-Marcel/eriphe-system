@@ -57,7 +57,7 @@ var (
 	// catalog's are, by name or name.tool.
 	providedServers = []string{workspaceServer}
 	// workspaceTools are its tools, in order.
-	workspaceTools = []string{"surface_write", "surface_remove", "workspace_read", "catalog_read"}
+	workspaceTools = []string{"surface_write", "surface_remove", "workspace_read", "catalog_read", "sources_read"}
 	// surfaceReadCap is how long a surface_write waits for its sources.
 	surfaceReadCap = 3 * time.Second
 )
@@ -66,9 +66,12 @@ func providedServer(name string) bool { return slices.Contains(providedServers, 
 
 // surfaceCaller is who calls the workspace's tools.
 type surfaceCaller struct {
-	author string          // brain, skill:<name>, lead:<session>, task:<id>
-	only   string          // a task filling one of the brain's surfaces: that one only, as the brain's
-	taint  func() []string // why what it writes may come from outside
+	author string // brain, skill:<name>, lead:<session>, task:<id>
+	only   string // a task filling one of the brain's surfaces: that one only, as the brain's
+	// sawSource marks a task that was told what a source gave (an error,
+	// the fields of a result): that taints it (workspace_sources.go).
+	sawSource func()
+	taint     func() []string // why what it writes may come from outside
 }
 
 // surfaceSourceIn is a source as an author writes it.
@@ -137,6 +140,10 @@ func (c *core) registerSurfaceTools(s *mcp.Server, who func() surfaceCaller, all
 				return map[string]any{"catalog": a2ui.CatalogPrompt(), "id": a2ui.Eriphe().ID()}, nil
 			})
 	}
+	if ok("sources_read") {
+		tool(s, "sources_read", sourcesReadHelp,
+			func(ctx context.Context, in sourcesIn) (map[string]any, error) { return c.toolSourcesRead(in) })
+	}
 }
 
 // brainSurfaceTools are the brain's: as brain, its turn's taint.
@@ -167,7 +174,7 @@ func (c *core) taskWorkspaceServer(t *TaskRow, grant []string) *mcp.Server {
 // next run writes the same surfaces); the task otherwise.
 func (c *core) taskCaller(id string) surfaceCaller {
 	who := surfaceCaller{author: "task:" + id, only: c.store.get(taskSurfaceKey(id)),
-		taint: func() []string { return c.taskTaint(id) }}
+		taint: func() []string { return c.taskTaint(id) }, sawSource: func() { c.taskRead(id, workspaceSourceRead) }}
 	if r := c.runOfTask(id); r != nil {
 		who.author = "skill:" + r.Skill
 	}
@@ -275,6 +282,9 @@ func (c *core) toolSurfaceWrite(who surfaceCaller, in surfaceWriteIn) (map[strin
 		return nil, err
 	}
 	if len(errs) > 0 {
+		if len(sin.Sources) > 0 {
+			who.saw() // a binding's error names what a source gave
+		}
 		return nil, invalidSurface(errs)
 	}
 	out := map[string]any{"id": s.ID, "author": s.Author, "note": "On the workspace. Update it with the same id; do not write it again to check it."}
@@ -284,9 +294,11 @@ func (c *core) toolSurfaceWrite(who surfaceCaller, in surfaceWriteIn) (map[strin
 	}
 	if f := surfaceFailing(s); len(f) > 0 {
 		out["failed"] = f
+		who.saw()
 	}
 	if previous != "" {
 		out["previous_error"] = previous
+		who.saw()
 	}
 	return out, nil
 }
@@ -415,7 +427,9 @@ func (c *core) toolWorkspaceRead(who surfaceCaller) map[string]any {
 			if f := surfaceFailing(s); len(f) > 0 {
 				v.Failed = f
 			}
-			v.Error = lastErrorText(s)
+			if v.Error = lastErrorText(s); v.Error != "" || v.Failed != nil {
+				who.saw()
+			}
 		}
 		seen = append(seen, v)
 	}
