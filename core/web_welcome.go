@@ -16,7 +16,7 @@ const (
 	welcomeNamed   = "welcome_named" // the name step is done
 )
 
-func (w *web) welcomeRoutes(mux *http.ServeMux) {
+func (w *web) welcomeRoutes(mux *webMux) {
 	mux.Handle("GET /welcome", w.auth(w.handleWelcome))
 	mux.Handle("GET /welcome/status", w.auth(w.handleWelcomeStatus))
 	mux.Handle("POST /welcome/name", w.auth(w.handleWelcomeName))

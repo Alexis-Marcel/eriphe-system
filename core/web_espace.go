@@ -20,7 +20,7 @@ import (
 // The app gets its words, the CSRF token and the assistant's name from
 // /espace/boot, never from inline code: the CSP stays strict (web.go).
 
-func (w *web) espaceRoutes(mux *http.ServeMux) {
+func (w *web) espaceRoutes(mux *webMux) {
 	mux.Handle("GET /espace", w.auth(w.handleEspace))
 	mux.Handle("GET /espace/boot", w.auth(w.handleEspaceBoot))
 	mux.Handle("GET /espace/catalog/v1.json", w.auth(w.handleEspaceCatalog))

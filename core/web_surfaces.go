@@ -15,7 +15,7 @@ import (
 // stays, when it last changed and the last error found on it; the user
 // removes any.
 
-func (w *web) surfaceRoutes(mux *http.ServeMux) {
+func (w *web) surfaceRoutes(mux *webMux) {
 	mux.Handle("GET /settings/surfaces", w.auth(w.handleSurfaces))
 	mux.Handle("POST /settings/surfaces/{id}/remove", w.auth(w.handleRemoveSurface))
 }

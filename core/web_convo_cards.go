@@ -13,7 +13,7 @@ import (
 // and kept up to date by the event stream ("cards"). A spontaneous
 // message of the brain's says why it was sent, folded under it.
 
-func (w *web) cardRoutes(mux *http.ServeMux) {
+func (w *web) cardRoutes(mux *webMux) {
 	mux.Handle("POST /cards/{id}/{action}", w.auth(w.handleCard))
 }
 

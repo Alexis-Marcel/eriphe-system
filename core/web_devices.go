@@ -12,7 +12,7 @@ import (
 // their cards), each one's page with its access log, and "Cut access"
 // (node_access.go).
 
-func (w *web) deviceRoutes(mux *http.ServeMux) {
+func (w *web) deviceRoutes(mux *webMux) {
 	mux.Handle("GET /settings/devices", w.auth(w.handleMachines))
 	mux.Handle("POST /settings/devices/join", w.auth(w.handleJoinCommand))
 	mux.Handle("GET /settings/devices/{name}", w.auth(w.handleDevice))

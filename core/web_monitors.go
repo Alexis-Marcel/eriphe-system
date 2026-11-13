@@ -19,7 +19,7 @@ import (
 // its tool first, pausing, deleting, and the brain's proposals answered
 // here as on their card.
 
-func (w *web) monitorRoutes(mux *http.ServeMux) {
+func (w *web) monitorRoutes(mux *webMux) {
 	mux.Handle("GET /settings/monitors", w.auth(w.handleMonitors))
 	mux.Handle("POST /settings/monitors", w.auth(w.handleSaveMonitor))
 	mux.Handle("POST /settings/monitors/try", w.auth(w.handleTryMonitor))

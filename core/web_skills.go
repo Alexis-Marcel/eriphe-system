@@ -18,7 +18,7 @@ import (
 // marked), approving it, and a new version's diff before it is approved
 // again.
 
-func (w *web) skillRoutes(mux *http.ServeMux) {
+func (w *web) skillRoutes(mux *webMux) {
 	mux.Handle("GET /settings/skills", w.auth(w.handleSkills))
 	mux.Handle("POST /settings/skills", w.auth(w.handleUploadSkill))
 	mux.Handle("GET /settings/skills/{name}", w.auth(w.handleSkill))

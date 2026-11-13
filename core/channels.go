@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -91,7 +90,7 @@ type channelKind struct {
 	card  func(c *core, x convoCard, p proposal)
 	// Its own part of the workspace: its routes, what it starts, and its
 	// row in Settings → Access once set up.
-	routes func(w *web, mux *http.ServeMux)
+	routes func(w *web, mux *webMux)
 	start  func(w *web)
 	entry  func(w *web) (entryRow, bool)
 }

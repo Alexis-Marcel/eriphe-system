@@ -19,7 +19,7 @@ import (
 // switch on; the tabs say whether they are in front, so that nothing
 // buzzes while the user is looking.
 
-func (w *web) pushRoutes(mux *http.ServeMux) {
+func (w *web) pushRoutes(mux *webMux) {
 	mux.Handle("GET /settings/notifications", w.auth(w.handleNotifications))
 	mux.Handle("GET /push/key", w.auth(w.handlePushKey))
 	mux.Handle("POST /push/subscribe", http.MaxBytesHandler(w.auth(w.handleSubscribe), 8<<10))
