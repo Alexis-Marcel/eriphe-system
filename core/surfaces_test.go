@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,6 +28,7 @@ type fakeLedger struct {
 	accounts []ledgerAccount
 	latest   string
 	calls    int
+	listened []string      // the resources the server holds a subscription to
 	hold     chan struct{} // the next read of the resource waits on it
 	gate     chan struct{} // while set, every read of the resource waits on it
 	inflight int           // reads of the resource waiting on the gate
@@ -87,8 +89,28 @@ func newFakeLedger() *fakeLedger {
 			}
 			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: "ledger://latest", Text: string(raw)}}}, nil
 		})
+	// A subscription the server holds, and no sooner: the client's Subscribe
+	// returns once its request is sent (the SDK does not wait for an answer),
+	// and an update told before the server holds it reaches nobody. The
+	// server acknowledges a subscription once it holds it.
+	s.AddSendingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if p, ok := req.GetParams().(*mcp.SubscriptionsAcknowledgedParams); ok && p != nil {
+				l.set(func(l *fakeLedger) { l.listened = append(l.listened, p.Notifications.ResourceSubscriptions...) })
+			}
+			return next(ctx, method, req)
+		}
+	})
 	l.srv = s
 	return l
+}
+
+// listens tells whether the server holds a subscription to a resource: it
+// tells its updates from then on.
+func (l *fakeLedger) listens(uri string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Contains(l.listened, uri)
 }
 
 func (l *fakeLedger) set(f func(l *fakeLedger)) {
@@ -424,10 +446,12 @@ func TestSurfaceRefreshTriggers(t *testing.T) {
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
 	}
-	waitFor(t, func() bool { u := c.pool.get("ledger"); u.mu.Lock(); defer u.mu.Unlock(); return len(u.followed) == 1 })
-	// The first read may finish late, in the background (surfaceLateReads):
-	// subscribe once it is stored, so its update is not taken for the next.
-	waitFor(t, func() bool { s, _ := c.surface(s.ID); return strings.Contains(string(s.Data), `"first"`) })
+	if !strings.Contains(string(s.Data), `"first"`) {
+		t.Fatalf("first read: %s", s.Data)
+	}
+	// Its resource is followed once the surface is written, but the server
+	// tells its updates only once it holds the subscription.
+	waitFor(t, func() bool { return l.listens("ledger://latest") })
 	_, ch, cancel := c.surfaceSubscribe()
 	defer cancel()
 	l.set(func(l *fakeLedger) { l.latest = "second" })

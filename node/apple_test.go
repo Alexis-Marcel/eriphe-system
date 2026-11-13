@@ -37,7 +37,8 @@ case "$1 $2" in
 "network ls") printf '[{"id":"eriphe-task-old","configuration":{"mode":"hostOnly","labels":{"eriphe.task":"old"}},"status":{}},{"id":"default","configuration":{"mode":"nat","labels":{}},"status":{}}]' ;;
 "ls -a") printf '[{"configuration":{"id":"eriphe-task-old","labels":{"eriphe.task":"old"}},"status":{"state":"running"}},{"configuration":{"id":"mine","labels":{}},"status":{"state":"running"}}]' ;;
 run*)
-  printf '%s\n' "$@" TZ=$TZ HTTPS_PROXY=$HTTPS_PROXY NO_PROXY=$NO_PROXY > "$d/run"
+  printf '%s\n' "$@" TZ=$TZ HTTPS_PROXY=$HTTPS_PROXY NO_PROXY=$NO_PROXY > "$d/run.new"
+  mv "$d/run.new" "$d/run"
   cat >/dev/null ;;
 esac
 `

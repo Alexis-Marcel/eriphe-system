@@ -33,7 +33,7 @@ func testNoSecrets(t *testing.T, engine, rt string) {
 		dir := t.TempDir()
 		argsFile = filepath.Join(dir, "args")
 		cli = filepath.Join(dir, "docker")
-		script := "#!/bin/sh\nif [ \"$1\" = network ]; then echo \"172.17.0.0/16 172.17.0.1;\"; exit; fi\nprintf '%s\\n' \"$@\" > " + argsFile + "\ncat >/dev/null\n"
+		script := "#!/bin/sh\nif [ \"$1\" = network ]; then echo \"172.17.0.0/16 172.17.0.1;\"; exit; fi\nprintf '%s\\n' \"$@\" > " + argsFile + ".new\nmv " + argsFile + ".new " + argsFile + "\ncat >/dev/null\n"
 		if err := os.WriteFile(cli, []byte(script), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -55,6 +55,8 @@ func testNoSecrets(t *testing.T, engine, rt string) {
 	if err := n.startContainer(task, "go"); err != nil {
 		t.Fatal(err)
 	}
+	// The fake engine is still running: it gives its arguments their name
+	// once they are all written.
 	waitFor(t, func() bool { _, err := os.Stat(argsFile); return err == nil })
 	raw, _ := os.ReadFile(argsFile)
 	args := strings.Split(strings.TrimSpace(string(raw)), "\n")

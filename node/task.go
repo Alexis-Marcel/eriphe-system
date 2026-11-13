@@ -281,6 +281,7 @@ type node struct {
 	services   map[string]*service // local MCP servers, by name (service.go)
 	retired    map[string]*service // unassigned services whose container is stopping
 	kick       chan struct{}       // something to deliver or report
+	stops      sync.WaitGroup      // the stops under way (stopLater)
 	upd        *updates            // eriphe-core's update request, for the updater (update.go)
 	nets       taskNets            // the tasks' networks, with the container engine (apple.go)
 	agents     *agentStore         // the agents injected into tasks (inject.go)

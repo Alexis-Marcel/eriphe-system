@@ -20,6 +20,19 @@ func setBrain(c *core, b *BrainConfig) {
 	c.snap.Store(&m)
 }
 
+// setServer changes a catalog server in a new snapshot of the configuration,
+// as a saved change does, and returns its servers: the pool's controllers
+// read the current snapshot meanwhile, which never changes.
+func setServer(c *core, name string, f func(*Server)) map[string]Server {
+	m := *c.conf()
+	m.Servers = maps.Clone(m.Servers)
+	s := m.Servers[name]
+	f(&s)
+	m.Servers[name] = s
+	c.snap.Store(&m)
+	return m.Servers
+}
+
 // editBrain changes the brain of the current snapshot.
 func editBrain(c *core, f func(*Assistant)) {
 	m := *c.conf()

@@ -100,14 +100,11 @@ func TestRevokeLowered(t *testing.T) {
 	known := n.sharedLevels()
 	changeShared(n.opt.root, func(l []sharedFolder) ([]sharedFolder, error) { l[0].Access = accessRead; return l, nil })
 	n.compareShared(known)
+	n.stops.Wait()
 	stopped := func(t *Task) bool {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		return t.stopping
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for !stopped(manager) && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
 	}
 	if !stopped(manager) || stopped(reader) {
 		t.Fatalf("manager stopped %v, reader %v", stopped(manager), stopped(reader))

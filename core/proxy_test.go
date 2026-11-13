@@ -468,9 +468,7 @@ func TestBrainFreeReadProxy(t *testing.T) {
 func TestBrainAssignmentFreeReads(t *testing.T) {
 	c := newCatalogCore(t)
 	setBrain(c, &BrainConfig{})
-	gh := c.conf().Servers["github"]
-	gh.AlwaysLoad = true
-	c.conf().Servers["github"] = gh
+	setServer(c, "github", func(s *Server) { s.AlwaysLoad = true })
 	c.store.registerNode("pc", hashSecret("node-secret"))
 	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	if _, err := c.startTask(context.Background(), "brain", runRequest{Prompt: "x", Node: "pc"},
