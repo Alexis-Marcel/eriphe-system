@@ -18,7 +18,7 @@ type intendIn struct {
 	Kind      string `json:"kind,omitempty" jsonschema:"promise (the user owes someone), commitment (you owe the user), waiting_for (someone owes the user), reminder (something to remember to do); reminder by default"`
 	Owner     string `json:"owner,omitempty" jsonschema:"who owes: owner (the user), assistant (you), person:<slug>"`
 	OwedTo    string `json:"owed_to,omitempty" jsonschema:"to whom: owner, person:<slug>…"`
-	Subject   string `json:"subject,omitempty" jsonschema:"project:<name>, client:<slug>…"`
+	Subject   string `json:"subject,omitempty" jsonschema:"what it is about, kind:slug: project:<name>, client:<slug>, pr:<owner>/<repo>#<n>…"`
 	DueAt     string `json:"due_at,omitempty" jsonschema:"the deadline, YYYY-MM-DD or YYYY-MM-DDTHH:MM"`
 	RemindAt  string `json:"remind_at,omitempty" jsonschema:"when to bring it up; the deadline itself by default (9:00 for a day without a time)"`
 	Cue       string `json:"cue,omitempty" jsonschema:"for 'the next time I talk about X': the name that brings it up (instead of a time)"`

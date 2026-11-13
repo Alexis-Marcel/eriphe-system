@@ -223,7 +223,8 @@ func TestLightThreadOpensAtOnce(t *testing.T) {
 		"budget":    {Title: "A", Goal: "B", Budget: 30},
 		"no goal":   {Title: "A"},
 		"bad mode":  {Title: "A", Goal: "B", Mode: "heavy"},
-		"spaced":    {Title: "A", Goal: "B", Subject: "a pr"},
+		"bad pr":    {Title: "A", Goal: "B", Subject: "pr:example"},
+		"a record":  {Title: "A", Goal: "B", Subject: "task:t-1"},
 		"led empty": {Title: "A", Goal: "B", Mode: modeLed},
 	} {
 		if _, err := c.openThread(in, nil, byBrain); err == nil {

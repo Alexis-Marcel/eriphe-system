@@ -94,7 +94,7 @@ func parseEnd(s string) (time.Time, error) {
 type rememberIn struct {
 	Text       string   `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact (not as an instruction)"`
 	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, lesson, decision (a choice and its reason), progress (the current state of a project or goal: done, under way, blocked, left) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
-	Subject    string   `json:"subject,omitempty" jsonschema:"owner, person:<slug>, client:<slug>, project:<name>, home, workspace (how the user wants the composed workspace: a preference), or a short free subject"`
+	Subject    string   `json:"subject,omitempty" jsonschema:"kind:slug, kind project, person, client, pr, mail, event, alert, home, tool or topic; owner alone for the user: owner, person:<slug>, project:<name>, topic:workspace (how the user wants the composed workspace: a preference), topic:<word>"`
 	Links      []string `json:"links,omitempty" jsonschema:"where the details are: vault wikilinks or paths, URLs without tokens; never copy the vault"`
 	ValidFrom  string   `json:"valid_from,omitempty" jsonschema:"when it became true, YYYY-MM-DD; now by default"`
 	ValidTo    string   `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD (the whole day) or YYYY-MM-DDTHH:MM; required for a situation"`
@@ -112,7 +112,7 @@ type rememberIn struct {
 type recallIn struct {
 	Query       string   `json:"query,omitempty" jsonschema:"words to look for, or the question itself: word families are found (anniversaire, anniversaires), synonyms are not, so add them ('voiture auto'); a time in it (hier, en septembre, la semaine dernière) ranks what is dated then first"`
 	Kinds       []string `json:"kinds,omitempty" jsonschema:"only these kinds"`
-	Subject     string   `json:"subject,omitempty" jsonschema:"only this subject; 'person:' for every person"`
+	Subject     string   `json:"subject,omitempty" jsonschema:"only this subject (kind:slug); 'person:' for every person"`
 	Since       string   `json:"since,omitempty" jsonschema:"only from this date (an episode's date, a fact's valid_from)"`
 	Until       string   `json:"until,omitempty" jsonschema:"only up to this date"`
 	AsOf        string   `json:"as_of,omitempty" jsonschema:"what was true at this date"`
@@ -251,9 +251,9 @@ func (c *core) recallRules(query, subject string, all bool) []recalledRule {
 	var out []recalledRule
 	for _, r := range rules {
 		hit := all
-		if s := canonRef(subject); s != "" && r.Kind == ruleTopic {
-			m := canonRef(r.Match)
-			hit = hit || m == s || strings.HasPrefix(m, s+":") || strings.HasPrefix(s, m+":")
+		if s, _, _ := subjectFilter(subject); s != "" && r.Kind == ruleTopic {
+			m, under := ruleMatch(r.Match), strings.TrimSuffix(s, ":")+":"
+			hit = hit || m == s || strings.HasPrefix(m, under) || strings.HasPrefix(s, m+":")
 		}
 		if !hit {
 			text := r.Match + " " + r.Why
@@ -284,7 +284,7 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	}
 	// How the user wants the workspace is a preference the composer reads,
 	// whatever its words (workspace.go).
-	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation && normalizeSubject(in.Subject) != workspaceSubject {
+	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation && !isWorkspaceSubject(in.Subject) {
 		return nil, errors.New("not remembered: " + h)
 	}
 	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,

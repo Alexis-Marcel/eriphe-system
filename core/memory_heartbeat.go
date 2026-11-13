@@ -11,13 +11,16 @@ import (
 // intention becomes due; recordHeartbeat keeps each wake as an episode, so
 // that the next one knows.
 
+// heartbeatSubject is the subject of the wakes and of their lessons.
+const heartbeatSubject = "topic:heartbeat"
+
 type wakePacket struct {
 	Now         time.Time
 	Profile     []*Memory
 	Due         []*Intention  // due, and not told yet: why it wakes
 	Pending     []*Intention  // due, told before, still not closed
 	Episodes    []*Memory     // the last 24 h
-	Lessons     []*Memory     // lessons with subject heartbeat
+	Lessons     []*Memory     // lessons with subject topic:heartbeat
 	Learned     []*learnEntry // what was learned since the last brief, not told yet (learning.go)
 	ProfileText string
 }
@@ -45,8 +48,8 @@ func (m *memStore) wakePacket() (*wakePacket, error) {
 		`occurred_at`, 50); err != nil {
 		return nil, err
 	}
-	if p.Lessons, err = m.list(`kind = 'lesson' AND subject = 'heartbeat' AND status = 'active' AND (valid_to IS NULL OR valid_to > ?)`,
-		[]any{now.Unix()}, `id`, 50); err != nil {
+	if p.Lessons, err = m.list(`kind = 'lesson' AND subject = ? AND status = 'active' AND (valid_to IS NULL OR valid_to > ?)`,
+		[]any{heartbeatSubject, now.Unix()}, `id`, 50); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -122,7 +125,7 @@ func learnedBlock(xs []*learnEntry) string {
 }
 
 // recordHeartbeat keeps what a heartbeat decided (even "nothing to do") as
-// an episode of subject heartbeat.
+// an episode of subject topic:heartbeat.
 func (m *memStore) recordHeartbeat(decision string) (*Memory, error) {
 	decision = strings.TrimSpace(decision)
 	if decision == "" {
@@ -131,7 +134,7 @@ func (m *memStore) recordHeartbeat(decision string) (*Memory, error) {
 	if scan := scanMemoryText(decision); scan.Reject != "" {
 		return nil, fmt.Errorf("refused: %s", scan.Reject)
 	}
-	x := &Memory{Kind: kindEpisode, Subject: "heartbeat", Text: truncate(decision, episodeTextMax-1),
+	x := &Memory{Kind: kindEpisode, Subject: heartbeatSubject, Text: truncate(decision, episodeTextMax-1),
 		SourceKind: srcBrain, SourceRef: "heartbeat", Trust: trustFirstParty, Status: memActive}
 	return x, m.add(x, "heartbeat")
 }

@@ -93,7 +93,7 @@ func TestRecallAccentsAndFilters(t *testing.T) {
 	a := mustAdd(t, m, &Memory{Kind: kindPerson, Subject: "person:Hélène", Text: "Hélène est la sœur de Sam, elle vit à Lyon"})
 	b := mustAdd(t, m, &Memory{Kind: kindFact, Subject: "home", Text: "Le chauffage se règle depuis Home Assistant"})
 	c := mustAdd(t, m, &Memory{Kind: kindPreference, Subject: "owner", Text: "Sam préfère les réponses courtes"})
-	if a.Subject != "person:hélène" {
+	if a.Subject != "person:helene" {
 		t.Fatalf("subject not normalised: %q", a.Subject)
 	}
 	// Accents are ignored both ways, and prefixes match.
@@ -380,7 +380,7 @@ func TestWakePacket(t *testing.T) {
 		t.Errorf("render has too much:\n%s", text)
 	}
 	x, err := m.recordHeartbeat("Rappel du loyer envoyé")
-	if err != nil || x.Kind != kindEpisode || x.Subject != "heartbeat" {
+	if err != nil || x.Kind != kindEpisode || x.Subject != heartbeatSubject {
 		t.Fatalf("record: %+v %v", x, err)
 	}
 	if p, _ = m.wakePacket(); len(p.Episodes) != 2 {

@@ -28,7 +28,7 @@ import (
 //     (messageAbout): « montre-m'en moins » is said to Eriphe in words.
 
 const (
-	workspaceSubject = "workspace" // the subject of a preference about the workspace
+	workspaceSubject = "topic:workspace" // the subject of a preference about the workspace
 
 	workspacePrefsMax  = 12 // workspace preferences a composer's turn reads, the latest first
 	workspaceRecallMax = 3  // other preferences recalled from the queue's words
@@ -45,6 +45,12 @@ const (
 	gestureKeep    = 30 * 24 * time.Hour
 	gestureTitle   = 120
 )
+
+// isWorkspaceSubject tells a subject that is the workspace's.
+func isWorkspaceSubject(s string) bool {
+	k, _ := subjectKey(s)
+	return k == workspaceSubject
+}
 
 // The display rules (#402) are gone: their table, and their cards.
 func displayRulesGone(db *sql.DB) error {

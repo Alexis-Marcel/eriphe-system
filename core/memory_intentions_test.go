@@ -145,7 +145,7 @@ func TestClockWakesBrain(t *testing.T) {
 	if items, _ := c.store.inbox("t-brain"); len(items) != 1 {
 		t.Fatalf("woken twice: %d", len(items))
 	}
-	if xs, _ := c.mem.list(`kind = 'episode' AND subject = 'heartbeat'`, nil, "", 5); len(xs) != 1 {
+	if xs, _ := c.mem.list(`kind = 'episode' AND subject = 'topic:heartbeat'`, nil, "", 5); len(xs) != 1 {
 		t.Fatalf("heartbeat episodes: %d", len(xs))
 	}
 	// An approved intention drawn from a mail: it reminds, the turn is tainted, it cannot allow.

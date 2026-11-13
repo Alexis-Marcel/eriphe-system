@@ -27,22 +27,24 @@ var threadMu sync.Mutex
 type threadIn struct {
 	Title    string     `json:"title" jsonschema:"what the user reads for the thread, in a few words in their language: Refonte du service photos"`
 	Goal     string     `json:"goal" jsonschema:"its real outcome, in one or two sentences: what must have happened for it to be done (merged and deployed, not only reviewed)"`
-	Subject  string     `json:"subject,omitempty" jsonschema:"the matter it follows, as a ref to find it again: project:<name>, pr:<owner>/<repo>#<n>, mail:<id>, event:<id>"`
+	Subject  string     `json:"subject,omitempty" jsonschema:"the matter it follows, its subject kind:slug, to find it again: project:<name>, pr:<owner>/<repo>#<n>, mail:<id>, event:<id>, alert:<id>, topic:<words>; one live thread a subject"`
 	Mode     string     `json:"mode,omitempty" jsonschema:"light (the default without steps: you hold it, no card, no budget) or led (the default with steps: a plan the user approves on a card, a lead, a budget)"`
 	DoneWhen string     `json:"done_when,omitempty" jsonschema:"led: what must be true at the end, checkable: the objective the thread is judged on"`
 	Budget   int        `json:"budget_minutes,omitempty" jsonschema:"led: minutes of running time it may take, 60 by default; past it the engine pauses and asks the user"`
 	Steps    []stepSpec `json:"steps,omitempty" jsonschema:"led: the plan, each step with its key, title, kind, the steps it comes after, and for a task its prompt, agent, resources and contract"`
 }
 
-// threadSubjectMax is the longest subject ref kept.
-const threadSubjectMax = 200
-
 // openThread records a thread. A light one is open at once: no card, no
 // budget. A led one asks the user to approve its plan. taint is why the
 // turn that opens it may carry what someone else wrote.
 func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error) {
 	in.Title, in.Goal, in.DoneWhen = oneLine(in.Title), strings.TrimSpace(in.Goal), strings.TrimSpace(in.DoneWhen)
-	in.Subject, in.Mode = strings.TrimSpace(in.Subject), strings.ToLower(strings.TrimSpace(in.Mode))
+	in.Mode = strings.ToLower(strings.TrimSpace(in.Mode))
+	subject, err := subjectKey(in.Subject)
+	if err != nil {
+		return Thread{}, fmt.Errorf("subject: %w", err)
+	}
+	in.Subject = subject
 	if in.Mode == "" {
 		in.Mode = modeLight
 		if len(in.Steps) > 0 {
@@ -54,10 +56,11 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 		return Thread{}, errors.New("a title is needed")
 	case in.Goal == "":
 		return Thread{}, errors.New("a goal is needed")
-	case len(in.Subject) > threadSubjectMax || strings.ContainsAny(in.Subject, " \n\t"):
-		return Thread{}, fmt.Errorf("subject: a ref without spaces, %d characters at most (project:site, pr:owner/repo#12)", threadSubjectMax)
 	case in.Mode != modeLight && in.Mode != modeLed:
 		return Thread{}, fmt.Errorf("mode %q: light or led", in.Mode)
+	}
+	if err := c.subjectFree(in.Subject, 0); err != nil {
+		return Thread{}, err
 	}
 	if in.Mode == modeLight {
 		if len(in.Steps) > 0 || in.Budget != 0 || in.DoneWhen != "" {
@@ -66,7 +69,7 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 		res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, tainted, created, started) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			truncate(in.Title, taskTitleMax), in.Goal, modeLight, in.Subject, threadOpen, strings.Join(taint, ", "), time.Now().Unix(), time.Now().Unix())
 		if err != nil {
-			return Thread{}, err
+			return Thread{}, c.liveSubjectErr(in.Subject, err)
 		}
 		id, _ := res.LastInsertId()
 		c.logThread(id, by, "Thread ouvert : "+in.Goal)
@@ -93,7 +96,7 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, done_when, mode, subject, state, phase, budget, tainted, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		truncate(in.Title, taskTitleMax), in.Goal, in.DoneWhen, modeLed, in.Subject, stateOf(phaseProposed), phaseProposed, in.Budget, strings.Join(taint, ", "), time.Now().Unix())
 	if err != nil {
-		return Thread{}, err
+		return Thread{}, c.liveSubjectErr(in.Subject, err)
 	}
 	id, _ := res.LastInsertId()
 	if err := c.insertSteps(id, in.Steps, true); err != nil {
@@ -780,6 +783,9 @@ func (c *core) reopenThread(id int64, why, by string) (Thread, error) {
 	}
 	if why = oneLine(why); why == "" {
 		return s, errors.New("why is needed: what brings its subject back")
+	}
+	if err := c.subjectFree(s.Subject, s.ID); err != nil {
+		return s, err
 	}
 	c.endSteps(context.Background(), s) // what its old plan left undone never starts by itself
 	c.setThread(id, map[string]any{"mode": modeLight, "phase": "", "state": threadOpen, "held": "", "lead": "", "told": "", "since": 0, "ended": 0})

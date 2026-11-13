@@ -309,7 +309,7 @@ func (m *memStore) learnings(f learnFilter) ([]*learnEntry, error) {
 	}
 	in("l.kind", f.Kinds)
 	in("l.status", f.Statuses)
-	if s := normalizeSubject(f.Subject); s != "" {
+	if s, _, _ := subjectFilter(f.Subject); s != "" {
 		where = append(where, `(x.subject = ? OR x.subject LIKE ? ESCAPE '\')`)
 		args = append(args, s, likeEscape(strings.TrimSuffix(s, ":"))+":%")
 	}

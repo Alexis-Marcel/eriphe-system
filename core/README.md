@@ -918,13 +918,13 @@ deployed, an appointment, a brand name to find, a service to rebuild. An assista
 thread has one (its goal); a task is one step. It replaced the work session (#464): one object for
 every matter.
 
-A thread has a title, a goal (its real outcome), a **subject** (a ref to find it again:
+A thread has a title, a goal (its real outcome), a **subject** (its key, see [Subjects](#subjects):
 `project:site`, `pr:owner/repo#12`, `event:<id>`), a **state** (`open`, `waiting`, `done`,
 `dropped`), a summary, and its times. Its **mode** is one of two:
 
 - **Light** (the default, without steps): held by the brain. `open_thread` opens it at once, with no
   card and no budget, and needs its subject. **One thread a subject** (`openThreadOnce`): a subject
-  that has a thread already (the same ref, any case) gives that thread back instead of a second one,
+  that has a thread already (the same key) gives that thread back instead of a second one,
   reopened light (why « même sujet ») if it ended, and the result says so; a led open on the subject
   of an active thread is refused, naming it. `find_thread` finds threads by words of their title,
   goal, subject or summary, or by their subject, the ended ones included; `close_thread` closes it
@@ -3150,7 +3150,7 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
 
 - **Preferences are memory.** « Les échecs de sauvegarde toujours devant », « plus de lettres de
   news.example.org », « montre-m'en moins » are [memories](#memory) of kind `preference` with
-  subject `workspace`, written as facts about the user. The brain remembers one from the user's
+  subject `topic:workspace`, written as facts about the user. The brain remembers one from the user's
   words (`remember`; a workspace preference is never sent to `rule`, whatever its words); the
   nightly extraction proposes one from the conversation (its prompt says how the user wants the
   workspace is a preference worth keeping) or, inferred, from repeated gestures. A preference the
@@ -4043,7 +4043,7 @@ a level; the code decides (`decideNotify`, no model):
   The time zone is the configuration's, or the one set in Settings.
 - **A daily cap** of "now" (4 by default, 0 to 20 in Settings), besides reminders the user asked
   for in their own words; over it, the brief.
-- **Topic rules** map a `ref` (`project:getout`, which also matches `project:getout:prod`) to now,
+- **Topic rules** map a subject (`project:getout`, which also matches `project:getout:prod`) to now,
   brief or never. A turn that read external content may lower an outcome, never raise it: what it
   notifies never interrupts, goes to the brief marked as such, and may hold no link.
 - **The answer to a due intention** is pushed through the same decision, question or not, once per
@@ -4074,10 +4074,10 @@ a level; the code decides (`decideNotify`, no model):
   feedback: what a brief or a point made on the user's return summarises.
 
 - **One topic vocabulary** (`topics.go`). A rule matches the `ref` the brain gives `notify`, so
-  labels must not drift: `canonRef` is the one form of a ref (lower case, accents folded, spaces as
-  hyphens, `projet:` → `project:`, a one-word topic in the singular: `factures` → `facture`), on both
-  sides of the match, so a rule written before stays in force. The known topics (rules, notifications
-  of the last 90 days, the memory's `project:`, `person:` and `client:` subjects) are listed in
+  labels must not drift: a ref about a subject is kept as its key ([Subjects](#subjects)), on both
+  sides of the match; a record's ref (`skill:<name>`, `intention:<id>`) as written. The known topics
+  (rules, notifications of the last 90 days, the live threads' subjects, the memory's `project:`,
+  `person:` and `client:` subjects) are listed in
   `notifications`; a new label of a known word family is kept under the known topic, and a new one
   is flagged to the brain with the known ones.
 - **Settings through the brain** (`settings_brain.go`, tool `setting`): the device order, the lines
@@ -4449,12 +4449,37 @@ are never shown back nor logged.
 | `PUT /v1/secrets/{name}` | `{value}` to set or replace, or `{file}` to import a file on eriphe-core's machine |
 | `DELETE /v1/secrets/{name}` | delete |
 
+## Subjects
+
+A **subject** is what something is about: a project, a person, a pull request, an alert. It has one
+key, `kind:slug`, made by one function (`subjectKey`, `subject.go`) for every store that keeps one:
+threads, memories, intentions (their subject, owner and `owed_to`), notifications and their topic
+rules. A test forbids any other normaliser.
+
+- **Kinds**: `project`, `person`, `client`, `pr`, `mail`, `event`, `alert`, `home`, `owner`, `tool`,
+  `topic`. A French or plural name is an alias (`projet:` → `project:`, `alerte:` → `alert:`); an
+  unknown kind or a bare word is a topic (`brand:velora` → `topic:brand-velora`, `factures` →
+  `topic:facture`). `owner` (the user) and `home` stand alone.
+- **Slugs**: a name (project, person, client, home, tool, topic) is lower case, accents folded,
+  spaces as hyphens, its sub-parts kept (`project:site:prod`); a topic's single word is singular. A
+  pull request is `pr:owner/repo#12`, lower case. An id (`mail:`, `event:`, `alert:`) is kept as
+  written.
+- **A ref is not a subject**: `card:12`, `task:t-…`, `intention:5`, `skill:<name>` name one record;
+  `subjectKey` refuses them.
+- **One live thread a subject**, whoever opens it (the brain, a skill): `openThread` refuses a
+  second, `reopen_thread` refuses an ended one beside a live one, and a unique index on the live
+  threads' subject holds it (`threads_live_subject`).
+- **Stored keys**: an older install's subjects are rewritten once at start: core.db's threads (of two
+  live threads on one key, the latest keeps it), notifications and topic rules (kv
+  `subject_keys`), memory.db's memories and intentions (schema 5 → 6). A value that gives no key is
+  kept and logged.
+
 ## Memory
 
 Eriphe's own memory, separate from the vault, in `memory.db` next to the database (SQLite, full
 text search with FTS5, accents ignored). It points at the vault (`links`) rather than copying it.
 A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `lesson`,
-`decision`, `progress`, `situation`; what is owed is an intention, never a memory), a subject (`owner`, `person:<slug>`, `client:<slug>`,
+`decision`, `progress`, `situation`; what is owed is an intention, never a memory), a subject (its key, see [Subjects](#subjects): `owner`, `person:<slug>`, `client:<slug>`,
 `project:<name>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
 what is temporary; `occurred_at` for an episode; `state` for a progress card), where it
 comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`), a trust level (`owner`,

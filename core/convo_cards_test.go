@@ -48,7 +48,7 @@ func TestCardBoundToItsProposal(t *testing.T) {
 	c := tw.c
 	r1 := proposedRule(t, c, "facture", "")
 	seq := brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
-	r2, _ := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "source:mail", Outcome: levelNever, State: ruleProposed, By: "brain"})
+	r2, _ := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "topic:mail", Outcome: levelNever, State: ruleProposed, By: "brain"})
 	x := cardOf(t, c, cardRule, r1.ID)
 	if x.Seq != seq || x.State != cardPending {
 		t.Fatalf("card %+v, want on message %d", x, seq)
@@ -68,7 +68,7 @@ func TestCardBoundToItsProposal(t *testing.T) {
 	if code != 200 || !strings.Contains(body, "is-approved") || !strings.Contains(hd.Get("HX-Trigger"), "memory-changed") {
 		t.Fatalf("yes: %d %q", code, body)
 	}
-	if rs, _ := c.notifyRules(ruleActive); len(rs) != 1 || rs[0].Match != "facture" {
+	if rs, _ := c.notifyRules(ruleActive); len(rs) != 1 || rs[0].Match != "topic:facture" {
 		t.Fatalf("the rule is not in force: %+v", rs)
 	}
 	if got, _ := c.notifyRule(r2.ID); got.State != ruleProposed {

@@ -115,7 +115,7 @@ CREATE INDEX IF NOT EXISTS thread_log_thread ON thread_log (thread, id);`
 
 func init() {
 	extraSchema = append(extraSchema, threadsSchema)
-	schemaFixes = append(schemaFixes, sessionsToThreads, threadStepColumns) // in this order (thread_steps.go)
+	schemaFixes = append(schemaFixes, sessionsToThreads, threadStepColumns, subjectKeysCore) // in this order (thread_steps.go, subject_rewrite.go)
 }
 
 // A thread's modes.
@@ -449,6 +449,39 @@ func (c *core) threads(activeOnly bool, limit int) ([]Thread, error) {
 // activeThreads is the condition of a thread open or waiting.
 const activeThreads = `state IN ('open', 'waiting')`
 
+// threadsLiveSubject holds one live thread a subject, whoever opens it
+// (the brain, a skill, a thread's lead): its condition is activeThreads.
+const threadsLiveSubject = `CREATE UNIQUE INDEX IF NOT EXISTS threads_live_subject ON threads (subject)
+	WHERE subject != '' AND ` + activeThreads
+
+// subjectFree tells that no live thread but except follows subject.
+func (c *core) subjectFree(subject string, except int64) error {
+	if subject == "" {
+		return nil
+	}
+	var id int64
+	var title string
+	err := c.store.db.QueryRow(`SELECT id, title FROM threads WHERE subject = ? AND id != ? AND `+activeThreads+` LIMIT 1`, subject, except).Scan(&id, &title)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("thread %d « %s » follows %s already: a subject has one live thread; go on with it (read_thread, add_step)", id, title, subject)
+}
+
+// liveSubjectErr is an insert's error, said as subjectFree says it when it
+// is the index's.
+func (c *core) liveSubjectErr(subject string, err error) error {
+	if strings.Contains(err.Error(), "UNIQUE") {
+		if e := c.subjectFree(subject, 0); e != nil {
+			return e
+		}
+	}
+	return err
+}
+
 func (c *core) threadsWhere(where string, args ...any) ([]Thread, error) {
 	rows, err := c.store.db.Query(`SELECT `+threadCols+` FROM threads WHERE `+where, args...)
 	if err != nil {
@@ -466,15 +499,19 @@ func (c *core) threadsWhere(where string, args ...any) ([]Thread, error) {
 	return out, rows.Err()
 }
 
-// findThreads finds threads by their subject (the same ref, any case) or
+// findThreads finds threads by their subject (its key, subject.go) or
 // by words of their title, goal, subject or summary, active ones first,
 // then the latest; ended ones too, to reopen one.
 func (c *core) findThreads(subject, text string, all bool, limit int) ([]Thread, error) {
 	var conds []string
 	var args []any
-	if subject = strings.TrimSpace(subject); subject != "" {
-		conds = append(conds, `lower(subject) = lower(?)`)
-		args = append(args, subject)
+	if subject != "" {
+		key, err := subjectKey(subject)
+		if err != nil {
+			return nil, fmt.Errorf("subject: %w", err)
+		}
+		conds = append(conds, `subject = ?`)
+		args = append(args, key)
 	}
 	for _, w := range strings.Fields(text) {
 		like := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.ToLower(w)) + "%"

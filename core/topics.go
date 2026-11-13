@@ -4,7 +4,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 )
 
 // The topic vocabulary. The brain labels what it tells the user (notify's
@@ -12,77 +11,15 @@ import (
 // drift ("factures", "facture", "Facturation"), a rule silently stops
 // matching. So the code keeps the labels comparable and small:
 //
-//   - canonRef is the one form of a ref: lower case, accents folded, spaces
-//     as hyphens, French kind names in English (projet:x → project:x), and
-//     a one-word topic in the singular (factures → facture). Entity refs keep
-//     their slug as written (person:jules stays person:jules).
-//   - knownTopics are the refs in use: the rules', the notifications' of
-//     the last 90 days, and the memory's subjects (project:, person:,
-//     client:), so a notification about a project uses the same key as
-//     its progress card.
+//   - a label is a subject, keyed by subjectKey (subject.go); a ref that
+//     names one record (task:t-1, skill:x) is kept as written.
+//   - knownTopics are the subjects in use: the rules', the notifications'
+//     of the last 90 days, the live threads' and the memory's (project:,
+//     person:, client:), so a notification about a project uses the same
+//     key as its thread and its memories.
 //   - reuseTopic maps a new label onto a known one of the same word family
-//     (facturation → facture), and the tools list the known topics to the
-//     brain when it invents one.
-
-// refKinds are the kinds of entity refs; their slug is not singularised.
-var refKinds = map[string]bool{"project": true, "person": true, "client": true, "task": true, "intention": true, "source": true,
-	"watch": true, "notification": true, "msg": true, "owner": true, "home": true, "tool": true}
-
-// refKindAlias are the other names of a kind; "" drops the prefix (a bare topic).
-var refKindAlias = map[string]string{"projet": "project", "projets": "project", "personne": "person", "tache": "task",
-	"veille": "watch", "outil": "tool", "topic": "", "sujet": "", "theme": ""}
-
-// idKinds name one record, not a topic: never offered as vocabulary.
-var idKinds = map[string]bool{"task": true, "intention": true, "notification": true, "msg": true, "watch": true}
-
-// canonRef is the one form of a ref, or "" if it holds other characters
-// than letters, digits, spaces and . _ @ / - :.
-func canonRef(s string) string {
-	s = foldAccents(strings.TrimSpace(s))
-	if s == "" {
-		return ""
-	}
-	for _, r := range s {
-		if !(r < unicode.MaxASCII && (unicode.IsLetter(r) || unicode.IsDigit(r))) && !strings.ContainsRune(" ._@/-:", r) {
-			return ""
-		}
-	}
-	var segs []string
-	for _, seg := range strings.Split(s, ":") {
-		seg = strings.Join(strings.FieldsFunc(seg, func(r rune) bool { return r == ' ' || r == '_' || r == '-' }), "-")
-		if seg != "" {
-			segs = append(segs, seg)
-		}
-	}
-	if len(segs) == 0 {
-		return ""
-	}
-	if alias, ok := refKindAlias[segs[0]]; ok && len(segs) > 1 {
-		if alias == "" {
-			segs = segs[1:]
-		} else {
-			segs[0] = alias
-		}
-	}
-	if !(len(segs) > 1 && refKinds[segs[0]]) {
-		for i, seg := range segs {
-			segs[i] = singular(seg)
-		}
-	}
-	return strings.Join(segs, ":")
-}
-
-// singular drops the plural s of a one-word topic, past four letters:
-// factures → facture, invoices → invoice. A longer name (notes-de-frais)
-// is kept as written; its family (topicFamily) still finds its variants.
-// Words ending in -ss, -is, -us are left (devis, colis, status).
-func singular(seg string) string {
-	if len(seg) > 4 && !strings.Contains(seg, "-") && strings.HasSuffix(seg, "s") &&
-		!strings.HasSuffix(seg, "ss") && !strings.HasSuffix(seg, "is") && !strings.HasSuffix(seg, "us") {
-		return seg[:len(seg)-1]
-	}
-	return seg
-}
+//     (topic:facturation → topic:facture), and the tools list the known
+//     topics to the brain when it invents one.
 
 // topicFamily is a ref's word family: its kind and the stems of its words,
 // so facturation and facture are one family.
@@ -110,9 +47,11 @@ type topicView struct {
 func (c *core) knownTopics() []topicView {
 	byRef := map[string]*topicView{}
 	add := func(ref string) *topicView {
-		ref = canonRef(ref)
-		kind, _, _ := strings.Cut(ref, ":")
-		if ref == "" || idKinds[kind] && strings.Contains(ref, ":") {
+		if isRecordRef(ref) {
+			return nil
+		}
+		ref, _ = subjectKey(ref)
+		if ref == "" {
 			return nil
 		}
 		if byRef[ref] == nil {
@@ -138,6 +77,15 @@ func (c *core) knownTopics() []topicView {
 				if t := add(ref); t != nil {
 					t.Uses += n
 				}
+			}
+		}
+		rows.Close()
+	}
+	if rows, err := c.store.db.Query(`SELECT subject FROM threads WHERE subject != '' AND ` + activeThreads); err == nil {
+		for rows.Next() {
+			var s string
+			if rows.Scan(&s) == nil {
+				add(s)
 			}
 		}
 		rows.Close()
@@ -176,11 +124,11 @@ func (c *core) knownTopics() []topicView {
 	return out
 }
 
-// reuseTopic is the ref to use for a label: its canonical form, or the
-// known topic of the same word family (only one, else the label as is);
+// reuseTopic is the ref to use for a label: its subject key, or the
+// known topic of the same word family (only one, else the key as is);
 // known tells whether the result is in use already.
 func reuseTopic(label string, topics []topicView) (ref string, known bool) {
-	ref = canonRef(label)
+	ref, _ = subjectKey(label)
 	if ref == "" {
 		return "", false
 	}
@@ -198,12 +146,6 @@ func reuseTopic(label string, topics []topicView) (ref string, known bool) {
 		return same[0], true
 	}
 	return ref, false
-}
-
-// isIDRef is a ref that names one record (task:12), not a topic.
-func isIDRef(ref string) bool {
-	kind, _, ok := strings.Cut(ref, ":")
-	return ok && idKinds[kind]
 }
 
 // topicRefs are the refs of the topics, for a note.
