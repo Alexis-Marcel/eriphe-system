@@ -81,6 +81,11 @@ func (m *fakeMonitor) server() *mcp.Server {
 		}) (*mcp.CallToolResult, map[string]any, error) {
 			return nil, map[string]any{"ok": true}, nil
 		})
+	// page reads the open web: no openWorldHint.
+	mcp.AddTool(s, &mcp.Tool{Name: "page", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+		func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"text": "a page"}, nil
+		})
 	return s
 }
 

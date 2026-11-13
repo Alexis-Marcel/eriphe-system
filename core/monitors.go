@@ -279,6 +279,11 @@ func (c *core) sourceWhy(s monitorSpec) string {
 	if !c.freeCall(name, s.Args) {
 		return fmt.Sprintf("%s.%s is not a free read in the user's grid: a monitor calls free reads only", s.Server, s.Tool)
 	}
+	if !c.freeAhead(name, s.Args) {
+		// Its arguments may come from a tainted turn: what reads the open
+		// web asks the user, through the brain's own call (policy.go).
+		return fmt.Sprintf("%s.%s reads the open web (openWorldHint not false): eriphe-core does not call it by itself", s.Server, s.Tool)
+	}
 	return ""
 }
 

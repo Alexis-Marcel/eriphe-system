@@ -211,6 +211,18 @@ func TestBrainOpenWorldReadFollowsTheTurn(t *testing.T) {
 	}
 }
 
+// Eriphe-core never reads the open web by itself, for a monitor or a
+// surface: their arguments may come from a tainted turn.
+func TestOpenWorldIsNoSource(t *testing.T) {
+	c, _, _ := pollCore(t)
+	if why := c.sourceWhy(monitorSpec{Server: "monitor", Tool: "status"}); why != "" {
+		t.Fatalf("a closed read: %s", why)
+	}
+	if why := c.sourceWhy(monitorSpec{Server: "monitor", Tool: "page"}); !strings.Contains(why, "open web") {
+		t.Errorf("an open-web read: %q", why)
+	}
+}
+
 // A task: the rule is read at launch, and holds whatever it reads since.
 func TestTaskFreeWriteFollowsItsStart(t *testing.T) {
 	c := newMailCore(t, accessFree)

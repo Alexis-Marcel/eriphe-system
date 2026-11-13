@@ -139,21 +139,17 @@ func globEscape(s string) string { return globChars.ReplaceAllString(s, `\$0`) }
 
 var globChars = regexp.MustCompile(`[\\*?\[]`)
 
-// freeRead tells whether the brain may call a catalog tool without asking:
-// a Read at Free, named by no rule of my policy (such a tool goes through
-// the permission flow, with its input). A write always goes through it:
-// the policy must see the turn's taint.
-func (c *core) freeRead(claudeName string) bool { return c.freeCall(claudeName, nil) }
-
-// freeCall is freeRead for one call: on a server of several accounts, at
-// the value of the account it names.
+// freeCall tells whether a call is a Read at Free in the user's grid: on a
+// server of several accounts, at the value of the account it names.
 func (c *core) freeCall(claudeName string, input map[string]any) bool {
 	f := c.pool.facts(claudeName, input)
 	return f.read && f.free() && !f.noAccount
 }
 
-// freeAhead tells whether a free call may skip the policy: not a read of
-// the open web, which must see the turn's taint as WebFetch does.
+// freeAhead tells whether a free call may skip the policy, allowed in
+// advance to the brain or made by eriphe-core itself (a monitor, a
+// surface's source): not a read of the open web, which must see the
+// turn's taint as WebFetch does. A write always goes through the policy.
 func (c *core) freeAhead(claudeName string, input map[string]any) bool {
 	f := c.pool.facts(claudeName, input)
 	return f.read && f.free() && !f.noAccount && !f.openWorld

@@ -3496,7 +3496,8 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   `{"tool": "server/tool", "args": {…}}` or `{"resource": "server", "uri": "…"}`. Code runs it as
   a monitor runs its look (`sourceWhy`, `readSource` in `monitors.go`): a tool must be one of the
   brain's, read-only by its own annotation and a free read in the user's grid (with its
-  arguments); a resource must be listed by its server. Checked when written and before every
+  arguments), not of the open web (its `openWorldHint` false: code never reads the web by itself,
+  with arguments a tainted turn may have chosen); a resource must be listed by its server. Checked when written and before every
   read (refused, it waits with why, nothing called). 20 s per read (8 s for a refresh on schedule), 256 KiB per result, 8 sources.
   The result is put at the pointer as it came (structured content, else text read as JSON),
   never understood. A server not trusted taints the surface (`tainted`: its sources, and the
