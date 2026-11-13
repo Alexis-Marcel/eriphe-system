@@ -1235,6 +1235,18 @@ tainted turn it waits for the user. A trusted server's reads stay free, the web'
 Only the brain's Free reads of closed sources are allowed in advance and called without a ticket;
 its writes and its reads of the open web go through the policy, so the turn's taint is always seen.
 
+**Tool definitions are pinned.** The first listing of a catalog server pins each tool's definition
+(its name, title, description, schemas and annotations): adding the server is the user's yes. A
+tool listed later with another definition, or a new tool, is held: not lent, not shown to any agent,
+not sorted by the grid, refused if called by name, until the user accepts them on the server's page
+("Accepter ces outils", `POST /settings/tools/{name}/approve`), which shows each held tool's
+category and description and pins those definitions: one the server changed again since stays
+held. The brain is told how many tools are held (an event; their names are the server's, so they
+are not quoted), to tell the user. A server cannot reword a description or turn a send into a read
+behind the user's back. Removing the server forgets its pins. Eriphe's own servers are not pinned:
+those it provides (folders) and those shipped with it (run from its images: mail, calendar, files,
+Signal), whose tools change with Eriphe's updates, which the user already chooses (`tool_pins.go`).
+
 ### The approval card
 
 An approval is a card of the conversation (`access_card.go`), answered by the user, never by the

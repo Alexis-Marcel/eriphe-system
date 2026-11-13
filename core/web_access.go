@@ -67,6 +67,9 @@ type toolAccess struct {
 	Named string
 	// Use is what the tool is for, the sentence the brain reads.
 	Use string
+	// Held are its tools listed with a definition the user has not
+	// accepted (tool_pins.go): not lent until they are.
+	Held []heldDef
 	// Tree is an account's tree of folders, for a tool with places
 	// (web_places.go): its root is the account's grid.
 	Tree *placeTree
@@ -129,6 +132,9 @@ func (w *web) toolAccessOf(lang, name, account string) (toolAccess, bool) {
 	if u := w.c.pool.get(name); u != nil {
 		var tools []*mcp.Tool
 		v.Status, _, tools = u.snapshot()
+		for _, t := range u.heldDefs() {
+			v.Held = append(v.Held, heldDef{t.Name, toolCategory(t), truncate(oneLine(t.Description), 300)})
+		}
 		for _, t := range tools {
 			value, _ := exceptionFor(access.exceptions, t.Name)
 			v.Tools = append(v.Tools, toolException{t.Name, toolCategory(t), value})
@@ -180,6 +186,9 @@ func (w *web) handleToolAccess(rw http.ResponseWriter, r *http.Request, s *sessi
 	v.Saved = r.URL.Query().Get("saved") != ""
 	w.render(rw, r, s, "settings", "", page{Title: "access.page", Nav: "settings", Tab: "tools", View: "access", Data: v})
 }
+
+// heldDef is a tool held for a new definition, as its page shows it.
+type heldDef struct{ Name, Category, Description string }
 
 // formGrid reads the grid a page posted, each category required.
 // A category the page does not show (not one of the tool's cases) keeps its
@@ -375,6 +384,24 @@ func (w *web) handleToolUse(rw http.ResponseWriter, r *http.Request, s *session)
 		return
 	}
 	log.Printf("web: tool %s: what it is for changed", name)
+	w.notify()
+	rw.Header().Set("HX-Refresh", "true")
+	rw.WriteHeader(http.StatusOK)
+}
+
+// handleApproveTools accepts the definitions a tool's server lists now
+// (tool_pins.go): its held tools are lent again.
+func (w *web) handleApproveTools(rw http.ResponseWriter, r *http.Request, s *session) {
+	name := r.PathValue("name")
+	if _, ok := w.c.conf().Servers[name]; !ok {
+		http.Error(rw, "unknown tool", http.StatusBadRequest)
+		return
+	}
+	if err := w.c.approveTools(name); err != nil {
+		w.toast(rw, err.Error(), false)
+		return
+	}
+	log.Printf("web: tool %s: its tools' definitions accepted", name)
 	w.notify()
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)

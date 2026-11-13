@@ -53,6 +53,8 @@ type pool struct {
 	// resourceUpdated is told when a server says one of the resources
 	// followed changed (pool_follow.go); it must return fast.
 	resourceUpdated func(server, uri string)
+	// toolsHeld is told when a server's held tools change (tool_pins.go).
+	toolsHeld func(server string, n int)
 	// trusted tells a server the user trusts (tool_trust.go): its reads of
 	// the open web are free like its others (access.go).
 	trusted func(server string) bool
@@ -69,15 +71,16 @@ type upstream struct {
 	name string
 	srv  Server
 
-	mu        sync.Mutex
-	status    string
-	err       string
-	session   *mcp.ClientSession
-	tools     []*mcp.Tool
-	resources []string  // its resources' URIs, which a monitor may read (monitors.go)
-	followed  []string  // the resources whose updates eriphe-core wants (pool_follow.go)
-	needsAuth string    // why the server wants an authorization, set by the OAuth gate
-	flow      *authFlow // a `eriphe connect` in progress
+	mu         sync.Mutex
+	status     string
+	err        string
+	session    *mcp.ClientSession
+	tools      []*mcp.Tool
+	unaccepted []*mcp.Tool // tools listed with a definition the user has not accepted (tool_pins.go)
+	resources  []string    // its resources' URIs, which a monitor may read (monitors.go)
+	followed   []string    // the resources whose updates eriphe-core wants (pool_follow.go)
+	needsAuth  string      // why the server wants an authorization, set by the OAuth gate
+	flow       *authFlow   // a `eriphe connect` in progress
 	// The OAuth client typed in the form of a pending server, in memory
 	// until the server is saved.
 	clientID, clientSecret string
@@ -399,8 +402,9 @@ func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
 		sess.Close()
 		return nil, err
 	}
+	tools, held := u.p.pinned(u, tools) // tool_pins.go
 	u.mu.Lock()
-	u.session, u.tools, u.resources, u.status, u.err = sess, tools, nil, statusReady, ""
+	u.session, u.tools, u.unaccepted, u.resources, u.status, u.err = sess, tools, held, nil, statusReady, ""
 	u.mu.Unlock()
 	go u.refreshResources()
 	go u.resubscribe()
@@ -470,9 +474,10 @@ func (u *upstream) refreshTools() {
 		log.Printf("server %s: tools: %v", u.name, err)
 		return
 	}
+	tools, held := u.p.pinned(u, tools)
 	u.mu.Lock()
 	if u.session == sess {
-		u.tools = tools
+		u.tools, u.unaccepted = tools, held
 	}
 	u.mu.Unlock()
 }
@@ -520,6 +525,9 @@ func (u *upstream) held() string {
 
 // call forwards one tool call, within the server's timeout.
 func (u *upstream) call(ctx context.Context, tool string, args json.RawMessage) (*mcp.CallToolResult, error) {
+	if slices.Contains(u.heldTools(), tool) {
+		return nil, errHeldTool // tool_pins.go
+	}
 	sess, err := u.live()
 	if err != nil {
 		return nil, err
