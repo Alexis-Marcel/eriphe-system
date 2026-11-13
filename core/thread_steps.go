@@ -804,9 +804,15 @@ func (c *core) linkCard(id int64, ref string) {
 	c.threadMoved(id)
 }
 
-// cardRaisedFor links a card raised for a thread (its source thread:<id>)
-// to it.
+// cardRaisedFor links a card raised for a thread to it: its source is
+// thread:<id>, or the task of one of its steps (task:<id>).
 func (c *core) cardRaisedFor(source, ref string) {
+	if task, ok := strings.CutPrefix(source, "task:"); ok && task != "" {
+		if st, ok := c.stepOfTask(task); ok {
+			c.linkCard(st.Thread, ref)
+		}
+		return
+	}
 	n, ok := strings.CutPrefix(source, "thread:")
 	if !ok {
 		return

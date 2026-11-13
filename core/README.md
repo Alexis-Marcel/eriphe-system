@@ -964,13 +964,26 @@ A **light** thread takes its steps from the brain (`add_step`), each born as the
 started once the steps it comes `after` are accepted; a task step asks its own start card when it is
 lent what needs a yes. The brain settles them (`settle_step`). `link_thread` joins what relates:
 `intention:<id>` becomes a deadline step (`intention-<id>`), a card's ref shows in the thread's
-timeline (`thread_cards`, with every card raised with the source `thread:<id>`), and `summary`
+timeline (`thread_cards`, with every card raised with the source `thread:<id>` or by the task of
+one of its steps), and `summary`
 sets where it stands, from the subject's progress memory. **A step's change wakes its holder**,
 when someone else made it (the user, a card, the clock, a task): the lead through `thread_inbox`,
 or the brain by an event `[thread N « title »] étape « … » (key, kind) → status`, which does not
 block it. What a tool said, or an intention drawn from external content, taints the step
 (`thread_steps.tainted`), the event that carries it, and `read_thread`. A thread that ends drops
 what still waits or runs in it: its tasks stop, its step cards are withdrawn (`callStepGone`).
+
+**The brain's turn about a thread** (`thread_turn.go`): a turn that names a thread (a thread tool
+called on it, or the delivered event of one of its steps, `thread_msg:<seq>`) is about it until it
+names another. The cards it raises meanwhile (one of its own calls' access cards, a task's start)
+are that thread's and show in its timeline; while one waits, the thread's surface shows it under
+« À toi », answered in place, and a decision moves the thread (`linkedCardMoved`). A new delivery
+(or a heartbeat) starts about no thread; a thread tool on an id that is no thread changes nothing. The prompt
+(`brain-prompt.md`, « Les threads ») says when the brain opens or resumes a thread (a question about
+a matter, a request of more than one step, an alert worth following: `find_thread` by subject
+first), how its steps grow from what is found, when its surface `thread-<id>` takes the stage
+(« where does it stand », from the workspace: `workspace_focus`) and when it opens on the side
+(« launch », « while I… »), and that a wake turn updates the thread without asking the user.
 
 For the thread's surface: `threadTimeline(id)` reads the thread with each step's kind, status,
 times, card ref and state (and an approved call's run state), whether it is tainted, the cards
@@ -984,8 +997,11 @@ at the next move, as `watchProposals` does.
 - **One writer per scope**: two steps writing the same repository branch or folder never run at
   once; the second waits.
 - **Handoff**: a task step's prompt gets the thread's goal, `done_when` and the outputs of the
-  steps it comes after (the agent's last message, or what the lead gave on accepting).
-- **Limits held by the code**: 2 retries per step (a retry answers the idle task with what to fix,
+  steps it comes after (the agent's last message, or what the lead gave on accepting). An output
+  that may carry what someone else wrote (a tainted step, a task that read external content) taints
+  the task it is handed to, approved plan or not: it starts tainted, never as a clean start.
+- **Limits held by the code**: 20 unfinished steps at once (a light thread grows as the matter goes
+  and comes back: what it went through does not count), 200 over a thread's life; 2 retries per step (a retry answers the idle task with what to fix,
   or starts a new one), 2 plan changes without asking (then a card), a budget of running time (60
   minutes by default; past it the thread pauses, the running steps finish, and a card offers more
   time). The brain never gives itself more time.

@@ -215,6 +215,33 @@ func (c *core) wholeThreadAsks(thread int64) []int64 {
 	return out
 }
 
+// linkedWaiting are the cards linked to a thread (thread_cards) that still
+// wait for the user and are no step's: they are answered on its surface.
+func (c *core) linkedWaiting(thread int64, steps []threadSurfaceStep) []string {
+	rows, err := c.store.db.Query(`SELECT ref FROM thread_cards WHERE thread = ? ORDER BY created, ref`, thread)
+	if err != nil {
+		return nil
+	}
+	var refs []string
+	for rows.Next() {
+		var ref string
+		if rows.Scan(&ref) == nil {
+			refs = append(refs, ref)
+		}
+	}
+	rows.Close() // one connection: the states are read after
+	var out []string
+	for _, ref := range refs {
+		if slices.ContainsFunc(steps, func(st threadSurfaceStep) bool { return st.Card == ref }) {
+			continue
+		}
+		if kind, _, ok := parseProposalRef(ref); ok && kind != cardThread && c.cardState(ref) == cardPending {
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
 // threadPart is the part the thread's holder added to its surface.
 type threadPart struct {
 	Author     string          `json:"author"`
@@ -284,8 +311,10 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		add(comp{"id": "thread_external", "component": "Text", "variant": "caption", "text": w("thread.surface.tainted")})
 	}
 
-	// What waits for the user: the thread's own cards, then its steps'.
-	yours := len(asks) > 0
+	// What waits for the user: the thread's own cards, the cards raised for
+	// it (thread_turn.go), then its steps'.
+	linked := c.linkedWaiting(s.ID, steps)
+	yours := len(asks) > 0 || len(linked) > 0
 	for _, st := range steps {
 		yours = yours || st.Waits
 	}
@@ -294,6 +323,9 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		add(comp{"id": "thread_yours", "component": "Text", "variant": "subtitle", "text": w("thread.surface.yours")})
 		for _, id := range asks {
 			add(comp{"id": "thread_ask_" + strconv.FormatInt(id, 10), "component": "Proposal", "proposalId": proposalRef(cardThread, id)})
+		}
+		for i, ref := range linked {
+			add(comp{"id": "thread_linked_" + strconv.Itoa(i), "component": "Proposal", "proposalId": ref})
 		}
 		for i, st := range steps {
 			n := strconv.Itoa(i)

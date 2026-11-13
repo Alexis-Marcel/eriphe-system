@@ -195,7 +195,8 @@ const (
 	planAmends    = 2  // changes of the plan without asking the user
 	defaultBudget = 60 // minutes, when the plan names none
 	maxBudget     = 24 * 60
-	maxSteps      = 20
+	maxSteps      = 20   // unfinished steps of a thread at once
+	maxStepsEver  = 200  // every step a thread had: its timeline's bound
 	stepOutputMax = 2000 // runes of a step's output passed to the steps after it
 	threadTextMax = 300
 )
@@ -342,13 +343,22 @@ func (s *stepSpec) normalize() error {
 // unique, what each comes after exists, and no cycle.
 func checkPlan(have []Step, add []stepSpec) error {
 	known := map[string][]string{}
+	open := 0
 	for _, s := range have {
 		if s.Status != stepDropped {
 			known[s.Key] = s.After
 		}
+		if !s.done() {
+			open++
+		}
 	}
-	if len(known)+len(add) > maxSteps {
-		return fmt.Errorf("at most %d steps in a thread", maxSteps)
+	// A light thread grows as the matter goes, and comes back: what bounds
+	// it is what still waits or runs, not what it went through.
+	if open+len(add) > maxSteps {
+		return fmt.Errorf("at most %d unfinished steps in a thread: let some finish or settle them first", maxSteps)
+	}
+	if len(have)+len(add) > maxStepsEver {
+		return fmt.Errorf("at most %d steps in a thread over its life: open another for what comes next", maxStepsEver)
 	}
 	for i := range add {
 		if err := add[i].normalize(); err != nil {

@@ -166,6 +166,7 @@ type brainTurn struct {
 	from, to int // the seqs of the messages delivered in this turn
 	eventSeq int // the brain task's last event when the turn started
 	tainted  []string
+	thread   int64                // the thread the turn is about: the last one it named (thread_turn.go)
 	keep     func(brainTurnState) // stores it, so a restart of eriphe-core does not forget it
 }
 
@@ -175,6 +176,7 @@ type brainTurnState struct {
 	To       int      `json:"to"`
 	EventSeq int      `json:"event_seq"`
 	Tainted  []string `json:"tainted,omitempty"`
+	Thread   int64    `json:"thread,omitempty"`
 }
 
 // span is the seqs of the messages delivered in this turn; 0, 0 if none.
@@ -201,20 +203,20 @@ func (t *brainTurn) load(raw string, brainRuns bool) {
 		}
 		return
 	}
-	t.from, t.to, t.eventSeq, t.tainted = st.From, st.To, st.EventSeq, st.Tainted
+	t.from, t.to, t.eventSeq, t.tainted, t.thread = st.From, st.To, st.EventSeq, st.Tainted, st.Thread
 }
 
 // save is called with t.mu held.
 func (t *brainTurn) save() {
 	if t.keep != nil {
-		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...)})
+		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...), t.thread})
 	}
 }
 
 func (t *brainTurn) start(from, to, eventSeq int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.from, t.to, t.eventSeq, t.tainted = from, to, eventSeq, nil
+	t.from, t.to, t.eventSeq, t.tainted, t.thread = from, to, eventSeq, nil, 0
 	t.save()
 }
 
