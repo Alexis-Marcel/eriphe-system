@@ -4,6 +4,7 @@ import { boot } from "./data";
 import { Espace } from "./Espace";
 import { FailSafe } from "./Fallback";
 import { WordsContext, makeT } from "./i18n";
+import "./fonts.css";
 import "./espace.css";
 
 // The shell (web/templates/espace.html) names where the boot is; the dev

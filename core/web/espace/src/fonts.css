@@ -1,0 +1,20 @@
+/* The workspace's two typefaces, served by eriphe-core with the app (the
+   CSP allows fonts from 'self' only): Bricolage Grotesque for what Eriphe
+   says and the titles, Hanken Grotesk for the rest. Variable fonts, Latin
+   only, both under the SIL Open Font License (@fontsource-variable). */
+
+@font-face {
+  font-family: "Bricolage Grotesque Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("../node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Hanken Grotesk Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../node_modules/@fontsource-variable/hanken-grotesk/files/hanken-grotesk-latin-wght-normal.woff2") format("woff2-variations");
+}

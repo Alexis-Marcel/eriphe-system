@@ -525,6 +525,35 @@ describe("the catalog's components", () => {
     expect(sent).toEqual([{ surfaceId: "t", componentId: "item", ref: "memory:2", yes: true }]);
   });
 
+  it("mark a proposal drawn from external content with a small badge, the whole sentence for screen readers", async () => {
+    const view = { ref: "rule:11", card: 11, state: "pending", text: "Classer la facture ?", tainted: true };
+    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "rule:11" }]), { read: async () => view, answer: async () => true });
+    await act(async () => {});
+    const badge = $(".a2-proposal-kicker .a2-badge-external");
+    expect(badge.getAttribute("title")).toBe("Vient d'un contenu extérieur : vérifie ce qui va être fait.");
+    expect(badge.querySelector("[aria-hidden=true]:not(svg)")?.textContent).toBe("extérieur");
+    expect(badge.querySelector(".sr-only")?.textContent).toBe("Vient d'un contenu extérieur : vérifie ce qui va être fait.");
+    // No more line of its own under the proposal.
+    expect($(".a2-proposal-taint")).toBeNull();
+  });
+
+  it("say at once that an answer is on its way", async () => {
+    const view = { ref: "rule:12", card: 12, state: "pending", text: "Ranger ?" };
+    let done!: (ok: boolean) => void;
+    await mount("en", one([{ id: "root", component: "Proposal", proposalId: "rule:12" }]), {
+      read: async () => view,
+      answer: () => new Promise<boolean>((r) => (done = r)),
+    });
+    await act(async () => {});
+    const [yes, no] = $$(".a2-proposal-actions button");
+    await act(async () => yes.click());
+    expect(yes.classList.contains("is-busy")).toBe(true);
+    expect(yes.getAttribute("aria-busy")).toBe("true");
+    expect((no as HTMLButtonElement).disabled).toBe(true);
+    expect(no.classList.contains("is-busy")).toBe(false);
+    await act(async () => done(true));
+  });
+
   it("render Markdown as text, never as HTML", async () => {
     await mount("en", one([
       {

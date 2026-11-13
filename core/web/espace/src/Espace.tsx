@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { createAdapter } from "./a2ui/adapter";
-import { SAMPLE_SURFACE, galleryFixtures, gallerySurfaces, sampleLayout, sampleProposals, surfaceFixtures } from "./a2ui/fixtures";
+import { Icon } from "./a2ui/icons";
+import { galleryFixtures, gallerySurfaces, sampleProposals, workspaceFixtures } from "./a2ui/fixtures";
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
@@ -9,6 +10,7 @@ import { ExchangeView, landed, lastSeq, Notices, type Sent } from "./Exchange";
 import { CONVO } from "./Fallback";
 import { DIMS, Grid, stacked, useNarrow, type Spot } from "./Grid";
 import { useWords } from "./i18n";
+import { fitted, focusedIn, unfocused } from "./place";
 import { startPresence } from "./presence";
 import type { Layout } from "./types";
 
@@ -50,17 +52,23 @@ export function closedIn(l: Layout, id: string): Layout {
   };
 }
 
-// focusedIn is a layout with a surface opened, at once; eriphe-core then
-// recomposes the workspace around it (workspace_focus.go).
-export function focusedIn(l: Layout, id: string): Layout {
-  return { ...l, focus: id, say: undefined };
-}
+export { focusedIn, unfocused };
 
-// unfocused is the layout when the focus ends: the one before it when the
-// page kept it (no eriphe-core behind), else the same with nothing open
-// until eriphe-core gives the one before back.
-export function unfocused(l: Layout, before: Layout | null): Layout {
-  return before ?? { ...l, focus: undefined, say: undefined, items: l.items.map(({ related: _, ...i }) => i) };
+// A click answers at once: opening a surface lays it out large at once
+// (focusedIn), going back gives the layout before it (unfocused), while
+// eriphe-core's own layout is on its way. Until core's layout agrees, or
+// for INTENT_FOR at most, the page keeps what the user asked over each
+// layout core sends (shownLayout): a layout already on its way does not
+// undo the click.
+export const INTENT_FOR = 6_000;
+export type Intent = { open: string; at: number } | { back: Layout | null; at: number };
+
+// shownLayout is core's layout with what the user asked and core has not
+// done yet; null once core agrees (or the wait is over): the intent ends.
+export function shownLayout(core: Layout, intent: Intent | null, now: number): Layout | null {
+  if (!intent || now - intent.at > INTENT_FOR) return null;
+  if ("open" in intent) return core.focus === intent.open ? null : focusedIn(core, intent.open);
+  return core.focus ? unfocused(core, intent.back) : null;
 }
 
 // layoutLine is Eriphe's line above the grid: the brain's about what is
@@ -102,7 +110,12 @@ export function Espace({ boot }: { boot: data.Boot }) {
   // dev server), a made-up one shows what the path does; with ?gallery,
   // every component of the catalog, one under the other.
   const [surfaces] = useState(() => createAdapter(lang));
+  // layout is core's (or the sample's); what is drawn is it with the
+  // user's intent over it, fitted to the tiles' content (place.ts).
   const [layout, setLayout] = useState<Layout | null>(null);
+  const [intent, setIntent] = useState<Intent | null>(null);
+  const [needs, setNeeds] = useState<Record<string, number>>({});
+  const onNeed = useCallback((id: string, rows: number) => setNeeds((n) => (n[id] === rows ? n : { ...n, [id]: rows })), []);
   const [gallery] = useState(() => new URLSearchParams(location.search).has("gallery"));
   const proposals = useMemo(() => (live ? coreProposals : sampleProposals(lang)), [live, lang]);
 
@@ -140,31 +153,54 @@ export function Espace({ boot }: { boot: data.Boot }) {
 
   useEffect(() => {
     if (boot.live && !gallery) return data.stream(boot, surfaces, setLayout, { onExchange, onNotes: addNotes });
-    surfaces.applyMessages(gallery ? galleryFixtures(lang) : surfaceFixtures(lang));
-    if (!gallery) setLayout(sampleLayout(lang));
+    const sample = workspaceFixtures(lang);
+    surfaces.applyMessages(gallery ? galleryFixtures(lang) : sample.messages);
+    if (!gallery) setLayout(sample.layout);
     const off = surfaces.onAction(() => say(t("espace.sent.sample")));
     return () => {
       off();
-      const ids = gallery ? gallerySurfaces(lang) : [SAMPLE_SURFACE];
+      const ids = gallery ? gallerySurfaces(lang) : sample.ids;
       surfaces.applyMessages(ids.map((surfaceId) => ({ version: "1.0" as const, deleteSurface: { surfaceId } })));
     };
   }, [boot, surfaces, lang, gallery, onExchange, addNotes]);
 
   const pool = useSyncExternalStore(surfaces.subscribe, surfaces.surfaces);
-  const onSurfaces = !gallery && !!layout && (pool.length > 0 || layout.items.length + layout.chips.length > 0);
-  const sfocus = onSurfaces ? layout?.focus ?? null : null;
-  const sfocusTitle = sfocus ? layout?.items.find((i) => i.id === sfocus)?.title ?? sfocus : null;
+  // The intent ends once core's layout does what it asked, or after a while.
+  const over = layout && intent ? shownLayout(layout, intent, Date.now()) : null;
+  useEffect(() => {
+    if (intent && layout && !shownLayout(layout, intent, Date.now())) setIntent(null);
+  }, [layout, intent]);
+  useEffect(() => {
+    if (!intent) return;
+    const timer = setTimeout(() => setIntent((i) => (i === intent ? null : i)), INTENT_FOR + 50);
+    return () => clearTimeout(timer);
+  }, [intent]);
+  const placed = over ?? layout;
+  const shown = useMemo(() => (placed && !narrow ? fitted(placed, needs) : placed), [placed, needs, narrow]);
+  const onSurfaces = !gallery && !!shown && (pool.length > 0 || shown.items.length + shown.chips.length > 0);
+  const sfocus = onSurfaces ? shown?.focus ?? null : null;
+  const sfocusTitle = sfocus ? shown?.items.find((i) => i.id === sfocus)?.title ?? sfocus : null;
   // On a phone the screen is the open surface's once it is drawn alone (stacked), not before:
   // a chip opened waits in the column until core places it.
-  const full = narrow && onSurfaces && stacked(layout!, new Set(pool.map((s) => s.id))).full;
-  const sbefore = useRef<Layout | null>(null); // the layout before the focus, with no eriphe-core behind
+  const full = narrow && onSurfaces && stacked(shown!, new Set(pool.map((s) => s.id))).full;
+  const sbefore = useRef<Layout | null>(null); // the layout before the focus
   const openSurface = (id: string) => {
     setSaid(null);
     sopened.current.add(id);
     sclosed.current.delete(id);
-    if (boot.live) data.place("open", id).catch(() => false);
-    else sbefore.current ??= layout;
-    setLayout((l) => l && focusedIn(l, id));
+    if (!placed?.focus) sbefore.current = placed;
+    if (!boot.live) return setLayout((l) => l && focusedIn(l, id));
+    const mine: Intent = { open: id, at: Date.now() };
+    setIntent(mine);
+    data.place("open", id).then(
+      (ok) => ok || failed(mine),
+      () => failed(mine),
+    );
+  };
+  // What core refused or never got: the page goes back to core's layout, and says so.
+  const failed = (mine: Intent) => {
+    setIntent((i) => (i === mine ? null : i));
+    say(t("espace.error"));
   };
   // The user arranges the grid: shown at once, kept by eriphe-core for the
   // session (workspace_gestures.go).
@@ -193,16 +229,19 @@ export function Espace({ boot }: { boot: data.Boot }) {
   }, [layout, live, onSurfaces]);
   const backSurface = () => {
     if (!sfocus) return;
-    if (boot.live) data.place("back", sfocus).catch(() => false);
-    else {
-      const before = sbefore.current;
-      sbefore.current = null;
-      setLayout((l) => l && unfocused(l, before));
-    }
+    const before = sbefore.current;
+    sbefore.current = null;
+    if (!boot.live) return setLayout((l) => l && unfocused(l, before));
+    const mine: Intent = { back: before, at: Date.now() };
+    setIntent(mine);
+    data.place("back", sfocus).then(
+      (ok) => ok || failed(mine),
+      () => failed(mine),
+    );
   };
   // Nothing to show: Eriphe says so, never an empty grid without a word.
-  const nothing = !gallery && !!layout && !onSurfaces;
-  const text = useTyped(said ?? (layout ? layoutLine(layout) : ""));
+  const nothing = !gallery && !!shown && !onSurfaces;
+  const text = useTyped(said ?? (shown ? layoutLine(shown) : ""));
 
   // A message goes to Eriphe with the surface open, if any: « montre-m'en
   // moins », « lance une recherche là-dessus ». It shows in the exchange at
@@ -246,13 +285,18 @@ export function Espace({ boot }: { boot: data.Boot }) {
   }, [live, gallery]);
 
   const hint = sfocusTitle ? t("espace.input.about", sfocusTitle) : t("espace.input");
-  const ambient = (onSurfaces ? layout!.ambient : undefined) ?? "calm";
+  const ambient = (onSurfaces ? shown!.ambient : undefined) ?? "calm";
 
   return (
     <MotionConfig reducedMotion="user">
       <div className={`espace ambient-${ambient}${wide ? " wide" : ""}${narrow ? " narrow" : ""}${full ? " focused" : ""}`}>
         <aside className="eriphe-panel" aria-live="polite">
-          <p className="eriphe-name">{boot.name}</p>
+          <div className="eriphe-head">
+            <p className="eriphe-name">{boot.name}</p>
+            <a className="eriphe-settings" href="/settings" title={t("espace.settings")} aria-label={t("espace.settings")}>
+              <Icon name="settings" />
+            </a>
+          </div>
           <div className="eriphe-text">{text && <p>{text}</p>}</div>
           {live && nothing && <p className="eriphe-sample quiet">{t("espace.empty")}</p>}
           {!live && <p className="eriphe-sample">{t("espace.sample")}</p>}
@@ -277,7 +321,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
         <div className="stage">
           <ProposalsContext.Provider value={proposals}>
             {onSurfaces ? (
-              <Grid adapter={surfaces} layout={layout!} narrow={narrow} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} />
+              <Grid adapter={surfaces} layout={shown!} narrow={narrow} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} onNeed={onNeed} />
             ) : gallery ? (
               <div className="surfaces">
                 <Surfaces adapter={surfaces} />

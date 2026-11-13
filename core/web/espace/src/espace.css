@@ -6,8 +6,8 @@
 :root {
   --field: #1b2433;
   --field-deep: #121a26;
-  --paper: #eef0ec;
-  --paper-dim: #d9ddd6;
+  --paper: #f0f0ec;
+  --paper-dim: #dddeda;
   --ink: #1a1f27;
   --ink-soft: #4b5361;
   --calm: #8fb3a1;
@@ -15,7 +15,8 @@
   --decision: #7fa3d6;
   --late: #b3541e;
   --glow: var(--calm);
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font: "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --display: "Bricolage Grotesque Variable", var(--font);
   color-scheme: dark;
 }
 
@@ -59,23 +60,31 @@ button, input, select { font: inherit; }
 
 /* Eriphe: the narrow column */
 .eriphe-panel {
-  display: flex; flex-direction: column; gap: 10px;
-  min-height: 0; max-height: 100%; overflow: auto;
-  align-self: start;
-  padding: 20px 20px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+  min-height: 0; max-height: 100%; overflow: auto; scrollbar-width: thin;
+  align-self: stretch;
+  padding: 22px 22px 16px;
   border-radius: 22px;
   background: color-mix(in oklab, var(--field-deep) 70%, transparent);
   border: 1px solid color-mix(in oklab, var(--glow) 35%, transparent);
   backdrop-filter: blur(14px);
 }
-.eriphe-name { margin: 0; font-weight: 600; font-size: 15px; color: var(--glow); }
+.eriphe-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.eriphe-name { margin: 0; font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--glow); }
+/* The way to the settings: a quiet icon, plain on hover or focus. */
+.eriphe-settings {
+  display: grid; place-items: center; width: 30px; height: 30px; margin: -6px -8px -6px 0; border-radius: 10px;
+  color: color-mix(in oklab, var(--paper) 55%, transparent); transition: color 0.15s, background 0.15s;
+}
+.eriphe-settings .a2-icon { width: 18px; height: 18px; }
+.eriphe-settings:hover, .eriphe-settings:focus-visible { color: var(--paper); background: color-mix(in oklab, var(--paper) 10%, transparent); }
 .eriphe-text { min-height: 3em; }
-.eriphe-text p { margin: 0; font-size: 18px; line-height: 1.4; letter-spacing: -0.01em; }
+.eriphe-text p { margin: 0; font-family: var(--display); font-weight: 400; font-size: 19px; line-height: 1.38; letter-spacing: -0.01em; }
 .eriphe-sample { margin: 0; padding: 6px 10px; border-radius: 10px; font-size: 12px; color: var(--ink); background: var(--urgent); }
 .eriphe-sample a { color: inherit; }
 .eriphe-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .eriphe-input input {
-  width: 100%; padding: 10px 14px; border-radius: 14px;
+  width: 100%; padding: 12px 16px; border-radius: 14px;
   border: 1px solid color-mix(in oklab, var(--paper) 18%, transparent);
   background: color-mix(in oklab, var(--paper) 6%, transparent); color: var(--paper);
 }
@@ -121,7 +130,7 @@ a.notice-text { text-decoration: none; }
 a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .notice-close { flex: none; padding: 0 4px; border: 0; background: none; color: var(--ink-soft); font-size: 18px; line-height: 1; cursor: pointer; }
 
-.eriphe-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-size: 13px; }
+.eriphe-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; margin-top: auto; padding-top: 8px; font-size: 13px; }
 .eriphe-links a, .eriphe-links .linkish { color: color-mix(in oklab, var(--paper) 75%, transparent); }
 
 /* The stage: chips at the top, then the canvas of surfaces (or the gallery's list), on one screen */
@@ -132,9 +141,10 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .canvas { grid-row: 3; }
 .chip {
   flex: 0 0 auto; display: flex; align-items: center; gap: 10px; max-width: 360px;
-  padding: 8px 12px; border-radius: 14px; background: var(--paper); color: var(--ink);
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--glow) 60%, transparent);
+  padding: 8px 14px; border-radius: 16px; background: var(--paper); color: var(--ink);
+  box-shadow: 0 10px 24px -14px #000c;
 }
+.chip:hover { background: #fff; }
 .chip.closed { background: var(--paper-dim); box-shadow: none; opacity: 0.75; }
 .chip-open { display: grid; gap: 0; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
 .chip-text { font-weight: 600; font-size: 14px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -165,24 +175,37 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .mod {
   position: relative; min-width: 0; min-height: 0;
   display: flex; flex-direction: column;
-  padding: 14px 16px 10px;
+  padding: 14px 18px 12px;
   background: var(--paper); color: var(--ink);
-  border-radius: 16px;
+  border-radius: 18px;
   overflow: hidden; cursor: pointer;
+  transition: box-shadow 0.2s, background 0.2s;
 }
-.mod.size-xl { padding: 18px 20px 12px; border-radius: 22px; }
-.mod.size-s { padding: 8px 12px; border-radius: 12px; background: var(--paper-dim); cursor: pointer; }
-.mod.focus { cursor: default; box-shadow: 0 0 0 2px var(--glow), 0 30px 80px -30px color-mix(in oklab, var(--glow) 70%, transparent); }
+.mod:hover { box-shadow: 0 14px 34px -20px #000d; }
+.mod.size-xl { padding: 20px 24px 14px; border-radius: 24px; }
+.mod.size-s { padding: 10px 14px; border-radius: 14px; background: var(--paper-dim); }
+/* The center stage: the surface open, ringed in the decision's blue. */
+.mod.focus { cursor: default; box-shadow: 0 0 0 2px var(--decision), 0 30px 80px -30px color-mix(in oklab, var(--decision) 70%, transparent); }
 
 /* A surface's tile: its title over it; it enters by CSS, Motion moves it */
 .tile { animation: tile-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; } /* not forwards: Motion moves it after */
-.tile-title { margin: 0 0 6px; padding-right: 30px; font-size: 13px; font-weight: 600; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Its title, over the content as a kicker: whole, on as many lines as it takes. */
+.tile-title { margin: 0 0 6px; font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--ink-soft); overflow-wrap: anywhere; }
 .size-s .tile-title { margin-bottom: 2px; font-size: 12px; }
+/* Said when the tile shows only its first blocks: the rest is there, open. */
+.tile-more { display: none; flex: none; margin-top: 1px; padding: 0 8px; border-radius: 999px; font-size: 11px; line-height: 18px; color: var(--ink-soft); background: #1a1f2710; white-space: nowrap; }
+.tile.cut .tile-more { display: block; }
+.tile.clip .mod-body { mask-image: linear-gradient(#000 calc(100% - 32px), transparent); }
 /* Its three small buttons: move (drag or arrows), size (+ or −), close */
 .tile-head { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
 .tile-head .tile-title { flex: 1; min-width: 0; padding-right: 0; }
-.tile-tools { display: flex; gap: 2px; margin: -4px -6px 0 0; opacity: 0.35; transition: opacity 0.15s; }
+/* Out of sight until the tile is hovered or holds the focus. */
+.tile-tools {
+  position: absolute; top: 8px; right: 10px; z-index: 1; display: flex; gap: 2px; padding: 2px; border-radius: 10px;
+  background: inherit; opacity: 0; transition: opacity 0.15s;
+}
 .tile:hover .tile-tools, .tile:focus-within .tile-tools, .tile.dragging .tile-tools { opacity: 1; }
+@media (hover: none) { .tile-tools { opacity: 0.6; } }
 .tile-tool {
   width: 24px; height: 24px; padding: 0; border: 0; border-radius: 8px;
   display: grid; place-items: center;
@@ -193,7 +216,7 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .tile.dragging .tile-move { cursor: grabbing; }
 .tile.dragging { opacity: 0.6; }
 .tile.pinned { box-shadow: inset 0 0 0 1px #1a1f2722; }
-.tile.focus.pinned { box-shadow: 0 0 0 2px var(--glow), 0 30px 80px -30px color-mix(in oklab, var(--glow) 70%, transparent); }
+.tile.focus.pinned { box-shadow: 0 0 0 2px var(--decision), 0 30px 80px -30px color-mix(in oklab, var(--decision) 70%, transparent); }
 /* Where a dragged tile would go */
 .tile-ghost {
   pointer-events: none; z-index: 2;
@@ -203,11 +226,31 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 @keyframes tile-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .tile { animation: none; } }
 
-.mod-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; overflow: auto; scrollbar-width: thin; }
-.size-s .mod-body { gap: 0; overflow: hidden; }
-.why { margin: 4px 0 0; font-size: 11px; color: color-mix(in oklab, currentColor 55%, transparent); }
+/* A tile's body never scrolls on the grid (Grid.tsx fits it); the surface
+   open does. .mod-fit holds the content at its natural height, measured. */
+.mod-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.mod.focus .mod-body { overflow: auto; scrollbar-width: thin; overscroll-behavior: contain; }
+.mod-fit { flex: none; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.mod-fit .fit-out { display: none !important; }
 
-.btn { padding: 6px 12px; border-radius: 999px; border: 1px solid #1a1f2733; background: transparent; color: inherit; cursor: pointer; font-size: 14px; }
+/* What a tile is, by the component at its root, as in the scenarios: a
+   proposal is a decision (ringed in blue), a warning is urgent (amber),
+   an error is late; the component's own box gives way to the tile's. */
+.tile:has(> .mod-body > .mod-fit > .a2-proposal-pending):not(.focus) { box-shadow: 0 0 0 2px var(--decision), 0 24px 60px -34px color-mix(in oklab, var(--decision) 80%, transparent); }
+.tile:has(> .mod-body > .mod-fit > .a2-alert-warning) { background: var(--urgent); }
+.tile:has(> .mod-body > .mod-fit > .a2-alert-warning) .tile-title { color: #3a2a10; }
+.tile:has(> .mod-body > .mod-fit > .a2-alert-error) { background: color-mix(in oklab, var(--late) 22%, var(--paper)); }
+.mod-fit > .a2-proposal, .mod-fit > .a2-alert { padding: 0; background: none; box-shadow: none; border-radius: 0; }
+.mod-fit > .a2-alert-warning > .a2-icon { color: #3a2a10; }
+.mod-fit > .a2-alert .a2-alert-text { font-size: 14px; }
+.mod-fit > .a2-proposal .a2-proposal-text, .mod-fit > .a2-card > .a2-card-title { font-family: var(--display); font-size: 18px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }
+.size-xl .mod-fit > .a2-proposal .a2-proposal-text, .size-xl .mod-fit > .a2-card > .a2-card-title { font-size: 24px; }
+.size-s .mod-fit > .a2-proposal .a2-proposal-text { font-size: 15px; }
+.why { margin: 6px 0 0; font-size: 12px; color: color-mix(in oklab, currentColor 55%, transparent); }
+.size-s .why { display: none; }
+
+.btn { padding: 6px 14px; border-radius: 999px; border: 1px solid #1a1f2733; background: transparent; color: inherit; cursor: pointer; font-size: 14px; transition: background 0.15s, border-color 0.15s, transform 0.1s; }
+.btn:active { transform: scale(0.97); }
 .btn.ghost { border-color: color-mix(in oklab, var(--paper) 25%, transparent); color: var(--paper); }
 .linkish { border: 0; background: none; padding: 0; color: var(--ink); text-align: left; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 
@@ -238,6 +281,7 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .canvas.column { height: auto; display: flex; flex-direction: column; overflow: visible; }
 .canvas.column .mod { flex: none; min-height: 64px; }
 .canvas.column .mod-body { flex: none; overflow: visible; }
+.canvas.column .tile-more { display: none; }
 .narrow .surfaces { flex-direction: column; max-height: none; }
 .narrow .a2-surface { flex: none; overflow: visible; }
 /* A surface open on a phone: the screen is its own. */
@@ -476,13 +520,26 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-proposal-kicker { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #3f5f8f; }
 .a2-proposal-decided .a2-proposal-kicker { color: var(--ink-soft); }
 .a2-proposal-text { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; }
-.a2-proposal-why, .a2-proposal-taint { margin: 0; font-size: 13px; color: var(--ink-soft); }
-.a2-proposal-taint { color: var(--late); }
+.a2-proposal-why { margin: 0; font-size: 13px; color: var(--ink-soft); }
+/* Drawn from external content: a small badge, its sentence on hover. */
+.a2-badge {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 1px 8px 1px 6px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; line-height: 18px; white-space: nowrap; cursor: help;
+}
+.a2-badge .a2-icon { width: 12px; height: 12px; }
+.a2-badge-external { color: #7a4310; background: color-mix(in oklab, var(--urgent) 28%, #fff); }
 .a2-proposal-fields { margin: 4px 0 0; display: grid; gap: 2px; font-size: 13px; }
 .a2-proposal-fields div { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: 8px; }
 .a2-proposal-fields dt { color: var(--ink-soft); }
 .a2-proposal-fields dd { margin: 0; }
 .a2-proposal-actions { display: flex; gap: 8px; margin-top: 8px; }
+/* The answer on its way: the button pressed says so at once. */
+.a2-button.is-busy { opacity: 1; cursor: progress; }
+.a2-button.is-busy::after {
+  content: ""; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid currentColor; border-right-color: transparent; animation: a2-spin 0.7s linear infinite;
+}
+@keyframes a2-spin { to { rotate: 360deg; } }
 .a2-proposal-failed { margin: 4px 0 0; font-size: 12px; color: var(--late); }
 
 /* Alert */
@@ -515,4 +572,6 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
   .option { transition: none; }
   .a2-shimmer { animation: none; }
   .a2-option span { transition: none; }
+  .a2-button.is-busy::after { animation: none; }
+  .mod, .btn { transition: none; }
 }

@@ -2723,7 +2723,8 @@ or more, `decision` with one of 80, `calm` otherwise; `by` is `composer` or `fal
 the composer's line, empty when code chose. With a surface open, a tile related to it has
 `"related": true` and `say` is the brain's line about it, once it wrote one; `focusBy` is
 `brain` when Eriphe put it on stage (below), and `previous` names the surface that was on stage
-just before it.
+just before it. A tile of weight 80
+or more has `"urgent": true`: laying a surface the user opens out at once, the page keeps it in front.
 
 **Focus** (`workspace_focus.go`): one workspace, and opening a surface does what a separate
 dashboard would. The open action places it first at once (above); once the focus settles (0.8 s
@@ -3059,9 +3060,45 @@ carries `surface:<id>` as its `about`. Each tile has three small buttons in its 
 by class showing where, or with the arrow keys), the size button changes its size (a click goes
 up, from xl back to s; + or − and the arrow keys), the cross closes it for the session. The page
 shows the change at once and sends the gesture; core's next layout places the others around it.
-A tile that leaves the grid unopened while the page is visible is sent as `ignored`. With no
+A tile that leaves the grid unopened while the page is visible is sent as `ignored`.
+
+**A tile fits its content** (`place.ts`, `fitted`; `Grid.tsx`, `measureTiles`). A tile on the grid
+never scrolls and never cuts a sentence: after each drawing, and when a tile's content or the
+canvas changes size (a `ResizeObserver`), the page measures each tile's content at its natural
+height (`.mod-fit`), at its width, and counts the rows it needs. Over core's layout, in core's
+order, a tile that needs more grows: under itself when the rows are free, else at the first place
+where it fits as tall, else as tall as it can at its place; one whose place an earlier tile took
+goes to the first free place, or is folded, first of the chips. The identity when every tile holds
+its content. The surface open and a tile the user placed keep their cells. A tile that still has too
+little room shows its first blocks whole, hides the last ones (`foldOut`: list items, rows, a
+column's children, a proposal's why…, never the first) and says the rest is there once opened
+(`espace.tile.more`); one block alone too tall (a day, a chart) fades out at its foot. Only the
+surface open scrolls: it is the workspace within the workspace. Fitting is the page's, per
+screen (core keeps one layout for every tab and the phone, and rows depend on the window's
+height): core's layout, and what the brain reads of it (`workspaceBlock`), keep core's cells and
+sizes before fitting. Not on a phone, where a tile is as tall as its content.
+
+**A click answers at once.** Opening a tile or a chip lays it out at once, before core's layout
+comes (`focusedIn`), by core's own stage rule (`layoutStage`): what the user placed at its place,
+what is urgent (`urgent`), then the surface opened, l at least, then the one that was on stage
+before it, m at most, still live, then the rest packed after, the last folded. Retour gives back
+the layout from before the opening at once (`unfocused`). The page keeps what the user asked over
+each layout core sends until core's agrees, or for 6 s (`shownLayout`, `INTENT_FOR`), so a layout
+already on its way does not undo the click; core's then comes in with Motion's move. An `open` or
+`back` that core refused or never got is undone, with a toast. A proposal's Oui or Non says at once that the answer is on its way (the pressed button
+spins, both are disabled). Closing a tile was already shown at once.
+
+**The look** (`espace.css`, `fonts.css`), the prototype's scenarios': paper tiles on the dark
+field, their title a small kicker over the content, their three buttons out of sight until the
+tile is hovered or holds the keyboard's focus; what a tile is shows by the component at its root
+(`:has`), never by its tool: a proposal waiting is ringed in the decision's blue, a warning is an
+amber tile, an error a late one, their own box giving way to the tile's; the surface open is
+ringed in blue. Eriphe's words and the titles are in Bricolage Grotesque, the rest in Hanken
+Grotesk, served by eriphe-core with the app (`@fontsource-variable`, Latin, SIL Open Font
+License; `font-src 'self'`). With no
 surface at all, Eriphe says so in the column (`espace.empty`): never an empty grid without a word.
-The chat is a narrow column, wider on demand, with a link to the conversation, and a message
+The chat is a narrow column, the whole height, wider on demand, with a link to the conversation
+at its foot and a quiet gear by Eriphe's name that opens the settings (`/settings`), and a message
 written there goes to the conversation; there is no menu and no button that keeps a rule: what the user wants of a surface
 is said to Eriphe.
 
@@ -3347,7 +3384,9 @@ A proposal shows where it matters (#428), with no code for any tool:
 - **Embedded.** `workspace_read` lists the proposals that wait, newest first (`proposals`:
   `ref`, the text unless it was drawn from external content, `when`); an author places a `Proposal` whose
   `proposalId` is one of those refs (`kind:id`), written or bound to the data. Its Oui and Non
-  answer that proposal and no other ([`answer`](#the-actions-of-a-surface)).
+  answer that proposal and no other ([`answer`](#the-actions-of-a-surface)). One drawn from
+  external content carries a small badge (« extérieur »), its whole sentence on hover and for a
+  screen reader.
 - **Dated.** A proposal that has a time shows as a ghost in every `Day` of its day (unless the
   Day says `"proposals": false`, for a day that is not the user's): drawn apart (« Proposé », « Proposé ·
   contenu extérieur » for one drawn from external content), placed by the hour with the events, saying which events it overlaps, which are marked too. A

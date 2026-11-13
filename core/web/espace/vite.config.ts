@@ -18,6 +18,8 @@ const csp =
 
 export default defineConfig({
   plugins: [react()],
+  // Relative: the stylesheet finds its fonts beside it, under /static/espace/.
+  base: "./",
   build: {
     outDir: "../static/espace",
     emptyOutDir: true,
@@ -28,7 +30,8 @@ export default defineConfig({
       output: {
         entryFileNames: "espace.js",
         chunkFileNames: "espace-[name].js",
-        assetFileNames: "espace[extname]",
+        // The stylesheet is espace.css; the fonts keep their names.
+        assetFileNames: (a) => (a.names.some((n) => n.endsWith(".css")) ? "espace[extname]" : "espace-[name][extname]"),
       },
     },
   },

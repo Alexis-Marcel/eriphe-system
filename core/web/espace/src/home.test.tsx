@@ -133,18 +133,18 @@ describe("the workspace on a phone", () => {
     expect(el.querySelector('.eriphe-links a[href="/conversation"]')).not.toBeNull();
     expect(el.querySelector(".eriphe-links button")).toBeNull();
 
-    const tiles = el.querySelectorAll("main.canvas article").length;
+    const tiles = el.querySelectorAll("main.canvas article.tile").length;
     const first = el.querySelector<HTMLElement>("main.canvas article")!;
     await act(async () => first.click());
     expect(page.classList.contains("focused")).toBe(true);
     expect(el.querySelector("main.canvas")!.classList.contains("full")).toBe(true);
-    expect(el.querySelectorAll("main.canvas article")).toHaveLength(1);
+    expect(el.querySelectorAll("main.canvas article.tile")).toHaveLength(1);
     // The line to write to Eriphe about it stays, and the way back.
     expect(el.querySelector(".eriphe-input input")).not.toBeNull();
     const back = el.querySelector<HTMLButtonElement>(".eriphe-actions button")!;
     await act(async () => back.click());
     expect(page.classList.contains("focused")).toBe(false);
-    expect(el.querySelectorAll("main.canvas article")).toHaveLength(tiles);
+    expect(el.querySelectorAll("main.canvas article.tile")).toHaveLength(tiles);
     expect(el.querySelector("main.canvas")!.classList.contains("full")).toBe(false);
   });
 

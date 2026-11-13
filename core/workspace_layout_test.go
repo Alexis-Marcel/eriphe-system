@@ -159,6 +159,10 @@ func TestLayoutFocus(t *testing.T) {
 	if l.Focus != "s-2" || l.Items[0].ID != "s-1" || l.Items[1].ID != "s-2" || l.Items[1].Size != sizeL {
 		t.Fatalf("focus: %s", tilesOf(l))
 	}
+	// The page lays an open surface out at once as code does: it knows what is urgent.
+	if !l.Items[0].Urgent || l.Items[1].Urgent {
+		t.Fatalf("urgent: %+v", l.Items[:2])
+	}
 	// Opened, an urgent surface stays where it is: first.
 	if l := layoutOf(pool, fallbackChoice(momentChange, time.Now()), "s-1"); l.Items[0].ID != "s-1" || l.Items[0].Size != sizeXL {
 		t.Fatalf("urgent focus: %s", tilesOf(l))

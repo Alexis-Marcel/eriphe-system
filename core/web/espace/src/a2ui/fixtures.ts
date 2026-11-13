@@ -90,6 +90,7 @@ export function sampleProposals(lang: Lang): Proposals {
       text: en ? "Stop telling me about invoices before the brief?" : "Ne plus te prévenir des factures avant le brief ?",
       why: en ? "You opened none of the last five." : "Tu n'as ouvert aucune des cinq dernières.",
     },
+    ...queueViews(lang),
     {
       ref: "intention:3",
       card: 8,
@@ -118,4 +119,77 @@ export function sampleProposals(lang: Lang): Proposals {
       return () => followers.delete(on);
     },
   };
+}
+
+// The made-up attention queue of the dev workspace: proposals as
+// eriphe-core's queue shows them, one surface each (workspace_queue.go),
+// some long, some drawn from external content.
+const queue = {
+  fr: [
+    { text: "Répondre à Sam que le devis de la terrasse convient, et proposer de commencer les travaux lundi 16 novembre à 8 h", why: "Sam attend une réponse depuis mardi.", tainted: true },
+    { text: "Garder en mémoire que l'école ferme à 16 h 30 le vendredi" },
+    { text: "Classer la facture d'électricité d'octobre dans Factures / 2026", tainted: true, why: "Elle est arrivée ce matin, avec une pièce jointe." },
+    { text: "Rappeler à Sam de renvoyer le formulaire d'inscription au club avant la fin de la semaine prochaine" },
+  ],
+  en: [
+    { text: "Tell Sam the terrace quote is fine, and offer to start the work on Monday 16 November at 8 am", why: "Sam has been waiting for an answer since Tuesday.", tainted: true },
+    { text: "Remember that the school closes at 4:30 pm on Fridays" },
+    { text: "File the October electricity bill in Bills / 2026", tainted: true, why: "It came this morning, with an attachment." },
+    { text: "Remind Sam to send the club's sign-up form back before the end of next week" },
+  ],
+};
+
+function queueViews(lang: Lang): ProposalView[] {
+  return queue[lang].map((q, i) => ({ ref: `card:${20 + i}`, card: 20 + i, state: "pending", ...q }));
+}
+
+const alert = {
+  fr: { title: "Attend une réponse", text: "La sauvegarde de la nuit ne s'est pas terminée : le disque du NAS était plein à 3 h 12." },
+  en: { title: "Waiting for an answer", text: "Last night's backup did not finish: the NAS disk was full at 3:12 am." },
+};
+
+const eriphe = {
+  fr: "Bonjour. Quatre propositions attendent ton accord, et la sauvegarde de cette nuit a échoué.",
+  en: "Hello. Four proposals wait for your yes, and last night's backup failed.",
+};
+
+const proposalTitle = { fr: "Proposition", en: "Proposal" };
+
+// workspaceFixtures is the dev server's workspace: the made-up surfaces
+// (the to-do list, the queue's proposals and alert, three of the
+// gallery's) and where eriphe-core would lay them out on the 12 × 8 grid.
+export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: Layout; ids: string[] } {
+  const card = (id: string, root: Record<string, unknown>): Message => ({
+    version: "1.0",
+    createSurface: { surfaceId: id, catalogId: CATALOG.id, components: [{ id: "root", ...root }] },
+  } as Message);
+  const pick = (id: string) => galleryFixtures(lang).find((m) => "createSurface" in m && m.createSurface.surfaceId === id)!;
+  const q = queueViews(lang);
+  const messages: Message[] = [
+    ...surfaceFixtures(lang),
+    card("q-alert", { component: "Alert", level: "warning", text: alert[lang].text }),
+    ...q.map((v, i) => card(`q-card-${i}`, { component: "Proposal", proposalId: v.ref })),
+    pick("gallery-day"),
+    pick("gallery-figures"),
+    pick("gallery-project"),
+  ];
+  const t = proposalTitle[lang];
+  const en = lang === "en";
+  const layout: Layout = {
+    eriphe: eriphe[lang],
+    by: "fallback",
+    ambient: "decision",
+    items: [
+      { id: "q-alert", title: alert[lang].title, size: "m", col: 0, row: 0, w: 3, h: 2, urgent: true },
+      { id: "q-card-0", title: t, size: "m", col: 3, row: 0, w: 3, h: 2 },
+      { id: SAMPLE_SURFACE, title: words[lang].title, size: "l", col: 6, row: 0, w: 6, h: 3 },
+      { id: "q-card-1", title: t, size: "s", col: 0, row: 2, w: 3, h: 1 },
+      { id: "q-card-2", title: t, size: "s", col: 3, row: 2, w: 3, h: 1 },
+      { id: "gallery-day", title: en ? "Today" : "Aujourd'hui", size: "l", col: 0, row: 3, w: 4, h: 3 },
+      { id: "gallery-figures", title: en ? "Home" : "Maison", size: "l", col: 4, row: 3, w: 4, h: 3 },
+      { id: "q-card-3", title: t, size: "s", col: 8, row: 3, w: 4, h: 1 },
+    ],
+    chips: [{ id: "gallery-project", title: en ? "The terrace" : "La terrasse", why: en ? "Nothing urgent" : "Rien de pressé" }],
+  };
+  return { messages, layout, ids: messages.flatMap((m) => ("createSurface" in m ? [m.createSurface.surfaceId] : [])) };
 }

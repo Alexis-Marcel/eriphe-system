@@ -670,7 +670,7 @@ const Proposal = createComponentImplementation(
     const src = useProposals();
     const ref = str(props.proposalId);
     const [p, setP] = useState<ProposalView | null | undefined>(undefined);
-    const [busy, setBusy] = useState(false);
+    const [busy, setBusy] = useState<"yes" | "no" | null>(null); // the answer on its way
     const [failed, setFailed] = useState(false);
     useEffect(() => {
       let live = true;
@@ -698,14 +698,14 @@ const Proposal = createComponentImplementation(
     }, [src, ref, moved]);
     const answer = async (yes: boolean) => {
       if (!p || busy) return;
-      setBusy(true);
+      setBusy(yes ? "yes" : "no");
       setFailed(false);
       const surfaceId = context.dataContext.surface?.id ?? "";
       const ok = await src.answer({ surfaceId, componentId: context.componentModel.id, ref: p.ref, yes }).catch(() => false);
       if (!ok) setFailed(true);
       const again = await src.read(ref).catch(() => null);
       setP(again ?? { ...p, state: ok ? (yes ? "approved" : "rejected") : p.state });
-      setBusy(false);
+      setBusy(null);
     };
     if (p === undefined) return <div className="a2-proposal a2-proposal-loading" aria-busy="true"><span className="a2-shimmer" aria-hidden="true" /></div>;
     if (p === null) return <p className="a2-empty">{t("espace.a2.proposal.none")}</p>;
@@ -731,11 +731,18 @@ const Proposal = createComponentImplementation(
         <p className="a2-proposal-kicker" role={exec ? "status" : undefined}>
           <IconView name={icon} />
           {kicker}
+          {/* Drawn from external content: a small badge, the whole sentence for a screen reader and on hover. */}
+          {p.tainted && (
+            <span className="a2-badge a2-badge-external" title={t("espace.a2.proposal.tainted")}>
+              <IconView name="warning" />
+              <span aria-hidden="true">{t("espace.a2.proposal.external")}</span>
+              <span className="sr-only">{t("espace.a2.proposal.tainted")}</span>
+            </span>
+          )}
         </p>
         {exec === "failed" && p.execWhy && <p className="a2-proposal-failed">{t(`espace.a2.proposal.why.${p.execWhy}`)}</p>}
         <p className="a2-proposal-text">{p.text}</p>
         {p.why && <p className="a2-proposal-why">{p.why}</p>}
-        {p.tainted && <p className="a2-proposal-taint">{t("espace.a2.proposal.tainted")}</p>}
         {p.fields && p.fields.length > 0 && (
           <dl className="a2-proposal-fields">
             {p.fields.map((f) => (
@@ -749,10 +756,10 @@ const Proposal = createComponentImplementation(
         {pending && elsewhere && <p className="a2-proposal-why a2-proposal-inchat">{t("espace.a2.proposal.inchat")}</p>}
         {pending && !elsewhere && (
           <div className="a2-proposal-actions">
-            <button type="button" className="btn a2-button a2-button-primary" disabled={busy} onClick={() => answer(true)}>
+            <button type="button" className={`btn a2-button a2-button-primary${busy === "yes" ? " is-busy" : ""}`} disabled={!!busy} aria-busy={busy === "yes"} onClick={() => answer(true)}>
               {t(keeps ? "espace.a2.keep" : "espace.a2.yes")}
             </button>
-            <button type="button" className="btn a2-button" disabled={busy} onClick={() => answer(false)}>
+            <button type="button" className={`btn a2-button${busy === "no" ? " is-busy" : ""}`} disabled={!!busy} aria-busy={busy === "no"} onClick={() => answer(false)}>
               {t(keeps ? "espace.a2.forget" : "espace.a2.no")}
             </button>
           </div>

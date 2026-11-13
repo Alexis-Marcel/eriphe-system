@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Adapter } from "./a2ui/adapter";
 import { SurfaceView } from "./a2ui/Surfaces";
 import { chipLabel, shownChips, surfaceTitle } from "./chips";
 import { useWords } from "./i18n";
+import { COLS, DIMS, ROWS, SIZES, foldOut, needRows } from "./place";
 import type { FoldedChip, Layout, Tile, TileSize } from "./types";
 
 // The workspace's surfaces, where eriphe-core lays them out (workspace_layout.go):
@@ -22,6 +23,13 @@ import type { FoldedChip, Layout, Tile, TileSize } from "./types";
 // shown again (onClose); the page shows it at once, core's next layout
 // follows.
 //
+// A tile on the grid never scrolls and never clips a sentence: the page
+// measures each one's content at its width (onNeed, in rows) and lays it
+// out taller where there is room (place.ts, fitted); one that still has
+// too little room shows its first blocks whole and says the rest is
+// there, open (foldOut). Only the surface open scrolls: it is the
+// workspace within the workspace.
+//
 // On a phone (narrow) the grid does not hold: one column, the tiles in the
 // composer's order, the chips after them, only the cross on a tile; a
 // surface open is drawn alone, on the whole screen (stacked).
@@ -30,10 +38,7 @@ const spring = { type: "spring", stiffness: 260, damping: 30 } as const;
 
 const interactive = "button,input,select,textarea,a,[role=button],[role=tab]";
 
-export const COLS = 12;
-export const ROWS = 8;
-export const SIZES: TileSize[] = ["s", "m", "l", "xl"];
-export const DIMS: Record<TileSize, { w: number; h: number }> = { s: { w: 3, h: 1 }, m: { w: 3, h: 2 }, l: { w: 4, h: 3 }, xl: { w: 6, h: 5 } };
+export { COLS, DIMS, ROWS, SIZES };
 
 // A tile's place as the user gives it: a size at a column and a row.
 export type Spot = { size: TileSize; col: number; row: number };
@@ -114,9 +119,37 @@ type Props = {
   onOpen: (id: string) => void;
   onClose?: (id: string) => void;
   onPlace?: (id: string, what: "moved" | "resized", to: Spot) => void;
+  onNeed?: (id: string, rows: number) => void; // a tile's content needs this many rows
 };
 
-export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => {}, onPlace = () => {} }: Props) {
+// measureTiles measures every tile of the canvas but the one open: the rows
+// its content needs (onNeed), and, when it has too little room for now,
+// which blocks it hides (foldOut, the tile marked .cut; .clip when one
+// block alone is still too tall). What it hid
+// before is shown again first, so the content is measured whole.
+export function measureTiles(canvas: HTMLElement, onNeed: (id: string, rows: number) => void) {
+  const style = getComputedStyle(canvas);
+  const gap = parseFloat(style.rowGap) || 0;
+  const cell = (canvas.clientHeight - gap * (ROWS - 1)) / ROWS;
+  for (const tile of Array.from(canvas.querySelectorAll<HTMLElement>("article.tile"))) {
+    const body = tile.querySelector<HTMLElement>(".mod-body");
+    const fit = tile.querySelector<HTMLElement>(".mod-fit");
+    const id = tile.dataset.surface;
+    if (!body || !fit || !id) continue;
+    for (const el of Array.from(fit.querySelectorAll(".fit-out"))) el.classList.remove("fit-out");
+    if (tile.classList.contains("focus")) {
+      tile.classList.remove("cut", "clip");
+      continue;
+    }
+    const natural = fit.offsetHeight;
+    if (cell > 0 && natural > 0) onNeed(id, needRows(tile.clientHeight, body.clientHeight, natural, cell, gap));
+    tile.classList.toggle("cut", natural > body.clientHeight + 1 && foldOut(fit, body.clientHeight));
+    // One block alone taller than the tile (a day, a chart): it fades out at the foot.
+    tile.classList.toggle("clip", fit.offsetHeight > body.clientHeight + 1);
+  }
+}
+
+export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => {}, onPlace = () => {}, onNeed = () => {} }: Props) {
   const { t } = useWords();
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   const byID = new Map(surfaces.map((s) => [s.id, s]));
@@ -175,6 +208,29 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
   };
   const ghost = drag && DIMS[drag.size];
 
+  // Measured after each drawing, and again when a tile's content or the
+  // canvas changes size; not on a phone, where a tile is as tall as it is.
+  const need = useRef(onNeed);
+  need.current = onNeed;
+  const measure = () => {
+    if (!narrow && canvas.current) measureTiles(canvas.current, (id, rows) => need.current(id, rows));
+  };
+  useLayoutEffect(measure);
+  useEffect(() => {
+    if (narrow || !canvas.current || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    });
+    ro.observe(canvas.current);
+    for (const el of Array.from(canvas.current.querySelectorAll(".mod-fit"))) ro.observe(el);
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+    };
+  });
+
   const strip = (
     <div className={`chips${narrow ? " stacked" : ""}`} role="list" aria-label={t("espace.chips")}>
       {shownChips(chips, (id) => surfaceTitle(byID.get(id)), t("espace.chip.untitled")).map((c) => (
@@ -189,7 +245,8 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
   );
   const board = (
     <main className={`canvas${narrow ? " column" : ""}${full ? " full" : ""}`} aria-label={t("espace.canvas")} ref={canvas}>
-      <LayoutGroup>
+      {/* A surface open on a phone takes the screen at once: the others go, not fading out. */}
+      <LayoutGroup key={full ? "full" : "grid"}>
         {/* Not mode="popLayout": it injects a <style> element, which the CSP refuses. */}
         <AnimatePresence>
           {tiles.map((tile) => {
@@ -210,6 +267,7 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
               >
                 <div className="tile-head">
                   <h2 className="tile-title">{tile.title}</h2>
+                  {!focus && <span className="tile-more">{t("espace.tile.more")}</span>}
                   <div className="tile-tools">
                     {!narrow && (<>
                       <button type="button" className="tile-tool tile-move" aria-label={t("espace.tile.move", tile.title)} title={t("espace.tile.move", tile.title)}
@@ -228,7 +286,9 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
                   </div>
                 </div>
                 <div className="mod-body">
-                  <SurfaceView surface={byID.get(tile.id)!} />
+                  <div className="mod-fit">
+                    <SurfaceView surface={byID.get(tile.id)!} />
+                  </div>
                 </div>
                 {tile.size !== "s" && (tile.why || tile.related) && <p className="why">{tile.why || t("espace.related")}</p>}
               </motion.article>

@@ -123,6 +123,7 @@ type layoutTile struct {
 	Why     string `json:"why,omitempty"`
 	Pinned  bool   `json:"pinned,omitempty"`  // placed by the user, or by the brain at their request, this session
 	Related bool   `json:"related,omitempty"` // related to the surface open (workspace_focus.go)
+	Urgent  bool   `json:"urgent,omitempty"`  // placed before a surface the user opens (weightUrgent): the page lays an open out as code does
 }
 
 // layoutChip is a folded surface.
@@ -306,7 +307,7 @@ func layoutStage(pool []surface, ch workspaceChoice, focus, previous string, pl 
 			continue
 		}
 		d := tileDims[s.size]
-		l.Items = append(l.Items, layoutTile{ID: w.s.ID, Title: w.s.Title, Size: s.size, Col: s.col, Row: s.row, W: d[0], H: d[1], Why: w.why, Pinned: w.pin != nil, Related: related[w.s.ID]})
+		l.Items = append(l.Items, layoutTile{ID: w.s.ID, Title: w.s.Title, Size: s.size, Col: s.col, Row: s.row, W: d[0], H: d[1], Why: w.why, Pinned: w.pin != nil, Related: related[w.s.ID], Urgent: w.s.Weight >= weightUrgent})
 	}
 	widenTiles(l.Items)
 	if l.Focus != "" && !slices.ContainsFunc(l.Items, func(t layoutTile) bool { return t.ID == l.Focus }) {
