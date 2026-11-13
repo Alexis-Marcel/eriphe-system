@@ -2,7 +2,7 @@
 // (The page imports the A2UI renderer, which needs a DOM to load.)
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as data from "./data";
-import { closedIn, leftGrid, placedAt } from "./Espace";
+import { closedIn, focusedIn, layoutLine, leftGrid, placedAt, unfocused } from "./Espace";
 import type { Layout } from "./types";
 
 // The page keeps no rule: what the user says goes to Eriphe with the
@@ -60,8 +60,17 @@ describe("workspace", () => {
   };
 
   it("tells which tiles left the grid unopened, not those opened or closed", () => {
-    const now = { ...grid, items: [grid.items[1]] };
+    const now = { ...grid, focus: undefined, items: [grid.items[1]] };
     expect(leftGrid(["week", "pay", "gone", "shut", "seen"], now, new Set(["seen"]), new Set(["shut"]))).toEqual(["week", "gone"]);
+  });
+
+  it("does not take what a focus folds, or gives back, for tiles left aside", () => {
+    const before = ["week", "pay", "news"];
+    const around = { ...grid, focus: "pay", items: [grid.items[1]] };
+    expect(leftGrid(before, around, new Set(), new Set())).toEqual([]);
+    const back = { ...grid, focus: undefined, items: [grid.items[0]] };
+    expect(leftGrid(["pay"], back, new Set(), new Set(), "pay")).toEqual([]);
+    expect(leftGrid(["pay"], back, new Set(), new Set())).toEqual(["pay"]);
   });
 
   it("shows a move, a resize and a close at once", () => {
@@ -71,5 +80,27 @@ describe("workspace", () => {
     expect(closed.items.map((i) => i.id)).toEqual(["pay"]);
     expect(closed.focus).toBeUndefined();
     expect(closed.chips).toEqual([{ id: "news", title: "Nouvelles" }, { id: "week", title: "La semaine", closed: true }]);
+  });
+
+  it("opens a surface at once, shows the brain's line about it, and goes back to the layout before", () => {
+    const before: Layout = { ...grid, focus: undefined, eriphe: "Ta journée." };
+    const open = focusedIn(before, "pay");
+    expect(open.focus).toBe("pay");
+    expect(layoutLine(open)).toBe("Ta journée.");
+    // eriphe-core recomposes around it, then the brain's line comes.
+    const around: Layout = { ...open, eriphe: "Autour du paiement.", items: [grid.items[1], { ...grid.items[0], related: true }] };
+    expect(layoutLine(around)).toBe("Autour du paiement.");
+    const said = { ...around, say: "Il attend depuis hier." };
+    expect(layoutLine(said)).toBe("Il attend depuis hier.");
+    // Another opened: its line is not the last one's.
+    expect(focusedIn(said, "week").say).toBeUndefined();
+    // Back: the layout before, kept by the page with nothing behind it.
+    expect(unfocused(said, before)).toBe(before);
+    // With eriphe-core behind, nothing open at once, nothing marked, no line, until it gives the one before back.
+    const back = unfocused(said, null);
+    expect(back.focus).toBeUndefined();
+    expect(back.items.some((i) => i.related)).toBe(false);
+    expect(layoutLine(back)).toBe("Autour du paiement.");
+    expect(layoutLine({ ...back, say: "Il attend depuis hier." })).toBe("Autour du paiement.");
   });
 });

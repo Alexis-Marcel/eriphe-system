@@ -82,6 +82,17 @@ describe("the grid of surfaces", () => {
     expect(tile("week")?.classList.contains("focus")).toBe(true);
   });
 
+  it("marks what relates to the surface open, and says so when it has no why", async () => {
+    await render({ ...layout, focus: "pay", items: [{ ...layout.items[0], related: true }, { ...layout.items[1], related: true }] });
+    expect(tile("week")?.classList.contains("related")).toBe(true);
+    expect(tile("week")?.querySelector(".why")?.textContent).toBe("espace.related");
+    expect(tile("pay")?.classList.contains("related")).toBe(false);
+    expect(tile("pay")?.querySelector(".why")?.textContent).toBe("Attend ton accord");
+    await render(layout);
+    expect(tile("week")?.classList.contains("related")).toBe(false);
+    expect(tile("week")?.querySelector(".why")).toBeNull();
+  });
+
   it("closes a tile with its cross, without opening it", async () => {
     const closed: string[] = [];
     await act(async () => root.render(<Grid adapter={adapter} layout={layout} onOpen={(id) => opened.push(id)} onClose={(id) => closed.push(id)} />));

@@ -162,7 +162,7 @@ export function Grid({ adapter, layout, onOpen, onClose = () => {}, onPlace = ()
                   exit={{ opacity: 0 }}
                   data-surface={tile.id}
                   aria-label={tile.title}
-                  className={`mod tile size-${tile.size} at-c${tile.col} at-r${tile.row} w-${tile.w} h-${tile.h}${focus ? " focus" : ""}${tile.pinned ? " pinned" : ""}${drag?.id === tile.id ? " dragging" : ""}`}
+                  className={`mod tile size-${tile.size} at-c${tile.col} at-r${tile.row} w-${tile.w} h-${tile.h}${focus ? " focus" : ""}${tile.related && !focus ? " related" : ""}${tile.pinned ? " pinned" : ""}${drag?.id === tile.id ? " dragging" : ""}`}
                   onClick={open}
                 >
                   <div className="tile-head">
@@ -185,7 +185,7 @@ export function Grid({ adapter, layout, onOpen, onClose = () => {}, onPlace = ()
                   <div className="mod-body">
                     <SurfaceView surface={byID.get(tile.id)!} />
                   </div>
-                  {tile.why && tile.size !== "s" && <p className="why">{tile.why}</p>}
+                  {tile.size !== "s" && (tile.why || tile.related) && <p className="why">{tile.why || t("espace.related")}</p>}
                 </motion.article>
               );
             })}

@@ -2,15 +2,17 @@
 // workspace_layout.go): the event stream's "layout". A tile is a surface at
 // its place on the 12 × 8 grid (col and row from 0, w and h in cells); a
 // chip, a surface folded in the strip above it. pinned: the user placed it
-// for the session; closed: the user closed it for the session.
+// for the session; related: it relates to the surface open (focus);
+// closed: the user closed it for the session.
 export type TileSize = "s" | "m" | "l" | "xl";
-export type Tile = { id: string; title: string; size: TileSize; col: number; row: number; w: number; h: number; why?: string; pinned?: boolean };
+export type Tile = { id: string; title: string; size: TileSize; col: number; row: number; w: number; h: number; why?: string; pinned?: boolean; related?: boolean };
 export type FoldedChip = { id: string; title: string; why?: string; closed?: boolean };
 export type Layout = {
   eriphe: string;
   by: string;
   ambient: "calm" | "decision" | "urgent";
   focus?: string;
+  say?: string; // the brain's line about the surface open (workspace_focus.go)
   items: Tile[];
   chips: FoldedChip[];
   moment?: string;

@@ -15,8 +15,11 @@ import type { Layout } from "./types";
 // proposal's Oui / Non.
 
 // leftGrid is what was a tile and no longer is (folded or gone), neither
-// opened nor closed by the user: on the surfaces' grid, ignored.
-export function leftGrid(before: string[], now: Layout, opened: Set<string>, closed: Set<string>): string[] {
+// opened nor closed by the user: on the surfaces' grid, ignored. Not while
+// a surface is open, nor as it closes (wasFocus): the workspace folds what
+// does not relate to it, the user did not leave those aside.
+export function leftGrid(before: string[], now: Layout, opened: Set<string>, closed: Set<string>, wasFocus?: string): string[] {
+  if (now.focus || wasFocus) return [];
   const tiles = new Set(now.items.map((i) => i.id));
   return before.filter((id) => !tiles.has(id) && !opened.has(id) && !closed.has(id));
 }
@@ -39,6 +42,25 @@ export function closedIn(l: Layout, id: string): Layout {
     items: l.items.filter((i) => i.id !== id),
     chips: [...l.chips.filter((c) => c.id !== id), { id, title, closed: true }],
   };
+}
+
+// focusedIn is a layout with a surface opened, at once; eriphe-core then
+// recomposes the workspace around it (workspace_focus.go).
+export function focusedIn(l: Layout, id: string): Layout {
+  return { ...l, focus: id, say: undefined };
+}
+
+// unfocused is the layout when the focus ends: the one before it when the
+// page kept it (no eriphe-core behind), else the same with nothing open
+// until eriphe-core gives the one before back.
+export function unfocused(l: Layout, before: Layout | null): Layout {
+  return before ?? { ...l, focus: undefined, say: undefined, items: l.items.map(({ related: _, ...i }) => i) };
+}
+
+// layoutLine is Eriphe's line above the grid: the brain's about what is
+// open, once it wrote one, else the composer's.
+export function layoutLine(l: Layout): string {
+  return (l.focus && l.say) || l.eriphe;
 }
 
 function useTyped(text: string) {
@@ -92,12 +114,14 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const onSurfaces = !gallery && !!layout && (pool.length > 0 || layout.items.length + layout.chips.length > 0);
   const sfocus = onSurfaces ? layout?.focus ?? null : null;
   const sfocusTitle = sfocus ? layout?.items.find((i) => i.id === sfocus)?.title ?? sfocus : null;
+  const sbefore = useRef<Layout | null>(null); // the layout before the focus, with no eriphe-core behind
   const openSurface = (id: string) => {
     setSaid(null);
     sopened.current.add(id);
     sclosed.current.delete(id);
     if (boot.live) data.place("open", id).catch(() => false);
-    else setLayout((l) => l && { ...l, focus: id });
+    else sbefore.current ??= layout;
+    setLayout((l) => l && focusedIn(l, id));
   };
   // The user arranges the grid: shown at once, kept by eriphe-core for the
   // session (workspace_gestures.go).
@@ -115,21 +139,27 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const sopened = useRef(new Set<string>());
   const sclosed = useRef(new Set<string>());
   const stiles = useRef<string[]>([]);
+  const sfocusWas = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!live || !onSurfaces || !layout) return;
-    for (const id of leftGrid(stiles.current, layout, sopened.current, sclosed.current)) {
+    for (const id of leftGrid(stiles.current, layout, sopened.current, sclosed.current, sfocusWas.current)) {
       data.gesture("ignored", "surface:" + id).catch(() => false);
     }
     stiles.current = document.visibilityState === "visible" ? layout.items.map((i) => i.id) : [];
+    sfocusWas.current = layout.focus;
   }, [layout, live, onSurfaces]);
   const backSurface = () => {
     if (!sfocus) return;
     if (boot.live) data.place("back", sfocus).catch(() => false);
-    else setLayout((l) => l && { ...l, focus: undefined });
+    else {
+      const before = sbefore.current;
+      sbefore.current = null;
+      setLayout((l) => l && unfocused(l, before));
+    }
   };
   // Nothing to show: Eriphe says so, never an empty grid without a word.
   const nothing = !gallery && !!layout && !onSurfaces;
-  const text = useTyped(said ?? layout?.eriphe ?? "");
+  const text = useTyped(said ?? (layout ? layoutLine(layout) : ""));
 
   // A message goes to Eriphe with the surface open, if any: « montre-m'en
   // moins », « lance une recherche là-dessus ».
