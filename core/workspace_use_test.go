@@ -8,9 +8,9 @@ import (
 )
 
 // The measure from a gesture log: a surface put in front is opened (the
-// time it took counts), ignored (it left unopened, or an ignored or closed
-// gesture came first) or still in front; one opened from the fold is not
-// counted.
+// time it took counts), ignored (folded unopened, or an ignored or closed
+// gesture came first), gone (removed unopened) or still in front; one
+// opened from the fold is not counted.
 func TestSurfaceUseOf(t *testing.T) {
 	t0 := time.Date(2026, 11, 13, 9, 0, 0, 0, time.UTC)
 	at := func(d time.Duration) time.Time { return t0.Add(d) }
@@ -18,14 +18,15 @@ func TestSurfaceUseOf(t *testing.T) {
 		return gesture{What: what, Ref: "surface:" + s, Time: at(d)}
 	}
 	spans := []frontSpan{
-		{Surface: "a", Shown: t0},                             // opened after 3 min
-		{Surface: "b", Shown: t0, Gone: at(10 * time.Minute)}, // left unopened
-		{Surface: "c", Shown: t0},                             // ignored on the page
-		{Surface: "d", Shown: t0},                             // closed, then opened
-		{Surface: "e", Shown: at(30 * time.Second)},           // opened from the fold
-		{Surface: "f", Shown: t0},                             // still in front
-		{Surface: "g", Shown: t0},                             // opened after 9 min
-		{Surface: "h", Shown: t0, Gone: at(time.Minute)},      // opened once gone
+		{Surface: "a", Shown: t0},                                       // opened after 3 min
+		{Surface: "b", Shown: t0, Gone: at(10 * time.Minute)},           // folded unopened
+		{Surface: "c", Shown: t0},                                       // ignored on the page
+		{Surface: "d", Shown: t0},                                       // closed, then opened
+		{Surface: "e", Shown: at(30 * time.Second)},                     // opened from the fold
+		{Surface: "f", Shown: t0},                                       // still in front
+		{Surface: "g", Shown: t0},                                       // opened after 9 min
+		{Surface: "h", Shown: t0, Gone: at(time.Minute)},                // opened once folded
+		{Surface: "i", Shown: t0, Gone: at(time.Minute), Removed: true}, // settled before it was opened
 	}
 	gs := []gesture{
 		g(gestureOpened, "a", 3*time.Minute),
@@ -37,7 +38,7 @@ func TestSurfaceUseOf(t *testing.T) {
 		g(gestureOpened, "zz", time.Minute), // never in front
 	}
 	u := surfaceUseOf(spans, gs)
-	want := surfaceUse{Shown: 7, Opened: 2, Ignored: 4, Front: 1, ToOpen: 6 * time.Minute}
+	want := surfaceUse{Shown: 8, Opened: 2, Ignored: 4, Gone: 1, Front: 1, ToOpen: 6 * time.Minute}
 	if u != want {
 		t.Fatalf("use %+v, want %+v", u, want)
 	}
@@ -76,18 +77,18 @@ func TestSurfaceUseFromLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	u := c.surfaceUseSince(now.Add(-time.Hour), time.Now())
-	if u.Shown != 2 || u.Opened != 1 || u.Ignored != 1 || u.ToOpen < 59*time.Second {
+	if u.Shown != 2 || u.Opened != 1 || u.Gone != 1 || u.Ignored != 0 || u.ToOpen < 59*time.Second {
 		t.Fatalf("use %+v", u)
 	}
 
 	tw := newTestWebFor(t, c)
 	tw.setup()
 	code, body, _ := tw.do("GET", "/settings/surfaces", nil, nil)
-	if code != 200 || !strings.Contains(body, "2 mises devant, 1 ouvertes, 1 laissées sans être ouvertes (50 %)") ||
+	if code != 200 || !strings.Contains(body, "2 mises devant, 1 ouvertes, 0 repliées sans être ouvertes (0 %), 1 retirées avant") ||
 		!strings.Contains(body, "en médiane") || !strings.Contains(body, `id="surface-`+a.ID+`"`) {
 		t.Fatalf("page %d:\n%s", code, body)
 	}
-	if got := useWords(u, "en"); !strings.Contains(got, "2 put in front, 1 opened, 1 left unopened (50%)") || !strings.Contains(got, "median") {
+	if got := useWords(u, "en"); !strings.Contains(got, "2 put in front, 1 opened, 0 folded unopened (0%), 1 removed first") || !strings.Contains(got, "median") {
 		t.Fatalf("en: %s", got)
 	}
 	if got := useWords(surfaceUse{}, "en"); got != tr("en", "surfaces.use.none") {

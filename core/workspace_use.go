@@ -11,9 +11,10 @@ import (
 // layout (workspace_layout.go), its time in front starts; it ends when the
 // surface leaves the tiles (folded, removed). The measure reads those
 // spans with the user's gestures (workspace_log): a surface put in front
-// is opened (an opened gesture while it was there), or ignored (it left
-// the tiles unopened, or an ignored or closed gesture came first), or
-// still in front. A surface the user opened from the fold, which became a
+// is opened (an opened gesture while it was there), ignored (folded while
+// still in the pool, unopened, or an ignored or closed gesture came
+// first), gone (removed unopened: its proposal answered, its lifetime
+// over, the user or its author took it away), or still in front. A surface the user opened from the fold, which became a
 // tile because they opened it, was not put in front by code: not counted.
 // Shown on Settings → Surfaces; no model, no score fed back.
 
@@ -21,7 +22,8 @@ const workspaceFrontSchema = `CREATE TABLE IF NOT EXISTS workspace_front (
 	id      INTEGER PRIMARY KEY AUTOINCREMENT,
 	surface TEXT NOT NULL,
 	shown   INTEGER NOT NULL,           -- when it became a tile
-	gone    INTEGER NOT NULL DEFAULT 0  -- when it stopped being one, 0 while it is
+	gone    INTEGER NOT NULL DEFAULT 0, -- when it stopped being one, 0 while it is
+	removed INTEGER NOT NULL DEFAULT 0  -- 1: it stopped because the surface was no longer there
 );
 CREATE INDEX IF NOT EXISTS workspace_front_shown ON workspace_front (shown);`
 
@@ -34,11 +36,12 @@ const (
 	openedFromFold = 2 * time.Second
 )
 
-// noteFront keeps the surfaces in front as the layout l has them: a time
-// in front starts for each tile not in front yet, and ends for each
-// surface in front that is no longer a tile. Read from the store, so a
-// restart neither starts nor ends one twice.
-func (c *core) noteFront(l workspaceLayout, now time.Time) {
+// noteFront keeps the surfaces in front as the layout l of pool has them:
+// a time in front starts for each tile not in front yet, and ends for each
+// surface in front that is no longer a tile, noting whether it left the
+// pool. Read from the store, so a restart neither starts nor ends one
+// twice.
+func (c *core) noteFront(l workspaceLayout, pool []surface, now time.Time) {
 	rows, err := c.store.db.Query(`SELECT id, surface FROM workspace_front WHERE gone = 0`)
 	if err != nil {
 		log.Printf("workspace front: %v", err)
@@ -62,23 +65,27 @@ func (c *core) noteFront(l workspaceLayout, now time.Time) {
 	}
 	for s, id := range open {
 		if !tiles[s] {
-			c.store.db.Exec(`UPDATE workspace_front SET gone = ? WHERE id = ?`, now.Unix(), id)
+			removed := !slices.ContainsFunc(pool, func(x surface) bool { return x.ID == s })
+			c.store.db.Exec(`UPDATE workspace_front SET gone = ?, removed = ? WHERE id = ?`, now.Unix(), removed, id)
 		}
 	}
 	c.store.db.Exec(`DELETE FROM workspace_front WHERE gone != 0 AND gone < ?`, now.Add(-gestureKeep).Unix())
 }
 
-// frontSpan is one time a surface was in front; Gone is zero while it is.
+// frontSpan is one time a surface was in front; Gone is zero while it is,
+// Removed tells it ended because the surface left the pool.
 type frontSpan struct {
 	Surface     string
 	Shown, Gone time.Time
+	Removed     bool
 }
 
 // surfaceUse is how the surfaces put in front fared.
 type surfaceUse struct {
 	Shown   int // put in front by code
 	Opened  int // opened while in front
-	Ignored int // left the tiles unopened, or ignored or closed first
+	Ignored int // folded unopened, or ignored or closed first
+	Gone    int // removed unopened: settled, ended or taken away
 	Front   int // still in front, not opened yet
 	// ToOpen is the median time from in front to opened; 0 with none.
 	ToOpen time.Duration
@@ -124,8 +131,10 @@ func surfaceUseOf(spans []frontSpan, gs []gesture) surfaceUse {
 		case !opened.IsZero() && (dismissed.IsZero() || opened.Before(dismissed)):
 			u.Opened++
 			waits = append(waits, opened.Sub(sp.Shown))
-		case !dismissed.IsZero() || !sp.Gone.IsZero():
+		case !dismissed.IsZero() || (!sp.Gone.IsZero() && !sp.Removed):
 			u.Ignored++
+		case !sp.Gone.IsZero():
+			u.Gone++
 		default:
 			u.Front++
 		}
@@ -143,7 +152,7 @@ func surfaceUseOf(spans []frontSpan, gs []gesture) surfaceUse {
 
 // surfaceUseSince measures the surfaces put in front since from.
 func (c *core) surfaceUseSince(from, now time.Time) surfaceUse {
-	rows, err := c.store.db.Query(`SELECT surface, shown, gone FROM workspace_front WHERE shown >= ? ORDER BY id`, from.Unix())
+	rows, err := c.store.db.Query(`SELECT surface, shown, gone, removed FROM workspace_front WHERE shown >= ? ORDER BY id`, from.Unix())
 	if err != nil {
 		return surfaceUse{}
 	}
@@ -151,7 +160,7 @@ func (c *core) surfaceUseSince(from, now time.Time) surfaceUse {
 	for rows.Next() {
 		var sp frontSpan
 		var shown, gone int64
-		if rows.Scan(&sp.Surface, &shown, &gone) != nil {
+		if rows.Scan(&sp.Surface, &shown, &gone, &sp.Removed) != nil {
 			continue
 		}
 		sp.Shown = time.Unix(shown, 0)

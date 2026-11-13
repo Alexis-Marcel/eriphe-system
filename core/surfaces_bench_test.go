@@ -34,7 +34,10 @@ import (
 // and each fault the score looks for is caught on a spoilt copy.
 // surfaces_live_test.go runs the same cases on a real model.
 
-const surfaceBenchNow = "2026-11-13 09:00"
+const (
+	surfaceBenchNow  = "2026-11-13 09:00"
+	benchPlaceholder = "en-preparation" // the surface a composed case's task fills
+)
 
 type surfaceCase struct {
 	ID      string          `json:"id"`
@@ -566,12 +569,18 @@ func surfaceInstructions(t *testing.T, user string) string {
 		t.Fatalf("surface_write: %v", err)
 	}
 	schema, _ := json.Marshal(list.Tools[0].InputSchema)
+	if para == "" {
+		t.Fatal("brain-prompt.md has no paragraph on surfaces")
+	}
 	return standingInstructions(para, user, "Eriphe") + "\n\nsurface_write : " + list.Tools[0].Description +
 		"\nSes arguments (JSON Schema) : " + string(schema) + "\n\n" + a2ui.CatalogPrompt()
 }
 
 // surfaceTurn is a case's request with the tools linked for it: what each
 // does, its schemas and what a read just gave (data, never instructions).
+// A live request is the brain's; a summary is the work of the task the
+// brain starts to fill a placeholder (delegateSurface), framed as
+// production frames it.
 func surfaceTurn(x surfaceCase) string {
 	now, _ := x.now()
 	var b strings.Builder
@@ -585,14 +594,20 @@ func surfaceTurn(x surfaceCase) string {
 			fmt.Fprintf(&b, "- %s/%s (%s) : %s\n  arguments : %s\n  outputSchema : %s\n  lu à l'instant : %s\n", s.Name, tl.Name, s.Use, tl.Description, in, out, res)
 		}
 	}
-	fmt.Fprintf(&b, "\nSam te demande : « %s »\n\n", x.Request)
+	if x.Kind == surfaceKindComposed {
+		// A summary is a task's work: the brain wrote a placeholder and
+		// started a task to fill it; the task has read the tools.
+		fmt.Fprintf(&b, "\nTa tâche : Sam a demandé « %s ». Tu as lu les outils ci-dessus.\n%s\n\n", x.Request, delegateSurfaceText(benchPlaceholder))
+	} else {
+		fmt.Fprintf(&b, "\nSam te demande : « %s »\n\n", x.Request)
+	}
 	b.WriteString("Tu n'as pas d'outil ici : réponds seulement par l'objet JSON des arguments de surface_write (title, components, data, sources, refresh, lifetime, weight, why), sans texte autour.")
 	return b.String()
 }
 
 func TestSurfaceInstructions(t *testing.T) {
 	p := surfaceInstructions(t, "Sam")
-	for _, want := range []string{"Une surface", "surface_write", "Composants", "Sam", `"refresh"`, `"every"`} {
+	for _, want := range []string{"run_task", "surface_write", "Composants", "Sam", `"refresh"`, `"every"`} {
 		if !strings.Contains(p, want) {
 			t.Errorf("instructions without %q", want)
 		}

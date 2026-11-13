@@ -3337,12 +3337,14 @@ Any assistant writes the workspace with five tools; the **author is the caller**
 - **The measure of use** (`workspace_use.go`). Each time a surface becomes a tile of the layout
   its time in front starts, and it ends when the surface leaves the tiles (`noteFront` on each
   new layout, in `workspace_front`, kept 30 days, read from the store so a restart starts none
-  twice). With the gestures (`workspace_log`), each time in front is opened (an `opened` gesture
-  while there), ignored (it left the tiles unopened, or an `ignored` or `closed` gesture came
-  first) or still in front; a surface the user opened from the fold (opened at most 2 s before it
+  twice; whether it ended because the surface left the pool). With the gestures (`workspace_log`),
+  each time in front is opened (an `opened` gesture while there), ignored (folded while still in
+  the pool, unopened, or an `ignored` or `closed` gesture came first), removed first (unopened,
+  the surface gone: its proposal answered, its lifetime over, taken away) or still in front; a
+  surface the user opened from the fold (opened at most 2 s before it
   became a tile) was not put in front by code and is not counted (`surfaceUseOf`, pure). The page
-  says how many were put in front, opened, ignored (and their share of those settled), still in
-  front, and the median time to open. No model, and nothing fed back: it is for reading.
+  says how many were put in front, opened, ignored (and their share of the opened and ignored),
+  removed first, still in front, and the median time to open. No model, and nothing fed back: it is for reading.
 
 **The surfaces' bench** (`testdata/surfaces/`, `surfaces_bench_test.go`). Invented requests of a
 fictional user, Sam, to see something, each with the tools linked for it (invented servers:
@@ -3362,7 +3364,8 @@ give, no source or another tool's, no data, a forbidden word, a button). `surfac
 runs the cases on a real model the way the composer's bench does: the brain's paragraph on
 surfaces (`brain-prompt.md`), `surface_write` as an MCP client lists it (description and
 arguments' schema) and the catalog (`a2ui.CatalogPrompt`) appended to the system prompt, the
-request and the tools as the turn, no tool, low effort:
+tools and the request as the turn (a live request as the brain's; a summary as the task's that
+fills a placeholder, with `delegateSurface`'s words), no tool, low effort:
 
 ```sh
 cd core

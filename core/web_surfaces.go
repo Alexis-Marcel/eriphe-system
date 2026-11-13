@@ -100,7 +100,7 @@ func useWords(u surfaceUse, lang string) string {
 	if u.Shown == 0 {
 		return tr(lang, "surfaces.use.none")
 	}
-	out := fmt.Sprintf(tr(lang, "surfaces.use"), u.Shown, u.Opened, u.Ignored, int(math.Round(100*u.IgnoredShare())), u.Front)
+	out := fmt.Sprintf(tr(lang, "surfaces.use"), u.Shown, u.Opened, u.Ignored, int(math.Round(100*u.IgnoredShare())), u.Gone, u.Front)
 	if u.Opened > 0 {
 		out += " " + fmt.Sprintf(tr(lang, "surfaces.use.open"), useSpan(u.ToOpen, lang))
 	}
