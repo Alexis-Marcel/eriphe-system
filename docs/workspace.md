@@ -27,7 +27,12 @@ Who writes the tiles:
 - **Eriphe**, when you ask it to show something;
 - **a skill**, the things Eriphe does on its own at set times or on an event (a morning
   preparation, say), each keeping its own tiles up to date;
-- **a thread**, a matter Eriphe follows to its goal, with where it stands;
+- **a thread**, a matter Eriphe follows to its goal: every thread has its tile, kept up to date as
+  it moves: its goal, where it stands, what waits for you (its proposals, answered right there, and
+  a **C'est fait** / **Done** button for a step only you can do), its steps on a timeline, and what
+  Eriphe added (a diff, a link). Small, it shows one line (« Fusion ✓ · Déploiement à toi »). A step
+  that read something from outside says « extérieur ». Once the thread is done, its tile stays
+  until the end of the day;
 - **Eriphe itself, for what waits for you**: a proposal to approve, an alert, a message held for
   later. These come and go with what they show.
 

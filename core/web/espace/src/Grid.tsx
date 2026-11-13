@@ -3,7 +3,7 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Adapter } from "./a2ui/adapter";
 import { OnStage } from "./a2ui/code";
 import { SurfaceView } from "./a2ui/Surfaces";
-import { chipLabel, shownChips, surfaceTitle } from "./chips";
+import { chipLabel, shownChips, surfaceSummary, surfaceTitle } from "./chips";
 import { useWords } from "./i18n";
 import { COLS, DIMS, ROWS, SIZES, foldOut, needRows } from "./place";
 import type { FoldedChip, Layout, Tile, TileSize } from "./types";
@@ -11,7 +11,9 @@ import type { FoldedChip, Layout, Tile, TileSize } from "./types";
 // The workspace's surfaces, where eriphe-core lays them out (workspace_layout.go):
 // each tile at its place on the fixed 12 × 8 grid, by class (.at-cN, .at-rN,
 // .w-N, .h-N, .size-*), never a style attribute; Motion moves a tile that
-// changed place, a tile enters by CSS. What is folded waits as a chip in the
+// changed place, a tile enters by CSS. A small tile (s) of a surface that
+// has a one-line summary (a thread's) shows that line, a chip shows it
+// beside its title. What is folded waits as a chip in the
 // strip above; a surface the layout does not name yet (it comes right after
 // the surface) waits there too, so nothing is unseen. Opening a tile or a
 // chip asks eriphe-core to place it first (onOpen).
@@ -236,14 +238,18 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
 
   const strip = (
     <div className={`chips${narrow ? " stacked" : ""}`} role="list" aria-label={t("espace.chips")}>
-      {shownChips(chips, (id) => surfaceTitle(byID.get(id)), t("espace.chip.untitled")).map((c) => (
-        <div key={c.id} role="listitem" className={`chip${c.closed ? " closed" : ""}`} data-surface={c.id}>
-          <button className="chip-open" onClick={() => onOpen(c.id)} title={t("espace.chip.open", chipLabel(c))}>
-            <span className="chip-text">{chipLabel(c)}</span>
-            {c.closed ? <span className="chip-from">{t("espace.chip.closed")}</span> : c.why && <span className="chip-from">{c.why}</span>}
-          </button>
-        </div>
-      ))}
+      {shownChips(chips, (id) => surfaceTitle(byID.get(id)), t("espace.chip.untitled")).map((c) => {
+        // A surface's one-line summary, when it has one, says more than why it is there.
+        const line = c.ids.length === 1 ? surfaceSummary(byID.get(c.id)) : undefined;
+        return (
+          <div key={c.id} role="listitem" className={`chip${c.closed ? " closed" : ""}`} data-surface={c.id}>
+            <button className="chip-open" onClick={() => onOpen(c.id)} title={t("espace.chip.open", chipLabel(c))}>
+              <span className="chip-text">{chipLabel(c)}</span>
+              {c.closed ? <span className="chip-from">{t("espace.chip.closed")}</span> : (line || c.why) && <span className="chip-from">{line || c.why}</span>}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
   const board = (
@@ -254,6 +260,8 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
         <AnimatePresence>
           {tiles.map((tile) => {
             const focus = layout.focus === tile.id;
+            // A small tile shows a surface's one-line summary, when it has one, rather than a slice of it.
+            const line = tile.size === "s" && !focus ? surfaceSummary(byID.get(tile.id)) : undefined;
             const open = (e: MouseEvent) => {
               if (!focus && !(e.target as HTMLElement).closest(interactive)) onOpen(tile.id);
             };
@@ -290,9 +298,13 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
                 </div>
                 <div className="mod-body">
                   <div className="mod-fit">
-                    <OnStage.Provider value={focus}>
-                      <SurfaceView surface={byID.get(tile.id)!} />
-                    </OnStage.Provider>
+                    {line ? (
+                      <p className="tile-line">{line}</p>
+                    ) : (
+                      <OnStage.Provider value={focus}>
+                        <SurfaceView surface={byID.get(tile.id)!} />
+                      </OnStage.Provider>
+                    )}
                   </div>
                 </div>
                 {tile.size !== "s" && (tile.why || tile.related) && <p className="why">{tile.why || t("espace.related")}</p>}

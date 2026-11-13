@@ -648,6 +648,7 @@ func (c *core) ask(thread int64, kind, step, why string, payload any, by string)
 		return 0, err
 	}
 	id, _ = res.LastInsertId()
+	defer c.keepThreadSurface(thread) // its card shows on the thread's surface
 	if by == byBrain {
 		c.cardProposed(cardThread, id)
 		return id, nil
@@ -680,4 +681,5 @@ func (c *core) proposedThreadAsks() []int64 {
 // closeAsks withdraws what a thread still asks: it ended.
 func (c *core) closeAsks(thread int64) {
 	c.store.db.Exec(`UPDATE thread_asks SET state = ?, decided = ? WHERE thread = ? AND state = ?`, askGone, time.Now().Unix(), thread, askPending)
+	c.keepThreadSurface(thread)
 }

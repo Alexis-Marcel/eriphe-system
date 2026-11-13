@@ -20,20 +20,25 @@ import (
 //     them ("open", the user opened a tile or a chip, also places the
 //     surface first and reads its sources again; "back" gives the layout
 //     back).
+//   - stepDone: the user did a step of a thread that is theirs ("C'est
+//     fait"), {"thread": <id>, "step": "<key>"}. Only code places it, on
+//     the thread's own surface: an author never writes one.
 //
 // Any other name, and any action that is not an event (a function call),
 // is refused. No action calls a tool that writes.
 const (
-	ActionAsk    = "ask"
-	ActionAnswer = "answer"
-	ActionOpen   = "open"
-	ActionBack   = "back"
-	ActionExpand = "expand"
-	ActionTab    = "tab"
+	ActionAsk      = "ask"
+	ActionAnswer   = "answer"
+	ActionStepDone = "stepDone"
+	ActionOpen     = "open"
+	ActionBack     = "back"
+	ActionExpand   = "expand"
+	ActionTab      = "tab"
 
 	// The kinds of action.
 	KindAsk    = "ask"
 	KindAnswer = "answer"
+	KindStep   = "step"
 	KindLocal  = "local"
 
 	// AskTextMax is the longest ask, in characters.
@@ -43,14 +48,16 @@ const (
 // LocalActions are the names done in the page.
 var LocalActions = []string{ActionOpen, ActionBack, ActionExpand, ActionTab}
 
-// ActionKind is the kind of an action name: KindAsk, KindAnswer, KindLocal,
-// or "" for a name outside the grammar.
+// ActionKind is the kind of an action name: KindAsk, KindAnswer, KindStep,
+// KindLocal, or "" for a name outside the grammar.
 func ActionKind(name string) string {
 	switch name {
 	case ActionAsk:
 		return KindAsk
 	case ActionAnswer:
 		return KindAnswer
+	case ActionStepDone:
+		return KindStep
 	case ActionOpen, ActionBack, ActionExpand, ActionTab:
 		return KindLocal
 	}
@@ -106,6 +113,8 @@ func CheckActions(surfaceID string, components json.RawMessage) []ValidationErro
 			}
 		case KindAnswer:
 			fail(at+"/name", "answer is sent by a Proposal component only, for the proposal it shows: write a Proposal")
+		case KindStep:
+			fail(at+"/name", "stepDone is placed by code only, on a thread's own surface, for a step the user does")
 		default:
 			fail(at+"/name", "no action "+strconv.Quote(name)+": a button asks Eriphe (ask) or acts in the page ("+strings.Join(LocalActions, ", ")+")")
 		}

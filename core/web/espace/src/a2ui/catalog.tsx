@@ -695,11 +695,13 @@ export function ghostsOf(ps: ProposalView[]): Ghost[] {
 // onlyAsks tells whether a surface shows external content (createSurface's
 // metadata, extensions.eriphe.tainted) and was written by a model: it can
 // only ask. Code's own (author "core", the attention queue's) shows a
-// proposal as its card does, with the proposal's own taint.
-type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string } } } };
+// proposal as its card does, with the proposal's own taint; so does a
+// thread's surface whose own thread is not tainted (answers: code bound
+// its Proposals to the thread's cards, whatever a step read).
+type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string; answers?: boolean } } } };
 const onlyAsks = (s: unknown) => {
   const m = (s as Meta | undefined)?.metadata?.extensions?.eriphe;
-  return Boolean(m?.tainted) && m?.author !== "core";
+  return Boolean(m?.tainted) && m?.author !== "core" && !m?.answers;
 };
 // external tells whether a surface shows external content, whoever wrote it.
 const external = (s: unknown) => Boolean((s as Meta | undefined)?.metadata?.extensions?.eriphe?.tainted);

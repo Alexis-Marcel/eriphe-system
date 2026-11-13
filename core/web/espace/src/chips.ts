@@ -10,6 +10,14 @@ export function surfaceTitle(s: unknown): string | undefined {
   return typeof t === "string" && t.trim() ? t.trim() : undefined;
 }
 
+// surfaceSummary is a surface's one-line summary, when eriphe-core gives
+// one (a thread's: « Fusion ✓ · Déploiement à toi »): what a small tile and
+// a chip show of it.
+export function surfaceSummary(s: unknown): string | undefined {
+  const t = (s as { metadata?: { extensions?: { eriphe?: { summary?: unknown } } } } | undefined)?.metadata?.extensions?.eriphe?.summary;
+  return typeof t === "string" && t.trim() ? t.trim() : undefined;
+}
+
 // shownChips are the chips the strip shows. Each has words, never a raw
 // id: the layout's title, else its surface's own, else untitled. Chips
 // with the same title (and both closed, or both not) are one, with their

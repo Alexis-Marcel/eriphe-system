@@ -69,6 +69,7 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 		}
 		id, _ := res.LastInsertId()
 		c.logThread(id, by, "Thread ouvert : "+in.Goal)
+		c.keepThreadSurface(id) // thread_surface.go
 		return c.thread(id)
 	}
 	switch {
@@ -836,9 +837,11 @@ func (c *core) holdForBudget(s Thread) {
 
 // threadsTick is the engine's pass, every 15 seconds: the deadlines that
 // came, the budgets, the steps whose task ended without being told
-// (eriphe-core restarted), and what may start.
+// (eriphe-core restarted), what may start, and the surface of an active
+// thread that has none.
 func (c *core) threadsTick(now time.Time) {
 	c.threadDeadlines(now) // thread_steps.go
+	c.keepThreadSurfaces() // thread_surface.go
 	ss, err := c.threadsWhere(activeThreads + ` ORDER BY id DESC LIMIT 50`)
 	if err != nil {
 		return
@@ -971,6 +974,7 @@ func (c *core) decideThreadAsk(ctx context.Context, id int64, approve bool) erro
 		state = askApproved
 	}
 	c.store.db.Exec(`UPDATE thread_asks SET state = ?, decided = ? WHERE id = ?`, state, time.Now().Unix(), id)
+	c.keepThreadSurface(s.ID) // its card leaves the thread's surface
 	user := c.conf().User
 	switch a.Kind {
 	case askPlan:

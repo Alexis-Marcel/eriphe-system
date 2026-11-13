@@ -14,9 +14,11 @@ import (
 // default: an author writes what it has the context for, and is woken
 // when its surface is wanted.
 //
-//   - A thread's lead keeps its thread's surface (lead-prompt.md): one
-//     surface, while: thread:<id>, the default lifetime of what it writes.
-//     Each of its wakes reminds it while it has none (leadSurfaceNudge);
+//   - A thread's surface is code's (thread_surface.go): written from the
+//     thread's data at each of its changes. Who holds the thread (the
+//     brain, or its lead) adds its part to it; a surface.stale about it
+//     wakes the lead that wrote that part. What else a lead writes lives
+//     while its thread does (while: thread:<id>, its default lifetime);
 //     code removes it when the thread ends (dropThreadSurfaces).
 //   - A skill writes its surface on its trigger, lent eriphe-workspace in
 //     its tools, as skill:<name>. when: surface.stale id=<id> matches it as
@@ -82,8 +84,9 @@ func (c *core) staleWake(e journalEvent) string {
 }
 
 // surfaceEventHeard listens to the journal for the authors code wakes:
-// the brain on a surface.missing, a lead on a surface.stale of its
-// thread's surface. A skill's are queued with its other events
+// the brain on a surface.missing; a lead on a surface.stale of a surface
+// it wrote, or of its thread's surface when it added the part there (code
+// keeps the rest up to date). A skill's are queued with its other events
 // (queueSkillEvent).
 func (c *core) surfaceEventHeard(e journalEvent) {
 	switch e.Kind {
@@ -91,7 +94,16 @@ func (c *core) surfaceEventHeard(e journalEvent) {
 		c.tellBrainMissing(e)
 	case evSurfaceStale:
 		author := c.staleWake(e)
+		text := "Ta surface « " + staleSurfaceID(e) + " » n'est plus à jour : relis le thread et réécris-la (surface_write, même id)."
 		raw, ok := strings.CutPrefix(author, "lead:")
+		if n, thread := threadOfAuthor(author); thread {
+			p := c.threadPartOf(n)
+			if p == nil || p.Author != "lead:"+strconv.FormatInt(n, 10) {
+				return // code keeps the rest
+			}
+			raw, ok = strconv.FormatInt(n, 10), true
+			text = "Ta partie de la surface du thread (« " + staleSurfaceID(e) + " ») n'est plus à jour : relis le thread et réécris-la (surface_write, même id), ou retire-la (surface_remove)."
+		}
 		if !ok {
 			return
 		}
@@ -104,7 +116,7 @@ func (c *core) surfaceEventHeard(e journalEvent) {
 		if e.External {
 			taint = []string{"event:" + e.Kind}
 		}
-		c.queueLead(s, "Ta surface « "+staleSurfaceID(e)+" » n'est plus à jour : relis le thread et réécris-la (surface_write, même id).", taint)
+		c.queueLead(s, text, taint)
 	}
 }
 
@@ -143,25 +155,17 @@ func (c *core) tellBrainMissing(e journalEvent) {
 	c.ping()
 }
 
-// leadSurfaceNudge is what a lead's wake adds while it keeps no surface.
-func (c *core) leadSurfaceNudge(thread int64) string {
-	author := "lead:" + strconv.FormatInt(thread, 10)
-	all, _ := c.surfaces()
-	for _, s := range all {
-		if s.Author == author {
-			return ""
-		}
-	}
-	return "Ton thread n'a pas encore sa surface dans l'espace de " + c.conf().User + " : écris-la (surface_write), puis tiens-la à jour."
-}
-
 // dropThreadSurfaces removes at once the surfaces whose lifetime ended
-// with a thread: its lead's, and those kept while it ran.
+// with a thread: its lead's, and those kept while it ran. Its own surface
+// stays a while (thread_surface.go).
 func (c *core) dropThreadSurfaces(thread int64) {
 	id := strconv.FormatInt(thread, 10)
 	all, _ := c.surfaces()
 	now := time.Now()
 	for _, s := range all {
+		if s.ID == threadSurfaceID(thread) {
+			continue
+		}
 		if (s.Author == "lead:"+id || s.Lifetime.While == "thread:"+id) && c.surfaceEnded(s, now) {
 			c.surfaceRemove(s.ID, surfaceByLifetime)
 		}

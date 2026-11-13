@@ -227,6 +227,15 @@ describe("the catalog's components", () => {
     expect(actions.at(-1)?.action.context).toEqual({ text: "Trouve-moi un itinéraire pour le voyage" });
   });
 
+  it("send a thread's « C'est fait » with the thread and the step code wrote", async () => {
+    await mount("fr", one([
+      { id: "root", component: "Button", label: "C'est fait", action: { event: { name: "stepDone", context: { thread: 4, step: "deploy" } } } },
+    ]));
+    await click($("button.a2-button")!);
+    expect(actions.at(-1)?.action).toMatchObject({ name: "stepDone", sourceComponentId: "root", surfaceId: "t" });
+    expect(actions.at(-1)?.action.context).toEqual({ thread: 4, step: "deploy" });
+  });
+
   it("let a choice take several values when asked", async () => {
     await mount("en", one([
       { id: "root", component: "Choice", multiple: true, options: [{ label: "A", value: "a" }, { label: "B", value: "b" }], value: { "@path": "/v" } },
@@ -469,6 +478,12 @@ describe("the catalog's components", () => {
     await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "t" } }]));
     const core = { extensions: { eriphe: { ...metadata.extensions.eriphe, author: "core" } } };
     await act(async () => adapter.applyMessages([{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata: core } }]));
+    await act(async () => {});
+    expect($(".a2-proposal-actions")).not.toBeNull();
+    // A thread's surface whose own thread is clean (answers): Oui and Non too, whatever a step read.
+    await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "t" } }]));
+    const thread = { extensions: { eriphe: { ...metadata.extensions.eriphe, author: "thread:4", answers: true } } };
+    await act(async () => adapter.applyMessages([{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata: thread } }]));
     await act(async () => {});
     expect($(".a2-proposal-actions")).not.toBeNull();
   });

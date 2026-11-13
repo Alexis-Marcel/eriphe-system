@@ -257,6 +257,9 @@ func (in surfaceWriteIn) surfaceIn(loc *time.Location) (surfaceIn, error) {
 
 // toolSurfaceWrite is surface_write.
 func (c *core) toolSurfaceWrite(who surfaceCaller, in surfaceWriteIn) (map[string]any, error) {
+	if thread, ok := threadOfSurface(strings.TrimSpace(in.ID)); ok {
+		return c.writeThreadPart(who, thread, in) // a thread's: its holder's part (thread_surface.go)
+	}
 	author := who.author
 	if who.only != "" {
 		in.ID = strings.TrimSpace(in.ID)
@@ -359,6 +362,9 @@ func lastErrorText(s surface) string {
 // toolSurfaceRemove is surface_remove.
 func (c *core) toolSurfaceRemove(who surfaceCaller, id string) (map[string]any, error) {
 	id = strings.TrimSpace(id)
+	if thread, ok := threadOfSurface(id); ok {
+		return c.removeThreadPart(who, thread) // thread_surface.go
+	}
 	by := who.author
 	if who.only != "" {
 		if id != who.only {
@@ -413,6 +419,9 @@ func (c *core) toolWorkspaceRead(who surfaceCaller) map[string]any {
 	seen := []surfaceSeen{}
 	for _, s := range all {
 		yours := mayChange(who.author, s.Author)
+		if n, ok := threadOfAuthor(s.Author); ok && mayAddPart(who.author, n) {
+			yours = true // its holder adds its part there (thread_surface.go)
+		}
 		if who.only != "" {
 			yours = s.ID == who.only // the brain's delegate: that one
 		}

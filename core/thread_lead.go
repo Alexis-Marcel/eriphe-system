@@ -34,7 +34,7 @@ const (
 	finalStep         = "final-check"
 	finalChecks       = 2 // final checks a thread may ask before its lead reports
 
-	leadStartPrompt = "Tu viens de démarrer. Lis le thread avec `thread`, écris sa surface dans l'espace (`surface_write`) : tu seras réveillé à chaque étape. Puis réponds seulement « [rien] »."
+	leadStartPrompt = "Tu viens de démarrer. Lis le thread avec `thread` : tu seras réveillé à chaque étape. Sa surface dans l'espace, eriphe-core l'écrit et la tient à jour. Puis réponds seulement « [rien] »."
 )
 
 const threadInboxSchema = `CREATE TABLE IF NOT EXISTS thread_inbox (
@@ -182,9 +182,6 @@ func (c *core) deliverLead(ctx context.Context, a Assistant, t *TaskRow) (bool, 
 		})
 	}
 	text := nowLine(c.notifyTime()) + "\n" + langLine(c.userLang()) + "\n\n" + strings.Join(texts, "\n\n")
-	if nudge := c.leadSurfaceNudge(id); nudge != "" {
-		text += "\n\n" + nudge // surface_authors.go
-	}
 	if _, err := c.answer(ctx, t.ID, "", text, nil, byPolicy); err != nil {
 		return false, err
 	}
