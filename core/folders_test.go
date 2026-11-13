@@ -26,6 +26,10 @@ type fakeShares struct {
 	mu      sync.Mutex
 	folders []sharedFolder
 	deleted []string
+	// files: each folder's files, by id then path, as the node reaches
+	// them (node/folder_files.go); ops, each operation it was asked.
+	files   map[string]map[string]string
+	ops     []string
 	patched []string // id:access of each lowering asked
 }
 
@@ -97,6 +101,7 @@ func foldersCoreShares(t *testing.T) (*core, *Store, *fakeShares) {
 		}
 		w.WriteHeader(http.StatusNotFound)
 	})
+	api.HandleFunc("POST /v1/shares/{id}/files", shares.serveFiles) // folder_tools_test.go
 	api.HandleFunc("GET /v1/node", func(w http.ResponseWriter, _ *http.Request) {
 		shares.mu.Lock()
 		defer shares.mu.Unlock()

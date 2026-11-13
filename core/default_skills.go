@@ -18,7 +18,8 @@ import (
 //
 // A default skill names no tool (TestNoToolInDefaultSkills): it works from
 // whatever is linked. It is lent only what grants nothing beyond the
-// user's access policy (the workspace, whose writes are its own surfaces):
+// user's access policy (the workspace, whose writes are its own surfaces;
+// the user's folders, each call held to their rights: folder_tools.go):
 // a tool it should read itself is lent the normal way, by a new version
 // the user approves on its card.
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"slices"
 	"time"
 )
 
@@ -70,13 +71,18 @@ func pullContext(input map[string]any, has func(string) bool, read func(tool str
 }
 
 // cardFields are what a card lists: what it read, then the call's parameters
-// but the number that read already says.
+// but the number that read already says, and a content its diff says.
 func cardFields(context []cardField, input map[string]any) []cardField {
 	out := context
+	diff := slices.ContainsFunc(context, func(f cardField) bool { return f.Name == "diff" })
 	for _, f := range callFields(input) {
-		if len(context) == 0 || (f.Name != "pullNumber" && f.Name != "pull_number") {
-			out = append(out, f)
+		if len(context) > 0 && (f.Name == "pullNumber" || f.Name == "pull_number") {
+			continue
 		}
+		if diff && f.Name == "content" {
+			continue
+		}
+		out = append(out, f)
 	}
 	return out
 }
@@ -93,6 +99,9 @@ func (c *core) callContext(ctx context.Context, tool string, input map[string]an
 	}
 	ctx, cancel := context.WithTimeout(ctx, cardReadTimeout)
 	defer cancel()
+	if server == foldersServer {
+		return c.folderCardContext(ctx, tool, input) // the file and its diff (folder_tools.go)
+	}
 	return pullContext(input, func(name string) bool { return u.toolByClaudeName(name) != nil },
 		func(name string, args map[string]any) (string, error) {
 			raw, err := json.Marshal(args)

@@ -118,6 +118,9 @@ func (c *core) callNeed(tool string, input map[string]any, f catalogFacts) acces
 // start that is not clean.
 func (c *core) refNeeds(ref string, clean bool) []accessNeed {
 	server, _, _ := strings.Cut(strings.TrimSpace(ref), ".")
+	if server == foldersServer {
+		return c.folderToolNeeds(ref, clean) // its folders' rights (folder_tools.go)
+	}
 	u := c.pool.get(server)
 	if u == nil {
 		return nil
@@ -417,7 +420,7 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 	id, _ := res.LastInsertId()
 	// The question itself: what notifies the user of a question notifies them of this one.
 	// The card says what: the message does not say it twice.
-	c.cardNow(cardAccess, id, fmt.Sprintf(tr(c.userLang(), "access.ask.message"), a.Need.Target()), "task:"+a.TaskID)
+	c.cardNow(cardAccess, id, fmt.Sprintf(tr(c.userLang(), "access.ask.message"), a.Need.TargetIn(c.userLang())), "task:"+a.TaskID)
 	log.Printf("access: card %d for task %s: %s", id, a.TaskID, a.Need.Category)
 	return id
 }
@@ -506,6 +509,15 @@ func verbs(list []string, lang string) string {
 // Target is where a need acts: its server, and its account if it has one.
 func (n accessNeed) Target() string { return strings.TrimSpace(n.Server + " " + n.Account) }
 
+// TargetIn is Target in words: a folder of eriphe-folders by its name
+// (folder_tools.go).
+func (n accessNeed) TargetIn(lang string) string {
+	if n.Server == foldersServer && n.Account != "" {
+		return fmt.Sprintf(tr(lang, "access.folder"), n.Account)
+	}
+	return n.Target()
+}
+
 func (c *core) accessText(a accessQuestion, lang string) string {
 	title := truncate(oneLine(c.taskTitle(a.TaskID)), 60)
 	switch {
@@ -516,9 +528,9 @@ func (c *core) accessText(a accessQuestion, lang string) string {
 	case strings.HasPrefix(a.Call, webFetchTool+" "):
 		return fmt.Sprintf(tr(lang, "access.ask.page"), c.conf().assistantName())
 	case a.Call != "":
-		return fmt.Sprintf(tr(lang, "access.ask.brain"), c.conf().assistantName(), callVerb(a.Call, lang), a.Need.Target())
+		return fmt.Sprintf(tr(lang, "access.ask.brain"), c.conf().assistantName(), callVerb(a.Call, lang), a.Need.TargetIn(lang))
 	}
-	return fmt.Sprintf(tr(lang, "access.ask.task"), title, verbs([]string{a.Need.Category}, lang), a.Need.Target())
+	return fmt.Sprintf(tr(lang, "access.ask.task"), title, verbs([]string{a.Need.Category}, lang), a.Need.TargetIn(lang))
 }
 
 // taskTitle is how a card names a task: the start of what it was asked.
@@ -543,7 +555,7 @@ func accessStartText(needs []startNeed, lang string) []string {
 			out = append(out, fmt.Sprintf(tr(lang, "access.ask.use"), n.Server))
 			continue
 		}
-		target := accessNeed{n.Server, n.Category, n.Account}.Target()
+		target := accessNeed{n.Server, n.Category, n.Account}.TargetIn(lang)
 		if byTarget[target] == nil {
 			order = append(order, target)
 		}

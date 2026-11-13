@@ -174,6 +174,9 @@ func (p *pool) facts(claudeName string, input map[string]any) catalogFacts {
 	if u == nil {
 		return catalogFacts{}
 	}
+	if u.provided != nil && u.provided.facts != nil {
+		return u.provided.facts(u.toolByClaudeName(tool), input) // its own rights (folder_tools.go)
+	}
 	return u.srv.toolFacts(u.toolByClaudeName(tool), input)
 }
 
@@ -286,6 +289,9 @@ func ptrTo[T any](v T) *T { return &v }
 // callAccount is the account a call names, on a server of several: the
 // name the server has it under; "" when it names none of them.
 func (c *core) callAccount(server string, input map[string]any) string {
+	if server == foldersServer {
+		return c.callFolder(input) // its folders are its accounts (folder_tools.go)
+	}
 	srv, ok := c.conf().Servers[server]
 	if !ok {
 		return ""

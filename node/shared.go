@@ -348,8 +348,9 @@ func (n *node) sharedList() []sharedInfo {
 }
 
 // The node's API for shared folders, through the tunnel: the list, taking
-// one off it, and lowering one's level or turning off its copies. Nothing
-// adds one, raises one, nor looks into a folder.
+// one off it, lowering one's level or turning off its copies, and its
+// files, held to the folder (folder_files.go). Nothing adds one nor raises
+// one.
 func (n *node) shareRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/shares", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"folders": n.sharedList()})
@@ -366,6 +367,7 @@ func (n *node) shareRoutes(mux *http.ServeMux) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+	mux.HandleFunc("POST /v1/shares/{id}/files", n.handleFiles) // folder_files.go
 	mux.HandleFunc("PATCH /v1/shares/{id}", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Access   string `json:"access"`
