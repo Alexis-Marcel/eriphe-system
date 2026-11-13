@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"slices"
@@ -155,5 +156,37 @@ func TestWebApproveTools(t *testing.T) {
 	}
 	if code, _, _ := tw.post("/settings/tools/nothing/approve", nil, csrf); code != 400 {
 		t.Fatalf("unknown tool: %d", code)
+	}
+}
+
+// A server shipped with Eriphe is not pinned: its tools change with
+// Eriphe's updates. Another image is.
+func TestShippedServerIsNotPinned(t *testing.T) {
+	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &pool{store: store}
+	run := func(image string) Server {
+		return Server{Run: json.RawMessage(`{"image":"` + image + `","transport":"stdio"}`)}
+	}
+	mail := &upstream{p: p, name: "mail", srv: run("ghcr.io/alexis-marcel/eriphe-mail:0.200.0")}
+	other := &upstream{p: p, name: "other", srv: run("ghcr.io/example/other-mcp:1")}
+	if !mail.srv.shipped() || other.srv.shipped() || (Server{URL: "https://eriphe.example/mcp"}).shipped() {
+		t.Fatal("shipped")
+	}
+	v1 := []*mcp.Tool{{Name: "search", Description: "v1"}}
+	v2 := []*mcp.Tool{{Name: "search", Description: "v2"}, {Name: "new"}}
+	for _, u := range []*upstream{mail, other} {
+		p.pinned(u, v1)
+	}
+	if kept, held := p.pinned(mail, v2); len(kept) != 2 || len(held) != 0 {
+		t.Errorf("shipped: kept %d, held %d", len(kept), len(held))
+	}
+	if pins, _ := store.toolPins("mail"); len(pins) != 0 {
+		t.Errorf("shipped pinned: %v", pins)
+	}
+	if kept, held := p.pinned(other, v2); len(kept) != 0 || len(held) != 2 {
+		t.Errorf("other: kept %d, held %d", len(kept), len(held))
 	}
 }

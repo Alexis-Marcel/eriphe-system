@@ -1240,8 +1240,9 @@ not sorted by the grid, refused if called by name, until the user accepts them o
 category and description and pins those definitions: one the server changed again since stays
 held. The brain is told how many tools are held (an event; their names are the server's, so they
 are not quoted), to tell the user. A server cannot reword a description or turn a send into a read
-behind the user's back. Removing the server forgets its pins; Eriphe's own
-provided servers (folders) are not pinned (`tool_pins.go`).
+behind the user's back. Removing the server forgets its pins. Eriphe's own servers are not pinned:
+those it provides (folders) and those shipped with it (run from its images: mail, calendar, files,
+Signal), whose tools change with Eriphe's updates, which the user already chooses (`tool_pins.go`).
 
 ### The approval card
 

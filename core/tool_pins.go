@@ -20,14 +20,30 @@ import (
 // The first listing of a server pins each tool's definition, adding the
 // server being the user's yes; a tool listed later with another definition,
 // or a new tool, is held: not lent, not shown, until the user accepts the
-// server's tools again on its page (approveTools). Eriphe's own provided
-// servers are not pinned: their tools are made in this process.
+// server's tools again on its page (approveTools). Eriphe's own servers are
+// not pinned: those it provides make their tools in this process, and those
+// shipped with it (shipped) change with its updates.
 
 const toolPinsSchema = `CREATE TABLE IF NOT EXISTS tool_pins (
   server TEXT NOT NULL, tool TEXT NOT NULL, hash TEXT NOT NULL,
   PRIMARY KEY (server, tool));`
 
 func init() { extraSchema = append(extraSchema, toolPinsSchema) }
+
+// eripheImages is where Eriphe's own images are published: a server run
+// from one of them (eriphe-mail, eriphe-calendar, eriphe-files,
+// eriphe-signal) is shipped with Eriphe.
+const eripheImages = "ghcr.io/alexis-marcel/eriphe-"
+
+// shipped tells a server shipped with Eriphe: its definitions change with
+// Eriphe's updates, which the user already chooses, so they are not pinned.
+func (s Server) shipped() bool {
+	if !s.local() {
+		return false
+	}
+	spec, err := decodeRun(s.Run)
+	return err == nil && strings.HasPrefix(strings.ToLower(spec.Image), eripheImages)
+}
 
 // toolHash fingerprints what a server says of a tool.
 func toolHash(t *mcp.Tool) string {
@@ -88,7 +104,7 @@ func (s *Store) forgetPins(server string) error {
 // never pinned is pinned now. Should the pins not be read, every tool is
 // held: nothing unchecked is lent.
 func (p *pool) pinned(u *upstream, tools []*mcp.Tool) (kept, held []*mcp.Tool) {
-	if p == nil || p.store == nil || u.provided != nil {
+	if p == nil || p.store == nil || u.provided != nil || u.srv.shipped() {
 		return tools, nil
 	}
 	pins, err := p.store.toolPins(u.name)
