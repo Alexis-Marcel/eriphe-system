@@ -9,6 +9,7 @@ import (
 )
 
 // The workspace reads a proposal by its own ref: its card's text and why,
+// its kind (what the card asks: memory and intention only keep something),
 // and the card whose Oui or Non answers it; once answered, its state.
 func TestEspaceProposal(t *testing.T) {
 	tw, csrf := newMemoryWeb(t)
@@ -29,7 +30,7 @@ func TestEspaceProposal(t *testing.T) {
 		return code, v
 	}
 	code, v := read()
-	if code != 200 || v.Card != x.ID || v.State != cardPending || v.Ref != ref || v.Text == "" || v.Why != "Trop de messages." {
+	if code != 200 || v.Card != x.ID || v.Kind != cardRule || v.State != cardPending || v.Ref != ref || v.Text == "" || v.Why != "Trop de messages." {
 		t.Fatalf("GET: %d %+v", code, v)
 	}
 

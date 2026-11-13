@@ -643,6 +643,20 @@ const onlyAsks = (s: unknown) => {
   return Boolean(m?.tainted) && m?.author !== "core";
 };
 
+// KEEPS are the kinds of proposals that only ask whether to keep something
+// (a memory, a reminder): yes runs nothing. Their header asks it and their
+// buttons say Garder and Oublier; any other kind does something once
+// accepted: Proposition, Oui and Non.
+const KEEPS: Record<string, string> = { memory: "espace.a2.proposal.memory", intention: "espace.a2.proposal.intention" };
+
+// decidedWord is the header of a decided proposal: kept or forgotten for
+// what only asked to keep, approved or declined otherwise.
+function decidedWord(state: string, keeps: boolean): string {
+  if (state !== "approved" && state !== "rejected") return "espace.a2.proposal.gone";
+  if (keeps) return state === "approved" ? "espace.a2.proposal.kept" : "espace.a2.proposal.forgotten";
+  return `espace.a2.proposal.${state}`;
+}
+
 // Proposal shows one proposal of Eriphe's, read from eriphe-core by its ref
 // (kind:id), and again when it moved; its Oui and Non send an "answer" action naming this surface,
 // this component and that proposal: eriphe-core decides it only if the
@@ -697,11 +711,12 @@ const Proposal = createComponentImplementation(
     if (p === null) return <p className="a2-empty">{t("espace.a2.proposal.none")}</p>;
     const pending = p.state === "pending";
     const elsewhere = onlyAsks(context.dataContext.surface);
+    const keeps = KEEPS[p.kind ?? ""];
     return (
-      <section className={`a2-proposal a2-proposal-${pending ? "pending" : "decided"}`} aria-label={t("espace.a2.proposal")}>
+      <section className={`a2-proposal a2-proposal-${pending ? "pending" : "decided"}`} aria-label={t(keeps ?? "espace.a2.proposal")}>
         <p className="a2-proposal-kicker">
           <IconView name={pending ? "star" : p.state === "approved" ? "check" : "close"} />
-          {pending ? t("espace.a2.proposal") : t(`espace.a2.proposal.${["approved", "rejected"].includes(p.state) ? p.state : "gone"}`)}
+          {pending ? t(keeps ?? "espace.a2.proposal") : t(decidedWord(p.state, Boolean(keeps)))}
         </p>
         <p className="a2-proposal-text">{p.text}</p>
         {p.why && <p className="a2-proposal-why">{p.why}</p>}
@@ -720,10 +735,10 @@ const Proposal = createComponentImplementation(
         {pending && !elsewhere && (
           <div className="a2-proposal-actions">
             <button type="button" className="btn a2-button a2-button-primary" disabled={busy} onClick={() => answer(true)}>
-              {t("espace.a2.yes")}
+              {t(keeps ? "espace.a2.keep" : "espace.a2.yes")}
             </button>
             <button type="button" className="btn a2-button" disabled={busy} onClick={() => answer(false)}>
-              {t("espace.a2.no")}
+              {t(keeps ? "espace.a2.forget" : "espace.a2.no")}
             </button>
           </div>
         )}

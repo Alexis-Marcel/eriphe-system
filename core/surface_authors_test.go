@@ -262,11 +262,12 @@ func TestOfferedProposalsInTheQueue(t *testing.T) {
 	if weights["Sam aime le thé vert"] != weightOffered || weights["Appeler le garage"] != weightOfferedDue {
 		t.Fatalf("weights %v", weights)
 	}
-	// The workspace shows them, as any item of the queue: a Proposal each.
+	// The workspace shows them, as any item of the queue: a Proposal each,
+	// in its group or alone.
 	c.syncQueueSurfaces()
-	for _, it := range items {
-		if sf, err := c.surface(queueSurfaceID(it.Ref)); err != nil || !strings.Contains(string(sf.Components), "Proposal") {
-			t.Errorf("no surface for %s: %v", it.Ref, err)
+	for _, e := range c.queuePlan(time.Now()) {
+		if sf, err := c.surface(e.surface); err != nil || !strings.Contains(string(sf.Components), "Proposal") {
+			t.Errorf("no surface for %s: %v", e.it.Ref, err)
 		}
 	}
 	c.attendOffers() // again: nothing doubles

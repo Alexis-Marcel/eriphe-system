@@ -28,9 +28,10 @@ import (
 //     placement goes and the composer places everything again. The brain
 //     places too, at the user's request (workspace_arrange), as the user
 //     would. Kept in kv (placementKey): a restart keeps it.
-//   - The queue: closing a surface of the queue (author core) ends its
-//     item; an item other than a card also ends once the user opened its
-//     surface and left it, or a day after it was delivered.
+//   - The queue: closing a surface of the queue (author core) hides it for
+//     the session and ends its items other than cards (cards wait for
+//     their answer); an item other than a card also ends once the user
+//     opened its surface and left it, or a day after it was delivered.
 //   - The brain reads the workspace in each turn (workspaceBlock): what is
 //     on the screen, at which size and place, what is open, folded and
 //     closed, and the last gestures; workspace_read gives the detail.
@@ -262,8 +263,8 @@ func (c *core) surfaceCleanTitle(id string) string {
 var errPlacement = errors.New("a place is a size (" + placementSizes + ") with a column and a row where it fits on the 12 × 8 grid")
 
 // openedOnWorkspace is the user opening a surface (focusSurface): it is no
-// longer closed, and an item of the queue other than a card it shows is
-// read: it ends once the user leaves it (queueSweep).
+// longer closed, and the items of the queue other than cards it shows are
+// read: they end once the user leaves it (queueSweep).
 func (c *core) openedOnWorkspace(id string, now time.Time) {
 	st := &c.layout
 	st.mu.Lock()
@@ -273,33 +274,34 @@ func (c *core) openedOnWorkspace(id string, now time.Time) {
 		c.savePlacementLocked()
 	}
 	st.mu.Unlock()
-	if it, ok := c.queueItemOf(id); ok && !strings.HasPrefix(it.Ref, "card:") {
-		st.mu.Lock()
-		if st.focus == id { // still the one open: a sweep never ends it under the click
-			if st.read == nil {
-				st.read = map[string]bool{}
-			}
-			st.read[id] = true
-		}
-		st.mu.Unlock()
+	refs := notCards(c.queueItemsOf(id))
+	if len(refs) == 0 {
+		return
 	}
+	st.mu.Lock()
+	if st.focus == id { // still the one open: a sweep never ends it under the click
+		if st.read == nil {
+			st.read = map[string][]string{}
+		}
+		st.read[id] = refs
+	}
+	st.mu.Unlock()
 }
 
-// queueItemOf is the open item a queue's surface shows.
-func (c *core) queueItemOf(id string) (attentionItem, bool) {
-	if !strings.HasPrefix(id, queueSurfacePrefix) {
-		return attentionItem{}, false
-	}
-	for _, it := range c.attentionOpen() {
-		if queueSurfaceID(it.Ref) == id {
-			return it, true
+// notCards are the refs of the items that are not cards: a card waits for
+// its answer, whatever the user saw.
+func notCards(items []attentionItem) []string {
+	var out []string
+	for _, it := range items {
+		if !strings.HasPrefix(it.Ref, "card:") {
+			out = append(out, it.Ref)
 		}
 	}
-	return attentionItem{}, false
+	return out
 }
 
 // closeSurface is the user closing a surface: not shown again this
-// session (folded last); one of the queue's ends its item, but a card's:
+// session (folded last). One of the queue's ends its items but its cards:
 // a card waits for its answer (it may not be in the conversation yet), its
 // surface back the next session.
 func (c *core) closeSurface(id string, now time.Time) error {
@@ -307,10 +309,9 @@ func (c *core) closeSurface(id string, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	var item attentionItem
-	queued := false
+	var ended []string
 	if s.Author == surfaceAuthorCore {
-		item, queued = c.queueItemOf(id)
+		ended = notCards(c.queueItemsOf(id))
 	}
 	c.noteGesture(gestureClosed, "surface:"+id, now)
 	if c.workspaceFocus(now) == id {
@@ -320,8 +321,8 @@ func (c *core) closeSurface(id string, now time.Time) error {
 		p.Closed[id] = now.Unix()
 		delete(p.Pins, id)
 	})
-	if queued && !strings.HasPrefix(item.Ref, "card:") {
-		c.attentionDone(item.Ref)
+	for _, ref := range ended {
+		c.attentionDone(ref)
 	}
 	return nil
 }
@@ -385,17 +386,15 @@ func (c *core) queueSweep(now time.Time) {
 		focus = ""
 	}
 	var left []string
-	for id := range st.read {
+	for id, refs := range st.read {
 		if id != focus {
-			left = append(left, id)
+			left = append(left, refs...) // what it showed when opened: an item come since was not seen
 			delete(st.read, id)
 		}
 	}
 	st.mu.Unlock()
-	for _, id := range left {
-		if it, ok := c.queueItemOf(id); ok && !strings.HasPrefix(it.Ref, "card:") {
-			c.attentionDone(it.Ref)
-		}
+	for _, ref := range left {
+		c.attentionDone(ref)
 	}
 }
 

@@ -2753,25 +2753,41 @@ is its line: marked about the surface, kept off the channels and the phone, and 
 layout's `say` while that focus lasts. Back before the brain read the request withdraws it, and
 asks nothing.
 
-**The attention queue as surfaces** (`workspace_queue.go`). Each open item of the
-[attention queue](#workspace-web) is a surface written by code (author `core`), with no code per
-kind of item: a card is a `Proposal` bound to its proposal (`kind:id`, read and answered through
-`GET /api/proposals/{ref}`), titled by its kind; any other item (a skill's message, a notification
-held for the brief, an alert) is an `Alert` with what Eriphe would say of it (else its why),
-titled « Urgent », « Attend ta réponse » or « À voir » by its weight. Its id is `q-<kind>-<id>`
-(a hash of the ref when its id cannot be a surface's), its weight the item's × 20 (`queueSurfaceWeight`),
-its why the item's, its taint the item's; its words are in the user's language (`userLang`, see
-below). It lives while its item is open:
-`syncQueueSurfaces` makes the queue's surfaces again whenever the queue changes (`attend` and
-`attentionDone` kick `runWorkspace`, never inline) and every 2 s, writing only what changed and
-removing what left. Code's surfaces are outside the pool's cap (100), and no assistant writes or
-removes them, the brain neither; the user removing one (Settings → Surfaces) takes its item out of
-the queue (a card stays to be answered in the conversation). A card whose proposal the `Proposal`
-cannot show is an `Alert` too. The user closing a queue's surface on the page ends its item the same
-way, but a card's: a card waits for its answer (it may not be in the conversation yet), its surface
-closed for the session only. An item other than a card also ends on its own once the user has seen
-it: a day after it was delivered (or raised again), or once they opened its surface and left it (went back, opened another, or the 15 minutes
-of the focus passed; `queueSweep`, on `runWorkspace`'s tick). A card stays until it is decided; an
+**The attention queue as surfaces** (`workspace_queue.go`). The open items of the
+[attention queue](#workspace-web) are shown by surfaces written by code (author `core`), grouped
+by what they ask, with no code per kind of item (#457):
+
+| Surface | Items | Title |
+|---|---|---|
+| `q-decide` | the cards whose proposal does something once accepted (a rule, an access, a run's calls, a task start, a skill, a setting, a monitor…) | « À décider » |
+| `q-reminders` | the intention cards: yes keeps the reminder, it runs nothing | « Rappels à garder » |
+| `q-memories` | the memory cards: yes keeps the extracted memory | « Souvenirs à garder » |
+| `q-notes` | anything else (a skill's message, a notification held for the brief, an alert, a card whose proposal the `Proposal` cannot show), an `Alert` each with what Eriphe would say of it, else its why | « À voir » |
+
+A group of cards is a `List` whose template is a `Proposal` bound to each item's ref in the
+surface's data (`{"items": [{"ref": "memory:12"}, …]}`, read and answered through
+`GET /api/proposals/{ref}`; `answerOf` checks the clicked `Proposal` shows the ref). It lists the
+heaviest then the newest first, 20 at most, and its title counts them all (« Souvenirs à garder · 12 »);
+with one item, its title is that item's subject, short, from the card's text (its kind when the
+card may carry external content). An **urgent** item has a surface of its own, `q-<kind>-<id>`
+(a hash of the ref when its id cannot be a surface's): weight 4 or 5 (a card a task waits on, an
+alert), or a proposal that takes place today (its time, `proposalSpans`, never a tool's name); a
+card alone is a `Proposal` titled by its subject, an `Alert` by its weight (« Urgent »,
+« Attend ta réponse »). The group ids stay the same while they live, so the composer and the
+brain's workspace block keep naming them; the composer's queue lists each item with the surface
+showing it. A surface's weight is its first item's × 20 (`queueSurfaceWeight`), its taint any of
+its items'; its words are in the user's language (`userLang`, see below). It lives while it has
+an item: `syncQueueSurfaces` makes the queue's surfaces again whenever the queue changes (`attend`
+and `attentionDone` kick `runWorkspace`, never inline) and every 2 s, writing only what changed
+(components, data, title, why, weight, taint) and removing what left. Code's surfaces are outside
+the pool's cap (100), and no assistant writes or removes them, the brain neither; the user
+removing one (Settings → Surfaces) takes its items out of the queue (a card stays to be answered
+in the conversation). The user closing a queue's surface on the page hides it for the session and
+ends its items other than cards: a card waits for its answer (it may not be in the conversation
+yet), its surface back the next session. An item other than a card also ends on its own once the
+user has seen it: a day after it was delivered (or raised again), or once they opened its surface
+and left it (went back, opened another, or the 15 minutes of the focus passed; `queueSweep`, on
+`runWorkspace`'s tick), only the items it showed when opened. A card stays until it is decided; an
 item still held (for a breakpoint or the brief) has not been delivered.
 
 The **composer** is a persistent assistant of role `composer`, like the brain and the session
@@ -3001,7 +3017,9 @@ a tile at its cells, by class (`.at-cN .at-rN .w-N .h-N .size-*`), its title ove
 under it, Motion moving a tile that changed place and CSS fading a new one in (fill `backwards`,
 so the animation never holds a transform Motion sets); the folded
 surfaces as chips in the strip above, and a surface the layout does not name yet (it comes right
-after) there too. Eriphe's line is the layout's. A click on a tile or a chip sends the page's own
+after) there too. A chip never shows a raw id: the layout's title, else the surface's own
+(`extensions.eriphe.title`), else « Sans titre »; chips with the same title are one, with their
+count (« Souvenirs à garder · 12 », the first opened by a click; `chips.ts`). Eriphe's line is the layout's. A click on a tile or a chip sends the page's own
 action `open` (`POST /api/espace/action`): core places the surface first and keeps the gesture
 (`surface:<id>`); Retour or Escape sends `back`. A message written while a surface is open
 carries `surface:<id>` as its `about`. Each tile has three small buttons in its corner
@@ -3063,9 +3081,11 @@ through `a2ui.Validate`).
   [dated proposals as ghosts](#proposals-in-the-surfaces-they-concern-surface_proposalsgo)),
   Alert (four levels), Placeholder (« En préparation », a slow shimmer).
 - *Proposal* shows one proposal of Eriphe's by its own ref (`kind:id`, the `proposal` of a
-  card): `GET /api/proposals/{ref}` (`web_espace_proposal.go`) gives its text, why, fields
+  card): `GET /api/proposals/{ref}` (`web_espace_proposal.go`) gives its kind, text, why, fields
   and state in the user's language, and the card that answers it (404 when no card carries
-  it); Oui and Non send an `answer` action on the surface (`POST /api/espace/action`, see
+  it). Its header and buttons say what the card asks, by its kind: a memory « Garder en mémoire ? »
+  and an intention « Garder ce rappel ? », Garder / Oublier (kept or forgotten once answered: yes runs
+  nothing); any other kind « Proposition », Oui / Non, its text saying what will be done. Its buttons send an `answer` action on the surface (`POST /api/espace/action`, see
   [the actions](#the-actions-of-a-surface)), never the card endpoint, then the proposal is read
   again, as it is whenever the stream says it moved (answered anywhere). On a surface showing external content (its createSurface's `extensions.eriphe.tainted`)
   that code did not write (`author` other than `core`) it shows no Oui or Non: such a surface can only ask, the proposal is answered in the

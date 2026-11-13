@@ -103,8 +103,8 @@ func TestComposerRole(t *testing.T) {
 	c.attend(attentionItem{Ref: "session:3", Weight: 4, Why: "Its plan waits for Sam", Source: "lead"})
 	done := make(chan workspaceChoice, 1)
 	go func() { done <- c.recompose(momentChange, "") }()
-	turn := answerComposer(t, c, id, `{"eriphe":"Le plan attend ton feu vert.","items":[{"id":"q-session-3","size":"l","why":"Plan à valider"},{"id":"s-404","size":"xl","why":"invented"}],"missing":["l'agenda de demain"],"stale":["q-mail-7"]}`)
-	if !strings.Contains(turn, "Ids permis : q-session-3, q-mail-7") || !strings.Contains(turn, "raison « Its plan waits for Sam »") {
+	turn := answerComposer(t, c, id, `{"eriphe":"Le plan attend ton feu vert.","items":[{"id":"q-session-3","size":"l","why":"Plan à valider"},{"id":"s-404","size":"xl","why":"invented"}],"missing":["l'agenda de demain"],"stale":["q-notes"]}`)
+	if !strings.Contains(turn, "Ids permis : q-session-3, q-notes") || !strings.Contains(turn, "raison « Its plan waits for Sam »") {
 		t.Errorf("turn %q", turn)
 	}
 	ch := <-done
@@ -113,7 +113,7 @@ func TestComposerRole(t *testing.T) {
 	}
 	// Laid out at once: what it chose in front, what it left folded.
 	if l := c.currentLayout(); len(l.Items) != 1 || l.Items[0].ID != "q-session-3" || l.Items[0].Size != sizeL ||
-		len(l.Chips) != 1 || l.Chips[0].ID != "q-mail-7" || l.Eriphe != ch.Eriphe || l.By != composedBy {
+		len(l.Chips) != 1 || l.Chips[0].ID != "q-notes" || l.Eriphe != ch.Eriphe || l.By != composedBy {
 		t.Fatalf("layout %+v", l)
 	}
 	// Its signals are in the journal.
@@ -139,7 +139,7 @@ func TestComposerRole(t *testing.T) {
 	if ch := <-done; ch.By != fallbackBy || ch.Moment != momentRemark {
 		t.Fatalf("fallback %+v", ch)
 	}
-	if l := c.currentLayout(); len(l.Items) != 2 || l.Items[0].ID != "q-session-3" || l.Items[1].ID != "q-mail-7" || l.By != fallbackBy {
+	if l := c.currentLayout(); len(l.Items) != 2 || l.Items[0].ID != "q-session-3" || l.Items[1].ID != "q-notes" || l.By != fallbackBy {
 		t.Fatalf("layout by weight %+v", l)
 	}
 
@@ -192,13 +192,13 @@ func TestComposerTimeout(t *testing.T) {
 		}
 	}
 	ch := <-done
-	if l := c.currentLayout(); ch.By != fallbackBy || len(l.Items) != 1 || l.Items[0].ID != "q-mail-1" || time.Since(start) > 3*time.Second {
+	if l := c.currentLayout(); ch.By != fallbackBy || len(l.Items) != 1 || l.Items[0].ID != "q-notes" || time.Since(start) > 3*time.Second {
 		t.Fatalf("choice %+v, layout %+v after %s", ch, l, time.Since(start))
 	}
 	// Its answer comes later: no one waits for it anymore.
 	task, _ := c.store.task(id)
 	c.store.addEvents(id, []EventRow{
-		{Seq: task.LastSeq + 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": `{"eriphe":"Trop tard.","items":[{"id":"q-mail-1","size":"xl","why":"x"}]}`}},
+		{Seq: task.LastSeq + 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": `{"eriphe":"Trop tard.","items":[{"id":"q-notes","size":"xl","why":"x"}]}`}},
 		{Seq: task.LastSeq + 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}},
 	})
 	c.store.updateTask(id, map[string]any{"state": stateIdle})
@@ -226,7 +226,7 @@ func TestComposerOff(t *testing.T) {
 	if ch := c.recompose(momentChange, ""); ch.By != fallbackBy || c.lastChoice() == nil {
 		t.Fatalf("choice %+v", ch)
 	}
-	if l := c.currentLayout(); len(l.Items) != 1 || l.Items[0].ID != "q-mail-1" {
+	if l := c.currentLayout(); len(l.Items) != 1 || l.Items[0].ID != "q-notes" {
 		t.Fatalf("layout %+v", l)
 	}
 	if n := len(tasksOfKind(t, c.core, assistantRoleComposer)); n != 0 {

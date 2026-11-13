@@ -143,8 +143,8 @@ func TestGestureKinds(t *testing.T) {
 	}
 }
 
-// Closing a card's surface hides it for the session but keeps the card: it
-// waits for its answer.
+// Closing a group of cards hides it for the session but keeps the cards: they
+// wait for their answer.
 func TestCloseCardSurfaceKeepsCard(t *testing.T) {
 	tw, _ := newMemoryWeb(t)
 	c := tw.c
@@ -152,7 +152,7 @@ func TestCloseCardSurfaceKeepsCard(t *testing.T) {
 	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
 	x := cardOf(t, c, cardRule, r.ID)
 	c.syncQueueSurfaces()
-	id := queueSurfaceID(cardItemRef(x.ID))
+	id := queueDecide // its group: a rule asks to do something
 	if _, ok := surfaceByID(t, c, id); !ok {
 		t.Fatal("no surface for the card")
 	}
@@ -215,7 +215,7 @@ func TestClosedNotShownAgainThisSession(t *testing.T) {
 	}
 }
 
-// Closing a surface of the queue ends its item; an item other than a card
+// Closing a surface of the queue ends its items; an item other than a card
 // also ends a day after it was delivered, or once the user opened its
 // surface and left it. A card waits for its answer.
 func TestQueueItemsEnd(t *testing.T) {
@@ -227,17 +227,17 @@ func TestQueueItemsEnd(t *testing.T) {
 	c.attend(attentionItem{Ref: "alert:7", Weight: 2, Why: "Une note", Say: "La sauvegarde a fini."})
 	c.store.db.Exec(`UPDATE attention SET delivered = ? WHERE ref = 'alert:7'`, now.Unix())
 	c.syncQueueSurfaces()
-	if _, ok := surfaceByID(t, c, "q-alert-7"); !ok {
+	if _, ok := surfaceByID(t, c, queueNotes); !ok {
 		t.Fatal("no surface for the item")
 	}
-	if err := c.closeSurface("q-alert-7", now); err != nil {
+	if err := c.closeSurface(queueNotes, now); err != nil {
 		t.Fatal(err)
 	}
 	c.syncQueueSurfaces()
 	if open("alert:7") {
 		t.Fatal("closed, the item stays")
 	}
-	if _, ok := surfaceByID(t, c, "q-alert-7"); ok {
+	if _, ok := surfaceByID(t, c, queueNotes); ok {
 		t.Fatal("closed, its surface stays")
 	}
 
@@ -262,7 +262,7 @@ func TestQueueItemsEnd(t *testing.T) {
 
 	// Read: opened, then left.
 	c.syncQueueSurfaces()
-	c.focusSurface("q-alert-10", now)
+	c.focusSurface(queueNotes, now)
 	c.queueSweep(now)
 	if !open("alert:10") {
 		t.Fatal("ended while the user reads it")

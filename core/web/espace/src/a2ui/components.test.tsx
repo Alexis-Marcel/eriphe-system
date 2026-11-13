@@ -450,6 +450,58 @@ describe("the catalog's components", () => {
     expect($(".a2-proposal-actions")).not.toBeNull();
   });
 
+  it("say what a card asks by its kind: keep a memory or a reminder, or do something", async () => {
+    const views: Record<string, { ref: string; card: number; kind: string; state: string; text: string }> = {
+      "memory:1": { ref: "memory:1", card: 1, kind: "memory", state: "pending", text: "Sam prefers mornings" },
+      "intention:2": { ref: "intention:2", card: 2, kind: "intention", state: "pending", text: "Add the event to the calendar" },
+      "access:3": { ref: "access:3", card: 3, kind: "access", state: "pending", text: "Send the quote" },
+    };
+    for (const lang of ["fr", "en"] as const) {
+      const fr = lang === "fr";
+      for (const [ref, kicker, buttons] of [
+        ["memory:1", fr ? "Garder en mémoire ?" : "Keep in memory?", fr ? "GarderOublier" : "KeepForget"],
+        ["intention:2", fr ? "Garder ce rappel ?" : "Keep this reminder?", fr ? "GarderOublier" : "KeepForget"],
+        ["access:3", fr ? "Proposition" : "Proposal", fr ? "OuiNon" : "YesNo"],
+      ]) {
+        await mount(lang, one([{ id: "root", component: "Proposal", proposalId: ref }]), {
+          read: async (r) => views[r] ?? null,
+          answer: async () => true,
+        });
+        await act(async () => {});
+        expect(text(".a2-proposal-kicker")).toBe(kicker);
+        expect(text(".a2-proposal-actions")).toBe(buttons);
+        await act(async () => root.unmount());
+        adapter.dispose();
+      }
+    }
+    // Kept or forgotten, once answered.
+    views["memory:1"].state = "approved";
+    views["intention:2"].state = "rejected";
+    await mount("fr", one([
+      { id: "root", component: "Column", children: ["a", "b"] },
+      { id: "a", component: "Proposal", proposalId: "memory:1" },
+      { id: "b", component: "Proposal", proposalId: "intention:2" },
+    ]), { read: async (r) => views[r] ?? null, answer: async () => true });
+    await act(async () => {});
+    expect($$(".a2-proposal-kicker").map((n) => n.textContent)).toEqual(["Gardé", "Oublié"]);
+  });
+
+  it("answer a proposal of a list, naming the template's component", async () => {
+    const view = (ref: string) => ({ ref, card: 1, kind: "memory", state: "pending", text: ref });
+    const sent: Answer[] = [];
+    await mount("fr", one([
+      { id: "root", component: "List", children: { path: "/items", componentId: "item" } },
+      { id: "item", component: "Proposal", proposalId: { "@path": "ref" } },
+    ], { items: [{ ref: "memory:1" }, { ref: "memory:2" }] }), {
+      read: async (r) => view(r),
+      answer: async (a) => (sent.push(a), true),
+    });
+    await act(async () => {});
+    expect($$(".a2-proposal-text").map((n) => n.textContent)).toEqual(["memory:1", "memory:2"]);
+    await click($$(".a2-proposal-actions button")[2]);
+    expect(sent).toEqual([{ surfaceId: "t", componentId: "item", ref: "memory:2", yes: true }]);
+  });
+
   it("render Markdown as text, never as HTML", async () => {
     await mount("en", one([
       {
