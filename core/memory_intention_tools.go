@@ -73,7 +73,7 @@ func viewIntention(x *Intention, now time.Time) intentionView {
 }
 
 func registerIntentionTools(s *mcp.Server, c *core) {
-	tool(s, "intend", "Record an intention, something owed or to do once: a promise, a commitment of yours, something the user waits for, a one-off reminder (remind me at 14:00); what comes back on a schedule is a watch instead; with its deadline, when to bring it up, or the person whose mention brings it up. eriphe-core wakes you when it is due. What a turn that read external content records is only proposed.",
+	tool(s, "intend", "Record an intention, something owed or to do once: a promise, a commitment of yours, something the user waits for, a one-off reminder (remind me at 14:00); what comes back on a schedule is a timed skill instead (write_skill, when: time); with its deadline, when to bring it up, or the person whose mention brings it up. eriphe-core wakes you when it is due. What a turn that read external content records is only proposed.",
 		func(ctx context.Context, in intendIn) (map[string]any, error) {
 			return c.brainIntend(in)
 		})
