@@ -1,0 +1,24 @@
+{
+  "id": "side-research",
+  "what": "Une recherche lancée pendant que le thread d'une PR est au centre : un second thread ouvert à côté, sans prendre le centre, avec une étape de tâche ; le thread de la PR n'est pas touché.",
+  "lang": "fr",
+  "stage": {"title": "PR 42 · règles d'alerte", "goal": "Les règles d'alerte de latence sont fusionnées, déployées et actives.", "subject": "pr:sam/supervision#42"},
+  "servers": [
+    {"name": "forge", "use": "les dépôts de code de Sam", "trusted": true, "tools": [
+      {"name": "pull", "description": "Read a pull request: its state, whether it is merged, its checks, its diff.",
+        "input_schema": {"type": "object", "properties": {"repo": {"type": "string"}, "number": {"type": "integer"}}, "required": ["repo", "number"]},
+        "result": {"repo": "sam/supervision", "number": 42, "title": "Règles d'alerte de latence", "state": "open", "merged": false}}
+    ]}
+  ],
+  "request": "Pendant que je relis la PR, fais une recherche sur la marque Velora : qui la détient, et si le nom est libre pour des vélos en France.",
+  "expect": {"subject": ["velora"], "side": true},
+  "answer": {
+    "calls": [
+      {"tool": "find_thread", "args": {"text": "Velora"}},
+      {"tool": "open_thread", "args": {"title": "Marque Velora", "goal": "Sam sait qui détient la marque Velora et si le nom est libre pour des vélos en France.", "subject": "marque:velora"}},
+      {"tool": "add_step", "args": {"thread_id": 8, "step": {"key": "recherche", "title": "Rechercher la marque Velora", "kind": "task",
+        "prompt": "Cherche qui détient la marque Velora et si le nom est déposé ou libre pour des vélos en France (registres de marques, sites des marques). Rends les sources."}}}
+    ],
+    "reply": "C'est lancé à côté : je cherche qui détient Velora et si le nom est libre."
+  }
+}

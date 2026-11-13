@@ -3724,7 +3724,42 @@ ERIPHE_LIVE_SURFACES=1 go test -run TestSurfacesLive -v .
 
 It reports per case and in all: validity, catalog adherence, sources declared, values copied,
 composed data, tool names shown, agreement, latency and cost (about 1 to 4 cents a case with
-Sonnet). It fails only when the CLI does.
+Sonnet). It fails only when the CLI does. Its question from the workspace is about a thing that is
+not followed (an appointment); a matter to follow is the threads' bench's.
+
+**The threads' bench** (`testdata/threads/`, `threads_bench_test.go`, #471). Invented requests of
+Sam about a matter to follow, each with the tools linked for it (invented servers: what each does,
+its schema, what a read gave or a change answers, trusted or not), what the brain knows of Sam,
+maybe a thread already on stage, and a reference answer: the calls the brain makes in its turn, in
+order, and its reply (`{"calls": [{"tool", "args"}…], "reply"}`). An answer is scored by playing
+its calls through the brain's own MCP server on a core linked to the case's fake servers, in a
+turn as production makes it (from the workspace; for a wake, the step's real event delivered), then
+reading what the core holds, never exact words: a status question finds the thread before opening
+it, opens it light with a subject, writes the brain's part on `thread-<id>` (no other surface)
+and puts it on stage; a PR not merged gets a `call` step on the change, whose card is the yes;
+one already merged, only a `check`; the wake after the change ran (the bench says yes on the card,
+the fake change runs) adds a `user` step after it (Sam deploys himself) and a `check` after that,
+never closing the thread; « pendant que je relis la PR, cherche… » while a thread is on stage
+opens a second one with a task step, no `workspace_focus`, the stage and its thread untouched.
+Always: no call refused, no change called outside a step, a reply in one line (`[rien]` for a
+wake), no server or tool name in the reply, the thread, its steps or the part. A turn announces
+the id the next thread gets (`threadBenchSeed`). In CI with no model, every case is valid, its
+reference answers score clean, and each fault is caught on a spoilt copy. `threads_live_test.go`
+runs the turns on a real model the way the surfaces' bench does: « Les threads », the paragraphs
+on surfaces and on the workspace's messages, the brain's tools for threads and the workspace as
+an MCP client lists them and the catalog appended to the system prompt; a wake is played after
+the case's reference first turn, so each turn is judged on its own:
+
+```sh
+cd core
+ERIPHE_LIVE_THREADS=1 go test -run TestThreadsLive -v .
+# ERIPHE_LIVE_THREADS_RUNS=1 (default), ERIPHE_LIVE_THREADS_MODEL=sonnet (default),
+# ERIPHE_LIVE_THREADS_CLI=claude (default), ERIPHE_LIVE_THREADS_CASES=<id>,<id> (all by default)
+```
+
+It reports per turn and in all: the faults, agreement, latency and cost (about 11 cents for the
+first turn, its system prompt written to the cache, then 2 cents a turn with Sonnet). It fails
+only when the CLI does.
 
 **Who keeps which surface** (`surface_authors.go`, #423). Nothing is recurring by default.
 

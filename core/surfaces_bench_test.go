@@ -30,7 +30,9 @@ import (
 //   - composed (a summary): the author wrote its values in data.
 //
 // A case with front is a question the user asked from the workspace about
-// a thing, with a proposal waiting (#458): its answer is the surface, the
+// a thing that is not followed (an appointment, a mail: a matter to follow
+// has its thread, testdata/threads), with a proposal waiting (#458): its
+// answer is the surface, the
 // focus asked (workspace_focus) and the text reply; a good one has the
 // subject in its title, embeds the proposal (a Proposal with its ref), is
 // put on stage, and the reply is one line.
