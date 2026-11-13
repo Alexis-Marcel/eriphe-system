@@ -100,19 +100,19 @@ func TestComposerRole(t *testing.T) {
 	}
 
 	c.attend(attentionItem{Ref: "mail:7", Weight: 2, Why: "A reply from example.org", Source: "skill:mail"})
-	c.attend(attentionItem{Ref: "session:3", Weight: 4, Why: "Its plan waits for Sam", Source: "lead"})
+	c.attend(attentionItem{Ref: "thread:3", Weight: 4, Why: "Its plan waits for Sam", Source: "lead"})
 	done := make(chan workspaceChoice, 1)
 	go func() { done <- c.recompose(momentChange, "") }()
-	turn := answerComposer(t, c, id, `{"eriphe":"Le plan attend ton feu vert.","items":[{"id":"q-session-3","size":"l","why":"Plan à valider"},{"id":"s-404","size":"xl","why":"invented"}],"missing":["l'agenda de demain"],"stale":["q-notes"]}`)
-	if !strings.Contains(turn, "Ids permis : q-session-3, q-notes") || !strings.Contains(turn, "raison « Its plan waits for Sam »") {
+	turn := answerComposer(t, c, id, `{"eriphe":"Le plan attend ton feu vert.","items":[{"id":"q-thread-3","size":"l","why":"Plan à valider"},{"id":"s-404","size":"xl","why":"invented"}],"missing":["l'agenda de demain"],"stale":["q-notes"]}`)
+	if !strings.Contains(turn, "Ids permis : q-thread-3, q-notes") || !strings.Contains(turn, "raison « Its plan waits for Sam »") {
 		t.Errorf("turn %q", turn)
 	}
 	ch := <-done
-	if ch.By != composedBy || len(ch.Items) != 1 || ch.Items[0] != (choiceItem{ID: "q-session-3", Size: sizeL, Why: "Plan à valider"}) || ch.Eriphe != "Le plan attend ton feu vert." {
+	if ch.By != composedBy || len(ch.Items) != 1 || ch.Items[0] != (choiceItem{ID: "q-thread-3", Size: sizeL, Why: "Plan à valider"}) || ch.Eriphe != "Le plan attend ton feu vert." {
 		t.Fatalf("choice %+v", ch)
 	}
 	// Laid out at once: what it chose in front, what it left folded.
-	if l := c.currentLayout(); len(l.Items) != 1 || l.Items[0].ID != "q-session-3" || l.Items[0].Size != sizeL ||
+	if l := c.currentLayout(); len(l.Items) != 1 || l.Items[0].ID != "q-thread-3" || l.Items[0].Size != sizeL ||
 		len(l.Chips) != 1 || l.Chips[0].ID != "q-notes" || l.Eriphe != ch.Eriphe || l.By != composedBy {
 		t.Fatalf("layout %+v", l)
 	}
@@ -139,7 +139,7 @@ func TestComposerRole(t *testing.T) {
 	if ch := <-done; ch.By != fallbackBy || ch.Moment != momentRemark {
 		t.Fatalf("fallback %+v", ch)
 	}
-	if l := c.currentLayout(); len(l.Items) != 2 || l.Items[0].ID != "q-session-3" || l.Items[1].ID != "q-notes" || l.By != fallbackBy {
+	if l := c.currentLayout(); len(l.Items) != 2 || l.Items[0].ID != "q-thread-3" || l.Items[1].ID != "q-notes" || l.By != fallbackBy {
 		t.Fatalf("layout by weight %+v", l)
 	}
 

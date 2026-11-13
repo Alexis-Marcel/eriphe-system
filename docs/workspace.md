@@ -27,7 +27,7 @@ Who writes the tiles:
 - **Eriphe**, when you ask it to show something;
 - **a skill**, the things Eriphe does on its own at set times or on an event (a morning
   preparation, say), each keeping its own tiles up to date;
-- **a work session**, while it runs, with its progress;
+- **a thread**, a matter Eriphe follows to its goal, with where it stands;
 - **Eriphe itself, for what waits for you**: a proposal to approve, an alert, a message held for
   later. These come and go with what they show.
 
@@ -164,7 +164,7 @@ The workspace has a **center**: one tile large, the others smaller around it. Cl
 chip to **open** it: it takes the center and the workspace recomposes around it, what relates to
 it around, the rest folded. The tile that was in the center stays next to it, smaller and still
 live (a merge you approved there keeps showing its progress); click it to swap them again. What relates is found from what the tiles show, never from a tool's name: the same source,
-the same work session or skill, the same day. Opening a tile also reads its data again. Eriphe may add one line above about what matters
+the same thread or skill, the same day. Opening a tile also reads its data again. Eriphe may add one line above about what matters
 there, or say nothing.
 
 **Back to the overview** (or Escape) restores the workspace as it was. The focus also ends by
@@ -206,7 +206,7 @@ specific tool.
 
 ## With nothing linked
 
-The workspace still works: it shows what waits for you (proposals, alerts, sessions) and Eriphe's
+The workspace still works: it shows what waits for you (proposals, alerts, threads) and Eriphe's
 line. The arrival skill writes one tile saying what the workspace could show in the morning once
 you link appointments, a mailbox or notes. Link one and ask.
 

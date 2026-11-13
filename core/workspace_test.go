@@ -258,12 +258,12 @@ func TestRefCompositionGone(t *testing.T) {
 
 	tw := newTestWeb(t)
 	csrf := tw.setup()
-	for _, path := range []string{"/api/composition", "/api/objects/session:1", "/api/attention"} {
+	for _, path := range []string{"/api/composition", "/api/objects/thread:1", "/api/attention"} {
 		if code, _, _ := tw.do("GET", path, nil, nil); code != http.StatusNotFound {
 			t.Errorf("GET %s: %d", path, code)
 		}
 	}
-	if code, _, _ := tw.post("/api/objects", url.Values{"refs": {"session:1"}}, csrf); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
+	if code, _, _ := tw.post("/api/objects", url.Values{"refs": {"thread:1"}}, csrf); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
 		t.Errorf("POST /api/objects: %d", code)
 	}
 	cs := connectTo(t, newMCPServer(tw.c))

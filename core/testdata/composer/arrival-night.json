@@ -1,6 +1,6 @@
 {
   "id": "arrival-night",
-  "what": "Sam revient le matin après une nuit : un mail urgent, une journée avec deux rendez-vous qui se chevauchent, une session finie qui attend un choix, une sauvegarde en échec que Sam veut toujours devant, et du patrimoine et des projets en fond.",
+  "what": "Sam revient le matin après une nuit : un mail urgent, une journée avec deux rendez-vous qui se chevauchent, un thread fini qui attend un choix, une sauvegarde en échec que Sam veut toujours devant, et du patrimoine et des projets en fond.",
   "now": "2026-11-12 07:45",
   "moment": "arrival",
   "away_minutes": 600,
@@ -10,18 +10,18 @@
     {"ref": "mail:m-102", "weight": 2, "age_minutes": 60, "title": "Les nouveautés de novembre", "why": "Lettre d'information de shop.example.org"},
     {"ref": "mail:m-103", "weight": 2, "age_minutes": 90, "title": "Re: covoiturage samedi", "why": "Un voisin propose un horaire pour samedi"},
     {"ref": "agenda:2026-11-12", "weight": 3, "age_minutes": 120, "title": "Jeudi 12 novembre : 4 événements", "why": "Le dentiste et l'appel client se chevauchent à 14 h"},
-    {"ref": "session:s-41", "weight": 4, "age_minutes": 300, "title": "Refonte de la page d'accueil", "why": "Finie : deux versions, choisis laquelle publier", "say": "Deux versions t'attendent, à toi de choisir."},
+    {"ref": "thread:s-41", "weight": 4, "age_minutes": 300, "title": "Refonte de la page d'accueil", "why": "Finie : deux versions, choisis laquelle publier", "say": "Deux versions t'attendent, à toi de choisir."},
     {"ref": "card:c-88", "weight": 3, "age_minutes": 150, "title": "Réponse au covoiturage", "why": "Un brouillon de réponse attend ton envoi"},
     {"ref": "project:atelier", "weight": 2, "age_minutes": 200, "title": "Atelier", "why": "Deux issues fermées cette nuit"},
     {"ref": "alert:backup-3", "weight": 2, "age_minutes": 420, "title": "Sauvegarde nocturne", "why": "La sauvegarde a échoué, troisième nuit de suite"},
     {"ref": "project:patrimoine", "weight": 1, "age_minutes": 480, "title": "Patrimoine", "why": "Le relevé mensuel de l'assurance vie est arrivé"}
   ],
-  "expect": {"front": ["mail:m-101", "session:s-41", "alert:backup-3", "agenda:2026-11-12"], "back": ["mail:m-102", "project:patrimoine"], "fallback_front": true},
+  "expect": {"front": ["mail:m-101", "thread:s-41", "alert:backup-3", "agenda:2026-11-12"], "back": ["mail:m-102", "project:patrimoine"], "fallback_front": true},
   "answer": {"eriphe": "Cette nuit : le notaire attend ta signature avant midi, la sauvegarde a encore échoué, et la refonte attend ton choix.",
     "items": [
       {"id": "q-mail-m-101", "size": "xl", "why": "Signature à renvoyer avant midi"},
       {"id": "q-alert-backup-3", "size": "l", "why": "Troisième échec de suite"},
-      {"id": "q-session-s-41", "size": "l", "why": "Deux versions à départager"},
+      {"id": "q-thread-s-41", "size": "l", "why": "Deux versions à départager"},
       {"id": "q-agenda-2026-11-12", "size": "m", "why": "Chevauchement à 14 h"},
       {"id": "q-card-c-88", "size": "m", "why": "Brouillon prêt à partir"}
     ],

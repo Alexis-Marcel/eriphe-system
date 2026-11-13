@@ -18,12 +18,12 @@ import (
 //     card (kind runcalls), with its message: each action and its
 //     parameters; the yes runs them all as kept, the no none. The brain is
 //     not told of their results: the run's note keeps them.
-//   - With can: [start-session], its last message may carry a work session
-//     to open, as a fenced ```session block of start_session's input. Its
+//   - With can: [open-thread], its last message may carry a thread
+//     to open, as a fenced ```thread block of open_thread's input. Its
 //     plan starts at once when every step only reads, writes on a branch of
 //     its repository or calls catalog tools (each call still under the
 //     grid): the skill's approval stands for it. Otherwise the plan waits for
-//     its card. The session is the run's: the events of its key go to its
+//     its card. The thread is the run's: the events of its key go to its
 //     lead while it is open.
 //   - With urgent: <fixed text>, a last message that starts with [urgent]
 //     sends that fixed text over the quiet hours and the daily cap, once per
@@ -35,7 +35,7 @@ const (
 	urgentSkillWhy = "Ton skill « %s » est urgent : tu as approuvé ce message pour être prévenu à toute heure."
 )
 
-var sessionBlockRe = regexp.MustCompile("(?s)```session\\s*\\n(.*?)```")
+var threadBlockRe = regexp.MustCompile("(?s)```thread\\s*\\n(.*?)```")
 
 // askRunCall keeps a run's call for its card and answers the task: not run.
 func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[string]any) {
@@ -169,44 +169,45 @@ func (c *core) runCallDone(a accessQuestion, text string) {
 	log.Printf("skill run %d: card %d: %s", a.Run, a.ID, truncate(text, 120))
 }
 
-// sessionOfMessage takes a ```session block out of a run's last message.
-func sessionOfMessage(text string) (*sessionIn, string, error) {
-	m := sessionBlockRe.FindStringSubmatchIndex(text)
+// threadOfMessage takes a ```thread block out of a run's last message.
+func threadOfMessage(text string) (*threadIn, string, error) {
+	m := threadBlockRe.FindStringSubmatchIndex(text)
 	if m == nil {
 		return nil, text, nil
 	}
 	rest := strings.TrimSpace(text[:m[0]] + text[m[1]:])
-	var in sessionIn
+	var in threadIn
 	if err := json.Unmarshal([]byte(text[m[2]:m[3]]), &in); err != nil {
-		return nil, rest, fmt.Errorf("its session block is not start_session's JSON: %w", err)
+		return nil, rest, fmt.Errorf("its thread block is not open_thread's JSON: %w", err)
 	}
 	return &in, rest, nil
 }
 
-// runSession opens the session a run asked for, if its skill may.
-func (c *core) runSession(ctx context.Context, r *skillRun, tr *skillTrigger, in *sessionIn) string {
-	if tr == nil || !containsStr(tr.Can, canSession) {
-		return "a session was asked, but the skill may not open one (can: [start-session])"
+// runThread opens the thread a run asked for, if its skill may.
+func (c *core) runThread(ctx context.Context, r *skillRun, tr *skillTrigger, in *threadIn) string {
+	if tr == nil || !containsStr(tr.Can, canThread) {
+		return "a thread was asked, but the skill may not open one (can: [open-thread])"
 	}
 	var taint []string
 	if why := c.taskResultTaint(r.Task); why != "" {
 		taint = []string{why}
 	}
-	s, err := c.openSession(*in, taint, "skill:"+r.Skill)
+	in.Mode = modeLed // a skill's run opens planned work, its lead hears the key's events
+	s, err := c.openThread(*in, taint, "skill:"+r.Skill)
 	if err != nil {
-		return "the session could not open: " + err.Error()
+		return "the thread could not open: " + err.Error()
 	}
-	c.store.db.Exec(`UPDATE skill_runs SET session = ? WHERE id = ?`, s.ID, r.ID)
+	c.store.db.Exec(`UPDATE skill_runs SET thread = ? WHERE id = ?`, s.ID, r.ID)
 	if !safePlan(in.Steps) {
-		return fmt.Sprintf("session %d opened; its plan waits for its card", s.ID)
+		return fmt.Sprintf("thread %d opened; its plan waits for its card", s.ID)
 	}
 	var ask int64
-	if c.store.db.QueryRow(`SELECT id FROM session_asks WHERE session = ? AND kind = ? AND state = ?`, s.ID, askPlan, askPending).Scan(&ask) == nil {
-		if err := c.decideSessionAsk(ctx, ask, true); err != nil {
-			return fmt.Sprintf("session %d opened; its plan waits for its card (%v)", s.ID, err)
+	if c.store.db.QueryRow(`SELECT id FROM thread_asks WHERE thread = ? AND kind = ? AND state = ?`, s.ID, askPlan, askPending).Scan(&ask) == nil {
+		if err := c.decideThreadAsk(ctx, ask, true); err != nil {
+			return fmt.Sprintf("thread %d opened; its plan waits for its card (%v)", s.ID, err)
 		}
 	}
-	return fmt.Sprintf("session %d opened and started", s.ID)
+	return fmt.Sprintf("thread %d opened and started", s.ID)
 }
 
 // safePlan: every step only reads, writes on a branch of its repository or
@@ -245,26 +246,26 @@ func (c *core) runUrgent(r *skillRun, tr *skillTrigger) {
 	}
 }
 
-// liveSession is the run's session while it is open.
-func (c *core) liveSession(r *skillRun) (Session, bool) {
+// liveThread is the run's thread while it is open.
+func (c *core) liveThread(r *skillRun) (Thread, bool) {
 	var id int64
-	c.store.db.QueryRow(`SELECT session FROM skill_runs WHERE id = ?`, r.ID).Scan(&id)
+	c.store.db.QueryRow(`SELECT thread FROM skill_runs WHERE id = ?`, r.ID).Scan(&id)
 	if id == 0 {
-		return Session{}, false
+		return Thread{}, false
 	}
-	s, err := c.session(id)
+	s, err := c.thread(id)
 	if err != nil {
-		return Session{}, false
+		return Thread{}, false
 	}
-	switch s.State {
-	case sessProposed, sessRunning, sessPaused:
+	switch s.Phase {
+	case phaseProposed, phaseRunning, phasePaused:
 		return s, true
 	}
-	return Session{}, false
+	return Thread{}, false
 }
 
-// toRunSession gives the events of a key to the lead of its run's session.
-func (c *core) toRunSession(r *skillRun, s Session, queued []queuedEvent) {
+// toRunThread gives the events of a key to the lead of its run's thread.
+func (c *core) toRunThread(r *skillRun, s Thread, queued []queuedEvent) {
 	var events []journalEvent
 	var taint []string
 	for _, q := range queued {
@@ -275,16 +276,16 @@ func (c *core) toRunSession(r *skillRun, s Session, queued []queuedEvent) {
 			}
 		}
 	}
-	c.tellLead(s, "De nouveaux événements sont arrivés pour cette session.\n"+eventsText(events), taint)
+	c.tellLead(s, "De nouveaux événements sont arrivés pour ce thread.\n"+eventsText(events), taint)
 	c.dequeue(queued)
 }
 
 // skillCanText is what a run is told of what its skill allows.
 func skillCanText(tr *skillTrigger) string {
 	var b strings.Builder
-	if containsStr(tr.Can, canSession) {
-		b.WriteString("\n\nSi le travail demande plusieurs étapes (enquêter, corriger, ouvrir une PR), ouvre une session de travail : " +
-			"termine ton message final par un bloc ```session contenant le JSON de start_session : " +
+	if containsStr(tr.Can, canThread) {
+		b.WriteString("\n\nSi le travail demande plusieurs étapes (enquêter, corriger, ouvrir une PR), ouvre un thread mené : " +
+			"termine ton message final par un bloc ```thread contenant le JSON de open_thread : " +
 			`{"title", "goal", "done_when", "budget_minutes", "steps": [{"key", "title", "kind": "task", "after": [], "prompt", "agent", "resources": [{"kind": "repo", "ref": "owner/name", "access": "write", "branch": "eriphe/…"}]}]}` +
 			". Une étape qui n'écrit que sur sa branche démarre seule ; la fusion et le déploiement restent à l'utilisateur.")
 	}

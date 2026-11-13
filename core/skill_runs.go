@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS skill_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT, skill TEXT NOT NULL, sha TEXT NOT NULL, key TEXT NOT NULL DEFAULT '',
   events TEXT NOT NULL DEFAULT '[]', task TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
   external INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, ended INTEGER,
-  session INTEGER NOT NULL DEFAULT 0); -- it may start a working session (skill_cards.go)
+  thread INTEGER NOT NULL DEFAULT 0); -- it may start a working thread (skill_cards.go)
 CREATE INDEX IF NOT EXISTS skill_runs_skill ON skill_runs (skill, id);
 CREATE INDEX IF NOT EXISTS skill_runs_task ON skill_runs (task);`
 
@@ -218,8 +218,8 @@ func (c *core) tickSkills(ctx context.Context, now time.Time) {
 		}
 		for _, key := range keys {
 			if r := c.openRun(sk.Name, key); r != nil {
-				if s, ok := c.liveSession(r); ok && r.State != skillRunOpen {
-					c.toRunSession(r, s, byKey[key]) // its session's lead gets them (skill_cards.go)
+				if s, ok := c.liveThread(r); ok && r.State != skillRunOpen {
+					c.toRunThread(r, s, byKey[key]) // its thread's lead gets them (skill_cards.go)
 				}
 				continue // they wait for its task (skillTaskChanged)
 			}
@@ -278,11 +278,11 @@ func scanSkillRun(row interface{ Scan(...any) error }) (*skillRun, error) {
 }
 
 // openRun is a run of the skill and key still open: its task, or the work
-// session it opened (skill_cards.go).
+// thread it opened (skill_cards.go).
 func (c *core) openRun(skill, key string) *skillRun {
 	r, err := scanSkillRun(c.store.db.QueryRow(`SELECT `+skillRunCols+` FROM skill_runs WHERE skill = ? AND key = ?
-		AND (state = ? OR (session != 0 AND session IN (SELECT id FROM sessions WHERE state IN (?, ?, ?)))) ORDER BY id DESC LIMIT 1`,
-		skill, key, skillRunOpen, sessProposed, sessRunning, sessPaused))
+		AND (state = ? OR (thread != 0 AND thread IN (SELECT id FROM threads WHERE mode = ? AND phase IN (?, ?, ?)))) ORDER BY id DESC LIMIT 1`,
+		skill, key, skillRunOpen, modeLed, phaseProposed, phaseRunning, phasePaused))
 	if err != nil {
 		return nil
 	}
@@ -520,7 +520,7 @@ func (c *core) joinWaiting(ctx context.Context, r *skillRun) bool {
 	return true
 }
 
-// tellRun ends a run with its last message: a work session it asks for,
+// tellRun ends a run with its last message: a thread it asks for,
 // its urgent text, its kept calls on one card, and a notification unless
 // [rien]; then what deserves the user's attention goes to the queue: the
 // receipt's attention block, or else the message by its prefix (runSignal).
@@ -529,13 +529,13 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 	if m, ok := c.skillManifestOf(r.SHA); ok {
 		st = m.Trigger
 	}
-	in, text, perr := sessionOfMessage(text)
+	in, text, perr := threadOfMessage(text)
 	note := ""
 	switch {
 	case perr != nil:
 		note = perr.Error()
 	case in != nil:
-		note = c.runSession(context.Background(), r, st, in)
+		note = c.runThread(context.Background(), r, st, in)
 	}
 	level, urgent := levelNow, false
 	if rest, ok := strings.CutPrefix(text, "[urgent]"); ok {

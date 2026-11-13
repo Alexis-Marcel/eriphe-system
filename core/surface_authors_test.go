@@ -12,15 +12,15 @@ func oneText(text string) []map[string]any {
 	return []map[string]any{{"id": "root", "component": "Text", "text": text}}
 }
 
-// A session's lead keeps its session's surface: reminded at each wake
-// while it has none, it writes it as lead:<session>, following the
-// session by default, updates it by its id, hears when it is stale, and
-// code removes it when the session ends.
-func TestLeadSurfaceFollowsItsSession(t *testing.T) {
-	c, s := sessionCore(t)
+// A thread's lead keeps its thread's surface: reminded at each wake
+// while it has none, it writes it as lead:<thread>, following the
+// thread by default, updates it by its id, hears when it is stale, and
+// code removes it when the thread ends.
+func TestLeadSurfaceFollowsItsThread(t *testing.T) {
+	c, s := threadCore(t)
 	ctx := context.Background()
-	c.decideCard(ctx, sessionCard(t, c, askPlan).ID, true, "web")
-	s, _ = c.session(s.ID)
+	c.decideCard(ctx, threadCard(t, c, askPlan).ID, true, "web")
+	s, _ = c.thread(s.ID)
 	a := c.conf().Assistants[s.Lead]
 	if !strings.Contains(leadPrompt, "surface_write") || !strings.Contains(leadStartPrompt, "surface_write") {
 		t.Error("the lead is not told to keep its surface")
@@ -41,19 +41,19 @@ func TestLeadSurfaceFollowsItsSession(t *testing.T) {
 	}
 
 	lead := connectServer(t, c.assistantServer(a, nil))
-	out, msg := callOn(t, lead, "surface_write", map[string]any{"id": "session-nom", "title": "Nom de la boutique", "components": oneText("Étape 1 sur 4")})
+	out, msg := callOn(t, lead, "surface_write", map[string]any{"id": "thread-nom", "title": "Nom de la boutique", "components": oneText("Étape 1 sur 4")})
 	author := "lead:" + strconv.FormatInt(s.ID, 10)
 	if msg != "" || out["author"] != author {
 		t.Fatalf("write %v %s", out, msg)
 	}
-	sf, _ := c.surface("session-nom")
-	if sf.Lifetime.While != "session:"+strconv.FormatInt(s.ID, 10) {
+	sf, _ := c.surface("thread-nom")
+	if sf.Lifetime.While != "thread:"+strconv.FormatInt(s.ID, 10) {
 		t.Fatalf("lifetime %+v", sf.Lifetime)
 	}
-	if _, msg = callOn(t, lead, "surface_write", map[string]any{"id": "session-nom", "title": "Nom de la boutique", "components": oneText("Étape 2 sur 4")}); msg != "" {
+	if _, msg = callOn(t, lead, "surface_write", map[string]any{"id": "thread-nom", "title": "Nom de la boutique", "components": oneText("Étape 2 sur 4")}); msg != "" {
 		t.Fatal(msg)
 	}
-	if sf, _ = c.surface("session-nom"); !strings.Contains(string(sf.Components), "Étape 2") {
+	if sf, _ = c.surface("thread-nom"); !strings.Contains(string(sf.Components), "Étape 2") {
 		t.Fatalf("not updated: %s", sf.Components)
 	}
 	if got := wake("L'étape market a rendu son travail."); strings.Contains(got, "n'a pas encore sa surface") {
@@ -62,18 +62,18 @@ func TestLeadSurfaceFollowsItsSession(t *testing.T) {
 
 	// The composer finds it stale: its lead hears it.
 	c.subscribeEvents(c.surfaceEventHeard)
-	c.emit(journalEvent{Kind: evSurfaceStale, Key: "session-nom", Source: "composer", Payload: map[string]any{"id": "session-nom"}})
+	c.emit(journalEvent{Kind: evSurfaceStale, Key: "thread-nom", Source: "composer", Payload: map[string]any{"id": "thread-nom"}})
 	var text string
-	c.store.db.QueryRow(`SELECT text FROM session_inbox WHERE session = ? ORDER BY id DESC LIMIT 1`, s.ID).Scan(&text)
-	if !strings.Contains(text, "« session-nom »") {
+	c.store.db.QueryRow(`SELECT text FROM thread_inbox WHERE thread = ? ORDER BY id DESC LIMIT 1`, s.ID).Scan(&text)
+	if !strings.Contains(text, "« thread-nom »") {
 		t.Errorf("the lead was not told: %q", text)
 	}
 
-	if err := c.stopSession(ctx, s.ID, "brain"); err != nil {
+	if err := c.stopThread(ctx, s.ID, "brain"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.surface("session-nom"); err == nil {
-		t.Error("the surface outlived its session")
+	if _, err := c.surface("thread-nom"); err == nil {
+		t.Error("the surface outlived its thread")
 	}
 }
 
@@ -276,7 +276,7 @@ func TestOfferedProposalsInTheQueue(t *testing.T) {
 	}
 
 	now := c.notifyTime()
-	for _, at := range []string{breakAnswer, breakReturn, breakSession, breakCap} {
+	for _, at := range []string{breakAnswer, breakReturn, breakThread, breakCap} {
 		if n := c.attentionBreak(at, now); n != 0 {
 			t.Fatalf("%s delivered %d", at, n)
 		}

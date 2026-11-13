@@ -126,7 +126,7 @@
   {{range .Runs}}<li id="run-{{.ID}}">
     <div class="list-main">
       <span><span class="tag{{if eq .State "done"}} tag-ok{{else if or (eq .State "failed") (eq .State "refused")}} tag-no{{else if eq .State "running"}} tag-warn{{end}}">{{t (printf "skills.run.%s" .State)}}</span>
-        {{date .At}}{{if .Task}} · <a class="mono" href="/tasks/{{.Task}}">{{.Task}}</a>{{end}}{{if .Session}} · <a href="/sessions/{{.Session}}">{{tf "skills.session" .Session}}</a>{{end}}</span>
+        {{date .At}}{{if .Task}} · <a class="mono" href="/tasks/{{.Task}}">{{.Task}}</a>{{end}}{{if .Thread}} · <a href="/threads/{{.Thread}}">{{tf "skills.thread" .Thread}}</a>{{end}}</span>
       {{if .Events}}<span class="small muted">{{range $i, $e := .Events}}{{if $i}} · {{end}}<span class="mono">{{$e.Kind}}</span>{{if $e.Key}} {{$e.Key}}{{end}}{{if $e.Summary}} « {{$e.Summary}} »{{end}}{{end}}</span>{{end}}
       {{if .Note}}<span class="small run-note">{{.Note}}</span>{{end}}
       {{range .Asks}}<span class="small run-ask"><span class="strong">{{.Verb}}</span> {{.Value}}

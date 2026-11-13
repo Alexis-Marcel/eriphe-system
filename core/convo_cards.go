@@ -242,8 +242,8 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		return c.taskStartProposal(p) // task_start.go
 	case cardAccess:
 		return c.accessProposal(p) // access_card.go
-	case cardSession:
-		return c.sessionProposal(p) // session_engine.go
+	case cardThread:
+		return c.threadProposal(p) // thread_engine.go
 	case cardSkill:
 		return c.skillProposal(p) // skill_write.go
 	case cardRunCalls:
@@ -331,8 +331,8 @@ func (c *core) pendingProposals() []proposal {
 	for _, id := range c.proposedAccess() {
 		add(cardAccess, id)
 	}
-	for _, id := range c.proposedSessionAsks() {
-		add(cardSession, id)
+	for _, id := range c.proposedThreadAsks() {
+		add(cardThread, id)
 	}
 	if rows, err := c.store.db.Query(`SELECT rowid FROM skills WHERE pending != '' AND source IN (?, ?)`, skillFromEriphe, skillFromDefault); err == nil {
 		var ids []int64
@@ -406,8 +406,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideTaskStart(id, approve)
 	case cardAccess:
 		return c.decideAccess(ctx, id, approve)
-	case cardSession:
-		return c.decideSessionAsk(ctx, id, approve)
+	case cardThread:
+		return c.decideThreadAsk(ctx, id, approve)
 	case cardSkill:
 		return c.decideSkill(id, approve)
 	case cardRunCalls:
@@ -448,11 +448,11 @@ func (c *core) cardProposed(kind string, id int64) {
 // no message of the brain's will carry it, so it gets its own, text, in
 // the conversation (as the brain's, written by eriphe-core), and enters
 // the attention queue (attention.go). source is who made it (task:<id>,
-// session:<id>, skill:<name>). A card already shown and still waiting is
+// thread:<id>, skill:<name>). A card already shown and still waiting is
 // not shown twice. The brain is not woken: it reads the open items at its
 // next turn, and nothing it does waits on the card.
 //
-// Only a card a task or a session waits on (weight 4) is shown at once; any
+// Only a card a task or a thread waits on (weight 4) is shown at once; any
 // other is held by the queue, with text, for the next breakpoint
 // (attentionBreak), which shows it under the message it delivers.
 func (c *core) cardNow(kind string, id int64, text, source string) {
@@ -539,7 +539,7 @@ func (c *core) attachTurnCards(seq int) {
 // the task waits on them, so the offer's quiet hours are not for them. One
 // whose task stopped meanwhile stays out of the conversation.
 func (c *core) claimBlockingCards() {
-	xs, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind IN (?, ?, ?)`, cardPending, cardTaskStart, cardAccess, cardSession)
+	xs, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind IN (?, ?, ?)`, cardPending, cardTaskStart, cardAccess, cardThread)
 	if err != nil {
 		return
 	}

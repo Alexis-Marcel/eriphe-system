@@ -25,7 +25,7 @@ import (
 //	tools: [mail, calendar]                  the catalog servers its tasks are lent
 //	                                         (eriphe-workspace: it keeps a surface, and a
 //	                                         surface.stale about it runs it whatever its when)
-//	can: [start-session]                     what its tasks may start (#276)
+//	can: [open-thread]                     what its tasks may start (#276)
 //
 // Each is checked when the skill is added: a version with a bad trigger is
 // refused. The user approves them with the rest of the skill, as one
@@ -33,14 +33,14 @@ import (
 
 const (
 	whenTime      = "time"
-	canSession    = "start-session"
+	canThread     = "open-thread"
 	minSkillEvery = 5 * time.Minute
 	maxSkillEvery = 24 * time.Hour
 	maxSkillTools = 10
 	maxWhenKinds  = 5
 )
 
-var skillCans = []string{canSession}
+var skillCans = []string{canThread}
 
 // skillTrigger is a skill's parsed trigger.
 type skillTrigger struct {
@@ -270,8 +270,8 @@ func (st *skillTrigger) Text(lang string) string {
 	if containsStr(st.Tools, workspaceServer) {
 		parts = append(parts, tr(lang, "skills.trigger.stale"))
 	}
-	if slices.Contains(st.Can, canSession) {
-		parts = append(parts, tr(lang, "skills.trigger.session"))
+	if slices.Contains(st.Can, canThread) {
+		parts = append(parts, tr(lang, "skills.trigger.thread"))
 	}
 	if st.Urgent != "" {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.urgent"), st.Urgent))

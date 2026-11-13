@@ -14,10 +14,10 @@ import (
 // default: an author writes what it has the context for, and is woken
 // when its surface is wanted.
 //
-//   - A session's lead keeps its session's surface (lead-prompt.md): one
-//     surface, while: session:<id>, the default lifetime of what it writes.
+//   - A thread's lead keeps its thread's surface (lead-prompt.md): one
+//     surface, while: thread:<id>, the default lifetime of what it writes.
 //     Each of its wakes reminds it while it has none (leadSurfaceNudge);
-//     code removes it when the session ends (dropSessionSurfaces).
+//     code removes it when the thread ends (dropThreadSurfaces).
 //   - A skill writes its surface on its trigger, lent eriphe-workspace in
 //     its tools, as skill:<name>. when: surface.stale id=<id> matches it as
 //     any event; and a skill lent the workspace is run by a surface.stale
@@ -83,7 +83,7 @@ func (c *core) staleWake(e journalEvent) string {
 
 // surfaceEventHeard listens to the journal for the authors code wakes:
 // the brain on a surface.missing, a lead on a surface.stale of its
-// session's surface. A skill's are queued with its other events
+// thread's surface. A skill's are queued with its other events
 // (queueSkillEvent).
 func (c *core) surfaceEventHeard(e journalEvent) {
 	switch e.Kind {
@@ -96,7 +96,7 @@ func (c *core) surfaceEventHeard(e journalEvent) {
 			return
 		}
 		n, _ := strconv.ParseInt(raw, 10, 64)
-		s, err := c.session(n)
+		s, err := c.thread(n)
 		if err != nil || !s.active() || !c.hasLead(s) {
 			return
 		}
@@ -104,7 +104,7 @@ func (c *core) surfaceEventHeard(e journalEvent) {
 		if e.External {
 			taint = []string{"event:" + e.Kind}
 		}
-		c.queueLead(s, "Ta surface « "+staleSurfaceID(e)+" » n'est plus à jour : relis la session et réécris-la (surface_write, même id).", taint)
+		c.queueLead(s, "Ta surface « "+staleSurfaceID(e)+" » n'est plus à jour : relis le thread et réécris-la (surface_write, même id).", taint)
 	}
 }
 
@@ -144,25 +144,25 @@ func (c *core) tellBrainMissing(e journalEvent) {
 }
 
 // leadSurfaceNudge is what a lead's wake adds while it keeps no surface.
-func (c *core) leadSurfaceNudge(session int64) string {
-	author := "lead:" + strconv.FormatInt(session, 10)
+func (c *core) leadSurfaceNudge(thread int64) string {
+	author := "lead:" + strconv.FormatInt(thread, 10)
 	all, _ := c.surfaces()
 	for _, s := range all {
 		if s.Author == author {
 			return ""
 		}
 	}
-	return "Ta session n'a pas encore sa surface dans l'espace de " + c.conf().User + " : écris-la (surface_write), puis tiens-la à jour."
+	return "Ton thread n'a pas encore sa surface dans l'espace de " + c.conf().User + " : écris-la (surface_write), puis tiens-la à jour."
 }
 
-// dropSessionSurfaces removes at once the surfaces whose lifetime ended
-// with a session: its lead's, and those kept while it ran.
-func (c *core) dropSessionSurfaces(session int64) {
-	id := strconv.FormatInt(session, 10)
+// dropThreadSurfaces removes at once the surfaces whose lifetime ended
+// with a thread: its lead's, and those kept while it ran.
+func (c *core) dropThreadSurfaces(thread int64) {
+	id := strconv.FormatInt(thread, 10)
 	all, _ := c.surfaces()
 	now := time.Now()
 	for _, s := range all {
-		if (s.Author == "lead:"+id || s.Lifetime.While == "session:"+id) && c.surfaceEnded(s, now) {
+		if (s.Author == "lead:"+id || s.Lifetime.While == "thread:"+id) && c.surfaceEnded(s, now) {
 			c.surfaceRemove(s.ID, surfaceByLifetime)
 		}
 	}

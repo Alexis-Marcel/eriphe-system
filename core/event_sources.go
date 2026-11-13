@@ -7,7 +7,7 @@ import (
 )
 
 // The event journal's sources (event_journal.go), besides those that call
-// emit where they are (a task's or a session's end):
+// emit where they are (a task's or a thread's end):
 //
 //   - a monitor (monitors.go): it polls a tool or reads a resource of a
 //     catalog server, or listens on an incoming address

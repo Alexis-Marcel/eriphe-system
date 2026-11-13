@@ -10,7 +10,7 @@ import (
 // gradient, no gradient text, no shouted labels, and every variable used is
 // one a stylesheet defines (or app.js sets).
 func TestStylesheetsKeepTheLook(t *testing.T) {
-	files := []string{"app.css", "memory.css", "agents.css", "remote.css", "sessions.css"}
+	files := []string{"app.css", "memory.css", "agents.css", "remote.css", "threads.css"}
 	var all strings.Builder
 	for _, f := range files {
 		css, err := webFS.ReadFile("web/static/" + f)

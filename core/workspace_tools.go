@@ -24,7 +24,7 @@ import (
 // The author is the caller, never a field:
 //
 //   - the brain: its own tools (newMCPServer), as brain, its turn's taint;
-//   - a session's lead: its own tools (registerLeadTools), as lead:<session>;
+//   - a thread's lead: its own tools (registerLeadTools), as lead:<thread>;
 //   - a task or a skill's run: eriphe-workspace, a server Eriphe provides,
 //     lent like any tool of the catalog ({kind: tool, ref: eriphe-workspace}
 //     in run_task, eriphe-workspace in a skill's tools). It is in the task's
@@ -66,7 +66,7 @@ func providedServer(name string) bool { return slices.Contains(providedServers, 
 
 // surfaceCaller is who calls the workspace's tools.
 type surfaceCaller struct {
-	author string // brain, skill:<name>, lead:<session>, task:<id>
+	author string // brain, skill:<name>, lead:<thread>, task:<id>
 	only   string // a task filling one of the brain's surfaces: that one only, as the brain's
 	// sawSource marks a task that was told what a source gave (an error,
 	// the fields of a result): that taints it (workspace_sources.go).
@@ -77,8 +77,8 @@ type surfaceCaller struct {
 // surfaceSourceIn is a source as an author writes it.
 type surfaceLifetimeIn struct {
 	Until string `json:"until,omitempty" jsonschema:"remove it at this time: RFC3339 or YYYY-MM-DDTHH:MM in the user's zone, within 90 days"`
-	While string `json:"while,omitempty" jsonschema:"keep it while this ref is pending or running: task:<id>, session:<id> or card:<id>"`
-	Kept  bool   `json:"kept,omitempty" jsonschema:"keep it as long as you, its author, are there (a skill, a lead's session)"`
+	While string `json:"while,omitempty" jsonschema:"keep it while this ref is pending or running: task:<id>, thread:<id> or card:<id>"`
+	Kept  bool   `json:"kept,omitempty" jsonschema:"keep it as long as you, its author, are there (a skill, a lead's thread)"`
 }
 
 type surfaceWriteIn struct {
@@ -88,7 +88,7 @@ type surfaceWriteIn struct {
 	Data       map[string]any           `json:"data,omitempty" jsonschema:"composed values the components bind (@path), written by you; dated"`
 	Sources    map[string]surfaceSource `json:"sources,omitempty" jsonschema:"live data: JSON pointer in the data (/mails) → {tool: server/tool, args} (a free read of yours) or {resource: server, uri}; code reads them again, never you"`
 	Refresh    surfaceRefresh           `json:"refresh,omitzero" jsonschema:"every: minutes between two reads of the sources (1 to 1440, 5 by default)"`
-	Lifetime   surfaceLifetimeIn        `json:"lifetime,omitzero" jsonschema:"one of until, while, kept; none: a day (a session's lead: while its session)"`
+	Lifetime   surfaceLifetimeIn        `json:"lifetime,omitzero" jsonschema:"one of until, while, kept; none: a day (a thread's lead: while its thread)"`
 	Weight     int                      `json:"weight,omitempty" jsonschema:"how much it matters, 1 to 100, 50 by default"`
 	Why        string                   `json:"why,omitempty" jsonschema:"why it is there, one sentence in the user's language"`
 }
@@ -154,9 +154,9 @@ func registerBrainSurfaceTools(s *mcp.Server, c *core) {
 	}, nil)
 }
 
-// leadSurfaceTools are a session lead's: as lead:<session>.
+// leadSurfaceTools are a thread's lead's: as lead:<thread>.
 func (c *core) registerLeadSurfaceTools(s *mcp.Server, a Assistant) {
-	author := "lead:" + strconv.FormatInt(leadSession(a), 10)
+	author := "lead:" + strconv.FormatInt(leadThread(a), 10)
 	c.registerSurfaceTools(s, func() surfaceCaller {
 		return surfaceCaller{author: author, taint: func() []string { return c.assistantTaint(a) }}
 	}, nil)
@@ -276,8 +276,8 @@ func (c *core) toolSurfaceWrite(who surfaceCaller, in surfaceWriteIn) (map[strin
 	if err != nil {
 		return nil, err
 	}
-	if session, ok := strings.CutPrefix(author, "lead:"); ok && sin.Lifetime == (surfaceLifetime{}) {
-		sin.Lifetime.While = "session:" + session // a lead's surface follows its session
+	if thread, ok := strings.CutPrefix(author, "lead:"); ok && sin.Lifetime == (surfaceLifetime{}) {
+		sin.Lifetime.While = "thread:" + thread // a lead's surface follows its thread
 	}
 	sin.Tainted, sin.wait = who.taint(), surfaceReadCap
 	previous := ""

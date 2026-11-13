@@ -198,7 +198,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerBrainSurfaceTools(s, c) // surface_write, surface_remove, workspace_read, catalog_read (workspace_tools.go)
 	registerNotifyTools(s, c)       // notify, notifications, rule
 	registerSinceTools(s, c)        // since
-	registerSessionTools(s, c)      // session_tools.go
+	registerThreadTools(s, c)       // thread_tools.go
 	return s
 }
 

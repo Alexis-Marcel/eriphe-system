@@ -39,7 +39,7 @@ func init() { extraSchema = append(extraSchema, eventJournalSchema) }
 // The kinds eriphe-core itself emits, besides the monitors' (monitors.go).
 const (
 	evTaskEnded    = "task.ended"
-	evSessionEnded = "session.ended"
+	evThreadEnded  = "thread.ended"
 	evUserReturned = "user.returned"
 )
 
@@ -59,7 +59,7 @@ type journalEvent struct {
 	ID       int64
 	Kind     string
 	Key      string
-	Source   string // alert:<hook>, monitor:<name>, task, session, user
+	Source   string // alert:<hook>, monitor:<name>, task, thread, user
 	At       time.Time
 	Payload  map[string]any
 	External bool

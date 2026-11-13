@@ -1,0 +1,148 @@
+{{/* The work threads (web_threads.go): the list, and a thread's page.
+     Its live part follows the thread through /threads/{id}/events
+     (threads.js); the line to the lead stays outside it, so what the
+     user types is never replaced. */}}
+
+{{define "main"}}{{if eq .View "threads"}}{{template "threads-index" .Data}}{{else}}{{template "thread-page" .Data}}{{end}}{{end}}
+
+{{define "threads-index"}}
+<div class="thread-wrap">
+  <a class="back" href="/conversation">{{template "i-back"}}{{t "threads.back"}}</a>
+  <header class="thread-index-head">
+    <h1>{{t "threads.title"}}</h1>
+    <p>{{t "threads.lead"}}</p>
+  </header>
+  {{if .}}<ul class="thread-rows">{{range .}}<li>{{template "thread-row" .}}</li>{{end}}</ul>
+  {{else}}<div class="thread-empty">
+    <span class="empty-art" aria-hidden="true">{{template "i-tasks"}}</span>
+    <p><b>{{t "threads.none"}}</b></p>
+    <p class="muted">{{t "threads.none.how"}}</p>
+    <a class="btn btn-primary sm" href="/conversation">{{t "threads.none.go"}}</a>
+  </div>{{end}}
+</div>
+{{end}}
+
+{{/* A thread in a list: its state, its title, its steps as a strip. */}}
+{{define "thread-row"}}
+<a class="thread-row{{if .Waits}} waits{{end}}" href="/threads/{{.ID}}">
+  <span class="chip chip-thread-{{.Look}}"><span class="pulse" aria-hidden="true"></span>{{if .Waits}}{{t "threads.waits"}}{{else}}{{t (printf "thread.state.%s" .Look)}}{{end}}</span>
+  <span class="thread-row-main">
+    <b>{{.Title}}</b>
+    <span class="muted small">{{short .Goal 140}}</span>
+  </span>
+  <span class="thread-row-end">
+    {{template "thread-strip" .Progress}}
+    {{if .Total}}<span class="muted small">{{tf "threads.progress" .Done .Total}}</span>{{end}}
+    <time class="muted small" datetime="{{iso .Updated}}">{{ago .Updated}}</time>
+  </span>
+</a>
+{{end}}
+
+{{define "thread-page"}}
+<div class="thread-wrap">
+  <a class="back" href="/threads">{{template "i-back"}}{{t "threads.title"}}</a>
+  <div id="thread-live" class="thread-live" data-thread-live="/threads/{{.ID}}/events">{{template "thread-body" .}}</div>
+  {{if and .Active .LeadName}}
+  <form class="thread-say" hx-post="/threads/{{.ID}}/lead" hx-target="#thread-live" hx-swap="innerHTML" hx-disabled-elt="find button" data-reset>
+    <label for="thread-say-text">{{tf "threads.say" .LeadName}}</label>
+    <div class="thread-say-row">
+      <textarea id="thread-say-text" name="text" rows="2" maxlength="2000" required placeholder="{{t "threads.say.ph"}}"></textarea>
+      <button class="btn btn-soft sm" type="submit">{{template "i-send"}}{{t "threads.say.send"}}</button>
+    </div>
+    <p class="muted small">{{t "threads.say.hint"}}</p>
+  </form>
+  {{end}}
+</div>
+<div id="drawer" class="drawer" aria-live="polite"></div>
+{{end}}
+
+{{define "thread-live"}}{{template "thread-body" .Data}}{{end}}
+
+{{define "thread-body"}}
+<header class="thread-head">
+  <div class="thread-head-main">
+    <span class="chip chip-thread-{{.Look}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "thread.state.%s" .Look)}}{{if .Held}} · {{t (printf "thread.held.%s" .Held)}}{{end}}</span>
+    <h1>{{.Title}}</h1>
+    <p class="thread-goal">{{.Goal}}</p>
+  </div>
+  {{if .Active}}<div class="thread-actions">
+    {{if eq .Phase "running"}}<button class="btn btn-soft sm" type="button" hx-post="/threads/{{.ID}}/pause" hx-target="#thread-live" hx-swap="innerHTML">{{t "threads.pause"}}</button>{{end}}
+    {{if eq .Phase "paused"}}<button class="btn btn-primary sm" type="button" hx-post="/threads/{{.ID}}/resume" hx-target="#thread-live" hx-swap="innerHTML">{{if .Held}}{{t "threads.resume.more"}}{{else}}{{t "threads.resume"}}{{end}}</button>{{end}}
+    <button class="btn btn-danger-ghost sm" type="button" hx-post="/threads/{{.ID}}/stop" hx-target="#thread-live" hx-swap="innerHTML" hx-confirm="{{tf "threads.stop.confirm" .Title}}">{{t "threads.stop"}}</button>
+  </div>{{end}}
+</header>
+
+<dl class="thread-facts">
+  {{if .DoneWhen}}<div class="fact-done"><dt>{{t "threads.donewhen"}}</dt><dd>{{.DoneWhen}}</dd></div>{{end}}
+  {{if .Subject}}<div><dt>{{t "threads.subject"}}</dt><dd class="mono">{{.Subject}}</dd></div>{{end}}
+  {{if eq .Mode "led"}}<div><dt>{{t "threads.time"}}</dt><dd><meter min="0" max="100" low="70" high="90" optimum="0" value="{{.Percent}}" aria-label="{{t "threads.time"}}">{{.Percent}} %</meter><span>{{tf "threads.minutes" .Minutes .Budget}}</span></dd></div>
+  <div><dt>{{t "threads.ledby"}}</dt><dd>{{if .LeadName}}{{.LeadName}}{{if .LeadBusy}} <span class="muted">{{t "threads.lead.busy"}}</span>{{end}}{{else}}{{name}}{{end}}</dd></div>
+  <div><dt>{{t "threads.steps"}}</dt><dd>{{tf "threads.progress" (index .Counts "accepted") .Total}}</dd></div>{{end}}
+</dl>
+
+{{if or .Asks .Choices}}
+<section class="thread-waits" aria-labelledby="thread-waits-t">
+  <h2 id="thread-waits-t">{{t "threads.waits.title"}}</h2>
+  {{if .Asks}}<div class="pcards">{{range .Asks}}{{template "card" .}}{{end}}</div>{{end}}
+  {{range .Choices}}
+  <article class="thread-choice">
+    <h3>{{.Title}}</h3>
+    <p>{{.Question}}</p>
+    <form class="choice-opts" hx-post="/threads/{{$.ID}}/choose" hx-target="#thread-live" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <input type="hidden" name="step" value="{{.Key}}">
+      {{range .Options}}<button class="btn btn-soft sm" type="submit" name="option" value="{{.}}">{{.}}</button>{{end}}
+    </form>
+  </article>
+  {{end}}
+</section>
+{{end}}
+
+{{if .Summary}}{{if eq .State "done"}}<section class="thread-summary" aria-labelledby="thread-sum-t"><h2 id="thread-sum-t">{{t "threads.summary"}}</h2><div class="md">{{md .Summary}}</div></section>{{end}}{{end}}
+
+<div class="thread-grid">
+  <section class="thread-plan" aria-labelledby="thread-plan-t">
+    <h2 id="thread-plan-t">{{t "threads.plan"}}</h2>
+    <ol class="stages">{{range .Stages}}
+      <li class="stage{{if .Final}} stage-final{{end}}">
+        <h3 class="stage-n">{{if .Final}}{{t "threads.stage.final"}}{{else}}{{tf "threads.stage" .N}}{{end}}{{if gt (len .Steps) 1}} <span class="muted">{{tf "threads.stage.together" (len .Steps)}}</span>{{end}}</h3>
+        <ul class="steps">{{range .Steps}}{{template "step" .}}{{end}}</ul>
+      </li>{{end}}
+    </ol>
+    <p class="proof-legend muted small">
+      <span><i class="proof proof-claimed" aria-hidden="true"></i>{{t "proof.claimed"}}</span>
+      <span><i class="proof proof-verified" aria-hidden="true">{{template "i-check"}}</i>{{t "proof.verified"}}</span>
+      <span><i class="proof proof-accepted" aria-hidden="true">{{template "i-check"}}</i>{{t "proof.accepted"}}</span>
+      <span><i class="proof proof-failed" aria-hidden="true">{{template "i-x"}}</i>{{t "proof.failed"}}</span>
+    </p>
+  </section>
+  <aside class="thread-log" aria-labelledby="thread-log-t">
+    <h2 id="thread-log-t">{{t "threads.log"}}</h2>
+    {{if .Log}}<ol>{{range .Log}}<li class="log-{{.Who}}"><time datetime="{{iso .At}}">{{clock .At}}</time><b>{{t (printf "threads.who.%s" .Who)}}</b><span>{{.Text}}</span></li>{{end}}</ol>
+    {{else}}<p class="muted small">{{t "threads.log.none"}}</p>{{end}}
+  </aside>
+</div>
+{{end}}
+
+{{/* A step: its proof mark, its title and status, what it runs on, the
+     lead's last word, and its output and evidence folded. */}}
+{{define "step"}}
+<li class="step st-{{.Status}}{{if .Failed}} failed{{end}}" id="step-{{.Key}}">
+  <div class="step-head">
+    <i class="proof proof-{{.Proof}}" aria-hidden="true">{{if or (eq .Proof "verified") (eq .Proof "accepted")}}{{template "i-check"}}{{else if or (eq .Proof "failed") (eq .Proof "rejected")}}{{template "i-x"}}{{end}}</i>
+    <h4>{{.Title}}</h4>
+    <span class="step-status">{{if and .Failed (or (eq .Status "reported") (eq .Status "verified"))}}{{t "step.status.failed"}}{{else}}{{t (printf "step.status.%s" .Status)}}{{end}}</span>
+  </div>
+  <p class="step-meta">
+    {{if eq .Kind "task"}}<span>{{template "i-bot"}}{{if .Agent}}{{.Agent}}{{else}}{{t "threads.agent.default"}}{{end}}</span>{{range .Resources}}{{if eq .Kind "repo"}}<span class="mono">{{template "i-branch"}}{{.Ref}}{{if .Branch}}@{{.Branch}}{{end}}</span>{{else if eq .Kind "folder"}}<span>{{template "i-folder"}}{{.Ref}}</span>{{end}}{{end}}
+    {{else if eq .Kind "choice"}}<span>{{t "step.kind.choice"}}</span>{{else}}<span>{{t "step.kind.approval"}}</span>{{end}}
+    {{if .Tries}}<span>{{tf "threads.try" .Tries}}</span>{{end}}
+    {{if .TaskLink}}<a href="{{.TaskLink}}" hx-get="{{.TaskLink}}" hx-target="#drawer" hx-swap="innerHTML">{{t "threads.task.open"}}</a>{{end}}
+  </p>
+  {{if .Question}}<p class="step-q">{{.Question}}</p>{{end}}
+  {{if .Note}}<p class="step-note">{{.Note}}</p>{{end}}
+  {{if and .Output (ne .Kind "task")}}<p class="step-picked">{{.Output}}</p>{{end}}
+  {{if and .Output (eq .Kind "task")}}<details class="step-more" data-keep="out-{{.Key}}"><summary>{{t "threads.output"}}</summary><div class="step-out">{{.Output}}</div></details>{{end}}
+  {{if .Evidence}}<details class="step-more" data-keep="ev-{{.Key}}"><summary>{{t "threads.evidence"}}</summary><pre class="step-out">{{.Evidence}}</pre></details>{{end}}
+</li>
+{{end}}
+

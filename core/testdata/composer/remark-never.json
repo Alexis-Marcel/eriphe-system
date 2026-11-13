@@ -8,14 +8,14 @@
   "items": [
     {"ref": "mail:m-301", "weight": 2, "age_minutes": 15, "title": "Les nouveautés de la semaine", "why": "Lettre d'information de news.example.org"},
     {"ref": "mail:m-302", "weight": 3, "age_minutes": 45, "title": "Pièces manquantes pour la déclaration", "why": "Le comptable demande deux justificatifs avant vendredi"},
-    {"ref": "session:s-60", "weight": 3, "age_minutes": 20, "title": "Tri des factures 2026", "why": "Étape 3 sur 5, rien à faire pour toi"},
+    {"ref": "thread:s-60", "weight": 3, "age_minutes": 20, "title": "Tri des factures 2026", "why": "Étape 3 sur 5, rien à faire pour toi"},
     {"ref": "agenda:2026-11-12", "weight": 2, "age_minutes": 180, "title": "Jeudi 12 novembre : 2 événements", "why": "Rien avant 16 h"}
   ],
   "expect": {"front": ["mail:m-302"], "hidden": ["mail:m-301"], "fallback_front": true},
   "answer": {"eriphe": "C'est noté : plus de lettres de news.example.org. Le comptable attend deux justificatifs.",
     "items": [
       {"id": "q-mail-m-302", "size": "l", "why": "Deux justificatifs avant vendredi"},
-      {"id": "q-session-s-60", "size": "m", "why": "Avance, rien à faire"}
+      {"id": "q-thread-s-60", "size": "m", "why": "Avance, rien à faire"}
     ],
     "missing": [], "stale": []}
 }

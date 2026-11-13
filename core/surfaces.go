@@ -23,7 +23,7 @@ import (
 )
 
 // Surfaces (#417): the tiles of the workspace, in A2UI v1.0 (core/a2ui).
-// A surface is written by an author (the brain, a skill, a session's lead,
+// A surface is written by an author (the brain, a skill, a thread's lead,
 // a task) and kept by code: a title, components from the catalog, data,
 // sources, a refresh, a lifetime, a weight and a why.
 //
@@ -129,7 +129,7 @@ type surfaceRefresh struct {
 }
 
 // surfaceLifetime is when code removes a surface: one of a date, a ref
-// that must stay pending or running (task:<id>, session:<id>, card:<id>),
+// that must stay pending or running (task:<id>, thread:<id>, card:<id>),
 // or as long as its author is there.
 type surfaceLifetime struct {
 	Until time.Time `json:"until,omitzero"`
@@ -287,7 +287,7 @@ type sourceRead struct {
 // field as an error.
 func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.ValidationError, error) {
 	if !surfaceAuthorRe.MatchString(author) {
-		return surface{}, nil, fmt.Errorf("author %q: brain, skill:<name>, lead:<session>, task:<id>", author)
+		return surface{}, nil, fmt.Errorf("author %q: brain, skill:<name>, lead:<thread>, task:<id>", author)
 	}
 	return c.writeSurface(author, in)
 }
@@ -496,8 +496,8 @@ func (c *core) checkLifetime(l surfaceLifetime, now time.Time) (surfaceLifetime,
 		return l, errors.New("until is a date to come, within 90 days")
 	case l.While != "":
 		kind, _, _ := strings.Cut(l.While, ":")
-		if kind != "task" && kind != "session" && kind != "card" {
-			return l, errors.New("while is a ref: task:<id>, session:<id> or card:<id>")
+		if kind != "task" && kind != "thread" && kind != "card" {
+			return l, errors.New("while is a ref: task:<id>, thread:<id> or card:<id>")
 		}
 		if !c.refLive(l.While) {
 			return l, fmt.Errorf("%s is not pending or running", l.While)
@@ -1002,19 +1002,19 @@ func (c *core) surfaceEnded(s surface, now time.Time) bool {
 }
 
 // refLive tells whether a ref is still pending or running: a task not over
-// (its turn ended counts as over), a session not ended, a card waiting.
+// (its turn ended counts as over), a thread not ended, a card waiting.
 func (c *core) refLive(ref string) bool {
 	kind, id, _ := strings.Cut(ref, ":")
 	switch kind {
 	case "task":
 		t, err := c.store.task(id)
 		return err == nil && !finished(t.State) && t.State != stateIdle
-	case "session", "lead":
+	case "thread", "lead":
 		n, err := strconv.ParseInt(id, 10, 64)
 		if err != nil {
 			return false
 		}
-		s, err := c.session(n)
+		s, err := c.thread(n)
 		return err == nil && s.Ended.IsZero()
 	case "card":
 		n, err := strconv.ParseInt(id, 10, 64)
