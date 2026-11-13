@@ -319,7 +319,7 @@ func (c *core) runComposer(ctx context.Context) {
 	tick := time.NewTicker(composerPoll)
 	defer tick.Stop()
 	d := debouncer{wait: composerDebounce, maxWait: composerDebounceMax}
-	stamp := c.queueStamp() + c.poolStamp()
+	stamp := c.queueStamp() + c.poolStamp() + c.gestureStamp()
 	prefSeen, prefChanged, _ := c.workspacePrefStamp()
 	show, showSeen := c.shown(time.Now())
 	checked := time.Time{}
@@ -333,7 +333,7 @@ func (c *core) runComposer(ctx context.Context) {
 		case <-tick.C:
 		}
 		now := time.Now()
-		if s := c.queueStamp() + c.poolStamp(); s != stamp {
+		if s := c.queueStamp() + c.poolStamp() + c.gestureStamp(); s != stamp { // a gesture of the user's: at once, debounced
 			stamp = s
 			d.changed(now)
 		}

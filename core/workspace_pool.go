@@ -79,6 +79,8 @@ type poolSnapshot struct {
 	Topic       string        // the conversation's: the user's last message (external words, as data)
 	Preferences []string
 	Gestures    []gesture
+	Closed      map[string]bool   // what the user closed this session: never shown (workspace_gestures.go)
+	Pinned      map[string]string // what the user placed this session, at its size: placed by code first
 	Now         time.Time
 }
 
@@ -152,6 +154,14 @@ func (c *core) poolSnapshot(moment, remark string) poolSnapshot {
 		s.Gestures = gs
 	}
 	s.Preferences = c.workspacePreferences(words)
+	pl := c.placementNow(now)
+	s.Closed, s.Pinned = map[string]bool{}, map[string]string{}
+	for id := range pl.Closed {
+		s.Closed[id] = true
+	}
+	for id, p := range pl.Pins {
+		s.Pinned[id] = p.Size
+	}
 	return s
 }
 
@@ -191,9 +201,9 @@ func composerTurn(s poolSnapshot) string {
 	if len(s.Gestures) > 0 {
 		b.WriteString("Ses gestes récents sur l'espace :\n")
 		for _, g := range s.Gestures {
-			what := "ouvert"
-			if g.What == gestureIgnored {
-				what = "laissé sans l'ouvrir"
+			what := g.What
+			if k, ok := gestureKinds[g.What]; ok {
+				what = k.fr
 			}
 			line := fmt.Sprintf("- %s %s %s", g.Time.In(s.Now.Location()).Format("15:04"), what, strings.TrimPrefix(g.Ref, "surface:"))
 			if g.Title != "" {
@@ -236,6 +246,11 @@ func composerTurn(s poolSnapshot) string {
 		}
 		if e.Tainted {
 			line += " · contenu extérieur"
+		}
+		if s.Closed[e.ID] {
+			line += " · fermée par lui pour la session : ne la choisis pas"
+		} else if size := s.Pinned[e.ID]; size != "" {
+			line += " · placée par lui pour la session, en " + size + " : garde-la"
 		}
 		b.WriteString(line + "\n")
 		ids = append(ids, e.ID)

@@ -109,21 +109,51 @@ func (w *web) handleSurfaceError(rw http.ResponseWriter, r *http.Request, _ *ses
 
 // gestureIn is a gesture of the user's on the workspace (workspace.go).
 type gestureIn struct {
-	What  string `json:"what"` // opened, ignored
+	What  string `json:"what"` // opened, ignored, closed, moved, resized
 	Ref   string `json:"ref"`
 	Title string `json:"title"`
+	Size  string `json:"size,omitempty"` // moved, resized: the tile's size and place
+	Col   *int   `json:"col,omitempty"`
+	Row   *int   `json:"row,omitempty"`
 }
 
 // handleGesture is POST /api/espace/gesture: the page says what the user
-// opened, or what left the screen unopened, for the extraction to read.
-// 204; 400 for a gesture it does not know.
+// did (workspace_gestures.go). closed, moved and resized are about a
+// surface (surface:<id>) and change the session's placement: a move or a
+// resize gives the tile's size, col and row. 204; 400 for a gesture it does
+// not know or a place off the grid, 404 for a surface there is not.
 func (w *web) handleGesture(rw http.ResponseWriter, r *http.Request, _ *session) {
 	var in gestureIn
-	if json.NewDecoder(r.Body).Decode(&in) != nil || w.c.noteGesture(in.What, in.Ref, in.Title, time.Now()) != nil {
+	if json.NewDecoder(r.Body).Decode(&in) != nil {
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": errGesture.Error()})
 		return
 	}
-	rw.WriteHeader(http.StatusNoContent)
+	now := time.Now()
+	var err error
+	switch in.What {
+	case gestureClosed, gestureMoved, gestureResized:
+		id, ok := strings.CutPrefix(in.Ref, "surface:")
+		switch {
+		case !ok:
+			err = errGesture
+		case in.What == gestureClosed:
+			err = w.c.closeSurface(id, now)
+		case in.Col == nil || in.Row == nil:
+			err = errPlacement
+		default:
+			err = w.c.placeSurface(id, in.What, in.Size, *in.Col, *in.Row, now)
+		}
+	default:
+		err = w.c.noteGesture(in.What, in.Ref, in.Title, now)
+	}
+	switch {
+	case errors.Is(err, errNoSurface):
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": err.Error()})
+	case err != nil:
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	default:
+		rw.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func (w *web) handleEspace(rw http.ResponseWriter, r *http.Request, s *session) {

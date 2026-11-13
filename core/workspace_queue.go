@@ -26,7 +26,9 @@ import (
 // Its weight is the item's (queueSurfaceWeight: 4 and 5 are urgent, placed
 // first by code), its why the item's (a Proposal shows its own). A card
 // whose proposal the Proposal cannot show is an Alert too. It lives while
-// the item is open (the user removing it takes the item out):
+// the item is open (the user removing or closing it takes the item out; an
+// item other than a card also ends once seen: queueSweep,
+// workspace_gestures.go):
 // syncQueueSurfaces makes the surfaces again from the queue whenever it
 // changes (attend and attentionDone kick it) and every queueSyncEvery, so a
 // card decided elsewhere leaves too. Its words are in the workspace's
@@ -233,10 +235,15 @@ func (c *core) runWorkspace(ctx context.Context) {
 	kick := c.workspaceKick()
 	tick := time.NewTicker(queueSyncEvery)
 	defer tick.Stop()
+	var sessionChecked time.Time
 	for {
-		c.syncQueueSurfaces() // writes and removals lay out again themselves
+		c.queueSweep(time.Now()) // items seen end (workspace_gestures.go)
+		c.syncQueueSurfaces()    // writes and removals lay out again themselves
 		if c.layoutFocused() {
 			c.relayout() // the surface opened may no longer be recent
+		} else if time.Since(sessionChecked) >= time.Minute && c.placementActive() {
+			sessionChecked = time.Now()
+			c.relayout() // the session may have ended: what the user closed and placed goes
 		}
 		select {
 		case <-ctx.Done():

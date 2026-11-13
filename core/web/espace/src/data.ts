@@ -28,8 +28,10 @@ import type { Composition, Layout, Obj, Ref } from "./types";
 //   "back" place a surface first on the layout, and give the layout back;
 // - POST /messages: what the user writes, with the ref of the module open
 //   (about), so Eriphe knows what « ça » is;
-// - POST /api/espace/gesture: what the user opened, or what left the screen
-//   unopened, which memory's extraction reads (workspace.go);
+// - POST /api/espace/gesture: what the user opened, what left the screen
+//   unopened, what they closed, moved or resized (workspace_gestures.go):
+//   the composer chooses again, memory's extraction reads them, and a
+//   close, a move or a resize holds for the session;
 // - GET /api/proposals/{ref}: a proposal a surface shows (the catalog's
 //   Proposal), answered by an "answer" action (answerProposal);
 // - GET /api/proposals?day=: the dated proposals that wait that day, which
@@ -355,7 +357,10 @@ export async function send(text: string, about?: Ref | null): Promise<boolean> {
 }
 
 // gesture tells eriphe-core what the user did: opened a module, or let one
-// leave the screen unopened. Nothing waits on it.
-export function gesture(what: "opened" | "ignored", ref: Ref, title: string): Promise<boolean> {
-  return postJSON("/api/espace/gesture", { what, ref, title });
+// leave the screen unopened; closed a surface (not shown again this
+// session), moved it or changed its size (to: kept as its place for the
+// session). Nothing waits on it.
+export type GestureKind = "opened" | "ignored" | "closed" | "moved" | "resized";
+export function gesture(what: GestureKind, ref: Ref, title: string, to?: { size: string; col: number; row: number }): Promise<boolean> {
+  return postJSON("/api/espace/gesture", { what, ref, title, ...to });
 }

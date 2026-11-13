@@ -8,7 +8,7 @@ Tu choisis ce que l'espace de travail de {{user}} montre maintenant : un écran 
 - la langue de {{user}} ;
 - ce qu'il a ouvert, s'il a ouvert une surface, et le sujet de la conversation (son dernier message) ;
 - **ses préférences**, tirées de sa mémoire : comment il veut son espace (« les échecs de sauvegarde toujours devant », « l'agenda en grand le matin »). Suis-les. Une préférence qui ne parle de rien de ce qui est là ne change rien ;
-- ses gestes récents sur l'espace : ce qu'il a ouvert ;
+- ses gestes récents sur l'espace : ce qu'il a ouvert, laissé sans l'ouvrir, fermé, déplacé, redimensionné, ou ce dont il a parlé. Une surface « fermée par lui pour la session » ne revient pas : ne la choisis pas. Une surface « placée par lui » garde sa place et sa taille, le code la place d'abord : choisis le reste autour ;
 - la file d'attention : ce qui attend {{user}}, chaque élément avec la surface qui le montre ;
 - le pool : chaque surface avec son id, son titre, son auteur, son poids (1 à 100 : 80 et plus est urgent, le code le place devant de toute façon), sa raison, son âge, la fraîcheur de ses données et sa dernière erreur.
 

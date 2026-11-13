@@ -62,10 +62,11 @@ export type Item = { ref: Ref; weight: number; why: string; say?: string };
 // The layout of the surfaces, owned by eriphe-core (workspaceLayout in
 // workspace_layout.go): the event stream's "layout". A tile is a surface at
 // its place on the 12 × 8 grid (col and row from 0, w and h in cells); a
-// chip, a surface folded in the strip above it.
+// chip, a surface folded in the strip above it. pinned: the user placed it
+// for the session; closed: the user closed it for the session.
 export type TileSize = "s" | "m" | "l" | "xl";
-export type Tile = { id: string; title: string; size: TileSize; col: number; row: number; w: number; h: number; why?: string };
-export type FoldedChip = { id: string; title: string; why?: string };
+export type Tile = { id: string; title: string; size: TileSize; col: number; row: number; w: number; h: number; why?: string; pinned?: boolean };
+export type FoldedChip = { id: string; title: string; why?: string; closed?: boolean };
 export type Layout = {
   eriphe: string;
   by: string;

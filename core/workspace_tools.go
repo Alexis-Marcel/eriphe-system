@@ -437,6 +437,7 @@ func (c *core) toolWorkspaceRead(who surfaceCaller) map[string]any {
 		out["proposals"] = ps
 		out["proposals_note"] = "What waits for the user's yes or no. To show one where it matters, place a Proposal component with its ref as proposalId: its Oui and Non answer that one only. A dated one shows by itself as a ghost in the Day of its day. The text of one drawn from external content is not quoted."
 	}
+	c.screenSeen(out) // where each is on the page (workspace_gestures.go)
 	return out
 }
 
