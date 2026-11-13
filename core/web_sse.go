@@ -14,18 +14,20 @@ import (
 // (the brain's message being written, empty once it has landed), "tasks"
 // (the side panel), "pending" (the requests at the end of the
 // conversation) and "cards" (cards that changed), each sent only when it
-// differs from the last one. Asked with a2ui=1 (the workspace, /espace), it
-// also sends "a2ui": the surfaces' A2UI messages in order (JSON, a2uiEvent in
-// surfaces_stream.go), a snapshot that resets the page first, and
-// "layout": where each surface is on the grid (JSON, workspaceLayout in
-// workspace_layout.go), sent after the "a2ui" event of the surfaces it
-// names and whenever it changes, and "proposals": the refs of the
-// proposals whose card was made or decided since, all of them first
+// differs from the last one. Asked with a2ui=1 (the workspace, the home
+// page), it sends none of that HTML but JSON: "exchange", the
+// conversation's last exchange (exchangeEvent, web_espace_exchange.go), at
+// once and whenever it changes; "a2ui": the surfaces' A2UI messages in
+// order (JSON, a2uiEvent in surfaces_stream.go), a snapshot that resets
+// the page first; "layout": where each surface is on the grid (JSON,
+// workspaceLayout in workspace_layout.go), sent after the "a2ui" event of
+// the surfaces it names and whenever it changes; and "proposals": the refs
+// of the proposals whose card was made or decided since, all of them first
 // (JSON, proposalsEvent in surface_proposals.go), for the surfaces that
-// show them to read them again. Every
-// event carries the last message's seq as its id, so a reconnecting
+// show them to read them again. Every event carries the last message's seq as its id, so a reconnecting
 // browser picks up where it left; its surfaces start again from a
-// snapshot.
+// snapshot. Both send "notice": the notifications routed to their tab (its
+// id in the tab query, as the tab tells its presence, web_push.go), JSON.
 func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) {
 	flusher, ok := rw.(http.Flusher)
 	if !ok {
@@ -86,9 +88,11 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		}
 		proposalsSeq, proposalsMoved = seq, ch
 	}
-	if r.URL.Query().Get("a2ui") == "1" {
+	workspace := r.URL.Query().Get("a2ui") == "1"
+	if workspace {
 		// The workspace, the home page, does not show the conversation's
-		// messages: its stream starts after the last one, not with them all.
+		// messages: its stream starts after the last one, not with them all,
+		// and its "exchange" event says the last exchange.
 		if after == 0 {
 			after = int(w.c.store.lastMessageSeq())
 		}
@@ -103,6 +107,10 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 
 	var lastTasks, lastPending, lastDraft string
 	lastCards := map[int64]string{}
+	// The workspace's exchange: made again when a message, the draft or
+	// Eriphe's state changed, sent when it differs.
+	var lastExchange, exchangeDraft string
+	thinking, exchangeThinking, exchangeStale := false, false, true
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	quiet, panelsAt, woken := time.Now(), time.Time{}, true
@@ -113,7 +121,11 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		draft, at, drafted := w.c.draft.get()
 		msgs, err := w.c.store.messagesAfter(after, 100)
 		fresh := err == nil && len(msgs) > 0
-		if fresh {
+		switch {
+		case fresh && workspace:
+			after = msgs[len(msgs)-1].Seq
+			exchangeStale = true
+		case fresh:
 			var b strings.Builder
 			w.dress(msgs)
 			w.dressCards(msgs, lang)
@@ -131,13 +143,21 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		if at < after {
 			draft = ""
 		}
-		if html, err := w.fragment(lang, "home", "draft", draft); err == nil && html != lastDraft {
-			writeEvent(rw, "draft", after, html)
-			lastDraft, sent = html, true
+		if !workspace {
+			if html, err := w.fragment(lang, "home", "draft", draft); err == nil && html != lastDraft {
+				writeEvent(rw, "draft", after, html)
+				lastDraft, sent = html, true
+			}
 		}
 		// The panels cost more: every other second, or at once when woken.
-		if woken || fresh || time.Since(panelsAt) > 1500*time.Millisecond {
+		// The workspace has none: Eriphe's state is all it reads of them.
+		panels := woken || fresh || time.Since(panelsAt) > 1500*time.Millisecond
+		if panels {
 			panelsAt, woken = time.Now(), false
+		}
+		if panels && workspace {
+			thinking = w.brainState() == "thinking"
+		} else if panels {
 			tasks, perms, err := w.tasksAndPerms()
 			if err == nil {
 				if html, err := w.fragment(lang, "home", "tasks", tasks); err == nil && html != lastTasks {
@@ -166,6 +186,16 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			if b.Len() > 0 {
 				writeEvent(rw, "cards", after, b.String())
 				sent = true
+			}
+		}
+		if workspace && (exchangeStale || draft != exchangeDraft || thinking != exchangeThinking) {
+			if lines, err := w.c.store.lastExchange(); err == nil {
+				exchangeStale, exchangeDraft, exchangeThinking = false, draft, thinking
+				raw, _ := json.Marshal(exchangeEvent{Lines: lines, Draft: truncate(draft, exchangeTextMax), Thinking: thinking})
+				if string(raw) != lastExchange {
+					writeEvent(rw, "exchange", after, string(raw))
+					lastExchange, sent = string(raw), true
+				}
 			}
 		}
 		// A notification routed to this tab, in front of the user (route_send.go).

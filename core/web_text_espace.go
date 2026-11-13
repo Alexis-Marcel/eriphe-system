@@ -31,7 +31,6 @@ var espaceStrings = map[string]map[string]string{
 		"espace.back":         "Revenir à la vue d'ensemble",
 		"espace.input":        "Écris à {{name}}",
 		"espace.input.about":  "Écris à {{name}}, sur %s",
-		"espace.sent":         "Envoyé : la réponse arrive dans la conversation.",
 		"espace.sent.sample":  "Exemple : rien n'est envoyé.",
 		"espace.convo":        "Ouvrir la conversation",
 		"espace.fallback":     "L'espace ne s'ouvre pas sur cet appareil.",
@@ -41,6 +40,16 @@ var espaceStrings = map[string]map[string]string{
 		"espace.narrow":       "Réduire la conversation",
 		"espace.chips":        "Ce qui attend",
 		"espace.canvas":       "Ce que {{name}} te montre",
+
+		// Le dernier échange et les notifications de l'onglet (Exchange.tsx).
+		"espace.exchange":         "Dernier échange",
+		"espace.exchange.you":     "Toi",
+		"espace.exchange.via":     "Toi, via %s",
+		"espace.exchange.writing": "{{name}} écrit…",
+		"espace.exchange.error":   "{{name}} n'a pas pu répondre : la conversation dit pourquoi.",
+		"espace.exchange.all":     "Toute la conversation",
+		"espace.notices":          "Notifications",
+		"espace.notice.close":     "Fermer",
 
 		// Les composants du catalogue (web/espace/src/a2ui).
 		"espace.a2.preparing":         "En préparation",
@@ -97,7 +106,6 @@ var espaceStrings = map[string]map[string]string{
 		"espace.back":         "Back to the overview",
 		"espace.input":        "Write to {{name}}",
 		"espace.input.about":  "Write to {{name}} about %s",
-		"espace.sent":         "Sent: the answer comes in the conversation.",
 		"espace.sent.sample":  "Example: nothing is sent.",
 		"espace.convo":        "Open the conversation",
 		"espace.fallback":     "The workspace does not open on this device.",
@@ -107,6 +115,16 @@ var espaceStrings = map[string]map[string]string{
 		"espace.narrow":       "Narrow the conversation",
 		"espace.chips":        "What waits",
 		"espace.canvas":       "What {{name}} shows you",
+
+		// The last exchange and the tab's notifications (Exchange.tsx).
+		"espace.exchange":         "Last exchange",
+		"espace.exchange.you":     "You",
+		"espace.exchange.via":     "You, via %s",
+		"espace.exchange.writing": "{{name}} is writing…",
+		"espace.exchange.error":   "{{name}} could not answer: the conversation says why.",
+		"espace.exchange.all":     "The whole conversation",
+		"espace.notices":          "Notifications",
+		"espace.notice.close":     "Dismiss",
 
 		// The catalog's components (web/espace/src/a2ui).
 		"espace.a2.preparing":         "In preparation",

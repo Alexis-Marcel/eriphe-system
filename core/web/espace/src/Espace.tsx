@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { createAdapter } from "./a2ui/adapter";
 import { SAMPLE_SURFACE, galleryFixtures, gallerySurfaces, sampleLayout, sampleProposals, surfaceFixtures } from "./a2ui/fixtures";
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
+import { ExchangeView, landed, lastSeq, Notices, type Sent } from "./Exchange";
 import { CONVO } from "./Fallback";
 import { DIMS, Grid, stacked, useNarrow, type Spot } from "./Grid";
 import { useWords } from "./i18n";
+import { startPresence } from "./presence";
 import type { Layout } from "./types";
+
+// NOTE_FOR is how long a notification routed here stays on the page.
+export const NOTE_FOR = 15_000;
 
 // The page has no control that keeps a rule or a preference: a surface is
 // opened by a click, and what the user wants of it is said to Eriphe in
@@ -100,8 +105,41 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const [layout, setLayout] = useState<Layout | null>(null);
   const [gallery] = useState(() => new URLSearchParams(location.search).has("gallery"));
   const proposals = useMemo(() => (live ? coreProposals : sampleProposals(lang)), [live, lang]);
+
+  // The conversation's last exchange (Exchange.tsx): folded when the page
+  // opens, unfolded when the user writes and when Eriphe answers.
+  const [exchange, setExchange] = useState<data.Exchange | null>(null);
+  const [sent, setSent] = useState<Sent | null>(null);
+  const [exOpen, setExOpen] = useState(false);
+  const exSeen = useRef<number | null>(null); // the exchange's last seq, once the first one came
+  const onExchange = useCallback((x: data.Exchange) => {
+    setExchange(x);
+    const seq = lastSeq(x);
+    if (exSeen.current !== null && (seq > exSeen.current || x.draft)) setExOpen(true);
+    exSeen.current = Math.max(exSeen.current ?? 0, seq);
+  }, []);
   useEffect(() => {
-    if (boot.live && !gallery) return data.stream(boot, surfaces, setLayout);
+    if (landed(exchange, sent)) setSent(null);
+  }, [exchange, sent]);
+
+  // The notifications routed to this tab, by the stream or the answer to
+  // its presence: a notice each, for a while.
+  const [notes, setNotes] = useState<data.Note[]>([]);
+  const dropNote = useCallback((id: number) => setNotes((ns) => ns.filter((n) => n.id !== id)), []);
+  const addNotes = useCallback(
+    (ns: data.Note[]) => {
+      setNotes((old) => [...old, ...ns.filter((n) => !old.some((o) => o.id === n.id))].slice(-4));
+      for (const n of ns) setTimeout(() => dropNote(n.id), NOTE_FOR);
+    },
+    [dropNote],
+  );
+  useEffect(() => {
+    if (!boot.live || gallery) return;
+    return startPresence({ tab: data.tab, csrf: () => boot.csrf, onNotes: addNotes });
+  }, [boot, gallery, addNotes]);
+
+  useEffect(() => {
+    if (boot.live && !gallery) return data.stream(boot, surfaces, setLayout, { onExchange, onNotes: addNotes });
     surfaces.applyMessages(gallery ? galleryFixtures(lang) : surfaceFixtures(lang));
     if (!gallery) setLayout(sampleLayout(lang));
     const off = surfaces.onAction(() => say(t("espace.sent.sample")));
@@ -110,7 +148,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
       const ids = gallery ? gallerySurfaces(lang) : [SAMPLE_SURFACE];
       surfaces.applyMessages(ids.map((surfaceId) => ({ version: "1.0" as const, deleteSurface: { surfaceId } })));
     };
-  }, [boot, surfaces, lang, gallery]);
+  }, [boot, surfaces, lang, gallery, onExchange, addNotes]);
 
   const pool = useSyncExternalStore(surfaces.subscribe, surfaces.surfaces);
   const onSurfaces = !gallery && !!layout && (pool.length > 0 || layout.items.length + layout.chips.length > 0);
@@ -167,10 +205,17 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const text = useTyped(said ?? (layout ? layoutLine(layout) : ""));
 
   // A message goes to Eriphe with the surface open, if any: « montre-m'en
-  // moins », « lance une recherche là-dessus ».
-  const send = async (msg: string, done: string) => {
+  // moins », « lance une recherche là-dessus ». It shows in the exchange at
+  // once, Eriphe's answer under it as it comes.
+  const send = async (msg: string) => {
     if (!live) return say(t("espace.sent.sample"));
-    say((await data.send(msg, sfocus ? "surface:" + sfocus : null).catch(() => false)) ? done : t("espace.error"));
+    const mine: Sent = { text: msg, after: lastSeq(exchange) };
+    setSent(mine);
+    setExOpen(true);
+    if (!(await data.send(msg, sfocus ? "surface:" + sfocus : null).catch(() => false))) {
+      setSent((s) => (s === mine ? null : s));
+      say(t("espace.error"));
+    }
   };
 
   useEffect(() => {
@@ -188,7 +233,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
     const v = input.value.trim();
     if (!v) return;
     input.value = "";
-    send(v, t("espace.sent"));
+    send(v);
   };
 
   // The event stream down too long: the conversation is offered, the
@@ -222,6 +267,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
           <form className="eriphe-input" onSubmit={onSubmit}>
             <input name="text" autoComplete="off" placeholder={hint} aria-label={hint} />
           </form>
+          <ExchangeView x={exchange} sent={sent} open={exOpen} onToggle={() => setExOpen(!exOpen)} />
           <div className="eriphe-links">
             <a href={CONVO}>{t("espace.convo")}</a>
             {!narrow && <button className="linkish" onClick={() => setWide(!wide)} aria-pressed={wide}>{t(wide ? "espace.narrow" : "espace.wide")}</button>}
@@ -240,6 +286,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
           </ProposalsContext.Provider>
         </div>
 
+        <Notices notes={notes} onClose={dropNote} />
         <AnimatePresence>
           {toast && (
             <motion.p key={toast} className="toast" role="status" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>

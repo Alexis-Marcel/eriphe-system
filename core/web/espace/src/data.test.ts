@@ -65,7 +65,7 @@ describe("the surfaces' stream", () => {
   it("applies the a2ui events in order, and starts again on a reset", () => {
     const stop = data.stream(boot, adapter);
     const [es] = FakeSource.open();
-    expect(es.url).toBe("/events?a2ui=1");
+    expect(es.url).toBe(`/events?a2ui=1&tab=${data.tab}`);
 
     es.emit("a2ui", { seq: 4, reset: true, messages: [create("one", "Un")] });
     expect(ids()).toEqual(["one"]);
@@ -92,10 +92,10 @@ describe("the surfaces' stream", () => {
   it("shares one stream with what follows the proposals, opened again to get the snapshot", () => {
     const moved = vi.fn();
     const stopFollow = data.followProposals(moved);
-    expect(FakeSource.open().map((s) => s.url)).toEqual(["/events"]);
+    expect(FakeSource.open().map((s) => s.url)).toEqual([`/events?tab=${data.tab}`]);
     const stop = data.stream(boot, adapter);
     const open = FakeSource.open();
-    expect(open.map((s) => s.url)).toEqual(["/events?a2ui=1"]);
+    expect(open.map((s) => s.url)).toEqual([`/events?a2ui=1&tab=${data.tab}`]);
     open[0].emit("a2ui", { seq: 1, reset: true, messages: [create("one", "Un")] });
     expect(ids()).toEqual(["one"]);
     // The proposals' listener moved to the new stream.

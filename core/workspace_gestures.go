@@ -140,8 +140,8 @@ func sessionStartIn(ts []time.Time, now time.Time, loc *time.Location) time.Time
 }
 
 // workspaceSessionStart is when the workspace's session began: from the
-// user's activity (their messages, a conversation tab in front, their
-// answers to notifications) and their gestures on the workspace.
+// user's activity (their messages, a tab in front, their answers to
+// notifications, their gestures on the workspace).
 func (c *core) workspaceSessionStart(now time.Time) time.Time {
 	loc := c.conf().location
 	if loc == nil {
@@ -159,15 +159,6 @@ func (c *core) workspaceSessionStart(now time.Time) time.Time {
 				ts = append(ts, s.At)
 			}
 		}
-	}
-	if rows, err := c.store.db.Query(`SELECT time FROM workspace_log WHERE time >= ? AND what != ?`, day.Unix(), gestureIgnored); err == nil {
-		for rows.Next() {
-			var at int64
-			if rows.Scan(&at) == nil {
-				ts = append(ts, time.Unix(at, 0))
-			}
-		}
-		rows.Close()
 	}
 	return sessionStartIn(ts, now, loc)
 }

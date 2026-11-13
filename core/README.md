@@ -2895,7 +2895,7 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   (its turn says so); opening its chip shows it again. What they moved or resized is pinned
   there, at that size: laid out first (the latest wins a place two want), never grown or
   widened; the others are laid out around it (`layoutWith`). A **session** lasts while the user
-  is active (their messages, a conversation tab in front, their answers to notifications, their
+  is active (their messages, a tab in front, their answers to notifications, their
   gestures on the workspace) with no gap of more than an hour, within one activity day (from
   05:00: a night's work after midnight is the same day); past it, the placement goes and the
   composer places everything again (`sessionStartIn`). Kept in kv (`workspace_placement`): a
@@ -2952,7 +2952,30 @@ conversation names it: a message (`/conversation#m12`, `convoAt`), a permission
 (`/conversation#perm-…`), a task's drawer (`/conversation?task=…`, a task's address opened as a
 page), in push notes, channels' links, the journal and the evidence; what means home (the brand,
 closing the settings, the wizard's end, the sign-in) stays `/`. The workspace's stream
-(`/events?a2ui=1`) starts after the conversation's last message: it does not carry them.
+(`/events?a2ui=1`) starts after the conversation's last message: it does not carry them, nor any
+of the conversation's HTML events, but the last exchange as JSON (below).
+
+**A full home** (#455). The workspace does what the conversation's page does to say the user is
+there (`presence.ts`, as `static/app.js`): it tells eriphe-core when it comes in front or leaves
+(`POST /presence`, visible and focused, `tab`, `front`, `sub` its push subscription's id, the CSRF
+token in the form and the header; every 20 s while in front; a beacon as it closes) and registers
+the service worker (`/sw.js`). Its tab id is also in its stream's query (`tab`), so a notification
+routed to it comes as an in-app notice, by the stream's `notice` or the presence answer: a small
+card at the bottom right for 15 s, its text a link when its URL is a path of the site (`Notices`,
+`Exchange.tsx`). A workspace left open is activity, and so are the gestures on it
+([`gestureActivity`](#preferences-gestures-and-the-brains-tools-workspacego)): a return that only
+opens tiles is a return (`user.returned`, the arrival skill).
+
+**The last exchange** (`web_espace_exchange.go`, `Exchange.tsx`). Not a second chat: under the
+input, the user's last message and Eriphe's last three lines after it (`lastExchange`; Eriphe's
+last line alone when the user never wrote; an error as a line that says it, never its raw text; an
+event's line never), the message Eriphe is writing (the draft, by the same rule as the
+conversation's) and whether it is at work (`brainState`), as the stream's `exchange` event (JSON,
+`exchangeEvent`, each text cut at 4000 characters), sent when the stream opens and whenever it
+changes. Folded to one line when the page opens, unfolded when the user writes (their message
+shows at once, until the stream has it) and when Eriphe's next line comes; Eriphe's text drawn by
+the app's Markdown renderer, never as HTML; a link to the whole conversation. The cards the user
+must answer are not repeated there: they are the queue's surfaces (`q-card-*`).
 
 **The fallback.** The conversation is where the user lands when the workspace cannot open. The
 shell (`templates/espace.html`) has no JavaScript of its own: without JavaScript a `<noscript>`
@@ -3632,8 +3655,9 @@ a level; the code decides (`decideNotify`, no model):
   `notification` (their kind, match, outcome, nights, lines and hours in the JSON `spec`; `act`
   `deliver` or `quiet`), read by `notifyRules` only, never fired by the rule tick.
 - **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
-  user's messages, a workspace tab in front, in 10-minute buckets kept 30 days, reactions to
-  notifications) and of unwelcome moments (« pas maintenant »), and suggests a window per kind of
+  user's messages, a tab in front (the conversation's or the workspace's), in 10-minute buckets
+  kept 30 days, reactions to notifications, gestures on the workspace's surfaces but `ignored`,
+  `gestureActivity`) and of unwelcome moments (« pas maintenant »), and suggests a window per kind of
   night from the last 14 days: the median last activity of the evening plus a margin, the median
   first of the morning, widened over repeated « pas maintenant » just outside it; too few days, no
   suggestion. The brain sees it in `notifications` and proposes a quiet rule; nothing changes until
