@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"io/fs"
 	"log"
+	"mime"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,10 @@ import (
 
 //go:embed web/templates/*.html web/static/*
 var webFS embed.FS
+
+// The workspace's fonts (web/espace, built into static/espace) go out with
+// their type: Go's own table has none for them, and a machine may have none.
+func init() { mime.AddExtensionType(".woff2", "font/woff2") }
 
 // WebConfig turns the workspace on.
 type WebConfig struct {

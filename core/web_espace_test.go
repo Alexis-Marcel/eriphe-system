@@ -14,6 +14,24 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
+// The workspace's fonts come from eriphe-core itself, beside its stylesheet,
+// as fonts: the CSP allows no other source.
+func TestEspaceFonts(t *testing.T) {
+	tw := newTestWeb(t)
+	tw.setup()
+	_, css, _ := tw.do("GET", "/static/espace/espace.css", nil, nil)
+	urls := regexp.MustCompile(`url\(\./(espace-[a-z-]+\.woff2)\)`).FindAllStringSubmatch(css, -1)
+	if len(urls) != 2 {
+		t.Fatalf("fonts in the stylesheet: %v", urls)
+	}
+	for _, u := range urls {
+		code, _, h := tw.do("GET", "/static/espace/"+u[1], nil, nil)
+		if code != http.StatusOK || h.Get("Content-Type") != "font/woff2" {
+			t.Errorf("%s: %d %s", u[1], code, h.Get("Content-Type"))
+		}
+	}
+}
+
 // /espace serves the app's shell to a session only, with the workspace's
 // security headers and nothing inline.
 func TestEspacePage(t *testing.T) {

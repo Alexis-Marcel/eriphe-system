@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAdapter, type Adapter, type Message } from "./a2ui/adapter";
 import { CATALOG } from "./a2ui/catalog";
 import { Grid, stacked, type Spot } from "./Grid";
@@ -237,5 +237,82 @@ describe("the workspace on a phone", () => {
     expect(canvas.classList.contains("column")).toBe(false);
     expect(strip.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(el.querySelector("button.tile-move")).not.toBeNull();
+  });
+});
+
+// jsdom lays nothing out: the heights a browser would give, by class.
+function sizes(px: { canvas: number; tile: number; body: number; fit: (fit: HTMLElement) => number }) {
+  const of = (el: HTMLElement, what: "client" | "offset") => {
+    if (el.matches("main.canvas")) return px.canvas;
+    if (el.matches("article.tile")) return px.tile;
+    if (el.matches(".mod-body")) return px.body;
+    if (el.matches(".mod-fit") && what === "offset") return px.fit(el);
+    return 0;
+  };
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) {
+    return of(this, "client");
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+    return of(this, "offset");
+  });
+}
+
+describe("a tile and its content", () => {
+  afterEach(() => vi.restoreAllMocks());
+  const two = (id: string, a: string, b: string): Message => ({
+    version: "1.0",
+    createSurface: {
+      surfaceId: id,
+      catalogId: CATALOG.id,
+      components: [
+        { id: "root", component: "Column", children: ["a", "b"] },
+        { id: "a", component: "Text", text: a },
+        { id: "b", component: "Text", text: b },
+      ],
+    },
+  });
+
+  const pairs: Layout = {
+    ...layout,
+    items: [
+      { id: "pair", title: "Deux mots", size: "s", col: 0, row: 0, w: 3, h: 1 },
+      { id: "more", title: "Encore", size: "s", col: 3, row: 0, w: 3, h: 1 },
+    ],
+  };
+
+  it("says how many rows each tile's content needs, but the open one's, and never scrolls a tile on the grid", async () => {
+    await act(async () => adapter.applyMessages([two("pair", "Un", "Deux"), two("more", "Trois", "Quatre")]));
+    // A canvas of 8 rows of 90 px, 0 px apart; a tile 90 px high, its body 60.
+    sizes({ canvas: 720, tile: 90, body: 60, fit: () => 150 });
+    const needs: [string, number][] = [];
+    await act(async () =>
+      root.render(<Grid adapter={adapter} layout={{ ...pairs, focus: "more" }} onOpen={() => {}} onNeed={(id, rows) => needs.push([id, rows])} />),
+    );
+    expect(needs).toContainEqual(["pair", 2]);
+    expect(needs.some(([id]) => id === "more")).toBe(false);
+    // The content sits whole in .mod-fit, inside a body that does not scroll (espace.css).
+    expect(tile("pair")!.querySelector(".mod-body > .mod-fit .a2-text")).not.toBeNull();
+  });
+
+  it("shows only whole blocks when it has too little room, and says the rest is there", async () => {
+    await act(async () => adapter.applyMessages([two("pair", "Un", "Deux"), two("more", "Trois", "Quatre")]));
+    // Each text shown is 40 px; the body holds 60.
+    const shown = (fit: HTMLElement) => 40 * Array.from(fit.querySelectorAll(".a2-text")).filter((b) => !b.closest(".fit-out")).length;
+    sizes({ canvas: 720, tile: 90, body: 60, fit: shown });
+    await render(pairs);
+    // (In a browser a ResizeObserver measures again once the surface drew; here, a layout that changed.)
+    await render({ ...pairs, items: pairs.items.map((i) => ({ ...i, why: "Deux" })) });
+    const pay = tile("pair")!;
+    expect(pay.classList.contains("cut")).toBe(true);
+    expect(Array.from(pay.querySelectorAll(".a2-text")).map((b) => [b.textContent, b.classList.contains("fit-out")])).toEqual([
+      ["Un", false],
+      ["Deux", true],
+    ]);
+    expect(pay.querySelector(".tile-more")?.textContent).toBe("espace.tile.more");
+    // Given the room, all of it again.
+    sizes({ canvas: 720, tile: 200, body: 170, fit: shown });
+    await render({ ...pairs, items: pairs.items.map((i) => ({ ...i, h: 2 })) });
+    expect(pay.classList.contains("cut")).toBe(false);
+    expect(pay.querySelectorAll(".fit-out")).toHaveLength(0);
   });
 });
