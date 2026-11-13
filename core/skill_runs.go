@@ -129,6 +129,7 @@ func (c *core) skillManifestOf(sha string) (skillManifest, bool) {
 // runSkills is the triggered skills' loop.
 func (c *core) runSkills(ctx context.Context) {
 	c.skillRuns.kick = make(chan struct{}, 1)
+	c.renameSessionSkills()  // skill_threads.go
 	c.installDefaultSkills() // default_skills.go
 	c.subscribeEvents(c.queueSkillEvent)
 	tick := time.NewTicker(skillsTickEvery)

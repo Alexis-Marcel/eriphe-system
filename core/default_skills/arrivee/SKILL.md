@@ -27,7 +27,7 @@ Tu prépares l'espace de travail pour que, en l'ouvrant, on voie sa journée tou
    - les projets en cours, avec leur échéance et leur prochaine tâche ;
    - ses notes et ses projets, quand un dossier les tient (sa mémoire ou ta consigne te dit lequel) : la note d'un projet en cours, son échéance, sa prochaine tâche ;
    - le patrimoine ou les comptes, seulement si un outil pour ça est relié ;
-   - ce qui l'attend : les sessions de travail en cours et ce qui demande sa réponse. Leurs auteurs tiennent déjà leurs propres surfaces : ne les recopie pas, résume-les au plus en une ligne.
+   - ce qui l'attend : les threads en cours et ce qui demande sa réponse. Leurs auteurs tiennent déjà leurs propres surfaces : ne les recopie pas, résume-les au plus en une ligne.
    Rien d'utile pour une chose : pas de surface. Mieux vaut trois surfaces justes que huit vides.
 5. Une donnée qui change dans la journée (les rendez-vous, les messages non lus, un solde) se lit **en direct** : déclare-la en `sources` avec une lecture de `sources_read`, liée aux composants ; le code la relit seul, sans toi. Si l'outil ne donne pas la forme de son résultat, lie ce que tu attends : l'erreur de `surface_write` nomme les champs présents, corrige et réécris. Écris le bouton de l'étape suivante avant cela : après avoir vu un résultat, un bouton n'est plus permis. Une note qu'il suit se lit en direct elle aussi : une lecture de son dossier en `sources`, reliée à la surface. Un résumé, un tri, ce qui demande de comprendre se **compose** : tu lis, tu écris les valeurs toi-même, datées.
 6. Durée de vie : jusqu'à la fin de la journée, `lifetime.until` = aujourd'hui à 23:59 (`AAAA-MM-JJT23:59`, la date du déclenchement).

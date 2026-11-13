@@ -964,8 +964,14 @@ accepted.
   moves once, as it opens: the tables and their `session` columns renamed, every session a led
   thread (its old state kept as its phase), and the refs rewritten where they are kept (cards,
   attention items, notifications, the journal, surfaces' lifetime and components, kv values, skill
-  runs, a running lead's trigger and name). A skill whose `can` says `start-session` needs a new
-  version with `open-thread`.
+  runs, a running lead's trigger and name). A skill that still says session (`skill_threads.go`,
+  when the skills start) is rewritten in those words only, in its `SKILL.md`: `start-session` in
+  `can` becomes `open-thread`, `session.ended` in `when` becomes `thread.ended`, a ```` ```session ````
+  fence ```` ```thread ````. The new bundle takes the approved (and the pending) version's place: the
+  same capability under its new name, so the user's approval stands. The version replaced is kept,
+  and the change is a learning entry (« renommé : session → thread ») the user can undo. A default
+  skill's rewritten version is recorded among its shipped ones (`default_skill_sha:<name>`), right
+  after the version it replaces, so a later release still sees it unchanged and updates it.
 
 **The thread's lead** is born when the user approves the plan (`lead-<id>`, « Chef du thread N »)
 and goes when the thread ends. Its trigger `thread:<id>` wakes it with what happened to its steps
