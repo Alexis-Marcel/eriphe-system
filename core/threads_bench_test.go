@@ -343,15 +343,21 @@ func beginWake(c *core, x threadCase) (*threadRun, string, error) {
 			if _, err := c.decideCard(context.Background(), xs[0].ID, true, "web"); err != nil {
 				return nil, "", err
 			}
+			// The step's event, once its run ended: all that was told until then.
 			var msgs []Message
+			told := func() bool {
+				return slices.ContainsFunc(msgs, func(m Message) bool {
+					return m.Role == roleEvent && strings.Contains(m.Text, "("+st.Key+", "+stepCall+") → ")
+				})
+			}
 			for range 300 {
-				if msgs, _ = c.store.undelivered(); len(msgs) > 0 {
+				if msgs, _ = c.store.undelivered(); told() {
 					break
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
-			if len(msgs) == 0 {
-				return nil, "", fmt.Errorf("no event after the yes")
+			if !told() {
+				return nil, "", fmt.Errorf("no event of step %s after the yes: %+v", st.Key, msgs)
 			}
 			c.turn.goOn(msgs[0].Seq, msgs[len(msgs)-1].Seq, msgs[0].Seq, nil)
 			c.threadsDelivered(msgs)
@@ -474,7 +480,7 @@ const (
 	faultTouched   = "the thread on stage touched"
 	faultNoTask    = "no task step"
 	faultNoUser    = "no user step after the change"
-	faultCheckLate = "no check after the user step"
+	faultCheckLate = "the check not after the user step"
 	faultClosed    = "closed"
 	faultReply     = "a reply of"
 	faultNames     = "tool names"

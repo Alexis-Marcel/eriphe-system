@@ -16,7 +16,7 @@
         "input_schema": {"type": "object", "properties": {"repo": {"type": "string"}, "number": {"type": "integer"}}, "required": ["repo", "number"]},
         "result": {"merged": true, "sha": "4f2c9e1"}}
     ]},
-    {"name": "vigie", "use": "la supervision de Sam", "trusted": true, "tools": [
+    {"name": "vigie", "use": "la supervision de Sam", "trusted": false, "tools": [
       {"name": "rules", "description": "List the alert rules the monitoring has loaded.",
         "input_schema": {"type": "object", "properties": {}},
         "result": {"version": "2026-11-12", "rules": [{"name": "erreurs-5xx", "state": "active"}, {"name": "latence-p95", "state": "active"}]}}
