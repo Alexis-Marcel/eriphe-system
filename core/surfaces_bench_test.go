@@ -29,6 +29,12 @@ import (
 //     the arguments the case expects), never copies a value a read gave;
 //   - composed (a summary): the author wrote its values in data.
 //
+// A case with front is a question the user asked from the workspace about
+// a thing, with a proposal waiting (#458): its answer is the surface, the
+// focus asked (workspace_focus) and the text reply; a good one has the
+// subject in its title, embeds the proposal (a Proposal with its ref), is
+// put on stage, and the reply is one line.
+//
 // This test runs in CI with no model: every case is valid, its reference
 // answer scores clean through a core linked to the case's fake servers,
 // and each fault the score looks for is caught on a spoilt copy.
@@ -48,6 +54,7 @@ type surfaceCase struct {
 	Now     string          `json:"now"`  // 2006-01-02 15:04 UTC, surfaceBenchNow if empty
 	Servers []benchServer   `json:"servers"`
 	Expect  surfaceExpect   `json:"expect"`
+	Front   *frontExpect    `json:"front,omitempty"`
 	Answer  json.RawMessage `json:"answer"`
 
 	file string
@@ -66,6 +73,24 @@ type benchTool struct {
 	OutputSchema map[string]any `json:"output_schema"`
 	Result       map[string]any `json:"result"` // what a read gives
 }
+
+// frontExpect is a question asked from the workspace: the proposal that
+// waits (its ref and text, as workspace_read lists it) and the words one of
+// which the title must carry (the subject).
+type frontExpect struct {
+	Proposal string   `json:"proposal"`
+	Text     string   `json:"text"`
+	Subject  []string `json:"subject"`
+}
+
+// frontAnswer is a front case's answer: the surface, the focus, the reply.
+type frontAnswer struct {
+	Surface json.RawMessage `json:"surface"`
+	Focus   bool            `json:"focus"`
+	Reply   string          `json:"reply"`
+}
+
+const benchReplyMax = 200 // a one-line reply, in characters
 
 // surfaceExpect is what a case asks beyond the defaults.
 type surfaceExpect struct {
@@ -131,6 +156,11 @@ func (x surfaceCase) check() string {
 	}
 	if x.Kind == surfaceKindLive && len(x.distinctive()) == 0 {
 		return "a live case's results need values to tell a copy by"
+	}
+	if f := x.Front; f != nil {
+		if _, _, ok := parseProposalRef(f.Proposal); !ok || f.Text == "" || len(f.Subject) == 0 {
+			return "front needs a proposal's ref, its text and the subject's words"
+		}
 	}
 	return ""
 }
@@ -249,11 +279,16 @@ type surfaceScore struct {
 	Forbidden  []string // the case's forbidden words, shown
 	Buttons    int
 	Sizes      []string // what is out of range
+	Front      []string // a front case: what the answer misses (subject, proposal, focus, one line)
 }
 
 func (s surfaceScore) agrees(x surfaceCase) bool {
-	ok := s.Invalid == "" && len(s.OffCatalog)+len(s.ToolNames)+len(s.Forbidden)+len(s.Sizes) == 0 &&
+	ok := s.Invalid == "" && len(s.OffCatalog)+len(s.ToolNames)+len(s.Forbidden)+len(s.Sizes)+len(s.Front) == 0 &&
 		(!x.Expect.NoButtons || s.Buttons == 0)
+	if x.Front != nil {
+		// Live when a free read gives it, composed otherwise: either is right.
+		return ok && (s.Composed || s.Sourced)
+	}
 	if x.Kind == surfaceKindLive {
 		return ok && s.Sourced && len(s.MissArgs)+len(s.Copied) == 0
 	}
@@ -269,7 +304,7 @@ func (s surfaceScore) String() string {
 		what string
 		list []string
 	}{{"off the catalog", s.OffCatalog}, {"arguments missing", s.MissArgs}, {"copied", s.Copied}, {"tool names", s.ToolNames},
-		{"forbidden", s.Forbidden}, {"sizes", s.Sizes}} {
+		{"forbidden", s.Forbidden}, {"sizes", s.Sizes}, {"front", s.Front}} {
 		if len(p.list) > 0 {
 			b = append(b, p.what+" "+strings.Join(p.list, ", "))
 		}
@@ -281,6 +316,38 @@ func (s surfaceScore) String() string {
 // scoreSurface scores an answer (surface_write's arguments, as a model
 // writes them) by writing it on a core linked to the case's servers.
 func scoreSurface(c *core, x surfaceCase, raw string) surfaceScore {
+	if x.Front == nil {
+		return scoreWrite(c, x, raw)
+	}
+	var a frontAnswer
+	if err := json.Unmarshal([]byte(jsonObject(raw)), &a); err != nil || len(a.Surface) == 0 {
+		return surfaceScore{Invalid: fmt.Sprintf("not {surface, focus, reply}: %v", err)}
+	}
+	sc := scoreWrite(c, x, string(a.Surface))
+	var in surfaceWriteIn
+	json.Unmarshal(a.Surface, &in)
+	title := strings.ToLower(in.Title)
+	if !slices.ContainsFunc(x.Front.Subject, func(w string) bool { return strings.Contains(title, strings.ToLower(w)) }) {
+		sc.Front = append(sc.Front, "no subject in the title")
+	}
+	shows := false
+	for _, ref := range proposalsIn(surface{Components: json.RawMessage(mustJSON(in.Components)), Data: json.RawMessage(mustJSON(in.Data))}) {
+		shows = shows || ref == x.Front.Proposal
+	}
+	if !shows {
+		sc.Front = append(sc.Front, "the proposal not embedded")
+	}
+	if !a.Focus {
+		sc.Front = append(sc.Front, "not put on stage")
+	}
+	if r := strings.TrimSpace(a.Reply); r == "" || strings.Contains(r, "\n") || len([]rune(r)) > benchReplyMax {
+		sc.Front = append(sc.Front, fmt.Sprintf("a reply of %d characters, %d lines", len([]rune(r)), strings.Count(r, "\n")+1))
+	}
+	return sc
+}
+
+// scoreWrite scores surface_write's arguments.
+func scoreWrite(c *core, x surfaceCase, raw string) surfaceScore {
 	var sc surfaceScore
 	var in surfaceWriteIn
 	if err := json.Unmarshal([]byte(jsonObject(raw)), &in); err != nil {
@@ -476,7 +543,8 @@ func TestSurfaceBenchCases(t *testing.T) {
 			}
 
 			// Each fault is caught on a spoilt copy.
-			spoil := func(what string, f func(a map[string]any), caught func(surfaceScore) bool) {
+			// spoilAll spoils the whole answer; spoil, its surface.
+			spoilAll := func(what string, f func(a map[string]any), caught func(surfaceScore) bool) {
 				t.Helper()
 				var a map[string]any
 				json.Unmarshal(x.Answer, &a)
@@ -486,6 +554,15 @@ func TestSurfaceBenchCases(t *testing.T) {
 				if sc.agrees(x) || !caught(sc) {
 					t.Errorf("%s not caught: %s", what, sc)
 				}
+			}
+			spoil := func(what string, f func(a map[string]any), caught func(surfaceScore) bool) {
+				t.Helper()
+				spoilAll(what, func(a map[string]any) {
+					if x.Front != nil {
+						a = a["surface"].(map[string]any)
+					}
+					f(a)
+				}, caught)
 			}
 			comps := func(a map[string]any) []any { return a["components"].([]any) }
 			spoil("a component off the catalog", func(a map[string]any) {
@@ -515,6 +592,22 @@ func TestSurfaceBenchCases(t *testing.T) {
 			} else {
 				spoil("no data", func(a map[string]any) { delete(a, "data") },
 					func(s surfaceScore) bool { return !s.Composed })
+			}
+			if x.Front != nil {
+				spoil("no proposal", func(a map[string]any) {
+					for _, comp := range comps(a) {
+						if m := comp.(map[string]any); m["component"] == "Proposal" {
+							m["component"], m["text"] = "Text", "Fusion proposée"
+							delete(m, "proposalId")
+						}
+					}
+				}, func(s surfaceScore) bool { return slices.Contains(s.Front, "the proposal not embedded") })
+				spoil("no subject", func(a map[string]any) { a["title"] = "Point" },
+					func(s surfaceScore) bool { return slices.Contains(s.Front, "no subject in the title") })
+				spoilAll("no focus", func(a map[string]any) { a["focus"] = false },
+					func(s surfaceScore) bool { return slices.Contains(s.Front, "not put on stage") })
+				spoilAll("a long reply", func(a map[string]any) { a["reply"] = "Voici.\nEt encore tout le détail." },
+					func(s surfaceScore) bool { return len(s.Front) == 1 && strings.HasPrefix(s.Front[0], "a reply") })
 			}
 			for _, f := range x.Expect.Forbid {
 				spoil("a forbidden word", func(a map[string]any) {
@@ -573,7 +666,7 @@ func surfaceInstructions(t *testing.T, user string) string {
 		t.Fatal("brain-prompt.md has no paragraph on surfaces")
 	}
 	return standingInstructions(para, user, "Eriphe") + "\n\nsurface_write : " + list.Tools[0].Description +
-		"\nSes arguments (JSON Schema) : " + string(schema) + "\n\n" + a2ui.CatalogPrompt()
+		"\nSes arguments (JSON Schema) : " + string(schema) + "\n\nworkspace_focus : " + workspaceFocusHelp + "\n\n" + a2ui.CatalogPrompt()
 }
 
 // surfaceTurn is a case's request with the tools linked for it: what each
@@ -593,6 +686,14 @@ func surfaceTurn(x surfaceCase) string {
 			res, _ := json.Marshal(tl.Result)
 			fmt.Fprintf(&b, "- %s/%s (%s) : %s\n  arguments : %s\n  outputSchema : %s\n  lu à l'instant : %s\n", s.Name, tl.Name, s.Use, tl.Description, in, out, res)
 		}
+	}
+	if f := x.Front; f != nil {
+		// A question from the workspace about a thing, a proposal waiting:
+		// the brain answers it itself, as its turn and workspace_read say.
+		fmt.Fprintf(&b, "\n[Sam %s #12 · depuis l'espace] %s\n", now.Format("15:04"), x.Request)
+		fmt.Fprintf(&b, "workspace_read : aucune surface sur ce sujet ; proposals : [{\"ref\": %q, \"text\": %q}] (la proposition que tu as faite, qui attend son oui).\n\n", f.Proposal, f.Text)
+		b.WriteString("Tu n'as pas d'outil ici : réponds seulement par un objet JSON {\"surface\": les arguments de surface_write (title, components, data, sources, refresh, lifetime, weight, why), \"focus\": true si tu la mets au centre (workspace_focus), \"reply\": ta réponse en texte}, sans texte autour.")
+		return b.String()
 	}
 	if x.Kind == surfaceKindComposed {
 		// A summary is a task's work: the brain wrote a placeholder and

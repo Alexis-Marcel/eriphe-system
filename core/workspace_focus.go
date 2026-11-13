@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // Focus (#429): one workspace, and opening a surface does what a separate
@@ -23,7 +25,8 @@ import (
 //   - Relations are found by code, from what every surface declares, never
 //     from a tool's name (surfaceRelations): the same source, the same
 //     server, the same ref it lives while or its author stands for (a
-//     session, its lead and its steps' tasks, a task, a skill), a day: a Day
+//     session, its lead and its steps' tasks, a task, a skill), the same
+//     proposal shown in a Proposal (the queue's tile of it), a day: a Day
 //     component on a date the focused surface carries, or the reverse.
 //   - Two choices are kept: the base one, composed with nothing open
 //     (workspaceChoice, kept in the store), and the one around the focus, in
@@ -64,7 +67,7 @@ var relationWords = map[string]string{
 }
 
 // refKindWords name what two surfaces share by its ref's kind.
-var refKindWords = map[string]string{"session": "session", "task": "tâche", "card": "proposition", "skill": "compétence"}
+var refKindWords = map[string]string{"session": "session", "task": "tâche", "card": "proposition", "proposal": "proposition", "skill": "compétence"}
 
 // focusRelation is a surface related to the one open, and how.
 type focusRelation struct {
@@ -182,6 +185,36 @@ func liveRefs(s surface, sessionOf func(task string) int64) map[string]bool {
 	}
 	add(s.Lifetime.While)
 	add(s.Author)
+	for _, ref := range proposalsIn(s) {
+		out["proposal:"+ref] = true // the queue's tile of the same proposal, answerable there
+	}
+	return out
+}
+
+// proposalsIn are the proposals a surface's Proposal components show:
+// their proposalId, written or bound to its data (under a template too).
+func proposalsIn(s surface) []string {
+	var comps []map[string]any
+	if json.Unmarshal(s.Components, &comps) != nil {
+		return nil
+	}
+	var out []string
+	for _, comp := range comps {
+		if ref, ok := comp["proposalId"].(string); ok && comp["component"] == "Proposal" {
+			out = append(out, ref)
+		}
+	}
+	var data any
+	json.Unmarshal(s.Data, &data)
+	for _, b := range a2ui.Eriphe().BoundPaths(s.Components) {
+		if b.Prop == "proposalId" && !b.List {
+			for _, v := range valuesAt(data, tokens(b.Path)) {
+				if ref, ok := v.(string); ok {
+					out = append(out, ref)
+				}
+			}
+		}
+	}
 	return out
 }
 
@@ -289,6 +322,8 @@ type focusState struct {
 	sayFor     string
 	kick       chan struct{} // the focus changed (runComposer)
 	settledFor string        // the last focus settleFocus handled
+	by         string        // who put the focus there: "" the user, focusByBrain (workspace_front.go)
+	prev       string        // what was on stage before: a tile reduced next to it (workspace_front.go)
 }
 
 // focusAsk is the brain asked about a focus: the event's seq.
@@ -447,6 +482,7 @@ func (c *core) settleFocus(now time.Time) (recompose bool) {
 	if id == "" {
 		stale := st.f.baseStale || (st.f.baseStamp != "" && st.f.baseStamp != c.baseStamp())
 		st.f.choice, st.f.choiceFor, st.f.baseStamp, st.f.baseStale = nil, "", "", false
+		st.f.by, st.f.prev = "", ""
 		ask := st.f.ask
 		st.f.ask, st.f.asked = nil, ""
 		st.mu.Unlock()

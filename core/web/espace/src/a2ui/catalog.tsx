@@ -712,12 +712,27 @@ const Proposal = createComponentImplementation(
     const pending = p.state === "pending";
     const elsewhere = onlyAsks(context.dataContext.surface);
     const keeps = KEEPS[p.kind ?? ""];
+    // Approved, an action's call runs, then is done or failed: the
+    // stream's "proposals" moves bring each step. What only keeps
+    // something runs nothing: Gardé or Oublié.
+    const exec = p.state === "approved" && !keeps ? p.exec : undefined;
+    const kicker = pending
+      ? t(keeps ?? "espace.a2.proposal")
+      : exec
+        ? t(`espace.a2.proposal.${exec === "failed" ? "execfailed" : exec}`)
+        : t(decidedWord(p.state, Boolean(keeps)));
+    const icon = pending ? "star" : exec === "failed" || p.state !== "approved" ? "close" : exec === "running" ? "clock" : "check";
     return (
-      <section className={`a2-proposal a2-proposal-${pending ? "pending" : "decided"}`} aria-label={t(keeps ?? "espace.a2.proposal")}>
-        <p className="a2-proposal-kicker">
-          <IconView name={pending ? "star" : p.state === "approved" ? "check" : "close"} />
-          {pending ? t(keeps ?? "espace.a2.proposal") : t(decidedWord(p.state, Boolean(keeps)))}
+      <section
+        className={`a2-proposal a2-proposal-${pending ? "pending" : "decided"}${exec ? " a2-proposal-exec-" + exec : ""}`}
+        aria-label={t(keeps ?? "espace.a2.proposal")}
+        aria-busy={exec === "running" || undefined}
+      >
+        <p className="a2-proposal-kicker" role={exec ? "status" : undefined}>
+          <IconView name={icon} />
+          {kicker}
         </p>
+        {exec === "failed" && p.execWhy && <p className="a2-proposal-failed">{t(`espace.a2.proposal.why.${p.execWhy}`)}</p>}
         <p className="a2-proposal-text">{p.text}</p>
         {p.why && <p className="a2-proposal-why">{p.why}</p>}
         {p.tainted && <p className="a2-proposal-taint">{t("espace.a2.proposal.tainted")}</p>}

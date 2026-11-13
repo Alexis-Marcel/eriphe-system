@@ -204,6 +204,7 @@ func (c *core) brainStarted(_ Assistant, _ *TaskRow, resumed bool) {
 		carried = c.turnTaint() // read from the previous task: its status still names it
 	}
 	c.draft.set("", c.store.lastMessageSeq())
+	c.front.begin(false)
 	if resumed {
 		c.turn.goOn(0, 0, 0, carried)
 	} else {
@@ -218,6 +219,8 @@ func (c *core) messageRef(m Message) string {
 	switch {
 	case m.FromWorkspace():
 		ref += " · bouton de l'espace" // an ask, sent by a button of a surface (surface_actions.go)
+	case c.typedInWorkspace(m):
+		ref += " · depuis l'espace" // typed in the workspace's input: an answer in front is expected (workspace_front.go)
 	case m.Via != "":
 		ref += " · " + m.Via
 	}
@@ -276,6 +279,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		parts = append([]string{pack}, parts...)
 	}
 	c.setWakeTurn(nil)                // what it says now answers these, not a due intention
+	c.front.begin(c.frontFor(msgs))   // an answer to the user in the workspace: one surface may go in front (workspace_front.go)
 	c.focusDelivered(msgs, t.LastSeq) // a request about what the user opened, read now (workspace_focus.go)
 	// Only a message of mine starts a clean turn: events alone go on with this one.
 	if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser }) {

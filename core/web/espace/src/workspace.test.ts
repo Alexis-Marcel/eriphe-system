@@ -29,9 +29,10 @@ describe("workspace", () => {
     const body = init.body as URLSearchParams;
     expect(body.get("text")).toBe("montre-m'en moins");
     expect(body.get("about")).toBe("surface:week");
+    expect(body.get("from")).toBe("workspace"); // typed in the workspace: Eriphe may answer on stage
 
     await data.send("bonjour", null);
-    expect((fetch.mock.calls[1] as unknown as [string, RequestInit])[1].body).toEqual(new URLSearchParams({ text: "bonjour" }));
+    expect((fetch.mock.calls[1] as unknown as [string, RequestInit])[1].body).toEqual(new URLSearchParams({ text: "bonjour", from: "workspace" }));
   });
 
   it("posts a close, a move and a resize of a surface, with its place", async () => {

@@ -13,6 +13,8 @@ export type Layout = {
   ambient: "calm" | "decision" | "urgent";
   focus?: string;
   say?: string; // the brain's line about the surface open (workspace_focus.go)
+  focusBy?: string; // "brain": Eriphe put it on stage, answering the user (workspace_front.go)
+  previous?: string; // what was on stage before it: a tile reduced next to it
   items: Tile[];
   chips: FoldedChip[];
   moment?: string;

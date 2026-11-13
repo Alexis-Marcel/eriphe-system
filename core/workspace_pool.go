@@ -77,6 +77,8 @@ type poolSnapshot struct {
 	Lang        string          // the user's: fr or en
 	Focus       string          // the surface the user opened, "" for none
 	FocusSince  time.Time       // when that focus began
+	FocusBy     string          // focusByBrain: Eriphe put it on stage, answering the user (workspace_front.go)
+	Previous    string          // what was on stage before it: code keeps it next to it, reduced
 	Related     []focusRelation // what relates to it, found by code (workspace_focus.go)
 	Topic       string          // the conversation's: the user's last message (external words, as data)
 	Preferences []string
@@ -135,6 +137,7 @@ func (c *core) poolSnapshot(moment, remark string) poolSnapshot {
 	now := time.Now()
 	s := poolSnapshot{Moment: moment, Remark: remark, Now: now, Lang: c.userLang()}
 	s.Focus, s.FocusSince = c.focusNow(now)
+	s.FocusBy, s.Previous = c.stageNow(now)
 	if moment == momentArrival {
 		_, s.Away = c.awaySince(c.notifyTime())
 	}
@@ -187,12 +190,23 @@ func composerTurn(s poolSnapshot) string {
 	case momentRemark:
 		fmt.Fprintf(&b, "Moment : il est là ; une nouvelle préférence de sa part pour l'espace : « %s »\n", packQuote(truncate(s.Remark, workspacePrefMax)))
 	case momentFocus:
-		b.WriteString("Moment : il est là ; il vient d'ouvrir une surface : recompose l'espace autour d'elle.\n")
+		if s.FocusBy == focusByBrain {
+			b.WriteString("Moment : il est là ; l'assistant vient de mettre une surface au centre pour répondre à sa question : recompose l'espace autour d'elle.\n")
+		} else {
+			b.WriteString("Moment : il est là ; il vient d'ouvrir une surface : recompose l'espace autour d'elle.\n")
+		}
 	default:
 		b.WriteString("Moment : il est là, au travail ; l'espace a changé.\n")
 	}
 	if e, ok := s.entry(s.Focus); ok {
-		fmt.Fprintf(&b, "Il a ouvert : %s « %s » : mets-la en premier et grande (l ou xl), ce qui s'y rapporte autour, le reste peut attendre replié.\n", e.ID, packQuote(truncate(e.Title, poolTitleMax)))
+		opened := "Il a ouvert"
+		if s.FocusBy == focusByBrain {
+			opened = "Au centre"
+		}
+		fmt.Fprintf(&b, "%s : %s « %s » : mets-la en premier et grande (l ou xl), ce qui s'y rapporte autour, le reste peut attendre replié.\n", opened, e.ID, packQuote(truncate(e.Title, poolTitleMax)))
+		if p, ok := s.entry(s.Previous); ok && s.Previous != s.Focus {
+			fmt.Fprintf(&b, "Au centre juste avant : %s « %s » : le code la garde à côté, plus petite ; ne la replie pas.\n", p.ID, packQuote(truncate(p.Title, poolTitleMax)))
+		}
 		if len(s.Related) > 0 {
 			b.WriteString("Ce qui s'y rapporte (trouvé par le code) :\n")
 			for _, r := range s.Related {

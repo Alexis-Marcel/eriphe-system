@@ -414,6 +414,29 @@ describe("the catalog's components", () => {
     expect(text(".a2-proposal-kicker")).toBe("Refusé");
   });
 
+  it("follow an approved call: running, then done or failed with our reason", async () => {
+    let view: Record<string, unknown> = { ref: "access:4", card: 4, state: "approved", exec: "running", text: "Fusionner ?" };
+    const followers = new Set<(m: Moved) => void>();
+    const move = (m: Moved) => act(async () => followers.forEach((f) => f(m)));
+    await mount("en", one([{ id: "root", component: "Proposal", proposalId: "access:4" }]), {
+      read: async () => view as never,
+      answer: async () => false,
+      follow: (on) => (followers.add(on), () => followers.delete(on)),
+    });
+    await act(async () => {});
+    expect(text(".a2-proposal-kicker")).toBe("Approved · running…");
+    expect($(".a2-proposal-exec-running")?.getAttribute("aria-busy")).toBe("true");
+    view = { ...view, exec: "done" };
+    await move({ refs: ["access:4"] });
+    await act(async () => {});
+    expect(text(".a2-proposal-kicker")).toBe("Approved · done");
+    view = { ...view, exec: "failed", execWhy: "error" };
+    await move({ refs: ["access:4"] });
+    await act(async () => {});
+    expect(text(".a2-proposal-kicker")).toBe("Approved · failed");
+    expect(text(".a2-proposal-failed")).toBe("The tool answered with an error.");
+  });
+
   it("say when a proposal is gone, or an answer did not leave", async () => {
     const view = { ref: "rule:9", card: 9, state: "pending", text: "Ranger les mails ?" };
     await mount("fr", one([

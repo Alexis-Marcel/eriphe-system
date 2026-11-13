@@ -96,16 +96,18 @@ type choiceItem struct {
 
 // workspaceLayout is what the page lays out: the event stream's "layout".
 type workspaceLayout struct {
-	Eriphe  string       `json:"eriphe"`            // Eriphe's line, "" when the composer did not write one
-	By      string       `json:"by"`                // composer or fallback
-	Ambient string       `json:"ambient"`           // calm, decision or urgent: by the heaviest tile
-	Focus   string       `json:"focus,omitempty"`   // the surface the user opened
-	Say     string       `json:"say,omitempty"`     // the brain's line about it (workspace_focus.go)
-	Items   []layoutTile `json:"items"`             // the tiles, each at its place on the grid
-	Chips   []layoutChip `json:"chips"`             // the folded surfaces, in order
-	Moment  string       `json:"moment,omitempty"`  // the choice's moment
-	At      time.Time    `json:"at,omitzero"`       // when the choice was made
-	Missing []string     `json:"missing,omitempty"` // what the composer said is missing (surface.missing)
+	Eriphe   string       `json:"eriphe"`             // Eriphe's line, "" when the composer did not write one
+	By       string       `json:"by"`                 // composer or fallback
+	Ambient  string       `json:"ambient"`            // calm, decision or urgent: by the heaviest tile
+	Focus    string       `json:"focus,omitempty"`    // the surface the user opened
+	Say      string       `json:"say,omitempty"`      // the brain's line about it (workspace_focus.go)
+	FocusBy  string       `json:"focusBy,omitempty"`  // brain: Eriphe put it on stage, answering the user (workspace_front.go)
+	Previous string       `json:"previous,omitempty"` // what was on stage before it, a tile reduced next to it (workspace_front.go)
+	Items    []layoutTile `json:"items"`              // the tiles, each at its place on the grid
+	Chips    []layoutChip `json:"chips"`              // the folded surfaces, in order
+	Moment   string       `json:"moment,omitempty"`   // the choice's moment
+	At       time.Time    `json:"at,omitzero"`        // when the choice was made
+	Missing  []string     `json:"missing,omitempty"`  // what the composer said is missing (surface.missing)
 }
 
 // layoutTile is one surface on the grid: col and row from 0, w and h in
@@ -152,6 +154,13 @@ func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout 
 // request) comes first, at its place when it has one, at its size, and
 // keeps both: no growing, no widening. Then the order of layoutOf.
 func layoutWith(pool []surface, ch workspaceChoice, focus string, pl userPlacement) workspaceLayout {
+	return layoutStage(pool, ch, focus, "", pl)
+}
+
+// layoutStage is layoutWith with the surface that was on stage before the
+// focus (previous): it stays a tile, reduced (m at most), next to the
+// stage, never folded for the others (workspace_front.go).
+func layoutStage(pool []surface, ch workspaceChoice, focus, previous string, pl userPlacement) workspaceLayout {
 	var closed []surface
 	pool = slices.DeleteFunc(slices.Clone(pool), func(s surface) bool {
 		if _, ok := pl.Closed[s.ID]; ok {
@@ -222,6 +231,12 @@ func layoutWith(pool []surface, ch workspaceChoice, focus string, pl userPlaceme
 	if s, ok := byID[focus]; ok {
 		add(s, true)
 		l.Focus = focus
+		if s, ok := byID[previous]; ok && previous != focus && !added[previous] {
+			add(s, false)
+			if w := &wants[len(wants)-1]; sizeRank[w.size] > sizeRank[sizeM] {
+				w.size = sizeM
+			}
+		}
 	}
 	for _, it := range ch.Items {
 		if s, ok := byID[it.ID]; ok {
@@ -263,7 +278,7 @@ func layoutWith(pool []surface, ch workspaceChoice, focus string, pl userPlaceme
 	// (xl is for what is urgent or asked so), and only if nothing else
 	// shrinks or folds for it. What the user placed keeps its size.
 	for i, w := range wants {
-		if spots[i] == nil || w.s.Weight < weightGrow || w.pin != nil {
+		if spots[i] == nil || w.s.Weight < weightGrow || w.pin != nil || w.s.ID == previous {
 			continue
 		}
 		up := biggerSize[spots[i].size]
@@ -296,6 +311,9 @@ func layoutWith(pool []surface, ch workspaceChoice, focus string, pl userPlaceme
 	widenTiles(l.Items)
 	if l.Focus != "" && !slices.ContainsFunc(l.Items, func(t layoutTile) bool { return t.ID == l.Focus }) {
 		l.Focus = "" // folded: what the user placed fills the grid
+	}
+	if l.Focus != "" && previous != l.Focus && slices.ContainsFunc(l.Items, func(t layoutTile) bool { return t.ID == previous }) {
+		l.Previous = previous
 	}
 	for _, w := range folded {
 		l.Chips = append(l.Chips, layoutChip{ID: w.s.ID, Title: w.s.Title, Why: w.why})
@@ -501,27 +519,7 @@ func (c *core) keepChoice(ch workspaceChoice) workspaceLayout {
 // focusFor or until another is opened; the workspace is then composed
 // around it (workspace_focus.go). "" ends the focus: the layout before it
 // comes back.
-func (c *core) focusSurface(id string, now time.Time) {
-	st := &c.layout
-	st.mu.Lock()
-	was := st.focus
-	if was != "" && now.Sub(st.focusAt) > focusFor {
-		was = ""
-	}
-	st.focus, st.focusAt = id, now
-	if id != was {
-		st.focusSince = now
-		if id == "" {
-			st.focusSince = time.Time{}
-		}
-		c.focusChangedLocked(was)
-	}
-	st.mu.Unlock()
-	if id != "" {
-		c.openedOnWorkspace(id, now) // no longer closed; a queue item read (workspace_gestures.go)
-	}
-	c.relayout()
-}
+func (c *core) focusSurface(id string, now time.Time) { c.setFocus(id, now, "") } // workspace_front.go
 
 // layoutFocused tells whether the last layout has a surface opened.
 func (c *core) layoutFocused() bool {
@@ -555,9 +553,16 @@ func (c *core) relayout() workspaceLayout {
 	if err != nil {
 		return st.last
 	}
-	l := layoutWith(pool, c.layoutChoiceLocked(focus, pool), focus, c.placementLocked(start))
+	previous := ""
+	if focus != "" {
+		previous = st.f.prev
+	}
+	l := layoutStage(pool, c.layoutChoiceLocked(focus, pool), focus, previous, c.placementLocked(start))
 	if l.Focus != "" && st.f.sayFor == focusKey(l.Focus, st.focusSince) {
 		l.Say = st.f.say
+	}
+	if l.Focus != "" {
+		l.FocusBy = st.f.by
 	}
 	raw, _ := json.Marshal(l)
 	if string(raw) != st.raw {
