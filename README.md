@@ -63,6 +63,8 @@ built-in instructions are in French.
   On by default when the full install is possible.
 - **Tools**: mail (IMAP/SMTP), calendars (CalDAV, Microsoft Graph), Google Drive folders, folders of
   your devices, Home Assistant, GitHub and any MCP server, from a catalog in the workspace.
+- **Composed workspace**: a screen Eriphe composes from your tools, which you shape by talking to
+  it ([docs/workspace.md](docs/workspace.md)).
 - **Voice** through Home Assistant's Assist pipeline (`ha/`).
 - **Remote access** through Tailscale, built in, outbound only.
 
