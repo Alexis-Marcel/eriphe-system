@@ -1920,10 +1920,16 @@ than the pack. The measure is the session's
 last `turn_end`, whichever task ran it: its `usage.context_tokens` (the node's, Claude Code's last
 call), or else the turn's input, cache reads and writes. Past either bound, the task starts a fresh
 session. A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
-node could not do, another harness) gets a context pack in its first turn, never in its system prompt: what waits for a decision, the
-tasks under way, the intentions under way (the due ones first), the last day's episodes, and the last
-messages between the user and the brain, the newest kept, within about 16,000 tokens (`brain_context.go`). It is quoted
-data; events are left out, since they carry what tasks said. eriphe-core logs its size.
+node could not do, another harness) gets a context pack in its first turn, never in its system prompt,
+within about 16,000 tokens (`brain_context.go`). The state of things comes first, in at most half of
+it: the open threads (title, goal, state, open steps, summary), the tasks under way, the progress
+memories not done, the decisions of the last 14 days, the people and facts of these subjects, the
+open intentions (the due ones first), what waits for the user (permissions, cards), the last day's
+episodes; then the last messages between the user and the brain in what is left, the newest kept.
+It is quoted data; what may carry what someone else wrote (an external memory, episode or card, a
+tainted thread, the summary of a thread whose steps read external content) is named, not quoted,
+and events are left out, since they carry what tasks said. eriphe-core logs its composition: each
+section's lines written out of those it had and its size, the state's and the messages' chars.
 
 ## API accesses the user adds (Home Assistant, shortcuts, scripts)
 
