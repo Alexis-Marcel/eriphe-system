@@ -21,7 +21,7 @@ type notifyIn struct {
 	Level string `json:"level" jsonschema:"now (worth interrupting: within the hour) or brief (can wait for the next brief)"`
 	Why   string `json:"why" jsonschema:"why you tell it, in the user's language, one sentence the user sees on opening it (the source, what triggered it)"`
 	Where string `json:"where,omitempty" jsonschema:"the line to try first, from where_now: inapp, computer, voice, phone, or a channel's own line (where_now lists them); empty lets the router choose (best, unless you have a reason). Lines off, the quiet hours and the user's rules still apply"`
-	Ref   string `json:"ref,omitempty" jsonschema:"what it is about, the key rules match: a known topic (notifications lists them) before a new one; project:<name> and person:<slug> as in the memory, source:<server>, a one-word topic (facture), task:<id>, intention:<id>"`
+	Ref   string `json:"ref,omitempty" jsonschema:"what it is about, the key rules match: a known topic (notifications lists them) before a new one; a subject, kind:slug, as in the memory and the threads (project:<name>, person:<slug>, pr:<owner>/<repo>#<n>, topic:<word> such as topic:facture), or a record: task:<id>, intention:<id>"`
 }
 
 type notificationsIn struct {
@@ -33,7 +33,7 @@ type ruleIn struct {
 	Action    string `json:"action,omitempty" jsonschema:"add (by default; it replaces the rule for the same match or nights) or delete"`
 	ID        int64  `json:"id,omitempty" jsonschema:"for delete: the rule's id"`
 	Kind      string `json:"kind,omitempty" jsonschema:"topic (what to do with notifications about a ref) or quiet (the quiet hours); topic by default"`
-	Match     string `json:"match,omitempty" jsonschema:"for topic: the ref it applies to, as given to notify; project:getout also matches project:getout:prod"`
+	Match     string `json:"match,omitempty" jsonschema:"for topic: the subject it applies to, as given to notify (kind:slug); project:getout also matches project:getout:prod"`
 	Outcome   string `json:"outcome,omitempty" jsonschema:"for topic: now, brief or never"`
 	Night     bool   `json:"night,omitempty" jsonschema:"for topic with outcome now: even in the quiet hours and over the daily cap; only if the user said so"`
 	Channels  string `json:"channels,omitempty" jsonschema:"for topic: where its notifications go: push, a channel's id (where_now lists them), or several comma-separated; the user's default channels when empty"`
@@ -127,26 +127,31 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 	return out, nil
 }
 
-// notifyTopic is the ref a notification is kept under: canonical, the
-// known topic of its word family if there is one, and a note when the
-// brain invented a new one (rules match only the refs in use).
+// notifyTopic is the ref a notification is kept under: a record's ref as
+// written, else its subject key (subject.go), the known topic of its word
+// family if there is one, and a note when the brain invented a new one
+// (rules match only the refs in use).
 func (c *core) notifyTopic(label string) (string, string) {
-	raw := strings.ToLower(strings.TrimSpace(label))
-	if raw == "" {
+	if r, ok := recordRef(label); ok {
+		return r, ""
+	}
+	key, err := subjectKey(label)
+	if key == "" && err == nil {
 		return "", ""
 	}
 	topics := c.knownTopics()
-	ref, known := reuseTopic(raw, topics)
+	if err != nil {
+		return "", "Not kept under a subject (" + err.Error() + "): no rule can match it. Known topics: " + topicRefs(topics, 15) + "."
+	}
+	ref, known := reuseTopic(key, topics)
 	switch {
-	case ref == "":
-		return raw, "Not a ref (letters, digits, - and : only): no rule can match it. Known topics: " + topicRefs(topics, 15) + "."
-	case isIDRef(ref) || known && ref == canonRef(raw):
+	case known && ref == key:
 		return ref, ""
 	case known:
-		return ref, "Kept under the known topic " + ref + " (same word family as " + raw + "): use it next time."
+		return ref, "Kept under the known topic " + ref + " (same word family as " + label + "): use it next time."
 	}
 	return ref, "New topic " + ref + ". Rules match the ref you give: reuse a known topic when it fits (" + topicRefs(topics, 15) +
-		"); for a project or a person, the memory's subject (project:<name>, person:<slug>)."
+		"); for a project or a person, its subject (project:<name>, person:<slug>)."
 }
 
 // notificationView is a notification as the brain sees it.
@@ -324,11 +329,12 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 	if r.Kind == ruleTopic {
 		topics := c.knownTopics()
 		ref, known := reuseTopic(in.Match, topics)
+		key, _ := subjectKey(in.Match)
 		switch {
 		case ref == "":
 		case !known:
 			topicNote = "No notification uses " + ref + " yet: a rule matches the ref notify gives, so give notify this same ref. Known topics: " + topicRefs(topics, 15) + "."
-		case ref != canonRef(in.Match):
+		case ref != key:
 			topicNote = "Written for the known topic " + ref + " (same word family as " + in.Match + ")."
 		}
 		if ref != "" {

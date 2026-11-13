@@ -76,7 +76,7 @@ func (c *core) taskNowText() string {
 type taskRememberIn struct {
 	Text     string `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact"`
 	Kind     string `json:"kind" jsonschema:"fact, person, episode, decision, progress or situation (where the user is or what they do for a while, with valid_to)"`
-	Subject  string `json:"subject,omitempty" jsonschema:"owner, person:<slug>, project:<name>, home, or a short free subject"`
+	Subject  string `json:"subject,omitempty" jsonschema:"kind:slug: owner, person:<slug>, project:<name>, home, topic:<word>"`
 	ValidTo  string `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD or YYYY-MM-DDTHH:MM; required for a situation"`
 	Keywords string `json:"keywords,omitempty" jsonschema:"other words to find it by"`
 }

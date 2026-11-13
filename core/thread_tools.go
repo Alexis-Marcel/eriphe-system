@@ -68,7 +68,7 @@ type linkThreadIn struct {
 }
 
 type findThreadIn struct {
-	Subject string `json:"subject,omitempty" jsonschema:"the ref of the matter, as given at its opening: project:site, pr:owner/repo#12"`
+	Subject string `json:"subject,omitempty" jsonschema:"the subject of the matter (kind:slug), as given at its opening: project:site, pr:owner/repo#12"`
 	Text    string `json:"text,omitempty" jsonschema:"words of its title, goal, subject or summary"`
 	All     bool   `json:"all,omitempty" jsonschema:"without subject nor text: the ended ones too (with them, they are always included)"`
 }
@@ -106,10 +106,14 @@ const sameSubject = "même sujet"
 // that thread's plan changes instead.
 func (c *core) openThreadOnce(in threadIn, taint []string) (s Thread, again string, err error) {
 	led := strings.EqualFold(strings.TrimSpace(in.Mode), modeLed) || (strings.TrimSpace(in.Mode) == "" && len(in.Steps) > 0)
-	subject := strings.TrimSpace(in.Subject)
+	subject, err := subjectKey(in.Subject)
+	if err != nil {
+		return s, "", fmt.Errorf("subject: %w", err)
+	}
+	in.Subject = subject
 	if subject == "" {
 		if !led {
-			return s, "", errors.New("subject is needed: the ref of the matter, to find its thread again (pr:owner/repo#12, project:site, brand:name)")
+			return s, "", errors.New("subject is needed: the subject of the matter, kind:slug, to find its thread again (pr:owner/repo#12, project:site, topic:brand-name)")
 		}
 		s, err = c.openThread(in, taint, byBrain)
 		return s, "", err

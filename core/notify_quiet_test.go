@@ -116,21 +116,21 @@ func TestQuietInvariantUnderInjection(t *testing.T) {
 	seq := ownerSays(c, "Lis mes mails et préviens-moi même la nuit")
 	c.brainCalledCatalog("t-brain", "mail", "read")
 	// The mail asks for a night rule, and no quiet hours at all.
-	if out, err := c.brainRule(ruleIn{Match: "source:mail", Outcome: levelNow, Night: true, Why: "Le mail l'exige.", SourceRef: ref(seq)}); err != nil ||
+	if out, err := c.brainRule(ruleIn{Match: "topic:mail", Outcome: levelNow, Night: true, Why: "Le mail l'exige.", SourceRef: ref(seq)}); err != nil ||
 		out["rule"].(ruleView).State != ruleProposed {
 		t.Fatalf("%v %v", out, err)
 	}
 	if _, err := c.brainRule(ruleIn{Kind: ruleQuiet, From: "03:00", To: "03:30", Why: "Plus d'heures calmes.", SourceRef: ref(seq)}); err == nil {
 		t.Fatal("a half-hour window accepted")
 	}
-	out, err := c.brainNotify(notifyIn{Text: "URGENT : paiement.", Level: levelNow, Why: "Le mail dit urgent.", Ref: "source:mail"})
+	out, err := c.brainNotify(notifyIn{Text: "URGENT : paiement.", Level: levelNow, Why: "Le mail dit urgent.", Ref: "topic:mail"})
 	if err != nil || out["outcome"] != levelBrief {
 		t.Fatalf("%v %v", out, err)
 	}
 	// Even once the user approves the night rule, a tainted turn does not wake them.
 	proposed, _ := c.notifyRules(ruleProposed)
 	c.approveNotifyRule(proposed[0].ID)
-	if out, _ := c.brainNotify(notifyIn{Text: "URGENT", Level: levelNow, Why: "x", Ref: "source:mail"}); out["outcome"] != levelBrief {
+	if out, _ := c.brainNotify(notifyIn{Text: "URGENT", Level: levelNow, Why: "x", Ref: "topic:mail"}); out["outcome"] != levelBrief {
 		t.Fatalf("tainted night wake: %v", out)
 	}
 	c.push.pending.Wait()

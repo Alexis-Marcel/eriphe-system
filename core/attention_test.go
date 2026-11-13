@@ -321,15 +321,16 @@ func TestAttentionThreadEndBreakpoint(t *testing.T) {
 // A ref is a known kind, a colon and an id of that kind's form.
 func TestParseRef(t *testing.T) {
 	for _, tc := range []struct{ in, kind, id string }{
-		{"mail:INBOX/42", refMail, "INBOX/42"},
-		{"mail:a:b:c", refMail, "a:b:c"},
+		{"mail:INBOX/42", "mail", "INBOX/42"},
+		{"mail:a:b:c", "mail", "a:b:c"},
 		{"agenda:2026-11-12", refAgenda, "2026-11-12"},
-		{"event:ev-1@example.org", refEvent, "ev-1@example.org"},
+		{"event:ev-1@example.org", "event", "ev-1@example.org"},
 		{"thread:3", refThread, "3"},
 		{"card:12", refCard, "12"},
 		{"task:t-abc", refTask, "t-abc"},
-		{"project:portfolio", refProject, "portfolio"},
-		{"alert:7", refAlert, "7"},
+		{"project:portfolio", "project", "portfolio"},
+		{"pr:example/site#12", "pr", "example/site#12"},
+		{"alert:7", "alert", "7"},
 		{"surface:agenda", refSurface, "agenda"},
 		{" task:t-1 ", refTask, "t-1"},
 	} {
