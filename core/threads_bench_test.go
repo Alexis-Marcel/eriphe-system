@@ -31,15 +31,17 @@ import (
 // their surfaces, the stage, the cards. Properties of the sequence, never
 // exact words:
 //
-//   - a status question (« où en est ») finds the matter's thread before
-//     opening one, opens it light with a subject, writes the brain's part
+//   - a status question (« où en est ») opens the matter's thread light
+//     with its subject (the code gives back the one the subject has, if
+//     any: finding it first is not asked), writes the brain's part
 //     on its surface thread-<id> (no other surface) and puts it on stage;
 //     not merged, a call step on the change tool, whose card is the yes;
 //     already merged, only a check;
 //   - a wake after that change ran: a user step after it (Sam deploys
 //     himself), then a check after the user step; never closed before;
 //   - a request « pendant que je… » while a thread is on stage opens a
-//     second thread with a task step, without taking the stage nor
+//     second thread with a task step (add_step, or run_task, which the
+//     turn's thread takes as its step), without taking the stage nor
 //     touching the thread on stage;
 //   - always: no call refused, no change called outside a step, the reply
 //     in one line, no tool's name where Sam reads.
@@ -431,8 +433,8 @@ func (r *threadRun) opened() []int64 {
 			continue
 		}
 		if th, ok := p.Out["thread"].(map[string]any); ok {
-			if id, ok := th["id"].(float64); ok {
-				out = append(out, int64(id))
+			if id, ok := th["id"].(float64); ok && !slices.Contains(out, int64(id)) {
+				out = append(out, int64(id)) // the same subject twice gives one
 			}
 		}
 	}
@@ -463,7 +465,6 @@ const (
 	faultParse     = "not an answer"
 	faultRefused   = "refused"
 	faultDirect    = "a change called directly"
-	faultNoFind    = "opened without looking for it"
 	faultNoThread  = "no thread opened"
 	faultTwo       = "more than one thread opened"
 	faultLed       = "opened led"
@@ -542,9 +543,6 @@ func (r *threadRun) score(c *core, x threadCase, a threadAnswer) threadScore {
 
 func (r *threadRun) scoreAsk(c *core, x threadCase, opened []int64) threadScore {
 	var sc threadScore
-	if find, open := r.index("find_thread"), r.index("open_thread"); open >= 0 && (find < 0 || find > open) {
-		sc = append(sc, faultNoFind)
-	}
 	if x.Expect.Side && (slices.Contains(opened, r.stage) || stepCounts(c)[r.stage] != r.before[r.stage]) {
 		sc = append(sc, faultTouched)
 	}
@@ -725,13 +723,15 @@ func TestThreadBenchCases(t *testing.T) {
 				}
 			}
 			id := float64(r.next)
-			ask("no find", faultNoFind, func(a *threadAnswer) { a.drop("find_thread") })
-			ask("found after", faultNoFind, func(a *threadAnswer) {
-				f := a.Calls[a.at("find_thread")]
-				a.drop("find_thread")
-				a.Calls = append(a.Calls, f)
-			})
-			ask("no subject", faultSubject, func(a *threadAnswer) { delete(a.Calls[a.at("open_thread")].Args, "subject") })
+			// The code holds one thread a subject: opened twice, it is one.
+			twice := cloneAnswer(x.Answer)
+			twice.drop("find_thread")
+			o := twice.Calls[twice.at("open_thread")]
+			twice.Calls = slices.Insert(twice.Calls, twice.at("open_thread"), o)
+			if _, r2, sc := playAsk(t, x, twice); len(sc) > 0 || len(r2.opened()) != 1 {
+				t.Errorf("opened twice: %v, %s", r2.opened(), sc)
+			}
+			ask("no subject", faultRefused, func(a *threadAnswer) { delete(a.Calls[a.at("open_thread")].Args, "subject") })
 			ask("another subject", faultSubject, func(a *threadAnswer) { a.Calls[a.at("open_thread")].Args["subject"] = "sujet:autre" })
 			ask("opened led", faultLed, func(a *threadAnswer) {
 				a.Calls[a.at("open_thread")].Args["steps"] = []any{map[string]any{"key": "a", "title": "Tout faire", "prompt": "Fais tout."}}
@@ -771,6 +771,16 @@ func TestThreadBenchCases(t *testing.T) {
 					a.Calls[a.at("add_step")].Args["thread_id"] = float64(r.stage)
 				})
 				ask("no task", faultNoTask, func(a *threadAnswer) { a.drop("add_step") })
+				// run_task in the turn that opened the thread is its task step.
+				byTask := cloneAnswer(x.Answer)
+				st := byTask.Calls[byTask.at("add_step")].Args["step"].(map[string]any)
+				byTask.Calls[byTask.at("add_step")] = threadCall{Tool: "run_task", Args: map[string]any{"title": st["title"], "prompt": st["prompt"]}}
+				if _, _, sc := playAsk(t, x, byTask); len(sc) > 0 {
+					t.Errorf("the task by run_task: %s", sc)
+				}
+				ask("a task of its own", faultNoTask, func(a *threadAnswer) {
+					a.Calls[a.at("add_step")] = threadCall{Tool: "run_task", Args: map[string]any{"prompt": "Cherche.", "thread": "none"}}
+				})
 			} else {
 				ask("no focus", faultStage, func(a *threadAnswer) { a.drop("workspace_focus") })
 				ask("no part", faultNoPart, func(a *threadAnswer) { a.drop("surface_write") })

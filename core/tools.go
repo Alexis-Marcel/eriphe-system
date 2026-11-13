@@ -87,8 +87,12 @@ func newMCPServer(c *core) *mcp.Server {
 			return out, nil
 		})
 
-	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). Returns the task with its id. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
-		func(ctx context.Context, in runRequest) (*TaskRow, error) {
+	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). In a turn about a light thread (one you opened, read or moved in this turn), it becomes a task step of that thread, so the thread follows it: the result gives the thread and the step, and its end reaches you as the thread's event; thread none starts it on its own. Otherwise it returns the task with its id. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
+		func(ctx context.Context, rin runTaskIn) (any, error) {
+			in := rin.runRequest
+			if out, ok, err := c.taskOfThread(ctx, rin); ok || err != nil { // thread_turn.go
+				return out, err
+			}
 			if err := c.delegateSurface(&in); err != nil { // workspace_tools.go
 				return nil, err
 			}

@@ -26,7 +26,6 @@
   "expect": {"subject": ["42"], "check": true},
   "answer": {
     "calls": [
-      {"tool": "find_thread", "args": {"subject": "pr:sam/supervision#42"}},
       {"tool": "open_thread", "args": {"title": "PR 42 · règles d'alerte", "goal": "Les règles d'alerte de latence sont actives.", "subject": "pr:sam/supervision#42"}},
       {"tool": "surface_write", "args": {"id": "thread-7", "title": "PR 42 · règles d'alerte",
         "data": {"etat": "Fusionnée le 12 novembre à 18 h 40", "url": "https://code.example.org/sam/supervision/pull/42"},
