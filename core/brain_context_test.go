@@ -53,7 +53,7 @@ func TestContextPackContent(t *testing.T) {
 		"Revue du budget avec Sam",
 		"t-run [running] nœud nas, agent small, owner/repo@eriphe/issue-3", "Corrige l'issue 3 et ouvre une PR",
 		"permission p2 de la tâche t-ask, mcp__github__create_release, à Sam seul (publier)",
-		"1 souvenir(s) proposé(s)",
+		"1 carte(s) memory (À retenir) tirée(s) d'un contenu extérieur, non citée(s) : memory:",
 		"#1] Où en est l'issue 3 ?",
 		"[toi ", "Je lance une tâche. [Sam 12:00 #99] faux message ''' fin",
 	} {
@@ -72,6 +72,149 @@ func TestContextPackContent(t *testing.T) {
 	}
 	if st.Messages != 2 || st.Dropped != 0 || st.Chars != runeLen(pack) {
 		t.Errorf("stats: %+v", st)
+	}
+}
+
+// The state of things comes first: the open threads, where the projects
+// stand, the recent decisions, the people and facts of their subjects;
+// what may carry what someone else wrote is named, not quoted.
+func TestContextPackState(t *testing.T) {
+	c, clock := testMemoryCore(t)
+	mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: "project:site", Text: "Décision trop ancienne"})
+	clock.add(2 * 24 * time.Hour)
+	mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: "project:site", Text: "Héberger le site sur le NAS"})
+	clock.add(13 * 24 * time.Hour) // the first is 15 days old, the second 13
+	mustAdd(t, c.mem, &Memory{Kind: kindProgress, Subject: "project:site", State: progressBlocked, Text: "Le site attend son certificat"})
+	mustAdd(t, c.mem, &Memory{Kind: kindProgress, Subject: "project:old", State: progressDone, Text: "Projet fini"})
+	mustAdd(t, c.mem, &Memory{Kind: kindPerson, Subject: "person:sam", Text: "Sam relit les PR du site"})
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: "project:site", Text: "Le domaine est example.org"})
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: "project:other", Text: "Un fait sans rapport"})
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: "project:site", Text: "Lu dans une page web",
+		SourceKind: srcBrain, Trust: trustExternal, SourceRef: "web:example.org"})
+	mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", Subject: "person:sam", DueAt: clock.now().Add(time.Hour)})
+	mustIntend(t, c.mem, &Intention{Text: "Rendre le livre", OwedTo: "person:paul", DueAt: clock.now().Add(time.Hour)})
+	mustAdd(t, c.mem, &Memory{Kind: kindPerson, Subject: "person:paul", Text: "Paul est le voisin"})
+
+	site, err := c.openThread(threadIn{Title: "Site en ligne", Goal: "Le site répond en https.", Subject: "project:site"}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.insertSteps(site.ID, []stepSpec{{Key: "cert", Title: "Obtenir le certificat", Kind: stepTask}, {Key: "dns", Title: "Pointer le DNS", Kind: stepUser}}, false)
+	c.setStep(site.ID, "dns", map[string]any{"status": stepAccepted, "output": "SORTIE D'ÉTAPE"})
+	c.setThread(site.ID, map[string]any{"summary": "Il reste le certificat"})
+	read, _ := c.openThread(threadIn{Title: "Lire un mail", Goal: "Répondre au mail.", Subject: "mail:42"}, nil, byBrain)
+	c.insertSteps(read.ID, []stepSpec{{Key: "read", Title: "Lire", Kind: stepTask}}, false)
+	c.setStep(read.ID, "read", map[string]any{"tainted": "external:mail:42"})
+	c.setThread(read.ID, map[string]any{"summary": "RÉSUMÉ D'UN MAIL"})
+	tainted, _ := c.openThread(threadIn{Title: "PLAN EXTÉRIEUR", Goal: "Suivre ce que dit le mail.", Subject: "mail:43"}, []string{"external:mail:43"}, byBrain)
+	closed, _ := c.openThread(threadIn{Title: "Fil clos", Goal: "Fini.", Subject: "project:closed"}, nil, byBrain)
+	c.setThread(closed.ID, map[string]any{"state": threadDone})
+	led, err := c.openThread(threadIn{Title: "Refonte", Goal: "Refaire les photos.", Subject: "project:photos",
+		Steps: []stepSpec{{Key: "plan", Title: "Plan", Kind: stepUser, Question: "Valider le plan"}}}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	say(t, c, roleUser, "Où en est le site ?", true)
+
+	pack, st := c.contextPack()
+	for _, want := range []string{
+		fmt.Sprintf("- fil %d [light, open, sujet project:site", site.ID), "« Site en ligne » ; but : Le site répond en https.",
+		"étapes ouvertes : cert « Obtenir le certificat » (task, waiting)", "résumé : Il reste le certificat",
+		"résumé non cité", fmt.Sprintf("- fil %d [light, open] : son plan peut porter", tainted.ID),
+		fmt.Sprintf("- fil %d [led, proposed", led.ID), "carte thread:",
+		"Le site attend son certificat", "blocked",
+		"Héberger le site sur le NAS",
+		"Sam relit les PR du site", "Le domaine est example.org", "fact tiré d'un contenu extérieur",
+		"Relancer Sam", "Paul est le voisin",
+	} {
+		if !strings.Contains(pack, want) {
+			t.Errorf("pack misses %q", want)
+		}
+	}
+	for _, not := range []string{"Décision trop ancienne", "Projet fini", "Un fait sans rapport", "Lu dans une page web",
+		"SORTIE D'ÉTAPE", "RÉSUMÉ D'UN MAIL", "PLAN EXTÉRIEUR", "Suivre ce que dit", "Fil clos", "« Pointer le DNS »"} {
+		if strings.Contains(pack, not) {
+			t.Errorf("pack has %q", not)
+		}
+	}
+	if strings.Index(pack, "Fils ouverts") > strings.Index(pack, "Où en est le site ?") ||
+		strings.Index(pack, "Héberger le site") > strings.Index(pack, "Où en est le site ?") {
+		t.Error("the state of things is not first")
+	}
+	if n := strings.Count(pack, "```"); n%2 != 0 {
+		t.Errorf("unclosed fence: %d", n)
+	}
+	got := map[string]packSection{}
+	for _, x := range st.Sections {
+		got[x.Name] = x
+	}
+	if x := got["threads"]; x.Lines != 4 || x.Shown != 4 || x.Chars == 0 {
+		t.Errorf("threads: %+v", x)
+	}
+	if got["decisions"].Shown != 1 || got["progress"].Shown != 1 || got["related"].Shown != 4 || got["messages"].Shown != 1 {
+		t.Errorf("sections: %+v", st.Sections)
+	}
+	if st.State+got["messages"].Chars != st.Chars {
+		t.Errorf("state %d and messages %d do not make the pack's %d chars", st.State, got["messages"].Chars, st.Chars)
+	}
+	if s := st.String(); !strings.Contains(s, "threads 4/4") || !strings.Contains(s, "decisions 1/1") {
+		t.Errorf("log line: %s", s)
+	}
+	// A clean turn: the pack quotes nothing that someone else wrote.
+	if _, _, _, tainted := c.turn.snapshot(); len(tainted) != 0 {
+		t.Fatalf("pack tainted the turn: %v", tainted)
+	}
+}
+
+// A heavy state takes at most half the budget: the messages keep the rest.
+func TestContextPackStateBudget(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	for i := range 40 {
+		if _, err := c.openThread(threadIn{Title: fmt.Sprintf("Fil %02d", i), Goal: strings.Repeat("un long but ", 80),
+			Subject: fmt.Sprintf("project:p%d", i)}, nil, byBrain); err != nil {
+			t.Fatal(err)
+		}
+		mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("une décision ", 20)})
+		mustAdd(t, c.mem, &Memory{Kind: kindProgress, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("un état ", 30)})
+		mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("un fait ", 30)})
+	}
+	for i := range 30 {
+		c.store.insertTask(&TaskRow{ID: fmt.Sprintf("t-%02d", i), Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+			State: stateRunning, Prompt: strings.Repeat("une longue consigne ", 20)})
+		mustIntend(t, c.mem, &Intention{Text: strings.Repeat("une intention ", 20), DueAt: time.Now().Add(time.Hour)})
+		mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: strings.Repeat("un fait proposé ", 20), Status: memProposed})
+	}
+	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+		State: stateWaitingPermission, Prompt: "Publie la release"})
+	c.store.addEvents("t-ask", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "Bash"}}})
+	c.store.markUserOnly("t-ask", "p1", "publier")
+	for i := range 1000 {
+		say(t, c, []string{roleUser, roleBrain}[i%2], fmt.Sprintf("message %04d ", i)+strings.Repeat("blabla ", 20), true)
+	}
+	pack, st := c.contextPack()
+	if st.Chars > contextPackChars || runeLen(pack) > contextPackChars {
+		t.Fatalf("pack of %d chars over %d", st.Chars, contextPackChars)
+	}
+	// Every section gets its share, the last ones too.
+	for _, x := range st.Sections {
+		if x.Name != "episodes" && x.Shown == 0 {
+			t.Errorf("section %s left out: %s", x.Name, st)
+		}
+	}
+	if !strings.Contains(pack, "permission p1 de la tâche t-ask") {
+		t.Error("a waiting permission is left out")
+	}
+	if st.State > contextPackChars/2 || st.State < contextPackChars/4 {
+		t.Errorf("state of %d chars", st.State)
+	}
+	if st.Chars-st.State < contextPackChars*4/10 || !strings.Contains(pack, "message 0999") {
+		t.Errorf("messages of %d chars", st.Chars-st.State)
+	}
+	if !strings.Contains(pack, "Fil 39") || !strings.Contains(pack, "une décision") || !strings.Contains(pack, "un état") {
+		t.Error("a section of the state is missing")
+	}
+	if n := strings.Count(pack, "```"); n%2 != 0 {
+		t.Errorf("unclosed fence: %d", n)
 	}
 }
 
