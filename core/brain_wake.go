@@ -77,6 +77,7 @@ func (c *core) deliverIntentions(ctx context.Context, a Assistant, t *TaskRow) (
 	p.Due = due
 	text := c.turnHead(time.Now()) + "\n\n" + p.render(c.conf().User) + "\n" + fmt.Sprintf(wakeInstructions, c.conf().User)
 	c.turn.goOn(0, 0, t.LastSeq, c.turnTaint())
+	c.turn.about(0)      // about no thread until it names one (thread_turn.go)
 	c.front.begin(false) // a heartbeat answers no one in the workspace (workspace_front.go)
 	var ids []string
 	for _, x := range due {

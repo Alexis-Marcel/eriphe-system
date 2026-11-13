@@ -629,6 +629,7 @@ func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string
 	c.attentionDone(cardItemRef(x.ID))
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ?`, x.State, x.Decided.Unix(), by, id)
 	c.proposalMoved(x.Ref)
+	c.linkedCardMoved(x.Ref) // the surface of a thread it is linked to (thread_turn.go)
 	log.Printf("cards: %s %s by %s", x.Ref, x.State, by)
 	return x, nil
 }
@@ -642,6 +643,7 @@ func (c *core) proposalDecided(kind string, id int64, approved bool) {
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = 'page' WHERE ref = ? AND state = ?`,
 		state, time.Now().Unix(), proposalRef(kind, id), cardPending)
 	c.proposalMoved(proposalRef(kind, id))
+	c.linkedCardMoved(proposalRef(kind, id))
 }
 
 // The right moment.

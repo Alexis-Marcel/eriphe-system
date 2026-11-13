@@ -292,6 +292,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 			c.turn.taint(why) // a tainted task's result, an untrusted channel, a tool's result run on a card
 		}
 	}
+	c.threadsDelivered(msgs) // a thread's event: the turn is about it (thread_turn.go)
 	// What my message brings up: the intentions whose person it names.
 	cue, cued := c.cueBlock(msgs)
 	if cue != "" {

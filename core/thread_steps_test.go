@@ -90,11 +90,14 @@ func waitStep(t *testing.T, c *core, s Thread, key, status string) Step {
 // eventSeq is the seq of the last event that says what, and its text.
 func eventSeq(t *testing.T, c *core, what string) (int, string) {
 	t.Helper()
-	msgs, _ := c.store.messagesAfter(0, 200)
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == roleEvent && strings.Contains(msgs[i].Text, what) {
-			return msgs[i].Seq, msgs[i].Text
+	for range 300 { // a step's status is set before its event is told
+		msgs, _ := c.store.messagesAfter(0, 200)
+		for i := len(msgs) - 1; i >= 0; i-- {
+			if msgs[i].Role == roleEvent && strings.Contains(msgs[i].Text, what) {
+				return msgs[i].Seq, msgs[i].Text
+			}
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("no event says %q", what)
 	return 0, ""

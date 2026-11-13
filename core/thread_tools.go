@@ -107,6 +107,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			if err != nil {
 				return nil, err
 			}
+			c.turnThread(s.ID) // what the turn raises next is the thread's (thread_turn.go)
 			if !s.led() {
 				return map[string]any{"thread": s, "note": "Open. Close it with close_thread only once its goal is reached."}, nil
 			}
@@ -123,6 +124,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in threadIDIn) (threadView, error) {
 			v, err := c.threadView(in.Thread, 20)
 			if err == nil {
+				c.turnThread(in.Thread)
 				for _, st := range v.Steps {
 					if st.Tainted != "" {
 						c.turn.taint(st.Tainted) // a call's result, an external intention
@@ -143,6 +145,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			if err := c.holderOnly(in.Thread); err != nil {
 				return Step{}, err
 			}
+			c.turnThread(in.Thread)
 			return c.settleStep(ctx, in.Thread, in.Step, in.Verdict, in.Note, in.Output, "brain")
 		})
 
@@ -153,11 +156,13 @@ func registerThreadTools(s *mcp.Server, c *core) {
 					return Step{}, err
 				}
 			}
+			c.turnThread(in.Thread)
 			return c.addStep(ctx, in.Thread, in.Step, c.turnTaint(), "brain")
 		})
 
 	tool(s, "link_thread", "Join to a thread what relates to it: an intention (ref intention:<id>) becomes a deadline step, due when it is; a card (its ref, kind:id) shows in its timeline. And/or set its summary: where it stands, from its subject's progress memory and its steps.",
 		func(ctx context.Context, in linkThreadIn) (map[string]any, error) {
+			c.turnThread(in.Thread)
 			note, err := c.linkThread(ctx, in.Thread, in.Ref, in.Summary, "brain")
 			return map[string]any{"note": note}, err
 		})
@@ -174,6 +179,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			if err := c.leadOnly(in.Thread); err != nil {
 				return nil, err
 			}
+			c.turnThread(in.Thread)
 			note, err := c.amendThread(ctx, in.Thread, amendIn{Add: in.Add, Drop: in.Drop}, in.Why, "brain")
 			return map[string]any{"note": note}, err
 		})
@@ -183,6 +189,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			if !c.turnFromUser() {
 				return Step{}, errors.New("a choice is the user's: record it in the turn of their answer")
 			}
+			c.turnThread(in.Thread)
 			return c.chooseStep(ctx, in.Thread, in.Step, in.Option, "user")
 		})
 
@@ -207,6 +214,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 
 	tool(s, "reopen_thread", "Reopen a thread that ended (done or dropped) when its subject comes back: it opens again, light, held by you, with its history.",
 		func(ctx context.Context, in reopenIn) (Thread, error) {
+			c.turnThread(in.Thread)
 			return c.reopenThread(in.Thread, in.Why, "brain")
 		})
 
@@ -215,6 +223,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			if err := c.tellLeadFromBrain(in.Thread, in.Text, c.turnTaint()); err != nil {
 				return nil, err
 			}
+			c.turnThread(in.Thread)
 			return map[string]any{"note": "Passed to the lead."}, nil
 		})
 

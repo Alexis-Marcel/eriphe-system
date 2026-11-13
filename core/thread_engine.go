@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -260,37 +261,75 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 	if s.DoneWhen != "" {
 		fmt.Fprintf(&b, "\nDone when: %s", s.DoneWhen)
 	}
+	// What the steps before it produced is passed on, and so is its taint:
+	// an output that carries what someone else wrote makes the prompt, and
+	// so the task, tainted, approved plan or not.
+	var handed []string
 	for _, k := range st.After {
 		i := slices.IndexFunc(steps, func(x Step) bool { return x.Key == k })
 		if i < 0 || steps[i].Output == "" {
 			continue
 		}
 		fmt.Fprintf(&b, "\n\n### Output of the step « %s »\n%s", steps[i].Title, truncate(steps[i].Output, stepOutputMax))
+		handed = appendNew(handed, c.stepTaint(steps[i])...)
+	}
+	if st.Key == finalStep {
+		for _, x := range steps { // the final check reads what every step said (finalSpec)
+			if x.Key != finalStep && x.Status != stepDropped {
+				handed = appendNew(handed, c.stepTaint(x)...)
+			}
+		}
 	}
 	if again != "" {
 		fmt.Fprintf(&b, "\n\n## Retry\nA previous attempt at this step was not accepted. What to fix: %s", again)
 	}
-	var taint []string
-	if s.Tainted != "" {
-		taint = strings.Split(s.Tainted, ", ")
-	}
 	planned := st.Planned && s.Phase == phaseRunning // a plan the user approved, still running: never one reopened light
-	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract,
-		askStart: true, cleanStart: planned, approvedInAdvance: planned}
-	if !planned {
-		r.taint = taint
+	var taint []string
+	if s.Tainted != "" && !planned {
+		taint = strings.Split(s.Tainted, ", ") // the plan the user approved stands for its own words
 	}
+	taint = appendNew(taint, handed...)
+	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract,
+		askStart: true, cleanStart: planned && len(taint) == 0, approvedInAdvance: planned, taint: taint}
 	t, err := c.runTask(ctx, r)
 	if err != nil {
 		return nil, err
 	}
 	if planned {
 		c.grantLent(t) // the user approved it with the plan (access_card.go)
-		c.store.set(lentByUserKey(t.ID), "1")
-	} else if len(taint) > 0 {
-		c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+s.Tainted)
+		if len(taint) == 0 {
+			c.store.set(lentByUserKey(t.ID), "1")
+		}
+	}
+	if len(taint) > 0 {
+		c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(taint, ", "))
 	}
 	return t, nil
+}
+
+// stepTaint is why a step's output may carry what someone else wrote:
+// what a call said, an external intention, what its task read.
+func (c *core) stepTaint(st Step) []string {
+	var out []string
+	if st.Tainted != "" {
+		out = strings.Split(st.Tainted, ", ")
+	}
+	if st.Task != "" {
+		if why := c.taskResultTaint(st.Task); why != "" {
+			out = appendNew(out, why)
+		}
+	}
+	return out
+}
+
+// appendNew appends what xs does not hold yet.
+func appendNew(xs []string, add ...string) []string {
+	for _, a := range add {
+		if a != "" && !slices.Contains(xs, a) {
+			xs = append(xs, a)
+		}
+	}
+	return xs
 }
 
 // threadTaskChanged follows a step's task: its turn's end is a report,
@@ -395,6 +434,7 @@ func (c *core) tellBrain(s Thread, text string, taint []string) {
 	if len(taint) > 0 {
 		c.store.set(taintKey(int(seq)), strings.Join(taint, ", "))
 	}
+	c.store.set(threadEventKey(int(seq)), strconv.FormatInt(s.ID, 10)) // its turn is about the thread (thread_turn.go)
 	c.store.undeliver(int(seq), int(seq))
 	c.ping()
 }

@@ -99,6 +99,7 @@ func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string, byBrain
 	id, _ := res.LastInsertId()
 	if byBrain {
 		c.cardProposed(cardTaskStart, id)
+		c.cardRaisedFor(c.turnSource(), proposalRef(cardTaskStart, id)) // in a turn about a thread (thread_turn.go)
 	} else {
 		c.cardNow(cardTaskStart, id, fmt.Sprintf(tr(c.userLang(), "taskstart.held.message"), t.label()), "task:"+t.ID)
 	}
