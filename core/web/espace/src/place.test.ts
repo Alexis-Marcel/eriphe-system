@@ -68,6 +68,22 @@ describe("a tile fits its content", () => {
     expect(fitted(l, { today: 6, card: 4 })).toBe(l);
   });
 
+  it("keeps the cells of the surface open from a tile that grows before it", () => {
+    // alert comes first in core's order and would grow down into week's cells.
+    const l = fitted({ ...base, focus: "week" }, { alert: 6 });
+    check(l);
+    expect(l.items.find((i) => i.id === "week")).toEqual(base.items[4]);
+    expect(l.items.find((i) => i.id === "alert")!.h).toBeGreaterThan(2);
+  });
+
+  it("gives a moved tile as many rows as there are, not only its own", () => {
+    // card takes week's place; week needs 6 rows: 6 nowhere, 5 under note.
+    const l = fitted(base, { card: 3, week: 6 });
+    check(l);
+    const week = l.items.find((i) => i.id === "week")!;
+    expect(week).toMatchObject({ col: 0, row: 3, h: 5 });
+  });
+
   it("counts a tile's rows from its chrome and its content", () => {
     // cells of 90 px, 12 px apart: 2 rows hold 192 px (and a pixel of rounding).
     expect(needRows(90, 50, 40, 90, 12)).toBe(1);

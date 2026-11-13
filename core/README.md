@@ -2723,8 +2723,8 @@ or more, `decision` with one of 80, `calm` otherwise; `by` is `composer` or `fal
 the composer's line, empty when code chose. With a surface open, a tile related to it has
 `"related": true` and `say` is the brain's line about it, once it wrote one; `focusBy` is
 `brain` when Eriphe put it on stage (below), and `previous` names the surface that was on stage
-just before it. A tile of weight 80
-or more has `"urgent": true`: laying a surface the user opens out at once, the page keeps it in front.
+just before it. A tile of weight 80 or more has `"urgent": true`: laying a surface the user
+opens out at once, the page keeps it in front.
 
 **Focus** (`workspace_focus.go`): one workspace, and opening a surface does what a separate
 dashboard would. The open action places it first at once (above); once the focus settles (0.8 s
@@ -3066,10 +3066,10 @@ A tile that leaves the grid unopened while the page is visible is sent as `ignor
 never scrolls and never cuts a sentence: after each drawing, and when a tile's content or the
 canvas changes size (a `ResizeObserver`), the page measures each tile's content at its natural
 height (`.mod-fit`), at its width, and counts the rows it needs. Over core's layout, in core's
-order, a tile that needs more grows: under itself when the rows are free, else at the first place
-where it fits as tall, else as tall as it can at its place; one whose place an earlier tile took
-goes to the first free place, or is folded, first of the chips. The identity when every tile holds
-its content. The surface open and a tile the user placed keep their cells. A tile that still has too
+order, a tile that needs more grows: as tall as it needs under itself when the rows are free, else
+at the first place where it fits as tall, else a row less, and so on down to core's height; one
+with no place left is folded, first of the chips. The identity when every tile holds its content.
+The surface open and a tile the user placed keep their cells, taken first. A tile that still has too
 little room shows its first blocks whole, hides the last ones (`foldOut`: list items, rows, a
 column's children, a proposal's why…, never the first) and says the rest is there once opened
 (`espace.tile.more`); one block alone too tall (a day, a chart) fades out at its foot. Only the
@@ -3085,8 +3085,8 @@ before it, m at most, still live, then the rest packed after, the last folded. R
 the layout from before the opening at once (`unfocused`). The page keeps what the user asked over
 each layout core sends until core's agrees, or for 6 s (`shownLayout`, `INTENT_FOR`), so a layout
 already on its way does not undo the click; core's then comes in with Motion's move. An `open` or
-`back` that core refused or never got is undone, with a toast. A proposal's Oui or Non says at once that the answer is on its way (the pressed button
-spins, both are disabled). Closing a tile was already shown at once.
+`back` that core refused or never got is undone, with a toast. A proposal's Oui or Non says at
+once that the answer is on its way (the pressed button spins, both are disabled). Closing a tile was already shown at once.
 
 **The look** (`espace.css`, `fonts.css`), the prototype's scenarios': paper tiles on the dark
 field, their title a small kicker over the content, their three buttons out of sight until the

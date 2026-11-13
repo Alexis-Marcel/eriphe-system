@@ -300,8 +300,8 @@ describe("a tile and its content", () => {
     const shown = (fit: HTMLElement) => 40 * Array.from(fit.querySelectorAll(".a2-text")).filter((b) => !b.closest(".fit-out")).length;
     sizes({ canvas: 720, tile: 90, body: 60, fit: shown });
     await render(pairs);
-    // (In a browser a ResizeObserver measures again once the surface drew; here, a second drawing.)
-    await render({ ...pairs });
+    // (In a browser a ResizeObserver measures again once the surface drew; here, a layout that changed.)
+    await render({ ...pairs, items: pairs.items.map((i) => ({ ...i, why: "Deux" })) });
     const pay = tile("pair")!;
     expect(pay.classList.contains("cut")).toBe(true);
     expect(Array.from(pay.querySelectorAll(".a2-text")).map((b) => [b.textContent, b.classList.contains("fit-out")])).toEqual([
@@ -311,7 +311,7 @@ describe("a tile and its content", () => {
     expect(pay.querySelector(".tile-more")?.textContent).toBe("espace.tile.more");
     // Given the room, all of it again.
     sizes({ canvas: 720, tile: 200, body: 170, fit: shown });
-    await render({ ...pairs });
+    await render({ ...pairs, items: pairs.items.map((i) => ({ ...i, h: 2 })) });
     expect(pay.classList.contains("cut")).toBe(false);
     expect(pay.querySelectorAll(".fit-out")).toHaveLength(0);
   });

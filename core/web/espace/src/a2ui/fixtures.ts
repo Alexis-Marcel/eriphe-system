@@ -168,7 +168,20 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
   const messages: Message[] = [
     ...surfaceFixtures(lang),
     card("q-alert", { component: "Alert", level: "warning", text: alert[lang].text }),
-    ...q.map((v, i) => card(`q-card-${i}`, { component: "Proposal", proposalId: v.ref })),
+    ...[0, 2].map((i) => card(`q-card-${i}`, { component: "Proposal", proposalId: q[i].ref })),
+    // Cards that ask the same, one surface: a List of Proposals (workspace_queue.go).
+    {
+      version: "1.0",
+      createSurface: {
+        surfaceId: "q-group",
+        catalogId: CATALOG.id,
+        components: [
+          { id: "root", component: "List", children: ["g1", "g3"] },
+          { id: "g1", component: "Proposal", proposalId: q[1].ref },
+          { id: "g3", component: "Proposal", proposalId: q[3].ref },
+        ],
+      },
+    } as Message,
     pick("gallery-day"),
     pick("gallery-figures"),
     pick("gallery-project"),
@@ -183,11 +196,10 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
       { id: "q-alert", title: alert[lang].title, size: "m", col: 0, row: 0, w: 3, h: 2, urgent: true },
       { id: "q-card-0", title: t, size: "m", col: 3, row: 0, w: 3, h: 2 },
       { id: SAMPLE_SURFACE, title: words[lang].title, size: "l", col: 6, row: 0, w: 6, h: 3 },
-      { id: "q-card-1", title: t, size: "s", col: 0, row: 2, w: 3, h: 1 },
+      { id: "q-group", title: en ? "Reminders to keep" : "Rappels à garder", size: "s", col: 0, row: 2, w: 3, h: 1 },
       { id: "q-card-2", title: t, size: "s", col: 3, row: 2, w: 3, h: 1 },
       { id: "gallery-day", title: en ? "Today" : "Aujourd'hui", size: "l", col: 0, row: 3, w: 4, h: 3 },
       { id: "gallery-figures", title: en ? "Home" : "Maison", size: "l", col: 4, row: 3, w: 4, h: 3 },
-      { id: "q-card-3", title: t, size: "s", col: 8, row: 3, w: 4, h: 1 },
     ],
     chips: [{ id: "gallery-project", title: en ? "The terrace" : "La terrasse", why: en ? "Nothing urgent" : "Rien de pressé" }],
   };

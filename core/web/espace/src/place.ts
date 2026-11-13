@@ -50,29 +50,30 @@ const chipOf = (t: Tile): FoldedChip => ({ id: t.id, title: t.title, why: t.why 
 // fitted is core's layout with each tile as tall as its content needs
 // (needs: rows by surface id, measured at the tile's width). The identity
 // when every tile already holds its content. In core's order, a tile that
-// needs more grows, at its place when the rows under it are free, else at
-// the first place where it fits as tall; else as tall as it can at its
-// place; one whose place an earlier tile took goes to the first free one
-// at its height, or is folded, first of the chips. The surface open, and a
-// tile the user placed, keep their place and height: the one scrolls, the
-// other shows what it can (Grid.tsx).
+// needs more grows: as tall as it needs, at its place when the rows under
+// it are free, else at the first place where it fits as tall; else a row
+// less, and so on down to core's height; one with no place left is
+// folded, first of the chips. The surface open, and a tile the user
+// placed, keep their cells, taken first: the one scrolls, the other shows
+// what it can (Grid.tsx).
 export function fitted(l: Layout, needs: Record<string, number>): Layout {
-  const grows = (t: Tile) => t.id !== l.focus && !t.pinned && (needs[t.id] ?? 0) > t.h;
+  const kept = (t: Tile) => t.id === l.focus || !!t.pinned;
+  const grows = (t: Tile) => !kept(t) && (needs[t.id] ?? 0) > t.h;
   if (!l.items.some(grows)) return l;
   const g = cells();
+  // The surface open and what the user placed keep their cells: taken first.
+  for (const t of l.items) if (kept(t)) g.take(t);
   const items: Tile[] = [];
   const folded: FoldedChip[] = [];
   for (const t of l.items) {
+    if (kept(t)) {
+      items.push(t);
+      continue;
+    }
     const at = (h: number): Box => ({ col: t.col, row: t.row, w: t.w, h });
     let box: Box | null = null;
-    if (grows(t)) {
-      const want = Math.min(needs[t.id], ROWS);
-      for (let h = want; h > t.h && !box; h--) {
-        if (g.free(at(h))) box = at(h);
-        else if (h === want) box = g.first(t.w, h);
-      }
-    }
-    if (!box) box = g.free(at(t.h)) ? at(t.h) : g.first(t.w, t.h);
+    // As tall as it needs, then a row less each time: at its place, else the first free one.
+    for (let h = grows(t) ? Math.min(needs[t.id], ROWS) : t.h; h >= t.h && !box; h--) box = g.free(at(h)) ? at(h) : g.first(t.w, h);
     if (!box) {
       folded.push(chipOf(t));
       continue;

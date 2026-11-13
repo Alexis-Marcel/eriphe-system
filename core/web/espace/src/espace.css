@@ -236,11 +236,14 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 /* What a tile is, by the component at its root, as in the scenarios: a
    proposal is a decision (ringed in blue), a warning is urgent (amber),
    an error is late; the component's own box gives way to the tile's. */
-.tile:has(> .mod-body > .mod-fit > .a2-proposal-pending):not(.focus) { box-shadow: 0 0 0 2px var(--decision), 0 24px 60px -34px color-mix(in oklab, var(--decision) 80%, transparent); }
+.tile:has(> .mod-body > .mod-fit > .a2-proposal-pending):not(.focus),
+.tile:has(> .mod-body > .mod-fit > .a2-list .a2-proposal-pending):not(.focus) { box-shadow: 0 0 0 2px var(--decision), 0 24px 60px -34px color-mix(in oklab, var(--decision) 80%, transparent); }
 .tile:has(> .mod-body > .mod-fit > .a2-alert-warning) { background: var(--urgent); }
 .tile:has(> .mod-body > .mod-fit > .a2-alert-warning) .tile-title { color: #3a2a10; }
 .tile:has(> .mod-body > .mod-fit > .a2-alert-error) { background: color-mix(in oklab, var(--late) 22%, var(--paper)); }
 .mod-fit > .a2-proposal, .mod-fit > .a2-alert { padding: 0; background: none; box-shadow: none; border-radius: 0; }
+/* A group of the queue (a List of proposals): one under the other, a rule between. */
+.mod-fit > .a2-list .a2-proposal { padding: 8px 0 4px; background: none; box-shadow: none; border-radius: 0; }
 .mod-fit > .a2-alert-warning > .a2-icon { color: #3a2a10; }
 .mod-fit > .a2-alert .a2-alert-text { font-size: 14px; }
 .mod-fit > .a2-proposal .a2-proposal-text, .mod-fit > .a2-card > .a2-card-title { font-family: var(--display); font-size: 18px; font-weight: 600; line-height: 1.25; letter-spacing: -0.01em; }

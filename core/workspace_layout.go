@@ -123,7 +123,7 @@ type layoutTile struct {
 	Why     string `json:"why,omitempty"`
 	Pinned  bool   `json:"pinned,omitempty"`  // placed by the user, or by the brain at their request, this session
 	Related bool   `json:"related,omitempty"` // related to the surface open (workspace_focus.go)
-	Urgent  bool   `json:"urgent,omitempty"`  // placed before a surface the user opens (weightUrgent): the page lays an open out as code does
+	Urgent  bool   `json:"urgent,omitempty"`  // placed before a surface the user opens (weightUrgent): the page keeps it in front when it lays an opening out at once
 }
 
 // layoutChip is a folded surface.

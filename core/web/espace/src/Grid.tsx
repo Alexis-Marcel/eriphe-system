@@ -208,14 +208,16 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
   };
   const ghost = drag && DIMS[drag.size];
 
-  // Measured after each drawing, and again when a tile's content or the
-  // canvas changes size; not on a phone, where a tile is as tall as it is.
+  // Measured when the tiles drawn change, and again when a tile's content
+  // or the canvas changes size (not at each drawing: Eriphe's line types at
+  // 60 frames a second); not on a phone, where a tile is as tall as it is.
   const need = useRef(onNeed);
   need.current = onNeed;
   const measure = () => {
     if (!narrow && canvas.current) measureTiles(canvas.current, (id, rows) => need.current(id, rows));
   };
-  useLayoutEffect(measure);
+  const drawnKey = JSON.stringify([narrow, layout.focus, tiles]);
+  useLayoutEffect(measure, [drawnKey]);
   useEffect(() => {
     if (narrow || !canvas.current || typeof ResizeObserver === "undefined") return;
     let frame = 0;
@@ -229,7 +231,7 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
       cancelAnimationFrame(frame);
       ro.disconnect();
     };
-  });
+  }, [drawnKey]);
 
   const strip = (
     <div className={`chips${narrow ? " stacked" : ""}`} role="list" aria-label={t("espace.chips")}>
