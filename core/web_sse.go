@@ -13,12 +13,9 @@ import (
 // Events of ready-made HTML: "message" (new messages, to append), "draft"
 // (the brain's message being written, empty once it has landed), "tasks"
 // (the side panel), "pending" (the requests at the end of the
-// conversation), "cards" (cards that changed), "attention" (the
-// attention queue, JSON: attention.go) and "composition" (the workspace's
-// composition, JSON: composer.go), each sent only when it differs from the
-// last one, and "walkthrough" (a walkthrough the brain asked for, JSON:
-// workspace.go), once. Asked with a2ui=1 (the workspace, /espace), it also
-// sends "a2ui": the surfaces' A2UI messages in order (JSON, a2uiEvent in
+// conversation) and "cards" (cards that changed), each sent only when it
+// differs from the last one. Asked with a2ui=1 (the workspace, /espace), it
+// also sends "a2ui": the surfaces' A2UI messages in order (JSON, a2uiEvent in
 // surfaces_stream.go), a snapshot that resets the page first, and
 // "layout": where each surface is on the grid (JSON, workspaceLayout in
 // workspace_layout.go), sent after the "a2ui" event of the surfaces it
@@ -99,9 +96,8 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		flusher.Flush()
 	}
 
-	var lastTasks, lastPending, lastDraft, lastAttention, lastComposition string
+	var lastTasks, lastPending, lastDraft string
 	lastCards := map[int64]string{}
-	walkSeen := w.c.walkSeenAt(time.Now())
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	quiet, panelsAt, woken := time.Now(), time.Time{}, true
@@ -166,25 +162,6 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 				writeEvent(rw, "cards", after, b.String())
 				sent = true
 			}
-			// The attention queue, as JSON (attention.go).
-			if raw, err := json.Marshal(w.attentionSnapshot()); err == nil && string(raw) != lastAttention {
-				writeEvent(rw, "attention", after, string(raw))
-				lastAttention, sent = string(raw), true
-			}
-			// The composition, once there is one (composer.go).
-			if comp := w.c.lastComposition(); comp != nil {
-				if raw, err := json.Marshal(comp); err == nil && string(raw) != lastComposition {
-					writeEvent(rw, "composition", after, string(raw))
-					lastComposition, sent = string(raw), true
-				}
-			}
-		}
-		// A walkthrough the brain asked for (workspace_walkthrough), once.
-		if wk := w.c.lastWalk(); wk.ID > walkSeen {
-			if raw, err := json.Marshal(wk); err == nil {
-				writeEvent(rw, "walkthrough", after, string(raw))
-				walkSeen, sent = wk.ID, true
-			}
 		}
 		// A notification routed to this tab, in front of the user (route_send.go).
 		if notes := w.c.showInApp(tab); len(notes) > 0 {
@@ -223,22 +200,6 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			quiet = time.Now()
 		}
 	}
-}
-
-// attentionView is the attention queue as the workspace reads it.
-type attentionView struct {
-	Items []attentionItem `json:"items"`
-}
-
-func (w *web) attentionSnapshot() attentionView {
-	return attentionView{Items: w.c.attentionOpen()}
-}
-
-// handleAttention is the attention queue's snapshot, as JSON.
-func (w *web) handleAttention(rw http.ResponseWriter, r *http.Request, s *session) {
-	rw.Header().Set("Content-Type", "application/json")
-	rw.Header().Set("Cache-Control", "no-store")
-	json.NewEncoder(rw).Encode(w.attentionSnapshot())
 }
 
 func writeEvent(rw http.ResponseWriter, event string, id int, data string) {

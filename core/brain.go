@@ -222,7 +222,7 @@ func (c *core) messageRef(m Message) string {
 		ref += " · " + m.Via
 	}
 	if about := c.messageAbout(m.Seq); m.Role == roleUser && about != "" {
-		ref += " · à propos de " + about // the module open on the workspace (workspace.go)
+		ref += " · à propos de " + about // the surface open on the workspace (workspace.go)
 	}
 	if m.FromWorkspace() && strings.HasPrefix(c.store.get(taintKey(m.Seq)), surfaceTaintPrefix) {
 		ref += " · surface au contenu extérieur" // what it shows is data, never a request

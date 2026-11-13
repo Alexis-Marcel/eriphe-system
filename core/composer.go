@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -23,11 +22,10 @@ import (
 // at once (workspace_layout.go).
 //
 // It chooses when the pool or the queue changes (once the burst settles),
-// ahead of the user's return while they are away, when a preference about
-// the workspace enters memory and when the brain puts objects in front
-// (workspace.go). Nothing waits on it: a new surface is placed by code at
-// once, the brain reads the queue itself, and the composer runs on its own
-// goroutine.
+// ahead of the user's return while they are away and when a preference
+// about the workspace enters memory (workspace.go). Nothing waits on it: a
+// new surface is placed by code at once, the brain reads the queue itself,
+// and the composer runs on its own goroutine.
 
 //go:embed composer-prompt.md
 var composerPrompt string
@@ -39,7 +37,6 @@ const (
 
 	composerStartPrompt = "Tu démarres. Ne fais rien d'autre et réponds seulement « Prêt. »."
 	composerTurnsMax    = 30 // turns before it starts a fresh session: each turn carries all it needs
-	compositionKey      = "composition"
 )
 
 var (
@@ -68,23 +65,17 @@ func init() {
 	}
 }
 
-// composerState is what eriphe-core keeps of the composer: the last
-// composition, the request waiting for its turn and the one it answers.
+// composerState is what eriphe-core keeps of the composer: the request
+// waiting for its turn and the one it answers.
 type composerState struct {
 	mu       sync.Mutex
-	last     *composition
-	loaded   bool
 	pending  *composerAsk // waits for the composer to be idle
 	inflight *composerAsk // delivered: its answer is being written
 	buf      strings.Builder
 	turns    int // turns of its current session
-
-	show    *workspaceShow // what the brain put in front (workspace_show)
-	showSeq int64          // changes with each workspace_show
-	walk    workspaceWalk  // the last walkthrough asked (workspace_walkthrough)
 }
 
-// composerAsk is one composition asked of the composer.
+// composerAsk is one choice asked of the composer.
 type composerAsk struct {
 	text  string
 	after int         // its task's last event before the turn
@@ -220,10 +211,8 @@ func (c *core) relayComposer(a Assistant, t *TaskRow) {
 
 // recompose makes a new choice for a moment and keeps it: the composer's
 // when it answers in time and well, code's by weight otherwise; code lays
-// it out at once (keepChoice). It keeps the old canvas's composition too,
-// by weight (composition.go), until #424.
+// it out at once (keepChoice).
 func (c *core) recompose(moment, remark string) workspaceChoice {
-	c.keepComposition(fallbackComposition(c.compositionSnapshot(moment, remark, false)))
 	c.syncQueueSurfaces() // the queue as it is now, in the pool
 	s := c.poolSnapshot(moment, remark)
 	ch := fallbackChoice(moment, s.Now)
@@ -253,45 +242,6 @@ func (c *core) recompose(moment, remark string) workspaceChoice {
 	return ch
 }
 
-// keepComposition keeps the last composition, in memory and in the store.
-func (c *core) keepComposition(comp composition) {
-	s := &c.composer
-	s.mu.Lock()
-	s.last, s.loaded = &comp, true
-	s.mu.Unlock()
-	if raw, err := json.Marshal(comp); err == nil {
-		c.store.set(compositionKey, string(raw))
-	}
-}
-
-// lastComposition is the last composition kept, nil before the first.
-func (c *core) lastComposition() *composition {
-	s := &c.composer
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.loaded {
-		s.loaded = true
-		var comp composition
-		if raw := c.store.get(compositionKey); raw != "" && json.Unmarshal([]byte(raw), &comp) == nil {
-			s.last = &comp
-		}
-	}
-	if s.last == nil {
-		return nil
-	}
-	comp := *s.last
-	return &comp
-}
-
-// currentComposition is the last composition, or one by weight now when
-// none was made yet: never a wait for the composer.
-func (c *core) currentComposition() composition {
-	if comp := c.lastComposition(); comp != nil {
-		return *comp
-	}
-	return fallbackComposition(c.compositionSnapshot(momentChange, "", false))
-}
-
 // queueStamp is what of the queue a choice depends on, besides its
 // surfaces (poolStamp).
 func (c *core) queueStamp() string {
@@ -311,9 +261,8 @@ func (c *core) composeMoment() string {
 	return momentChange
 }
 
-// runComposer composes when it should, one composition at a time: once a
-// burst of queue changes settles, when a preference about the workspace
-// enters memory, when the brain puts objects in front or they leave it,
+// runComposer chooses when it should, one choice at a time: once a burst
+// of changes settles, when a preference about the workspace enters memory,
 // and once ahead of the user's return while they are away.
 func (c *core) runComposer(ctx context.Context) {
 	tick := time.NewTicker(composerPoll)
@@ -321,9 +270,8 @@ func (c *core) runComposer(ctx context.Context) {
 	d := debouncer{wait: composerDebounce, maxWait: composerDebounceMax}
 	stamp := c.queueStamp() + c.poolStamp() + c.gestureStamp()
 	prefSeen, prefChanged, _ := c.workspacePrefStamp()
-	show, showSeen := c.shown(time.Now())
 	checked := time.Time{}
-	if c.lastComposition() == nil {
+	if c.lastChoice() == nil {
 		c.recompose(momentChange, "")
 	}
 	for {
@@ -336,17 +284,6 @@ func (c *core) runComposer(ctx context.Context) {
 		if s := c.queueStamp() + c.poolStamp() + c.gestureStamp(); s != stamp { // a gesture of the user's: at once, debounced
 			stamp = s
 			d.changed(now)
-		}
-		// The brain put objects in front, or what it put there expired.
-		if sh, seq := c.shown(now); seq != showSeen || (sh == nil) != (show == nil) {
-			show, showSeen = sh, seq
-			d = debouncer{wait: d.wait, maxWait: d.maxWait}
-			if sh != nil {
-				c.recompose(momentShow, sh.Why)
-			} else {
-				c.recompose(c.composeMoment(), "")
-			}
-			continue
 		}
 		// A preference about the workspace entered memory (or changed, or
 		// left it), not any message of the user's.
@@ -368,7 +305,7 @@ func (c *core) runComposer(ctx context.Context) {
 		// Away: the user's return is composed once, ahead of it.
 		if now.Sub(checked) >= time.Minute {
 			checked = now
-			if last := c.lastComposition(); last != nil && last.Moment != momentArrival && c.composeMoment() == momentArrival {
+			if last := c.lastChoice(); last != nil && last.Moment != momentArrival && c.composeMoment() == momentArrival {
 				c.recompose(momentArrival, "")
 			}
 		}

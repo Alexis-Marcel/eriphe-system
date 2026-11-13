@@ -193,7 +193,6 @@ func newMCPServer(c *core) *mcp.Server {
 	registerSkillWriteTool(s, c)    // write_skill (skill_write.go)
 	registerSkillRunsTool(s, c)     // skill_runs (skill_report.go)
 	registerMonitorTools(s, c)      // write_monitor, monitors (monitors.go)
-	registerWorkspaceTools(s, c)    // workspace_show, workspace_walkthrough (workspace.go)
 	registerWorkspaceArrange(s, c)  // workspace_arrange (workspace_gestures.go)
 	registerBrainSurfaceTools(s, c) // surface_write, surface_remove, workspace_read, catalog_read (workspace_tools.go)
 	registerNotifyTools(s, c)       // notify, notifications, rule

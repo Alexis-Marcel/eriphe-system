@@ -172,8 +172,6 @@ func (w *web) routes() http.Handler {
 
 	mux.Handle("GET /{$}", w.auth(w.handleHome))
 	mux.Handle("GET /events", w.auth(w.handleEvents))
-	mux.Handle("GET /api/attention", w.auth(w.handleAttention))     // web_sse.go
-	mux.Handle("GET /api/composition", w.auth(w.handleComposition)) // web_composition.go
 	// A message carries its attachments: the body may hold them all, and a little more.
 	mux.Handle("POST /messages", http.MaxBytesHandler(w.auth(w.handleSend), maxAttachments*maxAttachmentSize+1<<20))
 	mux.Handle("GET /attachments/{id}", w.auth(w.handleAttachment))
@@ -182,8 +180,6 @@ func (w *web) routes() http.Handler {
 	mux.Handle("POST /tasks/{id}/answer", w.auth(w.handleAnswer))
 	mux.Handle("POST /tasks/{id}/reply", w.auth(w.handleReply))
 	mux.Handle("POST /tasks/{id}/stop", w.auth(w.handleStop))
-	mux.Handle("GET /api/objects/{ref...}", w.auth(w.handleObject)) // web_objects.go
-	mux.Handle("POST /api/objects", http.MaxBytesHandler(w.auth(w.handleObjects), 1<<20))
 
 	// The settings' list of entries: the first level on a phone. A wide
 	// screen has the list as its sidebar and opens the first entry, the

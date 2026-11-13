@@ -889,7 +889,7 @@ An assistant (a skill's run, a session lead) says what deserves the user's atten
 
 `refs` name the objects it is about, `<kind>:<id>` with a kind among `mail`, `agenda`
 (`YYYY-MM-DD`), `event`, `session`, `card`, `task`, `project`, `alert` and `surface` (a surface of
-the workspace, by its id); only the form is checked, by `parseRef` (`objects.go`). An item about a
+the workspace, by its id); only the form is checked, by `parseRef`. An item about a
 surface is shown by that surface (no `q-` surface of its own) and leaves the queue with it.
 `weight` is 5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1 background; `why` is
 cut to 80 characters, `say` is optional. One block alone, or refs given as one string, are read as
@@ -2495,10 +2495,7 @@ nothing happens. A notification held for the brief waits for the return only: th
 brief (« Pendant ton absence : … »), which tells it even when its item was delivered (weight 4, its
 push kept back by the quiet hours), clears the notification's hold and writes the kv `last_brief`. Nothing waits past its cap: a weight 3 item goes two hours after it entered (checked
 every minute), a lighter one at the next breakpoint, the next return at the latest. The workspace
-reads it as JSON at `GET /api/attention` (`{"items": [{ref, weight, why, say, source, time, held,
-due}]}`, `held` while it waits for a breakpoint, `due` its cap; the workspace's session; without
-one, 401) and as the event stream's `attention` event, sent when it changes; the brain's turn lists
-the open items (`[en attente de … : …]`), the heaviest first, a held one marked « retenu »: nothing
+shows the open items as surfaces; the brain's turn lists the open items (`[en attente de … : …]`), the heaviest first, a held one marked « retenu »: nothing
 the brain does waits on it. A queue made by v0.156.0 gets its new columns when eriphe-core opens
 the database (`schemaFixes` in `store.go`), its items kept as delivered. A plain yes or no answers a card in words only when the message is
 the user's own (workspace, Telegram or a trusted channel; never a channel the user did not trust, nor `/v1/messages`, whose token may
@@ -2674,43 +2671,6 @@ on IPv4 only, so that clients keep their own address. At most two
 argon2 hashes are computed at once. Changing the password ends the other sessions.
 The bearer-token API is unchanged for the CLI and the nodes.
 
-### Objects by ref (`objects.go`)
-
-Every object the workspace shows is named by a ref, `kind:id`, and read on demand from its
-source: a composition carries refs, never copies. One parser reads them:
-
-| Ref | Object | Source |
-|---|---|---|
-| `mail:<id>` | a message (headers, body, attachments listed) | the mail server's `read_message`, a peek: never marked read |
-| `agenda:<YYYY-MM-DD>` | the user's day, its events | the calendar server's `list_events {"from": D, "days": 1}` |
-| `event:<id>` | an event | the calendar server's `get_event` |
-| `session:<id>` | a work session and its steps | the store |
-| `card:<id>` | a card of the conversation and what it proposes | the store, its proposal read now |
-| `task:<id>` | a task | the store |
-| `project:<name>` | a project: its progress card | the memory (`progress`, subject `project:<name>`) |
-| `alert:<id>` | none yet: answers 501 | |
-
-Mail and calendar are read by the tool their card names (`Objects` in `tool_cards.go`), from the
-workspace's server of that tool, as the brain would: the
-tool must be one of the brain's, read-only by its own annotation and a free read in the user's
-grid, else the read is refused (403) before any call; a read gets 5 s. The JSON of each kind is
-its Go type (`Object`, with one of `mail`, `agenda`, `event`, `session`, `card`, `task`,
-`project`); the front follows it. `related` lists the refs an object relates to, computed: a
-dated object (a message, an event, an intention due) and the agenda of that day, in the user's
-zone; a card and what its proposal comes from (the task a memory was drawn from, the task a start
-would run, the session that asks); a day and its events; a session and its steps' tasks; a task
-and its session.
-
-The workspace's session reads them (the cookie; a request without one gets 401, never the login
-page):
-
-- `GET /api/objects/{ref}`: one object; `404` for a ref that does not parse or names nothing,
-  `403` for a read the guards refuse, `502` with a short reason when its server fails or does
-  not answer in time, `501` for a kind without a source yet. An error is `{"error", "status"}`.
-- `POST /api/objects` with `{"refs": [...]}` (at most 50, the CSRF token in `X-CSRF-Token`):
-  `{"objects": [{"ref", "object"} or {"ref", "error", "status"}]}`, in the order asked, each
-  read on its own, 8 at once.
-
 ### The layout and the composer (`workspace_layout.go`, `workspace_pool.go`, `composer.go`)
 
 The workspace is one dynamic page of [surfaces](#surfaces-and-their-sources-surfacesgo). Where each
@@ -2777,8 +2737,8 @@ stopping after 30 turns: each turn carries all it needs. Its instructions are
 `composer-prompt.md` (French). It never writes content.
 
 A turn (`composerTurn`, from `poolSnapshot`) holds the moment (the time; the user's arrival after
-an absence, or their work and what changed: the pool or the queue, a new workspace preference,
-objects the brain put in front), the user's language (Eriphe's line and the whys are written in
+an absence, or their work and what changed: the pool or the queue, a new workspace preference),
+the user's language (Eriphe's line and the whys are written in
 it), the surface they opened and the conversation's topic (their last message, as data), the
 screen, their [preferences](#preferences-gestures-and-the-brains-tools-workspacego) from memory,
 their recent gestures (2 hours, 10 at most), the queue (each item with the surface showing it,
@@ -2815,14 +2775,8 @@ after the last change, 15 s at most after the first). A workspace preference ent
 changed) chooses at once, as a remark, with its words (`workspacePrefStamp`); one leaving it
 chooses again; a message of the user's does not. A gesture of the user's on the page (any but
 `ignored`, which the layout itself often causes) is a change like the pool's: the composer chooses
-again once the burst settles (`gestureStamp`). `workspace_show` chooses at once (moment
-`show`). While the user has been away 20 minutes or more (`awaySince`), the next choice is for
+again once the burst settles (`gestureStamp`). While the user has been away 20 minutes or more (`awaySince`), the next choice is for
 their return, and one is made ahead of it.
-
-**The old canvas's composition** (`composition.go`): until the per-kind canvas goes (#424), code
-still writes a composition by ref for it, by weight (`fallbackComposition`, with what
-`workspace_show` put in front first), served by `GET /api/composition` and the event stream's
-`composition`. The page shows that canvas only when there is no surface at all.
 
 **Settings → Agents → Workspace composer**: on or off, and its agent (a Sonnet one by default,
 else the default agent). Off by default; off, nothing is sent to a model, and code lays out by
@@ -2874,20 +2828,20 @@ tools.
   the queue's titles and whys recall (`workspacePreferences`), and composes at once when one
   enters memory, changes or leaves it (`workspacePrefStamp`). A proposed preference is not read.
 - **Gestures** (`workspace.go`, `workspace_gestures.go`). The page tells eriphe-core what the user
-  does: `opened` (a tile or a chip opened: the page's own action `open`), `ignored` (a tile in
-  front while the page was visible that left the grid, folded or gone, without being opened),
-  `closed`, `moved` and `resized` (a tile's three small buttons), and `about` (a message written
-  with a surface open). `POST /api/espace/gesture` with `{what, ref, title}`, and for `moved` and
-  `resized` the tile's new `size`, `col` and `row` (204; 400 for another gesture, a ref that does
-  not parse, or a place off the grid; 404 for a surface there is not; the workspace's session,
-  CSRF in `X-CSRF-Token`); `closed`, `moved` and `resized` are about a surface
-  (`surface:<id>`). Kept in `workspace_log`: `opened`, `ignored` and `about` once per ref in
+  does to a surface (`surface:<id>`): `opened` (a tile or a chip opened: the page's own action
+  `open`), `ignored` (a tile in front while the page was visible that left the grid, folded or
+  gone, without being opened), `closed`, `moved` and `resized` (a tile's three small buttons), and
+  `about` (a message written with a surface open). `POST /api/espace/gesture` with `{what, ref}`,
+  and for `moved` and `resized` the tile's new `size`, `col` and `row` (204; 400 for another
+  gesture, a ref that is not a surface's, or a place off the grid; 404 for a surface there is not;
+  the workspace's session, CSRF in `X-CSRF-Token`). Kept in `workspace_log`: `opened`, `ignored`
+  and `about` once per surface in
   10 minutes, every close, and every move or resize but one that goes on the one just before
   (the same tile, within a minute: the arrow keys); 30 days at most. A surface's title is core's, never
   the page's, and only when its author wrote it in a clean turn. Each gesture but `ignored`
   makes the composer choose again (debounced), its turn listing the last ten; the extraction
   reads a window's gestures as one segment of its transcript (`from="workspace"`, ref
-  `workspace:<id>`, trust external: the titles are the objects'); only a repeated pattern may
+  `workspace:<id>`, trust external: the titles are the surfaces'); only a repeated pattern may
   give an inferred preference. No counter, no score in code.
 - **The session's placement** (`workspace_gestures.go`). What the user closed is not shown again
   in the session: folded last in the chip strip, marked `closed`, whatever the composer chooses
@@ -2912,8 +2866,8 @@ tools.
   ses gestes : 10:02 ouvert agenda ; 10:03 fermé meteo ; 10:05 déplacé notes ; 10:06 écrit à propos de agenda]
   ```
 
-  A title is quoted only when its author wrote it in a clean turn; a gesture only by its ref (an
-  object's title may be a mail's subject). `workspace_read` has the detail, the page included
+  A title is quoted only when its author wrote it in a clean turn; a gesture only by its surface's
+  id. `workspace_read` has the detail, the page included
   (`screen`: each tile's id, size, col, row and `pinned`; `open`, `folded`, `closed`).
 - **`workspace_arrange`** (`items`: 8 at most, each `{id, size, col, row}`, size s, m, l or xl,
   one xl at most, col and row both or neither; `reset`): the brain arranges the workspace as the
@@ -2922,24 +2876,16 @@ tools.
   is no surface's, a size or a place off the grid is refused by name; a surface the user closed
   and the brain places is shown again. `reset` drops the session's placements first (closed
   surfaces stay closed). It answers where each went (`{id, size, col, row}`, or `folded`).
-- **A message about what is open.** A message written on `/espace` while a module is open
-  carries its ref (`POST /messages` with `about`; kept as `about_msg:<seq>` when it parses): the
-  brain reads it as `[Sam 10:02 #12 · à propos de mail:…]`, the extraction as
-  `[written about <ref>, open on the workspace]`. « Montre-m'en moins », « lance une recherche
-  là-dessus » are said in words.
-- **`workspace_show`** (`refs`, 6 at most, the most important first; `why`): puts objects in
-  front at once, queued or not. The composer composes again (moment `show`) with them as items
-  of the snapshot (weight 4 at least, the brain's why) and as modules first in every
-  composition (`requireFront`), the composer's or the fallback's, for an hour at most or until
-  the next call; no refs gives the front back to the composer.
-- **`workspace_walkthrough`** (`refs`, 12 at most, or none): the open workspace pages walk the
-  user through them one module at a time (none: through what the page shows that matters). It
-  reaches the page on the event stream's `walkthrough` event (`{id, refs, at}`), sent once to
-  each stream, and to one opened within 20 s of it; the page reads the objects it does not have.
-  « Présente-moi » is said to Eriphe, who calls it.
-
+- **A message about what is open.** A message written on `/espace` while a surface is open
+  carries it (`POST /messages` with `about` `surface:<id>`; kept as `about_msg:<seq>` when it names
+  a surface): the brain reads it as `[Sam 10:02 #12 · à propos de surface:…]`, the extraction as
+  `[written about surface:<id>, open on the workspace]`. « Montre-m'en moins », « lance une
+  recherche là-dessus » are said in words.
 The display rules of #402 are gone: their table (`attention_rules`, dropped when an older
-database opens, with their `showrule` cards: `displayRulesGone`), their API, page and tool.
+database opens, with their `showrule` cards: `displayRulesGone`), their API, page and tool. So is
+the first workspace's composition by ref and its views by kind of object (#424): its kv
+`composition`, and the gestures and `about_msg` that named an object rather than a surface, go
+when an older database opens (`refCompositionGone`).
 
 ### The composed workspace (`/espace`)
 
@@ -2961,37 +2907,15 @@ by class showing where, or with the arrow keys), the size button changes its siz
 up, from xl back to s; + or − and the arrow keys), the cross closes it for the session. The page
 shows the change at once and sends the gesture; core's next layout places the others around it.
 A tile that leaves the grid unopened while the page is visible is sent as `ignored`. With no
-surface at all, the page shows the old per-kind canvas below, until it goes (#424); its
-walkthrough works only there, and what `workspace_show` puts in front is seen only there.
+surface at all, Eriphe says so in the column (`espace.empty`): never an empty grid without a word.
+The chat is a narrow column, wider on demand, and a message written there goes to the
+conversation; there is no menu and no button that keeps a rule: what the user wants of a surface
+is said to Eriphe.
 
-**The old canvas** (`web/espace/src/engine.ts`, `views.tsx`): each module of the composition by
-ref takes an area by its weight (xl 30 cells, l 12, m 6, s 3; one xl at most). What does not fit
-shrinks, then becomes a chip at the top, with its source; with room left, what weighs 3 or more
-grows one step, never into xl. A ref that names no object is dropped.
+A 401 sends the page to the sign-in. `web/espace/src/data.ts` is the one place that talks to
+eriphe-core; a surface's proposal is read from `GET /api/proposals/{ref}`.
 
-A click on a module opens it in focus, in the centre, with the objects related to it beside it
-(an object's `related` refs, what names it in its own, a group's members), and Eriphe comments in
-one line. There is no menu and no button that keeps a rule: what the user wants of a module is
-said to Eriphe, in the chat, which sends the open module's ref with the message
-([`about`](#preferences-gestures-and-the-brains-tools-workspacego)); what they open, and what
-leaves the screen unopened, goes to eriphe-core as gestures. Everything arrives at once; a
-walkthrough, one module at a time, is something the user asks Eriphe for
-(`workspace_walkthrough`, the event stream's `walkthrough`). The chat is a narrow column, wider on
-demand, and a message written there goes to the conversation. Views are generic, one per kind of [object](#objects-by-ref-objectsgo)
-(mail, agenda day, event, card, session, task, project, and the composition's groups), each with a
-short and a full form; a kind without a view shows its title.
-
-Data: `/api/composition` (#386), else the attention queue `/api/attention` laid out by weight;
-the objects, and those they relate to, from `POST /api/objects` (50 refs a request; a ref that
-cannot be read is left out); read again on the event stream's `attention` and `composition`
-events. A 401 sends the page to the sign-in. Only when neither the composition nor the attention
-queue is served (404), or on the dev server, the page shows made-up data in the same shape
-(`web/espace/src/fixtures.ts`) and says it is an example. `web/espace/src/data.ts` is the one
-place that talks to eriphe-core; card answers go to `POST /cards/{id}/yes|no`, and a
-surface's proposal is read from `GET /api/proposals/{ref}`.
-
-**A2UI surfaces** (`web/espace/src/a2ui/`, epic #415). Beside the composition by ref, the page
-renders [A2UI v1.0](https://github.com/a2ui-project/a2ui) surfaces with the workspace catalog's
+**A2UI surfaces** (`web/espace/src/a2ui/`, epic #415). The page renders [A2UI v1.0](https://github.com/a2ui-project/a2ui) surfaces with the workspace catalog's
 components, ours, written in React. The engine is the official one: `@a2ui/web_core` keeps each
 surface (components upserted by id, the data model, JSON Pointer bindings, child-list templates,
 actions, validation) and `@a2ui/react`'s `createComponentImplementation` gives each component its
@@ -3067,9 +2991,9 @@ console for violations.
 ```sh
 cd core/web/espace
 npm ci
-npm test            # the layout engine's and the A2UI surfaces' tests (vitest)
+npm test            # the grid's, the data layer's and the A2UI surfaces' tests (vitest)
 npm run build       # type checks, then writes ../static/espace/espace.js and espace.css
-npm run dev         # http://localhost:5300, on the fixtures, no eriphe-core needed
+npm run dev         # http://localhost:5300, on a made-up surface, no eriphe-core needed
 ```
 
 CI rebuilds and fails when the committed files differ from the build. The words are in
@@ -3079,7 +3003,7 @@ CI rebuilds and fails when the committed files differ from the build. The words 
 
 **CSP.** The page keeps the workspace's policy, with no `'unsafe-inline'`: the shell
 (`templates/espace.html`) loads one script and one stylesheet; the app's words come from JSON.
-A module's place on the grid is a class (`.at-c3 .at-r0 .w-6 .h-5`), never a `style` attribute,
+A tile's place on the grid is a class (`.at-c3 .at-r0 .w-6 .h-5`), never a `style` attribute,
 which the policy refuses (`style-src-attr`). Motion animates by setting the element's style
 object from script (CSSOM), which a CSP does not govern; `AnimatePresence`'s `popLayout` mode is
 not used, since it injects a `<style>` element.

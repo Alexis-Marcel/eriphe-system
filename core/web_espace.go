@@ -109,12 +109,11 @@ func (w *web) handleSurfaceError(rw http.ResponseWriter, r *http.Request, _ *ses
 
 // gestureIn is a gesture of the user's on the workspace (workspace.go).
 type gestureIn struct {
-	What  string `json:"what"` // opened, ignored, closed, moved, resized
-	Ref   string `json:"ref"`
-	Title string `json:"title"`
-	Size  string `json:"size,omitempty"` // moved, resized: the tile's size and place
-	Col   *int   `json:"col,omitempty"`
-	Row   *int   `json:"row,omitempty"`
+	What string `json:"what"`           // opened, ignored, closed, moved, resized
+	Ref  string `json:"ref"`            // surface:<id>
+	Size string `json:"size,omitempty"` // moved, resized: the tile's size and place
+	Col  *int   `json:"col,omitempty"`
+	Row  *int   `json:"row,omitempty"`
 }
 
 // handleGesture is POST /api/espace/gesture: the page says what the user
@@ -144,7 +143,7 @@ func (w *web) handleGesture(rw http.ResponseWriter, r *http.Request, _ *session)
 			err = w.c.placeSurface(id, in.What, in.Size, *in.Col, *in.Row, now)
 		}
 	default:
-		err = w.c.noteGesture(in.What, in.Ref, in.Title, now)
+		err = w.c.noteGesture(in.What, in.Ref, now)
 	}
 	switch {
 	case errors.Is(err, errNoSurface):

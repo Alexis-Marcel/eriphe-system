@@ -1,61 +1,12 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
-	"fmt"
-	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
-
-func snapshotOf(items ...attentionItem) compositionSnapshot {
-	s := compositionSnapshot{Moment: momentChange, Now: time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)}
-	for i, it := range items {
-		if it.Time.IsZero() {
-			it.Time = s.Now.Add(-time.Duration(i+1) * time.Minute)
-		}
-		kind, _, _ := strings.Cut(it.Ref, ":")
-		s.Items = append(s.Items, snapshotItem{attentionItem: it, Kind: kind})
-	}
-	return s
-}
-
-func refsOf(items []compositionItem) string {
-	var out []string
-	for _, it := range items {
-		out = append(out, fmt.Sprintf("%s/%d", it.Ref, it.Weight))
-	}
-	return strings.Join(out, ",")
-}
-
-// The fallback composes by weight, then by time: the heaviest as modules,
-// the rest as chips.
-func TestFallbackComposition(t *testing.T) {
-	var items []attentionItem
-	for i := range compositionItemsMax + compositionChipsMax + 2 {
-		items = append(items, attentionItem{Ref: "mail:" + strconv.Itoa(i), Weight: 1 + i%3, Why: strings.Repeat("y", 90)})
-	}
-	items = append(items, attentionItem{Ref: "card:5", Weight: 5, Why: "Approve the payment"})
-	comp := fallbackComposition(snapshotOf(items...))
-	if comp.By != fallbackBy || len(comp.Items) != compositionItemsMax || len(comp.Chips) != compositionChipsMax {
-		t.Fatalf("composition %+v", comp)
-	}
-	if comp.Items[0].Ref != "card:5" || comp.Items[1].Weight != 3 || comp.Items[len(comp.Items)-1].Weight != 3 || comp.Ambient != "urgent" || comp.Mode != modeSide {
-		t.Errorf("order %s, ambient %s", refsOf(comp.Items), comp.Ambient)
-	}
-	// Of equal weight, the latest first.
-	if comp.Items[1].Ref != "mail:2" || runeLen(comp.Items[1].Why) > compositionWhyMax+1 {
-		t.Errorf("second %+v", comp.Items[1])
-	}
-	if empty := fallbackComposition(snapshotOf()); empty.Mode != modeCenter || len(empty.Items) != 0 || empty.Ambient != "calm" {
-		t.Errorf("empty %+v", empty)
-	}
-}
 
 // A burst of changes is composed once it settles, or at most maxWait
 // after it began.
@@ -97,9 +48,6 @@ func composerCore(t *testing.T) (*catalogCore, string) {
 		t.Fatal("the composer did not start")
 	}
 	c.store.updateTask(id, map[string]any{"state": stateIdle})
-	old := snapshotTitles
-	snapshotTitles = 200 * time.Millisecond
-	t.Cleanup(func() { snapshotTitles = old })
 	return c, id
 }
 
@@ -265,17 +213,17 @@ func TestComposerTimeout(t *testing.T) {
 	}
 }
 
-// Without the composer, a composition is made by weight at once.
+// Without the composer, a choice is made by weight at once.
 func TestComposerOff(t *testing.T) {
 	c := brainCore(t, &BrainConfig{})
 	c.attend(attentionItem{Ref: "mail:1", Weight: 2, Why: "A note"})
 	if c.composerReady() {
 		t.Fatal("ready without a composer")
 	}
-	if comp := c.currentComposition(); comp.By != fallbackBy || refsOf(comp.Items) != "mail:1/2" || c.lastComposition() != nil {
-		t.Fatalf("composition %+v", comp)
+	if c.lastChoice() != nil {
+		t.Fatal("a choice before the first")
 	}
-	if ch := c.recompose(momentChange, ""); ch.By != fallbackBy || c.lastComposition() == nil || c.lastChoice() == nil {
+	if ch := c.recompose(momentChange, ""); ch.By != fallbackBy || c.lastChoice() == nil {
 		t.Fatalf("choice %+v", ch)
 	}
 	if l := c.currentLayout(); len(l.Items) != 1 || l.Items[0].ID != "q-mail-1" {
@@ -284,63 +232,6 @@ func TestComposerOff(t *testing.T) {
 	if n := len(tasksOfKind(t, c.core, assistantRoleComposer)); n != 0 {
 		t.Fatalf("%d composer tasks", n)
 	}
-}
-
-// The workspace reads the composition behind its session, and the event
-// stream says when it changes; Settings turns the composer on.
-func TestWebComposition(t *testing.T) {
-	tw := newTestWeb(t)
-	tw.setup()
-	anon := &testWeb{t: t, srv: tw.srv, hc: &http.Client{Transport: tw.hc.Transport, CheckRedirect: tw.hc.CheckRedirect}}
-	if code, _, _ := anon.do("GET", "/api/composition", nil, nil); code != http.StatusUnauthorized {
-		t.Fatalf("composition without a session: %d", code)
-	}
-	tw.c.attend(attentionItem{Ref: "mail:7", Weight: 2, Why: "a reply from example.org", Say: "Sam's friend wrote back"})
-	code, body, h := tw.do("GET", "/api/composition", nil, nil)
-	var comp map[string]any
-	if code != 200 || !strings.HasPrefix(h.Get("Content-Type"), "application/json") || json.Unmarshal([]byte(body), &comp) != nil {
-		t.Fatalf("composition: %d %s", code, body)
-	}
-	for _, k := range []string{"mode", "eriphe", "items", "chips", "at", "by"} {
-		if _, ok := comp[k]; !ok {
-			t.Errorf("no %q in %s", k, body)
-		}
-	}
-	if comp["by"] != fallbackBy || !strings.Contains(body, `"ref":"mail:7","weight":2`) || !strings.Contains(body, `"say":"Sam's friend wrote back"`) {
-		t.Fatalf("composition %s", body)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)
-	resp, err := tw.hc.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		tw.c.keepComposition(composition{Mode: modeSide, Eriphe: "Un mail de ton ami.", Items: []compositionItem{{Ref: "mail:7", Weight: 3, Why: "Il répond"}},
-			Chips: []string{}, At: time.Now(), By: composedBy})
-	}()
-	sc := bufio.NewScanner(resp.Body)
-	event := ""
-	for sc.Scan() {
-		line := sc.Text()
-		if v, ok := strings.CutPrefix(line, "event: "); ok {
-			event = v
-		}
-		if data, ok := strings.CutPrefix(line, "data: "); ok && event == "composition" {
-			var got composition
-			if json.Unmarshal([]byte(data), &got) != nil {
-				t.Fatalf("composition event %q", data)
-			}
-			if got.Eriphe == "Un mail de ton ami." && got.By == composedBy {
-				return
-			}
-		}
-	}
-	t.Fatalf("no composition event: %v", sc.Err())
 }
 
 func TestWebComposerSettings(t *testing.T) {

@@ -306,7 +306,7 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 		return
 	}
 	if about := strings.TrimSpace(r.PostFormValue("about")); about != "" {
-		w.c.noteAbout(seq, about) // written with a module open on the workspace (workspace.go)
+		w.c.noteAbout(seq, about) // written with a surface open on the workspace (workspace.go)
 	}
 	w.c.resolveByText(r.Context(), int(seq)) // a plain yes or no to the card just above (convo_cards.go)
 	w.c.ping()

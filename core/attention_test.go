@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -314,5 +315,34 @@ func TestAttentionSessionEndBreakpoint(t *testing.T) {
 	c.emitLogged(journalEvent{Kind: evSessionEnded, Key: "session:2", Source: "session"})
 	if attentionOf(c, "mail:1").Held {
 		t.Fatal("not released at the session's end")
+	}
+}
+
+// A ref is a known kind, a colon and an id of that kind's form.
+func TestParseRef(t *testing.T) {
+	for _, tc := range []struct{ in, kind, id string }{
+		{"mail:INBOX/42", refMail, "INBOX/42"},
+		{"mail:a:b:c", refMail, "a:b:c"},
+		{"agenda:2026-11-12", refAgenda, "2026-11-12"},
+		{"event:ev-1@example.org", refEvent, "ev-1@example.org"},
+		{"session:3", refSession, "3"},
+		{"card:12", refCard, "12"},
+		{"task:t-abc", refTask, "t-abc"},
+		{"project:portfolio", refProject, "portfolio"},
+		{"alert:7", refAlert, "7"},
+		{"surface:agenda", refSurface, "agenda"},
+		{" task:t-1 ", refTask, "t-1"},
+	} {
+		r, err := parseRef(tc.in)
+		if err != nil || r.Kind != tc.kind || r.ID != tc.id || r.String() != tc.kind+":"+tc.id {
+			t.Errorf("%q: %+v %v", tc.in, r, err)
+		}
+	}
+	for _, bad := range []string{"", "mail", "mail:", "note:1", "agenda:12/11/2026", "agenda:2026-13-01",
+		"session:x", "session:0", "card:-1", "surface:Not An Id", "task:" + strings.Repeat("x", 1001)} {
+		var e errBadRef
+		if _, err := parseRef(bad); !errors.As(err, &e) {
+			t.Errorf("%q parsed: %v", bad, err)
+		}
 	}
 }

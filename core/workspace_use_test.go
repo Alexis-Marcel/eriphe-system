@@ -72,7 +72,7 @@ func TestSurfaceUseFromLayout(t *testing.T) {
 	}
 	c.relayout()                                                     // nothing changed: nothing starts twice
 	c.store.db.Exec(`UPDATE workspace_front SET shown = shown - 60`) // put in front a minute ago
-	c.noteGesture(gestureOpened, "surface:"+a.ID, "a", now)
+	c.noteGesture(gestureOpened, "surface:"+a.ID, now)
 	if err := c.surfaceRemove(b.ID, surfaceByUser); err != nil {
 		t.Fatal(err)
 	}

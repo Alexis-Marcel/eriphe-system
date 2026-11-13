@@ -18,19 +18,3 @@ export type Words = { t: T; lang: Lang };
 
 export const WordsContext = createContext<Words>({ t: makeT({}), lang: "fr" });
 export const useWords = () => useContext(WordsContext);
-
-const locale = (lang: Lang) => (lang === "en" ? "en-GB" : "fr-FR");
-
-// A time of day, "09:30" or "09 h 30" as each language writes it.
-export function clock(lang: Lang, iso: string): string {
-  const hm = iso.length > 5 ? iso.slice(11, 16) : iso;
-  return lang === "fr" ? hm.replace(":", " h ") : hm;
-}
-
-export function dayLabel(lang: Lang, date: string): string {
-  return new Date(date + "T12:00").toLocaleDateString(locale(lang), { weekday: "long", day: "numeric", month: "long" });
-}
-
-export function shortDate(lang: Lang, date: string): string {
-  return new Date(date.slice(0, 10) + "T12:00").toLocaleDateString(locale(lang), { day: "numeric", month: "short" });
-}

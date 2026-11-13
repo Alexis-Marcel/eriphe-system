@@ -320,7 +320,7 @@ func (c *core) closeSurface(id string, now time.Time) error {
 	if s.Author == surfaceAuthorCore {
 		item, queued = c.queueItemOf(id)
 	}
-	c.noteGesture(gestureClosed, "surface:"+id, "", now)
+	c.noteGesture(gestureClosed, "surface:"+id, now)
 	if c.workspaceFocus(now) == id {
 		c.focusSurface("", now)
 	}
@@ -346,7 +346,7 @@ func (c *core) placeSurface(id, what, size string, col, row int, now time.Time) 
 	if !fitsGrid(size, col, row) {
 		return errPlacement
 	}
-	c.noteGesture(what, "surface:"+id, "", now)
+	c.noteGesture(what, "surface:"+id, now)
 	c.changePlacement(now, func(p *userPlacement) {
 		delete(p.Closed, id)
 		p.Pins[id] = tilePin{Size: size, Col: col, Row: row, Placed: true, At: now.Unix(), By: placedByUser}
