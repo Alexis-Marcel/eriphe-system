@@ -1064,7 +1064,8 @@ by code from the thread's data (#468): it never depends on a model remembering t
   surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active
   thread that has none its surface (a surface another author wrote at its id goes). Steps are
   shown through a generic list (`threadSurfaceStep`: key, label, kind, state, time, card ref,
-  checks, note, external, waits, yours: a card shown while it waits, its outcome after), so
+  checks, note, external, waits, yours: a card shown while it waits; a call's card stays after
+  with how its run went; a card gone is not shown), so
   a new kind of step plugs in by its mapping (`threadSurfaceSteps`).
 - **The holder's part**: who holds the thread (the brain, or its lead) may add one with
   `surface_write` on `thread-<id>`: a state block, points to see, a diff (`Code`), a `Link`. It is
@@ -3561,7 +3562,7 @@ the page, with the session's cookie and CSRF token (401 without a session):
 
 | Endpoint | Takes | Answers |
 |---|---|---|
-| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`), of [the grammar](#the-actions-of-a-surface) | 204; 400 not a valid action, or one refused (told to the surface's author); 404 no such surface, or an answer to a proposal no card carries; 409 a proposal that no longer waits |
+| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`), of [the grammar](#the-actions-of-a-surface) | 204; 400 not a valid action, or one refused (told to the surface's author); 404 no such surface, or an answer to a proposal no card carries; 409 a proposal, or a user step, that no longer waits |
 | `POST /api/espace/error` | an A2UI v1.0 `error` naming its surface | 204, kept for the author (`surfaceError`); 400, 404 |
 
 #### The actions of a surface

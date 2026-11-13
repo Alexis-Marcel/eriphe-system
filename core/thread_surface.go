@@ -112,7 +112,7 @@ type threadSurfaceStep struct {
 	Kind     string    // task, choice, approval, call, user, check, deadline
 	State    string    // a Timeline item's: done, current, pending, failed
 	At       time.Time // when it ended, else when it started
-	Card     string    // the ref of its proposal, shown in place: answered there while it waits, then its outcome
+	Card     string    // the ref of its proposal, shown in place: answered there while it waits, then a call's outcome
 	Check    string    // ok or failed: what its checks said
 	Note     string    // the last word on it
 	External bool      // what it reports may come from outside
@@ -155,18 +155,24 @@ func (c *core) threadSurfaceSteps(s Thread, steps []Step) []threadSurfaceStep {
 		case st.Status == stepVerified:
 			v.Check = "ok"
 		}
+		// A step's card: while it waits; once decided, only a call's, which
+		// then shows how its run went. A card gone is not shown.
 		if id, ok := asks[st.Key]; ok {
-			v.Card = proposalRef(cardThread, id)
-		} else {
-			v.Card = c.stepCard(s.ID, st)
+			v.Card, v.Waits = proposalRef(cardThread, id), true
+		} else if ref := c.stepCard(s.ID, st); ref != "" {
+			switch state := c.cardState(ref); {
+			case state == cardPending:
+				v.Card, v.Waits = ref, true
+			case state != cardGone && st.Kind == stepCall:
+				v.Card = ref
+			}
 		}
 		if st.Kind == stepDeadline && st.DueAt > 0 && st.Ended == 0 {
 			v.At = time.Unix(st.DueAt, 0)
 		}
 		v.External = st.Tainted != "" || (st.Task != "" && c.taskResultTaint(st.Task) != "")
 		v.Yours = st.Kind == stepUser && st.Status == stepRunning
-		cardWaits := v.Card != "" && c.cardState(v.Card) == cardPending
-		v.Waits = cardWaits || v.Yours || (st.Kind == stepChoice && st.Status == stepRunning)
+		v.Waits = v.Waits || v.Yours || (st.Kind == stepChoice && st.Status == stepRunning)
 		out = append(out, v)
 	}
 	return out
@@ -338,8 +344,8 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		}
 		data["steps"] = items
 		add(comp{"id": "thread_steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/steps"}})
-		// A step's card that no longer waits shows its outcome (a call's
-		// execution followed) under the steps.
+		// A call's card, once decided, shows how its run went, under the
+		// steps.
 		for i, st := range steps {
 			if st.Card != "" && (!st.Waits || !s.active()) {
 				add(comp{"id": "thread_card_" + strconv.Itoa(i), "component": "Proposal", "proposalId": st.Card})

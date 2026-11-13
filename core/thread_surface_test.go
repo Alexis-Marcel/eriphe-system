@@ -226,8 +226,8 @@ func TestThreadSurfaceTainted(t *testing.T) {
 }
 
 // A step the user does shows « C'est fait »: its action names the thread
-// and the step as code wrote them, and is answered 501 until the engine
-// settles the user's steps; no author writes one.
+// and the step as code wrote them, and settles the step as the thread's
+// page does; no author writes one.
 func TestThreadSurfaceUserStep(t *testing.T) {
 	c := startCore(t)
 	tw := newTestWebFor(t, c)
@@ -388,9 +388,7 @@ func TestThreadSurfaceHeldStartAndTick(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, _, meta = threadSurfaceOf(t, c, th.ID)
-	// The card stays, under the timeline: it shows its outcome.
-	if comps := string(s.Components); !strings.Contains(comps, `"thread_steps","thread_card_0"`) || !strings.Contains(comps, proposalRef(cardTaskStart, start)) ||
-		strings.Contains(meta.Summary, "à toi") || s.Weight != threadWeight {
+	if strings.Contains(string(s.Components), proposalRef(cardTaskStart, start)) || strings.Contains(meta.Summary, "à toi") || s.Weight != threadWeight {
 		t.Fatalf("after the yes: %s %+v", s.Components, meta)
 	}
 
@@ -444,5 +442,59 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 	s, _, meta := threadSurfaceOf(t, c, th.ID)
 	if !strings.Contains(string(s.Components), `"thread_wait_0"`) || meta.Summary != "Le nom à toi" {
 		t.Errorf("a choice that waits: %s %+v", s.Components, meta)
+	}
+}
+
+// A call step's access card is shown in place while it waits, answered
+// there, then kept under the steps with how the call went. On a tainted
+// thread it is answered in the conversation only.
+func TestThreadSurfaceCallStep(t *testing.T) {
+	c := stepsCore(t)
+	tw := newTestWebFor(t, c)
+	csrf := tw.setup()
+	th := lightThread(t, c)
+	if _, err := c.addStep(context.Background(), th.ID, stepSpec{Key: "merge", Title: "Merge the PR", Kind: stepCall, Tool: mergeTool, Input: map[string]any{"number": 12}}, nil, "brain"); err != nil {
+		t.Fatal(err)
+	}
+	st := stepOf(t, c, th, "merge")
+	s, _, meta := threadSurfaceOf(t, c, th.ID)
+	comps := string(s.Components)
+	if !strings.Contains(comps, `"id":"thread_card_0","proposalId":"`+st.Card+`"`) || strings.Index(comps, "thread_card_0") > strings.Index(comps, `"thread_steps"`) ||
+		meta.Summary != "Merge the PR à toi" || s.Weight != threadWeightYours || !meta.Answers {
+		t.Fatalf("call card: %s %+v", comps, meta)
+	}
+	answer := actionOn("answer", s.ID, "thread_card_0", `{"proposal":"`+st.Card+`","answer":"yes"}`)
+	if code, b := postJSON(tw, "/api/espace/action", answer, csrf); code != http.StatusNoContent {
+		t.Fatalf("answer: %d %s", code, b)
+	}
+	waitStep(t, c, th, "merge", stepAccepted)
+	if state := c.cardState(st.Card); state != cardApproved {
+		t.Errorf("card %s", state)
+	}
+	s, _, meta = threadSurfaceOf(t, c, th.ID)
+	comps = string(s.Components)
+	if !strings.Contains(comps, `"thread_steps","thread_card_0"`) || !strings.Contains(comps, st.Card) || strings.Contains(meta.Summary, "à toi") {
+		t.Errorf("after the yes: %s %+v", comps, meta)
+	}
+
+	// Tainted: shown, not answered in place.
+	bad, err := c.openThread(threadIn{Title: "Mail", Goal: "Merge what the mail asks."}, []string{"mail:7"}, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.addStep(context.Background(), bad.ID, stepSpec{Key: "merge", Title: "Merge", Kind: stepCall, Tool: mergeTool, Input: map[string]any{"number": 13}}, nil, "brain"); err != nil {
+		t.Fatal(err)
+	}
+	st = stepOf(t, c, bad, "merge")
+	s, _, meta = threadSurfaceOf(t, c, bad.ID)
+	if st.Card == "" || !strings.Contains(string(s.Components), st.Card) || meta.Answers {
+		t.Fatalf("tainted call card: %+v %s %+v", st, s.Components, meta)
+	}
+	answer = actionOn("answer", s.ID, "thread_card_0", `{"proposal":"`+st.Card+`","answer":"yes"}`)
+	if code, b := postJSON(tw, "/api/espace/action", answer, csrf); code != http.StatusBadRequest {
+		t.Errorf("answered on a tainted thread: %d %s", code, b)
+	}
+	if state := c.cardState(st.Card); state != cardPending {
+		t.Errorf("tainted card %s", state)
 	}
 }
