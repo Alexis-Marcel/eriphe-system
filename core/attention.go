@@ -198,11 +198,11 @@ func (c *core) attendCard(x convoCard, p proposal, say, source string) {
 	if x.Kind == cardDigest || x.State != cardPending {
 		return
 	}
-	text := p.Text("fr")
+	text := p.Text(c.userLang())
 	if text == "" {
 		text = x.Text
 	}
-	c.attend(attentionItem{Ref: cardItemRef(x.ID), Weight: cardWeight(x.Kind), Why: tr("fr", "card.kind."+x.Kind) + " : " + text,
+	c.attend(attentionItem{Ref: cardItemRef(x.ID), Weight: cardWeight(x.Kind), Why: tr(c.userLang(), "card.kind."+x.Kind) + " : " + text,
 		Say: say, Source: source, Delivered: x.Seq > 0})
 }
 
@@ -310,9 +310,9 @@ func (c *core) attentionBreak(at string, now time.Time) int {
 	}
 	text := lines[0]
 	if len(lines) > 1 || at == breakReturn {
-		head := tr("fr", "attention.release")
+		head := tr(c.userLang(), "attention.release")
 		if at == breakReturn {
-			head = tr("fr", "attention.brief")
+			head = tr(c.userLang(), "attention.brief")
 		}
 		text = head + "\n- " + strings.Join(lines, "\n- ")
 	}

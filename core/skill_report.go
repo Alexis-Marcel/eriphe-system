@@ -112,7 +112,7 @@ func (c *core) runViewOf(r *skillRun, full bool) runView {
 			for _, f := range a.fields() {
 				lines = append(lines, f.Name+" : "+f.Value)
 			}
-			v.Asks = append(v.Asks, runAskView{ID: a.ID, Verb: callVerb(a.Call, "fr"), Value: truncate(strings.Join(lines, " · "), 300), State: a.State})
+			v.Asks = append(v.Asks, runAskView{ID: a.ID, Verb: callVerb(a.Call, c.userLang()), Value: truncate(strings.Join(lines, " · "), 300), State: a.State})
 		}
 		switch {
 		case a.State == startProposed:

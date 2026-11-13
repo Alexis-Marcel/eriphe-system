@@ -97,7 +97,7 @@ type convoCard struct {
 	Seq      int  // the message it is shown with; 0 while queued
 	Turn     bool // to be attached to the brain's next message
 	State    string
-	Text     string // what it said when made, in French: shown once its proposal is gone
+	Text     string // what it said when made, in the user's language (userLang): shown once its proposal is gone
 	Created  time.Time
 	Attached time.Time
 	Decided  time.Time
@@ -440,7 +440,7 @@ func (c *core) cardProposed(kind string, id int64) {
 	}
 	c.cardAgain(p)
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, turn, text, created) VALUES (?, ?, 1, ?, ?)
-		ON CONFLICT (ref) DO UPDATE SET turn = 1 WHERE seq = 0`, proposalRef(kind, id), kind, p.Text("fr"), time.Now().Unix())
+		ON CONFLICT (ref) DO UPDATE SET turn = 1 WHERE seq = 0`, proposalRef(kind, id), kind, p.Text(c.userLang()), time.Now().Unix())
 	c.proposalMoved(proposalRef(kind, id))
 }
 
@@ -470,7 +470,7 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 	if cardWeight(kind) < weightBlocksATask {
 		c.cardAgain(p)
 		c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)
-			ON CONFLICT (ref) DO UPDATE SET turn = 0 WHERE seq = 0`, ref, kind, p.Text("fr"), now)
+			ON CONFLICT (ref) DO UPDATE SET turn = 0 WHERE seq = 0`, ref, kind, p.Text(c.userLang()), now)
 		c.proposalMoved(ref)
 		if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
 			c.attendCard(x[0], p, text, source)
@@ -486,7 +486,7 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 	c.cardAgain(p)
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, seq, text, created, attached) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET seq = excluded.seq, turn = 0, attached = excluded.attached WHERE seq = 0`,
-		ref, kind, seq, p.Text("fr"), now, now)
+		ref, kind, seq, p.Text(c.userLang()), now, now)
 	c.proposalMoved(ref)
 	if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
 		c.attendCard(x[0], p, text, source)
@@ -510,7 +510,7 @@ func (c *core) syncCards() {
 	for _, p := range c.pendingProposals() {
 		c.cardAgain(p)
 		res, err := c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)`,
-			proposalRef(p.Kind, p.ID), p.Kind, p.Text("fr"), time.Now().Unix())
+			proposalRef(p.Kind, p.ID), p.Kind, p.Text(c.userLang()), time.Now().Unix())
 		if n, _ := rowsOf(res, err); n > 0 {
 			c.proposalMoved(proposalRef(p.Kind, p.ID))
 		}

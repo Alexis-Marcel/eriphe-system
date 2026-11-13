@@ -203,11 +203,11 @@ func (c *core) attendOffers() {
 		if x.Kind == cardIntention {
 			w = weightOfferedDue
 		}
-		text := p.Text("fr")
+		text := p.Text(c.userLang())
 		if text == "" {
 			text = x.Text
 		}
 		c.store.db.Exec(`INSERT INTO attention (ref, weight, why, source, time, tainted) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (ref) DO NOTHING`,
-			cardItemRef(x.ID), w, truncate(oneLine(tr("fr", "card.kind."+x.Kind)+" : "+text), attentionWhyMax), sourceOffer, now, boolInt(p.Tainted != ""))
+			cardItemRef(x.ID), w, truncate(oneLine(tr(c.userLang(), "card.kind."+x.Kind)+" : "+text), attentionWhyMax), sourceOffer, now, boolInt(p.Tainted != ""))
 	}
 }

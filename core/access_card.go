@@ -374,7 +374,7 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 	id, _ := res.LastInsertId()
 	// The question itself: what notifies the user of a question notifies them of this one.
 	// The card says what: the message does not say it twice.
-	c.cardNow(cardAccess, id, fmt.Sprintf(tr("fr", "access.ask.message"), a.Need.Target()), "task:"+a.TaskID)
+	c.cardNow(cardAccess, id, fmt.Sprintf(tr(c.userLang(), "access.ask.message"), a.Need.Target()), "task:"+a.TaskID)
 	log.Printf("access: card %d for task %s: %s", id, a.TaskID, a.Need.Category)
 	return id
 }

@@ -567,7 +567,7 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 		return
 	}
 	if silent {
-		text = fmt.Sprintf(tr("fr", "card.runcalls"), r.Skill, calls)
+		text = fmt.Sprintf(tr(c.userLang(), "card.runcalls"), r.Skill, calls)
 	}
 	if calls > 0 {
 		c.cardProposed(cardRunCalls, r.ID) // with the message below (convo_cards.go)
@@ -588,7 +588,7 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 		// Its message is held for the brief, or not sent: the card comes
 		// at the next breakpoint (attention.go), with a message of its own
 		// that does not tell the notification; the brief tells it.
-		c.cardNow(cardRunCalls, r.ID, fmt.Sprintf(tr("fr", "card.runcalls"), r.Skill, calls), "skill:"+r.Skill)
+		c.cardNow(cardRunCalls, r.ID, fmt.Sprintf(tr(c.userLang(), "card.runcalls"), r.Skill, calls), "skill:"+r.Skill)
 	}
 }
 

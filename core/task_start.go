@@ -100,7 +100,7 @@ func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string, byBrain
 	if byBrain {
 		c.cardProposed(cardTaskStart, id)
 	} else {
-		c.cardNow(cardTaskStart, id, fmt.Sprintf(tr("fr", "taskstart.held.message"), t.label()), "task:"+t.ID)
+		c.cardNow(cardTaskStart, id, fmt.Sprintf(tr(c.userLang(), "taskstart.held.message"), t.label()), "task:"+t.ID)
 	}
 	log.Printf("task %s held for the user's approval: %s", t.ID, needsLog(needs))
 	return nil

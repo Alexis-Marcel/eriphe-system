@@ -583,7 +583,7 @@ func (c *core) ask(session int64, kind, step, why string, payload any, by string
 	if s, err := c.session(session); err == nil {
 		title = s.Title
 	}
-	c.cardNow(cardSession, id, fmt.Sprintf(tr("fr", "session.ask.message"), title), "session:"+strconv.FormatInt(session, 10))
+	c.cardNow(cardSession, id, fmt.Sprintf(tr(c.userLang(), "session.ask.message"), title), "session:"+strconv.FormatInt(session, 10))
 	return id, nil
 }
 

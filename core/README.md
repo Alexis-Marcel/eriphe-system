@@ -3807,7 +3807,8 @@ and, by device, what was seen fast, late or moved on, from which it proposes rul
 blocked.
 
 **The user's state and what happened** (`user_state.go`, `since.go`, `since_tool.go`,
-`web_since.go`). Each of the brain's turns opens with the time (`[maintenant …]`) and, under it, the
+`web_since.go`). Each of the brain's turns opens with the time (`[maintenant …]`), the user's
+language (`[langue de l'utilisateur : …]`, see "The user's language" under [Workspace](#workspace-web)) and the
 user's state, built by code: `[état de Sam : présent, de retour à 14:50 après 4 h 30 d'absence
 (parti à 10:20) · heures calmes à 22:00 (22:00–08:00) · notifications « maintenant » restantes
 aujourd'hui : 3 sur 4]`. Present or away comes from the activity signals above: no activity for an

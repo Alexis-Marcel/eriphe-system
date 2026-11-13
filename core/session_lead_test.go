@@ -54,7 +54,8 @@ func TestSessionLead(t *testing.T) {
 		t.Fatalf("inbox %+v", items)
 	}
 	text := items[0].Data["text"].(string)
-	if !strings.Contains(text, "settle_step") || !strings.Contains(text, "De la part d'Eriphe : Sam prefers short names.") {
+	if !strings.Contains(text, "settle_step") || !strings.Contains(text, "De la part d'Eriphe : Sam prefers short names.") ||
+		!strings.Contains(text, langLine(c.userLang())) {
 		t.Errorf("the lead read %q", text)
 	}
 	if again, _ := c.deliverLead(ctx, a, &TaskRow{ID: "t-lead"}); again {
