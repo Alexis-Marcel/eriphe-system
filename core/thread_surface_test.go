@@ -471,9 +471,17 @@ func TestThreadSurfaceCallStep(t *testing.T) {
 	if state := c.cardState(st.Card); state != cardApproved {
 		t.Errorf("card %s", state)
 	}
-	s, _, meta = threadSurfaceOf(t, c, th.ID)
-	comps = string(s.Components)
-	if !strings.Contains(comps, `"thread_steps","thread_card_0"`) || !strings.Contains(comps, st.Card) || strings.Contains(meta.Summary, "à toi") {
+	// The step's status is stored, then its thread's surface written again
+	// (threadMoved), by the call's own goroutine: the surface follows.
+	shown := func() bool {
+		s, _, meta = threadSurfaceOf(t, c, th.ID)
+		comps = string(s.Components)
+		return strings.Contains(comps, `"thread_steps","thread_card_0"`) && strings.Contains(comps, st.Card) && !strings.Contains(meta.Summary, "à toi")
+	}
+	for deadline := time.Now().Add(5 * time.Second); !shown() && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !shown() {
 		t.Errorf("after the yes: %s %+v", comps, meta)
 	}
 

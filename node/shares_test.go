@@ -300,12 +300,14 @@ func TestRevoke(t *testing.T) {
 	holder := &Task{ID: "holder", State: stateRunning, Spec: TaskSpec{Folders: []TaskFolder{a}}}
 	other := &Task{ID: "other", State: stateRunning, Spec: TaskSpec{Folders: []TaskFolder{b}}}
 	n.tasks[holder.ID], n.tasks[other.ID] = holder, other
-	go n.watchShared(10 * time.Millisecond)
-	time.Sleep(30 * time.Millisecond)
-	// Taken off by the command, which the node only sees in the file.
+	// Taken off by the command, which the node only sees in the file: one
+	// look of watchShared, not its loop, which would outlive the test and
+	// read the list removed with the test's folder as nothing shared.
+	known := n.sharedLevels()
 	if err := changeShared(n.opt.root, func(l []sharedFolder) ([]sharedFolder, error) { return l[1:], nil }); err != nil {
 		t.Fatal(err)
 	}
+	n.compareShared(known)
 	stopped := func(t *Task) bool {
 		t.mu.Lock()
 		defer t.mu.Unlock()
