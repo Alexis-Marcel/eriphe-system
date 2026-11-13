@@ -172,6 +172,11 @@ describe("the workspace's presence", () => {
     expect(localURL("//example.org/x")).toBe(false);
     expect(localURL("https://example.org/x")).toBe(false);
     expect(localURL(undefined)).toBe(false);
+    expect(localURL("/\\evil.example")).toBe(false);
+    expect(localURL("/\\/evil.example")).toBe(false);
+    expect(localURL("/\t/evil.example")).toBe(false);
+    expect(localURL("/\n/evil.example")).toBe(false);
+    expect(localURL("/settings/tools?q=a")).toBe(true);
   });
 });
 
