@@ -139,17 +139,20 @@ func globEscape(s string) string { return globChars.ReplaceAllString(s, `\$0`) }
 
 var globChars = regexp.MustCompile(`[\\*?\[]`)
 
-// freeRead tells whether the brain may call a catalog tool without asking:
-// a Read at Free, named by no rule of my policy (such a tool goes through
-// the permission flow, with its input). A write always goes through it:
-// the policy must see the turn's taint.
-func (c *core) freeRead(claudeName string) bool { return c.freeCall(claudeName, nil) }
-
-// freeCall is freeRead for one call: on a server of several accounts, at
-// the value of the account it names.
+// freeCall tells whether a call is a Read at Free in the user's grid: on a
+// server of several accounts, at the value of the account it names.
 func (c *core) freeCall(claudeName string, input map[string]any) bool {
 	f := c.pool.facts(claudeName, input)
 	return f.read && f.free() && !f.noAccount
+}
+
+// freeAhead tells whether a free call may skip the policy, allowed in
+// advance to the brain or made by eriphe-core itself (a monitor, a
+// surface's source): not a read of the open web, which must see the
+// turn's taint as WebFetch does. A write always goes through the policy.
+func (c *core) freeAhead(claudeName string, input map[string]any) bool {
+	f := c.pool.facts(claudeName, input)
+	return f.read && f.free() && !f.noAccount && !f.openWorld
 }
 
 // readsFreely tells whether a task is an assistant's whose role reads freely.
@@ -168,7 +171,7 @@ func (c *core) readsFreely(taskID string) bool {
 func (c *core) brainFreeReads() []string {
 	var out []string
 	for _, r := range c.lentTools() {
-		if name := claudeToolName(r.server, r.tool); c.freeRead(name) && !slices.Contains(out, name) {
+		if name := claudeToolName(r.server, r.tool); c.freeAhead(name, nil) && !slices.Contains(out, name) {
 			out = append(out, name)
 		}
 	}
@@ -180,7 +183,7 @@ func (c *core) brainFreeReads() []string {
 func (c *core) freeReadsIn(grant []string) []string {
 	var out []string
 	for _, r := range c.lentTools() {
-		if name := claudeToolName(r.server, r.tool); grantAllows(grant, r.server, r.tool) && c.freeRead(name) && !slices.Contains(out, name) {
+		if name := claudeToolName(r.server, r.tool); grantAllows(grant, r.server, r.tool) && c.freeAhead(name, nil) && !slices.Contains(out, name) {
 			out = append(out, name)
 		}
 	}
@@ -277,7 +280,7 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	case f.value == gridNever:
 		return toolError("this tool is not allowed in Eriphe, for this account or at all")
 	case c.store.useTicket(taskID, claude, input):
-	case c.readsFreely(taskID) && c.freeCall(claude, input):
+	case c.readsFreely(taskID) && c.freeAhead(claude, input):
 		// The brain reads freely: no permission round trip, a decision on record all the same.
 		c.store.logDecision(taskID, "", claude, input, decideAllow, byPolicy, "lecture libre du cerveau")
 	default:

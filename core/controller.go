@@ -123,6 +123,7 @@ func newCore(cfg *Config, store *Store) *core {
 	c.pool.authHold = c.connectionHold // an account to connect again (connections.go)
 	c.pool.resourceUpdated = c.surfaceResourceUpdated
 	c.pool.toolsHeld = c.toolsHeld
+	c.pool.trusted = c.trustsServer
 	c.provideFolders() // the user's folders, a tool like any other (folder_tools.go)
 	// Local servers are services, reached on their node.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {

@@ -75,7 +75,7 @@ func (f *fakeAS) resourceScopes() []string {
 func newFakeAS(t *testing.T) *fakeAS {
 	f := &fakeAS{t: t, access: map[string]bool{}, firstExpiry: 3600}
 	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "notion"}, nil)
-	mcp.AddTool(mcpServer, &mcp.Tool{Name: "search", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+	mcp.AddTool(mcpServer, &mcp.Tool{Name: "search", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}},
 		func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
 			return nil, map[string]any{"pages": 3}, nil
 		})

@@ -240,7 +240,7 @@ func benchSurfaceCore(t *testing.T, x surfaceCase) *core {
 		for _, tl := range s.Tools {
 			out, _ := json.Marshal(tl.Result)
 			srv.AddTool(&mcp.Tool{Name: tl.Name, Description: tl.Description, InputSchema: tl.InputSchema, OutputSchema: tl.OutputSchema,
-				Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+				Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}},
 				func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 					return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(out)}}, StructuredContent: json.RawMessage(out)}, nil
 				})

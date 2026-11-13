@@ -133,6 +133,11 @@ type catalogFacts struct {
 	held bool
 	// granted: the user approved this category for the task (access_card.go).
 	granted bool
+	// openWorld: a read that reaches the open web, by its annotations
+	// (openWorldHint not false), of a server the user does not trust: on
+	// an unclean turn it is the user's, as WebFetch is, and it is never
+	// allowed in advance.
+	openWorld bool
 }
 
 // facts is what the catalog says of a call: of the tool alone with a nil
@@ -149,7 +154,11 @@ func (p *pool) facts(claudeName string, input map[string]any) catalogFacts {
 	if u.provided != nil && u.provided.facts != nil {
 		return u.provided.facts(u.toolByClaudeName(tool), input) // its own rights (folder_tools.go)
 	}
-	return u.srv.toolFacts(u.toolByClaudeName(tool), input)
+	t := u.toolByClaudeName(tool)
+	f := u.srv.toolFacts(t, input)
+	// A server the user trusts reads freely, the web too (tool_trust.go).
+	f.openWorld = f.read && openWorld(t) && (p.trusted == nil || !p.trusted(server))
+	return f
 }
 
 const noAccountReason = "ses comptes n'ont pas le même accès : l'appel doit nommer son compte (account)"

@@ -55,6 +55,9 @@ type pool struct {
 	resourceUpdated func(server, uri string)
 	// toolsHeld is told when a server's held tools change (tool_pins.go).
 	toolsHeld func(server string, n int)
+	// trusted tells a server the user trusts (tool_trust.go): its reads of
+	// the open web are free like its others (access.go).
+	trusted func(server string) bool
 
 	mu      sync.Mutex
 	ctx     context.Context // set by run; servers added later start in it
