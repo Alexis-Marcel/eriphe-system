@@ -80,8 +80,8 @@ func (s *Store) keepSubject(key, title string) string {
 // keepSubjectAt notes a key seen at a time: a new row, or a later last
 // seen; a title is kept once given. A record ref is no subject.
 func (s *Store) keepSubjectAt(key, title string, at time.Time) string {
-	if k, err := subjectKey(key); err != nil || k != key {
-		return key // not a key: a record's ref, the assistant
+	if k, err := subjectKey(key); err != nil || k != key || k == "" {
+		return key // none, or not a key: a record's ref, the assistant
 	}
 	key = s.canonSubject(key)
 	title = truncate(oneLine(title), subjectTitleMax)

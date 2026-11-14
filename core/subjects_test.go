@@ -28,6 +28,9 @@ func TestSubjectsNotedWhenWritten(t *testing.T) {
 	if _, err := c.brainNotify(notifyIn{Text: "Fini.", Level: levelBrief, Why: "Fini.", Ref: "task:t-1"}); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := c.brainNotify(notifyIn{Text: "Rien.", Level: levelBrief, Why: "Rien."}); err != nil {
+		t.Fatal(err)
+	}
 	all, _ := c.store.subjectsWhere(`1`)
 	var keys []string
 	for _, k := range all {
