@@ -40,7 +40,7 @@ type threadIn struct {
 func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error) {
 	in.Title, in.Goal, in.DoneWhen = oneLine(in.Title), strings.TrimSpace(in.Goal), strings.TrimSpace(in.DoneWhen)
 	in.Mode = strings.ToLower(strings.TrimSpace(in.Mode))
-	subject, err := subjectKey(in.Subject)
+	subject, err := c.subjectIs(in.Subject, in.Title)
 	if err != nil {
 		return Thread{}, fmt.Errorf("subject: %w", err)
 	}

@@ -506,7 +506,7 @@ func (c *core) findThreads(subject, text string, all bool, limit int) ([]Thread,
 	var conds []string
 	var args []any
 	if subject != "" {
-		key, err := subjectKey(subject)
+		key, err := c.subjectLookup(subject)
 		if err != nil {
 			return nil, fmt.Errorf("subject: %w", err)
 		}

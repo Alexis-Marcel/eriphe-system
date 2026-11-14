@@ -77,10 +77,14 @@ func main() {
 	c.token = token
 	c.startMachineTLS() // machine_tls.go
 	// Eriphe's memory, in its own file: without it, the rest still works.
-	if c.mem, err = openMemory(cfg.memoryConfig().DB); err != nil {
+	if mem, err := openMemory(cfg.memoryConfig().DB); err != nil {
 		log.Printf("memory: %v", err)
 	} else {
+		c.useMemory(mem) // its subjects are noted in core.db (subjects.go)
 		c.mem.owner = func() string { return c.conf().User }
+	}
+	if err := c.fillSubjects(); err != nil {
+		log.Printf("subjects: %v", err)
 	}
 	if err := c.reconcileServices(); err != nil {
 		log.Fatalf("services: %v", err)

@@ -307,6 +307,10 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		}
 	}
 	c.threadsDelivered(msgs) // a thread's event: the turn is about it (thread_turn.go)
+	// The known subjects my message names: the turn is about them (subjects.go).
+	if named := c.subjectsBlock(msgs); named != "" {
+		parts = append(parts, named)
+	}
 	// What my message brings up: the intentions whose person it names.
 	cue, cued := c.cueBlock(msgs)
 	if cue != "" {

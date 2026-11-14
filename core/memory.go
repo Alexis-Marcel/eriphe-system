@@ -181,6 +181,9 @@ type memStore struct {
 	now func() time.Time
 	// The user's name: in nearly every memory, so not a word to look for.
 	owner func() string
+	// The known subjects (subjects.go): a subject written is noted there,
+	// and kept under the one it was merged into. nil: as given.
+	subjects subjectBook
 }
 
 // memorySchemaVersion is the schema memory.db is at; meta.schema_version
@@ -412,7 +415,7 @@ func (m *memStore) normalize(x *Memory) error {
 	if err != nil {
 		return fmt.Errorf("subject: %w", err)
 	}
-	x.Subject = subject
+	x.Subject = m.keepSubject(subject)
 	if !containsStr(memoryKinds, x.Kind) {
 		return fmt.Errorf("kind must be one of %s", strings.Join(memoryKinds, ", "))
 	}
@@ -998,7 +1001,7 @@ func (m *memStore) recall(q recallQuery) ([]*Memory, error) {
 			args = append(args, likeEscape(s)+"%")
 		} else {
 			where = append(where, `m.subject = ?`)
-			args = append(args, s)
+			args = append(args, m.canonSubject(s))
 		}
 	}
 	when := `COALESCE(m.occurred_at, m.valid_from)`
