@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// invitation is a weekly meeting Sam sent to the user (me@icloud.example)
+// weeklyInvite is a weekly meeting Sam sent to the user (me@icloud.example)
 // and Alex, with one occurrence moved.
-const invitation = `BEGIN:VCALENDAR
+const weeklyInvite = `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//test//EN
 BEGIN:VEVENT
@@ -79,7 +79,7 @@ func byTitle(evs []Event, title string) []Event {
 
 func TestCalDAVAttendeesAndRespond(t *testing.T) {
 	e := newEnv(t)
-	e.perso.put(t, "/u/calendars/travail/weekly.ics", invitation)
+	e.perso.put(t, "/u/calendars/travail/weekly.ics", weeklyInvite)
 	e.perso.put(t, "/u/calendars/travail/mine.ics", mine)
 	e.perso.put(t, "/u/calendars/travail/others.ics", others)
 	cs := e.connect(t)
@@ -140,7 +140,7 @@ func TestCalDAVAttendeesAndRespond(t *testing.T) {
 
 func TestRespondReadOnly(t *testing.T) {
 	e := newEnv(t)
-	e.perso.put(t, "/u/calendars/travail/weekly.ics", invitation)
+	e.perso.put(t, "/u/calendars/travail/weekly.ics", weeklyInvite)
 	e.cfg.Accounts[0].ReadOnly = true
 	cs := e.connect(t)
 	list := call[listEventsOut](t, cs, "list_events", map[string]any{"account": "icloud", "from": "2026-10-27", "days": 1})
@@ -158,7 +158,7 @@ func TestRespondReadOnly(t *testing.T) {
 // The user found by another address of theirs.
 func TestRespondByAlias(t *testing.T) {
 	e := newEnv(t)
-	e.perso.put(t, "/u/calendars/travail/weekly.ics", strings.ReplaceAll(invitation, "me@icloud.example", "sam.alias@example.org"))
+	e.perso.put(t, "/u/calendars/travail/weekly.ics", strings.ReplaceAll(weeklyInvite, "me@icloud.example", "sam.alias@example.org"))
 	e.cfg.Accounts[0].Emails = []string{"Sam.Alias@example.org"}
 	cs := e.connect(t)
 	list := call[listEventsOut](t, cs, "list_events", map[string]any{"account": "icloud", "from": "2026-10-27", "days": 1})
@@ -221,7 +221,7 @@ func TestGraphAttendeesAndRespond(t *testing.T) {
 
 func TestCalDAVRespondOccurrence(t *testing.T) {
 	e := newEnv(t)
-	e.perso.put(t, "/u/calendars/travail/weekly.ics", invitation)
+	e.perso.put(t, "/u/calendars/travail/weekly.ics", weeklyInvite)
 	cs := e.connect(t)
 	list := call[listEventsOut](t, cs, "list_events", map[string]any{"account": "icloud", "from": "2026-10-27", "days": 21})
 	mk := byTitle(list.Events, "Marketing")

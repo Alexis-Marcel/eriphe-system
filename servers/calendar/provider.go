@@ -60,6 +60,7 @@ type CalendarInfo struct {
 // Item is an event as a provider returns it.
 type Item struct {
 	ID          string // provider id: CalDAV object path, Graph event id
+	Series      string // what its occurrences share: the CalDAV object, Graph's series master (else its id)
 	UID         string // iCalendar UID: the same in every calendar the event was sent to
 	CalendarID  string
 	Title       string

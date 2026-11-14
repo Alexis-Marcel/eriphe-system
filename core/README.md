@@ -1779,7 +1779,9 @@ kept per server by the pool and listed again on `resources/list_changed`); a res
 read, so it needs no access policy. The mail server's `mail://received` is the mail just received,
 `{"messages": [{"id", "account", "from", "subject", "date"}]}`: a monitor with `cond: new`,
 `path: messages`, `id: id` writes one `monitor.new` per message, its sender and subject in the
-item, so a skill follows the mail with `when: monitor.new key=mails`.
+item, so a skill follows the mail with `when: monitor.new key=mails`. The calendar server's
+`calendar://invitations` is the same for the invitations waiting for the user's answer
+(`path: invitations`, `id: id`; its title, start, organizer and event id in the item).
 
 - **Keyed by its name**, so a skill follows it with `when: monitor.changed key=getout-prod`. Its
   events are external unless its server is trusted, so the run they start is tainted.
