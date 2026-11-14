@@ -1315,7 +1315,7 @@ type surfaceMeta struct {
 	Weight  int       `json:"weight"`
 	Why     string    `json:"why,omitempty"`
 	Tainted bool      `json:"tainted,omitempty"`
-	Answers bool      `json:"answers,omitempty"` // tainted, its Proposals answer in place all the same: code placed them (thread_surface.go)
+	Answers bool      `json:"answers,omitempty"` // tainted, its Proposals answer in place all the same: code placed them (a thread's, thread_surface.go)
 	Summary string    `json:"summary,omitempty"` // one line, for a small tile or a chip
 	Updated time.Time `json:"updated"`
 }
