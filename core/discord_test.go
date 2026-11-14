@@ -127,6 +127,8 @@ func (f *fakeDiscord) gateway(rw http.ResponseWriter, r *http.Request) {
 				if p["op"] == 2.0 {
 					f.dispatch("READY", map[string]any{"session_id": "s1", "resume_gateway_url": "ws" + strings.TrimPrefix(f.srv.URL, "http") + "/gateway",
 						"user": map[string]any{"id": dcBotID, "username": "eriphe_bot", "bot": true}})
+				} else {
+					f.dispatch("RESUMED", nil)
 				}
 			}
 		}
@@ -354,9 +356,18 @@ func TestDiscordResumeAndClose(t *testing.T) {
 		t.Errorf("a reconnect is not a failure: %q", b.err())
 	}
 
-	f.closeWith(4004)
+	// A dropped connection is a failure until the session is back: then
+	// the bot answers again, and its page says so.
+	f.closeWith(4000)
 	waitUntil(t, func() bool { return len(f.opensNow()) == 3 })
-	if again := f.opensNow()[2]; again["op"] != 2.0 {
+	if again := f.opensNow()[2]; again["op"] != 6.0 {
+		t.Fatalf("after a drop: %v", again)
+	}
+	waitUntil(t, func() bool { return b.err() == "" })
+
+	f.closeWith(4004)
+	waitUntil(t, func() bool { return len(f.opensNow()) == 4 })
+	if again := f.opensNow()[3]; again["op"] != 2.0 {
 		t.Fatalf("after a refused token: %v", again)
 	}
 	waitUntil(t, func() bool { return strings.Contains(logs.String(), "refused") })
