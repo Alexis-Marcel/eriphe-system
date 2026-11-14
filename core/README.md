@@ -976,7 +976,9 @@ started once the steps it comes `after` are accepted; a task step asks its own s
 lent what needs a yes. The brain settles them (`settle_step`). **The thread holds its subject's
 state** (`thread_progress.go`): its summary is the only record of where the subject stands, written
 by `remember` kind `progress` (and a task's `remember`, and the nightly extraction), never from a
-turn or a source that read external content; a subject with no thread gets a light one opened by
+turn or a source that read external content (unless the thread's own steps read some already: its
+summary is then never quoted; the extraction's never); its log says who wrote it (`brain`, `task`,
+`extraction`); a subject with no thread gets a light one opened by
 the code (title `Suivi de <key>`; closed done at once when the progress says done), a subject whose
 thread ended is refused until the brain reopens it. The code links the rest: an open intention of a
 live light thread's subject becomes its deadline step (`intention-<id>`, once, at the engine's

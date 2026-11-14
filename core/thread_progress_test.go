@@ -70,6 +70,16 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 	if th, _ := c.thread(id); strings.Contains(th.Summary, "LU SUR LE WEB") {
 		t.Fatal("a tainted turn wrote the summary")
 	}
+	// Unless the thread's own steps read external content: its summary is
+	// never quoted then, and a wake they tainted still says where it stands.
+	c.insertSteps(id, []stepSpec{{Key: "read", Title: "Lire la page", Kind: stepTask}}, false)
+	c.setStep(id, "read", map[string]any{"tainted": "external:web"})
+	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:portfolio", Text: "La page est relue"}); err != nil {
+		t.Fatalf("a thread already external: %v", err)
+	}
+	if card, _ := c.subjectCard("project:portfolio", subjectCardChars); strings.Contains(card, "La page est relue") {
+		t.Errorf("an external thread's summary quoted:\n%s", card)
+	}
 }
 
 // Closing a thread on its goal writes a dated decision of its subject;

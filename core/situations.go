@@ -126,14 +126,14 @@ func (c *core) taskRemember(id string, in taskRememberIn) (map[string]any, error
 		return nil, fmt.Errorf("kind must be one of %s", strings.Join(taskRememberKinds, ", "))
 	}
 	if strings.TrimSpace(in.Kind) == kindProgress { // its thread's summary (thread_progress.go)
-		if c.taskResultTaint(id) != "" {
-			return nil, errProgressTainted
-		}
 		subject := in.Subject
 		if subject == "" {
 			subject = c.taskSubject(id)
 		}
-		th, note, err := c.noteProgress(subject, in.Text, in.State, "task "+id)
+		if c.taskResultTaint(id) != "" && !c.summaryUnquoted(subject) {
+			return nil, errProgressTainted
+		}
+		th, note, err := c.noteProgress(subject, in.Text, in.State, "task")
 		if err != nil {
 			return nil, err
 		}

@@ -126,15 +126,16 @@ func (c *core) openProgressThread(key, summary string, done bool, at time.Time) 
 	return id, nil
 }
 
-// brainProgress is remember's kind progress: the thread's summary, never
-// from a turn that read external content.
+// brainProgress is remember's kind progress: the thread's summary, from
+// a turn that read external content only when that summary is never
+// quoted anyway (summaryUnquoted).
 func (c *core) brainProgress(in rememberIn) (map[string]any, error) {
-	if taint := c.turnTaint(); len(taint) > 0 {
-		return nil, errProgressTainted
-	}
 	subject := in.Subject
 	if subject == "" {
 		subject = c.turnSubject() // the turn's thread, or the subject my message named
+	}
+	if taint := c.turnTaint(); len(taint) > 0 && !c.summaryUnquoted(subject) {
+		return nil, errProgressTainted
 	}
 	id, note, err := c.noteProgress(subject, in.Text, in.State, byBrain)
 	if err != nil {
@@ -146,14 +147,14 @@ func (c *core) brainProgress(in rememberIn) (map[string]any, error) {
 
 // applyProgress is an extraction's progress: its subject's thread summary,
 // never from external content nor from an unclear reading.
-func (c *core) applyProgress(op extractionOp, trust, ref, who string) (why, result string) {
+func (c *core) applyProgress(op extractionOp, trust, ref string) (why, result string) {
 	if trust == trustExternal {
 		return "a progress drawn from external content is not kept: a thread's summary is quoted in its subject's cards", ""
 	}
 	if strings.EqualFold(strings.TrimSpace(op.Basis), basisAmbiguous) {
 		return "an ambiguous progress is not kept", ""
 	}
-	if _, _, err := c.noteProgress(c.opSubject(op, ref), op.Text, op.State, who); err != nil {
+	if _, _, err := c.noteProgress(c.opSubject(op, ref), op.Text, op.State, "extraction"); err != nil {
 		return err.Error(), ""
 	}
 	return "", "added"
@@ -179,6 +180,22 @@ func (c *core) extractionThreads() string {
 		fmt.Fprintf(&b, "- thread=%d subject=%q state=%s: %s\n", s.ID, s.Subject, s.State, sum)
 	}
 	return b.String()
+}
+
+// summaryUnquoted tells whether the live thread of a subject is one whose
+// summary is never quoted (threadExternal): its steps read external
+// content already, so a wake it tainted may still say where it stands.
+func (c *core) summaryUnquoted(subject string) bool {
+	key := c.store.canonSubject(subjectOf(subject))
+	if key == "" {
+		return false
+	}
+	id, ok := c.liveThreadOf(key)
+	if !ok {
+		return false
+	}
+	s, err := c.thread(id)
+	return err == nil && c.threadExternal(s)
 }
 
 // threadExternal tells whether what a thread says may carry what someone
@@ -287,9 +304,7 @@ func (c *core) followIntention(ctx context.Context, id int64, x *Intention) {
 	if _, err := c.step(id, intentionStepKey(x.ID)); err == nil {
 		return
 	}
-	if _, err := c.linkIntentionLocked(ctx, id, x, "engine"); err != nil {
-		log.Printf("thread %d: intention %d: %v", id, x.ID, err)
-	}
+	c.linkIntentionLocked(ctx, id, x, "engine") // refused (its limits): tried again at the next pass, quietly
 }
 
 // progressMoved is the kv key that says the progress memories were

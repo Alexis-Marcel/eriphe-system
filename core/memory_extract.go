@@ -617,7 +617,7 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 		return fmt.Sprintf("unknown op %q", op.Op), ""
 	}
 	if strings.TrimSpace(op.Kind) == kindProgress {
-		return c.applyProgress(op, trust, ref, who)
+		return c.applyProgress(op, trust, ref)
 	}
 	basis := strings.ToLower(strings.TrimSpace(op.Basis))
 	if basis == "" {
