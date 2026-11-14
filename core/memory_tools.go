@@ -221,7 +221,7 @@ func ruleSummary(r notifyRule) string {
 	if r.Kind == ruleQuiet {
 		return "quiet hours " + r.Window() + " (" + r.Days + " nights)"
 	}
-	s := "notifications about " + r.Match + ": " + r.Outcome
+	s := "notifications about " + r.Match + ": " + ruleBounds(r)
 	if r.Night {
 		s += ", even at night"
 	}

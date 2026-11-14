@@ -38,7 +38,7 @@ func TestRouteOneDeviceThenNext(t *testing.T) {
 	c, b, _, _ := routeCore(t, now)
 	c.store.set(routeModeKey, routeOn)
 	ownerSays(c, "ok")
-	if _, err := c.brainNotify(notifyIn{Text: "La PR 42 est fusionnée.", Level: levelNow, Why: "Demandé.", Ref: "project:site"}); err != nil {
+	if _, err := c.brainNotify(notifyIn{Text: "La PR 42 est fusionnée.", Weight: 5, Why: "Demandé.", Ref: "project:site"}); err != nil {
 		t.Fatal(err)
 	}
 	c.push.pending.Wait()
@@ -79,7 +79,7 @@ func TestRouteSeenStops(t *testing.T) {
 	c, b, _, _ := routeCore(t, now)
 	c.store.set(routeModeKey, routeOn)
 	ownerSays(c, "ok")
-	out, _ := c.brainNotify(notifyIn{Text: "Facture reçue.", Level: levelNow, Why: "Nouvelle facture.", Ref: "topic:invoice"})
+	out, _ := c.brainNotify(notifyIn{Text: "Facture reçue.", Weight: 5, Why: "Nouvelle facture.", Ref: "topic:invoice"})
 	c.push.pending.Wait()
 	if _, err := c.notificationFeedback(out["id"].(int64), "up"); err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestRouteObserve(t *testing.T) {
 	now := at(t, "2026-11-04", "10:00")
 	c, b, _, _ := routeCore(t, now)
 	ownerSays(c, "ok")
-	c.brainNotify(notifyIn{Text: "Le build est vert.", Level: levelNow, Why: "Le build.", Ref: "project:site"})
+	c.brainNotify(notifyIn{Text: "Le build est vert.", Weight: 5, Why: "Le build.", Ref: "project:site"})
 	c.push.pending.Wait()
 	if n := len(b.sentTo()); n != 2 {
 		t.Fatalf("observe mode sent %d pushes, want every device", n)
@@ -127,7 +127,7 @@ func TestRouteInApp(t *testing.T) {
 	c.store.set(routeModeKey, routeOn)
 	c.push.seenOn("tab-1", true, tabSeen{sub: macID, kind: kindComputer})
 	ownerSays(c, "ok")
-	c.brainNotify(notifyIn{Text: "Le déploiement est fini.", Level: levelNow, Why: "Le déploiement.", Ref: "project:site"})
+	c.brainNotify(notifyIn{Text: "Le déploiement est fini.", Weight: 5, Why: "Le déploiement.", Ref: "project:site"})
 	c.push.pending.Wait()
 	if n := len(b.sentTo()); n != 0 {
 		t.Fatalf("%d pushes with Eriphe in front", n)
@@ -152,24 +152,24 @@ func TestRouteRuleLines(t *testing.T) {
 	now := at(t, "2026-11-04", "10:00")
 	c, b, _, _ := routeCore(t, now)
 	c.store.set(routeModeKey, routeOn)
-	if _, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Outcome: levelNow, Also: "phone", State: ruleActive, By: "owner"}); err != nil {
+	if _, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Floor: 5, Ceiling: 5, Also: "phone", State: ruleActive, By: "owner"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:site", Outcome: levelNow, Never: "computer", State: ruleActive, By: "owner"}); err != nil {
+	if _, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:site", Floor: 5, Ceiling: 5, Never: "computer", State: ruleActive, By: "owner"}); err != nil {
 		t.Fatal(err)
 	}
 	ownerSays(c, "ok")
-	c.brainNotify(notifyIn{Text: "Getout est en panne.", Level: levelNow, Why: "Alerte.", Ref: "project:getout"})
+	c.brainNotify(notifyIn{Text: "Getout est en panne.", Weight: 5, Why: "Alerte.", Ref: "project:getout"})
 	c.push.pending.Wait()
 	if got := b.sentTo(); len(got) != 2 {
 		t.Fatalf("also the phone: %v", got)
 	}
-	c.brainNotify(notifyIn{Text: "Le site est en ligne.", Level: levelNow, Why: "Déploiement.", Ref: "project:site"})
+	c.brainNotify(notifyIn{Text: "Le site est en ligne.", Weight: 5, Why: "Déploiement.", Ref: "project:site"})
 	c.push.pending.Wait()
 	if got := b.sentTo(); len(got) != 3 || got[2] != "/push/1" {
 		t.Fatalf("never the computer: %v", got)
 	}
-	if _, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "x", Outcome: levelNow, Also: "mac", State: ruleActive, By: "owner"}); err == nil {
+	if _, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "x", Floor: 5, Ceiling: 5, Also: "mac", State: ruleActive, By: "owner"}); err == nil {
 		t.Fatal("an unknown line was accepted")
 	}
 }

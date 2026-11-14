@@ -133,7 +133,7 @@
 {{end}}
 {{define "notify-rules-frag"}}{{template "notify-rules" .Data}}{{end}}
 
-{{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{t (printf "rule.out.%s" .Outcome)}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{channelNames .Channels}}{{end}}{{if .Also}} · {{t "rule.also"}} <span class="mono">{{.Also}}</span>{{end}}{{if .Never}} · {{t "rule.never"}} <span class="mono">{{.Never}}</span>{{end}}{{end}}</span>
+{{define "rule-line"}}<span class="strong">{{if eq .Kind "quiet"}}{{tf "rule.quietline" (t (printf "rule.days.%s" .Days)) .Window}}{{else}}<span class="mono">{{.Match}}</span> → {{ruleBounds .}}{{if .Night}} · {{t "rule.night"}}{{end}}{{if .Channels}} · {{channelNames .Channels}}{{end}}{{if .Also}} · {{t "rule.also"}} <span class="mono">{{.Also}}</span>{{end}}{{if .Never}} · {{t "rule.never"}} <span class="mono">{{.Never}}</span>{{end}}{{end}}</span>
 {{if .Why}}<span class="small muted">{{.Why}}</span>{{end}}{{end}}
 
 {{/* Notifications → Où te prévenir: the default channels of the brain's

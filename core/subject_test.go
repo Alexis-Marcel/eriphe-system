@@ -114,10 +114,10 @@ func TestOneSubjectEverywhere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.brainRule(ruleIn{Match: "projets:Site Web", Outcome: levelNow, Why: "Demandé.", SourceRef: ref(seq)}); err != nil {
+	if _, err := c.brainRule(ruleIn{Match: "projets:Site Web", Floor: 5, Why: "Demandé.", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := c.brainNotify(notifyIn{Text: "Le site est en ligne.", Level: levelNow, Why: "Déployé.", Ref: "Projet:Site-Web"})
+	out, err := c.brainNotify(notifyIn{Text: "Le site est en ligne.", Weight: 5, Why: "Déployé.", Ref: "Projet:Site-Web"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,8 +193,8 @@ func TestSubjectKeysRewriteCore(t *testing.T) {
 		`INSERT INTO threads (id, title, goal, subject, state, created) VALUES (2, 'b', 'g', 'project:site', 'open', 0)`,
 		`INSERT INTO threads (id, title, goal, subject, state, created) VALUES (3, 'c', 'g', 'PR:Example/Infra#12', 'done', 0)`,
 		`INSERT INTO threads (id, title, goal, subject, state, created) VALUES (4, 'd', 'g', 'brand:velora', 'open', 0)`,
-		`INSERT INTO notifications (text, why, ref, source, level, outcome, reason, created, token) VALUES ('t', 'w', 'Factures', 'brain', 'now', 'now', 'sent', 0, '')`,
-		`INSERT INTO notifications (text, why, ref, source, level, outcome, reason, created, token) VALUES ('t', 'w', 'skill:Veille', 'brain', 'now', 'now', 'sent', 0, '')`,
+		`INSERT INTO notifications (text, why, ref, source, weight, outcome, reason, created, token) VALUES ('t', 'w', 'Factures', 'brain', 5, 'now', 'sent', 0, '')`,
+		`INSERT INTO notifications (text, why, ref, source, weight, outcome, reason, created, token) VALUES ('t', 'w', 'skill:Veille', 'brain', 5, 'now', 'sent', 0, '')`,
 		`INSERT INTO rules (name, source, spec, prompt, state, why, source_ref, tainted, by, created, updated, act)
 			VALUES ('n', 'notification', '{"kind":"topic","match":"projet:getout","outcome":"now"}', '', 'active', '', '', '', 'user', 0, 0, 'deliver')`,
 	} {

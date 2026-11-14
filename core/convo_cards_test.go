@@ -15,7 +15,7 @@ import (
 // proposedRule adds a rule the brain proposed, and its card, as rule does.
 func proposedRule(t *testing.T, c *core, match, tainted string) notifyRule {
 	t.Helper()
-	r, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: match, Outcome: levelBrief, State: ruleProposed, By: "brain",
+	r, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: match, Ceiling: 2, State: ruleProposed, By: "brain",
 		Why: "Trop de messages.", Tainted: tainted})
 	if err != nil {
 		t.Fatal(err)
@@ -48,14 +48,14 @@ func TestCardBoundToItsProposal(t *testing.T) {
 	c := tw.c
 	r1 := proposedRule(t, c, "facture", "")
 	seq := brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
-	r2, _ := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "topic:mail", Outcome: levelNever, State: ruleProposed, By: "brain"})
+	r2, _ := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "topic:mail", Ceiling: 0, State: ruleProposed, By: "brain"})
 	x := cardOf(t, c, cardRule, r1.ID)
 	if x.Seq != seq || x.State != cardPending {
 		t.Fatalf("card %+v, want on message %d", x, seq)
 	}
 	_, body, _ := tw.do("GET", convoPath, nil, nil)
 	for _, want := range []string{fmt.Sprintf(`id="card-%d"`, x.ID), fmt.Sprintf(`hx-post="/cards/%d/yes"`, x.ID),
-		fmt.Sprintf(`hx-post="/cards/%d/no"`, x.ID), "data-card-edit=", "facture → au brief", `href="/settings/approve"`} {
+		fmt.Sprintf(`hx-post="/cards/%d/no"`, x.ID), "data-card-edit=", "facture → poids 2 au plus", `href="/settings/approve"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the conversation lacks %q", want)
 		}
@@ -447,7 +447,7 @@ func TestDigestAndWhy(t *testing.T) {
 	c.cardDigest(time.Now().Add(-time.Hour), time.Now().Add(time.Minute), nil)
 	brainSays(c, "Pendant ton absence, j'ai rangé les factures.")
 	n, err := c.notify(&notification{Text: "Le serveur répond lentement.", Why: "La veille du site a vu trois erreurs.", Ref: "project:site",
-		Source: notifyFromBrain}, notifyItem{Level: levelNow})
+		Source: notifyFromBrain}, notifyItem{Weight: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +502,7 @@ func TestTelegramCards(t *testing.T) {
 	c.channelCards()
 	tgOf(c).pending.Wait()
 	sent := f.sentMessages()
-	if len(sent) != 2 || !strings.Contains(fmt.Sprint(sent[1]["text"]), "facture → au brief") {
+	if len(sent) != 2 || !strings.Contains(fmt.Sprint(sent[1]["text"]), "facture → poids 2 au plus") {
 		t.Fatalf("sent %v", sent)
 	}
 	x := cardOf(t, c, cardRule, r.ID)

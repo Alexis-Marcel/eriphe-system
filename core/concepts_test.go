@@ -61,10 +61,10 @@ var conceptBench = []benchRow{
 		ruleCall(ruleIn{Kind: ruleQuiet, From: "23:00", To: "08:00"}),
 		rememberCall(kindPreference, "Ne veut pas être dérangé après 23 h"), "rule"},
 	{"Ne me préviens plus des factures avant le brief", "rule",
-		ruleCall(ruleIn{Match: "facture", Outcome: levelBrief}),
+		ruleCall(ruleIn{Match: "facture", Ceiling: ptr(2)}),
 		rememberCall(kindLesson, "Ne pas le prévenir des factures avant le brief"), "rule"},
 	{"Pour Getout, préviens-moi aussi sur Telegram", "rule",
-		ruleCall(ruleIn{Match: "project:getout", Outcome: levelNow, Also: "telegram"}),
+		ruleCall(ruleIn{Match: "project:getout", Floor: 5, Also: "telegram"}),
 		rememberCall(kindPreference, "Veut les notifications de Getout aussi sur Telegram"), "rule"},
 	{"Mets le téléphone en premier pour me prévenir", "setting",
 		settingCall(setOrder, "phone,computer"),
@@ -193,8 +193,8 @@ func TestRecallShowsRules(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	ownerSays(c, "ok")
 	c.addNotifyRule(notifyRule{Kind: ruleQuiet, Days: daysAll, From: 23 * 60, To: 7 * 60, State: ruleActive, By: "user", Why: "Demandé."})
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Outcome: levelNow, Night: true, State: ruleActive, By: "user", Why: "La prod compte."})
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "facture", Outcome: levelNever, State: ruleProposed, By: "brain", Why: "Pas utile."})
+	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Floor: 5, Ceiling: 5, Night: true, State: ruleActive, By: "user", Why: "La prod compte."})
+	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "facture", Ceiling: 0, State: ruleProposed, By: "brain", Why: "Pas utile."})
 
 	rules := func(in recallIn) []recalledRule {
 		t.Helper()

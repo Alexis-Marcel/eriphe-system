@@ -41,7 +41,7 @@ type notifyPage struct {
 func (w *web) notifyPage(open int64) notifyPage {
 	c := w.c
 	v := notifyPage{Zone: c.store.get("notify_zone"), DefaultZone: time.Local.String(), Cap: c.notifyCap(),
-		Stub: notifyRule{Kind: ruleTopic, Outcome: levelBrief, Days: daysAll, From: seedQuietFrom, To: seedQuietTo}}
+		Stub: notifyRule{Kind: ruleTopic, Ceiling: weightHeldNote, Days: daysAll, From: seedQuietFrom, To: seedQuietTo}}
 	card := func(n *notification) notifCard { return notifCard{notification: n, Open: n.ID == open} }
 	if recent, err := c.recentNotifications(30); err == nil {
 		for _, n := range recent {
@@ -99,10 +99,18 @@ func (w *web) handleNotifyReact(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusNoContent)
 }
 
+// formInt is a form's number, or def when it is not one.
+func formInt(r *http.Request, name string, def int) int {
+	if n, err := strconv.Atoi(r.PostFormValue(name)); err == nil {
+		return n
+	}
+	return def
+}
+
 // handleRuleSave adds a rule, or replaces one (id): the user's own, active at once.
 func (w *web) handleRuleSave(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
-	rule := notifyRule{Kind: r.PostFormValue("kind"), Match: r.PostFormValue("match"), Outcome: r.PostFormValue("outcome"),
+	rule := notifyRule{Kind: r.PostFormValue("kind"), Match: r.PostFormValue("match"), Floor: formInt(r, "floor", 0), Ceiling: formInt(r, "ceiling", weightInterrupts),
 		Night: r.PostFormValue("night") == "1", Channels: r.PostFormValue("channels"), Also: r.PostFormValue("also"), Never: r.PostFormValue("never"), Days: r.PostFormValue("days"), Why: r.PostFormValue("why"), State: ruleActive, By: "owner"}
 	if rule.Kind == ruleQuiet {
 		var err1, err2 error

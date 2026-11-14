@@ -104,7 +104,7 @@ func TestQueueSurfaces(t *testing.T) {
 	if s, ok := surfaceByID(t, c, queueReminders); !ok || s.Title != "Appeler le garage" || !slices.Equal(groupRefs(t, s), []string{q.reminder.Ref}) {
 		t.Fatalf("reminders %+v", s)
 	}
-	if s, ok := surfaceByID(t, c, queueDecide); !ok || s.Title != "Facture → au brief" || !slices.Equal(groupRefs(t, s), []string{q.rule.Ref}) {
+	if s, ok := surfaceByID(t, c, queueDecide); !ok || s.Title != "Facture → poids 2 au plus" || !slices.Equal(groupRefs(t, s), []string{q.rule.Ref}) {
 		t.Fatalf("decide %+v", s)
 	}
 	// What takes place today is urgent enough to stand alone, a Proposal

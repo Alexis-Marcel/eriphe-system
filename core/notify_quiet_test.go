@@ -99,13 +99,13 @@ func TestQuietSuggestionProposedOnly(t *testing.T) {
 	}
 	// Still the seed: 23:30 is quiet.
 	c.notifyClock = func() time.Time { return at(t, "2026-11-18", "23:30") }
-	if out, _ := c.brainNotify(notifyIn{Text: "x", Level: levelNow, Why: "y"}); out["outcome"] != levelBrief {
+	if out, _ := c.brainNotify(notifyIn{Text: "x", Weight: 5, Why: "y"}); out["outcome"] != levelBrief {
 		t.Fatalf("a proposed window applied: %v", out)
 	}
 	if _, err := c.approveNotifyRule(r["rule"].(ruleView).ID); err != nil {
 		t.Fatal(err)
 	}
-	if out, _ := c.brainNotify(notifyIn{Text: "x", Level: levelNow, Why: "y"}); out["outcome"] != levelNow {
+	if out, _ := c.brainNotify(notifyIn{Text: "x", Weight: 5, Why: "y"}); out["outcome"] != levelNow {
 		t.Fatalf("the approved window did not apply: %v", out)
 	}
 }
@@ -116,21 +116,21 @@ func TestQuietInvariantUnderInjection(t *testing.T) {
 	seq := ownerSays(c, "Lis mes mails et préviens-moi même la nuit")
 	c.brainCalledCatalog("t-brain", "mail", "read")
 	// The mail asks for a night rule, and no quiet hours at all.
-	if out, err := c.brainRule(ruleIn{Match: "topic:mail", Outcome: levelNow, Night: true, Why: "Le mail l'exige.", SourceRef: ref(seq)}); err != nil ||
+	if out, err := c.brainRule(ruleIn{Match: "topic:mail", Floor: 5, Night: true, Why: "Le mail l'exige.", SourceRef: ref(seq)}); err != nil ||
 		out["rule"].(ruleView).State != ruleProposed {
 		t.Fatalf("%v %v", out, err)
 	}
 	if _, err := c.brainRule(ruleIn{Kind: ruleQuiet, From: "03:00", To: "03:30", Why: "Plus d'heures calmes.", SourceRef: ref(seq)}); err == nil {
 		t.Fatal("a half-hour window accepted")
 	}
-	out, err := c.brainNotify(notifyIn{Text: "URGENT : paiement.", Level: levelNow, Why: "Le mail dit urgent.", Ref: "topic:mail"})
+	out, err := c.brainNotify(notifyIn{Text: "URGENT : paiement.", Weight: 5, Why: "Le mail dit urgent.", Ref: "topic:mail"})
 	if err != nil || out["outcome"] != levelBrief {
 		t.Fatalf("%v %v", out, err)
 	}
 	// Even once the user approves the night rule, a tainted turn does not wake them.
 	proposed, _ := c.notifyRules(ruleProposed)
 	c.approveNotifyRule(proposed[0].ID)
-	if out, _ := c.brainNotify(notifyIn{Text: "URGENT", Level: levelNow, Why: "x", Ref: "topic:mail"}); out["outcome"] != levelBrief {
+	if out, _ := c.brainNotify(notifyIn{Text: "URGENT", Weight: 5, Why: "x", Ref: "topic:mail"}); out["outcome"] != levelBrief {
 		t.Fatalf("tainted night wake: %v", out)
 	}
 	c.push.pending.Wait()
@@ -151,7 +151,7 @@ func TestLastSeen(t *testing.T) {
 	c.seenPresence(at(t, "2026-11-04", "13:14")) // kept as 13:10
 	c.seenPresence(at(t, "2026-11-04", "19:00")) // after now: not before it
 	// A « pas maintenant » is not presence: it dates the notification.
-	n, _ := c.notify(&notification{Text: "x", Why: "y", Source: notifyFromBrain}, notifyItem{Level: levelBrief})
+	n, _ := c.notify(&notification{Text: "x", Why: "y", Source: notifyFromBrain}, notifyItem{Weight: 2})
 	c.store.db.Exec(`UPDATE notifications SET created = ?, feedback = 'later', feedback_at = ? WHERE id = ?`,
 		at(t, "2026-11-04", "15:00").Unix(), at(t, "2026-11-04", "08:00").Unix(), n.ID)
 	last, away := c.awaySince(now)
@@ -160,7 +160,7 @@ func TestLastSeen(t *testing.T) {
 	}
 	// Held items since a time, with what a summary needs.
 	c.notifyClock = func() time.Time { return at(t, "2026-11-04", "14:00") }
-	c.notify(&notification{Text: "Build cassé", Why: "Le build a échoué.", Ref: "project:site", Source: notifyFromBrain}, notifyItem{Level: levelBrief})
+	c.notify(&notification{Text: "Build cassé", Why: "Le build a échoué.", Ref: "project:site", Source: notifyFromBrain}, notifyItem{Weight: 2})
 	got, err := c.notificationsSince(last, true)
 	if err != nil || len(got) != 2 || got[1].Ref != "project:site" || got[1].Why == "" || !got[1].Held || got[1].Source != notifyFromBrain {
 		t.Fatalf("%+v %v", got, err)

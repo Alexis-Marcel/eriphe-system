@@ -237,7 +237,7 @@ func TestAttentionReturnTellsTheBrief(t *testing.T) {
 	c, _, now := pollCore(t)
 	c.subscribeEvents(c.attentionOnEvent)
 	n, err := c.notify(&notification{Text: "La prod a redémarré cette nuit.", Why: "Skill « prod »", Ref: "skill:prod", Source: notifyFromSkill},
-		notifyItem{Level: levelBrief, Ref: "skill:prod"})
+		notifyItem{Weight: 2, Ref: "skill:prod"})
 	if err != nil || !n.Held {
 		t.Fatalf("%+v %v", n, err)
 	}
@@ -279,7 +279,7 @@ func TestAttentionQuietMessageToldAtTheBrief(t *testing.T) {
 	c, _, now := pollCore(t)
 	*now = at(t, "2026-11-04", "23:30")
 	n, err := c.notify(&notification{Text: "Le site est revenu.", Why: "Skill « prod »", Ref: "skill:prod", Source: notifyFromSkill},
-		notifyItem{Level: levelNow, Ref: "skill:prod"})
+		notifyItem{Weight: 5, Ref: "skill:prod"})
 	if err != nil || !n.Held || n.Reason != reasonQuiet {
 		t.Fatalf("%+v %v", n, err)
 	}

@@ -243,7 +243,7 @@ func (c *core) runUrgent(r *skillRun, tr *skillTrigger) {
 	c.store.set(fmt.Sprintf("skill_urgent:%d", r.ID), "1")
 	n := &notification{Text: tr.Urgent, Why: fmt.Sprintf(urgentSkillWhy, r.Skill), Ref: "skill:" + r.Skill, Subject: c.sourceSubject("task:" + r.Task),
 		Source: notifyFromUrgent}
-	if _, err := c.notify(n, notifyItem{Level: levelNow, Ref: n.Ref, Asked: true, Urgent: true}); err != nil {
+	if _, err := c.notify(n, notifyItem{Weight: weightInterrupts, Ref: n.Ref, Asked: true, Urgent: true}); err != nil {
 		log.Printf("skill %s: urgent: %v", r.Skill, err)
 	}
 }

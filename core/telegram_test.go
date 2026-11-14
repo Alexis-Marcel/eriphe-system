@@ -263,7 +263,7 @@ func TestTelegramNotifyAndFeedback(t *testing.T) {
 	linked(c)
 	tgOf(c).restart()
 	ownerSays(c, "Préviens-moi quand la PR est fusionnée")
-	out, err := c.brainNotify(notifyIn{Text: "La PR 42 est fusionnée.", Level: levelNow, Why: "Tu m'as demandé de te prévenir.", Ref: "project:site"})
+	out, err := c.brainNotify(notifyIn{Text: "La PR 42 est fusionnée.", Weight: 5, Why: "Tu m'as demandé de te prévenir.", Ref: "project:site"})
 	if err != nil || out["outcome"] != levelNow {
 		t.Fatalf("%v %v", out, err)
 	}
@@ -296,11 +296,11 @@ func TestTelegramNotifyAndFeedback(t *testing.T) {
 	}
 
 	// A rule: Telegram only for this topic; push only for another.
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Outcome: levelNow, Channels: "telegram", State: ruleActive, By: "owner"})
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:site", Outcome: levelNow, Channels: "push", State: ruleActive, By: "owner"})
+	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Floor: 5, Ceiling: 5, Channels: "telegram", State: ruleActive, By: "owner"})
+	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:site", Floor: 5, Ceiling: 5, Channels: "push", State: ruleActive, By: "owner"})
 	ownerSays(c, "Préviens-moi pour getout et le site")
-	c.brainNotify(notifyIn{Text: "Getout est en panne.", Level: levelNow, Why: "Une alerte.", Ref: "project:getout:prod"})
-	c.brainNotify(notifyIn{Text: "Le site est en ligne.", Level: levelNow, Why: "Le déploiement.", Ref: "project:site"})
+	c.brainNotify(notifyIn{Text: "Getout est en panne.", Weight: 5, Why: "Une alerte.", Ref: "project:getout:prod"})
+	c.brainNotify(notifyIn{Text: "Le site est en ligne.", Weight: 5, Why: "Le déploiement.", Ref: "project:site"})
 	tgOf(c).pending.Wait()
 	c.push.pending.Wait()
 	if got := b.received(); len(got) != 2 || got[1].Body != "Le site est en ligne." {
@@ -561,7 +561,7 @@ func TestCheckChannels(t *testing.T) {
 	if _, err := checkChannels("sms"); err == nil {
 		t.Error("sms accepted")
 	}
-	r := notifyRule{Kind: ruleTopic, Match: "project:x", Outcome: levelNow, Channels: "mail"}
+	r := notifyRule{Kind: ruleTopic, Match: "project:x", Floor: 5, Ceiling: 5, Channels: "mail"}
 	if r.check() == nil {
 		t.Error("a rule with an unknown channel was accepted")
 	}

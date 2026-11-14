@@ -263,7 +263,7 @@ func TestSignalNotifyAndReactions(t *testing.T) {
 	c := b.c
 	c.store.set(notifyChannelsKey, sgChannel)
 	ownerSays(c, "Préviens-moi quand la PR est fusionnée")
-	out, err := c.brainNotify(notifyIn{Text: "La PR 42 est fusionnée.", Level: levelNow, Why: "Tu m'as demandé.", Ref: "project:site"})
+	out, err := c.brainNotify(notifyIn{Text: "La PR 42 est fusionnée.", Weight: 5, Why: "Tu m'as demandé.", Ref: "project:site"})
 	if err != nil {
 		t.Fatal(err)
 	}

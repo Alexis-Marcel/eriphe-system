@@ -45,7 +45,7 @@ func TestTurnThreadGivesItsSubject(t *testing.T) {
 	if got := subjectOfRow(c, "tasks", "id = ?", given["id"]); got != "project:site" {
 		t.Errorf("given task under %q", got)
 	}
-	if out, _ := callBrainTool(t, c, "notify", map[string]any{"text": "Velora est prise.", "level": "brief", "why": "La recherche a fini."}); out["subject"] != key {
+	if out, _ := callBrainTool(t, c, "notify", map[string]any{"text": "Velora est prise.", "weight": 2, "why": "La recherche a fini."}); out["subject"] != key {
 		t.Errorf("notify: %v", out)
 	}
 	if out, isErr := callBrainTool(t, c, "remember", map[string]any{"text": "La marque Velora est déposée.", "kind": "fact"}); isErr {
@@ -84,15 +84,15 @@ func TestNamedSubjectIsTheTurns(t *testing.T) {
 	c.store.keepSubject("project:site", "")
 	ownerSays(c, "Préviens-moi quand le site est en ligne")
 	c.turn.name(c.subjectsNamed("Préviens-moi quand le site est en ligne"))
-	if out, _ := c.brainNotify(notifyIn{Text: "En ligne.", Level: levelBrief, Why: "Déployé."}); out["subject"] != "project:site" {
+	if out, _ := c.brainNotify(notifyIn{Text: "En ligne.", Weight: 2, Why: "Déployé."}); out["subject"] != "project:site" {
 		t.Errorf("one named: %v", out)
 	}
 	c.turn.name([]string{"project:site", "person:sam"})
-	if out, _ := c.brainNotify(notifyIn{Text: "Encore.", Level: levelBrief, Why: "Encore."}); out["subject"] != nil {
+	if out, _ := c.brainNotify(notifyIn{Text: "Encore.", Weight: 2, Why: "Encore."}); out["subject"] != nil {
 		t.Errorf("two named: %v", out)
 	}
 	c.turn.name(nil)
-	if out, _ := c.brainNotify(notifyIn{Text: "Rien.", Level: levelBrief, Why: "Rien.", Ref: "intention:4"}); out["subject"] != nil || out["ref"] != "intention:4" {
+	if out, _ := c.brainNotify(notifyIn{Text: "Rien.", Weight: 2, Why: "Rien.", Ref: "intention:4"}); out["subject"] != nil || out["ref"] != "intention:4" {
 		t.Errorf("none: %v", out)
 	}
 }
@@ -101,8 +101,8 @@ func TestNamedSubjectIsTheTurns(t *testing.T) {
 // record (skill:<name>) still matches its ref.
 func TestRuleMatchesSubjectOrRef(t *testing.T) {
 	rules := []notifyRule{
-		{ID: 1, Kind: ruleTopic, Match: "project:site", Outcome: levelNever, State: ruleActive},
-		{ID: 2, Kind: ruleTopic, Match: "skill:veille", Outcome: levelNow, State: ruleActive},
+		{ID: 1, Kind: ruleTopic, Match: "project:site", Ceiling: 0, State: ruleActive},
+		{ID: 2, Kind: ruleTopic, Match: "skill:veille", Floor: 5, Ceiling: 5, State: ruleActive},
 	}
 	for _, tc := range []struct {
 		it   notifyItem
@@ -306,7 +306,7 @@ func TestNotificationSubjectsMoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, ref := range []string{"project:site", "skill:veille", ""} {
-		s.db.Exec(`INSERT INTO notifications (created, text, why, ref, source, level, outcome, reason, token) VALUES (1, 'x', '', ?, 'brain', 'now', 'now', '', ?)`, ref, ref+"t")
+		s.db.Exec(`INSERT INTO notifications (created, text, why, ref, source, weight, outcome, reason, token) VALUES (1, 'x', '', ?, 'brain', 5, 'now', '', ?)`, ref, ref+"t")
 	}
 	s.db.Exec(`DELETE FROM kv WHERE key = ?`, notificationSubjects)
 	if err := subjectColumns(s.db); err != nil {

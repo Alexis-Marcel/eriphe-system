@@ -22,13 +22,13 @@ func TestSubjectsNotedWhenWritten(t *testing.T) {
 	if _, _, err := c.openThreadOnce(threadIn{Title: "Mise en ligne du site", Goal: "Le site est en ligne.", Subject: "project:site-web"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.brainRule(ruleIn{Match: "alerte:backup", Outcome: levelNow, Why: "Demandé.", SourceRef: ref(seq)}); err != nil {
+	if _, err := c.brainRule(ruleIn{Match: "alerte:backup", Floor: 5, Why: "Demandé.", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.brainNotify(notifyIn{Text: "Fini.", Level: levelBrief, Why: "Fini.", Ref: "task:t-1"}); err != nil {
+	if _, err := c.brainNotify(notifyIn{Text: "Fini.", Weight: 2, Why: "Fini.", Ref: "task:t-1"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.brainNotify(notifyIn{Text: "Rien.", Level: levelBrief, Why: "Rien."}); err != nil {
+	if _, err := c.brainNotify(notifyIn{Text: "Rien.", Weight: 2, Why: "Rien."}); err != nil {
 		t.Fatal(err)
 	}
 	all, _ := c.store.subjectsWhere(`1`)
@@ -50,8 +50,8 @@ func TestSubjectsNotedWhenWritten(t *testing.T) {
 func TestFillSubjects(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, created) VALUES ('Site', 'En ligne.', 'light', 'project:site', 'open', 100)`)
-	c.store.db.Exec(`INSERT INTO notifications (created, text, why, subject, source, level, outcome, reason, token) VALUES (200, 'x', '', 'person:sam', 'brain', 'now', 'now', '', 'a')`)
-	c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, source, level, outcome, reason, token) VALUES (200, 'x', '', 'skill:watch', 'brain', 'now', 'now', '', 'b')`)
+	c.store.db.Exec(`INSERT INTO notifications (created, text, why, subject, source, weight, outcome, reason, token) VALUES (200, 'x', '', 'person:sam', 'brain', 5, 'now', '', 'a')`)
+	c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, source, weight, outcome, reason, token) VALUES (200, 'x', '', 'skill:watch', 'brain', 5, 'now', '', 'b')`)
 	c.mem.db.Exec(`INSERT INTO memories (kind, subject, text, valid_from, recorded_at, source_kind, trust, status, updated_at)
 		VALUES ('fact', 'client:acme', 'x', 1, 1, 'conversation', 'owner', 'active', 300)`)
 	if err := c.fillSubjects(); err != nil {
@@ -149,8 +149,8 @@ func TestMergeSubjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.brainRule(ruleIn{Match: "project:site", Outcome: levelNow, Why: "Demandé.", SourceRef: ref(seq)})
-	c.brainNotify(notifyIn{Text: "En ligne.", Level: levelBrief, Why: "Déployé.", Ref: "project:site"})
+	c.brainRule(ruleIn{Match: "project:site", Floor: 5, Why: "Demandé.", SourceRef: ref(seq)})
+	c.brainNotify(notifyIn{Text: "En ligne.", Weight: 2, Why: "Déployé.", Ref: "project:site"})
 	c.store.keepSubject("project:site-web", "Site web")
 
 	out, isErr := callBrainTool(t, c, "name_subject", map[string]any{"subject": "project:site-web", "aliases": []string{"site", "le site public"}})
@@ -181,7 +181,7 @@ func TestMergeSubjects(t *testing.T) {
 	if xs, _ := c.mem.recall(recallQuery{Subject: "project:site"}); len(xs) != 1 {
 		t.Errorf("recall by the merged key: %+v", xs)
 	}
-	got, err := c.brainNotify(notifyIn{Text: "Encore.", Level: levelBrief, Why: "Encore.", Ref: "projet:site"})
+	got, err := c.brainNotify(notifyIn{Text: "Encore.", Weight: 2, Why: "Encore.", Ref: "projet:site"})
 	if err != nil || got["subject"] != key {
 		t.Errorf("notify under %v %v", got["subject"], err)
 	}

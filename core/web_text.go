@@ -604,6 +604,7 @@ func templateFuncs(lang string) template.FuncMap {
 		"join":      strings.Join,
 		// channelNames are a list of channels' names: "Appareils et <a channel>".
 		"channelNames": func(ids string) string { return channelNames(lang, ids) },
+		"ruleBounds":   func(r notifyRule) string { return ruleBoundsText(r, lang) },
 		"list":         func(s ...string) []string { return s },
 		"dict": func(kv ...any) map[string]any {
 			m := map[string]any{}
