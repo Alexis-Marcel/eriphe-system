@@ -41,4 +41,4 @@ Tu prépares l'espace de travail pour que, en l'ouvrant, on voie sa journée tou
 
 ## Pour finir
 
-Tu ne changes rien ailleurs que dans l'espace : pas d'envoi, pas de modification, pas de suppression. Si l'espace te signale une de tes surfaces périmée, réécris celle-là seulement. Ton dernier message est exactement « [rien] » : l'espace parle pour toi.
+Tu ne changes rien ailleurs que dans l'espace : pas d'envoi, pas de modification, pas de suppression. Si l'espace te signale une de tes surfaces périmée, réécris celle-là seulement. Ton reçu n'a pas de liste `attention` : l'espace parle pour toi, rien n'est notifié.

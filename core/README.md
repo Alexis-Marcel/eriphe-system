@@ -905,11 +905,12 @@ signal enters the [attention queue](#workspace-web) (`c.attend`) with its source
 `assistant:<name>`), marked as drawn from external content when the run or the thread read some:
 the brain reads it as data.
 
-A skill whose receipt has no block keeps working through its prefix: its message, once told, enters
-the queue as the notification it became (`alert:<id>`), weight 5 for `[urgent]`, 4 for a plain
-message, 3 for `[brief]`; `[rien]` and a notification a rule says never to are nothing. A block wins
-over the prefix (which still decides the notification), and a silent run's block still enters the
-queue. A worker's receipt carries no signal.
+In a skill's receipt the block is also what tells: no entry tells the user nothing (the run's
+message stays in its note), and an entry may leave `refs` out to be about the run's own message,
+which then enters the queue as the notification it became (`alert:<id>`), with the entry's weight
+(`tellRun`, [Triggered skills](#triggered-skills)). A lead's
+`report` needs its refs, and only a report with a kept item wakes the brain: without one it is
+kept in the conversation as read and costs no turn. A worker's receipt carries no signal.
 
 ### Threads (`threads.go`, `thread_engine.go`)
 
@@ -1059,7 +1060,7 @@ brain no longer judges a thread that has a lead: it passes the user's words with
 hears the lead's reports, the choices to ask, the budget's card and the end. A report may carry an
 [attention signal](#attention-signals-attention_signalgo) (`attention`, the same block as a skill's
 receipt): its items enter the attention queue with the source `assistant:lead-<id>`, and the tool's
-result lists what was `dropped`.
+result lists what was `dropped`. A report with no item kept does not wake the brain: it is kept in the conversation as read, and the result says so.
 
 **The final objective check**: `close_thread` on a led thread with a `done_when` adds a last step,
 `final-check`, a fresh agent lent read-only what the steps wrote (their repository branches and
@@ -1581,7 +1582,7 @@ turn is not tainted. Its front matter:
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
 | `can` | what its tasks may start: `open-thread`, a led thread |
-| `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run asks |
+| `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
 the rest of the skill, as one version: Settings → Skills shows it in words, and a change is a new
@@ -1592,11 +1593,14 @@ version, read with its diff.
   no start card: the user approved the skill. An external event taints it from its start
   (`task_taint:<id>`), so its writes ask a card as a tainted task's do; a time trigger or own
   events start it clean.
-- **Its last message** is what it tells the user: a notification, why « Skill « name » », ref
-  `skill:<name>`, its link-free rules when the task is tainted; `[rien]` tells nothing, `[brief]`
-  first holds it for the brief. What deserves the user's attention enters the attention queue,
-  from the receipt's [attention signal](#attention-signals-attention_signalgo) or else by the
-  prefix. Then its task stops. The brain is not told of its state; its
+- **Its last message** is what it may tell the user, weighed by its receipt's
+  [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
+  as everywhere; a skill's instructions write no prefix. No entry (or no receipt) tells nothing:
+  the run is `silent`, its message kept in its note. Otherwise its message is a notification, why
+  « Skill « name » », ref `skill:<name>`, its link-free rules when the task is tainted: `now` when
+  the heaviest entry weighs 4 or 5, `brief` below. Each entry with refs enters the attention queue
+  as it is; one without refs is about the message, the notification it became (`alert:<id>`).
+  Then its task stops. The brain is not told of its state and never woken by a run; its
   permissions are the user's, as any task's.
 - **One run open per skill and key**: the key's new events wait, and when its turn ends, its task
   gets them as a message instead of a second task.
@@ -1608,9 +1612,10 @@ version, read with its diff.
   approved again) waits for its next time; times missed while eriphe-core was down make one run.
 - **Its calls the user must approve never hold it** (`skill_cards.go`): as the brain's, each is
   kept with its exact input (`access_asks.run`), and the task is told it did not run and goes on.
-  When the run ends, they show on one card (kind `runcalls`), attached to its message (or to « the
-  skill proposes N actions » when it said `[rien]`, or when its message is held for the brief or
-  not sent, held by the attention queue for the next breakpoint): each action with its parameters. The yes runs
+  When the run ends, they show on one card (kind `runcalls`), attached to its message (sent now
+  even without an attention entry; « the skill proposes N actions » when it wrote none, or when
+  its message is held for the brief or not sent, held by the attention queue for the next
+  breakpoint): each action with its parameters. The yes runs
   them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
 - **A led thread**: with `can: [open-thread]`, the run is told it may end its last message with
   a fenced ` ```thread ` block holding `open_thread`'s JSON. eriphe-core opens it (`by`
@@ -1620,9 +1625,12 @@ version, read with its diff.
   without a branch: the plan waits for its card. While the thread is open, it is the run's: the
   events of its key go to its lead (`tellLead`), not to a new run. Merging and deploying stay the
   user's, on the thread's cards. Without `can`, the block is ignored and the note says why.
-- **Urgent**: with `urgent: <text>`, a last message that starts with `[urgent]` sends that fixed
-  text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the run
-  read enters it: a tainted run cannot write what wakes the user.
+- **Urgent**: with `urgent: <text>`, a run whose attention list weighs something 5 sends that
+  fixed text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the
+  run read enters it: a tainted run cannot write what wakes the user. Its own message goes as any
+  weight 5's, under the rules; without `urgent`, a weight 5 is only that.
+- **A thread block and a receipt** may both end the message: the block is taken out first, so its
+  closing fence does not hide the receipt.
 - **Limits**: 100 runs a skill in 24 hours (a run past it is kept `refused`), 50 events a run;
   a triggered task's own end never triggers a skill.
 - **Tables**: `skill_queue` (events waiting, by skill and key), `skill_runs` (skill, version, key,
@@ -1687,8 +1695,8 @@ what it can.
   their deadline and next task, wealth when a tool for it is linked, the threads and what waits
   for the user, without copying the surfaces their authors keep); live sources for what changes
   during the day, composed values for digests; `lifetime.until` the end of the day; with nothing
-  linked, one surface saying what it could show; it changes nothing outside the workspace and ends
-  with `[rien]`.
+  linked, one surface saying what it could show; it changes nothing outside the workspace and its
+  receipt has no attention entry: nothing is notified.
 
 ## Events
 
@@ -2728,7 +2736,7 @@ follows. A proposal waiting to be offered (a memory, an intention, a rule…: a 
 intention) from the source `offer`, so the composer may show it; no breakpoint delivers it and the
 brain's turn does not list it: `offerCards` offers it in the conversation as before, and once under
 the brain's message its item is the card's as any other (weight 3, delivered). A
-notification held for the brief (a skill's `[brief]`, the quiet hours, the daily cap, a tainted
+notification held for the brief (a skill's message weighed 1 to 3, the quiet hours, the daily cap, a tainted
 turn, « pas maintenant ») enters it as `alert:<id>` with weight 2, the item a skill's message
 becomes too. Weight 4 and 5 are delivered as they enter: nothing a running task or thread
 waits on is ever delayed. The rest is held for a **breakpoint**, where an interruption costs the

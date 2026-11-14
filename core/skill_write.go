@@ -31,11 +31,11 @@ type writeSkillIn struct {
 	Model        string   `json:"model,omitempty" jsonschema:"an agent of list_agents for its runs: a small one to sort mail; the default one if empty"`
 	Tools        []string `json:"tools,omitempty" jsonschema:"the catalog servers its runs are lent (list_tools): mail, calendar…; each call is still decided by the user's grid. eriphe-workspace to keep its own surface on the user's workspace: its runs write it as the skill, the same id each time"`
 	Can          []string `json:"can,omitempty" jsonschema:"what its runs may start: open-thread, a thread (investigate, fix, open a pull request)"`
-	Urgent       string   `json:"urgent,omitempty" jsonschema:"with when: a fixed message (160 characters, no link) sent at any hour when a run starts its last message with [urgent]: « Prod GetOut en panne, regarde Eriphe »"`
+	Urgent       string   `json:"urgent,omitempty" jsonschema:"with when: a fixed message (160 characters, no link) sent at any hour when a run weighs something 5 in its attention list: « Prod GetOut en panne, regarde Eriphe »"`
 }
 
 func registerSkillWriteTool(s *mcp.Server, c *core) {
-	tool(s, "write_skill", "Write one of the user's skills, or a new version of one, when the user asks for a behaviour of Eriphe's: a skill is know-how (instructions), and with when it runs by itself, as a task in the background, on events or at times. Use it for « quand je reçois un mail avec un rendez-vous, propose-moi… », « surveille la prod et propose un correctif ». Nothing runs before the user approves it on its card. Its runs never talk in this conversation: each one's last message is a notification, and its actions are asked on cards.",
+	tool(s, "write_skill", "Write one of the user's skills, or a new version of one, when the user asks for a behaviour of Eriphe's: a skill is know-how (instructions), and with when it runs by itself, as a task in the background, on events or at times. Use it for « quand je reçois un mail avec un rendez-vous, propose-moi… », « surveille la prod et propose un correctif ». Nothing runs before the user approves it on its card. Its runs never talk in this conversation: each one's last message is a notification when its receipt weighs it (attention, 1 to 5; none tells nothing), and its actions are asked on cards. Write no [rien], [brief] or [urgent] in its instructions: the weight says it.",
 		func(ctx context.Context, in writeSkillIn) (map[string]any, error) {
 			return c.writeSkill(in, c.turnTaint())
 		})
