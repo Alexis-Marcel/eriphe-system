@@ -408,3 +408,25 @@ func mustIntend(t *testing.T, m *memStore, x *Intention) *Intention {
 	}
 	return got
 }
+
+// The core runs on a read-only root filesystem with no writable temporary
+// directory: SQLite must keep its temporary files (a column dropped, a sort)
+// in memory, or a migration fails with a disk I/O error.
+func TestDatabasesKeepTempInMemory(t *testing.T) {
+	m, err := openMemory(filepath.Join(t.TempDir(), "memory.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.db.Close()
+	s, err := openStore(filepath.Join(t.TempDir(), "core.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.db.Close()
+	for name, db := range map[string]*sql.DB{"memory": m.db, "store": s.db} {
+		var v int
+		if err := db.QueryRow(`PRAGMA temp_store`).Scan(&v); err != nil || v != 2 {
+			t.Errorf("%s: temp_store %d (%v), want 2 (memory)", name, v, err)
+		}
+	}
+}
