@@ -326,11 +326,14 @@ type updateIn struct {
 }
 
 type respondIn struct {
-	ID       string `json:"id" jsonschema:"event id; for a recurring event the whole series is answered"`
+	ID       string `json:"id" jsonschema:"event id from list_events"`
 	Account  string `json:"account,omitempty" jsonschema:"the account of the event, as list_events gives it"`
 	Response string `json:"response" jsonschema:"accept, decline or tentative"`
 	Comment  string `json:"comment,omitempty" jsonschema:"a short word for the organizer, sent with the answer"`
-	Timezone string `json:"timezone,omitempty" jsonschema:"IANA zone for showing times"`
+	// A recurring event needs one of the two: nothing is guessed.
+	Occurrence string `json:"occurrence,omitempty" jsonschema:"for a recurring event: the start of the one occurrence answered, as list_events gives it"`
+	Series     bool   `json:"series,omitempty" jsonschema:"for a recurring event: answer every occurrence, only when the user asked for the whole series"`
+	Timezone   string `json:"timezone,omitempty" jsonschema:"IANA zone for showing times"`
 }
 
 type deleteOut struct {
@@ -558,8 +561,9 @@ func newServer(c *Calendars, version string) *mcp.Server {
 
 	// It sends the answer to the organizer: it reaches outside (open world).
 	tool(s, "respond_event", "Answer an invitation as the user: accept, decline or tentative, with an optional comment. "+
-		"The organizer is told. For a recurring event the whole series is answered. Refused for an event the user organizes "+
-		"or is not invited to (my_status tells).",
+		"The organizer is told. For a recurring event, give occurrence (its start, as list_events gives it) when the user "+
+		"speaks of one date (« je ne serai pas là samedi »), series: true only when they mean every occurrence; one of the two "+
+		"is required. Refused for an event the user organizes or is not invited to (my_status tells).",
 		&mcp.ToolAnnotations{DestructiveHint: ptr(false), IdempotentHint: true},
 		func(ctx context.Context, in respondIn) (Event, error) {
 			loc, err := c.zone(in.Timezone)
@@ -577,7 +581,26 @@ func newServer(c *Calendars, version string) *mcp.Server {
 			if err := writes(a); err != nil {
 				return Event{}, err
 			}
-			it, err := a.p.Respond(ctx, r.Calendar, r.Event, Response{Status: status, Comment: strings.TrimSpace(in.Comment)})
+			resp := Response{Status: status, Comment: strings.TrimSpace(in.Comment)}
+			switch {
+			case strings.TrimSpace(in.Occurrence) != "" && in.Series:
+				return Event{}, errors.New("give occurrence or series, not both")
+			case strings.TrimSpace(in.Occurrence) != "":
+				at, _, err := parseWhen(in.Occurrence, loc)
+				if err != nil {
+					return Event{}, err
+				}
+				resp.Occurrence = &at
+			case !in.Series:
+				cur, err := a.p.Get(ctx, r.Calendar, r.Event)
+				if err != nil {
+					return Event{}, err
+				}
+				if cur.Recurring {
+					return Event{}, errors.New("a recurring event: give occurrence (the start of the one the user means, as list_events gives it), or series: true if they mean every occurrence")
+				}
+			}
+			it, err := a.p.Respond(ctx, r.Calendar, r.Event, resp)
 			if err != nil {
 				return Event{}, err
 			}

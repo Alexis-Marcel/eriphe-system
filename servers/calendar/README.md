@@ -15,7 +15,7 @@ Microsoft Graph. Secrets are app passwords or OAuth access tokens lent by eriphe
 | `create_event` | timed (start + end or duration) or all-day (dates) | not destructive |
 | `update_event` | only the fields given; moving the start keeps the duration; whole series for recurring events | destructive |
 | `delete_event` | whole series for recurring events | destructive |
-| `respond_event` | answer an invitation as the user: `accept`, `decline` or `tentative`, optional `comment`; the organizer is told; whole series for recurring events | not destructive, open world (it sends a reply) |
+| `respond_event` | answer an invitation as the user: `accept`, `decline` or `tentative`, optional `comment`; the organizer is told; for a recurring event, one `occurrence` (its start) or `series: true` | not destructive, open world (it sends a reply) |
 | `find_free_time` | free slots within working hours (default 09:00-18:00, weekdays), all calendars; free events and all-day events do not block by default | read-only |
 
 Times without an offset are read in the configured zone (or a `timezone` argument) and shown with
@@ -33,12 +33,20 @@ account's `username` and its `emails`; Microsoft Graph says it itself (`isOrgani
 `responseStatus`), and rooms are not counted as attendees.
 
 `respond_event` refuses an event the user organizes, one they are not invited to, and a read-only
-account. On CalDAV it sets the user's own `PARTSTAT` in the event and its moved occurrences (the
-comment in `COMMENT`), without changing anything of the organizer's, and saves it with `If-Match`:
-a server that schedules (RFC 6638: Google, iCloud, Nextcloud...) sends the reply to the organizer;
-one that does not only keeps the answer in the calendar. On Microsoft Graph it calls `accept`,
-`decline` or `tentativelyAccept` with `sendResponse`, on the series when the id is an occurrence.
-Answering a single occurrence of a recurring event is not supported.
+account. For a recurring event it needs one of two: `occurrence`, the start of the one occurrence
+answered as `list_events` gives it (a moved occurrence: its new start, or its original one), or
+`series: true` for every occurrence; nothing is guessed. The brain is told to answer only the
+occurrence when the user speaks of one date.
+
+- CalDAV: it sets the user's own `PARTSTAT` (the comment in `COMMENT`) without changing anything
+  of the organizer's, and saves the object with `If-Match`. For the series, in the series and its
+  moved occurrences; for one occurrence, in its override (`RECURRENCE-ID`), added as a copy of the
+  series for that instance when it has none yet. A server that schedules (RFC 6638: Google,
+  iCloud, Nextcloud...) sends the reply to the organizer; one that does not only keeps the answer
+  in the calendar.
+- Microsoft Graph: `accept`, `decline` or `tentativelyAccept` with `sendResponse`, on the series
+  master for the series, on the occurrence itself for one occurrence (found among the series'
+  `instances` when the id is another one).
 
 Every tool takes an optional `account` (its `name`). The reads without one cover every account;
 `create_event` needs one (and a calendar) when several calendars can be written. `get_event`,

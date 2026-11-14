@@ -22,7 +22,8 @@ type Provider interface {
 	Update(ctx context.Context, calID, eventID string, p EventPatch) (*Item, error)
 	Delete(ctx context.Context, calID, eventID string) error
 	// Respond answers an invitation as the user: the organizer is told.
-	// A recurring event is answered for the whole series.
+	// A recurring event is answered for the whole series, or for one
+	// occurrence when r.Occurrence is set.
 	Respond(ctx context.Context, calID, eventID string, r Response) (*Item, error)
 }
 
@@ -30,6 +31,10 @@ type Provider interface {
 type Response struct {
 	Status  string // accepted, declined or tentative
 	Comment string // a word for the organizer; may be empty
+	// Occurrence is the start of the one occurrence answered, as
+	// list_events shows it (a moved one: its new start); nil answers the
+	// whole event, every occurrence of a recurring one.
+	Occurrence *time.Time
 }
 
 // Person is someone of an event: its organizer or an attendee.

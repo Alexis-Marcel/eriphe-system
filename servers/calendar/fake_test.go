@@ -301,6 +301,17 @@ func (f *fakeGraph) handle(w http.ResponseWriter, r *http.Request) {
 		f.events[id], f.calOf[id] = e, cal
 		w.WriteHeader(201)
 		json.NewEncoder(w).Encode(e)
+	case r.Method == "GET" && strings.HasPrefix(p, "/me/events/") && strings.HasSuffix(p, "/instances"):
+		master, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(p, "/me/events/"), "/instances"))
+		from, _ := time.Parse(time.RFC3339, r.URL.Query().Get("startDateTime"))
+		to, _ := time.Parse(time.RFC3339, r.URL.Query().Get("endDateTime"))
+		vals := []any{}
+		for _, e := range f.events {
+			if e["seriesMasterId"] == master && e["type"] != "seriesMaster" && gtime(e["end"]).After(from) && gtime(e["start"]).Before(to) {
+				vals = append(vals, e)
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"value": vals})
 	case r.Method == "POST" && strings.HasPrefix(p, "/me/events/") && strings.Count(p, "/") == 4:
 		// An answer: accept, decline, tentativelyAccept.
 		rest := strings.TrimPrefix(p, "/me/events/")

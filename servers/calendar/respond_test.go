@@ -117,7 +117,7 @@ func TestCalDAVAttendeesAndRespond(t *testing.T) {
 		t.Errorf("not invited: %s", msg)
 	}
 
-	ans := call[Event](t, cs, "respond_event", map[string]any{"id": first.ID, "response": "decline", "comment": "Absent ce samedi"})
+	ans := call[Event](t, cs, "respond_event", map[string]any{"id": first.ID, "response": "decline", "comment": "Absent ce samedi", "series": true})
 	if ans.MyStatus != "declined" {
 		t.Fatalf("answered: %+v", ans)
 	}
@@ -165,7 +165,7 @@ func TestRespondByAlias(t *testing.T) {
 	if len(list.Events) != 1 || list.Events[0].MyStatus != "needs-action" {
 		t.Fatalf("events: %+v", list.Events)
 	}
-	if ans := call[Event](t, cs, "respond_event", map[string]any{"id": list.Events[0].ID, "response": "tentative"}); ans.MyStatus != "tentative" {
+	if ans := call[Event](t, cs, "respond_event", map[string]any{"id": list.Events[0].ID, "response": "tentative", "series": true}); ans.MyStatus != "tentative" {
 		t.Fatalf("answered: %+v", ans)
 	}
 }
@@ -209,12 +209,100 @@ func TestGraphAttendeesAndRespond(t *testing.T) {
 	if msg := callErr(t, cs, "respond_event", map[string]any{"id": list.Events[1].ID, "response": "decline"}); !strings.Contains(msg, "organizes") {
 		t.Errorf("own: %s", msg)
 	}
-	ans := call[Event](t, cs, "respond_event", map[string]any{"id": occ.ID, "response": "decline", "comment": "Pas dispo"})
+	ans := call[Event](t, cs, "respond_event", map[string]any{"id": occ.ID, "response": "decline", "comment": "Pas dispo", "series": true})
 	if ans.MyStatus != "declined" {
 		t.Fatalf("answered: %+v", ans)
 	}
 	// Answered through the series, the reply sent.
 	if strings.Join(e.graph.answers, ";") != "AAMk-master decline Pas dispo true" {
 		t.Fatalf("answers: %v", e.graph.answers)
+	}
+}
+
+func TestCalDAVRespondOccurrence(t *testing.T) {
+	e := newEnv(t)
+	e.perso.put(t, "/u/calendars/travail/weekly.ics", invitation)
+	cs := e.connect(t)
+	list := call[listEventsOut](t, cs, "list_events", map[string]any{"account": "icloud", "from": "2026-10-27", "days": 21})
+	mk := byTitle(list.Events, "Marketing")
+	if len(mk) != 3 {
+		t.Fatalf("marketing: %+v", mk)
+	}
+	// Recurring: nothing is guessed.
+	if msg := callErr(t, cs, "respond_event", map[string]any{"id": mk[0].ID, "response": "decline"}); !strings.Contains(msg, "give occurrence") {
+		t.Errorf("no scope: %s", msg)
+	}
+	if msg := callErr(t, cs, "respond_event", map[string]any{"id": mk[0].ID, "response": "decline", "occurrence": mk[0].Start, "series": true}); !strings.Contains(msg, "not both") {
+		t.Errorf("both: %s", msg)
+	}
+	if msg := callErr(t, cs, "respond_event", map[string]any{"id": mk[0].ID, "response": "decline", "occurrence": "2026-10-28T15:00"}); !strings.Contains(msg, "no occurrence") {
+		t.Errorf("wrong date: %s", msg)
+	}
+
+	// One occurrence of the series: a new override, the series untouched.
+	ans := call[Event](t, cs, "respond_event", map[string]any{"id": mk[2].ID, "response": "decline", "occurrence": mk[2].Start, "comment": "Absent"})
+	if ans.MyStatus != "declined" || ans.Start != "2026-11-10T15:00:00+01:00" {
+		t.Fatalf("answered: %+v", ans)
+	}
+	raw := strings.ReplaceAll(e.perso.raw(t, "/u/calendars/travail/weekly.ics"), "\r\n ", "")
+	if strings.Count(raw, "BEGIN:VEVENT") != 3 || strings.Count(raw, "PARTSTAT=DECLINED") != 1 ||
+		!strings.Contains(raw, "RECURRENCE-ID:20261110T140000Z") || strings.Count(raw, "RRULE") != 1 {
+		t.Fatalf("saved:\n%s", raw)
+	}
+
+	// The moved occurrence, by the start list_events shows: its override.
+	call[Event](t, cs, "respond_event", map[string]any{"id": mk[1].ID, "response": "tentative", "occurrence": mk[1].Start})
+	raw = strings.ReplaceAll(e.perso.raw(t, "/u/calendars/travail/weekly.ics"), "\r\n ", "")
+	if strings.Count(raw, "BEGIN:VEVENT") != 3 || strings.Count(raw, "PARTSTAT=TENTATIVE") != 1 {
+		t.Fatalf("moved:\n%s", raw)
+	}
+
+	got := map[string]string{}
+	for _, ev := range byTitle(call[listEventsOut](t, cs, "list_events", map[string]any{"account": "icloud", "from": "2026-10-27", "days": 21}).Events, "Marketing") {
+		got[ev.Start[:10]] = ev.MyStatus
+	}
+	if got["2026-10-27"] != "needs-action" || got["2026-11-03"] != "tentative" || got["2026-11-10"] != "declined" || len(got) != 3 {
+		t.Fatalf("after: %v", got)
+	}
+}
+
+func TestGraphRespondOccurrence(t *testing.T) {
+	e := newEnv(t)
+	people := []any{
+		map[string]any{"type": "required", "status": map[string]any{"response": "none"}, "emailAddress": map[string]any{"name": "Me", "address": "me@example.org"}},
+	}
+	ev := func(id, typ, start, orig string) map[string]any {
+		return map[string]any{"id": id, "subject": "Revue", "type": typ, "seriesMasterId": "AAMk-master", "originalStart": orig,
+			"start": map[string]any{"dateTime": start, "timeZone": "UTC"}, "end": map[string]any{"dateTime": start[:11] + "18:00:00", "timeZone": "UTC"},
+			"isOrganizer": false, "organizer": map[string]any{"emailAddress": map[string]any{"name": "Sam", "address": "sam@example.org"}},
+			"attendees": people, "responseStatus": map[string]any{"response": "notResponded"}}
+	}
+	for _, x := range []map[string]any{
+		ev("AAMk-occ1", "occurrence", "2026-10-27T14:00:00", "2026-10-27T14:00:00Z"),
+		ev("AAMk-occ2", "exception", "2026-11-03T16:00:00", "2026-11-03T14:00:00Z"), // moved
+		ev("AAMk-master", "seriesMaster", "2026-10-20T14:00:00", ""),
+	} {
+		id := x["id"].(string)
+		e.graph.events[id], e.graph.calOf[id] = x, "AAMk-cal/1=="
+	}
+	e.graph.events["AAMk-master"]["seriesMasterId"] = ""
+	e.graph.calOf["AAMk-master"] = "AAMk-other"
+	cs := e.connect(t)
+	list := call[listEventsOut](t, cs, "list_events", map[string]any{"account": "work", "from": "2026-10-27", "days": 14})
+	if len(list.Events) != 2 {
+		t.Fatalf("events: %+v", list.Events)
+	}
+	if msg := callErr(t, cs, "respond_event", map[string]any{"id": list.Events[0].ID, "response": "decline"}); !strings.Contains(msg, "give occurrence") {
+		t.Errorf("no scope: %s", msg)
+	}
+	// The id is that occurrence: answered on it, not on the series.
+	call[Event](t, cs, "respond_event", map[string]any{"id": list.Events[0].ID, "response": "decline", "occurrence": list.Events[0].Start})
+	// Another occurrence through this id: the moved one, by its original start.
+	call[Event](t, cs, "respond_event", map[string]any{"id": list.Events[0].ID, "response": "accept", "occurrence": "2026-11-03T15:00"})
+	if strings.Join(e.graph.answers, ";") != "AAMk-occ1 decline  true;AAMk-occ2 accept  true" {
+		t.Fatalf("answers: %v", e.graph.answers)
+	}
+	if msg := callErr(t, cs, "respond_event", map[string]any{"id": list.Events[0].ID, "response": "accept", "occurrence": "2026-11-04T15:00"}); !strings.Contains(msg, "no occurrence") {
+		t.Errorf("wrong date: %s", msg)
 	}
 }
