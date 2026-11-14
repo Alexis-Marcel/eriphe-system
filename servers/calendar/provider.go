@@ -21,6 +21,29 @@ type Provider interface {
 	Create(ctx context.Context, calID string, in EventInput) (*Item, error)
 	Update(ctx context.Context, calID, eventID string, p EventPatch) (*Item, error)
 	Delete(ctx context.Context, calID, eventID string) error
+	// Respond answers an invitation as the user: the organizer is told.
+	// A recurring event is answered for the whole series.
+	Respond(ctx context.Context, calID, eventID string, r Response) (*Item, error)
+}
+
+// Response is the user's answer to an invitation.
+type Response struct {
+	Status  string // accepted, declined or tentative
+	Comment string // a word for the organizer; may be empty
+}
+
+// Person is someone of an event: its organizer or an attendee.
+type Person struct {
+	Name  string `json:"name,omitempty"`
+	Email string `json:"email,omitempty"`
+}
+
+// Attendee is someone invited, with their answer: accepted, declined,
+// tentative, needs-action (not answered yet) or delegated.
+type Attendee struct {
+	Person
+	Status   string `json:"status,omitempty"`
+	Optional bool   `json:"optional,omitempty"`
 }
 
 type CalendarInfo struct {
@@ -42,6 +65,50 @@ type Item struct {
 	Recurring   bool
 	Free        bool // transparent / "show as free": does not block time
 	Cancelled   bool
+
+	// The people, only for an event with attendees (a meeting).
+	Organizer     *Person
+	Attendees     []Attendee // nil in lists: see light
+	AttendeeCount int
+	MyStatus      string // the user's own answer (an Attendee status), or organizer
+}
+
+// light drops the attendees of listed events, keeping their count: a
+// meeting can have hundreds, and get_event gives them.
+func light(items []Item) []Item {
+	for i := range items {
+		items[i].Attendees = nil
+	}
+	return items
+}
+
+// meeting fills an item's people: count and, from the user's addresses,
+// their own status. Without attendees it is not a meeting: nothing is kept.
+func (it *Item) meeting(me []string, organizer *Person, attendees []Attendee) {
+	if len(attendees) == 0 {
+		return
+	}
+	it.Organizer, it.Attendees, it.AttendeeCount = organizer, attendees, len(attendees)
+	if organizer != nil && isMe(me, organizer.Email) {
+		it.MyStatus = "organizer"
+		return
+	}
+	for _, a := range attendees {
+		if isMe(me, a.Email) {
+			it.MyStatus = a.Status
+			return
+		}
+	}
+}
+
+func isMe(me []string, email string) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	for _, m := range me {
+		if email != "" && m == email {
+			return true
+		}
+	}
+	return false
 }
 
 type EventInput struct {

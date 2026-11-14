@@ -228,6 +228,8 @@ type fakeGraph struct {
 	calOf  map[string]string
 	n      int
 	page   int
+
+	answers []string // the invitations answered: id, action, comment, sendResponse
 }
 
 func newFakeGraph(token string) *fakeGraph {
@@ -299,6 +301,26 @@ func (f *fakeGraph) handle(w http.ResponseWriter, r *http.Request) {
 		f.events[id], f.calOf[id] = e, cal
 		w.WriteHeader(201)
 		json.NewEncoder(w).Encode(e)
+	case r.Method == "POST" && strings.HasPrefix(p, "/me/events/") && strings.Count(p, "/") == 4:
+		// An answer: accept, decline, tentativelyAccept.
+		rest := strings.TrimPrefix(p, "/me/events/")
+		id, _ := url.PathUnescape(rest[:strings.LastIndex(rest, "/")])
+		action := rest[strings.LastIndex(rest, "/")+1:]
+		e, ok := f.events[id]
+		if !ok {
+			graphErr(w, 404, "ErrorItemNotFound")
+			return
+		}
+		resp := map[string]string{"accept": "accepted", "decline": "declined", "tentativelyAccept": "tentativelyAccepted"}[action]
+		if resp == "" {
+			graphErr(w, 400, "BadAction")
+			return
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		f.answers = append(f.answers, fmt.Sprintf("%s %s %v %v", id, action, body["comment"], body["sendResponse"]))
+		e["responseStatus"] = map[string]any{"response": resp}
+		w.WriteHeader(202)
 	case strings.HasPrefix(p, "/me/events/"):
 		id, _ := url.PathUnescape(strings.TrimPrefix(p, "/me/events/"))
 		e, ok := f.events[id]

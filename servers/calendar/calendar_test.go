@@ -390,7 +390,7 @@ func TestToolAnnotations(t *testing.T) {
 	for _, tl := range res.Tools {
 		got[tl.Name] = tl.Annotations
 	}
-	if len(got) != 9 {
+	if len(got) != 10 {
 		t.Errorf("tools: %v", got)
 	}
 	for _, n := range []string{"list_accounts", "list_calendars", "list_events", "get_event", "find_free_time"} {
@@ -405,6 +405,10 @@ func TestToolAnnotations(t *testing.T) {
 	}
 	if a := got["create_event"]; a == nil || a.ReadOnlyHint || *a.DestructiveHint {
 		t.Errorf("create_event: %+v", a)
+	}
+	// It tells the organizer: it reaches outside, so it is asked as a send.
+	if a := got["respond_event"]; a == nil || a.ReadOnlyHint || *a.DestructiveHint || a.OpenWorldHint != nil && !*a.OpenWorldHint {
+		t.Errorf("respond_event: %+v", a)
 	}
 }
 
