@@ -99,7 +99,7 @@
 <li class="notif{{if .Open}} is-open{{end}}" id="notif-{{.ID}}">
   <div class="list-main">
     <span class="strong">{{.Text}}</span>
-    <span class="small muted">{{date .Created}} · <span class="tag{{if eq .Outcome "now"}} tag-ok{{else if eq .Outcome "brief"}} tag-accent{{end}}">{{t (printf "notif.out.%s" .Outcome)}}</span>
+    <span class="small muted">{{date .Created}} · <span class="tag{{if eq .Outcome "now"}} tag-ok{{else if eq .Outcome "held"}} tag-accent{{end}}">{{t (printf "notif.out.%s" .Outcome)}}</span>
       {{if .Held}}<span class="tag">{{t "notif.waiting"}}</span>{{end}}
       {{if .Tainted}}<span class="tag tag-no" title="{{.Tainted}}">{{t "notif.tainted"}}</span>{{end}}</span>
     <span class="small">{{t "notif.why"}} {{.Why}}</span>

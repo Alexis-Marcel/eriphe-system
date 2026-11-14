@@ -334,7 +334,7 @@ func TestWorkspaceBlock(t *testing.T) {
 	b := c.workspaceBlock(now)
 	for _, w := range []string{
 		"[l'espace de Sam, tel que sa page le montre",
-		"\n- agenda « Agenda du jour » · xl en 0,0 · ouverte",
+		"\n- agenda « Agenda du jour » · l en 0,0 · ouverte",
 		"\n- dehors · m en 9,6 · placée pour la session",
 		"fermé par lui pour la session (ne le remets pas devant sans qu'il le demande) : meteo",
 		"ouvert agenda ; ", "déplacé dehors ; ", "fermé meteo]",

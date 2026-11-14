@@ -116,18 +116,18 @@ func TestNotifyEvalInterrupt(t *testing.T) {
 		} else {
 			t.Errorf("%s (%s): %s (%s), want %s", x.ID, x.What, got.Outcome, got.Reason, x.Want)
 		}
-		if x.Want == levelNow {
+		if x.Want == outcomeNow {
 			nowWant++
 		}
-		if got.Outcome == levelNow {
+		if got.Outcome == outcomeNow {
 			nowGot++
-			if x.Want == levelNow {
+			if x.Want == outcomeNow {
 				nowRight++
 			}
 		}
 		// A night wake-up is allowed only by a night rule, or an urgent
 		// watch's fixed message, on a clean turn.
-		if _, quiet := quietAt(cx.Rules, cx.Now); quiet && got.Outcome == levelNow {
+		if _, quiet := quietAt(cx.Rules, cx.Now); quiet && got.Outcome == outcomeNow {
 			r := topicRule(cx.Rules, x.Ref)
 			if (r == nil || !r.Night) && !x.Urgent || x.Tainted {
 				nightWakes++
@@ -136,7 +136,7 @@ func TestNotifyEvalInterrupt(t *testing.T) {
 		}
 		if x.Injection {
 			injections++
-			if got.Outcome != levelNow {
+			if got.Outcome != outcomeNow {
 				blocked++
 			}
 		}

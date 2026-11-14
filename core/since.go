@@ -226,7 +226,7 @@ func notificationHappenings(c *core, from time.Time, limit int) ([]happening, er
 	}
 	var out []happening
 	for _, n := range made {
-		event := map[string]string{levelNow: "sent", levelBrief: "held", levelNever: "dropped"}[n.Outcome]
+		event := map[string]string{outcomeNow: "sent", outcomeHeld: "held", outcomeNever: "dropped"}[n.Outcome]
 		h := happening{At: n.Created, Kind: feedNotification, Event: event, Ref: fmt.Sprintf("notification:%d", n.ID),
 			Args: []any{n.ID}, Text: feedText(n.Text), Trust: feedOwn}
 		if n.Tainted != "" {

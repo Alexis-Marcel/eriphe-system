@@ -210,7 +210,7 @@ func TestSkillRunAttention(t *testing.T) {
 		if len(ns) != 1 {
 			return nil
 		}
-		return attentionOf(c, fmt.Sprintf("alert:%d", ns[0].ID))
+		return attentionOf(c, noteItemRef(ns[0].ID))
 	}
 	levelOf := func(r *skillRun) string {
 		t.Helper()
@@ -228,12 +228,12 @@ func TestSkillRunAttention(t *testing.T) {
 	for key, w := range map[string]int{"k-a": 5, "k-b": 4, "k-c": 3, "k-g": 1} {
 		r := end(key, fmt.Sprintf("Prod, key %s.", key)+rcpt(fmt.Sprintf(`[{"weight": %d, "why": "la prod"}]`, w)))
 		it := alertOf(r)
-		if it == nil || it.Weight != max(w, weightHeldNote) || it.Source != "skill:veille" || it.Why != "la prod" || !strings.Contains(it.Say, "Prod") {
+		if it == nil || it.Weight != w || it.Source != "skill:veille" || it.Why != "la prod" || !strings.Contains(it.Say, "Prod") {
 			t.Errorf("weight %d: item %+v", w, it)
 		}
-		want := levelNow
+		want := outcomeNow
 		if w < weightBlocksATask {
-			want = levelBrief
+			want = outcomeHeld
 		}
 		if got := levelOf(r); got != want {
 			t.Errorf("weight %d: level %q, want %q", w, got, want)
@@ -270,15 +270,19 @@ func TestSkillRunAttention(t *testing.T) {
 	if r = c.runByID(r.ID); r.State != skillRunDone {
 		t.Errorf("run %+v", r)
 	}
-	// From 4, the message is told too, now; the queue's item is the mail.
+	// From 4, the message is told too, now, its mail with it: one message.
+	said := len(brainMessages(t, c))
 	r = end("k-j", "Une facture en retard, key k-j."+rcpt(`[{"refs": ["mail:43"], "weight": 4, "why": "une facture en retard"}]`))
-	if it := attentionOf(c, "mail:43"); it == nil || it.Weight != 4 || levelOf(r) != levelNow || alertOf(r) != nil {
+	if it := attentionOf(c, "mail:43"); it == nil || it.Weight != 4 || it.Held || levelOf(r) != outcomeNow || alertOf(r) == nil || alertOf(r).Held {
 		t.Errorf("weight 4 with refs: item %+v, level %q, alert %+v", it, levelOf(r), alertOf(r))
+	}
+	if n := len(brainMessages(t, c)) - said; n != 1 {
+		t.Errorf("%d messages for one run", n)
 	}
 	// A bad ref never silences a weight: the entry is about the message,
 	// and the run's note says what was dropped.
 	r = end("k-i", "Prod down, key k-i."+rcpt(`[{"refs": ["bogus:1"], "weight": 5, "why": "la prod"}]`))
-	if it := alertOf(r); it == nil || it.Weight != 5 || levelOf(r) != levelNow {
+	if it := alertOf(r); it == nil || it.Weight != 5 || levelOf(r) != outcomeNow {
 		t.Errorf("bad ref: item %+v, level %q", it, levelOf(r))
 	}
 	if attentionOf(c, "bogus:1") != nil {

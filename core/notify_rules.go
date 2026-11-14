@@ -106,12 +106,12 @@ func ruleWeights(db *sql.DB) error {
 	rows.Close()
 	for id, m := range specs {
 		floor, ceiling := 0, weightInterrupts
-		switch m["outcome"] {
-		case levelNow:
+		switch m["outcome"] { // as they were written
+		case "now":
 			floor = weightInterrupts
-		case levelBrief:
-			ceiling = weightHeldNote
-		case levelNever:
+		case "brief":
+			ceiling = weightBrief
+		case "never":
 			ceiling = 0
 		}
 		delete(m, "outcome")

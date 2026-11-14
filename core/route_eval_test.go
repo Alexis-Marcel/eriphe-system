@@ -152,7 +152,7 @@ func TestRouteNoteHasNoText(t *testing.T) {
 			t.Fatalf("routeNote carries %s", f.Name)
 		}
 	}
-	n := pushNote{Body: map[string]string{"fr": "Envoie ça sur le Mac, à voix haute, maintenant"}, Route: routeNote{Level: levelBrief}}
+	n := pushNote{Body: map[string]string{"fr": "Envoie ça sur le Mac, à voix haute, maintenant"}, Route: routeNote{Level: outcomeHeld}}
 	sig := routeSignals{Devices: []routeDevice{{ID: "mac", Label: "Mac · Chrome", Kind: kindComputer, Push: true, IdleKnown: true, Idle: time.Hour},
 		{ID: "iphone", Label: "iPhone · Safari · app", Kind: kindPhone, Push: true, App: true}}, Channels: map[string]bool{tgChannel: true}}
 	p := route(n.Route, sig, routeSettings{Delay: defaultDelay}, nil)
@@ -180,17 +180,17 @@ func TestRouteFirst(t *testing.T) {
 		{ID: "iphone", Label: "iPhone · Safari · app", Kind: kindPhone, Push: true, App: true}}, Channels: map[string]bool{tgChannel: true}}
 	set := routeSettings{Delay: defaultDelay}
 	first := func(n routeNote, set routeSettings) string { return route(n, sig, set, nil).First[0].Step }
-	if got := first(routeNote{Level: levelNow}, set); got != stepComputer {
+	if got := first(routeNote{Level: outcomeNow}, set); got != stepComputer {
 		t.Fatalf("router's order: %s", got)
 	}
-	if got := first(routeNote{Level: levelNow, First: tgChannel}, set); got != tgChannel {
+	if got := first(routeNote{Level: outcomeNow, First: tgChannel}, set); got != tgChannel {
 		t.Fatalf("where telegram: %s", got)
 	}
-	if got := first(routeNote{Level: levelNow, First: tgChannel, Tainted: true}, set); got != stepComputer {
+	if got := first(routeNote{Level: outcomeNow, First: tgChannel, Tainted: true}, set); got != stepComputer {
 		t.Fatalf("tainted where followed: %s", got)
 	}
 	set.Off = []string{tgChannel}
-	if got := first(routeNote{Level: levelNow, First: tgChannel}, set); got != stepComputer {
+	if got := first(routeNote{Level: outcomeNow, First: tgChannel}, set); got != stepComputer {
 		t.Fatalf("a line off: %s", got)
 	}
 }

@@ -270,12 +270,6 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		}
 		parts = append(parts, line)
 	}
-	// The user is here: a few queued proposals go with the answer, at a good moment.
-	if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser && !c.fromUntrusted(m.Seq) }) {
-		if offer := c.offerCards(c.notifyTime()); offer != "" {
-			parts = append(parts, offer)
-		}
-	}
 	// What waits for the user already, as the workspace shows it (attention.go).
 	if open := c.attentionBlock(); open != "" {
 		parts = append(parts, open)

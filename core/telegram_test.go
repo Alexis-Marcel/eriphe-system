@@ -264,7 +264,7 @@ func TestTelegramNotifyAndFeedback(t *testing.T) {
 	tgOf(c).restart()
 	ownerSays(c, "Préviens-moi quand la PR est fusionnée")
 	out, err := c.brainNotify(notifyIn{Text: "La PR 42 est fusionnée.", Weight: 5, Why: "Tu m'as demandé de te prévenir.", Ref: "project:site"})
-	if err != nil || out["outcome"] != levelNow {
+	if err != nil || out["outcome"] != outcomeNow {
 		t.Fatalf("%v %v", out, err)
 	}
 	tgOf(c).pending.Wait()

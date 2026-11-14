@@ -205,7 +205,7 @@ func TestRelayout(t *testing.T) {
 		t.Fatal("not told of the new surface")
 	}
 	l, changed = c.watchLayout()
-	if tilesOf(l) != "one/xl@0,0" {
+	if tilesOf(l) != "one/l@0,0" {
 		t.Fatalf("layout %s", tilesOf(l))
 	}
 	c.relayout()
@@ -215,7 +215,7 @@ func TestRelayout(t *testing.T) {
 	default:
 	}
 	var stored workspaceLayout
-	if json.Unmarshal([]byte(c.store.get(layoutKey)), &stored) != nil || tilesOf(stored) != "one/xl@0,0" {
+	if json.Unmarshal([]byte(c.store.get(layoutKey)), &stored) != nil || tilesOf(stored) != "one/l@0,0" {
 		t.Fatalf("stored %q", c.store.get(layoutKey))
 	}
 	if err := c.surfaceRemove("one", surfaceByUser); err != nil {

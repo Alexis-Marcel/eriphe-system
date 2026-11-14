@@ -172,46 +172,35 @@ func (c *core) dropThreadSurfaces(thread int64) {
 	}
 }
 
-// Proposals waiting to be offered (memory, intentions, rules…) enter the
-// attention queue at a low weight, so the composer may show them; the
-// brain still offers them in the conversation as before (offerCards).
-// Their items, source sourceOffer, are never delivered by a breakpoint nor
-// listed to the brain as waiting: offerCards is what offers them.
+// A proposal waiting without a card in front of the user (the memory's
+// extraction, a turn that said nothing of it) enters the attention queue
+// at its card's weight (cardWeight), unless it is there already: the
+// queue delivers it like anything else (attention.go).
 
-const (
-	sourceOffer           = "offer"
-	weightOffered         = 1 // a proposal waiting to be offered
-	weightOfferedDue      = 2 // an intention: something due
-	attentionNotOffered   = `source != '` + sourceOffer + `'`
-	offersAttendedEachMax = 50
-)
+const cardsAttendedEachMax = 50
 
-// attendOffers puts the proposals waiting to be offered in the queue, an
-// item each, unless one is there already (a card shown, held, or offered).
-func (c *core) attendOffers() {
+// attendQueuedCards puts the queued cards in the attention queue, an item
+// each, delivered together.
+func (c *core) attendQueuedCards() {
 	c.syncCards()
-	queued, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind != ? ORDER BY id LIMIT ?`, cardPending, cardDigest, offersAttendedEachMax)
+	queued, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind != ? ORDER BY id LIMIT ?`, cardPending, cardDigest, cardsAttendedEachMax)
 	if err != nil {
 		return
 	}
-	now := time.Now().Unix()
+	n := 0
 	for _, x := range queued {
-		if blocksATask(x.Kind) {
-			continue // attended at weight 4 when made
+		var in int
+		if c.store.db.QueryRow(`SELECT COUNT(*) FROM attention WHERE ref = ?`, cardItemRef(x.ID)).Scan(&in); in > 0 {
+			continue // there already
 		}
 		x, p := c.liveCard(x)
 		if x.State != cardPending {
 			continue
 		}
-		w := weightOffered
-		if x.Kind == cardIntention {
-			w = weightOfferedDue
-		}
-		text := p.Text(c.userLang())
-		if text == "" {
-			text = x.Text
-		}
-		c.store.db.Exec(`INSERT INTO attention (ref, weight, why, source, time, tainted, subject) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (ref) DO NOTHING`,
-			cardItemRef(x.ID), w, truncate(oneLine(tr(c.userLang(), "card.kind."+x.Kind)+" : "+text), attentionWhyMax), sourceOffer, now, boolInt(p.Tainted != ""), x.Subject)
+		c.attendCardHeld(x, p, "", "")
+		n++
+	}
+	if n > 0 {
+		c.attentionNow()
 	}
 }

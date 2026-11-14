@@ -92,7 +92,7 @@ func TestQueueSurfaces(t *testing.T) {
 
 	// The memories: one surface, its title counting them, newest first.
 	mems, ok := surfaceByID(t, c, queueMemories)
-	if !ok || mems.Author != surfaceAuthorCore || mems.Weight != 60 || mems.Title != "Souvenirs à garder · 3" ||
+	if !ok || mems.Author != surfaceAuthorCore || mems.Weight != queueSurfaceWeight(cardWeight(cardMemory)) || mems.Title != "Souvenirs à garder · 3" ||
 		!strings.Contains(string(mems.Components), `"children":{"componentId":"item","path":"/items"}`) ||
 		!strings.Contains(string(mems.Components), `"proposalId":{"@path":"ref"}`) {
 		t.Fatalf("memories %+v %s", mems, mems.Components)
@@ -219,7 +219,7 @@ func TestQueueFloodGrouped(t *testing.T) {
 		}
 		mustIntend(t, c.mem, x)
 	}
-	c.attendOffers()
+	c.attendQueuedCards()
 	if n := len(c.attentionOpen()); n != 18 {
 		t.Fatalf("%d items", n)
 	}

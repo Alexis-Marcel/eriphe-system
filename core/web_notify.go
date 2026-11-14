@@ -41,7 +41,7 @@ type notifyPage struct {
 func (w *web) notifyPage(open int64) notifyPage {
 	c := w.c
 	v := notifyPage{Zone: c.store.get("notify_zone"), DefaultZone: time.Local.String(), Cap: c.notifyCap(),
-		Stub: notifyRule{Kind: ruleTopic, Ceiling: weightHeldNote, Days: daysAll, From: seedQuietFrom, To: seedQuietTo}}
+		Stub: notifyRule{Kind: ruleTopic, Ceiling: weightBrief, Days: daysAll, From: seedQuietFrom, To: seedQuietTo}}
 	card := func(n *notification) notifCard { return notifCard{notification: n, Open: n.ID == open} }
 	if recent, err := c.recentNotifications(30); err == nil {
 		for _, n := range recent {
