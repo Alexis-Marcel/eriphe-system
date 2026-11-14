@@ -79,7 +79,7 @@ const (
 
 var (
 	learnStatuses = []string{learnTrial, learnConfirmed, learnDormant, learnReverted}
-	learnKinds    = []string{kindProfile, kindPreference, kindLesson, kindDecision, kindSkill}
+	learnKinds    = []string{kindProfile, kindPreference, kindLesson, kindDecision, kindFact, kindPerson, kindProgress, kindSituation, kindSkill}
 )
 
 // learnEntry is one entry of the journal; the fields after Undo are read
@@ -121,13 +121,18 @@ func (e *learnEntry) Target() string {
 }
 
 // learnable tells whether a change to these memories is something learned:
-// it steers how Eriphe behaves.
+// it steers how Eriphe behaves, or the nightly extraction wrote it on its
+// own (a fact, a person, a progress card: applied on trial, the journal is
+// its digest and its undo; the day's journal episode aside).
 func learnable(xs ...*Memory) bool {
 	for _, x := range xs {
 		if x == nil {
 			continue
 		}
 		if x.Pinned || x.Kind == kindProfile || x.Kind == kindPreference || x.Kind == kindLesson || x.Kind == kindDecision {
+			return true
+		}
+		if x.SourceKind == srcExtraction && x.Kind != kindEpisode {
 			return true
 		}
 	}

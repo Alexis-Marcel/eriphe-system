@@ -179,7 +179,7 @@ func TestQueueSurfaceRefs(t *testing.T) {
 // card is in front as before.
 func TestOfferedProposalsInTheQueue(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Sam aime le thé vert", Status: memProposed, SourceKind: srcExtraction})
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Sam aime le thé vert", Status: memProposed, SourceKind: srcTask})
 	mustIntend(t, c.mem, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
 	c.attendOffers()
 	items := c.attentionOpen()

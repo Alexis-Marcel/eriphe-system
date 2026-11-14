@@ -38,6 +38,7 @@ type learnedPage struct {
 	Kinds    []string
 	Statuses []string
 	Off      bool // no memory
+	Waiting  int  // the extraction's proposals, without a card, until they expire
 }
 
 func (w *web) handleLearned(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -52,6 +53,7 @@ func (w *web) handleLearned(rw http.ResponseWriter, r *http.Request, s *session)
 	if m := w.c.mem; m == nil {
 		v.Off = true
 	} else {
+		v.Waiting = m.count(`status = 'proposed' AND source_kind = ?`, srcExtraction)
 		f := learnFilter{Limit: learnedMax}
 		if v.Kind != "" {
 			f.Kinds = []string{v.Kind}
