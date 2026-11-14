@@ -32,6 +32,7 @@ type writeSkillIn struct {
 	Tools        []string `json:"tools,omitempty" jsonschema:"the catalog servers its runs are lent (list_tools): mail, calendar…; each call is still decided by the user's grid. eriphe-workspace to keep its own surface on the user's workspace: its runs write it as the skill, the same id each time"`
 	Can          []string `json:"can,omitempty" jsonschema:"what its runs may start: open-thread, a thread (investigate, fix, open a pull request)"`
 	Urgent       string   `json:"urgent,omitempty" jsonschema:"with when: a fixed message (160 characters, no link) sent at any hour when a run weighs something 5 in its attention list: « Prod GetOut en panne, regarde Eriphe »"`
+	Subject      string   `json:"subject,omitempty" jsonschema:"with when: what its runs are about, kind:slug (project:getout); left out, a monitor's name (topic:<name>) or an event key written kind:slug. Its runs' notifications, cards and surfaces carry it"`
 }
 
 func registerSkillWriteTool(s *mcp.Server, c *core) {
@@ -64,6 +65,9 @@ func writtenSkillMD(in writeSkillIn) string {
 	}
 	if u := oneLine(in.Urgent); u != "" {
 		fmt.Fprintf(&b, "urgent: %s\n", u)
+	}
+	if s := oneLine(in.Subject); s != "" {
+		fmt.Fprintf(&b, "subject: %s\n", s)
 	}
 	b.WriteString("---\n\n")
 	b.WriteString(strings.TrimSpace(in.Instructions))

@@ -360,7 +360,7 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 		c.endRun(runID, skillRunRefused, fmt.Sprintf("more than %d runs in 24 hours", runsPerDay))
 		return
 	}
-	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now), Agent: sk.Trigger.Model,
+	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now), Agent: sk.Trigger.Model, Subject: skillRunSubject(sk.Trigger, key, events),
 		askStart: false, approvedInAdvance: true, cleanStart: !external}
 	for _, t := range sk.Trigger.Tools {
 		r.Resources = append(r.Resources, ResourceRef{Kind: "tool", Ref: t})
@@ -593,7 +593,7 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 	if weight == weightInterrupts {
 		c.runUrgent(r, st)
 	}
-	c.attendSignals(signals, dropped, source, tainted)
+	c.attendSignals(signals, dropped, "task:"+r.Task, source, tainted)
 	if !told && calls == 0 {
 		return
 	}
@@ -614,7 +614,7 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 		taint = []string{why}
 	}
 	out, err := c.notifyAs(notifyIn{Text: truncate(oneLine(msg), notifyTextMax), Level: level,
-		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill}, notifyFromSkill, taint, calls > 0)
+		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill, Subject: c.taskSubject(r.Task)}, notifyFromSkill, taint, calls > 0)
 	if err != nil {
 		c.endRun(r.ID, state, note+"\n· not told: "+err.Error())
 	}

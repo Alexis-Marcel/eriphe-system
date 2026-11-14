@@ -153,7 +153,7 @@ func TestQueueSurfaceRefs(t *testing.T) {
 		t.Fatal(err)
 	}
 	kept, dropped := decodeSignals([]byte(`[{"refs": ["surface:revue-du-jour"], "weight": 2, "why": "La revue est prête"}]`))
-	if len(dropped) > 0 || c.attendSignals(kept, dropped, "skill:revue", false) != 1 {
+	if len(dropped) > 0 || c.attendSignals(kept, dropped, "", "skill:revue", false) != 1 {
 		t.Fatalf("signal %v %v", kept, dropped)
 	}
 	if items := c.attentionOpen(); len(items) != 1 || items[0].Ref != "surface:revue-du-jour" || items[0].Weight != 2 {

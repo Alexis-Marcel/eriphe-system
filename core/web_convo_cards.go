@@ -98,7 +98,7 @@ func (w *web) dressCards(msgs []Message, lang string) {
 // whysOf reads the notifications the messages were sent as.
 func (c *core) whysOf(seqs []int) map[int]*msgWhy {
 	out := map[int]*msgWhy{}
-	rows, err := c.store.db.Query(`SELECT msg, why, ref FROM notifications WHERE msg >= ? AND msg <= ?`, seqs[0], seqs[len(seqs)-1])
+	rows, err := c.store.db.Query(`SELECT msg, why, CASE WHEN ref != '' THEN ref ELSE subject END FROM notifications WHERE msg >= ? AND msg <= ?`, seqs[0], seqs[len(seqs)-1])
 	if err != nil {
 		return out
 	}

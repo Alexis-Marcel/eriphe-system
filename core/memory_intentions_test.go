@@ -193,7 +193,8 @@ func TestClockWakeAboutNoThread(t *testing.T) {
 	if err := tendBrain(ctx, c); err != nil {
 		t.Fatal(err)
 	}
-	c.turn.about(s.ID) // the turn named the thread
+	c.turn.about(s.ID)                    // the turn named the thread
+	c.turn.name([]string{"project:site"}) // and my message a subject
 	mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Appeler le garage", RemindAt: clock.t.Add(time.Minute)})
 	clock.add(2 * time.Minute)
 	c.intentionsTick()
@@ -207,6 +208,9 @@ func TestClockWakeAboutNoThread(t *testing.T) {
 	}
 	if c.turn.aboutThread() != 0 || c.turnSource() != "" {
 		t.Errorf("the wake is about thread %d", c.turn.aboutThread())
+	}
+	if c.turnSubject() != "" {
+		t.Errorf("the wake is about %q", c.turnSubject())
 	}
 }
 

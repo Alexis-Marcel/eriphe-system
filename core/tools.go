@@ -99,6 +99,9 @@ func newMCPServer(c *core) *mcp.Server {
 			if err := c.taintedResources(in); err != nil { // resources.go
 				return nil, err
 			}
+			if in.Subject == "" {
+				in.Subject = c.turnSubject() // the turn's thread, or the subject my message named (subjects.go)
+			}
 			tainted := c.turnTaint()
 			in.askStart = true // what is the user's is asked now, not at the push (task_start.go)
 			in.byBrain = true  // its card goes with the brain's message

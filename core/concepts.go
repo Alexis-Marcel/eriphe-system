@@ -29,7 +29,7 @@ var concepts = []concept{
 	{"surface", "surface_write, surface_remove, workspace_read, catalog_read", "show the user something on their workspace when they ask to see it: a surface (a tile) live from any tool you read freely (sources), or composed by a task (a placeholder at once, run_task with surface); what they want to see every morning is a skill that keeps its surface; components are shapes, never tool names"},
 	{"setting", "setting", "how the user is told in general: device order, lines off, daily cap, time zone, a channel's detail, an urgent skill said aloud"},
 	{"where", "where_now", "where a notification would reach the user now: lines, devices, the room a voice channel says they are in"},
-	{"notify", "notify, notifications", "say something on your own, now or for the brief, under a known topic ref"},
+	{"notify", "notify, notifications", "say something on your own, now or for the brief, under the subject of the turn"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
 	{"task", "run_task", "long or heavy work, by an agent on a machine"},
 	{"thread", "open_thread, find_thread, read_thread, close_thread, reopen_thread", "one matter followed to its real goal (a pull request, an appointment, a brand name to find): opened light at once, found again by its subject, closed only on its goal; led (a plan the user approves, steps in parallel, a lead, a budget) for long autonomous work of several steps"},

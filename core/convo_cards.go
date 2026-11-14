@@ -52,7 +52,8 @@ const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	created  INTEGER NOT NULL,
 	attached INTEGER NOT NULL DEFAULT 0,
 	decided  INTEGER NOT NULL DEFAULT 0,
-	by       TEXT NOT NULL DEFAULT ''
+	by       TEXT NOT NULL DEFAULT '',
+	subject  TEXT NOT NULL DEFAULT ''   -- what it is about, kind:slug (subjects.go)
 );
 CREATE INDEX IF NOT EXISTS convo_cards_seq ON convo_cards (seq);`
 
@@ -102,6 +103,7 @@ type convoCard struct {
 	Attached time.Time
 	Decided  time.Time
 	By       string // web, a channel's id, text, or page (the fallback page)
+	Subject  string // what it is about: its proposal's, else its maker's (cardSubject)
 }
 
 func proposalRef(kind string, id int64) string { return kind + ":" + strconv.FormatInt(id, 10) }
@@ -112,12 +114,12 @@ func parseProposalRef(ref string) (string, int64, bool) {
 	return kind, id, ok && err == nil && id > 0 && slices.Contains(proposalKinds, kind)
 }
 
-const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by`
+const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by, subject`
 
 func scanCard(row interface{ Scan(...any) error }) (convoCard, error) {
 	var x convoCard
 	var created, attached, decided int64
-	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By)
+	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By, &x.Subject)
 	x.Created, x.Attached, x.Decided = unixOrZero(created), unixOrZero(attached), unixOrZero(decided)
 	return x, err
 }
@@ -443,6 +445,11 @@ func (c *core) cardProposed(kind string, id int64) {
 	c.cardAgain(p)
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, turn, text, created) VALUES (?, ?, 1, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET turn = 1 WHERE seq = 0`, proposalRef(kind, id), kind, p.Text(c.userLang()), time.Now().Unix())
+	inherit := c.turnSubject // made in the brain's turn
+	if kind == cardRunCalls {
+		inherit = nil // a skill's run: its own (cardSubject)
+	}
+	c.cardSubject(kind, id, inherit)
 	c.proposalMoved(proposalRef(kind, id))
 }
 
@@ -475,6 +482,7 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 		c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)
 			ON CONFLICT (ref) DO UPDATE SET turn = 0 WHERE seq = 0`, ref, kind, p.Text(c.userLang()), now)
 		c.proposalMoved(ref)
+		c.cardSubject(kind, id, func() string { return c.sourceSubject(source) })
 		if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
 			c.attendCard(x[0], p, text, source)
 		}
@@ -491,6 +499,7 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 		ON CONFLICT (ref) DO UPDATE SET seq = excluded.seq, turn = 0, attached = excluded.attached WHERE seq = 0`,
 		ref, kind, seq, p.Text(c.userLang()), now, now)
 	c.proposalMoved(ref)
+	c.cardSubject(kind, id, func() string { return c.sourceSubject(source) })
 	if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
 		c.attendCard(x[0], p, text, source)
 	}

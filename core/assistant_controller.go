@@ -486,7 +486,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 		first = r.firstPrompt(c, a, extra.Resume != "")
 	}
 	t, err := c.startTask(ctx, a.Role, runRequest{Prompt: first, Node: a.Node, Agent: a.Agent,
-		Tools: c.conf().assistantTools(a)}, extra)
+		Tools: c.conf().assistantTools(a), Subject: c.sourceSubject(threadRef(leadThread(a)))}, extra)
 	if err != nil {
 		return err
 	}

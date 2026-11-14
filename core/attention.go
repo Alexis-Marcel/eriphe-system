@@ -51,7 +51,8 @@ const attentionSchema = `CREATE TABLE IF NOT EXISTS attention (
 	time      INTEGER NOT NULL,
 	tainted   INTEGER NOT NULL DEFAULT 0,
 	delivered INTEGER NOT NULL DEFAULT 0, -- unix; 0 while held
-	due       INTEGER NOT NULL DEFAULT 0  -- unix: a held item goes then all the same; 0 for no time
+	due       INTEGER NOT NULL DEFAULT 0, -- unix: a held item goes then all the same; 0 for no time
+	subject   TEXT NOT NULL DEFAULT ''    -- what it is about, kind:slug (subjects.go)
 );`
 
 func init() {
@@ -118,14 +119,17 @@ var attentionMu sync.Mutex
 
 // attentionItem is one thing that needs the user.
 type attentionItem struct {
-	Ref    string    `json:"ref"`
-	Weight int       `json:"weight"`
-	Why    string    `json:"why"`
-	Say    string    `json:"say,omitempty"`
-	Source string    `json:"source"`
-	Time   time.Time `json:"time"`
-	Held   bool      `json:"held"`         // waits for a breakpoint
-	Due    time.Time `json:"due,omitzero"` // when a held item goes all the same
+	Ref    string `json:"ref"`
+	Weight int    `json:"weight"`
+	Why    string `json:"why"`
+	Say    string `json:"say,omitempty"`
+	Source string `json:"source"`
+	// Subject is what it is about; left empty, its source's (a thread's,
+	// a task's: sourceSubject).
+	Subject string    `json:"subject,omitempty"`
+	Time    time.Time `json:"time"`
+	Held    bool      `json:"held"`         // waits for a breakpoint
+	Due     time.Time `json:"due,omitzero"` // when a held item goes all the same
 
 	// Delivered, set by whoever attends it, says the item is in front of
 	// the user already (a card under a message). Weight 4 and 5 are
@@ -150,14 +154,18 @@ func (c *core) attend(it attentionItem) {
 	} else if cap := attentionCap(it.Weight); cap > 0 {
 		due = it.Time.Add(cap).Unix()
 	}
-	c.store.db.Exec(`INSERT INTO attention (ref, weight, why, say, source, time, tainted, delivered, due) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	if it.Subject == "" {
+		it.Subject = c.sourceSubject(it.Source)
+	}
+	c.store.db.Exec(`INSERT INTO attention (ref, weight, why, say, source, time, tainted, delivered, due, subject) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET weight = MAX(weight, excluded.weight), why = excluded.why,
+			subject = CASE WHEN excluded.subject != '' THEN excluded.subject ELSE subject END,
 			say = CASE WHEN excluded.say != '' THEN excluded.say ELSE say END, source = excluded.source, time = excluded.time,
 			tainted = MAX(tainted, excluded.tainted),
 			delivered = CASE WHEN delivered > 0 THEN delivered ELSE excluded.delivered END,
 			due = CASE WHEN due = 0 THEN excluded.due WHEN excluded.due = 0 THEN due ELSE MIN(due, excluded.due) END`,
 		it.Ref, it.Weight, truncate(oneLine(it.Why), attentionWhyMax), truncate(oneLine(it.Say), attentionWhyMax), it.Source, it.Time.Unix(),
-		boolInt(it.tainted), delivered, due)
+		boolInt(it.tainted), delivered, due, it.Subject)
 	c.kickWorkspace() // its surface (workspace_queue.go)
 }
 
@@ -204,7 +212,7 @@ func (c *core) attendCard(x convoCard, p proposal, say, source string) {
 		text = x.Text
 	}
 	c.attend(attentionItem{Ref: cardItemRef(x.ID), Weight: cardWeight(x.Kind), Why: tr(c.userLang(), "card.kind."+x.Kind) + " : " + text,
-		Say: say, Source: source, Delivered: x.Seq > 0})
+		Say: say, Source: source, Subject: x.Subject, Delivered: x.Seq > 0})
 }
 
 // attendNote puts a notification held for the brief in the queue: it is
@@ -216,7 +224,7 @@ func (c *core) attendNote(n *notification) {
 		source = n.Ref
 	}
 	c.attend(attentionItem{Ref: noteItemRef(n.ID), Weight: weightHeldNote, Why: n.Why, Say: n.Text, Source: source,
-		tainted: n.Tainted != ""})
+		Subject: n.Subject, tainted: n.Tainted != ""})
 	c.store.db.Exec(`UPDATE attention SET delivered = 0 WHERE ref = ? AND weight < ?`, noteItemRef(n.ID), weightBlocksATask)
 }
 
@@ -230,7 +238,7 @@ func (c *core) attentionOpen() []attentionItem {
 // whose card no longer waits (decided on a page, in words, or gone) leaves
 // the queue here.
 func (c *core) attentionWhere(where string, args ...any) []attentionItem {
-	rows, err := c.store.db.Query(`SELECT ref, weight, why, say, source, time, tainted, delivered,
+	rows, err := c.store.db.Query(`SELECT ref, weight, why, say, source, subject, time, tainted, delivered,
 		CASE WHEN `+heldForBrief+` THEN 0 ELSE due END FROM attention WHERE `+where, args...)
 	if err != nil {
 		return nil
@@ -239,7 +247,7 @@ func (c *core) attentionWhere(where string, args ...any) []attentionItem {
 	for rows.Next() {
 		var it attentionItem
 		var at, delivered, due int64
-		if rows.Scan(&it.Ref, &it.Weight, &it.Why, &it.Say, &it.Source, &at, &it.tainted, &delivered, &due) == nil {
+		if rows.Scan(&it.Ref, &it.Weight, &it.Why, &it.Say, &it.Source, &it.Subject, &at, &it.tainted, &delivered, &due) == nil {
 			it.Time = time.Unix(at, 0)
 			it.Held, it.Delivered = delivered == 0, delivered > 0
 			if it.Held && due > 0 {

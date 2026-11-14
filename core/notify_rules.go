@@ -352,6 +352,15 @@ func (c *core) deleteNotifyRule(id int64) error {
 // for project:getout:prod).
 // Both sides are compared as keys (subject.go), so a rule written as
 // factures matches the key topic:facture.
+// itemRule is the rule for a notification: its subject's, else its
+// record's (skill:<name>).
+func itemRule(rules []notifyRule, it notifyItem) *notifyRule {
+	if r := topicRule(rules, it.Subject); r != nil {
+		return r
+	}
+	return topicRule(rules, it.Ref)
+}
+
 func topicRule(rules []notifyRule, ref string) *notifyRule {
 	ref = ruleMatch(ref)
 	if ref == "" {

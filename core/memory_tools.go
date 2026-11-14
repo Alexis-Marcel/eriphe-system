@@ -289,6 +289,9 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	}
 	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,
 		Keywords: in.Keywords, Importance: in.Importance, State: in.State}
+	if x.Subject == "" && x.Supersedes == 0 && inheritsSubject(x.Kind) { // a replacement keeps the one it replaces
+		x.Subject = c.turnSubject() // the turn's thread, or the subject my message named (subjects.go)
+	}
 	var err error
 	if x.ValidFrom, err = parseWhen(in.ValidFrom); err != nil {
 		return nil, err

@@ -103,7 +103,7 @@
       {{if .Held}}<span class="tag">{{t "notif.waiting"}}</span>{{end}}
       {{if .Tainted}}<span class="tag tag-no" title="{{.Tainted}}">{{t "notif.tainted"}}</span>{{end}}</span>
     <span class="small">{{t "notif.why"}} {{.Why}}</span>
-    <span class="small muted">{{t (printf "notif.reason.%s" .Reason)}}{{if .Ref}} · <span class="mono">{{.Ref}}</span>{{end}}{{if .Msg}} · <a href="/conversation#m{{.Msg}}">{{t "notif.inchat"}}</a>{{end}}</span>
+    <span class="small muted">{{t (printf "notif.reason.%s" .Reason)}}{{if .Subject}} · <span class="mono">{{.Subject}}</span>{{end}}{{if .Ref}} · <span class="mono">{{.Ref}}</span>{{end}}{{if .Msg}} · <a href="/conversation#m{{.Msg}}">{{t "notif.inchat"}}</a>{{end}}</span>
   </div>
   {{if ne .Outcome "never"}}<div class="notif-fb" role="group" aria-label="{{t "notif.fb.label"}}">
     {{$fb := .Feedback}}{{$id := .ID}}{{range $r := (list "up" "down" "later")}}
