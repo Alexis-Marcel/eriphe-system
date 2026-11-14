@@ -158,6 +158,61 @@ func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
 	}
 }
 
+// A message the user wrote with a thread's surface open makes the turn
+// about that thread, and so does one about a surface of its subject:
+// run_task then starts a step of it. A message about another surface, or
+// none, leaves the turn about no thread.
+func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
+	c, _ := threadCore(t)
+	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "PR alerting", "goal": "La PR est en prod.", "subject": "pr:example/infra#12"})
+	if isErr {
+		t.Fatalf("open: %v", out)
+	}
+	th := openedThread(t, out)
+	turnOn := func(text, about string) {
+		t.Helper()
+		c.store.markDelivered(c.store.lastMessageSeq())
+		seq, _ := c.store.addMessage(roleUser, text, false)
+		if about != "" {
+			c.noteAbout(seq, about)
+		}
+		c.turn.start(int(seq), int(seq), 0)
+		msgs, _ := c.store.undelivered()
+		c.threadsDelivered(msgs)
+	}
+
+	turnOn("Refais les règles proprement.", "surface:"+threadSurfaceID(th.ID))
+	if c.turn.aboutThread() != th.ID {
+		t.Fatalf("the turn is about %d, not %d", c.turn.aboutThread(), th.ID)
+	}
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Refaire les règles", "prompt": "Refais les règles de latence."})
+	if isErr || out["thread"] == nil || int64(out["thread"].(float64)) != th.ID || out["step"] == nil {
+		t.Fatalf("not a step of thread %d: %v", th.ID, out)
+	}
+
+	// A surface of the thread's subject: its thread.
+	if _, _, err := c.writeSurface("brain", surfaceIn{ID: "pr-12", Title: "PR 12", Subject: "pr:example/infra#12",
+		Components: []byte(`[{"id":"root","component":"Text","text":"PR 12"}]`)}); err != nil {
+		t.Fatal(err)
+	}
+	turnOn("Et maintenant ?", "surface:pr-12")
+	if c.turn.aboutThread() != th.ID {
+		t.Errorf("about a surface of its subject: turn about %d", c.turn.aboutThread())
+	}
+
+	// Another surface, a thread that is none, or nothing: no thread.
+	if _, _, err := c.writeSurface("brain", surfaceIn{ID: "meteo", Title: "Météo",
+		Components: []byte(`[{"id":"root","component":"Text","text":"Soleil"}]`)}); err != nil {
+		t.Fatal(err)
+	}
+	for _, about := range []string{"surface:meteo", "surface:" + threadSurfaceID(999), ""} {
+		turnOn("Et la météo ?", about)
+		if c.turn.aboutThread() != 0 {
+			t.Errorf("about %q: turn about %d", about, c.turn.aboutThread())
+		}
+	}
+}
+
 func threadLogText(lines []ThreadLine) string {
 	var b strings.Builder
 	for _, l := range lines {
