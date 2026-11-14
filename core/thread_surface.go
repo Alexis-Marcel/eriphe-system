@@ -259,11 +259,6 @@ func threadCardsWaiting(steps []threadSurfaceStep, asks []int64, linked []string
 	return out
 }
 
-// threadAnswers tells whether a thread's surface answers its cards in
-// place: not when the thread is tainted (its Proposals send the user to
-// the conversation, and the queue keeps the answerable tile).
-func threadAnswers(s Thread) bool { return s.Tainted == "" }
-
 // threadShownCards are the cards waiting for the user that an active
 // thread's surface shows and answers, by ref, with the thread (the newest,
 // should two show one): answered there, they leave the attention queue's
@@ -275,9 +270,6 @@ func (c *core) threadShownCards() map[string]int64 {
 		return out
 	}
 	for _, s := range ss {
-		if !threadAnswers(s) {
-			continue
-		}
 		all, err := c.steps(s.ID)
 		if err != nil {
 			continue
@@ -357,9 +349,6 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	}
 	data["state"] = state
 	add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/state"}})
-	if s.Tainted != "" {
-		add(comp{"id": "thread_external", "component": "Text", "variant": "caption", "text": w("thread.surface.tainted")})
-	}
 
 	// What waits for the user: the thread's own cards, the cards raised for
 	// it (thread_turn.go), then its steps'.
@@ -373,9 +362,6 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		// (threadShownCards): it takes their weight.
 		in.Weight = threadWeightYours
 		for _, ref := range threadCardsWaiting(steps, asks, linked) {
-			if !threadAnswers(s) {
-				break
-			}
 			kind, _, _ := parseProposalRef(ref)
 			in.Weight = max(in.Weight, queueSurfaceWeight(cardWeight(kind)))
 		}
@@ -482,7 +468,11 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 			in.codeTaint = append(in.codeTaint, "step:"+st.Key)
 		}
 	}
-	in.answers = threadAnswers(s)
+	// Its Proposals answer in place, tainted or not: code bound them to the
+	// thread's cards, each showing its card's own text and taint, as the
+	// queue's tile would; only a part written after reading external
+	// content can only ask (answerOf, surface_actions.go).
+	in.answers = true
 	in.summary = threadLine(s, steps, asks, lang)
 	in.composed = true
 	return in, true
