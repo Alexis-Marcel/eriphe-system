@@ -106,12 +106,6 @@ func TestGestureKinds(t *testing.T) {
 	if strings.Join(whats, " ") != want {
 		t.Fatalf("gestures %v, want %s", whats, want)
 	}
-	seg := gestureSegment(gs, "Sam")
-	for _, w := range []string{"closed (not to be shown again", "moved (placed it elsewhere) surface:agenda", "resized surface:agenda", "wrote a message about surface:agenda"} {
-		if !strings.Contains(seg.Text, w) {
-			t.Errorf("the extraction's segment lacks %q:\n%s", w, seg.Text)
-		}
-	}
 	turn := composerTurn(poolSnapshot{Gestures: gs, Now: now})
 	for _, w := range []string{"fermé agenda", "déplacé agenda", "redimensionné agenda", "écrit à propos de agenda", "laissé sans l'ouvrir agenda"} {
 		if !strings.Contains(turn, w) {

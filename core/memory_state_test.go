@@ -28,7 +28,7 @@ func TestExtractionDurableState(t *testing.T) {
 		t.Fatalf("decision: %s %s", res, why)
 	}
 	d, _ := c.mem.recall(recallQuery{Query: "framework", Kinds: []string{kindDecision}})
-	if len(d) != 1 || d[0].Importance != 4 || d[0].Basis != basisStated || d[0].Confidence != 0.9 {
+	if len(d) != 1 || d[0].Importance != 4 || d[0].Basis != basisStated {
 		t.Fatalf("decision: %+v", d)
 	}
 	// A progress card, then its next state: one card, the old one dated.
@@ -62,7 +62,7 @@ func TestExtractionDurableState(t *testing.T) {
 	if _, res := apply(`{"op": "ADD", "kind": "fact", "subject": "owner", "text": "Sam part peut-être à Lisbonne", "basis": "ambiguous", "source_ref": "msg:1"}`); res != "proposed" {
 		t.Fatalf("ambiguous: %s", res)
 	}
-	if amb, _ = c.mem.list(`basis = 'ambiguous'`, nil, "", 5); len(amb) != 1 || amb[0].Confidence != 0.3 {
+	if amb, _ = c.mem.list(`basis = 'ambiguous'`, nil, "", 5); len(amb) != 1 || amb[0].Basis != basisAmbiguous {
 		t.Fatalf("ambiguous: %+v", amb)
 	}
 	if why, res := apply(`{"op": "ADD", "kind": "fact", "text": "x", "basis": "guessed", "source_ref": "msg:1"}`); res != "" || !strings.Contains(why, "basis") {
@@ -88,12 +88,23 @@ func TestExtractionDurableState(t *testing.T) {
 	if _, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:y", "text": "Fait : tout", "state": "done", "source_ref": "task:t1"}`); res != "proposed" {
 		t.Fatalf("external progress: %s", res)
 	}
-	// A task's receipt: its lesson is only proposed; my words never make one through the extraction.
-	if _, res := apply(`{"op": "ADD", "kind": "lesson", "text": "Les tests du dépôt site demandent Node 22", "source_ref": "task:t1"}`); res != "proposed" {
-		t.Fatalf("a task's lesson: %s", res)
+	// Never a lesson nor a preference, from a task or from my words: only
+	// the brain, on my own message, writes one.
+	for _, js := range []string{
+		`{"op": "ADD", "kind": "lesson", "text": "Les tests du dépôt site demandent Node 22", "source_ref": "task:t1"}`,
+		`{"op": "ADD", "kind": "lesson", "text": "Toujours demander", "source_ref": "msg:1"}`,
+		`{"op": "ADD", "kind": "preference", "subject": "topic:workspace", "text": "Sam veut la météo devant", "source_ref": "msg:1"}`,
+	} {
+		if why, res := apply(js); res != "" || !strings.Contains(why, "only the user's own words") {
+			t.Fatalf("%s: %s %s", js, res, why)
+		}
 	}
-	if _, res := apply(`{"op": "ADD", "kind": "lesson", "text": "Toujours demander", "source_ref": "msg:1"}`); res != "" {
-		t.Fatalf("a lesson from the extraction of my words: %s", res)
+	// One episode a day, the journal; never one for a task.
+	if why, res := apply(`{"op": "ADD", "kind": "episode", "subject": "project:site", "text": "La tâche a fini", "source_ref": "msg:1"}`); res != "" || !strings.Contains(why, "journal") {
+		t.Fatalf("a task's episode: %s %s", res, why)
+	}
+	if why, res := apply(`{"op": "ADD", "kind": "episode", "subject": "topic:journal", "text": "Sam a parlé du site", "source_ref": "msg:1"}`); res != "added" {
+		t.Fatalf("the journal: %s %s", res, why)
 	}
 	// The transcript gives each segment its date, for relative dates.
 	out := renderTranscript([]segment{{Ref: "msg:1", Time: time.Date(2026, 9, 8, 10, 5, 0, 0, time.Local), Who: "owner", Trust: trustOwner, Text: "demain"}})

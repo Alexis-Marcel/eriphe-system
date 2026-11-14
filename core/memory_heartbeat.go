@@ -116,7 +116,7 @@ func learnedBlock(xs []*learnEntry) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("\nCe que tu as appris depuis le dernier point (dis-le en une phrase chacun, sans numéros ; `learned` et `unlearn` s'il veut revenir dessus) :\n```text\n")
+	b.WriteString("\nCe que tu as appris depuis le dernier point (dis-le en une phrase chacun, sans numéros ; ce que l'extraction de la nuit a retenu d'elle-même (source extraction, à l'essai), en une phrase pour le tout ; `learned` et `unlearn` s'il veut revenir dessus) :\n```text\n")
 	for _, e := range xs {
 		b.WriteString(strings.ReplaceAll(learnedLine(e), "```", "'''") + "\n")
 	}

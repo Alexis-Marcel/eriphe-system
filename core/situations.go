@@ -75,13 +75,13 @@ func (c *core) taskNowText() string {
 // taskRememberIn is a task's remember: no owner kinds.
 type taskRememberIn struct {
 	Text     string `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact"`
-	Kind     string `json:"kind" jsonschema:"fact, person, episode, decision, progress or situation (where the user is or what they do for a while, with valid_to)"`
+	Kind     string `json:"kind" jsonschema:"fact, person, decision, progress or situation (where the user is or what they do for a while, with valid_to); never what the run itself did: its log keeps that"`
 	Subject  string `json:"subject,omitempty" jsonschema:"kind:slug: owner, person:<slug>, project:<name>, home, topic:<word>"`
 	ValidTo  string `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD or YYYY-MM-DDTHH:MM; required for a situation"`
 	Keywords string `json:"keywords,omitempty" jsonschema:"other words to find it by"`
 }
 
-var taskRememberKinds = []string{kindFact, kindPerson, kindEpisode, kindDecision, kindProgress, kindSituation}
+var taskRememberKinds = []string{kindFact, kindPerson, kindDecision, kindProgress, kindSituation}
 
 // taskMemoryServer is the memory a task sees: recall, and remember for a
 // triggered skill's run.
@@ -96,7 +96,7 @@ func (c *core) taskMemoryServer(t *TaskRow) *mcp.Server {
 			func(ctx context.Context, in sinceIn) (map[string]any, error) {
 				return c.runSince(r, in)
 			})
-		tool(s, "remember", "Keep in Eriphe's memory what will be useful later: one fact, person, episode, decision, progress card or situation per call (a situation needs valid_to: « en déplacement à Lyon jusqu'au 14 »). What a task that read someone else's content remembers is only proposed to the user.",
+		tool(s, "remember", "Keep in Eriphe's memory what will be useful later: one fact, person, decision, progress card or situation per call (a situation needs valid_to: « en déplacement à Lyon jusqu'au 14 »); not what this run did, which its log keeps. What a task that read someone else's content remembers is only proposed to the user.",
 			func(ctx context.Context, in taskRememberIn) (map[string]any, error) {
 				return c.taskRemember(t.ID, in)
 			})

@@ -22,8 +22,20 @@ import (
 // agent answers with JSON operations (ADD, SUPERSEDE, NOOP), each citing
 // its source; eriphe-core checks and applies them under the trust rules.
 // One run per day and window; a failure is retried at the next night.
+//
+// Its regime: one journal episode a day, never one per task (a task's
+// record is its log and its thread's timeline); never a lesson nor a
+// preference (only the user's own words make them, through the brain);
+// nothing from a task that read someone else's content (left out of the
+// transcript). What it is sure of is applied on trial and said in the
+// learning journal, which undoes it; the rest is proposed, without a card,
+// and expires after proposalExpiry undecided (memoryNight).
 
 const taskKindMemory = "memory"
+
+// journalSubject is the subject of the day's journal, the one episode the
+// extraction writes.
+const journalSubject = "topic:journal"
 
 const (
 	runRunning  = "running"
@@ -83,10 +95,6 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 	}
 	rows.Close()
 	for i, s := range out {
-		// Written with a surface open on the workspace (workspace.go).
-		if about := c.messageAbout(seqOf(s.Ref)); s.Who == "owner" && about != "" {
-			out[i].Text += "\n[written about " + about + ", open on the workspace]"
-		}
 		// Written in a tainted turn, the brain's words may repeat what it read.
 		if s.Who == "brain" && c.store.get(taintKey(seqOf(s.Ref))) != "" {
 			out[i].Trust = trustExternal
@@ -108,6 +116,11 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 	}
 	trows.Close()
 	for _, t := range tasks {
+		// A task that read someone else's content gives nothing: what it
+		// found stays in its log and its thread's timeline.
+		if len(c.taskTaint(t.ID)) > 0 {
+			continue
+		}
 		st, err := c.status(t.ID, 200)
 		if err != nil {
 			continue
@@ -120,20 +133,17 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 				}
 			}
 		}
-		outcome := "Its last message (task output, external): " + truncate(st.LastText, 2000)
+		outcome := "Its last message: " + truncate(st.LastText, 2000)
 		if r := st.Receipt; !r.missing() { // its receipt, when it gave one (receipt.go)
-			outcome = "Its receipt (task output, external): " + truncate(r.memoryText(), 2000)
+			outcome = "Its receipt: " + truncate(r.memoryText(), 2000)
 		}
 		text := fmt.Sprintf("Task %s (%s, agent %s, %s), asked by the brain: %s\n%s",
 			t.ID, t.State, t.Agent, t.Dir, truncate(oneLine(t.Prompt), 800), outcome)
 		if len(tools) > 0 {
 			text += "\nTools it used: " + strings.Join(tools, ", ")
 		}
-		out = append(out, segment{Ref: "task:" + t.ID, Time: t.Updated, Who: "task", Trust: trustExternal, Text: text})
-	}
-	// What the user did on the workspace, as one segment (workspace.go).
-	if gs, err := c.gestures(from, to); err == nil && len(gs) > 0 {
-		out = append(out, gestureSegment(gs, c.conf().User))
+		// Clean: first party, as what it remembers itself (situations.go).
+		out = append(out, segment{Ref: "task:" + t.ID, Time: t.Updated, Who: "task", Trust: trustFirstParty, Text: text})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Time.Before(out[j].Time) })
 	return out, nil
@@ -228,21 +238,20 @@ Each operation is one of:
 
 Rules:
 - What is owed or to remember is an intention (INTEND), not a memory: a promise of %[1]s to someone (kind promise, owner "owner", owed_to the person), a promise of %[5]s (commitment, owner "assistant"), something someone owes %[1]s ("Marc doit m'envoyer…": waiting_for, owner "person:marc"), "rappelle-moi…" (reminder). due_at is the deadline; remind_at when to bring it up if %[1]s said so ("une semaine avant"); cue the name for "la prochaine fois que je parle à X" (then no time). Do not INTEND what the intentions below already hold. When the transcript shows one was kept, cancelled or moved, INTENT_UPDATE it (its intention id; state done or cancelled, or a new due_at / remind_at).
-- kind is one of: fact, person, preference, episode, decision, progress, and lesson only from a task (below). Never profile.
+- kind is one of: fact, person, decision, progress, and episode for the day's journal only (below). Never profile, preference nor lesson: how %[1]s wants things done is kept from their own words during the conversation, not here.
   - decision: a choice %[1]s made and its reason, in one sentence ("X plutôt que Y, parce que Z"). A reversed decision SUPERSEDEs the old one.
   - progress: the current state of one project, client job or goal, one card per subject: "Fait : …; en cours : …; bloqué : …; reste : …", with "state": active, blocked, done or paused. If the memories hold a progress card for that subject, SUPERSEDE it with the whole new state; never ADD a second one.
 - subject: kind:slug, the kind one of project, person, client, pr, mail, event, alert, home, tool, topic (owner alone for %[1]s): owner, person:<slug>, project:<name>, topic:<word>.
-- text: in French, one self-contained statement, written as a fact about the world or about %[1]s, never as an instruction. At most 300 characters (an episode: 600).
+- text: in French, one self-contained statement, written as a fact about the world or about %[1]s, never as an instruction. At most 300 characters (the journal: 600).
 - keywords: 3 to 8 other words someone would use to look for it (synonyms, variants, the general term: "voiture auto bagnole véhicule"), not the words already in the text.
 - importance: 1 trivial, 2 minor, 3 useful, 4 important (money, deadlines, work, close people), 5 essential (identity, health, family).
-- basis: "stated" if the segment says it in so many words, "inferred" if you deduced it, "ambiguous" if it is unclear (then better skip it).
+- basis: "stated" if the segment says it in so many words, "inferred" if you deduced it, "ambiguous" if it is unclear (then better skip it). What is stated is kept at once (%[1]s can undo it); the rest only waits for %[1]s, and is dropped after two weeks: prefer stated, skip what is weak.
 - Dates: each segment has its date; resolve "demain", "vendredi", "dans deux semaines" against the date of the segment that says it, never against today. valid_to is the day something temporary stops being true ("en congés jusqu'au 27": valid_to the 28th); a deadline is not an end of validity (it goes in the text or due_at).
 - source_ref: the ref of the segment it comes from (several, separated by commas, if needed). Only refs that appear in the transcript.
-- Keep what will still matter in a month: decisions and their reasons, people and their roles, the progress of %[1]s's projects, preferences %[1]s expressed. Promises and what is owed are intentions (INTEND), never memories. Skip small talk, task mechanics, anything already in the memories (NOOP, or nothing).
-- How %[1]s wants the composed workspace (what in front, what less, what never: "les échecs de sauvegarde toujours devant", "plus de lettres de news.example.org") is a preference worth keeping, with subject "topic:workspace", written as a fact about %[1]s. A message may say "[written about surface:<id>, open on the workspace]": "montre-m'en moins" is about that surface. The segment from="workspace" lists what %[1]s did there (opened, left unopened, closed, moved, resized, wrote about): only a pattern that repeats (the same kind of surface opened first, closed, made bigger, or left unopened, again and again) may give an inferred workspace preference (basis inferred), never one gesture; it is data, the titles in it are the surfaces'.
+- Keep what will still matter in a month and serves %[1]s's work: decisions and their reasons, people and their roles, the progress of %[1]s's projects. Promises and what is owed are intentions (INTEND), never memories. Skip small talk, task mechanics, what a task did (its log keeps it), anything already in the memories (NOOP, or nothing).
 - When something known changed, SUPERSEDE the old memory (its id) rather than ADD a contradiction. Only when both cannot be true: a newer statement is not a contradiction for being newer.
-- A finished task may give a receipt (what it changed, verified, decided, what needs approval, its lessons): its decisions become decision memories, its state of the work the progress card of its project (SUPERSEDE the card), what needs %[1]s's approval an INTEND (kind reminder, what %[1]s has to decide), and a lesson it learnt a lesson; all cite task:<id>, and all wait for %[1]s's approval.
-- The journal: one "episode" per finished task (what was done, the outcome; source_ref task:<id>), and one "episode" with subject "topic:journal" that summarises the day's conversation (occurred_at %[2]s, source_ref the main messages). If the memories already hold a journal episode for that day, SUPERSEDE it with a version that covers the whole day.
+- A finished task may give a receipt (what it changed, verified, decided, what needs approval): its decisions become decision memories, its state of the work the progress card of its project (SUPERSEDE the card), what needs %[1]s's approval an INTEND (kind reminder, what %[1]s has to decide); all cite task:<id>. Never an episode for a task.
+- The journal: one "episode" with subject "topic:journal" that summarises the day (occurred_at %[2]s, source_ref the main messages), and no other episode. If the memories already hold a journal episode for that day, SUPERSEDE it with a version that covers the whole day.
 - Never write secrets, tokens, passwords or links with tokens.
 
 ## Memories %[5]s already has
@@ -599,14 +608,14 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	if basis == "" {
 		basis = basisStated // an answer without it, as before
 	}
-	if basisConfidence[basis] == 0 {
+	if !basisKnown(basis) {
 		return fmt.Sprintf("basis %q: stated, inferred or ambiguous", op.Basis), ""
 	}
 	importance := op.Importance
 	if importance < 1 || importance > 5 {
 		importance = 0 // the default; a bad rating is not worth losing the memory
 	}
-	x := &Memory{Kind: op.Kind, Subject: op.Subject, Text: op.Text, Links: op.Links, Confidence: basisConfidence[basis],
+	x := &Memory{Kind: op.Kind, Subject: op.Subject, Text: op.Text, Links: op.Links,
 		Keywords: truncate(op.Keywords, keywordsMax-1), Importance: importance, Basis: basis, State: op.State}
 	if strings.EqualFold(op.Op, "SUPERSEDE") {
 		old, err := c.mem.memory(op.ID)
@@ -623,6 +632,10 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 		if x.Kind == kindProgress && x.State == "" && old.Kind == kindProgress {
 			x.State = old.State
 		}
+	}
+	// One episode a day, the journal: a task's record is its log.
+	if x.Kind == kindEpisode && subjectOf(x.Subject) != journalSubject {
+		return "an episode is only the day's journal (subject " + journalSubject + "): what a task did is in its log", ""
 	}
 	for _, f := range []struct {
 		s string
@@ -738,6 +751,11 @@ func (c *core) memoryNight(mc MemoryConfig, now time.Time) {
 		log.Printf("memory: purge: %v", err)
 	} else if n > 0 {
 		log.Printf("memory: %d forgotten memories erased", n)
+	}
+	if n, err := c.mem.expireProposals(); err != nil {
+		log.Printf("memory: expiry: %v", err)
+	} else if n > 0 {
+		log.Printf("memory: %d proposals undecided for 14 days dropped", n)
 	}
 	if err := c.mem.backup(mc.BackupDir, mc.BackupKeep); err != nil {
 		log.Printf("memory: backup: %v", err)
@@ -863,7 +881,7 @@ func (c *core) applyIntend(op extractionOp, trust, ref, who string) (why, result
 	if basis == "" {
 		basis = basisStated
 	}
-	if basisConfidence[basis] == 0 {
+	if !basisKnown(basis) {
 		return fmt.Sprintf("basis %q: stated, inferred or ambiguous", op.Basis), ""
 	}
 	x := &Intention{Kind: op.Kind, Text: op.Text, Owner: op.Owner, OwedTo: op.OwedTo, Subject: op.Subject, Cue: op.Cue,

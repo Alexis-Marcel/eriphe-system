@@ -304,7 +304,9 @@ func (c *core) pendingProposals() []proposal {
 		}
 	}
 	if m := c.mem; m != nil {
-		if xs, err := m.list(`status = 'proposed'`, nil, `recorded_at, id`, 200); err == nil {
+		// The extraction's proposals get no card: they wait in À valider
+		// and expire undecided (memory_extract.go).
+		if xs, err := m.list(`status = 'proposed' AND source_kind != ?`, []any{srcExtraction}, `recorded_at, id`, 200); err == nil {
 			for _, x := range xs {
 				add(cardMemory, x.ID)
 			}

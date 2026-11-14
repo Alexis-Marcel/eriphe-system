@@ -107,9 +107,13 @@ func TestTaskMemory(t *testing.T) {
 		t.Fatalf("a clean run's memory %v", out)
 	}
 	c.store.set(taskTaintKey("t-run"), "mail.read_message")
-	out = callMem(t, rs, "remember", map[string]any{"text": "Sam dîne chez Paul jeudi", "kind": "episode"})
+	out = callMem(t, rs, "remember", map[string]any{"text": "Sam dîne chez Paul jeudi", "kind": "fact"})
 	if out["status"] != memProposed {
 		t.Fatalf("a tainted run's memory %v", out)
+	}
+	// What the run did is in its log, never an episode.
+	if _, err := c.taskRemember("t-run", taskRememberIn{Text: "La revue a tourné", Kind: kindEpisode}); err == nil {
+		t.Fatal("a task wrote an episode")
 	}
 	if _, err := c.taskRemember("t-run", taskRememberIn{Text: "Sam préfère le thé", Kind: kindPreference}); err == nil {
 		t.Fatal("a task wrote a preference")

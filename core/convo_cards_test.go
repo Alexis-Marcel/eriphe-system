@@ -156,12 +156,19 @@ func TestCardsFollowTheTurn(t *testing.T) {
 	if x := cardOf(t, c, cardRule, r2.ID); x.Seq != 0 || x.Turn {
 		t.Fatalf("a silent turn's card is not queued: %+v", x)
 	}
-	// A proposal from the memory's extraction is queued, never attached.
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le colis arrive jeudi", Status: memProposed, SourceKind: srcExtraction})
+	// A proposal made outside a turn (a skill's run) is queued, never attached.
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le colis arrive jeudi", Status: memProposed, SourceKind: srcTask})
 	c.syncCards()
 	brainSays(c, "Autre chose.")
 	if x := cardOf(t, c, cardMemory, 1); x.Seq != 0 {
-		t.Fatalf("an extracted proposal was attached: %+v", x)
+		t.Fatalf("a task's proposal was attached: %+v", x)
+	}
+	// One from the memory's extraction gets no card at all: it waits in
+	// À valider and expires undecided.
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le garage ferme lundi", Status: memProposed, SourceKind: srcExtraction})
+	c.syncCards()
+	if xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardMemory, 2)); len(xs) != 0 {
+		t.Fatalf("an extracted proposal has a card: %+v", xs)
 	}
 }
 
@@ -373,7 +380,7 @@ func TestAPIMessageAnswersNoCard(t *testing.T) {
 func TestCardsOfferedAtTheRightMoment(t *testing.T) {
 	queue := func(c *core, n int) {
 		for i := range n {
-			mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: fmt.Sprintf("Fait numéro %d", i), Status: memProposed, SourceKind: srcExtraction})
+			mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: fmt.Sprintf("Fait numéro %d", i), Status: memProposed, SourceKind: srcTask})
 		}
 	}
 	// The day: up to three, said naturally, then not again within the hour.

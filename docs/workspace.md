@@ -148,8 +148,9 @@ Two kinds of request:
   them like any memory: ask Eriphe what it remembers, or to forget one. There is no settings page
   for the workspace and no rule to maintain.
 
-Eriphe also notices what you do. If you keep closing the same kind of tile, it may propose a
-preference ("Sam does not want … in front"); it waits for your yes like any memory it infers.
+Eriphe also sees what you do: a tile you closed stays away for the session, and a tile you moved
+stays where you put it. A preference only comes from your own words: Eriphe does not guess one from
+your gestures.
 
 When you write while a tile is open, your message is about that tile: "this", "less of this",
 "look into it" refer to it.

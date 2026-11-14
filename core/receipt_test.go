@@ -283,7 +283,7 @@ func TestTranscriptReadsReceipt(t *testing.T) {
 	if err != nil || len(segs) != 1 {
 		t.Fatalf("segments %+v %v", segs, err)
 	}
-	for _, want := range []string{"Its receipt (task output, external): status done", "decisions: kept the old field",
+	for _, want := range []string{"Its receipt: status done", "decisions: kept the old field",
 		"lessons it proposes: run the linter first", "claimed, not checked: tests pass | the page loads"} {
 		if !strings.Contains(segs[0].Text, want) {
 			t.Errorf("segment lacks %q: %s", want, segs[0].Text)

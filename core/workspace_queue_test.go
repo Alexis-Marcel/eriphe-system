@@ -209,7 +209,7 @@ func TestQueueFloodGrouped(t *testing.T) {
 	tw, _ := newMemoryWeb(t)
 	c := tw.c
 	for i := range 12 {
-		mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Sam aime le thé " + strconv.Itoa(i), Status: memProposed, SourceKind: srcExtraction})
+		mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Sam aime le thé " + strconv.Itoa(i), Status: memProposed, SourceKind: srcTask})
 	}
 	later := time.Now().AddDate(0, 0, 3)
 	for i := range 6 {
