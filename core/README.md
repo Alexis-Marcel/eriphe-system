@@ -1629,6 +1629,8 @@ version, read with its diff.
   without a branch: the plan waits for its card. While the thread is open, it is the run's: the
   events of its key go to its lead (`tellLead`), not to a new run. Merging and deploying stay the
   user's, on the thread's cards. Without `can`, the block is ignored and the note says why.
+- **Subject**: with `subject: kind:slug`, its runs are about that subject; without it, about their
+  events' key when it names a thing (a monitor's, or `kind:slug`; subjects.go). Their tasks, notifications, cards, signals and surfaces carry it.
 - **Urgent**: with `urgent: <text>`, a run whose attention list weighs something 5 sends that
   fixed text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the
   run read enters it: a tainted run cannot write what wakes the user. Its own message goes as any
@@ -4087,9 +4089,10 @@ a level; the code decides (`decideNotify`, no model):
   `notificationsSince` what was held since then, each with its source, time, why, ref, outcome and
   feedback: what a brief or a point made on the user's return summarises.
 
-- **One topic vocabulary** (`topics.go`). A rule matches the `ref` the brain gives `notify`, so
-  labels must not drift: a ref about a subject is kept as its key ([Subjects](#subjects)), on both
-  sides of the match; a record's ref (`skill:<name>`, `intention:<id>`) as written. The known topics
+- **One topic vocabulary** (`topics.go`). A rule matches a notification's subject (set by the
+  code, or given to `notify`), else its record's ref, so labels must not drift: a subject is kept as
+  its key ([Subjects](#subjects)), on both sides of the match; a record's ref (`skill:<name>`,
+  `intention:<id>`) as written. The known topics
   (rules, notifications of the last 90 days, the live threads' subjects, the memory's `project:`,
   `person:` and `client:` subjects) are listed in
   `notifications`; a new label of a known word family is kept under the known topic, and a new one
@@ -4500,6 +4503,29 @@ rules. A test forbids any other normaliser.
   for writes and lookups (`subjectIs`, `subjectLookup`, the memory's `subjectBook`). Refused when
   both have a live thread, and in a turn that read external content; a sub-part's key
   (`project:site:prod`) is left as it is.
+- **A record's subject, set by the code**: notifications, attention items, cards, tasks and
+  surfaces carry a `subject` column next to their ref (which record: `intention:12`,
+  `skill:<name>`). The code sets it by inheritance, and a subject given explicitly wins:
+  - **the brain's turn** (`turnSubject`): its thread's (`brainTurn.thread`), else the one known
+    subject the user's messages name; two named give none, and a clock wake none. What the brain
+    makes in the turn takes it: `notify`, `remember` (a fact, a decision, a progress card, never a
+    replacement, which keeps the one it replaces; never a profile, a preference, a person, a lesson
+    or a situation), `intend`, `run_task`, a new surface (`surface_write`: one written again keeps
+    its subject unless one is given), a card it proposes;
+  - **a maker** (`sourceSubject`): a thread's or a lead's (`thread:`, `lead:`), a task's (`task:`):
+    a thread's step task and its lead's task, notifications and signals take the thread's, a card
+    raised by a task or a thread its maker's, an attention item its source's (an offered card's, its
+    card's), a surface its author's;
+  - **a card** takes its proposal's first (a memory's, an intention's, a thread's, a skill run's);
+  - **a skill's run** takes the `subject:` its SKILL.md declares, else its events' key where it
+    names a thing: a monitor's (`monitor.*`: `topic:<name>`) or a key written `kind:slug`; a task's,
+    a thread's or a surface's id gives none. Its notifications, signals, cards and surfaces follow
+    its task;
+  - **the extraction** reuses a task's subject (shown on its segment): a decision or a progress
+    card added from a task is the task's subject whatever was guessed, anything else takes it when
+    none was given; a replacement keeps its own, the day's journal `topic:journal`.
+  Notification rules match a notification's subject, else its record's ref (`itemRule`). An older
+  notification's subject moves out of its ref once at start (kv `notification_subjects`).
 - **Stored keys**: an older install's subjects are rewritten once at start: core.db's threads (of two
   live threads on one key, the latest keeps it), notifications and topic rules (kv
   `subject_keys`), memory.db's memories and intentions (schema 5 → 6, then 6 → 7: see [Memory](#memory)). A value that gives no key is

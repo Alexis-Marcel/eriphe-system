@@ -69,7 +69,7 @@ func (c *core) knownTopics() []topicView {
 		}
 	}
 	since := c.notifyTime().Add(-90 * 24 * time.Hour).Unix()
-	if rows, err := c.store.db.Query(`SELECT ref, COUNT(*) FROM notifications WHERE created >= ? AND ref != '' GROUP BY ref`, since); err == nil {
+	if rows, err := c.store.db.Query(`SELECT subject, COUNT(*) FROM notifications WHERE created >= ? AND subject != '' GROUP BY subject`, since); err == nil {
 		for rows.Next() {
 			var ref string
 			var n int

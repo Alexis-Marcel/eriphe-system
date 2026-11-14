@@ -121,8 +121,8 @@ func TestOneSubjectEverywhere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out["ref"] != key {
-		t.Errorf("notification under %v", out["ref"])
+	if out["subject"] != key {
+		t.Errorf("notification under %v", out["subject"])
 	}
 	if th.Subject != key {
 		t.Errorf("thread under %q", th.Subject)

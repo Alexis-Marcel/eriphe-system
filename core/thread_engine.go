@@ -292,7 +292,7 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 		taint = strings.Split(s.Tainted, ", ") // the plan the user approved stands for its own words
 	}
 	taint = appendNew(taint, handed...)
-	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract,
+	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract, Subject: s.Subject,
 		askStart: true, cleanStart: planned && len(taint) == 0, approvedInAdvance: planned, taint: taint}
 	t, err := c.runTask(ctx, r)
 	if err != nil {

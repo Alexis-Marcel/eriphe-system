@@ -50,7 +50,7 @@ func TestSubjectsNotedWhenWritten(t *testing.T) {
 func TestFillSubjects(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, created) VALUES ('Site', 'En ligne.', 'light', 'project:site', 'open', 100)`)
-	c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, source, level, outcome, reason, token) VALUES (200, 'x', '', 'person:sam', 'brain', 'now', 'now', '', 'a')`)
+	c.store.db.Exec(`INSERT INTO notifications (created, text, why, subject, source, level, outcome, reason, token) VALUES (200, 'x', '', 'person:sam', 'brain', 'now', 'now', '', 'a')`)
 	c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, source, level, outcome, reason, token) VALUES (200, 'x', '', 'skill:watch', 'brain', 'now', 'now', '', 'b')`)
 	c.mem.db.Exec(`INSERT INTO memories (kind, subject, text, valid_from, recorded_at, source_kind, trust, status, updated_at)
 		VALUES ('fact', 'client:acme', 'x', 1, 1, 'conversation', 'owner', 'active', 300)`)
@@ -164,7 +164,7 @@ func TestMergeSubjects(t *testing.T) {
 	var mem, intent, notif string
 	c.mem.db.QueryRow(`SELECT subject FROM memories`).Scan(&mem)
 	c.mem.db.QueryRow(`SELECT subject FROM intentions`).Scan(&intent)
-	c.store.db.QueryRow(`SELECT ref FROM notifications`).Scan(&notif)
+	c.store.db.QueryRow(`SELECT subject FROM notifications`).Scan(&notif)
 	if mem != key || intent != key || notif != key {
 		t.Errorf("memory %q, intention %q, notification %q", mem, intent, notif)
 	}
@@ -182,8 +182,8 @@ func TestMergeSubjects(t *testing.T) {
 		t.Errorf("recall by the merged key: %+v", xs)
 	}
 	got, err := c.brainNotify(notifyIn{Text: "Encore.", Level: levelBrief, Why: "Encore.", Ref: "projet:site"})
-	if err != nil || got["ref"] != key {
-		t.Errorf("notify under %v %v", got["ref"], err)
+	if err != nil || got["subject"] != key {
+		t.Errorf("notify under %v %v", got["subject"], err)
 	}
 	if again, _, _ := c.openThreadOnce(threadIn{Title: "Site", Goal: "En ligne.", Subject: "project:site"}, nil); again.ID != th.ID {
 		t.Errorf("a second thread %d", again.ID)

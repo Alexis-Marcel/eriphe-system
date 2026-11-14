@@ -9,6 +9,7 @@ import (
 	"log"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -200,7 +201,8 @@ func (c *core) fillSubjects() error {
 	}
 	queries := []string{
 		`SELECT subject, title, MAX(created) FROM threads WHERE subject != '' GROUP BY subject`,
-		`SELECT ref, '', MAX(created) FROM notifications WHERE ref != '' GROUP BY ref`,
+		`SELECT subject, '', MAX(created) FROM notifications WHERE subject != '' GROUP BY subject`,
+		`SELECT subject, '', MAX(updated) FROM tasks WHERE subject != '' GROUP BY subject`,
 	}
 	for _, q := range queries {
 		if err := collect(c.store.db, q); err != nil {
@@ -497,8 +499,8 @@ func (c *core) addSubjectNames(key, title string, aliases []string) error {
 
 // mergeSubject merges a subject into another: the row of the one merged
 // points to the other, its names become the other's aliases, and every
-// record under it is rewritten (threads, notifications, topic rules,
-// memories, intentions). Refused when both have a live thread: one is
+// record under it is rewritten (threads, notifications, attention items,
+// cards, tasks, surfaces, topic rules, memories, intentions). Refused when both have a live thread: one is
 // closed first. A sub-part's key (project:site:prod) is left as it is.
 func (c *core) mergeSubject(from, to string) error {
 	if from == to || from == "" || to == "" {
@@ -523,9 +525,13 @@ func (c *core) mergeSubject(from, to string) error {
 		`UPDATE subjects SET merged_into = ? WHERE key = ?`,
 		`UPDATE subjects SET merged_into = ?1 WHERE merged_into = ?2`,
 		`UPDATE threads SET subject = ? WHERE subject = ?`,
-		`UPDATE notifications SET ref = ? WHERE ref = ?`,
 	} {
 		if _, err := tx.Exec(q, to, from); err != nil {
+			return err
+		}
+	}
+	for _, table := range subjectTables {
+		if _, err := tx.Exec(`UPDATE `+table+` SET subject = ? WHERE subject = ?`, to, from); err != nil {
 			return err
 		}
 	}
@@ -628,4 +634,195 @@ func registerSubjectTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in nameSubjectIn) (map[string]any, error) {
 			return c.nameSubject(in)
 		})
+}
+
+// A record's subject. Notifications, attention items, cards, tasks and
+// surfaces carry a subject next to their ref (which record), and the code
+// sets it by inheritance: what the brain makes in a turn takes the turn's
+// subject (turnSubject), a task its thread's or its skill's, a card or a
+// surface its maker's (sourceSubject), a task's memories its own (the
+// extraction). The model may give one; it no longer has to.
+
+// subjectTables are the tables that carry a subject column of their own.
+var subjectTables = []string{"notifications", "attention", "convo_cards", "tasks", "surfaces"}
+
+// notificationSubjects is the kv key that says the notifications' subjects
+// moved from their ref to their subject.
+const notificationSubjects = "notification_subjects"
+
+// subjectColumns gives the tables made before it their subject column, and
+// moves once a notification's subject out of its ref: the ref keeps a
+// record's (skill:<name>, intention:<id>) only.
+func subjectColumns(db *sql.DB) error {
+	for _, table := range subjectTables {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'subject'`, table).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN subject TEXT NOT NULL DEFAULT ''`); err != nil {
+				return fmt.Errorf("%s: %w", table, err)
+			}
+		}
+	}
+	var done string
+	if db.QueryRow(`SELECT value FROM kv WHERE key = ?`, notificationSubjects).Scan(&done) == nil {
+		return nil
+	}
+	rows, err := db.Query(`SELECT DISTINCT ref FROM notifications WHERE ref != ''`)
+	if err != nil {
+		return err
+	}
+	var refs []string
+	for rows.Next() {
+		var s string
+		if rows.Scan(&s) == nil {
+			refs = append(refs, s)
+		}
+	}
+	rows.Close()
+	for _, s := range refs {
+		if k := subjectOf(s); k != "" && !isRecordRef(s) {
+			if _, err := db.Exec(`UPDATE notifications SET subject = ?, ref = '' WHERE ref = ?`, k, s); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = db.Exec(`INSERT OR REPLACE INTO kv (key, value) VALUES (?, '1')`, notificationSubjects)
+	return err
+}
+
+// turnSubject is the subject of the brain's turn: its thread's, or else
+// the one known subject my messages of the turn name; "" if neither.
+func (c *core) turnSubject() string {
+	if id := c.turn.aboutThread(); id > 0 {
+		if th, err := c.thread(id); err == nil && th.Subject != "" {
+			return th.Subject
+		}
+	}
+	if named := c.turn.named(); len(named) == 1 {
+		return named[0]
+	}
+	return ""
+}
+
+// sourceSubject is the subject of who made a record: a thread's (thread:,
+// lead:), a task's; "" for anyone else.
+func (c *core) sourceSubject(source string) string {
+	kind, id, _ := strings.Cut(source, ":")
+	switch kind {
+	case "thread", "lead":
+		n, err := strconv.ParseInt(id, 10, 64)
+		if err != nil {
+			return ""
+		}
+		if th, err := c.thread(n); err == nil {
+			return th.Subject
+		}
+	case "task":
+		var s string
+		c.store.db.QueryRow(`SELECT subject FROM tasks WHERE id = ?`, id).Scan(&s)
+		return s
+	}
+	return ""
+}
+
+// cardSubject sets a card's subject once: its proposal's (a memory's, an
+// intention's, a thread's, a skill run's), else what its maker inherits
+// (nil: none).
+func (c *core) cardSubject(kind string, id int64, inherit func() string) {
+	s := c.proposalSubject(kind, id)
+	if s == "" && inherit != nil {
+		s = inherit()
+	}
+	if s == "" {
+		return
+	}
+	c.store.db.Exec(`UPDATE convo_cards SET subject = ? WHERE ref = ? AND subject = ''`, c.store.keepSubject(s, ""), proposalRef(kind, id))
+}
+
+// proposalSubject is the subject of what a card proposes, if it has one.
+func (c *core) proposalSubject(kind string, id int64) string {
+	switch kind {
+	case cardMemory:
+		if c.mem != nil {
+			if x, err := c.mem.memory(id); err == nil {
+				return x.Subject
+			}
+		}
+	case cardIntention:
+		if c.mem != nil {
+			if x, err := c.mem.intention(id); err == nil {
+				return x.Subject
+			}
+		}
+	case cardThread:
+		return c.sourceSubject(threadRef(id))
+	case cardRunCalls:
+		var task string
+		c.store.db.QueryRow(`SELECT task FROM skill_runs WHERE id = ?`, id).Scan(&task)
+		if task != "" {
+			return c.sourceSubject("task:" + task)
+		}
+	}
+	return ""
+}
+
+// skillRunSubject is the subject of a skill's run: the one its trigger
+// declares, else its events' key where it names a thing: a monitor's
+// (monitor.*: topic:<name>), or a key written kind:slug. Another key (a
+// task's, a thread's, a surface's id) gives none.
+func skillRunSubject(st *skillTrigger, key string, events []journalEvent) string {
+	if st != nil && st.Subject != "" {
+		return st.Subject
+	}
+	if strings.Contains(key, ":") {
+		return subjectOf(key)
+	}
+	monitors := len(events) > 0
+	for _, e := range events {
+		monitors = monitors && strings.HasPrefix(e.Kind, "monitor.")
+	}
+	if monitors {
+		return subjectOf(key)
+	}
+	return ""
+}
+
+// taskSubject is the subject of a task, "" for none or no such task.
+func (c *core) taskSubject(id string) string {
+	if id == "" {
+		return ""
+	}
+	return c.sourceSubject("task:" + id)
+}
+
+// inheritsSubject tells a kind of memory that takes the turn's subject
+// when it is given none: what is known and decided of the matter, and
+// where it stands. A profile, a preference, a person, a lesson, a
+// situation or the day's journal is about someone or something else.
+func inheritsSubject(kind string) bool {
+	return kind == kindFact || kind == kindDecision || kind == kindProgress
+}
+
+// opSubject is the subject of what the extraction adds from a task (its
+// first source with a subject): a decision or a progress card of the task
+// is the task's subject whatever was guessed, anything else takes it when
+// none was given. Otherwise the one given. A replacement keeps its own.
+func (c *core) opSubject(op extractionOp, ref string) string {
+	var task string
+	for _, p := range strings.Split(ref, ",") {
+		if id, ok := strings.CutPrefix(p, "task:"); ok {
+			if task = c.taskSubject(id); task != "" {
+				break
+			}
+		}
+	}
+	switch {
+	case task == "" || op.Subject == journalSubject:
+		return op.Subject
+	case op.Kind == kindDecision || op.Kind == kindProgress || strings.TrimSpace(op.Subject) == "":
+		return task
+	}
+	return op.Subject
 }

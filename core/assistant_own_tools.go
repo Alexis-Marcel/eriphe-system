@@ -71,6 +71,9 @@ func (c *core) assistantNotify(a Assistant, in notifyIn) (map[string]any, error)
 	if strings.TrimSpace(in.Why) != "" {
 		in.Why = a.displayName() + " : " + strings.TrimSpace(in.Why)
 	}
+	if in.Subject == "" && (in.Ref == "" || isRecordRef(in.Ref)) {
+		in.Subject = c.sourceSubject(threadRef(leadThread(a))) // a lead's: its thread's (subjects.go)
+	}
 	return c.notifyAs(in, notifyFromAssistant, c.assistantTaint(a), false)
 }
 
@@ -102,7 +105,7 @@ func (c *core) assistantReport(a Assistant, in reportIn) (map[string]any, error)
 	items := 0
 	if len(in.Attention) > 0 {
 		kept, dropped := cleanSignals(in.Attention, false)
-		items = c.attendSignals(kept, dropped, taintAssistantPrefix+a.Name, len(tainted) > 0)
+		items = c.attendSignals(kept, dropped, threadRef(leadThread(a)), taintAssistantPrefix+a.Name, len(tainted) > 0)
 		out["attention"] = items
 		if len(dropped) > 0 {
 			out["dropped"] = dropped

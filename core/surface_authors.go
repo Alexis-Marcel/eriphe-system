@@ -211,7 +211,7 @@ func (c *core) attendOffers() {
 		if text == "" {
 			text = x.Text
 		}
-		c.store.db.Exec(`INSERT INTO attention (ref, weight, why, source, time, tainted) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (ref) DO NOTHING`,
-			cardItemRef(x.ID), w, truncate(oneLine(tr(c.userLang(), "card.kind."+x.Kind)+" : "+text), attentionWhyMax), sourceOffer, now, boolInt(p.Tainted != ""))
+		c.store.db.Exec(`INSERT INTO attention (ref, weight, why, source, time, tainted, subject) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (ref) DO NOTHING`,
+			cardItemRef(x.ID), w, truncate(oneLine(tr(c.userLang(), "card.kind."+x.Kind)+" : "+text), attentionWhyMax), sourceOffer, now, boolInt(p.Tainted != ""), x.Subject)
 	}
 }

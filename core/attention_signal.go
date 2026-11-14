@@ -190,17 +190,19 @@ func cleanSignals(in []attentionSignal, own bool) ([]attentionSignal, []string) 
 }
 
 // attendSignals puts each ref of the signals in the attention queue, from
-// source (skill:<name>, assistant:<name>); tainted when who wrote them
-// read external content. The dropped are logged. A signal without refs
-// makes no item here: its caller knows what it is about.
-func (c *core) attendSignals(signals []attentionSignal, dropped []string, source string, tainted bool) int {
+// source (skill:<name>, assistant:<name>), about the subject of maker (a
+// run's task:<id>, a lead's thread:<id>; "" for none: sourceSubject); tainted when who wrote them read
+// external content. The dropped are logged. A signal without refs makes
+// no item here: its caller knows what it is about.
+func (c *core) attendSignals(signals []attentionSignal, dropped []string, maker, source string, tainted bool) int {
+	subject := c.sourceSubject(maker)
 	for _, d := range dropped {
 		log.Printf("attention: %s: dropped %s", source, d)
 	}
 	n := 0
 	for _, s := range signals {
 		for _, ref := range s.Refs {
-			c.attend(attentionItem{Ref: ref, Weight: s.Weight, Why: s.Why, Say: s.Say, Source: source, tainted: tainted})
+			c.attend(attentionItem{Ref: ref, Weight: s.Weight, Why: s.Why, Say: s.Say, Source: source, Subject: subject, tainted: tainted})
 			n++
 		}
 	}

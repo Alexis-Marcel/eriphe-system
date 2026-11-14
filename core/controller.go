@@ -288,6 +288,7 @@ type runRequest struct {
 	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository the user gave to Eriphe cloned into /work/repo (repo, with branch, base, dir; see list_repos), the user's folders and the places of their tools (folder, place; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
 	Node      string        `json:"node,omitempty" jsonschema:"node name; empty lets the scheduler choose"`
+	Subject   string        `json:"subject,omitempty" jsonschema:"what it is about, kind:slug; leave it out for the subject of what this turn is about (its thread's, or the one subject the user's message named)"`
 	// Contract: what must be true at the end, for a task that changes
 	// something (contract.go); none for a search or a read.
 	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
@@ -352,6 +353,10 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		if err := r.Contract.normalize(); err != nil { // contract.go
 			return nil, err
 		}
+	}
+	subject, err := c.subjectIs(r.Subject, "")
+	if err != nil {
+		return nil, fmt.Errorf("subject: %w", err)
 	}
 	agentName, agent, err := c.conf().agent(r.Agent)
 	if err != nil {
@@ -421,7 +426,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		needs = append(c.startNeeds(lent.List, r.cleanStart), c.accessStartNeeds(lent.List, r.cleanStart)...) // task_start.go
 		needs = append(needs, c.folderNeeds(lent.List, r.cleanStart)...)                                      // folder_values.go
 	}
-	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model,
+	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model, Subject: subject,
 		Dir: where, Title: r.title(), Prompt: r.Prompt, State: statePending,
 		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List, Pinned: r.Node != ""}
 	if waiting != nil {

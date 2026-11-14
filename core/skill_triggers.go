@@ -26,6 +26,7 @@ import (
 //	                                         (eriphe-workspace: it keeps a surface, and a
 //	                                         surface.stale about it runs it whatever its when)
 //	can: [open-thread]                     what its tasks may start (#276)
+//	subject: project:site                    what its runs are about (subjects.go); without it, the events' key
 //
 // Each is checked when the skill is added: a version with a bad trigger is
 // refused. The user approves them with the rest of the skill, as one
@@ -56,6 +57,7 @@ type skillTrigger struct {
 	Tools    []string
 	Can      []string
 	Urgent   string // the fixed text of an urgent run (skill_cards.go)
+	Subject  string // what its runs are about; else their events' key (skillRunSubject)
 }
 
 // filterBound is a filter on a number of the event's payload.
@@ -92,7 +94,7 @@ func splitWhen(when string) (at, events string) {
 // someone follows it.
 func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 	if m.When == "" {
-		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "can": m.Can, "urgent": m.Urgent} {
+		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "can": m.Can, "urgent": m.Urgent, "subject": m.Subject} {
 			if v != "" {
 				return nil, skillErr("skills.err.nowhen", k)
 			}
@@ -174,6 +176,13 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 			return nil, skillErr("skills.err.urgent", u)
 		}
 		st.Urgent = u
+	}
+	if s := strings.TrimSpace(m.Subject); s != "" {
+		k, err := subjectKey(s)
+		if err != nil || k == "" {
+			return nil, skillErr("skills.err.subject", s)
+		}
+		st.Subject = k
 	}
 	st.Can = frontList(m.Can)
 	for _, c := range st.Can {

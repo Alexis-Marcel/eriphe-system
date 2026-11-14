@@ -93,7 +93,8 @@ type notification struct {
 	Created    time.Time `json:"created"`
 	Text       string    `json:"text"`
 	Why        string    `json:"why"`
-	Ref        string    `json:"ref,omitempty"`
+	Ref        string    `json:"ref,omitempty"`     // the record it is about: intention:12, skill:<name>
+	Subject    string    `json:"subject,omitempty"` // what it is about, kind:slug (subject.go)
 	Source     string    `json:"source"`
 	Level      string    `json:"level"`   // what was asked: now or brief
 	Outcome    string    `json:"outcome"` // what the code decided: now, brief or never
@@ -111,7 +112,8 @@ type notification struct {
 // notifyItem is what decideNotify judges.
 type notifyItem struct {
 	Level   string // now or brief, as asked
-	Ref     string // what it is about: project:getout, intention:12…
+	Subject string // what it is about: project:getout…
+	Ref     string // the record it is about: intention:12, skill:<name>…
 	Asked   bool   // the user asked for it in their own words: not counted in the cap
 	Tainted bool   // drawn from external content
 	Where   string // the line the writer would try first (where_now.go); "" for the router's order
@@ -141,7 +143,7 @@ func decideNotify(it notifyItem, cx notifyContext) notifyDecision {
 		return notifyDecision{levelNow, reasonWatch, 0}
 	}
 	level := it.Level
-	r := topicRule(cx.Rules, it.Ref)
+	r := itemRule(cx.Rules, it)
 	var ruleID int64
 	if r != nil {
 		ruleID = r.ID
@@ -220,12 +222,9 @@ func (c *core) notifyContext() (notifyContext, error) {
 
 // notify decides on n, keeps it, and pushes it when it is for now.
 func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
-	if k := c.store.keepSubject(n.Ref, ""); k != n.Ref { // a subject merged is kept under the other (subjects.go)
-		if it.Ref == n.Ref {
-			it.Ref = k
-		}
-		n.Ref = k
-	}
+	// A subject merged is kept under the other (subjects.go).
+	n.Subject = c.store.keepSubject(n.Subject, "")
+	it.Subject, it.Ref = n.Subject, n.Ref
 	cx, err := c.notifyContext()
 	if err != nil {
 		return nil, err
@@ -234,9 +233,9 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	n.Created, n.Level, n.Outcome, n.Reason, n.RuleID, n.Asked = cx.Now, it.Level, d.Outcome, d.Reason, d.RuleID, it.Asked
 	n.Held = d.Outcome == levelBrief
 	n.token = randomToken(16)
-	res, err := c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, source, level, outcome, reason, rule_id,
-		asked, tainted, msg, held, token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.Created.Unix(), n.Text, n.Why, n.Ref, n.Source, n.Level, n.Outcome, n.Reason, nullID(n.RuleID),
+	res, err := c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, subject, source, level, outcome, reason, rule_id,
+		asked, tainted, msg, held, token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.Created.Unix(), n.Text, n.Why, n.Ref, n.Subject, n.Source, n.Level, n.Outcome, n.Reason, nullID(n.RuleID),
 		n.Asked, n.Tainted, nullID(int64(n.Msg)), n.Held, n.token)
 	if err != nil {
 		return nil, err
@@ -249,7 +248,7 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	if d.Outcome == levelNow {
 		note := notifyNote(n)
 		note.Route = routeNote{Level: levelNow, Tainted: it.Tainted, Fixed: n.Source == notifyFromUrgent, First: it.Where}
-		if r := topicRule(cx.Rules, it.Ref); r != nil {
+		if r := itemRule(cx.Rules, it); r != nil {
 			note.Channels = r.Channels // the rule's channels, else the default (channels.go)
 			note.Route.Only, note.Route.Also, note.Route.Never = r.Channels, r.Also, r.Never
 			note.Route.Urgent = r.Outcome == levelNow && r.Night
@@ -276,13 +275,13 @@ func notificationURL(id int64) string {
 	return fmt.Sprintf("/settings/notifications?n=%d#notif-%d", id, id)
 }
 
-const notifyCols = `id, created, text, why, ref, source, level, outcome, reason, COALESCE(rule_id, 0), asked, tainted,
+const notifyCols = `id, created, text, why, ref, subject, source, level, outcome, reason, COALESCE(rule_id, 0), asked, tainted,
 	COALESCE(msg, 0), held, feedback, COALESCE(feedback_at, 0), token`
 
 func scanNotification(row interface{ Scan(...any) error }) (*notification, error) {
 	var n notification
 	var created, fbAt int64
-	if err := row.Scan(&n.ID, &created, &n.Text, &n.Why, &n.Ref, &n.Source, &n.Level, &n.Outcome, &n.Reason, &n.RuleID,
+	if err := row.Scan(&n.ID, &created, &n.Text, &n.Why, &n.Ref, &n.Subject, &n.Source, &n.Level, &n.Outcome, &n.Reason, &n.RuleID,
 		&n.Asked, &n.Tainted, &n.Msg, &n.Held, &n.Feedback, &fbAt, &n.token); err != nil {
 		return nil, err
 	}
@@ -422,7 +421,13 @@ func (c *core) notifyWake(seq, eventSeq int, text string) {
 	// Its taint is the intentions': a reminder approved by the user is not
 	// held back because the brain read a mail earlier in the turn; that
 	// turn's taint is still kept with it.
-	n := &notification{Text: truncate(strings.TrimSpace(text), notifyTextMax), Why: why, Ref: ref, Source: notifyFromWake,
+	subject := "" // the first intention's
+	if len(w.IDs) > 0 && c.mem != nil {
+		if x, err := c.mem.intention(w.IDs[0]); err == nil {
+			subject = x.Subject
+		}
+	}
+	n := &notification{Text: truncate(strings.TrimSpace(text), notifyTextMax), Why: why, Ref: ref, Subject: subject, Source: notifyFromWake,
 		Msg: seq, Tainted: strings.Join(c.turnTaint(), ", ")}
 	if _, err := c.notify(n, notifyItem{Level: levelNow, Ref: ref, Asked: w.Asked, Tainted: w.External}); err != nil {
 		log.Printf("notify: wake: %v", err)

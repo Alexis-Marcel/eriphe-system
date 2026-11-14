@@ -50,11 +50,12 @@ const (
 
 // segment is one piece of the day's transcript.
 type segment struct {
-	Ref   string // msg:N or task:ID
-	Time  time.Time
-	Who   string // owner, brain, event, task
-	Trust string
-	Text  string
+	Ref     string // msg:N or task:ID
+	Subject string // a task's subject (subjects.go)
+	Time    time.Time
+	Who     string // owner, brain, event, task
+	Trust   string
+	Text    string
 }
 
 func dayBounds(day string) (time.Time, time.Time, error) {
@@ -151,7 +152,7 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 			text += "\nTools it used: " + strings.Join(tools, ", ")
 		}
 		// Clean: first party, as what it remembers itself (situations.go).
-		out = append(out, segment{Ref: "task:" + t.ID, Time: t.Updated, Who: "task", Trust: trustFirstParty, Text: text})
+		out = append(out, segment{Ref: "task:" + t.ID, Time: t.Updated, Who: "task", Trust: trustFirstParty, Text: text, Subject: t.Subject})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Time.Before(out[j].Time) })
 	return out, nil
@@ -166,7 +167,11 @@ func seqOf(ref string) int {
 func renderTranscript(segs []segment) string {
 	var b strings.Builder
 	for _, s := range segs {
-		fmt.Fprintf(&b, "<segment ref=%q time=%q from=%q trust=%q>\n%s\n</segment>\n", s.Ref, s.Time.Local().Format("2006-01-02 15:04 Mon"), s.Who, s.Trust,
+		subject := ""
+		if s.Subject != "" {
+			subject = fmt.Sprintf(" subject=%q", s.Subject)
+		}
+		fmt.Fprintf(&b, "<segment ref=%q time=%q from=%q trust=%q%s>\n%s\n</segment>\n", s.Ref, s.Time.Local().Format("2006-01-02 15:04 Mon"), s.Who, s.Trust, subject,
 			strings.ReplaceAll(s.Text, "</segment>", "</ segment>"))
 	}
 	out := b.String()
@@ -643,6 +648,8 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 		if x.Kind == kindProgress && x.State == "" && old.Kind == kindProgress {
 			x.State = old.State
 		}
+	} else {
+		x.Subject = c.opSubject(op, ref) // a task's: its subject (subjects.go)
 	}
 	// One episode a day, the journal: a task's record is its log.
 	if x.Kind == kindEpisode && subjectOf(x.Subject) != journalSubject {
@@ -895,7 +902,7 @@ func (c *core) applyIntend(op extractionOp, trust, ref, who string) (why, result
 	if !basisKnown(basis) {
 		return fmt.Sprintf("basis %q: stated, inferred or ambiguous", op.Basis), ""
 	}
-	x := &Intention{Kind: op.Kind, Text: op.Text, Owner: op.Owner, OwedTo: op.OwedTo, Subject: op.Subject, Cue: op.Cue,
+	x := &Intention{Kind: op.Kind, Text: op.Text, Owner: op.Owner, OwedTo: op.OwedTo, Subject: c.opSubject(op, ref), Cue: op.Cue,
 		SourceKind: srcExtraction, SourceRef: ref, Trust: trust, Basis: basis, State: intentOpen}
 	var err error
 	if x.DueAt, err = parseWhen(op.DueAt); err != nil {
