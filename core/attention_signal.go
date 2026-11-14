@@ -42,7 +42,7 @@ const attentionInstruction = "When something deserves the user's attention, add 
 	"refs name the objects it is about, each in one of these forms: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, thread:<id>, card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
 	"Leave refs out when the entry is about your final message itself. " +
-	"Leave the list out when nothing deserves it: the user is then told nothing. A ref of another form, or a weight outside 1 to 5, is dropped."
+	"Leave the list out when nothing deserves it: the user is then told nothing."
 
 // The kinds of records an attention item may be about: kind:id. It may be
 // about a subject too (subject.go): mail:<message id>, event:<event id>,

@@ -62,31 +62,49 @@ type fence struct {
 	body, tag  string
 }
 
-// fencedBlocks reads the fenced blocks of text in order, each opening
-// fence paired with the next closing one: a block tagged go or thread is
-// one block, never half of another.
-func fencedBlocks(text string) []fence {
-	var out []fence
-	for i := 0; ; {
-		o := strings.Index(text[i:], "```")
-		if o < 0 {
-			return out
+// fenceLine is a line of a message that starts with a fence (```):
+// where its fence starts, where the line ends, and what follows the fence.
+type fenceLine struct {
+	at, end int
+	rest    string
+}
+
+func fenceLines(text string) []fenceLine {
+	var out []fenceLine
+	for at := 0; at < len(text); {
+		next := len(text)
+		if nl := strings.IndexByte(text[at:], '\n'); nl >= 0 {
+			next = at + nl + 1
 		}
-		o += i
-		nl := strings.IndexByte(text[o+3:], '\n')
-		if nl < 0 {
-			return out
+		line := strings.TrimRight(text[at:next], "\r\n")
+		if t := strings.TrimLeft(line, " \t"); strings.HasPrefix(t, "```") {
+			f := at + len(line) - len(t)
+			out = append(out, fenceLine{at: f, end: at + len(line), rest: strings.TrimSpace(t[3:])})
 		}
-		tag := strings.TrimSpace(text[o+3 : o+3+nl])
-		from := o + 3 + nl + 1
-		c := strings.Index(text[from:], "```")
-		if c < 0 {
-			return out
-		}
-		c += from
-		out = append(out, fence{start: o, end: c + 3, body: text[from:c], tag: tag})
-		i = c + 3
+		at = next
 	}
+	return out
+}
+
+// fencedBlocks reads the fenced blocks of text: fences open and close at
+// the start of a line, each opening paired with the next one, so a block
+// tagged go or thread is one block, never half of another. When a fence
+// is left unclosed (an odd count), the last two still make a block: a
+// receipt at the end is read after a stray fence.
+func fencedBlocks(text string) []fence {
+	lines := fenceLines(text)
+	block := func(o, c fenceLine) fence {
+		from := min(o.end+1, c.at)
+		return fence{start: o.at, end: c.end, body: text[from:c.at], tag: o.rest}
+	}
+	var out []fence
+	for i := 0; i+1 < len(lines); i += 2 {
+		out = append(out, block(lines[i], lines[i+1]))
+	}
+	if n := len(lines); n >= 3 && n%2 == 1 {
+		out = append(out, block(lines[n-2], lines[n-1]))
+	}
+	return out
 }
 
 // receiptFences are the blocks that may hold a receipt: untagged or json.
