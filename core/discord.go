@@ -364,8 +364,8 @@ func (d *discord) forgetSession() {
 	d.mu.Unlock()
 }
 
-// dispatch reads an event: READY keeps the session, a DM and a button are
-// the bot channel's.
+// dispatch reads an event: READY keeps the session, READY and RESUMED say
+// the connection is up, a DM and a button are the bot channel's.
 func (d *discord) dispatch(p dcPayload, on func(botEvent)) {
 	switch p.T {
 	case "READY":
@@ -379,6 +379,9 @@ func (d *discord) dispatch(p dcPayload, on func(botEvent)) {
 			d.session, d.resumeURL, d.self = r.SessionID, r.ResumeURL, r.User.ID
 			d.mu.Unlock()
 		}
+		on(botEvent{Up: true})
+	case "RESUMED":
+		on(botEvent{Up: true})
 	case "MESSAGE_CREATE":
 		var m dcMessage
 		if json.Unmarshal(p.D, &m) != nil {
