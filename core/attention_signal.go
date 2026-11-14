@@ -153,8 +153,8 @@ func decodeSignals(raw json.RawMessage) ([]attentionSignal, []string) {
 
 // cleanSignals keeps the signals of a good form, trimmed: refs of a known
 // form, a weight from 1 to 5, a why cut to its length. A signal with no
-// good ref left is dropped; one that named none is kept with none when
-// own (it is about the message that carries it), else dropped too.
+// good ref left is kept with none when own (it is about the message that
+// carries it: a bad ref never silences a weight), else dropped.
 func cleanSignals(in []attentionSignal, own bool) ([]attentionSignal, []string) {
 	var out []attentionSignal
 	var dropped []string
@@ -173,7 +173,7 @@ func cleanSignals(in []attentionSignal, own bool) ([]attentionSignal, []string) 
 				refs = append(refs, r)
 			}
 		}
-		if len(refs) == 0 && (len(s.Refs) > 0 || !own) {
+		if len(refs) == 0 && !own {
 			if len(s.Refs) == 0 {
 				dropped = append(dropped, "a signal without refs")
 			}

@@ -1599,7 +1599,10 @@ version, read with its diff.
   the run is `silent`, its message kept in its note. Otherwise its message is a notification, why
   « Skill « name » », ref `skill:<name>`, its link-free rules when the task is tainted: `now` when
   the heaviest entry weighs 4 or 5, `brief` below. Each entry with refs enters the attention queue
-  as it is; one without refs is about the message, the notification it became (`alert:<id>`).
+  as it is; one without refs (or whose refs were all bad: a bad ref never silences a weight) is
+  about the message, the notification it became (`alert:<id>`). Entries about objects alone tell
+  the message only from 4: below, their items speak at the brief, not twice. The run's note lists
+  what was dropped.
   Then its task stops. The brain is not told of its state and never woken by a run; its
   permissions are the user's, as any task's.
 - **One run open per skill and key**: the key's new events wait, and when its turn ends, its task
