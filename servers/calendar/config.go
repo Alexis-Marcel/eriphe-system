@@ -37,6 +37,10 @@ type AccountConfig struct {
 	// Google, the account address, used to find the calendars.
 	Username string     `json:"username,omitempty"`
 	Auth     AuthConfig `json:"auth"`
+	// Emails are other addresses the user is invited at (aliases, an Apple
+	// ID that is not the invited address): with the username, how the
+	// user is found among an event's attendees.
+	Emails []string `json:"emails,omitempty"`
 	// GraphURL overrides https://graph.microsoft.com/v1.0 (tests).
 	GraphURL string `json:"graph_url,omitempty"`
 	// ReadOnly refuses every write in this account's calendars: it can
@@ -166,6 +170,20 @@ func (a *AccountConfig) normalize() error {
 		return errors.New("username is required with a password")
 	}
 	return nil
+}
+
+// me is the user's addresses in this account, lowercase.
+func (a *AccountConfig) me() []string {
+	var out []string
+	if a == nil {
+		return nil
+	}
+	for _, e := range append([]string{a.Username}, a.Emails...) {
+		if e = strings.ToLower(strings.TrimSpace(e)); strings.Contains(e, "@") {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // secret reads the password or token now.

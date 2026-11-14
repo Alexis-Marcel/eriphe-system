@@ -196,7 +196,7 @@ func (d *CalDAV) Events(ctx context.Context, cal CalendarInfo, from, to time.Tim
 		}
 		out = append(out, d.occurrences(ic, href, cal.ID, from, to)...)
 	}
-	return out, nil
+	return light(out), nil
 }
 
 // occurrences turns a calendar object into the event instances within
@@ -291,6 +291,16 @@ func (d *CalDAV) item(ev ical.Event, href, calID string) Item {
 		it.Cancelled = true
 	}
 	it.Recurring = ev.Props.Get(ical.PropRecurrenceRule) != nil
+	var org *Person
+	if p := ev.Props.Get(ical.PropOrganizer); p != nil {
+		org = &Person{Name: p.Params.Get("CN"), Email: mailto(p.Value)}
+	}
+	var atts []Attendee
+	for _, p := range ev.Props.Values(ical.PropAttendee) {
+		atts = append(atts, Attendee{Person: Person{Name: p.Params.Get("CN"), Email: mailto(p.Value)},
+			Status: partstat(p.Params.Get("PARTSTAT")), Optional: strings.EqualFold(p.Params.Get("ROLE"), "OPT-PARTICIPANT")})
+	}
+	it.meeting(d.acct.me(), org, atts)
 	start := ev.Props.Get(ical.PropDateTimeStart)
 	it.AllDay = isDate(start)
 	it.Start, _ = propTime(start, d.loc)
@@ -448,6 +458,177 @@ func (d *CalDAV) Delete(ctx context.Context, calID, id string) error {
 		return statusError(d.acct.Name, "delete event", resp)
 	}
 	return nil
+}
+
+// Respond sets the user's own PARTSTAT, in every component of the object
+// for the series (and its moved occurrences), in one occurrence's override
+// for an occurrence, and saves it with If-Match: a server that
+// schedules (RFC 6638: Google, iCloud, Nextcloud...) sends the reply to the
+// organizer. The comment goes in COMMENT, which the reply carries.
+func (d *CalDAV) Respond(ctx context.Context, calID, id string, r Response) (*Item, error) {
+	ic, etag, err := d.object(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	m := master(ic)
+	if m == nil {
+		return nil, errNotFound
+	}
+	me := d.acct.me()
+	if len(me) == 0 {
+		return nil, fmt.Errorf("%s: the account's address is not known (username or emails): cannot find the user among the attendees", d.acct.Name)
+	}
+	for _, c := range ic.Children {
+		if p := c.Props.Get(ical.PropOrganizer); c.Name == ical.CompEvent && p != nil && isMe(me, mailto(p.Value)) {
+			return nil, fmt.Errorf("%s: the user organizes this event: there is no invitation to answer", d.acct.Name)
+		}
+	}
+	// The components answered: every one for the series (or a single
+	// event), else the occurrence's override, made from the series if it
+	// has none yet.
+	var comps []*ical.Component
+	if r.Occurrence == nil {
+		for _, c := range ic.Children {
+			if c.Name == ical.CompEvent {
+				comps = append(comps, c)
+			}
+		}
+	} else {
+		o, err := d.override(ic, m, *r.Occurrence)
+		if err != nil {
+			return nil, err
+		}
+		comps = []*ical.Component{o}
+	}
+	found := false
+	for _, c := range comps {
+		if answer(c, me, r) {
+			found = true
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("%s: the user (%s) is not among the attendees of this event", d.acct.Name, strings.Join(me, ", "))
+	}
+	hdr := map[string]string{}
+	if etag != "" {
+		hdr["If-Match"] = etag
+	}
+	if err := d.put(ctx, id, ic, hdr); err != nil {
+		return nil, err
+	}
+	shown := m
+	if r.Occurrence != nil {
+		shown = comps[0]
+	}
+	it := d.item(ical.Event{Component: shown}, id, calID)
+	return &it, nil
+}
+
+// answer sets the user's PARTSTAT in one component; false when the user
+// is not among its attendees.
+func answer(c *ical.Component, me []string, r Response) bool {
+	answered := false
+	atts := c.Props[ical.PropAttendee]
+	for i := range atts {
+		p := &atts[i]
+		if !isMe(me, mailto(p.Value)) {
+			continue
+		}
+		if p.Params == nil {
+			p.Params = ical.Params{}
+		}
+		p.Params.Set("PARTSTAT", strings.ToUpper(r.Status))
+		p.Params.Del("RSVP")
+		p.Params.Del("SCHEDULE-STATUS")
+		answered = true
+	}
+	if answered {
+		setText(c, ical.PropComment, r.Comment)
+		c.Props.SetDateTime(ical.PropDateTimeStamp, time.Now().UTC())
+	}
+	return answered
+}
+
+// override finds the component of one occurrence of a recurring event, by
+// its start as list_events shows it (a moved occurrence: its new start) or
+// its original one; without one, it adds a copy of the series for that
+// instance (RECURRENCE-ID), as a client does to answer one occurrence.
+func (d *CalDAV) override(ic *ical.Calendar, m *ical.Component, at time.Time) (*ical.Component, error) {
+	same := func(p *ical.Prop) bool {
+		t, err := propTime(p, d.loc)
+		if err != nil {
+			return false
+		}
+		if isDate(p) {
+			return t.Format(time.DateOnly) == at.In(d.loc).Format(time.DateOnly)
+		}
+		return t.Equal(at)
+	}
+	for _, c := range ic.Children {
+		if rid := c.Props.Get(ical.PropRecurrenceID); c.Name == ical.CompEvent && rid != nil &&
+			(same(rid) || same(c.Props.Get(ical.PropDateTimeStart))) {
+			return c, nil
+		}
+	}
+	if m.Props.Get(ical.PropRecurrenceRule) == nil {
+		return nil, errors.New("this event does not recur: answer it without occurrence")
+	}
+	set, err := (&ical.Event{Component: m}).RecurrenceSet(d.loc)
+	if err != nil || set == nil {
+		return nil, fmt.Errorf("%s: cannot read the event's recurrence", d.acct.Name)
+	}
+	cur := d.item(ical.Event{Component: m}, "", "")
+	var inst time.Time
+	for _, t := range set.Between(at.Add(-24*time.Hour), at.Add(24*time.Hour), true) {
+		if cur.AllDay && t.Format(time.DateOnly) == at.In(d.loc).Format(time.DateOnly) || !cur.AllDay && t.Equal(at) {
+			inst = t
+			break
+		}
+	}
+	if inst.IsZero() {
+		return nil, errors.New("the event has no occurrence starting then: give the start list_events shows")
+	}
+	o := &ical.Component{Name: ical.CompEvent, Props: ical.Props{}}
+	for name, ps := range m.Props {
+		switch name {
+		case ical.PropRecurrenceRule, ical.PropRecurrenceDates, ical.PropExceptionDates:
+			continue
+		}
+		for _, p := range ps {
+			q := ical.Prop{Name: p.Name, Value: p.Value, Params: ical.Params{}}
+			for k, v := range p.Params {
+				q.Params[k] = append([]string(nil), v...)
+			}
+			o.Props.Add(&q)
+		}
+	}
+	rid := ical.NewProp(ical.PropRecurrenceID)
+	if cur.AllDay {
+		rid.SetDate(inst)
+	} else {
+		rid.SetDateTime(inst.UTC())
+	}
+	o.Props.Set(rid)
+	d.setTimes(o, inst, inst.Add(cur.End.Sub(cur.Start)), cur.AllDay)
+	ic.Children = append(ic.Children, o)
+	return o, nil
+}
+
+// mailto is the address of a CAL-ADDRESS value (mailto:sam@example.org).
+func mailto(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) >= 7 && strings.EqualFold(v[:7], "mailto:") {
+		v = v[7:]
+	}
+	return v
+}
+
+// partstat is a PARTSTAT as an attendee status; none means not answered.
+func partstat(v string) string {
+	if v == "" {
+		return "needs-action"
+	}
+	return strings.ToLower(v)
 }
 
 // setTimes writes DTSTART and DTEND: dates for all-day events, UTC times

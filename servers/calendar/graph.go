@@ -50,9 +50,47 @@ type graphEvent struct {
 	IsCancelled    bool   `json:"isCancelled,omitempty"`
 	Type           string `json:"type,omitempty"`
 	SeriesMasterID string `json:"seriesMasterId,omitempty"`
+	OriginalStart  string `json:"originalStart,omitempty"`
+
+	// Read only: the people.
+	IsOrganizer    *bool           `json:"isOrganizer,omitempty"`
+	Organizer      *graphRecip     `json:"organizer,omitempty"`
+	Attendees      []graphAttendee `json:"attendees,omitempty"`
+	ResponseStatus *graphResponse  `json:"responseStatus,omitempty"`
 }
 
-const graphSelect = "id,iCalUId,subject,start,end,isAllDay,location,bodyPreview,showAs,isCancelled,type,seriesMasterId"
+type graphEmail struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
+
+type graphRecip struct {
+	EmailAddress graphEmail `json:"emailAddress"`
+}
+
+type graphResponse struct {
+	Response string `json:"response"`
+}
+
+type graphAttendee struct {
+	Type         string        `json:"type"` // required, optional, resource
+	Status       graphResponse `json:"status"`
+	EmailAddress graphEmail    `json:"emailAddress"`
+}
+
+// graphStatus is a Graph response as an attendee status.
+func graphStatus(r string) string {
+	switch r {
+	case "accepted", "declined", "organizer":
+		return r
+	case "tentativelyAccepted":
+		return "tentative"
+	}
+	return "needs-action" // none, notResponded
+}
+
+const graphSelect = "id,iCalUId,subject,start,end,isAllDay,location,bodyPreview,showAs,isCancelled,type,seriesMasterId," +
+	"isOrganizer,organizer,attendees,responseStatus"
 
 func (g *Graph) call(ctx context.Context, method, path string, in, out any) error {
 	u := path
@@ -148,7 +186,7 @@ func (g *Graph) Events(ctx context.Context, cal CalendarInfo, from, to time.Time
 		}
 		next = page.Next
 	}
-	return out, nil
+	return light(out), nil
 }
 
 func (g *Graph) parseTime(t *graphTime) time.Time {
@@ -191,6 +229,28 @@ func (g *Graph) item(e graphEvent, calID string) Item {
 	it.Free = e.ShowAs == "free"
 	it.Recurring = e.Type == "occurrence" || e.Type == "exception" || e.Type == "seriesMaster"
 	it.Cancelled = e.IsCancelled
+	var atts []Attendee
+	for _, a := range e.Attendees {
+		if a.Type == "resource" {
+			continue // a room
+		}
+		atts = append(atts, Attendee{Person: Person{Name: a.EmailAddress.Name, Email: a.EmailAddress.Address},
+			Status: graphStatus(a.Status.Response), Optional: a.Type == "optional"})
+	}
+	var org *Person
+	if e.Organizer != nil {
+		org = &Person{Name: e.Organizer.EmailAddress.Name, Email: e.Organizer.EmailAddress.Address}
+	}
+	it.meeting(g.acct.me(), org, atts)
+	if len(atts) > 0 {
+		// Graph says who the user is: no address to match.
+		switch {
+		case e.IsOrganizer != nil && *e.IsOrganizer:
+			it.MyStatus = "organizer"
+		case e.ResponseStatus != nil:
+			it.MyStatus = graphStatus(e.ResponseStatus.Response)
+		}
+	}
 	return it
 }
 
@@ -285,4 +345,79 @@ func (g *Graph) Update(ctx context.Context, calID, id string, p EventPatch) (*It
 
 func (g *Graph) Delete(ctx context.Context, calID, id string) error {
 	return g.call(ctx, http.MethodDelete, "/me/events/"+url.PathEscape(id), nil, nil)
+}
+
+// Respond answers with accept, decline or tentativelyAccept, and sends the
+// reply: on the series master for the series, on the occurrence's own event
+// for one occurrence.
+func (g *Graph) Respond(ctx context.Context, calID, id string, r Response) (*Item, error) {
+	var e graphEvent
+	if err := g.call(ctx, http.MethodGet, "/me/events/"+url.PathEscape(id)+"?$select=id,type,seriesMasterId,isOrganizer,attendees,start,originalStart", nil, &e); err != nil {
+		return nil, err
+	}
+	if e.IsOrganizer != nil && *e.IsOrganizer {
+		return nil, fmt.Errorf("%s: the user organizes this event: there is no invitation to answer", g.acct.Name)
+	}
+	if len(e.Attendees) == 0 {
+		return nil, fmt.Errorf("%s: this event is not an invitation: it has no attendees", g.acct.Name)
+	}
+	target := id
+	switch {
+	case r.Occurrence != nil:
+		if e.Type != "seriesMaster" && e.SeriesMasterID == "" {
+			return nil, fmt.Errorf("%s: this event does not recur: answer it without occurrence", g.acct.Name)
+		}
+		t, err := g.instance(ctx, e, *r.Occurrence)
+		if err != nil {
+			return nil, err
+		}
+		target = t
+	case e.SeriesMasterID != "":
+		target = e.SeriesMasterID
+	}
+	action := map[string]string{"accepted": "accept", "declined": "decline", "tentative": "tentativelyAccept"}[r.Status]
+	body := map[string]any{"comment": r.Comment, "sendResponse": true}
+	if err := g.call(ctx, http.MethodPost, "/me/events/"+url.PathEscape(target)+"/"+action, body, nil); err != nil {
+		return nil, err
+	}
+	return g.Get(ctx, calID, target)
+}
+
+// instance is the id of the series' occurrence starting at (its start, or
+// its original one for a moved occurrence): the event itself when it is
+// that occurrence, else from the series' instances.
+func (g *Graph) instance(ctx context.Context, e graphEvent, at time.Time) (string, error) {
+	is := func(x graphEvent) bool {
+		return g.parseTime(x.Start).Equal(at) || x.OriginalStart != "" && g.originalStart(x.OriginalStart).Equal(at)
+	}
+	if e.Type != "seriesMaster" && is(e) {
+		return e.ID, nil
+	}
+	master := e.ID
+	if e.SeriesMasterID != "" {
+		master = e.SeriesMasterID
+	}
+	q := url.Values{
+		"startDateTime": {at.Add(-48 * time.Hour).UTC().Format(time.RFC3339)},
+		"endDateTime":   {at.Add(48 * time.Hour).UTC().Format(time.RFC3339)},
+		"$select":       {"id,start,originalStart"},
+	}
+	var page struct {
+		Value []graphEvent `json:"value"`
+	}
+	if err := g.call(ctx, http.MethodGet, "/me/events/"+url.PathEscape(master)+"/instances?"+q.Encode(), nil, &page); err != nil {
+		return "", err
+	}
+	for _, x := range page.Value {
+		if is(x) {
+			return x.ID, nil
+		}
+	}
+	return "", fmt.Errorf("%s: the event has no occurrence starting then: give the start list_events shows", g.acct.Name)
+}
+
+// originalStart reads Graph's originalStart, an ISO 8601 instant.
+func (g *Graph) originalStart(s string) time.Time {
+	t, _ := time.Parse(time.RFC3339Nano, s)
+	return t
 }

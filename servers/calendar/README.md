@@ -11,10 +11,11 @@ Microsoft Graph. Secrets are app passwords or OAuth access tokens lent by eriphe
 | `test_account` | setup only (`_meta: {"eriphe/setup": true}`, never given to a task or the brain): sign one account in and list its calendars as the server will, and say whether it works, or why not, never the secret | read-only |
 | `list_calendars` | calendars of one or all accounts | read-only |
 | `list_events` | events in a range (default today + 7 days), all calendars unless one is given, recurring events expanded, optional text filter; from the cache within its window | read-only |
-| `get_event` | one event with its description | read-only |
+| `get_event` | one event with its description and its attendees | read-only |
 | `create_event` | timed (start + end or duration) or all-day (dates) | not destructive |
 | `update_event` | only the fields given; moving the start keeps the duration; whole series for recurring events | destructive |
 | `delete_event` | whole series for recurring events | destructive |
+| `respond_event` | answer an invitation as the user: `accept`, `decline` or `tentative`, optional `comment`; the organizer is told; for a recurring event, one `occurrence` (its start) or `series: true` | not destructive, open world (it sends a reply) |
 | `find_free_time` | free slots within working hours (default 09:00-18:00, weekdays), all calendars; free events and all-day events do not block by default | read-only |
 
 Times without an offset are read in the configured zone (or a `timezone` argument) and shown with
@@ -22,6 +23,30 @@ their offset. All-day events are dates, with an inclusive end (a one-day event h
 New CalDAV events are written in UTC; recurring events the server does not expand are expanded
 here (RRULE, EXDATE, moved occurrences), and an unknown TZID (Windows zone names) falls back to the
 configured zone.
+
+An event with attendees (a meeting) also has its `organizer` (name, email), `attendees_count`
+and `my_status`: the user's own answer (`accepted`, `declined`, `tentative`, `needs-action` when not
+answered yet, `delegated`), or `organizer` when the user sent it. `get_event` adds `attendees`
+(name, email, status, `optional`); `list_events` leaves them out, a meeting can have hundreds. An
+event without attendees has none of these. On CalDAV the user is found among the attendees by the
+account's `username` and its `emails`; Microsoft Graph says it itself (`isOrganizer`,
+`responseStatus`), and rooms are not counted as attendees.
+
+`respond_event` refuses an event the user organizes, one they are not invited to, and a read-only
+account. For a recurring event it needs one of two: `occurrence`, the start of the one occurrence
+answered as `list_events` gives it (a moved occurrence: its new start, or its original one), or
+`series: true` for every occurrence; nothing is guessed. The brain is told to answer only the
+occurrence when the user speaks of one date.
+
+- CalDAV: it sets the user's own `PARTSTAT` (the comment in `COMMENT`) without changing anything
+  of the organizer's, and saves the object with `If-Match`. For the series, in the series and its
+  moved occurrences; for one occurrence, in its override (`RECURRENCE-ID`), added as a copy of the
+  series for that instance when it has none yet. A server that schedules (RFC 6638: Google,
+  iCloud, Nextcloud...) sends the reply to the organizer; one that does not only keeps the answer
+  in the calendar.
+- Microsoft Graph: `accept`, `decline` or `tentativelyAccept` with `sendResponse`, on the series
+  master for the series, on the occurrence itself for one occurrence (found among the series'
+  `instances` when the id is another one).
 
 Every tool takes an optional `account` (its `name`). The reads without one cover every account;
 `create_event` needs one (and a calendar) when several calendars can be written. `get_event`,
@@ -99,6 +124,8 @@ JSON in `TOOL_CONFIG`, or a file in `TOOL_CONFIG_FILE` (or `-config`):
   CalDAV API turned off in the Google Cloud project of the user's Google app (it is not the Google
   Calendar API), or the account connected without Google Calendar, each with what to do. Any other
   refusal stays "403 Forbidden".
+- `emails`: other addresses the user is invited at (aliases, an Apple ID that is not the invited
+  address), besides `username`: how `my_status` and `respond_event` find the user on CalDAV.
 - `read_only`: the account is only read (eriphe-core sets it for an account it gives read-only
   access).
 - Limits: `max_events` (500), `timeout_seconds` (30), ranges up to 92 days (62 for free time).

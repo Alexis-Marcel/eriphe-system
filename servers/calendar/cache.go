@@ -215,8 +215,8 @@ func sameItems(a, b []Item) bool {
 	key := func(l []Item) []string {
 		out := make([]string, len(l))
 		for i, it := range l {
-			out[i] = fmt.Sprintf("%s|%d|%d|%t|%t|%t|%t|%q|%q|%q", it.ID, it.Start.Unix(), it.End.Unix(),
-				it.AllDay, it.Recurring, it.Free, it.Cancelled, it.Title, it.Location, it.Description)
+			out[i] = fmt.Sprintf("%s|%d|%d|%t|%t|%t|%t|%q|%q|%q|%s|%d", it.ID, it.Start.Unix(), it.End.Unix(),
+				it.AllDay, it.Recurring, it.Free, it.Cancelled, it.Title, it.Location, it.Description, it.MyStatus, it.AttendeeCount)
 		}
 		sort.Strings(out)
 		return out
