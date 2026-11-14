@@ -106,6 +106,9 @@ func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
 	if st.Task == "" || out["task"] != st.Task {
 		t.Errorf("its task: %q, result %v", st.Task, out["task"])
 	}
+	if ss, _ := out["start_state"].(map[string]any); ss["start"] != "started" {
+		t.Errorf("its start: %v", out["start_state"])
+	}
 	// A second one gets a key of its own.
 	out, _ = callBrainTool(t, c, "run_task", map[string]any{"prompt": "Cherche les marques proches."})
 	if out["step"] != stepTask+"-2" {

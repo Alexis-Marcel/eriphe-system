@@ -257,3 +257,51 @@ func (c *core) taskStartDeclined(id int64) {
 		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), false)
 	c.ping()
 }
+
+// startState says, for the brain, what a task's start waits for, as it is
+// when run_task returns: started now, held for the user's card (its ref
+// and what it asks), or pending with no node. The brain says that and
+// never guesses a card.
+func (c *core) startState(t *TaskRow) map[string]any {
+	if t == nil {
+		return nil
+	}
+	var id int64
+	var raw string
+	if c.store.db.QueryRow(`SELECT id, needs FROM task_starts WHERE task_id = ? AND state = ?`, t.ID, startProposed).Scan(&id, &raw) == nil {
+		var needs []startNeed
+		json.Unmarshal([]byte(raw), &needs)
+		asks := []string{}
+		for _, n := range needs {
+			asks = append(asks, n.ask())
+		}
+		return map[string]any{"start": "waits_for_card", "card": proposalRef(cardTaskStart, id), "asks": asks,
+			"note": "It starts only after the user's yes on its card, shown with your message: say what it asks, nothing more."}
+	}
+	if t.Node == "" {
+		return map[string]any{"start": "waits_for_node", "pending_reason": t.PendingReason,
+			"note": "No node can run it now: it starts by itself when one comes online. No card is asked."}
+	}
+	return map[string]any{"start": "started", "note": "Started now: no card was asked for its start."}
+}
+
+// ask is a need in words, for the brain.
+func (n startNeed) ask() string {
+	switch {
+	case n.Repo != "":
+		s := n.Access + " access to repository " + n.Repo
+		if n.Branch != "" {
+			s += ", branch " + n.Branch
+		}
+		return s
+	case n.Folder != "":
+		return n.Access + " access to folder " + n.Folder
+	case n.Server != "":
+		s := n.Category + " with tool " + n.Server
+		if n.Account != "" {
+			s += " (" + n.Account + ")"
+		}
+		return s
+	}
+	return n.Reason
+}

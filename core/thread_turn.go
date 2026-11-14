@@ -168,6 +168,13 @@ type runTaskIn struct {
 // noThread is run_task's thread for a task of its own.
 const noThread = "none"
 
+// runTaskOut is run_task's result for a task of its own: the task, and
+// what its start waits for (startState).
+type runTaskOut struct {
+	*TaskRow
+	Start map[string]any `json:"start_state"`
+}
+
 // taskOfThread makes a task the brain starts in a turn about a light
 // thread a task step of that thread, so the thread follows it: its tile,
 // its timeline and its event at the end. ok is false when it stays a task
@@ -210,8 +217,12 @@ func (c *core) taskOfThread(ctx context.Context, in runTaskIn) (map[string]any, 
 	if st.Status == stepBlocked { // its task could not start: the thread shows why
 		return nil, true, fmt.Errorf("the task could not start (step %s of thread %d, blocked): %s", st.Key, s.ID, st.Note)
 	}
-	return map[string]any{"thread": s.ID, "step": st.Key, "task": st.Task, "status": st.Status,
-		"note": fmt.Sprintf("A task step of thread %d « %s »: the thread follows it, and its end reaches you as the thread's event; settle it with settle_step.", s.ID, s.Title)}, true, nil
+	out := map[string]any{"thread": s.ID, "step": st.Key, "task": st.Task, "status": st.Status,
+		"note": fmt.Sprintf("A task step of thread %d « %s »: the thread follows it, and its end reaches you as the thread's event; settle it with settle_step.", s.ID, s.Title)}
+	if t, err := c.store.task(st.Task); st.Task != "" && err == nil {
+		out["start_state"] = c.startState(t) // task_start.go
+	}
+	return out, true, nil
 }
 
 // checkTaskRequest refuses before any step what startTask would refuse of

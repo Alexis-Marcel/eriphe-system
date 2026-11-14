@@ -290,3 +290,39 @@ func TestTaskStartCardOutsideTurn(t *testing.T) {
 		t.Fatalf("card %+v, want under message %d and in the queue", x, seq)
 	}
 }
+
+// run_task says what the start waits for, so the brain never guesses a
+// card: started now, held for the user's card (its ref and what it asks),
+// or pending with no node.
+func TestRunTaskTellsStartState(t *testing.T) {
+	c := startCore(t)
+	out, isErr := callBrainTool(t, c, "run_task", map[string]any{"title": "Lire le dépôt", "prompt": "Lis le README."})
+	st, _ := out["start_state"].(map[string]any)
+	if isErr || out["id"] == nil || st["start"] != "started" {
+		t.Fatalf("started now: %v", out)
+	}
+
+	held := launchWrite(t, c)
+	st = c.startState(held)
+	x, ok := startCard(t, c)
+	asks, _ := st["asks"].([]string)
+	if !ok || st["start"] != "waits_for_card" || st["card"] != x.Ref ||
+		len(asks) != 1 || asks[0] != "write access to repository owner/repo, branch eriphe/x" {
+		t.Fatalf("held: %v (card %+v)", st, x)
+	}
+	// Once answered, it is no longer said to wait.
+	if _, err := c.decideCard(context.Background(), x.ID, true, "web"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := c.store.task(held.ID)
+	if st := c.startState(got); st["start"] == "waits_for_card" {
+		t.Errorf("after the yes: %v", st)
+	}
+
+	c.store.setNodeStatus("nas", false, nil)
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer", "prompt": "Résume."})
+	st, _ = out["start_state"].(map[string]any)
+	if isErr || st["start"] != "waits_for_node" || st["pending_reason"] == "" {
+		t.Fatalf("no node: %v", out)
+	}
+}
