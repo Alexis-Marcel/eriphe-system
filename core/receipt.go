@@ -53,17 +53,77 @@ const (
 	receiptItemLen = 300
 )
 
-var (
-	receiptFenceRe = regexp.MustCompile("(?s)```[ \\t]*(?:json|JSON)?[ \\t]*\\r?\\n(.*?)\\r?\\n?```")
-	receiptRe      = regexp.MustCompile(`(?s)<receipt>\s*(.*?)\s*</receipt>`)
-)
+var receiptRe = regexp.MustCompile(`(?s)<receipt>\s*(.*?)\s*</receipt>`)
+
+// fence is a fenced block of a message: where it starts and ends, its
+// body, and its opening tag (json, go, thread…; "" for none).
+type fence struct {
+	start, end int
+	body, tag  string
+}
+
+// fenceLine is a line of a message that starts with a fence (```):
+// where its fence starts, where the line ends, and what follows the fence.
+type fenceLine struct {
+	at, end int
+	rest    string
+}
+
+func fenceLines(text string) []fenceLine {
+	var out []fenceLine
+	for at := 0; at < len(text); {
+		next := len(text)
+		if nl := strings.IndexByte(text[at:], '\n'); nl >= 0 {
+			next = at + nl + 1
+		}
+		line := strings.TrimRight(text[at:next], "\r\n")
+		if t := strings.TrimLeft(line, " \t"); strings.HasPrefix(t, "```") {
+			f := at + len(line) - len(t)
+			out = append(out, fenceLine{at: f, end: at + len(line), rest: strings.TrimSpace(t[3:])})
+		}
+		at = next
+	}
+	return out
+}
+
+// fencedBlocks reads the fenced blocks of text: fences open and close at
+// the start of a line, each opening paired with the next one, so a block
+// tagged go or thread is one block, never half of another. When a fence
+// is left unclosed (an odd count), the last two still make a block: a
+// receipt at the end is read after a stray fence.
+func fencedBlocks(text string) []fence {
+	lines := fenceLines(text)
+	block := func(o, c fenceLine) fence {
+		from := min(o.end+1, c.at)
+		return fence{start: o.at, end: c.end, body: text[from:c.at], tag: o.rest}
+	}
+	var out []fence
+	for i := 0; i+1 < len(lines); i += 2 {
+		out = append(out, block(lines[i], lines[i+1]))
+	}
+	if n := len(lines); n >= 3 && n%2 == 1 {
+		out = append(out, block(lines[n-2], lines[n-1]))
+	}
+	return out
+}
+
+// receiptFences are the blocks that may hold a receipt: untagged or json.
+func receiptFences(text string) []fence {
+	var out []fence
+	for _, f := range fencedBlocks(text) {
+		if f.tag == "" || strings.EqualFold(f.tag, "json") {
+			out = append(out, f)
+		}
+	}
+	return out
+}
 
 // parseReceipt finds the agent's receipt in its text: the last fenced block
 // (or <receipt> tag) that reads as one. ok is false when there is none.
 func parseReceipt(text string) (r *receipt, ok bool) {
 	var blocks []string
-	for _, m := range receiptFenceRe.FindAllStringSubmatch(text, -1) {
-		blocks = append(blocks, m[1])
+	for _, f := range receiptFences(text) {
+		blocks = append(blocks, f.body)
 	}
 	for _, m := range receiptRe.FindAllStringSubmatch(text, -1) {
 		blocks = append(blocks, m[1])
@@ -134,9 +194,9 @@ func decodeReceipt(raw string) *receipt {
 // without it.
 func stripReceipt(text string) string {
 	out := text
-	for _, m := range receiptFenceRe.FindAllStringSubmatchIndex(text, -1) {
-		if decodeReceipt(text[m[2]:m[3]]) != nil {
-			out = strings.Replace(out, text[m[0]:m[1]], "", 1)
+	for _, f := range receiptFences(text) {
+		if decodeReceipt(f.body) != nil {
+			out = strings.Replace(out, text[f.start:f.end], "", 1)
 		}
 	}
 	for _, m := range receiptRe.FindAllStringSubmatchIndex(text, -1) {

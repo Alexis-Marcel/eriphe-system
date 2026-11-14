@@ -64,7 +64,7 @@
     {"id": "u-08", "what": "Du contenu extérieur arriverait marqué urgent : la contamination l'emporte.", "at": "2026-11-05 03:00", "weight": 5, "ref": "watch:5", "urgent": true, "tainted": true, "injection": true, "want": "held"},
     {"id": "u-09", "what": "Un « urgent » demandé pour le brief reste au brief.", "at": "2026-11-05 03:00", "weight": 2, "ref": "watch:5", "urgent": true, "want": "held"},
     {"id": "w-01", "what": "Poids 4 en journée : envoyé.", "at": "2026-11-04 15:00", "weight": 4, "ref": "project:site", "want": "now"},
-    {"id": "w-02", "what": "Poids 3 en journée : gardé pour le brief.", "at": "2026-11-04 15:00", "weight": 3, "ref": "project:site", "want": "held"},
+    {"id": "w-02", "what": "Poids 3 en journée : gardé pour la prochaine pause.", "at": "2026-11-04 15:00", "weight": 3, "ref": "project:site", "want": "held"},
     {"id": "w-03", "what": "Un plafond de 2 sur le site abaisse un 5.", "at": "2026-11-04 15:00", "weight": 5, "ref": "project:site",
       "rules": [{"kind": "topic", "match": "project:site", "ceiling": 2}], "want": "held"},
     {"id": "w-04", "what": "Un plancher de 4 sur Getout relève un 2.", "at": "2026-11-04 15:00", "weight": 2, "ref": "project:getout",
@@ -77,7 +77,14 @@
       "rules": [{"kind": "topic", "match": "project:", "ceiling": 0}, {"kind": "topic", "match": "project:getout", "floor": 4}], "want": "now"},
     {"id": "w-08", "what": "Un 5 du cerveau seul, à 3 h, attend le matin.", "at": "2026-11-05 03:00", "weight": 5, "ref": "project:site", "want": "held"},
     {"id": "w-09", "what": "Plafond 0 sur la sorte : jamais.", "at": "2026-11-04 15:00", "weight": 5, "ref": "person:lina",
-      "rules": [{"kind": "topic", "match": "person:", "ceiling": 0}], "want": "never"}
+      "rules": [{"kind": "topic", "match": "person:", "ceiling": 0}], "want": "never"},
+    {"id": "w-10", "what": "Un 4 au plafond du jour : le plafond ne compte que les sonneries, il est montré.", "at": "2026-11-04 17:00", "weight": 4, "ref": "project:site", "sent_today": 6, "want": "now"},
+    {"id": "w-11", "what": "Un 4 dans les heures calmes : retenu.", "at": "2026-11-05 02:00", "weight": 4, "ref": "project:site", "want": "held"},
+    {"id": "w-12", "what": "Poids 1 en journée : retenu pour son retour.", "at": "2026-11-04 15:00", "weight": 1, "ref": "project:site", "want": "held"},
+    {"id": "w-13", "what": "Un plancher de 5 sans « même la nuit » attend le matin.", "at": "2026-11-05 03:00", "weight": 2, "ref": "project:getout",
+      "rules": [{"kind": "topic", "match": "project:getout", "floor": 5}], "want": "held"},
+    {"id": "w-14", "what": "Un mot sans deux-points est un thème, pas une sorte : il ne touche pas mail:42.", "at": "2026-11-04 15:00", "weight": 4, "ref": "mail:42",
+      "rules": [{"kind": "topic", "match": "mail", "ceiling": 0}], "want": "now"}
   ],
   "rule_cases": [
     {"id": "r-01", "what": "Sam demande lui-même une règle, dans un tour propre.", "owner_says": "Ne me préviens plus des factures avant le brief", "cite": true,

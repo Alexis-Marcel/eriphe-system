@@ -43,6 +43,9 @@ import (
 //     second thread with a task step (add_step, or run_task, which the
 //     turn's thread takes as its step), without taking the stage nor
 //     touching the thread on stage;
+//   - a wake: the progress the turn records goes to the woken thread's
+//     summary, never to a thread of its own (eriphe-core takes the subject
+//     from the turn's thread: the brain need not give it);
 //   - always: no call refused, no change called outside a step, the reply
 //     in one line, no tool's name where Sam reads.
 //
@@ -482,6 +485,7 @@ const (
 	faultNoTask    = "no task step"
 	faultNoUser    = "no user step after the change"
 	faultCheckLate = "the check not after the user step"
+	faultProgress  = "progress under another subject"
 	faultClosed    = "closed"
 	faultReply     = "a reply of"
 	faultNames     = "tool names"
@@ -631,6 +635,14 @@ func (r *threadRun) scoreWake(c *core) threadScore {
 		return st.Kind == stepCheck && slices.ContainsFunc(st.After, func(k string) bool { return slices.Contains(users, k) })
 	}) {
 		sc = append(sc, faultCheckLate)
+	}
+	for _, p := range r.calls {
+		if p.Name != "remember" || p.Err != "" || p.Args["kind"] != kindProgress {
+			continue
+		}
+		if id, _ := p.Out["thread"].(float64); int64(id) != r.wake {
+			sc = append(sc, fmt.Sprintf("%s: thread %v", faultProgress, p.Out["thread"]))
+		}
 	}
 	return sc
 }
@@ -852,6 +864,9 @@ func TestThreadBenchCases(t *testing.T) {
 			wake("closed", faultClosed, func(a *threadAnswer) {
 				a.Calls = append(a.Calls, threadCall{Tool: "close_thread", Args: map[string]any{"thread_id": id, "summary": "Fusionnée."}})
 			})
+			if i := slices.IndexFunc(x.Wake.Answer.Calls, func(k threadCall) bool { return k.Tool == "remember" }); i >= 0 {
+				wake("progress under another subject", faultProgress, func(a *threadAnswer) { a.Calls[i].Args["subject"] = "project:autre" })
+			}
 			wake("a question", faultReply, func(a *threadAnswer) { a.Reply = "C'est fusionné.\nTu veux que je déploie ?" })
 		})
 	}

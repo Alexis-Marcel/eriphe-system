@@ -126,6 +126,32 @@ func TestStripReceipt(t *testing.T) {
 	}
 }
 
+// A receipt right after a block tagged otherwise (go, thread) is read and
+// taken out: the tagged block's closing fence is not the receipt's opening
+// one (#522).
+func TestReceiptAfterTaggedBlock(t *testing.T) {
+	for _, tag := range []string{"go", "thread", "sh"} {
+		text := "Done.\n```" + tag + "\nfmt.Println(\"x\")\n```\n```json\n{\"receipt\": {\"status\": \"done\"}}\n```"
+		if r, ok := parseReceipt(text); !ok || r.Status != "done" {
+			t.Errorf("%s: receipt not read", tag)
+		}
+		if s := stripReceipt(text); s != "Done.\n```"+tag+"\nfmt.Println(\"x\")\n```" {
+			t.Errorf("%s: stripped %q", tag, s)
+		}
+	}
+	// A stray fence before it, unclosed or inline, does not hide it.
+	for _, before := range []string{"```go\nfmt.Println(\"cut", "Use ``` fences.", "```\nout"} {
+		text := "Done.\n" + before + "\n```json\n{\"receipt\": {\"status\": \"done\"}}\n```\n"
+		if r, ok := parseReceipt(text); !ok || r.Status != "done" {
+			t.Errorf("after %q: receipt not read", before)
+		}
+	}
+	// A receipt-shaped body in a tagged block is no receipt.
+	if _, ok := parseReceipt("```go\n{\"receipt\": {\"status\": \"done\"}}\n```"); ok {
+		t.Error("a go block read as a receipt")
+	}
+}
+
 func ev(seq int, typ string, data map[string]any) EventRow {
 	return EventRow{Seq: seq, Time: time.Now(), Type: typ, Data: data}
 }
