@@ -25,9 +25,10 @@ import (
 //     grid): the skill's approval stands for it. Otherwise the plan waits for
 //     its card. The thread is the run's: the events of its key go to its
 //     lead while it is open.
-//   - With urgent: <fixed text>, a last message that starts with [urgent]
-//     sends that fixed text over the quiet hours and the daily cap, once per
-//     run, as an urgent rule does: nothing the run read enters it.
+//   - With urgent: <fixed text>, a run that weighs something 5 in its
+//     attention list sends that fixed text over the quiet hours and the
+//     daily cap, once per run, as an urgent rule does: nothing the run read
+//     enters it. Its own message goes as any weight 5's, under the rules.
 
 const (
 	cardRunCalls   = "runcalls"
@@ -290,7 +291,7 @@ func skillCanText(tr *skillTrigger) string {
 			". Une étape qui n'écrit que sur sa branche démarre seule ; la fusion et le déploiement restent à l'utilisateur.")
 	}
 	if tr.Urgent != "" {
-		b.WriteString("\n\nSi c'est grave et que l'utilisateur doit le savoir tout de suite, même la nuit, commence ton message final par « [urgent] » : " +
+		b.WriteString("\n\nSi c'est grave et que l'utilisateur doit le savoir tout de suite, même la nuit, donne-lui le poids 5 dans ta liste attention : " +
 			"eriphe-core lui enverra son message d'urgence, fixé à l'avance.")
 	}
 	if containsStr(tr.Tools, workspaceServer) {

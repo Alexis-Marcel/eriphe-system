@@ -63,12 +63,12 @@ func TestUserLang(t *testing.T) {
 	}
 }
 
-// A task's and a skill run's voice: the user's language, the code's tokens
+// A task's and a skill run's voice: the user's language, the code's rules
 // kept whatever it is.
 func TestVoicesInUserLang(t *testing.T) {
 	en, fr := skillVoice("en"), skillVoice("fr")
 	if !strings.Contains(en, "in the user's language, English") || strings.Contains(en, "French") ||
-		!strings.Contains(en, "« [rien] »") || !strings.Contains(en, "« [brief] »") {
+		!strings.Contains(en, "no entry, and the user is told nothing") || strings.Contains(en, "[brief]") {
 		t.Fatalf("en:\n%s", en)
 	}
 	if !strings.Contains(fr, "French, with tutoiement") {
@@ -106,7 +106,7 @@ func TestTaskPromptsInUserLang(t *testing.T) {
 		t.Fatalf("runs %+v", rs)
 	}
 	if s := taskSpec(t, sc, rs[0].Task); !strings.Contains(s.AppendSystemPrompt+s.Prompt, "in the user's language, English") ||
-		!strings.Contains(s.AppendSystemPrompt+s.Prompt, "« [rien] »") {
+		!strings.Contains(s.AppendSystemPrompt+s.Prompt, "attention list") {
 		t.Fatalf("skill run spec %+v", s)
 	}
 }

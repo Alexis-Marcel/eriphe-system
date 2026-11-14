@@ -283,8 +283,8 @@ func TestAttentionQuietMessageToldAtTheBrief(t *testing.T) {
 	if err != nil || !n.Held || n.Reason != reasonQuiet {
 		t.Fatalf("%+v %v", n, err)
 	}
-	c.attend(runSignal(n.ID, n.Text, false, levelNow, "skill:prod", false))
-	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || it.Held || it.Weight != weightRunNow {
+	c.attend(runSignal(n.ID, attentionSignal{Weight: weightBlocksATask}, n.Text, "skill:prod", false))
+	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || it.Held || it.Weight != weightBlocksATask {
 		t.Fatalf("item %+v", it)
 	}
 	if c.attentionBreak(breakAnswer, *now) != 0 {
