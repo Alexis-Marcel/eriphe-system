@@ -42,7 +42,7 @@ func topic(id int64, match string, floor, ceiling int, night bool) notifyRule {
 func TestDecideNotify(t *testing.T) {
 	rules := []notifyRule{topic(1, "project:getout", 5, 5, true), topic(2, "topic:mail", 0, 0, false),
 		topic(3, "project:site", 0, 2, false), topic(4, "project:getout:staging", 0, 2, false),
-		topic(5, "person:lina", 5, 5, false), topic(6, "skill", 0, 3, false)}
+		topic(5, "person:lina", 5, 5, false), topic(6, "skill:", 0, 3, false)}
 	for _, x := range []struct {
 		name     string
 		it       notifyItem
@@ -167,8 +167,11 @@ func TestRuleChecked(t *testing.T) {
 	if err := r.check(); err != nil || r.Match != "project:getout" {
 		t.Fatalf("%v %q", err, r.Match)
 	}
+	if k := ruleMatch("mail"); k != "topic:mail" {
+		t.Errorf("a word without a colon is a topic: %q", k)
+	}
 	r = notifyRule{Kind: ruleTopic, Match: "Project:", Ceiling: 0}
-	if err := r.check(); err != nil || r.Match != "project" {
+	if err := r.check(); err != nil || r.Match != "project:" {
 		t.Fatalf("a kind alone: %v %q", err, r.Match)
 	}
 }

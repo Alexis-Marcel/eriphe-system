@@ -72,12 +72,12 @@
     {"id": "w-05", "what": "Un tour contaminé ne profite pas du plancher.", "at": "2026-11-04 15:00", "weight": 2, "ref": "project:getout", "tainted": true, "injection": true,
       "rules": [{"kind": "topic", "match": "project:getout", "floor": 5}], "want": "brief"},
     {"id": "w-06", "what": "Une règle sur la sorte project plafonne tout projet.", "at": "2026-11-04 15:00", "weight": 5, "ref": "project:site",
-      "rules": [{"kind": "topic", "match": "project", "ceiling": 3}], "want": "brief"},
+      "rules": [{"kind": "topic", "match": "project:", "ceiling": 3}], "want": "brief"},
     {"id": "w-07", "what": "La règle du sujet l'emporte sur celle de sa sorte.", "at": "2026-11-04 15:00", "weight": 5, "ref": "project:getout",
-      "rules": [{"kind": "topic", "match": "project", "ceiling": 0}, {"kind": "topic", "match": "project:getout", "floor": 4}], "want": "now"},
+      "rules": [{"kind": "topic", "match": "project:", "ceiling": 0}, {"kind": "topic", "match": "project:getout", "floor": 4}], "want": "now"},
     {"id": "w-08", "what": "Un 5 du cerveau seul, à 3 h, attend le matin.", "at": "2026-11-05 03:00", "weight": 5, "ref": "project:site", "want": "brief"},
     {"id": "w-09", "what": "Plafond 0 sur la sorte : jamais.", "at": "2026-11-04 15:00", "weight": 5, "ref": "person:lina",
-      "rules": [{"kind": "topic", "match": "person", "ceiling": 0}], "want": "never"}
+      "rules": [{"kind": "topic", "match": "person:", "ceiling": 0}], "want": "never"}
   ],
   "rule_cases": [
     {"id": "r-01", "what": "Sam demande lui-même une règle, dans un tour propre.", "owner_says": "Ne me préviens plus des factures avant le brief", "cite": true,

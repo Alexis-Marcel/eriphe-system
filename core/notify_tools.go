@@ -34,7 +34,7 @@ type ruleIn struct {
 	Action    string `json:"action,omitempty" jsonschema:"add (by default; it replaces the rule for the same match or nights) or delete"`
 	ID        int64  `json:"id,omitempty" jsonschema:"for delete: the rule's id"`
 	Kind      string `json:"kind,omitempty" jsonschema:"topic (what to do with notifications about a ref) or quiet (the quiet hours); topic by default"`
-	Match     string `json:"match,omitempty" jsonschema:"for topic: the subject it applies to, as given to notify (kind:slug), or a kind alone for every subject of it (project, person, skill); project:getout also matches project:getout:prod, and the longest match wins"`
+	Match     string `json:"match,omitempty" jsonschema:"for topic: the subject it applies to, as given to notify (kind:slug), or a kind alone with its colon for every subject of it (project:, person:, skill:; a word without a colon is a topic); project:getout also matches project:getout:prod, and the longest match wins"`
 	Floor     int    `json:"floor,omitempty" jsonschema:"for topic: the least weight its notifications get, 1 to 5 (5: always worth interrupting)"`
 	Ceiling   *int   `json:"ceiling,omitempty" jsonschema:"for topic: the most weight its notifications get, 0 to 4 (2: only at the brief; 0: never); leave it out for no ceiling"`
 	Night     bool   `json:"night,omitempty" jsonschema:"for topic with a floor of 4 or 5: even in the quiet hours and over the daily cap; only if the user said so"`

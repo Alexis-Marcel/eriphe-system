@@ -148,8 +148,8 @@ const (
 var ruleDays = []string{daysAll, daysWeekdays, daysWeekend}
 
 // ruleMatch is what a topic rule matches: a subject's key (subject.go),
-// a record's ref as written (skill:<name>), or a kind alone (project, or
-// project:), which matches every subject or record of that kind; "" if
+// a record's ref as written (skill:<name>), or a kind alone with its
+// colon (project:), which matches every subject or record of that kind; "" if
 // none.
 func ruleMatch(s string) string {
 	if k := ruleKind(s); k != "" {
@@ -162,11 +162,12 @@ func ruleMatch(s string) string {
 	return key
 }
 
-// ruleKind is a kind written alone, project or project:; "" otherwise.
+// ruleKind is a kind written alone with its colon, project:; "" otherwise.
+// Without the colon a word is a topic (mail is topic:mail).
 func ruleKind(s string) string {
-	k := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(s), ":"))
-	if isSubjectKind(k) || recordKinds[k] {
-		return k
+	k, ok := strings.CutSuffix(strings.ToLower(strings.TrimSpace(s)), ":")
+	if ok && (isSubjectKind(k) || recordKinds[k]) {
+		return k + ":"
 	}
 	return ""
 }
@@ -245,7 +246,7 @@ func (r *notifyRule) check() error {
 	case ruleTopic:
 		r.Match = ruleMatch(r.Match)
 		if r.Match == "" || len(r.Match) > 80 {
-			return errors.New("match is a subject like project:getout, person:lina or topic:facture, or a kind alone like project")
+			return errors.New("match is a subject like project:getout, person:lina or topic:facture, or a kind alone like project:")
 		}
 		switch {
 		case r.Floor < 0 || r.Floor > weightInterrupts || r.Ceiling < 0 || r.Ceiling > weightInterrupts:
@@ -452,7 +453,7 @@ func topicRule(rules []notifyRule, ref string) *notifyRule {
 			continue
 		}
 		match := ruleMatch(r.Match)
-		if match == "" || ref != match && !strings.HasPrefix(ref, match+":") {
+		if match == "" || ref != match && !strings.HasPrefix(ref, strings.TrimSuffix(match, ":")+":") {
 			continue
 		}
 		if best == nil || len(match) > len(ruleMatch(best.Match)) {

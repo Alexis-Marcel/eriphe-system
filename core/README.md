@@ -4076,7 +4076,8 @@ waits for the brief.
 - **A daily cap** of "now" (4 by default, 0 to 20 in Settings), besides reminders the user asked
   for in their own words; over it, the brief.
 - **Topic rules** bound the weight of what is about a subject (`project:getout`, which also matches
-  `project:getout:prod`) or a kind of subject or record alone (`project`, `skill`; the longest match
+  `project:getout:prod`) or a kind of subject or record alone with its colon (`project:`, `skill:`; a word without one is a
+  topic, `mail` is `topic:mail`; the longest match
   wins): a floor raises it, a ceiling lowers it, a ceiling of 0 is never. A turn that read external
   content may be lowered, never raised: what it notifies never interrupts, goes to the brief marked
   as such, and may hold no link. The rules kept with an outcome were rewritten once at start (now:
