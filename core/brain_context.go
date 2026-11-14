@@ -190,12 +190,7 @@ func (c *core) contextPack() (string, contextPackStats) {
 		p.section("decisions", fmt.Sprintf("Décisions des %d derniers jours (ta mémoire) :", packDecisionDays), packMemoryLines(decisions, subjects), share(125))
 		xs, _ := c.mem.intentions(intentDue, intentOpen, intentSnoozed)
 		for _, x := range xs {
-			line := intentionLine(x, now)
-			if x.Trust == trustExternal {
-				// Named, not quoted: the intentions tool reads it, and that taints the turn.
-				line = fmt.Sprintf("- [intention %d, %s] tirée d'un contenu extérieur : intentions la relit, ce qui souille le tour", x.ID, x.State)
-			}
-			intentions = append(intentions, truncate(line, packLineMax))
+			intentions = append(intentions, packIntentionLine(x, now))
 			for _, s := range []string{x.Subject, x.Owner, x.OwedTo} { // person:<slug> for whom owes or is owed
 				subjects[subjectOf(s)] = true
 			}
@@ -235,47 +230,64 @@ func (c *core) packThreads() (lines []string, subjects map[string]bool) {
 		if s.Subject != "" {
 			subjects[subjectOf(s.Subject)] = true
 		}
-		if s.Tainted != "" {
-			lines = append(lines, truncate(fmt.Sprintf("- fil %d [%s, %s] : son plan peut porter ce qu'un autre a écrit (%s) : read_thread le relit",
-				s.ID, s.Mode, s.Look(), packQuote(s.Tainted)), packLineMax))
-			continue
-		}
-		var b strings.Builder
-		fmt.Fprintf(&b, "- fil %d [%s, %s", s.ID, s.Mode, s.Look())
-		if s.Subject != "" {
-			b.WriteString(", sujet " + packQuote(s.Subject))
-		}
-		fmt.Fprintf(&b, ", depuis le %s] « %s » ; but : %s", s.Created.Local().Format("01-02"), packQuote(s.Title), packQuote(s.Goal))
-		if s.DoneWhen != "" {
-			b.WriteString(" ; fini quand : " + packQuote(s.DoneWhen))
-		}
-		steps, _ := c.steps(s.ID)
-		var open []string
-		external := false
-		for _, st := range steps {
-			if st.Tainted != "" || (st.Task != "" && c.taskResultTaint(st.Task) != "") {
-				external = true
-			}
-			if !st.done() {
-				open = append(open, fmt.Sprintf("%s « %s » (%s, %s)", st.Key, packQuote(st.Title), st.Kind, st.Status))
-			}
-		}
-		if len(open) > packThreadSteps {
-			open = append(open[:packThreadSteps], fmt.Sprintf("et %d autres", len(open)-packThreadSteps))
-		}
-		if len(open) > 0 {
-			b.WriteString(" ; étapes ouvertes : " + strings.Join(open, ", "))
-		}
-		if sum := strings.TrimSpace(s.Summary); sum != "" {
-			if external {
-				b.WriteString(" ; résumé non cité : ses étapes ont lu un contenu extérieur (read_thread le relit, ce qui souille le tour)")
-			} else {
-				b.WriteString(" ; résumé : " + packQuote(sum))
-			}
-		}
-		lines = append(lines, truncate(b.String(), packThreadMax))
+		lines = append(lines, truncate(c.threadLine(s), packThreadMax))
 	}
 	return lines, subjects
+}
+
+// threadLine is a thread in a line: its mode, state, subject, title,
+// goal, open steps and summary. One whose plan may carry what someone else
+// wrote is named, not quoted; so is the summary of one whose steps read
+// external content.
+func (c *core) threadLine(s Thread) string {
+	if s.Tainted != "" {
+		return fmt.Sprintf("- fil %d [%s, %s] : son plan peut porter ce qu'un autre a écrit (%s) : read_thread le relit",
+			s.ID, s.Mode, s.Look(), packQuote(s.Tainted))
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "- fil %d [%s, %s", s.ID, s.Mode, s.Look())
+	if s.Subject != "" {
+		b.WriteString(", sujet " + packQuote(s.Subject))
+	}
+	fmt.Fprintf(&b, ", depuis le %s] « %s » ; but : %s", s.Created.Local().Format("01-02"), packQuote(s.Title), packQuote(s.Goal))
+	if s.DoneWhen != "" {
+		b.WriteString(" ; fini quand : " + packQuote(s.DoneWhen))
+	}
+	steps, _ := c.steps(s.ID)
+	var open []string
+	external := false
+	for _, st := range steps {
+		if st.Tainted != "" || (st.Task != "" && c.taskResultTaint(st.Task) != "") {
+			external = true
+		}
+		if !st.done() {
+			open = append(open, fmt.Sprintf("%s « %s » (%s, %s)", st.Key, packQuote(st.Title), st.Kind, st.Status))
+		}
+	}
+	if len(open) > packThreadSteps {
+		open = append(open[:packThreadSteps], fmt.Sprintf("et %d autres", len(open)-packThreadSteps))
+	}
+	if len(open) > 0 {
+		b.WriteString(" ; étapes ouvertes : " + strings.Join(open, ", "))
+	}
+	if sum := strings.TrimSpace(s.Summary); sum != "" {
+		if external {
+			b.WriteString(" ; résumé non cité : ses étapes ont lu un contenu extérieur (read_thread le relit, ce qui souille le tour)")
+		} else {
+			b.WriteString(" ; résumé : " + packQuote(sum))
+		}
+	}
+	return b.String()
+}
+
+// packIntentionLine is an intention in a line; one drawn from external
+// content is named, not quoted: the intentions tool reads it, and that
+// taints the turn.
+func packIntentionLine(x *Intention, now time.Time) string {
+	if x.Trust == trustExternal {
+		return fmt.Sprintf("- [intention %d, %s] tirée d'un contenu extérieur : intentions la relit, ce qui souille le tour", x.ID, x.State)
+	}
+	return truncate(intentionLine(x, now), packLineMax)
 }
 
 // packExternal tells whether a memory may carry what someone else wrote:

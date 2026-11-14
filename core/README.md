@@ -4503,6 +4503,15 @@ rules. A test forbids any other normaliser.
   for writes and lookups (`subjectIs`, `subjectLookup`, the memory's `subjectBook`). Refused when
   both have a live thread, and in a turn that read external content; a sub-part's key
   (`project:site:prod`) is left as it is.
+- **A subject's card** (`subject_card.go`): `subjectCard(key, budget)` compiles, with no model, in
+  about 1000 characters, what eriphe-core knows of a subject: its live thread (goal, state, open
+  steps, summary), its latest progress note, its last 3 decisions, its facts and people (with the
+  people its intentions name), its open intentions, the cards that wait for the user about it
+  (`convo_cards.subject`, or what a card proposes), its preferences; what does not fit is cut from
+  the bottom and said. Only the key heads it, and a line that may carry someone else's words (an
+  external memory, a tainted thread, card or intention) is named, not quoted: a card never taints
+  a turn. The brain reads one with `read_subject` (a key, or a name or alias of a known subject);
+  Settings → Subjects lists the known subjects and shows each card exactly as the model gets it.
 - **A record's subject, set by the code**: notifications, attention items, cards, tasks and
   surfaces carry a `subject` column next to their ref (which record: `intention:12`,
   `skill:<name>`). The code sets it by inheritance, and a subject given explicitly wins:

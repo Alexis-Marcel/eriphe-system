@@ -1730,3 +1730,8 @@ details.app-install > * + * { margin-top: 10px; }
 .side-sub h3 { font-size: .9rem; }
 .thread-card .thread-strip { margin-top: 2px; }
 @media (prefers-reduced-motion: reduce) { .thread-strip i.st-running, .chip-thread-running .pulse { animation: none; } }
+/* Sujets (subjects.html): a card as the model gets it. */
+.subject-card-box { margin-bottom: 18px; }
+.subject-card-box h3 { font-size: 1rem; margin: 0 0 6px; }
+.subject-card { margin: 8px 0 0; padding: 12px 14px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem; }
+.subjects-list .is-current { background: var(--surface-2); }

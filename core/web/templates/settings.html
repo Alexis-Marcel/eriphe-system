@@ -13,6 +13,7 @@
     {{else if eq .Tab "access"}}{{template "access-page" .}}
     {{else if eq .Tab "notifications"}}{{template "notifications" .}}
     {{else if eq .Tab "learned"}}{{template "learned-page" .}}
+    {{else if eq .Tab "subjects"}}{{template "subjects-page" .}}
     {{else if eq .Tab "journal"}}{{template "journal-page" .}}
     {{else if eq .Tab "approve"}}{{template "approve-page" .}}
     {{else}}{{template "account" .}}{{end}}

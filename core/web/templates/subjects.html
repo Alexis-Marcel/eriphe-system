@@ -1,0 +1,31 @@
+{{/* Settings → « Sujets » (web_subjects.go): the known subjects, the latest
+     seen first; one picked shows its card exactly as the model gets it
+     (subject_card.go). */}}
+{{define "subjects-page"}}{{with .Data}}
+<div class="activity subjects" id="subjects">
+  <header class="page-head"><h2>{{t "subjects.title"}}</h2><p>{{t "subjects.lead"}}</p></header>
+  {{if .Key}}
+  <section class="subject-card-box" aria-labelledby="subject-card-h">
+    <h3 id="subject-card-h"><code class="subject">{{.Key}}</code>{{if .Thread}} · <a href="/threads/{{.Thread}}">{{tf "subjects.thread" .Thread}}</a>{{end}}</h3>
+    {{if .Unknown}}<p class="muted">{{t "subjects.unknown"}}</p>
+    {{else if .Card}}<p class="muted small">{{tf "subjects.size" .Stats.Chars .Stats.Lines}}{{if .Stats.Dropped}} · {{tf "subjects.dropped" .Stats.Dropped}}{{end}}</p>
+    <pre class="subject-card">{{.Card}}</pre>
+    {{else}}<p class="muted">{{t "subjects.empty"}}</p>{{end}}
+  </section>
+  {{end}}
+  {{if .Subjects}}
+  <ol class="list happened-list subjects-list">
+  {{range .Subjects}}
+    <li class="happened{{if eq .Key $.Data.Key}} is-current{{end}}">
+      <time class="mono small muted" datetime="{{iso .LastSeen}}">{{date .LastSeen}}</time>
+      <div class="happened-text">
+        <p><a href="/settings/subjects?s={{.Key}}" {{if eq .Key $.Data.Key}}aria-current="true"{{end}}><code class="subject">{{.Key}}</code></a>{{if .Title}} · {{.Title}}{{end}}</p>
+        {{if .Aliases}}<p class="muted small">{{t "subjects.aliases"}} {{range $i, $a := .Aliases}}{{if $i}}, {{end}}{{$a}}{{end}}</p>{{end}}
+      </div>
+    </li>
+  {{end}}
+  </ol>
+  {{if .More}}<p class="muted small">{{tf "subjects.more" .More}}</p>{{end}}
+  {{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-list"}}</span><p>{{t "subjects.none"}}</p></div>{{end}}
+</div>
+{{end}}{{end}}
