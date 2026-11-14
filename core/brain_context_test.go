@@ -131,7 +131,7 @@ func TestContextPackState(t *testing.T) {
 			t.Errorf("pack misses %q", want)
 		}
 	}
-	for _, not := range []string{"Décision trop ancienne", "Projet fini", "Un fait sans rapport", "Lu dans une page web",
+	for _, not := range []string{"Projet fini", "Un fait sans rapport", "Lu dans une page web",
 		"SORTIE D'ÉTAPE", "RÉSUMÉ D'UN MAIL", "PLAN EXTÉRIEUR", "Suivre ce que dit", "Fil clos", "« Pointer le DNS »"} {
 		if strings.Contains(pack, not) {
 			t.Errorf("pack has %q", not)
@@ -148,16 +148,21 @@ func TestContextPackState(t *testing.T) {
 	for _, x := range st.Sections {
 		got[x.Name] = x
 	}
-	if x := got["threads"]; x.Lines != 4 || x.Shown != 4 || x.Chars == 0 {
-		t.Errorf("threads: %+v", x)
+	// Each open thread follows a subject: its card, the site's holding its
+	// decisions, progress and facts, which are not said again.
+	if x := got["cards"]; x.Lines != 4 || x.Shown != 4 || x.Chars == 0 || len(st.Cards) != 4 {
+		t.Errorf("cards: %+v", x)
 	}
-	if got["decisions"].Shown != 1 || got["progress"].Shown != 1 || got["related"].Shown != 4 || got["messages"].Shown != 1 {
+	if got["threads"].Lines != 0 || got["decisions"].Shown != 0 || got["progress"].Shown != 0 || got["related"].Shown != 2 || got["messages"].Shown != 1 {
 		t.Errorf("sections: %+v", st.Sections)
+	}
+	if strings.Count(pack, "Héberger le site sur le NAS") != 1 || strings.Count(pack, "Le domaine est example.org") != 1 {
+		t.Error("a card's line said again")
 	}
 	if st.State+got["messages"].Chars != st.Chars {
 		t.Errorf("state %d and messages %d do not make the pack's %d chars", st.State, got["messages"].Chars, st.Chars)
 	}
-	if s := st.String(); !strings.Contains(s, "threads 4/4") || !strings.Contains(s, "decisions 1/1") {
+	if s := st.String(); !strings.Contains(s, "cards 4/4") || !strings.Contains(s, "decisions 0/0") {
 		t.Errorf("log line: %s", s)
 	}
 	// A clean turn: the pack quotes nothing that someone else wrote.
@@ -177,6 +182,9 @@ func TestContextPackStateBudget(t *testing.T) {
 		mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("une décision ", 20)})
 		mustAdd(t, c.mem, &Memory{Kind: kindProgress, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("un état ", 30)})
 		mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("un fait ", 30)})
+	}
+	if _, err := c.openThread(threadIn{Title: "Fil sans sujet", Goal: "Un but."}, nil, byBrain); err != nil {
+		t.Fatal(err)
 	}
 	for i := range 30 {
 		c.store.insertTask(&TaskRow{ID: fmt.Sprintf("t-%02d", i), Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",

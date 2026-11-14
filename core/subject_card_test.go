@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -75,7 +76,7 @@ func TestSubjectCard(t *testing.T) {
 	}
 }
 
-// A card keeps to its budget: what does not fit is cut from the bottom,
+// A card keeps to its budget, shared in rounds: what does not fit is left out,
 // and said.
 func TestSubjectCardBudget(t *testing.T) {
 	c, _ := testMemoryCore(t)
@@ -147,5 +148,144 @@ func TestSubjectsPage(t *testing.T) {
 	_, body, _ = tw.do("GET", "/settings/subjects?s=project:nope", nil, map[string]string{"Cookie": "lang=en"})
 	if !strings.Contains(body, "This subject is not known.") {
 		t.Fatalf("unknown:\n%s", body)
+	}
+}
+
+// The card of the turn's subject goes with the turn when the session does
+// not hold it as it is now: once, then again only when it changed.
+func TestSubjectCardPushedToTurn(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	setBrain(c, &BrainConfig{Agent: "small"})
+	th := siteSubject(t, c)
+	c.addSubjectNames("project:site", "", []string{"le site"})
+	deliver := func(text string) string {
+		t.Helper()
+		c.store.updateTask("t-brain", map[string]any{"state": stateIdle})
+		c.store.db.Exec(`UPDATE inbox SET acked = 1`)
+		say(t, c, roleUser, text, false)
+		if err := tendBrain(context.Background(), c); err != nil {
+			t.Fatal(err)
+		}
+		items, _ := c.store.inbox("t-brain")
+		if len(items) != 1 {
+			t.Fatalf("inbox: %+v", items)
+		}
+		got, _ := items[0].Data["text"].(string)
+		return got
+	}
+	got := deliver("Où en est le site ?")
+	card, _ := c.subjectCard("project:site", subjectCardChars)
+	if !strings.Contains(got, card) {
+		t.Fatalf("no card with the turn:\n%s", got)
+	}
+	if h := brainStatus(c).Cards["project:site"]; h != cardHash(card) {
+		t.Fatalf("the session's cards: %v", brainStatus(c).Cards)
+	}
+	if got := deliver("Et le site, alors ?"); strings.Contains(got, "Fiche du sujet") {
+		t.Fatalf("the same card again:\n%s", got)
+	}
+	if got := deliver("Bonjour"); strings.Contains(got, "Fiche du sujet") {
+		t.Fatalf("a card without a subject:\n%s", got)
+	}
+	c.setThread(th.ID, map[string]any{"summary": "Le certificat est posé"})
+	if got := deliver("Le site ?"); !strings.Contains(got, "Fiche du sujet project:site") || !strings.Contains(got, "Le certificat est posé") {
+		t.Fatalf("the changed card not given:\n%s", got)
+	}
+	if _, _, _, tainted := c.turn.snapshot(); len(tainted) != 0 {
+		t.Fatalf("the card tainted the turn: %v", tainted)
+	}
+}
+
+// A fresh session holds the cards of its pack: they are not given again
+// with its first turn.
+func TestSubjectCardInFreshSession(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	siteSubject(t, c)
+	task := startedBrain(t, c, false)
+	card, _ := c.subjectCard("project:site", subjectCardChars)
+	if !strings.Contains(task.Prompt, "Fiches des sujets des fils ouverts") || !strings.Contains(task.Prompt, card) {
+		t.Fatalf("pack without the card:\n%s", task.Prompt)
+	}
+	if brainStatus(c).Cards["project:site"] != cardHash(card) {
+		t.Fatalf("the session's cards: %v", brainStatus(c).Cards)
+	}
+	if x, ok := c.turnCard(brainStatus(c).Cards); ok {
+		t.Fatalf("given again: %s", x.Key)
+	}
+}
+
+// A worker task with a subject starts with its card, after what it is
+// asked; its prompt as shown is what it was asked. A lead starts with its
+// thread's.
+func TestSubjectCardAtStart(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	th := siteSubject(t, c)
+	card, _ := c.subjectCard("project:site", subjectCardChars)
+	task, err := c.runTask(context.Background(), runRequest{Prompt: "Pose le certificat", Subject: "project:site"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, _ := c.store.taskSpec(task.ID)
+	if !strings.HasPrefix(spec.Prompt, "Pose le certificat") || !strings.Contains(spec.Prompt, card) || task.Prompt != "Pose le certificat" {
+		t.Fatalf("task %q, spec:\n%s", task.Prompt, spec.Prompt)
+	}
+	other, _ := c.runTask(context.Background(), runRequest{Prompt: "Range les photos"})
+	if spec, _ := c.store.taskSpec(other.ID); strings.Contains(spec.Prompt, "Fiche du sujet") {
+		t.Fatalf("a card without a subject:\n%s", spec.Prompt)
+	}
+	lead := Assistant{Role: assistantRoleLead, Triggers: []string{triggerThread + ":" + itoa(int(th.ID))}}
+	if first := assistantRoles[assistantRoleLead].firstPrompt(c, lead, false); !strings.Contains(first, card) {
+		t.Fatalf("lead:\n%s", first)
+	}
+}
+
+// The pack leaves out only what a card shows: a decision past the card's
+// last three is still in its section.
+func TestContextPackLeavesOutWhatCardsShow(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	siteSubject(t, c) // four decisions: the card shows the last three
+	pack, st := c.contextPack()
+	if strings.Count(pack, "Décision 4 du site") != 1 || strings.Count(pack, "Décision 2 du site") != 1 {
+		t.Errorf("a decision a card shows said again:\n%s", pack)
+	}
+	if !strings.Contains(pack, "Décision 1 du site") {
+		t.Errorf("a decision the card does not show is left out:\n%s", pack)
+	}
+	if strings.Count(pack, "Relancer Lina pour le site") != 1 || strings.Count(pack, "Une idée à valider") != 1 {
+		t.Errorf("an intention or a card said twice:\n%s", pack)
+	}
+	if len(st.Cards) != 1 || len(st.Cards[0].Stats.Refs) == 0 {
+		t.Errorf("cards: %+v", st.Cards)
+	}
+}
+
+// A card that does not fit the pack leaves its thread in a line.
+func TestContextPackCardsThatDoNotFit(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	var ids []int64
+	c.conf().Providers["p"] = Provider{Kind: selfHostedKind, BaseURL: "http://192.0.2.10:11434/v1"}
+	for i := range 4 {
+		key := fmt.Sprintf("project:p%d", i)
+		th, err := c.openThread(threadIn{Title: fmt.Sprintf("Fil %d", i), Goal: "Un but court.", Subject: key}, nil, byBrain)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, th.ID)
+		for range 3 {
+			mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: key, Text: strings.Repeat("une décision ", 15)})
+			mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: key, Text: strings.Repeat("un fait ", 25)})
+		}
+	}
+	pack, st := c.contextPack()
+	if len(st.Cards) == 0 || len(st.Cards) == 4 {
+		t.Fatalf("%d cards of 4: %s", len(st.Cards), st)
+	}
+	for _, id := range ids {
+		if !strings.Contains(pack, fmt.Sprintf("- fil %d [", id)) {
+			t.Errorf("thread %d left out:\n%s", id, pack)
+		}
+	}
+	if n := strings.Count(pack, "```"); n%2 != 0 {
+		t.Errorf("unclosed fence: %d", n)
 	}
 }

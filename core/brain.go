@@ -191,7 +191,7 @@ func init() {
 			}
 			return prompt
 		},
-		firstPrompt: func(c *core, _ Assistant, resume bool) string { return c.brainFirstPrompt(resume) },
+		firstPrompt: func(c *core, a Assistant, resume bool) string { return c.brainFirstPrompt(a, resume) },
 		started:     (*core).brainStarted,
 		permission:  func(c *core, ctx context.Context, _ Assistant, t *TaskRow) error { return c.brainPermission(ctx, t) },
 		failing: func(c *core, a Assistant) {
@@ -288,7 +288,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 	if profile != "" {
 		parts = append([]string{profile}, parts...)
 	}
-	pack := c.packForDelivery(a)
+	pack, packed := c.packForDelivery(a)
 	if pack != "" {
 		parts = append([]string{pack}, parts...)
 	}
@@ -316,6 +316,16 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 	if cue != "" {
 		parts = append(parts, cue)
 	}
+	// The card of the turn's subject, when the session does not hold it as
+	// it is now (subject_card.go). A pack given now holds its own.
+	held := c.assistantStatus(a.Name).Cards
+	if pack != "" {
+		held = packedCards(packed, "context pack")
+	}
+	card, carded := c.turnCard(held)
+	if carded {
+		parts = append(parts, card.Text)
+	}
 	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Quiet = false })
 	if _, err := c.answer(ctx, t.ID, "", strings.Join(parts, "\n\n"), nil, byUser); err != nil {
 		return false, err
@@ -329,8 +339,18 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		}
 		if pack != "" {
 			st.PackDue = false
+			st.Cards = held
+		}
+		if carded {
+			if st.Cards == nil {
+				st.Cards = map[string]string{}
+			}
+			st.Cards[card.Key] = card.Hash
 		}
 	})
+	if carded {
+		logPushed(card, "brain turn")
+	}
 	return true, c.store.markDelivered(msgs[len(msgs)-1].Seq)
 }
 

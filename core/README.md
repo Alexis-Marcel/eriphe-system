@@ -1936,10 +1936,12 @@ call), or else the turn's input, cache reads and writes. Past either bound, the 
 session. A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
 node could not do, another harness) gets a context pack in its first turn, never in its system prompt,
 within about 16,000 tokens (`brain_context.go`). The state of things comes first, in at most half of
-it: the open threads (title, goal, state, open steps, summary), the tasks under way, the progress
-memories not done, the decisions of the last 14 days, the people and facts of these subjects, the
-open intentions (the due ones first), what waits for the user (permissions, cards), the last day's
-episodes; then the last messages between the user and the brain in what is left, the newest kept.
+it: the card of each open thread's subject (`subject_card.go`; a thread without a subject in a
+line: title, goal, state, open steps, summary), the tasks under way, the progress memories not
+done, the decisions of the last 14 days, the people and facts of these subjects, the open
+intentions (the due ones first), what waits for the user (permissions, cards), the last day's
+episodes. A card that does not fit leaves its thread in a line; a record a card shows (its refs)
+is not said again in the sections after it; then the last messages between the user and the brain in what is left, the newest kept.
 It is quoted data; what may carry what someone else wrote (an external memory, episode or card, a
 tainted thread, the summary of a thread whose steps read external content) is named, not quoted,
 and events are left out, since they carry what tasks said. eriphe-core logs its composition: each
@@ -4507,11 +4509,19 @@ rules. A test forbids any other normaliser.
   about 1000 characters, what eriphe-core knows of a subject: its live thread (goal, state, open
   steps, summary), its latest progress note, its last 3 decisions, its facts and people (with the
   people its intentions name), its open intentions, the cards that wait for the user about it
-  (`convo_cards.subject`, or what a card proposes), its preferences; what does not fit is cut from
-  the bottom and said. Only the key heads it, and a line that may carry someone else's words (an
+  (`convo_cards.subject`, or what a card proposes), its preferences. The budget is shared in rounds
+  (each part's first line, then each part's second…), and what does not fit is said. Only the key heads it, and a line that may carry someone else's words (an
   external memory, a tainted thread, card or intention) is named, not quoted: a card never taints
   a turn. The brain reads one with `read_subject` (a key, or a name or alias of a known subject);
   Settings → Subjects lists the known subjects and shows each card exactly as the model gets it.
+- **Cards pushed**: the code gives a card without being asked. To the brain's turn, after the
+  subjects block, when the turn's subject (`turnSubject`) has a card its session does not hold as it
+  is now: the session's cards are kept by hash (`AssistantStatus.Cards`, like the profile), set to
+  the pack's on a fresh session and to the cards given since. To a fresh session's context pack, one
+  per open thread's subject. To a worker task's first prompt, after what it is asked (its shown
+  prompt unchanged), and a thread lead's first turn, when they have a subject. A brain on a
+  self-hosted model gets 600-character cards. Each card pushed is logged: `subject card <key> →
+  <where>: <chars>, <lines>, <left out>`.
 - **A record's subject, set by the code**: notifications, attention items, cards, tasks and
   surfaces carry a `subject` column next to their ref (which record: `intention:12`,
   `skill:<name>`). The code sets it by inheritance, and a subject given explicitly wins:
