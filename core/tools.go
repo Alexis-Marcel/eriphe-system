@@ -207,6 +207,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerSinceTools(s, c)        // since
 	registerThreadTools(s, c)       // thread_tools.go
 	registerSubjectTools(s, c)      // name_subject (subjects.go)
+	registerSubjectCardTool(s, c)   // read_subject (subject_card.go)
 	return s
 }
 

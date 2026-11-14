@@ -330,6 +330,7 @@ The ways back follow the pages, never the browser's history. */}}
     <a href="/settings/monitors" {{if eq .Tab "monitors"}}aria-current="page"{{end}}>{{template "i-monitor"}}<span>{{t "settings.monitors"}}</span>{{template "chev"}}</a>
     <a href="/settings/surfaces" {{if eq .Tab "surfaces"}}aria-current="page"{{end}}>{{template "i-surface"}}<span>{{t "settings.surfaces"}}</span>{{template "chev"}}</a>
     <a href="/settings/learned" {{if eq .Tab "learned"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "learned.title"}}</span>{{template "chev"}}</a>
+    <a href="/settings/subjects" {{if eq .Tab "subjects"}}aria-current="page"{{end}}>{{template "i-list"}}<span>{{t "subjects.title"}}</span>{{template "chev"}}</a>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-connections">
     <h2 class="nav-group-title" id="sg-connections">{{t "settings.g.connections"}}</h2>
