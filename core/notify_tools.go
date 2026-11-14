@@ -18,7 +18,7 @@ import (
 
 type notifyIn struct {
 	Text    string `json:"text" jsonschema:"what to tell the user, in the user's language, one or two sentences, plain text"`
-	Level   string `json:"level" jsonschema:"now (worth interrupting: within the hour) or brief (can wait for the next brief)"`
+	Weight  int    `json:"weight" jsonschema:"how much it needs the user, 1 to 5: 5 interrupts (worth a push within the hour), 4 needs the user now, 3 matters today, 2 a glance, 1 background; below 4 it waits for the brief"`
 	Why     string `json:"why" jsonschema:"why you tell it, in the user's language, one sentence the user sees on opening it (the source, what triggered it)"`
 	Where   string `json:"where,omitempty" jsonschema:"the line to try first, from where_now: inapp, computer, voice, phone, or a channel's own line (where_now lists them); empty lets the router choose (best, unless you have a reason). Lines off, the quiet hours and the user's rules still apply"`
 	Subject string `json:"subject,omitempty" jsonschema:"what it is about, kind:slug, the key rules match; leave it out for the subject of what this turn is about (its thread's, or the one subject the user's message named); give one only for another: a known topic (notifications lists them) before a new one"`
@@ -34,9 +34,10 @@ type ruleIn struct {
 	Action    string `json:"action,omitempty" jsonschema:"add (by default; it replaces the rule for the same match or nights) or delete"`
 	ID        int64  `json:"id,omitempty" jsonschema:"for delete: the rule's id"`
 	Kind      string `json:"kind,omitempty" jsonschema:"topic (what to do with notifications about a ref) or quiet (the quiet hours); topic by default"`
-	Match     string `json:"match,omitempty" jsonschema:"for topic: the subject it applies to, as given to notify (kind:slug); project:getout also matches project:getout:prod"`
-	Outcome   string `json:"outcome,omitempty" jsonschema:"for topic: now, brief or never"`
-	Night     bool   `json:"night,omitempty" jsonschema:"for topic with outcome now: even in the quiet hours and over the daily cap; only if the user said so"`
+	Match     string `json:"match,omitempty" jsonschema:"for topic: the subject it applies to, as given to notify (kind:slug), or a kind alone for every subject of it (project, person, skill); project:getout also matches project:getout:prod, and the longest match wins"`
+	Floor     int    `json:"floor,omitempty" jsonschema:"for topic: the least weight its notifications get, 1 to 5 (5: always worth interrupting)"`
+	Ceiling   *int   `json:"ceiling,omitempty" jsonschema:"for topic: the most weight its notifications get, 0 to 4 (2: only at the brief; 0: never); leave it out for no ceiling"`
+	Night     bool   `json:"night,omitempty" jsonschema:"for topic with a floor of 4 or 5: even in the quiet hours and over the daily cap; only if the user said so"`
 	Channels  string `json:"channels,omitempty" jsonschema:"for topic: where its notifications go: push, a channel's id (where_now lists them), or several comma-separated; the user's default channels when empty"`
 	Also      string `json:"also,omitempty" jsonschema:"for topic: lines added to the first device, only if the user asked: phone, computer or a channel's line ('Getout: on the phone too')"`
 	Never     string `json:"never,omitempty" jsonschema:"for topic: lines it never goes by: voice, phone, computer, inapp or a channel's line"`
@@ -48,7 +49,7 @@ type ruleIn struct {
 }
 
 func registerNotifyTools(s *mcp.Server, c *core) {
-	tool(s, "notify", "Tell the user something on your own, now or at the next brief, with why. eriphe-core decides what happens: quiet hours, a daily cap and the user's rules may keep a now for the brief, and a turn that read external content never interrupts. The result says what happened: never say a notification was sent if it was not.",
+	tool(s, "notify", "Tell the user something on your own, with its weight (1 to 5) and why. eriphe-core decides what happens: from weight 4 it is sent now, lighter it waits for the brief; the user's rules raise or lower the weight of a subject, and quiet hours and a daily cap may keep a weight 4 or 5 for the brief, and a turn that read external content never interrupts. The result says what happened: never say a notification was sent if it was not.",
 		func(ctx context.Context, in notifyIn) (map[string]any, error) {
 			return c.brainNotify(in)
 		})
@@ -56,7 +57,7 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in notificationsIn) (map[string]any, error) {
 			return c.brainNotifications(in)
 		})
-	tool(s, "rule", "Write a notification rule of the user's: what to do with notifications about a subject (now, brief, never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, a channel's detail) are setting. A topic's match is a known subject (notifications lists them): a new one matches only notifications under that same subject. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
+	tool(s, "rule", "Write a notification rule of the user's: the weight of notifications about a subject or a kind of subject (a floor, a ceiling, 0 for never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, a channel's detail) are setting. A topic's match is a known subject (notifications lists them): a new one matches only notifications under that same subject. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})
@@ -97,8 +98,8 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 	switch {
 	case text == "" || why == "":
 		return nil, errors.New("text and why are needed")
-	case in.Level != levelNow && in.Level != levelBrief:
-		return nil, errors.New("level is now or brief")
+	case in.Weight < 1 || in.Weight > weightInterrupts:
+		return nil, errors.New("weight is 1 to 5")
 	case in.Where != "" && !slices.Contains(routeLines(), in.Where):
 		return nil, errors.New("where is one of " + linesText() + ", or empty")
 	}
@@ -120,7 +121,7 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 	// The message goes in the conversation with the push, and is not pushed again as a question.
 	c.relayMu.Lock()
 	defer c.relayMu.Unlock()
-	n, err := c.notify(n, notifyItem{Level: in.Level, Subject: n.Subject, Ref: n.Ref, Tainted: len(tainted) > 0, Where: in.Where})
+	n, err := c.notify(n, notifyItem{Weight: in.Weight, Subject: n.Subject, Ref: n.Ref, Tainted: len(tainted) > 0, Where: in.Where})
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +133,7 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 			c.store.db.Exec(`UPDATE notifications SET msg = ? WHERE id = ?`, seq, n.ID)
 		}
 	}
-	out := map[string]any{"id": n.ID, "outcome": n.Outcome, "result": notifyReasons[n.Reason]}
+	out := map[string]any{"id": n.ID, "outcome": n.Outcome, "weight": n.Weight, "result": notifyReasons[n.Reason]}
 	if n.Subject != "" {
 		out["subject"] = n.Subject
 	}
@@ -190,6 +191,7 @@ type notificationView struct {
 	Why      string `json:"why"`
 	Subject  string `json:"subject,omitempty"`
 	Ref      string `json:"ref,omitempty"`
+	Weight   int    `json:"weight"`
 	Outcome  string `json:"outcome"`
 	Result   string `json:"result"`
 	Held     bool   `json:"held_for_brief,omitempty"`
@@ -200,7 +202,7 @@ type notificationView struct {
 func (c *core) viewNotification(n *notification) notificationView {
 	fb := map[string]string{"up": "useful", "down": "not useful", "later": "not now"}[n.Feedback]
 	return notificationView{ID: n.ID, At: n.Created.In(c.notifyZone()).Format("2006-01-02 15:04"), Text: n.Text, Why: n.Why,
-		Subject: n.Subject, Ref: n.Ref, Outcome: n.Outcome, Result: notifyReasons[n.Reason], Held: n.Held, Feedback: fb, Tainted: n.Tainted != ""}
+		Subject: n.Subject, Ref: n.Ref, Weight: n.Weight, Outcome: n.Outcome, Result: notifyReasons[n.Reason], Held: n.Held, Feedback: fb, Tainted: n.Tainted != ""}
 }
 
 // feedbackTally is how the user took the notifications about one ref.
@@ -348,7 +350,11 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 	default:
 		return nil, errors.New("action is add or delete")
 	}
-	r := notifyRule{Kind: in.Kind, Match: in.Match, Outcome: in.Outcome, Night: in.Night, Channels: in.Channels, Also: in.Also, Never: in.Never, Days: in.Days, Why: in.Why, By: "brain"}
+	ceiling := weightInterrupts
+	if in.Ceiling != nil {
+		ceiling = *in.Ceiling
+	}
+	r := notifyRule{Kind: in.Kind, Match: in.Match, Floor: in.Floor, Ceiling: ceiling, Night: in.Night, Channels: in.Channels, Also: in.Also, Never: in.Never, Days: in.Days, Why: in.Why, By: "brain"}
 	if r.Kind == "" {
 		r.Kind = ruleTopic
 	}
@@ -356,7 +362,7 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 		return nil, errors.New("kind is topic or quiet; the device order, lines off, daily cap, time zone and a channel's detail are settings: setting")
 	}
 	var topicNote string
-	if r.Kind == ruleTopic {
+	if r.Kind == ruleTopic && ruleKind(in.Match) == "" { // a kind alone is no topic
 		topics := c.knownTopics()
 		ref, known := reuseTopic(in.Match, topics)
 		key, _ := subjectKey(in.Match)

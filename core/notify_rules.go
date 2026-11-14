@@ -12,9 +12,10 @@ import (
 
 // The user's notification rules, as data the code applies (decideNotify):
 //
-//   - a topic rule: what to do with what is about a ref (project:getout →
-//     now, brief or never), with "even at night", the one way through the
-//     quiet hours and the daily cap;
+//   - a topic rule: the weight of what is about a subject, or a kind of
+//     subject (project:getout, or every project), held between a floor and
+//     a ceiling (a ceiling of 0: never), with "even at night", the one way
+//     through the quiet hours and the daily cap;
 //   - a quiet rule: the quiet window, for all nights, or for the nights
 //     before a weekday or before a weekend day. Without one, the seed
 //     22:00–08:00 holds: there is always a quiet window.
@@ -35,7 +36,8 @@ const sourceNotification = "notification"
 type notifySpec struct {
 	Kind     string `json:"kind"`
 	Match    string `json:"match,omitempty"`
-	Outcome  string `json:"outcome,omitempty"`
+	Floor    int    `json:"floor,omitempty"`
+	Ceiling  int    `json:"ceiling"`
 	Night    bool   `json:"night,omitempty"`
 	Channels string `json:"channels,omitempty"`
 	Also     string `json:"also,omitempty"`
@@ -46,7 +48,7 @@ type notifySpec struct {
 }
 
 func (r notifyRule) spec() notifySpec {
-	return notifySpec{r.Kind, r.Match, r.Outcome, r.Night, r.Channels, r.Also, r.Never, r.Days, r.From, r.To}
+	return notifySpec{r.Kind, r.Match, r.Floor, r.Ceiling, r.Night, r.Channels, r.Also, r.Never, r.Days, r.From, r.To}
 }
 
 // ruleName is how a notification rule is named among the rules.
@@ -76,7 +78,54 @@ const rulesSchema = `CREATE TABLE IF NOT EXISTS rules (
   mark INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL,
   act TEXT NOT NULL DEFAULT '');`
 
-func init() { extraSchema = append(extraSchema, rulesSchema) }
+func init() {
+	extraSchema = append(extraSchema, rulesSchema)
+	schemaFixes = append(schemaFixes, ruleWeights)
+}
+
+// ruleWeights rewrites once the topic rules kept with an outcome (now,
+// brief, never) as bounds of weight: now is a floor of 5, brief a ceiling
+// of 2, never a ceiling of 0. A quiet rule gets the full ceiling it reads
+// back as.
+func ruleWeights(db *sql.DB) error {
+	rows, err := db.Query(`SELECT id, spec FROM rules WHERE source = ?`, sourceNotification)
+	if err != nil {
+		return err
+	}
+	specs := map[int64]map[string]any{}
+	for rows.Next() {
+		var id int64
+		var raw string
+		var m map[string]any
+		if rows.Scan(&id, &raw) == nil && json.Unmarshal([]byte(raw), &m) == nil {
+			if _, ok := m["ceiling"]; !ok {
+				specs[id] = m
+			}
+		}
+	}
+	rows.Close()
+	for id, m := range specs {
+		floor, ceiling := 0, weightInterrupts
+		switch m["outcome"] {
+		case levelNow:
+			floor = weightInterrupts
+		case levelBrief:
+			ceiling = weightHeldNote
+		case levelNever:
+			ceiling = 0
+		}
+		delete(m, "outcome")
+		if floor > 0 {
+			m["floor"] = floor
+		}
+		m["ceiling"] = ceiling
+		raw, _ := json.Marshal(m)
+		if _, err := db.Exec(`UPDATE rules SET spec = ? WHERE id = ?`, string(raw), id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 const (
 	ruleTopic = "topic"
@@ -96,14 +145,16 @@ const (
 	quietMax = 16 * 60
 )
 
-var (
-	ruleOutcomes = []string{levelNow, levelBrief, levelNever}
-	ruleDays     = []string{daysAll, daysWeekdays, daysWeekend}
-)
+var ruleDays = []string{daysAll, daysWeekdays, daysWeekend}
 
 // ruleMatch is what a topic rule matches: a subject's key (subject.go),
-// or a record's ref as written (skill:<name>); "" if neither.
+// a record's ref as written (skill:<name>), or a kind alone (project, or
+// project:), which matches every subject or record of that kind; "" if
+// none.
 func ruleMatch(s string) string {
+	if k := ruleKind(s); k != "" {
+		return k
+	}
 	if r, ok := recordRef(s); ok {
 		return r
 	}
@@ -111,12 +162,22 @@ func ruleMatch(s string) string {
 	return key
 }
 
+// ruleKind is a kind written alone, project or project:; "" otherwise.
+func ruleKind(s string) string {
+	k := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(s), ":"))
+	if isSubjectKind(k) || recordKinds[k] {
+		return k
+	}
+	return ""
+}
+
 // notifyRule is one rule.
 type notifyRule struct {
 	ID        int64     `json:"id"`
 	Kind      string    `json:"kind"`
 	Match     string    `json:"match,omitempty"`
-	Outcome   string    `json:"outcome,omitempty"`
+	Floor     int       `json:"floor,omitempty"` // for a topic: the least weight of what it matches
+	Ceiling   int       `json:"ceiling"`         // for a topic: the most; 0 is never
 	Night     bool      `json:"night,omitempty"`
 	Channels  string    `json:"channels,omitempty"` // for a topic: where it goes; the default channels when empty
 	Also      string    `json:"also,omitempty"`     // for a topic: lines added to the first one (route.go)
@@ -130,6 +191,19 @@ type notifyRule struct {
 	Tainted   string    `json:"tainted,omitempty"` // proposed in a turn that read this
 	By        string    `json:"by"`
 	Created   time.Time `json:"created"`
+}
+
+// ruleBounds says a topic rule's bounds of weight, for the brain.
+func ruleBounds(r notifyRule) string {
+	switch {
+	case r.Ceiling == 0:
+		return "never"
+	case r.Floor > 0 && r.Ceiling < weightInterrupts:
+		return fmt.Sprintf("weight %d to %d", r.Floor, r.Ceiling)
+	case r.Floor > 0:
+		return fmt.Sprintf("weight %d at least", r.Floor)
+	}
+	return fmt.Sprintf("weight %d at most", r.Ceiling)
 }
 
 // Window is a quiet rule's hours, HH:MM–HH:MM.
@@ -171,13 +245,19 @@ func (r *notifyRule) check() error {
 	case ruleTopic:
 		r.Match = ruleMatch(r.Match)
 		if r.Match == "" || len(r.Match) > 80 {
-			return errors.New("match is a subject like project:getout, person:lina or topic:facture")
+			return errors.New("match is a subject like project:getout, person:lina or topic:facture, or a kind alone like project")
 		}
-		if !containsStr(ruleOutcomes, r.Outcome) {
-			return errors.New("outcome is now, brief or never")
-		}
-		if r.Night && r.Outcome != levelNow {
-			return errors.New("night goes with the outcome now only")
+		switch {
+		case r.Floor < 0 || r.Floor > weightInterrupts || r.Ceiling < 0 || r.Ceiling > weightInterrupts:
+			return errors.New("floor and ceiling are weights from 0 to 5")
+		case r.Ceiling == 0 && r.Floor > 0:
+			return errors.New("a ceiling of 0 is never: no floor with it")
+		case r.Floor > r.Ceiling:
+			return errors.New("the floor is at most the ceiling")
+		case r.Floor == 0 && r.Ceiling == weightInterrupts:
+			return errors.New("a rule raises the weight (floor) or lowers it (ceiling; 0 is never)")
+		case r.Night && r.Floor < weightSent:
+			return errors.New("night goes with a floor of 4 or 5 only")
 		}
 		r.Days, r.From, r.To = "", 0, 0
 		ch, err := checkChannels(r.Channels)
@@ -201,7 +281,7 @@ func (r *notifyRule) check() error {
 		if n := quietLength(r.From, r.To); n < quietMin || n > quietMax {
 			return fmt.Errorf("quiet hours last between %d and %d hours", quietMin/60, quietMax/60)
 		}
-		r.Match, r.Outcome, r.Night, r.Channels, r.Also, r.Never = "", "", false, "", "", ""
+		r.Match, r.Floor, r.Ceiling, r.Night, r.Channels, r.Also, r.Never = "", 0, 0, false, "", "", ""
 	default:
 		return errors.New("kind is topic or quiet")
 	}
@@ -235,8 +315,8 @@ func (c *core) notifyRules(states ...string) ([]notifyRule, error) {
 		if json.Unmarshal([]byte(spec), &sp) != nil {
 			continue
 		}
-		r.Kind, r.Match, r.Outcome, r.Night, r.Channels, r.Also, r.Never, r.Days, r.From, r.To =
-			sp.Kind, sp.Match, sp.Outcome, sp.Night, sp.Channels, sp.Also, sp.Never, sp.Days, sp.From, sp.To
+		r.Kind, r.Match, r.Floor, r.Ceiling, r.Night, r.Channels, r.Also, r.Never, r.Days, r.From, r.To =
+			sp.Kind, sp.Match, sp.Floor, sp.Ceiling, sp.Night, sp.Channels, sp.Also, sp.Never, sp.Days, sp.From, sp.To
 		r.Created = time.Unix(created, 0)
 		out = append(out, r)
 	}

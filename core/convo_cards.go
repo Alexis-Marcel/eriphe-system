@@ -290,11 +290,24 @@ func ruleText(r notifyRule, lang string) string {
 	if r.Kind == ruleQuiet {
 		return fmt.Sprintf(tr(lang, "rule.quietline"), tr(lang, "rule.days."+r.Days), r.Window())
 	}
-	s := subjectLabel(r.Match) + " → " + tr(lang, "rule.out."+r.Outcome)
+	s := subjectLabel(r.Match) + " → " + ruleBoundsText(r, lang)
 	if r.Night {
 		s += " · " + tr(lang, "rule.night")
 	}
 	return s
+}
+
+// ruleBoundsText says a topic rule's bounds of weight in the user's words.
+func ruleBoundsText(r notifyRule, lang string) string {
+	switch {
+	case r.Ceiling == 0:
+		return tr(lang, "rule.out.never")
+	case r.Floor > 0 && r.Ceiling < weightInterrupts:
+		return fmt.Sprintf(tr(lang, "rule.between"), r.Floor, r.Ceiling)
+	case r.Floor > 0:
+		return fmt.Sprintf(tr(lang, "rule.floor"), r.Floor)
+	}
+	return fmt.Sprintf(tr(lang, "rule.ceiling"), r.Ceiling)
 }
 
 // pendingProposals lists every proposal that waits, oldest first by kind.

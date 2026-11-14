@@ -597,14 +597,12 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 	if !told && calls == 0 {
 		return
 	}
-	level := levelNow
+	level := weight // the heaviest entry's
 	switch {
 	case !told && text != "":
-		msg = text // its calls' card comes with what it said of them
+		msg, level = text, weightBlocksATask // its calls' card comes with what it said of them
 	case !told:
-		msg = fmt.Sprintf(tr(c.userLang(), "card.runcalls"), r.Skill, calls)
-	case weight < weightBlocksATask:
-		level = levelBrief
+		msg, level = fmt.Sprintf(tr(c.userLang(), "card.runcalls"), r.Skill, calls), weightBlocksATask
 	}
 	if calls > 0 {
 		c.cardProposed(cardRunCalls, r.ID) // with the message below (convo_cards.go)
@@ -613,7 +611,7 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 	if why := c.taskResultTaint(r.Task); why != "" {
 		taint = []string{why}
 	}
-	out, err := c.notifyAs(notifyIn{Text: truncate(oneLine(msg), notifyTextMax), Level: level,
+	out, err := c.notifyAs(notifyIn{Text: truncate(oneLine(msg), notifyTextMax), Weight: level,
 		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill, Subject: c.taskSubject(r.Task)}, notifyFromSkill, taint, calls > 0)
 	if err != nil {
 		c.endRun(r.ID, state, note+"\n· not told: "+err.Error())

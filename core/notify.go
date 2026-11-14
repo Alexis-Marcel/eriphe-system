@@ -13,9 +13,11 @@ import (
 )
 
 // The brain speaks on its own (notify), and the code decides when. The
-// model writes the words and asks for a level, now or for the brief; what
-// happens is decideNotify's: the quiet hours, the daily cap and the user's
-// rules (notify_rules.go). Models are wrong about one time in two on when to
+// model writes the words and weighs them, 1 to 5 (the attention scale:
+// attention.go); what happens is decideNotify's: the user's rules (a floor
+// and a ceiling of weight per subject or kind, notify_rules.go), then the
+// quiet hours and the daily cap. From weightSent a notification is sent
+// now; lighter, it waits for the brief. Models are wrong about one time in two on when to
 // interrupt (ProactiveBench), so the decision is code, measured on a labelled
 // corpus (notify_eval_test.go).
 //
@@ -24,12 +26,14 @@ import (
 //     content, breaks it; only a user rule marked "even at night" does, or
 //     the fixed message of a watch the user marked urgent, which eriphe-core
 //     sends itself (watch_urgent.go).
+//   - A weight from the model alone never goes through them: only a user
+//     rule marked "even at night" does, or a fixed urgent text.
 //   - At most notifyCap "now" a day (4 by default, Settings), besides what
 //     the user asked for themselves (a reminder from their own words).
 //   - What a tainted turn says (one that read external content) never
 //     interrupts: it goes to the brief at most, and is marked so. It only
 //     speaks to the user; nothing it says can act.
-//   - A "now" refused goes to the brief: it is held, listed for the brain
+//   - A weight sent refused goes to the brief: it is held, listed for the brain
 //     (notifications) and in the workspace, and waits in the attention
 //     queue for the user's next return, whose release is the brief
 //     (attention.go).
@@ -41,18 +45,47 @@ import (
 const notifySchema = `CREATE TABLE IF NOT EXISTS notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT, created INTEGER NOT NULL,
   text TEXT NOT NULL, why TEXT NOT NULL, ref TEXT NOT NULL DEFAULT '', source TEXT NOT NULL,
-  level TEXT NOT NULL, outcome TEXT NOT NULL, reason TEXT NOT NULL, rule_id INTEGER,
+  weight INTEGER NOT NULL DEFAULT 0, outcome TEXT NOT NULL, reason TEXT NOT NULL, rule_id INTEGER,
   asked INTEGER NOT NULL DEFAULT 0, tainted TEXT NOT NULL DEFAULT '', msg INTEGER,
   held INTEGER NOT NULL DEFAULT 0, feedback TEXT NOT NULL DEFAULT '', feedback_at INTEGER,
   token TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS notifications_created ON notifications (created);`
 
-func init() { extraSchema = append(extraSchema, notifySchema) }
+func init() {
+	extraSchema = append(extraSchema, notifySchema)
+	schemaFixes = append(schemaFixes, notifyWeightColumn)
+}
+
+// notifyWeightColumn rewrites once a table made when a notification had a
+// level (now or brief) instead of a weight: sent is 5, the rest 2.
+func notifyWeightColumn(db *sql.DB) error {
+	has := func(col string) bool {
+		var n int
+		db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('notifications') WHERE name = ?`, col).Scan(&n)
+		return n > 0
+	}
+	if !has("level") {
+		return nil
+	}
+	if !has("weight") {
+		if _, err := db.Exec(`ALTER TABLE notifications ADD COLUMN weight INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	if _, err := db.Exec(`UPDATE notifications SET weight = CASE WHEN outcome = 'now' THEN 5 ELSE 2 END WHERE weight = 0`); err != nil {
+		return err
+	}
+	_, err := db.Exec(`ALTER TABLE notifications DROP COLUMN level`)
+	return err
+}
 
 const (
+	// What the code decided: the outcome column.
 	levelNow   = "now"
 	levelBrief = "brief"
 	levelNever = "never"
+
+	weightSent = 4 // from this weight a notification is sent now
 
 	notifyFromBrain = "brain" // the notify tool
 	notifyFromWake  = "wake"  // the brain's answer to a due intention (brain_wake.go)
@@ -65,8 +98,8 @@ const (
 	// Why the code decided as it did: the reason column, shown in the
 	// workspace (notif.reason.*) and told to the brain (notifyReasons).
 	reasonNow     = "now"
-	reasonBrief   = "brief"   // asked for the brief
-	reasonRule    = "rule"    // a rule of the user's decided
+	reasonBrief   = "brief"   // weighed below weightSent
+	reasonRule    = "rule"    // a rule of the user's raised or lowered its weight
 	reasonTainted = "tainted" // external content never interrupts alone
 	reasonQuiet   = "quiet"
 	reasonCap     = "cap"
@@ -77,8 +110,8 @@ const (
 
 var notifyReasons = map[string]string{
 	reasonNow:     "sent now",
-	reasonBrief:   "kept for the brief, as asked",
-	reasonRule:    "decided by a rule of the user's",
+	reasonBrief:   "kept for the brief: weighed below 4",
+	reasonRule:    "weighed again by a rule of the user's",
 	reasonTainted: "kept for the brief: this turn read external content, which never interrupts on its own",
 	reasonQuiet:   "kept for the brief: quiet hours",
 	reasonCap:     "kept for the brief: today's cap of interruptions is reached",
@@ -96,7 +129,7 @@ type notification struct {
 	Ref        string    `json:"ref,omitempty"`     // the record it is about: intention:12, skill:<name>
 	Subject    string    `json:"subject,omitempty"` // what it is about, kind:slug (subject.go)
 	Source     string    `json:"source"`
-	Level      string    `json:"level"`   // what was asked: now or brief
+	Weight     int       `json:"weight"`  // as decided: the asked weight, through the rules
 	Outcome    string    `json:"outcome"` // what the code decided: now, brief or never
 	Reason     string    `json:"reason"`
 	RuleID     int64     `json:"rule,omitempty"`
@@ -111,7 +144,7 @@ type notification struct {
 
 // notifyItem is what decideNotify judges.
 type notifyItem struct {
-	Level   string // now or brief, as asked
+	Weight  int    // 1 to 5, as asked
 	Subject string // what it is about: project:getout…
 	Ref     string // the record it is about: intention:12, skill:<name>…
 	Asked   bool   // the user asked for it in their own words: not counted in the cap
@@ -135,49 +168,52 @@ type notifyDecision struct {
 	Outcome string
 	Reason  string
 	RuleID  int64
+	Weight  int // the weight asked, through the rule
 }
 
-// decideNotify decides, without a model: never, now or for the brief.
+// decideNotify decides, without a model: never, now or for the brief. The
+// rule for its subject (or kind) raises the weight to its floor and lowers
+// it to its ceiling, a ceiling of 0 being never; a tainted turn may be
+// lowered, never raised. From weightSent it is sent, unless the turn read
+// external content, the quiet hours or the daily cap hold it: only a rule
+// "even at night" goes through those two, or eriphe-core's own urgent text.
 func decideNotify(it notifyItem, cx notifyContext) notifyDecision {
-	if it.Urgent && !it.Tainted && it.Level == levelNow {
-		return notifyDecision{levelNow, reasonWatch, 0}
+	w := min(max(it.Weight, 1), weightInterrupts)
+	if it.Urgent && !it.Tainted && w == weightInterrupts {
+		return notifyDecision{levelNow, reasonWatch, 0, weightInterrupts}
 	}
-	level := it.Level
 	r := itemRule(cx.Rules, it)
 	var ruleID int64
+	reason := ""
 	if r != nil {
 		ruleID = r.ID
-		switch r.Outcome {
-		case levelNever:
-			return notifyDecision{levelNever, reasonRule, r.ID}
-		case levelBrief:
-			return notifyDecision{levelBrief, reasonRule, r.ID}
-		case levelNow:
-			if !it.Tainted { // the model chose the ref: a tainted turn may lower, never raise
-				level = levelNow
-			}
+		if r.Ceiling == 0 {
+			return notifyDecision{levelNever, reasonRule, r.ID, 0}
+		}
+		if w < r.Floor && !it.Tainted { // the model chose the subject: a tainted turn may lower, never raise
+			w, reason = r.Floor, reasonRule
+		}
+		if w > r.Ceiling {
+			w, reason = r.Ceiling, reasonRule
 		}
 	}
-	if level != levelNow {
-		return notifyDecision{levelBrief, reasonBrief, ruleID}
+	if w < weightSent {
+		return notifyDecision{levelBrief, cmpOr(reason, reasonBrief), ruleID, w}
 	}
 	if it.Tainted {
-		return notifyDecision{levelBrief, reasonTainted, ruleID}
+		return notifyDecision{levelBrief, reasonTainted, ruleID, weightSent - 1}
 	}
-	urgent := r != nil && r.Outcome == levelNow && r.Night
+	urgent := r != nil && r.Night && r.Floor >= weightSent
 	if _, quiet := quietAt(cx.Rules, cx.Now); quiet {
 		if !urgent {
-			return notifyDecision{levelBrief, reasonQuiet, ruleID}
+			return notifyDecision{levelBrief, reasonQuiet, ruleID, w}
 		}
-		return notifyDecision{levelNow, reasonUrgent, ruleID}
+		return notifyDecision{levelNow, reasonUrgent, ruleID, w}
 	}
 	if !it.Asked && !urgent && cx.SentNow >= cx.Cap {
-		return notifyDecision{levelBrief, reasonCap, ruleID}
+		return notifyDecision{levelBrief, reasonCap, ruleID, w}
 	}
-	if r != nil && r.Outcome == levelNow {
-		return notifyDecision{levelNow, reasonRule, ruleID}
-	}
-	return notifyDecision{levelNow, reasonNow, ruleID}
+	return notifyDecision{levelNow, cmpOr(reason, reasonNow), ruleID, w}
 }
 
 // The settings: the user's zone and the daily cap (Settings → notifications).
@@ -230,18 +266,18 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 		return nil, err
 	}
 	d := decideNotify(it, cx)
-	n.Created, n.Level, n.Outcome, n.Reason, n.RuleID, n.Asked = cx.Now, it.Level, d.Outcome, d.Reason, d.RuleID, it.Asked
+	n.Created, n.Weight, n.Outcome, n.Reason, n.RuleID, n.Asked = cx.Now, d.Weight, d.Outcome, d.Reason, d.RuleID, it.Asked
 	n.Held = d.Outcome == levelBrief
 	n.token = randomToken(16)
-	res, err := c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, subject, source, level, outcome, reason, rule_id,
+	res, err := c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, subject, source, weight, outcome, reason, rule_id,
 		asked, tainted, msg, held, token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.Created.Unix(), n.Text, n.Why, n.Ref, n.Subject, n.Source, n.Level, n.Outcome, n.Reason, nullID(n.RuleID),
+		n.Created.Unix(), n.Text, n.Why, n.Ref, n.Subject, n.Source, n.Weight, n.Outcome, n.Reason, nullID(n.RuleID),
 		n.Asked, n.Tainted, nullID(int64(n.Msg)), n.Held, n.token)
 	if err != nil {
 		return nil, err
 	}
 	n.ID, _ = res.LastInsertId()
-	log.Printf("notify: %d %s → %s (%s)", n.ID, it.Level, d.Outcome, d.Reason)
+	log.Printf("notify: %d weight %d → %d %s (%s)", n.ID, it.Weight, d.Weight, d.Outcome, d.Reason)
 	if n.Held {
 		c.attendNote(n) // told at the user's next return, the brief (attention.go)
 	}
@@ -251,7 +287,7 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 		if r := itemRule(cx.Rules, it); r != nil {
 			note.Channels = r.Channels // the rule's channels, else the default (channels.go)
 			note.Route.Only, note.Route.Also, note.Route.Never = r.Channels, r.Also, r.Never
-			note.Route.Urgent = r.Outcome == levelNow && r.Night
+			note.Route.Urgent = r.Night && r.Floor >= weightSent
 		}
 		if d.Reason == reasonWatch {
 			note.Route.Urgent = true // the shorter delay, and escalation in the quiet hours
@@ -275,13 +311,13 @@ func notificationURL(id int64) string {
 	return fmt.Sprintf("/settings/notifications?n=%d#notif-%d", id, id)
 }
 
-const notifyCols = `id, created, text, why, ref, subject, source, level, outcome, reason, COALESCE(rule_id, 0), asked, tainted,
+const notifyCols = `id, created, text, why, ref, subject, source, weight, outcome, reason, COALESCE(rule_id, 0), asked, tainted,
 	COALESCE(msg, 0), held, feedback, COALESCE(feedback_at, 0), token`
 
 func scanNotification(row interface{ Scan(...any) error }) (*notification, error) {
 	var n notification
 	var created, fbAt int64
-	if err := row.Scan(&n.ID, &created, &n.Text, &n.Why, &n.Ref, &n.Subject, &n.Source, &n.Level, &n.Outcome, &n.Reason, &n.RuleID,
+	if err := row.Scan(&n.ID, &created, &n.Text, &n.Why, &n.Ref, &n.Subject, &n.Source, &n.Weight, &n.Outcome, &n.Reason, &n.RuleID,
 		&n.Asked, &n.Tainted, &n.Msg, &n.Held, &n.Feedback, &fbAt, &n.token); err != nil {
 		return nil, err
 	}
@@ -429,7 +465,7 @@ func (c *core) notifyWake(seq, eventSeq int, text string) {
 	}
 	n := &notification{Text: truncate(strings.TrimSpace(text), notifyTextMax), Why: why, Ref: ref, Subject: subject, Source: notifyFromWake,
 		Msg: seq, Tainted: strings.Join(c.turnTaint(), ", ")}
-	if _, err := c.notify(n, notifyItem{Level: levelNow, Ref: ref, Asked: w.Asked, Tainted: w.External}); err != nil {
+	if _, err := c.notify(n, notifyItem{Weight: weightInterrupts, Ref: ref, Asked: w.Asked, Tainted: w.External}); err != nil {
 		log.Printf("notify: wake: %v", err)
 	}
 }

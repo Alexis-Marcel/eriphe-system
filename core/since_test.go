@@ -28,7 +28,7 @@ func feedCore(t *testing.T) *core {
 	setTime(t, c, `UPDATE task_log SET at = ? WHERE task_id = ?`, at(t, "2026-11-04", "09:00"), "t-1")
 
 	c.notifyClock = func() time.Time { return at(t, "2026-11-04", "08:30") }
-	c.notify(&notification{Text: "Le build de nuit a échoué.", Why: "Le build a échoué.", Source: notifyFromBrain}, notifyItem{Level: levelBrief})
+	c.notify(&notification{Text: "Le build de nuit a échoué.", Why: "Le build a échoué.", Source: notifyFromBrain}, notifyItem{Weight: 2})
 	c.notifyClock = func() time.Time { return at(t, "2026-11-04", "10:00") }
 
 	c.mem.now = func() time.Time { return at(t, "2026-11-04", "08:45") }
@@ -230,7 +230,7 @@ func TestHappenedPage(t *testing.T) {
 	c := tw.c
 	c.store.set("notify_zone", "Europe/Paris")
 	c.notify(&notification{Text: "Le serveur répond lentement.", Why: "Une alerte.", Source: notifyFromBrain, Tainted: "mail.read"},
-		notifyItem{Level: levelBrief})
+		notifyItem{Weight: 2})
 	c.store.insertTask(&TaskRow{ID: "t-9", Kind: "worker", Runtime: "claude-code", State: stateRunning, Prompt: "Range les factures"})
 	code, body, _ := tw.do("GET", "/settings/journal?range=day", nil, nil)
 	if code != 200 || !strings.Contains(body, "<h2>Journal</h2>") || !strings.Contains(body, "Le serveur répond lentement.") ||

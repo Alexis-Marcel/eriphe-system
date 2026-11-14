@@ -39,7 +39,7 @@ func TestUserStateLine(t *testing.T) {
 	if strings.Contains(got, "occupé") {
 		t.Errorf("busy without a calendar: %s", got)
 	}
-	c.notify(&notification{Text: "x", Why: "y", Source: notifyFromBrain}, notifyItem{Level: levelNow})
+	c.notify(&notification{Text: "x", Why: "y", Source: notifyFromBrain}, notifyItem{Weight: 5})
 	c.notifyClock = func() time.Time { return at(t, "2026-11-04", "16:30") }
 	got = stateLine(t, c)
 	if !strings.Contains(got, "3 sur 4") {

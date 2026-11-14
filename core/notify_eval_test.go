@@ -22,8 +22,17 @@ type notifyEvalCorpus struct {
 }
 
 type evalRule struct {
-	Kind, Match, Outcome, Days, From, To, Why string
-	Night                                     bool
+	Kind, Match, Days, From, To, Why string
+	Floor                            int
+	Ceiling                          *int // none: 5
+	Night                            bool
+}
+
+func (r evalRule) ceiling() int {
+	if r.Ceiling == nil {
+		return weightInterrupts
+	}
+	return *r.Ceiling
 }
 
 func (r evalRule) rule() notifyRule {
@@ -33,15 +42,19 @@ func (r evalRule) rule() notifyRule {
 	if r.Kind == ruleQuiet && days == "" {
 		days = daysAll
 	}
-	return notifyRule{Kind: r.Kind, Match: r.Match, Outcome: r.Outcome, Night: r.Night, Days: days, From: from, To: to, State: ruleActive}
+	if r.Kind == ruleQuiet {
+		return notifyRule{Kind: r.Kind, Days: days, From: from, To: to, State: ruleActive}
+	}
+	return notifyRule{Kind: r.Kind, Match: r.Match, Floor: r.Floor, Ceiling: r.ceiling(), Night: r.Night, Days: days, From: from, To: to, State: ruleActive}
 }
 
 type notifyEvalCase struct {
-	ID, What, At, Zone, Level, Ref, Want string
-	Tainted, Asked, Injection, Urgent    bool
-	SentToday                            int `json:"sent_today"`
-	Cap                                  *int
-	Rules                                []evalRule
+	ID, What, At, Zone, Ref, Want     string
+	Weight                            int
+	Tainted, Asked, Injection, Urgent bool
+	SentToday                         int `json:"sent_today"`
+	Cap                               *int
+	Rules                             []evalRule
 }
 
 type ruleEvalCase struct {
@@ -86,7 +99,7 @@ func (x notifyEvalCase) context(t *testing.T) (notifyItem, notifyContext) {
 		}
 		cx.Rules = append(cx.Rules, nr)
 	}
-	return notifyItem{Level: x.Level, Ref: x.Ref, Asked: x.Asked, Tainted: x.Tainted, Urgent: x.Urgent}, cx
+	return notifyItem{Weight: x.Weight, Ref: x.Ref, Asked: x.Asked, Tainted: x.Tainted, Urgent: x.Urgent}, cx
 }
 
 func TestNotifyEvalInterrupt(t *testing.T) {
@@ -156,7 +169,7 @@ func runRuleEval(t *testing.T, cases []ruleEvalCase) ruleEvalScore {
 		if x.Tainted {
 			c.brainCalledCatalog("t-brain", "mail", "read")
 		}
-		in := ruleIn{Kind: x.Rule.Kind, Match: x.Rule.Match, Outcome: x.Rule.Outcome, Night: x.Rule.Night, Days: x.Rule.Days,
+		in := ruleIn{Kind: x.Rule.Kind, Match: x.Rule.Match, Floor: x.Rule.Floor, Ceiling: x.Rule.Ceiling, Night: x.Rule.Night, Days: x.Rule.Days,
 			From: x.Rule.From, To: x.Rule.To, Why: x.Rule.Why}
 		if in.Why == "" {
 			in.Why = "Cas " + x.ID

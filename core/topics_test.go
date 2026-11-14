@@ -35,7 +35,7 @@ func TestReuseTopic(t *testing.T) {
 // A rule kept before the vocabulary still matches the canonical label,
 // and the brain's notify lands under the known topic, so the rule holds.
 func TestTopicRuleCanonical(t *testing.T) {
-	rules := []notifyRule{{ID: 1, Kind: ruleTopic, Match: "factures", Outcome: levelNever, State: ruleActive}}
+	rules := []notifyRule{{ID: 1, Kind: ruleTopic, Match: "factures", Ceiling: 0, State: ruleActive}}
 	for _, ref := range []string{"facture", "Factures", "topic:facture"} {
 		if r := topicRule(rules, ref); r == nil || r.ID != 1 {
 			t.Errorf("rule factures does not match %q", ref)
@@ -43,28 +43,28 @@ func TestTopicRuleCanonical(t *testing.T) {
 	}
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	ownerSays(c, "Ne me préviens plus des factures")
-	if _, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "facture", Outcome: levelNever, State: ruleActive, By: "user"}); err != nil {
+	if _, err := c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "facture", Ceiling: 0, State: ruleActive, By: "user"}); err != nil {
 		t.Fatal(err)
 	}
-	out, err := c.brainNotify(notifyIn{Text: "Une facture est arrivée.", Level: levelNow, Why: "Un mail de facture.", Ref: "Facturation"})
+	out, err := c.brainNotify(notifyIn{Text: "Une facture est arrivée.", Weight: 5, Why: "Un mail de facture.", Ref: "Facturation"})
 	if err != nil || out["outcome"] != levelNever || out["subject"] != "topic:facture" {
 		t.Fatalf("notify under a family label: %v %v", out, err)
 	}
 	if out["topic"] == nil {
 		t.Error("no note that the label was mapped to the known topic")
 	}
-	out, _ = c.brainNotify(notifyIn{Text: "Le colis part demain.", Level: levelBrief, Why: "Suivi.", Ref: "livraisons"})
+	out, _ = c.brainNotify(notifyIn{Text: "Le colis part demain.", Weight: 2, Why: "Suivi.", Ref: "livraisons"})
 	if note, _ := out["topic"].(string); !strings.Contains(note, "New topic topic:livraison") || !strings.Contains(note, "facture") {
 		t.Errorf("a new topic is not flagged with the known ones: %v", out)
 	}
 	// A rule the brain writes for a family label uses the known topic, and
 	// replaces the older one instead of adding a twin.
 	seq := ownerSays(c, "En fait préviens-moi des factures au brief")
-	got, err := c.brainRule(ruleIn{Match: "facturation", Outcome: levelBrief, Why: "Demandé.", SourceRef: ref(seq)})
+	got, err := c.brainRule(ruleIn{Match: "facturation", Ceiling: ptr(2), Why: "Demandé.", SourceRef: ref(seq)})
 	if err != nil || got["rule"].(ruleView).Match != "topic:facture" {
 		t.Fatalf("rule: %v %v", got, err)
 	}
-	if rs, _ := c.notifyRules(ruleActive); len(rs) != 1 || rs[0].Outcome != levelBrief {
+	if rs, _ := c.notifyRules(ruleActive); len(rs) != 1 || rs[0].Ceiling != 2 {
 		t.Fatalf("rules now %+v", rs)
 	}
 }
@@ -74,9 +74,9 @@ func TestTopicRuleCanonical(t *testing.T) {
 func TestKnownTopics(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	ownerSays(c, "ok")
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Outcome: levelNow, State: ruleActive, By: "user"})
-	c.brainNotify(notifyIn{Text: "x", Level: levelBrief, Why: "y", Ref: "Factures"})
-	c.brainNotify(notifyIn{Text: "x", Level: levelBrief, Why: "y", Ref: "task:t-1"})
+	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:getout", Floor: 5, Ceiling: 5, State: ruleActive, By: "user"})
+	c.brainNotify(notifyIn{Text: "x", Weight: 2, Why: "y", Ref: "Factures"})
+	c.brainNotify(notifyIn{Text: "x", Weight: 2, Why: "y", Ref: "task:t-1"})
 	seq := ownerSays(c, "Lina est ma sœur")
 	if _, err := c.brainRemember(rememberIn{Text: "Lina est la sœur de Sam.", Kind: kindPerson, Subject: "person:Lina", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)

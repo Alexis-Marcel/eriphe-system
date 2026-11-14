@@ -15,7 +15,7 @@ func TestJournalInSettings(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	c := tw.c
-	c.notify(&notification{Text: "Le serveur répond lentement.", Why: "Une alerte.", Source: notifyFromBrain}, notifyItem{Level: levelBrief})
+	c.notify(&notification{Text: "Le serveur répond lentement.", Why: "Une alerte.", Source: notifyFromBrain}, notifyItem{Weight: 2})
 	c.store.insertTask(&TaskRow{ID: "t-9", Kind: "worker", Runtime: "claude-code", State: stateRunning, Prompt: "Range les factures"})
 	c.store.recordDecision("t-9", "p-0", "Bash", map[string]any{"command": "git push origin main"}, decideDeny, byPolicy, "no pushing to main")
 
@@ -93,7 +93,7 @@ func TestApprovals(t *testing.T) {
 	mustAdd(t, m, &Memory{Kind: kindFact, Text: "Le colis arrive jeudi", Status: memProposed, SourceKind: srcExtraction, Trust: trustExternal})
 	mustIntend(t, m, &Intention{Text: "Régler la facture du fournisseur", DueAt: m.now().Add(48 * time.Hour), State: intentProposed,
 		SourceKind: srcExtraction, Trust: trustExternal})
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "topic:mail", Outcome: levelBrief, State: ruleProposed, By: "brain", Why: "Trop de mails."})
+	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "topic:mail", Ceiling: 2, State: ruleProposed, By: "brain", Why: "Trop de mails."})
 	c.store.insertTask(&TaskRow{ID: "t-perm", Agent: "small", Runtime: "claude-code", Prompt: "Publish", State: stateWaitingPermission})
 	c.store.addEvents("t-perm", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-1", "tool_name": "Bash",
 		"input": map[string]any{"command": "npm publish"}}}})
@@ -141,7 +141,7 @@ func TestNotificationsOnePage(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	c := tw.c
-	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:site", Outcome: levelNow, State: ruleActive, By: "owner"})
+	c.addNotifyRule(notifyRule{Kind: ruleTopic, Match: "project:site", Floor: 5, Ceiling: 5, State: ruleActive, By: "owner"})
 	code, body, _ := tw.do("GET", "/settings/notifications", nil, nil)
 	if code != 200 {
 		t.Fatalf("GET: %d", code)

@@ -218,7 +218,7 @@ func TestSkillRunAttention(t *testing.T) {
 		if len(ns) != 1 {
 			return ""
 		}
-		return ns[0].Level
+		return ns[0].Outcome
 	}
 	rcpt := func(attention string) string {
 		return "\n```json\n" + `{"receipt": {"status": "done", "attention": ` + attention + `}}` + "\n```"

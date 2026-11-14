@@ -1608,8 +1608,8 @@ version, read with its diff.
   [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
   as everywhere; a skill's instructions write no prefix. No entry (or no receipt) tells nothing:
   the run is `silent`, its message kept in its note. Otherwise its message is a notification, why
-  « Skill « name » », ref `skill:<name>`, its link-free rules when the task is tainted: `now` when
-  the heaviest entry weighs 4 or 5, `brief` below. Each entry with refs enters the attention queue
+  « Skill « name » », ref `skill:<name>`, its link-free rules when the task is tainted, weighed as
+  its heaviest entry (sent from 4, for the brief below). Each entry with refs enters the attention queue
   as it is; one without refs (or whose refs were all bad: a bad ref never silences a weight) is
   about the message, the notification it became (`alert:<id>`). Entries about objects alone tell
   the message only from 4: below, their items speak at the brief, not twice. The run's note lists
@@ -4061,20 +4061,26 @@ and takes it there, or opens one, on the workspace's own origin. Push needs a tr
 later), while Android and computers receive it in the browser too.
 
 **The brain's notifications** (`notify.go`, `notify_rules.go`, `notify_quiet.go`). The brain has
-four tools: `notify(text, level now|brief, why, ref)`, `notifications` (what it said, what waits
-for the brief, the feedback, the rules, the quiet hours, the known topics, the settings), `rule` and `setting`. The model writes and asks for
-a level; the code decides (`decideNotify`, no model):
+four tools: `notify(text, weight 1-5, why, ref)`, `notifications` (what it said, what waits
+for the brief, the feedback, the rules, the quiet hours, the known topics, the settings), `rule` and `setting`. The model writes and weighs
+on the attention scale (5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1
+background); the code decides (`decideNotify`, no model): from weight 4 it is sent now, lighter it
+waits for the brief.
 
 - **Quiet hours always hold.** The window is a rule (data): for every night, or for the nights
   before a weekday or a weekend day, 4 to 16 hours long; without one, the seed 22:00–08:00. A
-  "now" inside it waits for the brief, unless a topic rule of the user's says "even at night", or it
-  is the fixed message of a skill the user marked urgent (`urgent`).
+  weight 4 or 5 inside it waits for the brief, unless a topic rule of the user's says "even at night", or it
+  is the fixed message of a skill the user marked urgent (`urgent`). A weight 5 from the model alone
+  never goes through.
   The time zone is the configuration's, or the one set in Settings.
 - **A daily cap** of "now" (4 by default, 0 to 20 in Settings), besides reminders the user asked
   for in their own words; over it, the brief.
-- **Topic rules** map a subject (`project:getout`, which also matches `project:getout:prod`) to now,
-  brief or never. A turn that read external content may lower an outcome, never raise it: what it
-  notifies never interrupts, goes to the brief marked as such, and may hold no link.
+- **Topic rules** bound the weight of what is about a subject (`project:getout`, which also matches
+  `project:getout:prod`) or a kind of subject or record alone (`project`, `skill`; the longest match
+  wins): a floor raises it, a ceiling lowers it, a ceiling of 0 is never. A turn that read external
+  content may be lowered, never raised: what it notifies never interrupts, goes to the brief marked
+  as such, and may hold no link. The rules kept with an outcome were rewritten once at start (now:
+  floor 5; brief: ceiling 2; never: ceiling 0), and the notifications' level became their weight.
 - **The answer to a due intention** is pushed through the same decision, question or not, once per
   wake; a reminder from an intention drawn from external content waits for the brief.
 - Every notification is kept (`notifications`) with its why, outcome and reason. What waits for the
@@ -4088,7 +4094,7 @@ a level; the code decides (`decideNotify`, no model):
   tainted turn, they are proposed and the user approves them in À valider (a card in the conversation); Settings →
   Notifications shows every rule in force, to delete (a new or changed one is asked of the brain).
   Since #244 step 5 the topic rules and the quiet hours are rules too: rows of `rules` with source
-  `notification` (their kind, match, outcome, nights, lines and hours in the JSON `spec`; `act`
+  `notification` (their kind, match, floor, ceiling, nights, lines and hours in the JSON `spec`; `act`
   `deliver` or `quiet`), read by `notifyRules` only, never fired by the rule tick.
 - **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
   user's messages, a tab in front (the conversation's or the workspace's), in 10-minute buckets
