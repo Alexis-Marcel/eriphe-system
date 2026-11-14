@@ -122,6 +122,7 @@
     <div><dt>{{t "stats.firstpass"}}</dt><dd><strong>{{.Rate .FirstPass .Finished}} %</strong> <span class="muted small">{{.FirstPass}}/{{.Finished}}</span></dd></div>
     <div{{if .Unsupported}} class="warn"{{end}}><dt>{{t "stats.unsupported"}}</dt><dd><strong>{{.Unsupported}}</strong>{{if .Unchecked}} <span class="muted small">· {{tf "stats.unchecked" .Unchecked}}</span>{{end}}</dd></div>
     <div><dt>{{t "stats.cost"}}</dt><dd>{{if .Costed}}<strong>{{money .CostPerAccepted}}</strong> <span class="muted small">· {{tokens .TokensPerAccepted}} {{t "stats.tokens"}} · {{.MinutesPerAccepted}} min</span>{{else}}<span class="muted small">{{t "stats.nocost"}}</span>{{end}}</dd></div>
+    {{with .Cards}}{{if .Pushed}}<div><dt><a href="/settings/subjects">{{t "stats.cards"}}</a></dt><dd>{{if .Judged}}<strong>{{$.Rate .Used .Judged}} %</strong> <span class="muted small">{{.Used}}/{{.Judged}}</span>{{else}}<span class="muted small">{{tf "stats.cards.waiting" .Waiting}}</span>{{end}}</dd></div>{{end}}{{end}}
   </dl>{{end}}
   {{if .Failures}}<p class="tstats-fail"><span class="muted small">{{t "stats.failures"}}</span>{{range .Failures}} <span class="rc rc-{{if eq .Class "transient"}}open{{else if eq .Class "account"}}bad{{else}}none{{end}}">{{t (printf "stats.class.%s" .Class)}} {{.N}}</span>{{end}}</p>{{end}}
   {{if .Spend}}{{$roles := .SpendRoles}}<table class="tstats-spend">

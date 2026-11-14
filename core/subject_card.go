@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"slices"
 	"strings"
 
@@ -265,6 +264,7 @@ func (c *core) readSubject(in readSubjectIn) (map[string]any, error) {
 			return map[string]any{"subjects": named, "note": "Several subjects go by these words: read the one meant by its key."}, nil
 		}
 	}
+	c.cardLookedUp(key) // its turn's card was not enough (subject_card_use.go)
 	card, _ := c.subjectCard(key, subjectCardChars)
 	if card == "" {
 		card = "Rien de connu sur ce sujet pour l'instant."
@@ -284,8 +284,8 @@ func registerSubjectCardTool(s *mcp.Server, c *core) {
 // session holds (AssistantStatus.Cards, by hash, like the profile), to a
 // fresh session's context pack (the open threads' subjects,
 // brain_context.go), to a worker task's first prompt and a thread lead's
-// first turn when they have a subject. Each card pushed is logged: its
-// subject, size and where.
+// first turn when they have a subject. Each card pushed is logged (its
+// subject, size and where) and counted (subject_card_use.go).
 
 // pushedCard is a card given to a model.
 type pushedCard struct {
@@ -320,11 +320,6 @@ func (c *core) compileCard(key string, budget int) (pushedCard, bool) {
 	return pushedCard{Key: c.store.canonSubject(key), Text: text, Hash: cardHash(text), Stats: st}, true
 }
 
-// logPushed logs a card given to a model, and where.
-func logPushed(x pushedCard, where string) {
-	log.Printf("subject card %s → %s: %d chars, %d lines, %d left out", x.Key, where, x.Stats.Chars, x.Stats.Lines, x.Stats.Dropped)
-}
-
 // turnCard is the card of the brain's turn's subject, when its session
 // does not hold it as it is now (held: the cards it holds).
 func (c *core) turnCard(held map[string]string) (pushedCard, bool) {
@@ -340,8 +335,9 @@ func (c *core) turnCard(held map[string]string) (pushedCard, bool) {
 }
 
 // startCard is the card a task or a lead starts with, for its subject;
-// "" without one. where names it in the log.
-func (c *core) startCard(key, where string) string {
+// "" without one. place and who (the task's id, the lead's thread) are
+// where it is counted (subject_card_use.go).
+func (c *core) startCard(key, place, who string) string {
 	if key == "" {
 		return ""
 	}
@@ -349,6 +345,6 @@ func (c *core) startCard(key, where string) string {
 	if !ok {
 		return ""
 	}
-	logPushed(x, where)
+	c.cardPushed(x, place, 0, who)
 	return x.Text
 }

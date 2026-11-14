@@ -1,6 +1,9 @@
 package main
 
-import "net/http"
+import (
+	"net/http"
+	"time"
+)
 
 // Settings → « Sujets » (subject_card.go): the known subjects, the latest
 // seen first, each with its title and aliases; one picked shows its card
@@ -22,7 +25,13 @@ type subjectsPage struct {
 	Stats    subjectCardStats
 	Thread   int64 // its live thread, if any
 	Unknown  bool  // picked, but not known
+	// The cards pushed over cardUsesDays and how they were used, all and
+	// the picked subject's (subject_card_use.go).
+	Uses, KeyUses []cardUse
 }
+
+// cardUsesDays is the window of the counts the page shows.
+const cardUsesDays = 30
 
 func (w *web) handleSubjects(rw http.ResponseWriter, r *http.Request, s *session) {
 	all, err := w.c.store.subjectsWhere(`merged_into = ''`)
@@ -30,7 +39,8 @@ func (w *web) handleSubjects(rw http.ResponseWriter, r *http.Request, s *session
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	v := subjectsPage{Subjects: all}
+	since := time.Now().AddDate(0, 0, -cardUsesDays)
+	v := subjectsPage{Subjects: all, Uses: w.c.store.cardUses(since, "")}
 	if len(all) > subjectsShown {
 		v.Subjects, v.More = all[:subjectsShown], len(all)-subjectsShown
 	}
@@ -41,6 +51,7 @@ func (w *web) handleSubjects(rw http.ResponseWriter, r *http.Request, s *session
 		} else {
 			v.Card, v.Stats = w.c.subjectCard(v.Key, w.c.cardBudget())
 			v.Thread, _ = w.c.liveThreadOf(v.Key)
+			v.KeyUses = w.c.store.cardUses(since, v.Key)
 		}
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "subjects.title", Nav: "settings", Tab: "subjects", Data: v})

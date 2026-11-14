@@ -4532,7 +4532,22 @@ rules. A test forbids any other normaliser.
   per open thread's subject. To a worker task's first prompt, after what it is asked (its shown
   prompt unchanged), and a thread lead's first turn, when they have a subject. A brain on a
   self-hosted model gets 600-character cards. Each card pushed is logged: `subject card <key> →
-  <where>: <chars>, <lines>, <left out>`.
+  <place> [<task id or thread>]: <chars>, <lines>, <left out>`.
+- **Cards measured** (`subject_card_use.go`): each card pushed is counted in `card_pushes` (subject,
+  place: `turn`, `pack`, `task`, `lead`; size; the brain's turn; the task or the lead's thread) and
+  judged once its window is over (30 minutes for the brain, 2 hours for a task or a lead), with a
+  proxy said as it is: **wrote** when the model it went to wrote or changed a record of that
+  subject in the window (the brain: a memory, an intention or a line of the subject's thread
+  written by `brain`; a task: a memory its `remember` wrote, `task:<id>`, or the subject's thread
+  summary noted by a task; a lead: a line a lead wrote in the subject's thread, nearly always so,
+  as a lead works on its thread); else **answered** when it was the card of the turn's subject (the
+  turn's, or that one of a pack delivered with the turn) and the turn's answer, the first message
+  after it, is the brain's, without asking for that subject again in the turn (`recall` with its
+  subject or naming it, `read_subject` of it): the card was enough, or the subject did not matter,
+  which it cannot tell, so it is counted apart; else **no**. A pack's other cards, and a fresh
+  session's first pack, are no turn's: only wrote counts for them. Settings → Subjects shows the counts of the last 30 days by place, all
+  and the picked subject's; the tasks' reliability panel shows the share of the tasks' cards used.
+  Pushes are kept 90 days.
 - **A record's subject, set by the code**: notifications, attention items, cards, tasks and
   surfaces carry a `subject` column next to their ref (which record: `intention:12`,
   `skill:<name>`). The code sets it by inheritance, and a subject given explicitly wins:
