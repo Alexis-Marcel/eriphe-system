@@ -881,7 +881,8 @@ the agent's last message; without one, the last message, truncated, as before. `
 returns it as `receipt`, the task's card shows its status and how much is verified, its drawer
 verified and not verified side by side, the checks with the end of a failed one's output, and the
 mismatches. The last receipt is kept in `task_harness`. The night's memory extraction reads a
-finished task's receipt instead of its last message (still external).
+finished task's receipt instead of its last message (first party for a task that read nothing
+from outside; a task that did is left out of it).
 
 ### Attention signals (`attention_signal.go`)
 
@@ -905,11 +906,12 @@ signal enters the [attention queue](#workspace-web) (`c.attend`) with its source
 `assistant:<name>`), marked as drawn from external content when the run or the thread read some:
 the brain reads it as data.
 
-A skill whose receipt has no block keeps working through its prefix: its message, once told, enters
-the queue as the notification it became (`alert:<id>`), weight 5 for `[urgent]`, 4 for a plain
-message, 3 for `[brief]`; `[rien]` and a notification a rule says never to are nothing. A block wins
-over the prefix (which still decides the notification), and a silent run's block still enters the
-queue. A worker's receipt carries no signal.
+In a skill's receipt the block is also what tells: no entry tells the user nothing (the run's
+message stays in its note), and an entry may leave `refs` out to be about the run's own message,
+which then enters the queue as the notification it became (`alert:<id>`), with the entry's weight
+(`tellRun`, [Triggered skills](#triggered-skills)). A lead's
+`report` needs its refs, and only a report with a kept item wakes the brain: without one it is
+kept in the conversation as read and costs no turn. A worker's receipt carries no signal.
 
 ### Threads (`threads.go`, `thread_engine.go`)
 
@@ -1059,7 +1061,7 @@ brain no longer judges a thread that has a lead: it passes the user's words with
 hears the lead's reports, the choices to ask, the budget's card and the end. A report may carry an
 [attention signal](#attention-signals-attention_signalgo) (`attention`, the same block as a skill's
 receipt): its items enter the attention queue with the source `assistant:lead-<id>`, and the tool's
-result lists what was `dropped`.
+result lists what was `dropped`. A report with no item kept does not wake the brain: it is kept in the conversation as read, and the result says so.
 
 **The final objective check**: `close_thread` on a led thread with a `done_when` adds a last step,
 `final-check`, a fresh agent lent read-only what the steps wrote (their repository branches and
@@ -1581,7 +1583,7 @@ turn is not tainted. Its front matter:
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
 | `can` | what its tasks may start: `open-thread`, a led thread |
-| `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run asks |
+| `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
 the rest of the skill, as one version: Settings → Skills shows it in words, and a change is a new
@@ -1592,11 +1594,17 @@ version, read with its diff.
   no start card: the user approved the skill. An external event taints it from its start
   (`task_taint:<id>`), so its writes ask a card as a tainted task's do; a time trigger or own
   events start it clean.
-- **Its last message** is what it tells the user: a notification, why « Skill « name » », ref
-  `skill:<name>`, its link-free rules when the task is tainted; `[rien]` tells nothing, `[brief]`
-  first holds it for the brief. What deserves the user's attention enters the attention queue,
-  from the receipt's [attention signal](#attention-signals-attention_signalgo) or else by the
-  prefix. Then its task stops. The brain is not told of its state; its
+- **Its last message** is what it may tell the user, weighed by its receipt's
+  [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
+  as everywhere; a skill's instructions write no prefix. No entry (or no receipt) tells nothing:
+  the run is `silent`, its message kept in its note. Otherwise its message is a notification, why
+  « Skill « name » », ref `skill:<name>`, its link-free rules when the task is tainted: `now` when
+  the heaviest entry weighs 4 or 5, `brief` below. Each entry with refs enters the attention queue
+  as it is; one without refs (or whose refs were all bad: a bad ref never silences a weight) is
+  about the message, the notification it became (`alert:<id>`). Entries about objects alone tell
+  the message only from 4: below, their items speak at the brief, not twice. The run's note lists
+  what was dropped.
+  Then its task stops. The brain is not told of its state and never woken by a run; its
   permissions are the user's, as any task's.
 - **One run open per skill and key**: the key's new events wait, and when its turn ends, its task
   gets them as a message instead of a second task.
@@ -1608,9 +1616,10 @@ version, read with its diff.
   approved again) waits for its next time; times missed while eriphe-core was down make one run.
 - **Its calls the user must approve never hold it** (`skill_cards.go`): as the brain's, each is
   kept with its exact input (`access_asks.run`), and the task is told it did not run and goes on.
-  When the run ends, they show on one card (kind `runcalls`), attached to its message (or to « the
-  skill proposes N actions » when it said `[rien]`, or when its message is held for the brief or
-  not sent, held by the attention queue for the next breakpoint): each action with its parameters. The yes runs
+  When the run ends, they show on one card (kind `runcalls`), attached to its message (sent now
+  even without an attention entry; « the skill proposes N actions » when it wrote none, or when
+  its message is held for the brief or not sent, held by the attention queue for the next
+  breakpoint): each action with its parameters. The yes runs
   them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
 - **A led thread**: with `can: [open-thread]`, the run is told it may end its last message with
   a fenced ` ```thread ` block holding `open_thread`'s JSON. eriphe-core opens it (`by`
@@ -1620,9 +1629,12 @@ version, read with its diff.
   without a branch: the plan waits for its card. While the thread is open, it is the run's: the
   events of its key go to its lead (`tellLead`), not to a new run. Merging and deploying stay the
   user's, on the thread's cards. Without `can`, the block is ignored and the note says why.
-- **Urgent**: with `urgent: <text>`, a last message that starts with `[urgent]` sends that fixed
-  text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the run
-  read enters it: a tainted run cannot write what wakes the user.
+- **Urgent**: with `urgent: <text>`, a run whose attention list weighs something 5 sends that
+  fixed text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the
+  run read enters it: a tainted run cannot write what wakes the user. Its own message goes as any
+  weight 5's, under the rules; without `urgent`, a weight 5 is only that.
+- **A thread block and a receipt** may both end the message: the block is taken out first, so its
+  closing fence does not hide the receipt.
 - **Limits**: 100 runs a skill in 24 hours (a run past it is kept `refused`), 50 events a run;
   a triggered task's own end never triggers a skill.
 - **Tables**: `skill_queue` (events waiting, by skill and key), `skill_runs` (skill, version, key,
@@ -1687,8 +1699,8 @@ what it can.
   their deadline and next task, wealth when a tool for it is linked, the threads and what waits
   for the user, without copying the surfaces their authors keep); live sources for what changes
   during the day, composed values for digests; `lifetime.until` the end of the day; with nothing
-  linked, one surface saying what it could show; it changes nothing outside the workspace and ends
-  with `[rien]`.
+  linked, one surface saying what it could show; it changes nothing outside the workspace and its
+  receipt has no attention entry: nothing is notified.
 
 ## Events
 
@@ -2698,8 +2710,9 @@ needs something of theirs: [asked at launch](#github-in-a-task)) is a card bound
 to that one proposal, under the brain's message of the turn that made it (or its last message of
 the turn), with Oui, Non (the proposal's own approve and reject) and Modifier (the composer is
 prefilled, and the brain proposes again). The event stream keeps cards up to date (`cards`:
-approved, declined, no longer current). Other proposals (the memory's extraction, a turn that
-said nothing) are queued and offered three at most, once an hour at most, when the user writes or
+approved, declined, no longer current). The memory's extraction makes no card: what it is not
+sure of waits in À valider and expires (see [Memory](#memory)). Other proposals (a skill's run, a
+turn that said nothing) are queued and offered three at most, once an hour at most, when the user writes or
 at the brief and the return point, never in the quiet hours, at night (22:00–07:00), when a
 source says do not disturb, in a Focus or while busy; the brain says it in a sentence and the
 cards come with its message. A card that stops a task is not one of these: if its turn wrote
@@ -2728,7 +2741,7 @@ follows. A proposal waiting to be offered (a memory, an intention, a rule…: a 
 intention) from the source `offer`, so the composer may show it; no breakpoint delivers it and the
 brain's turn does not list it: `offerCards` offers it in the conversation as before, and once under
 the brain's message its item is the card's as any other (weight 3, delivered). A
-notification held for the brief (a skill's `[brief]`, the quiet hours, the daily cap, a tainted
+notification held for the brief (a skill's message weighed 1 to 3, the quiet hours, the daily cap, a tainted
 turn, « pas maintenant ») enters it as `alert:<id>` with weight 2, the item a skill's message
 becomes too. Weight 4 and 5 are delivered as they enter: nothing a running task or thread
 waits on is ever delayed. The rest is held for a **breakpoint**, where an interruption costs the
@@ -3158,9 +3171,7 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   news.example.org », « montre-m'en moins » are [memories](#memory) of kind `preference` with
   subject `topic:workspace`, written as facts about the user. The brain remembers one from the user's
   words (`remember`; a workspace preference is never sent to `rule`, whatever its words); the
-  nightly extraction proposes one from the conversation (its prompt says how the user wants the
-  workspace is a preference worth keeping) or, inferred, from repeated gestures. A preference the
-  extraction writes waits for the user's approval, on a card, like any other. The composer's turn
+  nightly extraction never writes one, from the conversation or from gestures. The composer's turn
   reads the active, current ones (12 at most, the latest first) and the few other preferences
   the queue's titles and whys recall (`workspacePreferences`), and composes at once when one
   enters memory, changes or leaves it (`workspacePrefStamp`). A proposed preference is not read.
@@ -3176,10 +3187,8 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   10 minutes, every close, and every move or resize but one that goes on the one just before
   (the same tile, within a minute: the arrow keys); 30 days at most. A surface's title is core's, never
   the page's, and only when its author wrote it in a clean turn. Each gesture but `ignored`
-  makes the composer choose again (debounced), its turn listing the last ten; the extraction
-  reads a window's gestures as one segment of its transcript (`from="workspace"`, ref
-  `workspace:<id>`, trust external: the titles are the surfaces'); only a repeated pattern may
-  give an inferred preference. No counter, no score in code.
+  makes the composer choose again (debounced), its turn listing the last ten; the brain reads
+  them too (`workspace_read`). No counter, no score in code.
 - **The session's placement** (`workspace_gestures.go`). What the user closed is not shown again
   in the session: folded last in the chip strip, marked `closed`, whatever the composer chooses
   (its turn says so); opening its chip shows it again. What they moved or resized is pinned
@@ -3223,8 +3232,7 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   about a thing on stage.
 - **A message about what is open.** A message written on `/espace` while a surface is open
   carries it (`POST /messages` with `about` `surface:<id>`; kept as `about_msg:<seq>` when it names
-  a surface): the brain reads it as `[Sam 10:02 #12 · depuis l'espace · à propos de surface:…]`, the extraction as
-  `[written about surface:<id>, open on the workspace]`. « Montre-m'en moins », « lance une
+  a surface): the brain reads it as `[Sam 10:02 #12 · depuis l'espace · à propos de surface:…]`. « Montre-m'en moins », « lance une
   recherche là-dessus » are said in words.
 The display rules of #402 are gone: their table (`attention_rules`, dropped when an older
 database opens, with their `showrule` cards: `displayRulesGone`), their API, page and tool. So is
@@ -4494,7 +4502,7 @@ rules. A test forbids any other normaliser.
   (`project:site:prod`) is left as it is.
 - **Stored keys**: an older install's subjects are rewritten once at start: core.db's threads (of two
   live threads on one key, the latest keeps it), notifications and topic rules (kv
-  `subject_keys`), memory.db's memories and intentions (schema 5 → 6). A value that gives no key is
+  `subject_keys`), memory.db's memories and intentions (schema 5 → 6, then 6 → 7: see [Memory](#memory)). A value that gives no key is
   kept and logged.
 
 ## Memory
@@ -4507,9 +4515,11 @@ A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `less
 what is temporary; `occurred_at` for an episode; `state` for a progress card), where it
 comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`), a trust level (`owner`,
 `first_party`, `external`), and for what the extraction derived a `basis`: `stated` (said in so
-many words), `inferred` (deduced) or `ambiguous`, with a matching confidence (0.9, 0.7, 0.3). A
-change over time supersedes the old memory, which stays, dated; every change is in `memory_log`.
-Forgotten memories are purged after 30 days.
+many words), `inferred` (deduced) or `ambiguous`. A change over time supersedes the old memory,
+which stays, dated; every change is in `memory_log`. Forgotten memories are purged after 30 days.
+An episode is the day's journal (or a wake of the brain's, `topic:heartbeat`), never a task's: what
+a task did is its log and its thread's timeline. memory.db at schema 7 dropped the `embedding` and
+`confidence` columns, which nothing read, and forgot the tasks' episodes an older version wrote.
 
 **Durable state.** Raw history is kept for audit (the conversation, `memory_log`, the journal
 episodes); what the brain needs to act is compiled from it in facts, lessons, **decisions** (a
@@ -4530,7 +4540,7 @@ gone.
 **Tasks read it.** Every worker task has a memory server of its own, `eriphe-memory`, relayed by
 its node (`/v1/tasks/<id>/mcp/eriphe-memory`; the name is reserved in the catalog): `recall`,
 current facts only, allowed without a card. A triggered skill's run also has `remember` (fact,
-person, episode, decision, progress, situation; never the user's profile, preferences or
+person, decision, progress, situation; never an episode, the user's profile, preferences or
 lessons): `source_kind` `task`, `source_ref` `task:<id>`, first party when the task is clean,
 `external` and only proposed when it read someone else's content.
 
@@ -4587,9 +4597,11 @@ does not lift this. Only a delivery holding a user message starts a clean turn: 
 events only (a task's permission, its end) goes on with the current turn and its taint, since
 what the brain read is still in its context; so does a resumed brain session. Every write goes through a scanner: instructions to a model, invisible
 characters, credentials and links carrying tokens are refused; imperative wording not from the
-user is only proposed. Proposals wait in the workspace (À valider (a card in the conversation)).
+user is only proposed. Proposals wait in the workspace (À valider, and a card in the conversation
+but for the extraction's); undecided after 14 days, a proposed memory is forgotten and a proposed
+intention cancelled (the nightly run, `expireProposals`).
 
-**Reading back is reading too.** A memory of trust `external` (a task's journal episode, a
+**Reading back is reading too.** A memory of trust `external` (a skill run's fact read in a mail, a
 proposal from a mail the user approved) summarises what was read outside: a turn whose `recall`
 returns one is tainted (`memory.external`), like a turn that read the mail
 itself. The context pack and the wake packet, which nobody asked for, name such a memory (its id,
@@ -4610,14 +4622,24 @@ messages whenever it changed. Claude Code's own auto-memory is turned off for th
 
 **Extraction and journal.** Every night at `extract_at` (and once a busy day's conversation has
 been quiet `idle_minutes`), eriphe-core writes out the day's transcript (messages and finished
-tasks, each labelled with its trust) and starts a `memory` task (not listed, never the brain's)
+tasks, each labelled with its trust; a task that read someone else's content is left out, its log
+and its thread's timeline keep what it found, and a clean one is first party) and starts a `memory` task (not listed, never the brain's)
 with a cheap agent and the memories it may touch. Its JSON answer (ADD, SUPERSEDE, NOOP, each
 citing a `source_ref` of the transcript, with `keywords`, an `importance` 1–5, a `basis` and,
-for what is temporary, a `valid_to`) is checked and applied: episodes (the journal, one per
-conversation day and per finished task) and what is stated in the user's words are active; what
-comes from tasks or external content, what was only inferred or is ambiguous, and preferences, are
-proposed; it never writes a profile, and a lesson only from a task (its receipt), proposed. Each
-segment carries its date, against which the
+for what is temporary, a `valid_to`) is checked and applied. Its regime, kept for what serves the
+work:
+
+- **One episode a day**, the journal (subject `topic:journal`); an episode for a task is refused.
+- **Never a profile, a preference nor a lesson**: only the user's own words make one, through the
+  brain's `remember` during the conversation.
+- **What it is sure of is applied on trial**: stated, not drawn from external content, not worded
+  as an instruction. It is active at once and recorded in the [learning journal](#what-eriphe-learned)
+  (status `trial`, provenance `extraction`), which is its digest: the wake and the brief tell it,
+  « Ce qu'Eriphe a appris » lists it with « Annuler », `unlearn` undoes it.
+- **The rest is proposed, without a card** (inferred, ambiguous, external, flagged): it waits in
+  À valider (the learned page says how many) and is dropped after 14 days undecided.
+
+What is owed is an intention (INTEND), as above. Each segment carries its date, against which the
 agent resolves "demain" or "vendredi". One run per day and window; a failure is retried the next night. The same night
 run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable from the page).
 
@@ -4642,7 +4664,8 @@ marked in Settings → Tools (see the [one taint rule](#tool-catalog)).
 
 The learning journal (`learning.go`, table `learning_log` in `memory.db`) records every
 change to what steers Eriphe: a memory of kind `lesson`, `preference`, `decision` or `profile` (or
-pinned) made active, changed (superseded or edited in place) or forgotten, and every change of a
+pinned), and any memory but an episode the nightly extraction wrote on its own (a fact, a person, a
+progress card), made active, changed (superseded or edited in place) or forgotten, and every change of a
 skill's approved version (approved, replaced, deleted). A proposal is not learned until approved.
 Each entry says what it touched (`memory #N`, or the skill's name and versions), the action
 (`added`, `changed`, `removed`, `reverted`), a status (`trial`: in force, not confirmed;
@@ -4667,8 +4690,9 @@ newest first, by kind and status, each entry with its source, date, status, what
 from external content is named, not quoted) and `unlearn` (`id`, `reason`, `source_ref`). An
 undo needs the user's message; on a tainted turn it is only proposed, unless that message of the
 same turn asked for it (as for `remember`), and waits as a card (kind `unlearn`) or on the page.
-The wake packet and the brief (`briefLines`) carry what was learned since the last brief and not
-told yet, except what the user did by hand, for the brain to say in a sentence each; `since`
+The wake packet (`learnedBlock`) carries what was learned since the last brief and not
+told yet, except what the user did by hand, for the brain to say in a sentence each (what the
+extraction kept on its own, in one sentence for the lot); `since`
 lists the entries (kind `learned`), and so does the Journal.
 
 The statuses `trial` and `dormant`, the provenance `consolidation`, the risk class and the

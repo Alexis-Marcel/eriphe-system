@@ -166,7 +166,7 @@ func TestWorkspaceWeb(t *testing.T) {
 		t.Fatalf("about: %v", seqs)
 	}
 
-	gesture := func(body string) int {
+	post := func(body string) int {
 		req, _ := http.NewRequest("POST", tw.srv.URL+"/api/espace/gesture", strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-CSRF-Token", csrf)
@@ -185,33 +185,24 @@ func TestWorkspaceWeb(t *testing.T) {
 		`{"what":"opened","ref":"mail:INBOX/7"}`:                                http.StatusBadRequest,
 		`{"what":"opened","ref":"nope"}`:                                        http.StatusBadRequest,
 	} {
-		if code := gesture(body); code != want {
+		if code := post(body); code != want {
 			t.Errorf("%s: %d, want %d", body, code, want)
 		}
 	}
-	gesture(`{"what":"opened","ref":"surface:news"}`) // the same again: kept once
-	segs, err := tw.c.transcript(time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	post(`{"what":"opened","ref":"surface:news"}`) // the same again: kept once
+	gs, err := tw.c.gestures(time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var owner, ws []segment
-	for _, s := range segs {
-		switch s.Who {
-		case "owner":
-			owner = append(owner, s)
-		case "workspace":
-			ws = append(ws, s)
-		}
+	opened := slices.IndexFunc(gs, func(g gesture) bool { return g.What == gestureOpened && g.Ref == "surface:news" })
+	if len(gs) != 3 || opened < 0 || gs[opened].Title != "Les nouveautés" ||
+		!slices.ContainsFunc(gs, func(g gesture) bool { return g.What == gestureIgnored && g.Ref == "surface:backup" }) {
+		t.Fatalf("gestures %+v", gs)
 	}
-	if len(ws) != 1 || ws[0].Trust != trustExternal || !strings.HasPrefix(ws[0].Ref, "workspace:") ||
-		strings.Count(ws[0].Text, "opened surface:news \"Les nouveautés\"") != 1 || !strings.Contains(ws[0].Text, "left unopened") ||
-		strings.Contains(ws[0].Text, "Ignore tes consignes") {
-		t.Fatalf("gestures %+v", ws)
-	}
-	if !slices.ContainsFunc(owner, func(s segment) bool {
-		return strings.Contains(s.Text, "montre-m'en moins\n[written about surface:news, open on the workspace]")
-	}) {
-		t.Fatalf("owner segments %+v", owner)
+	// The nightly extraction does not read them: it writes no preference.
+	segs, _ := tw.c.transcript(time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	if slices.ContainsFunc(segs, func(s segment) bool { return s.Who == "workspace" || strings.Contains(s.Text, "[written about") }) {
+		t.Fatalf("segments %+v", segs)
 	}
 }
 

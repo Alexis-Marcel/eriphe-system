@@ -13,17 +13,16 @@ import (
 //
 //   - How the user wants it (what in front, what less, what never) is a
 //     preference memory with subject "workspace": the brain remembers it
-//     from the user's words, the nightly extraction proposes one from the
-//     conversation or from what the user did. The composer reads those
-//     preferences, and the user's other preferences that bear on the queue,
-//     with every snapshot (workspacePreferences), and composes again when
-//     one enters memory (workspacePrefStamp).
-//   - What the user does on it feeds memory, implicitly: a surface opened, a
-//     tile that left the grid unopened, a tile closed, moved or resized,
-//     a message written about it, are gestures (workspace_log) the
-//     extraction reads as one segment of the day's transcript. No counter
-//     and no score: the extraction infers, the user approves. What they do
-//     to the layout holds for their session (workspace_gestures.go).
+//     from the user's words (the nightly extraction never writes a
+//     preference). The composer reads those preferences, and the user's
+//     other preferences that bear on the queue, with every snapshot
+//     (workspacePreferences), and composes again when one enters memory
+//     (workspacePrefStamp).
+//   - What the user does on it: a surface opened, a tile that left the
+//     grid unopened, a tile closed, moved or resized, a message written
+//     about it, are gestures (workspace_log) the brain and the composer
+//     read. No counter and no score. What they do to the layout holds for
+//     their session (workspace_gestures.go).
 //   - A message written while a surface is open carries its ref
 //     (messageAbout): « montre-m'en moins » is said to Eriphe in words.
 
@@ -226,26 +225,6 @@ func (c *core) gestures(from, to time.Time) ([]gesture, error) {
 		out = append(out, g)
 	}
 	return out, rows.Err()
-}
-
-// gestureSegment is the gestures of a window as one segment of the
-// extraction's transcript: what the user did, not what they said. The
-// titles are the surfaces', as their authors wrote them: external.
-func gestureSegment(gs []gesture, user string) segment {
-	var b strings.Builder
-	fmt.Fprintf(&b, "What %s did on the composed workspace (gestures, not words; the titles are the surfaces', external):", user)
-	for _, g := range gs {
-		what := g.What
-		if k, ok := gestureKinds[g.What]; ok {
-			what = k.en
-		}
-		fmt.Fprintf(&b, "\n- %s %s %s", g.Time.Local().Format("15:04"), what, g.Ref)
-		if g.Title != "" {
-			fmt.Fprintf(&b, " %q", g.Title)
-		}
-	}
-	last := gs[len(gs)-1]
-	return segment{Ref: fmt.Sprintf("workspace:%d", last.ID), Time: last.Time, Who: "workspace", Trust: trustExternal, Text: b.String()}
 }
 
 // A message about what is open.

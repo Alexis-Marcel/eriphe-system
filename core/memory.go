@@ -100,9 +100,11 @@ const (
 	basisAmbiguous = "ambiguous"
 )
 
-// basisConfidence is the confidence a basis gives: discrete, as models
-// follow a rubric better than a continuous range.
-var basisConfidence = map[string]float64{basisStated: 0.9, basisInferred: 0.7, basisAmbiguous: 0.3}
+// basisKnown tells one of the three bases: discrete, as models follow a
+// rubric better than a continuous range.
+func basisKnown(b string) bool {
+	return b == basisStated || b == basisInferred || b == basisAmbiguous
+}
 
 // ownerKinds are written only from my own words.
 func ownerKind(kind string) bool {
@@ -158,7 +160,6 @@ type Memory struct {
 	Trust        string    `json:"trust"`
 	Status       string    `json:"status"`
 	Pinned       bool      `json:"pinned,omitempty"`
-	Confidence   float64   `json:"confidence"`
 	UseCount     int       `json:"use_count"`
 	LastUsedAt   time.Time `json:"last_used_at,omitzero"`
 	Flags        string    `json:"flags,omitempty"`      // what the scanner noticed
@@ -187,10 +188,11 @@ type memStore struct {
 }
 
 // memorySchemaVersion is the schema memory.db is at; meta.schema_version
-// says it. A new file is made at it; a file at 5 is brought to it (its
-// subjects keyed, subject_rewrite.go); a file at another is refused, never
-// changed.
-const memorySchemaVersion = 6
+// says it. A new file is made at it; a file at 5 is brought to 6 (its
+// subjects keyed, subject_rewrite.go), one at 6 to 7 (the columns nothing
+// read gone, the tasks' episodes forgotten); a file at another is refused,
+// never changed.
+const memorySchemaVersion = 7
 
 // memorySchema is memory.db's own tables; the intentions' and the
 // lessons' are with them (intentionsSchema, learningSchema).
@@ -203,10 +205,9 @@ const memorySchema = `CREATE TABLE memories (
 	  due_at INTEGER, state TEXT NOT NULL DEFAULT '',
 	  source_kind TEXT NOT NULL, source_ref TEXT NOT NULL DEFAULT '',
 	  trust TEXT NOT NULL, status TEXT NOT NULL,
-	  pinned INTEGER NOT NULL DEFAULT 0, confidence REAL NOT NULL DEFAULT 1,
+	  pinned INTEGER NOT NULL DEFAULT 0,
 	  use_count INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER,
 	  flags TEXT NOT NULL DEFAULT '', deleted_at INTEGER, updated_at INTEGER NOT NULL,
-	  embedding BLOB,
 	  keywords TEXT NOT NULL DEFAULT '',   -- the extraction's, for the full-text index
 	  importance INTEGER NOT NULL DEFAULT 3,
 	  stems TEXT NOT NULL DEFAULT '',      -- the French stems, a shadow column of the index (memoryStems)
@@ -275,7 +276,12 @@ func (m *memStore) migrate() error {
 	case memorySchemaVersion:
 		return nil
 	case 5:
-		return m.migrate5()
+		if err := m.migrate5(); err != nil {
+			return err
+		}
+		return m.migrate6()
+	case 6:
+		return m.migrate6()
 	case 0:
 	default:
 		return fmt.Errorf("memory.db is at schema %d, this eriphe-core reads %d", version, memorySchemaVersion)
@@ -312,10 +318,101 @@ func (m *memStore) migrate5() error {
 	if err := rekeyMemory(tx); err != nil {
 		return fmt.Errorf("memory.db subject keys: %w", err)
 	}
-	if _, err := tx.Exec(`UPDATE meta SET value = ? WHERE key = 'schema_version'`, fmt.Sprint(memorySchemaVersion)); err != nil {
+	if _, err := tx.Exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+// migrate6 brings a memory.db at schema 6 to 7: the embedding and
+// confidence columns, which nothing read, dropped; the episodes of tasks
+// forgotten (their log and their thread's timeline keep what they did),
+// purged with the other forgotten memories.
+func (m *memStore) migrate6() error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, col := range []string{"embedding", "confidence"} {
+		var n int
+		tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name = ?`, col).Scan(&n)
+		if n == 0 {
+			continue
+		}
+		if _, err := tx.Exec(`ALTER TABLE memories DROP COLUMN ` + col); err != nil {
+			return err
+		}
+	}
+	rows, err := tx.Query(`SELECT id FROM memories WHERE kind = 'episode' AND status != 'deleted'
+		AND subject != 'topic:journal' AND (source_kind = 'task' OR source_ref LIKE 'task:%')`)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		rows.Scan(&id)
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		if err := m.forgetTx(tx, id, "migration", "a task's episode: its log keeps what it did", ""); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// proposalExpiry is how long a proposed memory or intention waits for the
+// user: undecided after it, it is dropped (expireProposals).
+const proposalExpiry = 14 * 24 * time.Hour
+
+// expireProposals forgets the proposed memories and cancels the proposed
+// intentions nobody decided within proposalExpiry; their cards, if any,
+// then read as rejected. It returns how many.
+func (m *memStore) expireProposals() (int, error) {
+	cut := m.now().Add(-proposalExpiry).Unix()
+	const why = "undecided for 14 days"
+	ids := func(q string) ([]int64, error) {
+		rows, err := m.db.Query(q, cut)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var out []int64
+		for rows.Next() {
+			var id int64
+			rows.Scan(&id)
+			out = append(out, id)
+		}
+		return out, rows.Err()
+	}
+	mems, err := ids(`SELECT id FROM memories WHERE status = 'proposed' AND recorded_at < ?`)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, id := range mems {
+		if err := m.forget(id, "expiry", why); err != nil {
+			return n, err
+		}
+		n++
+	}
+	ints, err := ids(`SELECT id FROM intentions WHERE state = 'proposed' AND created_at < ?`)
+	if err != nil {
+		return n, err
+	}
+	for _, id := range ints {
+		if _, err := m.changeIntention(id, intentionChange{State: intentCancelled}, "expiry", why); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }
 
 func (m *memStore) schemaVersion() int {
@@ -350,7 +447,7 @@ func fromNull(n sql.NullInt64) time.Time {
 }
 
 const memColumns = `id, kind, subject, text, links, occurred_at, valid_from, valid_to, recorded_at, superseded_by, supersedes,
-	due_at, state, source_kind, source_ref, trust, status, pinned, confidence, use_count, last_used_at, flags, deleted_at, updated_at,
+	due_at, state, source_kind, source_ref, trust, status, pinned, use_count, last_used_at, flags, deleted_at, updated_at,
 	keywords, importance, basis`
 
 func scanMemory(sc interface{ Scan(...any) error }) (*Memory, error) {
@@ -359,7 +456,7 @@ func scanMemory(sc interface{ Scan(...any) error }) (*Memory, error) {
 	var occurred, validTo, superseded, supersedes, due, used, deleted sql.NullInt64
 	var from, recorded, updated int64
 	err := sc.Scan(&x.ID, &x.Kind, &x.Subject, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
-		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.Confidence, &x.UseCount, &used,
+		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.UseCount, &used,
 		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance, &x.Basis)
 	if err != nil {
 		return nil, err
@@ -478,14 +575,11 @@ func (m *memStore) normalize(x *Memory) error {
 	default:
 		x.State, x.DueAt = "", time.Time{}
 	}
-	if x.Basis != "" && basisConfidence[x.Basis] == 0 {
+	if x.Basis != "" && !basisKnown(x.Basis) {
 		return errors.New("basis is stated, inferred or ambiguous")
 	}
 	if x.Kind == kindProfile {
 		x.Pinned = true
-	}
-	if x.Confidence <= 0 || x.Confidence > 1 {
-		x.Confidence = 1
 	}
 	if x.Status == "" {
 		x.Status = memActive
@@ -537,10 +631,10 @@ func (m *memStore) insert(q querier, x *Memory, who string, except int64) error 
 		links = []byte("[]")
 	}
 	res, err := q.Exec(`INSERT INTO memories (kind, subject, text, links, occurred_at, valid_from, valid_to, recorded_at, supersedes,
-		due_at, state, source_kind, source_ref, trust, status, pinned, confidence, flags, updated_at, keywords, importance, stems, basis)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		due_at, state, source_kind, source_ref, trust, status, pinned, flags, updated_at, keywords, importance, stems, basis)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		x.Kind, x.Subject, x.Text, string(links), unixOrNil(x.OccurredAt), x.ValidFrom.Unix(), unixOrNil(x.ValidTo), now.Unix(),
-		nullID(x.Supersedes), unixOrNil(x.DueAt), x.State, x.SourceKind, x.SourceRef, x.Trust, x.Status, x.Pinned, x.Confidence,
+		nullID(x.Supersedes), unixOrNil(x.DueAt), x.State, x.SourceKind, x.SourceRef, x.Trust, x.Status, x.Pinned,
 		x.Flags, now.Unix(), x.Keywords, x.Importance, memoryStems(x.Text, x.Subject, x.Keywords), x.Basis)
 	if err != nil {
 		return err
@@ -1181,7 +1275,7 @@ func scanMemoryWith(rows *sql.Rows, extra ...any) (*Memory, error) {
 	var occurred, validTo, superseded, supersedes, due, used, deleted sql.NullInt64
 	var from, recorded, updated int64
 	dest := []any{&x.ID, &x.Kind, &x.Subject, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
-		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.Confidence, &x.UseCount, &used,
+		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.UseCount, &used,
 		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance, &x.Basis}
 	if err := rows.Scan(append(dest, extra...)...); err != nil {
 		return nil, err

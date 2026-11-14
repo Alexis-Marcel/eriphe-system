@@ -18,8 +18,10 @@ import (
 // injection read in a mail or a page must not become something Eriphe
 // believes. The rules:
 //
-//   - external content and tasks only propose (status proposed), never a
-//     profile or a lesson; I approve them in the workspace;
+//   - external content, and a task that read it, only propose (status
+//     proposed), never a profile, a preference or a lesson; I approve them
+//     in the workspace, or they expire undecided; the nightly extraction
+//     leaves such a task out altogether;
 //   - a brain turn that called an external catalog tool is tainted: what it
 //     remembers is only proposed, unless my own message of that turn asked
 //     for it; nor may it lend a task tools that act (taintedResources);
@@ -513,35 +515,33 @@ func (c *core) askedThisTurn(msg *Message) bool {
 }
 
 // extractionDecision applies the rules to an extraction's operation: what
-// it read decides its trust, and only an episode or something stated in my
-// own words can be active at once; what the extraction deduced (basis
-// inferred or ambiguous) is proposed.
+// it read decides its trust. It never writes the profile, a preference nor
+// a lesson: only the user's own words make one, through the brain. What it
+// is sure of (stated, not read outside, not worded as an instruction) is
+// active at once, on trial in the learning journal, which undoes it; the
+// journal episode too, its trust telling what it is made of. The rest is
+// proposed, without a card, and expires undecided (expireProposals).
 func extractionDecision(kind string, refTrust string, scan scanResult, basis string) (writeDecision, error) {
 	d := writeDecision{Status: memProposed, Trust: refTrust, Source: srcExtraction}
 	if scan.Reject != "" {
 		return d, fmt.Errorf("refused: %s", scan.Reject)
 	}
-	if kind == kindProfile || kind == kindLesson && refTrust != trustExternal {
-		return d, fmt.Errorf("an extraction cannot write a %s", kind)
-	}
-	if kind == kindLesson {
-		// A task's lesson (its receipt): only ever proposed, for the user to endorse.
-		d.Why = "a lesson drawn from a task waits for the user's approval"
-		return d, nil
+	if ownerKind(kind) {
+		return d, fmt.Errorf("an extraction cannot write a %s: only the user's own words make one", kind)
 	}
 	switch {
 	case containsStr(scan.Flags, "imperative") && refTrust != trustOwner:
 		d.Why = "it reads like an instruction"
-	case kind == kindPreference:
-		d.Why = "a preference waits for the user's approval"
 	case kind == kindEpisode:
 		d.Status = memActive // the journal: its trust tells what it is made of
 	case basis == basisInferred || basis == basisAmbiguous:
 		d.Why = "it is " + basis + ", not said in so many words"
+	case refTrust == trustExternal:
+		d.Why = "taken from an external content"
 	case refTrust == trustOwner:
 		d.Status, d.Trust = memActive, trustFirstParty
-	default:
-		d.Why = "taken from a task or an external content"
+	default: // the brain's words in a clean turn, a clean task's
+		d.Status = memActive
 	}
 	return d, nil
 }

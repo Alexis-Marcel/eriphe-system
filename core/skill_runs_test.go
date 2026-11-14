@@ -161,7 +161,9 @@ func TestSkillRunJoinsAndTells(t *testing.T) {
 	}
 	// Its next turn ends with a message: told, and the task stops.
 	c.store.ackInbox(id, 1<<30)
-	c.store.addEvents(id, []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "GetOut renvoie des 5xx depuis 14h02, j'enquête."}}})
+	c.store.addEvents(id, []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "GetOut renvoie des 5xx depuis 14h02, j'enquête.\n```json\n" +
+		`{"receipt": {"status": "done", "attention": [{"weight": 4, "why": "des 5xx"}]}}` + "\n```"}},
+		{Seq: 2, Time: time.Now(), Type: "turn_end"}})
 	c.store.updateTask(id, map[string]any{"state": stateIdle})
 	c.skillTaskChanged(id, stateIdle, turnOutcome{})
 	r := c.runOfTask(id)
@@ -177,9 +179,9 @@ func TestSkillRunJoinsAndTells(t *testing.T) {
 	}
 }
 
-// A skill's message goes to the attention queue: without an attention
-// block, as the notification it became, weighed by its prefix ([urgent]
-// 5, plain 4, [brief] 3, [rien] nothing); with a block, the block wins.
+// A skill run reports what it says with its receipt's attention list:
+// weight 1 to 5, no entry tells nothing; an entry without refs is about
+// its message, the notification it became.
 func TestSkillRunAttention(t *testing.T) {
 	c, now := skillCore(t)
 	addTriggered(t, c, "---\nname: veille\ndescription: la veille\nwhen: monitor.new\n---\nRegarde.\n")
@@ -210,37 +212,88 @@ func TestSkillRunAttention(t *testing.T) {
 		}
 		return attentionOf(c, fmt.Sprintf("alert:%d", ns[0].ID))
 	}
-	for key, want := range map[string]int{"[urgent] Prod down, key a.": 5, "Prod slow, key b.": 4, "[brief] Prod fine, key c.": 3} {
-		k := strings.TrimSuffix(key[strings.LastIndex(key, "key ")+4:], ".")
-		it := alertOf(end(k, key))
-		if it == nil || it.Weight != want || it.Source != "skill:veille" || !strings.Contains(it.Why, "Prod") {
-			t.Errorf("%q: item %+v, want weight %d", key, it, want)
+	levelOf := func(r *skillRun) string {
+		t.Helper()
+		ns, _ := c.notificationsWhere(`source = ? AND text LIKE ?`, notifyFromSkill, "%"+r.Key+"%")
+		if len(ns) != 1 {
+			return ""
+		}
+		return ns[0].Level
+	}
+	rcpt := func(attention string) string {
+		return "\n```json\n" + `{"receipt": {"status": "done", "attention": ` + attention + `}}` + "\n```"
+	}
+	// An entry without refs is about the message: its notification, now
+	// from weight 4, for the brief below.
+	for key, w := range map[string]int{"k-a": 5, "k-b": 4, "k-c": 3, "k-g": 1} {
+		r := end(key, fmt.Sprintf("Prod, key %s.", key)+rcpt(fmt.Sprintf(`[{"weight": %d, "why": "la prod"}]`, w)))
+		it := alertOf(r)
+		if it == nil || it.Weight != max(w, weightHeldNote) || it.Source != "skill:veille" || it.Why != "la prod" || !strings.Contains(it.Say, "Prod") {
+			t.Errorf("weight %d: item %+v", w, it)
+		}
+		want := levelNow
+		if w < weightBlocksATask {
+			want = levelBrief
+		}
+		if got := levelOf(r); got != want {
+			t.Errorf("weight %d: level %q, want %q", w, got, want)
 		}
 	}
+	// No entry, with or without a receipt: nothing told, nothing queued,
+	// the run silent with its message in its note; the brain not woken.
 	before := len(c.attentionOpen())
-	if end("d", "[rien]"); len(c.attentionOpen()) != before {
-		t.Errorf("[rien] went to the queue: %+v", c.attentionOpen())
+	for _, key := range []string{"k-d", "k-h"} {
+		text := "Rien à signaler, key " + key + "."
+		if key == "k-h" {
+			text += rcpt(`[]`)
+		}
+		r := end(key, text)
+		if levelOf(r) != "" || len(c.attentionOpen()) != before {
+			t.Errorf("%s: told without an attention entry: %+v", key, c.attentionOpen())
+		}
+		if r = c.runByID(r.ID); r.State != skillRunSilent || !strings.Contains(r.Note, "Rien à signaler") {
+			t.Errorf("%s: run %+v", key, r)
+		}
 	}
-	// A block wins over the prefix: its refs, its weights; no alert item.
-	r := end("e", "[urgent] Une facture, key e.\n```json\n"+`{"receipt": {"status": "done", "attention": [`+
-		`{"refs": ["mail:42"], "weight": 2, "why": "une facture à payer"}, {"refs": ["bogus:1"], "weight": 3, "why": "x"}]}}`+"\n```")
+	if msgs, _ := c.store.undelivered(); len(msgs) != 0 {
+		t.Errorf("a run woke the brain: %+v", msgs)
+	}
+	// Entries with refs go to the queue as they are; below 4 they speak
+	// alone, the message not told twice at the brief.
+	r := end("k-e", "Une facture, key k-e."+rcpt(`[{"refs": ["mail:42"], "weight": 2, "why": "une facture à payer"}]`))
 	if it := attentionOf(c, "mail:42"); it == nil || it.Weight != 2 || it.Source != "skill:veille" || it.Why != "une facture à payer" {
 		t.Errorf("block item %+v", it)
 	}
-	if it := alertOf(r); it != nil {
-		t.Errorf("the prefix went to the queue with a block: %+v", it)
+	if levelOf(r) != "" {
+		t.Errorf("the message was told besides its item: %q", levelOf(r))
+	}
+	if r = c.runByID(r.ID); r.State != skillRunDone {
+		t.Errorf("run %+v", r)
+	}
+	// From 4, the message is told too, now; the queue's item is the mail.
+	r = end("k-j", "Une facture en retard, key k-j."+rcpt(`[{"refs": ["mail:43"], "weight": 4, "why": "une facture en retard"}]`))
+	if it := attentionOf(c, "mail:43"); it == nil || it.Weight != 4 || levelOf(r) != levelNow || alertOf(r) != nil {
+		t.Errorf("weight 4 with refs: item %+v, level %q, alert %+v", it, levelOf(r), alertOf(r))
+	}
+	// A bad ref never silences a weight: the entry is about the message,
+	// and the run's note says what was dropped.
+	r = end("k-i", "Prod down, key k-i."+rcpt(`[{"refs": ["bogus:1"], "weight": 5, "why": "la prod"}]`))
+	if it := alertOf(r); it == nil || it.Weight != 5 || levelOf(r) != levelNow {
+		t.Errorf("bad ref: item %+v, level %q", it, levelOf(r))
 	}
 	if attentionOf(c, "bogus:1") != nil {
 		t.Error("a bad ref was kept")
 	}
-	// A silent run with a block: nothing told, the block in the queue.
-	end("f", "[rien]\n```json\n"+`{"receipt": {"status": "done", "attention": {"refs": ["agenda:2026-11-13"], "weight": 1, "why": "une journée calme"}}}`+"\n```")
-	if it := attentionOf(c, "agenda:2026-11-13"); it == nil || it.Weight != 1 {
-		t.Errorf("silent block item %+v", it)
+	if r = c.runByID(r.ID); !strings.Contains(r.Note, "bogus") {
+		t.Errorf("note %q", r.Note)
+	}
+	// Prefixes mean nothing now: an old [urgent] without an entry is silent.
+	if r = end("k-f", "[urgent] Prod down, key k-f."); levelOf(r) != "" {
+		t.Error("a prefix told the user")
 	}
 }
 
-// [rien] tells nothing; a time trigger waits for its next time, then runs
+// No attention entry tells nothing; a time trigger waits for its next time, then runs
 // once for the times missed; a run's own end triggers nothing.
 func TestSkillRunSilentAndTime(t *testing.T) {
 	c, now := skillCore(t)
@@ -261,7 +314,7 @@ func TestSkillRunSilentAndTime(t *testing.T) {
 	if !strings.Contains(task.Prompt, "horaire") {
 		t.Fatalf("prompt %s", task.Prompt)
 	}
-	c.store.addEvents(task.ID, []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "[rien]"}}})
+	c.store.addEvents(task.ID, []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Rien à dire."}}})
 	c.store.updateTask(task.ID, map[string]any{"state": stateIdle})
 	c.skillTaskChanged(task.ID, stateIdle, turnOutcome{})
 	if r := c.runOfTask(task.ID); r.State != skillRunSilent {

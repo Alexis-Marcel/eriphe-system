@@ -47,7 +47,8 @@ func TestParseReceipt(t *testing.T) {
 }
 
 // A receipt's attention block: its good refs and weights kept, the rest
-// dropped with why; a receipt without one has none.
+// dropped with why (an entry with no good ref left is about the message);
+// a receipt without one has none.
 func TestReceiptAttention(t *testing.T) {
 	text := "Une facture.\n```json\n" + `{"receipt": {"status": "done", "attention": [` +
 		`{"refs": ["mail:42", "agenda:2026-11-12", "shop:1", "mail:"], "weight": 4, "why": "` + strings.Repeat("é", 100) + `", "say": "Ta facture est due."},` +
@@ -60,7 +61,7 @@ func TestReceiptAttention(t *testing.T) {
 	if !ok {
 		t.Fatal("no receipt")
 	}
-	if len(r.Attention) != 2 {
+	if len(r.Attention) != 3 || len(r.Attention[2].Refs) != 0 || r.Attention[2].Weight != 3 {
 		t.Fatalf("attention %+v", r.Attention)
 	}
 	a, b := r.Attention[0], r.Attention[1]
@@ -283,7 +284,7 @@ func TestTranscriptReadsReceipt(t *testing.T) {
 	if err != nil || len(segs) != 1 {
 		t.Fatalf("segments %+v %v", segs, err)
 	}
-	for _, want := range []string{"Its receipt (task output, external): status done", "decisions: kept the old field",
+	for _, want := range []string{"Its receipt: status done", "decisions: kept the old field",
 		"lessons it proposes: run the linter first", "claimed, not checked: tests pass | the page loads"} {
 		if !strings.Contains(segs[0].Text, want) {
 			t.Errorf("segment lacks %q: %s", want, segs[0].Text)

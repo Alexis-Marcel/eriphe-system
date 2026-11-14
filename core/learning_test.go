@@ -304,7 +304,7 @@ func TestUnlearnTaint(t *testing.T) {
 	if len(views) != 5 || views[0].Text != "" || !views[0].External || views[0].What == "" {
 		t.Fatalf("learned: %+v", views)
 	}
-	if _, err := c.brainLearned(learnedIn{Kinds: []string{"fact"}}); err == nil {
+	if _, err := c.brainLearned(learnedIn{Kinds: []string{"episode"}}); err == nil {
 		t.Fatal("a kind that is never learned")
 	}
 }

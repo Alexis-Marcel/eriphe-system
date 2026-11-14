@@ -5,6 +5,7 @@
 <div class="activity learned" id="learned">
   <header class="page-head"><h2>{{t "learned.title"}}</h2><p>{{t "learned.lead"}}</p></header>
   {{if .Off}}<p class="alert" role="alert">{{t "learned.off"}}</p>{{else}}
+  {{if .Waiting}}<p class="muted small"><a href="/settings/approve">{{tf "learned.waiting" .Waiting}}</a></p>{{end}}
   <nav class="pill-tabs" aria-label="{{t "learned.kinds"}}">
     <a href="/settings/learned{{if .Status}}?status={{.Status}}{{end}}" {{if not .Kind}}aria-current="true"{{end}}>{{t "happened.kind.all"}}</a>
     {{range .Kinds}}<a href="/settings/learned?kind={{.}}{{if $.Data.Status}}&amp;status={{$.Data.Status}}{{end}}" {{if eq . $.Data.Kind}}aria-current="true"{{end}}>{{t (printf "learned.kind.%s" .)}}</a>{{end}}

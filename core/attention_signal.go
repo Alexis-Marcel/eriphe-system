@@ -41,7 +41,8 @@ const attentionInstruction = "When something deserves the user's attention, add 
 	`"attention": [{"refs": ["mail:<id>"], "weight": 3, "why": "at most 80 characters, in the user's language", "say": "optional: what Eriphe could tell the user, one sentence in the user's language"}]` + ". " +
 	"refs name the objects it is about, each in one of these forms: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, thread:<id>, card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
-	"Leave it out when nothing does. A ref of another form, or a weight outside 1 to 5, is dropped."
+	"Leave refs out when the entry is about your final message itself. " +
+	"Leave the list out when nothing deserves it: the user is then told nothing. A ref of another form, or a weight outside 1 to 5, is dropped."
 
 // The kinds of records an attention item may be about: kind:id. It may be
 // about a subject too (subject.go): mail:<message id>, event:<event id>,
@@ -110,8 +111,9 @@ func validAttentionRef(ref string) bool {
 }
 
 // decodeSignals reads a receipt's "attention": a list of blocks, or one
-// block alone; refs given as one string are one ref. What does not read
-// is dropped, with why.
+// block alone; refs given as one string are one ref. An entry without refs
+// is about the message the receipt ends (a skill's run: its notification,
+// skill_runs.go): kept with none. What does not read is dropped, with why.
 func decodeSignals(raw json.RawMessage) ([]attentionSignal, []string) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, nil
@@ -129,7 +131,9 @@ func decodeSignals(raw json.RawMessage) ([]attentionSignal, []string) {
 			continue
 		}
 		var s attentionSignal
-		if json.Unmarshal(m["refs"], &s.Refs) != nil {
+		if refs := m["refs"]; len(refs) == 0 || string(refs) == "null" {
+			// none: about the message itself
+		} else if json.Unmarshal(refs, &s.Refs) != nil {
 			var one string
 			json.Unmarshal(m["refs"], &one)
 			s.Refs = []string{one}
@@ -143,14 +147,15 @@ func decodeSignals(raw json.RawMessage) ([]attentionSignal, []string) {
 		json.Unmarshal(m["say"], &s.Say)
 		out = append(out, s)
 	}
-	kept, bad := cleanSignals(out)
+	kept, bad := cleanSignals(out, true)
 	return kept, append(dropped, bad...)
 }
 
 // cleanSignals keeps the signals of a good form, trimmed: refs of a known
 // form, a weight from 1 to 5, a why cut to its length. A signal with no
-// good ref left is dropped.
-func cleanSignals(in []attentionSignal) ([]attentionSignal, []string) {
+// good ref left is kept with none when own (it is about the message that
+// carries it: a bad ref never silences a weight), else dropped.
+func cleanSignals(in []attentionSignal, own bool) ([]attentionSignal, []string) {
 	var out []attentionSignal
 	var dropped []string
 	for _, s := range in {
@@ -168,7 +173,7 @@ func cleanSignals(in []attentionSignal) ([]attentionSignal, []string) {
 				refs = append(refs, r)
 			}
 		}
-		if len(refs) == 0 {
+		if len(refs) == 0 && !own {
 			if len(s.Refs) == 0 {
 				dropped = append(dropped, "a signal without refs")
 			}
@@ -186,7 +191,8 @@ func cleanSignals(in []attentionSignal) ([]attentionSignal, []string) {
 
 // attendSignals puts each ref of the signals in the attention queue, from
 // source (skill:<name>, assistant:<name>); tainted when who wrote them
-// read external content. The dropped are logged.
+// read external content. The dropped are logged. A signal without refs
+// makes no item here: its caller knows what it is about.
 func (c *core) attendSignals(signals []attentionSignal, dropped []string, source string, tainted bool) int {
 	for _, d := range dropped {
 		log.Printf("attention: %s: dropped %s", source, d)

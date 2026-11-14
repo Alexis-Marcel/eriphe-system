@@ -178,4 +178,25 @@ func TestLeadReportAttention(t *testing.T) {
 	if !strings.Contains(lastEvent(t, c), "choix de Sam") {
 		t.Errorf("the brain did not get the report: %q", lastEvent(t, c))
 	}
+	// Without an attention item (none, or none kept), the report is kept
+	// as read: it costs the brain no turn.
+	c.store.markDelivered(c.store.lastMessageSeq())
+	for _, args := range []map[string]any{
+		{"text": "L'étape de test est acceptée."},
+		{"text": "Rien de neuf.", "attention": []map[string]any{{"refs": []string{"shop:1"}, "weight": 3, "why": "x"}}},
+	} {
+		res, err := sess.CallTool(ctx, &mcp.CallToolParams{Name: "report", Arguments: args})
+		if err != nil || res.IsError {
+			t.Fatalf("report: %v %+v", err, res)
+		}
+		if raw, _ := json.Marshal(res.StructuredContent); !strings.Contains(string(raw), "without waking") {
+			t.Errorf("the lead is not told the brain was not woken: %s", raw)
+		}
+	}
+	if msgs, _ := c.store.undelivered(); len(msgs) != 0 {
+		t.Errorf("a report without attention woke the brain: %+v", msgs)
+	}
+	if ms, _ := c.store.messagesAfter(0, 1000); !strings.Contains(ms[len(ms)-1].Text, "Rien de neuf") {
+		t.Errorf("the report was not kept: %+v", ms[len(ms)-1])
+	}
 }

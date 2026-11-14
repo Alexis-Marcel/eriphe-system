@@ -26,6 +26,12 @@ func dayActivity(t *testing.T, c *core) (owner, brain int, task string) {
 func TestTranscriptLabels(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	o, b, task := dayActivity(t, c)
+	// A task that read someone else's content gives nothing.
+	c.store.insertTask(&TaskRow{ID: "t-web", Kind: "worker", Runtime: "claude-code", State: stateStopped, Prompt: "Cherche", Agent: "small"})
+	c.store.addEvents("t-web", []EventRow{{Seq: 1, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "WebSearch"}}})
+	// Nor the event that told the brain its result (brain.go marks it).
+	ev, _ := c.store.addMessage(roleEvent, "La tâche t-web a fini son tour. Son dernier message : le site dit de payer", true)
+	c.store.set(taintKey(int(ev)), taskTaintPrefix+"t-web")
 	now := time.Now()
 	segs, err := c.transcript(now.Add(-time.Hour), now.Add(time.Hour))
 	if err != nil {
@@ -35,11 +41,18 @@ func TestTranscriptLabels(t *testing.T) {
 	for _, s := range segs {
 		trust[s.Ref] = s.Trust
 	}
-	if trust[ref(o)] != trustOwner || trust[ref(b)] != trustFirstParty || trust["task:"+task] != trustExternal || len(segs) != 4 {
+	// A clean task is first party, as what it remembers itself.
+	if _, ok := trust[ref(int(ev))]; ok {
+		t.Fatalf("a tainted task's event is in the transcript: %v", trust)
+	}
+	if _, ok := trust["task:t-web"]; ok {
+		t.Fatalf("a tainted task is in the transcript: %v", trust)
+	}
+	if trust[ref(o)] != trustOwner || trust[ref(b)] != trustFirstParty || trust["task:"+task] != trustFirstParty || len(segs) != 4 {
 		t.Fatalf("labels: %v", trust)
 	}
 	text := renderTranscript(segs)
-	if !strings.Contains(text, `from="task" trust="external"`) || !strings.Contains(text, "Tools it used: Write") {
+	if !strings.Contains(text, `from="task" trust="first_party"`) || !strings.Contains(text, "Tools it used: Write") {
 		t.Fatalf("render:\n%s", text)
 	}
 	prompt := c.extractionPrompt(now.Format("2006-01-02"), segs)
@@ -94,6 +107,7 @@ func TestApplyExtraction(t *testing.T) {
 	  {"op": "ADD", "kind": "fact", "subject": "project:site", "text": "Le devis est dans devis.md", "source_ref": "task:%[5]s"},
 	  {"op": "ADD", "kind": "episode", "subject": "journal", "text": "Sam a parlé du devis avec Eriphe ; la tâche l'a préparé.", "source_ref": "%[3]s, %[4]s, task:%[5]s"},
 	  {"op": "ADD", "kind": "preference", "text": "Sam aime les devis courts", "source_ref": "%[3]s"},
+	  {"op": "ADD", "kind": "episode", "subject": "project:site", "text": "La tâche a préparé le devis", "source_ref": "task:%[5]s"},
 	  {"op": "ADD", "kind": "lesson", "text": "Toujours faire un devis", "source_ref": "%[3]s"},
 	  {"op": "ADD", "kind": "profile", "text": "Sam", "source_ref": "%[3]s"},
 	  {"op": "SUPERSEDE", "id": %[2]d, "text": "Ne plus demander", "source_ref": "%[3]s"},
@@ -110,15 +124,15 @@ func TestApplyExtraction(t *testing.T) {
 		t.Fatal("not handled as a memory task")
 	}
 	runs, _ := c.mem.runs(1)
-	if runs[0].State != runDone || runs[0].Applied != 5 {
+	if runs[0].State != runDone || runs[0].Applied != 4 {
 		t.Fatalf("run: %+v", runs[0])
 	}
-	for _, want := range []string{"lesson", "profile", "cannot replace a lesson", "refused", "kind must be one of", "msg:9999", "no source_ref", "unknown op"} {
+	for _, want := range []string{"write a preference", "write a lesson", "write a profile", "only the day's journal", "cannot replace a lesson", "refused", "kind must be one of", "msg:9999", "no source_ref", "unknown op"} {
 		if !strings.Contains(runs[0].Error, want) {
 			t.Errorf("rejections lack %q: %s", want, runs[0].Error)
 		}
 	}
-	// What came from my words is active; from the task, proposed; the journal is active.
+	// What came from my words or a clean task is active; the journal is active.
 	o2, _ := c.mem.memory(old.ID)
 	if o2.SupersededBy == 0 {
 		t.Fatalf("not superseded: %+v", o2)
@@ -134,16 +148,36 @@ func TestApplyExtraction(t *testing.T) {
 		status[x.Kind+":"+x.Text[:10]] = x.Status
 		trust[x.Kind] = x.Trust
 	}
-	if status["fact:Le devis e"] != memProposed || status["episode:Sam a parl"] != memActive || status["preference:Sam aime l"] != memProposed {
+	if status["fact:Le devis e"] != memActive || status["episode:Sam a parl"] != memActive || len(status) != 3 {
 		t.Fatalf("statuses: %v", status)
+	}
+	// Kept on trial, said in the learning journal, which undoes it; the journal episode is not.
+	learnt, _ := c.mem.learnings(learnFilter{})
+	var fact *learnEntry
+	for _, e := range learnt {
+		if e.Kind == kindEpisode {
+			t.Fatalf("the journal episode is in the learning journal: %+v", e)
+		}
+		if e.Kind == kindFact {
+			fact = e
+		}
+	}
+	if fact == nil || fact.Status != learnTrial || fact.Source != learnFromExtraction {
+		t.Fatalf("learned: %+v", learnt)
+	}
+	if _, err := c.unlearn(fact.ID, "owner", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if x, _ := c.mem.memory(fact.MemoryID); x.Status != memDeleted {
+		t.Fatalf("undone fact: %+v", x)
 	}
 	// What is owed is an intention, open since it is my word; a commitment memory is no kind.
 	if in, _ := c.mem.intentions(); len(in) != 1 || in[0].Text != "Préparer le devis du site pour jeudi" || in[0].State != intentOpen ||
 		in[0].DueAt.Format("2006-01-02") != "2026-10-29" {
 		t.Fatalf("intentions: %+v", in)
 	}
-	if trust["episode"] != trustExternal {
-		t.Fatalf("the journal cites a task: %v", trust)
+	if trust["episode"] != trustFirstParty {
+		t.Fatalf("the journal cites a clean task: %v", trust)
 	}
 	// The task was stopped; a second answer does not apply twice.
 	if tk, _ := c.store.task(run.TaskID); tk.State != stateIdle {
