@@ -84,8 +84,6 @@ func TestContextPackState(t *testing.T) {
 	clock.add(2 * 24 * time.Hour)
 	mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: "project:site", Text: "Héberger le site sur le NAS"})
 	clock.add(13 * 24 * time.Hour) // the first is 15 days old, the second 13
-	mustAdd(t, c.mem, &Memory{Kind: kindProgress, Subject: "project:site", State: progressBlocked, Text: "Le site attend son certificat"})
-	mustAdd(t, c.mem, &Memory{Kind: kindProgress, Subject: "project:old", State: progressDone, Text: "Projet fini"})
 	mustAdd(t, c.mem, &Memory{Kind: kindPerson, Subject: "person:sam", Text: "Sam relit les PR du site"})
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: "project:site", Text: "Le domaine est example.org"})
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: "project:other", Text: "Un fait sans rapport"})
@@ -122,7 +120,6 @@ func TestContextPackState(t *testing.T) {
 		"étapes ouvertes : cert « Obtenir le certificat » (task, waiting)", "résumé : Il reste le certificat",
 		"résumé non cité", fmt.Sprintf("- fil %d [light, open] : son plan peut porter", tainted.ID),
 		fmt.Sprintf("- fil %d [led, proposed", led.ID), "carte thread:",
-		"Le site attend son certificat", "blocked",
 		"Héberger le site sur le NAS",
 		"Sam relit les PR du site", "Le domaine est example.org", "fact tiré d'un contenu extérieur",
 		"Relancer Sam", "Paul est le voisin",
@@ -149,11 +146,11 @@ func TestContextPackState(t *testing.T) {
 		got[x.Name] = x
 	}
 	// Each open thread follows a subject: its card, the site's holding its
-	// decisions, progress and facts, which are not said again.
+	// decisions and facts, which are not said again.
 	if x := got["cards"]; x.Lines != 4 || x.Shown != 4 || x.Chars == 0 || len(st.Cards) != 4 {
 		t.Errorf("cards: %+v", x)
 	}
-	if got["threads"].Lines != 0 || got["decisions"].Shown != 0 || got["progress"].Shown != 0 || got["related"].Shown != 2 || got["messages"].Shown != 1 {
+	if got["threads"].Lines != 0 || got["decisions"].Shown != 0 || got["progress"].Lines != 0 || got["related"].Shown != 2 || got["messages"].Shown != 1 {
 		t.Errorf("sections: %+v", st.Sections)
 	}
 	if strings.Count(pack, "Héberger le site sur le NAS") != 1 || strings.Count(pack, "Le domaine est example.org") != 1 {
@@ -175,12 +172,13 @@ func TestContextPackState(t *testing.T) {
 func TestContextPackStateBudget(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	for i := range 40 {
-		if _, err := c.openThread(threadIn{Title: fmt.Sprintf("Fil %02d", i), Goal: strings.Repeat("un long but ", 80),
-			Subject: fmt.Sprintf("project:p%d", i)}, nil, byBrain); err != nil {
+		th, err := c.openThread(threadIn{Title: fmt.Sprintf("Fil %02d", i), Goal: strings.Repeat("un long but ", 40),
+			Subject: fmt.Sprintf("project:p%d", i)}, nil, byBrain)
+		if err != nil {
 			t.Fatal(err)
 		}
+		c.setThread(th.ID, map[string]any{"summary": strings.Repeat("un état ", 30)})
 		mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("une décision ", 20)})
-		mustAdd(t, c.mem, &Memory{Kind: kindProgress, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("un état ", 30)})
 		mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("un fait ", 30)})
 	}
 	if _, err := c.openThread(threadIn{Title: "Fil sans sujet", Goal: "Un but."}, nil, byBrain); err != nil {

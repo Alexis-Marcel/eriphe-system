@@ -86,6 +86,9 @@ func main() {
 	if err := c.fillSubjects(); err != nil {
 		log.Printf("subjects: %v", err)
 	}
+	if err := c.progressToThreads(); err != nil { // thread_progress.go
+		log.Printf("progress: %v", err)
+	}
 	if err := c.reconcileServices(); err != nil {
 		log.Fatalf("services: %v", err)
 	}

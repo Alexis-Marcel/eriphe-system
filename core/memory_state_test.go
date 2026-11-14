@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Decisions and progress cards, and what the extraction now gives besides
+// Decisions and progress, and what the extraction now gives besides
 // the text: keywords, importance, basis and a planned end.
 func TestExtractionDurableState(t *testing.T) {
 	c, _ := testMemoryCore(t)
@@ -31,26 +31,26 @@ func TestExtractionDurableState(t *testing.T) {
 	if len(d) != 1 || d[0].Importance != 4 || d[0].Basis != basisStated {
 		t.Fatalf("decision: %+v", d)
 	}
-	// A progress card, then its next state: one card, the old one dated.
+	// A progress is its subject's thread summary: a light thread opened
+	// for it, then written over; no memory.
 	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:portfolio", "text": "Fait : accueil ; reste : contact",
 		"state": "active", "source_ref": "msg:1"}`); res != "added" {
 		t.Fatalf("progress: %s %s", res, why)
 	}
-	cards, _ := c.mem.recall(recallQuery{Kinds: []string{kindProgress}, Subject: "project:portfolio"})
-	if len(cards) != 1 || cards[0].State != progressActive {
-		t.Fatalf("card: %+v", cards)
+	id, ok := c.liveThreadOf("project:portfolio")
+	if th, _ := c.thread(id); !ok || th.Mode != modeLight || th.Summary != "Fait : accueil ; reste : contact" {
+		t.Fatalf("thread: %+v", th)
 	}
-	if why, res := apply(fmt.Sprintf(`{"op": "SUPERSEDE", "id": %d, "text": "Fait : accueil ; bloqué : photos", "state": "blocked", "source_ref": "msg:2"}`, cards[0].ID)); res != "superseded" {
+	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:portfolio", "text": "Fait : accueil ; bloqué : photos", "state": "blocked", "source_ref": "msg:2"}`); res != "added" {
 		t.Fatalf("progress update: %s %s", res, why)
 	}
-	cards, _ = c.mem.recall(recallQuery{Kinds: []string{kindProgress}, Subject: "project:portfolio"})
-	if len(cards) != 1 || cards[0].State != progressBlocked || cards[0].Kind != kindProgress {
-		t.Fatalf("current card: %+v", cards)
+	if th, _ := c.thread(id); th.Summary != "Bloqué. Fait : accueil ; bloqué : photos" {
+		t.Fatalf("summary: %q", th.Summary)
 	}
-	if past, _ := c.mem.recall(recallQuery{Kinds: []string{kindProgress}, IncludePast: true}); len(past) != 2 {
-		t.Fatalf("history of the card: %d", len(past))
+	if n := c.mem.count(`kind = 'progress'`); n != 0 {
+		t.Fatalf("%d progress memories", n)
 	}
-	// A state the card cannot have.
+	// A state it cannot have.
 	if _, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:x", "text": "y", "state": "open", "source_ref": "msg:1"}`); res != "" {
 		t.Fatalf("bad state: %s", res)
 	}
@@ -84,9 +84,12 @@ func TestExtractionDurableState(t *testing.T) {
 	if _, res := apply(`{"op": "ADD", "kind": "fact", "text": "z", "valid_to": "2020-01-01", "source_ref": "msg:1"}`); res != "" {
 		t.Fatalf("an end in the past: %s", res)
 	}
-	// An external progress card is proposed, like any external fact.
-	if _, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:y", "text": "Fait : tout", "state": "done", "source_ref": "task:t1"}`); res != "proposed" {
-		t.Fatalf("external progress: %s", res)
+	// An external progress is not kept: a summary is quoted in every card.
+	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:y", "text": "Fait : tout", "state": "done", "source_ref": "task:t1"}`); res != "" || !strings.Contains(why, "external") {
+		t.Fatalf("external progress: %s %s", res, why)
+	}
+	if _, ok := c.liveThreadOf("project:y"); ok {
+		t.Fatal("an external progress opened a thread")
 	}
 	// Never a lesson nor a preference, from a task or from my words: only
 	// the brain, on my own message, writes one.

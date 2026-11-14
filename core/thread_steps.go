@@ -737,10 +737,11 @@ func (c *core) liveIntention(id int64) error {
 	return nil
 }
 
-// linkThread joins to a thread what relates to it: an intention becomes
-// a deadline step (due when it is), a card shows in its timeline; and the
-// summary of where it stands, from its subject's progress memory.
-func (c *core) linkThread(ctx context.Context, id int64, ref, summary, by string) (string, error) {
+// linkThread joins to a thread what the code does not link on its own
+// (thread_progress.go): an intention of another subject becomes a
+// deadline step (due when it is), a card raised elsewhere shows in its
+// timeline.
+func (c *core) linkThread(ctx context.Context, id int64, ref, by string) (string, error) {
 	threadMu.Lock()
 	defer threadMu.Unlock()
 	s, err := c.thread(id)
@@ -750,55 +751,35 @@ func (c *core) linkThread(ctx context.Context, id int64, ref, summary, by string
 	if !s.active() {
 		return "", fmt.Errorf("the thread is %s: reopen it first", s.Look())
 	}
-	ref, summary = strings.TrimSpace(ref), strings.TrimSpace(summary)
-	if ref == "" && summary == "" {
-		return "", errors.New("nothing to link: a ref, a summary, or both")
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", errors.New("ref is needed: intention:<id>, or a card's ref (kind:id)")
 	}
-	var notes []string
-	if ref != "" {
-		if n, ok := strings.CutPrefix(ref, "intention:"); ok {
-			x, err := strconv.ParseInt(n, 10, 64)
-			if err != nil || x <= 0 {
-				return "", fmt.Errorf("ref %q: intention:<id>", ref)
-			}
-			if err := c.liveIntention(x); err != nil {
-				return "", err
-			}
-			it, _ := c.mem.intention(x)
-			sp := stepSpec{Key: "intention-" + n, Title: truncate(oneLine(it.Text), taskTitleMax), Kind: stepDeadline, Intention: x}
-			have, _ := c.steps(id)
-			specs := []stepSpec{sp}
-			if err := checkPlan(have, specs); err != nil {
-				return "", err
-			}
-			if err := c.insertSteps(id, specs, false); err != nil {
-				return "", err
-			}
-			if it.Trust == trustExternal {
-				c.setStep(id, sp.Key, map[string]any{"tainted": taintIntention}) // its words are someone else's
-			}
-			c.logThread(id, by, fmt.Sprintf("Intention %d liée : « %s ».", x, sp.Title))
-			c.advanceLocked(ctx, id)
-			notes = append(notes, fmt.Sprintf("Intention %d linked: a deadline step (%s), due when it is.", x, sp.Key))
-		} else {
-			kind, pid, ok := parseProposalRef(ref)
-			if !ok {
-				return "", fmt.Errorf("ref %q: intention:<id>, or a card's ref (kind:id, as workspace_read lists them)", ref)
-			}
-			if xs, _ := c.cardsWhere(`ref = ?`, ref); len(xs) == 0 && !c.proposalOf(kind, pid).Pending {
-				return "", fmt.Errorf("no card %s", ref)
-			}
-			c.linkCard(id, ref)
-			c.logThread(id, by, "Carte liée : "+ref+".")
-			notes = append(notes, "Card linked: it shows in the thread's timeline.")
+	if n, ok := strings.CutPrefix(ref, "intention:"); ok {
+		x, err := strconv.ParseInt(n, 10, 64)
+		if err != nil || x <= 0 {
+			return "", fmt.Errorf("ref %q: intention:<id>", ref)
 		}
+		if err := c.liveIntention(x); err != nil {
+			return "", err
+		}
+		it, _ := c.mem.intention(x)
+		sp, err := c.linkIntentionLocked(ctx, id, it, by) // thread_progress.go
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Intention %d linked: a deadline step (%s), due when it is.", x, sp.Key), nil
 	}
-	if summary != "" {
-		c.setThread(id, map[string]any{"summary": truncate(summary, 2000)})
-		c.logThread(id, by, "Résumé mis à jour.")
-		notes = append(notes, "Summary updated.")
+	kind, pid, ok := parseProposalRef(ref)
+	if !ok {
+		return "", fmt.Errorf("ref %q: intention:<id>, or a card's ref (kind:id, as workspace_read lists them)", ref)
 	}
-	return strings.Join(notes, " "), nil
+	if xs, _ := c.cardsWhere(`ref = ?`, ref); len(xs) == 0 && !c.proposalOf(kind, pid).Pending {
+		return "", fmt.Errorf("no card %s", ref)
+	}
+	c.linkCard(id, ref)
+	c.logThread(id, by, "Carte liée : "+ref+".")
+	return "Card linked: it shows in the thread's timeline.", nil
 }
 
 // linkCard shows a card in a thread's timeline.

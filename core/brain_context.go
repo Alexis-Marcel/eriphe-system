@@ -25,8 +25,8 @@ import (
 //
 // The profile is in the system prompt already. The pack holds, within a
 // budget, the state of things first, in at most half of it: the card of
-// each open thread's subject (subject_card.go), the tasks under way,
-// where each project stands (progress memories), the decisions of the
+// each open thread's subject (subject_card.go), its thread's summary
+// saying where it stands, the tasks under way, the decisions of the
 // last two weeks, the people and facts of these subjects, the open
 // commitments, what waits for the user (permissions, cards), the last
 // day's episodes; then the last messages of the conversation in what is
@@ -174,17 +174,17 @@ func (p *packBuilder) lines(title string, lines []string) int {
 
 // The pack's state of things, before the messages.
 const (
-	packThreads       = 10 // open threads, the latest first
+	packThreads       = 20 // open threads, the latest first: their summary is where each subject stands
 	packThreadSteps   = 8  // open steps named per thread
 	packThreadMax     = 1000
-	packStateMemories = 20 // progress cards, decisions, people and facts: each
+	packStateMemories = 20 // decisions, people and facts: each
 	packDecisionDays  = 14 // decisions recorded since
 )
 
 // contextPack is the pack for a fresh session of the brain, and what it
 // holds. The state of things comes first, in at most half the budget:
-// what the brain needs to work (the open threads, the tasks under way,
-// where each project stands, the recent decisions, the people and facts
+// what the brain needs to work (the open threads and where their
+// subjects stand, the tasks under way, the recent decisions, the people and facts
 // of these subjects, the open commitments, what waits for the user, the
 // last day's episodes); then the latest messages, in what is left.
 func (c *core) contextPack() (string, contextPackStats) {
@@ -211,7 +211,7 @@ func (c *core) contextPack() (string, contextPackStats) {
 			texts = append(texts, x.card.Text)
 		}
 	}
-	fit := p.blocks("cards", "Fiches des sujets des fils ouverts (les plus récents d'abord) :", texts, share(300))
+	fit := p.blocks("cards", "Fiches des sujets des fils ouverts (les plus récents d'abord) :", texts, share(400))
 	var cards []pushedCard
 	var threads []string
 	shown := map[string]bool{} // the records a card shows
@@ -232,9 +232,6 @@ func (c *core) contextPack() (string, contextPackStats) {
 	if c.mem != nil {
 		now := c.mem.now() // the memory's clock
 		current := `status = 'active' AND pinned = 0 AND (valid_to IS NULL OR valid_to > ?)`
-		progress, _ := c.mem.list(current+` AND kind = 'progress' AND COALESCE(state, '') != 'done'`,
-			[]any{now.Unix()}, `recorded_at DESC, id DESC`, packStateMemories)
-		p.section("progress", "Où en sont les projets (ta mémoire) :", packMemoryLines(notShown(progress, shown), subjects), share(100))
 		decisions, _ := c.mem.list(current+` AND kind = 'decision' AND recorded_at >= ?`,
 			[]any{now.Unix(), now.AddDate(0, 0, -packDecisionDays).Unix()}, `recorded_at DESC, id DESC`, packStateMemories)
 		p.section("decisions", fmt.Sprintf("Décisions des %d derniers jours (ta mémoire) :", packDecisionDays), packMemoryLines(notShown(decisions, shown), subjects), share(100))

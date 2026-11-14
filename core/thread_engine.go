@@ -751,6 +751,7 @@ func (c *core) closeLight(id int64, summary, by string) error {
 	}
 	c.endLight(context.Background(), s, threadDone, summary)
 	c.logThread(id, by, "Thread clos : "+summary)
+	c.closeDecision(id) // thread_progress.go
 	return nil
 }
 
@@ -801,6 +802,9 @@ func (c *core) closeLocked(s Thread, state, summary string) {
 		fields["summary"] = summary
 	}
 	c.setThread(s.ID, fields)
+	if state == phaseDone {
+		c.closeDecision(s.ID) // thread_progress.go
+	}
 	c.endSteps(context.Background(), s) // thread_steps.go
 	c.dropLead(s)                       // thread_lead.go
 	c.dropThreadSurfaces(s.ID)          // surface_authors.go
@@ -881,13 +885,15 @@ func (c *core) holdForBudget(s Thread) {
 	}
 }
 
-// threadsTick is the engine's pass, every 15 seconds: the deadlines that
-// came, the budgets, the steps whose task ended without being told
+// threadsTick is the engine's pass, every 15 seconds: the intentions of a
+// light thread's subject made its steps, the deadlines that came, the
+// budgets, the steps whose task ended without being told
 // (eriphe-core restarted), what may start, and the surface of an active
 // thread that has none.
 func (c *core) threadsTick(now time.Time) {
-	c.threadDeadlines(now) // thread_steps.go
-	c.keepThreadSurfaces() // thread_surface.go
+	c.followIntentions(context.Background()) // thread_progress.go
+	c.threadDeadlines(now)                   // thread_steps.go
+	c.keepThreadSurfaces()                   // thread_surface.go
 	ss, err := c.threadsWhere(activeThreads + ` ORDER BY id DESC LIMIT 50`)
 	if err != nil {
 		return

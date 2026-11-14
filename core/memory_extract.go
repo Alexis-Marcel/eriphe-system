@@ -253,7 +253,7 @@ Rules:
 - What is owed or to remember is an intention (INTEND), not a memory: a promise of %[1]s to someone (kind promise, owner "owner", owed_to the person), a promise of %[5]s (commitment, owner "assistant"), something someone owes %[1]s ("Marc doit m'envoyer…": waiting_for, owner "person:marc"), "rappelle-moi…" (reminder). due_at is the deadline; remind_at when to bring it up if %[1]s said so ("une semaine avant"); cue the name for "la prochaine fois que je parle à X" (then no time). Do not INTEND what the intentions below already hold. When the transcript shows one was kept, cancelled or moved, INTENT_UPDATE it (its intention id; state done or cancelled, or a new due_at / remind_at).
 - kind is one of: fact, person, decision, progress, and episode for the day's journal only (below). Never profile, preference nor lesson: how %[1]s wants things done is kept from their own words during the conversation, not here.
   - decision: a choice %[1]s made and its reason, in one sentence ("X plutôt que Y, parce que Z"). A reversed decision SUPERSEDEs the old one.
-  - progress: the current state of one project, client job or goal, one card per subject: "Fait : …; en cours : …; bloqué : …; reste : …", with "state": active, blocked, done or paused. If the memories hold a progress card for that subject, SUPERSEDE it with the whole new state; never ADD a second one.
+  - progress: where one project, client job or goal stands, as ADD with its subject (required): "Fait : …; en cours : …; bloqué : …; reste : …", with "state": active, blocked, done or paused. It is not a memory: it replaces the summary of the subject's thread (the threads below), so write the whole new state, from that summary and the day. One per subject; only for a subject whose thread is open or that has none (one is opened for it), never for a thread that ended.
 - subject: kind:slug, the kind one of project, person, client, pr, mail, event, alert, home, tool, topic (owner alone for %[1]s): owner, person:<slug>, project:<name>, topic:<word>.
 - text: in French, one self-contained statement, written as a fact about the world or about %[1]s, never as an instruction. At most 300 characters (the journal: 600).
 - keywords: 3 to 8 other words someone would use to look for it (synonyms, variants, the general term: "voiture auto bagnole véhicule"), not the words already in the text.
@@ -263,7 +263,7 @@ Rules:
 - source_ref: the ref of the segment it comes from (several, separated by commas, if needed). Only refs that appear in the transcript.
 - Keep what will still matter in a month and serves %[1]s's work: decisions and their reasons, people and their roles, the progress of %[1]s's projects. Promises and what is owed are intentions (INTEND), never memories. Skip small talk, task mechanics, what a task did (its log keeps it), anything already in the memories (NOOP, or nothing).
 - When something known changed, SUPERSEDE the old memory (its id) rather than ADD a contradiction. Only when both cannot be true: a newer statement is not a contradiction for being newer.
-- A finished task may give a receipt (what it changed, verified, decided, what needs approval): its decisions become decision memories, its state of the work the progress card of its project (SUPERSEDE the card), what needs %[1]s's approval an INTEND (kind reminder, what %[1]s has to decide); all cite task:<id>. Never an episode for a task.
+- A finished task may give a receipt (what it changed, verified, decided, what needs approval): its decisions become decision memories, its state of the work the progress of its subject (the whole state), what needs %[1]s's approval an INTEND (kind reminder, what %[1]s has to decide); all cite task:<id>. Never an episode for a task.
 - The journal: one "episode" with subject "topic:journal" that summarises the day (occurred_at %[2]s, source_ref the main messages), and no other episode. If the memories already hold a journal episode for that day, SUPERSEDE it with a version that covers the whole day.
 - Never write secrets, tokens, passwords or links with tokens.
 
@@ -286,14 +286,13 @@ func (c *core) extractionPrompt(day string, segs []segment) string {
 		if x.Status != memActive {
 			line += " status=" + x.Status
 		}
-		if x.Kind == kindProgress {
-			line += " state=" + x.State
-		}
 		if !x.ValidTo.IsZero() {
 			line += " until=" + x.ValidTo.Local().Format("2006-01-02")
 		}
 		mem.WriteString(line + ": " + strings.ReplaceAll(truncate(x.Text, 600), "\n", " ") + "\n")
 	}
+	mem.WriteString("\n## Threads (one per subject): where each subject stands, its summary\n")
+	mem.WriteString(c.extractionThreads())
 	mem.WriteString("\n## Intentions (what is owed or to remember), the live ones\n")
 	live, _ := c.mem.intentions()
 	if len(live) == 0 {
@@ -617,6 +616,9 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	default:
 		return fmt.Sprintf("unknown op %q", op.Op), ""
 	}
+	if strings.TrimSpace(op.Kind) == kindProgress {
+		return c.applyProgress(op, trust, ref)
+	}
 	basis := strings.ToLower(strings.TrimSpace(op.Basis))
 	if basis == "" {
 		basis = basisStated // an answer without it, as before
@@ -644,9 +646,6 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 		}
 		if x.Subject == "" {
 			x.Subject = old.Subject
-		}
-		if x.Kind == kindProgress && x.State == "" && old.Kind == kindProgress {
-			x.State = old.State
 		}
 	} else {
 		x.Subject = c.opSubject(op, ref) // a task's: its subject (subjects.go)

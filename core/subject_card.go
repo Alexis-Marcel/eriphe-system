@@ -15,8 +15,8 @@ import (
 
 // A subject's card: what eriphe-core knows of one subject, compiled by the
 // code from its records, no model, in about a thousand characters. Its
-// live thread (goal, state, open steps, summary), where it stands (its
-// latest progress note), its last decisions, the facts and people of the
+// thread (goal, state, open steps, and its summary: where it stands), the
+// live one, else the last that ended; its last decisions, the facts and people of the
 // subject, the open intentions, the cards that wait for the user, and the
 // preferences about it, in that order: the budget is shared in rounds
 // (each part's first line, then each part's second…), and what does not
@@ -150,10 +150,10 @@ func cardMemoryLine(x *Memory, key string) string {
 // subjectCardParts are the card's parts, in its order.
 func (c *core) subjectCardParts(key string) []cardSection {
 	var parts []cardSection
-	if id, ok := c.liveThreadOf(key); ok {
-		if th, err := c.thread(id); err == nil {
-			parts = append(parts, cardSection{lines: []string{truncate(c.threadLine(th), subjectCardThreadMax)}, refs: []string{threadRef(th.ID)}})
-		}
+	// Where it stands: its thread's summary, the live one's, else the
+	// last one's that ended.
+	if ts, err := c.threadsWhere(`subject = ? ORDER BY state NOT IN ('open', 'waiting'), id DESC LIMIT 1`, key); err == nil && len(ts) == 1 {
+		parts = append(parts, cardSection{lines: []string{truncate(c.threadLine(ts[0]), subjectCardThreadMax)}, refs: []string{threadRef(ts[0].ID)}})
 	}
 	if c.mem != nil {
 		now := c.mem.now()
@@ -163,9 +163,7 @@ func (c *core) subjectCardParts(key string) []cardSection {
 			return cardMemories(title, xs, key)
 		}
 		latest, weighed := `recorded_at DESC, id DESC`, `importance DESC, recorded_at DESC, id DESC`
-		parts = append(parts,
-			memories("Où il en est :", kindProgress, latest, 1),
-			memories("Dernières décisions :", kindDecision, latest, subjectCardDecisions))
+		parts = append(parts, memories("Dernières décisions :", kindDecision, latest, subjectCardDecisions))
 
 		// Its intentions: about it, owed by it or to it. Their parties are
 		// people of the subject.
@@ -275,7 +273,7 @@ func (c *core) readSubject(in readSubjectIn) (map[string]any, error) {
 }
 
 func registerSubjectCardTool(s *mcp.Server, c *core) {
-	tool(s, "read_subject", "The card of a subject, compiled by eriphe-core from its records: its live thread (goal, state, open steps, summary), where it stands, its last decisions, its facts and people, open intentions, cards waiting for the user, preferences. Give its key (project:site) or a name the user gives it. What may carry someone else's words is named, not quoted: reading a card never taints the turn.",
+	tool(s, "read_subject", "The card of a subject, compiled by eriphe-core from its records: its thread (goal, state, open steps, and its summary: where it stands), its last decisions, its facts and people, open intentions, cards waiting for the user, preferences. Give its key (project:site) or a name the user gives it. What may carry someone else's words is named, not quoted: reading a card never taints the turn.",
 		func(ctx context.Context, in readSubjectIn) (map[string]any, error) {
 			return c.readSubject(in)
 		})

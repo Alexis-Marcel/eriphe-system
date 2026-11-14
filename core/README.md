@@ -973,11 +973,21 @@ accepted.
 
 A **light** thread takes its steps from the brain (`add_step`), each born as the matter goes and
 started once the steps it comes `after` are accepted; a task step asks its own start card when it is
-lent what needs a yes. The brain settles them (`settle_step`). `link_thread` joins what relates:
-`intention:<id>` becomes a deadline step (`intention-<id>`), a card's ref shows in the thread's
-timeline (`thread_cards`, with every card raised with the source `thread:<id>` or by the task of
-one of its steps), and `summary`
-sets where it stands, from the subject's progress memory. **A step's change wakes its holder**,
+lent what needs a yes. The brain settles them (`settle_step`). **The thread holds its subject's
+state** (`thread_progress.go`): its summary is the only record of where the subject stands, written
+by `remember` kind `progress` (and a task's `remember`, and the nightly extraction), never from a
+turn or a source that read external content (unless the thread's own steps read some already: its
+summary is then never quoted; the extraction's never); its log says who wrote it (`brain`, `task`,
+`extraction`); a subject with no thread gets a light one opened by
+the code (title `Suivi de <key>`; closed done at once when the progress says done), a subject whose
+thread ended is refused until the brain reopens it. The code links the rest: an open intention of a
+live light thread's subject becomes its deadline step (`intention-<id>`, once, at the engine's
+pass), a card born in a turn about the thread, or raised with the source `thread:<id>` or by the
+task of one of its steps, shows in its timeline (`thread_cards`). Closing a thread on its goal
+(`close_thread`, a led thread's engine done) writes a dated decision memory of its subject from its
+summary (`source_kind` `thread`, `source_ref` `thread:<id>`; one from an earlier close is
+superseded; external when the thread's words may be someone else's). `link_thread` is left for the
+exceptions: an intention of another subject, a card raised elsewhere. **A step's change wakes its holder**,
 when someone else made it (the user, a card, the clock, a task): the lead through `thread_inbox`,
 or the brain by an event `[thread N « title »] étape « … » (key, kind) → status`, which does not
 block it. What a tool said, or an intention drawn from external content, taints the step
@@ -1936,12 +1946,13 @@ call), or else the turn's input, cache reads and writes. Past either bound, the 
 session. A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
 node could not do, another harness) gets a context pack in its first turn, never in its system prompt,
 within about 16,000 tokens (`brain_context.go`). The state of things comes first, in at most half of
-it: the card of each open thread's subject (`subject_card.go`; a thread without a subject in a
-line: title, goal, state, open steps, summary), the tasks under way, the progress memories not
-done, the decisions of the last 14 days, the people and facts of these subjects, the open
-intentions (the due ones first), what waits for the user (permissions, cards), the last day's
-episodes. A card that does not fit leaves its thread in a line; a record a card shows (its refs)
-is not said again in the sections after it; then the last messages between the user and the brain in what is left, the newest kept.
+it: the card of each open thread's subject, up to 20 threads (`subject_card.go`: its thread's
+summary says where the subject stands; a thread without a subject in a line: title, goal, state,
+open steps, summary), the tasks under way, the decisions of the last 14 days, the people and facts
+of these subjects, the open intentions (the due ones first), what waits for the user (permissions,
+cards), the last day's episodes. A card that does not fit leaves its thread in a line; a record a
+card shows (its refs) is not said again in the sections after it; then the last messages between
+the user and the brain in what is left, the newest kept.
 It is quoted data; what may carry what someone else wrote (an external memory, episode or card, a
 tainted thread, the summary of a thread whose steps read external content) is named, not quoted,
 and events are left out, since they carry what tasks said. eriphe-core logs its composition: each
@@ -4506,8 +4517,8 @@ rules. A test forbids any other normaliser.
   both have a live thread, and in a turn that read external content; a sub-part's key
   (`project:site:prod`) is left as it is.
 - **A subject's card** (`subject_card.go`): `subjectCard(key, budget)` compiles, with no model, in
-  about 1000 characters, what eriphe-core knows of a subject: its live thread (goal, state, open
-  steps, summary), its latest progress note, its last 3 decisions, its facts and people (with the
+  about 1000 characters, what eriphe-core knows of a subject: its thread, the live one or else the
+  last that ended (goal, state, open steps, and its summary: where it stands), its last 3 decisions, its facts and people (with the
   people its intentions name), its open intentions, the cards that wait for the user about it
   (`convo_cards.subject`, or what a card proposes), its preferences. The budget is shared in rounds
   (each part's first line, then each part's second…), and what does not fit is said. Only the key heads it, and a line that may carry someone else's words (an
@@ -4527,7 +4538,7 @@ rules. A test forbids any other normaliser.
   `skill:<name>`). The code sets it by inheritance, and a subject given explicitly wins:
   - **the brain's turn** (`turnSubject`): its thread's (`brainTurn.thread`), else the one known
     subject the user's messages name; two named give none, and a clock wake none. What the brain
-    makes in the turn takes it: `notify`, `remember` (a fact, a decision, a progress card, never a
+    makes in the turn takes it: `notify`, `remember` (a fact, a decision, a progress, never a
     replacement, which keeps the one it replaces; never a profile, a preference, a person, a lesson
     or a situation), `intend`, `run_task`, a new surface (`surface_write`: one written again keeps
     its subject unless one is given), a card it proposes;
@@ -4541,7 +4552,7 @@ rules. A test forbids any other normaliser.
     a thread's or a surface's id gives none. Its notifications, signals, cards and surfaces follow
     its task;
   - **the extraction** reuses a task's subject (shown on its segment): a decision or a progress
-    card added from a task is the task's subject whatever was guessed, anything else takes it when
+    added from a task is the task's subject whatever was guessed, anything else takes it when
     none was given; a replacement keeps its own, the day's journal `topic:journal`.
   Notification rules match a notification's subject, else its record's ref (`itemRule`). An older
   notification's subject moves out of its ref once at start (kv `notification_subjects`).
@@ -4555,10 +4566,11 @@ rules. A test forbids any other normaliser.
 Eriphe's own memory, separate from the vault, in `memory.db` next to the database (SQLite, full
 text search with FTS5, accents ignored). It points at the vault (`links`) rather than copying it.
 A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `lesson`,
-`decision`, `progress`, `situation`; what is owed is an intention, never a memory), a subject (its key, see [Subjects](#subjects): `owner`, `person:<slug>`, `client:<slug>`,
+`decision`, `situation`; what is owed is an intention, never a memory; where a subject stands is
+its thread's summary, never a memory), a subject (its key, see [Subjects](#subjects): `owner`, `person:<slug>`, `client:<slug>`,
 `project:<name>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
-what is temporary; `occurred_at` for an episode; `state` for a progress card), where it
-comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`), a trust level (`owner`,
+what is temporary; `occurred_at` for an episode), where it
+comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`, `thread:<id>`), a trust level (`owner`,
 `first_party`, `external`), and for what the extraction derived a `basis`: `stated` (said in so
 many words), `inferred` (deduced) or `ambiguous`. A change over time supersedes the old memory,
 which stays, dated; every change is in `memory_log`. Forgotten memories are purged after 30 days.
@@ -4568,10 +4580,14 @@ a task did is its log and its thread's timeline. memory.db at schema 7 dropped t
 
 **Durable state.** Raw history is kept for audit (the conversation, `memory_log`, the journal
 episodes); what the brain needs to act is compiled from it in facts, lessons, **decisions** (a
-choice and its reason, superseded when reversed) and **progress** cards: one current card per
-project, client job or goal, with a `state` (`active`, `blocked`, `done`, `paused`) and a text
-saying what is done, under way, blocked and left; each change supersedes the card, so the chain
-is its history.
+choice and its reason, superseded when reversed; closing a thread writes one). Where a project,
+client job or goal stands is not a memory: `remember` kind `progress` (a `state` `active`,
+`blocked`, `done` or `paused`, and a text saying what is done, under way, blocked and left)
+writes the summary of the subject's thread (see [Threads](#threads-threadsgo-thread_enginego)). The progress memories of an
+older install are rewritten once at start (kv `progress_to_threads`): the latest of each subject
+becomes its live thread's summary, or that of a light thread opened for it (closed done when it
+said done; a subject whose thread ended keeps that one's); they are forgotten, and any other
+progress row (a replaced one, a proposed or external one, one without subject) becomes a fact.
 
 **En ce moment** (`situations.go`). A `situation` is where the user is or what they do for a
 while (« en vacances à Lyon jusqu'à dimanche »): subject `owner` by default, and a `valid_to`,
@@ -4585,7 +4601,8 @@ gone.
 **Tasks read it.** Every worker task has a memory server of its own, `eriphe-memory`, relayed by
 its node (`/v1/tasks/<id>/mcp/eriphe-memory`; the name is reserved in the catalog): `recall`,
 current facts only, allowed without a card. A triggered skill's run also has `remember` (fact,
-person, decision, progress, situation; never an episode, the user's profile, preferences or
+person, decision, situation, and progress: its subject's thread summary, refused when the task read
+someone else's content; never an episode, the user's profile, preferences or
 lessons): `source_kind` `task`, `source_ref` `task:<id>`, first party when the task is clean,
 `external` and only proposed when it read someone else's content.
 
@@ -4709,8 +4726,8 @@ marked in Settings → Tools (see the [one taint rule](#tool-catalog)).
 
 The learning journal (`learning.go`, table `learning_log` in `memory.db`) records every
 change to what steers Eriphe: a memory of kind `lesson`, `preference`, `decision` or `profile` (or
-pinned), and any memory but an episode the nightly extraction wrote on its own (a fact, a person, a
-progress card), made active, changed (superseded or edited in place) or forgotten, and every change of a
+pinned), and any memory but an episode the nightly extraction wrote on its own (a fact, a person),
+made active, changed (superseded or edited in place) or forgotten, and every change of a
 skill's approved version (approved, replaced, deleted). A proposal is not learned until approved.
 Each entry says what it touched (`memory #N`, or the skill's name and versions), the action
 (`added`, `changed`, `removed`, `reverted`), a status (`trial`: in force, not confirmed;

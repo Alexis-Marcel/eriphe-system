@@ -62,9 +62,8 @@ type addStepIn struct {
 }
 
 type linkThreadIn struct {
-	Thread  int64  `json:"thread_id"`
-	Ref     string `json:"ref,omitempty" jsonschema:"what to link: intention:<id>, or a card's ref (kind:id)"`
-	Summary string `json:"summary,omitempty" jsonschema:"where the thread stands, for the user, in their language: from its subject's progress memory and its steps"`
+	Thread int64  `json:"thread_id"`
+	Ref    string `json:"ref" jsonschema:"what to link: intention:<id>, or a card's ref (kind:id)"`
 }
 
 type findThreadIn struct {
@@ -213,10 +212,10 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return c.addStep(ctx, in.Thread, in.Step, c.turnTaint(), "brain")
 		})
 
-	tool(s, "link_thread", "Join to a thread what relates to it: an intention (ref intention:<id>) becomes a deadline step, due when it is; a card (its ref, kind:id) shows in its timeline. And/or set its summary: where it stands, from its subject's progress memory and its steps.",
+	tool(s, "link_thread", "Only for an exception: join to a thread what eriphe-core does not link itself, an intention of another subject (ref intention:<id>: a deadline step, due when it is) or a card raised outside a turn about the thread (kind:id: in its timeline). An intention of the thread's subject and a card born in a turn about it are linked already; where it stands is remember kind progress.",
 		func(ctx context.Context, in linkThreadIn) (map[string]any, error) {
 			c.turnThread(in.Thread)
-			note, err := c.linkThread(ctx, in.Thread, in.Ref, in.Summary, "brain")
+			note, err := c.linkThread(ctx, in.Thread, in.Ref, "brain")
 			return map[string]any{"note": note}, err
 		})
 

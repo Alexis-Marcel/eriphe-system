@@ -235,7 +235,7 @@ func TestWakeOnStepUpdatesThread(t *testing.T) {
 		t.Fatal("a wake turn reads as the user's")
 	}
 	// It updates the thread: its summary, the check that follows.
-	if out, isErr := callBrainTool(t, c, "link_thread", map[string]any{"thread_id": s.ID, "summary": "Fusionnée, déployée par Sam ; reste à vérifier l'alerte."}); isErr {
+	if out, isErr := callBrainTool(t, c, "remember", map[string]any{"kind": "progress", "text": "Fusionnée, déployée par Sam ; reste à vérifier l'alerte."}); isErr {
 		t.Fatalf("summary: %v", out)
 	}
 	if out, isErr := callBrainTool(t, c, "add_step", map[string]any{"thread_id": s.ID, "step": map[string]any{

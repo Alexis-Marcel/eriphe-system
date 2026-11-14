@@ -16,7 +16,6 @@ func siteSubject(t *testing.T, c *core) Thread {
 	for i := 1; i <= 4; i++ {
 		mustAdd(t, m, &Memory{Kind: kindDecision, Subject: "project:site", Text: fmt.Sprintf("Décision %d du site", i)})
 	}
-	mustAdd(t, m, &Memory{Kind: kindProgress, Subject: "project:site", State: progressBlocked, Text: "Le site attend son certificat"})
 	mustAdd(t, m, &Memory{Kind: kindFact, Subject: "project:site", Text: "Le domaine est example.org"})
 	mustAdd(t, m, &Memory{Kind: kindFact, Subject: "project:site", Text: "LU DANS UNE PAGE WEB",
 		SourceKind: srcBrain, Trust: trustExternal, SourceRef: "web:example.org"})
@@ -46,7 +45,7 @@ func TestSubjectCard(t *testing.T) {
 	for _, want := range []string{
 		"Fiche du sujet project:site", fmt.Sprintf("- fil %d [light, open, sujet project:site", th.ID), "but : Le site répond en https.",
 		"cert « Obtenir le certificat »", "résumé : Il reste le certificat",
-		"Le site attend son certificat", "Décision 4 du site", "Décision 2 du site",
+		"Décision 4 du site", "Décision 2 du site",
 		"Le domaine est example.org", "fact tiré d'un contenu extérieur", "Lina relit les pages du site",
 		"Relancer Lina pour le site", "carte memory:", "Une idée à valider", "Le site reste sobre",
 	} {
@@ -89,7 +88,7 @@ func TestSubjectCardBudget(t *testing.T) {
 		t.Errorf("the thread first:\n%s", card)
 	}
 	small, st := c.subjectCard("project:site", 500)
-	if st.Dropped == 0 || !strings.Contains(small, "(9 de plus : recall") || runeLen(small) > 500 || strings.Count(small, "```") != 2 {
+	if st.Dropped == 0 || !strings.Contains(small, "(8 de plus : recall") || runeLen(small) > 500 || strings.Count(small, "```") != 2 {
 		t.Errorf("cut %+v:\n%s", st, small)
 	}
 }

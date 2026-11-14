@@ -354,16 +354,13 @@ func TestIntentionLinkedToThread(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, isErr := callBrainTool(t, c, "link_thread", map[string]any{"thread_id": s.ID, "ref": "intention:" + id64(x.ID), "summary": "Waiting for the review."})
+	out, isErr := callBrainTool(t, c, "link_thread", map[string]any{"thread_id": s.ID, "ref": "intention:" + id64(x.ID)})
 	if isErr {
 		t.Fatalf("link: %v", out)
 	}
 	st := stepOf(t, c, s, "intention-"+id64(x.ID))
 	if st.Kind != stepDeadline || st.Status != stepRunning || st.Intention != x.ID {
 		t.Fatalf("step %+v", st)
-	}
-	if th, _ := c.thread(s.ID); th.Summary != "Waiting for the review." {
-		t.Errorf("summary %q", th.Summary)
 	}
 	c.intentionsTick()
 	if st := stepOf(t, c, s, st.Key); st.Status != stepRunning {
