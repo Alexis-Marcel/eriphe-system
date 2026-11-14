@@ -220,6 +220,12 @@ func (c *core) notifyContext() (notifyContext, error) {
 
 // notify decides on n, keeps it, and pushes it when it is for now.
 func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
+	if k := c.store.keepSubject(n.Ref, ""); k != n.Ref { // a subject merged is kept under the other (subjects.go)
+		if it.Ref == n.Ref {
+			it.Ref = k
+		}
+		n.Ref = k
+	}
 	cx, err := c.notifyContext()
 	if err != nil {
 		return nil, err

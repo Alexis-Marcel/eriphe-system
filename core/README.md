@@ -4483,6 +4483,23 @@ rules. A test forbids any other normaliser.
 - **One live thread a subject**, whoever opens it (the brain, a skill): `openThread` refuses a
   second, `reopen_thread` refuses an ended one beside a live one, and a unique index on the live
   threads' subject holds it (`threads_live_subject`).
+- **Known subjects**: every key written (a thread's, a memory's, an intention's subject and parties, a
+  notification's, a topic rule's) is noted in core.db's `subjects` table: its key, a title (the
+  first given, a thread's title), aliases and when it was last seen; the subjects written before
+  are noted once at start (kv `subjects_filled`). A message of the user's names a subject by its
+  slug's words (project, person, client, tool, topic) or an alias, compared by their stems, three
+  letters at least; never `owner`, `home`, an id or Eriphe's own topics. A name inside a longer one
+  named too gives way to it (`site` to `site web`), five at most. The keys named go to the brain
+  under the message (`[sujets] … project:site (thread 12)`, keys only: a title may be someone
+  else's words), and the turn is about them (`brainTurn.subjects`, kept with the turn). A
+  person's intention cue is matched the same way.
+- **Merge**: `name_subject` gives a subject a title and aliases; an alias that is another subject's
+  key, or the name of another subject of the same kind, merges that subject into it: its row points
+  to the one kept (`merged_into`), its names become aliases, and its threads, notifications, topic
+  rules, memories and intentions are rewritten. A key merged is kept under the other from then on,
+  for writes and lookups (`subjectIs`, `subjectLookup`, the memory's `subjectBook`). Refused when
+  both have a live thread, and in a turn that read external content; a sub-part's key
+  (`project:site:prod`) is left as it is.
 - **Stored keys**: an older install's subjects are rewritten once at start: core.db's threads (of two
   live threads on one key, the latest keeps it), notifications and topic rules (kv
   `subject_keys`), memory.db's memories and intentions (schema 5 → 6, then 6 → 7: see [Memory](#memory)). A value that gives no key is

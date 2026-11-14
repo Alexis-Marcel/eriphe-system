@@ -302,6 +302,7 @@ func (m *memStore) addIntention(x *Intention, who string) (*Intention, error) {
 	if err := normalizeIntention(x, now); err != nil {
 		return nil, err
 	}
+	x.Subject, x.Owner, x.OwedTo = m.keepSubject(x.Subject), m.keepSubject(x.Owner), m.keepSubject(x.OwedTo)
 	var id int64
 	m.db.QueryRow(`SELECT id FROM intentions WHERE LOWER(TRIM(text)) = LOWER(TRIM(?)) AND state IN ('proposed', 'open', 'due', 'snoozed')
 		LIMIT 1`, x.Text).Scan(&id)
@@ -520,10 +521,7 @@ func (m *memStore) surfaced(xs []*Intention, how string) {
 // cueIntentions makes due the open intentions whose person cue my message
 // names ("la prochaine fois que je parle à Hélène").
 func (m *memStore) cueIntentions(text string) ([]*Intention, error) {
-	words := map[string]bool{}
-	for _, w := range memWords(foldAccents(text)) {
-		words[w] = true
-	}
+	words := textStems(text) // matched as a subject's names are (subjects.go)
 	if len(words) == 0 {
 		return nil, nil
 	}
@@ -537,13 +535,8 @@ func (m *memStore) cueIntentions(text string) ([]*Intention, error) {
 			continue
 		}
 		hit := false
-		for _, name := range strings.FieldsFunc(foldAccents(x.Cue), func(r rune) bool { return r == ',' || r == ';' || r == '|' }) {
-			parts := memWords(name)
-			all := len(parts) > 0
-			for _, p := range parts {
-				all = all && words[p]
-			}
-			hit = hit || all
+		for _, name := range strings.FieldsFunc(x.Cue, func(r rune) bool { return r == ',' || r == ';' || r == '|' }) {
+			hit = hit || namedIn(words, nameStems(name))
 		}
 		if !hit {
 			continue

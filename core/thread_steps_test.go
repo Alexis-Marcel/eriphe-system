@@ -29,7 +29,7 @@ func stepsCore(t *testing.T) *core {
 	}
 	c := newCore(cfg, store)
 	m, _ := testMemory(t)
-	c.mem = m
+	c.useMemory(m)
 	srv := mcp.NewServer(&mcp.Implementation{Name: "code"}, nil)
 	no := false
 	text := func(s string) *mcp.CallToolResult {

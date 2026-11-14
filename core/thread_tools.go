@@ -106,7 +106,7 @@ const sameSubject = "même sujet"
 // that thread's plan changes instead.
 func (c *core) openThreadOnce(in threadIn, taint []string) (s Thread, again string, err error) {
 	led := strings.EqualFold(strings.TrimSpace(in.Mode), modeLed) || (strings.TrimSpace(in.Mode) == "" && len(in.Steps) > 0)
-	subject, err := subjectKey(in.Subject)
+	subject, err := c.subjectLookup(in.Subject)
 	if err != nil {
 		return s, "", fmt.Errorf("subject: %w", err)
 	}

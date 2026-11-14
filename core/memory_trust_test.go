@@ -36,7 +36,7 @@ func testMemoryCore(t *testing.T) (*core, *fakeClock) {
 	s.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code"]}`))
 	s.setNodeStatus("nas", false, nil)
 	m, clock := testMemory(t)
-	c.mem = m
+	c.useMemory(m)
 	s.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateIdle, Prompt: "brain"})
 	setBrainTask(c, "t-brain")
 	return c, clock

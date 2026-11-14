@@ -239,7 +239,7 @@ func benchThreadCore(t *testing.T, x threadCase) *core {
 	}
 	c := newCore(cfg, store)
 	m, _ := testMemory(t)
-	c.mem = m
+	c.useMemory(m)
 	store.registerNode("box", hashSecret("x"))
 	store.setNodeStatus("box", true, []byte(`{"runtimes":["claude-code"],"cpus":8}`))
 	c.pool.dial = func(ctx context.Context, u *upstream) (mcp.Transport, error) {

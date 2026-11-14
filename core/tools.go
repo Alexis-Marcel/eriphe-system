@@ -203,6 +203,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerNotifyTools(s, c)       // notify, notifications, rule
 	registerSinceTools(s, c)        // since
 	registerThreadTools(s, c)       // thread_tools.go
+	registerSubjectTools(s, c)      // name_subject (subjects.go)
 	return s
 }
 

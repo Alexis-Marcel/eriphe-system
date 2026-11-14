@@ -262,6 +262,9 @@ func (c *core) addNotifyRule(r notifyRule) (notifyRule, error) {
 	if err := r.check(); err != nil {
 		return r, err
 	}
+	if r.Kind == ruleTopic {
+		r.Match = c.store.keepSubject(r.Match, "") // a subject merged is kept under the other (subjects.go)
+	}
 	now := c.notifyTime().Unix()
 	tx, err := c.store.db.Begin()
 	if err != nil {
