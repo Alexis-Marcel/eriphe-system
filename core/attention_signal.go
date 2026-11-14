@@ -195,16 +195,35 @@ func cleanSignals(in []attentionSignal, own bool) ([]attentionSignal, []string) 
 // external content. The dropped are logged. A signal without refs makes
 // no item here: its caller knows what it is about.
 func (c *core) attendSignals(signals []attentionSignal, dropped []string, maker, source string, tainted bool) int {
+	return c.attendSignalsWith(signals, dropped, maker, source, tainted, weightInterrupts, false)
+}
+
+// attendSignalsWith is attendSignals for signals a message carries (a
+// skill's run that is told): their weight is at most the message's, and
+// they are delivered with it when it was. As a notification's, a signal's
+// weight is held to 3 when who wrote it read external content, and to 2
+// in the quiet hours.
+func (c *core) attendSignalsWith(signals []attentionSignal, dropped []string, maker, source string, tainted bool, ceiling int, delivered bool) int {
 	subject := c.sourceSubject(maker)
+	if tainted {
+		ceiling = min(ceiling, weightProposal) // external content never interrupts on its own
+	}
+	if !delivered && c.inQuietHours(c.notifyTime()) {
+		ceiling = min(ceiling, weightBrief) // the quiet hours: the user's return
+	}
 	for _, d := range dropped {
 		log.Printf("attention: %s: dropped %s", source, d)
 	}
 	n := 0
 	for _, s := range signals {
 		for _, ref := range s.Refs {
-			c.attend(attentionItem{Ref: ref, Weight: s.Weight, Why: s.Why, Say: s.Say, Source: source, Subject: subject, tainted: tainted})
+			c.attendHeld(attentionItem{Ref: ref, Weight: min(s.Weight, ceiling), Why: s.Why, Say: s.Say, Source: source, Subject: subject,
+				tainted: tainted, Delivered: delivered})
 			n++
 		}
+	}
+	if n > 0 {
+		c.attentionNow() // what weighs 4 or 5, in one message
 	}
 	return n
 }

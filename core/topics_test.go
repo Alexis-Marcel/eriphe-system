@@ -47,7 +47,7 @@ func TestTopicRuleCanonical(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := c.brainNotify(notifyIn{Text: "Une facture est arrivée.", Weight: 5, Why: "Un mail de facture.", Ref: "Facturation"})
-	if err != nil || out["outcome"] != levelNever || out["subject"] != "topic:facture" {
+	if err != nil || out["outcome"] != outcomeNever || out["subject"] != "topic:facture" {
 		t.Fatalf("notify under a family label: %v %v", out, err)
 	}
 	if out["topic"] == nil {

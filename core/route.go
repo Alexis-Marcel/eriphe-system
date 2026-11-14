@@ -220,7 +220,7 @@ func route(n routeNote, sig routeSignals, set routeSettings, tried []string) rou
 			p.Then = append(p.Then, t)
 		}
 	}
-	if n.Level == levelNow && !n.Tainted && (!sig.Quiet || n.Urgent) && len(p.Then) > 0 {
+	if n.Level == outcomeNow && !n.Tainted && (!sig.Quiet || n.Urgent) && len(p.Then) > 0 {
 		p.After = escalationDelay(n, set)
 	} else {
 		p.Then = nil
@@ -233,7 +233,7 @@ func route(n routeNote, sig routeSignals, set routeSettings, tried []string) rou
 // on (a rule's "also" does not turn it on); never in the quiet hours,
 // but for an urgent watch's fixed message when the user said so.
 func voiceAllowed(n routeNote, sig routeSignals, set routeSettings) bool {
-	if n.Level != levelNow || n.Tainted || sig.Voice.Channel == 0 || slices.Contains(set.Off, stepVoice) {
+	if n.Level != outcomeNow || n.Tainted || sig.Voice.Channel == 0 || slices.Contains(set.Off, stepVoice) {
 		return false
 	}
 	return !sig.Quiet || n.Fixed && n.Urgent && set.VoiceUrgent

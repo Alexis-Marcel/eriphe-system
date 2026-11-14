@@ -908,7 +908,7 @@ the brain reads it as data.
 
 In a skill's receipt the block is also what tells: no entry tells the user nothing (the run's
 message stays in its note), and an entry may leave `refs` out to be about the run's own message,
-which then enters the queue as the notification it became (`alert:<id>`), with the entry's weight
+which then enters the queue as the notification it became (`notification:<id>`), at its weight
 (`tellRun`, [Triggered skills](#triggered-skills)). A lead's
 `report` needs its refs, and only a report with a kept item wakes the brain: without one it is
 kept in the conversation as read and costs no turn. A worker's receipt carries no signal.
@@ -1609,10 +1609,11 @@ version, read with its diff.
   as everywhere; a skill's instructions write no prefix. No entry (or no receipt) tells nothing:
   the run is `silent`, its message kept in its note. Otherwise its message is a notification, why
   « Skill « name » », ref `skill:<name>`, its link-free rules when the task is tainted, weighed as
-  its heaviest entry (sent from 4, for the brief below). Each entry with refs enters the attention queue
-  as it is; one without refs (or whose refs were all bad: a bad ref never silences a weight) is
-  about the message, the notification it became (`alert:<id>`). Entries about objects alone tell
-  the message only from 4: below, their items speak at the brief, not twice. The run's note lists
+  its heaviest entry (delivered at once from 4, pushed at 5). One entry without refs (or whose refs
+  were all bad: a bad ref never silences a weight) is about the message, the notification it
+  became (`notification:<id>`). Entries about objects alone tell the message only from 4, their
+  items coming with it (no heavier, delivered with it: one message); below, their items speak
+  alone in the queue, not twice. The run's note lists
   what was dropped.
   Then its task stops. The brain is not told of its state and never woken by a run; its
   permissions are the user's, as any task's.
@@ -1628,8 +1629,7 @@ version, read with its diff.
   kept with its exact input (`access_asks.run`), and the task is told it did not run and goes on.
   When the run ends, they show on one card (kind `runcalls`), attached to its message (sent now
   even without an attention entry; « the skill proposes N actions » when it wrote none, or when
-  its message is held for the brief or not sent, held by the attention queue for the next
-  breakpoint): each action with its parameters. The yes runs
+  its message is held or not sent, held by the attention queue for its breakpoint): each action with its parameters. The yes runs
   them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
 - **A led thread**: with `can: [open-thread]`, the run is told it may end its last message with
   a fenced ` ```thread ` block holding `open_thread`'s JSON. eriphe-core opens it (`by`
@@ -2727,50 +2727,46 @@ the turn), with Oui, Non (the proposal's own approve and reject) and Modifier (t
 prefilled, and the brain proposes again). The event stream keeps cards up to date (`cards`:
 approved, declined, no longer current). The memory's extraction makes no card: what it is not
 sure of waits in À valider and expires (see [Memory](#memory)). Other proposals (a skill's run, a
-turn that said nothing) are queued and offered three at most, once an hour at most, when the user writes or
-at the brief and the return point, never in the quiet hours, at night (22:00–07:00), when a
-source says do not disturb, in a Focus or while busy; the brain says it in a sentence and the
-cards come with its message. A card that stops a task is not one of these: if its turn wrote
-nothing (a turn that failed), it goes with the brain's next message, whatever the hour. A card made
+turn that said nothing) are queued and enter the attention queue at their card's weight
+(`cardWeight`: one a task or a thread waits on 4; a skill, a monitor or a run's calls 3; a
+reminder 2; a memory, a rule, a setting or an undo 1; `attendQueuedCards` each minute on the
+journal's timer); the queue delivers them like anything else that goes to the user. A card made
 outside a brain turn (the start of a task the brain did not launch, such as a thread's step; what
 a thread asks: its plan when a skill opened it, an approval step, a change of plan or more time;
-a skill run's calls when its message is held for the brief or not sent; an access asked at a
-task's call) comes under a message of its own written by eriphe-core as the brain's (`cardNow`),
-with no message of the user's needed: at once when a task or a thread waits on it, otherwise at
-the attention queue's next breakpoint (below); the brain is not woken for it, and nothing it does
-waits on it.
+a skill run's calls when its message is held or not sent; an access asked at a task's call)
+enters the queue with the message eriphe-core will write for it (`cardNow`); the brain is not
+woken for it, and nothing it does waits on it.
 
-**Attention queue** (`attention.go`). What needs the user is kept by code in one queue, one item
-per object: a ref (`card:<id>`, `thread:<id>`, `mail:<id>`…), a weight from 1 to 5 (5 interrupts,
-4 needs the user now, 3 matters today, 2 is a glance, 1 is background), a short why, an optional
-say, its source (`brain`, `task:<id>`, `thread:<id>`, `skill:<name>`) and its time. Items about the
-same ref merge (the highest weight, the latest why). A card enters it when it is made, weighted by
-its kind (one a task or a thread waits on: 4; any other proposal: 3), and leaves it once decided
+**Attention queue** (`attention.go`). It is the one path of what goes to the user, kept by code,
+one item per object: a ref (`card:<id>`, `notification:<id>`, `thread:<id>`, `mail:<id>`…), a
+weight from 1 to 5 (5 interrupts, 4 needs the user now, 3 matters today, 2 is a glance, 1 is
+background), a short why, an optional say, its source (`brain`, `task:<id>`, `thread:<id>`,
+`skill:<name>`) and its time. Items about the same ref merge (the highest weight, the latest why).
+Every notification (`notification:<id>`, a record's ref no signal can name, apart from the `alert`
+subject kind), every card (weighted by its kind, above) and every assistant's
+[attention signal](#attention-signals-attention_signalgo) enters it; what is in front of the user
+already enters delivered (the brain's own message, a card under it). An item leaves once decided
 or gone. Each open item is a surface of the workspace, written by code while it is open
-([the queue as surfaces](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)). Assistants feed it with their [attention signals](#attention-signals-attention_signalgo);
+([the queue as surfaces](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo));
 an item drawn from external content stays marked so, and the brain reads it as data. What the
 user wants shown more, less or never is not applied to the queue: it is a
 [preference in memory](#preferences-gestures-and-the-brains-tools-workspacego) the composer
-follows. A proposal waiting to be offered (a memory, an intention, a rule…: a queued card,
-`attendOffers` each minute on the journal's timer) enters it as `card:<id>` at weight 1 (2 for an
-intention) from the source `offer`, so the composer may show it; no breakpoint delivers it and the
-brain's turn does not list it: `offerCards` offers it in the conversation as before, and once under
-the brain's message its item is the card's as any other (weight 3, delivered). A
-notification held for the brief (a skill's message weighed 1 to 3, the quiet hours, the daily cap, a tainted
-turn, « pas maintenant ») enters it as `alert:<id>` with weight 2, the item a skill's message
-becomes too. Weight 4 and 5 are delivered as they enter: nothing a running task or thread
-waits on is ever delayed. The rest is held for a **breakpoint**, where an interruption costs the
-user least (Iqbal & Bailey, OASIS): the end of the brain's answer to a user message, the user's
-return after an absence (`user.returned`), and the end of a thread while the user is there
-(away, it waits for the return). A breakpoint delivers what is held in one message of its own
-written by eriphe-core as the brain's, the heaviest first, its cards under it; with nothing held,
-nothing happens. A notification held for the brief waits for the return only: that release is the
-brief (« Pendant ton absence : … »), which tells it even when its item was delivered (weight 4, its
-push kept back by the quiet hours), clears the notification's hold and writes the kv `last_brief`. Nothing waits past its cap: a weight 3 item goes two hours after it entered (checked
-every minute), a lighter one at the next breakpoint, the next return at the latest. The workspace
-shows the open items as surfaces; the brain's turn lists the open items (`[en attente de … : …]`), the heaviest first, a held one marked « retenu »: nothing
-the brain does waits on it. A queue made by v0.156.0 gets its new columns when eriphe-core opens
-the database (`schemaFixes` in `store.go`), its items kept as delivered. A plain yes or no answers a card in words only when the message is
+follows. The rest is delivered by code, in a message of its own written by eriphe-core as the
+brain's, the heaviest first, its cards under it (`attentionBreak`): **weight 4 and 5 at once**
+(nothing a running task or thread waits on is ever delayed; one message for what enters
+together); **weight 3 at the next breakpoint**, where an interruption costs the user least
+(Iqbal & Bailey, OASIS): the end of the brain's answer to a user message, the end of a thread
+while the user is there (away, it waits), or its cap, two hours after it entered (checked every
+minute, never in the quiet hours); **weight 1 and 2 only at the user's return** after an absence
+(`user.returned`), together: the brief (« Pendant ton absence : … »), three light cards at most
+each time, the rest waiting for the next. A delivered notification leaves its hold and points to
+the message; the return writes the kv `last_brief`. The queue never pushes to a device: only a
+notification decided now at weight 5 does (the brain's notifications, `notify.go`). An
+item about a surface (`surface:<id>`) lends it its weight. The brain's turn lists the open items
+(`[en attente de … : …]`), the heaviest first, a held one marked « retenu »: nothing the brain
+does waits on it. A queue made before it was the one path was rewritten once at start (an item
+`alert:<id>` of a notification became `notification:<id>`; the offered proposals' items were made
+again). A plain yes or no answers a card in words only when the message is
 the user's own (workspace, Telegram or a trusted channel; never a channel the user did not trust, nor `/v1/messages`, whose token may
 be lent to the brain), is nothing but a yes or a no, has no file, comes right
 after a recent message of the brain's written in a clean turn that shows exactly one waiting card,
@@ -3059,7 +3055,7 @@ by what they ask, with no code per kind of item (#457):
 | `q-decide` | the cards whose proposal does something once accepted (a rule, an access, a run's calls, a task start, a skill, a setting, a monitor…) | « À décider » |
 | `q-reminders` | the intention cards: yes keeps the reminder, it runs nothing | « Rappels à garder » |
 | `q-memories` | the memory cards: yes keeps the extracted memory | « Souvenirs à garder » |
-| `q-notes` | anything else (a skill's message, a notification held for the brief, an alert, a card whose proposal the `Proposal` cannot show), an `Alert` each with what Eriphe would say of it, else its why | « À voir » |
+| `q-notes` | anything else (a skill's message, a notification held, an alert, a card whose proposal the `Proposal` cannot show), an `Alert` each with what Eriphe would say of it, else its why | « À voir » |
 
 A group of cards is a `List` whose template is a `Proposal` bound to each item's ref in the
 surface's data (`{"items": [{"ref": "memory:12"}, …]}`, read and answered through
@@ -4049,7 +4045,7 @@ the language the device used:
 |---|---|---|
 | a worker task finished its turn, or failed (or was lost) | « Tâche finie : <title> », « La tâche « <title> » a échoué » | the conversation with that task's drawer (`/?task=<id>`) |
 | a permission waits for the user (one that is theirs, or any while the assistant is away), or the assistant ended a message on a question | « <Name> attend ta réponse : <tool and command, or the question> » | the conversation, at that permission or message |
-| the brain tells something on its own (`notify`), or answers a due intention, and the decision below says now | its text, with 👍 / 👎 / « pas maintenant » buttons where the platform shows them | that notification in Settings → Notifications, with why |
+| the brain tells something on its own (`notify`), or answers a due intention, and the decision below says now at weight 5 | its text, with 👍 / 👎 / « pas maintenant » buttons where the platform shows them | that notification in Settings → Notifications, with why |
 
 Each is pushed once, and not at all while a workspace tab is visible and focused: every open tab
 tells eriphe-core when it comes in front or leaves (`POST /presence`, and every 20 s while in
@@ -4064,30 +4060,32 @@ later), while Android and computers receive it in the browser too.
 four tools: `notify(text, weight 1-5, why, ref)`, `notifications` (what it said, what waits
 for the brief, the feedback, the rules, the quiet hours, the known topics, the settings), `rule` and `setting`. The model writes and weighs
 on the attention scale (5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1
-background); the code decides (`decideNotify`, no model): from weight 4 it is sent now, lighter it
-waits for the brief.
+background); the code decides (`decideNotify`, no model), and the notification enters the
+[attention queue](#workspace-web) at its decided weight (outcome `now`, `held` or `never`): from
+weight 4 it is delivered at once (written in the conversation), and only a 5 is pushed to a
+device; a 3 waits for the next breakpoint; a 1 or a 2 for the user's return, the brief. Stored
+outcomes `brief` were rewritten `held` at start.
 
 - **Quiet hours always hold.** The window is a rule (data): for every night, or for the nights
   before a weekday or a weekend day, 4 to 16 hours long; without one, the seed 22:00–08:00. A
-  weight 4 or 5 inside it waits for the brief, unless a topic rule of the user's says "even at night", or it
+  weight 4 or 5 inside it waits for the user's return (weight 2), unless a topic rule of the user's says "even at night", or it
   is the fixed message of a skill the user marked urgent (`urgent`). A weight 5 from the model alone
   never goes through.
   The time zone is the configuration's, or the one set in Settings.
-- **A daily cap** of "now" (4 by default, 0 to 20 in Settings), besides reminders the user asked
-  for in their own words; over it, the brief.
+- **A daily cap** of pushes (weight 5; 4 by default, 0 to 20 in Settings), besides reminders the
+  user asked for in their own words; over it, the next breakpoint (weight 3).
 - **Topic rules** bound the weight of what is about a subject (`project:getout`, which also matches
   `project:getout:prod`) or a kind of subject or record alone with its colon (`project:`, `skill:`; a word without one is a
   topic, `mail` is `topic:mail`; the longest match
   wins): a floor raises it, a ceiling lowers it, a ceiling of 0 is never. A turn that read external
-  content may be lowered, never raised: what it notifies never interrupts, goes to the brief marked
-  as such, and may hold no link. The rules kept with an outcome were rewritten once at start (now:
+  content may be lowered, never raised: what it notifies never interrupts, waits for the next
+  breakpoint at most, marked as such, and may hold no link. The rules kept with an outcome were rewritten once at start (now:
   floor 5; brief: ceiling 2; never: ceiling 0), and the notifications' level became their weight.
 - **The answer to a due intention** is pushed through the same decision, question or not, once per
-  wake; a reminder from an intention drawn from external content waits for the brief.
-- Every notification is kept (`notifications`) with its why, outcome and reason. What waits for the
-  brief is listed for the brain and in Settings, and waits in the attention queue for the user's
-  next return, whose release tells it (the brief, below). Feedback
-  (👍, 👎, « pas maintenant », which moves it back to the brief) is given in Settings or on the push
+  wake; a reminder from an intention drawn from external content is held.
+- Every notification is kept (`notifications`) with its why, weight, outcome and reason. What is
+  held is listed for the brain and in Settings, and waits in the attention queue for its release.
+  Feedback (👍, 👎, « pas maintenant », which holds it again for the user's return) is given in Settings or on the push
   itself (`POST /notify/react`, authorised by the notification's own token, which only its push
   carries), and returned to the brain per ref.
 - **Rules are written by the brain only when the user asked in that clean turn** (its `source_ref`

@@ -75,9 +75,11 @@ func TestAttentionMergeByRef(t *testing.T) {
 }
 
 // A card enters the queue with a weight by its kind: one a task or a
-// thread waits on, 4; any other proposal, 3. Decided, it leaves.
+// thread waits on, 4; what the user asked to be done, 3; a reminder, 2;
+// the small things, 1. Decided, it leaves.
 func TestAttentionWeightByKind(t *testing.T) {
-	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardThread: 4, cardRule: 3, cardMemory: 3, cardRunCalls: 3} {
+	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardThread: 4, cardSkill: 3, cardMonitor: 3, cardRunCalls: 3,
+		cardIntention: 2, cardRule: 1, cardMemory: 1, cardSetting: 1, cardUnlearn: 1} {
 		if got := cardWeight(kind); got != want {
 			t.Errorf("%s: weight %d, want %d", kind, got, want)
 		}
@@ -88,7 +90,7 @@ func TestAttentionWeightByKind(t *testing.T) {
 	brainSays(c, "Je ne te préviens plus des factures avant le brief ?")
 	x := cardOf(t, c, cardRule, r.ID)
 	it := attentionOf(c, cardItemRef(x.ID))
-	if it == nil || it.Weight != 3 || it.Source != byBrain || !strings.Contains(it.Why, "facture") {
+	if it == nil || it.Weight != 1 || it.Held || it.Source != byBrain || !strings.Contains(it.Why, "facture") {
 		t.Fatalf("item %+v", it)
 	}
 	if !strings.Contains(c.attentionBlock(), cardItemRef(x.ID)) {
@@ -139,9 +141,10 @@ func brainMessages(t *testing.T, c *core) []Message {
 	return msgs
 }
 
-// Below weight 4, an item is held until a breakpoint, which delivers what
-// is held in one message, the heaviest first; weight 4 and 5 are delivered
-// as they enter. A breakpoint with nothing held does nothing.
+// Below weight 4, an item is held: weight 3 until a breakpoint, 1 and 2
+// until the user's return; each release says what it delivers in one
+// message, the heaviest first. Weight 4 and 5 are delivered as they enter,
+// in a message of their own. A release with nothing held does nothing.
 func TestAttentionHeldUntilBreakpoint(t *testing.T) {
 	c, _, now := pollCore(t)
 	c.attend(attentionItem{Ref: "mail:1", Weight: 1, Why: "a newsletter", Say: "Une lettre d'information.", Source: "skill:mail", Time: *now})
@@ -163,27 +166,30 @@ func TestAttentionHeldUntilBreakpoint(t *testing.T) {
 	if b := c.attentionBlock(); !strings.Contains(b, "mail:2 (poids 3, skill:mail) : a bill due today (retenu") {
 		t.Errorf("the brain does not read the held item as held: %q", b)
 	}
-	if len(brainMessages(t, c)) != 0 {
-		t.Fatal("a held item was said")
+	if msgs := brainMessages(t, c); len(msgs) != 2 || msgs[0].Text != "the plan waits" || msgs[1].Text != "the site is down" {
+		t.Fatalf("weight 4 and 5 not said at once: %+v", msgs)
 	}
-	if n := c.attentionBreak(breakAnswer, *now); n != 3 {
-		t.Fatalf("delivered %d", n)
+	if n := c.attentionBreak(breakAnswer, *now); n != 1 {
+		t.Fatalf("delivered %d at the answer", n)
 	}
-	msgs := brainMessages(t, c)
-	if len(msgs) != 1 {
+	if msgs := brainMessages(t, c); len(msgs) != 3 || msgs[2].Text != "Ta facture est due aujourd'hui." {
 		t.Fatalf("messages %+v", msgs)
 	}
-	bill, day, letter := strings.Index(msgs[0].Text, "facture"), strings.Index(msgs[0].Text, "calme"), strings.Index(msgs[0].Text, "lettre")
-	if !strings.HasPrefix(msgs[0].Text, tr("fr", "attention.release")) || bill < 0 || !(bill < day && day < letter) {
-		t.Errorf("not in weight order: %q", msgs[0].Text)
+	if n := c.attentionBreak(breakReturn, *now); n != 2 {
+		t.Fatalf("delivered %d at the return", n)
+	}
+	msgs := brainMessages(t, c)
+	day, letter := strings.Index(msgs[3].Text, "calme"), strings.Index(msgs[3].Text, "lettre")
+	if len(msgs) != 4 || !strings.HasPrefix(msgs[3].Text, tr("fr", "attention.brief")) || day < 0 || day > letter {
+		t.Errorf("not the brief in weight order: %+v", msgs)
 	}
 	for _, it := range c.attentionOpen() {
 		if it.Held {
 			t.Errorf("still held: %+v", it)
 		}
 	}
-	if n := c.attentionBreak(breakReturn, *now); n != 0 || len(brainMessages(t, c)) != 1 {
-		t.Error("a breakpoint with nothing held said something")
+	if n := c.attentionBreak(breakReturn, *now); n != 0 || len(brainMessages(t, c)) != 4 {
+		t.Error("a release with nothing held said something")
 	}
 	// A delivered item merged with a new one stays delivered.
 	c.attend(attentionItem{Ref: "mail:2", Weight: 2, Why: "the bill, again", Source: "skill:mail", Time: *now})
@@ -241,7 +247,7 @@ func TestAttentionReturnTellsTheBrief(t *testing.T) {
 	if err != nil || !n.Held {
 		t.Fatalf("%+v %v", n, err)
 	}
-	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || !it.Held || it.Weight != weightHeldNote || it.Source != "skill:prod" {
+	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || !it.Held || it.Weight != weightBrief || it.Source != "skill:prod" {
 		t.Fatalf("item %+v", it)
 	}
 	if c.attentionBreak(breakAnswer, *now) != 0 || c.attentionBreak(breakThread, *now) != 0 {
@@ -273,8 +279,8 @@ func TestAttentionReturnTellsTheBrief(t *testing.T) {
 	}
 }
 
-// A skill's plain message in the quiet hours: its item (weight 4) is in
-// the queue at once, its push kept back; the brief tells it on return.
+// A skill's plain message in the quiet hours: held for the user's return
+// (weight 2), whatever its entry said; the brief tells it.
 func TestAttentionQuietMessageToldAtTheBrief(t *testing.T) {
 	c, _, now := pollCore(t)
 	*now = at(t, "2026-11-04", "23:30")
@@ -283,8 +289,8 @@ func TestAttentionQuietMessageToldAtTheBrief(t *testing.T) {
 	if err != nil || !n.Held || n.Reason != reasonQuiet {
 		t.Fatalf("%+v %v", n, err)
 	}
-	c.attend(runSignal(n.ID, attentionSignal{Weight: weightBlocksATask}, n.Text, "skill:prod", false))
-	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || it.Held || it.Weight != weightBlocksATask {
+	c.attend(runSignal(n.ID, attentionSignal{Weight: weightInterrupts}, n.Text, "skill:prod", false))
+	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || !it.Held || it.Weight != weightBrief || len(brainMessages(t, c)) != 0 {
 		t.Fatalf("item %+v", it)
 	}
 	if c.attentionBreak(breakAnswer, *now) != 0 {
@@ -305,7 +311,7 @@ func TestAttentionThreadEndBreakpoint(t *testing.T) {
 	c.subscribeEvents(c.attentionOnEvent)
 	seq := ownerSays(c, "Lance le thread")
 	c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, now.Add(-3*time.Hour).Unix(), seq)
-	c.attend(attentionItem{Ref: "mail:1", Weight: 2, Why: "a newsletter", Say: "Une lettre.", Source: "skill:mail", Time: *now})
+	c.attend(attentionItem{Ref: "mail:1", Weight: 3, Why: "a bill", Say: "Une facture.", Source: "skill:mail", Time: *now})
 	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: "thread:1", Source: "thread"})
 	if !attentionOf(c, "mail:1").Held {
 		t.Fatal("released while the user is away")
@@ -345,5 +351,139 @@ func TestParseRef(t *testing.T) {
 		if _, err := parseRef(bad); !errors.As(err, &e) {
 			t.Errorf("%q parsed: %v", bad, err)
 		}
+	}
+}
+
+// A notification's item is notification:<id>, never the alert subject a
+// signal may name: both stay apart. A queue made before is rewritten once.
+func TestAttentionNoteRefApart(t *testing.T) {
+	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
+	n, err := c.notify(&notification{Text: "Le build est cassé.", Why: "Skill « ci »", Ref: "skill:ci", Source: notifyFromSkill},
+		notifyItem{Weight: 2, Ref: "skill:ci"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	alert := "alert:" + strconv.FormatInt(n.ID, 10)
+	c.attendSignals([]attentionSignal{{Refs: []string{alert}, Weight: 2, Why: "une alerte"}}, nil, "", "skill:ci", false)
+	if attentionOf(c, noteItemRef(n.ID)) == nil || attentionOf(c, alert) == nil {
+		t.Fatalf("one item for two things: %+v", c.attentionOpen())
+	}
+	if _, err := parseRef(noteItemRef(n.ID)); err == nil {
+		t.Error("a signal may name a notification's item")
+	}
+	// The rewrite: an old item alert:<id> of a notification, an offer's.
+	c.attentionDone(noteItemRef(n.ID))
+	c.attentionDone(alert)
+	c.store.db.Exec(`INSERT INTO attention (ref, weight, source, time) VALUES (?, 2, 'skill:ci', 1), ('card:99', 1, 'offer', 1)`, alert)
+	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, attentionOneQueueKey)
+	for range 2 {
+		if err := attentionOneQueue(c.store.db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var notes, alerts, offers int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM attention WHERE ref = ?`, noteItemRef(n.ID)).Scan(&notes)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM attention WHERE ref = ?`, alert).Scan(&alerts)
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM attention WHERE source = 'offer'`).Scan(&offers)
+	if notes != 1 || alerts != 0 || offers != 0 {
+		t.Errorf("rewritten: %d notification, %d alert, %d offer", notes, alerts, offers)
+	}
+}
+
+// Only a notification decided now at weight 5 pushes; a 4 is written in
+// the conversation at once and pushes nothing; a 5 at night, nothing until
+// the user's return, not even at its cap; the queue alone never pushes.
+func TestAttentionPushesOnlyAFive(t *testing.T) {
+	c, b := notifyCore(t, at(t, "2026-11-04", "10:00"))
+	pushed := func() int { c.push.pending.Wait(); return len(b.received()) }
+	c.notify(&notification{Text: "Une PR attend.", Why: "x", Source: notifyFromSkill}, notifyItem{Weight: 4})
+	if pushed() != 0 {
+		t.Fatal("a 4 pushed")
+	}
+	if msgs := brainMessages(t, c); len(msgs) != 1 || msgs[0].Text != "Une PR attend." {
+		t.Fatalf("a 4 not written at once: %+v", msgs)
+	}
+	c.attend(attentionItem{Ref: "mail:1", Weight: 5, Why: "urgent!", Source: "skill:mail", tainted: true})
+	if pushed() != 0 {
+		t.Fatal("the queue pushed")
+	}
+	c.notify(&notification{Text: "La prod est tombée.", Why: "x", Source: notifyFromSkill}, notifyItem{Weight: 5})
+	if pushed() != 1 {
+		t.Fatal("a 5 did not push")
+	}
+	night := at(t, "2026-11-04", "23:30")
+	c.notifyClock = func() time.Time { return night }
+	said := len(brainMessages(t, c))
+	n, _ := c.notify(&notification{Text: "La prod est encore tombée.", Why: "x", Source: notifyFromSkill}, notifyItem{Weight: 5})
+	if pushed() != 1 || len(brainMessages(t, c)) != said || !n.Held {
+		t.Fatalf("a 5 at night went: %+v", n)
+	}
+	if c.attentionBreak(breakCap, night.Add(3*time.Hour)) != 0 || c.attentionBreak(breakAnswer, night) != 0 {
+		t.Fatal("released before the return")
+	}
+	if c.attentionBreak(breakReturn, night.Add(9*time.Hour)) != 1 {
+		t.Fatal("not told at the return")
+	}
+}
+
+// A signal is held as a notification is: to 3 when its writer read
+// external content, to 2 in the quiet hours; what is said at once is never
+// pushed again as a question nor relayed.
+func TestAttentionSignalGated(t *testing.T) {
+	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
+	c.attendSignals([]attentionSignal{{Refs: []string{"mail:1"}, Weight: 5, Why: "Tu réponds ?"}}, nil, "", "skill:mail", true)
+	if it := attentionOf(c, "mail:1"); it == nil || it.Weight != weightProposal || !it.Held || len(brainMessages(t, c)) != 0 {
+		t.Fatalf("a tainted signal at 5: %+v", it)
+	}
+	c.attendSignals([]attentionSignal{{Refs: []string{"mail:2"}, Weight: 4, Why: "Tu réponds ?"}}, nil, "", "skill:mail", false)
+	msgs := brainMessages(t, c)
+	if len(msgs) != 1 || c.store.get(notifiedKey(msgs[0].Seq)) == "" {
+		t.Fatalf("said at once, open to a push as a question: %+v", msgs)
+	}
+	c.notifyClock = func() time.Time { return at(t, "2026-11-05", "03:00") }
+	c.attendSignals([]attentionSignal{{Refs: []string{"mail:3"}, Weight: 5, Why: "La prod"}}, nil, "", "skill:prod", false)
+	if it := attentionOf(c, "mail:3"); it == nil || it.Weight != weightBrief || !it.Held || len(brainMessages(t, c)) != 1 {
+		t.Fatalf("a signal at 5 in the quiet hours: %+v", it)
+	}
+}
+
+// A wake's answer held by the quiet hours is in the queue, and told at
+// the user's return.
+func TestAttentionHeldWakeToldAtReturn(t *testing.T) {
+	c, _ := notifyCore(t, at(t, "2026-11-05", "02:00"))
+	c.setWakeTurn(&wakeTurn{Text: "Appeler le garage", Asked: true})
+	seq, _ := c.store.addMessage(roleBrain, "Pense à appeler le garage.", true)
+	c.notifyWake(int(seq), 1, "Pense à appeler le garage.")
+	ns, _ := c.notificationsWhere(`source = ?`, notifyFromWake)
+	if len(ns) != 1 || !ns[0].Held {
+		t.Fatalf("wake %+v", ns)
+	}
+	if c.attentionBreak(breakReturn, at(t, "2026-11-05", "09:00")) != 1 {
+		t.Fatal("not told at the return")
+	}
+	if n, _ := c.notificationByID(ns[0].ID); n.Held {
+		t.Error("held forever")
+	}
+}
+
+// An author's surface weighs below the urgent placement; an item about it
+// lends it its own weight, given back when the item leaves.
+func TestSurfaceWeightFromItsItem(t *testing.T) {
+	c, _ := surfaceCore(t)
+	writeTestSurface(t, c, surfaceIn{ID: "revue", Title: "Revue", Weight: 100})
+	if s, _ := c.surface("revue"); s.Weight != surfaceAuthorMax {
+		t.Fatalf("an author's surface weighs %d", s.Weight)
+	}
+	c.attend(attentionItem{Ref: "surface:revue", Weight: 5, Why: "la revue attend", Source: "skill:revue"})
+	if s, _ := c.surface("revue"); s.Weight != queueSurfaceWeight(5) {
+		t.Fatalf("its item does not lend its weight: %d", s.Weight)
+	}
+	writeTestSurface(t, c, surfaceIn{ID: "revue", Title: "Revue", Weight: 30})
+	if s, _ := c.surface("revue"); s.Weight != queueSurfaceWeight(5) {
+		t.Fatalf("rewritten, it lost its item's weight: %d", s.Weight)
+	}
+	c.attentionDone("surface:revue")
+	if s, _ := c.surface("revue"); s.Weight != surfaceAuthorMax {
+		t.Fatalf("its lent weight stays: %d", s.Weight)
 	}
 }

@@ -25,9 +25,6 @@ func TestMachineObservations(t *testing.T) {
 	if _, ok := c.obs.machine("studio", now.Add(idleFresh)); ok {
 		t.Fatal("an old observation still known")
 	}
-	if ok, why := c.proposalMoment(now); ok || why != "dnd" {
-		t.Fatalf("proposal moment %v %s", ok, why)
-	}
 	raw, _ := json.Marshal(c.whereNow(now))
 	if strings.Contains(string(raw), "]]") || !strings.Contains(string(raw), `"line":"telegram"`) {
 		t.Fatalf("where_now %s", raw)

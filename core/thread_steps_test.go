@@ -344,8 +344,9 @@ func TestDeadlineStepWakes(t *testing.T) {
 	eventSeq(t, c, "attend que Sam fasse : Remind the team")
 }
 
-// A linked intention becomes a deadline step: its being due wakes the
-// thread, tainted when it came from external content.
+// A linked intention becomes a deadline step: its being due settles it,
+// tainted when it came from external content, and wakes the brain once:
+// as the intention, not again as the step of a thread it holds.
 func TestIntentionLinkedToThread(t *testing.T) {
 	c := stepsCore(t)
 	s := lightThread(t, c)
@@ -371,9 +372,13 @@ func TestIntentionLinkedToThread(t *testing.T) {
 	if st := stepOf(t, c, s, st.Key); st.Status != stepAccepted || st.Tainted != taintIntention {
 		t.Fatalf("not woken: %+v", st)
 	}
-	seq, _ := eventSeq(t, c, "(intention-"+id64(x.ID)+", deadline) → accepted. Son intention est due")
-	if c.store.get(taintKey(seq)) != taintIntention {
-		t.Errorf("an external intention's wake is clean")
+	var told int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE role = ? AND text LIKE ?`, roleEvent, "%Son intention est due%").Scan(&told)
+	if told != 0 {
+		t.Errorf("the brain is told twice: %d event(s) of the step", told)
+	}
+	if due, _ := c.mem.toSurface(); len(due) != 1 || due[0].ID != x.ID {
+		t.Errorf("the intention does not wake the brain: %+v", due)
 	}
 	if out, isErr := callBrainTool(t, c, "link_thread", map[string]any{"thread_id": s.ID, "ref": "intention:999"}); !isErr {
 		t.Errorf("an unknown intention was linked: %v", out)

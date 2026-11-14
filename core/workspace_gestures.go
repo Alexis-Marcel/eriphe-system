@@ -372,10 +372,11 @@ func (c *core) gestureStamp() string {
 // counts from then.
 func (c *core) queueSweep(now time.Time) {
 	cutoff := now.Add(-queueItemKeep).Unix()
-	res, err := c.store.db.Exec(`DELETE FROM attention WHERE ref NOT LIKE 'card:%' AND delivered > 0 AND delivered <= ? AND time <= ? AND NOT `+heldForBrief,
+	res, err := c.store.db.Exec(`DELETE FROM attention WHERE ref NOT LIKE 'card:%' AND delivered > 0 AND delivered <= ? AND time <= ?`,
 		cutoff, cutoff)
 	if err == nil {
 		if n, _ := res.RowsAffected(); n > 0 {
+			surfacesRecap(c.store.db)
 			c.kickWorkspace()
 		}
 	}

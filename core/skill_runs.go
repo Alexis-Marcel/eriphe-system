@@ -593,7 +593,9 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 	if weight == weightInterrupts {
 		c.runUrgent(r, st)
 	}
-	c.attendSignals(signals, dropped, "task:"+r.Task, source, tainted)
+	if !told {
+		c.attendSignals(signals, dropped, "task:"+r.Task, source, tainted) // they speak alone
+	}
 	if !told && calls == 0 {
 		return
 	}
@@ -615,25 +617,32 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill, Subject: c.taskSubject(r.Task)}, notifyFromSkill, taint, calls > 0)
 	if err != nil {
 		c.endRun(r.ID, state, note+"\n· not told: "+err.Error())
+		if told {
+			c.attendSignals(signals, nil, "task:"+r.Task, source, tainted) // its objects still speak
+		}
 	}
-	if told && err == nil && out["outcome"] != levelNever {
+	if told && err == nil && out["outcome"] != outcomeNever {
 		for _, s := range own {
 			c.attend(runSignal(out["id"], s, msg, source, tainted))
 		}
+		// Its objects come with the message: no heavier, and delivered with it.
+		c.attendSignalsWith(signals, dropped, "task:"+r.Task, source, tainted, out["weight"].(int), out["outcome"] == outcomeNow)
 	}
-	if calls > 0 && (err != nil || out["outcome"] != levelNow) {
-		// Its message is held for the brief, or not sent: the card comes
-		// at the next breakpoint (attention.go), with a message of its own
-		// that does not tell the notification; the brief tells it.
+	if calls > 0 && (err != nil || out["outcome"] != outcomeNow) {
+		// Its message is held, or not sent: the card comes at its
+		// breakpoint (attention.go), with a message of its own that does
+		// not tell the notification; the notification's release does.
 		c.cardNow(cardRunCalls, r.ID, fmt.Sprintf(tr(c.userLang(), "card.runcalls"), r.Skill, calls), "skill:"+r.Skill)
 	}
 }
 
 // runSignal is the queue's item for an attention entry of a skill's run
-// without refs: the notification its message became (alert:<id>), with
-// the entry's weight, its why and say, or else the message's words.
+// without refs: the notification its message became (notification:<id>),
+// its why and say, or else the message's words. Its weight is the
+// notification's, as decided (a rule may lower it): the item merges at the
+// highest.
 func runSignal(id any, s attentionSignal, msg, source string, tainted bool) attentionItem {
-	return attentionItem{Ref: fmt.Sprintf("alert:%v", id), Weight: s.Weight,
+	return attentionItem{Ref: fmt.Sprintf("notification:%v", id), Weight: 1,
 		Why: truncate(oneLine(cmpOr(s.Why, msg)), signalWhyMax), Say: truncate(oneLine(cmpOr(s.Say, msg)), signalSayMax),
 		Source: source, tainted: tainted}
 }

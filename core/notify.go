@@ -16,10 +16,14 @@ import (
 // model writes the words and weighs them, 1 to 5 (the attention scale:
 // attention.go); what happens is decideNotify's: the user's rules (a floor
 // and a ceiling of weight per subject or kind, notify_rules.go), then the
-// quiet hours and the daily cap. From weightSent a notification is sent
-// now; lighter, it waits for the brief. Models are wrong about one time in two on when to
-// interrupt (ProactiveBench), so the decision is code, measured on a labelled
-// corpus (notify_eval_test.go).
+// quiet hours and the daily cap. Then it enters the attention queue
+// (attention.go), the one path to the user, at its decided weight: from
+// weightSent it is delivered at once (outcome now), lighter it is held
+// for a breakpoint, 1 and 2 for the user's return, the brief (outcome
+// held). Only a notification decided now at weight 5 is pushed to a
+// device. Models are wrong about one time in two on when to interrupt
+// (ProactiveBench), so the decision is code, measured on a labelled corpus
+// (notify_eval_test.go).
 //
 //   - There is always a quiet window: a quiet rule of the user's, else the
 //     seed 22:00–08:00. Nothing from the model alone, nor from external
@@ -28,15 +32,15 @@ import (
 //     sends itself (watch_urgent.go).
 //   - A weight from the model alone never goes through them: only a user
 //     rule marked "even at night" does, or a fixed urgent text.
-//   - At most notifyCap "now" a day (4 by default, Settings), besides what
-//     the user asked for themselves (a reminder from their own words).
+//     Held in them, it waits for the user's return (weight 2).
+//   - At most notifyCap pushes a day (4 by default, Settings), besides what
+//     the user asked for themselves (a reminder from their own words); over
+//     it, a 5 waits for the next breakpoint (weight 3).
 //   - What a tainted turn says (one that read external content) never
-//     interrupts: it goes to the brief at most, and is marked so. It only
-//     speaks to the user; nothing it says can act.
-//   - A weight sent refused goes to the brief: it is held, listed for the brain
-//     (notifications) and in the workspace, and waits in the attention
-//     queue for the user's next return, whose release is the brief
-//     (attention.go).
+//     interrupts: it waits for the next breakpoint at most (weight 3), and
+//     is marked so. It only speaks to the user; nothing it says can act.
+//   - What is held is listed for the brain (notifications) and in the
+//     workspace, and waits in the attention queue.
 //
 // Every notification is kept with its why: the push shows the text, and
 // opening it shows why, with 👍 / 👎 / « pas maintenant ». That feedback goes
@@ -65,7 +69,8 @@ func notifyWeightColumn(db *sql.DB) error {
 		return n > 0
 	}
 	if !has("level") {
-		return nil
+		_, err := db.Exec(`UPDATE notifications SET outcome = 'held' WHERE outcome = 'brief'`) // « brief » is the return only
+		return err
 	}
 	if !has("weight") {
 		if _, err := db.Exec(`ALTER TABLE notifications ADD COLUMN weight INTEGER NOT NULL DEFAULT 0`); err != nil {
@@ -76,16 +81,20 @@ func notifyWeightColumn(db *sql.DB) error {
 		return err
 	}
 	_, err := db.Exec(`ALTER TABLE notifications DROP COLUMN level`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE notifications SET outcome = 'held' WHERE outcome = 'brief'`)
 	return err
 }
 
 const (
 	// What the code decided: the outcome column.
-	levelNow   = "now"
-	levelBrief = "brief"
-	levelNever = "never"
+	outcomeNow   = "now"   // delivered at once; pushed at weight 5
+	outcomeHeld  = "held"  // waits in the queue for its breakpoint
+	outcomeNever = "never" // a rule of the user's says never
 
-	weightSent = 4 // from this weight a notification is sent now
+	weightSent = 4 // from this weight a notification is delivered at once
 
 	notifyFromBrain = "brain" // the notify tool
 	notifyFromWake  = "wake"  // the brain's answer to a due intention (brain_wake.go)
@@ -98,7 +107,8 @@ const (
 	// Why the code decided as it did: the reason column, shown in the
 	// workspace (notif.reason.*) and told to the brain (notifyReasons).
 	reasonNow     = "now"
-	reasonBrief   = "brief"   // weighed below weightSent
+	reasonPause   = "pause"   // weighed 3: the next breakpoint
+	reasonBrief   = "brief"   // weighed 1 or 2: the user's return
 	reasonRule    = "rule"    // a rule of the user's raised or lowered its weight
 	reasonTainted = "tainted" // external content never interrupts alone
 	reasonQuiet   = "quiet"
@@ -109,14 +119,15 @@ const (
 )
 
 var notifyReasons = map[string]string{
-	reasonNow:     "sent now",
-	reasonBrief:   "kept for the brief: weighed below 4",
+	reasonNow:     "delivered now (pushed to a device at weight 5)",
+	reasonPause:   "held for the next pause: weighed 3",
+	reasonBrief:   "held for the user's return, the brief: weighed 1 or 2",
 	reasonRule:    "weighed again by a rule of the user's",
-	reasonTainted: "kept for the brief: this turn read external content, which never interrupts on its own",
-	reasonQuiet:   "kept for the brief: quiet hours",
-	reasonCap:     "kept for the brief: today's cap of interruptions is reached",
-	reasonUrgent:  "sent now: a rule of the user's allows it even at night",
-	reasonLater:   "the user said not now: kept for the brief",
+	reasonTainted: "held for the next pause: this turn read external content, which never interrupts on its own",
+	reasonQuiet:   "held for the user's return: quiet hours",
+	reasonCap:     "held for the next pause: today's cap of pushes is reached",
+	reasonUrgent:  "delivered now: a rule of the user's allows it even at night",
+	reasonLater:   "the user said not now: held for their return",
 	reasonWatch:   "sent now, at any hour: the fixed message of a watch the user marked urgent",
 }
 
@@ -136,7 +147,7 @@ type notification struct {
 	Asked      bool      `json:"asked,omitempty"`   // the user asked for it themselves
 	Tainted    string    `json:"tainted,omitempty"` // what the turn had read, if anything
 	Msg        int       `json:"msg,omitempty"`     // its message in the conversation
-	Held       bool      `json:"held,omitempty"`    // waits for the brief
+	Held       bool      `json:"held,omitempty"`    // waits in the attention queue
 	Feedback   string    `json:"feedback,omitempty"`
 	FeedbackAt time.Time `json:"feedback_at,omitzero"`
 	token      string    // lets a push's buttons answer without a session
@@ -150,6 +161,9 @@ type notifyItem struct {
 	Asked   bool   // the user asked for it in their own words: not counted in the cap
 	Tainted bool   // drawn from external content
 	Where   string // the line the writer would try first (where_now.go); "" for the router's order
+	// Spoken: the caller writes it in the conversation itself when it is
+	// delivered now (the brain's own words): its item enters delivered.
+	Spoken bool
 	// Urgent is set by eriphe-core only, never by the brain: the fixed
 	// message of a watch the user marked urgent, on its condition
 	// (watch_urgent.go). It goes through the quiet hours and the cap.
@@ -160,7 +174,7 @@ type notifyItem struct {
 type notifyContext struct {
 	Now     time.Time // in the user's zone
 	Rules   []notifyRule
-	SentNow int // "now" sent today, besides what the user asked for
+	SentNow int // pushes today, besides what the user asked for
 	Cap     int
 }
 
@@ -171,7 +185,7 @@ type notifyDecision struct {
 	Weight  int // the weight asked, through the rule
 }
 
-// decideNotify decides, without a model: never, now or for the brief. The
+// decideNotify decides, without a model: never, now or held. The
 // rule for its subject (or kind) raises the weight to its floor and lowers
 // it to its ceiling, a ceiling of 0 being never; a tainted turn may be
 // lowered, never raised. From weightSent it is sent, unless the turn read
@@ -180,7 +194,7 @@ type notifyDecision struct {
 func decideNotify(it notifyItem, cx notifyContext) notifyDecision {
 	w := min(max(it.Weight, 1), weightInterrupts)
 	if it.Urgent && !it.Tainted && w == weightInterrupts {
-		return notifyDecision{levelNow, reasonWatch, 0, weightInterrupts}
+		return notifyDecision{outcomeNow, reasonWatch, 0, weightInterrupts}
 	}
 	r := itemRule(cx.Rules, it)
 	var ruleID int64
@@ -188,7 +202,7 @@ func decideNotify(it notifyItem, cx notifyContext) notifyDecision {
 	if r != nil {
 		ruleID = r.ID
 		if r.Ceiling == 0 {
-			return notifyDecision{levelNever, reasonRule, r.ID, 0}
+			return notifyDecision{outcomeNever, reasonRule, r.ID, 0}
 		}
 		if w < r.Floor && !it.Tainted { // the model chose the subject: a tainted turn may lower, never raise
 			w, reason = r.Floor, reasonRule
@@ -197,23 +211,25 @@ func decideNotify(it notifyItem, cx notifyContext) notifyDecision {
 			w, reason = r.Ceiling, reasonRule
 		}
 	}
-	if w < weightSent {
-		return notifyDecision{levelBrief, cmpOr(reason, reasonBrief), ruleID, w}
+	switch {
+	case w < weightProposal:
+		return notifyDecision{outcomeHeld, cmpOr(reason, reasonBrief), ruleID, w}
+	case w < weightSent:
+		return notifyDecision{outcomeHeld, cmpOr(reason, reasonPause), ruleID, w}
+	case it.Tainted:
+		return notifyDecision{outcomeHeld, reasonTainted, ruleID, weightProposal}
 	}
-	if it.Tainted {
-		return notifyDecision{levelBrief, reasonTainted, ruleID, weightSent - 1}
-	}
-	urgent := r != nil && r.Night && r.Floor >= weightSent
+	urgent := r != nil && r.Night && r.Floor == weightInterrupts
 	if _, quiet := quietAt(cx.Rules, cx.Now); quiet {
 		if !urgent {
-			return notifyDecision{levelBrief, reasonQuiet, ruleID, w}
+			return notifyDecision{outcomeHeld, reasonQuiet, ruleID, weightBrief}
 		}
-		return notifyDecision{levelNow, reasonUrgent, ruleID, w}
+		return notifyDecision{outcomeNow, reasonUrgent, ruleID, w}
 	}
-	if !it.Asked && !urgent && cx.SentNow >= cx.Cap {
-		return notifyDecision{levelBrief, reasonCap, ruleID, w}
+	if w == weightInterrupts && !it.Asked && !urgent && cx.SentNow >= cx.Cap {
+		return notifyDecision{outcomeHeld, reasonCap, ruleID, weightProposal}
 	}
-	return notifyDecision{levelNow, cmpOr(reason, reasonNow), ruleID, w}
+	return notifyDecision{outcomeNow, cmpOr(reason, reasonNow), ruleID, w}
 }
 
 // The settings: the user's zone and the daily cap (Settings → notifications).
@@ -251,12 +267,13 @@ func (c *core) notifyContext() (notifyContext, error) {
 	}
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	var sent int
-	err = c.store.db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE outcome = 'now' AND asked = 0 AND reason NOT IN (?, ?)
-		AND created >= ?`, reasonUrgent, reasonWatch, day.Unix()).Scan(&sent)
+	err = c.store.db.QueryRow(`SELECT COUNT(*) FROM notifications WHERE outcome = 'now' AND weight >= ? AND asked = 0 AND reason NOT IN (?, ?)
+		AND created >= ?`, weightInterrupts, reasonUrgent, reasonWatch, day.Unix()).Scan(&sent)
 	return notifyContext{Now: now, Rules: rules, SentNow: sent, Cap: c.notifyCap()}, err
 }
 
-// notify decides on n, keeps it, and pushes it when it is for now.
+// notify decides on n, keeps it, puts it in the attention queue (not when
+// never), and pushes it when it is delivered now at weight 5.
 func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	// A subject merged is kept under the other (subjects.go).
 	n.Subject = c.store.keepSubject(n.Subject, "")
@@ -267,7 +284,7 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	}
 	d := decideNotify(it, cx)
 	n.Created, n.Weight, n.Outcome, n.Reason, n.RuleID, n.Asked = cx.Now, d.Weight, d.Outcome, d.Reason, d.RuleID, it.Asked
-	n.Held = d.Outcome == levelBrief
+	n.Held = d.Outcome == outcomeHeld
 	n.token = randomToken(16)
 	res, err := c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, subject, source, weight, outcome, reason, rule_id,
 		asked, tainted, msg, held, token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -278,16 +295,16 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	}
 	n.ID, _ = res.LastInsertId()
 	log.Printf("notify: %d weight %d → %d %s (%s)", n.ID, it.Weight, d.Weight, d.Outcome, d.Reason)
-	if n.Held {
-		c.attendNote(n) // told at the user's next return, the brief (attention.go)
+	if d.Outcome != outcomeNever {
+		c.attendNote(n, it.Spoken && d.Outcome == outcomeNow) // the one path to the user (attention.go)
 	}
-	if d.Outcome == levelNow {
+	if d.Outcome == outcomeNow && d.Weight == weightInterrupts {
 		note := notifyNote(n)
-		note.Route = routeNote{Level: levelNow, Tainted: it.Tainted, Fixed: n.Source == notifyFromUrgent, First: it.Where}
+		note.Route = routeNote{Level: outcomeNow, Tainted: it.Tainted, Fixed: n.Source == notifyFromUrgent, First: it.Where}
 		if r := itemRule(cx.Rules, it); r != nil {
 			note.Channels = r.Channels // the rule's channels, else the default (channels.go)
 			note.Route.Only, note.Route.Also, note.Route.Never = r.Channels, r.Also, r.Never
-			note.Route.Urgent = r.Night && r.Floor >= weightSent
+			note.Route.Urgent = r.Night && r.Floor == weightInterrupts
 		}
 		if d.Reason == reasonWatch {
 			note.Route.Urgent = true // the shorter delay, and escalation in the quiet hours
@@ -349,13 +366,13 @@ func (c *core) notificationByID(id int64) (*notification, error) {
 	return scanNotification(c.store.db.QueryRow(`SELECT `+notifyCols+` FROM notifications WHERE id = ?`, id))
 }
 
-// heldNotifications are those waiting for the brief, oldest first.
+// heldNotifications are those waiting in the attention queue, oldest first.
 func (c *core) heldNotifications() ([]*notification, error) {
 	return c.notificationsWhere(`held = 1 ORDER BY id LIMIT 100`)
 }
 
 // notificationsSince are those made since a time, oldest first, all or
-// only what still waits for the brief: what a brief, or the point made on
+// only what still waits in the queue: what a brief, or the point made on
 // the user's return, summarises (each with its source, time, why, ref,
 // outcome and feedback).
 func (c *core) notificationsSince(since time.Time, heldOnly bool) ([]*notification, error) {
@@ -392,7 +409,7 @@ func (c *core) notificationFeedback(id int64, fb string) (*notification, error) 
 	c.ackNotification(id, ackFeedback) // seen: no next device (route_send.go)
 	n, err := c.notificationByID(id)
 	if err == nil && fb == "later" {
-		c.attendNote(n)
+		c.noteLater(n) // held again for the user's return (attention.go)
 	}
 	return n, err
 }

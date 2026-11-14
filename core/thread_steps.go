@@ -617,7 +617,7 @@ func (c *core) deadlineCame(thread int64, key string, now time.Time) {
 		return
 	}
 	var taint []string
-	status, detail := "", ""
+	status, detail, cameDue := "", "", false
 	switch {
 	case st.Intention != 0:
 		if c.mem == nil {
@@ -629,7 +629,7 @@ func (c *core) deadlineCame(thread int64, key string, now time.Time) {
 		}
 		switch x.State {
 		case intentDue:
-			status, detail = stepAccepted, "Son intention est due : "+x.Text
+			status, detail, cameDue = stepAccepted, "Son intention est due : "+x.Text, true
 		case intentDone:
 			status, detail = stepAccepted, "Son intention est faite : "+x.Text
 		case intentCancelled:
@@ -647,7 +647,11 @@ func (c *core) deadlineCame(thread int64, key string, now time.Time) {
 	}
 	c.setStep(thread, key, map[string]any{"status": status, "output": truncate(detail, 600), "tainted": strings.Join(taint, ", "), "ended": now.Unix()})
 	c.logThread(thread, "engine", fmt.Sprintf("L'échéance « %s » : %s.", st.Title, stepWord(status)))
-	c.stepWake(s, st, status, detail, taint)
+	// An intention that comes due wakes the brain itself (brain_wake.go):
+	// a thread the brain holds is not told again. A lead is.
+	if !cameDue || s.led() {
+		c.stepWake(s, st, status, detail, taint)
+	}
 	c.advanceLocked(context.Background(), thread)
 }
 

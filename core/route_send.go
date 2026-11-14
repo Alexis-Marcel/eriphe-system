@@ -281,7 +281,7 @@ func (c *core) escalateDue() {
 func (c *core) escalate(e routeEntry, n pushNote, set routeSettings, now time.Time) {
 	e.NextAt = time.Time{}
 	sig := c.routeSignals(now)
-	if n.Route.Level != levelNow || n.Route.Tainted || sig.Quiet && !n.Route.Urgent || e.Step >= maxEscalation {
+	if n.Route.Level != outcomeNow || n.Route.Tainted || sig.Quiet && !n.Route.Urgent || e.Step >= maxEscalation {
 		c.updateRoute(e, n)
 		return
 	}

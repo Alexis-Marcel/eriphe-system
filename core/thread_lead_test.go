@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -141,6 +142,7 @@ func TestFinalCheck(t *testing.T) {
 // attention queue under the lead's name, the bad ones are dropped and said.
 func TestLeadReportAttention(t *testing.T) {
 	c, s := threadCore(t)
+	c.notifyClock = func() time.Time { return at(t, "2026-11-04", "10:00") } // out of the quiet hours
 	ctx := context.Background()
 	c.decideCard(ctx, threadCard(t, c, askPlan).ID, true, "web")
 	s, _ = c.thread(s.ID)

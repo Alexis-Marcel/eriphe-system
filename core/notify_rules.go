@@ -106,12 +106,12 @@ func ruleWeights(db *sql.DB) error {
 	rows.Close()
 	for id, m := range specs {
 		floor, ceiling := 0, weightInterrupts
-		switch m["outcome"] {
-		case levelNow:
+		switch m["outcome"] { // as they were written
+		case "now":
 			floor = weightInterrupts
-		case levelBrief:
-			ceiling = weightHeldNote
-		case levelNever:
+		case "brief":
+			ceiling = weightBrief
+		case "never":
 			ceiling = 0
 		}
 		delete(m, "outcome")
@@ -257,8 +257,8 @@ func (r *notifyRule) check() error {
 			return errors.New("the floor is at most the ceiling")
 		case r.Floor == 0 && r.Ceiling == weightInterrupts:
 			return errors.New("a rule raises the weight (floor) or lowers it (ceiling; 0 is never)")
-		case r.Night && r.Floor < weightSent:
-			return errors.New("night goes with a floor of 4 or 5 only")
+		case r.Night && r.Floor != weightInterrupts:
+			return errors.New("night goes with a floor of 5 only: what pushes")
 		}
 		r.Days, r.From, r.To = "", 0, 0
 		ch, err := checkChannels(r.Channels)

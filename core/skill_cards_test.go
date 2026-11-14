@@ -234,10 +234,9 @@ func TestSkillRunUrgent(t *testing.T) {
 	}
 }
 
-// A run whose message is held for the brief has its calls' card held for
-// the next breakpoint, where it comes under a message that says only the
-// card; the notification waits for the user's return, the brief.
-func TestSkillRunCallsCardHeldForBrief(t *testing.T) {
+// A run whose message weighs 3 is held for the next breakpoint, its calls'
+// card with it: both come in one message there, the card under it.
+func TestSkillRunCallsCardHeldForBreakpoint(t *testing.T) {
 	c, now := skillCore(t)
 	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ntools: [monitor]\n---\nEnquête.\n")
 	r := startedRun(t, c, now, "prod")
@@ -249,7 +248,7 @@ func TestSkillRunCallsCardHeldForBrief(t *testing.T) {
 		`{"receipt": {"status": "done", "attention": [{"weight": 3, "why": "des 5xx"}]}}`+"\n```"); r.State != skillRunDone {
 		t.Fatalf("run %+v", r)
 	}
-	if ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill); len(ns) != 1 || ns[0].Outcome != levelBrief {
+	if ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill); len(ns) != 1 || ns[0].Outcome != outcomeHeld {
 		t.Fatalf("notifications %+v", ns)
 	}
 	x := cardOf(t, c, cardRunCalls, r.ID)
@@ -257,12 +256,12 @@ func TestSkillRunCallsCardHeldForBrief(t *testing.T) {
 		t.Fatalf("card %+v, item %+v: not held", x, it)
 	}
 	ns, _ := c.notificationsWhere(`source = ?`, notifyFromSkill)
-	// Its message is one item, alert:<id>: weighed by its entry, held
-	// for the return with no cap of time.
-	if it := attentionOf(c, noteItemRef(ns[0].ID)); it == nil || !it.Held || it.Weight != weightProposal || !it.Due.IsZero() {
+	// Its message is one item, notification:<id>, weighed by its entry,
+	// held for the next breakpoint (two hours at most).
+	if it := attentionOf(c, noteItemRef(ns[0].ID)); it == nil || !it.Held || it.Weight != weightProposal || it.Due.IsZero() {
 		t.Fatalf("notification item %+v", it)
 	}
-	// The brain's answer to a message of Sam's: the card comes.
+	// The brain's answer to a message of Sam's: both come.
 	ownerSays(c, "Quoi de neuf ?")
 	c.attentionAnswered(*now)
 	x = cardOf(t, c, cardRunCalls, r.ID)
@@ -270,18 +269,13 @@ func TestSkillRunCallsCardHeldForBrief(t *testing.T) {
 		t.Fatalf("card %+v, item %+v: not shown", x, it)
 	}
 	msgs, _ := c.store.messagesAfter(x.Seq-1, 1)
-	if msgs[0].Role != roleBrain || strings.Contains(msgs[0].Text, "5xx") || !strings.Contains(msgs[0].Text, "prod") {
+	if msgs[0].Role != roleBrain || !strings.Contains(msgs[0].Text, "5xx") || !strings.Contains(msgs[0].Text, "prod") {
 		t.Errorf("message %q", msgs[0].Text)
 	}
-	if c.attentionBreak(breakCap, time.Now().Add(5*time.Hour)) != 0 || !attentionOf(c, noteItemRef(ns[0].ID)).Held {
-		t.Fatal("the cap told the brief")
+	if n, _ := c.notificationByID(ns[0].ID); n.Held || n.Msg != x.Seq {
+		t.Errorf("notification %+v", n)
 	}
-	// Sam's return: the brief tells the notification.
-	if c.attentionBreak(breakReturn, *now) != 1 {
-		t.Fatal("the brief is not told")
-	}
-	last, _ := c.store.messagesAfter(x.Seq, 5)
-	if len(last) != 1 || !strings.Contains(last[0].Text, "5xx") {
-		t.Errorf("brief %+v", last)
+	if c.attentionBreak(breakReturn, *now) != 0 {
+		t.Fatal("told twice")
 	}
 }

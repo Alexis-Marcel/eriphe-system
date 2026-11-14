@@ -375,68 +375,6 @@ func TestAPIMessageAnswersNoCard(t *testing.T) {
 	}
 }
 
-// Queued proposals are offered a few at a time, at a good moment: never in
-// the quiet hours, at night, or when a source says not to disturb.
-func TestCardsOfferedAtTheRightMoment(t *testing.T) {
-	queue := func(c *core, n int) {
-		for i := range n {
-			mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: fmt.Sprintf("Fait numéro %d", i), Status: memProposed, SourceKind: srcTask})
-		}
-	}
-	// The day: up to three, said naturally, then not again within the hour.
-	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-	queue(c, 4)
-	now := c.notifyTime()
-	offer := c.offerCards(now)
-	if !strings.Contains(offer, "à proposer : 3") || !strings.Contains(offer, "J'ai deux petites choses") || !strings.Contains(offer, "Fait numéro 0") {
-		t.Fatalf("offer %q", offer)
-	}
-	if strings.Contains(offer, "Fait numéro 3") {
-		t.Error("more than three offered at once")
-	}
-	if again := c.offerCards(now.Add(10 * time.Minute)); again != "" {
-		t.Errorf("offered again within the hour: %q", again)
-	}
-	seq := brainSays(c, "Voilà. J'ai trois petites choses à te proposer.")
-	if xs, _ := c.cardsWhere(`seq = ?`, seq); len(xs) != 3 {
-		t.Fatalf("%d cards with the message", len(xs))
-	}
-	// Not taken by the brain: back to the queue at the turn's end.
-	c2, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-	queue(c2, 1)
-	c2.offerCards(c2.notifyTime())
-	c2.cardsTurnEnded()
-	if xs, _ := c2.cardsWhere(`seq = 0 AND turn = 0`); len(xs) != 1 {
-		t.Fatalf("not back in the queue: %+v", xs)
-	}
-
-	for name, setup := range map[string]func(*core) time.Time{
-		"night": func(c *core) time.Time { return at(t, "2026-11-04", "23:30") },
-		"early": func(c *core) time.Time { return at(t, "2026-11-04", "06:10") },
-		"quiet": func(c *core) time.Time {
-			r := quietRule("all", "06:00", "11:00")
-			r.By, r.Why = "owner", "Le matin, je travaille."
-			if _, err := c.addNotifyRule(r); err != nil {
-				t.Fatal(err)
-			}
-			return at(t, "2026-11-04", "10:00")
-		},
-		"dnd": func(c *core) time.Time {
-			now := at(t, "2026-11-04", "10:00")
-			c.obs.put("pc", machineObs{DND: true, Reason: "game", At: now})
-			return now
-		},
-	} {
-		now := at(t, "2026-11-04", "10:00")
-		c, _ := notifyCore(t, now)
-		queue(c, 2)
-		when := setup(c)
-		if offer := c.offerCards(when); offer != "" {
-			t.Errorf("%s: offered %q", name, offer)
-		}
-	}
-}
-
 // A digest card follows the brain's read of since, with the items and
 // their links; a spontaneous message says why it was sent.
 func TestDigestAndWhy(t *testing.T) {

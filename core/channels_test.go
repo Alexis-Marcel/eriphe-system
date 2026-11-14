@@ -86,7 +86,7 @@ func TestRegisteredChannelIsALine(t *testing.T) {
 		t.Fatalf("%q %v", v, err)
 	}
 	sig := routeSignals{Channels: map[string]bool{"chat": true}}
-	p := route(routeNote{Level: levelNow, First: "chat"}, sig, routeSettings{}, nil)
+	p := route(routeNote{Level: outcomeNow, First: "chat"}, sig, routeSettings{}, nil)
 	if len(p.First) != 1 || p.First[0].Step != "chat" || p.First[0].Label != "Chat" || describeTarget("fr", p.First[0]) != "Chat" {
 		t.Fatalf("plan %+v", p)
 	}

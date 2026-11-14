@@ -345,6 +345,9 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 	if in.Weight == 0 {
 		in.Weight = surfaceWeightDef
 	}
+	if !keptByCode(author) {
+		in.Weight = c.authorWeight(in.ID, in.Weight)
+	}
 	now := time.Now()
 	life, err := c.checkLifetime(in.Lifetime, now)
 	if err != nil {
@@ -1440,4 +1443,42 @@ func rewriteAt(v any, toks []string, fn func(string) string) any {
 		}
 	}
 	return v
+}
+
+// An author's surface (the brain's, a skill's, a lead's, a task's) weighs
+// at most surfaceAuthorMax: being placed first is the attention queue's,
+// from the weight of an item about it (surface:<id>, queueSurfaceWeight).
+
+const surfaceAuthorMax = weightUrgent - 1
+
+// authorWeight is the weight an author's surface is kept at: its own,
+// capped, raised to its open item's.
+func (c *core) authorWeight(id string, w int) int {
+	w = min(w, surfaceAuthorMax)
+	var item int
+	c.store.db.QueryRow(`SELECT COALESCE(MAX(weight), 0) FROM attention WHERE ref = ?`, refSurface+":"+id).Scan(&item)
+	if item > 0 {
+		w = max(w, queueSurfaceWeight(item))
+	}
+	return w
+}
+
+func init() { schemaFixes = append(schemaFixes, surfacesRecap) }
+
+// surfacesRecap gives back a weight lent: an author's surface with no open
+// item weighs surfaceAuthorMax at most. Run when an item about a surface
+// leaves, with the queue's sweep, and at start.
+func surfacesRecap(db *sql.DB) error {
+	_, err := db.Exec(`UPDATE surfaces SET weight = ? WHERE weight > ? AND author != ? AND author NOT LIKE 'thread:%'
+		AND NOT EXISTS (SELECT 1 FROM attention a WHERE a.ref = 'surface:' || surfaces.id)`, surfaceAuthorMax, surfaceAuthorMax, surfaceAuthorCore)
+	return err
+}
+
+// surfaceLent raises a surface to the weight of its open item.
+func (c *core) surfaceLent(id string) {
+	var item int
+	c.store.db.QueryRow(`SELECT COALESCE(MAX(weight), 0) FROM attention WHERE ref = ?`, refSurface+":"+id).Scan(&item)
+	if item > 0 {
+		c.store.db.Exec(`UPDATE surfaces SET weight = MAX(weight, ?) WHERE id = ?`, queueSurfaceWeight(item), id)
+	}
 }

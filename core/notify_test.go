@@ -52,32 +52,32 @@ func TestDecideNotify(t *testing.T) {
 		reason   string
 		withRule bool
 	}{
-		{"day now", notifyItem{Weight: 5}, at(t, "2026-11-04", "10:00"), 0, levelNow, reasonNow, true},
-		{"brief stays brief", notifyItem{Weight: 2}, at(t, "2026-11-04", "10:00"), 0, levelBrief, reasonBrief, true},
-		{"late evening", notifyItem{Weight: 5}, at(t, "2026-11-04", "22:30"), 0, levelBrief, reasonQuiet, true},
-		{"after midnight", notifyItem{Weight: 5}, at(t, "2026-11-05", "03:00"), 0, levelBrief, reasonQuiet, true},
-		{"quiet ends at 8", notifyItem{Weight: 5}, at(t, "2026-11-05", "08:00"), 0, levelNow, reasonNow, true},
-		{"quiet starts at 22", notifyItem{Weight: 5}, at(t, "2026-11-04", "21:59"), 0, levelNow, reasonNow, true},
-		{"cap", notifyItem{Weight: 5}, at(t, "2026-11-04", "15:00"), 4, levelBrief, reasonCap, true},
-		{"asked passes the cap", notifyItem{Weight: 5, Asked: true}, at(t, "2026-11-04", "15:00"), 9, levelNow, reasonNow, true},
-		{"asked does not pass the night", notifyItem{Weight: 5, Asked: true}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonQuiet, true},
-		{"night rule", notifyItem{Weight: 5, Ref: "project:getout:prod"}, at(t, "2026-11-05", "02:00"), 9, levelNow, reasonUrgent, true},
-		{"rule raises", notifyItem{Weight: 2, Ref: "person:lina"}, at(t, "2026-11-04", "11:00"), 0, levelNow, reasonRule, true},
-		{"rule raises, not at night", notifyItem{Weight: 2, Ref: "person:lina"}, at(t, "2026-11-04", "23:00"), 0, levelBrief, reasonQuiet, true},
-		{"never", notifyItem{Weight: 5, Ref: "topic:mail"}, at(t, "2026-11-04", "11:00"), 0, levelNever, reasonRule, true},
-		{"rule lowers", notifyItem{Weight: 5, Ref: "project:site"}, at(t, "2026-11-04", "11:00"), 0, levelBrief, reasonRule, true},
-		{"longest match", notifyItem{Weight: 5, Ref: "project:getout:staging"}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonRule, true},
-		{"no partial word", notifyItem{Weight: 5, Ref: "project:getoutside"}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonQuiet, true},
-		{"tainted day", notifyItem{Weight: 5, Tainted: true}, at(t, "2026-11-04", "11:00"), 0, levelBrief, reasonTainted, true},
-		{"tainted night rule", notifyItem{Weight: 5, Ref: "project:getout", Tainted: true}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonTainted, true},
-		{"tainted cannot raise", notifyItem{Weight: 2, Ref: "person:lina", Tainted: true}, at(t, "2026-11-04", "11:00"), 0, levelBrief, reasonBrief, true},
-		{"tainted never", notifyItem{Weight: 5, Ref: "topic:mail", Tainted: true}, at(t, "2026-11-04", "11:00"), 0, levelNever, reasonRule, true},
-		{"weight 4 is sent", notifyItem{Weight: 4}, at(t, "2026-11-04", "10:00"), 0, levelNow, reasonNow, true},
-		{"weight 3 waits", notifyItem{Weight: 3}, at(t, "2026-11-04", "10:00"), 0, levelBrief, reasonBrief, true},
-		{"a kind's ceiling", notifyItem{Weight: 5, Ref: "skill:veille"}, at(t, "2026-11-04", "10:00"), 0, levelBrief, reasonRule, true},
-		{"urgent at 2 is no urgent", notifyItem{Weight: 2, Urgent: true}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonBrief, true},
-		{"urgent", notifyItem{Weight: 5, Urgent: true}, at(t, "2026-11-05", "02:00"), 9, levelNow, reasonWatch, true},
-		{"no rules: seed", notifyItem{Weight: 5, Ref: "project:getout"}, at(t, "2026-11-05", "02:00"), 0, levelBrief, reasonQuiet, false},
+		{"day now", notifyItem{Weight: 5}, at(t, "2026-11-04", "10:00"), 0, outcomeNow, reasonNow, true},
+		{"brief stays brief", notifyItem{Weight: 2}, at(t, "2026-11-04", "10:00"), 0, outcomeHeld, reasonBrief, true},
+		{"late evening", notifyItem{Weight: 5}, at(t, "2026-11-04", "22:30"), 0, outcomeHeld, reasonQuiet, true},
+		{"after midnight", notifyItem{Weight: 5}, at(t, "2026-11-05", "03:00"), 0, outcomeHeld, reasonQuiet, true},
+		{"quiet ends at 8", notifyItem{Weight: 5}, at(t, "2026-11-05", "08:00"), 0, outcomeNow, reasonNow, true},
+		{"quiet starts at 22", notifyItem{Weight: 5}, at(t, "2026-11-04", "21:59"), 0, outcomeNow, reasonNow, true},
+		{"cap", notifyItem{Weight: 5}, at(t, "2026-11-04", "15:00"), 4, outcomeHeld, reasonCap, true},
+		{"asked passes the cap", notifyItem{Weight: 5, Asked: true}, at(t, "2026-11-04", "15:00"), 9, outcomeNow, reasonNow, true},
+		{"asked does not pass the night", notifyItem{Weight: 5, Asked: true}, at(t, "2026-11-05", "02:00"), 0, outcomeHeld, reasonQuiet, true},
+		{"night rule", notifyItem{Weight: 5, Ref: "project:getout:prod"}, at(t, "2026-11-05", "02:00"), 9, outcomeNow, reasonUrgent, true},
+		{"rule raises", notifyItem{Weight: 2, Ref: "person:lina"}, at(t, "2026-11-04", "11:00"), 0, outcomeNow, reasonRule, true},
+		{"rule raises, not at night", notifyItem{Weight: 2, Ref: "person:lina"}, at(t, "2026-11-04", "23:00"), 0, outcomeHeld, reasonQuiet, true},
+		{"never", notifyItem{Weight: 5, Ref: "topic:mail"}, at(t, "2026-11-04", "11:00"), 0, outcomeNever, reasonRule, true},
+		{"rule lowers", notifyItem{Weight: 5, Ref: "project:site"}, at(t, "2026-11-04", "11:00"), 0, outcomeHeld, reasonRule, true},
+		{"longest match", notifyItem{Weight: 5, Ref: "project:getout:staging"}, at(t, "2026-11-05", "02:00"), 0, outcomeHeld, reasonRule, true},
+		{"no partial word", notifyItem{Weight: 5, Ref: "project:getoutside"}, at(t, "2026-11-05", "02:00"), 0, outcomeHeld, reasonQuiet, true},
+		{"tainted day", notifyItem{Weight: 5, Tainted: true}, at(t, "2026-11-04", "11:00"), 0, outcomeHeld, reasonTainted, true},
+		{"tainted night rule", notifyItem{Weight: 5, Ref: "project:getout", Tainted: true}, at(t, "2026-11-05", "02:00"), 0, outcomeHeld, reasonTainted, true},
+		{"tainted cannot raise", notifyItem{Weight: 2, Ref: "person:lina", Tainted: true}, at(t, "2026-11-04", "11:00"), 0, outcomeHeld, reasonBrief, true},
+		{"tainted never", notifyItem{Weight: 5, Ref: "topic:mail", Tainted: true}, at(t, "2026-11-04", "11:00"), 0, outcomeNever, reasonRule, true},
+		{"weight 4 is sent", notifyItem{Weight: 4}, at(t, "2026-11-04", "10:00"), 0, outcomeNow, reasonNow, true},
+		{"weight 3 waits", notifyItem{Weight: 3}, at(t, "2026-11-04", "10:00"), 0, outcomeHeld, reasonPause, true},
+		{"a kind's ceiling", notifyItem{Weight: 5, Ref: "skill:veille"}, at(t, "2026-11-04", "10:00"), 0, outcomeHeld, reasonRule, true},
+		{"urgent at 2 is no urgent", notifyItem{Weight: 2, Urgent: true}, at(t, "2026-11-05", "02:00"), 0, outcomeHeld, reasonBrief, true},
+		{"urgent", notifyItem{Weight: 5, Urgent: true}, at(t, "2026-11-05", "02:00"), 9, outcomeNow, reasonWatch, true},
+		{"no rules: seed", notifyItem{Weight: 5, Ref: "project:getout"}, at(t, "2026-11-05", "02:00"), 0, outcomeHeld, reasonQuiet, false},
 	} {
 		cx := notifyContext{Now: x.now, SentNow: x.sent, Cap: defaultNotifyCap}
 		if x.withRule {
@@ -94,15 +94,15 @@ func TestDecideNotify(t *testing.T) {
 func TestDecideNotifyZones(t *testing.T) {
 	instant := at(t, "2026-11-04", "23:30") // Paris
 	it := notifyItem{Weight: 5}
-	if d := decideNotify(it, notifyContext{Now: instant, Cap: 4}); d.Outcome != levelBrief {
+	if d := decideNotify(it, notifyContext{Now: instant, Cap: 4}); d.Outcome != outcomeHeld {
 		t.Fatalf("23:30 in Paris: %+v", d)
 	}
 	ny := instant.In(mustZone(t, "America/New_York")) // 17:30
-	if d := decideNotify(it, notifyContext{Now: ny, Cap: 4}); d.Outcome != levelNow {
+	if d := decideNotify(it, notifyContext{Now: ny, Cap: 4}); d.Outcome != outcomeNow {
 		t.Fatalf("17:30 in New York: %+v", d)
 	}
 	tokyo := instant.In(mustZone(t, "Asia/Tokyo")) // 07:30 the next morning
-	if d := decideNotify(it, notifyContext{Now: tokyo, Cap: 4}); d.Outcome != levelBrief {
+	if d := decideNotify(it, notifyContext{Now: tokyo, Cap: 4}); d.Outcome != outcomeHeld {
 		t.Fatalf("07:30 in Tokyo: %+v", d)
 	}
 }
@@ -203,7 +203,7 @@ func TestNotifyPushedOrHeld(t *testing.T) {
 	c, b := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	ownerSays(c, "Préviens-moi quand la PR est fusionnée")
 	out, err := c.brainNotify(notifyIn{Text: "La PR 42 est fusionnée.", Weight: 5, Why: "Tu m'as demandé de te prévenir.", Ref: "project:site"})
-	if err != nil || out["outcome"] != levelNow {
+	if err != nil || out["outcome"] != outcomeNow {
 		t.Fatalf("%v %v", out, err)
 	}
 	c.push.pending.Wait()
@@ -220,7 +220,7 @@ func TestNotifyPushedOrHeld(t *testing.T) {
 
 	c.notifyClock = func() time.Time { return at(t, "2026-11-04", "23:15") }
 	out, err = c.brainNotify(notifyIn{Text: "Le build de nuit a échoué.", Weight: 5, Why: "Le build a échoué.", Ref: "project:site"})
-	if err != nil || out["outcome"] != levelBrief || !strings.Contains(out["note"].(string), "Do not say it was sent") {
+	if err != nil || out["outcome"] != outcomeHeld || !strings.Contains(out["note"].(string), "Do not say it was sent") {
 		t.Fatalf("%v %v", out, err)
 	}
 	c.push.pending.Wait()
@@ -246,7 +246,7 @@ func TestNotifyTainted(t *testing.T) {
 		t.Fatal("a link from a tainted turn was accepted")
 	}
 	out, err := c.brainNotify(notifyIn{Text: "Un mail réclame un paiement.", Weight: 5, Why: "Un mail urgent.", Ref: "topic:mail"})
-	if err != nil || out["outcome"] != levelBrief {
+	if err != nil || out["outcome"] != outcomeHeld {
 		t.Fatalf("%v %v", out, err)
 	}
 	c.push.pending.Wait()
@@ -291,7 +291,7 @@ func TestNotifyFeedback(t *testing.T) {
 	}
 }
 
-// The cap counts the "now" of the day in the user's zone.
+// The cap counts the pushes of the day in the user's zone.
 func TestNotifyCap(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "09:00"))
 	c.store.set("notify_cap", "2")
@@ -304,11 +304,15 @@ func TestNotifyCap(t *testing.T) {
 		}
 		outcomes = append(outcomes, out["outcome"].(string))
 	}
-	if strings.Join(outcomes, ",") != "now,now,brief" {
+	if strings.Join(outcomes, ",") != "now,now,held" {
 		t.Fatalf("%v", outcomes)
 	}
+	// The cap is of pushes: a 4 is not one.
+	if out, _ := c.brainNotify(notifyIn{Text: "Point D", Weight: 4, Why: "test"}); out["outcome"] != outcomeNow {
+		t.Fatalf("a 4 held by the cap of pushes: %v", out)
+	}
 	c.notifyClock = func() time.Time { return at(t, "2026-11-05", "09:00") }
-	if out, _ := c.brainNotify(notifyIn{Text: "Lendemain", Weight: 5, Why: "test"}); out["outcome"] != levelNow {
+	if out, _ := c.brainNotify(notifyIn{Text: "Lendemain", Weight: 5, Why: "test"}); out["outcome"] != outcomeNow {
 		t.Fatalf("the cap carried to the next day: %v", out)
 	}
 }

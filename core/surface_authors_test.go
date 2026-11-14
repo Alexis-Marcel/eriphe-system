@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -173,27 +174,29 @@ func TestQueueSurfaceRefs(t *testing.T) {
 	}
 }
 
-// Proposals waiting to be offered enter the queue at a low weight, for the
-// composer: no breakpoint delivers them and the brain's turn does not list
-// them; the brain still offers them, and once under its message their
-// card is in front as before.
-func TestOfferedProposalsInTheQueue(t *testing.T) {
+// Proposals waiting without a card in front of the user enter the queue at
+// their card's weight: the brain's turn lists them, no answer nor thread
+// breakpoint delivers the light ones, and the user's return does, a few
+// cards at a time, under one message.
+func TestQueuedProposalsInTheQueue(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Sam aime le thé vert", Status: memProposed, SourceKind: srcTask})
+	for i := range 4 {
+		mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: fmt.Sprintf("Sam aime le thé numéro %d", i), Status: memProposed, SourceKind: srcTask})
+	}
 	mustIntend(t, c.mem, &Intention{Text: "Appeler le garage", State: intentProposed, SourceKind: srcBrain, SourceRef: "msg:1", Trust: trustFirstParty})
-	c.attendOffers()
+	c.attendQueuedCards()
 	items := c.attentionOpen()
-	if len(items) != 2 {
+	if len(items) != 5 {
 		t.Fatalf("queue %+v", items)
 	}
 	weights := map[string]int{}
 	for _, it := range items {
-		if it.Source != sourceOffer || !it.Held {
+		if !it.Held {
 			t.Errorf("item %+v", it)
 		}
 		weights[strings.SplitN(it.Why, " : ", 2)[1]] = it.Weight
 	}
-	if weights["Sam aime le thé vert"] != weightOffered || weights["Appeler le garage"] != weightOfferedDue {
+	if weights["Sam aime le thé numéro 0"] != cardWeight(cardMemory) || weights["Appeler le garage"] != weightBrief {
 		t.Fatalf("weights %v", weights)
 	}
 	// The workspace shows them, as any item of the queue: a Proposal each,
@@ -204,35 +207,26 @@ func TestOfferedProposalsInTheQueue(t *testing.T) {
 			t.Errorf("no surface for %s: %v", e.it.Ref, err)
 		}
 	}
-	c.attendOffers() // again: nothing doubles
-	if n := len(c.attentionOpen()); n != 2 {
+	c.attendQueuedCards() // again: nothing doubles
+	if n := len(c.attentionOpen()); n != 5 {
 		t.Fatalf("%d items", n)
 	}
-
+	if b := c.attentionBlock(); !strings.Contains(b, "Appeler le garage") {
+		t.Fatalf("the brain's turn does not list them: %q", b)
+	}
 	now := c.notifyTime()
-	for _, at := range []string{breakAnswer, breakReturn, breakThread, breakCap} {
+	for _, at := range []string{breakAnswer, breakThread, breakCap, breakNow} {
 		if n := c.attentionBreak(at, now); n != 0 {
 			t.Fatalf("%s delivered %d", at, n)
 		}
 	}
-	if xs, _ := c.cardsWhere(`seq > 0`); len(xs) != 0 {
-		t.Fatalf("cards put in the conversation: %+v", xs)
+	if n := c.attentionBreak(breakReturn, now); n != attentionCardsPerBreak {
+		t.Fatalf("the return delivered %d", n)
 	}
-	if b := c.attentionBlock(); b != "" {
-		t.Fatalf("the brain's turn lists them: %q", b)
+	if xs, _ := c.cardsWhere(`seq > 0`); len(xs) != attentionCardsPerBreak {
+		t.Fatalf("cards under the brief: %+v", xs)
 	}
-
-	offer := c.offerCards(now)
-	if !strings.Contains(offer, "à proposer : 2") {
-		t.Fatalf("offer %q", offer)
-	}
-	seq := brainSays(c, "J'ai deux petites choses à te proposer.")
-	if xs, _ := c.cardsWhere(`seq = ?`, seq); len(xs) != 2 {
-		t.Fatalf("%d cards with the message", len(xs))
-	}
-	for _, it := range c.attentionOpen() {
-		if it.Held || it.Weight != weightProposal || it.Source == sourceOffer {
-			t.Errorf("offered, its item %+v", it)
-		}
+	if n := c.attentionBreak(breakReturn, now.Add(time.Hour)); n != 2 {
+		t.Fatalf("the next return delivered %d", n)
 	}
 }

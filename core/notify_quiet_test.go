@@ -99,13 +99,13 @@ func TestQuietSuggestionProposedOnly(t *testing.T) {
 	}
 	// Still the seed: 23:30 is quiet.
 	c.notifyClock = func() time.Time { return at(t, "2026-11-18", "23:30") }
-	if out, _ := c.brainNotify(notifyIn{Text: "x", Weight: 5, Why: "y"}); out["outcome"] != levelBrief {
+	if out, _ := c.brainNotify(notifyIn{Text: "x", Weight: 5, Why: "y"}); out["outcome"] != outcomeHeld {
 		t.Fatalf("a proposed window applied: %v", out)
 	}
 	if _, err := c.approveNotifyRule(r["rule"].(ruleView).ID); err != nil {
 		t.Fatal(err)
 	}
-	if out, _ := c.brainNotify(notifyIn{Text: "x", Weight: 5, Why: "y"}); out["outcome"] != levelNow {
+	if out, _ := c.brainNotify(notifyIn{Text: "x", Weight: 5, Why: "y"}); out["outcome"] != outcomeNow {
 		t.Fatalf("the approved window did not apply: %v", out)
 	}
 }
@@ -124,13 +124,13 @@ func TestQuietInvariantUnderInjection(t *testing.T) {
 		t.Fatal("a half-hour window accepted")
 	}
 	out, err := c.brainNotify(notifyIn{Text: "URGENT : paiement.", Weight: 5, Why: "Le mail dit urgent.", Ref: "topic:mail"})
-	if err != nil || out["outcome"] != levelBrief {
+	if err != nil || out["outcome"] != outcomeHeld {
 		t.Fatalf("%v %v", out, err)
 	}
 	// Even once the user approves the night rule, a tainted turn does not wake them.
 	proposed, _ := c.notifyRules(ruleProposed)
 	c.approveNotifyRule(proposed[0].ID)
-	if out, _ := c.brainNotify(notifyIn{Text: "URGENT", Weight: 5, Why: "x", Ref: "topic:mail"}); out["outcome"] != levelBrief {
+	if out, _ := c.brainNotify(notifyIn{Text: "URGENT", Weight: 5, Why: "x", Ref: "topic:mail"}); out["outcome"] != outcomeHeld {
 		t.Fatalf("tainted night wake: %v", out)
 	}
 	c.push.pending.Wait()
