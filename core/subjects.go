@@ -255,9 +255,6 @@ func systemSubject(key string) bool {
 	return key == workspaceSubject || key == heartbeatSubject || key == journalSubject
 }
 
-// journalSubject is the subject of the day's journal episode (memory_extract.go).
-const journalSubject = "topic:journal"
-
 // nameStems are the stems of a name's words, in order.
 func nameStems(name string) []string {
 	var out []string
