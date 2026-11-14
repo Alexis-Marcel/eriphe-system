@@ -106,6 +106,15 @@ func TestExtractionDurableState(t *testing.T) {
 	if why, res := apply(`{"op": "ADD", "kind": "episode", "subject": "topic:journal", "text": "Sam a parlé du site", "source_ref": "msg:1"}`); res != "added" {
 		t.Fatalf("the journal: %s %s", res, why)
 	}
+	// The day's second run completes it, the subject kept from the old one.
+	journal, _ := c.mem.list(`kind = 'episode' AND subject = ? AND status = 'active'`, []any{journalSubject}, "", 1)
+	if why, res := apply(fmt.Sprintf(`{"op": "SUPERSEDE", "id": %d, "text": "Sam a parlé du site, puis du devis", "source_ref": "msg:2"}`, journal[0].ID)); res != "superseded" {
+		t.Fatalf("the journal completed: %s %s", res, why)
+	}
+	wake := mustAdd(t, c.mem, &Memory{Kind: kindEpisode, Subject: heartbeatSubject, Text: "Rien à faire.", SourceKind: srcBrain, Trust: trustFirstParty})
+	if why, res := apply(fmt.Sprintf(`{"op": "SUPERSEDE", "id": %d, "text": "Autre chose", "source_ref": "msg:2"}`, wake.ID)); res != "" || !strings.Contains(why, "journal") {
+		t.Fatalf("a wake replaced: %s %s", res, why)
+	}
 	// The transcript gives each segment its date, for relative dates.
 	out := renderTranscript([]segment{{Ref: "msg:1", Time: time.Date(2026, 9, 8, 10, 5, 0, 0, time.Local), Who: "owner", Trust: trustOwner, Text: "demain"}})
 	if !strings.Contains(out, `time="2026-09-08 10:05 Tue"`) {

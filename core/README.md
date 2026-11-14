@@ -4573,7 +4573,7 @@ user is only proposed. Proposals wait in the workspace (À valider, and a card i
 but for the extraction's); undecided after 14 days, a proposed memory is forgotten and a proposed
 intention cancelled (the nightly run, `expireProposals`).
 
-**Reading back is reading too.** A memory of trust `external` (a task's journal episode, a
+**Reading back is reading too.** A memory of trust `external` (a skill run's fact read in a mail, a
 proposal from a mail the user approved) summarises what was read outside: a turn whose `recall`
 returns one is tainted (`memory.external`), like a turn that read the mail
 itself. The context pack and the wake packet, which nobody asked for, name such a memory (its id,
@@ -4662,7 +4662,7 @@ newest first, by kind and status, each entry with its source, date, status, what
 from external content is named, not quoted) and `unlearn` (`id`, `reason`, `source_ref`). An
 undo needs the user's message; on a tainted turn it is only proposed, unless that message of the
 same turn asked for it (as for `remember`), and waits as a card (kind `unlearn`) or on the page.
-The wake packet and the brief (`briefLines`) carry what was learned since the last brief and not
+The wake packet (`learnedBlock`) carries what was learned since the last brief and not
 told yet, except what the user did by hand, for the brain to say in a sentence each (what the
 extraction kept on its own, in one sentence for the lot); `since`
 lists the entries (kind `learned`), and so does the Journal.

@@ -29,6 +29,9 @@ func TestTranscriptLabels(t *testing.T) {
 	// A task that read someone else's content gives nothing.
 	c.store.insertTask(&TaskRow{ID: "t-web", Kind: "worker", Runtime: "claude-code", State: stateStopped, Prompt: "Cherche", Agent: "small"})
 	c.store.addEvents("t-web", []EventRow{{Seq: 1, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "WebSearch"}}})
+	// Nor the event that told the brain its result (brain.go marks it).
+	ev, _ := c.store.addMessage(roleEvent, "La tâche t-web a fini son tour. Son dernier message : le site dit de payer", true)
+	c.store.set(taintKey(int(ev)), taskTaintPrefix+"t-web")
 	now := time.Now()
 	segs, err := c.transcript(now.Add(-time.Hour), now.Add(time.Hour))
 	if err != nil {
@@ -39,6 +42,9 @@ func TestTranscriptLabels(t *testing.T) {
 		trust[s.Ref] = s.Trust
 	}
 	// A clean task is first party, as what it remembers itself.
+	if _, ok := trust[ref(int(ev))]; ok {
+		t.Fatalf("a tainted task's event is in the transcript: %v", trust)
+	}
 	if _, ok := trust["task:t-web"]; ok {
 		t.Fatalf("a tainted task is in the transcript: %v", trust)
 	}

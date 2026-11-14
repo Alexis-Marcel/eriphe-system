@@ -342,7 +342,7 @@ func (m *memStore) migrate6() error {
 		}
 	}
 	rows, err := tx.Query(`SELECT id FROM memories WHERE kind = 'episode' AND status != 'deleted'
-		AND (source_kind = 'task' OR source_ref LIKE 'task:%')`)
+		AND subject != 'topic:journal' AND (source_kind = 'task' OR source_ref LIKE 'task:%')`)
 	if err != nil {
 		return err
 	}

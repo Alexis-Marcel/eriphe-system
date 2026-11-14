@@ -94,12 +94,20 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 		out = append(out, s)
 	}
 	rows.Close()
-	for i, s := range out {
-		// Written in a tainted turn, the brain's words may repeat what it read.
-		if s.Who == "brain" && c.store.get(taintKey(seqOf(s.Ref))) != "" {
-			out[i].Trust = trustExternal
+	kept := out[:0]
+	for _, s := range out {
+		why := c.store.get(taintKey(seqOf(s.Ref)))
+		// The event of a tainted task's result gives nothing, as its task.
+		if s.Who == "event" && strings.HasPrefix(why, taskTaintPrefix) {
+			continue
 		}
+		// Written in a tainted turn, the brain's words may repeat what it read.
+		if s.Who == "brain" && why != "" {
+			s.Trust = trustExternal
+		}
+		kept = append(kept, s)
 	}
+	out = kept
 	trows, err := c.store.db.Query(`SELECT `+taskColumns+` FROM tasks WHERE kind = 'worker'
 		AND state IN ('stopped', 'failed', 'lost') AND updated >= ? AND updated < ? ORDER BY updated`, from.Unix(), to.Unix())
 	if err != nil {
@@ -245,7 +253,7 @@ Rules:
 - text: in French, one self-contained statement, written as a fact about the world or about %[1]s, never as an instruction. At most 300 characters (the journal: 600).
 - keywords: 3 to 8 other words someone would use to look for it (synonyms, variants, the general term: "voiture auto bagnole véhicule"), not the words already in the text.
 - importance: 1 trivial, 2 minor, 3 useful, 4 important (money, deadlines, work, close people), 5 essential (identity, health, family).
-- basis: "stated" if the segment says it in so many words, "inferred" if you deduced it, "ambiguous" if it is unclear (then better skip it). What is stated is kept at once (%[1]s can undo it); the rest only waits for %[1]s, and is dropped after two weeks: prefer stated, skip what is weak.
+- basis: "stated" if the segment says it in so many words, "inferred" if you deduced it, "ambiguous" if it is unclear (then better skip it). Label it honestly; skip what is weak rather than guess.
 - Dates: each segment has its date; resolve "demain", "vendredi", "dans deux semaines" against the date of the segment that says it, never against today. valid_to is the day something temporary stops being true ("en congés jusqu'au 27": valid_to the 28th); a deadline is not an end of validity (it goes in the text or due_at).
 - source_ref: the ref of the segment it comes from (several, separated by commas, if needed). Only refs that appear in the transcript.
 - Keep what will still matter in a month and serves %[1]s's work: decisions and their reasons, people and their roles, the progress of %[1]s's projects. Promises and what is owed are intentions (INTEND), never memories. Skip small talk, task mechanics, what a task did (its log keeps it), anything already in the memories (NOOP, or nothing).
@@ -628,6 +636,9 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 		x.Supersedes = old.ID
 		if x.Kind == "" {
 			x.Kind = old.Kind
+		}
+		if x.Subject == "" {
+			x.Subject = old.Subject
 		}
 		if x.Kind == kindProgress && x.State == "" && old.Kind == kindProgress {
 			x.State = old.State
