@@ -64,7 +64,7 @@ func init() {
 			first := langLine(c.userLang()) + "\n\n" + leadStartPrompt // its surface is written in this turn
 			// What is known of its thread's subject (subject_card.go).
 			id := leadThread(a)
-			if card := c.startCard(c.sourceSubject(threadRef(id)), fmt.Sprintf("lead of thread %d", id)); card != "" {
+			if card := c.startCard(c.sourceSubject(threadRef(id)), placeLead, fmt.Sprint(id)); card != "" {
 				first += "\n\n" + card
 			}
 			return first

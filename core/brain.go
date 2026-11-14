@@ -320,7 +320,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 	// it is now (subject_card.go). A pack given now holds its own.
 	held := c.assistantStatus(a.Name).Cards
 	if pack != "" {
-		held = packedCards(packed, "context pack")
+		held = c.packedCards(packed, c.turnSeq(), c.store.canonSubject(c.turnSubject()))
 	}
 	card, carded := c.turnCard(held)
 	if carded {
@@ -349,7 +349,7 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		}
 	})
 	if carded {
-		logPushed(card, "brain turn")
+		c.cardPushed(card, placeTurn, c.turnSeq(), "")
 	}
 	return true, c.store.markDelivered(msgs[len(msgs)-1].Seq)
 }

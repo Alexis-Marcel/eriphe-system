@@ -556,15 +556,22 @@ func (c *core) brainFirstPrompt(a Assistant, resume bool) string {
 	pack, st := c.contextPack()
 	log.Printf("brain: context pack for a fresh session: %s", st)
 	// The new session holds the pack's cards, and no other.
-	c.updateAssistant(a.Name, func(s *AssistantStatus) { s.Cards = packedCards(st.Cards, "context pack") })
+	c.updateAssistant(a.Name, func(s *AssistantStatus) { s.Cards = c.packedCards(st.Cards, 0, "") })
 	return brainFreshPrompt + "\n\n" + pack
 }
 
-// packedCards are the cards of a pack, logged, by subject.
-func packedCards(cards []pushedCard, where string) map[string]string {
+// packedCards are the cards of a pack, counted, by subject. The card of
+// the turn's subject (turnKey) is the turn's (turn: its last message's
+// seq); the others, and a fresh session's first pack, are no turn's: an
+// answer is not theirs to count.
+func (c *core) packedCards(cards []pushedCard, turn int, turnKey string) map[string]string {
 	held := map[string]string{}
 	for _, x := range cards {
-		logPushed(x, where)
+		n := 0
+		if turnKey != "" && x.Key == turnKey {
+			n = turn
+		}
+		c.cardPushed(x, placePack, n, "")
 		held[x.Key] = x.Hash
 	}
 	return held

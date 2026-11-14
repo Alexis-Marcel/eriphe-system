@@ -11,8 +11,14 @@
     {{else if .Card}}<p class="muted small">{{tf "subjects.size" .Stats.Chars .Stats.Lines}}{{if .Stats.Dropped}} · {{tf "subjects.dropped" .Stats.Dropped}}{{end}}</p>
     <pre class="subject-card">{{.Card}}</pre>
     {{else}}<p class="muted">{{t "subjects.empty"}}</p>{{end}}
+    {{if .KeyUses}}{{template "card-uses" .KeyUses}}{{end}}
   </section>
   {{end}}
+  {{if .Uses}}<section class="card-uses-box" aria-labelledby="card-uses-h">
+    <h3 id="card-uses-h">{{t "subjects.uses"}}</h3>
+    {{template "card-uses" .Uses}}
+    <p class="muted small">{{t "subjects.uses.how"}}</p>
+  </section>{{end}}
   {{if .Subjects}}
   <ol class="list happened-list subjects-list">
   {{range .Subjects}}
@@ -29,3 +35,10 @@
   {{else}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-list"}}</span><p>{{t "subjects.none"}}</p></div>{{end}}
 </div>
 {{end}}{{end}}
+
+{{define "card-uses"}}{{/* the cards pushed, by place, and how they were used */}}
+<table class="tstats-spend card-uses">
+  <thead><tr><th scope="col">{{t "subjects.uses.place"}}</th><th scope="col">{{t "subjects.uses.pushed"}}</th><th scope="col">{{t "subjects.uses.wrote"}}</th><th scope="col">{{t "subjects.uses.answered"}}</th><th scope="col">{{t "subjects.uses.no"}}</th><th scope="col">{{t "subjects.uses.waiting"}}</th></tr></thead>
+  <tbody>{{range .}}<tr><th scope="row">{{t (printf "subjects.place.%s" .Place)}}</th><td><strong>{{.Pushed}}</strong></td><td>{{.Wrote}}</td><td>{{.Answered}}</td><td>{{.Unused}}</td><td>{{.Waiting}}</td></tr>{{end}}</tbody>
+</table>
+{{end}}

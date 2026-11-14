@@ -165,6 +165,7 @@ func (c *core) brainRecall(in recallIn) (map[string]any, error) {
 	if c.mem == nil {
 		return nil, errMemoryOff
 	}
+	c.recallLookedUp(in) // its turn's cards were not enough (subject_card_use.go)
 	q := recallQuery{Query: in.Query, Kinds: in.Kinds, Subject: in.Subject, IncludePast: in.IncludePast, Limit: in.Limit, Touch: true}
 	var err error
 	if q.Since, err = parseWhen(in.Since); err != nil {

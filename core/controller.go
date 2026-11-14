@@ -179,6 +179,7 @@ func (c *core) checkNodes(ctx context.Context) {
 	c.replaceStranded()               // placement.go
 	c.harnessTick(time.Now())         // retries due, time budgets (task_retry.go)
 	c.threadsTick(time.Now())         // the threads' engine (thread_engine.go)
+	c.judgeCardPushes(time.Now())     // how the subject cards pushed were used (subject_card_use.go)
 	c.placeServices()                 // also when no node answers: a node gone too long loses its services
 	c.connectionTick(ctx, time.Now()) // the connections' tokens, now and then (connections.go)
 }
@@ -473,7 +474,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if kind == "worker" {
 		c.lendSkills(&spec) // skills_tasks.go
 		// What is known of its subject, after what it is asked (subject_card.go).
-		if card := c.startCard(subject, "task "+t.ID); card != "" {
+		if card := c.startCard(subject, placeTask, t.ID); card != "" {
 			spec.Prompt += "\n\n" + card
 		}
 	}

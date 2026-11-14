@@ -78,6 +78,9 @@ type taskStats struct {
 	Minutes     float64
 	Failures    []classCount // by class, the most first
 	FailedTasks int          // tasks with at least one failure
+	// The subject cards the tasks started with, and how they were used
+	// (subject_card_use.go).
+	Cards cardUse
 	// What all the tasks cost over the last spendDays, by day and role.
 	Spend      []daySpend
 	SpendRoles []string
@@ -151,6 +154,11 @@ func tokenCount(lang string, n int64) string {
 // stats reads the measures of the worker tasks that ended since since.
 func (s *Store) stats(since time.Time) taskStats {
 	var st taskStats
+	for _, u := range s.cardUses(since, "") {
+		if u.Place == placeTask {
+			st.Cards = u
+		}
+	}
 	rows, err := s.db.Query(`SELECT t.id, t.created, t.updated, COALESCE(h.receipt, ''), COALESCE(h.retries, 0),
 		COALESCE(h.repairs, 0), COALESCE(h.failures, ''),
 		(SELECT COUNT(*) FROM events e WHERE e.task_id = t.id AND e.type = 'turn_end'),

@@ -131,8 +131,14 @@ func TestStatsOnPanel(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	statsFixture(t, tw.c)
+	// The subject cards the tasks started with, two judged, one used.
+	for _, used := range []string{cardWrote, cardUnused, ""} {
+		tw.c.store.db.Exec(`INSERT INTO card_pushes (at, subject, place, chars, who, used) VALUES (?, 'project:site', ?, 500, 't-a', ?)`,
+			time.Now().Unix(), placeTask, used)
+	}
 	_, body, _ := tw.do("GET", convoPath, nil, nil)
 	for _, want := range []string{"Fiabilité des tâches · 30 jours", "Acceptées", "50 %", "2/4", "Du premier coup", "1/4",
+		`<a href="/settings/subjects">Fiches de sujet utilisées</a></dt><dd><strong>50 %</strong> <span class="muted small">1/2</span>`,
 		"Affirmations non étayées", "1 sans contrôle", "0,04 $", "2 k jetons", "contrôle 2", "compte 1", "passagers 1",
 		"Coût par rôle · 7 jours", ">worker</th>", "0,10 $"} {
 		if !strings.Contains(body, want) {

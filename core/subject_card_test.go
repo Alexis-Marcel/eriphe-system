@@ -180,6 +180,9 @@ func TestSubjectCardPushedToTurn(t *testing.T) {
 	if h := brainStatus(c).Cards["project:site"]; h != cardHash(card) {
 		t.Fatalf("the session's cards: %v", brainStatus(c).Cards)
 	}
+	if rows := pushRows(t, c); rows != fmt.Sprintf("project:site turn %d ", c.turnSeq()) {
+		t.Fatalf("counted: %q", rows)
+	}
 	if got := deliver("Et le site, alors ?"); strings.Contains(got, "Fiche du sujet") {
 		t.Fatalf("the same card again:\n%s", got)
 	}
@@ -211,6 +214,27 @@ func TestSubjectCardInFreshSession(t *testing.T) {
 	if x, ok := c.turnCard(brainStatus(c).Cards); ok {
 		t.Fatalf("given again: %s", x.Key)
 	}
+	if rows := pushRows(t, c); rows != "project:site pack 0 " {
+		t.Fatalf("counted: %q", rows) // a fresh session's first pack is no turn's
+	}
+}
+
+// pushRows are the cards counted, "subject place turn who" a line.
+func pushRows(t *testing.T, c *core) string {
+	t.Helper()
+	rows, err := c.store.db.Query(`SELECT subject, place, turn, who FROM card_pushes ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s, p, w string
+		var n int
+		rows.Scan(&s, &p, &n, &w)
+		out = append(out, fmt.Sprintf("%s %s %d %s", s, p, n, w))
+	}
+	return strings.Join(out, "\n")
 }
 
 // A worker task with a subject starts with its card, after what it is
@@ -235,6 +259,9 @@ func TestSubjectCardAtStart(t *testing.T) {
 	lead := Assistant{Role: assistantRoleLead, Triggers: []string{triggerThread + ":" + itoa(int(th.ID))}}
 	if first := assistantRoles[assistantRoleLead].firstPrompt(c, lead, false); !strings.Contains(first, card) {
 		t.Fatalf("lead:\n%s", first)
+	}
+	if rows, want := pushRows(t, c), fmt.Sprintf("project:site task 0 %s\nproject:site lead 0 %d", task.ID, th.ID); rows != want {
+		t.Fatalf("counted: %q, want %q", rows, want)
 	}
 }
 
