@@ -39,16 +39,45 @@ func (t *brainTurn) aboutThread() int64 {
 func threadEventKey(seq int) string { return fmt.Sprintf("thread_msg:%d", seq) }
 
 // threadsDelivered sets the thread the turn is about from what it was
-// given: none, unless an event of a thread is among it. A new delivery
-// never keeps the thread of the turn before.
+// given: none, unless an event of a thread is among it, or a message of
+// the user's written about a thread (its surface open on the workspace,
+// or a surface whose subject has a live thread); the last one wins. A new
+// delivery never keeps the thread of the turn before.
 func (c *core) threadsDelivered(msgs []Message) {
 	var id int64
 	for _, m := range msgs {
 		if n, err := strconv.ParseInt(c.store.get(threadEventKey(m.Seq)), 10, 64); err == nil && n > 0 {
 			id = n
+		} else if n := c.threadAbout(m); n > 0 {
+			id = n
 		}
 	}
 	c.turn.about(id)
+}
+
+// threadAbout is the thread a message of the user's was written about: the
+// thread whose surface was open, or the live thread of the open surface's
+// subject; 0 if none.
+func (c *core) threadAbout(m Message) int64 {
+	if m.Role != roleUser {
+		return 0
+	}
+	sid, ok := strings.CutPrefix(c.messageAbout(m.Seq), refSurface+":")
+	if !ok {
+		return 0
+	}
+	if n, ok := threadOfSurface(sid); ok {
+		if _, err := c.thread(n); err == nil {
+			return n
+		}
+		return 0
+	}
+	if s, err := c.surface(sid); err == nil && s.Subject != "" {
+		if n, ok := c.liveThreadOf(s.Subject); ok {
+			return n
+		}
+	}
+	return 0
 }
 
 // turnThread notes that the brain's turn named a thread, by a tool of its
