@@ -426,8 +426,48 @@ func TestAttentionPushesOnlyAFive(t *testing.T) {
 	}
 }
 
+// A signal is held as a notification is: to 3 when its writer read
+// external content, to 2 in the quiet hours; what is said at once is never
+// pushed again as a question nor relayed.
+func TestAttentionSignalGated(t *testing.T) {
+	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
+	c.attendSignals([]attentionSignal{{Refs: []string{"mail:1"}, Weight: 5, Why: "Tu réponds ?"}}, nil, "", "skill:mail", true)
+	if it := attentionOf(c, "mail:1"); it == nil || it.Weight != weightProposal || !it.Held || len(brainMessages(t, c)) != 0 {
+		t.Fatalf("a tainted signal at 5: %+v", it)
+	}
+	c.attendSignals([]attentionSignal{{Refs: []string{"mail:2"}, Weight: 4, Why: "Tu réponds ?"}}, nil, "", "skill:mail", false)
+	msgs := brainMessages(t, c)
+	if len(msgs) != 1 || c.store.get(notifiedKey(msgs[0].Seq)) == "" {
+		t.Fatalf("said at once, open to a push as a question: %+v", msgs)
+	}
+	c.notifyClock = func() time.Time { return at(t, "2026-11-05", "03:00") }
+	c.attendSignals([]attentionSignal{{Refs: []string{"mail:3"}, Weight: 5, Why: "La prod"}}, nil, "", "skill:prod", false)
+	if it := attentionOf(c, "mail:3"); it == nil || it.Weight != weightBrief || !it.Held || len(brainMessages(t, c)) != 1 {
+		t.Fatalf("a signal at 5 in the quiet hours: %+v", it)
+	}
+}
+
+// A wake's answer held by the quiet hours is in the queue, and told at
+// the user's return.
+func TestAttentionHeldWakeToldAtReturn(t *testing.T) {
+	c, _ := notifyCore(t, at(t, "2026-11-05", "02:00"))
+	c.setWakeTurn(&wakeTurn{Text: "Appeler le garage", Asked: true})
+	seq, _ := c.store.addMessage(roleBrain, "Pense à appeler le garage.", true)
+	c.notifyWake(int(seq), 1, "Pense à appeler le garage.")
+	ns, _ := c.notificationsWhere(`source = ?`, notifyFromWake)
+	if len(ns) != 1 || !ns[0].Held {
+		t.Fatalf("wake %+v", ns)
+	}
+	if c.attentionBreak(breakReturn, at(t, "2026-11-05", "09:00")) != 1 {
+		t.Fatal("not told at the return")
+	}
+	if n, _ := c.notificationByID(ns[0].ID); n.Held {
+		t.Error("held forever")
+	}
+}
+
 // An author's surface weighs below the urgent placement; an item about it
-// lends it its own weight.
+// lends it its own weight, given back when the item leaves.
 func TestSurfaceWeightFromItsItem(t *testing.T) {
 	c, _ := surfaceCore(t)
 	writeTestSurface(t, c, surfaceIn{ID: "revue", Title: "Revue", Weight: 100})
@@ -441,5 +481,9 @@ func TestSurfaceWeightFromItsItem(t *testing.T) {
 	writeTestSurface(t, c, surfaceIn{ID: "revue", Title: "Revue", Weight: 30})
 	if s, _ := c.surface("revue"); s.Weight != queueSurfaceWeight(5) {
 		t.Fatalf("rewritten, it lost its item's weight: %d", s.Weight)
+	}
+	c.attentionDone("surface:revue")
+	if s, _ := c.surface("revue"); s.Weight != surfaceAuthorMax {
+		t.Fatalf("its lent weight stays: %d", s.Weight)
 	}
 }

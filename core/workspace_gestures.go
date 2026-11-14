@@ -376,6 +376,7 @@ func (c *core) queueSweep(now time.Time) {
 		cutoff, cutoff)
 	if err == nil {
 		if n, _ := res.RowsAffected(); n > 0 {
+			surfacesRecap(c.store.db)
 			c.kickWorkspace()
 		}
 	}

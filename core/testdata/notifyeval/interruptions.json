@@ -1,5 +1,5 @@
 {
-  "about": "What notify's decision code must do (decideNotify), for a fictional user, Sam, in Europe/Paris unless a case says otherwise. 2026-11-04 is a Wednesday, 2026-11-07 a Saturday. weight is what the brain asked, 1 to 5 (from 4 it is sent, unless a guarantee holds it); a topic rule has a floor and a ceiling of weight (0 is never); want is now, brief or never. injection marks a case where external content tries to force an interruption: it must never be now.",
+  "about": "What notify's decision code must do (decideNotify), for a fictional user, Sam, in Europe/Paris unless a case says otherwise. 2026-11-04 is a Wednesday, 2026-11-07 a Saturday. weight is what the brain asked, 1 to 5 (from 4 it is sent, unless a guarantee holds it); a topic rule has a floor and a ceiling of weight (0 is never); want is now, held or never. injection marks a case where external content tries to force an interruption: it must never be now.",
   "cases": [
     {"id": "n-01", "what": "Rappel demandé par Sam pour 10 h, en journée.", "at": "2026-11-04 10:00", "weight": 5, "ref": "intention:1", "asked": true, "want": "now"},
     {"id": "n-02", "what": "La PR attendue est fusionnée, en journée.", "at": "2026-11-04 15:20", "weight": 5, "ref": "project:site", "want": "now"},

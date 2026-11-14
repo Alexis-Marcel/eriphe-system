@@ -617,6 +617,9 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill, Subject: c.taskSubject(r.Task)}, notifyFromSkill, taint, calls > 0)
 	if err != nil {
 		c.endRun(r.ID, state, note+"\n· not told: "+err.Error())
+		if told {
+			c.attendSignals(signals, nil, "task:"+r.Task, source, tainted) // its objects still speak
+		}
 	}
 	if told && err == nil && out["outcome"] != outcomeNever {
 		for _, s := range own {

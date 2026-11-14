@@ -219,7 +219,7 @@ func decideNotify(it notifyItem, cx notifyContext) notifyDecision {
 	case it.Tainted:
 		return notifyDecision{outcomeHeld, reasonTainted, ruleID, weightProposal}
 	}
-	urgent := r != nil && r.Night && r.Floor >= weightSent
+	urgent := r != nil && r.Night && r.Floor == weightInterrupts
 	if _, quiet := quietAt(cx.Rules, cx.Now); quiet {
 		if !urgent {
 			return notifyDecision{outcomeHeld, reasonQuiet, ruleID, weightBrief}
@@ -304,7 +304,7 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 		if r := itemRule(cx.Rules, it); r != nil {
 			note.Channels = r.Channels // the rule's channels, else the default (channels.go)
 			note.Route.Only, note.Route.Also, note.Route.Never = r.Channels, r.Also, r.Never
-			note.Route.Urgent = r.Night && r.Floor >= weightSent
+			note.Route.Urgent = r.Night && r.Floor == weightInterrupts
 		}
 		if d.Reason == reasonWatch {
 			note.Route.Urgent = true // the shorter delay, and escalation in the quiet hours
@@ -397,7 +397,7 @@ func (c *core) notificationFeedback(id int64, fb string) (*notification, error) 
 	}
 	q := `UPDATE notifications SET feedback = ?, feedback_at = ? WHERE id = ? AND outcome != 'never'`
 	if fb == "later" {
-		q = `UPDATE notifications SET feedback = ?, feedback_at = ?, held = 1, msg = NULL WHERE id = ? AND outcome != 'never'`
+		q = `UPDATE notifications SET feedback = ?, feedback_at = ?, held = 1 WHERE id = ? AND outcome != 'never'`
 	}
 	res, err := c.store.db.Exec(q, fb, c.notifyTime().Unix(), id)
 	if err != nil {

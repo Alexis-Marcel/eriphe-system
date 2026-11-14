@@ -1463,6 +1463,17 @@ func (c *core) authorWeight(id string, w int) int {
 	return w
 }
 
+func init() { schemaFixes = append(schemaFixes, surfacesRecap) }
+
+// surfacesRecap gives back a weight lent: an author's surface with no open
+// item weighs surfaceAuthorMax at most. Run when an item about a surface
+// leaves, with the queue's sweep, and at start.
+func surfacesRecap(db *sql.DB) error {
+	_, err := db.Exec(`UPDATE surfaces SET weight = ? WHERE weight > ? AND author != ? AND author NOT LIKE 'thread:%'
+		AND NOT EXISTS (SELECT 1 FROM attention a WHERE a.ref = 'surface:' || surfaces.id)`, surfaceAuthorMax, surfaceAuthorMax, surfaceAuthorCore)
+	return err
+}
+
 // surfaceLent raises a surface to the weight of its open item.
 func (c *core) surfaceLent(id string) {
 	var item int

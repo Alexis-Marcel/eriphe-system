@@ -219,6 +219,9 @@ func attentionCap(weight int) time.Duration {
 // attentionDone takes an item out: the user answered it, or it is gone.
 func (c *core) attentionDone(ref string) {
 	c.store.db.Exec(`DELETE FROM attention WHERE ref = ?`, ref)
+	if strings.HasPrefix(ref, refSurface+":") {
+		surfacesRecap(c.store.db)
+	}
 	c.kickWorkspace()
 }
 
@@ -269,16 +272,17 @@ func (c *core) attendCardHeld(x convoCard, p proposal, say, source string) bool 
 }
 
 // attendNote puts a notification in the queue at its decided weight:
-// delivered when the conversation has it already (n.Msg, or spoken: its
-// writer writes it), else at once from weight 4, or held for its
-// breakpoint.
+// delivered when the conversation has it already (sent now with its
+// message, or spoken: its writer writes it), else at once from weight 4,
+// or held for its breakpoint (a wake's answer held too: its release tells
+// it again).
 func (c *core) attendNote(n *notification, spoken bool) {
 	source := n.Source
 	if n.Source == notifyFromSkill && strings.HasPrefix(n.Ref, "skill:") {
 		source = n.Ref
 	}
 	c.attend(attentionItem{Ref: noteItemRef(n.ID), Weight: n.Weight, Why: n.Why, Say: n.Text, Source: source,
-		Subject: n.Subject, tainted: n.Tainted != "", Delivered: spoken || n.Msg > 0})
+		Subject: n.Subject, tainted: n.Tainted != "", Delivered: spoken || n.Msg > 0 && n.Outcome == outcomeNow})
 }
 
 // noteLater holds a notification again for the user's return (« pas
@@ -415,8 +419,10 @@ func (c *core) attentionBreak(at string, now time.Time) int {
 		}
 		c.store.db.Exec(`UPDATE attention SET delivered = ? WHERE ref = ? AND delivered = 0`, stamp, it.Ref)
 	}
-	if pushed {
-		c.store.set(notifiedKey(int(seq)), "1") // pushed already: not again as a question, nor on a channel
+	if pushed || at == breakNow {
+		// Decided here, or pushed already: not pushed as a question, nor
+		// relayed to a channel (a card a task waits on goes there itself).
+		c.store.set(notifiedKey(int(seq)), "1")
 	}
 	if at == breakReturn {
 		c.store.set(lastBriefKey, strconv.FormatInt(stamp, 10))
