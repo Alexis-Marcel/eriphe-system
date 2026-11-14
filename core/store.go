@@ -142,7 +142,7 @@ var extraSchema []string
 var schemaFixes []func(*sql.DB) error
 
 func openStore(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)")
+	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=temp_store(memory)")
 	if err != nil {
 		return nil, err
 	}

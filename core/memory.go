@@ -239,7 +239,7 @@ func openMemory(path string) (*memStore, error) {
 	if dir := filepath.Dir(path); dir != "" {
 		os.MkdirAll(dir, 0o700)
 	}
-	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
+	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=temp_store(memory)")
 	if err != nil {
 		return nil, err
 	}
