@@ -1008,9 +1008,11 @@ refused) comes back as that thread's event (`callToBrain`: `[thread N « title �
 surface follows it and its end comes back as the thread's event; its result gives the thread, the
 step and its task. What `run_task` refuses of the task itself (no prompt, an agent or a resource
 that is none) is refused before any step is born; a task that still cannot start leaves its step
-blocked and the call refused. It stays a task of its own with `thread: none`, a `surface` to fill or a `node`
-named, in a turn about no thread or about one led or ended, or when the thread cannot take one more
-step. The prompt
+blocked and the call refused. In a turn about no thread, the task is a step of the live light thread
+of the turn's subject, else of a light thread opened for it (`taskThread`, titled by the task): every
+piece of work has its thread, and the turn is about it afterwards. It stays a task of its own with
+`thread: none` (rare: fire-and-forget work), a `surface` to fill or a `node` named, in a turn about a
+thread led or ended, or when the thread cannot take one more step. The prompt
 (`brain-prompt.md`, « Les threads ») says when the brain opens or resumes a thread (a question about
 a matter, a request of more than one step, an alert worth following: `open_thread` with its
 subject), how its steps grow from what is found, when its surface `thread-<id>` takes the stage
