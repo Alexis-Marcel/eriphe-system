@@ -122,6 +122,7 @@ type botEvent struct {
 	Start   bool   // the service's "start" command: Text is what follows it
 	Data    string // a button's data
 	Ref     any    // what the transport needs to answer it
+	Up      bool   // only that the connection is up again: the last error is over
 }
 
 // botMessage is what is sent: a text and its rows of buttons.
@@ -446,7 +447,13 @@ func (b *botChannel) running() bool {
 
 func (b *botChannel) run(ctx context.Context, token string) {
 	var wait time.Duration
-	on := func(ev botEvent) { b.handle(ctx, token, ev) }
+	on := func(ev botEvent) {
+		if ev.Up {
+			b.setErr("") // a long-lived connection that came back: its round has not ended
+			return
+		}
+		b.handle(ctx, token, ev)
+	}
 	for {
 		if wait > 0 && !b.sleep(ctx, wait) {
 			return
