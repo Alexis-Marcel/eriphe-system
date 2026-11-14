@@ -54,7 +54,7 @@
       "calls": [
         {"tool": "add_step", "args": {"thread_id": 7, "step": {"key": "deploiement", "title": "Déployer la supervision", "kind": "user", "question": "Déploie la supervision (make deploy) pour charger la nouvelle règle.", "after": ["fusion"]}}},
         {"tool": "add_step", "args": {"thread_id": 7, "step": {"key": "verification", "title": "Vérifier que la règle est active", "kind": "check", "tool": "mcp__vigie__rules", "input": {}, "expect": "latence-p95", "after": ["deploiement"]}}},
-        {"tool": "link_thread", "args": {"thread_id": 7, "summary": "Fusionnée ; reste à déployer la supervision, puis à vérifier que la règle est active."}}
+        {"tool": "remember", "args": {"kind": "progress", "text": "Fusionnée ; reste à déployer la supervision, puis à vérifier que la règle est active."}}
       ],
       "reply": "La PR 42 est fusionnée : à toi de déployer la supervision."
     }

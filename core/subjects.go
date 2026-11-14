@@ -798,15 +798,16 @@ func (c *core) taskSubject(id string) string {
 }
 
 // inheritsSubject tells a kind of memory that takes the turn's subject
-// when it is given none: what is known and decided of the matter, and
-// where it stands. A profile, a preference, a person, a lesson, a
-// situation or the day's journal is about someone or something else.
+// when it is given none: what is known and decided of the matter (where
+// it stands is its thread's summary, brainProgress). A profile, a
+// preference, a person, a lesson, a situation or the day's journal is
+// about someone or something else.
 func inheritsSubject(kind string) bool {
-	return kind == kindFact || kind == kindDecision || kind == kindProgress
+	return kind == kindFact || kind == kindDecision
 }
 
 // opSubject is the subject of what the extraction adds from a task (its
-// first source with a subject): a decision or a progress card of the task
+// first source with a subject): a decision or a progress of the task
 // is the task's subject whatever was guessed, anything else takes it when
 // none was given. Otherwise the one given. A replacement keeps its own.
 func (c *core) opSubject(op extractionOp, ref string) string {

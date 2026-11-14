@@ -253,12 +253,12 @@ func TestTaintFromEvents(t *testing.T) {
 func TestBrainUpdateAndForget(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	ownerSays(c, "Bonjour")
-	x := mustAdd(t, c.mem, &Memory{Kind: kindProgress, Text: "Le devis avance", SourceKind: srcBrain, Trust: trustFirstParty})
-	if _, err := c.brainUpdate(updateIn{ID: x.ID, State: progressDone}); err != nil {
+	x := mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Le devis avance", SourceKind: srcBrain, Trust: trustFirstParty})
+	if _, err := c.brainUpdate(updateIn{ID: x.ID, Text: ptr("Le devis est signé")}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := c.mem.memory(x.ID); got.State != progressDone {
-		t.Fatalf("state: %+v", got)
+	if got, _ := c.mem.memory(x.ID); got.Text != "Le devis est signé" {
+		t.Fatalf("text: %+v", got)
 	}
 	// Pinning is mine.
 	if _, err := c.brainUpdate(updateIn{ID: x.ID, Pinned: ptr(true)}); err == nil {

@@ -70,27 +70,16 @@ const (
 	kindPerson     = "person"
 	kindEpisode    = "episode"
 	kindLesson     = "lesson"
-	// Durable state compiled from the raw history: a choice and its reason,
-	// and the current card of a project or goal (one per subject, each
-	// change superseding the last).
+	// A choice and its reason, compiled from the raw history. Where a
+	// subject stands is its thread's summary, never a memory
+	// (thread_progress.go).
 	kindDecision = "decision"
-	kindProgress = "progress"
 	// Where the user is or what they do for a while, with its end: shown
 	// to the brain and every task while it holds (situations.go).
 	kindSituation = "situation"
 )
 
-var memoryKinds = []string{kindProfile, kindPreference, kindFact, kindPerson, kindEpisode, kindLesson, kindDecision, kindProgress, kindSituation}
-
-// States of a progress card.
-const (
-	progressActive  = "active"
-	progressBlocked = "blocked"
-	progressDone    = "done"
-	progressPaused  = "paused"
-)
-
-var progressStates = []string{progressActive, progressBlocked, progressDone, progressPaused}
+var memoryKinds = []string{kindProfile, kindPreference, kindFact, kindPerson, kindEpisode, kindLesson, kindDecision, kindSituation}
 
 // How a derived memory was read (Graphify's labels): said in so many
 // words, deduced, or unclear. Beside the trust, which says who it comes from.
@@ -564,14 +553,6 @@ func (m *memStore) normalize(x *Memory) error {
 		if x.ValidTo.IsZero() || !x.ValidTo.After(x.ValidFrom) {
 			return errors.New("a situation needs valid_to, its end, after valid_from")
 		}
-	case kindProgress:
-		if x.State == "" {
-			x.State = progressActive
-		}
-		if !containsStr(progressStates, x.State) {
-			return errors.New("the state of a progress card is active, blocked, done or paused")
-		}
-		x.DueAt = time.Time{}
 	default:
 		x.State, x.DueAt = "", time.Time{}
 	}

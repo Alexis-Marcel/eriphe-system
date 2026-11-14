@@ -20,7 +20,7 @@ type concept struct {
 }
 
 var concepts = []concept{
-	{"memory", "remember, recall", "what you must know about the user: facts, people, decisions, a project's progress, how they want you to talk"},
+	{"memory", "remember, recall", "what you must know about the user: facts, people, decisions, how they want you to talk (where a subject stands is its thread's summary)"},
 	{"intention", "intend, intentions, update_intention", "something owed or to do once: at a date and time (remind me at 14:00), or the next time a name comes up"},
 	{"skill", "write_skill, list_skills, read_skill", "what comes back or reacts on its own: a skill with when (an event: a mail, an alert, the user's return, a task's end; or a time) runs as a task in the background and tells the user with its last message; also know-how followed when asked"},
 	{"monitor", "write_monitor, monitors", "know that something changed in a tool that does not tell by itself (Grafana's alerts, a status page): eriphe-core calls it at an interval, without a model, and writes an event a skill reacts to; never a time skill that calls the tool"},

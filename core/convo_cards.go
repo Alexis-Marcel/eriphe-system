@@ -438,6 +438,23 @@ var (
 // cardProposed makes the card of a proposal the brain just made: it goes
 // with the brain's next message of this turn.
 func (c *core) cardProposed(kind string, id int64) {
+	inherit, source := c.turnSubject, c.turnSource() // made in the brain's turn
+	switch kind {
+	case cardRunCalls:
+		inherit, source = nil, "" // a skill's run: its own (cardSubject)
+	case cardThread:
+		source = "" // a thread's ask: its step shows it
+	}
+	c.cardProposedBy(kind, id, inherit, source)
+}
+
+// cardProposedBy is cardProposed for a proposal its maker's subject
+// inherits (nil: none) and source raised: a card born in a turn about a
+// thread, or by a task step of one, shows in its timeline by the code.
+func (c *core) cardProposedBy(kind string, id int64, inherit func() string, source string) {
+	if source != "" {
+		c.cardRaisedFor(source, proposalRef(kind, id)) // thread_steps.go
+	}
 	p := c.proposalOf(kind, id)
 	if !p.Pending {
 		return
@@ -445,10 +462,6 @@ func (c *core) cardProposed(kind string, id int64) {
 	c.cardAgain(p)
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, turn, text, created) VALUES (?, ?, 1, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET turn = 1 WHERE seq = 0`, proposalRef(kind, id), kind, p.Text(c.userLang()), time.Now().Unix())
-	inherit := c.turnSubject // made in the brain's turn
-	if kind == cardRunCalls {
-		inherit = nil // a skill's run: its own (cardSubject)
-	}
 	c.cardSubject(kind, id, inherit)
 	c.proposalMoved(proposalRef(kind, id))
 }
