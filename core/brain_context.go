@@ -24,8 +24,8 @@ import (
 // and stays in the session's history like any other.
 //
 // The profile is in the system prompt already. The pack holds, within a
-// budget, the state of things first, in at most half of it: the open
-// threads (title, goal, state, open steps, summary), the tasks under way,
+// budget, the state of things first, in at most half of it: the card of
+// each open thread's subject (subject_card.go), the tasks under way,
 // where each project stands (progress memories), the decisions of the
 // last two weeks, the people and facts of these subjects, the open
 // commitments, what waits for the user (permissions, cards), the last
@@ -66,6 +66,7 @@ type contextPackStats struct {
 	Messages int
 	Dropped  int // older messages left out
 	Sections []packSection
+	Cards    []pushedCard // the subject cards it holds
 }
 
 // packSection is what one section of a pack holds: the lines written out
@@ -117,6 +118,32 @@ func (p *packBuilder) section(name, title string, lines []string, limit int) {
 	st.Chars = before - p.left
 	p.left = saved - st.Chars
 	p.sections = append(p.sections, st)
+}
+
+// blocks writes blocks quoted already (subject cards) under a title, in
+// at most limit chars of what is left, while they fit, and records what it
+// wrote; it returns how many, the first ones.
+func (p *packBuilder) blocks(name, title string, blocks []string, limit int) int {
+	st := packSection{Name: name, Lines: len(blocks)}
+	head := "\n" + title + "\n"
+	room := min(p.left, limit) - runeLen(head)
+	for _, b := range blocks {
+		if runeLen(b)+1 > room {
+			break
+		}
+		room -= runeLen(b) + 1
+		st.Shown++
+	}
+	if st.Shown > 0 {
+		before := p.left
+		p.write(head)
+		for _, b := range blocks[:st.Shown] {
+			p.write(b + "\n")
+		}
+		st.Chars = before - p.left
+	}
+	p.sections = append(p.sections, st)
+	return st.Shown
 }
 
 // lines quotes lines under a title while the budget lasts; it says how
@@ -174,8 +201,31 @@ func (c *core) contextPack() (string, contextPackStats) {
 	room := p.left
 	share := func(n int) int { return room * n / 1000 }
 
-	threads, subjects := c.packThreads()
-	p.section("threads", "Fils ouverts (les plus récents d'abord) :", threads, share(250))
+	// The open threads: the card of each one's subject, the latest first,
+	// while they fit; any other in a line. What a card shows is not said
+	// again in the sections after it.
+	open, subjects := c.packThreads(c.cardBudget())
+	var texts []string
+	for _, x := range open {
+		if x.card != nil {
+			texts = append(texts, x.card.Text)
+		}
+	}
+	fit := p.blocks("cards", "Fiches des sujets des fils ouverts (les plus récents d'abord) :", texts, share(300))
+	var cards []pushedCard
+	var threads []string
+	shown := map[string]bool{} // the records a card shows
+	for _, x := range open {
+		if x.card != nil && len(cards) < fit {
+			cards = append(cards, *x.card)
+			for _, r := range x.card.Stats.Refs {
+				shown[r] = true
+			}
+			continue
+		}
+		threads = append(threads, truncate(c.threadLine(x.thread), packThreadMax))
+	}
+	p.section("threads", "Fils ouverts :", threads, share(75))
 	perms, tasks := c.packTasks()
 	p.section("tasks", "Tâches en cours :", tasks, share(125))
 	var intentions, episodes []string
@@ -184,25 +234,28 @@ func (c *core) contextPack() (string, contextPackStats) {
 		current := `status = 'active' AND pinned = 0 AND (valid_to IS NULL OR valid_to > ?)`
 		progress, _ := c.mem.list(current+` AND kind = 'progress' AND COALESCE(state, '') != 'done'`,
 			[]any{now.Unix()}, `recorded_at DESC, id DESC`, packStateMemories)
-		p.section("progress", "Où en sont les projets (ta mémoire) :", packMemoryLines(progress, subjects), share(125))
+		p.section("progress", "Où en sont les projets (ta mémoire) :", packMemoryLines(notShown(progress, shown), subjects), share(100))
 		decisions, _ := c.mem.list(current+` AND kind = 'decision' AND recorded_at >= ?`,
 			[]any{now.Unix(), now.AddDate(0, 0, -packDecisionDays).Unix()}, `recorded_at DESC, id DESC`, packStateMemories)
-		p.section("decisions", fmt.Sprintf("Décisions des %d derniers jours (ta mémoire) :", packDecisionDays), packMemoryLines(decisions, subjects), share(125))
+		p.section("decisions", fmt.Sprintf("Décisions des %d derniers jours (ta mémoire) :", packDecisionDays), packMemoryLines(notShown(decisions, shown), subjects), share(100))
 		xs, _ := c.mem.intentions(intentDue, intentOpen, intentSnoozed)
 		for _, x := range xs {
+			if shown[fmt.Sprintf("intention:%d", x.ID)] {
+				continue // in its subject's card
+			}
 			intentions = append(intentions, packIntentionLine(x, now))
 			for _, s := range []string{x.Subject, x.Owner, x.OwedTo} { // person:<slug> for whom owes or is owed
 				subjects[subjectOf(s)] = true
 			}
 		}
-		p.section("related", "Personnes et faits de ces sujets (ta mémoire) :", c.packRelated(subjects, now), share(100))
-		p.section("intentions", "Intentions en cours (ta mémoire ; dues d'abord) :", intentions, share(100))
+		p.section("related", "Personnes et faits de ces sujets (ta mémoire) :", c.packRelated(subjects, now, shown), share(75))
+		p.section("intentions", "Intentions en cours (ta mémoire ; dues d'abord) :", intentions, share(75))
 		episodes = c.packEpisodes(now)
 	}
-	p.section("pending", fmt.Sprintf("En attente de %s (c'est à lui de répondre) :", user), append(perms, c.packCards()...), share(125))
+	p.section("pending", fmt.Sprintf("En attente de %s (c'est à lui de répondre) :", user), append(perms, c.packCards(shown)...), share(100))
 	p.section("episodes", "Les dernières 24 h (ta mémoire) :", episodes, share(50))
 
-	stats := contextPackStats{State: runeLen(p.b.String())}
+	stats := contextPackStats{State: runeLen(p.b.String()), Cards: cards}
 	p.left += total - stateMax // the messages get what the state left
 	msgs, dropped := c.packMessages(p.left - 400)
 	stats.Messages, stats.Dropped = len(msgs), dropped
@@ -216,23 +269,36 @@ func (c *core) contextPack() (string, contextPackStats) {
 	return out, stats
 }
 
-// packThreads are the open threads, and the subjects they follow. A thread
-// whose plan may carry what someone else wrote is named, not quoted; so is
-// the summary of one whose steps read external content (read_thread
-// taints the turn for them).
-func (c *core) packThreads() (lines []string, subjects map[string]bool) {
+// packThread is an open thread, and the card of its subject if it has one.
+type packThread struct {
+	thread Thread
+	card   *pushedCard
+}
+
+// packThreads are the open threads, the latest first, each with the card
+// of its subject (within budget), and the subjects they follow.
+func (c *core) packThreads(budget int) (open []packThread, subjects map[string]bool) {
 	subjects = map[string]bool{}
 	ts, err := c.threads(true, packThreads)
 	if err != nil {
 		return nil, subjects
 	}
 	for _, s := range ts {
-		if s.Subject != "" {
-			subjects[subjectOf(s.Subject)] = true
+		x := packThread{thread: s}
+		if key := subjectOf(s.Subject); key != "" {
+			subjects[key] = true
+			if card, ok := c.compileCard(key, budget); ok {
+				x.card = &card
+			}
 		}
-		lines = append(lines, truncate(c.threadLine(s), packThreadMax))
+		open = append(open, x)
 	}
-	return lines, subjects
+	return open, subjects
+}
+
+// notShown are the memories no card of the pack shows.
+func notShown(xs []*Memory, shown map[string]bool) []*Memory {
+	return slices.DeleteFunc(xs, func(x *Memory) bool { return shown[fmt.Sprintf("memory:%d", x.ID)] })
 }
 
 // threadLine is a thread in a line: its mode, state, subject, title,
@@ -322,7 +388,7 @@ func packMemoryLines(xs []*Memory, subjects map[string]bool) []string {
 // packRelated are the people and facts about the subjects of the open
 // threads, the projects, the recent decisions and the intentions. The
 // user's own are left out: their profile is in the system prompt.
-func (c *core) packRelated(subjects map[string]bool, now time.Time) []string {
+func (c *core) packRelated(subjects map[string]bool, now time.Time, shown map[string]bool) []string {
 	delete(subjects, "")
 	delete(subjects, "owner")
 	if len(subjects) == 0 {
@@ -340,7 +406,7 @@ func (c *core) packRelated(subjects map[string]bool, now time.Time) []string {
 	if err != nil {
 		return nil
 	}
-	return packMemoryLines(xs, map[string]bool{})
+	return packMemoryLines(notShown(xs, shown), map[string]bool{})
 }
 
 // packEpisodes are the last day's episodes, in their order; the external
@@ -369,10 +435,11 @@ func (c *core) packEpisodes(now time.Time) []string {
 
 // packCards are the cards that wait for the user, each by its ref, the
 // memories and intentions to approve last; those that may carry what
-// someone else wrote are named together, by kind, not quoted.
-func (c *core) packCards() []string {
+// someone else wrote are named together, by kind, not quoted. Those that
+// a card of the pack shows are left out.
+func (c *core) packCards(shown map[string]bool) []string {
 	lang := c.userLang()
-	ps := c.pendingProposals()
+	ps := slices.DeleteFunc(c.pendingProposals(), func(p proposal) bool { return shown[proposalRef(p.Kind, p.ID)] })
 	last := func(p proposal) bool { return p.Kind == cardMemory || p.Kind == cardIntention }
 	slices.SortStableFunc(ps, func(a, b proposal) int {
 		switch {
@@ -485,25 +552,38 @@ func (c *core) packMessages(budget int) (lines []string, dropped int) {
 
 // brainFirstPrompt is the first turn of the brain's task: a resumed
 // session already has the thread; a fresh one gets the pack.
-func (c *core) brainFirstPrompt(resume bool) string {
+func (c *core) brainFirstPrompt(a Assistant, resume bool) string {
 	if resume {
 		return brainStartPrompt
 	}
 	pack, st := c.contextPack()
 	log.Printf("brain: context pack for a fresh session: %s", st)
+	// The new session holds the pack's cards, and no other.
+	c.updateAssistant(a.Name, func(s *AssistantStatus) { s.Cards = packedCards(st.Cards, "context pack") })
 	return brainFreshPrompt + "\n\n" + pack
+}
+
+// packedCards are the cards of a pack, logged, by subject.
+func packedCards(cards []pushedCard, where string) map[string]string {
+	held := map[string]string{}
+	for _, x := range cards {
+		logPushed(x, where)
+		held[x.Key] = x.Hash
+	}
+	return held
 }
 
 // brainFreshPrompt opens a fresh session.
 const brainFreshPrompt = "Tu démarres dans une session neuve. Lis tes consignes et l'état du fil ci-dessous. " +
 	"Ne fais rien d'autre pour l'instant, puis réponds seulement « Prêt. »."
 
-// packForDelivery is the pack owed to a session that was not resumed, if any.
-func (c *core) packForDelivery(a Assistant) string {
+// packForDelivery is the pack owed to a session that was not resumed, if
+// any, and the cards it holds.
+func (c *core) packForDelivery(a Assistant) (string, []pushedCard) {
 	if !c.assistantStatus(a.Name).PackDue {
-		return ""
+		return "", nil
 	}
 	pack, st := c.contextPack()
 	log.Printf("brain: context pack for a session not resumed: %s", st)
-	return pack
+	return pack, st.Cards
 }

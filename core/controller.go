@@ -472,6 +472,10 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	}
 	if kind == "worker" {
 		c.lendSkills(&spec) // skills_tasks.go
+		// What is known of its subject, after what it is asked (subject_card.go).
+		if card := c.startCard(subject, "task "+t.ID); card != "" {
+			spec.Prompt += "\n\n" + card
+		}
 	}
 	if kind == "worker" && !harnessOf(agent.Runtime).takesSystemPrompt() {
 		// It takes no system prompt: it reads it first.

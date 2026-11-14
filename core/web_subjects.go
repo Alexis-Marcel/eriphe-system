@@ -39,7 +39,7 @@ func (w *web) handleSubjects(rw http.ResponseWriter, r *http.Request, s *session
 		if _, ok := w.c.store.knownSubject(v.Key); !ok {
 			v.Unknown = true
 		} else {
-			v.Card, v.Stats = w.c.subjectCard(v.Key, subjectCardChars)
+			v.Card, v.Stats = w.c.subjectCard(v.Key, w.c.cardBudget())
 			v.Thread, _ = w.c.liveThreadOf(v.Key)
 		}
 	}
