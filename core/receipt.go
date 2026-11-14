@@ -53,17 +53,59 @@ const (
 	receiptItemLen = 300
 )
 
-var (
-	receiptFenceRe = regexp.MustCompile("(?s)```[ \\t]*(?:json|JSON)?[ \\t]*\\r?\\n(.*?)\\r?\\n?```")
-	receiptRe      = regexp.MustCompile(`(?s)<receipt>\s*(.*?)\s*</receipt>`)
-)
+var receiptRe = regexp.MustCompile(`(?s)<receipt>\s*(.*?)\s*</receipt>`)
+
+// fence is a fenced block of a message: where it starts and ends, its
+// body, and its opening tag (json, go, thread…; "" for none).
+type fence struct {
+	start, end int
+	body, tag  string
+}
+
+// fencedBlocks reads the fenced blocks of text in order, each opening
+// fence paired with the next closing one: a block tagged go or thread is
+// one block, never half of another.
+func fencedBlocks(text string) []fence {
+	var out []fence
+	for i := 0; ; {
+		o := strings.Index(text[i:], "```")
+		if o < 0 {
+			return out
+		}
+		o += i
+		nl := strings.IndexByte(text[o+3:], '\n')
+		if nl < 0 {
+			return out
+		}
+		tag := strings.TrimSpace(text[o+3 : o+3+nl])
+		from := o + 3 + nl + 1
+		c := strings.Index(text[from:], "```")
+		if c < 0 {
+			return out
+		}
+		c += from
+		out = append(out, fence{start: o, end: c + 3, body: text[from:c], tag: tag})
+		i = c + 3
+	}
+}
+
+// receiptFences are the blocks that may hold a receipt: untagged or json.
+func receiptFences(text string) []fence {
+	var out []fence
+	for _, f := range fencedBlocks(text) {
+		if f.tag == "" || strings.EqualFold(f.tag, "json") {
+			out = append(out, f)
+		}
+	}
+	return out
+}
 
 // parseReceipt finds the agent's receipt in its text: the last fenced block
 // (or <receipt> tag) that reads as one. ok is false when there is none.
 func parseReceipt(text string) (r *receipt, ok bool) {
 	var blocks []string
-	for _, m := range receiptFenceRe.FindAllStringSubmatch(text, -1) {
-		blocks = append(blocks, m[1])
+	for _, f := range receiptFences(text) {
+		blocks = append(blocks, f.body)
 	}
 	for _, m := range receiptRe.FindAllStringSubmatch(text, -1) {
 		blocks = append(blocks, m[1])
@@ -134,9 +176,9 @@ func decodeReceipt(raw string) *receipt {
 // without it.
 func stripReceipt(text string) string {
 	out := text
-	for _, m := range receiptFenceRe.FindAllStringSubmatchIndex(text, -1) {
-		if decodeReceipt(text[m[2]:m[3]]) != nil {
-			out = strings.Replace(out, text[m[0]:m[1]], "", 1)
+	for _, f := range receiptFences(text) {
+		if decodeReceipt(f.body) != nil {
+			out = strings.Replace(out, text[f.start:f.end], "", 1)
 		}
 	}
 	for _, m := range receiptRe.FindAllStringSubmatchIndex(text, -1) {
