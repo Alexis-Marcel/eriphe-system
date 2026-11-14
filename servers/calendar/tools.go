@@ -384,6 +384,7 @@ func newServer(c *Calendars, version string) *mcp.Server {
 		}
 		return err
 	})
+	addInvitations(s, c)
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: ptr(false)}
 
 	tool(s, "list_accounts", "List the configured calendar accounts and the default time zone.", ro,

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -208,7 +209,7 @@ func (g *Graph) parseTime(t *graphTime) time.Time {
 }
 
 func (g *Graph) item(e graphEvent, calID string) Item {
-	it := Item{ID: e.ID, UID: e.ICalUID, CalendarID: calID, Start: g.parseTime(e.Start), End: g.parseTime(e.End)}
+	it := Item{ID: e.ID, Series: cmp.Or(e.SeriesMasterID, e.ID), UID: e.ICalUID, CalendarID: calID, Start: g.parseTime(e.Start), End: g.parseTime(e.End)}
 	if e.Subject != nil {
 		it.Title = *e.Subject
 	}

@@ -81,6 +81,16 @@ disk.
   `Calendars.OnChange`, the hook for change notifications. Each refresh logs one line per
   account with counts (calendars, fetched, unchanged, failed, events) and duration; no titles or
   descriptions.
+- **Invitations for eriphe-core**: the MCP resource `calendar://invitations` lists, from the
+  cache, the invitations waiting for the user's answer (`my_status` `needs-action`) that have not
+  ended, soonest first, JSON `{"invitations": [{"id", "event", "account", "calendar", "title",
+  "start", "organizer", "recurring", "pending"}]}`. A recurring invitation is listed once, by its
+  series (the CalDAV object, Graph's series master): `start` and `event` (an id for `get_event`
+  and `respond_event`) are its first waiting occurrence, `pending` how many wait in the window.
+  `id` is stable while it waits: answering one occurrence keeps it, answering every one takes it
+  out. A monitor of eriphe-core reads it (core/README.md, Monitors: `cond: new`,
+  `path: invitations`, `id: id`) and writes one `monitor.new` per new invitation. Without the
+  cache, or for an account it has not refreshed lately, nothing is listed.
 
 | Env | Default | |
 |---|---|---|
