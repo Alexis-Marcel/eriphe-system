@@ -552,6 +552,26 @@ describe("the catalog's components", () => {
     expect($(".a2-proposal-taint")).toBeNull();
   });
 
+  it("say where a proposal comes from, linked to its thread, and what its Oui does while it waits", async () => {
+    const view = {
+      ref: "access:4", card: 4, kind: "access", state: "pending", text: "Autoriser la tâche « Chercher » à modifier dans github ?",
+      thread: 3, from: "Fil « PR alerting »", yes: "Sur Oui, la tâche peut modifier dans github jusqu'à sa fin.",
+    };
+    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "access:4" }]), { read: async () => view, answer: async () => true });
+    await act(async () => {});
+    expect($(".a2-proposal-from a").getAttribute("href")).toBe("/threads/3");
+    expect(text(".a2-proposal-from")).toBe("Fil « PR alerting »");
+    expect(text(".a2-proposal-yes")).toBe("Sur Oui, la tâche peut modifier dans github jusqu'à sa fin.");
+  });
+
+  it("show a proposal of no thread without a line of where it comes from", async () => {
+    const view = { ref: "access:5", card: 5, kind: "access", state: "pending", text: "Autoriser ?", yes: "Sur Oui, cet appel part une seule fois, tel qu'il est montré." };
+    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "access:5" }]), { read: async () => view, answer: async () => true });
+    await act(async () => {});
+    expect($(".a2-proposal-from")).toBeNull();
+    expect(text(".a2-proposal-yes")).toBe("Sur Oui, cet appel part une seule fois, tel qu'il est montré.");
+  });
+
   it("say at once that an answer is on its way", async () => {
     const view = { ref: "rule:12", card: 12, state: "pending", text: "Ranger ?" };
     let done!: (ok: boolean) => void;

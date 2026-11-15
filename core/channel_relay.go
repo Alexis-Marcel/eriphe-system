@@ -191,6 +191,13 @@ func cardText(x convoCard, p proposal, lang string) string {
 	if p.Why != "" {
 		text += "\n" + truncate(p.Why, 300)
 	}
+	o := p.Origin(lang)
+	if o.From != "" {
+		text += "\n" + truncate(o.From, 300)
+	}
+	if o.Yes != "" {
+		text += "\n" + truncate(o.Yes, 300)
+	}
 	if p.Tainted != "" {
 		text += "\n(" + tr(lang, "notif.tainted") + ")"
 	}

@@ -161,6 +161,16 @@ type proposal struct {
 	Extracted bool        // from the memory's extraction, not from a turn of the brain's
 	text      func(lang string) string
 	fields    func(lang string) []cardField // Fields in the user's language, when they have words of ours
+	origin    func(lang string) cardOrigin  // where it comes from and what its Oui does (card_origin.go)
+}
+
+// Origin is where it comes from and what its Oui does, with the words of
+// lang: read only when its card is shown.
+func (p proposal) Origin(lang string) cardOrigin {
+	if p.origin == nil {
+		return cardOrigin{}
+	}
+	return p.origin(lang)
 }
 
 // FieldsIn are its fields, with the words of lang.
