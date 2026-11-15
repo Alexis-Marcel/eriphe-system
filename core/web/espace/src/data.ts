@@ -294,6 +294,12 @@ export type ProposalView = {
   why?: string;
   tainted?: boolean;
   fields?: { name: string; value: string }[];
+  // Where it comes from, in words (the thread, the task that asks), with
+  // the thread's page (/threads/<thread>); what its Oui does: facts of
+  // eriphe-core's, never the model's words.
+  thread?: number;
+  from?: string;
+  yes?: string;
   // When it takes place, if it has a time: times with the user's offset, a
   // date for a whole day.
   when?: Span[];

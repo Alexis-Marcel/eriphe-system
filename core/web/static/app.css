@@ -1607,6 +1607,8 @@ details.app-install > * + * { margin-top: 10px; }
 .pcard-call dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .pcard-call summary { cursor: pointer; }
 .pcard-why { font-size: .84rem; color: var(--muted); overflow-wrap: anywhere; }
+.pcard-from, .pcard-yes { font-size: .84rem; color: var(--muted); overflow-wrap: anywhere; }
+.pcard-from a { color: inherit; }
 .pcard-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .pcard-actions .btn { min-height: 36px; }
 .pcard-state { display: inline-flex; align-items: center; gap: 6px; font-size: .84rem; font-weight: 600; color: var(--muted); }

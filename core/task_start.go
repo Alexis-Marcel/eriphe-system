@@ -172,6 +172,7 @@ func (c *core) taskStartProposal(p proposal) proposal {
 	}
 	p.Tainted = s.Tainted
 	p.text = func(lang string) string { return startText(s.Needs, lang) }
+	p.origin = func(lang string) cardOrigin { return c.startOrigin(s.TaskID, lang) }
 	return p
 }
 

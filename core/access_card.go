@@ -466,6 +466,7 @@ func (c *core) accessProposal(p proposal) proposal {
 	}
 	p.Tainted = a.Tainted
 	p.text = func(lang string) string { return c.accessText(a, lang) }
+	p.origin = func(lang string) cardOrigin { return c.accessOrigin(a, lang) }
 	p.Fields = a.fields()
 	return p
 }

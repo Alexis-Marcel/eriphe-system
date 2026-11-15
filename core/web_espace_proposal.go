@@ -22,6 +22,9 @@ type proposalView struct {
 	Why     string      `json:"why,omitempty"`
 	Tainted bool        `json:"tainted,omitempty"`
 	Fields  []cardField `json:"fields,omitempty"`
+	Thread  int64       `json:"thread,omitempty"`  // the thread it is raised for: /threads/<id> (card_origin.go)
+	From    string      `json:"from,omitempty"`    // the thread and the task that ask, in words
+	Yes     string      `json:"yes,omitempty"`     // what Oui does, in words
 	When    []spanView  `json:"when,omitempty"`    // when it takes place, if it has a time
 	Exec    string      `json:"exec,omitempty"`    // approved, its call: running, done or failed (access_card.go)
 	ExecWhy string      `json:"execWhy,omitempty"` // failed: notkept, gone, notallowed or error
@@ -35,6 +38,8 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 		v.Text = t
 	}
 	v.Fields = p.FieldsIn(lang)
+	o := p.Origin(lang)
+	v.Thread, v.From, v.Yes = o.Thread, o.From, o.Yes
 	if p.Kind == cardAccess && x.State == cardApproved {
 		v.Exec, v.ExecWhy = w.c.callState(p.ID)
 	}
