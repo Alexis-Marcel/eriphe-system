@@ -10,8 +10,7 @@ import (
 )
 
 // workspace_focus puts a surface on stage only in the turn that answers the
-// user in the workspace, once; the layout says Eriphe put it there, and the
-// brain is not asked for a line about its own surface.
+// user in the workspace, once; the layout says Eriphe put it there.
 func TestWorkspaceFocusTurn(t *testing.T) {
 	c := focusCore(t)
 	brain := connectServer(t, newMCPServer(c))
@@ -42,11 +41,7 @@ func TestWorkspaceFocusTurn(t *testing.T) {
 	if tile, _ := tileOf(l, "agenda"); sizeRank[tile.Size] < sizeRank[sizeL] {
 		t.Fatalf("not large: %s", tilesOf(l))
 	}
-	// Its own surface: the brain is asked no line about it.
 	c.settleFocus(time.Now())
-	if msgs, _ := c.store.undelivered(); len(msgs) != 0 {
-		t.Fatalf("asked about its own surface: %+v", msgs)
-	}
 	if snap := c.poolSnapshot(momentFocus, ""); !strings.Contains(composerTurn(snap), "Au centre : agenda") {
 		t.Fatalf("the composer reads it as the user's: %s", composerTurn(snap))
 	}
@@ -72,16 +67,13 @@ func TestWorkspaceFocusTurn(t *testing.T) {
 
 // The stage: opening a surface puts it in the center; what was there stays
 // next to it, reduced, never folded; the brain's surface takes the stage
-// the same way, and a request about the one it replaced is withdrawn.
+// the same way.
 // Back ends the stage.
 func TestWorkspaceStage(t *testing.T) {
 	c := focusCore(t)
 	now := time.Now()
 	c.focusSurface("agenda", now)
 	c.settleFocus(now)
-	if msgs, _ := c.store.undelivered(); len(msgs) != 1 {
-		t.Fatalf("the user's open asks the brain: %+v", msgs)
-	}
 
 	// The brain answers on stage: agenda stays next to it, reduced.
 	c.front.begin(true)
@@ -95,9 +87,6 @@ func TestWorkspaceStage(t *testing.T) {
 	prev, ok := tileOf(l, "agenda")
 	if !ok || sizeRank[prev.Size] > sizeRank[sizeM] {
 		t.Fatalf("the previous one is not a reduced tile: %s", tilesOf(l))
-	}
-	if msgs, _ := c.store.undelivered(); len(msgs) != 0 {
-		t.Fatalf("the request about agenda is still waiting: %+v", msgs)
 	}
 	if snap := c.poolSnapshot(momentFocus, ""); snap.Previous != "agenda" || !strings.Contains(composerTurn(snap), "Au centre juste avant : agenda") {
 		t.Fatalf("the composer does not know the previous: %q", snap.Previous)

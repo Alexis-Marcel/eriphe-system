@@ -286,9 +286,8 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 	if pack != "" {
 		parts = append([]string{pack}, parts...)
 	}
-	c.setWakeTurn(nil)                // what it says now answers these, not a due intention
-	c.front.begin(c.frontFor(msgs))   // an answer to the user in the workspace: one surface may go in front (workspace_front.go)
-	c.focusDelivered(msgs, t.LastSeq) // a request about what the user opened, read now (workspace_focus.go)
+	c.setWakeTurn(nil)              // what it says now answers these, not a due intention
+	c.front.begin(c.frontFor(msgs)) // an answer to the user in the workspace: one surface may go in front (workspace_front.go)
 	// Only a message of mine starts a clean turn: events alone go on with this one.
 	if slices.ContainsFunc(msgs, func(m Message) bool { return m.Role == roleUser }) {
 		c.turn.start(msgs[0].Seq, msgs[len(msgs)-1].Seq, t.LastSeq)
@@ -466,14 +465,12 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 				seq, err := c.store.addMessage(roleBrain, text, true)
 				if err == nil {
 					c.markBrainMessage(int(seq))
-					c.focusCommented(int(seq), text, e.Seq) // its line about what the user opened (workspace_focus.go)
-					c.attachTurnCards(int(seq))             // what it proposed in this turn (convo_cards.go)
-					c.notifyWake(int(seq), e.Seq, text)     // the answer to a due intention reaches the phone
+					c.attachTurnCards(int(seq))         // what it proposed in this turn (convo_cards.go)
+					c.notifyWake(int(seq), e.Seq, text) // the answer to a due intention reaches the phone
 				}
 			}
 		}
 		if e.Type == "turn_end" {
-			c.focusTurnEnded(e.Seq)             // nothing to say about what the user opened
 			c.cardsTurnEnded()                  // what it proposed after its last message
 			c.attentionAnswered(c.notifyTime()) // its answer to the user done: a breakpoint (attention.go)
 		}

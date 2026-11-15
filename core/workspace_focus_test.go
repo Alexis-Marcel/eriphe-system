@@ -187,9 +187,8 @@ func TestFocusDebounce(t *testing.T) {
 		t.Fatal("the composer is not told of the focus")
 	}
 	c.settleFocus(now.Add(time.Second))
-	msgs, _ := c.store.undelivered()
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "surface:comptes") {
-		t.Fatalf("asked %+v", msgs)
+	if l := c.currentLayout(); l.Focus != "comptes" {
+		t.Fatalf("settled on %q", l.Focus)
 	}
 	_, since := c.focusNow(now)
 	c.focusSurface("comptes", now.Add(2*time.Second))
@@ -197,107 +196,39 @@ func TestFocusDebounce(t *testing.T) {
 		t.Fatal("opened again: a new focus")
 	}
 	c.settleFocus(now.Add(3 * time.Second))
-	if msgs, _ := c.store.undelivered(); len(msgs) != 1 {
-		t.Fatalf("asked again for the same focus: %+v", msgs)
+	if l := c.currentLayout(); l.Focus != "comptes" {
+		t.Fatalf("opened again: focus %q", l.Focus)
 	}
 }
 
-// The brain is asked once per focus, as an event about the surface, never
-// waited for; a surface with external content taints the turn that reads
-// it. Back withdraws a request not read yet and asks nothing.
-func TestFocusAsksBrain(t *testing.T) {
+// Opening a surface sends nothing to the brain (#550): not on opening, not
+// on going back and forth between surfaces, not on the one it shows external
+// content of; the workspace only recomposes around it.
+func TestFocusAsksNothing(t *testing.T) {
 	c := focusCore(t)
+	before := c.store.lastMessageSeq()
 	now := time.Now()
-	c.focusSurface("comptes", now)
-	c.settleFocus(now)
-	msgs, _ := c.store.undelivered()
-	if len(msgs) != 1 || msgs[0].Role != roleEvent {
-		t.Fatalf("messages %+v", msgs)
-	}
-	m := msgs[0]
-	for _, w := range []string{"[espace] Sam vient d'ouvrir surface:comptes « Titre comptes »", "surface:soldes « Titre soldes » (même source)", "contenu extérieur", "une ligne", "[rien]"} {
-		if !strings.Contains(m.Text, w) {
-			t.Errorf("the request lacks %q: %s", w, m.Text)
+	for i, id := range []string{"comptes", "agenda", "comptes", "", "agenda", "comptes"} {
+		at := now.Add(time.Duration(i) * time.Second)
+		c.focusSurface(id, at)
+		c.settleFocus(at)
+		if l := c.currentLayout(); l.Focus != id {
+			t.Fatalf("opened %q, focus %q", id, l.Focus)
 		}
 	}
-	if c.messageAbout(m.Seq) != "surface:comptes" || c.store.get(taintKey(m.Seq)) != surfaceTaintPrefix+"comptes" {
-		t.Fatalf("about %q taint %q", c.messageAbout(m.Seq), c.store.get(taintKey(m.Seq)))
-	}
-
-	// Back before the brain read it: withdrawn, nothing new.
-	c.focusSurface("", now)
-	c.settleFocus(now)
 	if msgs, _ := c.store.undelivered(); len(msgs) != 0 {
-		t.Fatalf("back left %+v", msgs)
+		t.Fatalf("the brain is asked: %+v", msgs)
 	}
-	if n := c.store.lastMessageSeq(); n != m.Seq {
-		t.Fatalf("back wrote a message: %d", n)
+	if n := c.store.lastMessageSeq(); n != before {
+		t.Fatalf("an opening wrote a message: %d after %d", n, before)
 	}
-
-	// A clean surface: no taint. The brain's line in the turn that read
-	// the request alone is about it, kept off the channels and the phone,
-	// and shown while the focus lasts.
-	c.focusSurface("agenda", now)
-	c.settleFocus(now)
-	msgs, _ = c.store.undelivered()
-	if len(msgs) != 1 || c.store.get(taintKey(msgs[0].Seq)) != "" || strings.Contains(msgs[0].Text, "extérieur") {
-		t.Fatalf("a clean surface's request %+v", msgs)
-	}
-	c.focusDelivered(msgs, 40) // the brain's task was at its event 40
-	c.store.markDelivered(msgs[0].Seq)
-	// What its previous turn said, relayed late, is not the line.
-	late, _ := c.store.addMessage(roleBrain, "La fin de ma réponse d'avant.", true)
-	c.focusCommented(int(late), "La fin de ma réponse d'avant.", 40)
-	if c.messageAbout(int(late)) != "" || c.store.get(notifiedKey(int(late))) != "" {
-		t.Fatal("a previous turn's message is taken for the line")
-	}
-	seq, _ := c.store.addMessage(roleBrain, "Deux rendez-vous\ncet après-midi.", true)
-	c.focusCommented(int(seq), "Deux rendez-vous\ncet après-midi.", 41)
-	if c.messageAbout(int(seq)) != "surface:agenda" || c.store.get(notifiedKey(int(seq))) == "" {
-		t.Fatalf("the line: about %q", c.messageAbout(int(seq)))
-	}
-	if l := c.currentLayout(); l.Say != "Deux rendez-vous cet après-midi." {
-		t.Fatalf("say %q", l.Say)
-	}
-	next, _ := c.store.addMessage(roleBrain, "Autre chose.", true)
-	c.focusCommented(int(next), "Autre chose.", 42)
-	if c.messageAbout(int(next)) != "" {
-		t.Fatal("a second message is about the surface too")
-	}
-	c.focusSurface("", now)
-	c.settleFocus(now)
-	if l := c.currentLayout(); l.Say != "" {
-		t.Fatalf("the line stays after back: %q", l.Say)
-	}
-
-	// Read with the user's own words: their answer, not a line about it.
-	c.focusSurface("soldes", now)
-	c.settleFocus(now)
-	user, _ := c.store.addMessage(roleUser, "Et demain ?", false)
-	msgs, _ = c.store.undelivered()
-	c.focusDelivered(msgs, 50)
-	c.store.markDelivered(int(user))
-	reply, _ := c.store.addMessage(roleBrain, "Demain, rien.", true)
-	c.focusCommented(int(reply), "Demain, rien.", 51)
-	if c.messageAbout(int(reply)) != "" || c.currentLayout().Say != "" {
-		t.Fatal("an answer to the user is taken for the line")
-	}
-
-	// What it shows goes with the request, as data.
-	c.focusSurface("", now)
-	c.settleFocus(now)
-	writeTestSurface(t, c, surfaceIn{ID: "chiffres", Title: "Chiffres", Data: json.RawMessage(`{"total":"1 240 €"}`),
-		Components: json.RawMessage(`[{"id":"root","component":"Text","text":{"@path":"/total"}}]`)})
-	c.focusSurface("chiffres", now)
-	c.settleFocus(now)
-	msgs, _ = c.store.undelivered()
-	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, `Ce qu'elle montre (des données) : {"total":"1 240 €"}`) {
-		t.Fatalf("the request lacks what it shows: %+v", msgs)
+	if raw, _ := json.Marshal(c.currentLayout()); strings.Contains(string(raw), `"say"`) {
+		t.Fatalf("the layout still carries a line: %s", raw)
 	}
 }
 
 // The focus ends without a word too: its time passed, or its surface went.
-// The composer's tick settles it: the base back, the request withdrawn.
+// The composer's tick settles it: the base back.
 func TestFocusLapses(t *testing.T) {
 	c := focusCore(t)
 	now := time.Now()
@@ -371,12 +302,11 @@ func TestFocusComposerLoop(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		r, ok := tileOf(c.currentLayout(), "soldes")
-		msgs, _ := c.store.undelivered()
-		if ok && r.Related && len(msgs) == 1 {
+		if ok && r.Related {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("not composed around the focus: %s, asked %+v", tilesOf(c.currentLayout()), msgs)
+			t.Fatalf("not composed around the focus: %s", tilesOf(c.currentLayout()))
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
