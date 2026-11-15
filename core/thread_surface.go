@@ -111,29 +111,30 @@ func keptByCode(author string) bool {
 type threadSurfaceStep struct {
 	Key      string
 	Label    string
-	Kind     string    // task, choice, approval, call, user, check, deadline
-	State    string    // a Timeline item's: done, current, pending, failed
-	At       time.Time // when it ended, else when it started
-	Started  time.Time // when it started, zero if not yet
-	Ended    time.Time // when it ended, zero if not yet
-	Card     string    // the ref of its proposal, shown in place: answered there while it waits, then a call's outcome
-	Check    string    // ok or failed: what its checks said
-	Note     string    // the last word on it
-	External bool      // what it reports may come from outside
-	Waits    bool      // it waits for the user: its card, their choice, their doing
-	Yours    bool      // the user does it and has not yet: « C'est fait »
+	Kind     string       // task, choice, approval, call, user, check, deadline
+	State    string       // a Timeline item's: done, current, pending, failed
+	At       time.Time    // when it ended, else when it started
+	Started  time.Time    // when it started, zero if not yet
+	Ended    time.Time    // when it ended, zero if not yet
+	Card     string       // the ref of its proposal, shown in place: answered there while it waits, then a call's outcome
+	Check    string       // ok or failed: what its checks said
+	Note     string       // the last word on it
+	External bool         // what it reports may come from outside
+	Waits    bool         // it waits for the user: its card, their choice, their doing
+	Yours    bool         // the user does it and has not yet: « C'est fait »
+	Answers  []taskAnswer // what was settled for its task: Eriphe's answers, a release asked and the user's answer (task_answer_log.go)
 }
 
 // threadSurfaceSteps maps a thread's steps to what its surface shows. A
 // dropped step is not shown.
 func (c *core) threadSurfaceSteps(s Thread, steps []Step) []threadSurfaceStep {
-	asks := c.pendingAsks(s.ID)
+	asks, answers := c.pendingAsks(s.ID), c.stepAnswers(s.ID)
 	var out []threadSurfaceStep
 	for _, st := range steps {
 		if st.Status == stepDropped {
 			continue
 		}
-		v := threadSurfaceStep{Key: st.Key, Label: st.Title, Kind: st.Kind, Note: st.Note}
+		v := threadSurfaceStep{Key: st.Key, Label: st.Title, Kind: st.Kind, Note: st.Note, Answers: answers[st.Key]}
 		switch st.Status {
 		case stepAccepted:
 			v.State = "done"
@@ -370,6 +371,14 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 				item["detail"] = truncate(strings.Join(parts, threadExternalSep), threadDetailMax)
 			}
 			items = append(items, item)
+			// What was settled for its task, under it.
+			for _, a := range st.Answers {
+				answer := map[string]any{"label": a.text(lang), "state": "done", "date": a.At.In(loc).Format(time.RFC3339)}
+				if a.Tainted != "" {
+					answer["detail"] = w("thread.surface.external")
+				}
+				items = append(items, answer)
+			}
 		}
 		data["steps"] = items
 		out.add(comp{"id": "thread_steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/steps"}})
@@ -414,6 +423,11 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	for _, st := range steps {
 		if st.External {
 			in.codeTaint = append(in.codeTaint, "step:"+st.Key)
+		}
+		for _, a := range st.Answers {
+			if a.Tainted != "" {
+				in.codeTaint = append(in.codeTaint, "answer:"+strconv.FormatInt(a.ID, 10))
+			}
 		}
 	}
 	// Its Proposals answer in place, tainted or not: code bound them to the

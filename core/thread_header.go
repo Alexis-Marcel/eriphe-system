@@ -19,7 +19,9 @@ import (
 //     data (its steps' starts and ends, its summary written again, its
 //     end) since the user's visit before the last one, oldest first, the
 //     last threadFactsMax; « Rien de nouveau depuis 14 h 32 » when none.
-//     Never the log's lines: they are French only, and may quote a lead.
+//     What was settled for its tasks is one: kept as a kind and its
+//     parameters (task_answer_log.go), worded here. Never the log's
+//     lines: they are French only, and may quote a lead.
 //   - Où on en est: the thread's summary, as remember (kind progress),
 //     the extraction or its close wrote it, with its date; no model call.
 //   - À toi: what waits for the user (its cards, a step of theirs), or
@@ -117,6 +119,15 @@ func threadFacts(s Thread, steps []threadSurfaceStep, since int64, lang string) 
 				word = "thread.fact.waits" // its card, the user's choice or doing
 			}
 			out = append(out, threadFact{st.Started, fmt.Sprintf(tr(lang, word), st.Label)})
+		}
+		for _, a := range st.Answers {
+			if after(a.At) {
+				text := fmt.Sprintf(tr(lang, "thread.fact.answer"), st.Label, a.text(lang))
+				if a.Tainted != "" {
+					text += threadExternalSep + tr(lang, "thread.surface.external")
+				}
+				out = append(out, threadFact{a.At, text})
+			}
 		}
 	}
 	if s.summarized > since && s.summarized > 0 {
