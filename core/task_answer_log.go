@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -47,6 +48,10 @@ func (c *core) logBrainChecks(task string, checks []taskCheck, reply string) {
 
 // logReleaseAsked is answer_task's release: an ask on a card, nothing more.
 func (c *core) logReleaseAsked(task string, refs []string) {
+	refs = slices.Clone(refs)
+	for i := range refs {
+		refs[i] = strings.TrimSpace(refs[i]) // as the card names them
+	}
 	c.logTaskAnswer(task, byBrain, fmt.Sprintf("Eriphe a demandé à %s, sur une carte, de débloquer %s : rien n'est débloqué avant sa réponse.",
 		c.conf().User, strings.Join(refs, ", ")))
 }

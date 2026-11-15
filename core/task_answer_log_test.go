@@ -10,11 +10,17 @@ import (
 func taskStep(t *testing.T, c *core, task, title string) Thread {
 	t.Helper()
 	s := lightThread(t, c)
-	if _, err := c.store.db.Exec(`INSERT INTO thread_steps (thread, key, n, title, kind, after, spec, status, planned, due, task) VALUES (?, 'work', 1, ?, ?, '', '{}', ?, 0, 0, ?)`,
-		s.ID, title, stepTask, stepRunning, task); err != nil {
+	addTaskStep(t, c, s, "work", task, title)
+	return s
+}
+
+// addTaskStep adds a running task step to a thread.
+func addTaskStep(t *testing.T, c *core, s Thread, key, task, title string) {
+	t.Helper()
+	if _, err := c.store.db.Exec(`INSERT INTO thread_steps (thread, key, n, title, kind, after, spec, status, planned, due, task) VALUES (?, ?, (SELECT COUNT(*) + 1 FROM thread_steps WHERE thread = ?), ?, ?, '', '{}', ?, 0, 0, ?)`,
+		s.ID, key, s.ID, title, stepTask, stepRunning, task); err != nil {
 		t.Fatal(err)
 	}
-	return s
 }
 
 // lastLine is a thread's last log line.
@@ -53,6 +59,18 @@ func TestAnswerTaskShowsInThread(t *testing.T) {
 		t.Errorf("the task: %s", task.State)
 	}
 
+	// Its contract's checks fixed: said too.
+	addTask(t, c, "t-3", stateIdle)
+	addTaskStep(t, c, s, "tests", "t-3", "Tests")
+	c.store.setContract("t-3", &taskContract{Objective: "Les tests passent.", Checks: []taskCheck{{Name: "tests", Run: "go test ./...", Dir: "/work/nowhere"}}})
+	c.store.setSpec("t-3", nodeTaskSpec{})
+	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-3", "checks": []any{map[string]any{"name": "tests", "run": "go test ./..."}}}); isErr {
+		t.Fatalf("checks: %v", out)
+	}
+	if l := lastLine(t, c, s); l.Who != byBrain || l.Text != "Étape « Tests » : Eriphe a corrigé les contrôles de l'assistant (tests)." {
+		t.Errorf("the checks line: %+v", l)
+	}
+
 	// A refused answer logs nothing.
 	if _, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "reply": "encore"}); !isErr {
 		t.Fatal("a running task answered")
@@ -62,8 +80,8 @@ func TestAnswerTaskShowsInThread(t *testing.T) {
 	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-2", "reply": "oui"}); isErr {
 		t.Fatalf("answer_task: %v", out)
 	}
-	if n := len(c.threadLog(s.ID, 100)); n != before+1 {
-		t.Errorf("%d lines after refused and threadless answers, want %d", n, before+1)
+	if n := len(c.threadLog(s.ID, 100)); n != before+2 {
+		t.Errorf("%d lines after refused and threadless answers, want %d", n, before+2)
 	}
 }
 
@@ -75,12 +93,12 @@ func TestReleaseShowsInThreadAsAnAsk(t *testing.T) {
 	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
 		State: stateIdle, Tools: "mail", Resources: []ResourceRef{{Kind: resTool, Ref: "mail.move", Access: accessWrite, Hold: true}}})
 	s := taskStep(t, c, "t-1", "Ranger les mails")
-	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "release": []string{"mail.move"}}); isErr {
+	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "release": []string{" mail.move "}}); isErr {
 		t.Fatalf("release: %v", out)
 	}
 	l := lastLine(t, c, s)
 	if l.Who != byBrain || !strings.Contains(l.Text, "a demandé") || !strings.Contains(l.Text, "sur une carte") ||
-		!strings.Contains(l.Text, "rien n'est débloqué") {
+		!strings.Contains(l.Text, "débloquer mail.move : rien n'est débloqué") {
 		t.Errorf("the ask: %+v", l)
 	}
 	if task, _ := c.store.task("t-1"); !task.Resources[0].Hold {
