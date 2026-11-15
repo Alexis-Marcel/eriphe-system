@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -214,61 +212,5 @@ func TestThreadClock(t *testing.T) {
 		if got := threadClock(tc.at, now, loc, tc.lang); got != tc.want {
 			t.Errorf("%s %s: %q, want %q", tc.at, tc.lang, got, tc.want)
 		}
-	}
-}
-
-// A database of 0.205, its threads table without the header's columns,
-// opens: they are added, empty, and its threads read as before. Twice, as
-// at each start.
-func TestThreadColumnsMigrate(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{
-		`CREATE TABLE threads (
-	id        INTEGER PRIMARY KEY AUTOINCREMENT,
-	title     TEXT NOT NULL,
-	goal      TEXT NOT NULL,
-	done_when TEXT NOT NULL DEFAULT '',
-	mode      TEXT NOT NULL DEFAULT 'light',
-	subject   TEXT NOT NULL DEFAULT '',
-	state     TEXT NOT NULL,
-	phase     TEXT NOT NULL DEFAULT '',
-	held      TEXT NOT NULL DEFAULT '',
-	budget    INTEGER NOT NULL DEFAULT 0,
-	amends    INTEGER NOT NULL DEFAULT 0,
-	summary   TEXT NOT NULL DEFAULT '',
-	tainted   TEXT NOT NULL DEFAULT '',
-	lead      TEXT NOT NULL DEFAULT '',
-	told      TEXT NOT NULL DEFAULT '',
-	spent     INTEGER NOT NULL DEFAULT 0,
-	since     INTEGER NOT NULL DEFAULT 0,
-	created   INTEGER NOT NULL,
-	started   INTEGER NOT NULL DEFAULT 0,
-	ended     INTEGER NOT NULL DEFAULT 0
-)`,
-		`INSERT INTO threads (title, goal, subject, state, summary, created, started) VALUES ('Site', 'Online.', 'project:site', 'open', 'Half done.', 1000, 1000)`,
-	} {
-		if _, err := db.Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	db.Close()
-	for range 2 {
-		store, err := openStore(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		s, err := scanThread(store.db.QueryRow(`SELECT ` + threadCols + ` FROM threads WHERE id = 1`))
-		if err != nil || s.Title != "Site" || s.Summary != "Half done." || s.summarized != 0 || s.seen != 0 {
-			t.Fatalf("thread %+v: %v", s, err)
-		}
-		var visited int64
-		if err := store.db.QueryRow(`SELECT visited FROM threads WHERE id = 1`).Scan(&visited); err != nil || visited != 0 {
-			t.Fatalf("visited %d: %v", visited, err)
-		}
-		store.db.Close()
 	}
 }

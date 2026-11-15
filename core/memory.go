@@ -177,10 +177,8 @@ type memStore struct {
 }
 
 // memorySchemaVersion is the schema memory.db is at; meta.schema_version
-// says it. A new file is made at it; a file at 5 is brought to 6 (its
-// subjects keyed, subject_rewrite.go), one at 6 to 7 (the columns nothing
-// read gone, the tasks' episodes forgotten); a file at another is refused,
-// never changed.
+// says it. A new file is made at it; a file at another is refused, never
+// changed.
 const memorySchemaVersion = 7
 
 // memorySchema is memory.db's own tables; the intentions' and the
@@ -264,13 +262,6 @@ func (m *memStore) migrate() error {
 	switch version {
 	case memorySchemaVersion:
 		return nil
-	case 5:
-		if err := m.migrate5(); err != nil {
-			return err
-		}
-		return m.migrate6()
-	case 6:
-		return m.migrate6()
 	case 0:
 	default:
 		return fmt.Errorf("memory.db is at schema %d, this eriphe-core reads %d", version, memorySchemaVersion)
@@ -286,71 +277,6 @@ func (m *memStore) migrate() error {
 		}
 	}
 	if _, err := tx.Exec(`INSERT INTO meta (key, value) VALUES ('schema_version', ?)`, fmt.Sprint(memorySchemaVersion)); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-// migrate5 brings a memory.db at schema 5 to 6: the subjects as keys, the
-// index of the old commitment kind and the facts tables gone.
-func (m *memStore) migrate5() error {
-	tx, err := m.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	for _, q := range []string{`DROP INDEX IF EXISTS memories_due`, `DROP TABLE IF EXISTS facts`, `DROP TABLE IF EXISTS facts_log`} {
-		if _, err := tx.Exec(q); err != nil {
-			return err
-		}
-	}
-	if err := rekeyMemory(tx); err != nil {
-		return fmt.Errorf("memory.db subject keys: %w", err)
-	}
-	if _, err := tx.Exec(`UPDATE meta SET value = '6' WHERE key = 'schema_version'`); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-// migrate6 brings a memory.db at schema 6 to 7: the embedding and
-// confidence columns, which nothing read, dropped; the episodes of tasks
-// forgotten (their log and their thread's timeline keep what they did),
-// purged with the other forgotten memories.
-func (m *memStore) migrate6() error {
-	tx, err := m.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	for _, col := range []string{"embedding", "confidence"} {
-		var n int
-		tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('memories') WHERE name = ?`, col).Scan(&n)
-		if n == 0 {
-			continue
-		}
-		if _, err := tx.Exec(`ALTER TABLE memories DROP COLUMN ` + col); err != nil {
-			return err
-		}
-	}
-	rows, err := tx.Query(`SELECT id FROM memories WHERE kind = 'episode' AND status != 'deleted'
-		AND subject != 'topic:journal' AND (source_kind = 'task' OR source_ref LIKE 'task:%')`)
-	if err != nil {
-		return err
-	}
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		rows.Scan(&id)
-		ids = append(ids, id)
-	}
-	rows.Close()
-	for _, id := range ids {
-		if err := m.forgetTx(tx, id, "migration", "a task's episode: its log keeps what it did", ""); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.Exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`); err != nil {
 		return err
 	}
 	return tx.Commit()

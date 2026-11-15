@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,38 +40,6 @@ const threadCardsSchema = `CREATE TABLE IF NOT EXISTS thread_cards (
 );`
 
 func init() { extraSchema = append(extraSchema, threadCardsSchema) }
-
-// threadStepColumns adds the columns of the steps of every kind to a
-// thread_steps made before them.
-func threadStepColumns(db *sql.DB) error {
-	rows, err := db.Query(`PRAGMA table_info(thread_steps)`)
-	if err != nil {
-		return err
-	}
-	have := map[string]bool{}
-	for rows.Next() {
-		var cid, notNull, pk int
-		var name, typ string
-		var def sql.NullString
-		if rows.Scan(&cid, &name, &typ, &notNull, &def, &pk) == nil {
-			have[name] = true
-		}
-	}
-	rows.Close()
-	for _, col := range []struct{ name, def string }{
-		{"card", `TEXT NOT NULL DEFAULT ''`},
-		{"due", `INTEGER NOT NULL DEFAULT 0`},
-		{"tainted", `TEXT NOT NULL DEFAULT ''`},
-	} {
-		if have[col.name] {
-			continue
-		}
-		if _, err := db.Exec(`ALTER TABLE thread_steps ADD COLUMN ` + col.name + ` ` + col.def); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 // stepKinds are the kinds a step may be.
 var stepKinds = []string{stepTask, stepCall, stepUser, stepChoice, stepApproval, stepCheck, stepDeadline}

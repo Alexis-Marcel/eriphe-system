@@ -169,73 +169,6 @@ func (m *memStore) canonSubject(key string) string {
 	return m.subjects.canonSubject(key)
 }
 
-// subjectsFilled is the kv key that says the subjects table holds the
-// subjects written before it existed.
-const subjectsFilled = "subjects_filled"
-
-// fillSubjects notes, once, the subjects already written in core.db and
-// memory.db, each seen when its latest record was.
-func (c *core) fillSubjects() error {
-	if c.store.get(subjectsFilled) != "" {
-		return nil
-	}
-	type seen struct {
-		key, title string
-		at         int64
-	}
-	var all []seen
-	collect := func(db *sql.DB, q string) error {
-		rows, err := db.Query(q)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var s seen
-			if err := rows.Scan(&s.key, &s.title, &s.at); err != nil {
-				return err
-			}
-			all = append(all, s)
-		}
-		return rows.Err()
-	}
-	queries := []string{
-		`SELECT subject, title, MAX(created) FROM threads WHERE subject != '' GROUP BY subject`,
-		`SELECT subject, '', MAX(created) FROM notifications WHERE subject != '' GROUP BY subject`,
-		`SELECT subject, '', MAX(updated) FROM tasks WHERE subject != '' GROUP BY subject`,
-	}
-	for _, q := range queries {
-		if err := collect(c.store.db, q); err != nil {
-			return err
-		}
-	}
-	if rules, err := c.notifyRules(); err == nil {
-		for _, r := range rules {
-			if r.Kind == ruleTopic && r.Match != "" {
-				all = append(all, seen{key: r.Match, at: time.Now().Unix()})
-			}
-		}
-	}
-	if c.mem != nil {
-		for _, q := range []string{
-			`SELECT subject, '', MAX(updated_at) FROM memories WHERE subject != '' AND status != 'deleted' GROUP BY subject`,
-			`SELECT subject, '', MAX(updated_at) FROM intentions WHERE subject != '' GROUP BY subject`,
-			`SELECT owed_to, '', MAX(updated_at) FROM intentions WHERE owed_to != '' GROUP BY owed_to`,
-		} {
-			if err := collect(c.mem.db, q); err != nil {
-				return err
-			}
-		}
-	}
-	for _, s := range all {
-		if k, err := subjectKey(s.key); err == nil && k == s.key {
-			c.store.keepSubjectAt(k, s.title, time.Unix(s.at, 0))
-		}
-	}
-	c.store.set(subjectsFilled, "1")
-	return nil
-}
-
 // subjectNames are the names a subject is told by in a message: its
 // slug's words for a named kind, and its aliases. owner, home, the ids
 // and the system's own topics have none of their own.
@@ -645,52 +578,6 @@ func registerSubjectTools(s *mcp.Server, c *core) {
 
 // subjectTables are the tables that carry a subject column of their own.
 var subjectTables = []string{"notifications", "attention", "convo_cards", "tasks", "surfaces"}
-
-// notificationSubjects is the kv key that says the notifications' subjects
-// moved from their ref to their subject.
-const notificationSubjects = "notification_subjects"
-
-// subjectColumns gives the tables made before it their subject column, and
-// moves once a notification's subject out of its ref: the ref keeps a
-// record's (skill:<name>, intention:<id>) only.
-func subjectColumns(db *sql.DB) error {
-	for _, table := range subjectTables {
-		var n int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'subject'`, table).Scan(&n); err != nil {
-			return err
-		}
-		if n == 0 {
-			if _, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN subject TEXT NOT NULL DEFAULT ''`); err != nil {
-				return fmt.Errorf("%s: %w", table, err)
-			}
-		}
-	}
-	var done string
-	if db.QueryRow(`SELECT value FROM kv WHERE key = ?`, notificationSubjects).Scan(&done) == nil {
-		return nil
-	}
-	rows, err := db.Query(`SELECT DISTINCT ref FROM notifications WHERE ref != ''`)
-	if err != nil {
-		return err
-	}
-	var refs []string
-	for rows.Next() {
-		var s string
-		if rows.Scan(&s) == nil {
-			refs = append(refs, s)
-		}
-	}
-	rows.Close()
-	for _, s := range refs {
-		if k := subjectOf(s); k != "" && !isRecordRef(s) {
-			if _, err := db.Exec(`UPDATE notifications SET subject = ?, ref = '' WHERE ref = ?`, k, s); err != nil {
-				return err
-			}
-		}
-	}
-	_, err = db.Exec(`INSERT OR REPLACE INTO kv (key, value) VALUES (?, '1')`, notificationSubjects)
-	return err
-}
 
 // turnSubject is the subject of the brain's turn: its thread's, or else
 // the one known subject my messages of the turn name; "" if neither.

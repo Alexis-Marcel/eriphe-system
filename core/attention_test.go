@@ -1,9 +1,7 @@
 package main
 
 import (
-	"database/sql"
 	"errors"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -101,34 +99,6 @@ func TestAttentionWeightByKind(t *testing.T) {
 	}
 	if attentionOf(c, cardItemRef(x.ID)) != nil || c.attentionBlock() != "" {
 		t.Error("a card decided on its page stays in the queue")
-	}
-}
-
-// A queue made by v0.156.0 (no tainted, delivered nor due) gets its
-// columns when the database opens, twice as once; its items, delivered as
-// they entered then, stay delivered.
-func TestAttentionUpgradeFromV0156(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`CREATE TABLE attention (ref TEXT PRIMARY KEY, weight INTEGER NOT NULL, why TEXT NOT NULL DEFAULT '',
-		say TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', time INTEGER NOT NULL)`); err != nil {
-		t.Fatal(err)
-	}
-	db.Exec(`INSERT INTO attention (ref, weight, why, source, time) VALUES ('mail:1', 3, 'a bill', 'skill:mail', 1000)`)
-	db.Close()
-	for range 2 {
-		s, err := openStore(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var delivered, due, tainted int64
-		if err := s.db.QueryRow(`SELECT delivered, due, tainted FROM attention WHERE ref = 'mail:1'`).Scan(&delivered, &due, &tainted); err != nil || delivered != 1000 {
-			t.Fatalf("delivered %d, due %d, tainted %d: %v", delivered, due, tainted, err)
-		}
-		s.db.Close()
 	}
 }
 
@@ -355,7 +325,7 @@ func TestParseRef(t *testing.T) {
 }
 
 // A notification's item is notification:<id>, never the alert subject a
-// signal may name: both stay apart. A queue made before is rewritten once.
+// signal may name: both stay apart.
 func TestAttentionNoteRefApart(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	n, err := c.notify(&notification{Text: "Le build est cassé.", Why: "Skill « ci »", Ref: "skill:ci", Source: notifyFromSkill},
@@ -370,23 +340,6 @@ func TestAttentionNoteRefApart(t *testing.T) {
 	}
 	if _, err := parseRef(noteItemRef(n.ID)); err == nil {
 		t.Error("a signal may name a notification's item")
-	}
-	// The rewrite: an old item alert:<id> of a notification, an offer's.
-	c.attentionDone(noteItemRef(n.ID))
-	c.attentionDone(alert)
-	c.store.db.Exec(`INSERT INTO attention (ref, weight, source, time) VALUES (?, 2, 'skill:ci', 1), ('card:99', 1, 'offer', 1)`, alert)
-	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, attentionOneQueueKey)
-	for range 2 {
-		if err := attentionOneQueue(c.store.db); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var notes, alerts, offers int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM attention WHERE ref = ?`, noteItemRef(n.ID)).Scan(&notes)
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM attention WHERE ref = ?`, alert).Scan(&alerts)
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM attention WHERE source = 'offer'`).Scan(&offers)
-	if notes != 1 || alerts != 0 || offers != 0 {
-		t.Errorf("rewritten: %d notification, %d alert, %d offer", notes, alerts, offers)
 	}
 }
 

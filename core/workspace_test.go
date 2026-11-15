@@ -1,60 +1,16 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"io"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
-
-// The display rules of #402 leave no trace: a database made by a release
-// that had them loses their table and their cards when it opens.
-func TestDisplayRulesGone(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{
-		`CREATE TABLE attention_rules (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL, delta INTEGER NOT NULL)`,
-		`INSERT INTO attention_rules (key, delta) VALUES ('alert:source=backup', -5)`,
-		`INSERT INTO convo_cards (id, ref, kind, created) VALUES (7, 'showrule:1', 'showrule', 1)`,
-		`INSERT INTO convo_cards (id, ref, kind, created) VALUES (8, 'memory:1', 'memory', 1)`,
-		`INSERT INTO attention (ref, weight, time) VALUES ('card:7', 3, 1), ('card:8', 3, 1)`,
-	} {
-		if _, err := s.db.Exec(q); err != nil {
-			t.Fatalf("%s: %v", q, err)
-		}
-	}
-	s.db.Close()
-	if s, err = openStore(path); err != nil {
-		t.Fatal(err)
-	}
-	defer s.db.Close()
-	var n int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM attention_rules`).Scan(&n); err == nil {
-		t.Fatal("attention_rules still there")
-	}
-	var kinds []string
-	rows, _ := s.db.Query(`SELECT kind FROM convo_cards UNION ALL SELECT ref FROM attention`)
-	for rows.Next() {
-		var k string
-		rows.Scan(&k)
-		kinds = append(kinds, k)
-	}
-	rows.Close()
-	slices.Sort(kinds)
-	if strings.Join(kinds, ",") != "card:8,memory" {
-		t.Fatalf("left: %v", kinds)
-	}
-}
 
 // No route, page nor tool of the rules is left.
 func TestNoRulesLeft(t *testing.T) {
@@ -203,84 +159,5 @@ func TestWorkspaceWeb(t *testing.T) {
 	segs, _ := tw.c.transcript(time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
 	if slices.ContainsFunc(segs, func(s segment) bool { return s.Who == "workspace" || strings.Contains(s.Text, "[written about") }) {
 		t.Fatalf("segments %+v", segs)
-	}
-}
-
-// The composition by ref and its objects leave no trace (#424): a database
-// made by a release that had them loses its composition and the gestures
-// and messages about an object when it opens; no route, event nor tool of
-// theirs is left.
-func TestRefCompositionGone(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{
-		`INSERT INTO kv (key, value) VALUES ('composition', '{"mode":"side","eriphe":"","items":[{"ref":"mail:7","weight":3,"why":""}],"chips":[]}')`,
-		`INSERT INTO kv (key, value) VALUES ('about_msg:1', 'mail:INBOX/7'), ('about_msg:2', 'surface:news'), ('workspace_choice', '{}')`,
-		`INSERT INTO workspace_log (time, what, ref, title) VALUES (1, 'opened', 'mail:INBOX/7', 'Un sujet'), (2, 'closed', 'surface:news', '')`,
-	} {
-		if _, err := s.db.Exec(q); err != nil {
-			t.Fatalf("%s: %v", q, err)
-		}
-	}
-	s.db.Close()
-	for range 2 { // and again: a fix runs at every start
-		if s, err = openStore(path); err != nil {
-			t.Fatal(err)
-		}
-		s.db.Close()
-	}
-	if s, err = openStore(path); err != nil {
-		t.Fatal(err)
-	}
-	defer s.db.Close()
-	var left []string
-	rows, _ := s.db.Query(`SELECT key || '=' || value FROM kv WHERE key IN ('composition', 'about_msg:1', 'about_msg:2', 'workspace_choice') UNION ALL SELECT ref FROM workspace_log ORDER BY 1`)
-	for rows.Next() {
-		var k string
-		rows.Scan(&k)
-		left = append(left, k)
-	}
-	rows.Close()
-	if strings.Join(left, ",") != "about_msg:2=surface:news,surface:news,workspace_choice={}" {
-		t.Fatalf("left: %v", left)
-	}
-
-	tw := newTestWeb(t)
-	csrf := tw.setup()
-	for _, path := range []string{"/api/composition", "/api/objects/thread:1", "/api/attention"} {
-		if code, _, _ := tw.do("GET", path, nil, nil); code != http.StatusNotFound {
-			t.Errorf("GET %s: %d", path, code)
-		}
-	}
-	if code, _, _ := tw.post("/api/objects", url.Values{"refs": {"thread:1"}}, csrf); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
-		t.Errorf("POST /api/objects: %d", code)
-	}
-	cs := connectTo(t, newMCPServer(tw.c))
-	res, err := cs.ListTools(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tl := range res.Tools {
-		if tl.Name == "workspace_show" || tl.Name == "workspace_walkthrough" {
-			t.Errorf("tool %s is still there", tl.Name)
-		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond) // the snapshot, and none of the events gone
-	defer cancel()
-	tw.c.attend(attentionItem{Ref: "mail:7", Weight: 3, Why: "a reply"})
-	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)
-	resp, err := tw.hc.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	sc := bufio.NewScanner(resp.Body)
-	for sc.Scan() {
-		if ev, ok := strings.CutPrefix(sc.Text(), "event: "); ok && (ev == "composition" || ev == "attention" || ev == "walkthrough") {
-			t.Fatalf("event %s is still sent", ev)
-		}
 	}
 }

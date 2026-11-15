@@ -1052,18 +1052,6 @@ at the next move, as `watchProposals` does.
 - The end of any thread is the journal's `thread.ended` (key `thread:<id>`, its state).
 - Tables: `threads`, `thread_steps`, `thread_asks` (what a thread asks, one card each),
   `thread_log`, `thread_cards` (the cards linked to a thread).
-- **From sessions** (`threads_migrate.go`): a database of an eriphe-core that had work sessions
-  moves once, as it opens: the tables and their `session` columns renamed, every session a led
-  thread (its old state kept as its phase), and the refs rewritten where they are kept (cards,
-  attention items, notifications, the journal, surfaces' lifetime and components, kv values, skill
-  runs, a running lead's trigger and name). A skill that still says session (`skill_threads.go`,
-  when the skills start) is rewritten in those words only, in its `SKILL.md`: `start-session` in
-  `can` becomes `open-thread`, `session.ended` in `when` becomes `thread.ended`, a ```` ```session ````
-  fence ```` ```thread ````. The new bundle takes the approved (and the pending) version's place: the
-  same capability under its new name, so the user's approval stands. The version replaced is kept,
-  and the change is a learning entry (« renommé : session → thread ») the user can undo. A default
-  skill's rewritten version is recorded among its shipped ones (`default_skill_sha:<name>`), right
-  after the version it replaces, so a later release still sees it unchanged and updates it.
 
 **The thread's lead** is born when the user approves the plan (`lead-<id>`, « Chef du thread N »)
 and goes when the thread ends. Its trigger `thread:<id>` wakes it with what happened to its steps
@@ -1353,9 +1341,7 @@ kept apart from **how** its credential is scoped.
 
 A read is what the server itself marks `readOnlyHint`. `ask` asks for everything, reads included.
 `reads` is the default of the presets; "Other…" (a server whose annotations nobody vouches for)
-starts on `ask`, as does an entry without `access`. The checkbox that said whether a server's
-annotations were believed is gone: the NAS's servers not believed had every case set to what Send
-was, once (`legacyTrust`), so nothing widened. Whatever the level, the built-in denials come first, then the file's rules.
+starts on `ask`, as does an entry without `access`. Whatever the level, the built-in denials come first, then the file's rules.
 
 **Per account.** The mail and the calendar are one server each for every account (`mail`,
 `agenda`: [one server per service](#mail-and-calendar-one-server-per-service)), and each account
@@ -2542,9 +2528,7 @@ browsed through the setup tool when first opened (`GET /settings/tools/{name}/tr
 for the root); a folder's column is "Comme <parent>" ("Comme le compte" at the top). `POST
 …/tree/case` (the same fields, `case-<category>=`, empty to follow) sets a folder's cases, or the
 root's (the account's grid, its exceptions kept). Keeping or letting go of a folder rewrites the
-tool's configuration, which restarts its server. The old account grids were the default of the
-given folders only: once (`legacyPlaceRoot`), each folder took its account's grid under its own
-cases and each account went to Never.
+tool's configuration, which restarts its server.
 
 **A place's grid.** A Drive folder, a repository and a machine's folder set their rights in the
 tool's grid (Libre · Sur accord · Jamais by case), in a drawer over their list
@@ -2564,8 +2548,7 @@ follow; kept by machine and id, `folder_case:<node>:<id>`). A folder shared read
 with the reason. On approval is asked on the task's [start card](#the-approval-card), once per
 task, before it starts; so is a Free Modifier of a task that did not start cleanly (a tainted turn,
 or a turn that is not the user's). Never is refused when the task is lent, and a Modifier set Never
-since mounts the folder read-only. A yes lets the task go with its mount; a no stops it. The NAS's
-values from before (`folder_value:…:manage` On approval) became Modifier On approval, once.
+since mounts the folder read-only. A yes lets the task go with its mount; a no stops it.
 
 **Sharing one** is done on the machine; Settings → Dossiers lists, machine by machine, what is
 shared there, with the machine's default rights first (the grid, inline), then each folder with its
@@ -2820,9 +2803,7 @@ the message; the return writes the kv `last_brief`. The queue never pushes to a 
 notification decided now at weight 5 does (the brain's notifications, `notify.go`). An
 item about a surface (`surface:<id>`) lends it its weight. The brain's turn lists the open items
 (`[en attente de … : …]`), the heaviest first, a held one marked « retenu »: nothing the brain
-does waits on it. A queue made before it was the one path was rewritten once at start (an item
-`alert:<id>` of a notification became `notification:<id>`; the offered proposals' items were made
-again). A plain yes or no answers a card in words only when the message is
+does waits on it. A plain yes or no answers a card in words only when the message is
 the user's own (workspace, Telegram or a trusted channel; never a channel the user did not trust, nor `/v1/messages`, whose token may
 be lent to the brain), is nothing but a yes or a no, has no file, comes right
 after a recent message of the brain's written in a clean turn that shows exactly one waiting card,
@@ -3292,11 +3273,6 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   carries it (`POST /messages` with `about` `surface:<id>`; kept as `about_msg:<seq>` when it names
   a surface): the brain reads it as `[Sam 10:02 #12 · depuis l'espace · à propos de surface:…]`. « Montre-m'en moins », « lance une
   recherche là-dessus » are said in words.
-The display rules of #402 are gone: their table (`attention_rules`, dropped when an older
-database opens, with their `showrule` cards: `displayRulesGone`), their API, page and tool. So is
-the first workspace's composition by ref and its views by kind of object (#424): its kv
-`composition`, and the gestures and `about_msg` that named an object rather than a surface, go
-when an older database opens (`refCompositionGone`).
 
 ### The composed workspace, the home page (`/`)
 
@@ -4152,8 +4128,7 @@ outcomes `brief` were rewritten `held` at start.
   topic, `mail` is `topic:mail`; the longest match
   wins): a floor raises it, a ceiling lowers it, a ceiling of 0 is never. A turn that read external
   content may be lowered, never raised: what it notifies never interrupts, waits for the next
-  breakpoint at most, marked as such, and may hold no link. The rules kept with an outcome were rewritten once at start (now:
-  floor 5; brief: ceiling 2; never: ceiling 0), and the notifications' level became their weight.
+  breakpoint at most, marked as such, and may hold no link.
 - **The answer to a due intention** is pushed through the same decision, question or not, once per
   wake; a reminder from an intention drawn from external content is held.
 - Every notification is kept (`notifications`) with its why, weight, outcome and reason. What is
@@ -4579,8 +4554,7 @@ rules. A test forbids any other normaliser.
   threads' subject holds it (`threads_live_subject`).
 - **Known subjects**: every key written (a thread's, a memory's, an intention's subject and parties, a
   notification's, a topic rule's) is noted in core.db's `subjects` table: its key, a title (the
-  first given, a thread's title), aliases and when it was last seen; the subjects written before
-  are noted once at start (kv `subjects_filled`). A message of the user's names a subject by its
+  first given, a thread's title), aliases and when it was last seen. A message of the user's names a subject by its
   slug's words (project, person, client, tool, topic) or an alias, compared by their stems, three
   letters at least; never `owner`, `home`, an id or Eriphe's own topics. A name inside a longer one
   named too gives way to it (`site` to `site web`), five at most. The keys named go to the brain
@@ -4647,12 +4621,7 @@ rules. A test forbids any other normaliser.
   - **the extraction** reuses a task's subject (shown on its segment): a decision or a progress
     added from a task is the task's subject whatever was guessed, anything else takes it when
     none was given; a replacement keeps its own, the day's journal `topic:journal`.
-  Notification rules match a notification's subject, else its record's ref (`itemRule`). An older
-  notification's subject moves out of its ref once at start (kv `notification_subjects`).
-- **Stored keys**: an older install's subjects are rewritten once at start: core.db's threads (of two
-  live threads on one key, the latest keeps it), notifications and topic rules (kv
-  `subject_keys`), memory.db's memories and intentions (schema 5 → 6, then 6 → 7: see [Memory](#memory)). A value that gives no key is
-  kept and logged.
+  Notification rules match a notification's subject, else its record's ref (`itemRule`).
 
 ## Memory
 
@@ -4668,19 +4637,15 @@ comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`, `thread:<id>`), a
 many words), `inferred` (deduced) or `ambiguous`. A change over time supersedes the old memory,
 which stays, dated; every change is in `memory_log`. Forgotten memories are purged after 30 days.
 An episode is the day's journal (or a wake of the brain's, `topic:heartbeat`), never a task's: what
-a task did is its log and its thread's timeline. memory.db at schema 7 dropped the `embedding` and
-`confidence` columns, which nothing read, and forgot the tasks' episodes an older version wrote.
+a task did is its log and its thread's timeline. memory.db says its schema in `meta`
+(`schema_version`, 7): a new file is made at it, a file at another is refused, never changed.
 
 **Durable state.** Raw history is kept for audit (the conversation, `memory_log`, the journal
 episodes); what the brain needs to act is compiled from it in facts, lessons, **decisions** (a
 choice and its reason, superseded when reversed; closing a thread writes one). Where a project,
 client job or goal stands is not a memory: `remember` kind `progress` (a `state` `active`,
 `blocked`, `done` or `paused`, and a text saying what is done, under way, blocked and left)
-writes the summary of the subject's thread (see [Threads](#threads-threadsgo-thread_enginego)). The progress memories of an
-older install are rewritten once at start (kv `progress_to_threads`): the latest of each subject
-becomes its live thread's summary, or that of a light thread opened for it (closed done when it
-said done; a subject whose thread ended keeps that one's); they are forgotten, and any other
-progress row (a replaced one, a proposed or external one, one without subject) becomes a fact.
+writes the summary of the subject's thread (see [Threads](#threads-threadsgo-thread_enginego)).
 
 **En ce moment** (`situations.go`). A `situation` is where the user is or what they do for a
 while (« en vacances à Lyon jusqu'à dimanche »): subject `owner` by default, and a `valid_to`,

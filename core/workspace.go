@@ -51,34 +51,6 @@ func isWorkspaceSubject(s string) bool {
 	return k == workspaceSubject
 }
 
-// The display rules (#402) are gone: their table, and their cards.
-func displayRulesGone(db *sql.DB) error {
-	if _, err := db.Exec(`DROP TABLE IF EXISTS attention_rules`); err != nil {
-		return err
-	}
-	if _, err := db.Exec(`DELETE FROM attention WHERE ref IN (SELECT 'card:' || id FROM convo_cards WHERE kind = 'showrule')`); err != nil {
-		return err
-	}
-	_, err := db.Exec(`DELETE FROM convo_cards WHERE kind = 'showrule'`)
-	return err
-}
-
-// The composition by ref and its canvas of objects (#424) are gone: the
-// last composition kept, and the gestures and messages about an object
-// rather than a surface.
-func refCompositionGone(db *sql.DB) error {
-	for _, q := range []string{
-		`DELETE FROM kv WHERE key = 'composition'`,
-		`DELETE FROM kv WHERE key LIKE 'about_msg:%' AND value NOT LIKE 'surface:%'`,
-		`DELETE FROM workspace_log WHERE ref NOT LIKE 'surface:%'`,
-	} {
-		if _, err := db.Exec(q); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 const workspaceLogSchema = `CREATE TABLE IF NOT EXISTS workspace_log (
 	id    INTEGER PRIMARY KEY AUTOINCREMENT,
 	time  INTEGER NOT NULL,
@@ -88,10 +60,7 @@ const workspaceLogSchema = `CREATE TABLE IF NOT EXISTS workspace_log (
 );
 CREATE INDEX IF NOT EXISTS workspace_log_time ON workspace_log (time);`
 
-func init() {
-	extraSchema = append(extraSchema, workspaceLogSchema)
-	schemaFixes = append(schemaFixes, displayRulesGone, refCompositionGone)
-}
+func init() { extraSchema = append(extraSchema, workspaceLogSchema) }
 
 // Preferences.
 

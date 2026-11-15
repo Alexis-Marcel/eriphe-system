@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 )
 
@@ -204,36 +203,6 @@ func TestSurfaceKeepsItsSubject(t *testing.T) {
 	}
 }
 
-// An older store gets the subject columns at start, and opens.
-func TestSubjectColumnsOnAnOlderStore(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, table := range subjectTables {
-		if _, err := s.db.Exec(`ALTER TABLE ` + table + ` DROP COLUMN subject`); err != nil {
-			t.Fatalf("%s: %v", table, err)
-		}
-	}
-	s.db.Exec(`DELETE FROM kv WHERE key = ?`, notificationSubjects)
-	s.db.Close()
-	s, err = openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, table := range subjectTables {
-		var n int
-		s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'subject'`, table).Scan(&n)
-		if n != 1 {
-			t.Errorf("%s has no subject", table)
-		}
-	}
-	if s.get(notificationSubjects) == "" {
-		t.Error("notifications not moved")
-	}
-}
-
 // A skill's run is about the subject it declares, else its events' key
 // when it names a thing; a bad subject refuses the skill.
 func TestSkillRunSubject(t *testing.T) {
@@ -294,29 +263,6 @@ func TestExtractionTakesTheTasksSubject(t *testing.T) {
 	} {
 		if got := c.opSubject(tc.op, tc.ref); got != tc.want {
 			t.Errorf("%+v from %s: %q, want %q", tc.op, tc.ref, got, tc.want)
-		}
-	}
-}
-
-// A notification's subject moves out of its ref once; a record's ref stays.
-func TestNotificationSubjectsMoved(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, ref := range []string{"project:site", "skill:veille", ""} {
-		s.db.Exec(`INSERT INTO notifications (created, text, why, ref, source, weight, outcome, reason, token) VALUES (1, 'x', '', ?, 'brain', 5, 'now', '', ?)`, ref, ref+"t")
-	}
-	s.db.Exec(`DELETE FROM kv WHERE key = ?`, notificationSubjects)
-	if err := subjectColumns(s.db); err != nil {
-		t.Fatal(err)
-	}
-	for ref, want := range map[string][2]string{"project:sitet": {"", "project:site"}, "skill:veillet": {"skill:veille", ""}} {
-		var r, sub string
-		s.db.QueryRow(`SELECT ref, subject FROM notifications WHERE token = ?`, ref).Scan(&r, &sub)
-		if r != want[0] || sub != want[1] {
-			t.Errorf("%s: ref %q subject %q", ref, r, sub)
 		}
 	}
 }

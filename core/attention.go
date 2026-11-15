@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"slices"
@@ -56,71 +55,7 @@ const attentionSchema = `CREATE TABLE IF NOT EXISTS attention (
 	subject   TEXT NOT NULL DEFAULT ''    -- what it is about, kind:slug (subjects.go)
 );`
 
-func init() {
-	extraSchema = append(extraSchema, attentionSchema)
-	schemaFixes = append(schemaFixes, attentionColumns, attentionOneQueue)
-}
-
-// attentionOneQueueKey says the queue was rewritten once for one path.
-const attentionOneQueueKey = "attention_one_queue"
-
-// attentionOneQueue rewrites once a queue made before it was the one path:
-// a notification's item was alert:<id>, the subject kind's form, and is
-// notification:<id>; a proposal waiting to be offered had an item of its
-// own (source offer), made again at its card's weight
-// (attendQueuedCards).
-func attentionOneQueue(db *sql.DB) error {
-	var done string
-	if db.QueryRow(`SELECT value FROM kv WHERE key = ?`, attentionOneQueueKey).Scan(&done) == nil {
-		return nil
-	}
-	for _, q := range []string{
-		`UPDATE OR REPLACE attention SET ref = 'notification:' || substr(ref, 7)
-			WHERE ref LIKE 'alert:%' AND EXISTS (SELECT 1 FROM notifications n WHERE 'alert:' || n.id = attention.ref)`,
-		`DELETE FROM attention WHERE source = 'offer'`,
-	} {
-		if _, err := db.Exec(q); err != nil {
-			return err
-		}
-	}
-	_, err := db.Exec(`INSERT INTO kv (key, value) VALUES (?, '1')`, attentionOneQueueKey)
-	return err
-}
-
-// attentionColumns brings a queue made by an older eriphe-core (v0.156.0:
-// no tainted, delivered nor due) up to date, its items kept. Those were
-// delivered as they entered: they stay delivered, never told again.
-func attentionColumns(db *sql.DB) error {
-	rows, err := db.Query(`SELECT name FROM pragma_table_info('attention')`)
-	if err != nil {
-		return err
-	}
-	have := map[string]bool{}
-	for rows.Next() {
-		var name string
-		if rows.Scan(&name) == nil {
-			have[name] = true
-		}
-	}
-	rows.Close()
-	if len(have) == 0 {
-		return nil // not made yet: attentionSchema makes it whole
-	}
-	for _, col := range []string{"tainted", "delivered", "due"} {
-		if have[col] {
-			continue
-		}
-		if _, err := db.Exec(`ALTER TABLE attention ADD COLUMN ` + col + ` INTEGER NOT NULL DEFAULT 0`); err != nil {
-			return err
-		}
-		if col == "delivered" {
-			if _, err := db.Exec(`UPDATE attention SET delivered = time`); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
+func init() { extraSchema = append(extraSchema, attentionSchema) }
 
 const (
 	attentionWhyMax   = 300
