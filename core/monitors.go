@@ -841,6 +841,7 @@ func (c *core) decideMonitor(id int64, approve bool) error {
 		raw, _ := json.Marshal(m.Pending)
 		_, err = c.store.db.Exec(`UPDATE monitors SET spec = ?, pending = '', look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 			string(raw), now, id)
+		c.monitorLooked(m.Name) // a new baseline: the threads that follow it (thread_live.go)
 	default:
 		_, err = c.store.db.Exec(`UPDATE monitors SET state = ?, look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 			monitorOn, now, id)

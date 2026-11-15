@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -74,7 +75,12 @@ func notePoint(st *monitorLook, got any, now time.Time) {
 		st.Points = nil
 		return
 	}
-	st.Points = append(st.Points, monitorPoint{now.Unix(), n})
+	p := monitorPoint{now.Unix(), n}
+	if k := len(st.Points); k > 0 && now.Unix()-st.Points[k-1].At < 60 {
+		st.Points[k-1] = p // a confirming look: the same minute, one point
+		return
+	}
+	st.Points = append(st.Points, p)
 	if k := len(st.Points); k > monitorPointsMax {
 		st.Points = st.Points[k-monitorPointsMax:]
 	}
@@ -186,6 +192,19 @@ func (c *core) monitorToThreads(m *monitor, kind string, p map[string]any) {
 	}
 }
 
+// monitorGone forgets a monitor removed: no thread follows it any more,
+// nor a later one of the same name.
+func (c *core) monitorGone(name string) {
+	ids := c.threadsFollowing(name)
+	c.store.db.Exec(`DELETE FROM thread_monitors WHERE monitor = ?`, name)
+	for _, id := range ids {
+		c.keepThreadSurface(id)
+	}
+	if len(ids) > 0 {
+		c.kickWorkspace()
+	}
+}
+
 // monitorLooked writes again the surfaces of the threads that follow a
 // monitor, once its look is saved: its new number, its events, its state.
 func (c *core) monitorLooked(name string) {
@@ -231,11 +250,16 @@ func (c *core) watchEvents(thread int64, n int) []threadWatchEvent {
 	return out
 }
 
-// fmtNum words a number as the user reads it.
+// fmtNum words a number as the user reads it: two decimals at most, three
+// significant digits below one (0,004 stays 0,004).
 func fmtNum(v float64, lang string) string {
-	s := strconv.FormatFloat(v, 'f', -1, 64)
-	if f := strconv.FormatFloat(v, 'f', 2, 64); len(f) < len(s) {
-		s = strings.TrimRight(strings.TrimRight(f, "0"), ".")
+	decimals := 2
+	if a := math.Abs(v); a > 0 && a < 1 {
+		decimals = min(2-int(math.Floor(math.Log10(a))), 12)
+	}
+	s := strconv.FormatFloat(v, 'f', decimals, 64)
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
 	}
 	if lang != "en" {
 		s = strings.Replace(s, ".", ",", 1)
@@ -290,7 +314,7 @@ func (c *core) threadLive(in *surfaceIn, out *threadComps, data map[string]any, 
 	out.add(comp{"id": "thread_live", "component": "Text", "variant": "subtitle", "text": tr(lang, "thread.live.title")})
 	for i, m := range ms {
 		n := strconv.Itoa(i)
-		alert := m.Spec.Cond == condCross && m.Look.Hit || m.Look.Failed
+		alert := m.State == monitorOn && (m.Spec.Cond == condCross && m.Look.Hit || m.Look.Failed)
 		hot = hot || alert
 		v := map[string]any{"name": m.Name}
 		parts := []string{fmt.Sprintf(tr(lang, "thread.live.by"), m.Name)}

@@ -80,8 +80,13 @@ func TestThreadFollowsMonitor(t *testing.T) {
 		t.Fatalf("weight %d before any crossing", w)
 	}
 
-	// Crossed: in its timeline and its header, and the thread rises.
+	// Crossed: in its timeline and its header, and the thread rises;
+	// nothing goes to the brain.
+	msgs := c.store.lastMessageSeq()
 	at(2, 95)
+	if task, _ := c.store.task("t-brain"); task.State != stateIdle || c.store.lastMessageSeq() != msgs {
+		t.Errorf("the brain was told: %s, %d messages", task.State, c.store.lastMessageSeq()-msgs)
+	}
 	crossed := "cpu : 95, au-dessus du seuil de 90"
 	_, data, meta := threadSurfaceOf(t, c, s.ID)
 	states, details := timelineOf(data)
@@ -113,12 +118,28 @@ func TestThreadFollowsMonitor(t *testing.T) {
 		t.Errorf("weight %d back under", w)
 	}
 
+	// Paused while past its limit: the thread comes down at once.
+	at(4, 97)
+	if w := weight(); w != threadWeightWatch {
+		t.Fatalf("weight %d past the limit again", w)
+	}
+	if err := c.pauseMonitor("cpu", true); err != nil {
+		t.Fatal(err)
+	}
+	if w := weight(); w != threadWeight {
+		t.Errorf("weight %d once paused", w)
+	}
+	if err := c.pauseMonitor("cpu", false); err != nil {
+		t.Fatal(err)
+	}
+
 	// Ended, the thread no longer follows it: no new event lands.
 	before := len(c.watchEvents(s.ID, 100))
 	if err := c.closeLight(s.ID, "fait", byBrain); err != nil {
 		t.Fatal(err)
 	}
-	at(4, 99)
+	at(5, 50)
+	at(6, 99)
 	if n := len(c.watchEvents(s.ID, 100)); n != before {
 		t.Errorf("an ended thread got %d events", n-before)
 	}
@@ -140,7 +161,34 @@ func TestThreadWatchTexts(t *testing.T) {
 			}
 		}
 	}
+	small, tiny := 0.004, 0.002
+	if got := (threadWatchEvent{Monitor: "m", Kind: evMonitorCrossed, Value: &small, Lim: &tiny, Holds: true}).text("en"); got != "m: 0.004, above the limit of 0.002" {
+		t.Errorf("small numbers %q", got)
+	}
+	if got := fmtNum(1234.5678, "fr"); got != "1234,57" {
+		t.Errorf("fmtNum %q", got)
+	}
 	if got := (threadWatchEvent{Monitor: "m", Kind: evMonitorCrossed, Value: &v, Lim: &l, Below: true, Holds: true}).text("fr"); got != "m : 0,5, en dessous du seuil de 2" {
 		t.Errorf("fr %q", got)
+	}
+}
+
+// A monitor removed is no longer followed, nor a later one of its name.
+func TestThreadMonitorRemoved(t *testing.T) {
+	c, _, _ := pollCore(t)
+	approvedMonitor(t, c, "cpu", monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 1, Path: "data.state"})
+	s := lightThread(t, c)
+	if _, err := c.linkMonitor(s.ID, "cpu", byBrain); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.deleteMonitor("cpu"); err != nil {
+		t.Fatal(err)
+	}
+	approvedMonitor(t, c, "cpu", monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 1, Path: "data.state"})
+	if ids := c.threadsFollowing("cpu"); len(ids) != 0 {
+		t.Errorf("still followed by %v", ids)
+	}
+	if _, data, _ := threadSurfaceOf(t, c, s.ID); data["live"] != nil {
+		t.Errorf("still live: %v", data["live"])
 	}
 }
