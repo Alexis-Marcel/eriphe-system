@@ -116,14 +116,21 @@ func (c *core) noteTaskAnswer(task, who, line string, a taskAnswer) {
 	c.logThread(st.Thread, who, fmt.Sprintf("Étape « %s » : %s", st.Title, line))
 }
 
-// brainTaint is why what the brain writes now may carry what someone else
-// wrote: its turn's taint.
-func (c *core) brainTaint() string { return strings.Join(c.turnTaint(), ", ") }
+// answerTaint is why what the brain answers a task may carry what someone
+// else wrote: its turn's taint, and the task's own when its result is
+// tainted (the question it answers came from there).
+func (c *core) answerTaint(task string) string {
+	why := c.turnTaint()
+	if t := c.taskResultTaint(task); t != "" && !slices.Contains(why, t) {
+		why = append(why, t)
+	}
+	return strings.Join(why, ", ")
+}
 
 // logBrainReply is answer_task's reply, sent to the task.
 func (c *core) logBrainReply(task, reply string) {
 	c.noteTaskAnswer(task, byBrain, "question de l'assistant → Eriphe a répondu : "+strings.TrimSpace(reply),
-		taskAnswer{Kind: answerReply, Reply: reply, Tainted: c.brainTaint()})
+		taskAnswer{Kind: answerReply, Reply: reply, Tainted: c.answerTaint(task)})
 }
 
 // logBrainChecks is answer_task's fix of a contract's checks.
@@ -138,7 +145,7 @@ func (c *core) logBrainChecks(task string, checks []taskCheck, reply string) {
 	} else {
 		line += "."
 	}
-	c.noteTaskAnswer(task, byBrain, line, taskAnswer{Kind: answerChecks, Refs: names, Reply: reply, Tainted: c.brainTaint()})
+	c.noteTaskAnswer(task, byBrain, line, taskAnswer{Kind: answerChecks, Refs: names, Reply: reply, Tainted: c.answerTaint(task)})
 }
 
 // logReleaseAsked is answer_task's release: an ask on a card, nothing

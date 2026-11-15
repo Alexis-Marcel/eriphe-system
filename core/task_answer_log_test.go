@@ -182,6 +182,22 @@ func TestTaskAnswersOnThreadSurface(t *testing.T) {
 	}
 }
 
+// A reply to a task whose result is tainted says « extérieur » on a clean
+// turn too: the question it answers came from there.
+func TestTaskAnswerOfTaintedTask(t *testing.T) {
+	c := stepsCore(t)
+	addTask(t, c, "t-1", stateIdle)
+	c.store.set(taskTaintKey("t-1"), "started on a tainted turn: mail.search_messages")
+	s := taskStep(t, c, "t-1", "Page contact")
+	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "reply": "mailto"}); isErr {
+		t.Fatalf("answer_task: %v", out)
+	}
+	_, data, meta := threadSurfaceOf(t, c, s.ID)
+	if _, details := timelineOf(data); details["Question de l'assistant → Eriphe a répondu : mailto"] != "extérieur" || !meta.Tainted {
+		t.Errorf("a reply to a tainted task: %v %+v", details, meta)
+	}
+}
+
 // A release shows as what it is on the thread's surface: Eriphe asked on
 // a card, then the user's own answer.
 func TestReleaseOnThreadSurface(t *testing.T) {
