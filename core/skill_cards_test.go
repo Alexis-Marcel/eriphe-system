@@ -279,3 +279,43 @@ func TestSkillRunCallsCardHeldForBreakpoint(t *testing.T) {
 		t.Fatal("told twice")
 	}
 }
+
+// A tainted run's plan that safePlan lets start was approved by code, not
+// by the user: its steps keep the run's taint, start unclean, and a Free
+// write from one asks a card.
+func TestSkillRunSafePlanKeepsTaint(t *testing.T) {
+	c, now := skillCore(t)
+	// "Always allow" makes the rollback Free: on a clean start it holds.
+	if err := c.store.allowAction("monitor", "mcp__monitor__rollback", ""); err != nil {
+		t.Fatal(err)
+	}
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ncan: [open-thread]\n---\nEnquête.\n")
+	r := startedRun(t, c, now, "prod")
+	if c.taskResultTaint(r.Task) == "" {
+		t.Fatal("the run on an external event is not tainted")
+	}
+	r = endTurn(t, c, r.Task, "Je lance un thread.\n```thread\n"+
+		`{"title": "Corriger le login", "goal": "Corriger l'erreur 500", "steps": [{"key": "fix", "title": "Corriger", "prompt": "Corrige.", "resources": [{"kind": "tool", "ref": "monitor"}]}]}`+
+		"\n```\n")
+	if !strings.Contains(r.Note, "opened and started") {
+		t.Fatalf("note %q", r.Note)
+	}
+	s, ok := c.liveThread(r)
+	if !ok || s.Phase != phaseRunning || s.Tainted == "" {
+		t.Fatalf("thread %+v", s)
+	}
+	st := stepOf(t, c, s, "fix")
+	if st.Task == "" {
+		t.Fatalf("step %+v", st)
+	}
+	if c.store.get(taskTaintKey(st.Task)) == "" {
+		t.Error("the step's task starts untainted")
+	}
+	if c.store.get(lentByUserKey(st.Task)) != "" {
+		t.Error("the step's task starts clean")
+	}
+	task, _ := c.store.task(st.Task)
+	if got, why := c.decideTask(task, "mcp__monitor__rollback", map[string]any{"version": "2.0.0"}); got != decideAsk || why != uncleanReason {
+		t.Errorf("a Free write from the step = %q (%s)", got, why)
+	}
+}

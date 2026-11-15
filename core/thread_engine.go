@@ -286,10 +286,11 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 	if again != "" {
 		fmt.Fprintf(&b, "\n\n## Retry\nA previous attempt at this step was not accepted. What to fix: %s", again)
 	}
-	planned := st.Planned && s.Phase == phaseRunning // a plan the user approved, still running: never one reopened light
+	planned := st.Planned && s.Phase == phaseRunning // a plan approved, still running: never one reopened light
+	byUser := planned && c.store.get(planByCodeKey(s.ID)) == ""
 	var taint []string
-	if s.Tainted != "" && !planned {
-		taint = strings.Split(s.Tainted, ", ") // the plan the user approved stands for its own words
+	if s.Tainted != "" && !byUser {
+		taint = strings.Split(s.Tainted, ", ") // the plan the user approved stands for its own words; one code approved does not
 	}
 	taint = appendNew(taint, handed...)
 	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract, Subject: s.Subject,
@@ -298,8 +299,8 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 	if err != nil {
 		return nil, err
 	}
-	if planned {
-		c.grantLent(t) // the user approved it with the plan (access_card.go)
+	if planned && (byUser || len(taint) == 0) {
+		c.grantLent(t) // the user approved it with the plan, or code a clean one (access_card.go)
 		if len(taint) == 0 {
 			c.store.set(lentByUserKey(t.ID), "1")
 		}
@@ -1011,6 +1012,16 @@ func stepFields(steps []Step, keep func(Step) bool) []cardField {
 
 // decideThreadAsk applies the user's answer to what a thread asks.
 func (c *core) decideThreadAsk(ctx context.Context, id int64, approve bool) error {
+	return c.decideThreadAskBy(ctx, id, approve, false)
+}
+
+// planByCodeKey marks a thread whose plan code approved (safePlan), not the
+// user: its words never stand for the user's, so its steps keep its taint.
+func planByCodeKey(id int64) string { return fmt.Sprintf("plan_by_code:%d", id) }
+
+// decideThreadAskBy applies an answer to what a thread asks; byCode: code
+// approved its plan, the user never saw it.
+func (c *core) decideThreadAskBy(ctx context.Context, id int64, approve, byCode bool) error {
 	threadMu.Lock()
 	defer threadMu.Unlock()
 	a, err := c.threadAsk(id)
@@ -1037,11 +1048,18 @@ func (c *core) decideThreadAsk(ctx context.Context, id int64, approve bool) erro
 			return nil
 		}
 		now := time.Now().Unix()
+		told := user + " a approuvé le plan"
+		if byCode {
+			c.store.set(planByCodeKey(s.ID), "1")
+			told = "Le plan, qui ne fait que lire ou écrire sur une branche, a démarré sans carte"
+			c.logThread(s.ID, "engine", "Plan démarré sans carte : il ne fait que lire ou écrire sur une branche.")
+		} else {
+			c.logThread(s.ID, "user", "Plan approuvé.")
+		}
 		c.setThread(s.ID, map[string]any{"phase": phaseRunning, "started": now, "since": now})
-		c.logThread(s.ID, "user", "Plan approuvé.")
 		c.createLead(s) // thread_lead.go
 		if s, err = c.thread(s.ID); err == nil && !c.hasLead(s) {
-			c.tellBrain(s, user+" a approuvé le plan : les premières étapes démarrent. Tu seras prévenu de chaque étape.", nil)
+			c.tellBrain(s, told+" : les premières étapes démarrent. Tu seras prévenu de chaque étape.", nil)
 		}
 	case askAmend:
 		var in amendIn

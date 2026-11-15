@@ -204,7 +204,7 @@ func (c *core) runThread(ctx context.Context, r *skillRun, tr *skillTrigger, in 
 	}
 	var ask int64
 	if c.store.db.QueryRow(`SELECT id FROM thread_asks WHERE thread = ? AND kind = ? AND state = ?`, s.ID, askPlan, askPending).Scan(&ask) == nil {
-		if err := c.decideThreadAsk(ctx, ask, true); err != nil {
+		if err := c.decideThreadAskBy(ctx, ask, true, true); err != nil {
 			return fmt.Sprintf("thread %d opened; its plan waits for its card (%v)", s.ID, err)
 		}
 	}
