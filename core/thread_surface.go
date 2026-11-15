@@ -37,7 +37,8 @@ import (
 //     alone, and shown under code's section, its root renamed thread_part.
 //     A new write replaces it, surface_remove takes it away. Composed
 //     only, no sources: a change of the thread rewrites the surface at
-//     once and never waits for a tool.
+//     once and never waits for a tool. Live data comes from a monitor
+//     the thread follows (thread_live.go), read by code.
 //   - Taint, per part: a step whose task read external content, and a
 //     part written after reading some, say « extérieur » where they show.
 //     For the models that read the workspace, the surface is tainted as
@@ -345,10 +346,16 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	}
 	// Since the user's last visit, where it stands, what is theirs
 	// (thread_header.go).
-	c.threadHeader(&in, &out, data, s, steps, asks, now)
+	watch, watchFacts := c.watchItems(&in, s, lang, loc)
+	c.threadHeader(&in, &out, data, s, steps, asks, watchFacts, now)
+	// The monitors it follows, read by code (thread_live.go): past a
+	// limit, it rises.
+	if c.threadLive(&in, &out, data, s, now) {
+		in.Weight = max(in.Weight, threadWeightWatch)
+	}
 
-	if len(steps) > 0 {
-		items := make([]any, 0, len(steps))
+	if len(steps) > 0 || len(watch) > 0 {
+		items := make([]any, 0, len(steps)+len(watch))
 		for _, st := range steps {
 			item := map[string]any{"label": st.Label, "state": st.State}
 			if !st.At.IsZero() {
@@ -380,6 +387,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 				items = append(items, answer)
 			}
 		}
+		items = append(items, watch...) // its monitors' last events, after its steps
 		data["steps"] = items
 		out.add(comp{"id": "thread_steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/steps"}})
 		// A call's card, once decided, shows how its run went, under the

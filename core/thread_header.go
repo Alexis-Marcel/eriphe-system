@@ -179,13 +179,19 @@ func (c *core) threadStateLine(s Thread, lang string) string {
 // threadHeader composes the header of a thread's surface: since the
 // user's last visit, where it stands, what is theirs. What waits for the
 // user gives the surface its weight.
-func (c *core) threadHeader(in *surfaceIn, out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, asks []int64, now time.Time) {
+func (c *core) threadHeader(in *surfaceIn, out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, asks []int64, more []threadFact, now time.Time) {
 	lang, loc := c.userLang(), c.userZone()
 	w := func(key string) string { return tr(lang, key) }
 	type comp = map[string]any
 
 	// Depuis ta dernière visite.
 	facts := threadFacts(s, steps, s.seen, lang)
+	for _, f := range more { // its monitors' events (thread_live.go)
+		if f.At.Unix() > s.seen {
+			facts = append(facts, f)
+		}
+	}
+	slices.SortStableFunc(facts, func(a, b threadFact) int { return a.At.Compare(b.At) })
 	switch {
 	case s.seen == 0:
 		out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle", "text": w("thread.head.sofar")})

@@ -63,7 +63,9 @@ type addStepIn struct {
 
 type linkThreadIn struct {
 	Thread int64  `json:"thread_id"`
-	Ref    string `json:"ref" jsonschema:"what to link: intention:<id>, or a card's ref (kind:id)"`
+	Ref    string `json:"ref,omitempty" jsonschema:"what to link: intention:<id>, or a card's ref (kind:id)"`
+	// Monitor makes the thread follow a monitor (thread_live.go).
+	Monitor string `json:"monitor,omitempty" jsonschema:"instead of ref: a monitor's name (monitors), approved by the user, for the thread to follow: its latest number and its events show on the thread's surface"`
 }
 
 type findThreadIn struct {
@@ -212,9 +214,16 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return c.addStep(ctx, in.Thread, in.Step, c.turnTaint(), "brain")
 		})
 
-	tool(s, "link_thread", "Only for an exception: join to a thread what eriphe-core does not link itself, an intention of another subject (ref intention:<id>: a deadline step, due when it is) or a card raised outside a turn about the thread (kind:id: in its timeline). An intention of the thread's subject and a card born in a turn about it are linked already; where it stands is remember kind progress.",
+	tool(s, "link_thread", "Only for an exception: join to a thread what eriphe-core does not link itself, an intention of another subject (ref intention:<id>: a deadline step, due when it is) or a card raised outside a turn about the thread (kind:id: in its timeline); or, with monitor, a monitor the thread follows (a latency, an error rate of what it is about): code shows its latest number and its events on the thread's surface, without a model, and a limit crossed raises the thread; a skill still reacts to its events. An intention of the thread's subject and a card born in a turn about it are linked already; where it stands is remember kind progress.",
 		func(ctx context.Context, in linkThreadIn) (map[string]any, error) {
 			c.turnThread(in.Thread)
+			if in.Monitor != "" {
+				if in.Ref != "" {
+					return nil, errors.New("one of ref or monitor")
+				}
+				note, err := c.linkMonitor(in.Thread, in.Monitor, "brain")
+				return map[string]any{"note": note}, err
+			}
 			note, err := c.linkThread(ctx, in.Thread, in.Ref, "brain")
 			return map[string]any{"note": note}, err
 		})
