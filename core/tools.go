@@ -168,27 +168,36 @@ func newMCPServer(c *core) *mcp.Server {
 	}
 	tool(s, "answer_task", "Answer what a task waits for: reply to its question; with checks, fix its contract's misconfigured checks; with release, ask the user on a card to release the tools it was lent held back.",
 		func(ctx context.Context, in answerIn) (map[string]string, error) {
+			// What it settles shows in the task's thread (task_answer_log.go).
+			reply := func() (string, error) {
+				if in.Checks != nil {
+					res, err := c.fixChecks(ctx, in.TaskID, in.Checks, in.Reply)
+					if err == nil {
+						c.logBrainChecks(in.TaskID, in.Checks, in.Reply)
+					}
+					return res, err
+				}
+				res, err := c.answer(ctx, in.TaskID, "", in.Reply, nil, byBrain)
+				if err == nil {
+					c.logBrainReply(in.TaskID, in.Reply)
+				}
+				return res, err
+			}
 			if len(in.Release) > 0 {
 				res, err := c.releaseTools(in.TaskID, in.Release)
+				if err == nil {
+					c.logReleaseAsked(in.TaskID, in.Release)
+				}
 				if err != nil || in.Reply == "" && in.Checks == nil {
 					return map[string]string{"result": res}, err
 				}
-				var more string
-				if in.Checks != nil {
-					more, err = c.fixChecks(ctx, in.TaskID, in.Checks, in.Reply)
-				} else {
-					more, err = c.answer(ctx, in.TaskID, "", in.Reply, nil, byBrain)
-				}
+				more, err := reply()
 				if err != nil {
 					return map[string]string{"result": res}, fmt.Errorf("%s, but: %w", res, err)
 				}
 				return map[string]string{"result": res + "; " + more}, nil
 			}
-			if in.Checks != nil {
-				res, err := c.fixChecks(ctx, in.TaskID, in.Checks, in.Reply)
-				return map[string]string{"result": res}, err
-			}
-			res, err := c.answer(ctx, in.TaskID, "", in.Reply, nil, byBrain)
+			res, err := reply()
 			return map[string]string{"result": res}, err
 		})
 

@@ -192,7 +192,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return v, err
 		})
 
-	tool(s, "settle_step", "Settle a step of a thread you hold. A task that reported its work or stopped, on its evidence: accept, retry (at most 2 per step; say what to fix) or reject; a report is only a claim: a step whose checks failed cannot be accepted. A user step you see done: accept, with what shows it in note. A deadline no longer to wait for: accept or reject. A call, a check, a choice or an approval settle themselves. Accepting lets the steps after it start.",
+	tool(s, "settle_step", "Settle a step of a thread you hold. A task that reported its work or stopped, on its evidence: accept, retry (at most 2 per step; say what to fix) or reject; a report is only a claim: a step whose checks failed cannot be accepted. A user step you see done, or the user tells you in the conversation is done: accept, with what shows it in note. A deadline no longer to wait for: accept or reject. A call, a check, a choice or an approval settle themselves. Accepting lets the steps after it start.",
 		func(ctx context.Context, in settleIn) (Step, error) {
 			if err := c.holderOnly(in.Thread); err != nil {
 				return Step{}, err
