@@ -710,7 +710,7 @@ whatever address it dials) and one client certificate per node.
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
 | `task_status` | state, the agent's last message (without its receipt), its checked [receipt](#receipts-receiptgo), the pending permission; `wait` blocks until the task needs you |
 | `list_tasks` | recent tasks |
-| `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources) |
+| `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card), so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
 | `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write the workspace, as `brain` ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)); `run_task`'s `surface` names a placeholder for the task to fill |
 
