@@ -32,8 +32,7 @@ import (
 //     (what the surface shows is marked as it always is, and its Proposal
 //     follows the #443 rules).
 //   - The layout says who put it there (focusBy): the page and the brain's
-//     next turn know Eriphe did, not the user; the brain is not asked for a
-//     line about its own surface (focusAskBrain).
+//     next turn know Eriphe did, not the user.
 //   - Back (the page's) ends the stage: the base composition comes back.
 
 const (
@@ -105,8 +104,7 @@ func (c *core) frontFor(msgs []Message) bool {
 }
 
 // setFocus is focusSurface, by the user ("") or by the brain: what was on
-// stage before stays next to it, reduced (layoutStage); the brain is asked
-// no line about a surface it put on stage itself.
+// stage before stays next to it, reduced (layoutStage).
 func (c *core) setFocus(id string, now time.Time, by string) {
 	st := &c.layout
 	st.mu.Lock()
@@ -114,7 +112,6 @@ func (c *core) setFocus(id string, now time.Time, by string) {
 	if was != "" && now.Sub(st.focusAt) > focusFor {
 		was = ""
 	}
-	var withdraw *focusAsk
 	if id != was {
 		st.f.prev = was // "" when the stage was empty, or ends
 		if id == "" {
@@ -128,10 +125,6 @@ func (c *core) setFocus(id string, now time.Time, by string) {
 			st.focusSince = time.Time{}
 		}
 		c.focusChangedLocked(was)
-		if by == focusByBrain {
-			st.f.asked = focusKey(id, st.focusSince) // its own: no line asked about it
-			withdraw, st.f.ask = st.f.ask, nil
-		}
 	}
 	if by == focusByBrain {
 		c.loadPlacementLocked()
@@ -141,9 +134,6 @@ func (c *core) setFocus(id string, now time.Time, by string) {
 		}
 	}
 	st.mu.Unlock()
-	if withdraw != nil {
-		c.withdrawFocusAsk(withdraw)
-	}
 	if id != "" && by == "" {
 		c.openedOnWorkspace(id, now) // no longer closed; a queue item read (workspace_gestures.go)
 	}

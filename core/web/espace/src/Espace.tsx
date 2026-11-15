@@ -71,12 +71,6 @@ export function shownLayout(core: Layout, intent: Intent | null, now: number): L
   return core.focus ? unfocused(core, intent.back) : null;
 }
 
-// layoutLine is Eriphe's line above the grid: the brain's about what is
-// open, once it wrote one, else the composer's.
-export function layoutLine(l: Layout): string {
-  return (l.focus && l.say) || l.eriphe;
-}
-
 function useTyped(text: string) {
   const reduced = useReducedMotion();
   const [n, setN] = useState(0);
@@ -241,7 +235,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
   };
   // Nothing to show: Eriphe says so, never an empty grid without a word.
   const nothing = !gallery && !!shown && !onSurfaces;
-  const text = useTyped(said ?? (shown ? layoutLine(shown) : ""));
+  const text = useTyped(said ?? (shown ? shown.eriphe : ""));
 
   // A message goes to Eriphe with the surface open, if any: « montre-m'en
   // moins », « lance une recherche là-dessus ». It shows in the exchange at

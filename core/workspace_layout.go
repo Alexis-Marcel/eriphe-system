@@ -100,7 +100,6 @@ type workspaceLayout struct {
 	By       string       `json:"by"`                 // composer or fallback
 	Ambient  string       `json:"ambient"`            // calm, decision or urgent: by the heaviest tile
 	Focus    string       `json:"focus,omitempty"`    // the surface the user opened
-	Say      string       `json:"say,omitempty"`      // the brain's line about it (workspace_focus.go)
 	FocusBy  string       `json:"focusBy,omitempty"`  // brain: Eriphe put it on stage, answering the user (workspace_front.go)
 	Previous string       `json:"previous,omitempty"` // what was on stage before it, a tile reduced next to it (workspace_front.go)
 	Items    []layoutTile `json:"items"`              // the tiles, each at its place on the grid
@@ -450,7 +449,7 @@ type layoutState struct {
 	focus      string
 	focusAt    time.Time  // when it was last opened: it lasts focusFor from then
 	focusSince time.Time  // when it began: opened again, it is the same focus
-	f          focusState // the choice around it, the base to go back to, the brain's line (workspace_focus.go)
+	f          focusState // the choice around it, the base to go back to (workspace_focus.go)
 	last       workspaceLayout
 	raw        string
 	changed    chan struct{} // closed when the layout changes
@@ -548,9 +547,6 @@ func (c *core) relayout() workspaceLayout {
 		previous = st.f.prev
 	}
 	l := layoutStage(pool, c.layoutChoiceLocked(focus, pool), focus, previous, c.placementLocked(start))
-	if l.Focus != "" && st.f.sayFor == focusKey(l.Focus, st.focusSince) {
-		l.Say = st.f.say
-	}
 	if l.Focus != "" {
 		l.FocusBy = st.f.by
 	}

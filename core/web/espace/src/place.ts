@@ -107,7 +107,7 @@ export function widen(tiles: Tile[]): Tile[] {
 export function focusedIn(l: Layout, id: string): Layout {
   const tile = l.items.find((t) => t.id === id);
   const chip = l.chips.find((c) => c.id === id);
-  if (!tile && !chip) return { ...l, focus: id, say: undefined };
+  if (!tile && !chip) return { ...l, focus: id };
   const open: Tile = tile ?? { id, title: chip!.title, why: chip!.why, size: "l", col: 0, row: 0, w: 4, h: 3 };
   const prev = l.focus && l.focus !== id ? l.items.find((t) => t.id === l.focus) : undefined;
   const others = l.items.filter((t) => t.id !== id && t.id !== prev?.id);
@@ -154,7 +154,6 @@ export function focusedIn(l: Layout, id: string): Layout {
     focus: placed.has(id) ? id : undefined,
     focusBy: undefined,
     previous: prev && placed.has(prev.id) ? prev.id : undefined,
-    say: undefined,
     items: widen(items),
     chips: [...folded, ...l.chips.filter((c) => c.id !== id || !placed.has(id))],
   };
@@ -163,7 +162,7 @@ export function focusedIn(l: Layout, id: string): Layout {
 // unfocused is the layout when the focus ends: the one before it when the
 // page kept it, else the same with nothing open, until core's comes.
 export function unfocused(l: Layout, before: Layout | null): Layout {
-  return before ?? { ...l, focus: undefined, say: undefined, items: l.items.map(({ related: _, ...i }) => i) };
+  return before ?? { ...l, focus: undefined, items: l.items.map(({ related: _, ...i }) => i) };
 }
 
 // needRows is how many rows a tile needs: its chrome (what is not its

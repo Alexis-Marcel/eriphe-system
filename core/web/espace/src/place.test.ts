@@ -118,7 +118,6 @@ describe("a surface opened", () => {
     const l = focusedIn(base, "card");
     check(l);
     expect(l.focus).toBe("card");
-    expect(l.say).toBeUndefined();
     // The urgent first, then it, l at least.
     expect(l.items.map((i) => i.id).slice(0, 2)).toEqual(["alert", "card"]);
     expect(l.items.find((i) => i.id === "card")).toMatchObject({ size: "l", col: 3, row: 0 });
