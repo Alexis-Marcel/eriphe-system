@@ -568,7 +568,7 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 	}
 	cs := connectTo(t, newMCPServer(c))
 	run := func(tools ...string) *mcp.CallToolResult {
-		args := map[string]any{"prompt": "do it"}
+		args := map[string]any{"prompt": "do it", "thread": "none"} // its own; as a thread's step below
 		var lent []map[string]any
 		for _, ref := range tools {
 			lent = append(lent, map[string]any{"kind": resTool, "ref": ref})
@@ -595,6 +595,16 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 		if out := run(tools...); out.IsError {
 			t.Fatalf("tainted run_task with %v = %s", tools, resultText(out))
 		}
+	}
+	// As the step of the thread opened for it, held the same.
+	out, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "run_task", Arguments: map[string]any{"prompt": "do it",
+		"resources": []map[string]any{{"kind": resTool, "ref": "github"}}}})
+	var step struct {
+		Thread int64  `json:"thread"`
+		Task   string `json:"task"`
+	}
+	if err != nil || json.Unmarshal([]byte(resultText(out)), &step) != nil || step.Thread == 0 || !c.heldTask(step.Task) {
+		t.Fatalf("tainted run_task as a step = %s, %v", resultText(out), err)
 	}
 
 	// A user's message does not make a tainted start clean.

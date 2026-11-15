@@ -148,11 +148,29 @@ func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
 		t.Errorf("the led thread has %d steps", len(steps))
 	}
 	c.turn.about(th.ID)
-	// A turn about no thread: a task of its own.
+	// A turn about no thread: a light thread opened for the task, titled
+	// by it, the task its first step; the turn is about it after.
 	c.turn.about(0)
-	if out, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume l'agenda."}); isErr || out["id"] == nil {
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer l'agenda", "prompt": "Résume l'agenda."})
+	if isErr || out["thread"] == nil || out["step"] != stepTask {
 		t.Fatalf("no thread: %v", out)
 	}
+	own, err := c.thread(int64(out["thread"].(float64)))
+	if err != nil || own.ID == th.ID || own.Mode != modeLight || !own.active() || own.Title != "Résumer l'agenda" {
+		t.Fatalf("its own thread: %+v, %v", own, err)
+	}
+	if c.turn.aboutThread() != own.ID {
+		t.Errorf("the turn is about %d, not its thread %d", c.turn.aboutThread(), own.ID)
+	}
+	// A turn about no thread that names a subject with a live light
+	// thread: a step of that one, no new thread (one thread a subject).
+	c.turn.about(0)
+	c.turn.name([]string{"brand:velora"})
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Vérifier l'INPI", "prompt": "Cherche Velora à l'INPI."})
+	if isErr || out["thread"] == nil || int64(out["thread"].(float64)) != th.ID {
+		t.Fatalf("the subject's thread %d: %v", th.ID, out)
+	}
+	c.turn.name(nil)
 	// About a thread that ended: a task of its own too.
 	c.closeLight(th.ID, "Fait.", "brain")
 	c.turn.about(th.ID)

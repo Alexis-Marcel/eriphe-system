@@ -296,10 +296,16 @@ func TestTaskStartCardOutsideTurn(t *testing.T) {
 // or pending with no node.
 func TestRunTaskTellsStartState(t *testing.T) {
 	c := startCore(t)
-	out, isErr := callBrainTool(t, c, "run_task", map[string]any{"title": "Lire le dépôt", "prompt": "Lis le README."})
+	out, isErr := callBrainTool(t, c, "run_task", map[string]any{"title": "Lire le dépôt", "prompt": "Lis le README.", "thread": "none"})
 	st, _ := out["start_state"].(map[string]any)
 	if isErr || out["id"] == nil || st["start"] != "started" {
 		t.Fatalf("started now: %v", out)
+	}
+	// A task step of the thread opened for it says the same.
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Lire la doc", "prompt": "Lis la doc."})
+	st, _ = out["start_state"].(map[string]any)
+	if isErr || out["thread"] == nil || st["start"] != "started" {
+		t.Fatalf("a step started now: %v", out)
 	}
 
 	held := launchWrite(t, c)
@@ -320,7 +326,7 @@ func TestRunTaskTellsStartState(t *testing.T) {
 	}
 
 	c.store.setNodeStatus("nas", false, nil)
-	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer", "prompt": "Résume."})
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer", "prompt": "Résume.", "thread": "none"})
 	st, _ = out["start_state"].(map[string]any)
 	if isErr || st["start"] != "waits_for_node" || st["pending_reason"] == "" {
 		t.Fatalf("no node: %v", out)
