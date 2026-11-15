@@ -320,6 +320,9 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	if s.active() {
 		in.Lifetime.While = "thread:" + strconv.FormatInt(s.ID, 10)
 	} else {
+		if s.Ends == endsDay || s.tidied > 0 {
+			return in, false // its day is over, or the user put it away
+		}
 		end := s.Ended
 		if end.IsZero() {
 			end = now
@@ -343,6 +346,11 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	if state := c.threadStateLine(s, lang); state != "" {
 		data["state"] = state
 		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/state"}})
+	}
+	if !s.active() && s.Ends == endsGoal {
+		// « Ranger »: the user puts the ended thread away (tidyOf).
+		out.add(comp{"id": threadTidyID, "component": "Button", "label": w("thread.surface.tidy"),
+			"action": map[string]any{"event": map[string]any{"name": a2ui.ActionTidy, "context": map[string]any{"thread": s.ID}}}})
 	}
 	// Since the user's last visit, where it stands, what is theirs
 	// (thread_header.go).
@@ -697,6 +705,32 @@ func (c *core) stepDoneOf(s surface, a a2ui.Action) (int64, string, *errActionRe
 		return 0, "", &errActionRefused{Path: at, Message: "step " + strconv.Quote(step) + " does not wait for the user"}
 	}
 	return thread, step, nil
+}
+
+// threadTidyID is the id of « Ranger » on an ended thread's surface.
+const threadTidyID = "thread_tidy"
+
+// tidyOf is the thread a « Ranger » puts away: the one the clicked Button
+// carries as code wrote it, on its thread's surface.
+func tidyOf(s surface, a a2ui.Action) (int64, *errActionRefused) {
+	thread, ok := threadOfAuthor(s.Author)
+	comp, at, found := componentOf(s, a.SourceComponentID)
+	if !ok || !found || comp["component"] != "Button" || a.SourceComponentID != threadTidyID {
+		return 0, &errActionRefused{Path: at, Message: "tidy comes from a thread's own « Ranger », on its surface"}
+	}
+	act, _ := comp["action"].(map[string]any)
+	ev, _ := act["event"].(map[string]any)
+	ctx, _ := ev["context"].(map[string]any)
+	n, _ := ctx["thread"].(float64)
+	if ev["name"] != a2ui.ActionTidy || int64(n) != thread {
+		return 0, &errActionRefused{Path: at + "/action", Message: "this component carries no tidy"}
+	}
+	var sent int64
+	json.Unmarshal(a.Context["thread"], &sent)
+	if sent != thread || len(a.Context) != 1 {
+		return 0, &errActionRefused{Path: at + "/action", Message: `a tidy's context is the one its button carries: {"thread": id}`}
+	}
+	return thread, nil
 }
 
 // errStepSettled is the answer to « C'est fait » for a step that no

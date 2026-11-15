@@ -23,6 +23,8 @@ import (
 //   - stepDone: the user did a step of a thread that is theirs ("C'est
 //     fait"), {"thread": <id>, "step": "<key>"}. Only code places it, on
 //     the thread's own surface: an author never writes one.
+//   - tidy: « Ranger », the user puts an ended thread away, {"thread":
+//     <id>}. Only code places it, on the thread's own surface.
 //
 // Any other name, and any action that is not an event (a function call),
 // is refused. No action calls a tool that writes.
@@ -30,6 +32,7 @@ const (
 	ActionAsk      = "ask"
 	ActionAnswer   = "answer"
 	ActionStepDone = "stepDone"
+	ActionTidy     = "tidy"
 	ActionOpen     = "open"
 	ActionBack     = "back"
 	ActionExpand   = "expand"
@@ -39,6 +42,7 @@ const (
 	KindAsk    = "ask"
 	KindAnswer = "answer"
 	KindStep   = "step"
+	KindTidy   = "tidy"
 	KindLocal  = "local"
 
 	// AskTextMax is the longest ask, in characters.
@@ -48,7 +52,7 @@ const (
 // LocalActions are the names done in the page.
 var LocalActions = []string{ActionOpen, ActionBack, ActionExpand, ActionTab}
 
-// ActionKind is the kind of an action name: KindAsk, KindAnswer, KindStep,
+// ActionKind is the kind of an action name: KindAsk, KindAnswer, KindStep, KindTidy,
 // KindLocal, or "" for a name outside the grammar.
 func ActionKind(name string) string {
 	switch name {
@@ -58,6 +62,8 @@ func ActionKind(name string) string {
 		return KindAnswer
 	case ActionStepDone:
 		return KindStep
+	case ActionTidy:
+		return KindTidy
 	case ActionOpen, ActionBack, ActionExpand, ActionTab:
 		return KindLocal
 	}
@@ -115,6 +121,8 @@ func CheckActions(surfaceID string, components json.RawMessage) []ValidationErro
 			fail(at+"/name", "answer is sent by a Proposal component only, for the proposal it shows: write a Proposal")
 		case KindStep:
 			fail(at+"/name", "stepDone is placed by code only, on a thread's own surface, for a step the user does")
+		case KindTidy:
+			fail(at+"/name", "tidy is placed by code only, on an ended thread's own surface")
 		default:
 			fail(at+"/name", "no action "+strconv.Quote(name)+": a button asks Eriphe (ask) or acts in the page ("+strings.Join(LocalActions, ", ")+")")
 		}

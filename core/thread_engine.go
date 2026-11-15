@@ -32,6 +32,7 @@ type threadIn struct {
 	DoneWhen string     `json:"done_when,omitempty" jsonschema:"led: what must be true at the end, checkable: the objective the thread is judged on"`
 	Budget   int        `json:"budget_minutes,omitempty" jsonschema:"led: minutes of running time it may take, 60 by default; past it the engine pauses and asks the user"`
 	Steps    []stepSpec `json:"steps,omitempty" jsonschema:"led: the plan, each step with its key, title, kind, the steps it comes after, and for a task its prompt, agent, resources and contract"`
+	Ends     string     `json:"ends,omitempty" jsonschema:"how it ends: goal (the default: closed once its goal is reached), standing (what the user manages continuously, their mail, their agenda, a supervision: never closed), day (a view for today, an answer shown: it ends by itself at midnight); standing and day are light"`
 }
 
 // openThread records a thread. A light one is open at once: no card, no
@@ -40,6 +41,10 @@ type threadIn struct {
 func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error) {
 	in.Title, in.Goal, in.DoneWhen = oneLine(in.Title), strings.TrimSpace(in.Goal), strings.TrimSpace(in.DoneWhen)
 	in.Mode = strings.ToLower(strings.TrimSpace(in.Mode))
+	in.Ends = strings.ToLower(strings.TrimSpace(in.Ends))
+	if in.Ends == "" {
+		in.Ends = endsGoal
+	}
 	subject, err := c.subjectIs(in.Subject, in.Title)
 	if err != nil {
 		return Thread{}, fmt.Errorf("subject: %w", err)
@@ -58,6 +63,10 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 		return Thread{}, errors.New("a goal is needed")
 	case in.Mode != modeLight && in.Mode != modeLed:
 		return Thread{}, fmt.Errorf("mode %q: light or led", in.Mode)
+	case !slices.Contains(threadEnds, in.Ends):
+		return Thread{}, fmt.Errorf("ends %q: goal, standing or day", in.Ends)
+	case in.Ends != endsGoal && in.Mode != modeLight:
+		return Thread{}, fmt.Errorf("a %s thread is light: no plan, budget nor done_when", in.Ends)
 	}
 	if err := c.subjectFree(in.Subject, 0); err != nil {
 		return Thread{}, err
@@ -66,8 +75,8 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 		if len(in.Steps) > 0 || in.Budget != 0 || in.DoneWhen != "" {
 			return Thread{}, errors.New("a light thread has no plan, budget nor done_when: open it led for planned, autonomous work")
 		}
-		res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, tainted, created, started) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			truncate(in.Title, taskTitleMax), in.Goal, modeLight, in.Subject, threadOpen, strings.Join(taint, ", "), time.Now().Unix(), time.Now().Unix())
+		res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, tainted, created, started, ends) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			truncate(in.Title, taskTitleMax), in.Goal, modeLight, in.Subject, threadOpen, strings.Join(taint, ", "), time.Now().Unix(), time.Now().Unix(), in.Ends)
 		if err != nil {
 			return Thread{}, c.liveSubjectErr(in.Subject, err)
 		}
@@ -719,6 +728,9 @@ func (c *core) stopThread(ctx context.Context, id int64, by string) error {
 	if !s.active() {
 		return fmt.Errorf("the thread is %s already", s.State)
 	}
+	if s.standing() {
+		return errStanding
+	}
 	if !s.led() {
 		c.endLight(ctx, s, threadDropped, "")
 		c.logThread(id, by, "Thread abandonné.")
@@ -736,6 +748,10 @@ func (c *core) stopThread(ctx context.Context, id int64, by string) error {
 	return nil
 }
 
+// errStanding refuses to end a standing thread: what the user manages
+// continuously has no goal to reach.
+var errStanding = errors.New("a standing thread never ends: it is what the user manages continuously (their mail, their agenda). Leave it open; what is done in it is a note on its item or a step")
+
 // closeLight closes a light thread whose goal is reached: done, with how
 // as its summary.
 func (c *core) closeLight(id int64, summary, by string) error {
@@ -750,6 +766,9 @@ func (c *core) closeLight(id int64, summary, by string) error {
 	}
 	if !s.active() {
 		return fmt.Errorf("the thread is %s already", s.State)
+	}
+	if s.standing() {
+		return errStanding
 	}
 	if summary = strings.TrimSpace(summary); summary == "" {
 		return errors.New("a summary is needed: how its goal was reached. A thread closes only on its goal; to give up, stop it")
@@ -794,7 +813,11 @@ func (c *core) reopenThread(id int64, why, by string) (Thread, error) {
 		return s, err
 	}
 	c.endSteps(context.Background(), s) // what its old plan left undone never starts by itself
-	c.setThread(id, map[string]any{"mode": modeLight, "phase": "", "state": threadOpen, "held": "", "lead": "", "told": "", "since": 0, "ended": 0})
+	fields := map[string]any{"mode": modeLight, "phase": "", "state": threadOpen, "held": "", "lead": "", "told": "", "since": 0, "ended": 0, "tidied": 0}
+	if s.Ends == endsDay {
+		fields["started"] = time.Now().Unix() // its day is today's
+	}
+	c.setThread(id, fields)
 	c.logThread(id, by, "Thread rouvert : "+why)
 	return c.thread(id)
 }
@@ -866,6 +889,48 @@ func (c *core) resumeThread(ctx context.Context, id int64, by string) error {
 
 const heldBudget = "budget"
 
+// endDays ends the day threads opened before the user's last midnight:
+// done, and gone from the workspace at once.
+func (c *core) endDays(now time.Time) {
+	loc := c.userZone()
+	local := now.In(loc)
+	midnight := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
+	ss, err := c.threadsWhere(`ends = ? AND `+activeThreads+` AND started < ? ORDER BY id`, endsDay, midnight.Unix())
+	if err != nil {
+		return
+	}
+	for _, s := range ss {
+		threadMu.Lock()
+		if cur, err := c.thread(s.ID); err == nil && cur.active() && cur.Ends == endsDay {
+			c.endLight(context.Background(), cur, threadDone, "")
+			c.logThread(s.ID, "engine", "Journée finie : le fil se termine.")
+		}
+		threadMu.Unlock()
+	}
+}
+
+// tidyThread is « Ranger » on an ended thread's surface: the user puts it
+// away. It leaves the workspace at once; it is never deleted, and stays
+// one to find and reopen when its matter comes back.
+func (c *core) tidyThread(id int64, by string) error {
+	threadMu.Lock()
+	defer threadMu.Unlock()
+	s, err := c.thread(id)
+	if err != nil {
+		return err
+	}
+	if s.active() || s.Ends != endsGoal || s.tidied > 0 {
+		return errNotTidy
+	}
+	c.setThread(id, map[string]any{"tidied": time.Now().Unix()})
+	c.logThread(id, by, "Fil rangé.")
+	return nil
+}
+
+// errNotTidy is « Ranger » on a thread that is not one to put away: active,
+// standing, of a day, or put away already. 409.
+var errNotTidy = errors.New("only an ended thread with a goal is put away, once")
+
 // spentMinutes is the time a thread ran, in whole minutes: more time
 // counts from there.
 func spentMinutes(s Thread) int {
@@ -898,7 +963,8 @@ func (c *core) holdForBudget(s Thread) {
 func (c *core) threadsTick(now time.Time) {
 	c.followIntentions(context.Background()) // thread_progress.go
 	c.threadDeadlines(now)                   // thread_steps.go
-	c.keepThreadSurfaces()                   // thread_surface.go
+	c.endDays(now)
+	c.keepThreadSurfaces() // thread_surface.go
 	ss, err := c.threadsWhere(activeThreads + ` ORDER BY id DESC LIMIT 50`)
 	if err != nil {
 		return

@@ -938,6 +938,21 @@ A thread has a title, a goal (its real outcome), a **subject** (its key, see [Su
   waiting, stopped and declined are dropped). A led thread that ended reopens light: its lead went
   with its end.
 
+**How it ends** (`threads.ends`, #571), whatever it holds; the family is never shown to the user,
+it only changes the thread's life:
+
+- `goal` (the default): it ends on its goal (`close_thread`) or is dropped (`stop_thread`). Ended,
+  its surface stays until the user's midnight (an hour at least), or until the user puts it away
+  with **« Ranger »**, a button code places on its surface (the action `tidy`): `tidied` is set,
+  the surface leaves at once, the thread is never deleted and is still found (`find_thread`, its
+  subject) and reopened when its matter comes back. Reopening clears `tidied`.
+- `standing`: what the user manages continuously (their mail, their agenda, a supervision). Light
+  only; `close_thread` and `stop_thread` refuse it (`errStanding`, from the engine, so the page and
+  a lead are refused too): it is never ended, so never hidden.
+- `day`: a view for the day (an answer shown, « j'ai quoi demain ? »). Light only; the engine's
+  tick ends it (`done`) once the user's midnight passed since it started (`endDays`) and its
+  surface leaves at once. Reopened, its day is the reopening's.
+
 | Who | Does |
 |---|---|
 | Brain | opens the thread with the user (`open_thread`: title, goal, subject; led: `done_when`, budget, steps), the only voice |
@@ -1172,6 +1187,10 @@ by code from the thread's data (#468): it never depends on a model remembering t
   ([the actions of a surface](#the-actions-of-a-surface)); code checks it against the button it
   wrote, then `settleUserStep` settles the step through `userStepDone` (`thread_steps.go`), as
   the thread's page does; 409 for a step that no longer waits.
+- **« Ranger »** (`thread_tidy`), on an ended `goal` thread's surface only, sends `tidy` with
+  `{"thread": <id>}`; code checks it against the button it wrote (`tidyOf`), then `tidyThread`
+  puts the thread away: its surface leaves at once (a day thread's leaves at its end, a standing
+  one's never). 409 once put away.
 
 ## Permission policy
 
@@ -3723,6 +3742,7 @@ writes.
 | `ask` | a Button's `{"event": {"name": "ask", "context": {"text": "…"}}}`: literal words, nothing else, never bound data; none at all from an author whose turn read external content | the text written on the clicked Button becomes a message of the user's to the brain, as if typed (`Via` `workspace:ask`, shown as « bouton de l'espace » / "workspace button"; `about` = `surface:<id>`, which the brain reads as `[Sam 10:02 #12 · bouton de l'espace · à propos de surface:…]`); a plain "oui" so sent decides no card. The brain is woken, never waited for. On a tainted surface the message taints the brain's turn (`surface:<id>`) and its line adds « surface au contenu extérieur »: what it shows is data |
 | `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does; a thread's, unless the thread itself is tainted or the Proposal is in a part written after reading external content), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
 | `stepDone` | never by an author: code places it on a thread's surface, the « C'est fait » of a step the user does, `{"thread": <id>, "step": "<key>"}` | checked against the Button code wrote there (its thread and step), for a step of kind `user` that waits; then `settleUserStep`, the engine's `userStepDone` (409 once it no longer waits) |
+| `tidy` | never by an author: code places it on an ended thread's surface, its « Ranger », `{"thread": <id>}` | checked against the Button code wrote there (its thread); then `tidyThread`: the surface leaves, the thread is kept (409 once put away) |
 | local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer |
 
 Anything else (another name, a function call, a component that carries no such action, an answer
