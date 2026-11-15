@@ -233,11 +233,12 @@ overview** and the field to write about it at the top.
 
 The conversation with Eriphe stays, with its history, the tasks and Settings, at
 `/conversation`: **Open the conversation**, in the workspace's column, goes there. What you write
-in the workspace's column is a message of that conversation. The column shows this visit: the
-message Eriphe composed for your return first, then what you and Eriphe said since you came back,
-its newest answer large; **The whole conversation**, by Eriphe's name, for the rest. What you write
-with a thread open goes in its card, with Eriphe's answer, and the column keeps one line of it;
-once over, the exchange folds into one line of the card, which you can click to read it again.
+in the workspace's column is a message of that conversation. The column shows only the last
+exchange: the message Eriphe composed for your return, then your last message and Eriphe's answer
+as it writes it. What you say updates a thread or a tile in the middle, so there is rarely a need
+to read back: scroll up in the column and **Earlier messages** appears, each click bringing a few
+more; **The whole conversation**, by Eriphe's name, has the rest. What you write with a thread open
+is about that thread, and its answer shows in the column too.
 Questions Eriphe needs you to answer come as tiles on the workspace.
 
 While the workspace is open in front of you, Eriphe knows you are there, as with the conversation:

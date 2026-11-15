@@ -24,7 +24,8 @@ func (w *web) espaceRoutes(mux *webMux) {
 	mux.Handle("GET /espace", w.auth(w.handleEspace))
 	mux.Handle("GET /espace/boot", w.auth(w.handleEspaceBoot))
 	mux.Handle("GET /espace/catalog/v1.json", w.auth(w.handleEspaceCatalog))
-	mux.Handle("GET /espace/media", w.auth(w.handleMedia)) // surfaces_media.go
+	mux.Handle("GET /espace/media", w.auth(w.handleMedia))         // surfaces_media.go
+	mux.Handle("GET /api/espace/earlier", w.auth(w.handleEarlier)) // web_espace_exchange.go
 	mux.Handle("POST /api/espace/gesture", http.MaxBytesHandler(w.auth(w.handleGesture), 4<<10))
 	mux.Handle("GET /api/proposals/{ref}", w.auth(w.handleProposal)) // web_espace_proposal.go
 	mux.Handle("GET /api/proposals", w.auth(w.handleDayProposals))   // web_espace_proposal.go

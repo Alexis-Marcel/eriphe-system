@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { createAdapter } from "./a2ui/adapter";
 import { Icon } from "./a2ui/icons";
-import { galleryFixtures, gallerySurfaces, sampleProposals, workspaceFixtures } from "./a2ui/fixtures";
+import { galleryFixtures, gallerySurfaces, sampleEarlier, sampleProposals, workspaceFixtures } from "./a2ui/fixtures";
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
-import { CardTalk, landed, lastSeq, Notices, Present, type Sent } from "./Exchange";
+import { landed, lastSeq, Notices, Present, type Sent } from "./Exchange";
 import { CONVO } from "./Fallback";
 import { DIMS, Grid, stacked, useNarrow, type Spot } from "./Grid";
 import { useWords } from "./i18n";
@@ -113,11 +113,12 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const [gallery] = useState(() => new URLSearchParams(location.search).has("gallery"));
   const proposals = useMemo(() => (live ? coreProposals : sampleProposals(lang)), [live, lang]);
 
-  // The visit's conversation and the threads' exchanges (Exchange.tsx): the
-  // left column, and the card of the thread open.
+  // The conversation's last exchange (Exchange.tsx), in the left column;
+  // the lines before it on request (load).
   const [exchange, setExchange] = useState<data.Exchange | null>(null);
   const [sent, setSent] = useState<Sent | null>(null);
   const onExchange = useCallback((x: data.Exchange) => setExchange(x), []);
+  const loadEarlier = useCallback((before: number) => (live ? data.earlier(before) : Promise.resolve(sampleEarlier(lang, before))), [live, lang]);
   useEffect(() => {
     if (landed(exchange, sent)) setSent(null);
   }, [exchange, sent]);
@@ -240,17 +241,13 @@ export function Espace({ boot }: { boot: data.Boot }) {
     if (composed) setArrival(composed);
   }, [composed]);
   const text = useTyped(said ?? arrival);
-  const titleOf = (id: string) => {
-    const named = shown?.items.find((i) => i.id === id)?.title ?? shown?.chips.find((c) => c.id === id)?.title;
-    return named && named !== id ? named : undefined;
-  };
 
   // A message goes to Eriphe with the surface open, if any: « montre-m'en
   // moins », « lance une recherche là-dessus ». It shows in the exchange at
   // once, Eriphe's answer under it as it comes.
   const send = async (msg: string) => {
     if (!live) return say(t("espace.sent.sample"));
-    const mine: Sent = { text: msg, after: lastSeq(exchange), about: sfocus ?? undefined };
+    const mine: Sent = { text: msg, after: lastSeq(exchange) };
     setSent(mine);
     if (!(await data.send(msg, sfocus ? "surface:" + sfocus : null).catch(() => false))) {
       setSent((s) => (s === mine ? null : s));
@@ -301,7 +298,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
               <Icon name="settings" />
             </a>
           </div>
-          <Present arrival={text} x={exchange} sent={sent} focus={sfocus} titleOf={titleOf} onOpen={openSurface} />
+          <Present arrival={text} x={exchange} sent={sent} load={loadEarlier} />
           {live && nothing && <p className="eriphe-sample quiet">{t("espace.empty")}</p>}
           {!live && <p className="eriphe-sample">{t("espace.sample")}</p>}
           {down && (
@@ -323,8 +320,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
         <div className="stage">
           <ProposalsContext.Provider value={proposals}>
             {onSurfaces ? (
-              <Grid adapter={surfaces} layout={shown!} narrow={narrow} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} onNeed={onNeed} onBack={backSurface}
-                below={(id) => <CardTalk id={id} x={exchange} sent={sent} />} />
+              <Grid adapter={surfaces} layout={shown!} narrow={narrow} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} onNeed={onNeed} onBack={backSurface} />
             ) : gallery ? (
               <div className="surfaces">
                 <Surfaces adapter={surfaces} />

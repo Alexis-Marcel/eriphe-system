@@ -1,4 +1,4 @@
-import type { Exchange, ExchangeLine, Talk } from "../data";
+import type { Earlier, Exchange, ExchangeLine } from "../data";
 import type { Lang } from "../i18n";
 import type { Layout } from "../types";
 import type { Message } from "./adapter";
@@ -156,31 +156,33 @@ const eriphe = {
 
 const proposalTitle = { fr: "Proposition", en: "Proposal" };
 
-// sampleExchange is the dev server's conversation (web_espace_exchange.go):
-// a visit with a word about nothing, and two exchanges filed under the
-// project's surface: one of yesterday, folded in its card, and one going
-// on, in its card when it is open.
-export function sampleExchange(lang: Lang, now = Date.now()): Exchange {
+// sampleLines is the dev server's conversation (web_espace_exchange.go),
+// oldest first: a few exchanges, the last one about the terrace.
+function sampleLines(lang: Lang, now: number): ExchangeLine[] {
   const en = lang === "en";
   const at = (min: number) => new Date(now - min * 60_000).toISOString();
-  const thread = "gallery-project";
-  const old: Talk = {
-    lines: [
-      { seq: 2, role: "user", text: en ? "use the club's colours on the home page" : "mets les couleurs du club sur l'accueil", time: at(26 * 60), thread },
-      { seq: 3, role: "brain", text: en ? "Done: the home page uses **the club's green**; the assistant will show you before publishing." : "C'est fait : l'accueil prend **le vert du club** ; l'assistant te le montre avant de publier.", time: at(26 * 60 - 1), thread },
-    ],
-  };
-  const user: ExchangeLine = { seq: 11, role: "user", text: en ? "add a contact form after all" : "ajoute plutôt un formulaire de contact finalement", time: at(3), thread };
-  const reply: ExchangeLine = { seq: 12, role: "brain", text: en ? "All right: a contact form rather than a mailto link. I restarted the assistant; it shows you the page before publishing." : "D'accord : un formulaire de contact plutôt qu'un lien mailto. J'ai relancé l'assistant ; il te montre la page avant de publier.", time: at(2), thread };
-  return {
-    lines: [
-      { seq: 8, role: "user", text: en ? "is the backup running again?" : "la sauvegarde repart ?", time: at(12) },
-      { seq: 9, role: "brain", text: en ? "Not yet: the NAS disk is still full. Free some room and I'll start it again." : "Pas encore : le disque du NAS est toujours plein. Libère de la place et je la relance.", time: at(11) },
-      user,
-      reply,
-    ],
-    threads: { [thread]: [old, { lines: [user, reply] }] },
-  };
+  return [
+    { seq: 2, role: "user", text: en ? "use the club's colours on the home page" : "mets les couleurs du club sur l'accueil", time: at(26 * 60) },
+    { seq: 3, role: "brain", text: en ? "Done: the home page uses **the club's green**; the assistant will show you before publishing." : "C'est fait : l'accueil prend **le vert du club** ; l'assistant te le montre avant de publier.", time: at(26 * 60 - 1) },
+    { seq: 5, role: "user", text: en ? "what's on tomorrow?" : "j'ai quoi demain ?", time: at(40) },
+    { seq: 6, role: "brain", text: en ? "A call at 10 and the garage at 5 pm." : "Un appel à 10 h et le garage à 17 h.", time: at(39) },
+    { seq: 8, role: "user", text: en ? "is the backup running again?" : "la sauvegarde repart ?", time: at(12) },
+    { seq: 9, role: "brain", text: en ? "Not yet: the NAS disk is still full. Free some room and I'll start it again." : "Pas encore : le disque du NAS est toujours plein. Libère de la place et je la relance.", time: at(11) },
+    { seq: 11, role: "user", text: en ? "add a contact form after all" : "ajoute plutôt un formulaire de contact finalement", time: at(3) },
+    { seq: 12, role: "brain", text: en ? "All right: a contact form rather than a mailto link. I restarted the assistant; it shows you the page before publishing." : "D'accord : un formulaire de contact plutôt qu'un lien mailto. J'ai relancé l'assistant ; il te montre la page avant de publier.", time: at(2) },
+  ];
+}
+
+// sampleExchange is the dev server's last exchange.
+export function sampleExchange(lang: Lang, now = Date.now()): Exchange {
+  return { lines: sampleLines(lang, now).slice(-2), earlier: true };
+}
+
+// sampleEarlier is the dev server's lines before a line, two at a time, as
+// GET /api/espace/earlier gives them.
+export function sampleEarlier(lang: Lang, before: number, now = Date.now()): Earlier {
+  const all = sampleLines(lang, now).filter((l) => l.seq < before);
+  return { lines: all.slice(-2), more: all.length > 2 };
 }
 
 // workspaceFixtures is the dev server's workspace: the made-up surfaces

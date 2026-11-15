@@ -1,33 +1,23 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type TouchEvent, type WheelEvent } from "react";
 import { Markdown } from "./a2ui/markdown";
-import type { Exchange, ExchangeLine, Note, Talk } from "./data";
-import { useWords, type Lang } from "./i18n";
+import type { Earlier, Exchange, ExchangeLine, Note } from "./data";
+import { useWords } from "./i18n";
 import { localURL } from "./presence";
 
 // What the workspace shows of the conversation (the stream's "exchange"
-// event, web_espace_exchange.go), not a second chat:
-//
-//   - the left column is the present of the visit (Present): the message
-//     Eriphe composed for the arrival, first, then the visit's lines;
-//     Eriphe's last line large while nothing follows it, the older ones
-//     smaller, the user's as small bubbles;
-//   - what the user says about a thread is filed under it (thread_talk.go):
-//     with its card open, the exchange shows in the card (CardTalk), the
-//     left column keeps one line of it; once over (a newer exchange, or
-//     TALK_OVER without a word), it folds into one line of the card, which
-//     unfolds on a click.
+// event, web_espace_exchange.go), not a second chat: the left column keeps
+// to the last exchange, the user's last message and Eriphe's answer, after
+// the message Eriphe composed for the arrival. What the user says updates
+// a thread or a surface at the centre, so rereading is rare: scrolling up
+// the column shows a button that brings the lines before, a few at a time;
+// the conversation (/conversation) has them all.
 //
 // The page places it all as text; Eriphe's text is Markdown, drawn by the
 // page's own renderer (a2ui/markdown.tsx), which makes no HTML of it.
 
 // Sent is a message the user just wrote here, shown before eriphe-core has
-// it: after is the exchange's last seq when it was sent, about the surface
-// open then.
-export type Sent = { text: string; after: number; about?: string };
-
-// TALK_OVER is how long an exchange about a thread stays open in its card
-// without a word.
-export const TALK_OVER = 10 * 60_000;
+// it: after is the exchange's last seq when it was sent.
+export type Sent = { text: string; after: number };
 
 export function lastSeq(x: Exchange | null): number {
   return x?.lines.reduce((m, l) => Math.max(m, l.seq), 0) ?? 0;
@@ -44,83 +34,21 @@ function pendingOf(x: Exchange | null, sent: Sent | null): Sent | null {
   return sent && !landed(x, sent) ? sent : null;
 }
 
-// talkingAbout is the surface the exchange going on is filed under: the
-// message sent's, or the last of the user's.
-export function talkingAbout(x: Exchange | null, sent: Sent | null): string | undefined {
-  const p = pendingOf(x, sent);
-  if (p) return p.about;
-  return [...(x?.lines ?? [])].reverse().find((l) => l.role === "user")?.thread;
-}
+export type Item = { kind: "line"; line: ExchangeLine } | { kind: "draft"; text: string };
 
-export type Item =
-  | { kind: "line"; line: ExchangeLine }
-  | { kind: "trace"; key: string; thread: string }
-  | { kind: "draft"; text: string };
-
-// present is what the left column shows after the arrival message, with
-// the surface open (focus): the visit's lines, the exchange about the open
-// thread as one line; the message sent, the draft; and whether Eriphe is
-// at work there.
-export function present(x: Exchange | null, sent: Sent | null, focus: string | null): { items: Item[]; writing: boolean } {
-  const items: Item[] = [];
-  const inCard = (thread?: string) => !!focus && thread === focus;
-  for (const l of x?.lines ?? []) {
-    if (!inCard(l.thread)) items.push({ kind: "line", line: l });
-    else if (l.role === "user") items.push({ kind: "trace", key: "t" + l.seq, thread: focus! });
-  }
+// present is the last exchange as the column shows it: the message sent,
+// alone until it lands (it is the last exchange then), or the event's
+// lines; the draft; and whether Eriphe is at work.
+export function present(x: Exchange | null, sent: Sent | null): { items: Item[]; writing: boolean } {
   const p = pendingOf(x, sent);
-  if (p) items.push(inCard(p.about) ? { kind: "trace", key: "sent", thread: focus! } : { kind: "line", line: { seq: -1, role: "user", text: p.text, time: "" } });
-  const here = !inCard(talkingAbout(x, sent));
-  const draft = x?.draft && !inCard(x.draftThread) ? x.draft : "";
+  const items: Item[] = p ? [{ kind: "line", line: { seq: -1, role: "user", text: p.text, time: "" } }] : (x?.lines ?? []).map((line) => ({ kind: "line", line }));
+  const draft = x?.draft ?? "";
   if (draft) items.push({ kind: "draft", text: draft });
-  return { items, writing: here && !draft && (!!p || !!x?.thinking) };
+  return { items, writing: !draft && (!!p || !!x?.thinking) };
 }
 
-// cardTalk is what the card of a surface shows of the exchanges filed
-// under it at now: the one going on (open), the others folded, oldest
-// first; and whether Eriphe is at work on it.
-export function cardTalk(x: Exchange | null, sent: Sent | null, id: string, now: number): { open: ExchangeLine[]; folded: Talk[]; draft: string; writing: boolean } {
-  const talks = x?.threads?.[id] ?? [];
-  const p = pendingOf(x, sent);
-  const draft = x?.draft && x.draftThread === id ? x.draft : "";
-  const about = talkingAbout(x, sent) === id;
-  const writing = about && !draft && (!!p || !!x?.thinking);
-  if (p && p.about === id) return { open: [{ seq: -1, role: "user", text: p.text, time: "" }], folded: talks, draft, writing };
-  const last = talks.at(-1);
-  if (!last) return { open: [], folded: [], draft, writing: false };
-  // Over: a newer message of the user's, or a while without a word.
-  const mine = last.lines[0]?.seq ?? 0;
-  const newer = !!p || !!x?.lines.some((l) => l.role === "user" && l.seq > mine);
-  const at = Math.max(...last.lines.map((l) => Date.parse(l.time) || 0));
-  const going = !newer && (about && (!!draft || !!x?.thinking) || now - at < TALK_OVER);
-  return going ? { open: last.lines, folded: talks.slice(0, -1), draft, writing } : { open: [], folded: talks, draft: "", writing: false };
-}
-
-// clock words a moment as the thread's header does: « 16 h 10 » today,
-// « 13 nov. 16 h 10 » before.
-export function clock(time: string, lang: Lang, now = new Date()): string {
-  const d = new Date(time);
-  if (isNaN(d.getTime())) return "";
-  const hm = lang === "en" ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` : `${d.getHours()} h ${String(d.getMinutes()).padStart(2, "0")}`;
-  if (d.toDateString() === now.toDateString()) return hm;
-  return `${d.toLocaleDateString(lang, { day: "numeric", month: "short" })} ${hm}`;
-}
-
-// plain is a text cut to n characters, its Markdown marks left out: a
-// folded line is a glimpse, the unfolded one has it whole.
-export function plain(text: string, n: number): string {
-  const s = text.replace(/[*_`#>~]|\[([^\]]*)\]\([^)]*\)/g, (_, label) => label ?? "").replace(/\s+/g, " ").trim();
-  return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
-}
-
-function useNow(every: number) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), every);
-    return () => clearInterval(timer);
-  }, [every]);
-  return now;
-}
+// upward tells whether a key scrolls the column up.
+const upward = (key: string) => key === "ArrowUp" || key === "PageUp" || key === "Home";
 
 function Dots() {
   const { t } = useWords();
@@ -147,116 +75,128 @@ function Said({ line, className }: { line: ExchangeLine; className: string }) {
   return (
     <div className={className}>
       <Markdown text={line.text ?? ""} newTab={t("espace.a2.newtab")} />
-      {line.external && <p className="talk-external">{t("espace.talk.external")}</p>}
+      {line.external && <p className="exchange-external">{t("espace.exchange.external")}</p>}
     </div>
   );
 }
 
+// Line is a line of the conversation: the user's as a small bubble,
+// Eriphe's as text, large when it is the newest.
+function Line({ line, latest }: { line: ExchangeLine; latest: boolean }) {
+  const { t } = useWords();
+  if (line.role !== "user") return <Said line={line} className={`present-msg present-brain${latest ? " latest" : ""}`} />;
+  return (
+    <div className="present-user">
+      {line.via && <span className="exchange-who">{t("espace.exchange.via", line.via)}</span>}
+      <p className="present-bubble">{line.text}</p>
+    </div>
+  );
+}
+
+// Before is what the column brought before the exchange whose first line
+// is head: the lines, whether more come before them, and whether the user
+// scrolled up (the button shows).
+type Before = { head: number; lines: ExchangeLine[]; more: boolean; asked: boolean };
+
 // Present is the left column's conversation: the arrival message, then
-// the visit (present), the newest of Eriphe's large.
-export function Present({ arrival, x, sent, focus, titleOf, onOpen }: {
+// the last exchange, Eriphe's newest line large. Scrolling up shows the
+// button that brings the lines before it (load); they stay until the next
+// exchange.
+export function Present({ arrival, x, sent, load }: {
   arrival: string;
   x: Exchange | null;
   sent: Sent | null;
-  focus: string | null;
-  titleOf: (id: string) => string | undefined;
-  onOpen: (id: string) => void;
+  load: (before: number) => Promise<Earlier>;
 }) {
   const { t } = useWords();
-  const { items, writing } = present(x, sent, focus);
+  const { items, writing } = present(x, sent);
+  const pending = !!pendingOf(x, sent);
+  const head = pending ? -1 : (x?.lines[0]?.seq ?? 0);
+  const [state, setState] = useState<Before>({ head, lines: [], more: false, asked: false });
+  const before: Before = state.head === head ? state : { head, lines: [], more: false, asked: false };
+  const more = before.lines.length > 0 ? before.more : !pending && head > 0 && !!x?.earlier;
+  const [busy, setBusy] = useState(false);
+
   const lastItem = items.at(-1);
-  const latest = writing ? null : lastItem ? (lastItem.kind === "draft" || (lastItem.kind === "line" && lastItem.line.role === "brain") ? lastItem : null) : "arrival";
+  const latest = writing ? null : lastItem ? (lastItem.kind === "draft" || lastItem.line.role === "brain" ? lastItem : null) : "arrival";
+
   const box = useRef<HTMLDivElement>(null);
+  const top = useRef(0);
+  const touch = useRef(0);
+  const fromBottom = useRef<number | null>(null);
   useLayoutEffect(() => {
     const b = box.current;
     if (b && typeof b.scrollTo === "function") b.scrollTo({ top: b.scrollHeight });
-  }, [items.length, writing, x?.draft]);
+  }, [head, items.length, writing, x?.draft]);
+  // Lines brought before: what was shown stays where it was.
+  useLayoutEffect(() => {
+    const b = box.current;
+    if (b && fromBottom.current !== null) b.scrollTop = b.scrollHeight - fromBottom.current;
+    fromBottom.current = null;
+  }, [before.lines.length]);
+
+  const ask = () => {
+    if (!before.asked) setState({ ...before, asked: true });
+  };
+  const onScroll = () => {
+    const b = box.current;
+    if (!b) return;
+    if (b.scrollTop < top.current) ask();
+    top.current = b.scrollTop;
+  };
+  const bring = async () => {
+    const first = before.lines[0]?.seq ?? x?.lines[0]?.seq;
+    if (!first || busy) return;
+    setBusy(true);
+    try {
+      const got = await load(first);
+      const b = box.current;
+      if (b) fromBottom.current = b.scrollHeight - b.scrollTop;
+      setState((cur) => {
+        const now = cur.head === head ? cur : before;
+        return { head, lines: [...got.lines, ...now.lines], more: got.more && got.lines.length > 0, asked: true };
+      });
+    } catch {
+      /* the conversation has them */
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="present" ref={box} aria-label={t("espace.exchange")}>
+    <div
+      className="present"
+      ref={box}
+      tabIndex={0}
+      aria-label={t("espace.exchange")}
+      onScroll={onScroll}
+      onWheel={(e: WheelEvent) => e.deltaY < 0 && ask()}
+      onTouchStart={(e: TouchEvent) => void (touch.current = e.touches[0]?.clientY ?? 0)}
+      onTouchMove={(e: TouchEvent) => (e.touches[0]?.clientY ?? 0) > touch.current && ask()}
+      onKeyDown={(e: KeyboardEvent) => upward(e.key) && ask()}
+    >
+      {before.asked && more && (
+        <button type="button" className="present-earlier" onClick={bring} disabled={busy}>
+          {t("espace.exchange.earlier")}
+        </button>
+      )}
+      {before.lines.map((l) => (
+        <Line key={l.seq} line={l} latest={false} />
+      ))}
       {arrival && (
         <div className={`present-msg present-arrival${latest === "arrival" ? " latest" : ""}`}>
           <p className="present-said">{arrival}</p>
         </div>
       )}
-      {items.map((it) => {
-        if (it.kind === "trace") {
-          return (
-            <p key={it.key} className="present-trace">
-              {t("espace.talk.trace", titleOf(it.thread) ?? t("espace.chip.untitled"))}
-            </p>
-          );
-        }
-        if (it.kind === "draft") {
-          return <Said key="draft" line={{ seq: 0, role: "brain", text: it.text, time: "" }} className={`present-msg present-brain draft${latest === it ? " latest" : ""}`} />;
-        }
-        const l = it.line;
-        if (l.role === "user") {
-          const title = l.thread ? titleOf(l.thread) : undefined;
-          return (
-            <div key={l.seq} className="present-user">
-              {l.via && <span className="exchange-who">{t("espace.exchange.via", l.via)}</span>}
-              <p className="present-bubble">{l.text}</p>
-              {l.thread && title && (
-                <button type="button" className="present-about" onClick={() => onOpen(l.thread!)}>
-                  {t("espace.talk.about", title)}
-                </button>
-              )}
-            </div>
-          );
-        }
-        return <Said key={l.seq} line={l} className={`present-msg present-brain${latest === it ? " latest" : ""}`} />;
-      })}
+      {items.map((it) =>
+        it.kind === "draft" ? (
+          <Said key="draft" line={{ seq: 0, role: "brain", text: it.text, time: "" }} className={`present-msg present-brain draft${latest === it ? " latest" : ""}`} />
+        ) : (
+          <Line key={it.line.seq} line={it.line} latest={latest === it} />
+        ),
+      )}
       {writing && <Dots />}
     </div>
-  );
-}
-
-// CardTalk is what a surface's card shows of the exchanges filed under
-// it: the folded ones, a line each that unfolds, then the one going on.
-export function CardTalk({ id, x, sent }: { id: string; x: Exchange | null; sent: Sent | null }) {
-  const { t, lang } = useWords();
-  const now = useNow(30_000);
-  const [unfolded, setUnfolded] = useState<Record<number, boolean>>({});
-  const v = cardTalk(x, sent, id, now);
-  if (v.open.length === 0 && v.folded.length === 0 && !v.draft && !v.writing) return null;
-  const said = (l: ExchangeLine) =>
-    l.role === "user" ? (
-      <p key={l.seq} className="talk-user">
-        <span className="talk-bubble">{l.text}</span>
-      </p>
-    ) : (
-      <Said key={l.seq} line={l} className="talk-brain" />
-    );
-  return (
-    <section className="talk" aria-label={t("espace.talk")}>
-      {v.folded.length > 0 && (
-        <ol className="talk-folded">
-          {v.folded.map((x) => {
-            const user = x.lines[0];
-            const reply = [...x.lines].reverse().find((l) => l.role === "brain");
-            const open = !!unfolded[user.seq];
-            const when = clock(user.time, lang);
-            const line = reply ? t("espace.talk.line", when, plain(user.text ?? "", 60), plain(reply.text ?? "", 90)) : t("espace.talk.line.alone", when, plain(user.text ?? "", 60));
-            return (
-              <li key={user.seq} className={`talk-fold${open ? " open" : ""}`}>
-                <button type="button" className="talk-fold-line" aria-expanded={open} onClick={() => setUnfolded((u) => ({ ...u, [user.seq]: !open }))}>
-                  {line}
-                </button>
-                {open && <div className="talk-fold-body">{x.lines.map(said)}</div>}
-              </li>
-            );
-          })}
-        </ol>
-      )}
-      {(v.open.length > 0 || v.draft || v.writing) && (
-        <div className="talk-open" aria-live="polite">
-          <p className="talk-title">{t("espace.talk")}</p>
-          {v.open.map(said)}
-          {v.draft && <Said line={{ seq: 0, role: "brain", text: v.draft, time: "" }} className="talk-brain draft" />}
-          {v.writing && <Dots />}
-        </div>
-      )}
-    </section>
   );
 }
 

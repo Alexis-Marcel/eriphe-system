@@ -1,61 +1,69 @@
 package main
 
 import (
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// The workspace's view of the conversation (#455, #556): not a second
-// chat, the present of the visit, in the left column. The visit's lines
-// (the user's messages and Eriphe's since the user came back, the last
-// few), the message being written, whether Eriphe is at work; and, for
-// each thread the user talked with Eriphe about, its last exchanges
-// (thread_talk.go), which the workspace shows in the thread's card. The
-// conversation (convoPath) has the rest. The workspace's stream
+// The workspace's view of the conversation (#455): not a second chat, the
+// last exchange only, in the left column. What the user says updates a
+// thread or a surface at the centre, so rereading the conversation is
+// rare: the user's last message and what Eriphe said after it, the message
+// being written, and whether Eriphe is at work. The workspace's stream
 // (/events?a2ui=1, web_sse.go) sends it as JSON, its "exchange" event, when
 // it connects and whenever it changes: a reconnecting page gets it whole.
+// The lines before it come on request, a few at a time
+// (GET /api/espace/earlier); the conversation (convoPath) has them all.
 //
 // The brain's text is its own, shown as Markdown by the page's renderer,
 // which makes no HTML of it, and marked when written in a turn that read
 // external content (markBrainMessage); an event's line (an external
-// source's) and an error's raw text are never sent.
+// source's), the first run's messages and an error's raw text are never
+// sent.
+
+// The exchanges were filed per thread and shown in its card (#556) before
+// the column kept to the last exchange.
+const threadTalkGone = `DROP TABLE IF EXISTS thread_talk;
+DELETE FROM kv WHERE key = 'thread_talk_turn';`
+
+func init() { extraSchema = append(extraSchema, threadTalkGone) }
 
 const (
-	exchangeReplies     = 3    // Eriphe's last lines in a thread's exchange
-	exchangeTextMax     = 4000 // the page folds a long one; the conversation has it whole
-	exchangeVisitMax    = 12   // the visit's last lines
-	exchangeTalks       = 3    // a thread's last exchanges
-	exchangeTalkThreads = 12   // the threads talked about last
+	exchangeReplies = 12   // Eriphe's last lines after the user's message
+	exchangeTextMax = 4000 // the page folds a long one; the conversation has it whole
+	exchangeEarlier = 10   // the lines before, per request
 )
 
 // exchangeLine is a message: the user's (with where they said it, when not
-// here or in the conversation), Eriphe's, or an error, without its text:
-// the page says Eriphe could not answer. Thread is the surface of the
-// thread it is filed under; External, a line of Eriphe's written in a
-// tainted turn.
+// here or in the conversation), Eriphe's (External: written in a tainted
+// turn), or an error, without its text: the page says Eriphe could not
+// answer.
 type exchangeLine struct {
 	Seq      int       `json:"seq"`
 	Role     string    `json:"role"` // user, brain or error
 	Text     string    `json:"text,omitempty"`
 	Via      string    `json:"via,omitempty"`
 	Time     time.Time `json:"time"`
-	Thread   string    `json:"thread,omitempty"`
 	External bool      `json:"external,omitempty"`
-}
-
-// exchangeTalk is an exchange about a thread: the user's message and
-// Eriphe's lines of its turn.
-type exchangeTalk struct {
-	Lines []exchangeLine `json:"lines"`
 }
 
 // exchangeEvent is the workspace's "exchange" event.
 type exchangeEvent struct {
-	Lines       []exchangeLine            `json:"lines"`                 // the visit's
-	Threads     map[string][]exchangeTalk `json:"threads,omitempty"`     // by thread surface, oldest first
-	Draft       string                    `json:"draft,omitempty"`       // Eriphe's message being written
-	DraftThread string                    `json:"draftThread,omitempty"` // the thread surface the draft answers about
-	Thinking    bool                      `json:"thinking,omitempty"`    // Eriphe is at work
+	Lines    []exchangeLine `json:"lines"`              // the last exchange
+	Earlier  bool           `json:"earlier,omitempty"`  // lines come before it
+	Draft    string         `json:"draft,omitempty"`    // Eriphe's message being written
+	Thinking bool           `json:"thinking,omitempty"` // Eriphe is at work
+}
+
+// exchangeLines is the filter of the lines the page gets, with its
+// arguments (exchangeArgs): the user's (not the first run's), Eriphe's and
+// errors, never an event's.
+const exchangeLines = `(role IN (?, ?) OR (role = ? AND via != ?))`
+
+func exchangeArgs(args ...any) []any {
+	return append(args, roleBrain, roleError, roleUser, firstRunVia)
 }
 
 // exchangeOf is a message as the page gets it.
@@ -74,114 +82,80 @@ func (s *Store) exchangeOf(m Message) exchangeLine {
 	return l
 }
 
-// visitLines are the conversation's lines since the visit began, the
-// last exchangeVisitMax: the user's (not the first run's), Eriphe's and
-// errors, never an event's.
-func (s *Store) visitLines(since time.Time) ([]exchangeLine, error) {
-	var from int64
-	if !since.IsZero() {
-		from = since.Unix()
+// lastExchange is the user's last message and Eriphe's lines after it
+// (the last exchangeReplies); with no message of the user's, Eriphe's last
+// line. Earlier tells whether lines come before. Empty when the
+// conversation is.
+func (s *Store) lastExchange() (lines []exchangeLine, earlier bool, err error) {
+	var from int
+	s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE role = ? AND via != ?`, roleUser, firstRunVia).Scan(&from)
+	if from == 0 {
+		s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE role IN (?, ?)`, roleBrain, roleError).Scan(&from)
 	}
-	msgs, err := s.queryMessages(`SELECT seq, time, role, text, via FROM messages
-		WHERE time >= ? AND (role IN (?, ?) OR (role = ? AND via != ?)) ORDER BY seq DESC LIMIT ?`,
-		from, roleBrain, roleError, roleUser, firstRunVia, exchangeVisitMax)
+	if from == 0 {
+		return []exchangeLine{}, false, nil
+	}
+	lines = []exchangeLine{}
+	mine, err := s.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE seq = ? AND role = ?`, from, roleUser)
 	if err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	for _, m := range mine {
+		lines = append(lines, s.exchangeOf(m))
+	}
+	// The last few, however many events came between.
+	replies, err := s.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE seq >= ? AND role IN (?, ?) ORDER BY seq DESC LIMIT ?`,
+		from, roleBrain, roleError, exchangeReplies)
+	if err != nil {
+		return nil, false, err
+	}
+	for i := len(replies) - 1; i >= 0; i-- {
+		lines = append(lines, s.exchangeOf(replies[i]))
+	}
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM (SELECT 1 FROM messages WHERE seq < ? AND `+exchangeLines+` LIMIT 1)`, exchangeArgs(lines[0].Seq)...).Scan(&n)
+	return lines, n > 0, nil
+}
+
+// earlierLines are the exchangeEarlier lines before seq, oldest first,
+// and whether more come before them.
+func (s *Store) earlierLines(before int) ([]exchangeLine, bool, error) {
+	msgs, err := s.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE seq < ? AND `+exchangeLines+` ORDER BY seq DESC LIMIT ?`,
+		append(exchangeArgs(before), exchangeEarlier+1)...)
+	if err != nil {
+		return nil, false, err
+	}
+	more := len(msgs) > exchangeEarlier
+	if more {
+		msgs = msgs[:exchangeEarlier]
 	}
 	out := make([]exchangeLine, 0, len(msgs))
 	for i := len(msgs) - 1; i >= 0; i-- {
 		out = append(out, s.exchangeOf(msgs[i]))
 	}
-	return out, nil
+	return out, more, nil
 }
 
-// visitStart is when the user's visit began: back from their last
-// absence; now while they are away (the page shows what was composed for
-// their return); the beginning when they were never away.
-func (c *core) visitStart(now time.Time) time.Time {
-	a, ok := c.lastAbsence(now)
-	switch {
-	case !ok:
-		return time.Time{}
-	case a.Back.IsZero():
-		return now
+// earlierView is the answer of GET /api/espace/earlier.
+type earlierView struct {
+	Lines []exchangeLine `json:"lines"` // oldest first
+	More  bool           `json:"more"`  // lines come before them
+}
+
+// handleEarlier is GET /api/espace/earlier?before=<seq>: the lines of the
+// conversation before that one, for the user who scrolls up the left
+// column.
+func (w *web) handleEarlier(rw http.ResponseWriter, r *http.Request, _ *session) {
+	before, err := strconv.Atoi(r.URL.Query().Get("before"))
+	if err != nil || before <= 0 {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "before: a message's seq"})
+		return
 	}
-	return a.Back
-}
-
-// workspaceExchange is the exchange event's visit and threads at now.
-func (c *core) workspaceExchange(now time.Time) ([]exchangeLine, map[string][]exchangeTalk, error) {
-	lines, err := c.store.visitLines(c.visitStart(now))
+	lines, more, err := w.c.store.earlierLines(before)
 	if err != nil {
-		return nil, nil, err
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "the conversation could not be read"})
+		return
 	}
-	seqs := make([]int, len(lines))
-	for i, l := range lines {
-		seqs[i] = l.Seq
-	}
-	filed := c.talkOf(seqs)
-	for i := range lines {
-		lines[i].Thread = filed[lines[i].Seq]
-	}
-	threads, err := c.threadTalks()
-	return lines, threads, err
-}
-
-// threadTalks are the last exchanges of the threads talked about last,
-// by their surface, oldest first.
-func (c *core) threadTalks() (map[string][]exchangeTalk, error) {
-	rows, err := c.store.db.Query(`SELECT thread, turn FROM thread_talk GROUP BY thread, turn ORDER BY turn DESC LIMIT 100`)
-	if err != nil {
-		return nil, err
-	}
-	type key struct {
-		thread int64
-		turn   int
-	}
-	var turns []key
-	count := map[int64]int{}
-	for rows.Next() {
-		var k key
-		if rows.Scan(&k.thread, &k.turn) != nil {
-			continue
-		}
-		n, seen := count[k.thread]
-		if (!seen && len(count) >= exchangeTalkThreads) || n >= exchangeTalks {
-			continue
-		}
-		count[k.thread] = n + 1
-		turns = append(turns, k)
-	}
-	rows.Close() // one connection: the messages are read after
-	out := map[string][]exchangeTalk{}
-	for i := len(turns) - 1; i >= 0; i-- {
-		k := turns[i]
-		msgs, err := c.store.queryMessages(`SELECT m.seq, m.time, m.role, m.text, m.via FROM thread_talk t JOIN messages m ON m.seq = t.seq
-			WHERE t.turn = ? ORDER BY m.seq`, k.turn)
-		if err != nil {
-			return nil, err
-		}
-		sid := threadSurfaceID(k.thread)
-		var talk exchangeTalk
-		var replies []exchangeLine
-		for _, m := range msgs {
-			l := c.store.exchangeOf(m)
-			l.Thread = sid
-			switch m.Role {
-			case roleUser:
-				talk.Lines = append(talk.Lines, l)
-			case roleBrain, roleError:
-				replies = append(replies, l)
-			}
-		}
-		if len(talk.Lines) == 0 {
-			continue // the user's message is gone
-		}
-		if n := len(replies) - exchangeReplies; n > 0 {
-			replies = replies[n:]
-		}
-		talk.Lines = append(talk.Lines, replies...)
-		out[sid] = append(out[sid], talk)
-	}
-	return out, nil
+	rw.Header().Set("Cache-Control", "no-store")
+	writeJSON(rw, http.StatusOK, earlierView{Lines: lines, More: more})
 }
