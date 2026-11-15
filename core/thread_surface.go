@@ -37,7 +37,8 @@ import (
 //     alone, and shown under code's section, its root renamed thread_part.
 //     A new write replaces it, surface_remove takes it away. Composed
 //     only, no sources: a change of the thread rewrites the surface at
-//     once and never waits for a tool.
+//     once and never waits for a tool. Live data comes from a monitor
+//     the thread follows (thread_live.go), read by code.
 //   - Taint, per part: a step whose task read external content, and a
 //     part written after reading some, say « extérieur » where they show.
 //     For the models that read the workspace, the surface is tainted as
@@ -111,29 +112,30 @@ func keptByCode(author string) bool {
 type threadSurfaceStep struct {
 	Key      string
 	Label    string
-	Kind     string    // task, choice, approval, call, user, check, deadline
-	State    string    // a Timeline item's: done, current, pending, failed
-	At       time.Time // when it ended, else when it started
-	Started  time.Time // when it started, zero if not yet
-	Ended    time.Time // when it ended, zero if not yet
-	Card     string    // the ref of its proposal, shown in place: answered there while it waits, then a call's outcome
-	Check    string    // ok or failed: what its checks said
-	Note     string    // the last word on it
-	External bool      // what it reports may come from outside
-	Waits    bool      // it waits for the user: its card, their choice, their doing
-	Yours    bool      // the user does it and has not yet: « C'est fait »
+	Kind     string       // task, choice, approval, call, user, check, deadline
+	State    string       // a Timeline item's: done, current, pending, failed
+	At       time.Time    // when it ended, else when it started
+	Started  time.Time    // when it started, zero if not yet
+	Ended    time.Time    // when it ended, zero if not yet
+	Card     string       // the ref of its proposal, shown in place: answered there while it waits, then a call's outcome
+	Check    string       // ok or failed: what its checks said
+	Note     string       // the last word on it
+	External bool         // what it reports may come from outside
+	Waits    bool         // it waits for the user: its card, their choice, their doing
+	Yours    bool         // the user does it and has not yet: « C'est fait »
+	Answers  []taskAnswer // what was settled for its task: Eriphe's answers, a release asked and the user's answer (task_answer_log.go)
 }
 
 // threadSurfaceSteps maps a thread's steps to what its surface shows. A
 // dropped step is not shown.
 func (c *core) threadSurfaceSteps(s Thread, steps []Step) []threadSurfaceStep {
-	asks := c.pendingAsks(s.ID)
+	asks, answers := c.pendingAsks(s.ID), c.stepAnswers(s.ID)
 	var out []threadSurfaceStep
 	for _, st := range steps {
 		if st.Status == stepDropped {
 			continue
 		}
-		v := threadSurfaceStep{Key: st.Key, Label: st.Title, Kind: st.Kind, Note: st.Note}
+		v := threadSurfaceStep{Key: st.Key, Label: st.Title, Kind: st.Kind, Note: st.Note, Answers: answers[st.Key]}
 		switch st.Status {
 		case stepAccepted:
 			v.State = "done"
@@ -344,10 +346,16 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	}
 	// Since the user's last visit, where it stands, what is theirs
 	// (thread_header.go).
-	c.threadHeader(&in, &out, data, s, steps, asks, now)
+	watch, watchFacts := c.watchItems(&in, s, lang, loc)
+	c.threadHeader(&in, &out, data, s, steps, asks, watchFacts, now)
+	// The monitors it follows, read by code (thread_live.go): past a
+	// limit, it rises.
+	if c.threadLive(&in, &out, data, s, now) {
+		in.Weight = max(in.Weight, threadWeightWatch)
+	}
 
-	if len(steps) > 0 {
-		items := make([]any, 0, len(steps))
+	if len(steps) > 0 || len(watch) > 0 {
+		items := make([]any, 0, len(steps)+len(watch))
 		for _, st := range steps {
 			item := map[string]any{"label": st.Label, "state": st.State}
 			if !st.At.IsZero() {
@@ -370,7 +378,16 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 				item["detail"] = truncate(strings.Join(parts, threadExternalSep), threadDetailMax)
 			}
 			items = append(items, item)
+			// What was settled for its task, under it.
+			for _, a := range st.Answers {
+				answer := map[string]any{"label": a.text(lang), "state": "done", "date": a.At.In(loc).Format(time.RFC3339)}
+				if a.Tainted != "" {
+					answer["detail"] = w("thread.surface.external")
+				}
+				items = append(items, answer)
+			}
 		}
+		items = append(items, watch...) // its monitors' last events, after its steps
 		data["steps"] = items
 		out.add(comp{"id": "thread_steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/steps"}})
 		// A call's card, once decided, shows how its run went, under the
@@ -414,6 +431,11 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	for _, st := range steps {
 		if st.External {
 			in.codeTaint = append(in.codeTaint, "step:"+st.Key)
+		}
+		for _, a := range st.Answers {
+			if a.Tainted != "" {
+				in.codeTaint = append(in.codeTaint, "answer:"+strconv.FormatInt(a.ID, 10))
+			}
 		}
 	}
 	// Its Proposals answer in place, tainted or not: code bound them to the

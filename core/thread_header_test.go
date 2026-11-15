@@ -151,7 +151,7 @@ func TestThreadHeaderFactsAndYours(t *testing.T) {
 		in := surfaceIn{Weight: threadWeight}
 		var out threadComps
 		data := map[string]any{}
-		c.threadHeader(&in, &out, data, s, steps, nil, now)
+		c.threadHeader(&in, &out, data, s, steps, nil, nil, now)
 		texts := map[string]string{}
 		facts, _ := data["facts"].([]any)
 		for _, comp := range out.list {

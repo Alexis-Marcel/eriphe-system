@@ -710,7 +710,7 @@ whatever address it dials) and one client certificate per node.
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
 | `task_status` | state, the agent's last message (without its receipt), its checked [receipt](#receipts-receiptgo), the pending permission; `wait` blocks until the task needs you |
 | `list_tasks` | recent tasks |
-| `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card), so the user can see and contradict it; display only |
+| `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card) and on the thread's surface, under the step and in its header's facts, so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
 | `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write the workspace, as `brain` ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)); `run_task`'s `surface` names a placeholder for the task to fill |
 
@@ -1111,7 +1111,8 @@ by code from the thread's data (#468): it never depends on a model remembering t
   (« En cours · mené par son chef », « En attente · tenu par Eriphe »; not for a light thread the
   brain holds that is open); a header in three parts (#553, `thread_header.go`):
   - **Depuis ta dernière visite**: facts made by code from the thread's data (a step started,
-    done, failed or handing in its work, the summary written again, the thread's end), each
+    done, failed or handing in its work, what was settled for its task, the summary written
+    again, the thread's end), each
     with its time, since the user's visit before the last one, oldest first, the last 5 (« … et 2
     plus tôt » before them); with none, the log tells whether anything else moved (a step added,
     a plan changed, a card linked, a reopen: « 3 changement(s), le dernier à 15 h 10. », counted,
@@ -1129,8 +1130,26 @@ by code from the thread's data (#468): it never depends on a model remembering t
     button; « Rien pour l'instant. » when nothing waits.
 
   Then the steps as a `Timeline` (each with its state, its time, its kind, its checks and the
-  last word on it), none when it has no step. Its component ids start with `thread_`, its data
+  last word on it), none when it has no step. Under a task step, what was settled for its task
+  (#564): Eriphe's reply to its question (« Question de l'assistant → Eriphe a répondu : … »),
+  its checks fixed, a release Eriphe asked on a card and the user's answer on it. Kept as facts
+  in `thread_answers` (a kind, its refs, Eriphe's reply, the brain turn's taint) by
+  `task_answer_log.go`, worded by code in the user's language, never the task's question; a
+  reply written on a tainted turn says « extérieur » and taints the surface (`answer:<id>`). Its component ids start with `thread_`, its data
   is under `/thread`.
+- **A live thread** (#555, `thread_live.go`): who holds the thread may make it follow up to 3
+  monitors the user approved (`link_thread` with `monitor`, its name; a proposed one is refused).
+  Under the header, « En direct »: each monitor's latest number as a `Metric` and its last 24 as a
+  `Chart` (kept in its look, `monitorLook.Points`), with « Surveillance <name> · lu à 14 h 32 ·
+  lu par le code, sans modèle »; each look writes the surface again (after its state is saved).
+  Its events (`thread_watch`: kind, number, limit, holds, taint) land at the end of the
+  `Timeline`, the last 5, and in the header's facts, worded from the kind and numbers only
+  (« cpu : 95, au-dessus du seuil de 90 »), never a changed value, a new item or an error's text.
+  While a cross monitor is past its limit, or its looks fail, the thread's weight rises to 65;
+  back under, it comes down. A monitor of a server not trusted makes the surface « extérieur »
+  for the models (`monitor:<name>`), its Proposals still answer in place. Nothing wakes the
+  brain: a skill reacts to the monitor's events as before. The holder's part still takes no
+  sources.
 - **Rewritten at each change** of the thread: the store's `setThread`, `setStep`, `insertSteps`,
   a card asked, decided or withdrawn call `keepThreadSurface`, which writes only when what the
   surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active

@@ -19,7 +19,9 @@ import (
 //     data (its steps' starts and ends, its summary written again, its
 //     end) since the user's visit before the last one, oldest first, the
 //     last threadFactsMax; « Rien de nouveau depuis 14 h 32 » when none.
-//     Never the log's lines: they are French only, and may quote a lead.
+//     What was settled for its tasks is one: kept as a kind and its
+//     parameters (task_answer_log.go), worded here. Never the log's
+//     lines: they are French only, and may quote a lead.
 //   - Où on en est: the thread's summary, as remember (kind progress),
 //     the extraction or its close wrote it, with its date; no model call.
 //   - À toi: what waits for the user (its cards, a step of theirs), or
@@ -118,6 +120,15 @@ func threadFacts(s Thread, steps []threadSurfaceStep, since int64, lang string) 
 			}
 			out = append(out, threadFact{st.Started, fmt.Sprintf(tr(lang, word), st.Label)})
 		}
+		for _, a := range st.Answers {
+			if after(a.At) {
+				text := fmt.Sprintf(tr(lang, "thread.fact.answer"), st.Label, a.text(lang))
+				if a.Tainted != "" {
+					text += threadExternalSep + tr(lang, "thread.surface.external")
+				}
+				out = append(out, threadFact{a.At, text})
+			}
+		}
 	}
 	if s.summarized > since && s.summarized > 0 {
 		out = append(out, threadFact{time.Unix(s.summarized, 0), tr(lang, "thread.fact.summary")})
@@ -168,13 +179,19 @@ func (c *core) threadStateLine(s Thread, lang string) string {
 // threadHeader composes the header of a thread's surface: since the
 // user's last visit, where it stands, what is theirs. What waits for the
 // user gives the surface its weight.
-func (c *core) threadHeader(in *surfaceIn, out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, asks []int64, now time.Time) {
+func (c *core) threadHeader(in *surfaceIn, out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, asks []int64, more []threadFact, now time.Time) {
 	lang, loc := c.userLang(), c.userZone()
 	w := func(key string) string { return tr(lang, key) }
 	type comp = map[string]any
 
 	// Depuis ta dernière visite.
 	facts := threadFacts(s, steps, s.seen, lang)
+	for _, f := range more { // its monitors' events (thread_live.go)
+		if f.At.Unix() > s.seen {
+			facts = append(facts, f)
+		}
+	}
+	slices.SortStableFunc(facts, func(a, b threadFact) int { return a.At.Compare(b.At) })
 	switch {
 	case s.seen == 0:
 		out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle", "text": w("thread.head.sofar")})

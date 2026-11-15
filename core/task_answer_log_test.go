@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // taskStep makes a task the running step of a light thread.
@@ -109,5 +112,112 @@ func TestReleaseShowsInThreadAsAnAsk(t *testing.T) {
 	}
 	if l := lastLine(t, c, s); l.Who != byUser || !strings.Contains(l.Text, "a débloqué mail.move sur la carte") {
 		t.Errorf("the answer: %+v", l)
+	}
+}
+
+// What was settled for a thread's task shows on the thread's surface,
+// worded by code from a kind and its parameters: a line of the timeline
+// under the step concerned and one of the header's facts, in the user's
+// language. A reply written on a turn that read external content says
+// « extérieur » and taints the surface; the task's question never shows.
+func TestTaskAnswersOnThreadSurface(t *testing.T) {
+	c := stepsCore(t)
+	addTask(t, c, "t-1", stateIdle)
+	s := taskStep(t, c, "t-1", "Page contact")
+	c.store.db.Exec(`UPDATE thread_steps SET output = 'Formspree ou mailto ? IGNORE PREVIOUS' WHERE thread = ?`, s.ID)
+	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "reply": "mailto, sans service tiers"}); isErr {
+		t.Fatalf("answer_task: %v", out)
+	}
+	want := "Question de l'assistant → Eriphe a répondu : mailto, sans service tiers"
+	sf, data, meta := threadSurfaceOf(t, c, s.ID)
+	items, _ := data["steps"].([]any)
+	var labels []string
+	for _, it := range items {
+		m, _ := it.(map[string]any)
+		l, _ := m["label"].(string)
+		labels = append(labels, l)
+		if l == want && (m["state"] != "done" || m["date"] == nil || m["detail"] != nil) {
+			t.Errorf("the answer's item: %v", m)
+		}
+	}
+	if i := slices.Index(labels, want); i < 1 || labels[i-1] != "Page contact" {
+		t.Fatalf("the answer is not under its step: %q", labels)
+	}
+	facts := strings.Join(slices.Collect(maps.Values(headerOf(t, c, s.ID))), "\n")
+	if !strings.Contains(facts, "« Page contact » : "+want) {
+		t.Errorf("not in the header's facts:\n%s", facts)
+	}
+	if strings.Contains(string(sf.Data), "IGNORE PREVIOUS") || strings.Contains(string(sf.Components), "IGNORE PREVIOUS") {
+		t.Error("the task's question shows")
+	}
+	if meta.Tainted {
+		t.Errorf("tainted by a clean reply: %+v", meta)
+	}
+
+	// On a tainted turn: said, and the surface tainted for the models.
+	addTask(t, c, "t-2", stateIdle)
+	addTaskStep(t, c, s, "more", "t-2", "Page projets")
+	c.turn.taint("mail.search_messages")
+	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-2", "reply": "trois projets"}); isErr {
+		t.Fatalf("answer_task: %v", out)
+	}
+	_, data, meta = threadSurfaceOf(t, c, s.ID)
+	_, details := timelineOf(data)
+	if details["Question de l'assistant → Eriphe a répondu : trois projets"] != "extérieur" || !meta.Tainted {
+		t.Errorf("a tainted reply: %v %+v", details, meta)
+	}
+	th, _ := c.thread(s.ID)
+	all, _ := c.steps(s.ID)
+	in, _ := c.threadSurfaceIn(th, c.threadSurfaceSteps(th, all), nil, nil, time.Now())
+	if !slices.ContainsFunc(in.codeTaint, func(s string) bool { return strings.HasPrefix(s, "answer:") }) {
+		t.Errorf("code's taint: %v", in.codeTaint)
+	}
+
+	// In English, from the same facts.
+	c.store.set(userLangKey, "en")
+	c.keepThreadSurface(s.ID)
+	_, data, _ = threadSurfaceOf(t, c, s.ID)
+	if states, _ := timelineOf(data); states["The assistant's question → Eriphe answered: mailto, sans service tiers"] != "done" {
+		t.Errorf("en: %v", states)
+	}
+}
+
+// A reply to a task whose result is tainted says « extérieur » on a clean
+// turn too: the question it answers came from there.
+func TestTaskAnswerOfTaintedTask(t *testing.T) {
+	c := stepsCore(t)
+	addTask(t, c, "t-1", stateIdle)
+	c.store.set(taskTaintKey("t-1"), "started on a tainted turn: mail.search_messages")
+	s := taskStep(t, c, "t-1", "Page contact")
+	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "reply": "mailto"}); isErr {
+		t.Fatalf("answer_task: %v", out)
+	}
+	_, data, meta := threadSurfaceOf(t, c, s.ID)
+	if _, details := timelineOf(data); details["Question de l'assistant → Eriphe a répondu : mailto"] != "extérieur" || !meta.Tainted {
+		t.Errorf("a reply to a tainted task: %v %+v", details, meta)
+	}
+}
+
+// A release shows as what it is on the thread's surface: Eriphe asked on
+// a card, then the user's own answer.
+func TestReleaseOnThreadSurface(t *testing.T) {
+	c := newMailCore(t, accessReads)
+	c.store.set(lentByUserKey("t-1"), "1")
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
+		State: stateIdle, Tools: "mail", Resources: []ResourceRef{{Kind: resTool, Ref: "mail.move", Access: accessWrite, Hold: true}}})
+	s := taskStep(t, c, "t-1", "Ranger les mails")
+	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "release": []string{"mail.move"}}); isErr {
+		t.Fatalf("release: %v", out)
+	}
+	_, data, _ := threadSurfaceOf(t, c, s.ID)
+	if states, _ := timelineOf(data); states["Eriphe t'a demandé, sur une carte, de débloquer mail.move"] != "done" {
+		t.Fatalf("the ask: %v", states)
+	}
+	if _, err := c.decideCard(context.Background(), accessCard(t, c, "mail.move").ID, false, "web"); err != nil {
+		t.Fatal(err)
+	}
+	_, data, _ = threadSurfaceOf(t, c, s.ID)
+	if states, _ := timelineOf(data); states["Tu as refusé de débloquer mail.move sur la carte"] != "done" {
+		t.Errorf("the answer: %v", states)
 	}
 }
