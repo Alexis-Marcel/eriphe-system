@@ -1006,7 +1006,7 @@ refused) comes back as that thread's event (`callToBrain`: `[thread N « title �
 user's written over a thread's surface (or a surface of its subject); a thread tool on an id that
 is no thread changes nothing. `off_thread` (no argument) is the brain saying the turn is about no
 thread after all: the user wrote over a thread's surface about something else (« j'ai quoi de prévu
-aujourd'hui ? »); called before anything else, the cards and tasks it raises next are no thread's,
+aujourd'hui ? »); called right before the first card or task, the cards and tasks it raises next are no thread's,
 until a thread tool names one again.
 `run_task` in a turn about a light, active thread (`taskOfThread`) is a `task` step of that thread
 (the same prompt, title, agent, resources and contract; key `task`, `task-2`…), so the thread's

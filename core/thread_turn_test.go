@@ -194,9 +194,10 @@ func TestCardsOfThreadTurnLinked(t *testing.T) {
 }
 
 // « J'ai quoi de prévu aujourd'hui ? » written over a thread's surface:
-// the turn starts about that thread, the brain says it is not (off_thread),
-// and what it raises next, a card or a task, is not the thread's. A thread
-// tool called after names one again.
+// the turn starts about that thread; the brain reads what it needs (here
+// another thread, for its deadline), says the turn is about none
+// (off_thread), and what it raises next, a card or a task, is no thread's.
+// A thread tool called after names one again.
 func TestOffThreadTurnLinksNothing(t *testing.T) {
 	c := stepsCore(t)
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
@@ -211,8 +212,15 @@ func TestOffThreadTurnLinksNothing(t *testing.T) {
 		t.Fatalf("the turn is about %d, not %d", c.turn.aboutThread(), pr.ID)
 	}
 
+	other, err := c.openThread(threadIn{Title: "Factures", Goal: "Les factures sont envoyées.", Subject: "project:factures"}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, isErr := callBrainTool(t, c, "read_thread", map[string]any{"thread_id": other.ID}); isErr {
+		t.Fatal("read_thread")
+	}
 	out, isErr := callBrainTool(t, c, "off_thread", map[string]any{})
-	if isErr || out["result"] != "about no thread" || int64(out["previous"].(float64)) != pr.ID {
+	if isErr || out["result"] != "about no thread" || int64(out["previous"].(float64)) != other.ID {
 		t.Fatalf("off_thread: %v", out)
 	}
 	if c.turn.aboutThread() != 0 {
@@ -220,8 +228,8 @@ func TestOffThreadTurnLinksNothing(t *testing.T) {
 	}
 	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})
 	card := accessCard(t, c, "merge").Ref
-	if refs := timelineCards(t, c, pr.ID); refs != "" {
-		t.Errorf("the thread's cards: %q", refs)
+	if refs := timelineCards(t, c, pr.ID) + timelineCards(t, c, other.ID); refs != "" {
+		t.Errorf("the threads' cards: %q", refs)
 	}
 	if s, _, _ := threadSurfaceOf(t, c, pr.ID); strings.Contains(string(s.Components), card) {
 		t.Errorf("the card waits on the thread's surface: %s", s.Components)
@@ -231,7 +239,7 @@ func TestOffThreadTurnLinksNothing(t *testing.T) {
 	if s := c.turnSubject(); s != "" {
 		t.Errorf("the turn's subject is %q", s)
 	}
-	if s, ok := c.taskThread("Préparer la journée"); !ok || s.ID == pr.ID {
+	if s, ok := c.taskThread("Préparer la journée"); !ok || s.ID == pr.ID || s.ID == other.ID {
 		t.Errorf("a task would follow thread %d (%v)", s.ID, ok)
 	}
 

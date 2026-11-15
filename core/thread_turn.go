@@ -102,7 +102,7 @@ func (c *core) offThread() map[string]any {
 	}
 	c.turn.about(0)
 	return map[string]any{"result": "about no thread", "previous": id,
-		"note": fmt.Sprintf("What you raise next is not thread %d's. Answer what was asked with its own surface (workspace_focus), in one line.", id)}
+		"note": fmt.Sprintf("What you raise next is not thread %d's, until a thread tool (read_thread too) names one again. Answer what was asked with its own surface (workspace_focus), in one line.", id)}
 }
 
 // linkedCardMoved tells the threads a card is linked to that it was
