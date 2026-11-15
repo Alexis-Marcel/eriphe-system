@@ -193,6 +193,60 @@ func TestCardsOfThreadTurnLinked(t *testing.T) {
 	}
 }
 
+// « J'ai quoi de prévu aujourd'hui ? » written over a thread's surface:
+// the turn starts about that thread, the brain says it is not (off_thread),
+// and what it raises next, a card or a task, is not the thread's. A thread
+// tool called after names one again.
+func TestOffThreadTurnLinksNothing(t *testing.T) {
+	c := stepsCore(t)
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	pr := lightThread(t, c)
+	c.store.markDelivered(c.store.lastMessageSeq())
+	seq, _ := c.store.addMessage(roleUser, "J'ai quoi de prévu aujourd'hui ?", false)
+	c.noteAbout(seq, "surface:"+threadSurfaceID(pr.ID))
+	c.turn.start(int(seq), int(seq), 0)
+	msgs, _ := c.store.undelivered()
+	c.threadsDelivered(msgs)
+	if c.turn.aboutThread() != pr.ID {
+		t.Fatalf("the turn is about %d, not %d", c.turn.aboutThread(), pr.ID)
+	}
+
+	out, isErr := callBrainTool(t, c, "off_thread", map[string]any{})
+	if isErr || out["result"] != "about no thread" || int64(out["previous"].(float64)) != pr.ID {
+		t.Fatalf("off_thread: %v", out)
+	}
+	if c.turn.aboutThread() != 0 {
+		t.Fatalf("the turn is still about %d", c.turn.aboutThread())
+	}
+	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})
+	card := accessCard(t, c, "merge").Ref
+	if refs := timelineCards(t, c, pr.ID); refs != "" {
+		t.Errorf("the thread's cards: %q", refs)
+	}
+	if s, _, _ := threadSurfaceOf(t, c, pr.ID); strings.Contains(string(s.Components), card) {
+		t.Errorf("the card waits on the thread's surface: %s", s.Components)
+	}
+	// A task started now follows a thread of its own, not this one
+	// (taskOfThread: a turn about no thread, nor about its subject).
+	if s := c.turnSubject(); s != "" {
+		t.Errorf("the turn's subject is %q", s)
+	}
+	if s, ok := c.taskThread("Préparer la journée"); !ok || s.ID == pr.ID {
+		t.Errorf("a task would follow thread %d (%v)", s.ID, ok)
+	}
+
+	// Nothing to leave now. A thread tool after: its thread again.
+	if out, _ := callBrainTool(t, c, "off_thread", map[string]any{}); out["result"] != "about no thread already" || c.turn.aboutThread() != 0 {
+		t.Errorf("off_thread again: %v, turn about %d", out, c.turn.aboutThread())
+	}
+	if _, isErr := callBrainTool(t, c, "read_thread", map[string]any{"thread_id": pr.ID}); isErr {
+		t.Fatal("read_thread")
+	}
+	if c.turn.aboutThread() != pr.ID {
+		t.Errorf("read_thread after: turn about %d", c.turn.aboutThread())
+	}
+}
+
 // timelineCards are the refs of the cards linked to a thread.
 func timelineCards(t *testing.T, c *core, id int64) string {
 	t.Helper()

@@ -91,6 +91,20 @@ func (c *core) turnThread(id int64) {
 	}
 }
 
+// offThread is off_thread: the brain says its turn is about no thread,
+// though what it was given named one (a message written over a thread's
+// surface): the cards it raises next, its tasks, are no longer that
+// thread's. A thread tool called after names one again.
+func (c *core) offThread() map[string]any {
+	id := c.turn.aboutThread()
+	if id <= 0 {
+		return map[string]any{"result": "about no thread already"}
+	}
+	c.turn.about(0)
+	return map[string]any{"result": "about no thread", "previous": id,
+		"note": fmt.Sprintf("What you raise next is not thread %d's. Answer what was asked with its own surface (workspace_focus), in one line.", id)}
+}
+
 // linkedCardMoved tells the threads a card is linked to that it was
 // decided: their surface shows it waiting no more.
 func (c *core) linkedCardMoved(ref string) {

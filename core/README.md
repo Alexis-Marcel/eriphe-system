@@ -1002,7 +1002,12 @@ are that thread's and show in its timeline; while one waits, the thread's surfac
 moves the thread (`linkedCardMoved`). How a call kept on a linked card went (run on a yes, or
 refused) comes back as that thread's event (`callToBrain`: `[thread N « title »] …`, marked
 `thread_msg:<seq>`), so the turn that reads it is about the thread. A new delivery
-(or a heartbeat) starts about no thread; a thread tool on an id that is no thread changes nothing.
+(or a heartbeat) starts about no thread, unless it carries a thread's event or a message of the
+user's written over a thread's surface (or a surface of its subject); a thread tool on an id that
+is no thread changes nothing. `off_thread` (no argument) is the brain saying the turn is about no
+thread after all: the user wrote over a thread's surface about something else (« j'ai quoi de prévu
+aujourd'hui ? »); called before anything else, the cards and tasks it raises next are no thread's,
+until a thread tool names one again.
 `run_task` in a turn about a light, active thread (`taskOfThread`) is a `task` step of that thread
 (the same prompt, title, agent, resources and contract; key `task`, `task-2`…), so the thread's
 surface follows it and its end comes back as the thread's event; its result gives the thread, the
