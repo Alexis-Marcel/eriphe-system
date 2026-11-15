@@ -449,7 +449,7 @@ type layoutState struct {
 	focus      string
 	focusAt    time.Time  // when it was last opened: it lasts focusFor from then
 	focusSince time.Time  // when it began: opened again, it is the same focus
-	f          focusState // the choice around it, the base to go back to, the brain's line (workspace_focus.go)
+	f          focusState // the choice around it, the base to go back to (workspace_focus.go)
 	last       workspaceLayout
 	raw        string
 	changed    chan struct{} // closed when the layout changes

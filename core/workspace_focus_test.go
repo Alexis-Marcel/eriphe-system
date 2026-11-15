@@ -298,6 +298,7 @@ func TestFocusComposerLoop(t *testing.T) {
 	t.Cleanup(func() { cancel(); <-done })
 
 	time.Sleep(50 * time.Millisecond) // its first composition, with nothing open
+	before := c.store.lastMessageSeq()
 	c.focusSurface("comptes", time.Now())
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -309,5 +310,8 @@ func TestFocusComposerLoop(t *testing.T) {
 			t.Fatalf("not composed around the focus: %s", tilesOf(c.currentLayout()))
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	if msgs, _ := c.store.undelivered(); len(msgs) != 0 || c.store.lastMessageSeq() != before {
+		t.Fatalf("the opening reached the brain: %+v", msgs)
 	}
 }
