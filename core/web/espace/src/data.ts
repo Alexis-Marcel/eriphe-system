@@ -11,7 +11,7 @@ import type { Layout } from "./types";
 //   on the grid, which code decides (workspace_layout.go), and its
 //   "proposals" events the refs of the proposals made or decided since
 //   (surface_proposals.go), for what shows them to read them again; its
-//   "exchange" events the conversation's last exchange (exchangeEvent,
+//   "exchange" events the visit's conversation and the threads' exchanges (exchangeEvent,
 //   web_espace_exchange.go), when it opens and whenever it changes; its
 //   "notice" events the notifications routed to this tab (route_send.go).
 //   One stream per page, shared, with the page's tab id;
@@ -165,14 +165,20 @@ function listen(type: string, h: Handler): () => void {
 // reset: the surfaces the page has are dropped first.
 export type SurfaceEvent = { seq: number; reset?: boolean; messages: Message[] };
 
-// A line of the conversation's last exchange (exchangeLine,
-// web_espace_exchange.go): the user's (via: where they said it, when not
-// here or in the conversation), Eriphe's, or an error, without its text.
-export type ExchangeLine = { seq: number; role: "user" | "brain" | "error"; text?: string; via?: string; time: string };
+// A line of the conversation (exchangeLine, web_espace_exchange.go): the
+// user's (via: where they said it, when not here or in the conversation),
+// Eriphe's (external: written after reading external content), or an
+// error, without its text; thread: the thread surface it is filed under.
+export type ExchangeLine = { seq: number; role: "user" | "brain" | "error"; text?: string; via?: string; time: string; thread?: string; external?: boolean };
 
-// The "exchange" event: the user's last message and Eriphe's lines after
-// it, the message Eriphe is writing, and whether it is at work.
-export type Exchange = { lines: ExchangeLine[]; draft?: string; thinking?: boolean };
+// An exchange about a thread: the user's message, then Eriphe's lines.
+export type Talk = { lines: ExchangeLine[] };
+
+// The "exchange" event: the visit's lines, the last exchanges of each
+// thread talked about (by its surface, oldest first), the message Eriphe is
+// writing (and the thread surface it answers about), and whether it is at
+// work.
+export type Exchange = { lines: ExchangeLine[]; threads?: Record<string, Talk[]>; draft?: string; draftThread?: string; thinking?: boolean };
 
 // A notification routed to this tab (inApp, route_send.go): shown in the
 // page, no system notification; its url opens it.

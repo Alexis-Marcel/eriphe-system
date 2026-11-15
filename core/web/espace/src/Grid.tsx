@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Adapter } from "./a2ui/adapter";
 import { OnStage } from "./a2ui/code";
@@ -158,6 +158,7 @@ type Props = {
   onPlace?: (id: string, what: "moved" | "resized", to: Spot) => void;
   onNeed?: (id: string, rows: number) => void; // a tile's content needs this many rows
   onBack?: () => void; // back to the overview, from the surface open
+  below?: (id: string) => ReactNode; // what the page places under the surface open (its exchanges, Exchange.tsx)
 };
 
 // measureTiles measures every tile of the canvas but the one open: the rows
@@ -187,7 +188,7 @@ export function measureTiles(canvas: HTMLElement, onNeed: (id: string, rows: num
   }
 }
 
-export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => {}, onPlace = () => {}, onNeed = () => {}, onBack = () => {} }: Props) {
+export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => {}, onPlace = () => {}, onNeed = () => {}, onBack = () => {}, below }: Props) {
   const { t } = useWords();
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   const byID = new Map(surfaces.map((s) => [s.id, s]));
@@ -358,6 +359,7 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
                 <SurfaceView surface={byID.get(tile.id)!} />
               </OnStage.Provider>
             )}
+            {focus && below?.(tile.id)}
           </div>
         </div>
         {tile.size !== "s" && !centre && tile.why && <p className="why">{tile.why}</p>}

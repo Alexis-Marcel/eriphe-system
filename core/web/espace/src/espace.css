@@ -78,8 +78,6 @@ button, input, select { font: inherit; }
 }
 .eriphe-settings .a2-icon { width: 18px; height: 18px; }
 .eriphe-settings:hover, .eriphe-settings:focus-visible { color: var(--paper); background: color-mix(in oklab, var(--paper) 10%, transparent); }
-.eriphe-text { min-height: 3em; }
-.eriphe-text p { margin: 0; font-family: var(--display); font-weight: 400; font-size: 19px; line-height: 1.38; letter-spacing: -0.01em; }
 .eriphe-sample { margin: 0; padding: 6px 10px; border-radius: 10px; font-size: 12px; color: var(--ink); background: var(--urgent); }
 .eriphe-sample a { color: inherit; }
 .eriphe-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -89,33 +87,51 @@ button, input, select { font: inherit; }
   background: color-mix(in oklab, var(--paper) 6%, transparent); color: var(--paper);
 }
 .eriphe-input input::placeholder { color: color-mix(in oklab, var(--paper) 50%, transparent); }
-/* The conversation's last exchange, under the input (Exchange.tsx): folded
-   to one line, unfolded it scrolls within a few lines' height. */
-.exchange { display: grid; gap: 6px; font-size: 14px; }
-.exchange-toggle {
-  justify-self: start; display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none;
-  color: color-mix(in oklab, var(--paper) 75%, transparent); font: inherit; font-size: 13px; cursor: pointer;
-}
-.exchange-toggle::before { content: "▸"; transition: rotate 0.15s; }
-.exchange.open .exchange-toggle::before { rotate: 90deg; }
-.exchange-body {
-  display: grid; gap: 8px; max-height: 40vh; overflow: auto; padding: 10px 12px; border-radius: 14px;
-  background: color-mix(in oklab, var(--paper) 6%, transparent); overscroll-behavior: contain;
-}
-.exchange-user { margin: 0; color: color-mix(in oklab, var(--paper) 80%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The visit's conversation, the left column (Exchange.tsx's Present): the
+   arrival message first, then the visit; Eriphe's newest line large while
+   nothing follows it, the older ones smaller; the user's as small bubbles.
+   It takes the column's room and scrolls, kept at its end. */
+.eriphe-all { margin-left: auto; font-size: 12px; color: color-mix(in oklab, var(--paper) 55%, transparent); text-decoration: none; }
+.eriphe-all:hover, .eriphe-all:focus-visible { color: var(--paper); text-decoration: underline; }
+.present { flex: 1 1 auto; min-height: 3em; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 2px 2px 6px; scrollbar-width: thin; overscroll-behavior: contain; }
+.present-msg { overflow-wrap: anywhere; }
+.present-said, .present-brain { margin: 0; font-size: 14px; line-height: 1.45; color: color-mix(in oklab, var(--paper) 72%, transparent); transition: font-size 0.35s ease, color 0.35s; }
+.present-msg.latest .present-said, .present-brain.latest { font-family: var(--display); font-size: 19px; line-height: 1.38; letter-spacing: -0.005em; color: var(--paper); }
+.present-brain .a2-markdown > :first-child, .talk-brain .a2-markdown > :first-child { margin-top: 0; }
+.present-brain .a2-markdown > :last-child, .talk-brain .a2-markdown > :last-child { margin-bottom: 0; }
+.present-brain.draft, .talk-brain.draft { opacity: 0.75; }
+.present-user { display: grid; justify-items: end; gap: 3px; }
+.present-bubble { margin: 0; max-width: 85%; padding: 7px 12px; border-radius: 16px 16px 4px 16px; background: color-mix(in oklab, var(--paper) 14%, transparent); color: var(--paper); font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.present-about { padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: color-mix(in oklab, var(--paper) 60%, transparent); cursor: pointer; }
+.present-about:hover, .present-about:focus-visible { color: var(--paper); text-decoration: underline; }
+.present-trace { margin: 0; font-size: 13px; font-style: italic; color: color-mix(in oklab, var(--paper) 60%, transparent); }
+.present-trace::before { content: ""; display: inline-block; width: 14px; height: 1px; margin: 0 8px 4px 0; background: currentColor; vertical-align: middle; }
 .exchange-who { display: block; font-size: 12px; color: color-mix(in oklab, var(--paper) 55%, transparent); }
-.exchange-brain { overflow-wrap: anywhere; }
-.exchange-brain .a2-markdown > :first-child { margin-top: 0; }
-.exchange-brain .a2-markdown > :last-child { margin-bottom: 0; }
-.exchange-brain.draft { opacity: 0.75; }
-.exchange-error { margin: 0; padding: 6px 10px; border-radius: 10px; color: var(--ink); background: var(--urgent); }
+.exchange-error { margin: 0; padding: 6px 10px; border-radius: 10px; color: var(--ink); background: var(--urgent); font-size: 13px; }
+.talk-external { margin: 4px 0 0; font-size: 11.5px; font-style: italic; opacity: 0.7; }
 .exchange-dots { display: flex; gap: 4px; margin: 0; }
 .exchange-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--glow); animation: exchange-dot 1.2s infinite ease-in-out; }
 .exchange-dots i:nth-child(2) { animation-delay: 0.2s; }
 .exchange-dots i:nth-child(3) { animation-delay: 0.4s; }
 @keyframes exchange-dot { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .exchange-dots i { animation: none; opacity: 0.6; } }
-.exchange-all { justify-self: start; font-size: 13px; color: color-mix(in oklab, var(--paper) 75%, transparent); }
+
+/* The exchanges about a thread, in its card open (Exchange.tsx's
+   CardTalk): the ones over, a line each that unfolds; the one going on. */
+.talk { display: grid; gap: 10px; margin-top: 14px; font-size: 14px; }
+.talk-folded { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.talk-fold-line { display: block; width: 100%; padding: 4px 0 4px 22px; border: 0; background: none; color: var(--ink-soft); font: inherit; font-size: 13px; line-height: 1.4; text-align: left; cursor: pointer; position: relative; }
+.talk-fold-line::before { content: "✎"; position: absolute; left: 2px; top: 4px; color: var(--decision); }
+.talk-fold-line::after { content: " ▸"; }
+.talk-fold.open .talk-fold-line::after { content: " ▾"; }
+.talk-fold-line:hover { color: var(--ink); }
+.talk-fold-body, .talk-open { display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; background: #1a1f270b; }
+.talk-fold-body { margin: 4px 0 6px 22px; border: 1px dashed color-mix(in oklab, var(--decision) 60%, transparent); }
+.talk-title { margin: 0; font-size: 12px; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.talk-user { display: grid; justify-items: end; margin: 0; }
+.talk-bubble { max-width: 85%; padding: 6px 12px; border-radius: 16px 16px 4px 16px; background: var(--ink); color: var(--paper); font-size: 13px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.talk-brain { color: var(--ink); overflow-wrap: anywhere; }
+.talk .exchange-dots i { background: var(--ink-soft); }
 
 /* The notifications routed to this tab (Exchange.tsx's Notices): over the
    page, bottom right, each for a while. */
@@ -330,10 +346,9 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 /* A surface open on a phone: the screen is its own. */
 .espace.narrow.focused { height: 100dvh; min-height: 0; overflow: hidden; grid-template-rows: auto minmax(0, 1fr); }
 .narrow.focused .eriphe-panel { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 12px; }
-.narrow.focused .eriphe-name, .narrow.focused .eriphe-text, .narrow.focused .eriphe-links, .narrow.focused .eriphe-sample:not(.eriphe-offline) { display: none; }
+.narrow.focused .eriphe-name, .narrow.focused .eriphe-all, .narrow.focused .eriphe-links, .narrow.focused .eriphe-sample:not(.eriphe-offline) { display: none; }
 .narrow.focused .eriphe-input { flex: 1; min-width: 12em; }
-.narrow.focused .exchange { flex-basis: 100%; }
-.narrow.focused .exchange:not(.open) { display: none; }
+.narrow.focused .present { flex-basis: 100%; max-height: 30vh; }
 .narrow.focused .stage { min-height: 0; }
 .canvas.column.full { flex: 1; min-height: 0; }
 .canvas.column.full .mod { flex: 1; min-height: 0; }

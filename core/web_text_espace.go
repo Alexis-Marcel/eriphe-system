@@ -52,13 +52,19 @@ var espaceStrings = map[string]map[string]string{
 		"espace.state.related":   "Lié",
 		"espace.state.closed":    "Fermé",
 
-		// Le dernier échange et les notifications de l'onglet (Exchange.tsx).
-		"espace.exchange":         "Dernier échange",
-		"espace.exchange.you":     "Toi",
+		// La conversation de la visite, les échanges sur un fil et les
+		// notifications de l'onglet (Exchange.tsx).
+		"espace.exchange":         "La conversation de cette visite",
 		"espace.exchange.via":     "Toi, via %s",
 		"espace.exchange.writing": "{{name}} écrit…",
 		"espace.exchange.error":   "{{name}} n'a pas pu répondre : la conversation dit pourquoi.",
 		"espace.exchange.all":     "Toute la conversation",
+		"espace.talk":             "Échange sur ce fil",
+		"espace.talk.line":        "%s : tu as écrit « %s » ; {{name}} a répondu « %s »",
+		"espace.talk.line.alone":  "%s : tu as écrit « %s »",
+		"espace.talk.trace":       "Tu as parlé de %s : l'échange est dans sa carte",
+		"espace.talk.about":       "À propos de %s ↗",
+		"espace.talk.external":    "Écrit après avoir lu un contenu extérieur",
 		"espace.notices":          "Notifications",
 		"espace.notice.close":     "Fermer",
 
@@ -154,13 +160,19 @@ var espaceStrings = map[string]map[string]string{
 		"espace.state.related":   "Related",
 		"espace.state.closed":    "Closed",
 
-		// The last exchange and the tab's notifications (Exchange.tsx).
-		"espace.exchange":         "Last exchange",
-		"espace.exchange.you":     "You",
+		// The visit's conversation, the exchanges about a thread and the
+		// tab's notifications (Exchange.tsx).
+		"espace.exchange":         "This visit's conversation",
 		"espace.exchange.via":     "You, via %s",
 		"espace.exchange.writing": "{{name}} is writing…",
 		"espace.exchange.error":   "{{name}} could not answer: the conversation says why.",
 		"espace.exchange.all":     "The whole conversation",
+		"espace.talk":             "Exchange about this thread",
+		"espace.talk.line":        "%s: you wrote “%s”; {{name}} answered “%s”",
+		"espace.talk.line.alone":  "%s: you wrote “%s”",
+		"espace.talk.trace":       "You talked about %s: the exchange is in its card",
+		"espace.talk.about":       "About %s ↗",
+		"espace.talk.external":    "Written after reading external content",
 		"espace.notices":          "Notifications",
 		"espace.notice.close":     "Dismiss",
 

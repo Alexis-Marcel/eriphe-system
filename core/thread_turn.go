@@ -53,6 +53,7 @@ func (c *core) threadsDelivered(msgs []Message) {
 		}
 	}
 	c.turn.about(id)
+	c.talkDelivered(msgs, id) // an exchange with the user about it (thread_talk.go)
 }
 
 // threadAbout is the thread a message of the user's was written about: the
@@ -101,6 +102,7 @@ func (c *core) offThread() map[string]any {
 		return map[string]any{"result": "about no thread already"}
 	}
 	c.turn.about(0)
+	c.talkOff() // the user's message was about something else (thread_talk.go)
 	return map[string]any{"result": "about no thread", "previous": id,
 		"note": fmt.Sprintf("What you raise next is not thread %d's, until a thread tool (read_thread too) names one again. Answer what was asked with its own surface (workspace_focus), in one line.", id)}
 }

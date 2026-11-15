@@ -238,6 +238,7 @@ func (c *core) noteAbout(seq int64, ref string) {
 	ref = strings.TrimSpace(ref)
 	if gestureRef(ref) {
 		c.store.set(aboutKey(seq), ref)
+		c.fileUserTalk(seq) // about a thread: filed under it (thread_talk.go)
 		c.noteGesture(gestureAbout, ref, time.Now())
 	}
 }
