@@ -1689,8 +1689,11 @@ version, read with its diff.
   a fenced ` ```thread ` block holding `open_thread`'s JSON. eriphe-core opens it (`by`
   `skill:<name>`, tainted as the run). Its plan starts at once when every step only reads, writes
   on a branch of its repository or calls catalog tools, each call still under the grid: the
-  skill's approval stands for it. A folder lent beyond read, a credential, a file, or a write
-  without a branch: the plan waits for its card. While the thread is open, it is the run's: the
+  skill's approval stands for it. Code approved that plan, not the user: the steps of a tainted
+  run's plan keep its taint, start unclean and ask their own start card for what they are lent
+  (a write on a branch included), as a step added since does; a Free write asks its card.
+  A folder lent beyond read, a credential, a file, or a write without a branch: the plan waits
+  for its card. While the thread is open, it is the run's: the
   events of its key go to its lead (`tellLead`), not to a new run. Merging and deploying stay the
   user's, on the thread's cards. Without `can`, the block is ignored and the note says why.
 - **Subject**: with `subject: kind:slug`, its runs are about that subject; without it, about their
