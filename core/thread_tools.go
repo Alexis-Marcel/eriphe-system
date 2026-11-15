@@ -279,6 +279,11 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return map[string]any{"note": "Passed to the lead."}, nil
 		})
 
+	tool(s, "off_thread", "Say this turn is about no thread: the user wrote with a thread's surface open (or one of its subject's) but asks about something else (« j'ai quoi de prévu aujourd'hui ? » from a pull request's thread). Read what you need first, then call it right before the first card or task: what the turn raises next is no longer that thread's. Any thread tool called after (read_thread too) names a thread again. Not for a question about the thread open: answer that one in it.",
+		func(ctx context.Context, _ struct{}) (map[string]any, error) {
+			return c.offThread(), nil
+		})
+
 	tool(s, "stop_thread", "Stop a thread the user wants stopped, or that will not reach its goal: it is dropped; a led one's running tasks stop and its cards are withdrawn.",
 		func(ctx context.Context, in threadIDIn) (map[string]any, error) {
 			if err := c.stopThread(ctx, in.Thread, "brain"); err != nil {
