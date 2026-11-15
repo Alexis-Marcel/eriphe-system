@@ -293,14 +293,18 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 		taint = strings.Split(s.Tainted, ", ") // the plan the user approved stands for its own words; one code approved does not
 	}
 	taint = appendNew(taint, handed...)
+	// What it is lent was approved with the plan: by the user, or by code
+	// for a clean start only. A tainted step of a plan code approved asks
+	// its own start card, as a step added since does.
+	approved := planned && (byUser || len(taint) == 0)
 	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract, Subject: s.Subject,
-		askStart: true, cleanStart: planned && len(taint) == 0, approvedInAdvance: planned, taint: taint}
+		askStart: true, cleanStart: planned && len(taint) == 0, approvedInAdvance: approved, taint: taint}
 	t, err := c.runTask(ctx, r)
 	if err != nil {
 		return nil, err
 	}
-	if planned && (byUser || len(taint) == 0) {
-		c.grantLent(t) // the user approved it with the plan, or code a clean one (access_card.go)
+	if approved {
+		c.grantLent(t) // access_card.go
 		if len(taint) == 0 {
 			c.store.set(lentByUserKey(t.ID), "1")
 		}

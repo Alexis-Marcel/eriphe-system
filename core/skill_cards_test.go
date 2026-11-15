@@ -318,4 +318,28 @@ func TestSkillRunSafePlanKeepsTaint(t *testing.T) {
 	if got, why := c.decideTask(task, "mcp__monitor__rollback", map[string]any{"version": "2.0.0"}); got != decideAsk || why != uncleanReason {
 		t.Errorf("a Free write from the step = %q (%s)", got, why)
 	}
+
+	// A write on a branch: the step asks its start card, as one added since.
+	c, now = skillCore(t)
+	setServer(c, "github", func(s *Server) {
+		*s = Server{URL: "https://api.githubcopilot.com/mcp/", Auth: &ServerAuth{BearerFile: "vault:server.github.token"}, Use: "GitHub"}
+	})
+	giveRepos(t, c, "owner/repo")
+	withApp(t, c, newFakeGitHub(t))
+	addTriggered(t, c, "---\nname: prod\ndescription: la prod\nwhen: monitor.received\ncan: [open-thread]\n---\nEnquête.\n")
+	r = startedRun(t, c, now, "prod")
+	r = endTurn(t, c, r.Task, "Je lance un thread.\n```thread\n"+
+		`{"title": "Corriger le login", "goal": "Corriger l'erreur 500", "steps": [{"key": "fix", "title": "Corriger", "prompt": "Corrige.", "resources": [{"kind": "repo", "ref": "owner/repo", "access": "write", "branch": "eriphe/fix"}]}]}`+
+		"\n```\n")
+	if !strings.Contains(r.Note, "opened and started") {
+		t.Fatalf("note %q", r.Note)
+	}
+	s, _ = c.liveThread(r)
+	st = stepOf(t, c, s, "fix")
+	if st.Task == "" || !c.heldTask(st.Task) {
+		t.Errorf("a tainted write on a branch started without its card: %+v", st)
+	}
+	if c.store.repoGranted(st.Task, "owner/repo", catChange) {
+		t.Error("the branch write was granted by code")
+	}
 }
