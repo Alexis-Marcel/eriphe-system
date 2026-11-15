@@ -552,6 +552,8 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-proposal-decided .a2-proposal-kicker { color: var(--ink-soft); }
 .a2-proposal-text { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; }
 .a2-proposal-why { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.a2-proposal-from, .a2-proposal-yes { margin: 0; font-size: 13px; color: var(--ink-soft); }
+.a2-proposal-from a { color: inherit; }
 /* Drawn from external content: a small badge, its sentence on hover. */
 .a2-badge {
   display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 1px 8px 1px 6px; border-radius: 999px;
