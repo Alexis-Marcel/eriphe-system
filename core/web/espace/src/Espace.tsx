@@ -170,7 +170,8 @@ export function Espace({ boot }: { boot: data.Boot }) {
     return () => clearTimeout(timer);
   }, [intent]);
   const placed = over ?? layout;
-  const shown = useMemo(() => (placed && !narrow ? fitted(placed, needs) : placed), [placed, needs, narrow]);
+  // Not fitted with a surface open: the others are in a column (Grid.tsx), in an order that does not jump.
+  const shown = useMemo(() => (placed && !narrow && !placed.focus ? fitted(placed, needs) : placed), [placed, needs, narrow]);
   const onSurfaces = !gallery && !!shown && (pool.length > 0 || shown.items.length + shown.chips.length > 0);
   const sfocus = onSurfaces ? shown?.focus ?? null : null;
   const sfocusTitle = sfocus ? shown?.items.find((i) => i.id === sfocus)?.title ?? sfocus : null;
@@ -315,7 +316,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
         <div className="stage">
           <ProposalsContext.Provider value={proposals}>
             {onSurfaces ? (
-              <Grid adapter={surfaces} layout={shown!} narrow={narrow} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} onNeed={onNeed} />
+              <Grid adapter={surfaces} layout={shown!} narrow={narrow} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} onNeed={onNeed} onBack={backSurface} />
             ) : gallery ? (
               <div className="surfaces">
                 <Surfaces adapter={surfaces} />

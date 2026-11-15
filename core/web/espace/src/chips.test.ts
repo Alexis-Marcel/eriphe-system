@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipLabel, shownChips, surfaceSummary, surfaceTitle } from "./chips";
+import { chipLabel, shownChips, surfaceSummary, surfaceTitle, surfaceUpdated, surfaceWeight } from "./chips";
 
 // The chips' words: never a raw id, and those that say the same once,
 // with their count.
@@ -42,5 +42,13 @@ describe("chips", () => {
     expect(surfaceSummary({ metadata: { extensions: { eriphe: { summary: " Fusion ✓ · Déploiement à toi " } } } })).toBe("Fusion ✓ · Déploiement à toi");
     expect(surfaceSummary({ metadata: { extensions: { eriphe: { summary: 3 } } } })).toBeUndefined();
     expect(surfaceSummary(undefined)).toBeUndefined();
+  });
+
+  it("read a surface's weight and when it was last written, else nothing", () => {
+    const s = { metadata: { extensions: { eriphe: { weight: 80, updated: "2026-11-15T16:00:00Z" } } } };
+    expect(surfaceWeight(s)).toBe(80);
+    expect(surfaceUpdated(s)).toBe("2026-11-15T16:00:00Z");
+    expect(surfaceWeight({ metadata: { extensions: { eriphe: { weight: "80" } } } })).toBe(0);
+    expect(surfaceUpdated(undefined)).toBe("");
   });
 });

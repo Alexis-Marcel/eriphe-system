@@ -3,7 +3,7 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Adapter } from "./a2ui/adapter";
 import { OnStage } from "./a2ui/code";
 import { SurfaceView } from "./a2ui/Surfaces";
-import { chipLabel, shownChips, surfaceSummary, surfaceTitle } from "./chips";
+import { URGENT, chipLabel, shownChips, surfaceSummary, surfaceTitle, surfaceUpdated, surfaceWeight } from "./chips";
 import { useWords } from "./i18n";
 import { COLS, DIMS, ROWS, SIZES, foldOut, needRows } from "./place";
 import type { FoldedChip, Layout, Tile, TileSize } from "./types";
@@ -32,6 +32,20 @@ import type { FoldedChip, Layout, Tile, TileSize } from "./types";
 // too little room shows its first blocks whole and says the rest is
 // there, open (foldOut). Only the surface open scrolls: it is the
 // workspace within the workspace.
+//
+// A surface open re-lays the workspace out (focus mode, on a wide screen):
+// it large in the centre, a working area that scrolls; everything else in
+// a column at the side (sideOf), compact: a state chip, its title, one
+// line; still live, and a click on one opens it instead. No dim, no blur:
+// the others are smaller, not hidden. What needs the user (urgent: a card
+// a task waits on, an alert) comes first in the column, whole, so that its
+// Oui / Non answers there without leaving the focus; what arrives or
+// changes while the focus lasts says « nouveau », and pulses when it needs
+// the user. It never takes the centre: only the user (or Eriphe, asked)
+// moves the focus. Back (Esc, the panel's button, the centre's arrow)
+// gives the grid again. Each surface keeps its Motion layoutId from the
+// grid to the centre or the column and back: the re-layout is animated.
+// Core's places on the grid around the focus are not used on a wide screen.
 //
 // On a phone (narrow) the grid does not hold: one column, the tiles in the
 // composer's order, the chips after them, only the cross on a tile; a
@@ -115,6 +129,26 @@ export function stacked(layout: Layout, have: Set<string>): { tiles: Tile[]; chi
   return open ? { tiles: [open], chips: [], full: true } : { tiles, chips, full: false };
 }
 
+// A surface in the focus mode's column. needs: it needs the user (urgent,
+// by the layout or by its weight): first in the column, shown whole.
+export type SideItem = { id: string; title: string; why?: string; needs: boolean; related?: boolean; closed?: boolean };
+
+// sideOf is the column beside the surface open: what the grid would draw
+// but it, the tiles in core's order then the chips, the closed last; what
+// needs the user first of all.
+export function sideOf(layout: Layout, have: Set<string>, weight: (id: string) => number = () => 0): SideItem[] {
+  const { tiles, chips } = drawn(layout, have);
+  const all: SideItem[] = [
+    ...tiles
+      .filter((i) => i.id !== layout.focus)
+      .map((i) => ({ id: i.id, title: i.title, why: i.why, needs: !!i.urgent || weight(i.id) >= URGENT, related: i.related })),
+    ...chips
+      .filter((c) => c.id !== layout.focus)
+      .map((c) => ({ id: c.id, title: c.title, why: c.why, needs: !c.closed && weight(c.id) >= URGENT, closed: c.closed })),
+  ];
+  return [...all.filter((i) => i.needs), ...all.filter((i) => !i.needs && !i.closed), ...all.filter((i) => i.closed)];
+}
+
 type Props = {
   adapter: Adapter;
   layout: Layout;
@@ -123,6 +157,7 @@ type Props = {
   onClose?: (id: string) => void;
   onPlace?: (id: string, what: "moved" | "resized", to: Spot) => void;
   onNeed?: (id: string, rows: number) => void; // a tile's content needs this many rows
+  onBack?: () => void; // back to the overview, from the surface open
 };
 
 // measureTiles measures every tile of the canvas but the one open: the rows
@@ -152,12 +187,27 @@ export function measureTiles(canvas: HTMLElement, onNeed: (id: string, rows: num
   }
 }
 
-export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => {}, onPlace = () => {}, onNeed = () => {} }: Props) {
+export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => {}, onPlace = () => {}, onNeed = () => {}, onBack = () => {} }: Props) {
   const { t } = useWords();
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   const byID = new Map(surfaces.map((s) => [s.id, s]));
   const have = new Set(byID.keys());
   const { tiles, chips, full } = narrow ? stacked(layout, have) : { ...drawn(layout, have), full: false };
+  // The focus mode: a wide screen, and the surface open is drawn.
+  const center = !narrow && layout.focus ? tiles.find((i) => i.id === layout.focus) : undefined;
+
+  // What arrived or changed since the focus began: each surface as it was
+  // then (surfaceUpdated), the one open aside. A new focus has seen all.
+  const since = useRef<{ focus?: string; was: Map<string, string>; none?: boolean }>({ was: new Map(), none: true });
+  // Taken again once the surfaces come, when the layout came first.
+  if (since.current.focus !== layout.focus || (since.current.none && surfaces.length > 0)) {
+    since.current = {
+      focus: layout.focus,
+      was: new Map(surfaces.filter((s) => s.id !== layout.focus).map((s) => [s.id, surfaceUpdated(s)])),
+      none: surfaces.length === 0,
+    };
+  }
+  const fresh = (id: string) => since.current.was.get(id) !== surfaceUpdated(byID.get(id));
 
   // A drag of a tile's grip: the cell it would go to, shown by a ghost.
   const canvas = useRef<HTMLElement>(null);
@@ -242,80 +292,142 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
         // A surface's one-line summary, when it has one, says more than why it is there.
         const line = c.ids.length === 1 ? surfaceSummary(byID.get(c.id)) : undefined;
         return (
-          <div key={c.id} role="listitem" className={`chip${c.closed ? " closed" : ""}`} data-surface={c.id}>
+          <motion.div key={c.id} layoutId={narrow ? undefined : "surface-" + c.id} transition={spring} role="listitem" className={`chip${c.closed ? " closed" : ""}`} data-surface={c.id}>
             <button className="chip-open" onClick={() => onOpen(c.id)} title={t("espace.chip.open", chipLabel(c))}>
               <span className="chip-text">{chipLabel(c)}</span>
               {c.closed ? <span className="chip-from">{t("espace.chip.closed")}</span> : (line || c.why) && <span className="chip-from">{line || c.why}</span>}
             </button>
-          </div>
+          </motion.div>
         );
       })}
     </div>
   );
+  // A surface as a tile: on the grid at its place, or open in the centre
+  // (focus mode), where it has no place, only the way back and its cross.
+  const tileView = (tile: Tile, centre = false) => {
+    const focus = layout.focus === tile.id;
+    // A small tile shows a surface's one-line summary, when it has one, rather than a slice of it.
+    const line = tile.size === "s" && !focus ? surfaceSummary(byID.get(tile.id)) : undefined;
+    const open = (e: MouseEvent) => {
+      if (!focus && !(e.target as HTMLElement).closest(interactive)) onOpen(tile.id);
+    };
+    const place = centre ? " centre" : ` at-c${tile.col} at-r${tile.row} w-${tile.w} h-${tile.h}`;
+    return (
+      <motion.article
+        key={tile.id}
+        layout
+        layoutId={narrow ? undefined : "surface-" + tile.id}
+        transition={spring}
+        exit={{ opacity: 0 }}
+        data-surface={tile.id}
+        aria-label={tile.title}
+        className={`mod tile size-${tile.size}${place}${focus ? " focus" : ""}${tile.pinned ? " pinned" : ""}${drag?.id === tile.id ? " dragging" : ""}`}
+        onClick={open}
+      >
+        <div className="tile-head">
+          <h2 className="tile-title">{tile.title}</h2>
+          {!focus && <span className="tile-more">{t("espace.tile.more")}</span>}
+          <div className="tile-tools">
+            {centre && (
+              <button type="button" className="tile-tool tile-back" aria-label={t("espace.back")} title={t("espace.back")} onClick={onBack}>
+                <span aria-hidden="true">←</span>
+              </button>
+            )}
+            {!narrow && !centre && (<>
+              <button type="button" className="tile-tool tile-move" aria-label={t("espace.tile.move", tile.title)} title={t("espace.tile.move", tile.title)}
+                onPointerDown={startDrag(tile)} onKeyDown={moveKeys(tile)}>
+                <span aria-hidden="true">⠿</span>
+              </button>
+              <button type="button" className="tile-tool tile-size" aria-label={t("espace.tile.size", tile.title, tile.size.toUpperCase())} title={t("espace.tile.size", tile.title, tile.size.toUpperCase())}
+                onClick={() => { const to = resized(tile, 1, true); if (to) onPlace(tile.id, "resized", to); }} onKeyDown={sizeKeys(tile)}>
+                <span aria-hidden="true">⤡</span>
+              </button>
+            </>)}
+            <button type="button" className="tile-tool tile-close" aria-label={t("espace.tile.close", tile.title)} title={t("espace.tile.close", tile.title)}
+              onClick={() => onClose(tile.id)}>
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+        </div>
+        <div className="mod-body">
+          <div className="mod-fit">
+            {line ? (
+              <p className="tile-line">{line}</p>
+            ) : (
+              <OnStage.Provider value={focus}>
+                <SurfaceView surface={byID.get(tile.id)!} />
+              </OnStage.Provider>
+            )}
+          </div>
+        </div>
+        {tile.size !== "s" && !centre && tile.why && <p className="why">{tile.why}</p>}
+      </motion.article>
+    );
+  };
+
   const board = (
     <main className={`canvas${narrow ? " column" : ""}${full ? " full" : ""}`} aria-label={t("espace.canvas")} ref={canvas}>
       {/* A surface open on a phone takes the screen at once: the others go, not fading out. */}
       <LayoutGroup key={full ? "full" : "grid"}>
         {/* Not mode="popLayout": it injects a <style> element, which the CSP refuses. */}
-        <AnimatePresence>
-          {tiles.map((tile) => {
-            const focus = layout.focus === tile.id;
-            // A small tile shows a surface's one-line summary, when it has one, rather than a slice of it.
-            const line = tile.size === "s" && !focus ? surfaceSummary(byID.get(tile.id)) : undefined;
-            const open = (e: MouseEvent) => {
-              if (!focus && !(e.target as HTMLElement).closest(interactive)) onOpen(tile.id);
-            };
-            return (
-              <motion.article
-                key={tile.id}
-                layout
-                transition={spring}
-                exit={{ opacity: 0 }}
-                data-surface={tile.id}
-                aria-label={tile.title}
-                className={`mod tile size-${tile.size} at-c${tile.col} at-r${tile.row} w-${tile.w} h-${tile.h}${focus ? " focus" : ""}${tile.related && !focus ? " related" : ""}${tile.pinned ? " pinned" : ""}${drag?.id === tile.id ? " dragging" : ""}`}
-                onClick={open}
-              >
-                <div className="tile-head">
-                  <h2 className="tile-title">{tile.title}</h2>
-                  {!focus && <span className="tile-more">{t("espace.tile.more")}</span>}
-                  <div className="tile-tools">
-                    {!narrow && (<>
-                      <button type="button" className="tile-tool tile-move" aria-label={t("espace.tile.move", tile.title)} title={t("espace.tile.move", tile.title)}
-                        onPointerDown={startDrag(tile)} onKeyDown={moveKeys(tile)}>
-                        <span aria-hidden="true">⠿</span>
-                      </button>
-                      <button type="button" className="tile-tool tile-size" aria-label={t("espace.tile.size", tile.title, tile.size.toUpperCase())} title={t("espace.tile.size", tile.title, tile.size.toUpperCase())}
-                        onClick={() => { const to = resized(tile, 1, true); if (to) onPlace(tile.id, "resized", to); }} onKeyDown={sizeKeys(tile)}>
-                        <span aria-hidden="true">⤡</span>
-                      </button>
-                    </>)}
-                    <button type="button" className="tile-tool tile-close" aria-label={t("espace.tile.close", tile.title)} title={t("espace.tile.close", tile.title)}
-                      onClick={() => onClose(tile.id)}>
-                      <span aria-hidden="true">×</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="mod-body">
-                  <div className="mod-fit">
-                    {line ? (
-                      <p className="tile-line">{line}</p>
-                    ) : (
-                      <OnStage.Provider value={focus}>
-                        <SurfaceView surface={byID.get(tile.id)!} />
-                      </OnStage.Provider>
-                    )}
-                  </div>
-                </div>
-                {tile.size !== "s" && (tile.why || tile.related) && <p className="why">{tile.why || t("espace.related")}</p>}
-              </motion.article>
-            );
-          })}
-        </AnimatePresence>
+        <AnimatePresence>{tiles.map((tile) => tileView(tile))}</AnimatePresence>
       </LayoutGroup>
       {drag && ghost && <div className={`tile-ghost at-c${drag.col} at-r${drag.row} w-${ghost.w} h-${ghost.h}`} aria-hidden="true" />}
     </main>
   );
+
+  // The focus mode: the surface open in the centre, the others in the
+  // column beside it, each compact and live; what needs the user whole.
+  if (center) {
+    const side = sideOf(layout, have, (id) => surfaceWeight(byID.get(id)));
+    return (
+      <main className="canvas focus-mode" aria-label={t("espace.canvas")} ref={canvas}>
+        {tileView(center, true)}
+        <aside className="side" aria-label={t("espace.side")}>
+          {side.map((item) => {
+            const s = byID.get(item.id);
+            const title = (item.title && item.title !== item.id ? item.title : undefined) ?? surfaceTitle(s) ?? t("espace.chip.untitled");
+            const line = surfaceSummary(s) || item.why;
+            const state = item.needs ? "yours" : item.closed ? "closed" : item.related ? "related" : undefined;
+            const isNew = fresh(item.id);
+            const open = (e: MouseEvent) => {
+              if (!(e.target as HTMLElement).closest(interactive)) onOpen(item.id);
+            };
+            return (
+              <motion.article
+                key={item.id}
+                layout
+                layoutId={"surface-" + item.id}
+                transition={spring}
+                data-surface={item.id}
+                aria-label={title}
+                className={`mod side-item${item.needs ? " needs" : ""}${item.closed ? " closed" : ""}${isNew ? " fresh" : ""}`}
+                onClick={open}
+              >
+                <button type="button" className="side-open" onClick={() => onOpen(item.id)} title={t("espace.chip.open", title)}>
+                  {(state || isNew) && (
+                    <span className="side-head">
+                      {state && <span className={`side-state st-${state}`}>{t("espace.state." + state)}</span>}
+                      {isNew && <span className="side-new">{t("espace.side.new")}</span>}
+                    </span>
+                  )}
+                  <span className="side-title">{title}</span>
+                  {line && !item.needs && <span className="side-line">{line}</span>}
+                </button>
+                {/* What needs the user is whole: its Oui / Non answers here, the focus stays. */}
+                {item.needs && s && (
+                  <div className="side-body">
+                    <SurfaceView surface={s} />
+                  </div>
+                )}
+              </motion.article>
+            );
+          })}
+        </aside>
+      </main>
+    );
+  }
+
   // On a phone the chips come after the tiles: what is folded waits below.
   return narrow ? <>{board}{strip}</> : <>{strip}{board}</>;
 }
