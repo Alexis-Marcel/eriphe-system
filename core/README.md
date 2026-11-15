@@ -1137,6 +1137,19 @@ by code from the thread's data (#468): it never depends on a model remembering t
   `task_answer_log.go`, worded by code in the user's language, never the task's question; a
   reply written on a tainted turn says « extérieur » and taints the surface (`answer:<id>`). Its component ids start with `thread_`, its data
   is under `/thread`.
+- **A live thread** (#555, `thread_live.go`): who holds the thread may make it follow up to 3
+  monitors the user approved (`link_thread` with `monitor`, its name; a proposed one is refused).
+  Under the header, « En direct »: each monitor's latest number as a `Metric` and its last 24 as a
+  `Chart` (kept in its look, `monitorLook.Points`), with « Surveillance <name> · lu à 14 h 32 ·
+  lu par le code, sans modèle »; each look writes the surface again (after its state is saved).
+  Its events (`thread_watch`: kind, number, limit, holds, taint) land at the end of the
+  `Timeline`, the last 5, and in the header's facts, worded from the kind and numbers only
+  (« cpu : 95, au-dessus du seuil de 90 »), never a changed value, a new item or an error's text.
+  While a cross monitor is past its limit, or its looks fail, the thread's weight rises to 65;
+  back under, it comes down. A monitor of a server not trusted makes the surface « extérieur »
+  for the models (`monitor:<name>`), its Proposals still answer in place. Nothing wakes the
+  brain: a skill reacts to the monitor's events as before. The holder's part still takes no
+  sources.
 - **Rewritten at each change** of the thread: the store's `setThread`, `setStep`, `insertSteps`,
   a card asked, decided or withdrawn call `keepThreadSurface`, which writes only when what the
   surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active
