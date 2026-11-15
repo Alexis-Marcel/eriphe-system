@@ -185,12 +185,9 @@ func TestLinksIntoTheConversation(t *testing.T) {
 func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 	tw, _ := homeWeb(t)
 	for range 3 {
-		seq, err := tw.c.store.addMessage(roleUser, "un message passé", true)
-		if err != nil {
+		if _, err := tw.c.store.addMessage(roleUser, "un message passé", true); err != nil {
 			t.Fatal(err)
 		}
-		// Before the user's last absence: not in the visit's lines either.
-		tw.c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, time.Now().Add(-5*time.Hour).Unix(), seq)
 	}
 	if _, err := tw.c.store.addMessage(roleUser, "le dernier", true); err != nil {
 		t.Fatal(err)
