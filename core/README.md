@@ -3343,7 +3343,7 @@ Eriphe about it.
 **The surfaces, where core says** (`web/espace/src/Grid.tsx`). The page draws each surface where
 the event stream's `layout` puts it ([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)):
 a tile at its cells, by class (`.at-cN .at-rN .w-N .h-N .size-*`), its title over it and its why
-under it, Motion moving a tile that changed place and CSS fading a new one in (fill `backwards`,
+under it, Motion moving a tile that changed place and CSS fading a new one in (by `scale`, fill `backwards`,
 so the animation never holds a transform Motion sets); the folded
 surfaces as chips in the strip above, and a surface the layout does not name yet (it comes right
 after) there too. A chip never shows a raw id: the layout's title, else the surface's own
@@ -3357,6 +3357,21 @@ by class showing where, or with the arrow keys), the size button changes its siz
 up, from xl back to s; + or − and the arrow keys), the cross closes it for the session. The page
 shows the change at once and sends the gesture; core's next layout places the others around it.
 A tile that leaves the grid unopened while the page is visible is sent as `ignored`.
+
+**A surface open re-lays the workspace out** (`Grid.tsx`, focus mode, on a wide screen). The
+surface open is large in the centre, a working area that scrolls, with the way back (←) and its
+cross; everything else is in a column at the side (`sideOf`), the strip's chips included:
+compact (a state chip, the title, one line: the surface's `extensions.eriphe.summary`, else its
+why), live, and a click on one opens it instead. Nothing is dimmed nor blurred. What needs the
+user (urgent: `urgent` in the layout, or a weight of 80 and up in `extensions.eriphe.weight`)
+comes first, marked « À toi », and is shown whole, so its Oui / Non answers there without leaving
+the focus; « Lié » marks what relates to the surface open, « Fermé » what was closed. What arrives
+or is written again while the focus lasts (its `extensions.eriphe.updated` changed: a new item in a
+group of the queue, a thread's line) says « nouveau », and pulses a few times when it needs the
+user; it never takes the centre. Each surface keeps its Motion `layoutId` from the grid or the
+strip to the centre or the column and back, so the re-layout is animated. Core's places on the
+grid around the focus are not used on a wide screen, nor fitted. Escape, Retour or ← gives the
+grid again.
 
 **A tile fits its content** (`place.ts`, `fitted`; `Grid.tsx`, `measureTiles`). A tile on the grid
 never scrolls and never cuts a sentence: after each drawing, and when a tile's content or the

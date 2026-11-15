@@ -223,7 +223,8 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
   border: 2px dashed var(--glow); border-radius: 16px;
   background: color-mix(in oklab, var(--glow) 18%, transparent);
 }
-@keyframes tile-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: none; } }
+/* scale, not transform: Motion moves a tile by its transform, which the animation must not hold. */
+@keyframes tile-in { from { opacity: 0; scale: 0.95; } to { opacity: 1; scale: 1; } }
 @media (prefers-reduced-motion: reduce) { .tile { animation: none; } }
 
 /* A tile's body never scrolls on the grid (Grid.tsx fits it); the surface
@@ -253,6 +254,43 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .size-s .why { display: none; }
 /* A small tile's one-line summary (a thread's): one line, an ellipsis when too long. */
 .tile-line { margin: 0; font-size: 13px; line-height: 1.35; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* A surface open re-lays the workspace out (Grid.tsx, focus mode): it in
+   the centre, large, a working area that scrolls; the others in a column
+   at the side, compact and live, never dimmed nor blurred. */
+.canvas.focus-mode {
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 290px); grid-template-rows: minmax(0, 1fr);
+  gap: 16px;
+}
+.mod.centre { grid-column: 1; grid-row: 1; justify-self: center; width: 100%; max-width: 920px; padding: 20px 26px 16px; border-radius: 24px; background: var(--paper); }
+.mod.centre .tile-tools { opacity: 1; }
+.side {
+  grid-column: 2; grid-row: 1; min-height: 0; overflow: auto; scrollbar-width: thin; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 10px; padding: 2px 4px 8px 2px;
+}
+.side-item { flex: none; padding: 10px 13px; border-radius: 16px; gap: 6px; }
+.side-item.closed { background: var(--paper-dim); }
+.side-open { display: grid; gap: 3px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.side-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.side-state { display: inline-flex; align-items: center; gap: 5px; padding: 0 8px 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 19px; white-space: nowrap; }
+.side-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.st-yours { background: var(--urgent); color: #3a2a10; }
+.st-related { background: color-mix(in oklab, var(--decision) 22%, white); color: #2c4f80; }
+.st-closed { background: #1a1f2712; color: var(--ink-soft); }
+.side-new { padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 18px; letter-spacing: 0.02em; background: var(--ink); color: var(--paper); }
+.side-title { font-weight: 600; font-size: 14.5px; line-height: 1.3; overflow-wrap: anywhere; }
+.side-line { font-size: 12.5px; line-height: 1.4; color: var(--ink-soft); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.side-body { min-width: 0; font-size: 13px; }
+.side-body > .a2-proposal, .side-body > .a2-alert { padding: 0; background: none; box-shadow: none; border-radius: 0; }
+/* What needs the user: ringed; arrived while the focus lasts, it pulses a few times. */
+.side-item.needs { box-shadow: 0 0 0 2px var(--urgent), 0 16px 40px -24px #000c; }
+.side-item.needs.fresh { animation: side-pulse 1.6s ease-out 4; }
+@keyframes side-pulse {
+  0% { box-shadow: 0 0 0 2px var(--urgent), 0 0 0 2px color-mix(in oklab, var(--urgent) 75%, transparent); }
+  70% { box-shadow: 0 0 0 2px var(--urgent), 0 0 0 14px color-mix(in oklab, var(--urgent) 0%, transparent); }
+  100% { box-shadow: 0 0 0 2px var(--urgent), 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .side-item.needs.fresh { animation: none; } }
 
 .btn { padding: 6px 14px; border-radius: 999px; border: 1px solid #1a1f2733; background: transparent; color: inherit; cursor: pointer; font-size: 14px; transition: background 0.15s, border-color 0.15s, transform 0.1s; }
 .btn:active { transform: scale(0.97); }
