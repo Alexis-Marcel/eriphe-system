@@ -3004,9 +3004,8 @@ after the `a2ui` event of the surfaces it names and whenever it changes, and kep
 `col` and `row` count from 0, `w` and `h` in cells; `ambient` is `urgent` with a tile of weight 90
 or more, `decision` with one of 80, `calm` otherwise; `by` is `composer` or `fallback`; `eriphe` is
 the composer's line, empty when code chose. With a surface open, a tile related to it has
-`"related": true` and `say` is the brain's line about it, once it wrote one; `focusBy` is
-`brain` when Eriphe put it on stage (below), and `previous` names the surface that was on stage
-just before it. A tile of weight 80 or more has `"urgent": true`: laying a surface the user
+`"related": true`; `focusBy` is `brain` when Eriphe put it on stage (below), and `previous` names
+the surface that was on stage just before it. A tile of weight 80 or more has `"urgent": true`: laying a surface the user
 opens out at once, the page keeps it in front.
 
 **Focus** (`workspace_focus.go`): one workspace, and opening a surface does what a separate
@@ -3036,15 +3035,9 @@ folded for the others (`layoutStage`; the layout's `previous`, the composer's tu
 juste avant », the brain's « au centre juste avant »): nothing goes back, the user clicks it to
 swap again. Back (or Escape) ends the stage and lays the base out, as above, with no previous.
 
-The brain is asked once per focus, never waited for: an event of the conversation (`[espace] Sam
-vient d'ouvrir surface:<id> …`, about `surface:<id>`), with the surfaces related to it and how and
-what it shows (its data, else its components, 2000 characters, as data), the titles quoted only
-when their author wrote them in a clean turn, asking for one line or `[rien]`; a
-surface with external content (its sources or its author's turn) taints the turn that reads it.
-The first message of the brain's turn that read it, with no message of the user's in that turn,
-is its line: marked about the surface, kept off the channels and the phone, and shown as the
-layout's `say` while that focus lasts. Back before the brain read the request withdraws it, and
-asks nothing.
+Opening a surface sends nothing to the brain (#550): opening one, or going back and forth between
+them, is no turn of the conversation; only the workspace recomposes around it. What the surface
+shows (a thread's header, for a thread) says where things stand.
 
 **An answer on stage.** When the user asks from the workspace about a thing (« où en est la PR
 … ? »), the brain answers with a surface (the subject as title, its state, the points to see,
@@ -3055,9 +3048,7 @@ its input, `· depuis l'espace`, or a button's ask), never on events alone, once
 display-only (it writes nothing, sends nothing, the next click takes the stage back), so a tainted
 turn may use it too: the surface keeps its taint and its Proposal the rules below. The layout
 says `focusBy: brain`, the composer's turn « l'assistant vient de mettre une surface au centre
-pour répondre à sa question », the brain's next turn « au centre, mise par toi »; the brain is not
-asked for a line about its own surface (a request still waiting about the surface it replaced
-is withdrawn). A surface whose Proposal shows a proposal relates to the queue's tile showing the
+pour répondre à sa question », the brain's next turn « au centre, mise par toi ». A surface whose Proposal shows a proposal relates to the queue's tile showing the
 same proposal (alone or in its group) (`proposal:<ref>`, « même proposition »), so a tainted answer, whose Proposal can only
 say « answer it in the conversation », gets the answerable tile next to it.
 
