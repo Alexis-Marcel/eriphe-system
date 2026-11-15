@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 )
 
 // A machine's folder's rights: what Eriphe may do there, as for any tool,
@@ -142,31 +141,4 @@ func folderStartText(needs []startNeed, lang string) []string {
 		}
 	}
 	return out
-}
-
-// legacyFolderValues moves the values set before folders had rights (the
-// NAS, once): a folder whose manage was On approval keeps Modifier on
-// approval; drop's values go with drop.
-func legacyFolderValues(store *Store) {
-	rows, err := store.db.Query(`SELECT key, value FROM kv WHERE key LIKE 'folder_value:%'`)
-	if err != nil {
-		return
-	}
-	type kept struct{ key, value string }
-	var all []kept
-	for rows.Next() {
-		var k kept
-		if rows.Scan(&k.key, &k.value) == nil {
-			all = append(all, k)
-		}
-	}
-	rows.Close()
-	for _, k := range all {
-		rest, ok := strings.CutSuffix(strings.TrimPrefix(k.key, "folder_value:"), ":manage")
-		if ok && k.value == gridApproval {
-			raw, _ := json.Marshal(accessGrid{Change: gridApproval})
-			store.set("folder_case:"+rest, string(raw))
-		}
-		store.db.Exec(`DELETE FROM kv WHERE key = ?`, k.key)
-	}
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"maps"
 	"net/http"
 	"slices"
@@ -388,66 +387,4 @@ func legacyPlaces(s Server) Server {
 	s.Run = marshalRun(spec)
 	s.PlaceGrids = grids
 	return s
-}
-
-// legacyPlaceRoot moves the accounts of the tools with places to their tree
-// (the NAS, once): an account's grid was the default of its given folders
-// only, and becomes the root of the account, Never until set. Each folder
-// given before takes the account's grid as its own cases, under what it
-// set itself, so nothing it allowed or refused changes; the account keeps
-// its action exceptions.
-func legacyPlaceRoot(store *Store) {
-	const done = "legacy_place_root"
-	if store.get(done) != "" {
-		return
-	}
-	list, err := store.catalogRows()
-	if err != nil {
-		return
-	}
-	for _, r := range list {
-		var s Server
-		if r.Kind != kindServer || json.Unmarshal(r.Spec, &s) != nil {
-			continue
-		}
-		_, cfg, isSvc := accountsOf(s)
-		if _, _, ok := keeperOf(s); !ok || !isSvc {
-			continue
-		}
-		grids := maps.Clone(s.PlaceGrids)
-		if grids == nil {
-			grids = map[string]accessGrid{}
-		}
-		accounts := map[string]accountGrid{}
-		for _, a := range cfg.Accounts {
-			old, exceptions := s.baseAccess().grid, map[string]string(nil)
-			for name, g := range s.AccountGrids {
-				if strings.EqualFold(name, a.Name) {
-					old, exceptions = g.Grid, g.Exceptions
-				}
-			}
-			for name, level := range s.AccountAccess {
-				if strings.EqualFold(name, a.Name) {
-					old = levelGrid(level)
-				}
-			}
-			full := accessGrid{old.value(catRead), old.value(catChange), old.value(catDelete), old.value(catSend)}
-			for _, p := range placesIn(r.Name, s) {
-				if !p.Root && (strings.EqualFold(p.Account, a.Name) || p.Account == "" && len(cfg.Accounts) == 1) {
-					grids[p.ID] = full.over(grids[p.ID])
-				}
-			}
-			accounts[a.Name] = accountGrid{Grid: neverGrid, Exceptions: exceptions}
-		}
-		s.PlaceGrids, s.AccountGrids, s.AccountAccess = grids, accounts, nil
-		if len(s.PlaceGrids) == 0 {
-			s.PlaceGrids = nil
-		}
-		if err := store.putCatalog(kindServer, r.Name, s); err != nil {
-			log.Printf("catalog: %s: its tree: %v", r.Name, err)
-			return
-		}
-		log.Printf("catalog: %s: each account is now the root of its folders, Never until set; its folders kept what they had", r.Name)
-	}
-	store.set(done, "1")
 }

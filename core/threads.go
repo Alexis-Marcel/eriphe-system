@@ -117,8 +117,7 @@ CREATE TABLE IF NOT EXISTS thread_log (
 CREATE INDEX IF NOT EXISTS thread_log_thread ON thread_log (thread, id);`
 
 func init() {
-	extraSchema = append(extraSchema, threadsSchema)
-	schemaFixes = append(schemaFixes, sessionsToThreads, threadStepColumns, subjectKeysCore, subjectColumns, threadColumns) // in this order (thread_steps.go, subject_rewrite.go, subjects.go, thread_header.go)
+	extraSchema = append(extraSchema, threadsSchema, threadsLiveSubject)
 }
 
 // A thread's modes.

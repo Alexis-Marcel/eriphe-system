@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// The schedule of a watch of source horaire: days and times of day, in the
-// user's zone. Written as the user would say it, in English or French:
+// The schedule of a triggered skill's when (skill_triggers.go): days and
+// times of day, in the user's zone. Written as the user would say it, in English or French:
 //
 //	daily 07:00                 tous les jours 07:00
 //	weekdays 07:00              semaine 07:00

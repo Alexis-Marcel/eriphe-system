@@ -2,8 +2,6 @@ package main
 
 import (
 	"net/url"
-	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -502,52 +500,3 @@ func TestNotifyRoutes(t *testing.T) {
 }
 
 func idText(n int64) string { return strconv.FormatInt(n, 10) }
-
-// A store made when notifications had a level and rules an outcome is
-// rewritten once at start: weights, and bounds of weight.
-func TestNotifyWeightsRewritten(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{
-		`ALTER TABLE notifications ADD COLUMN level TEXT NOT NULL DEFAULT ''`,
-		`ALTER TABLE notifications DROP COLUMN weight`,
-		`INSERT INTO notifications (created, text, why, source, level, outcome, reason, token) VALUES (1, 'a', '', 'brain', 'now', 'now', 'now', 'a')`,
-		`INSERT INTO notifications (created, text, why, source, level, outcome, reason, token) VALUES (1, 'b', '', 'brain', 'now', 'brief', 'quiet', 'b')`,
-		`INSERT INTO rules (name, source, spec, prompt, state, by, created, updated) VALUES ('n', 'notification', '{"kind":"topic","match":"project:getout","outcome":"now","night":true,"channels":"push"}', '', 'active', 'owner', 1, 1)`,
-		`INSERT INTO rules (name, source, spec, prompt, state, by, created, updated) VALUES ('n', 'notification', '{"kind":"topic","match":"topic:facture","outcome":"brief"}', '', 'proposed', 'brain', 1, 1)`,
-		`INSERT INTO rules (name, source, spec, prompt, state, by, created, updated) VALUES ('n', 'notification', '{"kind":"topic","match":"topic:mail","outcome":"never"}', '', 'active', 'owner', 1, 1)`,
-	} {
-		if _, err := s.db.Exec(q); err != nil {
-			t.Fatalf("%s: %v", q, err)
-		}
-	}
-	s.db.Close()
-	for range 2 { // once, and again changes nothing
-		if s, err = openStore(path); err != nil {
-			t.Fatal(err)
-		}
-		c := &core{store: s}
-		rules, _ := c.notifyRules()
-		got := map[string][3]int{}
-		for _, r := range rules {
-			if err := r.check(); err != nil {
-				t.Errorf("%s: %v", r.Match, err)
-			}
-			got[r.Match] = [3]int{r.Floor, r.Ceiling, boolInt(r.Night)}
-			if r.Match == "project:getout" && r.Channels != "push" {
-				t.Errorf("channels lost: %+v", r)
-			}
-		}
-		if want := map[string][3]int{"project:getout": {5, 5, 1}, "topic:facture": {0, 2, 0}, "topic:mail": {0, 0, 0}}; !reflect.DeepEqual(got, want) {
-			t.Errorf("rules %v, want %v", got, want)
-		}
-		ns, err := c.notificationsWhere(`1 ORDER BY id`)
-		if err != nil || len(ns) != 2 || ns[0].Weight != 5 || ns[1].Weight != 2 {
-			t.Fatalf("notifications %v %v", ns, err)
-		}
-		s.db.Close()
-	}
-}

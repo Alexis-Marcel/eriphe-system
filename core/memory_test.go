@@ -77,7 +77,7 @@ func TestMemorySchema(t *testing.T) {
 		t.Fatalf("another schema: %v", err)
 	}
 	x, _ := sql.Open("sqlite", path)
-	x.Exec(`UPDATE meta SET value = '5' WHERE key = 'schema_version'`)
+	x.Exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`)
 	x.Close()
 	if m, err = openMemory(path); err != nil {
 		t.Fatal(err)

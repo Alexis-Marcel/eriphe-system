@@ -46,33 +46,6 @@ func TestSubjectsNotedWhenWritten(t *testing.T) {
 	}
 }
 
-// The subjects written before the table existed are noted once at start.
-func TestFillSubjects(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, created) VALUES ('Site', 'En ligne.', 'light', 'project:site', 'open', 100)`)
-	c.store.db.Exec(`INSERT INTO notifications (created, text, why, subject, source, weight, outcome, reason, token) VALUES (200, 'x', '', 'person:sam', 'brain', 5, 'now', '', 'a')`)
-	c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, source, weight, outcome, reason, token) VALUES (200, 'x', '', 'skill:watch', 'brain', 5, 'now', '', 'b')`)
-	c.mem.db.Exec(`INSERT INTO memories (kind, subject, text, valid_from, recorded_at, source_kind, trust, status, updated_at)
-		VALUES ('fact', 'client:acme', 'x', 1, 1, 'conversation', 'owner', 'active', 300)`)
-	if err := c.fillSubjects(); err != nil {
-		t.Fatal(err)
-	}
-	for key, seen := range map[string]int64{"project:site": 100, "person:sam": 200, "client:acme": 300} {
-		k, ok := c.store.knownSubject(key)
-		if !ok || k.LastSeen.Unix() != seen {
-			t.Errorf("%s: %+v %v", key, k, ok)
-		}
-	}
-	if _, ok := c.store.knownSubject("skill:watch"); ok {
-		t.Error("a record's ref noted as a subject")
-	}
-	c.store.db.Exec(`DELETE FROM subjects`)
-	c.fillSubjects()
-	if all, _ := c.store.subjectsWhere(`1`); len(all) != 0 {
-		t.Error("filled twice")
-	}
-}
-
 // A message names known subjects by their names and aliases, never by a
 // word too short, an id, or Eriphe's own topics; a name inside a longer
 // one named too gives way to it.

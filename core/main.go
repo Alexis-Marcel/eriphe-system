@@ -83,12 +83,6 @@ func main() {
 		c.useMemory(mem) // its subjects are noted in core.db (subjects.go)
 		c.mem.owner = func() string { return c.conf().User }
 	}
-	if err := c.fillSubjects(); err != nil {
-		log.Printf("subjects: %v", err)
-	}
-	if err := c.progressToThreads(); err != nil { // thread_progress.go
-		log.Printf("progress: %v", err)
-	}
 	if err := c.reconcileServices(); err != nil {
 		log.Fatalf("services: %v", err)
 	}

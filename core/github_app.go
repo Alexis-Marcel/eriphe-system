@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -641,48 +640,4 @@ func (t tokenTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		t.refused()
 	}
 	return resp, err
-}
-
-// legacyRepoPlaces moves the repositories given before every one was (the
-// NAS, once): the GitHub tools on a connection name them by owner and repo,
-// a repository given to read keeps Modifier,
-// Supprimer and Envoyer never, and the old table goes.
-func legacyRepoPlaces(store *Store) {
-	rows, err := store.db.Query(`SELECT connection, id, access FROM connection_places`)
-	if err != nil {
-		return // no table: nothing to move
-	}
-	read := map[string][]string{}
-	for rows.Next() {
-		var conn, id, access string
-		if rows.Scan(&conn, &id, &access) == nil {
-			if access != accessWrite {
-				read[conn] = append(read[conn], strings.ToLower(id))
-			}
-		}
-	}
-	rows.Close()
-	list, err := store.catalogRows()
-	if err != nil {
-		return
-	}
-	for _, r := range list {
-		var s Server
-		if r.Kind != kindServer || json.Unmarshal(r.Spec, &s) != nil || s.Auth == nil || s.Auth.Connection == "" || !isGitHubServer(r.Name, s) {
-			continue
-		}
-		s.PlaceArgs = repoPlaceArgs
-		for _, id := range read[s.Auth.Connection] {
-			if s.PlaceGrids == nil {
-				s.PlaceGrids = map[string]accessGrid{}
-			}
-			s.PlaceGrids[id] = accessGrid{Change: gridNever, Delete: gridNever, Send: gridNever}
-		}
-		if err := store.putCatalog(kindServer, r.Name, s); err != nil {
-			log.Printf("catalog: %s: its repositories: %v", r.Name, err)
-			return
-		}
-	}
-	store.db.Exec(`DROP TABLE connection_places`)
-	log.Printf("catalog: the repositories given are now every repository, those given to read kept to reading")
 }

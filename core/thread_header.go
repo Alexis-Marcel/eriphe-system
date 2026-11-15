@@ -38,23 +38,6 @@ const (
 	threadVisitSame = 5 * time.Minute // opened again within it: the same visit
 )
 
-// threadColumns gives the threads table made before the header its
-// columns: the summary's date and the user's visits.
-func threadColumns(db *sql.DB) error {
-	for _, col := range []string{"summarized", "seen", "visited"} {
-		var n int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('threads') WHERE name = ?`, col).Scan(&n); err != nil {
-			return err
-		}
-		if n == 0 {
-			if _, err := db.Exec(`ALTER TABLE threads ADD COLUMN ` + col + ` INTEGER NOT NULL DEFAULT 0`); err != nil {
-				return fmt.Errorf("threads: %s: %w", col, err)
-			}
-		}
-	}
-	return nil
-}
-
 // threadVisited records the user opening a thread's surface, then writes
 // it again: its header now tells what changed since the visit before.
 // Not a move of the thread: no log line, no watcher woken.

@@ -52,41 +52,11 @@ const notifySchema = `CREATE TABLE IF NOT EXISTS notifications (
   weight INTEGER NOT NULL DEFAULT 0, outcome TEXT NOT NULL, reason TEXT NOT NULL, rule_id INTEGER,
   asked INTEGER NOT NULL DEFAULT 0, tainted TEXT NOT NULL DEFAULT '', msg INTEGER,
   held INTEGER NOT NULL DEFAULT 0, feedback TEXT NOT NULL DEFAULT '', feedback_at INTEGER,
-  token TEXT NOT NULL);
+  token TEXT NOT NULL,
+  subject TEXT NOT NULL DEFAULT ''); -- what it is about, kind:slug (subjects.go)
 CREATE INDEX IF NOT EXISTS notifications_created ON notifications (created);`
 
-func init() {
-	extraSchema = append(extraSchema, notifySchema)
-	schemaFixes = append(schemaFixes, notifyWeightColumn)
-}
-
-// notifyWeightColumn rewrites once a table made when a notification had a
-// level (now or brief) instead of a weight: sent is 5, the rest 2.
-func notifyWeightColumn(db *sql.DB) error {
-	has := func(col string) bool {
-		var n int
-		db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('notifications') WHERE name = ?`, col).Scan(&n)
-		return n > 0
-	}
-	if !has("level") {
-		_, err := db.Exec(`UPDATE notifications SET outcome = 'held' WHERE outcome = 'brief'`) // « brief » is the return only
-		return err
-	}
-	if !has("weight") {
-		if _, err := db.Exec(`ALTER TABLE notifications ADD COLUMN weight INTEGER NOT NULL DEFAULT 0`); err != nil {
-			return err
-		}
-	}
-	if _, err := db.Exec(`UPDATE notifications SET weight = CASE WHEN outcome = 'now' THEN 5 ELSE 2 END WHERE weight = 0`); err != nil {
-		return err
-	}
-	_, err := db.Exec(`ALTER TABLE notifications DROP COLUMN level`)
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(`UPDATE notifications SET outcome = 'held' WHERE outcome = 'brief'`)
-	return err
-}
+func init() { extraSchema = append(extraSchema, notifySchema) }
 
 const (
 	// What the code decided: the outcome column.

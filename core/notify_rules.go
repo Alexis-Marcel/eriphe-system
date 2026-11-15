@@ -27,8 +27,7 @@ import (
 // They are rules (rule_engine.go) on the event "notification": kept in the
 // table rules with the source notification, their parameters in spec,
 // applied by code when a notification is decided (decideNotify), never by
-// the timer. Before #244 step 5 they had a table of their own,
-// notify_rules, moved at start (migrateNotifyRules).
+// the timer.
 
 const sourceNotification = "notification"
 
@@ -78,54 +77,7 @@ const rulesSchema = `CREATE TABLE IF NOT EXISTS rules (
   mark INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL,
   act TEXT NOT NULL DEFAULT '');`
 
-func init() {
-	extraSchema = append(extraSchema, rulesSchema)
-	schemaFixes = append(schemaFixes, ruleWeights)
-}
-
-// ruleWeights rewrites once the topic rules kept with an outcome (now,
-// brief, never) as bounds of weight: now is a floor of 5, brief a ceiling
-// of 2, never a ceiling of 0. A quiet rule gets the full ceiling it reads
-// back as.
-func ruleWeights(db *sql.DB) error {
-	rows, err := db.Query(`SELECT id, spec FROM rules WHERE source = ?`, sourceNotification)
-	if err != nil {
-		return err
-	}
-	specs := map[int64]map[string]any{}
-	for rows.Next() {
-		var id int64
-		var raw string
-		var m map[string]any
-		if rows.Scan(&id, &raw) == nil && json.Unmarshal([]byte(raw), &m) == nil {
-			if _, ok := m["ceiling"]; !ok {
-				specs[id] = m
-			}
-		}
-	}
-	rows.Close()
-	for id, m := range specs {
-		floor, ceiling := 0, weightInterrupts
-		switch m["outcome"] { // as they were written
-		case "now":
-			floor = weightInterrupts
-		case "brief":
-			ceiling = weightBrief
-		case "never":
-			ceiling = 0
-		}
-		delete(m, "outcome")
-		if floor > 0 {
-			m["floor"] = floor
-		}
-		m["ceiling"] = ceiling
-		raw, _ := json.Marshal(m)
-		if _, err := db.Exec(`UPDATE rules SET spec = ? WHERE id = ?`, string(raw), id); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+func init() { extraSchema = append(extraSchema, rulesSchema) }
 
 const (
 	ruleTopic = "topic"

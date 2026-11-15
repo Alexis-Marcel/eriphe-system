@@ -138,26 +138,3 @@ func TestConnectionPlacesPage(t *testing.T) {
 		t.Fatalf("no connection: %d", code)
 	}
 }
-
-// The repositories given before every one was (the NAS, once): one given to
-// read keeps to reading, the table goes.
-func TestLegacyRepoPlaces(t *testing.T) {
-	cc := newDynamicCore(t, nil)
-	cn, err := cc.keepMinted(githubProvider, "acme")
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := Server{URL: "https://api.githubcopilot.com/mcp/", Auth: &ServerAuth{Connection: cn.ID}, Use: "github"}
-	cc.store.putCatalog(kindServer, "github", srv)
-	cc.store.db.Exec(`CREATE TABLE connection_places (connection TEXT, id TEXT, name TEXT, access TEXT)`)
-	cc.store.db.Exec(`INSERT INTO connection_places VALUES (?, 'acme/Site', 'acme/Site', 'read'), (?, 'acme/app', 'acme/app', 'write')`, cn.ID, cn.ID)
-	legacyRepoPlaces(cc.store)
-	d, _ := loadCatalog(&Config{}, cc.store)
-	got := d.Servers["github"]
-	if len(got.PlaceArgs) != 2 || len(got.PlaceGrids) != 1 || got.PlaceGrids["acme/site"] != (accessGrid{Change: gridNever, Delete: gridNever, Send: gridNever}) {
-		t.Fatalf("migrated: %+v", got)
-	}
-	if _, err := cc.store.db.Exec(`SELECT 1 FROM connection_places`); err == nil {
-		t.Fatal("the old table stays")
-	}
-}

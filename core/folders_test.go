@@ -662,25 +662,6 @@ func TestFolderRights(t *testing.T) {
 	}
 }
 
-// The NAS's values from before rights: manage on approval is Modifier on
-// approval; drop's go.
-func TestLegacyFolderValues(t *testing.T) {
-	c, store := foldersCore(t)
-	store.set("folder_value:nas:f1:manage", gridApproval)
-	store.set("folder_value:nas:f1:drop", gridApproval)
-	store.set("folder_value:nas:f2:manage", "")
-	legacyFolderValues(store)
-	clients, _ := store.folder("Clients")
-	if c.folderCase(clients, catChange) != gridApproval || c.folderCase(clients, catRead) != gridFree {
-		t.Fatalf("moved %v", c.folderRights(clients))
-	}
-	var n int
-	store.db.QueryRow(`SELECT COUNT(*) FROM kv WHERE key LIKE 'folder_value:%'`).Scan(&n)
-	if n != 0 {
-		t.Fatalf("%d old values left", n)
-	}
-}
-
 // Settings → Dossiers sets a machine's default and a folder's own cases.
 func TestWebFolderCases(t *testing.T) {
 	c, store := foldersCore(t)

@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
 	"maps"
 	"path"
 	"slices"
@@ -492,61 +490,4 @@ func lends(s Server, t *mcp.Tool) bool {
 		}
 	}
 	return false
-}
-
-// legacyTrust moves the servers saved when a checkbox said whether their
-// annotations were believed (the NAS, once): one not believed counted every
-// tool as Send, so its grid, and each of its accounts' not believed, now
-// says Send's value for every case, as before. Its exceptions stay.
-func legacyTrust(store *Store) {
-	const done = "legacy_trust_annotations"
-	if store.get(done) != "" {
-		return
-	}
-	list, err := store.catalogRows()
-	if err != nil {
-		return
-	}
-	flat := func(g accessGrid) accessGrid {
-		v := g.value(catSend)
-		return accessGrid{Read: v, Change: v, Delete: v, Send: v}
-	}
-	for _, r := range list {
-		if r.Kind != kindServer {
-			continue
-		}
-		var s Server
-		var doc struct {
-			Trust    bool `json:"trust_annotations"`
-			Accounts map[string]struct {
-				Trust *bool `json:"trust_annotations"`
-			} `json:"account_grids"`
-		}
-		if json.Unmarshal(r.Spec, &s) != nil || json.Unmarshal(r.Spec, &doc) != nil {
-			continue
-		}
-		changed := false
-		if s.Grid != nil && !doc.Trust {
-			g := flat(*s.Grid)
-			s.Grid, changed = &g, true
-		}
-		for name, a := range s.AccountGrids {
-			trusted := doc.Trust
-			if t := doc.Accounts[name].Trust; t != nil {
-				trusted = *t
-			}
-			if !trusted {
-				a.Grid = flat(a.Grid)
-				s.AccountGrids[name], changed = a, true
-			}
-		}
-		if changed {
-			if err := store.putCatalog(kindServer, r.Name, s); err != nil {
-				log.Printf("catalog: %s: its annotations: %v", r.Name, err)
-				return
-			}
-			log.Printf("catalog: %s: its annotations were not believed: every case is now what Send was", r.Name)
-		}
-	}
-	store.set(done, "1")
 }
