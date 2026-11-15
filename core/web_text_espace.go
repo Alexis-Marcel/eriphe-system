@@ -46,6 +46,11 @@ var espaceStrings = map[string]map[string]string{
 		"espace.narrow":          "Réduire la conversation",
 		"espace.chips":           "Ce qui attend",
 		"espace.canvas":          "Ce que {{name}} te montre",
+		"espace.side":            "Les autres sujets",
+		"espace.side.new":        "nouveau",
+		"espace.state.yours":     "À toi",
+		"espace.state.related":   "Lié",
+		"espace.state.closed":    "Fermé",
 
 		// Le dernier échange et les notifications de l'onglet (Exchange.tsx).
 		"espace.exchange":         "Dernier échange",
@@ -143,6 +148,11 @@ var espaceStrings = map[string]map[string]string{
 		"espace.narrow":          "Narrow the conversation",
 		"espace.chips":           "What waits",
 		"espace.canvas":          "What {{name}} shows you",
+		"espace.side":            "The other subjects",
+		"espace.side.new":        "new",
+		"espace.state.yours":     "Yours",
+		"espace.state.related":   "Related",
+		"espace.state.closed":    "Closed",
 
 		// The last exchange and the tab's notifications (Exchange.tsx).
 		"espace.exchange":         "Last exchange",

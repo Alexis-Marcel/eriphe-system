@@ -104,21 +104,56 @@ describe("a click on the workspace", () => {
     await act(async () => tile("pay").click());
     // At once, before core answered: it in front, l at least, as core places it.
     expect(actions).toHaveLength(1);
-    expect(tile("pay").className).toMatch(/size-l at-c0 at-r0 .*focus/);
-    expect(tile("today").className).toContain("size-l at-c4 at-r0");
+    // The workspace re-laid out: it in the centre, the other in the column at the side.
+    expect(tile("pay").className).toMatch(/size-l centre focus/);
+    expect(tile("today").classList.contains("side-item")).toBe(true);
+    expect(el.querySelector(".canvas.focus-mode > aside.side")?.contains(tile("today"))).toBe(true);
     // A layout core sent before it read the click does not undo it.
     await act(async () => FakeSource.emit("layout", grid));
     expect(tile("pay").classList.contains("focus")).toBe(true);
-    // Core's layout around it: shown as it is.
+    // Core's layout around it: the same re-layout, its places on the grid aside.
     await act(async () => actions[0].done(true));
     const around: Layout = { ...grid, focus: "pay", items: [{ ...grid.items[1], size: "xl", col: 0, row: 0, w: 6, h: 5 }, { ...grid.items[0], size: "m", col: 6, row: 0, w: 3, h: 2 }] };
     await act(async () => FakeSource.emit("layout", around));
-    expect(tile("today").className).toContain("at-c6 at-r0 w-3 h-2");
+    expect(tile("pay").classList.contains("centre")).toBe(true);
+    expect(tile("today").classList.contains("side-item")).toBe(true);
 
     // Back: the layout before it, at once.
     await act(async () => el.querySelector<HTMLButtonElement>(".eriphe-actions button")!.click());
     expect(tile("pay").classList.contains("focus")).toBe(false);
     expect(tile("today").className).toContain("size-l at-c0 at-r0 w-6 h-3");
+  });
+
+  it("brings what needs the user to the column while a surface is open, never to the centre", async () => {
+    await draw();
+    await act(async () => tile("today").click());
+    await act(async () => actions[0].done(true));
+    const around: Layout = { ...grid, focus: "today", items: [{ ...grid.items[0], size: "xl", w: 6, h: 5 }, { ...grid.items[1], col: 6 }] };
+    await act(async () => FakeSource.emit("layout", around));
+    expect(el.querySelector(".side-new")).toBeNull();
+    // A card a task waits on arrives: urgent, placed first by core; the focus stays.
+    const card = text("q-card-7", "Envoyer le récapitulatif à Sam ?");
+    Object.assign(card.createSurface, { metadata: { extensions: { eriphe: { title: "À décider", weight: 80, updated: "2026-11-15T16:00:00Z" } } } });
+    await act(async () => {
+      FakeSource.emit("a2ui", { seq: 2, messages: [card] });
+      FakeSource.emit("layout", { ...around, items: [{ id: "q-card-7", title: "À décider", size: "l", col: 0, row: 0, w: 4, h: 3, urgent: true }, ...around.items] });
+    });
+    expect(tile("today").classList.contains("centre")).toBe(true);
+    const arrived = tile("q-card-7");
+    expect(arrived.classList.contains("side-item")).toBe(true);
+    expect(arrived.className).toContain("needs");
+    expect(arrived.className).toContain("fresh");
+    // First of the column, whole: its content answers there.
+    expect(el.querySelector("aside.side > article")).toBe(arrived);
+    expect(arrived.querySelector(".side-body .a2-text")?.textContent).toBe("Envoyer le récapitulatif à Sam ?");
+    // A click opens it instead, by core, at once.
+    await act(async () => arrived.querySelector<HTMLButtonElement>("button.side-open")!.click());
+    expect(actions[1].body).toMatchObject({ action: { name: "open", surfaceId: "q-card-7" } });
+    expect(tile("q-card-7").classList.contains("centre")).toBe(true);
+    expect(tile("today").classList.contains("side-item")).toBe(true);
+    // Esc gives the overview again.
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(el.querySelector(".canvas.focus-mode")).toBeNull();
   });
 
   it("goes back to core's layout, and says so, when core refused", async () => {

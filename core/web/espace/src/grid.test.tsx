@@ -35,6 +35,15 @@ const layout: Layout = {
 const render = (l: Layout) => act(async () => root.render(<Grid adapter={adapter} layout={l} onOpen={(id) => opened.push(id)} />));
 const tile = (id: string) => el.querySelector<HTMLElement>(`article[data-surface="${id}"]`);
 
+// styled is what has a style the code gave: none. Motion moves a surface
+// (layoutId) through its style object, the CSSOM, which the CSP allows:
+// opacity, transform and visibility only, on a surface.
+const MOTION = new Set(["opacity", "transform", "transform-origin", "visibility", "pointer-events"]);
+const styled = () =>
+  [...document.querySelectorAll<HTMLElement>("[style]")]
+    .filter((e) => !e.dataset.surface || [...Array.from(e.style)].some((p) => !MOTION.has(p)))
+    .map((e) => `${e.className}: ${e.getAttribute("style")}`);
+
 beforeEach(async () => {
   el = document.createElement("div");
   document.body.append(el);
@@ -62,7 +71,7 @@ describe("the grid of surfaces", () => {
     // A tile whose surface has not come yet is not drawn.
     expect(tile("ghost")).toBeNull();
     // No style attribute, no <style>: the CSP stays strict.
-    expect(document.querySelectorAll("[style]")).toHaveLength(0);
+    expect(styled()).toEqual([]);
     expect(document.querySelectorAll("style")).toHaveLength(styles);
   });
 
@@ -99,24 +108,89 @@ describe("the grid of surfaces", () => {
     expect(el.querySelectorAll("article")).toHaveLength(2);
   });
 
-  it("opens a chip or a tile, not the one already open", async () => {
-    await render({ ...layout, focus: "week" });
+  it("opens a chip or a tile", async () => {
+    await render(layout);
     await act(async () => el.querySelector<HTMLButtonElement>('.chip[data-surface="news"] button')!.click());
+    await act(async () => tile("pay")!.click());
+    expect(opened).toEqual(["news", "pay"]);
+  });
+
+  it("lays a surface open out in the centre, the others in a column beside it, compact", async () => {
+    await render({ ...layout, focus: "week", items: [layout.items[0], { ...layout.items[1], related: true }] });
+    const centre = tile("week")!;
+    expect(centre.className).toBe("mod tile size-m centre focus");
+    expect(centre.querySelector(".a2-text")?.textContent).toBe("Trois réunions");
+    // No move nor size in the centre: the way back and the cross.
+    expect(centre.querySelector("button.tile-move")).toBeNull();
+    expect(centre.querySelector("button.tile-back")?.getAttribute("aria-label")).toBe("espace.back");
+    expect(centre.querySelector("button.tile-close")).not.toBeNull();
+    // No strip: what was folded is in the column too, after the tiles; its title, its line.
+    expect(el.querySelector(".chips")).toBeNull();
+    const side = [...el.querySelectorAll<HTMLElement>("aside.side > article")];
+    expect(side.map((s) => s.dataset.surface)).toEqual(["pay", "news", "late"]);
+    expect(side[0].querySelector(".side-title")?.textContent).toBe("Paiement");
+    expect(side[0].querySelector(".side-line")?.textContent).toBe("Attend ton accord");
+    expect(side[0].querySelector(".a2-text")).toBeNull();
+    expect(side[1].querySelector(".side-line")?.textContent).toBe("Rien de pressé");
+    expect(side[2].querySelector(".side-title")?.textContent).toBe("espace.chip.untitled");
+    // Nothing arrived since the focus began: no « nouveau ».
+    expect(el.querySelector(".side-new")).toBeNull();
+    expect(styled()).toEqual([]);
+  });
+
+  it("opens one of the column instead, not the one already open, and goes back", async () => {
+    let back = 0;
+    await act(async () => root.render(<Grid adapter={adapter} layout={{ ...layout, focus: "week" }} onOpen={(id) => opened.push(id)} onBack={() => back++} />));
+    await act(async () => tile("news")!.querySelector<HTMLButtonElement>("button.side-open")!.click());
     await act(async () => tile("pay")!.click());
     await act(async () => tile("week")!.click());
     expect(opened).toEqual(["news", "pay"]);
-    expect(tile("week")?.classList.contains("focus")).toBe(true);
+    await act(async () => tile("week")!.querySelector<HTMLButtonElement>("button.tile-back")!.click());
+    expect(back).toBe(1);
   });
 
-  it("marks what relates to the surface open, and says so when it has no why", async () => {
-    await render({ ...layout, focus: "pay", items: [{ ...layout.items[0], related: true }, { ...layout.items[1], related: true }] });
-    expect(tile("week")?.classList.contains("related")).toBe(true);
-    expect(tile("week")?.querySelector(".why")?.textContent).toBe("espace.related");
-    expect(tile("pay")?.classList.contains("related")).toBe(false);
-    expect(tile("pay")?.querySelector(".why")?.textContent).toBe("Attend ton accord");
-    await render(layout);
-    expect(tile("week")?.classList.contains("related")).toBe(false);
-    expect(tile("week")?.querySelector(".why")).toBeNull();
+  it("says each one's state in the column: related, closed, yours", async () => {
+    const heavy: Message = {
+      version: "1.0",
+      createSurface: { surfaceId: "heavy", catalogId: CATALOG.id, components: [{ id: "root", component: "Text", text: "Une alerte" }], metadata: { extensions: { eriphe: { title: "Alerte", weight: 100 } } } },
+    };
+    await act(async () => adapter.applyMessages([heavy]));
+    await render({
+      ...layout,
+      focus: "pay",
+      items: [layout.items[0], { ...layout.items[1], related: true }],
+      chips: [{ id: "news", title: "Nouvelles", closed: true }, { id: "heavy", title: "Alerte" }],
+    });
+    const state = (id: string) => tile(id)!.querySelector(".side-state")?.textContent;
+    expect([...el.querySelectorAll<HTMLElement>("aside.side > article")].map((s) => s.dataset.surface)).toEqual(["heavy", "week", "late", "news"]);
+    expect(state("heavy")).toBe("espace.state.yours");
+    expect(state("week")).toBe("espace.state.related");
+    expect(state("news")).toBe("espace.state.closed");
+    expect(state("late")).toBeUndefined();
+    // What needs the user is whole in the column: it answers there.
+    expect(tile("heavy")!.querySelector(".side-body .a2-text")?.textContent).toBe("Une alerte");
+  });
+
+  it("marks what arrives or changes while a surface is open, without moving the focus", async () => {
+    const card = (words: string, updated: string): Message => ({
+      version: "1.0",
+      createSurface: { surfaceId: "card", catalogId: CATALOG.id, components: [{ id: "root", component: "Text", text: words }], metadata: { extensions: { eriphe: { title: "Carte", weight: 80, updated } } } },
+    });
+    const focused: Layout = { ...layout, focus: "week" };
+    await render(focused);
+    await act(async () => adapter.applyMessages([card("Envoyer à Sam ?", "2026-11-15T16:00:00Z")]));
+    const withCard = { ...focused, items: [{ id: "card", title: "Carte", size: "l" as const, col: 0, row: 0, w: 4, h: 3, urgent: true }, ...focused.items] };
+    await render(withCard);
+    expect(tile("week")!.classList.contains("centre")).toBe(true);
+    expect(tile("card")!.className).toContain("side-item needs fresh");
+    expect(tile("card")!.querySelector(".side-new")?.textContent).toBe("espace.side.new");
+    expect(tile("pay")!.querySelector(".side-new")).toBeNull();
+    // A new focus has seen all: no mark.
+    await render({ ...withCard, focus: "pay" });
+    expect(el.querySelector(".side-new")).toBeNull();
+    // Written again while it lasts (a new item in its group): marked again.
+    await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "card" } }, card("Envoyer à Sam ? · 2", "2026-11-15T16:05:00Z")]));
+    expect(tile("card")!.querySelector(".side-new")).not.toBeNull();
   });
 
   it("closes a tile with its cross, without opening it", async () => {
@@ -184,7 +258,7 @@ describe("the grid of surfaces", () => {
     const ghost = el.querySelector<HTMLElement>(".tile-ghost")!;
     expect(ghost.className).toBe("tile-ghost at-c2 at-r4 w-3 h-2");
     expect(tile("week")!.classList.contains("dragging")).toBe(true);
-    expect(document.querySelectorAll("[style]")).toHaveLength(0);
+    expect(styled()).toEqual([]);
     await act(async () => { window.dispatchEvent(new MouseEvent("pointermove", { clientX: 1190, clientY: 790 })); });
     expect(el.querySelector(".tile-ghost")!.className).toBe("tile-ghost at-c9 at-r6 w-3 h-2");
     await act(async () => { window.dispatchEvent(new MouseEvent("pointerup", {})); });
@@ -230,7 +304,7 @@ describe("the workspace on a phone", () => {
     expect(el.querySelector("button.tile-move")).toBeNull();
     expect(el.querySelector("button.tile-size")).toBeNull();
     expect(tile("pay")!.querySelector("button.tile-close")).not.toBeNull();
-    expect(document.querySelectorAll("[style]")).toHaveLength(0);
+    expect(styled()).toEqual([]);
     await act(async () => tile("pay")!.click());
     expect(opened).toEqual(["pay"]);
   });
@@ -311,13 +385,16 @@ describe("a tile and its content", () => {
     // A canvas of 8 rows of 90 px, 0 px apart; a tile 90 px high, its body 60.
     sizes({ canvas: 720, tile: 90, body: 60, fit: () => 150 });
     const needs: [string, number][] = [];
-    await act(async () =>
-      root.render(<Grid adapter={adapter} layout={{ ...pairs, focus: "more" }} onOpen={() => {}} onNeed={(id, rows) => needs.push([id, rows])} />),
-    );
+    const draw = (l: Layout) => act(async () => root.render(<Grid adapter={adapter} layout={l} onOpen={() => {}} onNeed={(id, rows) => needs.push([id, rows])} />));
+    await draw(pairs);
     expect(needs).toContainEqual(["pair", 2]);
-    expect(needs.some(([id]) => id === "more")).toBe(false);
+    expect(needs).toContainEqual(["more", 2]);
     // The content sits whole in .mod-fit, inside a body that does not scroll (espace.css).
     expect(tile("pair")!.querySelector(".mod-body > .mod-fit .a2-text")).not.toBeNull();
+    // One open: in the centre it scrolls, the others are in the column; none is measured.
+    needs.length = 0;
+    await draw({ ...pairs, focus: "more" });
+    expect(needs).toEqual([]);
   });
 
   it("shows only whole blocks when it has too little room, and says the rest is there", async () => {
@@ -352,8 +429,8 @@ describe("a tile and its content", () => {
     // Each line shown is 20 px; the body holds 60.
     const shown = (fit: HTMLElement) => 20 * Array.from(fit.querySelectorAll(".a2-code-line")).filter((b) => !b.closest(".fit-out")).length;
     sizes({ canvas: 720, tile: 90, body: 60, fit: shown });
-    await render({ ...pairs, focus: "more" });
-    await render({ ...pairs, focus: "more", items: pairs.items.map((i) => ({ ...i, why: "Du code" })) });
+    await render(pairs);
+    await render({ ...pairs, items: pairs.items.map((i) => ({ ...i, why: "Du code" })) });
     // On the grid: GRID_LINES drawn at most, the rest counted; the last hidden whole, the tile says so.
     const grid = tile("pair")!;
     expect(grid.querySelectorAll(".a2-code-line")).toHaveLength(GRID_LINES);
@@ -362,6 +439,7 @@ describe("a tile and its content", () => {
     expect(Array.from(grid.querySelectorAll(".a2-code-line:not(.fit-out)")).map((l) => l.textContent)).toEqual(["ligne 1", "ligne 2", "ligne 3"]);
     expect(grid.querySelector(".mod-body > .mod-fit .a2-code-body")).not.toBeNull();
     // Open: every line, none hidden, nothing counted; its body is the one that scrolls (espace.css, .mod.focus).
+    await render({ ...pairs, focus: "more" });
     const open = tile("more")!;
     expect(open.classList.contains("focus")).toBe(true);
     expect(open.querySelectorAll(".a2-code-line")).toHaveLength(lines.length);
