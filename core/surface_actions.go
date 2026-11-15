@@ -84,6 +84,12 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		return refused
 	}
 	now := time.Now()
+	if th, ok := threadOfSurface(id); ok && a.Name == a2ui.ActionOpen && s.Author == threadAuthor(th) {
+		// A visit of the thread: its header tells what changed since the
+		// one before (thread_header.go). Before the note, which a rewrite
+		// of the surface would lose.
+		c.threadVisited(th, now)
+	}
 	err = c.noteOnSurface(id, func(l *surfaceLook) {
 		l.Action = &surfaceActed{Name: a.Name, Component: a.SourceComponentID, At: now.Unix()}
 	})

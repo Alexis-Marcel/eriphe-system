@@ -116,8 +116,8 @@ func (c *core) openProgressThread(key, summary string, done bool, at time.Time) 
 	if done {
 		state, ended = threadDone, at.Unix()
 	}
-	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, summary, created, started, ended) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		truncate("Suivi de "+key, taskTitleMax), "Suivre où en est "+key+".", modeLight, key, state, summary, at.Unix(), at.Unix(), ended)
+	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, summary, summarized, created, started, ended) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		truncate("Suivi de "+key, taskTitleMax), "Suivre où en est "+key+".", modeLight, key, state, summary, at.Unix(), at.Unix(), at.Unix(), ended)
 	if err != nil {
 		return 0, c.liveSubjectErr(key, err)
 	}

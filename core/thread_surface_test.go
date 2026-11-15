@@ -67,7 +67,9 @@ func TestThreadSurfaceLight(t *testing.T) {
 	if meta.Summary != "Ouvert" || !strings.Contains(meta.Why, "tenu à jour") || meta.Tainted || !meta.Answers {
 		t.Errorf("meta %+v", meta)
 	}
-	if !strings.Contains(string(s.Components), "thread_nosteps") || !strings.Contains(data["state"].(string), "tenu par") {
+	// Open and held by the brain: the header says it all, no state line
+	// nor empty timeline.
+	if strings.Contains(string(s.Components), "thread_steps") || data["state"] != nil || !strings.Contains(string(s.Components), "thread_yours_none") {
 		t.Errorf("components %s data %v", s.Components, data)
 	}
 

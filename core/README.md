@@ -1107,13 +1107,30 @@ by code from the thread's data (#468): it never depends on a model remembering t
 - **Its author is `thread:<id>`**, code's for that thread (not `core`, the attention queue's):
   nobody else writes or removes it as a whole (`mayChange`), no other author may take its id, and
   it does not count in the 100 surfaces at most.
-- **Code's section**: the goal; the state and who holds it (« Ouvert · tenu par Eriphe », « En
-  cours · mené par son chef »); what waits for the user, « À toi »: the thread's own cards (its
-  plan, a change of it, more time) and each step's (an approval's card, a task step's held start)
-  as `Proposal` components bound to their refs, a choice to make, and for a step the user does
-  (kind `user`) a « C'est fait » button; the steps as a `Timeline` (each with its state, its time, its kind, its checks and
-  the last word on it); the summary. Its component ids start with `thread_`, its data is under
-  `/thread`.
+- **Code's section**: the goal; the state and who holds it when it says more than the header
+  (« En cours · mené par son chef », « En attente · tenu par Eriphe »; not for a light thread the
+  brain holds that is open); a header in three parts (#553, `thread_header.go`):
+  - **Depuis ta dernière visite**: facts made by code from the thread's data (a step started,
+    done, failed or handing in its work, the summary written again, the thread's end), each
+    with its time, since the user's visit before the last one, oldest first, the last 5 (« … et 2
+    plus tôt » before them); with none, the log tells whether anything else moved (a step added,
+    a plan changed, a card linked, a reopen: « 3 changement(s), le dernier à 15 h 10. », counted,
+    never quoted), else « Rien de nouveau depuis 14 h 32. »; « Jusqu'ici » and
+    what happened since its opening before any visit. Never the log's lines (French only, and
+    they may quote a lead). A visit is the page's `open` action on the surface: `seen` takes the
+    last visit, `visited` is now, so the visit that opens it still shows what was new; opened
+    again within 5 minutes, the same visit. Times are absolute (« 14 h 32 », « 13 nov. 9 h 05 »):
+    the surface is written again only when it changes.
+  - **Où on en est**: the summary as remember (kind progress), the extraction or its close wrote
+    it, with its date (`threads.summarized`, stamped by `setThread`); no model call.
+  - **À toi** (active threads): the thread's own cards (its plan, a change of it, more time) and
+    each step's (an approval's card, a task step's held start) as `Proposal` components bound to
+    their refs, a choice to make, and for a step the user does (kind `user`) a « C'est fait »
+    button; « Rien pour l'instant. » when nothing waits.
+
+  Then the steps as a `Timeline` (each with its state, its time, its kind, its checks and the
+  last word on it), none when it has no step. Its component ids start with `thread_`, its data
+  is under `/thread`.
 - **Rewritten at each change** of the thread: the store's `setThread`, `setStep`, `insertSteps`,
   a card asked, decided or withdrawn call `keepThreadSurface`, which writes only when what the
   surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active
