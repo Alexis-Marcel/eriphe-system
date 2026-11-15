@@ -361,9 +361,26 @@ describe("earlier messages", () => {
     expect(earlierButton()).toBeNull();
     const box = left();
     Object.defineProperty(box, "scrollTop", { configurable: true, writable: true, value: 200 });
+    Object.defineProperty(box, "scrollHeight", { configurable: true, writable: true, value: 900 });
     await act(async () => void box.dispatchEvent(new Event("scroll")));
+    // The content shrank under a view kept at its end: no asking.
+    box.scrollTop = 150;
+    Object.defineProperty(box, "scrollHeight", { configurable: true, value: 850 });
+    await act(async () => void box.dispatchEvent(new Event("scroll")));
+    expect(earlierButton()).toBeNull();
     box.scrollTop = 120;
     await act(async () => void box.dispatchEvent(new Event("scroll")));
+    expect(earlierButton()).not.toBeNull();
+
+    await act(async () => FakeSource.emit("exchange", { ...exchange, lines: [{ seq: 13, role: "user", text: "et puis", time: at(0) }] }));
+    expect(earlierButton()).toBeNull();
+    const finger = (type: string, y: number) => {
+      const e = new Event(type, { bubbles: true });
+      Object.defineProperty(e, "touches", { value: [{ clientY: y }] });
+      return e;
+    };
+    await act(async () => void box.dispatchEvent(finger("touchstart", 100)));
+    await act(async () => void box.dispatchEvent(finger("touchmove", 160)));
     expect(earlierButton()).not.toBeNull();
 
     await act(async () => FakeSource.emit("exchange", { lines: [{ seq: 1, role: "user", text: "le premier", time: at(0) }] }));

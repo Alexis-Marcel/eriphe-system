@@ -121,7 +121,7 @@ export function Present({ arrival, x, sent, load }: {
   const latest = writing ? null : lastItem ? (lastItem.kind === "draft" || lastItem.line.role === "brain" ? lastItem : null) : "arrival";
 
   const box = useRef<HTMLDivElement>(null);
-  const top = useRef(0);
+  const top = useRef({ top: 0, height: 0, client: 0 });
   const touch = useRef(0);
   const fromBottom = useRef<number | null>(null);
   useLayoutEffect(() => {
@@ -138,11 +138,14 @@ export function Present({ arrival, x, sent, load }: {
   const ask = () => {
     if (!before.asked) setState({ ...before, asked: true });
   };
+  // A scroll up by the user, not the column's content or size changing
+  // under a view kept at its end.
   const onScroll = () => {
     const b = box.current;
     if (!b) return;
-    if (b.scrollTop < top.current) ask();
-    top.current = b.scrollTop;
+    const was = top.current;
+    if (b.scrollTop < was.top && b.scrollHeight === was.height && b.clientHeight === was.client) ask();
+    top.current = { top: b.scrollTop, height: b.scrollHeight, client: b.clientHeight };
   };
   const bring = async () => {
     const first = before.lines[0]?.seq ?? x?.lines[0]?.seq;
