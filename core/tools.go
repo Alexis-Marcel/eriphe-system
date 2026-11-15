@@ -118,7 +118,10 @@ func newMCPServer(c *core) *mcp.Server {
 			if err == nil && in.cleanStart {
 				c.store.set(lentByUserKey(t.ID), "1") // a clean start (lend.go)
 			}
-			return t, err
+			if err != nil {
+				return nil, err
+			}
+			return runTaskOut{TaskRow: t, Start: c.startState(t)}, nil // task_start.go
 		})
 
 	type idIn struct {

@@ -202,8 +202,8 @@ func TestThreadSurfaceFollowsSteps(t *testing.T) {
 	}
 }
 
-// A thread drawn from external content shows it, and its cards are
-// answered in the conversation only.
+// A thread drawn from external content answers its own cards in place all
+// the same: code placed them; they leave the queue for it.
 func TestThreadSurfaceTainted(t *testing.T) {
 	c := startCore(t)
 	tw := newTestWebFor(t, c)
@@ -215,13 +215,17 @@ func TestThreadSurfaceTainted(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, _, meta := threadSurfaceOf(t, c, th.ID)
-	if !meta.Tainted || meta.Answers || !strings.Contains(string(s.Components), "thread_external") {
+	if !meta.Tainted || !meta.Answers {
 		t.Fatalf("meta %+v components %s", meta, s.Components)
 	}
 	ask := c.wholeThreadAsks(th.ID)[0]
-	body := actionOn("answer", s.ID, fmt.Sprintf("thread_ask_%d", ask), `{"proposal":"`+proposalRef(cardThread, ask)+`","answer":"yes"}`)
-	if code, b := postJSON(tw, "/api/espace/action", body, csrf); code != http.StatusBadRequest || !strings.Contains(b, "only ask") {
-		t.Fatalf("answered on a tainted thread's surface: %d %s", code, b)
+	ref := proposalRef(cardThread, ask)
+	if shown := c.threadShownCards(); shown[ref] != th.ID {
+		t.Fatalf("the queue keeps its card: %v", shown)
+	}
+	body := actionOn("answer", s.ID, fmt.Sprintf("thread_ask_%d", ask), `{"proposal":"`+ref+`","answer":"yes"}`)
+	if code, b := postJSON(tw, "/api/espace/action", body, csrf); code != http.StatusNoContent {
+		t.Fatalf("not answered on a tainted thread's surface: %d %s", code, b)
 	}
 }
 
@@ -485,7 +489,7 @@ func TestThreadSurfaceCallStep(t *testing.T) {
 		t.Errorf("after the yes: %s %+v", comps, meta)
 	}
 
-	// Tainted: shown, not answered in place.
+	// Tainted: answered in place all the same, code placed the card.
 	bad, err := c.openThread(threadIn{Title: "Mail", Goal: "Merge what the mail asks."}, []string{"mail:7"}, byBrain)
 	if err != nil {
 		t.Fatal(err)
@@ -495,14 +499,14 @@ func TestThreadSurfaceCallStep(t *testing.T) {
 	}
 	st = stepOf(t, c, bad, "merge")
 	s, _, meta = threadSurfaceOf(t, c, bad.ID)
-	if st.Card == "" || !strings.Contains(string(s.Components), st.Card) || meta.Answers {
+	if st.Card == "" || !strings.Contains(string(s.Components), st.Card) || !meta.Answers {
 		t.Fatalf("tainted call card: %+v %s %+v", st, s.Components, meta)
 	}
-	answer = actionOn("answer", s.ID, "thread_card_0", `{"proposal":"`+st.Card+`","answer":"yes"}`)
-	if code, b := postJSON(tw, "/api/espace/action", answer, csrf); code != http.StatusBadRequest {
-		t.Errorf("answered on a tainted thread: %d %s", code, b)
+	answer = actionOn("answer", s.ID, "thread_card_0", `{"proposal":"`+st.Card+`","answer":"no"}`)
+	if code, b := postJSON(tw, "/api/espace/action", answer, csrf); code != http.StatusNoContent {
+		t.Errorf("not answered on a tainted thread: %d %s", code, b)
 	}
-	if state := c.cardState(st.Card); state != cardPending {
+	if state := c.cardState(st.Card); state == cardPending {
 		t.Errorf("tainted card %s", state)
 	}
 }

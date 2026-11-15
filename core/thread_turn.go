@@ -39,16 +39,45 @@ func (t *brainTurn) aboutThread() int64 {
 func threadEventKey(seq int) string { return fmt.Sprintf("thread_msg:%d", seq) }
 
 // threadsDelivered sets the thread the turn is about from what it was
-// given: none, unless an event of a thread is among it. A new delivery
-// never keeps the thread of the turn before.
+// given: none, unless an event of a thread is among it, or a message of
+// the user's written about a thread (its surface open on the workspace,
+// or a surface whose subject has a live thread); the last one wins. A new
+// delivery never keeps the thread of the turn before.
 func (c *core) threadsDelivered(msgs []Message) {
 	var id int64
 	for _, m := range msgs {
 		if n, err := strconv.ParseInt(c.store.get(threadEventKey(m.Seq)), 10, 64); err == nil && n > 0 {
 			id = n
+		} else if n := c.threadAbout(m); n > 0 {
+			id = n
 		}
 	}
 	c.turn.about(id)
+}
+
+// threadAbout is the thread a message of the user's was written about: the
+// thread whose surface was open, or the live thread of the open surface's
+// subject; 0 if none.
+func (c *core) threadAbout(m Message) int64 {
+	if m.Role != roleUser {
+		return 0
+	}
+	sid, ok := strings.CutPrefix(c.messageAbout(m.Seq), refSurface+":")
+	if !ok {
+		return 0
+	}
+	if n, ok := threadOfSurface(sid); ok {
+		if _, err := c.thread(n); err == nil {
+			return n
+		}
+		return 0
+	}
+	if s, err := c.surface(sid); err == nil && s.Subject != "" {
+		if n, ok := c.liveThreadOf(s.Subject); ok {
+			return n
+		}
+	}
+	return 0
 }
 
 // turnThread notes that the brain's turn named a thread, by a tool of its
@@ -139,6 +168,13 @@ type runTaskIn struct {
 // noThread is run_task's thread for a task of its own.
 const noThread = "none"
 
+// runTaskOut is run_task's result for a task of its own: the task, and
+// what its start waits for (startState).
+type runTaskOut struct {
+	*TaskRow
+	Start map[string]any `json:"start_state"`
+}
+
 // taskOfThread makes a task the brain starts a task step of a light
 // thread, so the thread follows it: its tile, its timeline and its event
 // at the end. In a turn about a light thread, of that one; in a turn about
@@ -195,8 +231,12 @@ func (c *core) taskOfThread(ctx context.Context, in runTaskIn) (map[string]any, 
 	if st.Status == stepBlocked { // its task could not start: the thread shows why
 		return nil, true, fmt.Errorf("the task could not start (step %s of thread %d, blocked): %s", st.Key, s.ID, st.Note)
 	}
-	return map[string]any{"thread": s.ID, "step": st.Key, "task": st.Task, "status": st.Status,
-		"note": fmt.Sprintf("A task step of thread %d « %s »: the thread follows it, and its end reaches you as the thread's event; settle it with settle_step.", s.ID, s.Title)}, true, nil
+	out := map[string]any{"thread": s.ID, "step": st.Key, "task": st.Task, "status": st.Status,
+		"note": fmt.Sprintf("A task step of thread %d « %s »: the thread follows it, and its end reaches you as the thread's event; settle it with settle_step.", s.ID, s.Title)}
+	if t, err := c.store.task(st.Task); st.Task != "" && err == nil {
+		out["start_state"] = c.startState(t) // task_start.go
+	}
+	return out, true, nil
 }
 
 // taskThread is the light thread a task started in a turn about no thread

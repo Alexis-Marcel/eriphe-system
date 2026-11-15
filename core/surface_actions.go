@@ -27,8 +27,8 @@ import (
 //     surface shows, decided like its card's Oui or Non; refused on a
 //     tainted surface, unless code wrote it (the attention queue's, whose
 //     Proposal shows the proposal's own taint, as its card does; a
-//     thread's, whose Proposals code bound to its own cards, as long as
-//     the thread itself is not tainted: surfaceLook.Answers).
+//     thread's, whose Proposals code bound to its own cards, whatever
+//     the thread read: surfaceLook.Answers).
 //   - stepDone: « C'est fait » on a thread's surface, for a step the user
 //     does: the Button code wrote there, its thread and step as stored
 //     (thread_surface.go, settleUserStep).

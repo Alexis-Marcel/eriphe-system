@@ -435,8 +435,8 @@ func TestThreadCardsLeaveTheQueue(t *testing.T) {
 		}
 	}
 
-	// A tainted thread's surface does not answer its cards in place: the
-	// queue keeps the answerable tile.
+	// A tainted thread's surface answers its cards in place too: they
+	// leave the queue for it, no tile beside it.
 	bad, err := c.openThread(threadIn{Title: "Mail", Goal: "Merge what the mail asks."}, []string{"mail:7"}, byBrain)
 	if err != nil {
 		t.Fatal(err)
@@ -450,10 +450,10 @@ func TestThreadCardsLeaveTheQueue(t *testing.T) {
 		t.Fatalf("the tainted step's card: %+v", st)
 	}
 	c.syncQueueSurfaces()
-	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(xs[0]))); !ok {
-		t.Error("a tainted thread's card left the queue")
+	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(xs[0]))); ok {
+		t.Error("a tainted thread's card has a tile beside it")
 	}
-	if s, _, _ := threadSurfaceOf(t, c, bad.ID); s.Weight != threadWeightYours {
+	if s, _, _ := threadSurfaceOf(t, c, bad.ID); s.Weight != queueSurfaceWeight(weightBlocksATask) {
 		t.Errorf("the tainted thread's surface weighs %d", s.Weight)
 	}
 

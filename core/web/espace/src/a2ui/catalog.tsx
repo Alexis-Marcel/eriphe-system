@@ -696,8 +696,8 @@ export function ghostsOf(ps: ProposalView[]): Ghost[] {
 // metadata, extensions.eriphe.tainted) and was written by a model: it can
 // only ask. Code's own (author "core", the attention queue's) shows a
 // proposal as its card does, with the proposal's own taint; so does a
-// thread's surface whose own thread is not tainted (answers: code bound
-// its Proposals to the thread's cards, whatever a step read).
+// thread's surface (answers: code bound its Proposals to the thread's
+// cards, whatever the thread read).
 type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string; answers?: boolean } } } };
 const onlyAsks = (s: unknown) => {
   const m = (s as Meta | undefined)?.metadata?.extensions?.eriphe;
