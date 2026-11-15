@@ -324,7 +324,7 @@ func (c *core) startOther(s Thread, st Step) (bool, error) {
 		}
 		c.logThread(s.ID, "engine", fmt.Sprintf("L'étape « %s » attend %s : %s", st.Title, c.conf().User, st.Question))
 		if told {
-			c.tellBrain(s, fmt.Sprintf("L'étape « %s » (%s) attend que %s fasse : %s\nDis-le-lui ; il répond « C'est fait » sur la page du thread, ou tu la règles avec settle_step quand tu le vois fait.",
+			c.tellBrain(s, fmt.Sprintf("L'étape « %s » (%s) attend que %s fasse : %s\nDis-le-lui ; il répond « C'est fait » sur la page du thread, ou tu la règles avec settle_step quand tu le vois fait ou qu'il te le dit.",
 				st.Title, st.Key, c.conf().User, st.Question), nil)
 		}
 		return true, nil

@@ -609,10 +609,12 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 			if err := c.releaseApproved(a); err != nil {
 				return err
 			}
+			c.logReleaseDecided(a.TaskID, a.Refs, true) // task_answer_log.go
 			c.settleWaiting(ctx, a, true)
 			return nil
 		}
 		c.store.logDecision(a.TaskID, "", "release "+strings.Join(a.Refs, ", "), nil, decideDeny, byUser, "refusé sur la carte")
+		c.logReleaseDecided(a.TaskID, a.Refs, false)
 		return nil
 	case a.Call != "":
 		if approve {
