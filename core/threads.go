@@ -66,7 +66,10 @@ const threadsSchema = `CREATE TABLE IF NOT EXISTS threads (
 	since     INTEGER NOT NULL DEFAULT 0,
 	created   INTEGER NOT NULL,
 	started   INTEGER NOT NULL DEFAULT 0,
-	ended     INTEGER NOT NULL DEFAULT 0
+	ended     INTEGER NOT NULL DEFAULT 0,
+	summarized INTEGER NOT NULL DEFAULT 0, -- when its summary was last written
+	seen      INTEGER NOT NULL DEFAULT 0,  -- the user's visit before the last one: its surface tells what changed since
+	visited   INTEGER NOT NULL DEFAULT 0   -- when the user last opened its surface
 );
 CREATE INDEX IF NOT EXISTS threads_subject ON threads (subject);
 CREATE TABLE IF NOT EXISTS thread_steps (
@@ -115,7 +118,7 @@ CREATE INDEX IF NOT EXISTS thread_log_thread ON thread_log (thread, id);`
 
 func init() {
 	extraSchema = append(extraSchema, threadsSchema)
-	schemaFixes = append(schemaFixes, sessionsToThreads, threadStepColumns, subjectKeysCore, subjectColumns) // in this order (thread_steps.go, subject_rewrite.go, subjects.go)
+	schemaFixes = append(schemaFixes, sessionsToThreads, threadStepColumns, subjectKeysCore, subjectColumns, threadColumns) // in this order (thread_steps.go, subject_rewrite.go, subjects.go, thread_header.go)
 }
 
 // A thread's modes.
@@ -208,26 +211,28 @@ func init() { proposalKinds = append(proposalKinds, cardThread) }
 
 // Thread is a work thread as the store keeps it.
 type Thread struct {
-	ID       int64     `json:"id"`
-	Title    string    `json:"title"`
-	Goal     string    `json:"goal"`
-	DoneWhen string    `json:"done_when,omitempty"`
-	Mode     string    `json:"mode"`              // light or led
-	Subject  string    `json:"subject,omitempty"` // the matter it follows, a ref
-	State    string    `json:"state"`             // open, waiting, done, dropped
-	Phase    string    `json:"phase,omitempty"`   // a led thread's engine
-	Held     string    `json:"held,omitempty"`    // why the code paused it: budget
-	Budget   int       `json:"budget"`            // minutes of running time it may take
-	Amends   int       `json:"amends,omitempty"`  // changes of its plan made without asking
-	Summary  string    `json:"summary,omitempty"`
-	Tainted  string    `json:"tainted,omitempty"` // why its plan may carry what someone else wrote
-	Lead     string    `json:"lead,omitempty"`    // the assistant that leads it; empty: the brain
-	Spent    int64     `json:"spent"`             // seconds it ran, until since
-	since    int64     // when it last started running
-	told     string    // what the lead was last told of the whole thread: complete, stalled
-	Created  time.Time `json:"created"`
-	Started  time.Time `json:"started,omitzero"`
-	Ended    time.Time `json:"ended,omitzero"`
+	ID         int64     `json:"id"`
+	Title      string    `json:"title"`
+	Goal       string    `json:"goal"`
+	DoneWhen   string    `json:"done_when,omitempty"`
+	Mode       string    `json:"mode"`              // light or led
+	Subject    string    `json:"subject,omitempty"` // the matter it follows, a ref
+	State      string    `json:"state"`             // open, waiting, done, dropped
+	Phase      string    `json:"phase,omitempty"`   // a led thread's engine
+	Held       string    `json:"held,omitempty"`    // why the code paused it: budget
+	Budget     int       `json:"budget"`            // minutes of running time it may take
+	Amends     int       `json:"amends,omitempty"`  // changes of its plan made without asking
+	Summary    string    `json:"summary,omitempty"`
+	Tainted    string    `json:"tainted,omitempty"` // why its plan may carry what someone else wrote
+	Lead       string    `json:"lead,omitempty"`    // the assistant that leads it; empty: the brain
+	Spent      int64     `json:"spent"`             // seconds it ran, until since
+	since      int64     // when it last started running
+	summarized int64     // when its summary was last written
+	seen       int64     // the user's visit before the last one, 0 if none
+	told       string    // what the lead was last told of the whole thread: complete, stalled
+	Created    time.Time `json:"created"`
+	Started    time.Time `json:"started,omitzero"`
+	Ended      time.Time `json:"ended,omitzero"`
 }
 
 // active tells whether it may still move: open or waiting.
@@ -416,13 +421,13 @@ var stepKeyRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,23}$`)
 
 // The store.
 
-const threadCols = `id, title, goal, done_when, mode, subject, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended`
+const threadCols = `id, title, goal, done_when, mode, subject, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended, summarized, seen`
 
 func scanThread(row interface{ Scan(...any) error }) (Thread, error) {
 	var s Thread
 	var created, started, ended int64
 	err := row.Scan(&s.ID, &s.Title, &s.Goal, &s.DoneWhen, &s.Mode, &s.Subject, &s.State, &s.Phase, &s.Held, &s.Budget, &s.Amends, &s.Summary, &s.Tainted, &s.Lead,
-		&s.told, &s.Spent, &s.since, &created, &started, &ended)
+		&s.told, &s.Spent, &s.since, &created, &started, &ended, &s.summarized, &s.seen)
 	s.Created, s.Started, s.Ended = time.Unix(created, 0), unixOrZero(started), unixOrZero(ended)
 	return s, err
 }
@@ -614,6 +619,9 @@ func (c *core) setStep(thread int64, key string, fields map[string]any) error {
 func (c *core) setThread(id int64, fields map[string]any) error {
 	if p, ok := fields["phase"].(string); ok && p != "" {
 		fields["state"] = stateOf(p)
+	}
+	if _, ok := fields["summary"]; ok {
+		fields["summarized"] = time.Now().Unix() // « Où on en est » dates it (thread_header.go)
 	}
 	var sets []string
 	var args []any

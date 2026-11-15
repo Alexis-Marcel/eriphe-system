@@ -24,11 +24,13 @@ import (
 //   - Its author is thread:<id>, code's for that thread: nobody else
 //     writes or removes it as a whole (mayChange), and it does not count
 //     in surfacesMax.
-//   - Code's section: the goal, the state, what waits for the user (the
-//     thread's cards as Proposals, a user step's « C'est fait »), the
+//   - Code's section: the goal, the state when it says more than the
+//     header, the header (thread_header.go: since the user's last visit,
+//     where it stands with the summary, what waits for the user: the
+//     thread's cards as Proposals, a user step's « C'est fait »), then the
 //     steps as a Timeline (each with its kind, state, time, checks and
-//     note), and the summary. Its component ids start with thread_, its
-//     data is under /thread.
+//     note). Its component ids start with thread_, its data is under
+//     /thread.
 //   - The holder's part: who holds the thread (the brain, or its lead)
 //     may add one with surface_write on thread-<id> (a state block, points
 //     to see, a diff, a link). It is kept apart (threadPartKey), checked
@@ -112,6 +114,8 @@ type threadSurfaceStep struct {
 	Kind     string    // task, choice, approval, call, user, check, deadline
 	State    string    // a Timeline item's: done, current, pending, failed
 	At       time.Time // when it ended, else when it started
+	Started  time.Time // when it started, zero if not yet
+	Ended    time.Time // when it ended, zero if not yet
 	Card     string    // the ref of its proposal, shown in place: answered there while it waits, then a call's outcome
 	Check    string    // ok or failed: what its checks said
 	Note     string    // the last word on it
@@ -143,11 +147,12 @@ func (c *core) threadSurfaceSteps(s Thread, steps []Step) []threadSurfaceStep {
 		if st.Key == finalStep {
 			v.Label = tr(c.userLang(), "thread.surface.final")
 		}
+		v.Started, v.Ended = unixOrZero(st.Started), unixOrZero(st.Ended)
 		switch {
 		case st.Ended > 0:
-			v.At = time.Unix(st.Ended, 0)
+			v.At = v.Ended
 		case st.Started > 0:
-			v.At = time.Unix(st.Started, 0)
+			v.At = v.Started
 		}
 		switch {
 		case st.Failed:
@@ -330,71 +335,18 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	}
 
 	type comp = map[string]any
-	var comps []comp
-	var children []string
-	add := func(c comp) {
-		comps = append(comps, c)
-		children = append(children, c["id"].(string))
-	}
+	var out threadComps
 	data := map[string]any{"goal": s.Goal}
-
-	add(comp{"id": "thread_goal", "component": "Text", "text": map[string]any{"@path": "/thread/goal"}})
-	state := w("thread.state." + s.Look())
-	if s.active() {
-		if s.led() && s.Lead != "" {
-			state += threadExternalSep + w("thread.surface.lead")
-		} else {
-			state += threadExternalSep + w("thread.surface.brain")
-		}
+	out.add(comp{"id": "thread_goal", "component": "Text", "text": map[string]any{"@path": "/thread/goal"}})
+	if state := c.threadStateLine(s, lang); state != "" {
+		data["state"] = state
+		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/state"}})
 	}
-	data["state"] = state
-	add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/state"}})
+	// Since the user's last visit, where it stands, what is theirs
+	// (thread_header.go).
+	c.threadHeader(&in, &out, data, s, steps, asks, now)
 
-	// What waits for the user: the thread's own cards, the cards raised for
-	// it (thread_turn.go), then its steps'.
-	linked := c.linkedWaiting(s.ID, steps)
-	yours := len(asks) > 0 || len(linked) > 0
-	for _, st := range steps {
-		yours = yours || st.Waits
-	}
-	if yours && s.active() {
-		// Its cards leave the attention queue for it when it answers them
-		// (threadShownCards): it takes their weight.
-		in.Weight = threadWeightYours
-		for _, ref := range threadCardsWaiting(steps, asks, linked) {
-			kind, _, _ := parseProposalRef(ref)
-			in.Weight = max(in.Weight, queueSurfaceWeight(cardWeight(kind)))
-		}
-		add(comp{"id": "thread_yours", "component": "Text", "variant": "subtitle", "text": w("thread.surface.yours")})
-		for _, id := range asks {
-			add(comp{"id": "thread_ask_" + strconv.FormatInt(id, 10), "component": "Proposal", "proposalId": proposalRef(cardThread, id)})
-		}
-		for i, ref := range linked {
-			add(comp{"id": "thread_linked_" + strconv.Itoa(i), "component": "Proposal", "proposalId": ref})
-		}
-		for i, st := range steps {
-			n := strconv.Itoa(i)
-			switch {
-			case !st.Waits:
-			case st.Card != "":
-				add(comp{"id": "thread_card_" + n, "component": "Proposal", "proposalId": st.Card})
-			case !st.Yours:
-				add(comp{"id": "thread_wait_" + n, "component": "Text", "text": st.Label})
-			default:
-				comps = append(comps,
-					comp{"id": "thread_user_" + n + "_label", "component": "Text", "text": st.Label},
-					comp{"id": "thread_user_" + n + "_done", "component": "Button", "label": w("thread.surface.done"), "icon": "check", "variant": "primary",
-						"action": map[string]any{"event": map[string]any{"name": a2ui.ActionStepDone,
-							"context": map[string]any{"thread": s.ID, "step": st.Key}}}})
-				add(comp{"id": "thread_user_" + n, "component": "Row", "align": "center",
-					"children": []string{"thread_user_" + n + "_label", "thread_user_" + n + "_done"}})
-			}
-		}
-	}
-
-	if len(steps) == 0 {
-		add(comp{"id": "thread_nosteps", "component": "Text", "variant": "caption", "text": w("thread.surface.nosteps")})
-	} else {
+	if len(steps) > 0 {
 		items := make([]any, 0, len(steps))
 		for _, st := range steps {
 			item := map[string]any{"label": st.Label, "state": st.State}
@@ -420,18 +372,14 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 			items = append(items, item)
 		}
 		data["steps"] = items
-		add(comp{"id": "thread_steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/steps"}})
+		out.add(comp{"id": "thread_steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/steps"}})
 		// A call's card, once decided, shows how its run went, under the
 		// steps.
 		for i, st := range steps {
 			if st.Card != "" && (!st.Waits || !s.active()) {
-				add(comp{"id": "thread_card_" + strconv.Itoa(i), "component": "Proposal", "proposalId": st.Card})
+				out.add(comp{"id": "thread_card_" + strconv.Itoa(i), "component": "Proposal", "proposalId": st.Card})
 			}
 		}
-	}
-	if sum := strings.TrimSpace(s.Summary); sum != "" {
-		data["summary"] = sum
-		add(comp{"id": "thread_summary", "component": "Markdown", "text": map[string]any{"@path": "/thread/summary"}})
 	}
 
 	composed := map[string]any{}
@@ -445,9 +393,9 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		if len(part.Tainted) > 0 {
 			label += threadExternalSep + w("thread.surface.external")
 		}
-		add(comp{"id": "thread_part_by", "component": "Text", "variant": "caption", "text": label})
-		comps = append(comps, list...)
-		children = append(children, threadPartRoot)
+		out.add(comp{"id": "thread_part_by", "component": "Text", "variant": "caption", "text": label})
+		out.inner(list...)
+		out.children = append(out.children, threadPartRoot)
 		json.Unmarshal(part.Data, &composed)
 		if composed == nil {
 			composed = map[string]any{}
@@ -455,7 +403,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		in.Tainted = part.Tainted
 	}
 	composed[threadDataKey] = data
-	comps = append([]comp{{"id": "root", "component": "Column", "children": children}}, comps...)
+	comps := append([]comp{{"id": "root", "component": "Column", "children": out.children}}, out.list...)
 	in.Components, _ = json.Marshal(comps)
 	in.Data, _ = json.Marshal(composed)
 
