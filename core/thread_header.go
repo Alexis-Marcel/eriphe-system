@@ -112,7 +112,11 @@ func threadFacts(s Thread, steps []threadSurfaceStep, since int64, lang string) 
 			}
 			out = append(out, threadFact{st.Ended, fmt.Sprintf(tr(lang, word), st.Label)})
 		case after(st.Started) && st.Ended.IsZero():
-			out = append(out, threadFact{st.Started, fmt.Sprintf(tr(lang, "thread.fact.started"), st.Label)})
+			word := "thread.fact.started"
+			if st.Waits {
+				word = "thread.fact.waits" // its card, the user's choice or doing
+			}
+			out = append(out, threadFact{st.Started, fmt.Sprintf(tr(lang, word), st.Label)})
 		}
 	}
 	if s.summarized > since && s.summarized > 0 {
@@ -176,8 +180,19 @@ func (c *core) threadHeader(in *surfaceIn, out *threadComps, data map[string]any
 		out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle", "text": w("thread.head.sofar")})
 	case len(facts) == 0:
 		out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle", "text": w("thread.head.since")})
-		out.add(comp{"id": "thread_nothing", "component": "Text", "variant": "caption",
-			"text": fmt.Sprintf(w("thread.head.nothing"), threadClock(time.Unix(s.seen, 0), now, loc, lang))})
+		// No fact code words, but the log says whether something moved
+		// (a step added, a plan changed, a card linked, a reopen): never
+		// « Rien de nouveau » then. Counted, never quoted.
+		var n int
+		var last sql.NullInt64
+		c.store.db.QueryRow(`SELECT COUNT(*), MAX(at) FROM thread_log WHERE thread = ? AND at > ?`, s.ID, s.seen).Scan(&n, &last)
+		if n > 0 && last.Valid {
+			out.add(comp{"id": "thread_moved", "component": "Text", "variant": "caption",
+				"text": fmt.Sprintf(w("thread.head.moved"), n, threadClock(time.Unix(last.Int64, 0), now, loc, lang))})
+		} else {
+			out.add(comp{"id": "thread_nothing", "component": "Text", "variant": "caption",
+				"text": fmt.Sprintf(w("thread.head.nothing"), threadClock(time.Unix(s.seen, 0), now, loc, lang))})
+		}
 	default:
 		out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle",
 			"text": fmt.Sprintf(w("thread.head.sincewhen"), threadClock(time.Unix(s.seen, 0), now, loc, lang))})

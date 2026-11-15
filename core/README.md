@@ -1108,7 +1108,9 @@ by code from the thread's data (#468): it never depends on a model remembering t
   - **Depuis ta dernière visite**: facts made by code from the thread's data (a step started,
     done, failed or handing in its work, the summary written again, the thread's end), each
     with its time, since the user's visit before the last one, oldest first, the last 5 (« … et 2
-    plus tôt » before them); « Rien de nouveau depuis 14 h 32. » when none; « Jusqu'ici » and
+    plus tôt » before them); with none, the log tells whether anything else moved (a step added,
+    a plan changed, a card linked, a reopen: « 3 changement(s), le dernier à 15 h 10. », counted,
+    never quoted), else « Rien de nouveau depuis 14 h 32. »; « Jusqu'ici » and
     what happened since its opening before any visit. Never the log's lines (French only, and
     they may quote a lead). A visit is the page's `open` action on the surface: `seen` takes the
     last visit, `visited` is now, so the visit that opens it still shows what was new; opened

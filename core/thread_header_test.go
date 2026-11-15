@@ -54,6 +54,7 @@ func TestThreadHeaderSinceVisit(t *testing.T) {
 	}
 	now := time.Now()
 	c.store.db.Exec(`UPDATE threads SET created = ? WHERE id = ?`, now.Add(-5*time.Hour).Unix(), th.ID)
+	c.store.db.Exec(`UPDATE thread_log SET at = ? WHERE thread = ?`, now.Add(-5*time.Hour).Unix(), th.ID)
 	clock := func(at time.Time) string { return threadClock(at, now, c.userZone(), "fr") }
 
 	// Never visited: what happened so far.
@@ -76,6 +77,13 @@ func TestThreadHeaderSinceVisit(t *testing.T) {
 	h = headerOf(t, c, th.ID)
 	if h["thread_since"] != "Depuis ta dernière visite" || h["thread_nothing"] != "Rien de nouveau depuis "+clock(first)+"." || h["thread_fact_0"] != "" {
 		t.Fatalf("nothing new: %v", h)
+	}
+
+	// Something moved that code words no fact of (a line in its log: a
+	// step added, a plan changed, a card linked): never « Rien de nouveau ».
+	c.logThread(th.ID, "engine", "Carte liée : access:7.")
+	if h = headerOf(t, c, th.ID); h["thread_nothing"] != "" || !strings.HasPrefix(h["thread_moved"], "1 changement(s), le dernier à ") {
+		t.Fatalf("moved: %v", h)
 	}
 
 	// The summary written again: a fact, and where it stands, dated.
@@ -130,7 +138,7 @@ func TestThreadHeaderFactsAndYours(t *testing.T) {
 	for _, f := range facts {
 		texts = append(texts, f.Text)
 	}
-	want := []string{"« Home page » : fait", "« Contact page » a démarré", "« Tests » : en échec", "« Review » a rendu son travail", "« Deploy » a démarré"}
+	want := []string{"« Home page » : fait", "« Contact page » a démarré", "« Tests » : en échec", "« Review » a rendu son travail", "« Deploy » t'attend"}
 	if strings.Join(texts, "|") != strings.Join(want, "|") {
 		t.Fatalf("facts %q", texts)
 	}
