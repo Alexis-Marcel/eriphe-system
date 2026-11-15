@@ -1276,7 +1276,18 @@ run, the card keeps the exact input, and a yes runs it from eriphe-core, however
 the brain restarted, if the tool is still allowed; the result, or a no, comes back as an event. The
 same call asked again is the same card. A brain's card says the action in words and lists the call's
 parameters by name, the long ones folded, on a channel the user writes from too; never the raw call. A call on a pull request
-adds its title and the start of its description, read with the tool itself when the card is made. A task's card is shown:
+adds its title and the start of its description, read with the tool itself when the card is made.
+
+An access card and a start's card read alone (`card_origin.go`): wherever they are shown (the
+conversation, a `Proposal`, a channel) they say where they come from and what their Oui does,
+facts of eriphe-core's only, never words of the model's next to Oui and Non. The thread is the one
+of the step the card is, or of the step whose task asks (never a link the brain made with
+`link_thread`), linked to its page; its title shows only when no outside content reached the thread
+(`threads.tainted` empty), else it is named by its number. The task that asks is named when the
+card's text does not (a call of a task, a start), and only if it was not started on a tainted turn.
+What Oui does follows the answer's code: a grant lets the task act until it ends, a release gives
+it its held tools, a call runs once as shown (a step's, then its thread goes on), a page or a search
+is allowed once, a start starts the task. A task's card is shown:
 
 1. **at launch**, on its start's card, for what it is lent outright: it waits (`held`) for the answer;
 2. **on release** of a tool lent [held back](#resources);
@@ -3428,7 +3439,8 @@ through `a2ui.Validate`).
   Alert (four levels), Placeholder (« En préparation », a slow shimmer).
 - *Proposal* shows one proposal of Eriphe's by its own ref (`kind:id`, the `proposal` of a
   card): `GET /api/proposals/{ref}` (`web_espace_proposal.go`) gives its kind, text, why, fields
-  and state in the user's language, and the card that answers it (404 when no card carries
+  and state in the user's language, where it comes from (`thread`, `from`) and what its Oui does
+  (`yes`) when it is an [access or a start's card](#the-approval-card), and the card that answers it (404 when no card carries
   it). Its header and buttons say what the card asks, by its kind: a memory « Garder en mémoire ? »
   and an intention « Garder ce rappel ? », Garder / Oublier (kept or forgotten once answered: yes runs
   nothing); any other kind « Proposition », Oui / Non, its text saying what will be done. Its buttons send an `answer` action on the surface (`POST /api/espace/action`, see
