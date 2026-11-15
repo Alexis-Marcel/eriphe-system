@@ -189,9 +189,15 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			}
 		}
 		if workspace && (exchangeStale || draft != exchangeDraft || thinking != exchangeThinking) {
-			if lines, err := w.c.store.lastExchange(); err == nil {
+			if lines, threads, err := w.c.workspaceExchange(time.Now()); err == nil {
 				exchangeStale, exchangeDraft, exchangeThinking = false, draft, thinking
-				raw, _ := json.Marshal(exchangeEvent{Lines: lines, Draft: truncate(draft, exchangeTextMax), Thinking: thinking})
+				ev := exchangeEvent{Lines: lines, Threads: threads, Draft: truncate(draft, exchangeTextMax), Thinking: thinking}
+				if draft != "" {
+					if id := w.c.talkThread(); id > 0 {
+						ev.DraftThread = threadSurfaceID(id) // the answer about a thread, in its card
+					}
+				}
+				raw, _ := json.Marshal(ev)
 				if string(raw) != lastExchange {
 					writeEvent(rw, "exchange", after, string(raw))
 					lastExchange, sent = string(raw), true

@@ -10,27 +10,23 @@ import (
 	"time"
 )
 
-// The last exchange is the user's last message and Eriphe's lines after
-// it: never an event's line nor an error's raw text, the last few replies.
-func TestLastExchange(t *testing.T) {
+// The visit's lines are the conversation's since the user came back, the
+// last few: the user's (not the first run's), Eriphe's and errors without
+// their raw text; never an event's line.
+func TestVisitLines(t *testing.T) {
 	tw := newTestWeb(t)
 	st := tw.c.store
-	if got, err := st.lastExchange(); err != nil || len(got) != 0 {
+	if got, err := st.visitLines(time.Time{}); err != nil || len(got) != 0 {
 		t.Fatalf("empty conversation: %+v %v", got, err)
 	}
+	old, _ := st.addMessage(roleUser, "hier soir", true)
+	st.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, time.Now().Add(-5*time.Hour).Unix(), old)
 	st.addMessage(roleBrain, "Bonjour Sam.", true)
-	if got, _ := st.lastExchange(); len(got) != 1 || got[0].Role != roleBrain {
-		t.Fatalf("no message of the user's: Eriphe's last line, %+v", got)
-	}
-	st.addMessage(roleUser, "avant", true)
 	st.addMessageVia(roleUser, "mets l'agenda en grand", "Telegram", true)
 	st.addMessage(roleEvent, "<b>du dehors</b>", true)
 	st.addMessageVia(roleError, "panic: raw trace", "turn", true)
-	for _, s := range []string{"un", "deux", "trois", "quatre"} {
-		st.addMessage(roleBrain, s, true)
-	}
 	st.addMessageVia(roleUser, "réglage", firstRunVia, true) // the first run's, hidden
-	got, err := st.lastExchange()
+	got, err := st.visitLines(time.Now().Add(-time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,23 +34,21 @@ func TestLastExchange(t *testing.T) {
 	for _, l := range got {
 		parts = append(parts, l.Role+":"+l.Text+":"+l.Via)
 	}
-	if strings.Join(parts, " ") != "user:mets l'agenda en grand:Telegram brain:deux: brain:trois: brain:quatre:" {
-		t.Fatalf("exchange %v", parts)
+	if strings.Join(parts, " ") != "brain:Bonjour Sam.: user:mets l'agenda en grand:Telegram error::" {
+		t.Fatalf("visit %v", parts)
 	}
-	st.addMessage(roleUser, "et demain ?", true)
-	st.addMessageVia(roleError, "panic: raw trace", "turn", true)
-	got, _ = st.lastExchange()
-	if len(got) != 2 || got[1].Role != roleError || got[1].Text != "" || got[1].Via != "" {
-		t.Fatalf("an error, without its text: %+v", got)
+	if all, _ := st.visitLines(time.Time{}); len(all) != 4 || all[0].Text != "hier soir" {
+		t.Fatalf("never away: the whole conversation's last lines, %+v", all)
 	}
-	// Many events since: Eriphe's newest line still comes.
+	// Many lines since: the last few.
 	for range 60 {
 		st.addMessage(roleEvent, "un événement", true)
+		st.addMessage(roleBrain, "encore", true)
 	}
 	st.addMessage(roleBrain, "enfin", true)
-	got, _ = st.lastExchange()
-	if len(got) != 3 || got[0].Text != "et demain ?" || got[2].Text != "enfin" {
-		t.Fatalf("after many events: %+v", got)
+	got, _ = st.visitLines(time.Time{})
+	if len(got) != exchangeVisitMax || got[len(got)-1].Text != "enfin" {
+		t.Fatalf("after many lines: %+v", got)
 	}
 }
 

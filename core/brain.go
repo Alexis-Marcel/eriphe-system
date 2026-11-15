@@ -465,6 +465,7 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 				seq, err := c.store.addMessage(roleBrain, text, true)
 				if err == nil {
 					c.markBrainMessage(int(seq))
+					c.fileReply(int(seq))               // its reply about a thread, filed under it (thread_talk.go)
 					c.attachTurnCards(int(seq))         // what it proposed in this turn (convo_cards.go)
 					c.notifyWake(int(seq), e.Seq, text) // the answer to a due intention reaches the phone
 				}

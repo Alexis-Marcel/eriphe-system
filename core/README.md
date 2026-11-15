@@ -3317,7 +3317,7 @@ conversation names it: a message (`/conversation#m12`, `convoAt`), a permission
 page), in push notes, channels' links, the journal and the evidence; what means home (the brand,
 closing the settings, the wizard's end, the sign-in) stays `/`. The workspace's stream
 (`/events?a2ui=1`) starts after the conversation's last message: it does not carry them, nor any
-of the conversation's HTML events, but the last exchange as JSON (below).
+of the conversation's HTML events, but the visit's conversation as JSON (below).
 
 **A full home** (#455). The workspace does what the conversation's page does to say the user is
 there (`presence.ts`, as `static/app.js`): it tells eriphe-core when it comes in front or leaves
@@ -3330,16 +3330,32 @@ card at the bottom right for 15 s, its text a link when its URL is a path of the
 ([`gestureActivity`](#preferences-gestures-and-the-brains-tools-workspacego)): a return that only
 opens tiles is a return (`user.returned`, the arrival skill).
 
-**The last exchange** (`web_espace_exchange.go`, `Exchange.tsx`). Not a second chat: under the
-input, the user's last message and Eriphe's last three lines after it (`lastExchange`; Eriphe's
-last line alone when the user never wrote; an error as a line that says it, never its raw text; an
-event's line never), the message Eriphe is writing (the draft, by the same rule as the
-conversation's) and whether it is at work (`brainState`), as the stream's `exchange` event (JSON,
-`exchangeEvent`, each text cut at 4000 characters), sent when the stream opens and whenever it
-changes. Folded to one line when the page opens, unfolded when the user writes (their message
-shows at once, until the stream has it) and when Eriphe's next line comes; Eriphe's text drawn by
-the app's Markdown renderer, never as HTML; a link to the whole conversation. The cards the user
-must answer are not repeated there: they are the queue's surfaces (`q-card-*`).
+**The visit's conversation** (`web_espace_exchange.go`, `Exchange.tsx`, #556). Not a second
+chat: the left column is the present of the visit. First the message composed for the arrival
+(the layout's `eriphe`, kept while a layout says none), then the visit's lines (`visitLines`: the
+user's messages, Eriphe's and errors since the user came back from their last absence,
+`lastAbsence`, the last 12; an error as a line that says it, never its raw text; an event's line
+never; none while the user is away), the message Eriphe is writing (the draft, by the same rule as
+the conversation's) and whether it is at work (`brainState`). Eriphe's newest line is large while
+nothing follows it, the older ones smaller, the user's messages small bubbles; a link to the whole
+conversation by Eriphe's name. All of it is the stream's `exchange` event (JSON, `exchangeEvent`,
+each text cut at 4000 characters), sent when the stream opens and whenever it changes; Eriphe's
+text drawn by the app's Markdown renderer, never as HTML, a line written in a tainted turn
+(`markBrainMessage`) marked as such. The cards the user must answer are not repeated there: they
+are the queue's surfaces (`q-card-*`).
+
+**Exchanges filed per thread** (`thread_talk.go`). A message written over a thread's surface
+(`threadAbout`) is filed under the thread (`thread_talk`) when written and when the brain is given
+it (`threadsDelivered`: the turn is then the thread's talk), with Eriphe's lines of that turn while
+it is still about the thread (`fileReply`); `off_thread` unfiles the turn, a thread tool naming
+another thread ends it, and a turn about a thread only by its event files nothing. The event
+carries, by thread surface, its last 3 exchanges (`threads`), each visit line the thread it is
+filed under, and the thread the draft answers about (`draftThread`). With that thread's card open,
+the page places the exchange going on in the card, as text (never a component the brain wrote),
+and keeps one line of it in the left column; once over (a newer message of the user's, or 10
+minutes without a word and Eriphe not at work on it), it folds into one line of the card
+(« 16 h 10 : tu as écrit « … » ; Eriphe a répondu « … » »), which unfolds on a click. With the card
+not open, the exchange shows whole in the left column, with a link to the card.
 
 **The fallback.** The conversation is where the user lands when the workspace cannot open. The
 shell (`templates/espace.html`) has no JavaScript of its own: without JavaScript a `<noscript>`

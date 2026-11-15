@@ -130,7 +130,7 @@ describe("the workspace on a phone", () => {
     expect(page.classList.contains("focused")).toBe(false);
     expect(el.querySelector("main.canvas")!.classList.contains("column")).toBe(true);
     // No widening of a panel on a column; the conversation is a link away.
-    expect(el.querySelector('.eriphe-links a[href="/conversation"]')).not.toBeNull();
+    expect(el.querySelector('.eriphe-head a.eriphe-all[href="/conversation"]')).not.toBeNull();
     expect(el.querySelector(".eriphe-links button")).toBeNull();
 
     const tiles = el.querySelectorAll("main.canvas article.tile").length;

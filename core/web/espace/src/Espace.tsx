@@ -6,7 +6,7 @@ import { galleryFixtures, gallerySurfaces, sampleProposals, workspaceFixtures } 
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
 import * as data from "./data";
-import { ExchangeView, landed, lastSeq, Notices, type Sent } from "./Exchange";
+import { CardTalk, landed, lastSeq, Notices, Present, type Sent } from "./Exchange";
 import { CONVO } from "./Fallback";
 import { DIMS, Grid, stacked, useNarrow, type Spot } from "./Grid";
 import { useWords } from "./i18n";
@@ -113,18 +113,11 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const [gallery] = useState(() => new URLSearchParams(location.search).has("gallery"));
   const proposals = useMemo(() => (live ? coreProposals : sampleProposals(lang)), [live, lang]);
 
-  // The conversation's last exchange (Exchange.tsx): folded when the page
-  // opens, unfolded when the user writes and when Eriphe answers.
+  // The visit's conversation and the threads' exchanges (Exchange.tsx): the
+  // left column, and the card of the thread open.
   const [exchange, setExchange] = useState<data.Exchange | null>(null);
   const [sent, setSent] = useState<Sent | null>(null);
-  const [exOpen, setExOpen] = useState(false);
-  const exSeen = useRef<number | null>(null); // the exchange's last seq, once the first one came
-  const onExchange = useCallback((x: data.Exchange) => {
-    setExchange(x);
-    const seq = lastSeq(x);
-    if (exSeen.current !== null && (seq > exSeen.current || x.draft)) setExOpen(true);
-    exSeen.current = Math.max(exSeen.current ?? 0, seq);
-  }, []);
+  const onExchange = useCallback((x: data.Exchange) => setExchange(x), []);
   useEffect(() => {
     if (landed(exchange, sent)) setSent(null);
   }, [exchange, sent]);
@@ -149,7 +142,10 @@ export function Espace({ boot }: { boot: data.Boot }) {
     if (boot.live && !gallery) return data.stream(boot, surfaces, setLayout, { onExchange, onNotes: addNotes });
     const sample = workspaceFixtures(lang);
     surfaces.applyMessages(gallery ? galleryFixtures(lang) : sample.messages);
-    if (!gallery) setLayout(sample.layout);
+    if (!gallery) {
+      setLayout(sample.layout);
+      setExchange(sample.exchange);
+    }
     const off = surfaces.onAction(() => say(t("espace.sent.sample")));
     return () => {
       off();
@@ -236,16 +232,26 @@ export function Espace({ boot }: { boot: data.Boot }) {
   };
   // Nothing to show: Eriphe says so, never an empty grid without a word.
   const nothing = !gallery && !!shown && !onSurfaces;
-  const text = useTyped(said ?? (shown ? shown.eriphe : ""));
+  // The message Eriphe composed for the user's arrival: the first of the
+  // left column, not a headline; kept while a layout says none (a focus).
+  const [arrival, setArrival] = useState("");
+  const composed = shown?.eriphe ?? "";
+  useEffect(() => {
+    if (composed) setArrival(composed);
+  }, [composed]);
+  const text = useTyped(said ?? arrival);
+  const titleOf = (id: string) => {
+    const named = shown?.items.find((i) => i.id === id)?.title ?? shown?.chips.find((c) => c.id === id)?.title;
+    return named && named !== id ? named : undefined;
+  };
 
   // A message goes to Eriphe with the surface open, if any: « montre-m'en
   // moins », « lance une recherche là-dessus ». It shows in the exchange at
   // once, Eriphe's answer under it as it comes.
   const send = async (msg: string) => {
     if (!live) return say(t("espace.sent.sample"));
-    const mine: Sent = { text: msg, after: lastSeq(exchange) };
+    const mine: Sent = { text: msg, after: lastSeq(exchange), about: sfocus ?? undefined };
     setSent(mine);
-    setExOpen(true);
     if (!(await data.send(msg, sfocus ? "surface:" + sfocus : null).catch(() => false))) {
       setSent((s) => (s === mine ? null : s));
       say(t("espace.error"));
@@ -288,11 +294,14 @@ export function Espace({ boot }: { boot: data.Boot }) {
         <aside className="eriphe-panel" aria-live="polite">
           <div className="eriphe-head">
             <p className="eriphe-name">{boot.name}</p>
+            <a className="eriphe-all" href={CONVO}>
+              {t("espace.exchange.all")}
+            </a>
             <a className="eriphe-settings" href="/settings" title={t("espace.settings")} aria-label={t("espace.settings")}>
               <Icon name="settings" />
             </a>
           </div>
-          <div className="eriphe-text">{text && <p>{text}</p>}</div>
+          <Present arrival={text} x={exchange} sent={sent} focus={sfocus} titleOf={titleOf} onOpen={openSurface} />
           {live && nothing && <p className="eriphe-sample quiet">{t("espace.empty")}</p>}
           {!live && <p className="eriphe-sample">{t("espace.sample")}</p>}
           {down && (
@@ -306,9 +315,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
           <form className="eriphe-input" onSubmit={onSubmit}>
             <input name="text" autoComplete="off" placeholder={hint} aria-label={hint} />
           </form>
-          <ExchangeView x={exchange} sent={sent} open={exOpen} onToggle={() => setExOpen(!exOpen)} />
           <div className="eriphe-links">
-            <a href={CONVO}>{t("espace.convo")}</a>
             {!narrow && <button className="linkish" onClick={() => setWide(!wide)} aria-pressed={wide}>{t(wide ? "espace.narrow" : "espace.wide")}</button>}
           </div>
         </aside>
@@ -316,7 +323,8 @@ export function Espace({ boot }: { boot: data.Boot }) {
         <div className="stage">
           <ProposalsContext.Provider value={proposals}>
             {onSurfaces ? (
-              <Grid adapter={surfaces} layout={shown!} narrow={narrow} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} onNeed={onNeed} onBack={backSurface} />
+              <Grid adapter={surfaces} layout={shown!} narrow={narrow} onOpen={openSurface} onClose={closeSurface} onPlace={placeSurface} onNeed={onNeed} onBack={backSurface}
+                below={(id) => <CardTalk id={id} x={exchange} sent={sent} />} />
             ) : gallery ? (
               <div className="surfaces">
                 <Surfaces adapter={surfaces} />

@@ -1,3 +1,4 @@
+import type { Exchange, ExchangeLine, Talk } from "../data";
 import type { Lang } from "../i18n";
 import type { Layout } from "../types";
 import type { Message } from "./adapter";
@@ -155,10 +156,37 @@ const eriphe = {
 
 const proposalTitle = { fr: "Proposition", en: "Proposal" };
 
+// sampleExchange is the dev server's conversation (web_espace_exchange.go):
+// a visit with a word about nothing, and two exchanges filed under the
+// project's surface: one of yesterday, folded in its card, and one going
+// on, in its card when it is open.
+export function sampleExchange(lang: Lang, now = Date.now()): Exchange {
+  const en = lang === "en";
+  const at = (min: number) => new Date(now - min * 60_000).toISOString();
+  const thread = "gallery-project";
+  const old: Talk = {
+    lines: [
+      { seq: 2, role: "user", text: en ? "use the club's colours on the home page" : "mets les couleurs du club sur l'accueil", time: at(26 * 60), thread },
+      { seq: 3, role: "brain", text: en ? "Done: the home page uses **the club's green**; the assistant will show you before publishing." : "C'est fait : l'accueil prend **le vert du club** ; l'assistant te le montre avant de publier.", time: at(26 * 60 - 1), thread },
+    ],
+  };
+  const user: ExchangeLine = { seq: 11, role: "user", text: en ? "add a contact form after all" : "ajoute plutôt un formulaire de contact finalement", time: at(3), thread };
+  const reply: ExchangeLine = { seq: 12, role: "brain", text: en ? "All right: a contact form rather than a mailto link. I restarted the assistant; it shows you the page before publishing." : "D'accord : un formulaire de contact plutôt qu'un lien mailto. J'ai relancé l'assistant ; il te montre la page avant de publier.", time: at(2), thread };
+  return {
+    lines: [
+      { seq: 8, role: "user", text: en ? "is the backup running again?" : "la sauvegarde repart ?", time: at(12) },
+      { seq: 9, role: "brain", text: en ? "Not yet: the NAS disk is still full. Free some room and I'll start it again." : "Pas encore : le disque du NAS est toujours plein. Libère de la place et je la relance.", time: at(11) },
+      user,
+      reply,
+    ],
+    threads: { [thread]: [old, { lines: [user, reply] }] },
+  };
+}
+
 // workspaceFixtures is the dev server's workspace: the made-up surfaces
 // (the to-do list, the queue's proposals and alert, three of the
 // gallery's) and where eriphe-core would lay them out on the 12 × 8 grid.
-export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: Layout; ids: string[] } {
+export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: Layout; ids: string[]; exchange: Exchange } {
   const card = (id: string, root: Record<string, unknown>): Message => ({
     version: "1.0",
     createSurface: { surfaceId: id, catalogId: CATALOG.id, components: [{ id: "root", ...root }] },
@@ -203,5 +231,5 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
     ],
     chips: [{ id: "gallery-project", title: en ? "The terrace" : "La terrasse", why: en ? "Nothing urgent" : "Rien de pressé" }],
   };
-  return { messages, layout, ids: messages.flatMap((m) => ("createSurface" in m ? [m.createSurface.surfaceId] : [])) };
+  return { messages, layout, ids: messages.flatMap((m) => ("createSurface" in m ? [m.createSurface.surfaceId] : [])), exchange: sampleExchange(lang) };
 }

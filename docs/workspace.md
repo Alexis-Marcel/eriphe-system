@@ -233,10 +233,12 @@ overview** and the field to write about it at the top.
 
 The conversation with Eriphe stays, with its history, the tasks and Settings, at
 `/conversation`: **Open the conversation**, in the workspace's column, goes there. What you write
-in the workspace's column is a message of that conversation. Under the field, **Last exchange**
-shows your last message and Eriphe's answer as it writes it; click it to fold or unfold it, and
-**The whole conversation** for the rest. When the page opens it is folded; it unfolds when you
-write and when Eriphe answers. Questions Eriphe needs you to answer come as tiles on the workspace.
+in the workspace's column is a message of that conversation. The column shows this visit: the
+message Eriphe composed for your return first, then what you and Eriphe said since you came back,
+its newest answer large; **The whole conversation**, by Eriphe's name, for the rest. What you write
+with a thread open goes in its card, with Eriphe's answer, and the column keeps one line of it;
+once over, the exchange folds into one line of the card, which you can click to read it again.
+Questions Eriphe needs you to answer come as tiles on the workspace.
 
 While the workspace is open in front of you, Eriphe knows you are there, as with the conversation:
 a notification shows as a small notice in the page rather than on your phone, and a return after
