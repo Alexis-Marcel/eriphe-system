@@ -64,8 +64,9 @@ const (
 	srcMonitor  = "monitor"
 	byPart      = "part" // a source the holder's part brought
 
-	threadSourcesMax = surfaceSourcesMax // sources a thread carries, monitors included
-	threadItemsMax   = 200               // items shown of one source
+	threadSourcesMax  = surfaceSourcesMax // sources a thread carries, monitors included
+	threadItemsMax    = 200               // items shown of one source
+	threadItemTextMax = 160               // runes of an item's title or detail
 )
 
 var threadSourceNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
@@ -76,6 +77,10 @@ var threadSourceNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 type sourceItems struct {
 	Path string `json:"path,omitempty" jsonschema:"the list in what it reads, a path as a monitor's (messages, data.items); empty: the whole result is the list"`
 	ID   string `json:"id" jsonschema:"each item's id, a path in the item (id, uid, number)"`
+	// What its row shows, read by code: paths in the item; the id when
+	// there is no title.
+	Title  string `json:"title,omitempty" jsonschema:"what its row says, a path in the item (subject, title, summary); its id without"`
+	Detail string `json:"detail,omitempty" jsonschema:"beside it, quieter: a path in the item (from, author, start)"`
 }
 
 // threadSource is a source as it is given.
@@ -144,7 +149,8 @@ func (s *threadSource) check() error {
 		if s.Items.ID == "" {
 			return fmt.Errorf("source %s: items needs id, a path in each item", s.Name)
 		}
-		for _, p := range []string{s.Items.Path, s.Items.ID} {
+		s.Items.Title, s.Items.Detail = strings.TrimSpace(s.Items.Title), strings.TrimSpace(s.Items.Detail)
+		for _, p := range []string{s.Items.Path, s.Items.ID, s.Items.Title, s.Items.Detail} {
 			if len(p) > monitorPathMax {
 				return fmt.Errorf("source %s: a path of %d characters at most", s.Name, monitorPathMax)
 			}
@@ -559,7 +565,18 @@ func threadSourceItems(src storedSource, most int) []map[string]any {
 			continue
 		}
 		seen[id] = true
-		out = append(out, map[string]any{"source": src.Name, "id": id, "n": i})
+		row := map[string]any{"source": src.Name, "id": id, "n": i, "title": id}
+		for key, path := range map[string]string{"title": src.Items.Title, "detail": src.Items.Detail} {
+			if path == "" {
+				continue
+			}
+			if v, err := extract(it, path); err == nil && v != nil {
+				if text := truncate(oneLine(valueText(v)), threadItemTextMax); text != "" {
+					row[key] = text
+				}
+			}
+		}
+		out = append(out, row)
 		if len(out) == most {
 			break
 		}
@@ -614,26 +631,7 @@ func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[strin
 		}
 		out.add(comp{"id": "thread_src_" + n + "_by", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/sources/" + n + "/caption"}})
 		if src.Items != nil {
-			// Each item, its note joined by code (thread_items.go). No row
-			// carries an action: a tainted note's never may ask.
-			items := threadSourceItems(src, threadItemsMax)
-			rows := make([]any, 0, len(items))
-			for _, it := range items {
-				it["label"], it["detail"] = it["id"], ""
-				if note, ok := notes[src.Name+"\x00"+it["id"].(string)]; ok {
-					noteRow(it, note, lang, loc, now)
-					if note.Tainted != "" {
-						in.codeTaint = append(in.codeTaint, threadNoteTaint+src.Name+"/"+note.Item)
-					}
-				}
-				rows = append(rows, it)
-			}
-			v["items"] = rows
-			item := "thread_src_" + n + "_item"
-			out.add(comp{"id": "thread_src_" + n + "_items", "component": "List", "children": map[string]any{"path": "/thread/sources/" + n + "/items", "componentId": item}})
-			out.inner(comp{"id": item, "component": "Column", "children": []any{item + "_label", item + "_detail"}},
-				comp{"id": item + "_label", "component": "Text", "text": map[string]any{"@path": "label"}},
-				comp{"id": item + "_detail", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "detail"}})
+			itemsBlock(out, v, src, notes, n, lang, loc, now, &in.codeTaint)
 		}
 		shown = append(shown, v)
 	}

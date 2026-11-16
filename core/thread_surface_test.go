@@ -28,11 +28,27 @@ func threadSurfaceOf(t *testing.T, c *core, id int64) (surface, map[string]any, 
 	return s, th, meta.Extensions[surfaceExtension]
 }
 
+// sourceRows are the rows a source of a thread's surface shows, its
+// groups' in order.
+func sourceRows(src map[string]any) []any {
+	var rows []any
+	groups, _ := src["groups"].([]any)
+	for _, g := range groups {
+		items, _ := g.(map[string]any)["items"].([]any)
+		rows = append(rows, items...)
+	}
+	return rows
+}
+
 // timelineOf is the steps the surface's Timeline shows: label → state, and
 // each one's detail.
 func timelineOf(data map[string]any) (map[string]string, map[string]string) {
 	states, details := map[string]string{}, map[string]string{}
-	items, _ := data["steps"].([]any)
+	var items []any
+	for _, key := range []string{"done", "steps", "watch"} { // the steps done (folded), the others, its monitors' events
+		list, _ := data[key].([]any)
+		items = append(items, list...)
+	}
 	for _, it := range items {
 		m, _ := it.(map[string]any)
 		label, _ := m["label"].(string)
@@ -67,9 +83,9 @@ func TestThreadSurfaceLight(t *testing.T) {
 	if meta.Summary != "Ouvert" || !strings.Contains(meta.Why, "tenu à jour") || meta.Tainted || !meta.Answers {
 		t.Errorf("meta %+v", meta)
 	}
-	// Open and held by the brain: the header says it all, no state line
-	// nor empty timeline.
-	if strings.Contains(string(s.Components), "thread_steps") || data["state"] != nil || !strings.Contains(string(s.Components), "thread_yours_none") {
+	// Open and held by the brain: the header says it all, no state line,
+	// no empty timeline, no « À toi » with nothing in it.
+	if strings.Contains(string(s.Components), "thread_steps") || data["state"] != nil || strings.Contains(string(s.Components), "thread_yours") {
 		t.Errorf("components %s data %v", s.Components, data)
 	}
 
@@ -102,7 +118,7 @@ func TestThreadSurfaceLight(t *testing.T) {
 	if s.Lifetime.While != "" || until.Sub(th.Ended) < threadAfterEnd || (!midnight && until.Sub(th.Ended) != threadAfterEnd) {
 		t.Fatalf("lifetime %+v, ended %s", s.Lifetime, th.Ended)
 	}
-	if meta.Summary != "Fait ✓" || data["summary"] != "Merged as 4f2c, deployed at 10:00." || s.Weight != threadWeightEnded {
+	if ended, _ := data["ended"].(map[string]any); meta.Summary != "Fait ✓" || ended["text"] != "Merged as 4f2c, deployed at 10:00." || s.Weight != threadWeightEnded {
 		t.Errorf("done: meta %+v data %v weight %d", meta, data, s.Weight)
 	}
 	c.tickSurfaces(context.Background(), until.Add(-time.Minute))
@@ -452,7 +468,8 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 }
 
 // A call step's access card is shown in place while it waits, answered
-// there, then kept under the steps with how the call went. On a tainted
+// there, then kept with its step, folded with the steps done, one line
+// saying how the call went. On a tainted
 // thread it is answered in the conversation only.
 func TestThreadSurfaceCallStep(t *testing.T) {
 	c := stepsCore(t)
@@ -482,7 +499,8 @@ func TestThreadSurfaceCallStep(t *testing.T) {
 	shown := func() bool {
 		s, _, meta = threadSurfaceOf(t, c, th.ID)
 		comps = string(s.Components)
-		return strings.Contains(comps, `"thread_steps","thread_card_0"`) && strings.Contains(comps, st.Card) && !strings.Contains(meta.Summary, "à toi")
+		return strings.Contains(comps, `"thread_done_steps","thread_card_0"`) && strings.Contains(comps, `"compact":true,"component":"Proposal","id":"thread_card_0","proposalId":"`+st.Card+`"`) &&
+			!strings.Contains(meta.Summary, "à toi")
 	}
 	for deadline := time.Now().Add(5 * time.Second); !shown() && time.Now().Before(deadline); {
 		time.Sleep(10 * time.Millisecond)

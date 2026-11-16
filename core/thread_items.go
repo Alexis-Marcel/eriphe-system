@@ -238,26 +238,98 @@ func noteAuthor(author, lang string) string {
 }
 
 // noteRow puts a note on its item's row: its words, its state, its due
-// date, who wrote it and whether it may carry someone else's words.
-func noteRow(row map[string]any, n itemNote, lang string, loc *time.Location, now time.Time) {
+// date, who wrote it and whether it may carry someone else's words
+// (« extérieur »: never an action on it).
+func noteRow(row map[string]any, n itemNote, lang string, loc *time.Location) {
 	row["note"], row["state"], row["by"] = n.Note, n.State, noteAuthor(n.Author, lang)
-	parts := []string{}
 	if n.Tainted != "" {
 		row["external"] = true
-		parts = append(parts, tr(lang, "thread.surface.external"))
-	}
-	if n.State != "" {
-		parts = append(parts, tr(lang, "thread.item.state."+n.State))
+		row["mark"] = tr(lang, "thread.surface.external")
 	}
 	if n.Due > 0 {
-		due := time.Unix(n.Due, 0)
-		row["due"] = due.In(loc).Format(time.RFC3339)
-		parts = append(parts, fmt.Sprintf(tr(lang, "thread.item.due"), threadClock(due, now, loc, lang)))
+		due := time.Unix(n.Due, 0).In(loc)
+		row["due"] = due.Format(time.RFC3339)
+		if due.Hour() == 0 && due.Minute() == 0 {
+			row["due"] = due.Format(time.DateOnly) // a day, no time
+		}
 	}
-	if n.Note != "" {
-		parts = append(parts, n.Note)
+}
+
+// itemGroups is the order of the groups of a source's items, by their
+// notes' state; "" holds the items with no state yet. Those with nothing
+// to do, and those handled, are folded.
+var itemGroups = []string{itemStateAct, itemStateLook, "", itemStateInfo, itemStateNone, itemStateDone}
+
+// itemLevel is how a row of a state stands out (Item's level).
+func itemLevel(state string) string {
+	switch state {
+	case itemStateAct:
+		return "high"
+	case itemStateInfo, itemStateNone, itemStateDone:
+		return "low"
 	}
-	row["detail"] = strings.Join(parts, threadExternalSep)
+	return "normal"
+}
+
+// itemsBlock composes the items of a source that lists things, in code's
+// section of a thread's surface: their counts by state, then their rows
+// grouped by state, each with its note joined by code. Bound by paths, so
+// that a read again changes the data, not the components. No row carries
+// an action: a tainted note's never may ask.
+func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[string]itemNote, n, lang string, loc *time.Location, now time.Time, taint *[]string) {
+	type comp = map[string]any
+	byState := map[string][]any{}
+	for _, it := range threadSourceItems(src, threadItemsMax) {
+		for _, k := range []string{"detail", "note", "due", "mark"} { // each row has what its Item binds
+			if _, ok := it[k]; !ok {
+				it[k] = ""
+			}
+		}
+		state := ""
+		if note, ok := notes[src.Name+"\x00"+it["id"].(string)]; ok {
+			noteRow(it, note, lang, loc)
+			state = note.State
+			if note.Tainted != "" {
+				*taint = append(*taint, threadNoteTaint+src.Name+"/"+note.Item)
+			}
+		}
+		it["level"] = itemLevel(state)
+		byState[state] = append(byState[state], it)
+	}
+	var counts, groups []any
+	for _, state := range itemGroups {
+		rows := byState[state]
+		if len(rows) == 0 {
+			continue
+		}
+		name := tr(lang, "thread.item.group."+state)
+		if state == "" {
+			name = tr(lang, "thread.item.group.other")
+		}
+		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": state != itemStateNone && state != itemStateDone, "items": rows})
+		if state != "" {
+			counts = append(counts, map[string]any{"label": tr(lang, "thread.item.state."+state), "value": len(rows)})
+		}
+	}
+	v["counts"], v["groups"] = emptyList(counts), emptyList(groups)
+	at := "/thread/sources/" + n
+	id := "thread_src_" + n
+	out.add(comp{"id": id + "_counts", "component": "List", "direction": "horizontal", "children": map[string]any{"path": at + "/counts", "componentId": id + "_count"}})
+	out.add(comp{"id": id + "_groups", "component": "List", "children": map[string]any{"path": at + "/groups", "componentId": id + "_group"}, "emptyText": tr(lang, "thread.item.none")})
+	out.inner(
+		comp{"id": id + "_count", "component": "Metric", "label": map[string]any{"@path": "label"}, "value": map[string]any{"@path": "value"}},
+		comp{"id": id + "_group", "component": "Fold", "label": map[string]any{"@path": "label"}, "open": map[string]any{"@path": "open"}, "child": id + "_rows"},
+		comp{"id": id + "_rows", "component": "List", "children": map[string]any{"path": "items", "componentId": id + "_row"}},
+		comp{"id": id + "_row", "component": "Item", "title": map[string]any{"@path": "title"}, "detail": map[string]any{"@path": "detail"},
+			"note": map[string]any{"@path": "note"}, "due": map[string]any{"@path": "due"}, "mark": map[string]any{"@path": "mark"}, "level": map[string]any{"@path": "level"}},
+	)
+}
+
+func emptyList(list []any) []any {
+	if list == nil {
+		return []any{}
+	}
+	return list
 }
 
 // readNotesTaint is why reading a thread's notes taints the reader: each

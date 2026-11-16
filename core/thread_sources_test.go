@@ -21,7 +21,7 @@ func sourcesOf(t *testing.T, c *core, id int64) ([]string, [][]string) {
 		caption, _ := m["caption"].(string)
 		captions = append(captions, caption)
 		var ids []string
-		rows, _ := m["items"].([]any)
+		rows := sourceRows(m)
 		for _, r := range rows {
 			row, _ := r.(map[string]any)
 			id, _ := row["id"].(string)

@@ -13,7 +13,7 @@ import (
 
 // The header of a thread's surface (#553): opening a thread tells in
 // seconds what changed, where it stands and what is the user's, without
-// rereading it. Three parts, under its goal, all composed by code:
+// rereading it. Three blocks (thread_blocks.go), all composed by code:
 //
 //   - Depuis ta dernière visite: facts made by code from the thread's own
 //     data (its steps' starts and ends, its summary written again, its
@@ -24,8 +24,8 @@ import (
 //     lines: they are French only, and may quote a lead.
 //   - Où on en est: the thread's summary, as remember (kind progress),
 //     the extraction or its close wrote it, with its date; no model call.
-//   - À toi: what waits for the user (its cards, a step of theirs), or
-//     « Rien pour l'instant. ». An ended thread has none.
+//   - À toi: what waits for the user (its cards, a step of theirs); none
+//     when nothing waits, nor once it ended.
 //
 // The visit: the user opening a thread's surface (the page's action
 // "open", surfaceAction) moves its visits: seen takes the last one,
@@ -142,6 +142,15 @@ func threadClock(t, now time.Time, loc *time.Location, lang string) string {
 	return fmt.Sprintf("%d %s %s", t.Day(), month, clock)
 }
 
+// threadWaitsUser tells whether something of a thread waits for the user:
+// its own cards, the ones linked to it, a step of theirs.
+func threadWaitsUser(steps []threadSurfaceStep, asks []int64, linked []string) bool {
+	if len(asks) > 0 || len(linked) > 0 {
+		return true
+	}
+	return slices.ContainsFunc(steps, func(st threadSurfaceStep) bool { return st.Waits })
+}
+
 // threadStateLine is the thread's state under its goal, when it says more
 // than the header: not for a light thread the brain holds that is open.
 func (c *core) threadStateLine(s Thread, lang string) string {
@@ -159,15 +168,13 @@ func (c *core) threadStateLine(s Thread, lang string) string {
 	return state
 }
 
-// threadHeader composes the header of a thread's surface: since the
-// user's last visit, where it stands, what is theirs. What waits for the
-// user gives the surface its weight.
-func (c *core) threadHeader(in *surfaceIn, out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, asks []int64, more []threadFact, now time.Time) {
+// threadSince composes « Depuis ta dernière visite »: the facts since
+// the user's visit before the last one, its monitors' events among them.
+func (c *core) threadSince(out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, more []threadFact, now time.Time) {
 	lang, loc := c.userLang(), c.userZone()
 	w := func(key string) string { return tr(lang, key) }
 	type comp = map[string]any
 
-	// Depuis ta dernière visite.
 	facts := threadFacts(s, steps, s.seen, lang)
 	for _, f := range more { // its monitors' events (thread_live.go)
 		if f.At.Unix() > s.seen {
@@ -211,6 +218,14 @@ func (c *core) threadHeader(in *surfaceIn, out *threadComps, data map[string]any
 			out.add(comp{"id": "thread_fact_" + strconv.Itoa(i), "component": "Text", "text": map[string]any{"@path": "/thread/facts/" + strconv.Itoa(i)}})
 		}
 	}
+}
+
+// threadWhere composes « Où on en est »: the thread's summary, with its
+// date. An ended thread says it in its banner (blockEnded).
+func (c *core) threadWhere(out *threadComps, data map[string]any, s Thread, now time.Time) {
+	lang, loc := c.userLang(), c.userZone()
+	w := func(key string) string { return tr(lang, key) }
+	type comp = map[string]any
 
 	// Où on en est.
 	out.add(comp{"id": "thread_where", "component": "Text", "variant": "subtitle", "text": w("thread.head.where")})
@@ -224,22 +239,22 @@ func (c *core) threadHeader(in *surfaceIn, out *threadComps, data map[string]any
 	} else {
 		out.add(comp{"id": "thread_nosummary", "component": "Text", "variant": "caption", "text": w("thread.head.nosummary")})
 	}
+}
 
-	// À toi: the thread's own cards, the cards raised for it
-	// (thread_turn.go), then its steps'.
+// threadYours composes « À toi »: what waits for the user, the thread's
+// own cards, the cards raised for it (thread_turn.go), then its steps';
+// nothing when nothing waits, or once it ended. What waits gives the
+// surface its weight.
+func (c *core) threadYours(in *surfaceIn, out *threadComps, s Thread, steps []threadSurfaceStep, asks []int64, linked []string) {
+	w := func(key string) string { return tr(c.userLang(), key) }
+	type comp = map[string]any
 	if !s.active() {
 		return
 	}
-	out.add(comp{"id": "thread_yours", "component": "Text", "variant": "subtitle", "text": w("thread.surface.yours")})
-	linked := c.linkedWaiting(s.ID, steps)
-	yours := len(asks) > 0 || len(linked) > 0
-	for _, st := range steps {
-		yours = yours || st.Waits
-	}
-	if !yours {
-		out.add(comp{"id": "thread_yours_none", "component": "Text", "variant": "caption", "text": w("thread.head.nothingyours")})
+	if !threadWaitsUser(steps, asks, linked) {
 		return
 	}
+	out.add(comp{"id": "thread_yours", "component": "Text", "variant": "subtitle", "text": w("thread.surface.yours")})
 	// Its cards leave the attention queue for it when it answers them
 	// (threadShownCards): it takes their weight.
 	in.Weight = threadWeightYours
