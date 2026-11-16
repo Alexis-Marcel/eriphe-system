@@ -12,7 +12,7 @@ import (
 )
 
 // The brain's part is played here as its prompt asks it (brain-prompt.md,
-// « Les threads »): the tools it calls, in order, and what eriphe-core
+// « Les fils »): the tools it calls, in order, and what eriphe-core
 // makes of them.
 
 // threadSurface is the thread's own surface, thread-<id>, that code wrote
@@ -458,25 +458,26 @@ func TestStepLimitCountsUnfinished(t *testing.T) {
 }
 
 // The prompt says when to open a thread, when its surface takes the stage,
-// and how a wake turn goes.
+// and how a wake turn goes (« fil » is the word the user reads).
 func TestBrainPromptThreads(t *testing.T) {
 	raw, _ := os.ReadFile("brain-prompt.md")
 	prompt := string(raw)
-	start := strings.Index(prompt, "## Les threads")
+	start := strings.Index(prompt, "## Les fils")
 	end := strings.Index(prompt, "## Ta mémoire")
 	if start < 0 || end < start {
-		t.Fatal("no « Les threads »")
+		t.Fatal("no « Les fils »")
 	}
 	section := prompt[start:end]
 	for _, want := range []string{
-		"**Quand en ouvrir un.**", "`open_thread` avec sa clé", "reste du texte, sans thread",
-		"une étape `call` de fusion", "une étape `user`", "seulement le `check`, rien d'autre", "devient une étape `task` de ce thread", "Une tâche est toujours une étape d'un thread",
+		"**Quand en ouvrir un.**", "`open_thread` avec sa clé", "reste du texte, sans fil", "tout ce qui se **montre** est un fil", "`take`", "`new_because`",
+		"une étape `call` de fusion", "une étape `user`", "seulement le `check`, rien d'autre", "devient une étape `task` de ce fil", "Une tâche est toujours une étape d'un fil",
+		"un **veilleur**", "`tools: [eriphe-threads]`", "`note_item`", "`stop_thread`", "une recherche",
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",
 		"se range seul dans sa chronologie", "Sa réponse sur une de ces cartes",
 	} {
 		if !strings.Contains(section, want) {
-			t.Errorf("« Les threads » lacks %q", want)
+			t.Errorf("« Les fils » lacks %q", want)
 		}
 	}
 }

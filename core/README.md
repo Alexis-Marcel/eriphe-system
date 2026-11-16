@@ -1052,9 +1052,13 @@ about no thread, the task is a step of the live light thread the user's message 
 loose, and the code never opens a thread for it. A turn about a led thread is refused too (its plan
 changes with `amend_thread`), and so is one about an ended thread (reopen it first), or a thread
 that cannot take one more step. The prompt
-(`brain-prompt.md`, « Les threads ») says when the brain opens or resumes a thread (a question about
-a matter, a request of more than one step, an alert worth following: `open_thread` with its
-alias), how its steps grow from what is found, when its surface `thread-<id>` takes the stage
+(`brain-prompt.md`, « Les fils »: « fil » is the word the user reads) says that the thread is the
+one object the user sees, how it ends (`goal`, `standing`, `day`, for the brain alone), when the
+brain opens or resumes one (a question about a matter, a request of more than one step, a research,
+an alert worth following, anything shown: `open_thread` with its alias, `take` or `new_because`
+when the matcher lists near ones; a one-line answer stays text), that a standing thread comes
+from a watcher (a skill lent `eriphe-threads` with its `thread:` alias), how its steps grow from
+what is found, how notes and offered actions propose on it, when its surface `thread-<id>` takes the stage
 (« where does it stand », from the workspace: `workspace_focus`) and when it opens on the side
 (« launch », « while I… »), and that a wake turn updates the thread without asking the user.
 
@@ -3180,9 +3184,8 @@ them, is no turn of the conversation; only the workspace is laid out again aroun
 shows (a thread's header, for a thread) says where things stand.
 
 **An answer on stage.** When the user asks from the workspace about a thing (« où en est la PR
-… ? »), the brain answers with a surface (the subject as title, its state, the points to see,
-what is next, the pending proposal embedded; the thread's own surface when the thing has one)
-and puts it on stage with `workspace_focus`, then replies in one line. The tool is the brain's
+… ? »), the brain finds or opens the thing's thread, adds its part to the thread's surface when it
+helps (its state, the points to see, what is next), and puts it on stage with `workspace_focus`, then replies in one line. The tool is the brain's
 only, allowed in the turn that answers a message of the user's sent from the workspace (typed in
 its input, `· depuis l'espace`, or a button's ask), never on events alone, once per turn; it is
 display-only (it writes nothing, sends nothing, the next click takes the stage back), so a tainted
@@ -3857,8 +3860,8 @@ Always: no call refused, no change called outside a step, a reply in one line (`
 wake), no server or tool name in the reply, the thread, its steps or the part. A turn announces
 the id the next thread gets (`threadBenchSeed`). In CI with no model, every case is valid, its
 reference answers score clean, and each fault is caught on a spoilt copy. `threads_live_test.go`
-runs the turns on a real model: « Les threads », the paragraphs
-on surfaces and on the workspace's messages, the brain's tools for threads and the workspace as
+runs the turns on a real model: « Les fils », the paragraphs
+on the brain's part of a thread and on the workspace's messages, the brain's tools for threads and the workspace as
 an MCP client lists them and the catalog appended to the system prompt; a wake is played after
 the case's reference first turn, so each turn is judged on its own:
 

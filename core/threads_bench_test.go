@@ -960,27 +960,27 @@ var threadToolsListed = []string{"find_thread", "open_thread", "read_thread", "a
 	"close_thread", "reopen_thread", "stop_thread", "run_task", "surface_write", "surface_remove", "workspace_read", "workspace_focus"}
 
 // threadInstructions are what the brain reads to keep threads: its prompt's
-// « Les threads », its paragraph on surfaces and on answering from the
+// « Les fils », its paragraph on its part of a thread and on answering from the
 // workspace, its tools for threads and the workspace as an MCP client
 // lists them, and the catalog of components.
 func threadInstructions(t *testing.T, c *core, user string) string {
 	t.Helper()
-	start := strings.Index(brainPrompt, "## Les threads")
+	start := strings.Index(brainPrompt, "## Les fils")
 	end := strings.Index(brainPrompt, "## Ta mémoire")
 	if start < 0 || end < start {
-		t.Fatal("brain-prompt.md has no « Les threads »")
+		t.Fatal("brain-prompt.md has no « Les fils »")
 	}
 	var para, front string
 	for line := range strings.SplitSeq(brainPrompt, "\n") {
 		switch {
-		case strings.HasPrefix(line, "- **Une surface**"):
+		case strings.HasPrefix(line, "- **Ta partie d'un fil**"):
 			para = line
 		case strings.HasPrefix(line, "- `[{{user}} HH:MM #N · depuis l'espace]`"):
 			front = line
 		}
 	}
 	if para == "" || front == "" {
-		t.Fatal("brain-prompt.md has no paragraph on surfaces or on the workspace's messages")
+		t.Fatal("brain-prompt.md has no paragraph on its part of a thread or on the workspace's messages")
 	}
 	ctx := context.Background()
 	ct, st := mcp.NewInMemoryTransports()
@@ -1005,7 +1005,7 @@ func threadInstructions(t *testing.T, c *core, user string) string {
 		schema, _ := json.Marshal(list.Tools[i].InputSchema)
 		fmt.Fprintf(&tools, "\n%s : %s\nSes arguments (JSON Schema) : %s\n", name, list.Tools[i].Description, schema)
 	}
-	raw := brainPrompt[start:end] + "\n## Tes surfaces\n" + para + "\n" + front + "\n"
+	raw := brainPrompt[start:end] + "\n## Ta partie\n" + para + "\n" + front + "\n"
 	return standingInstructions(raw, user, "Eriphe") + "\n## Tes outils" + tools.String() + "\n" + a2ui.CatalogPrompt()
 }
 
@@ -1013,7 +1013,7 @@ func TestThreadInstructions(t *testing.T) {
 	x := loadThreadCases(t)[0]
 	c := benchThreadCore(t, x)
 	p := threadInstructions(t, c, "Sam")
-	for _, want := range append([]string{"## Les threads", "workspace_focus", "Composants", "Sam"}, threadToolsListed...) {
+	for _, want := range append([]string{"## Les fils", "workspace_focus", "Composants", "Sam"}, threadToolsListed...) {
 		if !strings.Contains(p, want) {
 			t.Errorf("instructions without %q", want)
 		}
