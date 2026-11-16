@@ -123,7 +123,7 @@ func TestBrainDraftReport(t *testing.T) {
 // call and the answer in the next.
 func TestBrainWorkingNoteNotShown(t *testing.T) {
 	c, report, brainMessages := brainReports(t)
-	c.store.addMessage(roleEvent, "[thread 1 « Publication »] A step reported its work.", true)
+	c.store.addMessage(roleEvent, "[thread 1 « Garage »] A step reported its work.", true)
 
 	report("t-brain", nodeReport{State: stateRunning, Events: []EventRow{
 		{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Need the whole report."}}}})
@@ -132,9 +132,9 @@ func TestBrainWorkingNoteNotShown(t *testing.T) {
 	}
 	report("t-brain", nodeReport{State: stateIdle, Events: []EventRow{
 		{Seq: 2, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "mcp__eriphe-core__task_status", "input": map[string]any{"task_id": "t-step"}}},
-		{Seq: 3, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Seven topics are on the tile."}},
-		{Seq: 4, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success", "result": "Seven topics are on the tile."}}}})
-	if msgs := brainMessages(); len(msgs) != 1 || msgs[0] != "Seven topics are on the tile." {
+		{Seq: 3, Time: time.Now(), Type: "text", Data: map[string]any{"text": "The garage can take the car on Tuesday."}},
+		{Seq: 4, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success", "result": "The garage can take the car on Tuesday."}}}})
+	if msgs := brainMessages(); len(msgs) != 1 || msgs[0] != "The garage can take the car on Tuesday." {
 		t.Fatalf("brain messages = %q", msgs)
 	}
 	if text, _, _ := c.draft.get(); text != "" {
@@ -144,7 +144,7 @@ func TestBrainWorkingNoteNotShown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lines) != 1 || lines[0].Text != "Seven topics are on the tile." {
+	if len(lines) != 1 || lines[0].Text != "The garage can take the car on Tuesday." {
 		t.Fatalf("exchange = %+v", lines)
 	}
 
