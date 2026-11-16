@@ -40,8 +40,11 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 	v.Fields = p.FieldsIn(lang)
 	o := p.Origin(lang)
 	v.Thread, v.From, v.Yes = o.Thread, o.From, o.Yes
-	if p.Kind == cardAccess && x.State == cardApproved {
+	switch {
+	case p.Kind == cardAccess && x.State == cardApproved:
 		v.Exec, v.ExecWhy = w.c.callState(p.ID)
+	case p.Kind == cardCalls && x.State == cardApproved:
+		v.Exec, v.ExecWhy = w.c.callsExec(p.ID)
 	}
 	if x.State == cardPending {
 		for _, s := range w.c.proposalSpans(p.Kind, p.ID, w.c.userZone()) {

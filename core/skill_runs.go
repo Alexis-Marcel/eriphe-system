@@ -610,11 +610,21 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 	if s := c.runThreadWork(r); s != "" {
 		note += "\n· " + s
 	}
+	itemCards := c.runBatches(r.ID)
+	if len(itemCards) > 0 {
+		note += fmt.Sprintf("\n· %d card(s) on items of its thread", len(itemCards))
+	}
 	state := skillRunDone
-	if weight == 0 && calls == 0 {
+	if weight == 0 && calls == 0 && len(itemCards) == 0 {
 		state = skillRunSilent
 	}
 	c.endRun(r.ID, state, note)
+	// Its calls on items: a card each, on its item's row (item_cards.go).
+	for _, batch := range itemCards {
+		if asks := c.batchAsks(batch); len(asks) > 0 {
+			c.cardNow(cardCalls, batch, "", threadRef(asks[0].Thread))
+		}
+	}
 	source, tainted := "skill:"+r.Skill, c.taskResultTaint(r.Task) != ""
 	if weight == weightInterrupts {
 		c.runUrgent(r, st)

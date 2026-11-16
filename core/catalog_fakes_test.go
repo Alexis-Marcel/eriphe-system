@@ -19,14 +19,15 @@ import (
 // read-only tool), rollback (a tool that acts), and a resource,
 // monitor://received (the mail server's mail://received).
 type fakeMonitor struct {
-	mu      sync.Mutex
-	state   string
-	version string
-	failing bool
-	calls   int
-	rules   []map[string]any // alerts: Grafana-like alert rules, each uid, name, state
-	cpu     float64          // status: data.cpu
-	got     []map[string]any // monitor://received: messages, each id, subject
+	mu       sync.Mutex
+	state    string
+	version  string
+	failing  bool
+	calls    int
+	rules    []map[string]any // alerts: Grafana-like alert rules, each uid, name, state
+	cpu      float64          // status: data.cpu
+	got      []map[string]any // monitor://received: messages, each id, subject
+	silenced []string         // silence: the uids it was called on
 }
 
 func (m *fakeMonitor) server() *mcp.Server {
@@ -73,6 +74,16 @@ func (m *fakeMonitor) server() *mcp.Server {
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 			Version string `json:"version"`
 		}) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"ok": true}, nil
+		})
+	// silence acts on one alert, by its uid: an action on an item.
+	mcp.AddTool(s, &mcp.Tool{Name: "silence"},
+		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+			UID string `json:"uid"`
+		}) (*mcp.CallToolResult, map[string]any, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			m.silenced = append(m.silenced, in.UID)
 			return nil, map[string]any{"ok": true}, nil
 		})
 	// page reads the open web: no openWorldHint.

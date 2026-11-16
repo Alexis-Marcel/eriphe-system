@@ -350,9 +350,21 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	// The blocks, in their order (thread_blocks.go); the head is composed
 	// last, once the weight is known, and put first.
 	c.blockEnded(&out, data, s, now)
-	c.threadYours(&in, &out, s, steps, asks, linked)
+	// The cards on its items show on their rows, not with what waits for
+	// the user; one whose row is not drawn shows there (item_cards.go).
+	var cards []itemCard
+	var onRows map[string]bool
+	if s.active() {
+		cards = c.threadItemCards(s.ID, now)
+		cards, onRows = c.drawnItemCards(s.ID, cards)
+	}
+	c.threadYours(&in, &out, s, steps, asks, slices.DeleteFunc(slices.Clone(linked), func(ref string) bool { return onRows[ref] }))
+	if len(onRows) > 0 {
+		// It waits for the user on its rows: it takes their weight.
+		in.Weight = max(in.Weight, threadWeightYours, queueSurfaceWeight(cardWeight(cardCalls)))
+	}
 	// The tools and resources it reads, their items (thread_sources.go).
-	values := c.threadSourcesPart(&in, &out, data, s, now)
+	values := c.threadSourcesPart(&in, &out, data, s, cards, now)
 	// The monitors it follows, read by code (thread_live.go): past a
 	// limit, it rises.
 	watch, watchFacts := c.watchItems(&in, s, lang, loc)

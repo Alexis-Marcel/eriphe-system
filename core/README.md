@@ -1775,6 +1775,23 @@ version, read with its diff.
   even without an attention entry; « the skill proposes N actions » when it wrote none, or when
   its message is held or not sent, held by the attention queue for its breakpoint): each action with its parameters. The yes runs
   them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
+- **Its calls on an item are that item's card** (#575, `item_cards.go`): a kept call whose input
+  names exactly one item a source of its thread lists, of the call's own server (a value of its
+  input equal to the item's id; code matches it, the run never says it), carries the item
+  (`access_asks.thread`, `source`, `item`) and is on that item's card (kind `calls`, `batch` = its
+  first call's id), not on the run's: when the run ends, each item gets its card, raised for the
+  thread (`cardNow`), with its taint. The same call on the same item still waiting, from any run,
+  is the card already there. The thread's surface shows it on the item's row (a `Proposal` bound in
+  the row, `/thread/sources/<n>/groups/<g>/items/<i>/cards`, its group opened while it waits;
+  folded there a day once decided), one on several items under the source
+  (`/thread/sources/<n>/cards`), and one whose row is not drawn with what waits for the user; it
+  takes the thread's weight and state (yours), and leaves the attention queue while the thread is
+  active. Its words are code's: the action by its tool, its origin the thread and the item by its
+  source and id, Oui running each call once as kept. Oui and Non come from its row only: a
+  `Proposal` bound inside a list sends where it is (`at`, its place in the data), and on a
+  thread's surface the answer must say it; `answerOf` checks the place is one its binding takes
+  and the data there shows that card. Its results go to the run's note (a run's) or the thread's
+  log, never to the brain; a calls card is answered by its buttons only, never by a plain « oui ».
 - **Its thread** (`task_threads.go`): its runs are about its alias, `thread: kind:slug`; without
   it, their events' key when it names a thing (a monitor's, `topic:<name>`, or `kind:slug`;
   about.go). Their tasks, notifications, cards and signals carry it. Lent `eriphe-threads`, a

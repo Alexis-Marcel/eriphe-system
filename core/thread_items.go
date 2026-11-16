@@ -273,18 +273,34 @@ func itemLevel(state string) string {
 
 // itemsBlock composes the items of a source that lists things, in code's
 // section of a thread's surface: their counts by state, then their rows
-// grouped by state, each with its note joined by code. Bound by paths, so
-// that a read again changes the data, not the components. No row carries
-// an action: a tainted note's never may ask.
-func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[string]itemNote, n, lang string, loc *time.Location, now time.Time, taint *[]string) {
+// grouped by state, each with its note joined by code, and the cards on
+// it (item_cards.go); the cards on several of its items above them. Bound
+// by paths, so that a read again changes the data, not the components. No
+// row asks: a tainted note's never may. A group with a card that waits is
+// open.
+func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[string]itemNote, cards []itemCard, n, lang string, loc *time.Location, now time.Time, taint *[]string) {
 	type comp = map[string]any
 	byState := map[string][]any{}
+	waits := map[string]bool{} // the groups with a card that waits
+	rowCards := map[string][]any{}
+	var sourceCards []any
+	for _, x := range cards {
+		switch {
+		case x.Source != src.Name:
+		case x.Item == "":
+			sourceCards = append(sourceCards, map[string]any{"ref": x.Ref})
+		default:
+			rowCards[x.Item] = append(rowCards[x.Item], map[string]any{"ref": x.Ref, "pending": x.Pending})
+		}
+	}
 	for _, it := range threadSourceItems(src, threadItemsMax) {
 		for _, k := range []string{"detail", "note", "due", "mark"} { // each row has what its Item binds
 			if _, ok := it[k]; !ok {
 				it[k] = ""
 			}
 		}
+		id := it["id"].(string)
+		it["cards"] = emptyList(rowCards[id])
 		state := ""
 		if note, ok := notes[src.Name+"\x00"+it["id"].(string)]; ok {
 			noteRow(it, note, lang, loc)
@@ -295,6 +311,9 @@ func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[
 		}
 		it["level"] = itemLevel(state)
 		byState[state] = append(byState[state], it)
+		for _, x := range rowCards[id] {
+			waits[state] = waits[state] || x.(map[string]any)["pending"] == true
+		}
 	}
 	var counts, groups []any
 	for _, state := range itemGroups {
@@ -306,22 +325,28 @@ func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[
 		if state == "" {
 			name = tr(lang, "thread.item.group.other")
 		}
-		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": state != itemStateNone && state != itemStateDone, "items": rows})
+		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": waits[state] || state != itemStateNone && state != itemStateDone, "items": rows})
 		if state != "" {
 			counts = append(counts, map[string]any{"label": tr(lang, "thread.item.state."+state), "value": len(rows)})
 		}
 	}
-	v["counts"], v["groups"] = emptyList(counts), emptyList(groups)
+	v["counts"], v["groups"], v["cards"] = emptyList(counts), emptyList(groups), emptyList(sourceCards)
 	at := "/thread/sources/" + n
 	id := "thread_src_" + n
 	out.add(comp{"id": id + "_counts", "component": "List", "direction": "horizontal", "children": map[string]any{"path": at + "/counts", "componentId": id + "_count"}})
+	out.add(comp{"id": id + "_cards", "component": "List", "children": map[string]any{"path": at + "/cards", "componentId": id + "_card"}})
 	out.add(comp{"id": id + "_groups", "component": "List", "children": map[string]any{"path": at + "/groups", "componentId": id + "_group"}, "emptyText": tr(lang, "thread.item.none")})
 	out.inner(
 		comp{"id": id + "_count", "component": "Metric", "label": map[string]any{"@path": "label"}, "value": map[string]any{"@path": "value"}},
 		comp{"id": id + "_group", "component": "Fold", "label": map[string]any{"@path": "label"}, "open": map[string]any{"@path": "open"}, "child": id + "_rows"},
 		comp{"id": id + "_rows", "component": "List", "children": map[string]any{"path": "items", "componentId": id + "_row"}},
-		comp{"id": id + "_row", "component": "Item", "title": map[string]any{"@path": "title"}, "detail": map[string]any{"@path": "detail"},
+		comp{"id": id + "_row", "component": "Column", "children": []string{id + "_item", id + "_row_cards"}},
+		comp{"id": id + "_item", "component": "Item", "title": map[string]any{"@path": "title"}, "detail": map[string]any{"@path": "detail"},
 			"note": map[string]any{"@path": "note"}, "due": map[string]any{"@path": "due"}, "mark": map[string]any{"@path": "mark"}, "level": map[string]any{"@path": "level"}},
+		comp{"id": id + "_row_cards", "component": "List", "children": map[string]any{"path": "cards", "componentId": id + "_card"}},
+		// One template for the cards of a row and those of the source: an
+		// answer says which (at), checked against the data (answerOf).
+		comp{"id": id + "_card", "component": "Proposal", "proposalId": map[string]any{"@path": "ref"}, "compact": true},
 	)
 }
 

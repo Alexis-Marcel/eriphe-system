@@ -363,8 +363,10 @@ export function answerProposal(a: Answer): Promise<boolean> {
   return action(answerMessage(a));
 }
 
-// What a Proposal component answers: the proposal it shows, where.
-export type Answer = { surfaceId: string; componentId: string; ref: string; yes: boolean };
+// What a Proposal component answers: the proposal it shows, where; at is
+// its place in the surface's data when it is bound inside a list (a row's
+// card), which eriphe-core checks shows that proposal.
+export type Answer = { surfaceId: string; componentId: string; ref: string; yes: boolean; at?: string };
 
 export function answerMessage(a: Answer): ActionMessage {
   return {
@@ -374,7 +376,7 @@ export function answerMessage(a: Answer): ActionMessage {
       surfaceId: a.surfaceId,
       sourceComponentId: a.componentId,
       timestamp: new Date().toISOString(),
-      context: { proposal: a.ref, answer: a.yes ? "yes" : "no" },
+      context: { proposal: a.ref, answer: a.yes ? "yes" : "no", ...(a.at ? { at: a.at } : {}) },
     },
   };
 }

@@ -75,7 +75,7 @@ const (
 	cardTextAnswer = 30 * time.Minute // a plain yes or no answers a card this recent only
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls, cardMonitor}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls, cardCalls, cardMonitor}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -255,6 +255,8 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		return c.skillProposal(p) // skill_write.go
 	case cardRunCalls:
 		return c.runCallsProposal(p) // skill_cards.go
+	case cardCalls:
+		return c.callsProposal(p) // item_cards.go
 	case cardMonitor:
 		return c.monitorProposal(p) // monitors.go
 	case cardUnlearn:
@@ -372,6 +374,9 @@ func (c *core) pendingProposals() []proposal {
 	for _, id := range c.runsWithCalls() {
 		add(cardRunCalls, id)
 	}
+	for _, id := range c.proposedBatches() {
+		add(cardCalls, id)
+	}
 	for _, id := range c.proposedMonitors() {
 		add(cardMonitor, id)
 	}
@@ -434,6 +439,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideSkill(id, approve)
 	case cardRunCalls:
 		return c.decideRunCalls(ctx, id, approve)
+	case cardCalls:
+		return c.decideCalls(ctx, id, approve)
 	case cardMonitor:
 		return c.decideMonitor(id, approve)
 	case cardUnlearn:
@@ -768,8 +775,8 @@ func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 		return none, false
 	}
 	x, p := c.liveCard(cards[0])
-	if x.State != cardPending || p.Tainted != "" || x.Kind == cardAccess {
-		return none, false // an access card comes at any moment: a yes may be for something else, so its buttons only
+	if x.State != cardPending || p.Tainted != "" || x.Kind == cardAccess || x.Kind == cardCalls {
+		return none, false // an access card comes at any moment, an item's is answered on its row: a yes may be for something else, so their buttons only
 	}
 	x, err = c.decideCard(ctx, x.ID, yes, "text")
 	if err != nil {
