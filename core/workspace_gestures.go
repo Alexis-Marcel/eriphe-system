@@ -42,6 +42,7 @@ const (
 	queueItemKeep  = 24 * time.Hour // an item other than a card ends this long after it was delivered
 	arrangeMax     = 8
 	blockGestures  = 10
+	blockMarks     = 40 // the latest marks of the session the brain reads; read_thread gives them all
 	placedByUser   = "user"
 	placedByBrain  = "brain"
 	placementSizes = "s, m, l, xl"
@@ -407,7 +408,8 @@ func (c *core) queueSweep(now time.Time) {
 // short: the tiles on the screen with their size and place, the one open,
 // what is folded and what the user closed, and their last gestures of the
 // session; "" when the workspace is empty. A title is quoted only when its
-// author wrote it in a clean turn; a gesture is quoted by its ref only.
+// author wrote it in a clean turn; a gesture is quoted by its ref only,
+// and a mark by its ref, list and item: ids, never text.
 func (c *core) workspaceBlock(now time.Time) string {
 	l := c.currentLayout()
 	if len(l.Items)+len(l.Chips) == 0 {
@@ -462,18 +464,37 @@ func (c *core) workspaceBlock(now time.Time) string {
 	}
 	start := c.workspaceSessionStart(now)
 	if gs, err := c.gestures(start, now.Add(time.Second)); err == nil && len(gs) > 0 {
-		if len(gs) > blockGestures {
-			gs = gs[len(gs)-blockGestures:]
-		}
 		loc := c.conf().location
 		if loc == nil {
 			loc = time.Local
 		}
-		parts := make([]string, 0, len(gs))
-		for _, g := range gs {
-			parts = append(parts, fmt.Sprintf("%s %s %s", g.Time.In(loc).Format("15:04"), gestureKinds[g.What].fr, strings.TrimPrefix(g.Ref, "surface:")))
+		// The marks apart: many may come between two turns, and none is lost
+		// among the moves (thread_marks.go).
+		marks := slices.DeleteFunc(slices.Clone(gs), func(g gesture) bool { return !isMarkGesture(g.What) })
+		gs = slices.DeleteFunc(gs, func(g gesture) bool { return isMarkGesture(g.What) })
+		line := func(head string, gs []gesture, most int, more string) {
+			if len(gs) == 0 {
+				return
+			}
+			parts := make([]string, 0, min(len(gs), most)+1)
+			if len(gs) > most {
+				parts = append(parts, fmt.Sprintf(more, len(gs)-most))
+				gs = gs[len(gs)-most:]
+			}
+			for _, g := range gs {
+				part := fmt.Sprintf("%s %s %s", g.Time.In(loc).Format("15:04"), gestureKinds[g.What].fr, strings.TrimPrefix(g.Ref, surfaceRefPrefix))
+				switch {
+				case g.Detail != "":
+					part += " " + g.Detail // a mark's list and item: ids only
+				case isMarkGesture(g.What):
+					part += " (élément extérieur, non cité : read_thread le donne)"
+				}
+				parts = append(parts, part)
+			}
+			b.WriteString("\n" + head + " : " + strings.Join(parts, " ; "))
 		}
-		b.WriteString("\nses gestes : " + strings.Join(parts, " ; "))
+		line("ses gestes", gs, blockGestures, "%d plus tôt")
+		line("ses marques (liste/élément ; read_thread les donne toutes)", marks, blockMarks, "%d plus tôt")
 	}
 	b.WriteString("]")
 	return b.String()

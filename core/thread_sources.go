@@ -33,8 +33,9 @@ import (
 //     item, as a monitor's new does: code shows its items, one per id, in
 //     code's section (/thread/sources), never a model.
 //   - Who holds the thread adds one with link_thread (source), or with
-//     its part of the thread's surface (surface_write with sources: the
-//     part's own, replaced with it).
+//     a block of its part of the thread's surface (surface_write with
+//     block and sources: that block's own, replaced with it, gone with
+//     the last block that gives it; thread_part.go).
 //   - Read at once when added, every few minutes (every, 5 by default), at
 //     a resource's update, and when the user opens the thread's surface;
 //     only while the thread is active. A read never holds the engine nor a
@@ -371,12 +372,13 @@ func (c *core) keepSourceReads(thread int64, srcs map[string]threadSource, reads
 	c.kickWorkspace()
 }
 
-// partSources are the sources of the holder's part of a thread's surface,
-// as the thread's: each at /<name>, read every refresh minutes.
-func (c *core) partSources(thread int64, in surfaceWriteIn) (map[string]threadSource, error) {
+// partSources are the sources a block of the holder's part gives, as the
+// thread's: each at /<name>, read every refresh minutes. others are the
+// names the part's other blocks give: they count once.
+func (c *core) partSources(thread int64, in surfaceWriteIn, others map[string]bool) (map[string]threadSource, error) {
 	if len(in.Sources) == 0 {
 		if in.Refresh.Every != 0 {
-			return nil, errors.New("refresh every is for a part with sources")
+			return nil, errors.New("refresh every is for a block with sources")
 		}
 		return nil, nil
 	}
@@ -403,7 +405,7 @@ func (c *core) partSources(thread int64, in surfaceWriteIn) (map[string]threadSo
 	}
 	n := len(out)
 	for _, src := range c.threadSources(thread) {
-		if _, again := out[src.Name]; !again && src.By != byPart {
+		if _, again := out[src.Name]; !again && (src.By != byPart || others[src.Name]) {
 			n++
 		}
 	}
@@ -413,17 +415,18 @@ func (c *core) partSources(thread int64, in surfaceWriteIn) (map[string]threadSo
 	return out, nil
 }
 
-// setPartSources makes the part's sources the thread's, in place of the
-// part's before, with what their first read gave; those still reading
-// are kept once they are read.
-func (c *core) setPartSources(thread int64, srcs map[string]threadSource, reads map[string]sourceRead, late *lateReads) {
+// setPartSources makes the part's sources the thread's: srcs, a block's
+// just written, with what their first read gave (those still reading are
+// kept once they are read), and keep, the names its other blocks give; any
+// other source a block gave goes.
+func (c *core) setPartSources(thread int64, srcs map[string]threadSource, keep map[string]bool, reads map[string]sourceRead, late *lateReads) {
 	rows, err := c.store.db.Query(`SELECT name FROM thread_sources WHERE thread = ? AND by = ?`, thread, byPart)
 	if err == nil {
 		var gone []string
 		for rows.Next() {
 			var name string
 			if rows.Scan(&name) == nil {
-				if _, kept := srcs[name]; !kept {
+				if _, kept := srcs[name]; !kept && !keep[name] {
 					gone = append(gone, name)
 				}
 			}

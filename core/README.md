@@ -712,7 +712,7 @@ whatever address it dials) and one client certificate per node.
 | `list_tasks` | recent tasks |
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card) and on the thread's surface, under the step and in its header's facts, so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
-| `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write its part of a thread's surface, as `brain`, and read the threads on screen ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
+| `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write or remove a block of its part of a thread's surface, as `brain`, and read the threads on screen ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
 
 The scheduler takes the requested node if it is online and fits. Otherwise it works in two passes,
 like Kubernetes': it **filters** the online nodes that offer the agent's runtime and carry all its
@@ -1184,7 +1184,7 @@ by code from the thread's data (#468): it never depends on a model remembering t
      line untouched), and an « Ouvrir » Button: a local `open` that names the child's surface
      (`{"surface": "thread-<id>"}`), opened inside its parent. The rows are at `/thread/children`
      (`thread`, `surface`, `title`, `status`, `line`, `level`, `mark`; an empty list for a thread
-     with none), where the holder's part may bind them: a part is checked against code's data as
+     with none), where the holder's part may bind them: a block is checked against code's data as
      its surface shows it (`threadCodeData`). **A child raises its parent**: one that waits for the
      user makes its parent wait for the user (« À toi », its tile `yours`), and an active parent
      takes the highest weight of its own and its children's. A child's change writes its parent's
@@ -1207,7 +1207,7 @@ by code from the thread's data (#468): it never depends on a model remembering t
      the last call whose card was approved), opened to see them as a `Timeline` with their
      decided cards, each a compact `Proposal` (one line, opened by a click); then the other steps
      as a `Timeline`, a decided card of theirs compact under it;
-  10. the holder's part (below).
+  10. the holder's part, its blocks in their order (below).
 
   A step in a `Timeline` has its state, its time, its kind, its checks and the last word on it.
   Under a task step, what was settled for its task
@@ -1216,19 +1216,20 @@ by code from the thread's data (#468): it never depends on a model remembering t
   in `thread_answers` (a kind, its refs, Eriphe's reply, the brain turn's taint) by
   `task_answer_log.go`, worded by code in the user's language, never the task's question; a
   reply written on a tainted turn says « extérieur » and taints the surface (`answer:<id>`). Its component ids start with `thread_`, its data
-  is under `/thread`.
+  is under `/thread`, the user's marks with it (`/thread/marks`, below).
 - **A thread's sources** (#571, `thread_sources.go`, table `thread_sources`): live data the thread
   carries, read by code without a model, under a surface source's rules (`sourceWhy`: a free read
   of the brain's, or a resource the server lists; `checkSources` when added). A source has a name
   and one kind: a `tool` (server/tool with fixed `args`), a `resource` (a server and its `uri`), or
   a `monitor` the user approved (below). The brain adds one with `link_thread` `source` (the same
-  name replaces it; a name alone takes it away); the holder's part brings its own with
+  name replaces it; a name alone takes it away); a block of the holder's part brings its own with
   `surface_write` `sources` (each at `/<name>`, `refresh.every` its interval): they become the
-  thread's (`by` `part`), replaced when the part is written again, gone when it is removed; a
-  part may not give again a source the thread has already (it binds `/<name>`). They are stored
-  with their first read before the part is, so the part is never written bound to a value not
-  there yet; while one has never given anything, a part that binds it is held quietly (no error
-  for its author). At most 8 a thread, 3 of them monitors.
+  thread's (`by` `part`), replaced when the block is written again, gone with the last block
+  that gives them; two blocks may give the same source alike (same tool, arguments and
+  refresh), never otherwise; a block may not give again a source the thread has already (it
+  binds `/<name>`). They are stored with their first read before the block is, so the block is
+  never written bound to a value not there yet; while one has never given anything, a part that
+  binds it is held quietly (no error for its author). At most 8 a thread, 3 of them monitors.
   - A tool or a resource is read at once when added (in the background), every `every` minutes (5
     by default) at the engine's tick (`threadSourcesDue`), when its server says the resource
     changed (`threadResourceUpdated`; the pool follows the resources of active threads), and when
@@ -1294,15 +1295,42 @@ by code from the thread's data (#468): it never depends on a model remembering t
   checks, note, external, waits, yours: a card shown while it waits; a call's card stays after
   with how its run went; a card gone is not shown), so
   a new kind of step plugs in by its mapping (`threadSurfaceSteps`).
-- **The holder's part**: who holds the thread (the brain, or its lead) may add one with
-  `surface_write` on `thread-<id>`: a state block, points to see, a diff (`Code`), a `Link`. It is
-  kept apart (`thread_part:<id>`), checked alone (A2UI, actions, links, bindings; no `thread_` id,
-  no `/thread` data; its sources, each at `/<name>`, become the thread's, see above, so a change
-  of the thread still rewrites the surface at once, never waiting for a tool), and shown under code's section, its root renamed `thread_part`, with who
-  added it. Writing it again replaces it, `surface_remove` takes it away; the surface stays; code
-  keeps the rest.
+- **The holder's part** (#610, `thread_part.go`): who holds the thread (the brain, or its lead)
+  composes it by **named blocks**: a state, points to see, a diff (`Code`), a `Link`, each its
+  block. `surface_write` with `block` adds that block, or replaces it alone where it stands;
+  `surface_remove` with `block` takes it away; without a block nothing is written or removed:
+  there is no whole part. Blocks keep the order they were first written in; `before` (another
+  block's name) places the block written before that one, new or not. 16 blocks at most, 24 KiB
+  of components and of data all together. They are kept apart, in order (`thread_part:<id>`,
+  `{"blocks": [...]}`), each checked alone (A2UI, actions, links, bindings against its own data
+  and sources, the thread's own sources and code's `/thread`; no `thread_` id, no `/thread` data,
+  no component id nor data key another block holds, the error naming it; its sources, each at
+  `/<name>`, become the thread's, see above, so a change of the thread still rewrites the surface
+  at once, never waiting for a tool), and shown under code's section, each root renamed
+  `thread_part_<block>`, with who added them. The call answers the blocks in order, as
+  `workspace_read` (`blocks`, on a thread one holds) and `read_thread` do; the surface stays;
+  code keeps the rest. A block that does not hold with the rest when code writes the surface (a
+  source not read yet, or failing) is left out alone, the others shown, and named in the
+  surface's error (quietly while a source has never been read); the part as a whole only when
+  that still fails. A part written whole by an older eriphe-core is dropped at start, with the
+  sources it gave: its holder writes it again, by blocks.
+- **The user's marks** (#610, `thread_marks.go`, table `thread_marks`): keep, drop or done on
+  something a thread shows (an option, a lead, a line of a checklist), recorded by code in the
+  thread's data, never in the composed part: a holder's block places the closed action `mark`
+  (`{"thread", "list", "item", "mark"}`, [the actions of a surface](#the-actions-of-a-surface)),
+  code keeps it per thread, list and item (`""` takes it away) and serves it at
+  `/thread/marks/<list>/<item>` (`/thread/marks` always there, a binding under it never refused
+  for a mark not set yet), so a rewrite of the part never loses one. A mark starts no turn: it is
+  a gesture (`kept`, `dropped`, `done`, `unmarked`, its list and item in `workspace_log.detail`),
+  which the brain reads at its next turn in the workspace's block (« ses marques », the session's
+  last 40, apart from the other gestures) and `workspace_read` lists; `read_thread` returns them
+  all. The page cannot say one as a gesture (`/api/espace/gesture` refuses those names). A mark
+  set on a tainted surface is **external** (`thread_marks.external`): no charset tells an id from
+  someone else's words, so it is kept and served, but its gesture does not quote its list and item
+  (« élément extérieur, non cité »), and `read_thread` (the lead's `thread`, a task's) taints its
+  reader (`mark:<list>/<item>`), as a tainted note does.
 - **Taint, per part**: a step whose task read external content shows « extérieur » in its detail,
-  a part written after reading some says so beside who added it (and may not hold a `Proposal`,
+  a block written after reading some says so beside who added it (and may not hold a `Proposal`,
   its media dropped as for any tainted author). For the models that read the workspace the surface
   is tainted as soon as one part is (`look.code_taint`, `look.author_taint`). Its Proposals still
   answer in place (`look.answers`, the page's `extensions.eriphe.answers`), as the attention
@@ -3378,11 +3406,13 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   - notes « Notes » · m en 9,6 · placée par lui
   replié : news « Nouvelles », veille
   fermé par lui pour la session (ne le remets pas devant sans qu'il le demande) : meteo
-  ses gestes : 10:02 ouvert agenda ; 10:03 fermé meteo ; 10:05 déplacé notes ; 10:06 écrit à propos de agenda]
+  ses gestes : 10:02 ouvert agenda ; 10:03 fermé meteo ; 10:05 déplacé notes ; 10:06 écrit à propos de agenda
+  ses marques (liste/élément ; read_thread les donne toutes) : 10:07 gardé thread-4 options/b ; 10:07 écarté thread-4 options/c]
   ```
 
   A title is quoted only when its author wrote it in a clean turn; a gesture only by its surface's
-  id. `workspace_read` has the detail, the page included
+  id, a mark by its surface's id, list and item (ids). The session's last 10 gestures, and apart
+  its last 40 marks, so that none is lost among the moves between two turns. `workspace_read` has the detail, the page included
   (`screen`: each tile's id, size, col, row and `pinned`; `open`, `folded`, `closed`).
 - **`workspace_arrange`** (`items`: 8 at most, each `{id, size, col, row}`, size s, m, l or xl,
   one xl at most, col and row both or neither; `reset`): the brain arranges the workspace as the
@@ -3852,6 +3882,7 @@ writes.
 |---|---|---|
 | `ask` | a Button's `{"event": {"name": "ask", "context": {"text": "…"}}}`: literal words, nothing else, never bound data; none at all from an author whose turn read external content | the text written on the clicked Button becomes a message of the user's to the brain, as if typed (`Via` `workspace:ask`, shown as « bouton de l'espace » / "workspace button"; `about` = `surface:<id>`, which the brain reads as `[Sam 10:02 #12 · bouton de l'espace · à propos de surface:…]`); a plain "oui" so sent decides no card. The brain is woken, never waited for. On a tainted surface the message taints the brain's turn (`surface:<id>`) and its line adds « surface au contenu extérieur »: what it shows is data |
 | `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does; a thread's, unless the thread itself is tainted or the Proposal is in a part written after reading external content), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
+| `mark` | by the holder of a thread, in a block of its part, on its own thread only: `{"thread": <its id>, "list": "<id>", "item": "<id>", "mark": "keep"\|"drop"\|"done"\|""}`, `thread` and `mark` literals, `list` and `item` literal ids or bound to the data (a row's id); allowed after reading external content (ids only) | checked against the component of the thread's own surface that carries it (`markOf`): the thread and the mark as written, `list` and `item` the literals or values its binding takes in the surface's data, each an id (`a2ui.MarkIDOK`: letters, digits, `_.:@=+-`, 128 at most, no `/`), the thread active; then recorded (`setMark`), a gesture for the brain's next turn, no turn of its own |
 | `stepDone` | never by an author: code places it on a thread's surface, the « C'est fait » of a step the user does, `{"thread": <id>, "step": "<key>"}` | checked against the Button code wrote there (its thread and step), for a step of kind `user` that waits; then `settleUserStep`, the engine's `userStepDone` (409 once it no longer waits) |
 | `tidy` | never by an author: code places it on an ended thread's surface, its « Ranger », `{"thread": <id>}` | checked against the Button code wrote there (its thread); then `tidyThread`: the surface leaves, the thread is kept (409 once put away) |
 | `choose` | never by an author: code places it on a thread's surface, one Button per option of a choice step that waits, `{"thread": <id>, "step": "<key>", "option": "<option>"}` | checked against the Button code wrote there (its whole context), for a choice step that still waits and one of its own options; then `chooseStep` |
@@ -3904,9 +3935,9 @@ never a tile of its own. Five tools; the **author is the caller**, never a field
 
 | Tool | Does |
 |---|---|
-| `surface_write` | write the caller's part of a thread's surface: `id` is `thread-<id>` of a thread it holds, `components`, `data`, `sources`, `refresh {every}` ([a thread's part](#a-threads-surface-thread_surfacego)). Any other id is refused, the refusal saying the way: find or open the thing's thread first (`open_thread`; `ends: day` for what is shown for today). Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong part comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `part` |
-| `surface_remove` | take the caller's part away from a thread's surface; the surface stays |
-| `workspace_read` | the threads on screen (`threads`: surface id, thread, title, state, new, `yours` when the caller holds it, the thread's sources, last update, `waiting`, the user's last action on it; for one it holds, `failed` and the last `error`), the queue's surfaces (`queue`: id, title, state), the user's gestures of the last hour (what, ref, time), the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
+| `surface_write` | write one block of the caller's part of a thread's surface: `id` is `thread-<id>` of a thread it holds, `block` (its name: a new one adds a block, one there is replaced alone), `before` (another block's name, to place it before), `components`, `data`, `sources`, `refresh {every}` ([a thread's part](#a-threads-surface-thread_surfacego)). Any other id is refused, the refusal saying the way: find or open the thing's thread first (`open_thread`; `ends: day` for what is shown for today). Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong block comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `block`, `blocks` (in order) |
+| `surface_remove` | take one block of the caller's part away from a thread's surface, by `block`; the other blocks and the surface stay. Answers `removed`, `blocks` |
+| `workspace_read` | the threads on screen (`threads`: surface id, thread, title, state, new, `yours` when the caller holds it, the thread's sources, last update, `waiting`, the user's last action on it; for one it holds, its part's `blocks` in order, `failed` and the last `error`), the queue's surfaces (`queue`: id, title, state), the user's gestures of the last hour (what, ref, `marked` for a mark: list/item, time), the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
 | `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand |
 | `sources_read` | what code may read for a part (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: code reads them under the access policy (`sourceWhy`). Without a shape, the author binds what it expects and `surface_write`'s error names the fields the result has. With nothing linked, it says so |
 

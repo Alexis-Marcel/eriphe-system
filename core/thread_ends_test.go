@@ -68,7 +68,7 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 
 	// « j'ai quoi demain ? »: the day thread's part.
 	if _, err := c.writeThreadPart(surfaceCaller{author: surfaceAuthorBrain, taint: func() []string { return nil }}, day.ID,
-		surfaceWriteIn{ID: threadSurfaceID(day.ID), Components: oneText("Dentiste à 10 h")}); err != nil {
+		surfaceWriteIn{ID: threadSurfaceID(day.ID), Block: "jour", Components: oneText("Dentiste à 10 h")}); err != nil {
 		t.Fatal(err)
 	}
 

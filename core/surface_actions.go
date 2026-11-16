@@ -44,6 +44,12 @@ import (
 //     group of them: the Button code wrote on its surface; the note and
 //     its action read again from the store, it makes one card bound to
 //     the item(s) and runs nothing (item_offers.go).
+//   - mark: keep, drop or done on something a thread shows, from a
+//     component of the thread's own surface that carries it (its holder's
+//     block): its thread and mark as stored, its list and item written
+//     there or taken from the data where its binding reads; recorded in
+//     the thread's data, a gesture for the brain's next turn, never a
+//     turn of its own (thread_marks.go).
 //   - local (open, back, expand, tab): recorded; "open" (a tile or a chip)
 //     places the surface first on the layout, keeps the gesture and reads
 //     its sources again, in the background; "back" gives the layout back.
@@ -75,8 +81,8 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 	if err != nil {
 		return err
 	}
-	var text, ref, step, option, do, source, item, state, offer string
-	var yes bool
+	var text, ref, step, option, do, source, item, state, offer, list, mark string
+	var yes, external bool
 	var thread int64
 	var refused *errActionRefused
 	var offerCallsOf []offerCall
@@ -103,9 +109,11 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 			}
 		}
 		offerCallsOf = calls
+	case a2ui.KindMark:
+		thread, list, item, mark, external, refused = c.markOf(s, a) // thread_marks.go
 	case a2ui.KindLocal:
 	default:
-		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), stepDone, tidy, choose, control and offer (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
+		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), stepDone, tidy, choose, control, offer and mark (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
 	}
 	if refused != nil {
 		refused.Message = "the user's action " + strconv.Quote(truncate(a.Name, 64)) + " on " + truncate(a.SourceComponentID, 64) + " was refused: " + refused.Message
@@ -145,6 +153,8 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 			return nil // its card waits on the row already
 		}
 		return err
+	case a2ui.KindMark:
+		return c.setMark(thread, list, item, mark, external, now) // no turn: a gesture the brain reads at its next
 	}
 	switch a.Name {
 	case a2ui.ActionOpen:

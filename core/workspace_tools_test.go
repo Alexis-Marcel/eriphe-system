@@ -96,12 +96,12 @@ func TestWorkspaceToolsThroughMCP(t *testing.T) {
 
 	// A tile of its own: refused, whatever the id, with the way to a thread's part.
 	for _, id := range []string{"", "comptes", "q-alert-1"} {
-		_, msg := callOn(t, brain, "surface_write", map[string]any{"id": id, "components": accountsSurface(),
+		_, msg := callOn(t, brain, "surface_write", map[string]any{"id": id, "block": "comptes", "components": accountsSurface(),
 			"sources": map[string]any{"/ledger": map[string]any{"tool": "ledger/balances"}}})
 		if !strings.Contains(msg, "a thread's part") || !strings.Contains(msg, "open_thread") {
 			t.Fatalf("a free surface %q: %s", id, msg)
 		}
-		if _, msg := callOn(t, brain, "surface_remove", map[string]any{"id": id}); !strings.Contains(msg, "a thread's part") {
+		if _, msg := callOn(t, brain, "surface_remove", map[string]any{"id": id, "block": "comptes"}); !strings.Contains(msg, "a thread's part") {
 			t.Fatalf("remove %q: %s", id, msg)
 		}
 	}
@@ -133,12 +133,12 @@ func TestWorkspaceToolsThroughMCP(t *testing.T) {
 		t.Fatalf("%d threads", len(all))
 	}
 	sid := threadSurfaceID(th.ID)
-	got, msg = callOn(t, brain, "surface_write", map[string]any{"id": sid, "components": accountsSurface(),
+	got, msg = callOn(t, brain, "surface_write", map[string]any{"id": sid, "block": "comptes", "components": accountsSurface(),
 		"sources": map[string]any{"/ledger": map[string]any{"tool": "ledger/balances"}}})
-	if msg != "" || got["part"] != true {
+	if msg != "" || got["block"] != "comptes" {
 		t.Fatalf("part: %v %s", got, msg)
 	}
-	if _, msg = callOn(t, brain, "surface_write", map[string]any{"id": sid, "components": accountsSurface(),
+	if _, msg = callOn(t, brain, "surface_write", map[string]any{"id": sid, "block": "comptes", "components": accountsSurface(),
 		"sources": map[string]any{"/ledger": map[string]any{"tool": "ledger/balances"}}}); msg != "" {
 		t.Fatalf("rewrite: %s", msg)
 	}
@@ -150,20 +150,20 @@ func TestWorkspaceToolsThroughMCP(t *testing.T) {
 	}
 
 	// No root, and a binding to nothing: A2UI's errors, with their path.
-	_, msg = callOn(t, brain, "surface_write", map[string]any{"id": sid, "components": []map[string]any{
+	_, msg = callOn(t, brain, "surface_write", map[string]any{"id": sid, "block": "autre", "components": []map[string]any{
 		{"id": "top", "component": "Text", "text": "x"}}})
 	if !strings.Contains(msg, `"code":"VALIDATION_FAILED"`) || !strings.Contains(msg, `"path"`) {
 		t.Fatalf("invalid: %s", msg)
 	}
-	_, msg = callOn(t, brain, "surface_write", map[string]any{"id": sid, "components": boundText("/rien")})
+	_, msg = callOn(t, brain, "surface_write", map[string]any{"id": sid, "block": "autre", "components": boundText("/rien")})
 	if !strings.Contains(msg, `"path":"/components/0/text/@path"`) {
 		t.Fatalf("unbound: %s", msg)
 	}
 
-	if _, msg = callOn(t, brain, "surface_remove", map[string]any{"id": sid}); msg != "" {
+	if _, msg = callOn(t, brain, "surface_remove", map[string]any{"id": sid, "block": "comptes"}); msg != "" {
 		t.Fatal(msg)
 	}
-	if s, err := c.surface(sid); err != nil || strings.Contains(string(s.Components), `"thread_part"`) {
+	if s, err := c.surface(sid); err != nil || strings.Contains(string(s.Components), `"thread_part`) {
 		t.Fatalf("the part stayed, or the surface went: %v", err)
 	}
 }
@@ -291,9 +291,9 @@ func TestPartReadCap(t *testing.T) {
 	brain := connectServer(t, newMCPServer(c))
 
 	start := time.Now()
-	got, msg := callOn(t, brain, "surface_write", map[string]any{"id": threadSurfaceID(th.ID), "components": boundText("/latest/entry"),
+	got, msg := callOn(t, brain, "surface_write", map[string]any{"id": threadSurfaceID(th.ID), "block": "derniere", "components": boundText("/latest/entry"),
 		"sources": map[string]any{"/latest": map[string]any{"resource": "ledger", "uri": "ledger://latest"}}})
-	if msg != "" || got["part"] != true || time.Since(start) > 2*time.Second {
+	if msg != "" || got["block"] != "derniere" || time.Since(start) > 2*time.Second {
 		t.Fatalf("write %v %s after %s", got, msg, time.Since(start))
 	}
 	close(hold)
@@ -335,7 +335,7 @@ func TestSurfaceAskGuard(t *testing.T) {
 		var list []map[string]any
 		json.Unmarshal(comps, &list)
 		who := surfaceCaller{author: surfaceAuthorBrain, taint: func() []string { return taint }}
-		_, err := c.writeThreadPart(who, th.ID, surfaceWriteIn{ID: threadSurfaceID(th.ID), Components: list, Data: data})
+		_, err := c.writeThreadPart(who, th.ID, surfaceWriteIn{ID: threadSurfaceID(th.ID), Block: "relance", Components: list, Data: data})
 		return err
 	}
 	if err := part(ask(`"Relance la sauvegarde"`), nil, nil); err != nil {

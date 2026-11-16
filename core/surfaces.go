@@ -165,7 +165,10 @@ type surfaceIn struct {
 	// thread's, the queue's) also says its state (tileStateOf) and how
 	// many things changed since the user last opened it; a standing
 	// thread's, that it folds into a chip while it has nothing for the
-	// user (foldsQuiet); a child thread's, the surface it opens inside.
+	// user (foldsQuiet); a child thread's, the surface it opens inside,
+	// and the block of its holder's part each component is of, by its
+	// place in the list (thread_part.go).
+	blockAt   map[int]string
 	composed  bool
 	codeTaint []string
 	answers   bool
@@ -750,6 +753,9 @@ func (c *core) checkBindings(id string, comps json.RawMessage, data map[string]a
 		}
 		ptr, rest := sourceCovering(b.Path, srcs)
 		if ptr == "" {
+			if strings.HasPrefix(b.Path, threadMarksPath+"/") {
+				continue // a mark the user has not set yet reads empty (thread_marks.go)
+			}
 			if ok, hint := lookup(data, tokens(b.Path), b.List); !ok {
 				fail(b, fmt.Sprintf("nothing at %s in the surface's data%s: write it in data, or read it from a source", b.Path, hint))
 			}

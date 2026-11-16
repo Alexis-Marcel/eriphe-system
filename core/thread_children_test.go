@@ -319,7 +319,7 @@ func TestChildrenBindable(t *testing.T) {
 	}
 	childThread(t, c, parent.ID, "Le devis", "topic:devis")
 	who := surfaceCaller{author: surfaceAuthorBrain, taint: func() []string { return nil }}
-	_, err := c.writeThreadPart(who, parent.ID, surfaceWriteIn{ID: threadSurfaceID(parent.ID), Components: []map[string]any{
+	_, err := c.writeThreadPart(who, parent.ID, surfaceWriteIn{ID: threadSurfaceID(parent.ID), Block: "enfants", Components: []map[string]any{
 		{"id": "root", "component": "List", "children": map[string]any{"path": "/thread/children", "componentId": "kid"}},
 		{"id": "kid", "component": "Text", "text": map[string]any{"@path": "title"}},
 	}})

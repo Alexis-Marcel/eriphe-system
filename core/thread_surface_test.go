@@ -317,33 +317,34 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 	}
 	sid := threadSurfaceID(th.ID)
 	lead := connectServer(t, c.assistantServer(a, nil))
-	part := map[string]any{"id": sid, "components": []map[string]any{
+	part := map[string]any{"id": sid, "block": "pr", "components": []map[string]any{
 		{"id": "root", "component": "Column", "children": []string{"diff", "pr"}},
 		{"id": "diff", "component": "Code", "mode": "diff", "text": map[string]any{"@path": "/diff"}},
 		{"id": "pr", "component": "Link", "label": "Ouvrir la PR", "url": "https://example.org/pr/12"},
 	}, "data": map[string]any{"diff": "--- a\n+++ b\n@@ -1 +1 @@\n-x\n+y\n"}}
 	out, msg := callOn(t, lead, "surface_write", part)
-	if msg != "" || out["part"] != true || out["author"] != threadAuthor(th.ID) {
+	if msg != "" || out["block"] != "pr" || out["author"] != threadAuthor(th.ID) {
 		t.Fatalf("part %v %s", out, msg)
 	}
 	s, data, _ := threadSurfaceOf(t, c, th.ID)
-	if !strings.Contains(string(s.Components), `"thread_part"`) || !strings.Contains(string(s.Components), "Ajouté par son chef") ||
+	if !strings.Contains(string(s.Components), `"thread_part_pr"`) || !strings.Contains(string(s.Components), "Ajouté par son chef") ||
 		!strings.Contains(string(s.Data), `"diff"`) || data["state"] == nil || s.Tainted != "" {
 		t.Fatalf("part not shown: %s %s", s.Components, s.Data)
 	}
 
 	// Code writes again: the part stays.
 	reports(t, c, stepOf(t, c, th, "names"), receiptOf("Lumen.", "names"))
-	if s, _, _ = threadSurfaceOf(t, c, th.ID); !strings.Contains(string(s.Components), `"thread_part"`) {
+	if s, _, _ = threadSurfaceOf(t, c, th.ID); !strings.Contains(string(s.Components), `"thread_part_pr"`) {
 		t.Fatal("the part went with code's change")
 	}
 
 	// Checked alone.
 	for name, bad := range map[string]map[string]any{
-		"code's id":    {"id": sid, "components": []map[string]any{{"id": "root", "component": "Text", "text": "x"}, {"id": "thread_x", "component": "Text", "text": "y"}}},
-		"code's data":  {"id": sid, "components": oneText("x"), "data": map[string]any{"thread": 1}},
-		"not a source": {"id": sid, "components": boundText("/n"), "sources": map[string]any{"/n": map[string]any{"tool": "ledger/balances"}}}, // no ledger here: sources themselves are allowed (thread_sources_test.go)
-		"stepDone":     {"id": sid, "components": []map[string]any{{"id": "root", "component": "Button", "label": "Fait", "action": map[string]any{"event": map[string]any{"name": "stepDone", "context": map[string]any{"thread": th.ID, "step": "names"}}}}}},
+		"no block":     {"id": sid, "block": "", "components": oneText("x")},
+		"code's id":    {"id": sid, "block": "pr", "components": []map[string]any{{"id": "root", "component": "Text", "text": "x"}, {"id": "thread_x", "component": "Text", "text": "y"}}},
+		"code's data":  {"id": sid, "block": "pr", "components": oneText("x"), "data": map[string]any{"thread": 1}},
+		"not a source": {"id": sid, "block": "pr", "components": boundText("/n"), "sources": map[string]any{"/n": map[string]any{"tool": "ledger/balances"}}}, // no ledger here: sources themselves are allowed (thread_sources_test.go)
+		"stepDone":     {"id": sid, "block": "pr", "components": []map[string]any{{"id": "root", "component": "Button", "label": "Fait", "action": map[string]any{"event": map[string]any{"name": "stepDone", "context": map[string]any{"thread": th.ID, "step": "names"}}}}}},
 	} {
 		if _, msg := callOn(t, lead, "surface_write", bad); msg == "" {
 			t.Errorf("%s: accepted", name)
@@ -352,12 +353,12 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 
 	// After reading outside content: marked, no Proposal; its cards still answer in place.
 	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Tainted = []string{"mail:7"} })
-	withProposal := map[string]any{"id": sid, "components": []map[string]any{
+	withProposal := map[string]any{"id": sid, "block": "avis", "components": []map[string]any{
 		{"id": "root", "component": "Column", "children": []string{"p"}}, {"id": "p", "component": "Proposal", "proposalId": "rule:1"}}}
 	if _, msg := callOn(t, lead, "surface_write", withProposal); !strings.Contains(msg, "Proposal") {
 		t.Errorf("a tainted part placed a Proposal: %q", msg)
 	}
-	if _, msg := callOn(t, lead, "surface_write", map[string]any{"id": sid, "components": oneText("Lumen semble libre.")}); msg != "" {
+	if _, msg := callOn(t, lead, "surface_write", map[string]any{"id": sid, "block": "avis", "components": oneText("Lumen semble libre.")}); msg != "" {
 		t.Fatal(msg)
 	}
 	s, _, meta := threadSurfaceOf(t, c, th.ID)
@@ -365,8 +366,13 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 		t.Errorf("tainted part: %s %q %+v", s.Components, s.Tainted, meta)
 	}
 
-	if out, msg := callOn(t, lead, "surface_remove", map[string]any{"id": sid}); msg != "" || out["removed"] != "part" {
-		t.Fatalf("remove %v %s", out, msg)
+	if _, msg := callOn(t, lead, "surface_remove", map[string]any{"id": sid, "block": ""}); msg == "" {
+		t.Error("removed with no block")
+	}
+	for _, block := range []string{"avis", "pr"} {
+		if out, msg := callOn(t, lead, "surface_remove", map[string]any{"id": sid, "block": block}); msg != "" || out["removed"] != block {
+			t.Fatalf("remove %v %s", out, msg)
+		}
 	}
 	if s, _, _ = threadSurfaceOf(t, c, th.ID); strings.Contains(string(s.Components), "thread_part") {
 		t.Error("the part stayed")
@@ -425,9 +431,9 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 	}
 	sid := threadSurfaceID(th.ID)
 	brain := connectServer(t, newMCPServer(c))
-	out, msg := callOn(t, brain, "surface_write", map[string]any{"id": sid, "components": []map[string]any{
+	out, msg := callOn(t, brain, "surface_write", map[string]any{"id": sid, "block": "etat", "components": []map[string]any{
 		{"id": "root", "component": "Metric", "label": "Contrôles", "value": "12/12"}}})
-	if msg != "" || out["part"] != true {
+	if msg != "" || out["block"] != "etat" {
 		t.Fatalf("part %v %s", out, msg)
 	}
 	s, _, _ := threadSurfaceOf(t, c, th.ID)
@@ -436,10 +442,10 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 	}
 	read, _ := callOn(t, brain, "workspace_read", map[string]any{})
 	raw, _ := json.Marshal(read["threads"])
-	if !strings.Contains(string(raw), `"id":"`+sid+`"`) || !strings.Contains(string(raw), `"yours":true`) {
+	if !strings.Contains(string(raw), `"id":"`+sid+`"`) || !strings.Contains(string(raw), `"yours":true`) || !strings.Contains(string(raw), `"blocks":["etat"]`) {
 		t.Errorf("workspace_read: %s", raw)
 	}
-	if _, msg := callOn(t, brain, "surface_remove", map[string]any{"id": sid}); msg != "" {
+	if _, msg := callOn(t, brain, "surface_remove", map[string]any{"id": sid, "block": "etat"}); msg != "" {
 		t.Fatal(msg)
 	}
 	if _, err := c.surface(sid); err != nil {

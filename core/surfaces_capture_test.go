@@ -51,7 +51,7 @@ func captureTask(t *testing.T, c *core) (string, string) {
 func partWith(t *testing.T, c *core, sid, src string) surface {
 	t.Helper()
 	thread, _ := threadOfSurface(sid)
-	in := surfaceWriteIn{ID: sid, Components: []map[string]any{
+	in := surfaceWriteIn{ID: sid, Block: "page", Components: []map[string]any{
 		{"id": "root", "component": "Column", "children": []string{"shot", "addr"}},
 		{"id": "shot", "component": "Image", "url": src, "alt": "La page d'accueil"},
 		{"id": "addr", "component": "Link", "label": "Ouvrir le site", "url": "https://www.example.org/"},

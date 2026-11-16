@@ -89,6 +89,10 @@ type threadView struct {
 	// Its parent's title, and its children (thread_children.go).
 	ParentTitle string      `json:"parent_title,omitempty"`
 	Children    []threadKin `json:"children,omitempty"`
+	// The user's marks on what it shows (thread_marks.go), and the blocks
+	// of its holder's part, in order (thread_part.go).
+	Marks  []threadMark `json:"marks,omitempty"`
+	Blocks []string     `json:"blocks,omitempty"`
 }
 
 func (c *core) threadView(id int64, lines int) (threadView, error) {
@@ -100,7 +104,8 @@ func (c *core) threadView(id int64, lines int) (threadView, error) {
 	if err != nil {
 		return threadView{}, err
 	}
-	v := threadView{Thread: s, Steps: steps, Log: c.threadLog(id, lines), Notes: c.itemNotes(id), Names: c.threadNames(id), Children: kinOf(c.children(id))}
+	v := threadView{Thread: s, Steps: steps, Log: c.threadLog(id, lines), Notes: c.itemNotes(id), Names: c.threadNames(id), Children: kinOf(c.children(id)),
+		Marks: c.marksOf(id), Blocks: c.threadPartOf(id).names()}
 	if s.Parent != 0 {
 		if p, err := c.thread(s.Parent); err == nil {
 			v.ParentTitle = p.Title
@@ -323,15 +328,15 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return map[string]any{"threads": found}, err
 		})
 
-	tool(s, "read_thread", "A thread: its mode, names, state (open, waiting, done, dropped) and summary, its parent and children, and its card (what eriphe-core knows of it: last decisions, facts and people, open intentions, cards waiting for the user, preferences; what may carry someone else's words is named, not quoted); led, its phase, budget and time spent, each step (status: waiting, running, reported: its agent says it is done, verified: its checks passed, accepted, rejected, blocked, dropped; its task, evidence and output) and its recent log.",
+	tool(s, "read_thread", "A thread: its mode, names, state (open, waiting, done, dropped) and summary, its parent and children, and its card (what eriphe-core knows of it: last decisions, facts and people, open intentions, cards waiting for the user, preferences; what may carry someone else's words is named, not quoted); led, its phase, budget and time spent, each step (status: waiting, running, reported: its agent says it is done, verified: its checks passed, accepted, rejected, blocked, dropped; its task, evidence and output), its recent log, the user's marks on what it shows (list, item: keep, drop or done) and the blocks of its part, in order.",
 		func(ctx context.Context, in threadIDIn) (threadView, error) {
 			v, err := c.threadView(in.Thread, 20)
 			if err == nil {
 				c.cardLookedUp(threadRef(v.ID)) // its turn's card was not enough (card_use.go)
 				v.Card, _ = c.aboutCard(threadRef(v.ID), threadCardChars)
 				c.turnThread(in.Thread)
-				for _, why := range readNotesTaint(v.Notes) {
-					c.turn.taint(why) // a note written after reading outside content
+				for _, why := range append(readNotesTaint(v.Notes), readMarksTaint(v.Marks)...) {
+					c.turn.taint(why) // a note written after reading outside content, a mark set on it
 				}
 				for _, st := range v.Steps {
 					if st.Tainted != "" {

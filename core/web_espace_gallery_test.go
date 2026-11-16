@@ -41,7 +41,7 @@ func TestEspaceGalleryIsValid(t *testing.T) {
 		}
 		json.Unmarshal(msgs, &created)
 		for _, s := range created {
-			for _, e := range a2ui.CheckActions(s.CreateSurface.ID, s.CreateSurface.Components) {
+			for _, e := range a2ui.CheckActions(s.CreateSurface.ID, 0, s.CreateSurface.Components) {
 				t.Errorf("%s: %+v", lang, e)
 			}
 			for _, e := range a2ui.CheckLinks(s.CreateSurface.ID, s.CreateSurface.Components) {

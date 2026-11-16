@@ -1,10 +1,13 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // The composed workspace's memory and tools (#409). The workspace keeps no
@@ -38,10 +41,17 @@ const (
 	gestureMoved   = "moved"   // the user moved a tile: pinned there this session
 	gestureResized = "resized" // the user changed a tile's size: pinned at it this session
 	gestureAbout   = "about"   // the user wrote a message with it open
-	gestureRepeat  = 10 * time.Minute
-	gestureSteps   = time.Minute // moves or resizes of the same tile this close, one after the other, are one
-	gestureKeep    = 30 * 24 * time.Hour
-	gestureTitle   = 120
+	// A mark the user set on something a thread shows (thread_marks.go),
+	// its list and item in the detail: noted by the mark action only,
+	// never said by the page.
+	gestureKept     = "kept"
+	gestureDropped  = "dropped"
+	gestureDone     = "done"
+	gestureUnmarked = "unmarked"
+	gestureRepeat   = 10 * time.Minute
+	gestureSteps    = time.Minute // moves or resizes of the same tile this close, one after the other, are one
+	gestureKeep     = 30 * 24 * time.Hour
+	gestureTitle    = 120
 )
 
 // isWorkspaceEntity tells an about that is the workspace's.
@@ -51,15 +61,22 @@ func isWorkspaceEntity(s string) bool {
 }
 
 const workspaceLogSchema = `CREATE TABLE IF NOT EXISTS workspace_log (
-	id    INTEGER PRIMARY KEY AUTOINCREMENT,
-	time  INTEGER NOT NULL,
-	what  TEXT NOT NULL,             -- opened, ignored, closed, moved, resized, about
-	ref   TEXT NOT NULL,             -- surface:<id>
-	title TEXT NOT NULL DEFAULT ''   -- the surface's title, from a clean turn of its author
+	id     INTEGER PRIMARY KEY AUTOINCREMENT,
+	time   INTEGER NOT NULL,
+	what   TEXT NOT NULL,             -- opened, ignored, closed, moved, resized, about; kept, dropped, done, unmarked
+	ref    TEXT NOT NULL,             -- surface:<id>
+	title  TEXT NOT NULL DEFAULT '',  -- the surface's title, from a clean turn of its author
+	detail TEXT NOT NULL DEFAULT ''   -- a mark's: <list>/<item>, ids only
 );
 CREATE INDEX IF NOT EXISTS workspace_log_time ON workspace_log (time);`
 
-func init() { extraSchema = append(extraSchema, workspaceLogSchema) }
+func init() {
+	extraSchema = append(extraSchema, workspaceLogSchema)
+	// A log made before marks has no detail.
+	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
+		return addColumn(db, "workspace_log", "detail", "TEXT NOT NULL DEFAULT ''")
+	})
+}
 
 // seePreferences are the user's preferences about what they see (about
 // topic:workspace), the latest first: what a skill that notes a thread's
@@ -82,11 +99,12 @@ func (c *core) seePreferences() []string {
 
 // gesture is one thing the user did on the workspace.
 type gesture struct {
-	ID    int64
-	Time  time.Time
-	What  string
-	Ref   string
-	Title string
+	ID     int64
+	Time   time.Time
+	What   string
+	Ref    string
+	Title  string
+	Detail string // a mark's list and item, <list>/<item>
 }
 
 // gestureKinds are the gestures kept, and how the extraction (English)
@@ -98,6 +116,24 @@ var gestureKinds = map[string]struct{ en, fr string }{
 	gestureMoved:   {"moved (placed it elsewhere)", "déplacé"},
 	gestureResized: {"resized", "redimensionné"},
 	gestureAbout:   {"wrote a message about", "écrit à propos de"},
+	// The marks' (markGestures): their detail says what was marked.
+	gestureKept:     {"kept", "gardé"},
+	gestureDropped:  {"set aside", "écarté"},
+	gestureDone:     {"marked done", "marqué fait"},
+	gestureUnmarked: {"cleared the mark of", "marque retirée"},
+}
+
+// markGestures are the gestures of the marks, by mark ("" clears one).
+var markGestures = map[string]string{a2ui.MarkKeep: gestureKept, a2ui.MarkDrop: gestureDropped, a2ui.MarkDone: gestureDone, "": gestureUnmarked}
+
+// isMarkGesture tells a mark's gesture.
+func isMarkGesture(what string) bool {
+	for _, g := range markGestures {
+		if g == what {
+			return true
+		}
+	}
+	return false
 }
 
 // surfaceRefPrefix names a surface in a gesture and in what a message was
@@ -110,9 +146,10 @@ var errGesture = errors.New("a gesture is opened, ignored, closed, moved, resize
 // and about once per surface in gestureRepeat; each close counts, and each
 // move or resize but those that go on the one just before (gestureSteps);
 // those older than gestureKeep go. Its title is the one core has, and only
-// when its author wrote it in a clean turn: never the page's.
+// when its author wrote it in a clean turn: never the page's. A mark's is
+// never said this way: only the mark action notes it (noteMarkGesture).
 func (c *core) noteGesture(what, ref string, now time.Time) error {
-	if _, ok := gestureKinds[what]; !ok {
+	if _, ok := gestureKinds[what]; !ok || isMarkGesture(what) {
 		return errGesture
 	}
 	if !gestureRef(ref) {
@@ -138,9 +175,27 @@ func (c *core) noteGesture(what, ref string, now time.Time) error {
 			return err
 		}
 	}
+	return c.logGesture(what, ref, title, "", now)
+}
+
+// noteMarkGesture keeps the mark the user set on a thread's surface, its
+// list and item (ids, checked by the mark action) in the detail, unless it
+// is external (set on a tainted surface): the brain reads it with the
+// workspace's other gestures at its next turn.
+func (c *core) noteMarkGesture(thread int64, list, item, mark string, external bool, now time.Time) error {
+	sid := threadSurfaceID(thread)
+	detail := list + "/" + item
+	if external {
+		detail = ""
+	}
+	return c.logGesture(markGestures[mark], surfaceRefPrefix+sid, c.surfaceCleanTitle(sid), detail, now)
+}
+
+// logGesture writes a gesture down; those older than gestureKeep go.
+func (c *core) logGesture(what, ref, title, detail string, now time.Time) error {
 	c.store.db.Exec(`DELETE FROM workspace_log WHERE time < ?`, now.Add(-gestureKeep).Unix())
-	_, err := c.store.db.Exec(`INSERT INTO workspace_log (time, what, ref, title) VALUES (?, ?, ?, ?)`,
-		now.Unix(), what, ref, truncate(oneLine(title), gestureTitle))
+	_, err := c.store.db.Exec(`INSERT INTO workspace_log (time, what, ref, title, detail) VALUES (?, ?, ?, ?, ?)`,
+		now.Unix(), what, ref, truncate(oneLine(title), gestureTitle), detail)
 	return err
 }
 
@@ -153,7 +208,7 @@ func gestureRef(ref string) bool {
 
 // gestures are the gestures between from and to, the oldest first.
 func (c *core) gestures(from, to time.Time) ([]gesture, error) {
-	rows, err := c.store.db.Query(`SELECT id, time, what, ref, title FROM workspace_log WHERE time >= ? AND time < ? ORDER BY id`,
+	rows, err := c.store.db.Query(`SELECT id, time, what, ref, title, detail FROM workspace_log WHERE time >= ? AND time < ? ORDER BY id`,
 		from.Unix(), to.Unix())
 	if err != nil {
 		return nil, err
@@ -163,7 +218,7 @@ func (c *core) gestures(from, to time.Time) ([]gesture, error) {
 	for rows.Next() {
 		var g gesture
 		var at int64
-		if err := rows.Scan(&g.ID, &at, &g.What, &g.Ref, &g.Title); err != nil {
+		if err := rows.Scan(&g.ID, &at, &g.What, &g.Ref, &g.Title, &g.Detail); err != nil {
 			return nil, err
 		}
 		g.Time = time.Unix(at, 0)
