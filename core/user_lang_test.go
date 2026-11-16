@@ -3,9 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"io/fs"
 	"net/url"
-	"path"
 	"strings"
 	"testing"
 	"time"
@@ -66,12 +64,12 @@ func TestUserLang(t *testing.T) {
 // A task's and a skill run's voice: the user's language, the code's rules
 // kept whatever it is.
 func TestVoicesInUserLang(t *testing.T) {
-	en, fr := skillVoice("en"), skillVoice("fr")
+	en, fr := skillVoice("en", true), skillVoice("fr", false)
 	if !strings.Contains(en, "in the user's language, English") || strings.Contains(en, "French") ||
-		!strings.Contains(en, "no entry, and the user is told nothing") || strings.Contains(en, "[brief]") {
+		!strings.Contains(en, "no entry, and nothing is told") || strings.Contains(en, "[brief]") || !strings.Contains(en, "note_item") {
 		t.Fatalf("en:\n%s", en)
 	}
-	if !strings.Contains(fr, "French, with tutoiement") {
+	if !strings.Contains(fr, "French, with tutoiement") || strings.Contains(fr, "note_item") {
 		t.Fatalf("fr:\n%s", fr)
 	}
 	if w := workerVoice("Iris", "en"); !strings.Contains(w, "in the user's language, English") || strings.Contains(w, "French") {
@@ -111,21 +109,10 @@ func TestTaskPromptsInUserLang(t *testing.T) {
 	}
 }
 
-// The arrival skill writes its surfaces in the user's language.
-func TestArrivalSkillLanguage(t *testing.T) {
-	body, err := fs.ReadFile(defaultSkillFS, path.Join(defaultSkillsDir, "arrivee", "SKILL.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(body), "langue de l'utilisateur") {
-		t.Fatal("the arrival skill does not name the user's language")
-	}
-}
-
 // A learned entry's reason, when code wrote it, is in the page's language.
 func TestLearnedReasonInLang(t *testing.T) {
 	reason := templateFuncs("fr")["reason"].(func(string) string)
-	if got := reason(defaultSkillReason); got != "installé par défaut" {
+	if got := reason("approved"); got != "approuvé" {
 		t.Fatalf("fr %q", got)
 	}
 	if got := reason("Sam asked for it"); got != "Sam asked for it" {

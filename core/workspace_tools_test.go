@@ -136,10 +136,10 @@ func TestWorkspaceToolsThroughMCP(t *testing.T) {
 func TestSurfaceRights(t *testing.T) {
 	c, _ := surfaceCore(t)
 	in := surfaceIn{ID: "suivi", Title: "Suivi", Components: json.RawMessage(`[{"id":"root","component":"Text","text":"a"}]`)}
-	if _, _, err := c.surfaceWrite("skill:revue", in); err != nil {
+	if _, _, err := c.surfaceWrite("task:t-revue", in); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := c.surfaceWrite("task:t-9", in); err == nil || !strings.Contains(err.Error(), "skill:revue") {
+	if _, _, err := c.surfaceWrite("task:t-9", in); err == nil || !strings.Contains(err.Error(), "task:t-revue") {
 		t.Fatalf("another author wrote it: %v", err)
 	}
 	if err := c.surfaceRemove("suivi", "lead:4"); err == nil {
@@ -147,45 +147,14 @@ func TestSurfaceRights(t *testing.T) {
 	}
 	in.Title = "Suivi revu"
 	s, _, err := c.surfaceWrite("brain", in)
-	if err != nil || s.Author != "skill:revue" || s.Title != "Suivi revu" {
+	if err != nil || s.Author != "task:t-revue" || s.Title != "Suivi revu" {
 		t.Fatalf("the brain's change: %+v %v", s, err)
 	}
-	if _, _, err := c.surfaceWrite("skill:revue", in); err != nil {
+	if _, _, err := c.surfaceWrite("task:t-revue", in); err != nil {
 		t.Fatalf("its author lost it: %v", err)
 	}
 	if err := c.surfaceRemove("suivi", "brain"); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// A skill writes as itself: its next run (another task) updates the same
-// surface; a task that is no skill's run writes as itself.
-func TestSkillSurfaceAuthorAcrossRuns(t *testing.T) {
-	c, _ := surfaceCore(t)
-	for _, id := range []string{"t-run1", "t-run2", "t-other"} {
-		c.store.insertTask(&TaskRow{ID: id, Runtime: "claude-code", State: stateRunning})
-	}
-	for _, id := range []string{"t-run1", "t-run2"} {
-		c.store.db.Exec(`INSERT INTO skill_runs (skill, sha, task, state, created) VALUES ('revue', 'x', ?, 'running', 0)`, id)
-	}
-	write := func(task, title string) (map[string]any, error) {
-		return c.toolSurfaceWrite(c.taskCaller(task), surfaceWriteIn{ID: "revue-du-jour", Title: title,
-			Components: []map[string]any{{"id": "root", "component": "Text", "text": title}}})
-	}
-	if out, err := write("t-run1", "Lundi"); err != nil || out["author"] != "skill:revue" {
-		t.Fatalf("first run: %v %v", out, err)
-	}
-	if _, err := write("t-run2", "Mardi"); err != nil {
-		t.Fatalf("the next run: %v", err)
-	}
-	if s, _ := c.surface("revue-du-jour"); s.Title != "Mardi" || s.Author != "skill:revue" {
-		t.Fatalf("surface %+v", s)
-	}
-	if _, err := write("t-other", "Autre"); err == nil {
-		t.Fatal("a task wrote a skill's surface")
-	}
-	if who := c.taskCaller("t-other"); who.author != "task:t-other" {
-		t.Fatalf("author %s", who.author)
 	}
 }
 
@@ -281,33 +250,6 @@ func TestWorkspaceReadQuotesNoTaint(t *testing.T) {
 	}
 }
 
-// A skill lends the workspace in its tools: its run starts lent it, and
-// writes as the skill through its node.
-func TestSkillRunWritesItsSurface(t *testing.T) {
-	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: revue\ndescription: la revue\nwhen: monitor.new\ntools: ["+workspaceServer+"]\n---\nÉcris la revue.\n")
-	c.emit(journalEvent{Kind: "monitor.new", Key: "x", Source: "monitor:x", At: *now})
-	c.tickSkills(context.Background(), *now)
-	rs := runsOfSkill(t, c, "revue")
-	if len(rs) != 1 || rs[0].State == skillRunRefused {
-		t.Fatalf("runs %+v", rs)
-	}
-	task, _ := c.store.task(rs[0].Task)
-	if task.Tools != workspaceServer {
-		t.Fatalf("tools %q", task.Tools)
-	}
-	c.store.updateTask(task.ID, map[string]any{"node": "pc", "state": stateRunning})
-	sess, err := taskEndpoint(t, c, task.ID, workspaceServer, "pc-secret")
-	if err != nil {
-		t.Fatal(err)
-	}
-	got, msg := callOn(t, sess, "surface_write", map[string]any{"id": "revue", "title": "Revue",
-		"components": []map[string]any{{"id": "root", "component": "Text", "text": "Trois points"}}})
-	if msg != "" || got["author"] != "skill:revue" {
-		t.Fatalf("write %v %s", got, msg)
-	}
-}
-
 // The workspace reaches a task through its grant only, like any tool: a
 // task not lent it does not reach it; one lent a tool of it sees that one,
 // its node relays it and allows it in advance; skills lend it by name.
@@ -361,9 +303,6 @@ func TestWorkspaceGrantPath(t *testing.T) {
 		t.Fatalf("assignments %s", w.Body.Bytes())
 	}
 
-	if _, err := parseSkillMD([]byte("---\nname: revue\ndescription: la revue\nwhen: time daily 07:00\ntools: [" + workspaceServer + "]\n---\nÉcris la revue.\n")); err != nil {
-		t.Fatalf("a skill lending the workspace: %v", err)
-	}
 	listed, _ := callOn(t, connectServer(t, newMCPServer(c)), "list_tools", map[string]any{})
 	if raw, _ := json.Marshal(listed["provided"]); !strings.Contains(string(raw), workspaceServer) || !strings.Contains(string(raw), "surface_write") {
 		t.Fatalf("list_tools: %s", raw)
@@ -439,20 +378,20 @@ func TestSurfaceAskGuard(t *testing.T) {
 // lifetime, last update and last error, and removes one.
 func TestSurfacesPage(t *testing.T) {
 	c, _ := surfaceCore(t)
-	if _, _, err := c.surfaceWrite("skill:revue", surfaceIn{ID: "comptes", Title: "Comptes", Components: accountsSurface(), Sources: balances}); err != nil {
+	if _, _, err := c.surfaceWrite("task:t-revue", surfaceIn{ID: "comptes", Title: "Comptes", Components: accountsSurface(), Sources: balances}); err != nil {
 		t.Fatal(err)
 	}
 	c.surfaceError("comptes", a2ui.Error{Code: "RENDER_FAILED", Path: "/components/1", Message: "rien à afficher"})
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	code, body, _ := tw.do("GET", "/settings/surfaces", nil, nil)
-	for _, want := range []string{"Comptes", "le skill « revue »", "ledger/balances", "jusqu&#39;au", "Mise à jour", "rien à afficher", "/settings/surfaces/comptes/remove"} {
+	for _, want := range []string{"Comptes", "la tâche t-revue", "ledger/balances", "jusqu&#39;au", "Mise à jour", "rien à afficher", "/settings/surfaces/comptes/remove"} {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Errorf("page %d lacks %q", code, want)
 		}
 	}
 	tw.do("GET", "/settings/surfaces", nil, nil)
-	if _, body, _ := tw.do("GET", "/settings/surfaces", nil, map[string]string{"Accept-Language": "en"}); !strings.Contains(body, "the skill “revue”") {
+	if _, body, _ := tw.do("GET", "/settings/surfaces", nil, map[string]string{"Accept-Language": "en"}); !strings.Contains(body, "task t-revue") {
 		t.Error("the English page")
 	}
 	if _, _, h := tw.post("/settings/surfaces/comptes/remove", url.Values{}, csrf); h.Get("HX-Redirect") != "/settings/surfaces" {

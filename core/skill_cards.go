@@ -196,10 +196,5 @@ func skillCanText(tr *skillTrigger, th *Thread, sources []string) string {
 		b.WriteString("\n\nSi c'est grave et que l'utilisateur doit le savoir tout de suite, même la nuit, donne-lui le poids 5 dans ta liste attention : " +
 			"eriphe-core lui enverra son message d'urgence, fixé à l'avance.")
 	}
-	if containsStr(tr.Tools, workspaceServer) {
-		b.WriteString("\n\nTu tiens la surface de ce skill dans l'espace de travail de l'utilisateur (" + workspaceServer + ") : " +
-			"retrouve la tienne avec workspace_read (yours), réécris-la avec surface_write et le même id, garde-la (lifetime kept) ; " +
-			"catalog_read donne les composants avant la première. Un événement " + evSurfaceStale + " à son sujet demande de la réécrire.")
-	}
 	return b.String()
 }

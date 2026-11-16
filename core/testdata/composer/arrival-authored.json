@@ -5,7 +5,7 @@
   "moment": "arrival",
   "away_minutes": 720,
   "items": [
-    {"ref": "surface:arrivee", "author": "skill:arrivee", "weight": 70, "age_minutes": 15, "title": "Ce qui t'attend ce matin", "why": "Deux réponses à donner, une réunion à 10 h"},
+    {"ref": "surface:arrivee", "author": "task:t-arrivee", "weight": 70, "age_minutes": 15, "title": "Ce qui t'attend ce matin", "why": "Deux réponses à donner, une réunion à 10 h"},
     {"ref": "surface:erreurs-site", "author": "brain", "weight": 50, "age_minutes": 600, "title": "Erreurs du site", "why": "Suivi demandé après la mise en ligne"},
     {"ref": "surface:comparatif-assurances", "author": "task:t-77", "weight": 40, "age_minutes": 5, "title": "Comparatif des assurances", "why": "En préparation"},
     {"ref": "card:c-90", "weight": 4, "age_minutes": 40, "title": "Répondre à la crèche", "why": "Une réponse prête attend ton accord", "say": "La réponse à la crèche attend ton accord."},

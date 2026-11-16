@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -10,107 +9,6 @@ import (
 
 func oneText(text string) []map[string]any {
 	return []map[string]any{{"id": "root", "component": "Text", "text": text}}
-}
-
-// A skill reacts to surface.stale: by its when (id=<its surface>), and,
-// whatever its when, about a surface it wrote, even a skill at fixed
-// times; another's surface does not run it.
-func TestSkillRewritesOnStale(t *testing.T) {
-	m, err := parseSkillMD([]byte("---\nname: x\ndescription: x\nwhen: surface.stale id=revue\n---\nRéécris.\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	st, _ := parseSkillTrigger(m)
-	if !st.matches(journalEvent{Kind: evSurfaceStale, Key: "revue", Payload: map[string]any{"id": "revue"}}) ||
-		st.matches(journalEvent{Kind: evSurfaceStale, Key: "autre", Payload: map[string]any{"id": "autre"}}) {
-		t.Fatal("when: surface.stale id=… does not match its surface only")
-	}
-
-	c, now := skillCore(t)
-	addTriggered(t, c, "---\nname: revue\ndescription: la revue du matin\nwhen: time daily 07:00\ntools: ["+workspaceServer+"]\n---\nÉcris la revue.\n")
-	comps := []byte(`[{"id":"root","component":"Text","text":"Trois points"}]`)
-	if _, _, err := c.surfaceWrite("skill:revue", surfaceIn{ID: "revue", Title: "Revue", Components: comps, Lifetime: surfaceLifetime{Kept: true}}); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := c.surfaceWrite("brain", surfaceIn{ID: "autre", Title: "Autre", Components: comps}); err != nil {
-		t.Fatal(err)
-	}
-	c.emit(journalEvent{Kind: evSurfaceStale, Key: "autre", Source: "composer", At: *now, Payload: map[string]any{"id": "autre"}})
-	c.tickSkills(context.Background(), *now)
-	if rs := runsOfSkill(t, c, "revue"); len(rs) != 0 {
-		t.Fatalf("another's surface ran it: %+v", rs)
-	}
-	c.emit(journalEvent{Kind: evSurfaceStale, Key: "revue", Source: "composer", At: *now, Payload: map[string]any{"id": "revue"}})
-	c.tickSkills(context.Background(), *now)
-	rs := runsOfSkill(t, c, "revue")
-	if len(rs) != 1 || rs[0].State == skillRunRefused {
-		t.Fatalf("runs %+v", rs)
-	}
-	task, _ := c.store.task(rs[0].Task)
-	if task.Tools != workspaceServer || !strings.Contains(task.Prompt, evSurfaceStale) || !strings.Contains(task.Prompt, "même id") {
-		t.Fatalf("task %q %q", task.Tools, task.Prompt)
-	}
-	if sk := c.triggeredSkills()[0]; !strings.Contains(sk.Trigger.Text("fr"), "périmée") {
-		t.Errorf("its card does not say it: %q", sk.Trigger.Text("fr"))
-	}
-
-	// Stale again within the quiet: its author is not woken again.
-	c.store.db.Exec(`UPDATE skill_runs SET state = ?`, skillRunDone)
-	c.emit(journalEvent{Kind: evSurfaceStale, Key: "revue", Source: "composer", At: now.Add(time.Minute), Payload: map[string]any{"id": "revue"}})
-	if q, _ := c.skillQueue("revue"); len(q) != 0 {
-		t.Fatalf("woken again within the quiet: %+v", q)
-	}
-	c.emit(journalEvent{Kind: evSurfaceStale, Key: "revue", Source: "composer", At: now.Add(time.Hour), Payload: map[string]any{"id": "revue"}})
-	if q, _ := c.skillQueue("revue"); len(q) != 1 {
-		t.Fatalf("not woken after the quiet: %+v", q)
-	}
-
-	// A skill not lent the workspace is not woken by its surface.
-	addTriggered(t, c, "---\nname: tri\ndescription: le tri\nwhen: time daily 08:00\n---\nTrie.\n")
-	c.surfaceWrite("skill:tri", surfaceIn{ID: "tri", Title: "Tri", Components: comps})
-	c.emit(journalEvent{Kind: evSurfaceStale, Key: "tri", Source: "composer", At: *now, Payload: map[string]any{"id": "tri"}})
-	if q, _ := c.skillQueue("tri"); len(q) != 0 {
-		t.Fatalf("a skill without the workspace woken: %+v", q)
-	}
-}
-
-// Asked for something every morning, the brain writes a skill lent the
-// workspace: a provided server is one of its tools, and its runs keep
-// their surface.
-func TestBrainRecurringRequestWritesWorkspaceSkill(t *testing.T) {
-	c, now := skillCore(t)
-	out, isErr := callBrainTool(t, c, "write_skill", map[string]any{"name": "matin", "description": "Le point du matin dans l'espace",
-		"instructions": "Écris la surface du matin : l'agenda du jour.", "when": "time daily 07:00", "tools": []string{workspaceServer}})
-	if isErr {
-		t.Fatalf("write_skill: %v", out)
-	}
-	k, err := c.store.skill("matin")
-	if err != nil || k.Pending == "" {
-		t.Fatalf("skill %+v %v", k, err)
-	}
-	if err := c.store.approveSkill("matin", k.Pending); err != nil {
-		t.Fatal(err)
-	}
-	var sk *triggeredSkill
-	for _, x := range c.triggeredSkills() {
-		if x.Name == "matin" {
-			sk = &x
-		}
-	}
-	if sk == nil || !containsStr(sk.Trigger.Tools, workspaceServer) {
-		t.Fatalf("triggered %+v", sk)
-	}
-	c.startSkillRun(context.Background(), *sk, "", nil, *now)
-	rs := runsOfSkill(t, c, "matin")
-	if len(rs) != 1 || rs[0].State == skillRunRefused {
-		t.Fatalf("runs %+v", rs)
-	}
-	if task, _ := c.store.task(rs[0].Task); task.Tools != workspaceServer || c.taskCaller(task.ID).author != "skill:matin" {
-		t.Fatalf("task %q", task.Tools)
-	}
-	if !strings.Contains(brainPrompt, "tools: [eriphe-workspace]") {
-		t.Error("the brain is not told how a recurring request keeps its surface")
-	}
 }
 
 // surface.missing reaches the brain as an event of the conversation, once
@@ -150,7 +48,7 @@ func TestQueueSurfaceRefs(t *testing.T) {
 	if !validAttentionRef("surface:revue-du-jour") || validAttentionRef("surface:Pas Un Id") {
 		t.Fatal("surface refs")
 	}
-	if _, _, err := c.surfaceWrite("skill:revue", surfaceIn{ID: "revue-du-jour", Title: "Revue", Components: []byte(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil {
+	if _, _, err := c.surfaceWrite("task:t-revue", surfaceIn{ID: "revue-du-jour", Title: "Revue", Components: []byte(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil {
 		t.Fatal(err)
 	}
 	kept, dropped := decodeSignals([]byte(`[{"refs": ["surface:revue-du-jour"], "weight": 2, "why": "La revue est prête"}]`))

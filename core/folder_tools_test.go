@@ -319,28 +319,6 @@ func TestFoldersSurfaceSource(t *testing.T) {
 	})
 }
 
-// The arrival skill is lent the folders, and sees their reads among the
-// sources code may read.
-func TestArrivalSkillSeesFolders(t *testing.T) {
-	c, _ := folderFilesCore(t)
-	m, err := parseSkillMD(defaultSkills()["arrivee"][0].Data)
-	if err != nil || !slices.Contains(m.Trigger.Tools, foldersServer) {
-		t.Fatalf("arrival tools %v %v", m.Trigger, err)
-	}
-	out, err := c.toolSourcesRead(sourcesIn{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	offers, _ := out["sources"].([]readOffer)
-	i := slices.IndexFunc(offers, func(o readOffer) bool { return o.Tool == foldersServer+"/read_file" })
-	if i < 0 || !offers[i].Free || !offers[i].Shape {
-		t.Fatalf("sources %+v", offers)
-	}
-	if slices.ContainsFunc(offers, func(o readOffer) bool { return o.Tool == foldersServer+"/write_file" }) {
-		t.Error("a write offered as a source")
-	}
-}
-
 // No folder shared: nothing lent.
 func TestFoldersToolOnlyWithFolders(t *testing.T) {
 	c := newCatalogCore(t)

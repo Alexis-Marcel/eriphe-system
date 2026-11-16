@@ -891,13 +891,18 @@ An assistant (a skill's run, a thread's lead) says what deserves the user's atte
 (`attentionInstruction`, after `receiptInstruction` in `skillVoice`) or in a lead's `report`:
 
 ```json
-"attention": [{"refs": ["mail:42", "agenda:2026-11-12"], "weight": 4, "why": "une facture due aujourd'hui", "say": "Ta facture est due."}]
+"attention": [{"refs": ["thread:12"], "weight": 4, "why": "une facture due aujourd'hui", "say": "Ta facture est due."}]
 ```
 
-`refs` name the objects it is about, `<kind>:<id>` with a kind among `mail`, `agenda`
-(`YYYY-MM-DD`), `event`, `thread`, `card`, `task`, `project`, `alert` and `surface` (a surface of
-the workspace, by its id); only the form is checked, by `parseRef`. An item about a
-surface is shown by that surface (no `q-` surface of its own) and leaves the queue with it.
+`refs` name the objects it is about, `<kind>:<id>` with a kind among `thread`, `card`, `task`,
+`surface` (a surface of the workspace, by its id) and the subjects' kinds (`project`, `alert`…);
+no kind is a tool's (no `mail:`, `agenda:`, `event:`): an item of a thread's source is raised
+through its thread. Only the form is checked, by `parseRef`. An item about a
+surface is shown by that surface (no `q-` surface of its own) and leaves the queue with it. An
+item about a thread (`thread:<id>`, a skill's `set_thread` raise or a receipt's entry) raises
+that thread's tile whatever its weight (`threadSurfaceIn` takes `queueSurfaceWeight` of it),
+puts nothing in a `q-` surface, and ends once the user opened that thread's surface and left it;
+the tile then goes back to its own weight.
 `weight` is 5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1 background; `why` is
 cut to 80 characters, `say` is optional. One block alone, or refs given as one string, are read as
 a list. A ref of another form, a weight outside 1 to 5 (or not whole), an entry that is not an
@@ -1711,9 +1716,14 @@ version, read with its diff.
   no start card: the user approved the skill. An external event taints it from its start
   (`task_taint:<id>`), so its writes ask a card as a tainted task's do; a time trigger or own
   events start it clean.
-- **Its last message** is what it may tell the user, weighed by its receipt's
+- **It acts on its thread** when lent `eriphe-threads` (`skillVoice`): it notes the items it
+  looked at, says the thread waits for the user or gives it a deadline, raises it, adds what the
+  user must do or decide. That is what the user sees, ordered by code; a skill writes no surface
+  (`eriphe-workspace` is refused in its `tools`). The run's note says how many notes it wrote.
+- **Its last message** is optional, the run's report, weighed by its receipt's
   [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
-  as everywhere; a skill's instructions write no prefix. No entry (or no receipt) tells nothing:
+  as everywhere; a skill's instructions write no prefix. Entries whose refs are all threads
+  raise their tiles and never tell the message. No entry (or no receipt) tells nothing:
   the run is `silent`, its message kept in its note. Otherwise its message is a notification, why
   « Skill « name » », ref `skill:<name>`, its link-free rules when the task is tainted, weighed as
   its heaviest entry (delivered at once from 4, pushed at 5). One entry without refs (or whose refs
@@ -1726,10 +1736,6 @@ version, read with its diff.
   permissions are the user's, as any task's.
 - **One run open per skill and key**: the key's new events wait, and when its turn ends, its task
   gets them as a message instead of a second task.
-- **A skill lent the workspace** (`tools: [eriphe-workspace]`) also runs on a `surface.stale`
-  about a surface it wrote, whatever its `when`, a time trigger too (a time trigger cannot name an
-  event); once per 30 minutes a surface. Its card and Settings → Skills say so
-  ([who keeps which surface](#the-assistants-workspace-tools-workspace_toolsgo)).
 - **Time triggers** run at their times, in the user's zone; a trigger seen for the first time (or
   approved again) waits for its next time; times missed while eriphe-core was down make one run.
 - **Its calls the user must approve never hold it** (`skill_cards.go`): as the brain's, each is
@@ -1794,50 +1800,11 @@ brain reads the same with **`skill_runs`** (`name`, `limit`; free). It gets the 
 keys and the runs' outcomes, but not their text: what a run read stays on its page.
 
 **Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
-`every`, `model`, `tools`, `can`, `urgent`) writes a `SKILL.md` and adds it as a version waiting for
+`every`, `model`, `tools`, `thread`, `urgent`) writes a `SKILL.md` and adds it as a version waiting for
 approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog
 servers). Its card (kind `skill`) says the trigger in words and the instructions; the yes approves
 exactly that version, the no drops it. Written on a tainted turn, the card says so. A triggered
 task has no such tool.
-
-**Default skills** (`default_skills.go`, `default_skills/`). Eriphe brings skills that are the
-user's like any other once installed. Each is installed at the first start of eriphe-core that has
-it, approved and on (source `default`), recorded in the learning journal (the brain tells it, and
-`unlearn` takes it away), then never again: the store remembers it (`default_skill:<name>`), so a
-skill the user removed, changed or turned off stays as they left it, and a skill of theirs with the
-same name is left alone. A release may change a default skill: at start, one the user has not
-changed (its approved version is one Eriphe shipped, whose hashes the store keeps under
-`default_skill_sha:<name>`; nothing pending; on) is updated to the shipped version (source
-`default`), recorded in the journal as « mis à jour par défaut » / "updated by default", which
-undoes it. Each shipped version is offered once: an update undone or refused is not offered again.
-An update that adds only servers Eriphe provides (`eriphe-workspace`, `eriphe-folders`, which
-grant nothing beyond the access policy) is installed as any update; one that asks for more (another
-tool, a `can`, an `urgent` text, a script) waits on the skill's card for the user's yes. An install
-made before the hashes were kept counts as unchanged while its skill is still the one installed by
-default (source `default`). A default skill names no tool, server or person
-(`TestNoToolInDefaultSkills`): it works from whatever is linked, and is lent only
-`eriphe-workspace` and `eriphe-folders`, which grant nothing beyond the access policy (its writes
-are its own surfaces; its live sources are read by code, free reads only; each folder call is held
-to that folder's rights). A tool it should read itself (to
-digest mails, say) is lent the normal way: its surface offers a button (`ask`), the brain proposes
-a new version with those `tools`, and the user says yes or no on its card; until then it writes
-what it can.
-
-- **`arrivee`** prepares the workspace for the user's arrival, so opening it shows the day at
-  once: `when: time daily 06:00; user.returned away_minutes>=180`. In the morning it runs before
-  the user arrives; on a return after three hours or more it runs at the first sign of them (a
-  message, a tab in front: `user.returned`, within a minute), and the composer shows at once what
-  is there while it updates. Three hours, not the hour `user.returned` needs: after a meal or a
-  meeting the day's surfaces are still right, and live sources refresh themselves; after half a
-  day away, the day has moved. Its French instructions: read `workspace_read` first and keep the
-  same ids (the morning and return runs overlap: update, never add), `sources_read` and
-  `catalog_read`; write a `Placeholder` for each surface at once, then fill them; decide what is
-  worth a surface (the day's appointments, the messages that need an answer, the projects with
-  their deadline and next task, wealth when a tool for it is linked, the threads and what waits
-  for the user, without copying the surfaces their authors keep); live sources for what changes
-  during the day, composed values for digests; `lifetime.until` the end of the day; with nothing
-  linked, one surface saying what it could show; it changes nothing outside the workspace and its
-  receipt has no attention entry: nothing is notified.
 
 ## Events
 
@@ -2583,7 +2550,7 @@ in-memory session), so every path a catalog call takes applies to it unchanged:
 - **Taint.** The user's folders are theirs (`trustsServer`): what they say is data, never
   instructions, but reading them does not taint a turn or a task by itself.
 - **Who has it.** The brain, by default, once a folder is shared (`assistantGrant` lends it every
-  lent tool); a skill through its `tools` (the arrival skill has it); a task as
+  lent tool); a skill through its `tools`; a task as
   `{kind: tool, ref: eriphe-folders}`. Lending the folder itself to a task stays for heavy work.
 - **Surfaces.** Its reads are read-only by their annotations: `sources_read` lists them and a
   surface may read a file live (`{tool: eriphe-folders/read_file, args: {folder, path}}`, bound
@@ -3239,7 +3206,7 @@ runs on its own goroutine (`runComposer`), the brain reads the queue itself.
   6 hours;
 - `surface.stale`, key and payload `id`, payload `author` and `title`: a surface whose data is too
   old for the moment, or in error; told once per version of the surface. `when: surface.stale
-  id=week` or `author=skill:arrivee`.
+  id=week`.
 
 Both are external when the pool or the queue held content from outside.
 
@@ -3389,7 +3356,7 @@ routed to it comes as an in-app notice, by the stream's `notice` or the presence
 card at the bottom right for 15 s, its text a link when its URL is a path of the site (`Notices`,
 `Exchange.tsx`). A workspace left open is activity, and so are the gestures on it
 ([`gestureActivity`](#preferences-gestures-and-the-brains-tools-workspacego)): a return that only
-opens tiles is a return (`user.returned`, the arrival skill).
+opens tiles is a return (`user.returned`).
 
 **The last exchange** (`web_espace_exchange.go`, `Exchange.tsx`). Not a second chat: what the
 user says updates a thread or a surface at the centre, so the left column keeps to the last
@@ -3667,7 +3634,7 @@ and update the commit in the two `NOTICE` files.
 
 ### Surfaces and their sources (`surfaces.go`)
 
-A surface is one tile of the workspace, stored with its **author** (`brain`, `skill:<name>`,
+A surface is one tile of the workspace, stored with its **author** (`brain`,
 `lead:<thread>`, `task:<id>`, `core` for [the attention queue's](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo),
 or `thread:<id>` for [a thread's](#a-threads-surface-thread_surfacego);
 a task the brain [delegated a surface to](#the-assistants-workspace-tools-workspace_toolsgo) fills
@@ -3863,11 +3830,11 @@ Any assistant writes the workspace with five tools; the **author is the caller**
   thread's lead, on its own tools (`registerLeadTools`), as `lead:<thread>`. A task or a skill's
   run through **`eriphe-workspace`, a server Eriphe provides**: lent like any catalog server
   (`{kind: tool, ref: eriphe-workspace}` or `eriphe-workspace.<tool>` in `run_task`'s resources,
-  `eriphe-workspace` in a skill's `tools`), checked by `checkGrant`, listed by `list_tools` under
+  never in a skill's `tools`), checked by `checkGrant`, listed by `list_tools` under
   `provided`, put in the task's spec by `specServers` and relayed by its node at
   `/v1/node/tasks/<id>/mcp/eriphe-workspace` like the others (`taskMCPHandler` serves the tools its
-  grant covers; a task not lent it gets 403). The name is reserved. A skill's run writes as
-  `skill:<name>`, so its next run rewrites the same surface; any other task as `task:<id>`.
+  grant covers; a task not lent it gets 403). The name is reserved. A task writes as `task:<id>`;
+  a skill is never lent it (it writes on its thread, `eriphe-threads`).
 - **No approval.** Writing a surface is not an external write: the lent tools are allowed in
   advance (the spec's `allowedTools`), and each caller writes its own surfaces only.
 - **Taint.** Calling `eriphe-workspace` does not taint a task by itself, as eriphe-core's own tools
@@ -3978,17 +3945,11 @@ only when the CLI does.
 - **A thread's surface is code's** ([a thread's surface](#a-threads-surface-thread_surfacego)):
   who holds the thread (the brain, or its lead) adds its part to it, and a `surface.stale` about
   it wakes the lead that wrote that part.
-- **A skill** writes its surface on its trigger: `tools: [eriphe-workspace]` in its front matter
-  lends it the workspace, its runs write as `skill:<name>` (the same surface each run, by its id,
-  `lifetime: kept` while the skill exists), and its run's prompt says so (`skillCanText`). It reacts
-  to the composer's events with `when` like any event (`when: surface.stale id=<its surface>`), and
-  a `surface.stale` about a surface it wrote runs it whatever its `when`, a skill at fixed times
-  too (`queueSkillEvent`; its run gets the event, keyed by the surface; its card says so). An
-  author (a skill, a lead) is woken by a `surface.stale` once per 30 minutes a surface
-  (`staleWake`), so a rewrite the composer still finds stale does not loop.
+- **A skill writes no surface**: lent `eriphe-threads`, it acts on its thread, whose surface is
+  code's ([Triggered skills](#triggered-skills)). A lead is woken by a `surface.stale` once per
+  30 minutes a surface (`staleWake`), so a rewrite the composer still finds stale does not loop.
 - **The brain** writes what the user asks; asked for something that comes back (« chaque matin »),
-  it writes a skill with `tools: [eriphe-workspace]` (`write_skill` accepts the servers Eriphe
-  provides) that maintains the surface. A `surface.missing` reaches it as an event of the
+  it writes a skill with `tools: [eriphe-threads]` that tends its thread. A `surface.missing` reaches it as an event of the
   conversation (« [espace] Il manque … »), once an hour for the same text, its turn tainted when the
   event is external: it writes the surface, a skill, or nothing.
 - **The events**: `surface.stale` (key and payload `id`: a surface out of date) and

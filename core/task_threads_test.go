@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -302,5 +303,84 @@ func TestTaskThreadsGrant(t *testing.T) {
 	}
 	if !providedServer(threadsServer) || !slices.Contains(reserved, threadsServer) {
 		t.Fatal("not provided")
+	}
+}
+
+// A skill raising its thread (its receipt's thread:<id>) raises that
+// thread's tile, whatever the weight, and puts nothing in a tile of the
+// queue; the user opening that tile then leaving it ends the raise, and
+// the tile goes back. From a tainted run, the raise is held to 3.
+func TestSkillRaisesThreadTile(t *testing.T) {
+	c, _, now := alertsWatcher(t)
+	raise := func(key string, weight int, tainted bool) (int64, *skillRun) {
+		c.emit(journalEvent{Kind: evMonitorNew, Key: "alertes", Source: "monitor:alertes", At: *now, Payload: map[string]any{"id": key}})
+		c.tickSkills(context.Background(), *now)
+		r := runsOfSkill(t, c, "veille-alertes")[0]
+		id := runThreadOf(c, r)
+		if tainted {
+			c.taskRead(r.Task, "mail/read") // what someone else wrote
+		}
+		endTurn(t, c, r.Task, "La prod renvoie des 5xx.\n```json\n"+
+			`{"receipt": {"status": "done", "attention": [{"refs": ["thread:`+strconv.FormatInt(id, 10)+`"], "weight": `+strconv.Itoa(weight)+`, "why": "des 5xx"}]}}`+"\n```")
+		*now = now.Add(time.Hour)
+		return id, r
+	}
+	id, _ := raise("a", 4, false)
+	sid := threadSurfaceID(id)
+	if it := attentionOf(c, threadRef(id)); it == nil || it.Weight != 4 || it.Source != "skill:veille-alertes" || it.tainted {
+		t.Fatalf("item %+v", it)
+	}
+	c.syncQueueSurfaces()
+	s, _ := c.surface(sid)
+	if s.Weight < queueSurfaceWeight(4) {
+		t.Fatalf("tile weight %d", s.Weight)
+	}
+	for _, e := range c.queuePlan(time.Now()) {
+		if e.it.Ref == threadRef(id) && (!e.about || e.surface != sid) {
+			t.Fatalf("placed %+v", e)
+		}
+	}
+	all, _ := c.surfaces()
+	for _, x := range all {
+		if strings.HasPrefix(x.ID, queueSurfacePrefix) {
+			t.Errorf("a tile of the queue: %s %q", x.ID, x.Title)
+		}
+	}
+
+	// Opened, then left: seen.
+	c.focusSurface(sid, time.Now())
+	c.queueSweep(time.Now())
+	if attentionOf(c, threadRef(id)) == nil {
+		t.Fatal("ended while the user reads it")
+	}
+	c.focusSurface("", time.Now())
+	c.queueSweep(time.Now())
+	if it := attentionOf(c, threadRef(id)); it != nil {
+		t.Fatalf("still raised %+v", it)
+	}
+	if s, _ = c.surface(sid); s.Weight >= queueSurfaceWeight(4) {
+		t.Fatalf("tile weight %d after", s.Weight)
+	}
+
+	// A tainted run: held to 3.
+	if again, r := raise("b", 5, true); again != id || c.taskResultTaint(r.Task) == "" {
+		t.Fatalf("run %+v on thread %d", r, again)
+	}
+	if it := attentionOf(c, threadRef(id)); it == nil || it.Weight != 3 || !it.tainted {
+		t.Fatalf("tainted item %+v", it)
+	}
+	c.syncQueueSurfaces()
+	if s, _ = c.surface(sid); s.Weight >= queueSurfaceWeight(4) {
+		t.Fatalf("tainted tile weight %d", s.Weight)
+	}
+}
+
+// A skill writes no surface: eriphe-workspace is refused in its tools.
+func TestSkillNoWorkspace(t *testing.T) {
+	if _, err := parseSkillMD([]byte("---\nname: x\ndescription: y\nwhen: monitor.new\ntools: [eriphe-workspace]\n---\nz\n")); err == nil {
+		t.Fatal("a skill lent the workspace")
+	}
+	if !strings.Contains(skillVoice("fr", true), "note_item") || strings.Contains(skillVoice("fr", false), "note_item") {
+		t.Fatal("the voice")
 	}
 }
