@@ -178,6 +178,7 @@ func TestGalleryCatalog(t *testing.T) {
 		"dropbox":   {"bêta"},
 		"exa":       {"sans compte"},
 		"strava":    {"ne fait que lire"},
+		"substack":  {"ne fait que lire"},
 		"stripe":    {"Paiements, clients et factures Stripe."},
 		"buffer":    {"lecture seule possible"},
 		"kit":       {"payant"},
