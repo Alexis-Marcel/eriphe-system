@@ -27,7 +27,7 @@ func TestThreadLead(t *testing.T) {
 	if !strings.Contains(leadInstructions(c, a, ""), "Find a name for the shop.") {
 		t.Error("the lead does not know its goal")
 	}
-	if got := leadToolNames(t, c, a); !slices.Equal(got, []string{"amend_thread", "catalog_read", "close_thread", "report", "settle_step", "sources_read", "surface_remove", "surface_write", "thread", "workspace_read"}) {
+	if got := leadToolNames(t, c, a); !slices.Equal(got, []string{"amend_thread", "catalog_read", "close_thread", "note_item", "report", "settle_step", "sources_read", "surface_remove", "surface_write", "thread", "workspace_read"}) {
 		t.Errorf("lead tools %v", got)
 	}
 

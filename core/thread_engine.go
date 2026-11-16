@@ -965,6 +965,7 @@ func (c *core) threadsTick(now time.Time) {
 	c.threadDeadlines(now)                   // thread_steps.go
 	c.endDays(now)
 	c.threadSourcesDue(now) // thread_sources.go
+	c.pruneItemNotes(now)   // thread_items.go
 	c.keepThreadSurfaces()  // thread_surface.go
 	ss, err := c.threadsWhere(activeThreads + ` ORDER BY id DESC LIMIT 50`)
 	if err != nil {

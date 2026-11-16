@@ -955,7 +955,7 @@ func threadTurn(x threadCase, c *core, r *threadRun, event string) string {
 }
 
 // threadToolsListed are the brain's tools a turn about threads uses.
-var threadToolsListed = []string{"find_thread", "open_thread", "read_thread", "add_step", "settle_step", "link_thread",
+var threadToolsListed = []string{"find_thread", "open_thread", "read_thread", "add_step", "settle_step", "link_thread", "note_item",
 	"close_thread", "reopen_thread", "stop_thread", "off_thread", "run_task", "surface_write", "surface_remove", "workspace_read", "workspace_focus"}
 
 // threadInstructions are what the brain reads to keep threads: its prompt's

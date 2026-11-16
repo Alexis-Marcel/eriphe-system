@@ -242,8 +242,26 @@ func registerLeadTools(c *core, s *mcp.Server, a Assistant) {
 	id := leadThread(a)
 	by := "lead"
 	c.registerLeadSurfaceTools(s, a) // its thread's surfaces (workspace_tools.go)
-	tool(s, "thread", "Your thread as it is now: its goal, done_when, state, budget and time spent, each step (status, task, evidence, output, your last note) and the recent log.",
-		func(ctx context.Context, _ struct{}) (threadView, error) { return c.threadView(id, 30) })
+	tool(s, "thread", "Your thread as it is now: its goal, done_when, state, budget and time spent, each step (status, task, evidence, output, your last note), the notes on its sources' items and the recent log.",
+		func(ctx context.Context, _ struct{}) (threadView, error) {
+			v, err := c.threadView(id, 30)
+			if taints := readNotesTaint(v.Notes); err == nil && len(taints) > 0 {
+				// A note written after reading outside content taints its reader.
+				c.updateAssistant(a.Name, func(st *AssistantStatus) {
+					for _, x := range taints {
+						if !slices.Contains(st.Tainted, x) {
+							st.Tainted = append(st.Tainted, x)
+						}
+					}
+				})
+			}
+			return v, err
+		})
+	tool(s, "note_item", "Note one item your thread's source lists, by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a due date. Code shows it on the item's row. A note written after reading external content is marked so and never quoted into a summary. No note, state nor due takes it away.",
+		func(ctx context.Context, in noteItemIn) (map[string]any, error) {
+			note, err := c.noteItem(id, in, threadNoteAuthor+strconv.FormatInt(id, 10), c.assistantTaint(a))
+			return map[string]any{"note": note}, err
+		})
 	tool(s, "settle_step", "Judge a step that reported its work or stopped, on its evidence: accept, retry (at most 2 per step; say what to fix) or reject. A step whose checks failed cannot be accepted.",
 		func(ctx context.Context, in leadSettleIn) (Step, error) {
 			return c.settleStep(ctx, id, in.Step, in.Verdict, in.Note, in.Output, by)
