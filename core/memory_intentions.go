@@ -70,7 +70,7 @@ type Intention struct {
 	Text         string    `json:"text"`
 	Owner        string    `json:"owner"`             // who owes: owner, assistant, person:<slug>
 	OwedTo       string    `json:"owed_to,omitempty"` // to whom
-	Subject      string    `json:"subject,omitempty"`
+	About        string    `json:"about,omitempty"`
 	Trigger      string    `json:"trigger"`
 	Cue          string    `json:"cue,omitempty"` // for a person trigger: the name(s) that bring it up
 	DueAt        time.Time `json:"due_at,omitzero"`
@@ -99,7 +99,7 @@ func (x *Intention) Overdue(now time.Time) bool {
 const intentionsSchema = `CREATE TABLE intentions (
 	  id INTEGER PRIMARY KEY AUTOINCREMENT,
 	  kind TEXT NOT NULL, text TEXT NOT NULL, owner TEXT NOT NULL DEFAULT 'owner', owed_to TEXT NOT NULL DEFAULT '',
-	  subject TEXT NOT NULL DEFAULT '', trigger TEXT NOT NULL DEFAULT 'time', cue TEXT NOT NULL DEFAULT '',
+	  about TEXT NOT NULL DEFAULT '', trigger TEXT NOT NULL DEFAULT 'time', cue TEXT NOT NULL DEFAULT '',
 	  due_at INTEGER, remind_at INTEGER, state TEXT NOT NULL, snoozed_until INTEGER,
 	  surfaced_at INTEGER, surfaced INTEGER NOT NULL DEFAULT 0, next_check_at INTEGER,
 	  source_kind TEXT NOT NULL, source_ref TEXT NOT NULL DEFAULT '', trust TEXT NOT NULL, basis TEXT NOT NULL DEFAULT '',
@@ -130,16 +130,16 @@ func defaultRemind(due time.Time) time.Time {
 // dayDeadline tells a deadline given as a day (kept as its last minute).
 func dayDeadline(t time.Time) bool { return t.Hour() == 23 && t.Minute() == 59 }
 
-// intentAssistant is the owner of what Eriphe owes: not a subject.
+// intentAssistant is the owner of what Eriphe owes: not a key.
 const intentAssistant = "assistant"
 
-// intentionParty is who owes or is owed: the assistant, or a subject's
+// intentionParty is who owes or is owed: the assistant, or a key's
 // key (owner, person:<slug>…).
 func intentionParty(s string) (string, error) {
 	if strings.EqualFold(strings.TrimSpace(s), intentAssistant) {
 		return intentAssistant, nil
 	}
-	return subjectKey(s)
+	return aliasKey(s)
 }
 
 // normalizeIntention checks an intention and fills what follows from it.
@@ -163,7 +163,7 @@ func normalizeIntention(x *Intention, now time.Time) error {
 		return fmt.Errorf("owner: %w", err)
 	}
 	if x.Owner == "" {
-		x.Owner = subjOwner
+		x.Owner = aliasOwner
 		if x.Kind == intentCommitment {
 			x.Owner = intentAssistant
 		}
@@ -171,8 +171,8 @@ func normalizeIntention(x *Intention, now time.Time) error {
 	if x.OwedTo, err = intentionParty(x.OwedTo); err != nil {
 		return fmt.Errorf("owed_to: %w", err)
 	}
-	if x.Subject, err = subjectKey(x.Subject); err != nil {
-		return fmt.Errorf("subject: %w", err)
+	if x.About, err = aboutKey(x.About); err != nil {
+		return fmt.Errorf("about: %w", err)
 	}
 	x.Cue = strings.Join(strings.Fields(x.Cue), " ")
 	if x.Trigger == "" {
@@ -221,10 +221,10 @@ func normalizeIntention(x *Intention, now time.Time) error {
 
 func insertIntention(q querier, x *Intention, now time.Time, who, detail string) error {
 	x.CreatedAt, x.UpdatedAt = now, now
-	res, err := q.Exec(`INSERT INTO intentions (kind, text, owner, owed_to, subject, trigger, cue, due_at, remind_at, state, snoozed_until,
+	res, err := q.Exec(`INSERT INTO intentions (kind, text, owner, owed_to, about, trigger, cue, due_at, remind_at, state, snoozed_until,
 		surfaced_at, surfaced, next_check_at, source_kind, source_ref, trust, basis, memory_id, created_at, updated_at, flags)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		x.Kind, x.Text, x.Owner, x.OwedTo, x.Subject, x.Trigger, x.Cue, unixOrNil(x.DueAt), unixOrNil(x.RemindAt), x.State,
+		x.Kind, x.Text, x.Owner, x.OwedTo, x.About, x.Trigger, x.Cue, unixOrNil(x.DueAt), unixOrNil(x.RemindAt), x.State,
 		unixOrNil(x.SnoozedUntil), unixOrNil(x.SurfacedAt), x.Surfaced, unixOrNil(x.NextCheckAt), x.SourceKind, x.SourceRef, x.Trust,
 		x.Basis, nullID(x.MemoryID), now.Unix(), now.Unix(), x.Flags)
 	if err != nil {
@@ -240,14 +240,14 @@ func intentionLog(q querier, id int64, now time.Time, who, op, from, to, detail 
 	return err
 }
 
-const intentionColumns = `id, kind, text, owner, owed_to, subject, trigger, cue, due_at, remind_at, state, snoozed_until, surfaced_at,
+const intentionColumns = `id, kind, text, owner, owed_to, about, trigger, cue, due_at, remind_at, state, snoozed_until, surfaced_at,
 	surfaced, next_check_at, source_kind, source_ref, trust, basis, memory_id, created_at, updated_at, closed_at, flags`
 
 func scanIntention(sc interface{ Scan(...any) error }) (*Intention, error) {
 	var x Intention
 	var due, remind, snoozed, surfaced, next, memID, closed sql.NullInt64
 	var created, updated int64
-	if err := sc.Scan(&x.ID, &x.Kind, &x.Text, &x.Owner, &x.OwedTo, &x.Subject, &x.Trigger, &x.Cue, &due, &remind, &x.State,
+	if err := sc.Scan(&x.ID, &x.Kind, &x.Text, &x.Owner, &x.OwedTo, &x.About, &x.Trigger, &x.Cue, &due, &remind, &x.State,
 		&snoozed, &surfaced, &x.Surfaced, &next, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Basis, &memID, &created, &updated,
 		&closed, &x.Flags); err != nil {
 		return nil, err
@@ -302,7 +302,7 @@ func (m *memStore) addIntention(x *Intention, who string) (*Intention, error) {
 	if err := normalizeIntention(x, now); err != nil {
 		return nil, err
 	}
-	x.Subject, x.Owner, x.OwedTo = m.keepSubject(x.Subject), m.keepSubject(x.Owner), m.keepSubject(x.OwedTo)
+	x.About, x.Owner, x.OwedTo = m.noteAbout(x.About), m.noteAbout(x.Owner), m.noteAbout(x.OwedTo)
 	var id int64
 	m.db.QueryRow(`SELECT id FROM intentions WHERE LOWER(TRIM(text)) = LOWER(TRIM(?)) AND state IN ('proposed', 'open', 'due', 'snoozed')
 		LIMIT 1`, x.Text).Scan(&id)
@@ -521,7 +521,7 @@ func (m *memStore) surfaced(xs []*Intention, how string) {
 // cueIntentions makes due the open intentions whose person cue my message
 // names ("la prochaine fois que je parle à Hélène").
 func (m *memStore) cueIntentions(text string) ([]*Intention, error) {
-	words := textStems(text) // matched as a subject's names are (subjects.go)
+	words := textStems(text) // matched as a thread's names are (names.go)
 	if len(words) == 0 {
 		return nil, nil
 	}

@@ -31,7 +31,7 @@ import (
 //     call: a run that read external content writes tainted notes, a
 //     tainted raise weighs 3 at most, and what it adds taints the thread.
 //   - A skill's run has a thread: the thread of its alias (its trigger's
-//     thread, else topic:<monitor>, skillRunSubject). Code finds it when
+//     thread, else topic:<monitor>, skillRunAlias). Code finds it when
 //     the run starts, reopens it if it ended, or opens it standing,
 //     titled by the skill, its words the user approved (skillThread). A
 //     tool given no thread_id acts on it.
@@ -114,13 +114,13 @@ func threadsInfo() map[string]any {
 // taskOpenIn is open_thread's input for a task: light or standing, or led
 // with a plan that waits for its card.
 type taskOpenIn struct {
-	Title   string     `json:"title" jsonschema:"what the user reads for the thread, a few words in their language"`
-	Goal    string     `json:"goal" jsonschema:"its real outcome, or for a standing one what it keeps, in one or two sentences"`
-	Subject string     `json:"subject" jsonschema:"its alias, kind:slug, to find it again: pr:<owner>/<repo>#<n>, project:<name>, topic:<words>; one live thread an alias"`
-	Ends    string     `json:"ends,omitempty" jsonschema:"goal (the default: it ends once its goal is reached, by the user or Eriphe) or standing (what the user manages continuously: never closed)"`
-	Steps   []stepSpec `json:"steps,omitempty" jsonschema:"a plan for long work (investigate, fix, open a pull request): the thread is led, and nothing starts before the user approves the plan on its card"`
-	Budget  int        `json:"budget_minutes,omitempty" jsonschema:"with steps: minutes of running time it may take"`
-	Done    string     `json:"done_when,omitempty" jsonschema:"with steps: what must be true at the end"`
+	Title  string     `json:"title" jsonschema:"what the user reads for the thread, a few words in their language"`
+	Goal   string     `json:"goal" jsonschema:"its real outcome, or for a standing one what it keeps, in one or two sentences"`
+	Alias  string     `json:"alias" jsonschema:"its alias, kind:slug, to find it again: pr:<owner>/<repo>#<n>, project:<name>, topic:<words>; one thread an alias"`
+	Ends   string     `json:"ends,omitempty" jsonschema:"goal (the default: it ends once its goal is reached, by the user or Eriphe) or standing (what the user manages continuously: never closed)"`
+	Steps  []stepSpec `json:"steps,omitempty" jsonschema:"a plan for long work (investigate, fix, open a pull request): the thread is led, and nothing starts before the user approves the plan on its card"`
+	Budget int        `json:"budget_minutes,omitempty" jsonschema:"with steps: minutes of running time it may take"`
+	Done   string     `json:"done_when,omitempty" jsonschema:"with steps: what must be true at the end"`
 }
 
 // setThreadIn is set_thread's input.
@@ -162,9 +162,9 @@ func (c *core) taskThreadsServer(t *TaskRow, grant []string) *mcp.Server {
 	lent := func(name string) bool { return grantAllows(grant, threadsServer, name) }
 
 	if lent("find_thread") {
-		tool(s, "find_thread", "Find threads: by their subject (alias, kind:slug), or by words of their title, goal or summary; without either, the open and waiting ones. Ended ones are listed too: open_thread on their subject reopens one.",
+		tool(s, "find_thread", "Find threads: by their alias (kind:slug) or a name, or by words of their title, goal or summary; without either, the open and waiting ones. Ended ones are listed too: open_thread on their alias reopens one.",
 			func(ctx context.Context, in findThreadIn) (map[string]any, error) {
-				ss, err := c.findThreads(in.Subject, in.Text, in.All, 30)
+				ss, err := c.findThreads(in.Alias, in.Text, in.All, 30)
 				for _, x := range ss {
 					if x.Tainted != "" {
 						c.taskRead(w.task, threadRef(x.ID)) // its words may be someone else's
@@ -205,14 +205,14 @@ func (c *core) taskThreadsServer(t *TaskRow, grant []string) *mcp.Server {
 			})
 	}
 	if lent("open_thread") {
-		tool(s, "open_thread", "Open a thread on a subject (alias kind:slug): one matter each. A subject that has a thread already gives that one back, reopened if it ended, never a second. Light by default, with no card: you and Eriphe note it, the user acts. ends standing for what the user manages continuously (never closed). With steps, a plan for long work: the thread is led, and nothing starts before the user approves its plan on a card.",
+		tool(s, "open_thread", "Open a thread on a matter (its alias, kind:slug): one matter each. An alias that has a thread already gives that one back, reopened if it ended, never a second. Light by default, with no card: you and Eriphe note it, the user acts. ends standing for what the user manages continuously (never closed). With steps, a plan for long work: the thread is led, and nothing starts before the user approves its plan on a card.",
 			func(ctx context.Context, in taskOpenIn) (map[string]any, error) {
 				ends := strings.ToLower(strings.TrimSpace(in.Ends))
 				if ends == endsDay {
 					return nil, errors.New("ends is goal or standing")
 				}
-				if alias, err := c.subjectLookup(in.Subject); err != nil || alias == "" {
-					return nil, errors.New("subject is needed: its alias, kind:slug, to find it again")
+				if alias, err := aliasKey(in.Alias); err != nil || alias == "" {
+					return nil, errors.New("alias is needed: the key of the matter, kind:slug, to find it again")
 				}
 				for _, st := range in.Steps {
 					if st.Kind == "" || st.runsTask() {
@@ -221,7 +221,7 @@ func (c *core) taskThreadsServer(t *TaskRow, grant []string) *mcp.Server {
 						}
 					}
 				}
-				s, again, err := c.openThreadOnce(threadIn{Title: in.Title, Goal: in.Goal, Subject: in.Subject, Ends: ends,
+				s, again, err := c.openThreadOnce(threadIn{Title: in.Title, Goal: in.Goal, Alias: in.Alias, Ends: ends,
 					Steps: in.Steps, Budget: in.Budget, DoneWhen: in.Done}, w.taint(c), w.author)
 				if err != nil {
 					return nil, err
@@ -336,7 +336,7 @@ func (c *core) setThreadByTask(ctx context.Context, id int64, in setThreadIn, w 
 		return "", err
 	}
 	if !s.active() {
-		return "", fmt.Errorf("the thread is %s: open_thread on its subject reopens it", s.Look())
+		return "", fmt.Errorf("the thread is %s: open_thread on its alias reopens it", s.Look())
 	}
 	state := strings.ToLower(strings.TrimSpace(in.State))
 	switch {
@@ -404,7 +404,7 @@ const threadDeadlineStep = "deadline"
 // the ids its events carry (skillThreadSource).
 func (c *core) skillThread(sk triggeredSkill, alias string, events []journalEvent) (Thread, error) {
 	by := "skill:" + sk.Name
-	s, _, err := c.openThreadOnce(threadIn{Title: skillTitle(sk.Name), Goal: sk.Manifest.Description, Subject: alias, Ends: endsStanding}, nil, by)
+	s, _, err := c.openThreadOnce(threadIn{Title: skillTitle(sk.Name), Goal: sk.Manifest.Description, Alias: alias, Ends: endsStanding}, nil, by)
 	if err != nil {
 		return s, err
 	}

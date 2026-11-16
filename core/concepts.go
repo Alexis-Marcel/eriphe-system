@@ -20,19 +20,19 @@ type concept struct {
 }
 
 var concepts = []concept{
-	{"memory", "remember, recall", "what you must know about the user: facts, people, decisions, how they want you to talk (where a subject stands is its thread's summary)"},
+	{"memory", "remember, recall", "what you must know about the user: facts, people, decisions, how they want you to talk (where a matter stands is its thread's summary)"},
 	{"intention", "intend, intentions, update_intention", "something owed or to do once: at a date and time (remind me at 14:00), or the next time a name comes up"},
 	{"skill", "write_skill, list_skills, read_skill", "what comes back or reacts on its own: a skill with when (an event: a mail, an alert, the user's return, a task's end; or a time) runs as a task in the background and tells the user with its last message; also know-how followed when asked"},
 	{"monitor", "write_monitor, monitors", "know that something changed in a tool that does not tell by itself (Grafana's alerts, a status page): eriphe-core calls it at an interval, without a model, and writes an event a skill reacts to; never a time skill that calls the tool"},
 	{"rule", "rule", "what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
-	{"workspace", "workspace_arrange, workspace_focus", "the composed workspace: arrange its surfaces as the user asks (a size, a place, for their session); put on its stage the surface that answers what they asked from it (workspace_focus); how the user wants it in general (what in front, what less, what never) is a preference memory with subject workspace, which its composer reads"},
+	{"workspace", "workspace_arrange, workspace_focus", "the composed workspace: arrange its surfaces as the user asks (a size, a place, for their session); put on its stage the surface that answers what they asked from it (workspace_focus); how the user wants it in general (what in front, what less, what never) is a preference memory about topic:workspace, which its composer reads"},
 	{"surface", "surface_write, surface_remove, workspace_read, catalog_read", "show the user something on their workspace when they ask to see it: a surface (a tile) live from any tool you read freely (sources), or composed by a task (a placeholder at once, run_task with surface); what they want to see every morning is a skill that keeps its surface; components are shapes, never tool names"},
 	{"setting", "setting", "how the user is told in general: device order, lines off, daily cap, time zone, a channel's detail, an urgent skill said aloud"},
 	{"where", "where_now", "where a notification would reach the user now: lines, devices, the room a voice channel says they are in"},
-	{"notify", "notify, notifications", "say something on your own, now or for the brief, under the subject of the turn"},
+	{"notify", "notify, notifications", "say something on your own, now or for the brief, about the turn's thread"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
 	{"task", "run_task", "long or heavy work, by an agent on a machine: a step of the thread the turn is about"},
-	{"thread", "open_thread, find_thread, read_thread, close_thread, reopen_thread", "one matter followed to its real goal (a pull request, an appointment, a brand name to find): opened light at once, found again by its subject, closed only on its goal; led (a plan the user approves, steps in parallel, a lead, a budget) for long autonomous work of several steps; every task is a step of one, and another matter asked about has its own"},
+	{"thread", "open_thread, find_thread, read_thread, name_thread, close_thread, reopen_thread", "one matter followed to its real goal (a pull request, an appointment, a brand name to find): opened light at once, found again by its alias and names (name_thread), closed only on its goal; led (a plan the user approves, steps in parallel, a lead, a budget) for long autonomous work of several steps; every task is a step of one, and another matter asked about has its own"},
 }
 
 const conceptMapEN = "memory, intention, skill, monitor, rule, workspace, surface, setting, where, notify, since, task, thread"

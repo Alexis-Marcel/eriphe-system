@@ -12,7 +12,7 @@ import (
 // rule and has no fixed control but the Oui / Non of a card:
 //
 //   - How the user wants it (what in front, what less, what never) is a
-//     preference memory with subject "workspace": the brain remembers it
+//     preference memory about "topic:workspace": the brain remembers it
 //     from the user's words (the nightly extraction never writes a
 //     preference). The composer reads those preferences, and the user's
 //     other preferences that bear on the queue, with every snapshot
@@ -27,7 +27,7 @@ import (
 //     (messageAbout): « montre-m'en moins » is said to Eriphe in words.
 
 const (
-	workspaceSubject = "topic:workspace" // the subject of a preference about the workspace
+	workspaceEntity = "topic:workspace" // what a preference about the workspace is about
 
 	workspacePrefsMax  = 12 // workspace preferences a composer's turn reads, the latest first
 	workspaceRecallMax = 3  // other preferences recalled from the queue's words
@@ -45,10 +45,10 @@ const (
 	gestureTitle   = 120
 )
 
-// isWorkspaceSubject tells a subject that is the workspace's.
-func isWorkspaceSubject(s string) bool {
-	k, _ := subjectKey(s)
-	return k == workspaceSubject
+// isWorkspaceEntity tells an about that is the workspace's.
+func isWorkspaceEntity(s string) bool {
+	k, _ := aliasKey(s)
+	return k == workspaceEntity
 }
 
 const workspaceLogSchema = `CREATE TABLE IF NOT EXISTS workspace_log (
@@ -72,8 +72,8 @@ func (c *core) workspacePreferences(words []string) []string {
 	if c.mem == nil {
 		return nil
 	}
-	xs, _ := c.mem.list(`kind = ? AND subject = ? AND status = ? AND (valid_to IS NULL OR valid_to > ?)`,
-		[]any{kindPreference, workspaceSubject, memActive, c.mem.now().Unix()}, `updated_at DESC, id DESC`, workspacePrefsMax)
+	xs, _ := c.mem.list(`kind = ? AND about = ? AND status = ? AND (valid_to IS NULL OR valid_to > ?)`,
+		[]any{kindPreference, workspaceEntity, memActive, c.mem.now().Unix()}, `updated_at DESC, id DESC`, workspacePrefsMax)
 	if q := strings.TrimSpace(strings.Join(words, " ")); q != "" {
 		more, _ := c.mem.recall(recallQuery{Query: q, Kinds: []string{kindPreference}, Limit: workspaceRecallMax})
 		xs = append(xs, more...)
@@ -99,10 +99,10 @@ func (c *core) workspacePrefStamp() (stamp string, changed int64, words string) 
 	}
 	var n int
 	var last sql.NullInt64
-	c.mem.db.QueryRow(`SELECT COUNT(*), MAX(updated_at) FROM memories WHERE kind = ? AND subject = ? AND status = ?`,
-		kindPreference, workspaceSubject, memActive).Scan(&n, &last)
-	c.mem.db.QueryRow(`SELECT text FROM memories WHERE kind = ? AND subject = ? AND status = ? ORDER BY updated_at DESC, id DESC LIMIT 1`,
-		kindPreference, workspaceSubject, memActive).Scan(&words)
+	c.mem.db.QueryRow(`SELECT COUNT(*), MAX(updated_at) FROM memories WHERE kind = ? AND about = ? AND status = ?`,
+		kindPreference, workspaceEntity, memActive).Scan(&n, &last)
+	c.mem.db.QueryRow(`SELECT text FROM memories WHERE kind = ? AND about = ? AND status = ? ORDER BY updated_at DESC, id DESC LIMIT 1`,
+		kindPreference, workspaceEntity, memActive).Scan(&words)
 	return fmt.Sprintf("%d:%d", n, last.Int64), last.Int64, words
 }
 
@@ -198,7 +198,7 @@ func (c *core) gestures(from, to time.Time) ([]gesture, error) {
 
 // A message about what is open.
 
-func aboutKey(seq int64) string { return fmt.Sprintf("about_msg:%d", seq) }
+func aboutMsgKey(seq int64) string { return fmt.Sprintf("about_msg:%d", seq) }
 
 // noteAbout keeps the surface a message of the user's was written about
 // (the one open on the workspace, surface:<id>), and the gesture; anything
@@ -206,10 +206,10 @@ func aboutKey(seq int64) string { return fmt.Sprintf("about_msg:%d", seq) }
 func (c *core) noteAbout(seq int64, ref string) {
 	ref = strings.TrimSpace(ref)
 	if gestureRef(ref) {
-		c.store.set(aboutKey(seq), ref)
+		c.store.set(aboutMsgKey(seq), ref)
 		c.noteGesture(gestureAbout, ref, time.Now())
 	}
 }
 
 // messageAbout is the ref a message was written about, "" for none.
-func (c *core) messageAbout(seq int) string { return c.store.get(aboutKey(int64(seq))) }
+func (c *core) messageAbout(seq int) string { return c.store.get(aboutMsgKey(int64(seq))) }

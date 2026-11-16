@@ -164,13 +164,13 @@ func looksRandom(s string) bool {
 // until I am back in the loop.
 
 type brainTurn struct {
-	mu       sync.Mutex
-	from, to int // the seqs of the messages delivered in this turn
-	eventSeq int // the brain task's last event when the turn started
-	tainted  []string
-	thread   int64                // the thread the turn is about: the last one it named (thread_turn.go)
-	subjects []string             // the known subjects my messages of the turn name (subjects.go)
-	keep     func(brainTurnState) // stores it, so a restart of eriphe-core does not forget it
+	mu        sync.Mutex
+	from, to  int // the seqs of the messages delivered in this turn
+	eventSeq  int // the brain task's last event when the turn started
+	tainted   []string
+	thread    int64                // the thread the turn is about: the last one it named (thread_turn.go)
+	namedRefs []string             // the threads and entities my messages of the turn name (names.go)
+	keep      func(brainTurnState) // stores it, so a restart of eriphe-core does not forget it
 }
 
 // brainTurnState is the turn as the store keeps it (kv brain_turn).
@@ -180,7 +180,7 @@ type brainTurnState struct {
 	EventSeq int      `json:"event_seq"`
 	Tainted  []string `json:"tainted,omitempty"`
 	Thread   int64    `json:"thread,omitempty"`
-	Subjects []string `json:"subjects,omitempty"`
+	Named    []string `json:"named,omitempty"`
 }
 
 // span is the seqs of the messages delivered in this turn; 0, 0 if none.
@@ -207,20 +207,20 @@ func (t *brainTurn) load(raw string, brainRuns bool) {
 		}
 		return
 	}
-	t.from, t.to, t.eventSeq, t.tainted, t.thread, t.subjects = st.From, st.To, st.EventSeq, st.Tainted, st.Thread, st.Subjects
+	t.from, t.to, t.eventSeq, t.tainted, t.thread, t.namedRefs = st.From, st.To, st.EventSeq, st.Tainted, st.Thread, st.Named
 }
 
 // save is called with t.mu held.
 func (t *brainTurn) save() {
 	if t.keep != nil {
-		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...), t.thread, append([]string(nil), t.subjects...)})
+		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...), t.thread, append([]string(nil), t.namedRefs...)})
 	}
 }
 
 func (t *brainTurn) start(from, to, eventSeq int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.from, t.to, t.eventSeq, t.tainted, t.thread, t.subjects = from, to, eventSeq, nil, 0, nil
+	t.from, t.to, t.eventSeq, t.tainted, t.thread, t.namedRefs = from, to, eventSeq, nil, 0, nil
 	t.save()
 }
 

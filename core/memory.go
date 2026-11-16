@@ -71,7 +71,7 @@ const (
 	kindEpisode    = "episode"
 	kindLesson     = "lesson"
 	// A choice and its reason, compiled from the raw history. Where a
-	// subject stands is its thread's summary, never a memory
+	// matter stands is its thread's summary, never a memory
 	// (thread_progress.go).
 	kindDecision = "decision"
 	// Where the user is or what they do for a while, with its end: shown
@@ -133,7 +133,7 @@ const (
 type Memory struct {
 	ID           int64     `json:"id"`
 	Kind         string    `json:"kind"`
-	Subject      string    `json:"subject,omitempty"`
+	About        string    `json:"about,omitempty"`
 	Text         string    `json:"text"`
 	Links        []string  `json:"links,omitempty"`
 	OccurredAt   time.Time `json:"occurred_at,omitzero"`
@@ -171,21 +171,21 @@ type memStore struct {
 	now func() time.Time
 	// The user's name: in nearly every memory, so not a word to look for.
 	owner func() string
-	// The known subjects (subjects.go): a subject written is noted there,
-	// and kept under the one it was merged into. nil: as given.
-	subjects subjectBook
+	// The names (names.go): an about written is noted there, and kept
+	// under its thread when it is a thread's alias. nil: as given.
+	names aboutBook
 }
 
 // memorySchemaVersion is the schema memory.db is at; meta.schema_version
-// says it. A new file is made at it; a file at another is refused, never
-// changed.
-const memorySchemaVersion = 7
+// says it. A new file is made at it; one at 7 is brought to it
+// (migrateAbout); a file at another is refused, never changed.
+const memorySchemaVersion = 8
 
 // memorySchema is memory.db's own tables; the intentions' and the
 // lessons' are with them (intentionsSchema, learningSchema).
 const memorySchema = `CREATE TABLE memories (
 	  id INTEGER PRIMARY KEY AUTOINCREMENT,
-	  kind TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', text TEXT NOT NULL,
+	  kind TEXT NOT NULL, about TEXT NOT NULL DEFAULT '', text TEXT NOT NULL,
 	  links TEXT NOT NULL DEFAULT '[]',
 	  occurred_at INTEGER, valid_from INTEGER NOT NULL, valid_to INTEGER, recorded_at INTEGER NOT NULL,
 	  superseded_by INTEGER, supersedes INTEGER,
@@ -200,18 +200,18 @@ const memorySchema = `CREATE TABLE memories (
 	  stems TEXT NOT NULL DEFAULT '',      -- the French stems, a shadow column of the index (memoryStems)
 	  basis TEXT NOT NULL DEFAULT '');
 	CREATE INDEX memories_status_kind ON memories (status, kind);
-	CREATE INDEX memories_subject ON memories (subject);
-	CREATE VIRTUAL TABLE memories_fts USING fts5(text, subject, keywords, stems, content='memories', content_rowid='id',
+	CREATE INDEX memories_about ON memories (about);
+	CREATE VIRTUAL TABLE memories_fts USING fts5(text, about, keywords, stems, content='memories', content_rowid='id',
 	  tokenize='unicode61 remove_diacritics 2');
 	CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
-	  INSERT INTO memories_fts (rowid, text, subject, keywords, stems) VALUES (new.id, new.text, new.subject, new.keywords, new.stems); END;
+	  INSERT INTO memories_fts (rowid, text, about, keywords, stems) VALUES (new.id, new.text, new.about, new.keywords, new.stems); END;
 	CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
-	  INSERT INTO memories_fts (memories_fts, rowid, text, subject, keywords, stems)
-	    VALUES ('delete', old.id, old.text, old.subject, old.keywords, old.stems); END;
-	CREATE TRIGGER memories_au AFTER UPDATE OF text, subject, keywords, stems ON memories BEGIN
-	  INSERT INTO memories_fts (memories_fts, rowid, text, subject, keywords, stems)
-	    VALUES ('delete', old.id, old.text, old.subject, old.keywords, old.stems);
-	  INSERT INTO memories_fts (rowid, text, subject, keywords, stems) VALUES (new.id, new.text, new.subject, new.keywords, new.stems); END;
+	  INSERT INTO memories_fts (memories_fts, rowid, text, about, keywords, stems)
+	    VALUES ('delete', old.id, old.text, old.about, old.keywords, old.stems); END;
+	CREATE TRIGGER memories_au AFTER UPDATE OF text, about, keywords, stems ON memories BEGIN
+	  INSERT INTO memories_fts (memories_fts, rowid, text, about, keywords, stems)
+	    VALUES ('delete', old.id, old.text, old.about, old.keywords, old.stems);
+	  INSERT INTO memories_fts (rowid, text, about, keywords, stems) VALUES (new.id, new.text, new.about, new.keywords, new.stems); END;
 	CREATE TABLE memory_log (
 	  seq INTEGER PRIMARY KEY AUTOINCREMENT, memory_id INTEGER NOT NULL, time INTEGER NOT NULL,
 	  who TEXT NOT NULL, op TEXT NOT NULL, before TEXT, after TEXT, reason TEXT NOT NULL DEFAULT '');
@@ -225,12 +225,15 @@ const memorySchema = `CREATE TABLE memories (
 	CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
 
 // memoryStems is a memory's stems column: its text, the name in its
-// subject (person:paul: paul) and its keywords.
-func memoryStems(text, subject, keywords string) string {
-	if _, name, ok := strings.Cut(subject, ":"); ok {
-		subject = name
+// about's name (person:paul: paul; a thread's none) and its keywords.
+func memoryStems(text, about, keywords string) string {
+	if kind, name, ok := strings.Cut(about, ":"); ok {
+		about = name
+		if kind == refThread {
+			about = ""
+		}
 	}
-	return stemText(text, subject, keywords)
+	return stemText(text, about, keywords)
 }
 
 func openMemory(path string) (*memStore, error) {
@@ -262,6 +265,8 @@ func (m *memStore) migrate() error {
 	switch version {
 	case memorySchemaVersion:
 		return nil
+	case 7:
+		return m.migrateAbout()
 	case 0:
 	default:
 		return fmt.Errorf("memory.db is at schema %d, this eriphe-core reads %d", version, memorySchemaVersion)
@@ -278,6 +283,42 @@ func (m *memStore) migrate() error {
 	}
 	if _, err := tx.Exec(`INSERT INTO meta (key, value) VALUES ('schema_version', ?)`, fmt.Sprint(memorySchemaVersion)); err != nil {
 		return err
+	}
+	return tx.Commit()
+}
+
+// migrateAbout brings memory.db from schema 7 to 8 (#573): what a memory
+// or an intention is about is its about column, no longer subject, and
+// the full-text index follows. The values are kept as they are: step 8 of
+// #578 converts them.
+func (m *memStore) migrateAbout() error {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`DROP TRIGGER IF EXISTS memories_ai`, `DROP TRIGGER IF EXISTS memories_ad`, `DROP TRIGGER IF EXISTS memories_au`,
+		`DROP TABLE IF EXISTS memories_fts`, `DROP INDEX IF EXISTS memories_subject`,
+		`ALTER TABLE memories RENAME COLUMN subject TO about`,
+		`ALTER TABLE intentions RENAME COLUMN subject TO about`,
+	} {
+		if _, err := tx.Exec(q); err != nil {
+			return fmt.Errorf("schema 7 to 8: %w", err)
+		}
+	}
+	// The index, the full-text table and its triggers, as a new file has
+	// them; the full-text table rebuilt from the memories.
+	at := strings.Index(memorySchema, "CREATE INDEX memories_about")
+	end := strings.Index(memorySchema, "CREATE TABLE memory_log")
+	if at < 0 || end < at {
+		return errors.New("schema 7 to 8: no full-text schema")
+	}
+	for _, q := range []string{memorySchema[at:end], `INSERT INTO memories_fts (memories_fts) VALUES ('rebuild')`,
+		`UPDATE meta SET value = '8' WHERE key = 'schema_version'`} {
+		if _, err := tx.Exec(q); err != nil {
+			return fmt.Errorf("schema 7 to 8: %w", err)
+		}
 	}
 	return tx.Commit()
 }
@@ -361,7 +402,7 @@ func fromNull(n sql.NullInt64) time.Time {
 	return time.Unix(n.Int64, 0)
 }
 
-const memColumns = `id, kind, subject, text, links, occurred_at, valid_from, valid_to, recorded_at, superseded_by, supersedes,
+const memColumns = `id, kind, about, text, links, occurred_at, valid_from, valid_to, recorded_at, superseded_by, supersedes,
 	due_at, state, source_kind, source_ref, trust, status, pinned, use_count, last_used_at, flags, deleted_at, updated_at,
 	keywords, importance, basis`
 
@@ -370,7 +411,7 @@ func scanMemory(sc interface{ Scan(...any) error }) (*Memory, error) {
 	var links string
 	var occurred, validTo, superseded, supersedes, due, used, deleted sql.NullInt64
 	var from, recorded, updated int64
-	err := sc.Scan(&x.ID, &x.Kind, &x.Subject, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
+	err := sc.Scan(&x.ID, &x.Kind, &x.About, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
 		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.UseCount, &used,
 		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance, &x.Basis)
 	if err != nil {
@@ -423,11 +464,11 @@ func (m *memStore) log(q querier, id int64, who, op string, before, after *Memor
 // dates. The trust rules come before it (memory_trust.go).
 func (m *memStore) normalize(x *Memory) error {
 	x.Text = strings.TrimSpace(x.Text)
-	subject, err := subjectKey(x.Subject)
+	about, err := aboutKey(x.About)
 	if err != nil {
-		return fmt.Errorf("subject: %w", err)
+		return fmt.Errorf("about: %w", err)
 	}
-	x.Subject = m.keepSubject(subject)
+	x.About = m.noteAbout(about)
 	if !containsStr(memoryKinds, x.Kind) {
 		return fmt.Errorf("kind must be one of %s", strings.Join(memoryKinds, ", "))
 	}
@@ -473,8 +514,8 @@ func (m *memStore) normalize(x *Memory) error {
 	}
 	switch x.Kind {
 	case kindSituation:
-		if x.Subject == "" {
-			x.Subject = "owner"
+		if x.About == "" {
+			x.About = "owner"
 		}
 		if x.ValidTo.IsZero() || !x.ValidTo.After(x.ValidFrom) {
 			return errors.New("a situation needs valid_to, its end, after valid_from")
@@ -537,12 +578,12 @@ func (m *memStore) insert(q querier, x *Memory, who string, except int64) error 
 	if x.Links == nil {
 		links = []byte("[]")
 	}
-	res, err := q.Exec(`INSERT INTO memories (kind, subject, text, links, occurred_at, valid_from, valid_to, recorded_at, supersedes,
+	res, err := q.Exec(`INSERT INTO memories (kind, about, text, links, occurred_at, valid_from, valid_to, recorded_at, supersedes,
 		due_at, state, source_kind, source_ref, trust, status, pinned, flags, updated_at, keywords, importance, stems, basis)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		x.Kind, x.Subject, x.Text, string(links), unixOrNil(x.OccurredAt), x.ValidFrom.Unix(), unixOrNil(x.ValidTo), now.Unix(),
+		x.Kind, x.About, x.Text, string(links), unixOrNil(x.OccurredAt), x.ValidFrom.Unix(), unixOrNil(x.ValidTo), now.Unix(),
 		nullID(x.Supersedes), unixOrNil(x.DueAt), x.State, x.SourceKind, x.SourceRef, x.Trust, x.Status, x.Pinned,
-		x.Flags, now.Unix(), x.Keywords, x.Importance, memoryStems(x.Text, x.Subject, x.Keywords), x.Basis)
+		x.Flags, now.Unix(), x.Keywords, x.Importance, memoryStems(x.Text, x.About, x.Keywords), x.Basis)
 	if err != nil {
 		return err
 	}
@@ -580,8 +621,8 @@ func (m *memStore) add(x *Memory, who string) error {
 		if old.Status != memActive || old.SupersededBy != 0 {
 			return fmt.Errorf("memory %d is not a current one: it cannot be superseded", old.ID)
 		}
-		if x.Subject == "" {
-			x.Subject = old.Subject
+		if x.About == "" {
+			x.About = old.About
 		}
 		if x.Status == memActive && old.Pinned {
 			x.Pinned = true // the replacement keeps its place in the profile
@@ -626,7 +667,7 @@ func (m *memStore) retire(q querier, old, by *Memory, who string) error {
 // memoryPatch is a change to a memory; nil fields stay.
 type memoryPatch struct {
 	Text    *string
-	Subject *string
+	About   *string
 	Links   *[]string
 	Kind    *string
 	ValidTo *time.Time // zero time: true again
@@ -666,8 +707,8 @@ func (m *memStore) updateTx(tx *sql.Tx, id int64, p memoryPatch, who, reason str
 	if p.Text != nil {
 		x.Text = *p.Text
 	}
-	if p.Subject != nil {
-		x.Subject = *p.Subject
+	if p.About != nil {
+		x.About = *p.About
 	}
 	if p.Links != nil {
 		x.Links = *p.Links
@@ -713,10 +754,10 @@ func (m *memStore) updateTx(tx *sql.Tx, id int64, p memoryPatch, who, reason str
 	if x.Links == nil {
 		links = []byte("[]")
 	}
-	if _, err := tx.Exec(`UPDATE memories SET kind = ?, subject = ?, text = ?, links = ?, valid_to = ?, due_at = ?, state = ?,
-		pinned = ?, status = ?, updated_at = ?, keywords = ?, importance = ?, stems = ? WHERE id = ?`, x.Kind, x.Subject, x.Text,
+	if _, err := tx.Exec(`UPDATE memories SET kind = ?, about = ?, text = ?, links = ?, valid_to = ?, due_at = ?, state = ?,
+		pinned = ?, status = ?, updated_at = ?, keywords = ?, importance = ?, stems = ? WHERE id = ?`, x.Kind, x.About, x.Text,
 		string(links), unixOrNil(x.ValidTo), unixOrNil(x.DueAt), x.State, x.Pinned, x.Status, x.UpdatedAt.Unix(), x.Keywords,
-		x.Importance, memoryStems(x.Text, x.Subject, x.Keywords), id); err != nil {
+		x.Importance, memoryStems(x.Text, x.About, x.Keywords), id); err != nil {
 		return nil, err
 	}
 	if err := m.log(tx, id, who, "update", before, &x, reason); err != nil {
@@ -887,7 +928,7 @@ func (m *memStore) purge() (int, error) {
 type recallQuery struct {
 	Query       string
 	Kinds       []string
-	Subject     string
+	About       string
 	Since       time.Time
 	Until       time.Time
 	AsOf        time.Time
@@ -929,7 +970,7 @@ func ftsQuery(q string, skip ...string) string {
 // Ranking weights (docs/memory-design.md): relevance first, then bounded
 // factors, so that an old memory that matches well still comes back.
 const (
-	bm25Weights      = `bm25(memories_fts, 1.0, 0.5, 0.6, 0.8)` // text, subject, keywords, stems
+	bm25Weights      = `bm25(memories_fts, 1.0, 0.5, 0.6, 0.8)` // text, about, keywords, stems
 	episodeRecencyLo = 0.5                                      // an old episode keeps half its relevance
 	inRangeBoost     = 1.6                                      // dated in the question's time
 	outOfRangeFactor = 0.6                                      // a fact not true then
@@ -994,15 +1035,15 @@ func (m *memStore) recall(q recallQuery) ([]*Memory, error) {
 			args = append(args, k)
 		}
 	}
-	if s, prefix, err := subjectFilter(q.Subject); err != nil {
+	if s, prefix, err := aboutFilter(q.About); err != nil {
 		return nil, err
 	} else if s != "" {
 		if prefix {
-			where = append(where, `m.subject LIKE ? ESCAPE '\'`)
+			where = append(where, `m.about LIKE ? ESCAPE '\'`)
 			args = append(args, likeEscape(s)+"%")
 		} else {
-			where = append(where, `m.subject = ?`)
-			args = append(args, m.canonSubject(s))
+			where = append(where, `m.about = ?`)
+			args = append(args, m.resolveAbout(s))
 		}
 	}
 	when := `COALESCE(m.occurred_at, m.valid_from)`
@@ -1105,16 +1146,16 @@ func (m *memStore) recall(q recallQuery) ([]*Memory, error) {
 	return out, nil
 }
 
-// boost weighs a memory: its subject named in the query, its place in the
+// boost weighs a memory: its about named in the query, its place in the
 // profile, its importance, and for episodes their age (half-life of 30
 // days), which lowers them no further than ageFloor: with a query, an old
 // memory that matches well still comes back.
 func boost(x *Memory, words []string, now time.Time, ageFloor float64) float64 {
 	b := 1.0
-	if x.Subject != "" && len(words) > 0 {
-		_, name, ok := strings.Cut(x.Subject, ":")
+	if x.About != "" && len(words) > 0 {
+		_, name, ok := strings.Cut(x.About, ":")
 		if !ok {
-			name = x.Subject
+			name = x.About
 		}
 		for _, part := range strings.FieldsFunc(foldAccents(name), func(r rune) bool { return r == '-' || r == ' ' || r == '_' }) {
 			if containsStr(words, part) {
@@ -1181,7 +1222,7 @@ func scanMemoryWith(rows *sql.Rows, extra ...any) (*Memory, error) {
 	var links string
 	var occurred, validTo, superseded, supersedes, due, used, deleted sql.NullInt64
 	var from, recorded, updated int64
-	dest := []any{&x.ID, &x.Kind, &x.Subject, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
+	dest := []any{&x.ID, &x.Kind, &x.About, &x.Text, &links, &occurred, &from, &validTo, &recorded, &superseded, &supersedes,
 		&due, &x.State, &x.SourceKind, &x.SourceRef, &x.Trust, &x.Status, &x.Pinned, &x.UseCount, &used,
 		&x.Flags, &deleted, &updated, &x.Keywords, &x.Importance, &x.Basis}
 	if err := rows.Scan(append(dest, extra...)...); err != nil {
@@ -1235,11 +1276,11 @@ func (m *memStore) profile() ([]*Memory, error) {
 }
 
 // aboutOwner is what the assistant knows about the user: the profile (its
-// pinned memories) and the other current memories about them (subject
+// pinned memories) and the other current memories about them (about
 // owner), the pinned ones first. Episodes are not.
 func (m *memStore) aboutOwner() ([]*Memory, error) {
 	return m.list(`status = 'active' AND (valid_to IS NULL OR valid_to > ?) AND kind != 'episode'
-		AND (pinned = 1 OR subject = 'owner')`, []any{m.now().Unix()},
+		AND (pinned = 1 OR about = 'owner')`, []any{m.now().Unix()},
 		`pinned DESC, CASE kind WHEN 'profile' THEN 0 WHEN 'preference' THEN 1 WHEN 'lesson' THEN 2 ELSE 3 END, id`, 100)
 }
 

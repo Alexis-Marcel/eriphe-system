@@ -27,7 +27,7 @@ var threadMu sync.Mutex
 type threadIn struct {
 	Title    string     `json:"title" jsonschema:"what the user reads for the thread, in a few words in their language: Refonte du service photos"`
 	Goal     string     `json:"goal" jsonschema:"its real outcome, in one or two sentences: what must have happened for it to be done (merged and deployed, not only reviewed)"`
-	Subject  string     `json:"subject,omitempty" jsonschema:"the matter it follows, its subject kind:slug, to find it again: project:<name>, pr:<owner>/<repo>#<n>, mail:<id>, event:<id>, alert:<id>, topic:<words>; one live thread a subject"`
+	Alias    string     `json:"alias,omitempty" jsonschema:"the key of the matter it follows, kind:slug, to find it again: project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, topic:<words>; a key is one thread's (a mail or an event is an item, note_item, not a key)"`
 	Mode     string     `json:"mode,omitempty" jsonschema:"light (the default without steps: you hold it, no card, no budget) or led (the default with steps: a plan the user approves on a card, a lead, a budget)"`
 	DoneWhen string     `json:"done_when,omitempty" jsonschema:"led: what must be true at the end, checkable: the objective the thread is judged on"`
 	Budget   int        `json:"budget_minutes,omitempty" jsonschema:"led: minutes of running time it may take, 60 by default; past it the engine pauses and asks the user"`
@@ -45,11 +45,10 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 	if in.Ends == "" {
 		in.Ends = endsGoal
 	}
-	subject, err := c.subjectIs(in.Subject, in.Title)
+	alias, err := c.freeAlias(in.Alias)
 	if err != nil {
-		return Thread{}, fmt.Errorf("subject: %w", err)
+		return Thread{}, fmt.Errorf("alias: %w", err)
 	}
-	in.Subject = subject
 	if in.Mode == "" {
 		in.Mode = modeLight
 		if len(in.Steps) > 0 {
@@ -68,19 +67,19 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 	case in.Ends != endsGoal && in.Mode != modeLight:
 		return Thread{}, fmt.Errorf("a %s thread is light: no plan, budget nor done_when", in.Ends)
 	}
-	if err := c.subjectFree(in.Subject, 0); err != nil {
-		return Thread{}, err
-	}
 	if in.Mode == modeLight {
 		if len(in.Steps) > 0 || in.Budget != 0 || in.DoneWhen != "" {
 			return Thread{}, errors.New("a light thread has no plan, budget nor done_when: open it led for planned, autonomous work")
 		}
-		res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, tainted, created, started, ends) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			truncate(in.Title, taskTitleMax), in.Goal, modeLight, in.Subject, threadOpen, strings.Join(taint, ", "), time.Now().Unix(), time.Now().Unix(), in.Ends)
+		res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, state, tainted, created, started, ends) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			truncate(in.Title, taskTitleMax), in.Goal, modeLight, threadOpen, strings.Join(taint, ", "), time.Now().Unix(), time.Now().Unix(), in.Ends)
 		if err != nil {
-			return Thread{}, c.liveSubjectErr(in.Subject, err)
+			return Thread{}, err
 		}
 		id, _ := res.LastInsertId()
+		if err := c.giveAlias(id, alias); err != nil {
+			log.Printf("thread %d: alias %s: %v", id, alias, err)
+		}
 		c.logThread(id, by, "Thread ouvert : "+in.Goal)
 		c.keepThreadSurface(id) // thread_surface.go
 		return c.thread(id)
@@ -102,12 +101,15 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 			return Thread{}, err
 		}
 	}
-	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, done_when, mode, subject, state, phase, budget, tainted, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		truncate(in.Title, taskTitleMax), in.Goal, in.DoneWhen, modeLed, in.Subject, stateOf(phaseProposed), phaseProposed, in.Budget, strings.Join(taint, ", "), time.Now().Unix())
+	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, done_when, mode, state, phase, budget, tainted, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		truncate(in.Title, taskTitleMax), in.Goal, in.DoneWhen, modeLed, stateOf(phaseProposed), phaseProposed, in.Budget, strings.Join(taint, ", "), time.Now().Unix())
 	if err != nil {
-		return Thread{}, c.liveSubjectErr(in.Subject, err)
+		return Thread{}, err
 	}
 	id, _ := res.LastInsertId()
+	if err := c.giveAlias(id, alias); err != nil {
+		log.Printf("thread %d: alias %s: %v", id, alias, err)
+	}
 	if err := c.insertSteps(id, in.Steps, true); err != nil {
 		return Thread{}, err
 	}
@@ -302,7 +304,7 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 	}
 	taint = appendNew(taint, handed...)
 	approved := planned // what it is lent was approved with the plan
-	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract, Subject: s.Subject,
+	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract, About: threadRef(s.ID),
 		Node: st.Node, askStart: true, cleanStart: planned && len(taint) == 0, approvedInAdvance: approved, taint: taint}
 	t, err := c.runTask(ctx, r)
 	if err != nil {
@@ -792,7 +794,7 @@ func (c *core) endLight(ctx context.Context, s Thread, state, summary string) {
 		Payload: map[string]any{"thread": s.ID, "state": state, "ends": s.Ends}})
 }
 
-// reopenThread opens again a thread that ended, when its subject comes
+// reopenThread opens again a thread that ended, when its matter comes
 // back: light, held by the brain, its steps and log kept. A led one's
 // lead went with its end; its engine does not start again.
 func (c *core) reopenThread(id int64, why, by string) (Thread, error) {
@@ -806,10 +808,7 @@ func (c *core) reopenThread(id int64, why, by string) (Thread, error) {
 		return s, fmt.Errorf("the thread is %s: it has not ended", s.State)
 	}
 	if why = oneLine(why); why == "" {
-		return s, errors.New("why is needed: what brings its subject back")
-	}
-	if err := c.subjectFree(s.Subject, s.ID); err != nil {
-		return s, err
+		return s, errors.New("why is needed: what brings it back")
 	}
 	c.endSteps(context.Background(), s) // what its old plan left undone never starts by itself
 	fields := map[string]any{"mode": modeLight, "phase": "", "state": threadOpen, "held": "", "lead": "", "told": "", "since": 0, "ended": 0, "tidied": 0}
@@ -955,7 +954,7 @@ func (c *core) holdForBudget(s Thread) {
 }
 
 // threadsTick is the engine's pass, every 15 seconds: the intentions of a
-// light thread's subject made its steps, the deadlines that came, the
+// light thread made its steps, the deadlines that came, the
 // budgets, the steps whose task ended without being told
 // (eriphe-core restarted), what may start, and the surface of an active
 // thread that has none.

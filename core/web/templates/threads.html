@@ -74,7 +74,7 @@
 
 <dl class="thread-facts">
   {{if .DoneWhen}}<div class="fact-done"><dt>{{t "threads.donewhen"}}</dt><dd>{{.DoneWhen}}</dd></div>{{end}}
-  {{if .Subject}}<div><dt>{{t "threads.subject"}}</dt><dd class="mono">{{.Subject}}</dd></div>{{end}}
+  {{if .Alias}}<div><dt>{{t "threads.alias"}}</dt><dd class="mono">{{.Alias}}</dd></div>{{end}}
   {{if eq .Mode "led"}}<div><dt>{{t "threads.time"}}</dt><dd><meter min="0" max="100" low="70" high="90" optimum="0" value="{{.Percent}}" aria-label="{{t "threads.time"}}">{{.Percent}} %</meter><span>{{tf "threads.minutes" .Minutes .Budget}}</span></dd></div>
   <div><dt>{{t "threads.ledby"}}</dt><dd>{{if .LeadName}}{{.LeadName}}{{if .LeadBusy}} <span class="muted">{{t "threads.lead.busy"}}</span>{{end}}{{else}}{{name}}{{end}}</dd></div>
   <div><dt>{{t "threads.steps"}}</dt><dd>{{tf "threads.progress" (index .Counts "accepted") .Total}}</dd></div>{{end}}

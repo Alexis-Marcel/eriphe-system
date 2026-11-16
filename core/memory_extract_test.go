@@ -90,7 +90,7 @@ func TestApplyExtraction(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	c.mem.now = time.Now
 	o, b, task := dayActivity(t, c)
-	old := mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: "person:paul", Text: "Paul est un ami", SourceKind: srcBrain, Trust: trustFirstParty})
+	old := mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "person:paul", Text: "Paul est un ami", SourceKind: srcBrain, Trust: trustFirstParty})
 	lesson := mustAdd(t, c.mem, &Memory{Kind: kindLesson, Text: "Demander avant de pousser"})
 	run := startTestRun(t, c)
 	tk, _ := c.store.task(run.TaskID)
@@ -104,10 +104,10 @@ func TestApplyExtraction(t *testing.T) {
 	  {"op": "SUPERSEDE", "id": %[1]d, "text": "Paul est l'associé de Sam", "source_ref": "%[3]s"},
 	  {"op": "INTEND", "kind": "commitment", "owner": "assistant", "text": "Préparer le devis du site pour jeudi", "due_at": "2026-10-29", "source_ref": "%[3]s"},
 	  {"op": "ADD", "kind": "commitment", "text": "Rappeler le client lundi", "source_ref": "%[3]s"},
-	  {"op": "ADD", "kind": "fact", "subject": "project:site", "text": "Le devis est dans devis.md", "source_ref": "task:%[5]s"},
-	  {"op": "ADD", "kind": "episode", "subject": "journal", "text": "Sam a parlé du devis avec Eriphe ; la tâche l'a préparé.", "source_ref": "%[3]s, %[4]s, task:%[5]s"},
+	  {"op": "ADD", "kind": "fact", "about": "project:site", "text": "Le devis est dans devis.md", "source_ref": "task:%[5]s"},
+	  {"op": "ADD", "kind": "episode", "about": "journal", "text": "Sam a parlé du devis avec Eriphe ; la tâche l'a préparé.", "source_ref": "%[3]s, %[4]s, task:%[5]s"},
 	  {"op": "ADD", "kind": "preference", "text": "Sam aime les devis courts", "source_ref": "%[3]s"},
-	  {"op": "ADD", "kind": "episode", "subject": "project:site", "text": "La tâche a préparé le devis", "source_ref": "task:%[5]s"},
+	  {"op": "ADD", "kind": "episode", "about": "project:site", "text": "La tâche a préparé le devis", "source_ref": "task:%[5]s"},
 	  {"op": "ADD", "kind": "lesson", "text": "Toujours faire un devis", "source_ref": "%[3]s"},
 	  {"op": "ADD", "kind": "profile", "text": "Sam", "source_ref": "%[3]s"},
 	  {"op": "SUPERSEDE", "id": %[2]d, "text": "Ne plus demander", "source_ref": "%[3]s"},
@@ -138,7 +138,7 @@ func TestApplyExtraction(t *testing.T) {
 		t.Fatalf("not superseded: %+v", o2)
 	}
 	repl, _ := c.mem.memory(o2.SupersededBy)
-	if repl.Status != memActive || repl.Subject != "person:paul" || repl.SourceKind != srcExtraction {
+	if repl.Status != memActive || repl.About != "person:paul" || repl.SourceKind != srcExtraction {
 		t.Fatalf("replacement: %+v", repl)
 	}
 	status := map[string]string{}

@@ -78,8 +78,8 @@ type taskStats struct {
 	Minutes     float64
 	Failures    []classCount // by class, the most first
 	FailedTasks int          // tasks with at least one failure
-	// The subject cards the tasks started with, and how they were used
-	// (subject_card_use.go).
+	// The thread cards the tasks started with, and how they were used
+	// (card_use.go).
 	Cards cardUse
 	// What all the tasks cost over the last spendDays, by day and role.
 	Spend      []daySpend

@@ -64,12 +64,12 @@ type memoryPage struct {
 	View        string
 	Q           string
 	Kind        string
-	Subject     string
+	On          string // the about it is filtered on
 	Past        bool
 	Items       []memCard
 	Done        []memCard
 	Days        []memDay
-	Subjects    []string
+	Ons         []string // the abouts to filter on
 	Kinds       []string
 	KindLinks   []kindLink
 	AllLink     string
@@ -177,7 +177,7 @@ func (w *web) memoryCounts(p *memoryPage) {
 
 func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) {
 	q := r.URL.Query()
-	p := memoryPage{View: q.Get("view"), Q: strings.TrimSpace(q.Get("q")), Kind: q.Get("kind"), Subject: strings.TrimSpace(q.Get("subject")),
+	p := memoryPage{View: q.Get("view"), Q: strings.TrimSpace(q.Get("q")), Kind: q.Get("kind"), On: strings.TrimSpace(q.Get("about")),
 		Past: q.Get("past") == "1", Kinds: memoryKinds, Budget: profileBudget}
 	if !containsStr(memoryViews, p.View) {
 		p.View = "all"
@@ -201,20 +201,20 @@ func (w *web) handleMemory(rw http.ResponseWriter, r *http.Request, s *session) 
 		if about, err := m.aboutOwner(); err == nil {
 			for _, x := range about {
 				p.About = append(p.About, w.memCard(x, false))
-				if p.Q == "" && p.Kind == "" && p.Subject == "" && !p.Past {
+				if p.Q == "" && p.Kind == "" && p.On == "" && !p.Past {
 					shown[x.ID] = true
 				}
 			}
 		}
 		b := w.c.conf().brain()
 		p.Interview = b != nil && b.Agent != ""
-		rq := recallQuery{Query: p.Q, Subject: p.Subject, IncludePast: p.Past, Limit: 100}
+		rq := recallQuery{Query: p.Q, About: p.On, IncludePast: p.Past, Limit: 100}
 		if p.Kind != "" {
 			rq.Kinds = []string{p.Kind}
 		}
 		xs, err = m.recall(rq)
 		if err == nil {
-			p.Subjects = w.subjects()
+			p.Ons = w.memoryAbouts()
 		}
 		p.AllLink = memoryQuery(p, "")
 		for _, k := range memoryKinds {
@@ -270,9 +270,9 @@ func (w *web) handleMemoryInterview(rw http.ResponseWriter, r *http.Request, s *
 	redirect(rw, r, "/")
 }
 
-func (w *web) subjects() []string {
-	rows, err := w.c.mem.db.Query(`SELECT subject FROM memories WHERE status = 'active' AND subject != ''
-		GROUP BY subject ORDER BY COUNT(*) DESC, subject LIMIT 60`)
+func (w *web) memoryAbouts() []string {
+	rows, err := w.c.mem.db.Query(`SELECT about FROM memories WHERE status = 'active' AND about != ''
+		GROUP BY about ORDER BY COUNT(*) DESC, about LIMIT 60`)
 	if err != nil {
 		return nil
 	}
@@ -360,22 +360,22 @@ func (w *web) handleMemoryEdit(rw http.ResponseWriter, r *http.Request, s *sessi
 	if x == nil {
 		return
 	}
-	text, subject, kind := r.PostFormValue("text"), r.PostFormValue("subject"), r.PostFormValue("kind")
+	text, about, kind := r.PostFormValue("text"), r.PostFormValue("about"), r.PostFormValue("kind")
 	links := formLinks(r.PostFormValue("links"))
 	fail := func(err error) {
 		card := w.memCard(x, false)
 		card.Edit, card.Error = true, err.Error()
-		card.Text, card.Subject, card.Links = text, subject, links
+		card.Text, card.About, card.Links = text, about, links
 		if containsStr(memoryKinds, kind) {
 			card.Kind = kind
 		}
 		w.renderCard(rw, r, s, card)
 	}
-	if err := ownerScan(text, subject, strings.Join(links, "\n")); err != nil {
+	if err := ownerScan(text, about, strings.Join(links, "\n")); err != nil {
 		fail(err)
 		return
 	}
-	p := memoryPatch{Text: &text, Subject: &subject, Links: &links, Kind: &kind}
+	p := memoryPatch{Text: &text, About: &about, Links: &links, Kind: &kind}
 	if _, err := w.c.mem.update(x.ID, p, "owner", ""); err != nil {
 		fail(err)
 		return
@@ -388,10 +388,10 @@ func (w *web) handleMemoryAdd(rw http.ResponseWriter, r *http.Request, s *sessio
 		w.toast(rw, errMemoryOff.Error(), false)
 		return
 	}
-	x := &Memory{Kind: r.PostFormValue("kind"), Subject: r.PostFormValue("subject"), Text: r.PostFormValue("text"),
+	x := &Memory{Kind: r.PostFormValue("kind"), About: r.PostFormValue("about"), Text: r.PostFormValue("text"),
 		Links: formLinks(r.PostFormValue("links")), SourceKind: srcOwner, SourceRef: "workspace", Trust: trustOwner, Status: memActive,
 		Pinned: r.PostFormValue("pin") == "1"}
-	if err := ownerScan(x.Text, x.Subject, strings.Join(x.Links, "\n")); err != nil {
+	if err := ownerScan(x.Text, x.About, strings.Join(x.Links, "\n")); err != nil {
 		w.toast(rw, err.Error(), false)
 		return
 	}
@@ -569,8 +569,8 @@ func memoryQuery(p memoryPage, kind string) string {
 	if kind != "" {
 		v.Set("kind", kind)
 	}
-	if p.Subject != "" {
-		v.Set("subject", p.Subject)
+	if p.On != "" {
+		v.Set("about", p.On)
 	}
 	if p.Past {
 		v.Set("past", "1")
@@ -649,8 +649,8 @@ var memoryStrings = map[string]map[string]string{
 		"mem.search":           "Chercher dans la mémoire",
 		"mem.searchph":         "anniversaire, Paul, NAS…",
 		"mem.searchhint":       "Les accents ne comptent pas ; n'importe quel mot suffit.",
-		"mem.subject":          "Sujet",
-		"mem.anysubject":       "Tous les sujets",
+		"mem.on":               "À propos de",
+		"mem.anyabout":         "Tout",
 		"mem.past":             "Inclure ce qui n'est plus vrai",
 		"mem.go":               "Chercher",
 		"mem.allkinds":         "Tout",
@@ -669,7 +669,7 @@ var memoryStrings = map[string]map[string]string{
 		"mem.text":             "Texte",
 		"mem.textph":           "Ce que {{name}} doit retenir, en une phrase.",
 		"mem.kind":             "Type",
-		"mem.subjectph":        "owner, person:paul, project:eriphe…",
+		"mem.aboutph":          "owner, person:paul, thread:12…",
 		"mem.links":            "Liens (un par ligne)",
 		"mem.linksph":          "[[Note du coffre]]",
 		"mem.pinit":            "Épingler au profil",
@@ -776,8 +776,8 @@ var memoryStrings = map[string]map[string]string{
 		"mem.search":           "Search the memory",
 		"mem.searchph":         "birthday, Paul, NAS…",
 		"mem.searchhint":       "Accents do not matter; any word is enough.",
-		"mem.subject":          "Subject",
-		"mem.anysubject":       "All subjects",
+		"mem.on":               "About",
+		"mem.anyabout":         "Everything",
 		"mem.past":             "Include what is no longer true",
 		"mem.go":               "Search",
 		"mem.allkinds":         "All",
@@ -796,7 +796,7 @@ var memoryStrings = map[string]map[string]string{
 		"mem.text":             "Text",
 		"mem.textph":           "What {{name}} should remember, in one sentence.",
 		"mem.kind":             "Kind",
-		"mem.subjectph":        "owner, person:paul, project:eriphe…",
+		"mem.aboutph":          "owner, person:paul, thread:12…",
 		"mem.links":            "Links (one per line)",
 		"mem.linksph":          "[[Vault note]]",
 		"mem.pinit":            "Pin to the profile",

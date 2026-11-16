@@ -11,12 +11,12 @@ import (
 func TestLightThreadOpensAtOnce(t *testing.T) {
 	c := startCore(t)
 	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{
-		"title": "PR alerting", "goal": "The alerting PR is merged and deployed.", "subject": "pr:example/infra#12"})
+		"title": "PR alerting", "goal": "The alerting PR is merged and deployed.", "alias": "pr:example/infra#12"})
 	if isErr || strings.Contains(out["note"].(string), "Only proposed") {
 		t.Fatalf("open_thread: %v", out)
 	}
 	ss, _ := c.threads(true, 10)
-	if len(ss) != 1 || ss[0].Mode != modeLight || ss[0].State != threadOpen || ss[0].Phase != "" || ss[0].Budget != 0 || ss[0].Subject != "pr:example/infra#12" {
+	if len(ss) != 1 || ss[0].Mode != modeLight || ss[0].State != threadOpen || ss[0].Phase != "" || ss[0].Budget != 0 || ss[0].Alias != "pr:example/infra#12" {
 		t.Fatalf("threads %+v", ss)
 	}
 	if xs, _ := c.cardsWhere(`kind = ?`, cardThread); len(xs) != 0 {
@@ -40,8 +40,8 @@ func TestLightThreadOpensAtOnce(t *testing.T) {
 		"budget":    {Title: "A", Goal: "B", Budget: 30},
 		"no goal":   {Title: "A"},
 		"bad mode":  {Title: "A", Goal: "B", Mode: "heavy"},
-		"bad pr":    {Title: "A", Goal: "B", Subject: "pr:example"},
-		"a record":  {Title: "A", Goal: "B", Subject: "task:t-1"},
+		"bad pr":    {Title: "A", Goal: "B", Alias: "pr:example"},
+		"a record":  {Title: "A", Goal: "B", Alias: "task:t-1"},
 		"led empty": {Title: "A", Goal: "B", Mode: modeLed},
 	} {
 		if _, err := c.openThread(in, nil, byBrain); err == nil {
@@ -50,13 +50,13 @@ func TestLightThreadOpensAtOnce(t *testing.T) {
 	}
 }
 
-// find_thread finds a thread by its subject, any case, or by words; with
-// neither, the active ones; the ended ones too when asked by subject.
+// find_thread finds a thread by its alias, any case, or by words; with
+// neither, the active ones; the ended ones too when asked by alias.
 func TestFindThread(t *testing.T) {
 	c := startCore(t)
 	open := func(title, goal, subject string) Thread {
 		t.Helper()
-		th, err := c.openThread(threadIn{Title: title, Goal: goal, Subject: subject}, nil, byBrain)
+		th, err := c.openThread(threadIn{Title: title, Goal: goal, Alias: subject}, nil, byBrain)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -64,7 +64,7 @@ func TestFindThread(t *testing.T) {
 	}
 	pr := open("PR alerting", "Merged and deployed.", "pr:example/infra#12")
 	open("Wardrobe", "Find a wardrobe for the bedroom.", "project:bedroom")
-	done := open("Dentist", "An appointment is booked.", "event:42")
+	done := open("Dentist", "An appointment is booked.", "project:dentist")
 	if err := c.closeLight(done.ID, "Booked for Tuesday.", "brain"); err != nil {
 		t.Fatal(err)
 	}
@@ -81,14 +81,14 @@ func TestFindThread(t *testing.T) {
 		}
 		return titles
 	}
-	if got := find(map[string]any{"subject": "PR:example/infra#12"}); len(got) != 1 || got[0] != pr.Title {
-		t.Errorf("by subject: %v", got)
+	if got := find(map[string]any{"alias": "PR:example/infra#12"}); len(got) != 1 || got[0] != pr.Title {
+		t.Errorf("by alias: %v", got)
 	}
 	if got := find(map[string]any{"text": "wardrobe bedroom"}); len(got) != 1 || got[0] != "Wardrobe" {
 		t.Errorf("by words: %v", got)
 	}
-	if got := find(map[string]any{"subject": "event:42"}); len(got) != 1 || got[0] != "Dentist" {
-		t.Errorf("an ended one by subject: %v", got)
+	if got := find(map[string]any{"alias": "projet:Dentist"}); len(got) != 1 || got[0] != "Dentist" {
+		t.Errorf("an ended one by alias: %v", got)
 	}
 	if got := find(map[string]any{"text": "100%"}); len(got) != 0 {
 		t.Errorf("a wildcard matched: %v", got)
@@ -106,7 +106,7 @@ func TestFindThread(t *testing.T) {
 // thread that ended reopens light: its lead went with its end.
 func TestCloseAndReopenThread(t *testing.T) {
 	c := startCore(t)
-	th, err := c.openThread(threadIn{Title: "PR alerting", Goal: "Merged and deployed.", Subject: "pr:example/infra#12"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "PR alerting", Goal: "Merged and deployed.", Alias: "pr:example/infra#12"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestCloseAndReopenThread(t *testing.T) {
 		t.Fatalf("reopen_thread: %v", out)
 	}
 	th, _ = c.thread(th.ID)
-	if th.State != threadOpen || !th.Ended.IsZero() || th.Subject != "pr:example/infra#12" {
+	if th.State != threadOpen || !th.Ended.IsZero() || th.Alias != "pr:example/infra#12" {
 		t.Fatalf("reopened %+v", th)
 	}
 	if l := c.threadLog(th.ID, 10); len(l) != 3 || !strings.Contains(l[2].Text, "rolled back") {
@@ -162,20 +162,20 @@ func TestCloseAndReopenThread(t *testing.T) {
 	}
 }
 
-// A fresh core.db has every column the one-shot fixes used to add, and
-// one live thread a subject.
+// A fresh core.db has every column the one-shot fixes used to add, an
+// about where records said subject, and one thread a key.
 func TestFreshStoreSchema(t *testing.T) {
 	c := startCore(t)
 	db := c.store.db
 	want := map[string][]string{
-		"threads":       {"mode", "subject", "phase", "summarized", "seen", "visited"},
+		"threads":       {"mode", "phase", "summarized", "seen", "visited"},
 		"thread_steps":  {"card", "due", "tainted"},
-		"attention":     {"tainted", "delivered", "due", "subject"},
-		"notifications": {"weight", "subject"},
+		"attention":     {"tainted", "delivered", "due"},
+		"notifications": {"weight"},
 		"skill_runs":    {"thread"},
 	}
-	for _, table := range subjectTables {
-		want[table] = append(want[table], "subject")
+	for _, table := range aboutTables {
+		want[table] = append(want[table], "about")
 	}
 	for table, cols := range want {
 		for _, col := range cols {
@@ -186,11 +186,20 @@ func TestFreshStoreSchema(t *testing.T) {
 			}
 		}
 	}
-	insert := `INSERT INTO threads (title, goal, subject, state, created) VALUES ('x', 'x', 'project:site', 'open', 1)`
-	if _, err := db.Exec(insert); err != nil {
+	for _, table := range append([]string{"threads"}, aboutTables...) {
+		var n int
+		db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = 'subject'`, table).Scan(&n)
+		if n != 0 {
+			t.Errorf("%s still says subject", table)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO names (name, target, seen) VALUES ('project:site', 'thread:1', 1)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(insert); err == nil {
-		t.Error("two live threads on one subject")
+	if _, err := db.Exec(`INSERT INTO names (name, target, seen) VALUES ('project:site', 'thread:2', 1)`); err == nil {
+		t.Error("two threads have one key")
+	}
+	if _, err := db.Exec(`INSERT INTO names (name, target, seen) VALUES ('le site', 'thread:2', 1)`); err != nil {
+		t.Errorf("a name two threads go by: %v", err)
 	}
 }

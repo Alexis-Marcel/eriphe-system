@@ -80,7 +80,7 @@ func main() {
 	if mem, err := openMemory(cfg.memoryConfig().DB); err != nil {
 		log.Printf("memory: %v", err)
 	} else {
-		c.useMemory(mem) // its subjects are noted in core.db (subjects.go)
+		c.useMemory(mem) // its abouts are kept by the names of core.db (names.go)
 		c.mem.owner = func() string { return c.conf().User }
 	}
 	if err := c.reconcileServices(); err != nil {

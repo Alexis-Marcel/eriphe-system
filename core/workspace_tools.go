@@ -67,9 +67,9 @@ func providedServer(name string) bool { return slices.Contains(providedServers, 
 type surfaceCaller struct {
 	author string // brain, lead:<thread>, task:<id>
 	only   string // a task filling one of the brain's surfaces: that one only, as the brain's
-	// subject is what what it writes is about when it says nothing: the
+	// about is what what it writes is about when it says nothing: the
 	// brain's turn's, a task's (a skill's run); nil: its author's.
-	subject func() string
+	about func() string
 	// sawSource marks a task that was told what a source gave (an error,
 	// the fields of a result): that taints it (workspace_sources.go).
 	sawSource func()
@@ -86,7 +86,7 @@ type surfaceLifetimeIn struct {
 type surfaceWriteIn struct {
 	ID         string                   `json:"id,omitempty" jsonschema:"your surface's id (lowercase letters, digits, dashes) to write it again; empty or new for a new one; the same id updates it"`
 	Title      string                   `json:"title" jsonschema:"what the user reads above it, a few words in their language"`
-	Subject    string                   `json:"subject,omitempty" jsonschema:"what it is about, kind:slug; leave it out for the subject of what this turn is about (its thread's, or the one subject the user's message named)"`
+	About      string                   `json:"about,omitempty" jsonschema:"what it is about: thread:<id>, or an entity's key; leave it out for what this turn is about (its thread)"`
 	Components []map[string]any         `json:"components" jsonschema:"the A2UI components, a flat list, one with id root"`
 	Data       map[string]any           `json:"data,omitempty" jsonschema:"composed values the components bind (@path), written by you; dated"`
 	Sources    map[string]surfaceSource `json:"sources,omitempty" jsonschema:"live data: JSON pointer in the data (/mails) → {tool: server/tool, args} (a free read of yours) or {resource: server, uri}; code reads them again, never you"`
@@ -153,7 +153,7 @@ func (c *core) registerSurfaceTools(s *mcp.Server, who func() surfaceCaller, all
 // brainSurfaceTools are the brain's: as brain, its turn's taint.
 func registerBrainSurfaceTools(s *mcp.Server, c *core) {
 	c.registerSurfaceTools(s, func() surfaceCaller {
-		return surfaceCaller{author: surfaceAuthorBrain, taint: c.turnTaint, subject: c.turnSubject}
+		return surfaceCaller{author: surfaceAuthorBrain, taint: c.turnTaint, about: c.turnAbout}
 	}, nil)
 }
 
@@ -178,7 +178,7 @@ func (c *core) taskWorkspaceServer(t *TaskRow, grant []string) *mcp.Server {
 func (c *core) taskCaller(id string) surfaceCaller {
 	return surfaceCaller{author: "task:" + id, only: c.store.get(taskSurfaceKey(id)),
 		taint: func() []string { return c.taskTaint(id) }, sawSource: func() { c.taskRead(id, workspaceSourceRead) },
-		subject: func() string { return c.taskSubject(id) }}
+		about: func() string { return c.taskAbout(id) }}
 }
 
 // taskSurfaceKey keeps the surface a task fills for the brain (run_task's
@@ -282,11 +282,11 @@ func (c *core) toolSurfaceWrite(who surfaceCaller, in surfaceWriteIn) (map[strin
 		sin.Lifetime.While = "thread:" + thread // a lead's surface follows its thread
 	}
 	sin.Tainted, sin.wait = who.taint(), surfaceReadCap
-	if sin.Subject, err = c.subjectIs(in.Subject, ""); err != nil {
-		return nil, fmt.Errorf("subject: %w", err)
+	if sin.About, err = c.aboutIs(in.About); err != nil {
+		return nil, fmt.Errorf("about: %w", err)
 	}
-	if who.subject != nil {
-		sin.inherit = who.subject() // for a new surface only (surfaces.go)
+	if who.about != nil {
+		sin.inherit = who.about() // for a new surface only (surfaces.go)
 	}
 	previous := ""
 	if old, err := c.surface(strings.TrimSpace(sin.ID)); err == nil && mayChange(author, old.Author) {

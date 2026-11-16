@@ -46,7 +46,7 @@ func headerOf(t *testing.T, c *core, id int64) map[string]string {
 // last visit. Opened again within threadVisitSame, the same visit.
 func TestThreadHeaderSinceVisit(t *testing.T) {
 	c := startCore(t)
-	th, err := c.openThread(threadIn{Title: "Site", Goal: "The contact page is online.", Subject: "project:site"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "Site", Goal: "The contact page is online.", Alias: "project:site"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}

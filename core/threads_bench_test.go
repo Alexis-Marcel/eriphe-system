@@ -94,10 +94,10 @@ type threadTool struct {
 
 // threadExpect is what a case asks of the first turn.
 type threadExpect struct {
-	Subject []string `json:"subject"` // words one of which the thread's subject carries
-	Merge   string   `json:"merge"`   // the change a call step must take (full name); "" for none
-	Check   bool     `json:"check"`   // only a check step is proposed
-	Side    bool     `json:"side"`    // opened on the side, with a task step
+	Alias []string `json:"about"` // words one of which the thread's alias carries
+	Merge string   `json:"merge"` // the change a call step must take (full name); "" for none
+	Check bool     `json:"check"` // only a check step is proposed
+	Side  bool     `json:"side"`  // opened on the side, with a task step
 }
 
 type threadAnswer struct {
@@ -148,7 +148,7 @@ func (x threadCase) check() string {
 		return "no server linked"
 	case len(x.Answer.Calls) == 0:
 		return "no answer"
-	case len(x.Expect.Subject) == 0:
+	case len(x.Expect.Alias) == 0:
 		return "no subject's words"
 	case x.Expect.Side && x.Stage == nil:
 		return "a side case needs a thread on stage"
@@ -562,8 +562,8 @@ func (r *threadRun) scoreAsk(c *core, x threadCase, opened []int64) threadScore 
 	if s.led() {
 		sc = append(sc, faultLed)
 	}
-	if subj := strings.ToLower(s.Subject); subj == "" || !slices.ContainsFunc(x.Expect.Subject, func(w string) bool { return strings.Contains(subj, strings.ToLower(w)) }) {
-		sc = append(sc, fmt.Sprintf("%s: %q", faultSubject, s.Subject))
+	if subj := strings.ToLower(s.Alias); subj == "" || !slices.ContainsFunc(x.Expect.Alias, func(w string) bool { return strings.Contains(subj, strings.ToLower(w)) }) {
+		sc = append(sc, fmt.Sprintf("%s: %q", faultSubject, s.Alias))
 	}
 	for _, p := range r.calls {
 		if p.Name == "surface_write" && p.Err == "" {
@@ -743,8 +743,8 @@ func TestThreadBenchCases(t *testing.T) {
 			if _, r2, sc := playAsk(t, x, twice); len(sc) > 0 || len(r2.opened()) != 1 {
 				t.Errorf("opened twice: %v, %s", r2.opened(), sc)
 			}
-			ask("no subject", faultRefused, func(a *threadAnswer) { delete(a.Calls[a.at("open_thread")].Args, "subject") })
-			ask("another subject", faultSubject, func(a *threadAnswer) { a.Calls[a.at("open_thread")].Args["subject"] = "sujet:autre" })
+			ask("no alias", faultRefused, func(a *threadAnswer) { delete(a.Calls[a.at("open_thread")].Args, "alias") })
+			ask("another alias", faultSubject, func(a *threadAnswer) { a.Calls[a.at("open_thread")].Args["alias"] = "theme:autre" })
 			ask("opened led", faultLed, func(a *threadAnswer) {
 				a.Calls[a.at("open_thread")].Args["steps"] = []any{map[string]any{"key": "a", "title": "Tout faire", "prompt": "Fais tout."}}
 				a.Calls[a.at("open_thread")].Args["done_when"] = "C'est fait."
@@ -753,7 +753,7 @@ func TestThreadBenchCases(t *testing.T) {
 			ask("no thread", faultNoThread, func(a *threadAnswer) { a.Calls = a.Calls[:a.at("open_thread")] })
 			ask("two threads", faultTwo, func(a *threadAnswer) {
 				o := a.Calls[a.at("open_thread")]
-				a.Calls = append(a.Calls, threadCall{Tool: o.Tool, Args: map[string]any{"title": "Encore", "goal": "Encore.", "subject": "autre:1"}})
+				a.Calls = append(a.Calls, threadCall{Tool: o.Tool, Args: map[string]any{"title": "Encore", "goal": "Encore.", "alias": "autre:1"}})
 			})
 			ask("closed", faultClosed, func(a *threadAnswer) {
 				a.Calls = append(a.Calls, threadCall{Tool: "close_thread", Args: map[string]any{"thread_id": id, "summary": "Fait."}})
@@ -865,8 +865,8 @@ func TestThreadBenchCases(t *testing.T) {
 				a.Calls = append(a.Calls, threadCall{Tool: "close_thread", Args: map[string]any{"thread_id": id, "summary": "Fusionnée."}})
 			})
 			if i := slices.IndexFunc(x.Wake.Answer.Calls, func(k threadCall) bool { return k.Tool == "remember" }); i >= 0 {
-				// A subject no thread follows: refused (open_thread first), never a thread opened.
-				wake("progress under another subject", faultRefused, func(a *threadAnswer) { a.Calls[i].Args["subject"] = "project:autre" })
+				// An alias no thread has: refused (open_thread first), never a thread opened.
+				wake("progress about another matter", faultRefused, func(a *threadAnswer) { a.Calls[i].Args["about"] = "project:autre" })
 			}
 			wake("a question", faultReply, func(a *threadAnswer) { a.Reply = "C'est fusionné.\nTu veux que je déploie ?" })
 		})
@@ -946,7 +946,7 @@ func threadTurn(x threadCase, c *core, r *threadRun, event string) string {
 		for _, st := range v.Steps {
 			steps = append(steps, map[string]any{"key": st.Key, "title": st.Title, "kind": st.Kind, "status": st.Status, "after": st.After})
 		}
-		raw, _ := json.Marshal(map[string]any{"id": v.ID, "title": v.Title, "goal": v.Goal, "subject": v.Subject, "state": v.State, "summary": v.Summary, "steps": steps})
+		raw, _ := json.Marshal(map[string]any{"id": v.ID, "title": v.Title, "goal": v.Goal, "alias": v.Alias, "state": v.State, "summary": v.Summary, "steps": steps})
 		fmt.Fprintf(&b, "\n%s\nread_thread %d : %s\n\n", event, r.wake, raw)
 	} else {
 		fmt.Fprintf(&b, "\n[Sam %s #12 · depuis l'espace] %s\n\n", now.Format("15:04"), x.Request)

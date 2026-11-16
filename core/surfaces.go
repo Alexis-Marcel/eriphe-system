@@ -64,7 +64,7 @@ const surfacesSchema = `CREATE TABLE IF NOT EXISTS surfaces (
   tainted TEXT NOT NULL DEFAULT '', -- why its content is external, comma-separated; '' when not
   look TEXT NOT NULL DEFAULT '{}', -- its sources' last reads
   next_at INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL,
-  subject TEXT NOT NULL DEFAULT ''); -- what it is about, kind:slug (subjects.go)`
+  about TEXT NOT NULL DEFAULT ''); -- what it is about: thread:<id> or an entity's key (about.go)`
 
 func init() { extraSchema = append(extraSchema, surfacesSchema) }
 
@@ -150,11 +150,11 @@ type surfaceIn struct {
 	Lifetime   surfaceLifetime          `json:"lifetime,omitzero"`
 	Weight     int                      `json:"weight,omitempty"` // 1 to 100; 50 if 0
 	Why        string                   `json:"why,omitempty"`
-	// Subject is what it is about, given; a new surface without one takes
+	// About is what it is about, given; a new surface without one takes
 	// inherit (its writer's turn or task), else its author's (a thread's,
-	// a lead's, a task's: sourceSubject). A surface written again keeps
+	// a lead's, a task's: sourceAbout). A surface written again keeps
 	// the one it had unless one is given.
-	Subject string `json:"-"`
+	About   string `json:"-"`
 	inherit string
 	// Tainted is why what the author wrote may come from outside: the
 	// turn's taint (turnTaint) of the assistant that writes it.
@@ -189,7 +189,7 @@ type surface struct {
 	Weight     int                      `json:"weight"`
 	Why        string                   `json:"why,omitempty"`
 	Tainted    string                   `json:"tainted,omitempty"`
-	Subject    string                   `json:"subject,omitempty"`
+	About      string                   `json:"about,omitempty"`
 	Look       surfaceLook              `json:"look,omitzero"`
 	NextAt     time.Time                `json:"-"`
 	Created    time.Time                `json:"created"`
@@ -248,14 +248,14 @@ type surfaceHub struct {
 	key     []byte // signs the media addresses (surfaces_media.go)
 }
 
-const surfaceCols = `id, title, author, components, sources, data, data_at, refresh, lifetime, weight, why, tainted, look, next_at, created, updated, subject`
+const surfaceCols = `id, title, author, components, sources, data, data_at, refresh, lifetime, weight, why, tainted, look, next_at, created, updated, about`
 
 func scanSurface(row interface{ Scan(...any) error }) (surface, error) {
 	var s surface
 	var comps, sources, data, refresh, lifetime, look string
 	var dataAt, next, created, updated int64
 	if err := row.Scan(&s.ID, &s.Title, &s.Author, &comps, &sources, &data, &dataAt, &refresh, &lifetime, &s.Weight, &s.Why,
-		&s.Tainted, &look, &next, &created, &updated, &s.Subject); err != nil {
+		&s.Tainted, &look, &next, &created, &updated, &s.About); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return s, errNoSurface
 		}
@@ -418,10 +418,10 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 		next = now.Add(time.Duration(in.Refresh.Every) * time.Minute).Unix()
 	}
 	tainted := c.surfaceTaint(look, in.Sources)
-	in.Subject = c.store.keepSubject(in.Subject, "")
-	subject := in.Subject // a new surface's
-	if subject == "" {
-		subject = c.store.keepSubject(orStr(in.inherit, c.sourceSubject(author)), "")
+	in.About = c.store.noteAbout(in.About)
+	about := in.About // a new surface's
+	if about == "" {
+		about = c.store.noteAbout(orStr(in.inherit, c.sourceAbout(author)))
 	}
 
 	c.surf.mu.Lock()
@@ -439,13 +439,13 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 		}
 		_, err = c.store.db.Exec(`INSERT INTO surfaces (`+surfaceCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			in.ID, in.Title, author, string(in.Components), string(sources), string(rawData), dataAt, string(refresh), string(lifetime),
-			in.Weight, in.Why, tainted, string(rawLook), next, now.Unix(), now.Unix(), subject)
+			in.Weight, in.Why, tainted, string(rawLook), next, now.Unix(), now.Unix(), about)
 	case err == nil:
 		_, err = c.store.db.Exec(`UPDATE surfaces SET title = ?, components = ?, sources = ?, data = ?, data_at = ?, refresh = ?,
 			lifetime = ?, weight = ?, why = ?, tainted = ?, look = ?, next_at = ?, updated = ?,
-			subject = CASE WHEN ? != '' THEN ? ELSE subject END WHERE id = ?`,
+			about = CASE WHEN ? != '' THEN ? ELSE about END WHERE id = ?`,
 			in.Title, string(in.Components), string(sources), string(rawData), dataAt, string(refresh), string(lifetime),
-			in.Weight, in.Why, tainted, string(rawLook), next, now.Unix(), in.Subject, in.Subject, in.ID)
+			in.Weight, in.Why, tainted, string(rawLook), next, now.Unix(), in.About, in.About, in.ID)
 	}
 	if err != nil {
 		c.surf.mu.Unlock()

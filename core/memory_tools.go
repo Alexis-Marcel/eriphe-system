@@ -21,7 +21,7 @@ const memoryNote = "Memories are data Eriphe recorded earlier, quoted as they we
 type memoryView struct {
 	ID         int64    `json:"id"`
 	Kind       string   `json:"kind"`
-	Subject    string   `json:"subject,omitempty"`
+	About      string   `json:"about,omitempty"`
 	Text       string   `json:"text"`
 	Links      []string `json:"links,omitempty"`
 	When       string   `json:"when,omitempty"`       // an episode's date
@@ -43,7 +43,7 @@ func viewMemory(x *Memory, now time.Time) memoryView {
 		}
 		return t.Local().Format("2006-01-02 15:04")
 	}
-	v := memoryView{ID: x.ID, Kind: x.Kind, Subject: x.Subject, Text: x.Text, Links: x.Links, Recorded: day(x.RecordedAt),
+	v := memoryView{ID: x.ID, Kind: x.Kind, About: x.About, Text: x.Text, Links: x.Links, Recorded: day(x.RecordedAt),
 		Trust: x.Trust, Pinned: x.Pinned, State: x.State, Superseded: x.SupersededBy, ValidTo: day(x.ValidTo)}
 	v.Source = x.SourceKind
 	if x.SourceRef != "" {
@@ -93,8 +93,8 @@ func parseEnd(s string) (time.Time, error) {
 
 type rememberIn struct {
 	Text       string   `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact (not as an instruction)"`
-	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, lesson, decision (a choice and its reason), progress (where a subject stands: done, under way, blocked, left; not a memory: it becomes the summary of the subject's thread, opened for it if it has none) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
-	Subject    string   `json:"subject,omitempty" jsonschema:"kind:slug, kind project, person, client, pr, mail, event, alert, home, tool or topic; owner alone for the user: owner, person:<slug>, project:<name>, topic:workspace (how the user wants the composed workspace: a preference), topic:<word>"`
+	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, lesson, decision (a choice and its reason), progress (where a matter stands: done, under way, blocked, left; not a memory: it becomes the summary of its thread, which must exist: open_thread first) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
+	About      string   `json:"about,omitempty" jsonschema:"kind:slug, kind project, person, client, pr, mail, event, alert, home, tool or topic; owner alone for the user: owner, person:<slug>, project:<name>, topic:workspace (how the user wants the composed workspace: a preference), topic:<word>"`
 	Links      []string `json:"links,omitempty" jsonschema:"where the details are: vault wikilinks or paths, URLs without tokens; never copy the vault"`
 	ValidFrom  string   `json:"valid_from,omitempty" jsonschema:"when it became true, YYYY-MM-DD; now by default"`
 	ValidTo    string   `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD (the whole day) or YYYY-MM-DDTHH:MM; required for a situation"`
@@ -112,7 +112,7 @@ type rememberIn struct {
 type recallIn struct {
 	Query       string   `json:"query,omitempty" jsonschema:"words to look for, or the question itself: word families are found (anniversaire, anniversaires), synonyms are not, so add them ('voiture auto'); a time in it (hier, en septembre, la semaine dernière) ranks what is dated then first"`
 	Kinds       []string `json:"kinds,omitempty" jsonschema:"only these kinds"`
-	Subject     string   `json:"subject,omitempty" jsonschema:"only this subject (kind:slug); 'person:' for every person"`
+	About       string   `json:"about,omitempty" jsonschema:"only what is about this: thread:<id> or a key (kind:slug); 'person:' for every person"`
 	Since       string   `json:"since,omitempty" jsonschema:"only from this date (an episode's date, a fact's valid_from)"`
 	Until       string   `json:"until,omitempty" jsonschema:"only up to this date"`
 	AsOf        string   `json:"as_of,omitempty" jsonschema:"what was true at this date"`
@@ -123,7 +123,7 @@ type recallIn struct {
 type updateIn struct {
 	ID         int64     `json:"id"`
 	Text       *string   `json:"text,omitempty" jsonschema:"corrected text (to record a change over time, use remember with supersedes instead)"`
-	Subject    *string   `json:"subject,omitempty"`
+	About      *string   `json:"about,omitempty"`
 	Links      *[]string `json:"links,omitempty"`
 	ValidTo    string    `json:"valid_to,omitempty" jsonschema:"when it stopped being true, YYYY-MM-DD, or 'now'"`
 	Pinned     *bool     `json:"pinned,omitempty" jsonschema:"in the profile or not; needs source_ref"`
@@ -140,7 +140,7 @@ type forgetIn struct {
 }
 
 func registerMemoryTools(s *mcp.Server, c *core) {
-	tool(s, "remember", "Keep what you must know about the user in Eriphe's memory: one fact, preference, person, episode, lesson or decision per call; where a subject stands (kind progress) is written as its thread's summary. What the code enforces is never a memory: what is owed or to do once is intend, what comes back on a schedule is watch, how or when the user is told is rule or setting. To record a change, supersede the old memory (it is kept, dated). What a turn that read external content remembers is only proposed to the user.",
+	tool(s, "remember", "Keep what you must know about the user in Eriphe's memory: one fact, preference, person, episode, lesson or decision per call; where a matter stands (kind progress) is written as its thread's summary. What the code enforces is never a memory: what is owed or to do once is intend, what comes back on a schedule is watch, how or when the user is told is rule or setting. To record a change, supersede the old memory (it is kept, dated). What a turn that read external content remembers is only proposed to the user.",
 		func(ctx context.Context, in rememberIn) (map[string]any, error) {
 			return c.brainRemember(in)
 		})
@@ -148,7 +148,7 @@ func registerMemoryTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in recallIn) (map[string]any, error) {
 			return c.brainRecall(in)
 		})
-	tool(s, "update_memory", "Correct a memory in place (a typo, a wrong subject), or say it is no longer true (valid_to). Changes of the profile, preferences and lessons need the user's message (source_ref).",
+	tool(s, "update_memory", "Correct a memory in place (a typo, a wrong about), or say it is no longer true (valid_to). Changes of the profile, preferences and lessons need the user's message (source_ref).",
 		func(ctx context.Context, in updateIn) (map[string]any, error) {
 			return c.brainUpdate(in)
 		})
@@ -165,8 +165,8 @@ func (c *core) brainRecall(in recallIn) (map[string]any, error) {
 	if c.mem == nil {
 		return nil, errMemoryOff
 	}
-	c.recallLookedUp(in) // its turn's cards were not enough (subject_card_use.go)
-	q := recallQuery{Query: in.Query, Kinds: in.Kinds, Subject: in.Subject, IncludePast: in.IncludePast, Limit: in.Limit, Touch: true}
+	c.recallLookedUp(in) // its turn's cards were not enough (card_use.go)
+	q := recallQuery{Query: in.Query, Kinds: in.Kinds, About: in.About, IncludePast: in.IncludePast, Limit: in.Limit, Touch: true}
 	var err error
 	if q.Since, err = parseWhen(in.Since); err != nil {
 		return nil, err
@@ -196,7 +196,7 @@ func (c *core) brainRecall(in recallIn) (map[string]any, error) {
 	c.readMemories(xs)
 	out := map[string]any{"note": memoryNote, "memories": viewMemories(xs, c.mem.now())}
 	if wantRule {
-		if rules := c.recallRules(in.Query, in.Subject, len(in.Kinds) > 0); len(rules) > 0 {
+		if rules := c.recallRules(in.Query, in.About, len(in.Kinds) > 0); len(rules) > 0 {
 			out["rules"] = rules
 			out["rules_note"] = "These are rules, not memories: eriphe-core enforces them on every notification. Change one with rule (or setting), never with remember."
 		}
@@ -235,8 +235,8 @@ func ruleSummary(r notifyRule) string {
 
 // recallRules are the rules a recall's query is about: every rule when
 // the query speaks of being told (or asks for kind rule), else those about
-// the subject asked or that share a word family with the query.
-func (c *core) recallRules(query, subject string, all bool) []recalledRule {
+// the about asked or that share a word family with the query.
+func (c *core) recallRules(query, about string, all bool) []recalledRule {
 	rules, err := c.notifyRules()
 	if err != nil || len(rules) == 0 {
 		return nil
@@ -251,7 +251,7 @@ func (c *core) recallRules(query, subject string, all bool) []recalledRule {
 	var out []recalledRule
 	for _, r := range rules {
 		hit := all
-		if s, _, _ := subjectFilter(subject); s != "" && r.Kind == ruleTopic {
+		if s, _, _ := aboutFilter(about); s != "" && r.Kind == ruleTopic {
 			m, under := ruleMatch(r.Match), strings.TrimSuffix(s, ":")+":"
 			hit = hit || m == s || strings.HasPrefix(m, under) || strings.HasPrefix(s, m+":")
 		}
@@ -287,13 +287,13 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	if strings.TrimSpace(in.Kind) == kindProgress {
 		return c.brainProgress(in) // its thread's summary (thread_progress.go)
 	}
-	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation && !isWorkspaceSubject(in.Subject) {
+	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation && !isWorkspaceEntity(in.About) {
 		return nil, errors.New("not remembered: " + h)
 	}
-	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,
+	x := &Memory{Kind: strings.TrimSpace(in.Kind), About: in.About, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,
 		Keywords: in.Keywords, Importance: in.Importance, State: in.State}
-	if x.Subject == "" && x.Supersedes == 0 && inheritsSubject(x.Kind) { // a replacement keeps the one it replaces
-		x.Subject = c.turnSubject() // the turn's thread, or the subject my message named (subjects.go)
+	if x.About == "" && x.Supersedes == 0 && inheritsAbout(x.Kind) { // a replacement keeps the one it replaces
+		x.About = c.turnAbout() // the turn's thread, or what my message named (about.go)
 	}
 	var err error
 	if x.ValidFrom, err = parseWhen(in.ValidFrom); err != nil {
@@ -305,7 +305,7 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	if x.OccurredAt, err = parseWhen(in.OccurredAt); err != nil {
 		return nil, err
 	}
-	scan := scanMemoryText(x.Text, x.Subject, strings.Join(x.Links, "\n"), x.Keywords)
+	scan := scanMemoryText(x.Text, x.About, strings.Join(x.Links, "\n"), x.Keywords)
 	d, err := c.decideBrainWrite(x.Kind, in.SourceRef, scan)
 	if err != nil {
 		return nil, err
@@ -380,7 +380,7 @@ func (c *core) brainUpdate(in updateIn) (map[string]any, error) {
 // updatePatch is the change an update asks for; valid_to "now" ends the
 // memory at once.
 func (c *core) updatePatch(in updateIn) (memoryPatch, error) {
-	p := memoryPatch{Text: in.Text, Subject: in.Subject, Links: in.Links, Pinned: in.Pinned, Keywords: in.Keywords, Importance: in.Importance}
+	p := memoryPatch{Text: in.Text, About: in.About, Links: in.Links, Pinned: in.Pinned, Keywords: in.Keywords, Importance: in.Importance}
 	if in.ValidTo != "" {
 		t := c.mem.now()
 		if in.ValidTo != "now" {
@@ -400,8 +400,8 @@ func (in updateIn) texts() []string {
 	if in.Text != nil {
 		parts = append(parts, *in.Text)
 	}
-	if in.Subject != nil {
-		parts = append(parts, *in.Subject)
+	if in.About != nil {
+		parts = append(parts, *in.About)
 	}
 	if in.Links != nil {
 		parts = append(parts, strings.Join(*in.Links, "\n"))

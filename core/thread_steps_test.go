@@ -66,7 +66,7 @@ func stepsCore(t *testing.T) *core {
 // lightThread opens a light thread, as the brain does.
 func lightThread(t *testing.T, c *core) Thread {
 	t.Helper()
-	s, err := c.openThread(threadIn{Title: "PR alerting", Goal: "The alerting PR is merged and deployed.", Subject: "pr:example/infra#12"}, nil, byBrain)
+	s, err := c.openThread(threadIn{Title: "PR alerting", Goal: "The alerting PR is merged and deployed.", Alias: "pr:example/infra#12"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}

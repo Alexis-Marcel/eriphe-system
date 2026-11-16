@@ -25,9 +25,9 @@ import (
 //
 // The profile is in the system prompt already. The pack holds, within a
 // budget, the state of things first, in at most half of it: the card of
-// each open thread's subject (subject_card.go), its thread's summary
+// each open thread (thread_card.go), its summary
 // saying where it stands, the tasks under way, the decisions of the
-// last two weeks, the people and facts of these subjects, the open
+// last two weeks, the people and facts of these threads, the open
 // commitments, what waits for the user (permissions, cards), the last
 // day's episodes; then the last messages of the conversation in what is
 // left, the newest kept. What may carry what someone else wrote (an
@@ -66,7 +66,7 @@ type contextPackStats struct {
 	Messages int
 	Dropped  int // older messages left out
 	Sections []packSection
-	Cards    []pushedCard // the subject cards it holds
+	Cards    []pushedCard // the cards it holds
 }
 
 // packSection is what one section of a pack holds: the lines written out
@@ -120,7 +120,7 @@ func (p *packBuilder) section(name, title string, lines []string, limit int) {
 	p.sections = append(p.sections, st)
 }
 
-// blocks writes blocks quoted already (subject cards) under a title, in
+// blocks writes blocks quoted already (thread cards) under a title, in
 // at most limit chars of what is left, while they fit, and records what it
 // wrote; it returns how many, the first ones.
 func (p *packBuilder) blocks(name, title string, blocks []string, limit int) int {
@@ -174,7 +174,7 @@ func (p *packBuilder) lines(title string, lines []string) int {
 
 // The pack's state of things, before the messages.
 const (
-	packThreads       = 20 // open threads, the latest first: their summary is where each subject stands
+	packThreads       = 20 // open threads, the latest first: their summary is where each matter stands
 	packThreadSteps   = 8  // open steps named per thread
 	packThreadMax     = 1000
 	packStateMemories = 20 // decisions, people and facts: each
@@ -184,8 +184,8 @@ const (
 // contextPack is the pack for a fresh session of the brain, and what it
 // holds. The state of things comes first, in at most half the budget:
 // what the brain needs to work (the open threads and where their
-// subjects stand, the tasks under way, the recent decisions, the people and facts
-// of these subjects, the open commitments, what waits for the user, the
+// matters stand, the tasks under way, the recent decisions, the people and facts
+// of these threads, the open commitments, what waits for the user, the
 // last day's episodes); then the latest messages, in what is left.
 func (c *core) contextPack() (string, contextPackStats) {
 	user := c.conf().User
@@ -201,17 +201,17 @@ func (c *core) contextPack() (string, contextPackStats) {
 	room := p.left
 	share := func(n int) int { return room * n / 1000 }
 
-	// The open threads: the card of each one's subject, the latest first,
+	// The open threads: the card of each one, the latest first,
 	// while they fit; any other in a line. What a card shows is not said
 	// again in the sections after it.
-	open, subjects := c.packThreads(c.cardBudget())
+	open, abouts := c.packThreads(c.cardBudget())
 	var texts []string
 	for _, x := range open {
 		if x.card != nil {
 			texts = append(texts, x.card.Text)
 		}
 	}
-	fit := p.blocks("cards", "Fiches des sujets des fils ouverts (les plus récents d'abord) :", texts, share(400))
+	fit := p.blocks("cards", "Fiches des fils ouverts (les plus récents d'abord) :", texts, share(400))
 	var cards []pushedCard
 	var threads []string
 	shown := map[string]bool{} // the records a card shows
@@ -234,18 +234,18 @@ func (c *core) contextPack() (string, contextPackStats) {
 		current := `status = 'active' AND pinned = 0 AND (valid_to IS NULL OR valid_to > ?)`
 		decisions, _ := c.mem.list(current+` AND kind = 'decision' AND recorded_at >= ?`,
 			[]any{now.Unix(), now.AddDate(0, 0, -packDecisionDays).Unix()}, `recorded_at DESC, id DESC`, packStateMemories)
-		p.section("decisions", fmt.Sprintf("Décisions des %d derniers jours (ta mémoire) :", packDecisionDays), packMemoryLines(notShown(decisions, shown), subjects), share(100))
+		p.section("decisions", fmt.Sprintf("Décisions des %d derniers jours (ta mémoire) :", packDecisionDays), packMemoryLines(notShown(decisions, shown), abouts), share(100))
 		xs, _ := c.mem.intentions(intentDue, intentOpen, intentSnoozed)
 		for _, x := range xs {
 			if shown[fmt.Sprintf("intention:%d", x.ID)] {
-				continue // in its subject's card
+				continue // in its thread's card
 			}
 			intentions = append(intentions, packIntentionLine(x, now))
-			for _, s := range []string{x.Subject, x.Owner, x.OwedTo} { // person:<slug> for whom owes or is owed
-				subjects[subjectOf(s)] = true
+			for _, s := range []string{x.About, x.Owner, x.OwedTo} { // person:<slug> for whom owes or is owed
+				abouts[aboutOf(s)] = true
 			}
 		}
-		p.section("related", "Personnes et faits de ces sujets (ta mémoire) :", c.packRelated(subjects, now, shown), share(75))
+		p.section("related", "Personnes et faits de ces fils (ta mémoire) :", c.packRelated(abouts, now, shown), share(75))
 		p.section("intentions", "Intentions en cours (ta mémoire ; dues d'abord) :", intentions, share(75))
 		episodes = c.packEpisodes(now)
 	}
@@ -266,31 +266,29 @@ func (c *core) contextPack() (string, contextPackStats) {
 	return out, stats
 }
 
-// packThread is an open thread, and the card of its subject if it has one.
+// packThread is an open thread, and its card if it has one.
 type packThread struct {
 	thread Thread
 	card   *pushedCard
 }
 
-// packThreads are the open threads, the latest first, each with the card
-// of its subject (within budget), and the subjects they follow.
-func (c *core) packThreads(budget int) (open []packThread, subjects map[string]bool) {
-	subjects = map[string]bool{}
+// packThreads are the open threads, the latest first, each with its card
+// (within budget), and their refs.
+func (c *core) packThreads(budget int) (open []packThread, refs map[string]bool) {
+	refs = map[string]bool{}
 	ts, err := c.threads(true, packThreads)
 	if err != nil {
-		return nil, subjects
+		return nil, refs
 	}
 	for _, s := range ts {
 		x := packThread{thread: s}
-		if key := subjectOf(s.Subject); key != "" {
-			subjects[key] = true
-			if card, ok := c.compileCard(key, budget); ok {
-				x.card = &card
-			}
+		refs[threadRef(s.ID)] = true
+		if card, ok := c.compileCard(threadRef(s.ID), budget); ok {
+			x.card = &card
 		}
 		open = append(open, x)
 	}
-	return open, subjects
+	return open, refs
 }
 
 // notShown are the memories no card of the pack shows.
@@ -298,7 +296,7 @@ func notShown(xs []*Memory, shown map[string]bool) []*Memory {
 	return slices.DeleteFunc(xs, func(x *Memory) bool { return shown[fmt.Sprintf("memory:%d", x.ID)] })
 }
 
-// threadLine is a thread in a line: its mode, state, subject, title,
+// threadLine is a thread in a line: its mode, state, alias, title,
 // goal, open steps and summary. One whose plan may carry what someone else
 // wrote is named, not quoted; so is the summary of one whose steps read
 // external content.
@@ -309,8 +307,8 @@ func (c *core) threadLine(s Thread) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "- fil %d [%s, %s", s.ID, s.Mode, s.Look())
-	if s.Subject != "" {
-		b.WriteString(", sujet " + packQuote(s.Subject))
+	if s.Alias != "" {
+		b.WriteString(", " + packQuote(s.Alias))
 	}
 	fmt.Fprintf(&b, ", depuis le %s] « %s » ; but : %s", s.Created.Local().Format("01-02"), packQuote(s.Title), packQuote(s.Goal))
 	if s.DoneWhen != "" {
@@ -358,20 +356,20 @@ func packIntentionLine(x *Intention, now time.Time) string {
 func packExternal(x *Memory) bool { return externalWhy(x.Trust, x.Flags, x.SourceRef) != "" }
 
 // packMemoryLines are memories in lines, the external ones named; their
-// subjects join subjects.
-func packMemoryLines(xs []*Memory, subjects map[string]bool) []string {
+// abouts join abouts.
+func packMemoryLines(xs []*Memory, abouts map[string]bool) []string {
 	var lines []string
 	for _, x := range xs {
-		if x.Subject != "" {
-			subjects[subjectOf(x.Subject)] = true
+		if x.About != "" {
+			abouts[aboutOf(x.About)] = true
 		}
 		if packExternal(x) {
 			lines = append(lines, truncate("- "+externalLine(x), packLineMax))
 			continue
 		}
 		head := fmt.Sprintf("%s #%d", x.Kind, x.ID)
-		if x.Subject != "" {
-			head += ", " + packQuote(x.Subject)
+		if x.About != "" {
+			head += ", " + packQuote(x.About)
 		}
 		if x.State != "" {
 			head += ", " + x.State
@@ -382,23 +380,23 @@ func packMemoryLines(xs []*Memory, subjects map[string]bool) []string {
 	return lines
 }
 
-// packRelated are the people and facts about the subjects of the open
+// packRelated are the people and facts about the threads of the open
 // threads, the projects, the recent decisions and the intentions. The
 // user's own are left out: their profile is in the system prompt.
-func (c *core) packRelated(subjects map[string]bool, now time.Time, shown map[string]bool) []string {
-	delete(subjects, "")
-	delete(subjects, "owner")
-	if len(subjects) == 0 {
+func (c *core) packRelated(abouts map[string]bool, now time.Time, shown map[string]bool) []string {
+	delete(abouts, "")
+	delete(abouts, "owner")
+	if len(abouts) == 0 {
 		return nil
 	}
-	keys := make([]string, 0, len(subjects))
+	keys := make([]string, 0, len(abouts))
 	args := []any{now.Unix()}
-	for k := range subjects {
+	for k := range abouts {
 		keys = append(keys, "?")
 		args = append(args, k)
 	}
 	xs, err := c.mem.list(`status = 'active' AND pinned = 0 AND (valid_to IS NULL OR valid_to > ?)
-		AND kind IN ('person', 'fact') AND subject IN (`+strings.Join(keys, ", ")+`)`,
+		AND kind IN ('person', 'fact') AND about IN (`+strings.Join(keys, ", ")+`)`,
 		args, `importance DESC, recorded_at DESC, id DESC`, packStateMemories)
 	if err != nil {
 		return nil
@@ -560,8 +558,8 @@ func (c *core) brainFirstPrompt(a Assistant, resume bool) string {
 	return brainFreshPrompt + "\n\n" + pack
 }
 
-// packedCards are the cards of a pack, counted, by subject. The card of
-// the turn's subject (turnKey) is the turn's (turn: its last message's
+// packedCards are the cards of a pack, counted, by about. The card of
+// what the turn is about (turnKey) is the turn's (turn: its last message's
 // seq); the others, and a fresh session's first pack, are no turn's: an
 // answer is not theirs to count.
 func (c *core) packedCards(cards []pushedCard, turn int, turnKey string) map[string]string {

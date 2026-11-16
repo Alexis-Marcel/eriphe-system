@@ -22,8 +22,8 @@ func TestMemoryPageRenders(t *testing.T) {
 	tw, _ := newMemoryWeb(t)
 	m := tw.c.mem
 	mustAdd(t, m, &Memory{Kind: kindProfile, Text: "Sam est développeur"})
-	mustAdd(t, m, &Memory{Kind: kindPerson, Subject: "person:hélène", Text: "Hélène, la sœur de Sam <script>alert(1)</script>"})
-	mustAdd(t, m, &Memory{Kind: kindEpisode, Subject: "journal", Text: "Journée calme"})
+	mustAdd(t, m, &Memory{Kind: kindPerson, About: "person:hélène", Text: "Hélène, la sœur de Sam <script>alert(1)</script>"})
+	mustAdd(t, m, &Memory{Kind: kindEpisode, About: "journal", Text: "Journée calme"})
 	mustIntend(t, m, &Intention{Text: "Payer le loyer", DueAt: m.now().Add(-time.Minute)})
 	mustIntend(t, m, &Intention{Text: "Régler la facture du fournisseur", DueAt: m.now().Add(48 * time.Hour), State: intentProposed,
 		SourceKind: srcExtraction, SourceRef: "task:t-mail", Trust: trustExternal})
@@ -103,12 +103,12 @@ func TestMemoryActions(t *testing.T) {
 	m := tw.c.mem
 	id := func(x *Memory) string { return strconv.FormatInt(x.ID, 10) }
 	// Add, as me.
-	code, body, _ := tw.post("/memory", url.Values{"text": {"Le NAS est au grenier"}, "kind": {"fact"}, "subject": {"Home"}, "links": {"[[NAS]]\n"}}, csrf)
+	code, body, _ := tw.post("/memory", url.Values{"text": {"Le NAS est au grenier"}, "kind": {"fact"}, "about": {"Home"}, "links": {"[[NAS]]\n"}}, csrf)
 	if code != 200 || !strings.Contains(body, "Le NAS est au grenier") {
 		t.Fatalf("add: %d %s", code, body)
 	}
 	xs, _ := m.recall(recallQuery{Query: "grenier"})
-	if len(xs) != 1 || xs[0].Trust != trustOwner || xs[0].Subject != "home" || xs[0].Links[0] != "[[NAS]]" {
+	if len(xs) != 1 || xs[0].Trust != trustOwner || xs[0].About != "home" || xs[0].Links[0] != "[[NAS]]" {
 		t.Fatalf("added: %+v", xs)
 	}
 	x := xs[0]
@@ -117,7 +117,7 @@ func TestMemoryActions(t *testing.T) {
 		t.Fatalf("secret added: %v", h)
 	}
 	// Edit in place.
-	code, body, _ = tw.post("/memory/"+id(x), url.Values{"text": {"Le NAS est à la cave"}, "kind": {"fact"}, "subject": {"home"}}, csrf)
+	code, body, _ = tw.post("/memory/"+id(x), url.Values{"text": {"Le NAS est à la cave"}, "kind": {"fact"}, "about": {"home"}}, csrf)
 	if got, _ := m.memory(x.ID); code != 200 || got.Text != "Le NAS est à la cave" || !strings.Contains(body, "à la cave") {
 		t.Fatalf("edit: %d %+v", code, got)
 	}

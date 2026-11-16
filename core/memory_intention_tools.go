@@ -18,7 +18,7 @@ type intendIn struct {
 	Kind      string `json:"kind,omitempty" jsonschema:"promise (the user owes someone), commitment (you owe the user), waiting_for (someone owes the user), reminder (something to remember to do); reminder by default"`
 	Owner     string `json:"owner,omitempty" jsonschema:"who owes: owner (the user), assistant (you), person:<slug>"`
 	OwedTo    string `json:"owed_to,omitempty" jsonschema:"to whom: owner, person:<slug>…"`
-	Subject   string `json:"subject,omitempty" jsonschema:"what it is about, kind:slug: project:<name>, client:<slug>, pr:<owner>/<repo>#<n>…"`
+	About     string `json:"about,omitempty" jsonschema:"what it is about, kind:slug: project:<name>, client:<slug>, pr:<owner>/<repo>#<n>…"`
 	DueAt     string `json:"due_at,omitempty" jsonschema:"the deadline, YYYY-MM-DD or YYYY-MM-DDTHH:MM"`
 	RemindAt  string `json:"remind_at,omitempty" jsonschema:"when to bring it up; the deadline itself by default (9:00 for a day without a time)"`
 	Cue       string `json:"cue,omitempty" jsonschema:"for 'the next time I talk about X': the name that brings it up (instead of a time)"`
@@ -47,7 +47,7 @@ type intentionView struct {
 	Text     string `json:"text"`
 	Owner    string `json:"owner"`
 	OwedTo   string `json:"owed_to,omitempty"`
-	Subject  string `json:"subject,omitempty"`
+	About    string `json:"about,omitempty"`
 	Due      string `json:"due,omitempty"`
 	Remind   string `json:"remind,omitempty"`
 	Cue      string `json:"cue,omitempty"`
@@ -66,7 +66,7 @@ func viewIntention(x *Intention, now time.Time) intentionView {
 		}
 		return t.Local().Format("2006-01-02 15:04")
 	}
-	v := intentionView{ID: x.ID, Kind: x.Kind, Text: x.Text, Owner: x.Owner, OwedTo: x.OwedTo, Subject: x.Subject, Due: day(x.DueAt),
+	v := intentionView{ID: x.ID, Kind: x.Kind, Text: x.Text, Owner: x.Owner, OwedTo: x.OwedTo, About: x.About, Due: day(x.DueAt),
 		Remind: day(x.RemindAt), Cue: x.Cue, State: x.State, Snoozed: day(x.SnoozedUntil), Overdue: x.Overdue(now),
 		Source: strings.TrimSpace(x.SourceKind + " " + x.SourceRef), Trust: x.Trust, Surfaced: x.Surfaced}
 	return v
@@ -123,9 +123,9 @@ func (c *core) brainIntend(in intendIn) (map[string]any, error) {
 			return nil, errors.New("not recorded: " + h)
 		}
 	}
-	x := &Intention{Kind: in.Kind, Text: in.Text, Owner: in.Owner, OwedTo: in.OwedTo, Subject: in.Subject, Cue: in.Cue}
-	if x.Subject == "" {
-		x.Subject = c.turnSubject() // the turn's thread, or the subject my message named (subjects.go)
+	x := &Intention{Kind: in.Kind, Text: in.Text, Owner: in.Owner, OwedTo: in.OwedTo, About: in.About, Cue: in.Cue}
+	if x.About == "" {
+		x.About = c.turnAbout() // the turn's thread, or what my message named (about.go)
 	}
 	var err error
 	if x.DueAt, err = parseWhen(in.DueAt); err != nil {
@@ -134,7 +134,7 @@ func (c *core) brainIntend(in intendIn) (map[string]any, error) {
 	if x.RemindAt, err = parseWhen(in.RemindAt); err != nil {
 		return nil, err
 	}
-	scan := scanMemoryText(x.Text, x.Owner, x.OwedTo, x.Subject, x.Cue)
+	scan := scanMemoryText(x.Text, x.Owner, x.OwedTo, x.About, x.Cue)
 	d, err := c.decideBrainWrite(intentCommitment, in.SourceRef, scan)
 	if err != nil {
 		return nil, err

@@ -47,7 +47,7 @@
 <article class="mem k-{{.Kind}}{{if .Past}} is-past{{end}} st-{{.Status}}" id="mem-{{.ID}}">
   <div class="mem-top">
     <span class="kind k-{{.Kind}}"><i aria-hidden="true"></i>{{t (printf "kind.%s" .Kind)}}</span>
-    {{if .Subject}}<a class="mem-subj" href="/memory?subject={{.Subject}}">{{.Subject}}</a>{{end}}
+    {{if .About}}<a class="mem-subj" href="/memory?about={{.About}}">{{.About}}</a>{{end}}
     {{if .Pinned}}<span class="pinned" title="{{t "mem.view.profile"}}">{{template "i-pin"}}<span class="sr-only">{{t "mem.view.profile"}}</span></span>{{end}}
     <span class="trust t-{{.Trust}}">{{t (printf "trust.%s" .Trust)}}</span>
   </div>
@@ -92,7 +92,7 @@
     {{if .Error}}<p class="alert span2" role="alert">{{.Error}}</p>{{end}}
     <label class="field span2"><span>{{t "mem.text"}}</span><textarea name="text" rows="3" required maxlength="4000">{{.Text}}</textarea></label>
     <label class="field"><span>{{t "mem.kind"}}</span><select name="kind">{{$k := .Kind}}{{range .Kinds}}<option value="{{.}}" {{if eq . $k}}selected{{end}}>{{t (printf "kind.%s" .)}}</option>{{end}}</select></label>
-    <label class="field"><span>{{t "mem.subject"}}</span><input type="text" name="subject" value="{{.Subject}}" maxlength="100" class="mono" spellcheck="false" autocomplete="off"></label>
+    <label class="field"><span>{{t "mem.on"}}</span><input type="text" name="about" value="{{.About}}" maxlength="100" class="mono" spellcheck="false" autocomplete="off"></label>
     <label class="field"><span>{{t "mem.links"}}</span><textarea name="links" rows="2" class="mono">{{range .Links}}{{.}}
 {{end}}</textarea></label>
     <div class="mem-form-end span2">

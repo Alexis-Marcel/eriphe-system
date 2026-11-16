@@ -568,7 +568,7 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 	}
 	cs := connectTo(t, newMCPServer(c))
 	// A task is a step of a thread: the turn's.
-	th, err := c.openThread(threadIn{Title: "Issue", Goal: "Elle est traitée.", Subject: "topic:issue"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "Issue", Goal: "Elle est traitée.", Alias: "topic:issue"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}

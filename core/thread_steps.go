@@ -713,7 +713,7 @@ func (c *core) liveIntention(id int64) error {
 }
 
 // linkThread joins to a thread what the code does not link on its own
-// (thread_progress.go): an intention of another subject becomes a
+// (thread_progress.go): an intention about another thread becomes a
 // deadline step (due when it is), a card raised elsewhere shows in its
 // timeline.
 func (c *core) linkThread(ctx context.Context, id int64, ref, by string) (string, error) {

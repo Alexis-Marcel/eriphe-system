@@ -47,7 +47,7 @@ func TestTopicRuleCanonical(t *testing.T) {
 		t.Fatal(err)
 	}
 	out, err := c.brainNotify(notifyIn{Text: "Une facture est arrivée.", Weight: 5, Why: "Un mail de facture.", Ref: "Facturation"})
-	if err != nil || out["outcome"] != outcomeNever || out["subject"] != "topic:facture" {
+	if err != nil || out["outcome"] != outcomeNever || out["about"] != "topic:facture" {
 		t.Fatalf("notify under a family label: %v %v", out, err)
 	}
 	if out["topic"] == nil {
@@ -78,7 +78,7 @@ func TestKnownTopics(t *testing.T) {
 	c.brainNotify(notifyIn{Text: "x", Weight: 2, Why: "y", Ref: "Factures"})
 	c.brainNotify(notifyIn{Text: "x", Weight: 2, Why: "y", Ref: "task:t-1"})
 	seq := ownerSays(c, "Lina est ma sœur")
-	if _, err := c.brainRemember(rememberIn{Text: "Lina est la sœur de Sam.", Kind: kindPerson, Subject: "person:Lina", SourceRef: ref(seq)}); err != nil {
+	if _, err := c.brainRemember(rememberIn{Text: "Lina est la sœur de Sam.", Kind: kindPerson, About: "person:Lina", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
 	var refs []string

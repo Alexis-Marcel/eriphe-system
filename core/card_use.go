@@ -7,40 +7,39 @@ import (
 	"time"
 )
 
-// What the subject cards are worth (#512, step 8). Each card pushed to a
+// What the thread cards are worth (#512, step 8). Each card pushed to a
 // model is counted, by place, and judged once its window is over: used or
 // not. The judgment is a proxy, kept simple and said as it is:
 //
 //   - wrote: in the window after the push, the model it was pushed to
-//     wrote or changed a record of the card's subject. For the brain (a
-//     turn's card, a pack's), a memory, an intention or a line in a
-//     thread of that subject written by "brain"; for a worker task, a
-//     memory its remember wrote (source task:<id>), or the subject's
-//     thread summary noted by a task; for a lead, a line written by a lead
-//     in a thread of that subject (nearly always: a lead works on its
-//     thread, so its count says little).
-//   - answered: the card of a brain turn's subject (the turn's, or the
+//     wrote or changed a record about the card's thread or entity. For the
+//     brain (a turn's card, a pack's), a memory, an intention or a line in
+//     the thread written by "brain"; for a worker task, a memory its
+//     remember wrote (source task:<id>), or the thread's summary noted by
+//     a task; for a lead, a line written by a lead in the thread (nearly
+//     always: a lead works on its thread, so its count says little).
+//   - answered: the card of what a brain turn is about (the turn's, or the
 //     one of a pack delivered with the turn's messages; a pack's other
 //     cards are no turn's) when the turn's answer, the first message after
-//     it, is the brain's, and the brain did not ask again for that subject
-//     in the turn (recall with its subject or naming it, read_subject of
-//     it): the card was enough, or the subject did not matter to the
-//     answer; it does not tell which, so it is counted apart from wrote.
+//     it, is the brain's, and the brain did not ask again for it in the
+//     turn (recall about it or naming it, read_thread of it): the card was
+//     enough, or it did not matter to the answer; it does not tell which,
+//     so it is counted apart from wrote.
 //   - no: neither.
 //
 // The window is cardUseWindow for the brain, cardUseLongWindow for a task
-// or a lead, which work longer. Counts are shown in Réglages → Sujets and
+// or a lead, which work longer. Counts are shown in
 // the tasks' reliability panel; each push is logged too.
 
 const cardPushesSchema = `CREATE TABLE IF NOT EXISTS card_pushes (
 	id      INTEGER PRIMARY KEY AUTOINCREMENT,
 	at      INTEGER NOT NULL,
-	subject TEXT NOT NULL,
+	about   TEXT NOT NULL DEFAULT '',
 	place   TEXT NOT NULL,               -- turn, pack, task, lead
 	chars   INTEGER NOT NULL,
 	turn    INTEGER NOT NULL DEFAULT 0,  -- the brain's turn it went in (its last message's seq); 0 for none
 	who     TEXT NOT NULL DEFAULT '',    -- the task's id, the lead's thread
-	looked  INTEGER NOT NULL DEFAULT 0,  -- recall or read_subject asked for its subject in that turn
+	looked  INTEGER NOT NULL DEFAULT 0,  -- recall or read_thread asked for it in that turn
 	used    TEXT NOT NULL DEFAULT ''     -- '' until judged; wrote, answered, no
 );
 CREATE INDEX IF NOT EXISTS card_pushes_used ON card_pushes (used, at);`
@@ -49,7 +48,7 @@ func init() { extraSchema = append(extraSchema, cardPushesSchema) }
 
 // Where a card is pushed.
 const (
-	placeTurn = "turn" // the brain's turn, its subject's card
+	placeTurn = "turn" // the brain's turn, its card
 	placePack = "pack" // a fresh session's context pack
 	placeTask = "task" // a worker task's first prompt
 	placeLead = "lead" // a thread lead's first turn
@@ -84,10 +83,10 @@ func (c *core) cardPushed(x pushedCard, place string, turn int, who string) {
 	if who != "" {
 		where += " " + who
 	}
-	log.Printf("subject card %s → %s: %d chars, %d lines, %d left out", x.Key, where, x.Stats.Chars, x.Stats.Lines, x.Stats.Dropped)
-	if _, err := c.store.db.Exec(`INSERT INTO card_pushes (at, subject, place, chars, turn, who) VALUES (?, ?, ?, ?, ?, ?)`,
+	log.Printf("card %s → %s: %d chars, %d lines, %d left out", x.Key, where, x.Stats.Chars, x.Stats.Lines, x.Stats.Dropped)
+	if _, err := c.store.db.Exec(`INSERT INTO card_pushes (at, about, place, chars, turn, who) VALUES (?, ?, ?, ?, ?, ?)`,
 		time.Now().Unix(), x.Key, place, x.Stats.Chars, turn, who); err != nil {
-		log.Printf("subject card %s: %v", x.Key, err)
+		log.Printf("card %s: %v", x.Key, err)
 	}
 }
 
@@ -98,46 +97,46 @@ func (c *core) turnSeq() int {
 }
 
 // cardLookedUp notes that the brain asked again, in its turn, for these
-// subjects: their cards of the turn were not enough.
+// threads or entities: their cards of the turn were not enough.
 func (c *core) cardLookedUp(keys ...string) {
 	turn := c.turnSeq()
 	if turn == 0 {
 		return
 	}
 	for _, k := range keys {
-		if k = c.store.canonSubject(subjectOf(k)); k != "" {
-			c.store.db.Exec(`UPDATE card_pushes SET looked = 1 WHERE used = '' AND turn = ? AND subject = ? AND place IN (?, ?)`,
+		if k = c.store.resolveAbout(aboutOf(k)); k != "" {
+			c.store.db.Exec(`UPDATE card_pushes SET looked = 1 WHERE used = '' AND turn = ? AND about = ? AND place IN (?, ?)`,
 				turn, k, placeTurn, placePack)
 		}
 	}
 }
 
-// recallLookedUp notes what a recall asks for: its subject, and the
-// known subjects its words name.
+// recallLookedUp notes what a recall asks for: its about, and the threads
+// and entities its words name.
 func (c *core) recallLookedUp(in recallIn) {
-	keys := c.subjectsNamed(in.Query)
-	if in.Subject != "" {
-		keys = append(keys, in.Subject)
+	keys := c.named(in.Query)
+	if in.About != "" {
+		keys = append(keys, in.About)
 	}
 	c.cardLookedUp(keys...)
 }
 
 // cardPush is a row of card_pushes.
 type cardPush struct {
-	ID      int64
-	At      time.Time
-	Subject string
-	Place   string
-	Turn    int
-	Who     string
-	Looked  bool
+	ID     int64
+	At     time.Time
+	About  string
+	Place  string
+	Turn   int
+	Who    string
+	Looked bool
 }
 
 // judgeCardPushes judges the pushes whose window is over, and forgets the
 // oldest. It runs with the controller's pass.
 func (c *core) judgeCardPushes(now time.Time) {
 	c.store.db.Exec(`DELETE FROM card_pushes WHERE at < ?`, now.Add(-cardPushesKept).Unix())
-	rows, err := c.store.db.Query(`SELECT id, at, subject, place, turn, who, looked FROM card_pushes
+	rows, err := c.store.db.Query(`SELECT id, at, about, place, turn, who, looked FROM card_pushes
 		WHERE used = '' AND at <= ? ORDER BY id LIMIT 200`, now.Add(-cardUseWindow).Unix())
 	if err != nil {
 		return
@@ -146,7 +145,7 @@ func (c *core) judgeCardPushes(now time.Time) {
 	for rows.Next() {
 		var x cardPush
 		var at int64
-		if rows.Scan(&x.ID, &at, &x.Subject, &x.Place, &x.Turn, &x.Who, &x.Looked) == nil {
+		if rows.Scan(&x.ID, &at, &x.About, &x.Place, &x.Turn, &x.Who, &x.Looked) == nil {
 			x.At = time.Unix(at, 0)
 			xs = append(xs, x)
 		}
@@ -166,8 +165,11 @@ func (c *core) judgeCard(x cardPush) string {
 	var n int
 	threadBy := func(who string) int {
 		var k int
-		c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_log l JOIN threads t ON t.id = l.thread
-			WHERE t.subject = ? AND l.at BETWEEN ? AND ? AND l.who = ?`, x.Subject, from, to, who).Scan(&k)
+		id, ok := threadOfAbout(x.About)
+		if !ok {
+			return 0
+		}
+		c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_log WHERE thread = ? AND at BETWEEN ? AND ? AND who = ?`, id, from, to, who).Scan(&k)
 		return k
 	}
 	switch x.Place {
@@ -176,9 +178,9 @@ func (c *core) judgeCard(x cardPush) string {
 		if c.mem != nil {
 			var m, i int
 			c.mem.db.QueryRow(`SELECT COUNT(*) FROM memory_log l JOIN memories m ON m.id = l.memory_id
-				WHERE m.subject = ? AND l.time BETWEEN ? AND ? AND l.who = ?`, x.Subject, from, to, byBrain).Scan(&m)
+				WHERE m.about = ? AND l.time BETWEEN ? AND ? AND l.who = ?`, x.About, from, to, byBrain).Scan(&m)
 			c.mem.db.QueryRow(`SELECT COUNT(*) FROM intention_log l JOIN intentions i ON i.id = l.intention_id
-				WHERE i.subject = ? AND l.time BETWEEN ? AND ? AND l.who = ?`, x.Subject, from, to, byBrain).Scan(&i)
+				WHERE i.about = ? AND l.time BETWEEN ? AND ? AND l.who = ?`, x.About, from, to, byBrain).Scan(&i)
 			n += m + i
 		}
 	case placeTask:
@@ -186,7 +188,7 @@ func (c *core) judgeCard(x cardPush) string {
 		if c.mem != nil {
 			var m int
 			c.mem.db.QueryRow(`SELECT COUNT(*) FROM memory_log l JOIN memories m ON m.id = l.memory_id
-				WHERE m.subject = ? AND l.time BETWEEN ? AND ? AND l.who = 'task' AND m.source_ref = ?`, x.Subject, from, to, "task:"+x.Who).Scan(&m)
+				WHERE m.about = ? AND l.time BETWEEN ? AND ? AND l.who = 'task' AND m.source_ref = ?`, x.About, from, to, "task:"+x.Who).Scan(&m)
 			n += m
 		}
 	case placeLead:
@@ -224,13 +226,13 @@ func (u cardUse) Used() int { return u.Wrote + u.Answered }
 // Judged is the cards judged.
 func (u cardUse) Judged() int { return u.Used() + u.Unused }
 
-// cardUses are the counts per place since a time, for a subject or all
+// cardUses are the counts per place since a time, for one about or all
 // ("").
-func (s *Store) cardUses(since time.Time, subject string) []cardUse {
+func (s *Store) cardUses(since time.Time, about string) []cardUse {
 	where, args := `at >= ?`, []any{since.Unix()}
-	if subject != "" {
-		where += ` AND subject = ?`
-		args = append(args, subject)
+	if about != "" {
+		where += ` AND about = ?`
+		args = append(args, about)
 	}
 	byPlace := map[string]*cardUse{}
 	rows, err := s.db.Query(`SELECT place, used, COUNT(*) FROM card_pushes WHERE `+where+` GROUP BY place, used`, args...)

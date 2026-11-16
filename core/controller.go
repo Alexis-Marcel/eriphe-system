@@ -180,7 +180,7 @@ func (c *core) checkNodes(ctx context.Context) {
 	c.replaceStranded()               // placement.go
 	c.harnessTick(time.Now())         // retries due, time budgets (task_retry.go)
 	c.threadsTick(time.Now())         // the threads' engine (thread_engine.go)
-	c.judgeCardPushes(time.Now())     // how the subject cards pushed were used (subject_card_use.go)
+	c.judgeCardPushes(time.Now())     // how the cards pushed were used (card_use.go)
 	c.placeServices()                 // also when no node answers: a node gone too long loses its services
 	c.connectionTick(ctx, time.Now()) // the connections' tokens, now and then (connections.go)
 }
@@ -290,7 +290,7 @@ type runRequest struct {
 	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository the user gave to Eriphe cloned into /work/repo (repo, with branch, base, dir; see list_repos), the user's folders and the places of their tools (folder, place; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
 	Node      string        `json:"node,omitempty" jsonschema:"node name; empty lets the scheduler choose"`
-	Subject   string        `json:"subject,omitempty" jsonschema:"what it is about, kind:slug; leave it out for the subject of what this turn is about (its thread's, or the one subject the user's message named)"`
+	About     string        `json:"about,omitempty" jsonschema:"what it is about: thread:<id>, or an entity's key (person:<slug>); leave it out for what this turn is about (its thread)"`
 	// Contract: what must be true at the end, for a task that changes
 	// something (contract.go); none for a search or a read.
 	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
@@ -356,9 +356,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 			return nil, err
 		}
 	}
-	subject, err := c.subjectIs(r.Subject, "")
+	about, err := c.aboutIs(r.About)
 	if err != nil {
-		return nil, fmt.Errorf("subject: %w", err)
+		return nil, fmt.Errorf("about: %w", err)
 	}
 	agentName, agent, err := c.conf().agent(r.Agent)
 	if err != nil {
@@ -428,7 +428,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		needs = append(c.startNeeds(lent.List, r.cleanStart), c.accessStartNeeds(lent.List, r.cleanStart)...) // task_start.go
 		needs = append(needs, c.folderNeeds(lent.List, r.cleanStart)...)                                      // folder_values.go
 	}
-	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model, Subject: subject,
+	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model, About: about,
 		Dir: where, Title: r.title(), Prompt: r.Prompt, State: statePending,
 		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List, Pinned: r.Node != ""}
 	if waiting != nil {
@@ -474,8 +474,8 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	}
 	if kind == "worker" {
 		c.lendSkills(&spec) // skills_tasks.go
-		// What is known of its subject, after what it is asked (subject_card.go).
-		if card := c.startCard(subject, placeTask, t.ID); card != "" {
+		// What is known of its thread, after what it is asked (thread_card.go).
+		if card := c.startCard(about, placeTask, t.ID); card != "" {
 			spec.Prompt += "\n\n" + card
 		}
 	}

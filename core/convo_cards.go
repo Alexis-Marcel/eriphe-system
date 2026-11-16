@@ -53,7 +53,7 @@ const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	attached INTEGER NOT NULL DEFAULT 0,
 	decided  INTEGER NOT NULL DEFAULT 0,
 	by       TEXT NOT NULL DEFAULT '',
-	subject  TEXT NOT NULL DEFAULT ''   -- what it is about, kind:slug (subjects.go)
+	about  TEXT NOT NULL DEFAULT ''   -- what it is about: thread:<id> or an entity's key (about.go)
 );
 CREATE INDEX IF NOT EXISTS convo_cards_seq ON convo_cards (seq);`
 
@@ -98,7 +98,7 @@ type convoCard struct {
 	Attached time.Time
 	Decided  time.Time
 	By       string // web, a channel's id, text, or page (the fallback page)
-	Subject  string // what it is about: its proposal's, else its maker's (cardSubject)
+	About    string // what it is about: its proposal's, else its maker's (cardAbout)
 }
 
 func proposalRef(kind string, id int64) string { return kind + ":" + strconv.FormatInt(id, 10) }
@@ -109,12 +109,12 @@ func parseProposalRef(ref string) (string, int64, bool) {
 	return kind, id, ok && err == nil && id > 0 && slices.Contains(proposalKinds, kind)
 }
 
-const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by, subject`
+const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by, about`
 
 func scanCard(row interface{ Scan(...any) error }) (convoCard, error) {
 	var x convoCard
 	var created, attached, decided int64
-	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By, &x.Subject)
+	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By, &x.About)
 	x.Created, x.Attached, x.Decided = unixOrZero(created), unixOrZero(attached), unixOrZero(decided)
 	return x, err
 }
@@ -295,7 +295,7 @@ func ruleText(r notifyRule, lang string) string {
 	if r.Kind == ruleQuiet {
 		return fmt.Sprintf(tr(lang, "rule.quietline"), tr(lang, "rule.days."+r.Days), r.Window())
 	}
-	s := subjectLabel(r.Match) + " → " + ruleBoundsText(r, lang)
+	s := aboutLabel(r.Match) + " → " + ruleBoundsText(r, lang)
 	if r.Night {
 		s += " · " + tr(lang, "rule.night")
 	}
@@ -456,17 +456,17 @@ var (
 // cardProposed makes the card of a proposal the brain just made: it goes
 // with the brain's next message of this turn.
 func (c *core) cardProposed(kind string, id int64) {
-	inherit, source := c.turnSubject, c.turnSource() // made in the brain's turn
+	inherit, source := c.turnAbout, c.turnSource() // made in the brain's turn
 	switch kind {
 	case cardRunCalls:
-		inherit, source = nil, "" // a skill's run: its own (cardSubject)
+		inherit, source = nil, "" // a skill's run: its own (cardAbout)
 	case cardThread:
 		source = "" // a thread's ask: its step shows it
 	}
 	c.cardProposedBy(kind, id, inherit, source)
 }
 
-// cardProposedBy is cardProposed for a proposal its maker's subject
+// cardProposedBy is cardProposed for a proposal its maker's about
 // inherits (nil: none) and source raised: a card born in a turn about a
 // thread, or by a task step of one, shows in its timeline by the code.
 func (c *core) cardProposedBy(kind string, id int64, inherit func() string, source string) {
@@ -480,7 +480,7 @@ func (c *core) cardProposedBy(kind string, id int64, inherit func() string, sour
 	c.cardAgain(p)
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, turn, text, created) VALUES (?, ?, 1, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET turn = 1 WHERE seq = 0`, proposalRef(kind, id), kind, p.Text(c.userLang()), time.Now().Unix())
-	c.cardSubject(kind, id, inherit)
+	c.cardAbout(kind, id, inherit)
 	c.proposalMoved(proposalRef(kind, id))
 }
 
@@ -508,7 +508,7 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)
 		ON CONFLICT (ref) DO UPDATE SET turn = 0 WHERE seq = 0`, ref, kind, p.Text(c.userLang()), time.Now().Unix())
 	c.proposalMoved(ref)
-	c.cardSubject(kind, id, func() string { return c.sourceSubject(source) })
+	c.cardAbout(kind, id, func() string { return c.sourceAbout(source) })
 	if x, err := c.cardsWhere(`ref = ?`, ref); err == nil && len(x) == 1 {
 		c.attendCard(x[0], p, text, source)
 	}

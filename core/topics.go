@@ -11,12 +11,13 @@ import (
 // drift ("factures", "facture", "Facturation"), a rule silently stops
 // matching. So the code keeps the labels comparable and small:
 //
-//   - a label is a subject, keyed by subjectKey (subject.go); a ref that
-//     names one record (task:t-1, skill:x) is kept as written.
-//   - knownTopics are the subjects in use: the rules', the notifications'
-//     of the last 90 days, the live threads' and the memory's (project:,
-//     person:, client:), so a notification about a project uses the same
-//     key as its thread and its memories.
+//   - a label is an about: a thread (thread:<id>) or a key, kept by
+//     aboutKey (about_key.go); a ref that names one record (task:t-1,
+//     skill:x) is kept as written.
+//   - knownTopics are the abouts in use: the rules', the notifications' of
+//     the last 90 days, the live threads and the memory's entities
+//     (person:, client:…), so a notification about a matter uses its
+//     thread, as its memories do.
 //   - reuseTopic maps a new label onto a known one of the same word family
 //     (topic:facturation → topic:facture), and the tools list the known
 //     topics to the brain when it invents one.
@@ -40,17 +41,14 @@ type topicView struct {
 	Ref  string `json:"ref"`
 	Uses int    `json:"notifications_90_days,omitempty"`
 	Rule bool   `json:"has_rule,omitempty"`
-	From string `json:"from,omitempty"` // memory: a subject of the memory
+	From string `json:"from,omitempty"` // memory: what memories are about
 }
 
 // knownTopics are the refs in use, the ruled and the most used first.
 func (c *core) knownTopics() []topicView {
 	byRef := map[string]*topicView{}
 	add := func(ref string) *topicView {
-		if isRecordRef(ref) {
-			return nil
-		}
-		ref, _ = subjectKey(ref)
+		ref, _ = aboutKey(ref)
 		if ref == "" {
 			return nil
 		}
@@ -69,7 +67,7 @@ func (c *core) knownTopics() []topicView {
 		}
 	}
 	since := c.notifyTime().Add(-90 * 24 * time.Hour).Unix()
-	if rows, err := c.store.db.Query(`SELECT subject, COUNT(*) FROM notifications WHERE created >= ? AND subject != '' GROUP BY subject`, since); err == nil {
+	if rows, err := c.store.db.Query(`SELECT about, COUNT(*) FROM notifications WHERE created >= ? AND about != '' GROUP BY about`, since); err == nil {
 		for rows.Next() {
 			var ref string
 			var n int
@@ -81,18 +79,18 @@ func (c *core) knownTopics() []topicView {
 		}
 		rows.Close()
 	}
-	if rows, err := c.store.db.Query(`SELECT subject FROM threads WHERE subject != '' AND ` + activeThreads); err == nil {
+	if rows, err := c.store.db.Query(`SELECT id FROM threads WHERE ` + activeThreads); err == nil {
 		for rows.Next() {
-			var s string
-			if rows.Scan(&s) == nil {
-				add(s)
+			var id int64
+			if rows.Scan(&id) == nil {
+				add(threadRef(id))
 			}
 		}
 		rows.Close()
 	}
 	if c.mem != nil {
-		if rows, err := c.mem.db.Query(`SELECT DISTINCT subject FROM memories WHERE status = 'active' AND
-			(subject LIKE 'project:%' OR subject LIKE 'person:%' OR subject LIKE 'client:%')`); err == nil {
+		if rows, err := c.mem.db.Query(`SELECT DISTINCT about FROM memories WHERE status = 'active' AND
+			(about LIKE 'thread:%' OR about LIKE 'project:%' OR about LIKE 'person:%' OR about LIKE 'client:%')`); err == nil {
 			for rows.Next() {
 				var s string
 				if rows.Scan(&s) == nil {
@@ -124,11 +122,11 @@ func (c *core) knownTopics() []topicView {
 	return out
 }
 
-// reuseTopic is the ref to use for a label: its subject key, or the
+// reuseTopic is the ref to use for a label: its about, or the
 // known topic of the same word family (only one, else the key as is);
 // known tells whether the result is in use already.
 func reuseTopic(label string, topics []topicView) (ref string, known bool) {
-	ref, _ = subjectKey(label)
+	ref, _ = aboutKey(label)
 	if ref == "" {
 		return "", false
 	}

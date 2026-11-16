@@ -77,9 +77,9 @@ type TaskRow struct {
 	Resources []ResourceRef `json:"resources,omitempty"`
 	// Pinned: its node was chosen by hand, and it never moves.
 	Pinned bool `json:"pinned,omitempty"`
-	// Subject is what it is about: its thread's, its skill's, the brain's
-	// turn's, or the one it was given (subjects.go).
-	Subject string `json:"subject,omitempty"`
+	// About is what it is about: its thread, its skill's, the brain's
+	// turn's, or the one it was given (about.go).
+	About string `json:"about,omitempty"`
 	// Desired, when inserted: held while its start waits for the user
 	// (task_start.go), running otherwise. Not read back.
 	Desired string `json:"-"`
@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   tools TEXT NOT NULL DEFAULT '', folders TEXT NOT NULL DEFAULT '',
   resources TEXT NOT NULL DEFAULT '',        -- all it is lent, as JSON (resources.go)
   pinned INTEGER NOT NULL DEFAULT 0,         -- its node given by hand (placement.go)
-  subject TEXT NOT NULL DEFAULT '');         -- what it is about, kind:slug (subjects.go)
+  about TEXT NOT NULL DEFAULT '');         -- what it is about: thread:<id> or an entity's key (about.go)
 CREATE TABLE IF NOT EXISTS messages (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL,
   role TEXT NOT NULL, text TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0,
@@ -356,9 +356,9 @@ func (s *Store) insertTask(t *TaskRow) error {
 	if t.Kind == "" {
 		t.Kind = "worker"
 	}
-	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, dir, title, prompt, state, pending_reason, kind, tools, folders, resources, pinned, desired, subject, created, updated)
+	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, dir, title, prompt, state, pending_reason, kind, tools, folders, resources, pinned, desired, about, created, updated)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Dir, t.Title, t.Prompt,
-		t.State, t.PendingReason, t.Kind, t.Tools, t.Folders, marshalResources(t.Resources), t.Pinned, orStr(t.Desired, desiredRunning), t.Subject, now.Unix(), now.Unix())
+		t.State, t.PendingReason, t.Kind, t.Tools, t.Folders, marshalResources(t.Resources), t.Pinned, orStr(t.Desired, desiredRunning), t.About, now.Unix(), now.Unix())
 	return err
 }
 
@@ -387,14 +387,14 @@ func (t *TaskRow) label() string {
 	return truncate(line, taskTitleMax)
 }
 
-const taskColumns = `id, node, agent, node_task_id, runtime, model, kind, tools, folders, resources, dir, title, prompt, state, pending_reason, session_id, last_seq, created, updated, pinned, subject`
+const taskColumns = `id, node, agent, node_task_id, runtime, model, kind, tools, folders, resources, dir, title, prompt, state, pending_reason, session_id, last_seq, created, updated, pinned, about`
 
 func scanTask(sc interface{ Scan(...any) error }) (*TaskRow, error) {
 	var t TaskRow
 	var created, updated int64
 	var resources string
 	err := sc.Scan(&t.ID, &t.Node, &t.Agent, &t.NodeTaskID, &t.Runtime, &t.Model, &t.Kind, &t.Tools, &t.Folders, &resources, &t.Dir, &t.Title, &t.Prompt,
-		&t.State, &t.PendingReason, &t.SessionID, &t.LastSeq, &created, &updated, &t.Pinned, &t.Subject)
+		&t.State, &t.PendingReason, &t.SessionID, &t.LastSeq, &created, &updated, &t.Pinned, &t.About)
 	t.Resources = unmarshalResources(resources)
 	t.Created, t.Updated = time.Unix(created, 0), time.Unix(updated, 0)
 	return &t, err

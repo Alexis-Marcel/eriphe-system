@@ -20,7 +20,7 @@ import (
 // attentionSignal is one block: the objects it is about, how much they
 // matter, why, and what Eriphe could say of them.
 type attentionSignal struct {
-	Refs   []string `json:"refs" jsonschema:"the objects it is about: thread:<id> (its tile rises), card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…)"`
+	Refs   []string `json:"refs" jsonschema:"the objects it is about: thread:<id> (its tile rises), card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…)"`
 	Weight int      `json:"weight" jsonschema:"5 interrupts the user, 4 needs the user now, 3 matters today, 2 a glance, 1 background"`
 	Why    string   `json:"why" jsonschema:"why it deserves attention, in the user's language, at most 80 characters"`
 	Say    string   `json:"say,omitempty" jsonschema:"what Eriphe could tell the user of it, in the user's language, one sentence; optional"`
@@ -38,13 +38,13 @@ const (
 // the receipt's own instruction (receiptInstruction).
 const attentionInstruction = "When something deserves the user's attention, add to the receipt an \"attention\" list, one entry per thing: " +
 	`"attention": [{"refs": ["thread:<id>"], "weight": 3, "why": "at most 80 characters, in the user's language", "say": "optional: what Eriphe could tell the user, one sentence in the user's language"}]` + ". " +
-	"refs name the objects it is about, each in one of these forms: thread:<id> (the thread's tile rises on the workspace), card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
+	"refs name the objects it is about, each in one of these forms: thread:<id> (the thread's tile rises on the workspace), card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
 	"Leave refs out when the entry is about your final message itself. " +
 	"Leave the list out when nothing deserves it: the user is then told nothing."
 
 // The kinds of records an attention item may be about: kind:id. It may be
-// about a subject too (subject.go): project:<name>, pr:<owner>/<repo>#<n>,
+// about a key too (about_key.go): project:<name>, pr:<owner>/<repo>#<n>,
 // alert:<id>…, the id as written. No kind is a tool's: an item of a
 // thread's source is raised through its thread (task_threads.go).
 const (
@@ -67,9 +67,9 @@ type errBadRef struct{ why string }
 
 func (e errBadRef) Error() string { return "bad ref: " + e.why }
 
-// parseRef reads a ref: a record's or a subject's kind (subject.go), a
+// parseRef reads a ref: a record's or a key's kind (about_key.go), a
 // colon, an id. A thread's and a card's id is a number, a surface's its
-// id; a subject's id is kept as written.
+// id; a key's id is kept as written.
 func parseRef(s string) (itemRef, error) {
 	kind, id, ok := strings.Cut(strings.TrimSpace(s), ":")
 	if !ok || id == "" {
@@ -87,7 +87,7 @@ func parseRef(s string) (itemRef, error) {
 		}
 	case refTask:
 	default:
-		if isSubjectKind(kind) {
+		if isAliasKind(kind) {
 			break
 		}
 		return r, errBadRef{"no kind " + strconv.Quote(kind)}
@@ -185,8 +185,8 @@ func cleanSignals(in []attentionSignal, own bool) ([]attentionSignal, []string) 
 }
 
 // attendSignals puts each ref of the signals in the attention queue, from
-// source (skill:<name>, assistant:<name>), about the subject of maker (a
-// run's task:<id>, a lead's thread:<id>; "" for none: sourceSubject); tainted when who wrote them read
+// source (skill:<name>, assistant:<name>), about what maker is about (a
+// run's task:<id>, a lead's thread:<id>; "" for none: sourceAbout); tainted when who wrote them read
 // external content. The dropped are logged. A signal without refs makes
 // no item here: its caller knows what it is about.
 func (c *core) attendSignals(signals []attentionSignal, dropped []string, maker, source string, tainted bool) int {
@@ -199,7 +199,7 @@ func (c *core) attendSignals(signals []attentionSignal, dropped []string, maker,
 // weight is held to 3 when who wrote it read external content, and to 2
 // in the quiet hours.
 func (c *core) attendSignalsWith(signals []attentionSignal, dropped []string, maker, source string, tainted bool, ceiling int, delivered bool) int {
-	subject := c.sourceSubject(maker)
+	about := c.sourceAbout(maker)
 	if tainted {
 		ceiling = min(ceiling, weightProposal) // external content never interrupts on its own
 	}
@@ -212,7 +212,7 @@ func (c *core) attendSignalsWith(signals []attentionSignal, dropped []string, ma
 	n := 0
 	for _, s := range signals {
 		for _, ref := range s.Refs {
-			c.attendHeld(attentionItem{Ref: ref, Weight: min(s.Weight, ceiling), Why: s.Why, Say: s.Say, Source: source, Subject: subject,
+			c.attendHeld(attentionItem{Ref: ref, Weight: min(s.Weight, ceiling), Why: s.Why, Say: s.Say, Source: source, About: about,
 				tainted: tainted, Delivered: delivered})
 			n++
 		}

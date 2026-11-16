@@ -7,7 +7,7 @@
   "front": {
     "proposal": "access:12",
     "text": "Accepter l'invitation « Révision du vélo » jeudi à 14 h ?",
-    "subject": ["révision", "vélo"]
+    "about": ["révision", "vélo"]
   },
   "servers": [{"name": "agenda", "use": "l'agenda de Sam", "tools": [{
     "name": "event",
