@@ -198,8 +198,11 @@ func TestThreadsBornInOnePlace(t *testing.T) {
 		raw, _ := os.ReadFile(f)
 		src := string(raw)
 		n := strings.Count(src, "INSERT INTO threads ")
-		if f == "thread_engine.go" {
+		switch f {
+		case "thread_engine.go":
 			n -= 2 // openThread: a light thread, a led one
+		case "convert_one_thread.go":
+			n-- // the one-shot conversion's ended threads (Q7); goes with it
 		}
 		if n != 0 {
 			t.Errorf("%s writes a thread outside openThread (%d)", f, n)

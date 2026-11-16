@@ -90,7 +90,10 @@ func (w *web) handleSkill(rw http.ResponseWriter, r *http.Request, s *session) {
 	}
 	d := skillPage{Skill: k}
 	d.Runs, d.Totals, d.Live = w.skillRuns(k.Name)
-	if d.Shown, err = w.c.store.skillVersion(orStr(k.Pending, k.Approved)); err != nil {
+	// A version that does not read is shown still, its files and why
+	// (Skill.Broken).
+	var se *skillError
+	if d.Shown, err = w.c.store.skillVersion(orStr(k.Pending, k.Approved)); err != nil && (d.Shown == nil || !errors.As(err, &se)) {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -108,7 +111,7 @@ func (w *web) handleSkill(rw http.ResponseWriter, r *http.Request, s *session) {
 		var old *skillVersion
 		if k.Approved != "" {
 			d.Update = true
-			if old, err = w.c.store.skillVersion(k.Approved); err != nil {
+			if old, err = w.c.store.skillVersion(k.Approved); err != nil && (old == nil || !errors.As(err, &se)) {
 				http.Error(rw, err.Error(), http.StatusInternalServerError)
 				return
 			}

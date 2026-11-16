@@ -15,6 +15,7 @@
     </div>
     <h3 class="tile-title">{{template "i-skill"}}<a href="/settings/skills/{{.Name}}" class="stretched mono">{{.Name}}</a></h3>
     <p class="muted small skill-desc">{{.Description}}</p>
+    {{template "skill-unread" .}}
     {{with index $.Data.Triggers .Name}}<p class="small skill-trigger">{{.}}</p>{{end}}
     <p class="muted small">{{tf "skills.files" .Files}}</p>
   </li>
@@ -40,12 +41,19 @@
 
 {{end}}
 
+{{/* Why a skill is off by the code, or its version shown does not read. */}}
+{{define "skill-unread"}}
+{{with .OffWhy}}<p class="warn-note small">{{t .}}</p>{{end}}
+{{with .Broken}}<p class="warn-note small">{{if .Arg}}{{tf .Key .Arg}}{{else}}{{t .Key}}{{end}}</p>{{end}}
+{{end}}
+
 {{define "skill-page"}}{{with .Data}}
 <a class="back" href="/settings/skills">{{template "i-back"}}{{t "settings.skills"}}</a>
 <header class="page-head">
   <h2 class="mono">{{.Skill.Name}}</h2>
   <p>{{.Shown.Manifest.Description}}</p>
   {{with .Shown.Manifest.Trigger}}<p><strong>{{t "skills.trigger"}}</strong> : {{.Text $.Lang}}</p>{{end}}
+  {{template "skill-unread" .Skill}}
 </header>
 
 {{if .Skill.Pending}}

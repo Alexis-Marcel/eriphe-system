@@ -115,6 +115,7 @@ func (c *core) useMemory(m *memStore) {
 	c.mem = m
 	if m != nil {
 		m.names = c.store
+		c.convertOneThreadMemory() // once, an install made before #578 (convert_one_thread.go)
 	}
 }
 
