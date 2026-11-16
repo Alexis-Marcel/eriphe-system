@@ -1824,7 +1824,8 @@ version, read with its diff.
   is connected: it is born when a watcher acts on its alias, for any source.
   **It exists as soon as the skill is on** (`openSkillThreads`): when its version is approved
   (on its card or in Réglages), when it is turned on, and at core start for every skill on whose
-  alias has no thread yet, code opens it the same way (`openSkillThread`, held by one lock so a
+  alias has no thread yet (an active one gets its monitor's source there should it lack it; an
+  ended one stays ended), code opens it the same way (`openSkillThread`, held by one lock so a
   run and an approval never open two), without a model run. Its alias is the one its trigger
   gives before any event (`skillOwnThread`): its `thread:`, else on `monitor.*` events with
   `key=<name>`, `topic:<name>`. A watcher of a poll monitor's new items (`monitor.new

@@ -138,6 +138,33 @@ func TestSkillThreadsAtStart(t *testing.T) {
 	}
 }
 
+// A watcher approved before its monitor gets its thread without a source;
+// at the next start, the monitor on, the thread gets it. Just opened, the
+// thread is new to the user: a tile until they see it.
+func TestSkillThreadSourceAtStart(t *testing.T) {
+	c, _, _ := pollCore(t)
+	k, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte("---\nname: veille-alertes\ndescription: Les alertes.\nwhen: monitor.new key=alertes\ntools: [eriphe-threads, monitor]\n---\nx\n")}}, "upload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.approveSkill(k.Name, k.Pending, "owner"); err != nil {
+		t.Fatal(err)
+	}
+	id := skillThreadOf(t, c, "topic:alerte")
+	if id == 0 || len(c.threadSources(id)) != 0 {
+		t.Fatalf("thread %d, sources %+v", id, c.threadSources(id))
+	}
+	if sf, err := c.surface(threadSurfaceID(id)); err != nil || tileStateOf(sf) != tileNew || foldsQuiet(sf) {
+		t.Fatalf("just opened: %+v %v", sf.Look, err)
+	}
+	approvedMonitor(t, c, "alertes", monitorSpec{Server: "monitor", Tool: "alerts", Every: 1, Cond: condNew, Path: "data.rules", ID: "uid"})
+	c.openSkillThreads("", false)
+	c.surf.refreshing.Wait()
+	if again := skillThreadOf(t, c, "topic:alerte"); again != id || len(c.threadSources(id)) != 1 {
+		t.Fatalf("thread %d, sources %+v", again, c.threadSources(id))
+	}
+}
+
 // The alias of a skill's thread before any event, as its runs make it,
 // and the monitor whose new items it handles.
 func TestSkillOwnThread(t *testing.T) {
