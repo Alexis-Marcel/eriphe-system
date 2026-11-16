@@ -141,6 +141,31 @@ var extraSchema []string
 // column added), after the schema: CREATE TABLE IF NOT EXISTS never does.
 var schemaFixes []func(*sql.DB) error
 
+// addColumn adds a column to a table that lacks it; a table that has it
+// is left as it is.
+func addColumn(db *sql.DB, table, column, def string) error {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	_, err = db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + def)
+	return err
+}
+
 func openStore(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=temp_store(memory)")
 	if err != nil {

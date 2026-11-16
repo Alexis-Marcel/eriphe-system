@@ -57,7 +57,13 @@ const monitorsSchema = `CREATE TABLE IF NOT EXISTS monitors (
   hook TEXT NOT NULL DEFAULT '', -- listen: its token's hash (incoming_hooks.go)
   tainted TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, updated INTEGER NOT NULL);`
 
-func init() { extraSchema = append(extraSchema, monitorsSchema) }
+func init() {
+	extraSchema = append(extraSchema, monitorsSchema)
+	// A monitors table made before the hook column has none.
+	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
+		return addColumn(db, "monitors", "hook", "TEXT NOT NULL DEFAULT ''")
+	})
+}
 
 const (
 	monitorProposed = "proposed" // written by the brain, never approved yet

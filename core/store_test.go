@@ -1,10 +1,41 @@
 package main
 
 import (
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+// A monitors table made before the hook column gets it at open, and
+// opening again changes nothing.
+func TestOpenStoreAddsMonitorHook(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "core.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE monitors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, state TEXT NOT NULL,
+  spec TEXT NOT NULL DEFAULT '{}', pending TEXT NOT NULL DEFAULT '',
+  look TEXT NOT NULL DEFAULT '{}', next_at INTEGER NOT NULL DEFAULT 0,
+  tainted TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, updated INTEGER NOT NULL);
+INSERT INTO monitors (name, state, created, updated) VALUES ('disk', 'on', 1, 1);`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	for range 2 {
+		s, err := openStore(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var hook string
+		if err := s.db.QueryRow(`SELECT hook FROM monitors WHERE name = 'disk'`).Scan(&hook); err != nil || hook != "" {
+			t.Fatalf("hook = %q, %v", hook, err)
+		}
+		s.db.Close()
+	}
+}
 
 func TestStore(t *testing.T) {
 	s, err := openStore(filepath.Join(t.TempDir(), "core.db"))
