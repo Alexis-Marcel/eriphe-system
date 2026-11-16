@@ -134,6 +134,7 @@ func (c *core) skillManifestOf(sha string) (skillManifest, bool) {
 func (c *core) runSkills(ctx context.Context) {
 	c.skillRuns.kick = make(chan struct{}, 1)
 	c.subscribeEvents(c.queueSkillEvent)
+	c.openSkillThreads("", false) // a skill on whose alias has no thread yet gets it (task_threads.go)
 	tick := time.NewTicker(skillsTickEvery)
 	defer tick.Stop()
 	for {

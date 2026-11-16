@@ -166,5 +166,6 @@ func (c *core) decideSkill(id int64, approve bool) error {
 		return err
 	}
 	c.store.set(skillFiredKey+name, "") // a time trigger starts from its next time
+	c.openSkillThreads(name, true)      // its thread shows from now (task_threads.go)
 	return nil
 }

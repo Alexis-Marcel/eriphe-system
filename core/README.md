@@ -1822,6 +1822,15 @@ version, read with its diff.
   item by the id its `monitor.new` carries: the run notes them there. The run is told its thread
   and its sources; the next run finds the same thread. Nothing creates a thread because a tool
   is connected: it is born when a watcher acts on its alias, for any source.
+  **It exists as soon as the skill is on** (`openSkillThreads`): when its version is approved
+  (on its card or in Réglages), when it is turned on, and at core start for every skill on whose
+  alias has no thread yet, code opens it the same way (`openSkillThread`, held by one lock so a
+  run and an approval never open two), without a model run. Its alias is the one its trigger
+  gives before any event (`skillOwnThread`): its `thread:`, else on `monitor.*` events with
+  `key=<name>`, `topic:<name>`. A watcher of a poll monitor's new items (`monitor.new
+  key=<name>`) gets that monitor's read as its source with items at once, so its list shows,
+  read by code; a skill on time with `thread:` gets its thread with no source; a skill off, not
+  lent `eriphe-threads`, or whose alias is only known from its events gets none until its run.
 - **eriphe-threads**, a server Eriphe provides, lent like any tool (`tools: [eriphe-threads]`,
   `{kind: tool, ref: eriphe-threads}` in `run_task`; `eriphe-threads.note_item` lends one tool).
   Its tools ask nothing (writing on a thread is not an external write) and act as
