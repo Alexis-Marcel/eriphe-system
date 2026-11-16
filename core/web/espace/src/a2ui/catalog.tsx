@@ -879,7 +879,9 @@ const Proposal = createComponentImplementation(
       setBusy(yes ? "yes" : "no");
       setFailed(false);
       const surfaceId = context.dataContext.surface?.id ?? "";
-      const ok = await src.answer({ surfaceId, componentId: context.componentModel.id, ref: p.ref, yes }).catch(() => false);
+      // Bound inside a list (a row's card): where, so that only this row's answers.
+      const at = context.dataContext.path && context.dataContext.path !== "/" ? { at: context.dataContext.path } : {};
+      const ok = await src.answer({ surfaceId, componentId: context.componentModel.id, ref: p.ref, yes, ...at }).catch(() => false);
       if (!ok) setFailed(true);
       const again = await src.read(ref).catch(() => null);
       setP(again ?? { ...p, state: ok ? (yes ? "approved" : "rejected") : p.state });

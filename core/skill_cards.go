@@ -36,25 +36,44 @@ func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[s
 		return
 	}
 	raw, _ := json.Marshal(input)
+	var thread int64
+	c.store.db.QueryRow(`SELECT thread FROM skill_runs WHERE id = ?`, r.ID).Scan(&thread)
+	source, item, onItem := c.callItem(thread, tool, input)
 	var id int64
-	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE run = ? AND call LIKE ? AND input = ? AND state = ?`,
-		r.ID, tool+" %", string(raw), startProposed).Scan(&id) != nil {
+	switch {
+	case onItem && c.itemAskWaiting(thread, source, item, tool, string(raw)) != 0:
+		// The same call on the same item waits already: its card.
+	case !onItem && c.store.db.QueryRow(`SELECT id FROM access_asks WHERE run = ? AND batch = 0 AND call LIKE ? AND input = ? AND state = ?`,
+		r.ID, tool+" %", string(raw), startProposed).Scan(&id) == nil:
+	default:
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		cancel()
 		n := c.callNeed(tool, input, c.pool.facts(tool, input))
-		c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, pid, n.Server, n.Category, n.Account, tool+" "+string(fields), string(raw),
-			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID)
+		if !onItem {
+			thread = 0
+		}
+		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, thread, source, item)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, pid, n.Server, n.Category, n.Account, tool+" "+string(fields), string(raw),
+			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID, thread, source, item)
+		if id, _ := rowsID(res, err); onItem && id > 0 {
+			// One card per item: the one its other calls on it are on.
+			batch := c.runItemBatch(r.ID, thread, source, item)
+			if batch == 0 {
+				batch = id
+			}
+			c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, batch, id)
+		}
 	}
 	c.store.addInbox(t.ID, "permission", map[string]any{"id": pid, "allow": false, "message": runCallsWait, "by": byPolicy})
 	c.store.recordDecision(t.ID, pid, tool, input, decideDeny, byPolicy, "kept for the run's card")
 	c.bump()
 }
 
-// runAsks are a run's kept calls.
+// runAsks are a run's kept calls on no item: those on one are its item's
+// card (item_cards.go).
 func (c *core) runAsks(run int64) []accessQuestion {
-	rows, err := c.store.db.Query(`SELECT id FROM access_asks WHERE run = ? ORDER BY id`, run)
+	rows, err := c.store.db.Query(`SELECT id FROM access_asks WHERE run = ? AND batch = 0 ORDER BY id`, run)
 	if err != nil {
 		return nil
 	}
@@ -128,7 +147,7 @@ func (c *core) runCallsProposal(p proposal) proposal {
 // runsWithCalls are the runs over whose kept calls still wait.
 func (c *core) runsWithCalls() []int64 {
 	rows, err := c.store.db.Query(`SELECT DISTINCT a.run FROM access_asks a JOIN skill_runs r ON r.id = a.run
-		WHERE a.run != 0 AND a.state = ? AND r.state != ? ORDER BY a.run`, startProposed, skillRunOpen)
+		WHERE a.run != 0 AND a.batch = 0 AND a.state = ? AND r.state != ? ORDER BY a.run`, startProposed, skillRunOpen)
 	if err != nil {
 		return nil
 	}
@@ -186,7 +205,8 @@ func skillCanText(tr *skillTrigger, th *Thread, sources []string) string {
 				"ajoute ce que l'utilisateur doit faire ou décider (add_step : user, deadline, ou call : une action qu'il approuve sur sa carte). Tu ne le clos jamais.",
 				th.ID, th.Title, th.Alias, threadsServer)
 			if len(sources) > 0 {
-				fmt.Fprintf(&b, " Ses sources qui listent des éléments : %s ; un élément s'y note par son id, celui que donnent ses événements.", strings.Join(sources, ", "))
+				fmt.Fprintf(&b, " Ses sources qui listent des éléments : %s ; un élément s'y note par son id, celui que donnent ses événements. "+
+					"Une action que tu proposes sur un élément (un appel d'un de tes outils qui le nomme par son id) devient une carte sur sa ligne : l'utilisateur y répond, elle ne fait que cet appel.", strings.Join(sources, ", "))
 			}
 		} else {
 			b.WriteString("\n\nTu agis sur les fils avec les outils de " + threadsServer + " : trouve celui d'une chose (find_thread) avant d'en ouvrir un (open_thread).")

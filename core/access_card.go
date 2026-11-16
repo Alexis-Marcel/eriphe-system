@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,9 +42,25 @@ CREATE TABLE IF NOT EXISTS access_asks (
 	state         TEXT NOT NULL DEFAULT 'proposed',
 	created       INTEGER NOT NULL,
 	decided       INTEGER NOT NULL DEFAULT 0,
-	run           INTEGER NOT NULL DEFAULT 0); -- a triggered skill's run (skill_cards.go)`
+	run           INTEGER NOT NULL DEFAULT 0, -- a triggered skill's run (skill_cards.go)
+	thread        INTEGER NOT NULL DEFAULT 0, -- with item: the thread whose item it acts on (item_cards.go)
+	source        TEXT NOT NULL DEFAULT '',   -- the thread's source that lists the item
+	item          TEXT NOT NULL DEFAULT '',   -- the item's id in that source
+	batch         INTEGER NOT NULL DEFAULT 0); -- the card it is on, kind calls: its first call's id`
 
-func init() { extraSchema = append(extraSchema, accessCardSchema) }
+func init() {
+	extraSchema = append(extraSchema, accessCardSchema)
+	// A table made before the item cards lacks their columns.
+	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
+		for _, col := range []struct{ name, def string }{{"thread", "INTEGER NOT NULL DEFAULT 0"}, {"source", "TEXT NOT NULL DEFAULT ''"},
+			{"item", "TEXT NOT NULL DEFAULT ''"}, {"batch", "INTEGER NOT NULL DEFAULT 0"}} {
+			if err := addColumn(db, "access_asks", col.name, col.def); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
 
 const (
 	cardAccess    = "access"
@@ -217,20 +234,25 @@ type accessQuestion struct {
 	Tainted    string
 	State      string
 	Run        int64  // a triggered skill's run: its card is the run's (skill_cards.go)
+	Thread     int64  // with Item: the thread whose item it acts on (item_cards.go)
+	Source     string // the thread's source that lists the item
+	Item       string // the item's id in that source
+	Batch      int64  // the calls card it is on, 0 when none
 	source     string // who raised it, when not its task: thread:<id>
 }
 
 func (c *core) accessAskOf(id int64) (accessQuestion, error) {
 	var a accessQuestion
 	var refs string
-	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state, run FROM access_asks WHERE id = ?`, id).
-		Scan(&a.ID, &a.TaskID, &a.Permission, &a.Need.Server, &a.Need.Category, &a.Need.Account, &a.Call, &a.Input, &refs, &a.Tainted, &a.State, &a.Run)
+	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state, run, thread, source, item, batch FROM access_asks WHERE id = ?`, id).
+		Scan(&a.ID, &a.TaskID, &a.Permission, &a.Need.Server, &a.Need.Category, &a.Need.Account, &a.Call, &a.Input, &refs, &a.Tainted, &a.State, &a.Run,
+			&a.Thread, &a.Source, &a.Item, &a.Batch)
 	json.Unmarshal([]byte(refs), &a.Refs)
 	return a, err
 }
 
 func (c *core) proposedAccess() []int64 {
-	rows, err := c.store.db.Query(`SELECT id FROM access_asks WHERE state = ? AND run = 0 ORDER BY id`, startProposed)
+	rows, err := c.store.db.Query(`SELECT id FROM access_asks WHERE state = ? AND run = 0 AND batch = 0 ORDER BY id`, startProposed)
 	if err != nil {
 		return nil
 	}
@@ -317,6 +339,11 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	if a.Run != 0 {
 		text, _ := c.trackedCall(ctx, a, name)
 		c.runCallDone(a, text) // a run's: the brain is not told (skill_cards.go)
+		return
+	}
+	if a.Batch != 0 {
+		text, _ := c.trackedCall(ctx, a, name)
+		c.itemCallDone(a, text) // an item's: its thread's log (item_cards.go)
 		return
 	}
 	if name == webFetchTool || name == webSearchTool {
@@ -628,6 +655,10 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 		}
 		if a.Run != 0 {
 			c.runCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name))
+			return nil
+		}
+		if a.Batch != 0 {
+			c.itemCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name))
 			return nil
 		}
 		c.callToBrain(a, fmt.Sprintf("%s a refusé sur la carte : %s n'est pas exécutée.", c.conf().User, name), "")

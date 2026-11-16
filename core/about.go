@@ -122,6 +122,10 @@ func (c *core) proposalAbout(kind string, id int64) string {
 		}
 	case cardThread:
 		return c.sourceAbout(threadRef(id))
+	case cardCalls:
+		if asks := c.batchAsks(id); len(asks) > 0 && asks[0].Thread > 0 {
+			return c.sourceAbout(threadRef(asks[0].Thread))
+		}
 	case cardRunCalls:
 		var task string
 		c.store.db.QueryRow(`SELECT task FROM skill_runs WHERE id = ?`, id).Scan(&task)

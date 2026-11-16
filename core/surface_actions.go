@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -28,7 +29,9 @@ import (
 //     tainted surface, unless code wrote it (the attention queue's, whose
 //     Proposal shows the proposal's own taint, as its card does; a
 //     thread's, whose Proposals code bound to its own cards, whatever
-//     the thread read: surfaceLook.Answers).
+//     the thread read: surfaceLook.Answers). A Proposal bound inside a
+//     list answers only the proposal at the place it says (at): a row's
+//     card from its row (item_cards.go).
 //   - stepDone: « C'est fait » on a thread's surface, for a step the user
 //     does: the Button code wrote there, its thread and step as stored
 //     (thread_surface.go, settleUserStep).
@@ -176,18 +179,102 @@ func (c *core) answerOf(s surface, a a2ui.Action) (string, bool, *errActionRefus
 	if s.Look.Answers && len(s.Look.AuthorTaint) > 0 && !strings.HasPrefix(a.SourceComponentID, threadCompPrefix) {
 		return "", false, &errActionRefused{Path: at, Message: "a part written after reading external content can only ask: its proposal is answered in the conversation"}
 	}
-	var ref, answer string
+	var ref, answer, row string
 	json.Unmarshal(a.Context["proposal"], &ref)
 	json.Unmarshal(a.Context["answer"], &answer)
-	if answer != "yes" && answer != "no" || len(a.Context) != 2 {
-		return "", false, &errActionRefused{Path: at, Message: `an answer's context is {"proposal": ref, "answer": "yes"|"no"}`}
+	_, hasRow := a.Context["at"]
+	if hasRow && json.Unmarshal(a.Context["at"], &row) != nil {
+		hasRow = false
 	}
-	for _, shown := range c.proposalsShown(s, a.SourceComponentID) {
-		if shown == ref {
+	keys := 2
+	if hasRow {
+		keys = 3
+	}
+	if answer != "yes" && answer != "no" || len(a.Context) != keys {
+		return "", false, &errActionRefused{Path: at, Message: `an answer's context is {"proposal": ref, "answer": "yes"|"no"}, and "at": where its Proposal is in the data, for one in a list`}
+	}
+	shown, refused := c.proposalsShownAt(s, a.SourceComponentID, row, hasRow)
+	if refused != "" {
+		return "", false, &errActionRefused{Path: at + "/proposalId", Message: refused}
+	}
+	for _, x := range shown {
+		if x == ref {
 			return ref, answer == "yes", nil
 		}
 	}
-	return "", false, &errActionRefused{Path: at + "/proposalId", Message: "this Proposal does not show " + strconv.Quote(truncate(ref, 100))}
+	where := "this Proposal"
+	if hasRow {
+		where += " at " + strconv.Quote(truncate(row, 100))
+	}
+	return "", false, &errActionRefused{Path: at + "/proposalId", Message: where + " does not show " + strconv.Quote(truncate(ref, 100))}
+}
+
+// proposalsShownAt are the refs a Proposal component shows where the
+// user clicked it: for one bound inside a list, the one at row (its place
+// in the data, as the page gives it), checked to be one of the places its
+// binding takes. A thread's surface names the row: there each row of
+// items has its own cards (item_cards.go). refused says why not.
+func (c *core) proposalsShownAt(s surface, id, row string, hasRow bool) ([]string, string) {
+	comp, _, _ := componentOf(s, id)
+	if ref, ok := comp["proposalId"].(string); ok {
+		return []string{ref}, ""
+	}
+	binding, _ := comp["proposalId"].(map[string]any)
+	path, _ := binding["@path"].(string)
+	var places [][]string
+	listed := false
+	for _, b := range a2ui.Eriphe().BoundPaths(s.Components) {
+		if b.Component == id && b.Prop == "proposalId" && !b.List {
+			places = append(places, tokens(b.Path))
+			listed = listed || slices.Contains(tokens(b.Path), "*")
+		}
+	}
+	_, thread := threadOfSurface(s.ID)
+	switch {
+	case !hasRow && listed && thread:
+		return nil, "an answer from a row of a thread's surface says where its Proposal is (at)"
+	case !hasRow:
+		return c.proposalsShown(s, id), ""
+	case path == "":
+		return nil, "this Proposal is bound to nothing"
+	}
+	concrete := path
+	if !strings.HasPrefix(path, "/") {
+		concrete = strings.TrimSuffix(row, "/") + "/" + path
+	}
+	toks := tokens(concrete)
+	if !slices.ContainsFunc(places, func(p []string) bool { return placeOf(p, toks) }) {
+		return nil, "this Proposal is not at " + strconv.Quote(truncate(row, 100))
+	}
+	var data any
+	json.Unmarshal(s.Data, &data)
+	var out []string
+	for _, v := range valuesAt(data, toks) {
+		if ref, ok := v.(string); ok {
+			out = append(out, ref)
+		}
+	}
+	return out, ""
+}
+
+// placeOf tells whether a path is one place of a pattern: the same
+// tokens, an index of a list where the pattern says "*".
+func placeOf(pattern, toks []string) bool {
+	if len(pattern) != len(toks) {
+		return false
+	}
+	for i, p := range pattern {
+		if p == "*" {
+			if n, err := strconv.Atoi(toks[i]); err != nil || n < 0 || toks[i] != strconv.Itoa(n) {
+				return false
+			}
+			continue
+		}
+		if p != toks[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // proposalsShown are the refs a Proposal component of a surface shows: its

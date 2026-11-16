@@ -588,7 +588,7 @@ func threadSourceItems(src storedSource, most int) []map[string]any {
 // show in code's section (/thread/sources): each its caption (by, when
 // read, failing, « extérieur ») and its items; and their last reads, by
 // name, for the surface's data at /<name>.
-func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[string]any, s Thread, now time.Time) map[string]any {
+func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[string]any, s Thread, cards []itemCard, now time.Time) map[string]any {
 	lang, loc := c.userLang(), c.userZone()
 	type comp = map[string]any
 	values := map[string]any{}
@@ -631,7 +631,7 @@ func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[strin
 		}
 		out.add(comp{"id": "thread_src_" + n + "_by", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/sources/" + n + "/caption"}})
 		if src.Items != nil {
-			itemsBlock(out, v, src, notes, n, lang, loc, now, &in.codeTaint)
+			itemsBlock(out, v, src, notes, cards, n, lang, loc, now, &in.codeTaint)
 		}
 		shown = append(shown, v)
 	}

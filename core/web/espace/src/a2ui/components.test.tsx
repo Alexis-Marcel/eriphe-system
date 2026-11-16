@@ -344,6 +344,29 @@ describe("the catalog's components", () => {
     expect(text(".a2-proposal-kicker")).toBe("Validé");
   });
 
+  it("say where a proposal bound in a list is, so only its own row answers it", async () => {
+    const sent: Answer[] = [];
+    const views: Record<string, { ref: string; card: number; kind: string; state: string; text: string }> = {
+      "calls:3": { ref: "calls:3", card: 3, kind: "calls", state: "pending", text: "Archiver" },
+      "calls:5": { ref: "calls:5", card: 5, kind: "calls", state: "pending", text: "Archiver" },
+    };
+    await mount(
+      "fr",
+      one(
+        [
+          { id: "root", component: "List", children: { path: "/rows", componentId: "row" } },
+          { id: "row", component: "List", children: { path: "cards", componentId: "card" } },
+          { id: "card", component: "Proposal", proposalId: { "@path": "ref" } },
+        ],
+        { rows: [{ cards: [{ ref: "calls:3" }] }, { cards: [{ ref: "calls:5" }] }] },
+      ),
+      { read: async (r) => views[r] ?? null, answer: async (a) => (sent.push(a), true) },
+    );
+    await act(async () => {});
+    await click($$(".a2-proposal-actions button")[2]);
+    expect(sent).toEqual([{ surfaceId: "t", componentId: "card", ref: "calls:5", yes: true, at: "/rows/1/cards/0" }]);
+  });
+
   it("show a day's dated proposals as ghosts, and what they overlap", async () => {
     const src = sampleProposals("fr");
     await mount("fr", galleryFixtures("fr"), src);
@@ -524,7 +547,7 @@ describe("the catalog's components", () => {
     expect($$(".a2-proposal-kicker").map((n) => n.textContent)).toEqual(["Gardé", "Oublié"]);
   });
 
-  it("answer a proposal of a list, naming the template's component", async () => {
+  it("answer a proposal of a list, naming the template's component and where it is", async () => {
     const view = (ref: string) => ({ ref, card: 1, kind: "memory", state: "pending", text: ref });
     const sent: Answer[] = [];
     await mount("fr", one([
@@ -537,7 +560,7 @@ describe("the catalog's components", () => {
     await act(async () => {});
     expect($$(".a2-proposal-text").map((n) => n.textContent)).toEqual(["memory:1", "memory:2"]);
     await click($$(".a2-proposal-actions button")[2]);
-    expect(sent).toEqual([{ surfaceId: "t", componentId: "item", ref: "memory:2", yes: true }]);
+    expect(sent).toEqual([{ surfaceId: "t", componentId: "item", ref: "memory:2", yes: true, at: "/items/1" }]);
   });
 
   it("mark a proposal drawn from external content with a small badge, the whole sentence for screen readers", async () => {

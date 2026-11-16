@@ -14,8 +14,9 @@ import (
 //     context is exactly {"text": "<literal>"}; code adds the surface and
 //     the component.
 //   - answer: the user's yes or no to one proposal, {"proposal": "<ref>",
-//     "answer": "yes"|"no"}. Only the Proposal component sends it, for the
-//     proposal it shows: an author never writes one.
+//     "answer": "yes"|"no"}, and "at": its place in the data when it is bound
+//     inside a list. Only the Proposal component sends it, for the proposal
+//     it shows: an author never writes one.
 //   - local: open, back, expand, tab. The page's own gestures; core records
 //     them ("open", the user opened a tile or a chip, also places the
 //     surface first and reads its sources again; "back" gives the layout
