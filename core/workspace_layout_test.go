@@ -68,12 +68,9 @@ func TestLayoutByWeight(t *testing.T) {
 	if !strings.HasPrefix(got, "s-2/xl@0,0 s-4/l@6,0 s-5/l") || len(l.Items) != 5 || len(l.Chips) != 0 {
 		t.Fatalf("tiles %s, chips %v", got, chipsOf(l))
 	}
-	if l.Ambient != "urgent" {
-		t.Errorf("ambient %s", l.Ambient)
-	}
-	// Nothing heavy: calm. One surface fills its rows.
+	// One surface fills its rows.
 	one := layoutOf(poolOf(50), "")
-	if len(one.Items) != 1 || one.Items[0].W != layoutCols || one.Ambient != "calm" {
+	if len(one.Items) != 1 || one.Items[0].W != layoutCols {
 		t.Fatalf("one %+v", one)
 	}
 	// None: an empty layout, never nil lists.

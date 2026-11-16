@@ -21,7 +21,6 @@ const text = (id: string, words: string): Message => ({
 });
 
 const layout: Layout = {
-  ambient: "urgent",
   items: [
     { id: "pay", title: "Paiement", size: "xl", col: 0, row: 0, w: 6, h: 5, why: "Attend ton accord" },
     { id: "week", title: "La semaine", size: "m", col: 6, row: 0, w: 6, h: 2 },

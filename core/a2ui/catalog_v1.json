@@ -13,7 +13,7 @@
       "properties": {
         "component": {"const": "Text"},
         "text": {"$ref": "common_types.json#/$defs/DynamicString"},
-        "variant": {"type": "string", "enum": ["title", "subtitle", "body", "caption"], "default": "body", "description": "Son style ; body par défaut."}
+        "variant": {"type": "string", "enum": ["title", "subtitle", "body", "caption", "mark"], "default": "body", "description": "Son style ; body par défaut. mark : une marque courte attachée à ce qui la suit (« extérieur »)."}
       },
       "required": ["component", "text"]
     },

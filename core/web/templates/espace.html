@@ -10,8 +10,9 @@ after a while (.espace-fallback), at once when the app gives up (.failed). */}}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{name}}</title>
-<meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#121a26">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f7f7f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f0f11" media="(prefers-color-scheme: dark)">
 <meta name="csrf-token" content="{{.CSRF}}">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">

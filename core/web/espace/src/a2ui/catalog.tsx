@@ -53,7 +53,7 @@ const Text = createComponentImplementation(
     name: "Text",
     schema: z.object({
       text: CommonSchemas.DynamicString,
-      variant: z.enum(["title", "subtitle", "body", "caption"]).optional(),
+      variant: z.enum(["title", "subtitle", "body", "caption", "mark"]).optional(),
     }),
   },
   ({ props }) => {
@@ -63,6 +63,8 @@ const Text = createComponentImplementation(
     // jump between them.
     if (v === "title") return <h3 className={cls}>{props.text}</h3>;
     if (v === "subtitle") return <h4 className={cls}>{props.text}</h4>;
+    // A mark: a short word attached to what follows it (« extérieur »).
+    if (v === "mark") return <span className={cls}>{props.text}</span>;
     return <p className={cls}>{props.text}</p>;
   },
 );

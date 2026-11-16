@@ -52,7 +52,7 @@ describe("workspace", () => {
   });
 
   const grid: Layout = {
-    ambient: "calm", focus: "week",
+    focus: "week",
     items: [
       { id: "week", title: "La semaine", size: "m", col: 0, row: 0, w: 6, h: 2 },
       { id: "pay", title: "Paiement", size: "s", col: 6, row: 0, w: 3, h: 1 },

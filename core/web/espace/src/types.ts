@@ -11,7 +11,6 @@ export type TileSize = "s" | "m" | "l" | "xl";
 export type Tile = { id: string; title: string; size: TileSize; col: number; row: number; w: number; h: number; why?: string; pinned?: boolean; related?: boolean; urgent?: boolean };
 export type FoldedChip = { id: string; title: string; why?: string; closed?: boolean };
 export type Layout = {
-  ambient: "calm" | "decision" | "urgent";
   focus?: string;
   focusBy?: string; // "brain": Eriphe put it on stage, answering the user (workspace_front.go)
   previous?: string; // what was on stage before it: a tile reduced next to it

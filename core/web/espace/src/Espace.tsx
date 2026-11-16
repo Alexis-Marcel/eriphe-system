@@ -299,11 +299,10 @@ export function Espace({ boot }: { boot: data.Boot }) {
   }, [live, gallery]);
 
   const hint = sfocusTitle ? t("espace.input.about", sfocusTitle) : t("espace.input");
-  const ambient = (onSurfaces ? shown!.ambient : undefined) ?? "calm";
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className={`espace ambient-${ambient}${narrow ? " narrow" : ""}${full ? " focused" : ""}`} style={!narrow && panel ? { gridTemplateColumns: `${panel}px minmax(0, 1fr)` } : undefined}>
+      <div className={`espace${narrow ? " narrow" : ""}${full ? " focused" : ""}`} style={!narrow && panel ? { gridTemplateColumns: `${panel}px minmax(0, 1fr)` } : undefined}>
         <aside className="eriphe-panel" aria-live="polite">
           <div className="eriphe-head">
             <p className="eriphe-name">{boot.name}</p>
@@ -324,7 +323,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
             </p>
           )}
           <div className="eriphe-actions">
-            {sfocus && <button className="btn ghost" onClick={backSurface}>{t("espace.back")}</button>}
+            {sfocus && <button className="btn" onClick={backSurface}>{t("espace.back")}</button>}
           </div>
           <form className="eriphe-input" onSubmit={onSubmit}>
             <input name="text" autoComplete="off" placeholder={hint} aria-label={hint} />

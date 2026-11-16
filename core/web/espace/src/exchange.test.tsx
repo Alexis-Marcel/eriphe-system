@@ -200,7 +200,6 @@ const surface = (id: string, words: string) => ({
 
 // A layout with the thread's surface open, or none open.
 const layout = (focus?: string): Layout => ({
-  ambient: "calm",
   focus,
   items: [
     { id: "thread-3", title: "Site portfolio", size: "l", col: 0, row: 0, w: 6, h: 3 },

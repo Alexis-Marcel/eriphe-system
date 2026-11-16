@@ -63,7 +63,6 @@ export function surfaceFixtures(lang: Lang): Message[] {
 // layout the event stream's "layout" carries (workspace_layout.go).
 export function sampleLayout(lang: Lang): Layout {
   return {
-    ambient: "calm",
     items: [{ id: SAMPLE_SURFACE, title: words[lang].title, size: "l", col: 0, row: 0, w: 12, h: 3 }],
     chips: [],
   };
@@ -249,7 +248,6 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
   // In eriphe-core's order (workspace_layout.go): what waits for the user,
   // then the urgent, the new, the quiet, what ended.
   const layout: Layout = {
-    ambient: "decision",
     items: [
       { id: "thread-101", title: en ? "The club's site" : "Le site du club", size: "l", col: 0, row: 0, w: 4, h: 3 },
       { id: "q-card-0", title: t, size: "m", col: 4, row: 0, w: 3, h: 2 },

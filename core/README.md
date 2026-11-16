@@ -1330,7 +1330,7 @@ by code from the thread's data (#468): it never depends on a model remembering t
   at once, never waiting for a tool), and shown under code's frame in place of the default
   composition, each root renamed `thread_part_<block>`; a block that may carry someone else's
   words (written after reading external content, or giving or binding a source not trusted) is
-  shown in a `Column` (`thread_external_<block>`) with « extérieur » above it
+  shown in a `Column` (`thread_external_<block>`) with « extérieur », a Text of variant `mark`, above it
   (`thread_mark_<block>`), the others as they are. The call answers the blocks in order, as
   `workspace_read` (`blocks`, on a thread one holds) and `read_thread` do; the surface stays;
   code keeps the rest. A block that does not hold with the rest when code writes the surface (a
@@ -3308,14 +3308,13 @@ after the `a2ui` event of the surfaces it names and whenever it changes, and kep
 (`workspace_layout`):
 
 ```json
-{"ambient": "urgent", "focus": "week",
+{"focus": "week",
  "items": [{"id": "q-card-12", "title": "Accès à un outil", "size": "xl",
             "col": 0, "row": 0, "w": 6, "h": 5, "why": "Attend ton accord"}],
  "chips": [{"id": "news", "title": "Nouvelles", "why": "Rien de pressé"}]}
 ```
 
-`col` and `row` count from 0, `w` and `h` in cells; `ambient` is `urgent` with a tile of weight 90
-or more, `decision` with one of 80, `calm` otherwise. With a surface open, a tile related to it has
+`col` and `row` count from 0, `w` and `h` in cells. With a surface open, a tile related to it has
 `"related": true`; `focusBy` is `brain` when Eriphe put it on stage (below), and `previous` names
 the surface that was on stage just before it. A tile of weight 80 or more has `"urgent": true`:
 laying a surface the user opens out at once, the page keeps it in front. A tile placed has
@@ -3645,14 +3644,22 @@ already on its way does not undo the click; core's then comes in with Motion's m
 `back` that core refused or never got is undone, with a toast. A proposal's Oui or Non says at
 once that the answer is on its way (the pressed button spins, both are disabled). Closing a tile was already shown at once.
 
-**The look** (`espace.css`, `fonts.css`), the prototype's scenarios': paper tiles on the dark
-field, their title a small kicker over the content, their three buttons out of sight until the
-tile is hovered or holds the keyboard's focus; what a tile is shows by the component at its root
-(`:has`), never by its tool: a proposal waiting is ringed in the decision's blue, a warning is an
-amber tile, an error a late one, their own box giving way to the tile's; the surface open is
-ringed in blue. Eriphe's words and the titles are in Bricolage Grotesque, the rest in Hanken
-Grotesk, served by eriphe-core with the app (`@fontsource-variable`, Latin, SIL Open Font
-License; `font-src 'self'`). With no
+**The look** (`espace.css`, `fonts.css`, prototype `?moderne` and `?travail`): neutral greys,
+light or dark as the system says (`prefers-color-scheme`; the shell's `color-scheme` and
+`theme-color` follow it), flat cards on a quiet ground, hairlines rather than shadows. Colour says a
+state, never a tool or a subject: the accent for what waits for the user, hot for what is urgent
+or failed, warn for a warning or someone else's words, ok for what is done; each has a fill and a
+text tone that reads at WCAG AA on the card and on its own soft fill. The conversation is a tile
+like the others, in the same frame. A tile's title heads it, its state a small pill beside it;
+its three buttons stay out of sight until the tile is hovered or holds the keyboard's focus (on a
+touch screen they sit in the head's line). What a tile is shows by the component at its root
+(`:has`), never by its tool: a proposal waiting edges it in the accent, a warning or an error
+tints it, their own box giving way to the tile's. Code's « extérieur » beside a block that may
+carry someone else's words is a Text of variant `mark`: a small tag attached to the block under
+it, which it edges. One typeface, Geist (Vercel, `geist` 1.9.2, unchanged): the sans as one
+variable font, the mono in its one weight, under the SIL Open Font License
+(`web/espace/src/fonts/OFL.txt`), served by eriphe-core with the app (`font-src 'self'`, nothing
+fetched elsewhere). With no
 surface at all, Eriphe says so in the column (`espace.empty`): never an empty grid without a word.
 The chat is a narrow column, the whole height; its right edge can be dragged to set its width
 (240-640 px, kept in the browser, double-click resets), with a link to the conversation

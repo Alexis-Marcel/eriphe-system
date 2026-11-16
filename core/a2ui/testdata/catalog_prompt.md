@@ -39,7 +39,7 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
 `*` : obligatoire. « fixe » : une valeur écrite telle quelle, sans liaison.
 
 - **Text** : Un texte court.
-  text* texte · variant title|subtitle|body|caption (Son style ; body par défaut)
+  text* texte · variant title|subtitle|body|caption|mark (Son style ; body par défaut. mark : une marque courte attachée à ce qui la suit (« extérieur »))
 - **Markdown** : Un texte plus long en Markdown simple (titres, listes, gras, liens), sans HTML ni image.
   text* texte
 - **Image** : Une image.
