@@ -235,6 +235,9 @@ func (w *web) handleEnableSkill(rw http.ResponseWriter, r *http.Request, s *sess
 		w.toast(rw, tr(w.lang(r), "err.internal"), false)
 		return
 	}
+	if on {
+		w.c.openSkillThreads(name, true) // its thread shows from now (task_threads.go)
+	}
 	log.Printf("web: skill %s on: %v", name, on)
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)

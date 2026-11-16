@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -406,18 +407,32 @@ func (c *core) setThreadByTask(ctx context.Context, id int64, in setThreadIn, w 
 // threadDeadlineStep is the key of the deadline set_thread makes or moves.
 const threadDeadlineStep = "deadline"
 
-// skillThread is the thread of a skill's run: the one of its alias, found
-// again; reopened if it ended; else opened standing, titled by the skill,
-// in the words the user approved with it. A run of a poll monitor's new
-// items gives it that monitor's read as its source, the items noted by
-// the ids its events carry (skillThreadSource).
+// skillThreadMu holds the opening of a skill's thread: a run and an
+// approval never open two for one alias.
+var skillThreadMu sync.Mutex
+
+// skillThread is the thread of a skill's run: the one of its alias (most
+// often opened when the skill was turned on, openSkillThreads), found
+// again; reopened if it ended; else opened (openSkillThread). A run of a
+// poll monitor's new items gives it that monitor's read as its source, the
+// items noted by the ids its events carry.
 func (c *core) skillThread(sk triggeredSkill, alias string, events []journalEvent) (Thread, error) {
+	return c.openSkillThread(sk, alias, monitorOfEvents(events))
+}
+
+// openSkillThread finds the thread of a skill's alias again, reopened if
+// it ended, else opens it standing, titled by the skill, in the words the
+// user approved with it; the poll monitor named (if any) becomes its
+// source with items, once (monitorThreadSource).
+func (c *core) openSkillThread(sk triggeredSkill, alias, monitor string) (Thread, error) {
+	skillThreadMu.Lock()
+	defer skillThreadMu.Unlock()
 	by := "skill:" + sk.Name
 	s, _, err := c.openThreadOnce(threadIn{Title: skillTitle(sk.Name), Goal: sk.Manifest.Description, Alias: alias, Ends: endsStanding, exact: true}, nil, by)
 	if err != nil {
 		return s, err
 	}
-	if src, ok := c.skillThreadSource(events); ok && !slices.ContainsFunc(c.threadSources(s.ID), func(x storedSource) bool { return x.Name == src.Name }) {
+	if src, ok := c.monitorThreadSource(monitor); ok && !slices.ContainsFunc(c.threadSources(s.ID), func(x storedSource) bool { return x.Name == src.Name }) {
 		if _, err := c.addThreadSource(s.ID, src, by); err != nil {
 			log.Printf("skill %s: thread %d: source %s: %v", sk.Name, s.ID, src.Name, err)
 		}
@@ -425,18 +440,79 @@ func (c *core) skillThread(sk triggeredSkill, alias string, events []journalEven
 	return s, nil
 }
 
-// skillThreadSource is the read of the poll monitor whose new items a
-// run's events all are, as a source with items: its list, each item by
-// the id its events carry.
-func (c *core) skillThreadSource(events []journalEvent) (threadSource, bool) {
+// openSkillThreads gives each skill on that acts on a thread (lent
+// eriphe-threads, with an alias known before any event: skillOwnThread)
+// its thread now, so it shows from the start, its monitor's list read by
+// code; no model runs. only names one skill ("" for all). reopen, when the
+// user approves or turns a skill on, reopens its thread if it ended; else
+// (at start) only a skill whose alias has no thread gets one.
+func (c *core) openSkillThreads(only string, reopen bool) {
+	for _, sk := range c.triggeredSkills() {
+		if (only != "" && sk.Name != only) || !containsStr(sk.Trigger.Tools, threadsServer) {
+			continue
+		}
+		alias, monitor := skillOwnThread(sk.Trigger)
+		if alias == "" {
+			continue
+		}
+		if !reopen {
+			if key, err := aliasKey(alias); err == nil {
+				if _, ok := c.aliasThread(key); ok {
+					continue
+				}
+			}
+		}
+		if s, err := c.openSkillThread(sk, alias, monitor); err != nil {
+			log.Printf("skill %s: its thread: %v", sk.Name, err)
+		} else {
+			log.Printf("skill %s: its thread %d", sk.Name, s.ID)
+		}
+	}
+}
+
+// skillOwnThread is the alias of a skill's thread as its trigger says it,
+// before any event: its thread:, else, on a monitor's events, the
+// monitor's key (as skillRunAlias makes it from them); and the monitor
+// whose new items it handles, "" for none. A "" alias: its thread is only
+// known from its events.
+func skillOwnThread(st *skillTrigger) (alias, monitor string) {
+	if st == nil {
+		return "", ""
+	}
+	key := strings.TrimSpace(st.Filters["key"])
+	monitors := len(st.Kinds) > 0 && key != "" && !strings.Contains(key, ":")
+	for _, k := range st.Kinds {
+		monitors = monitors && strings.HasPrefix(k, "monitor.")
+	}
+	if monitors && containsStr(st.Kinds, evMonitorNew) {
+		monitor = key
+	}
+	switch {
+	case st.Thread != "":
+		return st.Thread, monitor
+	case monitors:
+		alias, _ = aliasKey(key)
+	}
+	return alias, monitor
+}
+
+// monitorOfEvents is the poll monitor whose new items a run's events all
+// are, "" when they are not.
+func monitorOfEvents(events []journalEvent) string {
 	name := ""
 	for _, e := range events {
 		m, ok := strings.CutPrefix(e.Source, "monitor:")
 		if e.Kind != evMonitorNew || !ok || (name != "" && m != name) {
-			return threadSource{}, false
+			return ""
 		}
 		name = m
 	}
+	return name
+}
+
+// monitorThreadSource is the read of a poll monitor of new items, on, as a
+// source with items: its list, each item by its id.
+func (c *core) monitorThreadSource(name string) (threadSource, bool) {
 	if name == "" {
 		return threadSource{}, false
 	}
