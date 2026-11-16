@@ -787,7 +787,7 @@ describe("the catalog's components", () => {
     expect(document.querySelectorAll("[style]")).toHaveLength(0);
   });
 
-  it("draw a thread's items grouped by their notes, counted, a due date and « extérieur » aside, no action on a row", async () => {
+  it("draw a thread's items grouped by their notes, counted, a due date and « extérieur » aside, no button in the item itself", async () => {
     await mount("fr", threadFixtures("fr"));
     const items = (sel: string) => $$(`[data-surface=thread-102] ${sel}`);
     expect(items(".a2-list-horizontal .a2-metric").map((m) => m.textContent)).toEqual(["à faire1", "à regarder1", "rien à faire1"]);

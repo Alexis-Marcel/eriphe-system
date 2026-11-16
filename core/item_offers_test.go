@@ -103,6 +103,21 @@ func TestNoteActionsChecked(t *testing.T) {
 	if n := c.itemNotes(id); len(n) != 1 || len(n[0].Actions) != 1 || n[0].Actions[0].Tool != "mcp__monitor__silence" {
 		t.Fatalf("notes %+v", n)
 	}
+	// A watcher's run offers through eriphe-threads one of its tools, by
+	// the name the catalog gives it or server/tool; one it is not lent is
+	// refused (threadCaller.lends).
+	task := runsOfSkill(t, c, "veille-alertes")[0].Task
+	if out, isErr := callTaskThreads(t, c, task, "note_item", map[string]any{"source": "alertes", "item": "c", "note": "À couper",
+		"actions": []any{map[string]any{"label": "Faire taire", "tool": "monitor/silence", "args": map[string]any{"uid": offerItemArg}}}}); isErr {
+		t.Fatalf("note_item with an action: %v", out)
+	}
+	notes := c.itemNotes(id)
+	if i := slices.IndexFunc(notes, func(n itemNote) bool { return n.Item == "c" }); i < 0 || len(notes[i].Actions) != 1 || notes[i].Actions[0].bound("c")["uid"] != "c" {
+		t.Fatalf("notes %+v", notes)
+	}
+	if err := (threadCaller{grant: []string{threadsServer}}).lends("mcp__monitor__silence"); err == nil {
+		t.Error("a tool not lent is lent")
+	}
 	// An author may never write an offer: code places it.
 	errs := a2ui.CheckActions("s", json.RawMessage(`[{"id":"b","component":"Button","label":"x","action":{"event":{"name":"offer","context":{"thread":1}}}}]`))
 	if len(errs) != 1 || !strings.Contains(errs[0].Message, "placed by code") {
@@ -151,6 +166,7 @@ func TestItemOffers(t *testing.T) {
 		comp string
 		ctx  map[string]any
 	}{
+		"an empty item":              {"thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "", "offer": key}},
 		"an item not listed":         {"thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "z", "offer": key}},
 		"an action not on it":        {"thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": "0123456789ab"}},
 		"another thread":             {"thread_src_0_offer", map[string]any{"thread": id + 1, "source": "alertes", "item": "b", "offer": key}},
@@ -189,7 +205,7 @@ func TestItemOffers(t *testing.T) {
 	if got := rowCardRefs(row); len(got) != 1 || got[0] != ref {
 		t.Fatalf("row b cards %v", got)
 	}
-	if p := c.proposalOf(cardCalls, batch); !p.Pending || p.Text("fr") != callVerb(asks[0].Call, "fr") || !strings.Contains(p.Origin("fr").From, "b") {
+	if p := c.proposalOf(cardCalls, batch); !p.Pending || p.Text("fr") != callVerb(asks[0].Call, "fr") || !strings.HasSuffix(p.Origin("fr").From, " · un élément du fil") {
 		t.Fatalf("card %+v %q %+v", p, p.Text("fr"), p.Origin("fr"))
 	}
 	if err := answerAt(c, id, "thread_src_0_card", ref, at+"/cards/0", true); err != nil {
@@ -197,7 +213,9 @@ func TestItemOffers(t *testing.T) {
 	}
 	waitSilenced(t, fm, "b")
 
-	// The group: one card, a call per item of it.
+	// The group: one card, a call per item of it; its server trusted, its
+	// items' source named.
+	c.setServerTrust("monitor", true, "user")
 	if err := offerClick(c, id, "thread_src_0_group_offer", map[string]any{"thread": id, "source": "alertes", "state": itemStateNone, "offer": key}); err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +227,7 @@ func TestItemOffers(t *testing.T) {
 		t.Fatalf("group asks %+v", asks)
 	}
 	p := c.proposalOf(cardCalls, batch)
-	if len(p.Fields) != 3 || !strings.Contains(p.Text("fr"), "3") || !strings.Contains(p.Origin("fr").From, "3 éléments") || !strings.Contains(p.Origin("fr").Yes, "3") {
+	if len(p.Fields) != 3 || !strings.Contains(p.Text("fr"), "3") || !strings.HasSuffix(p.Origin("fr").From, " · 3 éléments de alertes") || !strings.Contains(p.Origin("fr").Yes, "3") {
 		t.Fatalf("group card %+v %q %+v", p, p.Text("fr"), p.Origin("fr"))
 	}
 	c.keepThreadSurface(id)

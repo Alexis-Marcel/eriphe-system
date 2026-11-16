@@ -309,7 +309,7 @@ func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string,
 	raw, _ := json.Marshal(input)
 	var id int64
 	source := c.turnSource() // in a turn about a thread, the card is the thread's (thread_turn.go)
-	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE call LIKE ? AND input = ? AND state = ?`, tool+" %", string(raw), startProposed).Scan(&id) != nil {
+	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE call LIKE ? AND input = ? AND state = ? AND batch = 0`, tool+" %", string(raw), startProposed).Scan(&id) != nil {
 		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: c.callNeed(tool, input, c.pool.facts(tool, input)),
 			Call: tool + " " + string(fields), Input: string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", "), source: source})

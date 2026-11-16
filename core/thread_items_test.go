@@ -127,7 +127,8 @@ func TestThreadItemNotes(t *testing.T) {
 
 // A note written after reading external content is shown, marked
 // « extérieur », taints the surface for the models and its row carries no
-// action; reading it taints the brain's turn, so where the subject stands
+// ask (an action offered on it is a Button whose click only makes a card,
+// item_offers.go); reading it taints the brain's turn, so where the subject stands
 // is then refused (remember kind progress). Its author and taint are
 // code's: a lead's note says so.
 func TestThreadItemNoteTainted(t *testing.T) {

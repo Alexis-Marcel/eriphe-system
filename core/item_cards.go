@@ -155,9 +155,20 @@ func (c *core) callsOrigin(first accessQuestion, items []string, calls int, lang
 		o.title = c.cleanThreadTitle(o.thread)
 	}
 	from := o.from(lang)
-	item := fmt.Sprintf(tr(lang, "card.from.item"), truncate(oneLine(first.Item), 80), truncate(first.Source, 60))
-	if len(items) > 1 {
+	// The item by its id and its source only when neither may be someone
+	// else's words: a source of a trusted server, calls kept clean; else
+	// code's words alone.
+	named := first.Tainted == "" && c.trustedItemSource(first.Thread, first.Source)
+	var item string
+	switch {
+	case len(items) > 1 && named:
 		item = fmt.Sprintf(tr(lang, "card.from.items"), len(items), truncate(first.Source, 60))
+	case len(items) > 1:
+		item = fmt.Sprintf(tr(lang, "card.from.itemsn"), len(items))
+	case named:
+		item = fmt.Sprintf(tr(lang, "card.from.item"), truncate(oneLine(first.Item), 80), truncate(first.Source, 60))
+	default:
+		item = tr(lang, "card.from.itemn")
 	}
 	if from != "" {
 		from += " · "
@@ -167,6 +178,17 @@ func (c *core) callsOrigin(first accessQuestion, items []string, calls int, lang
 		yes = fmt.Sprintf(tr(lang, "card.yes.calls"), calls)
 	}
 	return cardOrigin{Thread: first.Thread, From: from + item, Yes: yes}
+}
+
+// trustedItemSource tells whether a thread's source is read from a server
+// the user trusts: its items' ids are not someone else's words.
+func (c *core) trustedItemSource(thread int64, name string) bool {
+	for _, src := range c.threadSources(thread) {
+		if src.Name == name {
+			return c.trustsServer(src.surface().spec().Server) // its name is a slug (threadSource.check)
+		}
+	}
+	return false
 }
 
 // decideCalls answers every call of the card still waiting.

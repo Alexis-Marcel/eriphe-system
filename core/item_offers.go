@@ -286,7 +286,7 @@ func offerOf(s surface, a a2ui.Action) (thread int64, source, item, state, key s
 	var got int64
 	_, hasItem := a.Context["item"]
 	_, hasState := a.Context["state"]
-	if json.Unmarshal(a.Context["thread"], &got) != nil || got != th || len(a.Context) != 4 || hasItem == hasState || str("source") == "" || !offerKey(str("offer")) {
+	if json.Unmarshal(a.Context["thread"], &got) != nil || got != th || len(a.Context) != 4 || hasItem == hasState || hasItem && str("item") == "" || str("source") == "" || !offerKey(str("offer")) {
 		return 0, "", "", "", "", &errActionRefused{Path: at, Message: `an offer's context is {"thread", "source", "item" or "state", "offer"}, for this thread`}
 	}
 	return th, str("source"), str("item"), str("state"), str("offer"), nil
@@ -356,9 +356,15 @@ func (c *core) offer(ctx context.Context, thread int64, calls []offerCall) (stri
 		if id := c.itemAskWaiting(thread, oc.note.Source, oc.note.Item, oc.action.Tool, string(raw)); id != 0 {
 			continue
 		}
-		rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		fields, _ := json.Marshal(cardFields(c.callContext(rctx, oc.action.Tool, input), input))
-		cancel()
+		// What the call acts on, read for one item only: a group's click
+		// does not wait on N reads.
+		var known []cardField
+		if len(calls) == 1 {
+			rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			known = c.callContext(rctx, oc.action.Tool, input)
+			cancel()
+		}
+		fields, _ := json.Marshal(cardFields(known, input))
 		n := c.callNeed(oc.action.Tool, input, c.pool.facts(oc.action.Tool, input))
 		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, account, call, input, tainted, created, thread, source, item, batch)
 			VALUES ('', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, n.Server, n.Category, n.Account, oc.action.Tool+" "+string(fields), string(raw),

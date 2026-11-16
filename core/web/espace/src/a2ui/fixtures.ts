@@ -113,7 +113,7 @@ export function sampleProposals(lang: Lang): Proposals {
       state: "pending",
       kind: "calls",
       text: en ? "use “move funds”" : "utiliser « move funds »",
-      from: en ? "Thread #102 · item Courant of ledger" : "Fil n° 102 · élément Courant de ledger",
+      from: en ? "Thread #102 · an item of the thread" : "Fil n° 102 · un élément du fil",
       yes: en ? "On Yes, this call runs once, exactly as shown." : "Sur Oui, cet appel part une seule fois, tel qu'il est montré.",
       fields: [{ name: en ? "use “move funds”" : "utiliser « move funds »", value: "to : Courant" }],
     },
