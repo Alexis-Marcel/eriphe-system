@@ -61,6 +61,7 @@ const (
 	threadPartRoot      = "thread_part"   // the holder's part's root, renamed
 	threadPartKey       = "thread_part:"  // + the thread's id: the holder's part, JSON
 	threadShownKey      = "thread_shown:" // + the thread's id: a hash of what its surface shows
+	threadAgainKey      = "thread_again:" // + the thread's id: when a link showed it again once ended, unix
 	threadPartMax       = 24 << 10        // components and data of a part, each
 	threadAfterEnd      = time.Hour       // a done thread's surface stays this long at least
 	threadLineMax       = 80              // runes of the one-line summary
@@ -292,6 +293,28 @@ func (c *core) threadShownCards() map[string]int64 {
 	return out
 }
 
+// showThreadAgain puts an ended thread's surface back on the workspace, for
+// as long as one that just ended: a link to it (/espace?open=thread-<id>,
+// from a card, the tasks, a skill's run) opens it. Not one the user put
+// away (« Ranger »), nor a day's: its day is over.
+func (c *core) showThreadAgain(id int64, now time.Time) {
+	s, err := c.thread(id)
+	if err != nil || s.active() || s.tidied > 0 || s.Ends == endsDay {
+		return
+	}
+	c.store.set(threadAgainKey+strconv.FormatInt(id, 10), strconv.FormatInt(now.Unix(), 10))
+	c.keepThreadSurface(id)
+}
+
+// threadAgain is when a link last showed an ended thread again; zero if never.
+func (c *core) threadAgain(id int64) time.Time {
+	n, err := strconv.ParseInt(c.store.get(threadAgainKey+strconv.FormatInt(id, 10)), 10, 64)
+	if err != nil || n == 0 {
+		return time.Time{}
+	}
+	return time.Unix(n, 0)
+}
+
 // threadPart is the part the thread's holder added to its surface.
 type threadPart struct {
 	Author     string          `json:"author"`
@@ -325,6 +348,9 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 			return in, false // its day is over, or the user put it away
 		}
 		end := s.Ended
+		if again := c.threadAgain(s.ID); again.After(end) {
+			end = again // shown again: as long as one that just ended
+		}
 		if end.IsZero() {
 			end = now
 		}
@@ -492,7 +518,7 @@ func threadLine(s Thread, steps []threadSurfaceStep, asks []int64, lang string) 
 // keepThreadSurface writes a thread's surface as its data says, when what
 // it shows changed: the hook of each change of a thread. An active thread
 // always has its surface; an ended one keeps it until its time is over,
-// never gets it again once it left.
+// and gets it again only when a link shows it again (showThreadAgain).
 func (c *core) keepThreadSurface(id int64) {
 	if c.conf() == nil {
 		return // not configured yet: its tick gives it its surface
@@ -504,15 +530,9 @@ func (c *core) keepThreadSurface(id int64) {
 		return
 	}
 	sid := threadSurfaceID(id)
-	old, err := c.surface(sid)
+	_, err = c.surface(sid)
 	exists := err == nil
-	if exists && old.Author != threadAuthor(id) {
-		// Its id taken before threads had their surface (a lead's own):
-		// the thread's takes its place.
-		c.surfaceRemove(sid, surfaceByLifetime)
-		exists = false
-	}
-	if !s.active() && !exists {
+	if !s.active() && !exists && c.threadAgain(id).IsZero() {
 		return
 	}
 	all, err := c.steps(id)

@@ -146,13 +146,12 @@ func (c *core) blockHead(out *threadComps, data map[string]any, s Thread, steps 
 	}
 }
 
-// blockControls composes the head's buttons for a thread that runs steps
-// (led, which ends on its goal): Pause while it runs, Resume while paused
-// (more time when its budget held it), and Stop. A light thread has none:
-// it reads no ends, so every light thread is drawn the same. Each is
-// code's (controlOf).
+// blockControls composes the head's buttons, each code's (controlOf):
+// Stop on any active thread stopThread takes (not a standing one, which
+// never ends); on a thread that runs steps (led), Pause while it runs and
+// Resume while paused (more time when its budget held it) before it.
 func blockControls(out *threadComps, s Thread, lang string) {
-	if !s.active() || !s.led() {
+	if !s.active() || s.standing() {
 		return
 	}
 	type comp = map[string]any
@@ -164,6 +163,7 @@ func blockControls(out *threadComps, s Thread, lang string) {
 	}
 	var row []string
 	switch {
+	case !s.led():
 	case s.Phase == phaseRunning:
 		row = append(row, button("pause", "thread.surface.pause", "default"))
 	case s.Phase == phasePaused && s.Held == heldBudget:

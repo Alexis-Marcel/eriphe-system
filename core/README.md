@@ -1107,7 +1107,8 @@ the decision goes back to the user through the brain.
 ([a thread's surface](#a-threads-surface-thread_surfacego)): its cards, « C'est fait », a
 choice's options, Pause, Resume and Stop, all code's buttons. A link to a thread (a card's origin,
 the tasks panel, a skill's run) opens its surface: `/espace?open=thread-<id>`, which the page opens once
-the surface is there. The user's word to a lead is a message written with the thread open: the
+the surface is there. An ended thread whose surface has left is shown again first
+(`showThreadAgain`), for as long as one that just ended; not one put away, nor a `day` thread. The user's word to a lead is a message written with the thread open: the
 brain passes it on (`tell_lead`). The tasks panel of the conversation shows the threads open first.
 
 #### A thread's surface (`thread_surface.go`)
@@ -1263,11 +1264,12 @@ by code from the thread's data (#468): it never depends on a model remembering t
 - **A choice** that waits shows one button per option, each sending `choose` with
   `{"thread": <id>, "step": "<key>", "option": "<option>"}`; code checks it against the button it
   wrote (`chooseOf`: the step still waits, the option is one of its own), then `chooseStep`.
-- **Pause, Resume, Stop** (`thread_controls`), in the head of a thread that runs steps (led) while
-  it is active: `control` with `{"thread": <id>, "do": "pause"|"resume"|"stop"}`, checked against
-  the button (`controlOf`), then `pauseThread`, `resumeThread` (by the user: more time when its
-  budget held it, « Donner plus de temps ») or `stopThread`. A light thread has none, so every
-  light thread is drawn the same.
+- **Pause, Resume, Stop** (`thread_controls`), in the head of an active thread: `control` with
+  `{"thread": <id>, "do": "pause"|"resume"|"stop"}`, checked against the button (`controlOf`),
+  then `pauseThread`, `resumeThread` (by the user: more time when its budget held it, « Donner plus
+  de temps ») or `stopThread`. Stop is on every thread `stopThread` takes (a light one is dropped);
+  Pause and Resume only on a thread that runs steps (led). A standing thread has none: it never
+  ends.
 - **« Ranger »** (`thread_tidy`), on an ended `goal` thread's surface only, sends `tidy` with
   `{"thread": <id>}`; code checks it against the button it wrote (`tidyOf`), then `tidyThread`
   puts the thread away: its surface leaves at once (a day thread's leaves at its end, a standing
@@ -3750,7 +3752,7 @@ writes.
 | `stepDone` | never by an author: code places it on a thread's surface, the « C'est fait » of a step the user does, `{"thread": <id>, "step": "<key>"}` | checked against the Button code wrote there (its thread and step), for a step of kind `user` that waits; then `settleUserStep`, the engine's `userStepDone` (409 once it no longer waits) |
 | `tidy` | never by an author: code places it on an ended thread's surface, its « Ranger », `{"thread": <id>}` | checked against the Button code wrote there (its thread); then `tidyThread`: the surface leaves, the thread is kept (409 once put away) |
 | `choose` | never by an author: code places it on a thread's surface, one Button per option of a choice step that waits, `{"thread": <id>, "step": "<key>", "option": "<option>"}` | checked against the Button code wrote there (its whole context), for a choice step that still waits and one of its own options; then `chooseStep` |
-| `control` | never by an author: code places it in the head of a thread that runs steps, `{"thread": <id>, "do": "pause"\|"resume"\|"stop"}` | checked against the Button code wrote there (its whole context); then `pauseThread`, `resumeThread` (by the user) or `stopThread` |
+| `control` | never by an author: code places it in the head of an active thread (Stop; Pause and Resume on one that runs steps), `{"thread": <id>, "do": "pause"\|"resume"\|"stop"}` | checked against the Button code wrote there (its whole context); then `pauseThread`, `resumeThread` (by the user) or `stopThread` |
 | local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer |
 
 Anything else (another name, a function call, a component that carries no such action, an answer

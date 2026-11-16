@@ -405,13 +405,8 @@ func TestThreadSurfaceHeldStartAndTick(t *testing.T) {
 		t.Fatalf("after the yes: %s %+v", s.Components, meta)
 	}
 
-	// Gone, or its id taken by a lead's own before: the tick gives it back.
+	// Gone: the tick gives it back.
 	c.surfaceRemove(s.ID, surfaceByLifetime)
-	lead := fmt.Sprintf("lead:%d", th.ID)
-	if _, _, err := c.fixtureSurface(lead, surfaceIn{ID: "lead-made", Title: "x", Components: json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil {
-		t.Fatal(err)
-	}
-	c.store.db.Exec(`UPDATE surfaces SET id = ? WHERE id = 'lead-made'`, s.ID)
 	c.threadsTick(time.Now())
 	if s, _, _ = threadSurfaceOf(t, c, th.ID); s.Author != threadAuthor(th.ID) {
 		t.Fatalf("not given back: %+v", s)
