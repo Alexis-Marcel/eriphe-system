@@ -123,7 +123,7 @@ func TestNoteActionsChecked(t *testing.T) {
 		t.Error("a tool not lent is lent")
 	}
 	// An author may never write an offer: code places it.
-	errs := a2ui.CheckActions("s", json.RawMessage(`[{"id":"b","component":"Button","label":"x","action":{"event":{"name":"offer","context":{"thread":1}}}}]`))
+	errs := a2ui.CheckActions("s", 0, json.RawMessage(`[{"id":"b","component":"Button","label":"x","action":{"event":{"name":"offer","context":{"thread":1}}}}]`))
 	if len(errs) != 1 || !strings.Contains(errs[0].Message, "placed by code") {
 		t.Fatalf("errors %+v", errs)
 	}

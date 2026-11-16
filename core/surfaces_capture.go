@@ -245,6 +245,6 @@ func (c *core) handleTaskMedia(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"src": surfaceMediaScheme + m.ID, "type": m.Type, "size": m.Size,
-		"note": "Give src to whoever holds the thread: it writes it as an Image's url in its part of " + m.Surface + " (only there), with a Link to the page's address beside it.",
+		"note": "Give src to whoever holds the thread: it writes it as an Image's url in a block of its part of " + m.Surface + " (only there), with a Link to the page's address beside it.",
 	})
 }

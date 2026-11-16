@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -27,17 +28,17 @@ import (
 //   - Code's section: generic blocks in one fixed order, the same for
 //     every thread (thread_blocks.go): a child's crumb, head, ended,
 //     yours, children, items, live, where, since, steps. Its component
-//     ids start with thread_, its data is under /thread.
+//     ids start with thread_, its data is under /thread, the user's marks
+//     with it (/thread/marks, thread_marks.go).
 //   - The holder's part: who holds the thread (the brain, or its lead)
-//     may add one with surface_write on thread-<id> (a state block, points
-//     to see, a diff, a link). It is kept apart (threadPartKey), checked
-//     alone, and shown under code's section, its root renamed thread_part.
-//     A new write replaces it, surface_remove takes it away. Its sources
-//     become the thread's (thread_sources.go): read by code, the surface
-//     written from their last read, so a change of the thread rewrites it
-//     at once and never waits for a tool.
+//     composes it by named blocks with surface_write on thread-<id> (a
+//     state, points to see, a diff, a link), each kept apart, checked
+//     alone, and shown under code's section in its order (thread_part.go).
+//     Their sources become the thread's (thread_sources.go): read by code,
+//     the surface written from their last read, so a change of the thread
+//     rewrites it at once and never waits for a tool.
 //   - Taint, per part: a step whose task read external content, and a
-//     part written after reading some, say « extérieur » where they show.
+//     block written after reading some, say « extérieur » where they show.
 //     For the models that read the workspace, the surface is tainted as
 //     soon as one part is (surfaceLook.CodeTaint, AuthorTaint). Its
 //     Proposals still answer in place (surfaceLook.Answers) unless the
@@ -60,11 +61,11 @@ const (
 	threadSurfacePrefix = "thread-"       // + the thread's id: its surface
 	threadCompPrefix    = "thread_"       // code's component ids
 	threadDataKey       = "thread"        // code's data, /thread
-	threadPartRoot      = "thread_part"   // the holder's part's root, renamed
-	threadPartKey       = "thread_part:"  // + the thread's id: the holder's part, JSON
+	threadPartRoot      = "thread_part"   // + _<block>: a block of the holder's part's root, renamed
+	threadPartKey       = "thread_part:"  // + the thread's id: the holder's part, its blocks as JSON
 	threadShownKey      = "thread_shown:" // + the thread's id: a hash of what its surface shows
 	threadAgainKey      = "thread_again:" // + the thread's id: when a link showed it again once ended, unix
-	threadPartMax       = 24 << 10        // components and data of a part, each
+	threadPartMax       = 24 << 10        // components and data of a part's blocks together, each
 	threadAfterEnd      = time.Hour       // a done thread's surface stays this long at least
 	threadLineMax       = 80              // runes of the one-line summary
 	threadDetailMax     = 200             // runes of a step's detail
@@ -320,26 +321,6 @@ func (c *core) threadAgain(id int64) time.Time {
 	return time.Unix(n, 0)
 }
 
-// threadPart is the part the thread's holder added to its surface.
-type threadPart struct {
-	Author     string          `json:"author"`
-	Components json.RawMessage `json:"components"` // its root renamed threadPartRoot
-	Data       json.RawMessage `json:"data,omitempty"`
-	Tainted    []string        `json:"tainted,omitempty"`
-}
-
-func (c *core) threadPartOf(thread int64) *threadPart {
-	raw := c.store.get(threadPartKey + strconv.FormatInt(thread, 10))
-	if raw == "" {
-		return nil
-	}
-	var p threadPart
-	if json.Unmarshal([]byte(raw), &p) != nil || len(p.Components) == 0 {
-		return nil
-	}
-	return &p
-}
-
 // threadSurfaceIn is a thread's surface as code writes it; false when an
 // ended thread's time on the workspace is over.
 func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64, part *threadPart, now time.Time) (surfaceIn, bool) {
@@ -480,27 +461,37 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 
 	composed := map[string]any{}
 	if part != nil {
-		var list []comp
-		json.Unmarshal(part.Components, &list)
-		label := w("thread.surface.part.brain")
-		if strings.HasPrefix(part.Author, "lead:") {
-			label = w("thread.surface.part.lead")
+		// The holder's blocks, in their order (thread_part.go), each its
+		// root under code's; their data side by side, no key in two.
+		label := w("thread.surface.part.lead")
+		if slices.ContainsFunc(part.Blocks, func(b partBlock) bool { return !strings.HasPrefix(b.Author, "lead:") }) {
+			label = w("thread.surface.part.brain")
 		}
-		if len(part.Tainted) > 0 {
+		in.Tainted = part.tainted()
+		if len(in.Tainted) > 0 {
 			label += threadExternalSep + w("thread.surface.external")
 		}
-		out.add(comp{"id": "thread_part_by", "component": "Text", "variant": "caption", "text": label})
-		out.inner(list...)
-		out.children = append(out.children, threadPartRoot)
-		json.Unmarshal(part.Data, &composed)
-		if composed == nil {
-			composed = map[string]any{}
+		out.add(comp{"id": "thread_by", "component": "Text", "variant": "caption", "text": label})
+		in.blockAt = map[int]string{}
+		for _, b := range part.Blocks {
+			var list []comp
+			var d map[string]any
+			json.Unmarshal(b.Components, &list)
+			json.Unmarshal(b.Data, &d)
+			for i := range list {
+				in.blockAt[1+len(out.list)+i] = b.Name // after the root
+			}
+			out.inner(list...)
+			out.children = append(out.children, partRoot(b.Name))
+			maps.Copy(composed, d)
 		}
-		in.Tainted = part.Tainted
 	}
 	for name, v := range values {
 		composed[name] = v // where the holder's part binds it
 	}
+	// The user's marks, code's, always there to bind (thread_marks.go): a
+	// rewrite of the part never loses one.
+	data[threadMarksKey] = c.marksData(s.ID)
 	composed[threadDataKey] = data
 	comps := append([]comp{{"id": "root", "component": "Column", "children": out.children}}, out.list...)
 	in.Components, _ = json.Marshal(comps)
@@ -615,19 +606,29 @@ func (c *core) writeThreadSurface(id int64) (has bool) {
 	}
 	_, errs, err := c.writeSurface(threadAuthor(id), in)
 	if (err != nil || len(errs) > 0) && part != nil {
-		// The part was checked alone: should it still not hold with code's,
-		// code's section is written without it, and its author told.
+		// Each block was checked alone: should one still not hold with the
+		// rest (a source not read yet, or failing), the surface is written
+		// without the blocks the errors point at, else without the part,
+		// and their author told.
 		why := fmt.Sprintf("%v", err)
 		if len(errs) > 0 {
 			raw, _ := json.Marshal(errs)
 			why = string(raw)
 		}
-		in, _ = c.threadSurfaceIn(s, steps, asks, nil, time.Now())
+		out := part.blocksAt(in.blockAt, errs)
+		kept := part.without(out)
+		in, _ = c.threadSurfaceIn(s, steps, asks, kept, time.Now())
 		_, errs, err = c.writeSurface(threadAuthor(id), in)
-		// A source of the thread not read yet (or failing) holds the part
-		// quietly until it is: nothing for its author to fix.
+		if (err != nil || len(errs) > 0) && kept != nil {
+			out = part.names()
+			in, _ = c.threadSurfaceIn(s, steps, asks, nil, time.Now())
+			_, errs, err = c.writeSurface(threadAuthor(id), in)
+		}
+		// A source of the thread not read yet (or failing) holds them
+		// quietly until it is: nothing for their author to fix.
 		if err == nil && len(errs) == 0 && !c.sourceUnread(id) {
-			c.surfaceError(sid, a2ui.Error{Code: a2ui.CodeValidationFailed, SurfaceID: sid, Message: "the part added to the thread's surface is left out: " + truncate(why, 400)})
+			c.surfaceError(sid, a2ui.Error{Code: a2ui.CodeValidationFailed, SurfaceID: sid,
+				Message: "the blocks " + strings.Join(out, ", ") + " of the part are left out of the thread's surface: " + truncate(why, 400)})
 		}
 	}
 	if err != nil || len(errs) > 0 {
@@ -662,141 +663,6 @@ func (c *core) keepThreadSurfaces() {
 			c.keepThreadSurface(s.ID) // written before it said whether it folds, or before it had no why; or its ends changed
 		}
 	}
-}
-
-// mayAddPart tells whether an author holds a thread, and so may add its
-// part to the thread's surface: the brain, or its own lead.
-func mayAddPart(author string, thread int64) bool {
-	return author == surfaceAuthorBrain || author == "lead:"+strconv.FormatInt(thread, 10)
-}
-
-// writeThreadPart is surface_write on a thread's surface: the holder's
-// part, checked alone, kept apart, then the surface written again with it.
-func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteIn) (map[string]any, error) {
-	sid := threadSurfaceID(thread)
-	if !mayAddPart(who.author, thread) {
-		return nil, fmt.Errorf("the surface %s is the thread's, kept by code: only who holds the thread adds a part to it", sid)
-	}
-	s, err := c.thread(thread)
-	if err != nil {
-		return nil, err
-	}
-	if !s.active() {
-		return nil, fmt.Errorf("the thread is %s: its surface takes no new part", s.State)
-	}
-	srcs, err := c.partSources(thread, in)
-	if err != nil {
-		return nil, err
-	}
-	if in.Components == nil {
-		return nil, errors.New("components are needed: a flat list, one with id root")
-	}
-	tainted := who.taint()
-	var errs []a2ui.ValidationError
-	fail := func(i int, msg string) {
-		errs = append(errs, a2ui.ValidationError{Code: a2ui.CodeValidationFailed, SurfaceID: sid, Path: "/components/" + strconv.Itoa(i), Message: msg})
-	}
-	for i, comp := range in.Components {
-		id, _ := comp["id"].(string)
-		if strings.HasPrefix(id, threadCompPrefix) {
-			fail(i, "ids starting with "+threadCompPrefix+" are code's on a thread's surface: name it otherwise")
-		}
-		if comp["component"] == "Proposal" && len(tainted) > 0 {
-			fail(i, "a Proposal placed after reading external content could be answered as something else: the thread's cards are shown by code already")
-		}
-	}
-	if _, ok := in.Data[threadDataKey]; ok {
-		return nil, fmt.Errorf("data /%s is code's on a thread's surface: write your values under another key", threadDataKey)
-	}
-	comps, _ := json.Marshal(in.Components)
-	data, _ := json.Marshal(orEmptyMap(in.Data))
-	if len(comps) > threadPartMax || len(data) > threadPartMax {
-		return nil, fmt.Errorf("a part of components and data of %d KiB at most each", threadPartMax>>10)
-	}
-	if len(errs) == 0 {
-		errs = a2ui.ValidateSurface(a2ui.Surface{ID: sid, Components: comps, DataModel: data})
-	}
-	if len(errs) == 0 {
-		errs = actionGuard(sid, comps, len(tainted) > 0)
-	}
-	if len(errs) == 0 {
-		errs = a2ui.CheckLinks(sid, comps)
-	}
-	// Its sources, read once to check what it binds (held surfaceReadCap at
-	// most: those still reading are checked against their schema).
-	reads, late := c.readSourcesWithin(in.Sources, surfaceReadCap)
-	merged := orEmptyMap(in.Data)
-	if len(errs) == 0 {
-		var err error
-		if merged, err = mergeSources(merged, in.Sources, reads); err != nil {
-			return nil, err
-		}
-		// Code's data is there to bind too (/thread/children, /thread/steps):
-		// checked against what its surface shows now, never kept in the part.
-		merged[threadDataKey] = c.threadCodeData(sid)
-		errs = c.checkBindings(sid, comps, merged, in.Sources, reads)
-	}
-	if len(errs) > 0 {
-		return nil, invalidSurface(errs)
-	}
-	for _, comp := range in.Components {
-		if comp["id"] == "root" {
-			comp["id"] = threadPartRoot
-		}
-	}
-	comps, _ = json.Marshal(in.Components)
-	raw, _ := json.Marshal(threadPart{Author: who.author, Components: comps, Data: data, Tainted: slices.Compact(slices.Sorted(slices.Values(tainted)))})
-	// Its sources first, with what their first read gave: the part is
-	// never written bound to a value not there yet.
-	c.setPartSources(thread, srcs, reads, late)
-	c.store.set(threadPartKey+strconv.FormatInt(thread, 10), string(raw))
-	c.keepThreadSurface(thread)
-	note := "Your part is on the thread's surface, under what code keeps there (its steps, its state, its cards). Writing it again replaces it; surface_remove takes it away. Its title, weight, why and lifetime are code's."
-	if len(srcs) > 0 {
-		note += " Its sources are the thread's: code reads them again, without a model, while the thread is active."
-	}
-	return map[string]any{"id": sid, "author": threadAuthor(thread), "part": true, "note": note}, nil
-}
-
-// threadCodeData is code's data on a thread's surface as it shows now,
-// /thread: an empty object when it has none yet.
-func (c *core) threadCodeData(sid string) map[string]any {
-	var data map[string]any
-	if sf, err := c.surface(sid); err == nil {
-		var all map[string]json.RawMessage
-		json.Unmarshal(sf.Data, &all)
-		json.Unmarshal(all[threadDataKey], &data)
-	}
-	return orEmptyMap(data)
-}
-
-// removeThreadPart is surface_remove on a thread's surface: the holder's
-// part goes, the surface stays.
-func (c *core) removeThreadPart(who surfaceCaller, thread int64) (map[string]any, error) {
-	if !mayAddPart(who.author, thread) {
-		return nil, fmt.Errorf("the surface %s is the thread's, kept by code while it lives", threadSurfaceID(thread))
-	}
-	c.dropThreadPart(thread)
-	c.keepThreadSurface(thread)
-	return map[string]any{"removed": "part", "note": "Your part is gone; the thread's surface stays while the thread does."}, nil
-}
-
-// dropThreadPart takes a thread's part away, with the sources it brought.
-func (c *core) dropThreadPart(thread int64) {
-	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, threadPartKey+strconv.FormatInt(thread, 10))
-	for _, src := range c.threadSources(thread) {
-		if src.By == byPart {
-			c.store.db.Exec(`DELETE FROM thread_sources WHERE thread = ? AND name = ?`, thread, src.Name)
-			c.sourceNotesGone(thread, src.Name, time.Now())
-		}
-	}
-}
-
-func orEmptyMap(m map[string]any) map[string]any {
-	if m == nil {
-		return map[string]any{}
-	}
-	return m
 }
 
 // stepDoneOf is the step a « C'est fait » settles: the one the clicked

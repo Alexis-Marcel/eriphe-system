@@ -170,16 +170,16 @@ func TestThreadSourceResource(t *testing.T) {
 	}
 }
 
-// The holder's part may bring sources (#571 lifted the refusal): they
-// become the thread's, read by code, their value where the part binds
-// it; written again without them, or removed, they go.
+// A block of the holder's part may bring sources (#571 lifted the
+// refusal): they become the thread's, read by code, their value where
+// the block binds it; written again without them, or removed, they go.
 func TestThreadPartSources(t *testing.T) {
 	c, _ := surfaceCore(t)
 	th := lightThread(t, c)
 	sid := threadSurfaceID(th.ID)
 	brain := surfaceCaller{author: surfaceAuthorBrain, taint: func() []string { return nil }}
 	part := func() surfaceWriteIn {
-		return surfaceWriteIn{ID: sid, Components: boundText("/bal/total"),
+		return surfaceWriteIn{ID: sid, Block: "solde", Components: boundText("/bal/total"),
 			Sources: map[string]surfaceSource{"/bal": {Tool: "ledger/balances"}}}
 	}
 	if _, err := c.writeThreadPart(brain, th.ID, part()); err != nil {
@@ -195,33 +195,33 @@ func TestThreadPartSources(t *testing.T) {
 		t.Errorf("no value at /bal: %s", s.Data)
 	}
 	for name, bad := range map[string]surfaceWriteIn{
-		"nested":      {ID: sid, Components: boundText("/a/b"), Sources: map[string]surfaceSource{"/a/b": {Tool: "ledger/balances"}}},
-		"code's data": {ID: sid, Components: boundText("/thread"), Sources: map[string]surfaceSource{"/thread": {Tool: "ledger/balances"}}},
-		"not a read":  {ID: sid, Components: boundText("/m"), Sources: map[string]surfaceSource{"/m": {Tool: "ledger/move_funds"}}},
-		"unbound":     {ID: sid, Components: boundText("/bal/nope"), Sources: map[string]surfaceSource{"/bal": {Tool: "ledger/balances"}}},
+		"nested":      {ID: sid, Block: "solde", Components: boundText("/a/b"), Sources: map[string]surfaceSource{"/a/b": {Tool: "ledger/balances"}}},
+		"code's data": {ID: sid, Block: "solde", Components: boundText("/thread"), Sources: map[string]surfaceSource{"/thread": {Tool: "ledger/balances"}}},
+		"not a read":  {ID: sid, Block: "solde", Components: boundText("/m"), Sources: map[string]surfaceSource{"/m": {Tool: "ledger/move_funds"}}},
+		"unbound":     {ID: sid, Block: "solde", Components: boundText("/bal/nope"), Sources: map[string]surfaceSource{"/bal": {Tool: "ledger/balances"}}},
 	} {
 		if _, err := c.writeThreadPart(brain, th.ID, bad); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	if _, err := c.writeThreadPart(brain, th.ID, surfaceWriteIn{ID: sid, Components: oneText("x")}); err != nil {
+	if _, err := c.writeThreadPart(brain, th.ID, surfaceWriteIn{ID: sid, Block: "solde", Components: oneText("x")}); err != nil {
 		t.Fatal(err)
 	}
 	if srcs := c.threadSources(th.ID); len(srcs) != 0 {
-		t.Errorf("the part's sources stayed: %+v", srcs)
+		t.Errorf("the block's sources stayed: %+v", srcs)
 	}
 	if _, err := c.writeThreadPart(brain, th.ID, part()); err != nil {
 		t.Fatal(err)
 	}
 	c.surf.refreshing.Wait()
-	if _, err := c.removeThreadPart(brain, th.ID); err != nil {
+	if _, err := c.removeThreadPart(brain, th.ID, "solde"); err != nil {
 		t.Fatal(err)
 	}
 	if srcs := c.threadSources(th.ID); len(srcs) != 0 {
 		t.Errorf("removed, its sources stayed: %+v", srcs)
 	}
 
-	// Written with its source, the part shows at once, and still once the
+	// Written with its source, the block shows at once, and still once the
 	// thread ended; a source the thread has already is bound, not given
 	// again.
 	if _, err := c.writeThreadPart(brain, th.ID, part()); err != nil {
@@ -230,8 +230,8 @@ func TestThreadPartSources(t *testing.T) {
 	shown := func(when string) {
 		t.Helper()
 		s, _, _ := threadSurfaceOf(t, c, th.ID)
-		if !strings.Contains(string(s.Components), `"thread_part"`) || s.Look.LastError != nil {
-			t.Fatalf("%s: the part is left out: %s %+v", when, s.Components, s.Look.LastError)
+		if !strings.Contains(string(s.Components), `"thread_part_solde"`) || s.Look.LastError != nil {
+			t.Fatalf("%s: the block is left out: %s %+v", when, s.Components, s.Look.LastError)
 		}
 	}
 	shown("written")
@@ -239,10 +239,14 @@ func TestThreadPartSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.surf.refreshing.Wait()
-	again := surfaceWriteIn{ID: sid, Components: boundText("/accounts/total"),
+	again := surfaceWriteIn{ID: sid, Block: "comptes", Components: boundText("/accounts/total"),
 		Sources: map[string]surfaceSource{"/accounts": {Tool: "ledger/balances"}}}
 	if _, err := c.writeThreadPart(brain, th.ID, again); err == nil {
-		t.Error("a part took the name of the thread's source")
+		t.Error("a block took the name of the thread's source")
+	}
+	again.Sources = nil
+	if _, err := c.writeThreadPart(brain, th.ID, again); err != nil {
+		t.Errorf("a block binds the thread's own source: %v", err)
 	}
 	if srcs := c.threadSources(th.ID); len(srcs) != 2 || srcs[0].Name != "accounts" || srcs[0].By != byBrain || srcs[1].By != byPart {
 		t.Errorf("sources %+v", srcs)

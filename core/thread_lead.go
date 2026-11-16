@@ -242,11 +242,12 @@ func registerLeadTools(c *core, s *mcp.Server, a Assistant) {
 	id := leadThread(a)
 	by := "lead"
 	c.registerLeadSurfaceTools(s, a) // its thread's surfaces (workspace_tools.go)
-	tool(s, "thread", "Your thread as it is now: its goal, done_when, state, budget and time spent, each step (status, task, evidence, output, your last note), the notes on its sources' items and the recent log.",
+	tool(s, "thread", "Your thread as it is now: its goal, done_when, state, budget and time spent, each step (status, task, evidence, output, your last note), the notes on its sources' items, the recent log, the user's marks on what it shows (list, item: keep, drop or done) and the blocks of your part, in order.",
 		func(ctx context.Context, _ struct{}) (threadView, error) {
 			v, err := c.threadView(id, 30)
-			if taints := readNotesTaint(v.Notes); err == nil && len(taints) > 0 {
-				// A note written after reading outside content taints its reader.
+			if taints := append(readNotesTaint(v.Notes), readMarksTaint(v.Marks)...); err == nil && len(taints) > 0 {
+				// A note written after reading outside content, or a mark set
+				// on it, taints its reader.
 				c.updateAssistant(a.Name, func(st *AssistantStatus) {
 					for _, x := range taints {
 						if !slices.Contains(st.Tainted, x) {

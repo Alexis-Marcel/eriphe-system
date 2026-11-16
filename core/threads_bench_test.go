@@ -521,7 +521,9 @@ func (r *threadRun) score(c *core, x threadCase, a threadAnswer) threadScore {
 				shown = append(shown, st.Title, st.Question)
 			}
 			if p := c.threadPartOf(id); p != nil {
-				shown = append(shown, string(p.Components), string(p.Data))
+				for _, b := range p.Blocks {
+					shown = append(shown, string(b.Components), string(b.Data))
+				}
 			}
 		}
 	}

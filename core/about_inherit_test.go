@@ -55,7 +55,7 @@ func TestTurnThreadIsTheAbout(t *testing.T) {
 		t.Errorf("intention under %q", intent)
 	}
 	sid := threadSurfaceID(openedThread(t, out).ID)
-	if out, isErr := callBrainTool(t, c, "surface_write", map[string]any{"id": sid,
+	if out, isErr := callBrainTool(t, c, "surface_write", map[string]any{"id": sid, "block": "prise",
 		"components": []any{map[string]any{"id": "root", "component": "Text", "text": "Prise."}}}); isErr {
 		t.Fatalf("surface_write: %v", out)
 	}

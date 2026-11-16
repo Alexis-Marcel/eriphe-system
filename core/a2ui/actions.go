@@ -2,6 +2,8 @@ package a2ui
 
 import (
 	"encoding/json"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -40,6 +42,13 @@ import (
 //     on a group of them, {"thread": <id>, "source": "<name>", "item":
 //     "<id>" or "state": "<state>", "offer": "<key>"}: a card is made for
 //     it, nothing runs. Only code places it, on the thread's own surface.
+//   - mark: the user keeps, drops or marks done something a thread shows,
+//     {"thread": <id>, "list": "<id>", "item": "<id>", "mark":
+//     "keep"|"drop"|"done"|""} ("" clears it): ids only, never text. An
+//     author places it on its own thread's surface only (thread: that
+//     thread, a literal), mark a literal, list and item each a literal id
+//     or bound to the data (a row of a list). Code records it in the
+//     thread's data, never in the composed part, and starts no turn.
 //
 // Any other name, and any action that is not an event (a function call),
 // is refused. No action calls a tool that writes.
@@ -51,6 +60,7 @@ const (
 	ActionChoose   = "choose"
 	ActionControl  = "control"
 	ActionOffer    = "offer"
+	ActionMark     = "mark"
 	ActionOpen     = "open"
 	ActionBack     = "back"
 	ActionExpand   = "expand"
@@ -64,11 +74,30 @@ const (
 	KindChoose  = "choose"
 	KindControl = "control"
 	KindOffer   = "offer"
+	KindMark    = "mark"
 	KindLocal   = "local"
 
 	// AskTextMax is the longest ask, in characters.
 	AskTextMax = 1000
+
+	// The marks.
+	MarkKeep = "keep"
+	MarkDrop = "drop"
+	MarkDone = "done"
 )
+
+// Marks are the marks a mark action sets; "" clears one.
+var Marks = []string{MarkKeep, MarkDrop, MarkDone}
+
+// markIDRe is a mark's list or item: an id, never text, and a safe token
+// of a JSON pointer (no / nor ~).
+var markIDRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.:@=+-]{0,127}$`)
+
+// MarkIDOK tells whether a mark's list or item is an id it may carry.
+func MarkIDOK(s string) bool { return markIDRe.MatchString(s) }
+
+// MarkOK tells whether a mark is one of Marks, or "" to clear it.
+func MarkOK(s string) bool { return s == "" || slices.Contains(Marks, s) }
 
 // LocalActions are the names done in the page.
 var LocalActions = []string{ActionOpen, ActionBack, ActionExpand, ActionTab}
@@ -91,6 +120,8 @@ func ActionKind(name string) string {
 		return KindControl
 	case ActionOffer:
 		return KindOffer
+	case ActionMark:
+		return KindMark
 	case ActionOpen, ActionBack, ActionExpand, ActionTab:
 		return KindLocal
 	}
@@ -99,10 +130,11 @@ func ActionKind(name string) string {
 
 // CheckActions checks the actions of a surface's components against the
 // grammar, as an author writes them: an event, ask with a literal text
-// only, or a local name with no context; never answer, never a function
-// call. Each error's path points at the action in the components list
-// ("/components/2/action/event").
-func CheckActions(surfaceID string, components json.RawMessage) []ValidationError {
+// only, a local name with no context, or mark on the thread whose surface
+// it is (thread; 0 for a surface that is no thread's); never answer,
+// never a function call. Each error's path points at the action in the
+// components list ("/components/2/action/event").
+func CheckActions(surfaceID string, thread int64, components json.RawMessage) []ValidationError {
 	var list []map[string]any
 	if json.Unmarshal(components, &list) != nil {
 		return nil
@@ -144,6 +176,10 @@ func CheckActions(surfaceID string, components json.RawMessage) []ValidationErro
 			if len(ctx) > 0 {
 				fail(at+"/context", "a local action ("+name+") carries no context")
 			}
+		case KindMark:
+			if msg := checkMark(ctx, thread); msg != "" {
+				fail(at+"/context", msg)
+			}
 		case KindAnswer:
 			fail(at+"/name", "answer is sent by a Proposal component only, for the proposal it shows: write a Proposal")
 		case KindStep:
@@ -153,10 +189,46 @@ func CheckActions(surfaceID string, components json.RawMessage) []ValidationErro
 		case KindChoose, KindControl, KindOffer:
 			fail(at+"/name", name+" is placed by code only, on a thread's own surface")
 		default:
-			fail(at+"/name", "no action "+strconv.Quote(name)+": a button asks Eriphe (ask) or acts in the page ("+strings.Join(LocalActions, ", ")+")")
+			fail(at+"/name", "no action "+strconv.Quote(name)+": a button asks Eriphe (ask), marks something its thread shows (mark) or acts in the page ("+strings.Join(LocalActions, ", ")+")")
 		}
 	}
 	return errs
+}
+
+// markShape is a mark's context, as its errors say it.
+const markShape = `a mark's context is {"thread": <this thread's id>, "list": "<id>", "item": "<id>", "mark": "keep"|"drop"|"done"|""}`
+
+// checkMark checks a mark's context as its author writes it: on the
+// thread whose surface it is, the mark a literal, list and item each a
+// literal id or a binding, never a function call; "" when it holds.
+func checkMark(ctx map[string]any, thread int64) string {
+	n, isNum := ctx["thread"].(float64)
+	mark, isStr := ctx["mark"].(string)
+	switch {
+	case thread == 0:
+		return "mark is placed on a thread's surface only"
+	case len(ctx) != 4 || !isNum || !isStr:
+		return markShape
+	case n != float64(thread):
+		return "a mark is placed on its own thread only: thread " + strconv.FormatInt(thread, 10)
+	case !MarkOK(mark):
+		return `mark is keep, drop, done, or "" to clear it`
+	}
+	for _, k := range []string{"list", "item"} {
+		switch v := ctx[k].(type) {
+		case string:
+			if !MarkIDOK(v) {
+				return k + " is an id (letters, digits and _.:@=+-, 128 at most), never text"
+			}
+		case map[string]any:
+			if p, ok := v["@path"].(string); !ok || p == "" || len(v) != 1 {
+				return k + ` is a literal id or a binding {"@path": …}, never a function call`
+			}
+		default:
+			return markShape
+		}
+	}
+	return ""
 }
 
 // AskText is the text of the ask written on a component of the list, as
