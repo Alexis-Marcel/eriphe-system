@@ -113,10 +113,10 @@ func TestMemoryAboutAndInterview(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := c.mem
-	pinned := mustAdd(t, m, &Memory{Kind: kindProfile, Subject: "owner", Text: "Sam est menuisier à son compte"})
-	plain := mustAdd(t, m, &Memory{Kind: kindFact, Subject: "owner", Text: "Sam habite 1 rue de l'Exemple"})
-	mustAdd(t, m, &Memory{Kind: kindPerson, Subject: "person:lea", Text: "Léa, une cliente de Sam"})
-	mustAdd(t, m, &Memory{Kind: kindEpisode, Subject: "owner", Text: "Sam a fini un chantier"})
+	pinned := mustAdd(t, m, &Memory{Kind: kindProfile, About: "owner", Text: "Sam est menuisier à son compte"})
+	plain := mustAdd(t, m, &Memory{Kind: kindFact, About: "owner", Text: "Sam habite 1 rue de l'Exemple"})
+	mustAdd(t, m, &Memory{Kind: kindPerson, About: "person:lea", Text: "Léa, une cliente de Sam"})
+	mustAdd(t, m, &Memory{Kind: kindEpisode, About: "owner", Text: "Sam a fini un chantier"})
 
 	about := func(body string) string {
 		i := strings.Index(body, `id="mem-about"`)
@@ -161,7 +161,7 @@ func TestMemoryAboutAndInterview(t *testing.T) {
 	if len(ids) != 4 { // every memory, each once
 		t.Errorf("ids on the page: %v", ids)
 	}
-	for _, path := range []string{"/memory?q=menuisier", "/memory?subject=owner", "/memory?kind=profile"} {
+	for _, path := range []string{"/memory?q=menuisier", "/memory?about=owner", "/memory?kind=profile"} {
 		_, b, _ := tw.do("GET", path, nil, nil)
 		list := b[strings.Index(b, `id="mem-list"`):]
 		if !strings.Contains(list, `id="mem-`+itoa(int(pinned.ID))+`"`) {
@@ -210,7 +210,7 @@ func TestBrainPromptFirstRun(t *testing.T) {
 	raw, _ := os.ReadFile("brain-prompt.md")
 	p := string(raw)
 	for _, want := range []string{"## Premier lancement", "· premier lancement]", "refais-moi l'interview", "/settings/devices#connect",
-		"Une question à la fois", "court résumé", "tu n'insistes pas", "À propos de moi", "update_memory pinned", "sujet `owner`"} {
+		"Une question à la fois", "court résumé", "tu n'insistes pas", "À propos de moi", "update_memory pinned", "`about` `owner`"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("the prompt lacks %q", want)
 		}

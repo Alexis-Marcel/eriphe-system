@@ -71,8 +71,8 @@ func (c *core) assistantNotify(a Assistant, in notifyIn) (map[string]any, error)
 	if strings.TrimSpace(in.Why) != "" {
 		in.Why = a.displayName() + " : " + strings.TrimSpace(in.Why)
 	}
-	if in.Subject == "" && (in.Ref == "" || isRecordRef(in.Ref)) {
-		in.Subject = c.sourceSubject(threadRef(leadThread(a))) // a lead's: its thread's (subjects.go)
+	if in.About == "" && (in.Ref == "" || isRecordRef(in.Ref)) {
+		in.About = c.sourceAbout(threadRef(leadThread(a))) // a lead's: its thread (about.go)
 	}
 	return c.notifyAs(in, notifyFromAssistant, c.assistantTaint(a), false)
 }

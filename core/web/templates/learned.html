@@ -22,7 +22,7 @@
       <div class="happened-text">
         <p>
           <span class="strong">{{t (printf "learned.action.%s" .Action)}}</span>
-          · {{t (printf "learned.kind.%s" .Kind)}}{{if .Subject}} <code class="subject">{{.Subject}}</code>{{end}}
+          · {{t (printf "learned.kind.%s" .Kind)}}{{if .About}} <code class="subject">{{.About}}</code>{{end}}
           <span class="tag{{if eq .Status "confirmed"}} tag-ok{{else if eq .Status "reverted"}} tag-no{{else}} tag-warn{{end}}">{{t (printf "learned.status.%s" .Status)}}</span>
           {{if eq .Risk "high"}}<span class="tag tag-script" title="{{t "learned.riskhint"}}">{{t "learned.risk.high"}}</span>{{end}}
           {{if eq .Undo "proposed"}}<span class="tag tag-warn">{{t "learned.undoproposed"}}</span>{{end}}

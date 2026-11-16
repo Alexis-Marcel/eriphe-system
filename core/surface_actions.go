@@ -233,7 +233,7 @@ func (c *core) askFromSurface(s surface, text string) error {
 	if err != nil {
 		return err
 	}
-	c.store.set(aboutKey(seq), "surface:"+s.ID)
+	c.store.set(aboutMsgKey(seq), "surface:"+s.ID)
 	if s.Tainted != "" {
 		c.store.set(taintKey(int(seq)), surfaceTaintPrefix+s.ID)
 	}

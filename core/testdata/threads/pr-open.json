@@ -27,10 +27,10 @@
     ]}
   ],
   "request": "Où en est la PR 42 des règles d'alerte ?",
-  "expect": {"subject": ["42"], "merge": "mcp__forge__merge"},
+  "expect": {"about": ["42"], "merge": "mcp__forge__merge"},
   "answer": {
     "calls": [
-      {"tool": "open_thread", "args": {"title": "PR 42 · règles d'alerte", "goal": "Les règles d'alerte de latence sont fusionnées, déployées et actives.", "subject": "pr:sam/supervision#42"}},
+      {"tool": "open_thread", "args": {"title": "PR 42 · règles d'alerte", "goal": "Les règles d'alerte de latence sont fusionnées, déployées et actives.", "alias": "pr:sam/supervision#42"}},
       {"tool": "surface_write", "args": {"id": "thread-7", "title": "PR 42 · règles d'alerte",
         "data": {"etat": "Ouverte, prête à fusionner",
           "points": [{"point": "Fichiers de règles valides"}, {"point": "Rejouées sur les pics du mois : 3 alertes, aucune fausse"}],

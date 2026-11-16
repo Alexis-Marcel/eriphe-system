@@ -17,12 +17,12 @@ import (
 // preferences, written with them or only proposed).
 
 type notifyIn struct {
-	Text    string `json:"text" jsonschema:"what to tell the user, in the user's language, one or two sentences, plain text"`
-	Weight  int    `json:"weight" jsonschema:"how much it needs the user, 1 to 5: 5 interrupts (worth a push within the hour), 4 needs the user now, 3 matters today, 2 a glance, 1 background; from 4 it is delivered at once (5 is pushed to a device), 3 waits for the next pause, 1 and 2 for the user's return (the brief)"`
-	Why     string `json:"why" jsonschema:"why you tell it, in the user's language, one sentence the user sees on opening it (the source, what triggered it)"`
-	Where   string `json:"where,omitempty" jsonschema:"the line to try first, from where_now: inapp, computer, voice, phone, or a channel's own line (where_now lists them); empty lets the router choose (best, unless you have a reason). Lines off, the quiet hours and the user's rules still apply"`
-	Subject string `json:"subject,omitempty" jsonschema:"what it is about, kind:slug, the key rules match; leave it out for the subject of what this turn is about (its thread's, or the one subject the user's message named); give one only for another: a known topic (notifications lists them) before a new one"`
-	Ref     string `json:"ref,omitempty" jsonschema:"a record it is about, if one: task:<id>, intention:<id>"`
+	Text   string `json:"text" jsonschema:"what to tell the user, in the user's language, one or two sentences, plain text"`
+	Weight int    `json:"weight" jsonschema:"how much it needs the user, 1 to 5: 5 interrupts (worth a push within the hour), 4 needs the user now, 3 matters today, 2 a glance, 1 background; from 4 it is delivered at once (5 is pushed to a device), 3 waits for the next pause, 1 and 2 for the user's return (the brief)"`
+	Why    string `json:"why" jsonschema:"why you tell it, in the user's language, one sentence the user sees on opening it (the source, what triggered it)"`
+	Where  string `json:"where,omitempty" jsonschema:"the line to try first, from where_now: inapp, computer, voice, phone, or a channel's own line (where_now lists them); empty lets the router choose (best, unless you have a reason). Lines off, the quiet hours and the user's rules still apply"`
+	About  string `json:"about,omitempty" jsonschema:"what it is about, the key rules match: thread:<id>, or a key kind:slug; leave it out for what this turn is about (its thread); give one only for another: a known topic (notifications lists them) before a new one"`
+	Ref    string `json:"ref,omitempty" jsonschema:"a record it is about, if one: task:<id>, intention:<id>"`
 }
 
 type notificationsIn struct {
@@ -34,7 +34,7 @@ type ruleIn struct {
 	Action    string `json:"action,omitempty" jsonschema:"add (by default; it replaces the rule for the same match or nights) or delete"`
 	ID        int64  `json:"id,omitempty" jsonschema:"for delete: the rule's id"`
 	Kind      string `json:"kind,omitempty" jsonschema:"topic (what to do with notifications about a ref) or quiet (the quiet hours); topic by default"`
-	Match     string `json:"match,omitempty" jsonschema:"for topic: the subject it applies to, as given to notify (kind:slug), or a kind alone with its colon for every subject of it (project:, person:, skill:; a word without a colon is a topic); project:getout also matches project:getout:prod, and the longest match wins"`
+	Match     string `json:"match,omitempty" jsonschema:"for topic: what it applies to, as given to notify (thread:<id>, or a key kind:slug, which matches the thread it is the alias of), or a kind alone with its colon for every key of it (project:, person:, skill:; a word without a colon is a topic); project:getout also matches project:getout:prod, and the longest match wins"`
 	Floor     int    `json:"floor,omitempty" jsonschema:"for topic: the least weight its notifications get, 1 to 5 (5: always worth interrupting)"`
 	Ceiling   *int   `json:"ceiling,omitempty" jsonschema:"for topic: the most weight its notifications get, 0 to 4 (2: only at the user's return, the brief; 0: never); leave it out for no ceiling"`
 	Night     bool   `json:"night,omitempty" jsonschema:"for topic with a floor of 5: pushed even in the quiet hours and over the daily cap; only if the user said so"`
@@ -49,15 +49,15 @@ type ruleIn struct {
 }
 
 func registerNotifyTools(s *mcp.Server, c *core) {
-	tool(s, "notify", "Tell the user something on your own, with its weight (1 to 5) and why. eriphe-core decides what happens: from weight 4 it is delivered at once (5 is pushed to a device), 3 waits for the next pause, 1 and 2 for the user's return (the brief); the user's rules raise or lower the weight of a subject, quiet hours and a daily cap of pushes may hold a 4 or a 5, and a turn that read external content never interrupts. The result says what happened: never say a notification was sent if it was not.",
+	tool(s, "notify", "Tell the user something on your own, with its weight (1 to 5) and why. eriphe-core decides what happens: from weight 4 it is delivered at once (5 is pushed to a device), 3 waits for the next pause, 1 and 2 for the user's return (the brief); the user's rules raise or lower the weight of a thread or a topic, quiet hours and a daily cap of pushes may hold a 4 or a 5, and a turn that read external content never interrupts. The result says what happened: never say a notification was sent if it was not.",
 		func(ctx context.Context, in notifyIn) (map[string]any, error) {
 			return c.brainNotify(in)
 		})
-	tool(s, "notifications", "What you told the user on your own and how they took it (useful, not useful, not now), what waits in the queue, the notification rules (active and proposed), the quiet hours in force and the window the user's activity suggests, the known topics (the subjects to reuse in notify and rule), and the settings (device order, lines off, daily cap, time zone, each channel's detail).",
+	tool(s, "notifications", "What you told the user on your own and how they took it (useful, not useful, not now), what waits in the queue, the notification rules (active and proposed), the quiet hours in force and the window the user's activity suggests, the known topics (the abouts to reuse in notify and rule), and the settings (device order, lines off, daily cap, time zone, each channel's detail).",
 		func(ctx context.Context, in notificationsIn) (map[string]any, error) {
 			return c.brainNotifications(in)
 		})
-	tool(s, "rule", "Write a notification rule of the user's: the weight of notifications about a subject or a kind of subject (a floor, a ceiling, 0 for never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, a channel's detail) are setting. A topic's match is a known subject (notifications lists them): a new one matches only notifications under that same subject. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
+	tool(s, "rule", "Write a notification rule of the user's: the weight of notifications about a thread, a key or a kind of key (a floor, a ceiling, 0 for never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, a channel's detail) are setting. A topic's match is a known topic (notifications lists them): a new one matches only notifications about that same thread or key. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})
@@ -69,24 +69,24 @@ func (c *core) brainNotify(in notifyIn) (map[string]any, error) {
 	return c.notifyAs(in, notifyFromBrain, c.turnTaint(), true)
 }
 
-// notifySubject is what a notification is about: the subject given (a
-// subject given as its ref too), else what source inherits; and its
+// notifyAbout is what a notification is about: the about given (an
+// about given as its ref too), else what source inherits; and its
 // record's ref.
-func (c *core) notifySubject(in notifyIn, inherit func() string) (subject, ref, note string) {
-	given := in.Subject
+func (c *core) notifyAbout(in notifyIn, inherit func() string) (about, ref, note string) {
+	given := in.About
 	if r, ok := recordRef(in.Ref); ok {
 		ref = r
 	} else if given == "" {
 		given = in.Ref
 	}
 	if given != "" {
-		subject, note = c.notifyTopic(given)
-		return subject, ref, note
+		about, note = c.notifyTopic(given)
+		return about, ref, note
 	}
 	if inherit != nil {
-		subject = inherit()
+		about = inherit()
 	}
-	return subject, ref, ""
+	return about, ref, ""
 }
 
 // notifyAs is notify for the brain or for an assistant with the power
@@ -103,7 +103,7 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 	case in.Where != "" && !slices.Contains(routeLines(), in.Where):
 		return nil, errors.New("where is one of " + linesText() + ", or empty")
 	}
-	scan := scanMemoryText(text, why, in.Subject, in.Ref)
+	scan := scanMemoryText(text, why, in.About, in.Ref)
 	if scan.Reject != "" {
 		return nil, fmt.Errorf("refused: %s", scan.Reject)
 	}
@@ -113,15 +113,15 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 	}
 	var inherit func() string
 	if source == notifyFromBrain {
-		inherit = c.turnSubject // the turn's thread, or the subject my message named (subjects.go)
+		inherit = c.turnAbout // the turn's thread, or what my message named (about.go)
 	}
-	subject, ref, topicNote := c.notifySubject(in, inherit)
+	about, ref, topicNote := c.notifyAbout(in, inherit)
 	n := &notification{Text: truncate(text, notifyTextMax), Why: truncate(why, notifyWhyMax),
-		Ref: truncate(ref, 100), Subject: truncate(subject, subjectMax), Source: source, Tainted: strings.Join(tainted, ", ")}
+		Ref: truncate(ref, 100), About: truncate(about, aboutMax), Source: source, Tainted: strings.Join(tainted, ", ")}
 	// The message goes in the conversation with the push, and is not pushed again as a question.
 	c.relayMu.Lock()
 	defer c.relayMu.Unlock()
-	n, err := c.notify(n, notifyItem{Weight: in.Weight, Subject: n.Subject, Ref: n.Ref, Tainted: len(tainted) > 0, Where: in.Where, Spoken: conversation})
+	n, err := c.notify(n, notifyItem{Weight: in.Weight, About: n.About, Ref: n.Ref, Tainted: len(tainted) > 0, Where: in.Where, Spoken: conversation})
 	if err != nil {
 		return nil, err
 	}
@@ -134,8 +134,8 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 		}
 	}
 	out := map[string]any{"id": n.ID, "outcome": n.Outcome, "weight": n.Weight, "result": notifyReasons[n.Reason]}
-	if n.Subject != "" {
-		out["subject"] = n.Subject
+	if n.About != "" {
+		out["about"] = n.About
 	}
 	if n.Ref != "" {
 		out["ref"] = n.Ref
@@ -159,20 +159,20 @@ func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversati
 }
 
 // notifyTopic is the ref a notification is kept under: a record's ref as
-// written, else its subject key (subject.go), the known topic of its word
+// written, else its about (about_key.go), the known topic of its word
 // family if there is one, and a note when the brain invented a new one
 // (rules match only the refs in use).
 func (c *core) notifyTopic(label string) (string, string) {
 	if r, ok := recordRef(label); ok {
 		return r, ""
 	}
-	key, err := subjectKey(label)
+	key, err := aliasKey(label)
 	if key == "" && err == nil {
 		return "", ""
 	}
 	topics := c.knownTopics()
 	if err != nil {
-		return "", "Not kept under a subject (" + err.Error() + "): no rule can match it. Known topics: " + topicRefs(topics, 15) + "."
+		return "", "Not kept under a topic (" + err.Error() + "): no rule can match it. Known topics: " + topicRefs(topics, 15) + "."
 	}
 	ref, known := reuseTopic(key, topics)
 	switch {
@@ -181,8 +181,8 @@ func (c *core) notifyTopic(label string) (string, string) {
 	case known:
 		return ref, "Kept under the known topic " + ref + " (same word family as " + label + "): use it next time."
 	}
-	return ref, "New topic " + ref + ". Rules match a notification's subject: reuse a known topic when it fits (" + topicRefs(topics, 15) +
-		"); for a project or a person, its subject (project:<name>, person:<slug>)."
+	return ref, "New topic " + ref + ". Rules match what a notification is about: reuse a known topic when it fits (" + topicRefs(topics, 15) +
+		"); for a matter, its thread (thread:<id>); for a person, person:<slug>."
 }
 
 // notificationView is a notification as the brain sees it.
@@ -191,7 +191,7 @@ type notificationView struct {
 	At       string `json:"at"`
 	Text     string `json:"text"`
 	Why      string `json:"why"`
-	Subject  string `json:"subject,omitempty"`
+	About    string `json:"about,omitempty"`
 	Ref      string `json:"ref,omitempty"`
 	Weight   int    `json:"weight"`
 	Outcome  string `json:"outcome"`
@@ -204,7 +204,7 @@ type notificationView struct {
 func (c *core) viewNotification(n *notification) notificationView {
 	fb := map[string]string{"up": "useful", "down": "not useful", "later": "not now"}[n.Feedback]
 	return notificationView{ID: n.ID, At: n.Created.In(c.notifyZone()).Format("2006-01-02 15:04"), Text: n.Text, Why: n.Why,
-		Subject: n.Subject, Ref: n.Ref, Weight: n.Weight, Outcome: n.Outcome, Result: notifyReasons[n.Reason], Held: n.Held, Feedback: fb, Tainted: n.Tainted != ""}
+		About: n.About, Ref: n.Ref, Weight: n.Weight, Outcome: n.Outcome, Result: notifyReasons[n.Reason], Held: n.Held, Feedback: fb, Tainted: n.Tainted != ""}
 }
 
 // feedbackTally is how the user took the notifications about one ref.
@@ -219,7 +219,7 @@ type feedbackTally struct {
 func (c *core) feedbackTallies() ([]feedbackTally, error) {
 	since := c.notifyTime().AddDate(0, 0, -30).Unix()
 	rows, err := c.store.db.Query(`SELECT about, COUNT(*), SUM(feedback = 'up'), SUM(feedback = 'down'), SUM(feedback = 'later')
-		FROM (SELECT CASE WHEN subject != '' THEN subject ELSE ref END AS about, feedback FROM notifications
+		FROM (SELECT CASE WHEN about != '' THEN about ELSE ref END AS about, feedback FROM notifications
 		WHERE created >= ? AND outcome != 'never') GROUP BY about ORDER BY COUNT(*) DESC LIMIT 30`, since)
 	if err != nil {
 		return nil, err
@@ -367,11 +367,11 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 	if r.Kind == ruleTopic && ruleKind(in.Match) == "" { // a kind alone is no topic
 		topics := c.knownTopics()
 		ref, known := reuseTopic(in.Match, topics)
-		key, _ := subjectKey(in.Match)
+		key, _ := aliasKey(in.Match)
 		switch {
 		case ref == "":
 		case !known:
-			topicNote = "No notification uses " + ref + " yet: a rule matches a notification's subject, so notify under this same subject. Known topics: " + topicRefs(topics, 15) + "."
+			topicNote = "No notification uses " + ref + " yet: a rule matches what a notification is about, so notify about this same one. Known topics: " + topicRefs(topics, 15) + "."
 		case ref != key:
 			topicNote = "Written for the known topic " + ref + " (same word family as " + in.Match + ")."
 		}

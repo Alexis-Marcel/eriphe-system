@@ -52,7 +52,7 @@ func TestParseReceipt(t *testing.T) {
 func TestReceiptAttention(t *testing.T) {
 	text := "Une facture.\n```json\n" + `{"receipt": {"status": "done", "attention": [` +
 		`{"refs": ["mail:42", "thread:12", "agenda:2026-11-12", "mail:"], "weight": 4, "why": "` + strings.Repeat("é", 100) + `", "say": "Ta facture est due."},` +
-		`{"refs": "event:7", "weight": 2, "why": "a glance"},` +
+		`{"refs": "alert:7", "weight": 2, "why": "a glance"},` +
 		`{"refs": ["task:t-1"], "weight": 6, "why": "too heavy"},` +
 		`{"refs": ["card:3"], "weight": 2.5, "why": "half"},` +
 		`{"refs": ["nothing:1"], "weight": 3, "why": "no good ref"},` +
@@ -65,14 +65,14 @@ func TestReceiptAttention(t *testing.T) {
 		t.Fatalf("attention %+v", r.Attention)
 	}
 	a, b := r.Attention[0], r.Attention[1]
-	if !slices.Equal(a.Refs, []string{"mail:42", "thread:12"}) || a.Weight != 4 || a.Say != "Ta facture est due." ||
+	if !slices.Equal(a.Refs, []string{"thread:12"}) || a.Weight != 4 || a.Say != "Ta facture est due." ||
 		len([]rune(a.Why)) != signalWhyMax+1 { // cut, with its ellipsis
 		t.Errorf("first %+v", a)
 	}
-	if !slices.Equal(b.Refs, []string{"event:7"}) || b.Weight != 2 {
+	if !slices.Equal(b.Refs, []string{"alert:7"}) || b.Weight != 2 {
 		t.Errorf("one ref as a string %+v", b)
 	}
-	if len(r.dropped) != 6 { // agenda:… (no kind of a tool), mail:, weight 6, weight 2.5, nothing:1, not an object
+	if len(r.dropped) != 7 { // mail:42 (an item, raised through its thread), agenda:… (no kind of a tool), mail:, weight 6, weight 2.5, nothing:1, not an object
 		t.Errorf("dropped %q", r.dropped)
 	}
 	if s := stripReceipt(text); s != "Une facture." {
@@ -85,9 +85,9 @@ func TestReceiptAttention(t *testing.T) {
 	if r, _ := parseReceipt(doneReceipt); r.Attention != nil || r.dropped != nil {
 		t.Errorf("no block: %+v %q", r.Attention, r.dropped)
 	}
-	for ref, want := range map[string]bool{"mail:abc": true, "alert:12": true, "project:my site": true, "mail": false,
-		"skill:x": false, ":1": false, "card: 3": false, "card:x": false, "agenda:tomorrow": false, " mail:1": false,
-		"mail:" + strings.Repeat("x", 300): false} {
+	for ref, want := range map[string]bool{"mail:abc": false, "alert:12": true, "project:my site": true, "mail": false,
+		"skill:x": false, ":1": false, "card: 3": false, "card:x": false, "agenda:tomorrow": false, " alert:1": false,
+		"alert:" + strings.Repeat("x", 300): false} {
 		if validAttentionRef(ref) != want {
 			t.Errorf("ref %q: want %v", ref, want)
 		}

@@ -355,20 +355,20 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 		c.endRun(runID, skillRunRefused, fmt.Sprintf("more than %d runs in 24 hours", runsPerDay))
 		return
 	}
-	subject := skillRunSubject(sk.Trigger, key, events)
+	alias := skillRunAlias(sk.Trigger, key, events)
 	var th *Thread
 	var sources []string
-	if containsStr(sk.Trigger.Tools, threadsServer) && subject != "" {
+	if containsStr(sk.Trigger.Tools, threadsServer) && alias != "" {
 		// Lent eriphe-threads, it acts on the thread of its alias: code
 		// finds it, or opens it (task_threads.go).
-		if s, err := c.skillThread(sk, subject, events); err != nil {
+		if s, err := c.skillThread(sk, alias, events); err != nil {
 			log.Printf("skill %s: run %d: its thread: %v", sk.Name, runID, err)
 		} else {
 			th, sources = &s, c.itemSourceNames(s.ID)
 			c.store.db.Exec(`UPDATE skill_runs SET thread = ? WHERE id = ?`, s.ID, runID)
 		}
 	}
-	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now, th, sources), Agent: sk.Trigger.Model, Subject: subject,
+	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now, th, sources), Agent: sk.Trigger.Model, About: alias,
 		askStart: false, approvedInAdvance: true, cleanStart: !external}
 	for _, t := range sk.Trigger.Tools {
 		r.Resources = append(r.Resources, ResourceRef{Kind: "tool", Ref: t})
@@ -627,7 +627,7 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 		taint = []string{why}
 	}
 	out, err := c.notifyAs(notifyIn{Text: truncate(oneLine(msg), notifyTextMax), Weight: level,
-		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill, Subject: c.taskSubject(r.Task)}, notifyFromSkill, taint, calls > 0)
+		Why: "Skill « " + r.Skill + " »", Ref: "skill:" + r.Skill, About: c.taskAbout(r.Task)}, notifyFromSkill, taint, calls > 0)
 	if err != nil {
 		c.endRun(r.ID, state, note+"\n· not told: "+err.Error())
 		if told {

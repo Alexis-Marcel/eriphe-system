@@ -168,7 +168,7 @@ func (c *core) runUrgent(r *skillRun, tr *skillTrigger) {
 		return
 	}
 	c.store.set(fmt.Sprintf("skill_urgent:%d", r.ID), "1")
-	n := &notification{Text: tr.Urgent, Why: fmt.Sprintf(urgentSkillWhy, r.Skill), Ref: "skill:" + r.Skill, Subject: c.sourceSubject("task:" + r.Task),
+	n := &notification{Text: tr.Urgent, Why: fmt.Sprintf(urgentSkillWhy, r.Skill), Ref: "skill:" + r.Skill, About: c.sourceAbout("task:" + r.Task),
 		Source: notifyFromUrgent}
 	if _, err := c.notify(n, notifyItem{Weight: weightInterrupts, Ref: n.Ref, Asked: true, Urgent: true}); err != nil {
 		log.Printf("skill %s: urgent: %v", r.Skill, err)
@@ -184,12 +184,12 @@ func skillCanText(tr *skillTrigger, th *Thread, sources []string) string {
 			fmt.Fprintf(&b, "\n\nTon fil : le thread %d « %s » (%s). Tu agis dessus avec les outils de %s, sans redonner son id : "+
 				"note chaque élément de ses sources (note_item), dis s'il attend l'utilisateur ou fixe une échéance (set_thread), fais-le remonter s'il le faut (set_thread raise), "+
 				"ajoute ce que l'utilisateur doit faire ou décider (add_step : user, deadline, ou call : une action qu'il approuve sur sa carte). Tu ne le clos jamais.",
-				th.ID, th.Title, th.Subject, threadsServer)
+				th.ID, th.Title, th.Alias, threadsServer)
 			if len(sources) > 0 {
 				fmt.Fprintf(&b, " Ses sources qui listent des éléments : %s ; un élément s'y note par son id, celui que donnent ses événements.", strings.Join(sources, ", "))
 			}
 		} else {
-			b.WriteString("\n\nTu agis sur les fils avec les outils de " + threadsServer + " : trouve celui d'un sujet (find_thread) avant d'en ouvrir un (open_thread).")
+			b.WriteString("\n\nTu agis sur les fils avec les outils de " + threadsServer + " : trouve celui d'une chose (find_thread) avant d'en ouvrir un (open_thread).")
 		}
 	}
 	if tr.Urgent != "" {

@@ -97,7 +97,7 @@ func TestSkillTendsItsThread(t *testing.T) {
 	r := rs[0]
 	id := runThreadOf(c, r)
 	th, err := c.thread(id)
-	if err != nil || th.Ends != endsStanding || th.Subject != "topic:alerte" || th.Title != "Veille alertes" || th.Tainted != "" || th.led() {
+	if err != nil || th.Ends != endsStanding || th.Alias != "topic:alerte" || th.Title != "Veille alertes" || th.Tainted != "" || th.led() {
 		t.Fatalf("thread %d %+v %v", id, th, err)
 	}
 	srcs := c.threadSources(id)
@@ -160,7 +160,7 @@ func TestSkillTendsItsThread(t *testing.T) {
 	if len(rs) != 2 || runThreadOf(c, rs[0]) != id {
 		t.Fatalf("runs %+v: not its thread %d", rs, id)
 	}
-	if ss, _ := c.threadsWhere(`subject = ?`, "topic:alerte"); len(ss) != 1 {
+	if ss, _ := c.threadsWhere(threadOfAlias, "topic:alerte"); len(ss) != 1 {
 		t.Fatalf("threads %+v", ss)
 	}
 	if len(c.threadSources(id)) != 1 {
@@ -189,8 +189,8 @@ func TestSkillThreadWritesTaint(t *testing.T) {
 		t.Fatal(out)
 	}
 	// It finds a thread opened on someone else's words: that taints it.
-	other, _ := c.openThread(threadIn{Title: "Facture", Goal: "Payée.", Subject: "topic:facture"}, []string{"mail"}, byBrain)
-	if out, isErr := callTaskThreads(t, c, r.Task, "find_thread", map[string]any{"subject": "topic:facture"}); isErr || c.taskResultTaint(r.Task) == "" {
+	other, _ := c.openThread(threadIn{Title: "Facture", Goal: "Payée.", Alias: "topic:facture"}, []string{"mail"}, byBrain)
+	if out, isErr := callTaskThreads(t, c, r.Task, "find_thread", map[string]any{"alias": "topic:facture"}); isErr || c.taskResultTaint(r.Task) == "" {
 		t.Fatalf("found %v %d: the run is not tainted", out, other.ID)
 	}
 	if out, isErr := callTaskThreads(t, c, r.Task, "note_item", map[string]any{"source": "alertes", "item": "b", "note": "down"}); isErr {
@@ -262,7 +262,7 @@ func TestSkillThreadSteps(t *testing.T) {
 	}
 	// Tainted: held to 3.
 	c.taskRead(r.Task, "mcp__monitor__alerts")
-	other, _ := c.openThread(threadIn{Title: "Certificats", Goal: "Renouvelés.", Subject: "topic:certs"}, nil, byBrain)
+	other, _ := c.openThread(threadIn{Title: "Certificats", Goal: "Renouvelés.", Alias: "topic:certs"}, nil, byBrain)
 	if out, isErr := call("set_thread", map[string]any{"thread_id": other.ID, "raise": map[string]any{"weight": 5, "why": "expirent"}}); isErr {
 		t.Fatal(out)
 	}
@@ -271,7 +271,7 @@ func TestSkillThreadSteps(t *testing.T) {
 	}
 
 	// A led thread waits for its card, opened by a tainted run.
-	out, isErr := call("open_thread", map[string]any{"title": "Corriger le DNS", "goal": "Le DNS répond.", "subject": "project:dns",
+	out, isErr := call("open_thread", map[string]any{"title": "Corriger le DNS", "goal": "Le DNS répond.", "alias": "project:dns",
 		"steps": []any{map[string]any{"key": "fix", "title": "Corriger", "prompt": "Corrige."}}})
 	if isErr {
 		t.Fatal(out)
@@ -284,10 +284,10 @@ func TestSkillThreadSteps(t *testing.T) {
 		t.Fatal("its plan's card is not shown")
 	}
 	// Its own subject again: that thread, not a second; never a day.
-	if out, _ := call("open_thread", map[string]any{"title": "Alertes", "goal": "x", "subject": "topic:alertes"}); !strings.Contains(out["note"].(string), "Not a new thread") {
+	if out, _ := call("open_thread", map[string]any{"title": "Alertes", "goal": "x", "alias": "topic:alertes"}); !strings.Contains(out["note"].(string), "Not a new thread") {
 		t.Fatalf("again %v", out)
 	}
-	if _, isErr := call("open_thread", map[string]any{"title": "Jour", "goal": "x", "subject": "topic:jour", "ends": "day"}); !isErr {
+	if _, isErr := call("open_thread", map[string]any{"title": "Jour", "goal": "x", "alias": "topic:jour", "ends": "day"}); !isErr {
 		t.Error("a day thread opened by a task")
 	}
 }

@@ -20,7 +20,7 @@ func TestSituationNow(t *testing.T) {
 		t.Fatalf("%v %v", out, err)
 	}
 	x, _ := c.mem.memory(out["id"].(int64))
-	if x.Subject != "owner" || x.ValidTo.Format("2006-01-02 15:04") != "2026-11-01 23:59" {
+	if x.About != "owner" || x.ValidTo.Format("2006-01-02 15:04") != "2026-11-01 23:59" {
 		t.Fatalf("%+v", x)
 	}
 	now := clock.now()

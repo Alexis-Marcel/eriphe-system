@@ -41,15 +41,15 @@ func TestDayEndIsNoBreakpoint(t *testing.T) {
 // stays until midnight, its « Ranger » there.
 func TestThreadEndsAcrossMidnight(t *testing.T) {
 	c := startCore(t)
-	standing, err := c.openThread(threadIn{Title: "Mes mails", Goal: "Ce qui arrive.", Subject: "topic:mails", Ends: endsStanding}, nil, byBrain)
+	standing, err := c.openThread(threadIn{Title: "Mes mails", Goal: "Ce qui arrive.", Alias: "topic:mails", Ends: endsStanding}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	day, err := c.openThread(threadIn{Title: "Demain", Goal: "Ce que j'ai demain.", Subject: "topic:demain", Ends: endsDay}, nil, byBrain)
+	day, err := c.openThread(threadIn{Title: "Demain", Goal: "Ce que j'ai demain.", Alias: "topic:demain", Ends: endsDay}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	goal, err := c.openThread(threadIn{Title: "PR 12", Goal: "Merged.", Subject: "pr:example/site#12"}, nil, byBrain)
+	goal, err := c.openThread(threadIn{Title: "PR 12", Goal: "Merged.", Alias: "pr:example/site#12"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,15 +109,15 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 
 	// Asked to stand, the thread its subject has becomes a standing one; a
 	// led one stays on its goal.
-	got, _, err := c.openThreadOnce(threadIn{Title: "PR 12", Goal: "Merged.", Subject: "pr:example/site#12", Ends: endsStanding}, nil, byBrain)
+	got, _, err := c.openThreadOnce(threadIn{Title: "PR 12", Goal: "Merged.", Alias: "pr:example/site#12", Ends: endsStanding}, nil, byBrain)
 	if err != nil || got.ID != goal.ID || got.Ends != endsStanding || !got.active() {
 		t.Fatalf("again: %+v %v", got, err)
 	}
-	led, err := c.openThread(threadIn{Title: "Refonte", Goal: "En ligne.", Subject: "project:refonte", Steps: []stepSpec{{Key: "a", Title: "A", Kind: stepUser, Question: "Fais-le."}}}, nil, byBrain)
+	led, err := c.openThread(threadIn{Title: "Refonte", Goal: "En ligne.", Alias: "project:refonte", Steps: []stepSpec{{Key: "a", Title: "A", Kind: stepUser, Question: "Fais-le."}}}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := c.openThreadOnce(threadIn{Title: "Refonte", Goal: "En ligne.", Subject: "project:refonte", Ends: endsDay}, nil, byBrain); err == nil {
+	if _, _, err := c.openThreadOnce(threadIn{Title: "Refonte", Goal: "En ligne.", Alias: "project:refonte", Ends: endsDay}, nil, byBrain); err == nil {
 		t.Error("a led thread was made a day's")
 	}
 	if th, _ := c.thread(led.ID); th.Ends != endsGoal {
@@ -125,10 +125,10 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 	}
 
 	// A standing or day thread is light; ends is one of three.
-	if _, err := c.openThread(threadIn{Title: "x", Goal: "y", Subject: "topic:x", Ends: "forever"}, nil, byBrain); err == nil {
+	if _, err := c.openThread(threadIn{Title: "x", Goal: "y", Alias: "topic:x", Ends: "forever"}, nil, byBrain); err == nil {
 		t.Error("ends forever accepted")
 	}
-	if _, err := c.openThread(threadIn{Title: "x", Goal: "y", Subject: "topic:y", Ends: endsStanding, Steps: []stepSpec{{Key: "a", Title: "A"}}}, nil, byBrain); err == nil {
+	if _, err := c.openThread(threadIn{Title: "x", Goal: "y", Alias: "topic:y", Ends: endsStanding, Steps: []stepSpec{{Key: "a", Title: "A"}}}, nil, byBrain); err == nil {
 		t.Error("a led standing thread was opened")
 	}
 }
@@ -140,7 +140,7 @@ func TestThreadTidy(t *testing.T) {
 	c := startCore(t)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
-	th, err := c.openThread(threadIn{Title: "PR 12", Goal: "Merged.", Subject: "pr:example/site#12"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "PR 12", Goal: "Merged.", Alias: "pr:example/site#12"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestOpenStoreAddsThreadEnds(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`CREATE TABLE threads (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, goal TEXT NOT NULL,
-	done_when TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'light', subject TEXT NOT NULL DEFAULT '', state TEXT NOT NULL,
+	done_when TEXT NOT NULL DEFAULT '', mode TEXT NOT NULL DEFAULT 'light', about TEXT NOT NULL DEFAULT '', state TEXT NOT NULL,
 	phase TEXT NOT NULL DEFAULT '', held TEXT NOT NULL DEFAULT '', budget INTEGER NOT NULL DEFAULT 0, amends INTEGER NOT NULL DEFAULT 0,
 	summary TEXT NOT NULL DEFAULT '', tainted TEXT NOT NULL DEFAULT '', lead TEXT NOT NULL DEFAULT '', told TEXT NOT NULL DEFAULT '',
 	spent INTEGER NOT NULL DEFAULT 0, since INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, started INTEGER NOT NULL DEFAULT 0,

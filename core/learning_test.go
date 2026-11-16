@@ -26,7 +26,7 @@ func TestLearningLogsMemoryChanges(t *testing.T) {
 	if xs := learnedAll(t, m); len(xs) != 0 {
 		t.Fatalf("a fact or an episode is learned: %+v", xs[0])
 	}
-	lesson := mustAdd(t, m, &Memory{Kind: kindLesson, Subject: "owner", Text: "Sam veut des réponses courtes", SourceRef: "msg:3"})
+	lesson := mustAdd(t, m, &Memory{Kind: kindLesson, About: "owner", Text: "Sam veut des réponses courtes", SourceRef: "msg:3"})
 	xs := learnedAll(t, m)
 	if len(xs) != 1 {
 		t.Fatalf("%d entries", len(xs))
@@ -84,7 +84,7 @@ func TestLearningLogsMemoryChanges(t *testing.T) {
 	if xs, _ := m.learnings(learnFilter{Query: "vouvoiement"}); len(xs) != 2 {
 		t.Errorf("by topic: %d", len(xs))
 	}
-	if xs, _ := m.learnings(learnFilter{Subject: "owner"}); len(xs) != 2 {
+	if xs, _ := m.learnings(learnFilter{About: "owner"}); len(xs) != 2 {
 		t.Errorf("by subject: %d", len(xs))
 	}
 	// An entry is fixed but for its status.
@@ -348,7 +348,7 @@ func TestLearnedInHeartbeat(t *testing.T) {
 	c, clock := testMemoryCore(t)
 	m := c.mem
 	c.store.set(lastBriefKey, strconv.FormatInt(clock.now().Add(-time.Hour).Unix(), 10))
-	mustAdd(t, m, &Memory{Kind: kindPreference, Subject: "owner", Text: "Sam préfère les messages du soir", Trust: trustFirstParty, SourceKind: srcBrain})
+	mustAdd(t, m, &Memory{Kind: kindPreference, About: "owner", Text: "Sam préfère les messages du soir", Trust: trustFirstParty, SourceKind: srcBrain})
 	mustAdd(t, m, &Memory{Kind: kindDecision, Text: "Ce que Sam a écrit lui-même"}).Trust = trustOwner
 	m.db.Exec(`UPDATE learning_log SET status = status`) // a status change is allowed
 	p, err := c.wakePacket()

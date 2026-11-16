@@ -300,8 +300,8 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		}
 	}
 	c.threadsDelivered(msgs) // a thread's event: the turn is about it (thread_turn.go)
-	// The known subjects my message names: the turn is about them (subjects.go).
-	if named := c.subjectsBlock(msgs); named != "" {
+	// The threads and entities my message names: the turn is about them (names.go).
+	if named := c.namedBlock(msgs); named != "" {
 		parts = append(parts, named)
 	}
 	// What my message brings up: the intentions whose person it names.
@@ -309,11 +309,11 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 	if cue != "" {
 		parts = append(parts, cue)
 	}
-	// The card of the turn's subject, when the session does not hold it as
-	// it is now (subject_card.go). A pack given now holds its own.
+	// The card of what the turn is about, when the session does not hold
+	// it as it is now (thread_card.go). A pack given now holds its own.
 	held := c.assistantStatus(a.Name).Cards
 	if pack != "" {
-		held = c.packedCards(packed, c.turnSeq(), c.store.canonSubject(c.turnSubject()))
+		held = c.packedCards(packed, c.turnSeq(), c.store.resolveAbout(c.turnAbout()))
 	}
 	card, carded := c.turnCard(held)
 	if carded {

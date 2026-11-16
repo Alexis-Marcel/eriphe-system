@@ -82,7 +82,7 @@ type benchTool struct {
 type frontExpect struct {
 	Proposal string   `json:"proposal"`
 	Text     string   `json:"text"`
-	Subject  []string `json:"subject"`
+	About    []string `json:"about"`
 }
 
 // frontAnswer is a front case's answer: the surface, the focus, the reply.
@@ -160,7 +160,7 @@ func (x surfaceCase) check() string {
 		return "a live case's results need values to tell a copy by"
 	}
 	if f := x.Front; f != nil {
-		if _, _, ok := parseProposalRef(f.Proposal); !ok || f.Text == "" || len(f.Subject) == 0 {
+		if _, _, ok := parseProposalRef(f.Proposal); !ok || f.Text == "" || len(f.About) == 0 {
 			return "front needs a proposal's ref, its text and the subject's words"
 		}
 	}
@@ -329,7 +329,7 @@ func scoreSurface(c *core, x surfaceCase, raw string) surfaceScore {
 	var in surfaceWriteIn
 	json.Unmarshal(a.Surface, &in)
 	title := strings.ToLower(in.Title)
-	if !slices.ContainsFunc(x.Front.Subject, func(w string) bool { return strings.Contains(title, strings.ToLower(w)) }) {
+	if !slices.ContainsFunc(x.Front.About, func(w string) bool { return strings.Contains(title, strings.ToLower(w)) }) {
 		sc.Front = append(sc.Front, "no subject in the title")
 	}
 	shows := false

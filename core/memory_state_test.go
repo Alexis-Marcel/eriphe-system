@@ -23,7 +23,7 @@ func TestExtractionDurableState(t *testing.T) {
 		return c.applyOp(op, refs, "test")
 	}
 	// A decision stated by the user: active, with its keywords and importance.
-	if why, res := apply(`{"op": "ADD", "kind": "decision", "subject": "project:portfolio", "text": "Astro plutôt que WordPress, parce que c'est rapide",
+	if why, res := apply(`{"op": "ADD", "kind": "decision", "about": "project:portfolio", "text": "Astro plutôt que WordPress, parce que c'est rapide",
 		"keywords": "choix framework", "importance": 4, "basis": "stated", "source_ref": "msg:1"}`); res != "added" {
 		t.Fatalf("decision: %s %s", res, why)
 	}
@@ -33,26 +33,26 @@ func TestExtractionDurableState(t *testing.T) {
 	}
 	// A progress is its subject's thread summary, written over; no
 	// memory. A subject no thread follows: dropped, no thread opened.
-	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:portfolio", "text": "Fait : accueil",
+	if why, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:portfolio", "text": "Fait : accueil",
 		"state": "active", "source_ref": "msg:1"}`); res != "" || !strings.Contains(why, "open_thread") {
 		t.Fatalf("progress with no thread: %s %s", res, why)
 	}
 	if ts, _ := c.threads(false, 10); len(ts) != 0 {
 		t.Fatalf("a thread opened by code: %+v", ts)
 	}
-	th, err := c.openThread(threadIn{Title: "Portfolio", Goal: "En ligne.", Subject: "project:portfolio"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "Portfolio", Goal: "En ligne.", Alias: "project:portfolio"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := th.ID
-	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:portfolio", "text": "Fait : accueil ; reste : contact",
+	if why, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:portfolio", "text": "Fait : accueil ; reste : contact",
 		"state": "active", "source_ref": "msg:1"}`); res != "added" {
 		t.Fatalf("progress: %s %s", res, why)
 	}
 	if th, _ := c.thread(id); th.Summary != "Fait : accueil ; reste : contact" {
 		t.Fatalf("thread: %+v", th)
 	}
-	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:portfolio", "text": "Fait : accueil ; bloqué : photos", "state": "blocked", "source_ref": "msg:2"}`); res != "added" {
+	if why, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:portfolio", "text": "Fait : accueil ; bloqué : photos", "state": "blocked", "source_ref": "msg:2"}`); res != "added" {
 		t.Fatalf("progress update: %s %s", res, why)
 	}
 	if th, _ := c.thread(id); th.Summary != "Bloqué. Fait : accueil ; bloqué : photos" {
@@ -62,15 +62,15 @@ func TestExtractionDurableState(t *testing.T) {
 		t.Fatalf("%d progress memories", n)
 	}
 	// A state it cannot have.
-	if _, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:x", "text": "y", "state": "open", "source_ref": "msg:1"}`); res != "" {
+	if _, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:x", "text": "y", "state": "open", "source_ref": "msg:1"}`); res != "" {
 		t.Fatalf("bad state: %s", res)
 	}
 	// What the extraction deduced is proposed, even from the user's words.
-	if _, res := apply(`{"op": "ADD", "kind": "fact", "subject": "owner", "text": "Sam aime le café fort", "basis": "inferred", "source_ref": "msg:1"}`); res != "proposed" {
+	if _, res := apply(`{"op": "ADD", "kind": "fact", "about": "owner", "text": "Sam aime le café fort", "basis": "inferred", "source_ref": "msg:1"}`); res != "proposed" {
 		t.Fatalf("inferred: %s", res)
 	}
 	amb, _ := c.mem.list(`basis = 'ambiguous'`, nil, "", 5)
-	if _, res := apply(`{"op": "ADD", "kind": "fact", "subject": "owner", "text": "Sam part peut-être à Lisbonne", "basis": "ambiguous", "source_ref": "msg:1"}`); res != "proposed" {
+	if _, res := apply(`{"op": "ADD", "kind": "fact", "about": "owner", "text": "Sam part peut-être à Lisbonne", "basis": "ambiguous", "source_ref": "msg:1"}`); res != "proposed" {
 		t.Fatalf("ambiguous: %s", res)
 	}
 	if amb, _ = c.mem.list(`basis = 'ambiguous'`, nil, "", 5); len(amb) != 1 || amb[0].Basis != basisAmbiguous {
@@ -81,7 +81,7 @@ func TestExtractionDurableState(t *testing.T) {
 	}
 	// A planned end: true until then, gone after.
 	end := time.Now().AddDate(0, 0, 10).Format("2006-01-02")
-	if why, res := apply(`{"op": "ADD", "kind": "fact", "subject": "owner", "text": "Sam est en congés", "valid_to": "` + end + `", "source_ref": "msg:1"}`); res != "added" {
+	if why, res := apply(`{"op": "ADD", "kind": "fact", "about": "owner", "text": "Sam est en congés", "valid_to": "` + end + `", "source_ref": "msg:1"}`); res != "added" {
 		t.Fatalf("planned end: %s %s", res, why)
 	}
 	if xs, _ := c.mem.recall(recallQuery{Query: "congés"}); len(xs) != 1 {
@@ -96,7 +96,7 @@ func TestExtractionDurableState(t *testing.T) {
 		t.Fatalf("an end in the past: %s", res)
 	}
 	// An external progress is not kept: a summary is quoted in every card.
-	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:y", "text": "Fait : tout", "state": "done", "source_ref": "task:t1"}`); res != "" || !strings.Contains(why, "external") {
+	if why, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:y", "text": "Fait : tout", "state": "done", "source_ref": "task:t1"}`); res != "" || !strings.Contains(why, "external") {
 		t.Fatalf("external progress: %s %s", res, why)
 	}
 	if _, ok := c.liveThreadOf("project:y"); ok {
@@ -107,25 +107,25 @@ func TestExtractionDurableState(t *testing.T) {
 	for _, js := range []string{
 		`{"op": "ADD", "kind": "lesson", "text": "Les tests du dépôt site demandent Node 22", "source_ref": "task:t1"}`,
 		`{"op": "ADD", "kind": "lesson", "text": "Toujours demander", "source_ref": "msg:1"}`,
-		`{"op": "ADD", "kind": "preference", "subject": "topic:workspace", "text": "Sam veut la météo devant", "source_ref": "msg:1"}`,
+		`{"op": "ADD", "kind": "preference", "about": "topic:workspace", "text": "Sam veut la météo devant", "source_ref": "msg:1"}`,
 	} {
 		if why, res := apply(js); res != "" || !strings.Contains(why, "only the user's own words") {
 			t.Fatalf("%s: %s %s", js, res, why)
 		}
 	}
 	// One episode a day, the journal; never one for a task.
-	if why, res := apply(`{"op": "ADD", "kind": "episode", "subject": "project:site", "text": "La tâche a fini", "source_ref": "msg:1"}`); res != "" || !strings.Contains(why, "journal") {
+	if why, res := apply(`{"op": "ADD", "kind": "episode", "about": "project:site", "text": "La tâche a fini", "source_ref": "msg:1"}`); res != "" || !strings.Contains(why, "journal") {
 		t.Fatalf("a task's episode: %s %s", res, why)
 	}
-	if why, res := apply(`{"op": "ADD", "kind": "episode", "subject": "topic:journal", "text": "Sam a parlé du site", "source_ref": "msg:1"}`); res != "added" {
+	if why, res := apply(`{"op": "ADD", "kind": "episode", "about": "topic:journal", "text": "Sam a parlé du site", "source_ref": "msg:1"}`); res != "added" {
 		t.Fatalf("the journal: %s %s", res, why)
 	}
 	// The day's second run completes it, the subject kept from the old one.
-	journal, _ := c.mem.list(`kind = 'episode' AND subject = ? AND status = 'active'`, []any{journalSubject}, "", 1)
+	journal, _ := c.mem.list(`kind = 'episode' AND about = ? AND status = 'active'`, []any{journalEntity}, "", 1)
 	if why, res := apply(fmt.Sprintf(`{"op": "SUPERSEDE", "id": %d, "text": "Sam a parlé du site, puis du devis", "source_ref": "msg:2"}`, journal[0].ID)); res != "superseded" {
 		t.Fatalf("the journal completed: %s %s", res, why)
 	}
-	wake := mustAdd(t, c.mem, &Memory{Kind: kindEpisode, Subject: heartbeatSubject, Text: "Rien à faire.", SourceKind: srcBrain, Trust: trustFirstParty})
+	wake := mustAdd(t, c.mem, &Memory{Kind: kindEpisode, About: heartbeatEntity, Text: "Rien à faire.", SourceKind: srcBrain, Trust: trustFirstParty})
 	if why, res := apply(fmt.Sprintf(`{"op": "SUPERSEDE", "id": %d, "text": "Autre chose", "source_ref": "msg:2"}`, wake.ID)); res != "" || !strings.Contains(why, "journal") {
 		t.Fatalf("a wake replaced: %s %s", res, why)
 	}

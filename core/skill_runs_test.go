@@ -260,8 +260,8 @@ func TestSkillRunAttention(t *testing.T) {
 	}
 	// Entries with refs go to the queue as they are; below 4 they speak
 	// alone, the message not told twice at the brief.
-	r := end("k-e", "Une facture, key k-e."+rcpt(`[{"refs": ["mail:42"], "weight": 2, "why": "une facture à payer"}]`))
-	if it := attentionOf(c, "mail:42"); it == nil || it.Weight != 2 || it.Source != "skill:veille" || it.Why != "une facture à payer" {
+	r := end("k-e", "Une facture, key k-e."+rcpt(`[{"refs": ["alert:42"], "weight": 2, "why": "une facture à payer"}]`))
+	if it := attentionOf(c, "alert:42"); it == nil || it.Weight != 2 || it.Source != "skill:veille" || it.Why != "une facture à payer" {
 		t.Errorf("block item %+v", it)
 	}
 	if levelOf(r) != "" {
@@ -270,10 +270,10 @@ func TestSkillRunAttention(t *testing.T) {
 	if r = c.runByID(r.ID); r.State != skillRunDone {
 		t.Errorf("run %+v", r)
 	}
-	// From 4, the message is told too, now, its mail with it: one message.
+	// From 4, the message is told too, now, its alert with it: one message.
 	said := len(brainMessages(t, c))
-	r = end("k-j", "Une facture en retard, key k-j."+rcpt(`[{"refs": ["mail:43"], "weight": 4, "why": "une facture en retard"}]`))
-	if it := attentionOf(c, "mail:43"); it == nil || it.Weight != 4 || it.Held || levelOf(r) != outcomeNow || alertOf(r) == nil || alertOf(r).Held {
+	r = end("k-j", "Une facture en retard, key k-j."+rcpt(`[{"refs": ["alert:43"], "weight": 4, "why": "une facture en retard"}]`))
+	if it := attentionOf(c, "alert:43"); it == nil || it.Weight != 4 || it.Held || levelOf(r) != outcomeNow || alertOf(r) == nil || alertOf(r).Held {
 		t.Errorf("weight 4 with refs: item %+v, level %q, alert %+v", it, levelOf(r), alertOf(r))
 	}
 	if n := len(brainMessages(t, c)) - said; n != 1 {

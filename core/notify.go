@@ -15,7 +15,7 @@ import (
 // The brain speaks on its own (notify), and the code decides when. The
 // model writes the words and weighs them, 1 to 5 (the attention scale:
 // attention.go); what happens is decideNotify's: the user's rules (a floor
-// and a ceiling of weight per subject or kind, notify_rules.go), then the
+// and a ceiling of weight per thread, key or kind, notify_rules.go), then the
 // quiet hours and the daily cap. Then it enters the attention queue
 // (attention.go), the one path to the user, at its decided weight: from
 // weightSent it is delivered at once (outcome now), lighter it is held
@@ -53,7 +53,7 @@ const notifySchema = `CREATE TABLE IF NOT EXISTS notifications (
   asked INTEGER NOT NULL DEFAULT 0, tainted TEXT NOT NULL DEFAULT '', msg INTEGER,
   held INTEGER NOT NULL DEFAULT 0, feedback TEXT NOT NULL DEFAULT '', feedback_at INTEGER,
   token TEXT NOT NULL,
-  subject TEXT NOT NULL DEFAULT ''); -- what it is about, kind:slug (subjects.go)
+  about TEXT NOT NULL DEFAULT ''); -- what it is about: thread:<id> or an entity's key (about.go)
 CREATE INDEX IF NOT EXISTS notifications_created ON notifications (created);`
 
 func init() { extraSchema = append(extraSchema, notifySchema) }
@@ -107,8 +107,8 @@ type notification struct {
 	Created    time.Time `json:"created"`
 	Text       string    `json:"text"`
 	Why        string    `json:"why"`
-	Ref        string    `json:"ref,omitempty"`     // the record it is about: intention:12, skill:<name>
-	Subject    string    `json:"subject,omitempty"` // what it is about, kind:slug (subject.go)
+	Ref        string    `json:"ref,omitempty"`   // the record it is about: intention:12, skill:<name>
+	About      string    `json:"about,omitempty"` // what it is about: thread:<id> or a key (about_key.go)
 	Source     string    `json:"source"`
 	Weight     int       `json:"weight"`  // as decided: the asked weight, through the rules
 	Outcome    string    `json:"outcome"` // what the code decided: now, brief or never
@@ -125,12 +125,13 @@ type notification struct {
 
 // notifyItem is what decideNotify judges.
 type notifyItem struct {
-	Weight  int    // 1 to 5, as asked
-	Subject string // what it is about: project:getout…
-	Ref     string // the record it is about: intention:12, skill:<name>…
-	Asked   bool   // the user asked for it in their own words: not counted in the cap
-	Tainted bool   // drawn from external content
-	Where   string // the line the writer would try first (where_now.go); "" for the router's order
+	Weight  int      // 1 to 5, as asked
+	About   string   // what it is about: thread:<id>, person:lina…
+	Aliases []string // its thread's keys (project:getout…): a rule on one matches it
+	Ref     string   // the record it is about: intention:12, skill:<name>…
+	Asked   bool     // the user asked for it in their own words: not counted in the cap
+	Tainted bool     // drawn from external content
+	Where   string   // the line the writer would try first (where_now.go); "" for the router's order
 	// Spoken: the caller writes it in the conversation itself when it is
 	// delivered now (the brain's own words): its item enters delivered.
 	Spoken bool
@@ -156,7 +157,7 @@ type notifyDecision struct {
 }
 
 // decideNotify decides, without a model: never, now or held. The
-// rule for its subject (or kind) raises the weight to its floor and lowers
+// rule for what it is about (or its kind) raises the weight to its floor and lowers
 // it to its ceiling, a ceiling of 0 being never; a tainted turn may be
 // lowered, never raised. From weightSent it is sent, unless the turn read
 // external content, the quiet hours or the daily cap hold it: only a rule
@@ -174,7 +175,7 @@ func decideNotify(it notifyItem, cx notifyContext) notifyDecision {
 		if r.Ceiling == 0 {
 			return notifyDecision{outcomeNever, reasonRule, r.ID, 0}
 		}
-		if w < r.Floor && !it.Tainted { // the model chose the subject: a tainted turn may lower, never raise
+		if w < r.Floor && !it.Tainted { // the model chose the about: a tainted turn may lower, never raise
 			w, reason = r.Floor, reasonRule
 		}
 		if w > r.Ceiling {
@@ -245,9 +246,12 @@ func (c *core) notifyContext() (notifyContext, error) {
 // notify decides on n, keeps it, puts it in the attention queue (not when
 // never), and pushes it when it is delivered now at weight 5.
 func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
-	// A subject merged is kept under the other (subjects.go).
-	n.Subject = c.store.keepSubject(n.Subject, "")
-	it.Subject, it.Ref = n.Subject, n.Ref
+	// A thread's alias is kept as its thread (names.go).
+	n.About = c.store.noteAbout(n.About)
+	it.About, it.Ref = n.About, n.Ref
+	if id, ok := threadOfAbout(n.About); ok {
+		it.Aliases = c.threadNames(id)
+	}
 	cx, err := c.notifyContext()
 	if err != nil {
 		return nil, err
@@ -256,9 +260,9 @@ func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
 	n.Created, n.Weight, n.Outcome, n.Reason, n.RuleID, n.Asked = cx.Now, d.Weight, d.Outcome, d.Reason, d.RuleID, it.Asked
 	n.Held = d.Outcome == outcomeHeld
 	n.token = randomToken(16)
-	res, err := c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, subject, source, weight, outcome, reason, rule_id,
+	res, err := c.store.db.Exec(`INSERT INTO notifications (created, text, why, ref, about, source, weight, outcome, reason, rule_id,
 		asked, tainted, msg, held, token) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.Created.Unix(), n.Text, n.Why, n.Ref, n.Subject, n.Source, n.Weight, n.Outcome, n.Reason, nullID(n.RuleID),
+		n.Created.Unix(), n.Text, n.Why, n.Ref, n.About, n.Source, n.Weight, n.Outcome, n.Reason, nullID(n.RuleID),
 		n.Asked, n.Tainted, nullID(int64(n.Msg)), n.Held, n.token)
 	if err != nil {
 		return nil, err
@@ -298,13 +302,13 @@ func notificationURL(id int64) string {
 	return fmt.Sprintf("/settings/notifications?n=%d#notif-%d", id, id)
 }
 
-const notifyCols = `id, created, text, why, ref, subject, source, weight, outcome, reason, COALESCE(rule_id, 0), asked, tainted,
+const notifyCols = `id, created, text, why, ref, about, source, weight, outcome, reason, COALESCE(rule_id, 0), asked, tainted,
 	COALESCE(msg, 0), held, feedback, COALESCE(feedback_at, 0), token`
 
 func scanNotification(row interface{ Scan(...any) error }) (*notification, error) {
 	var n notification
 	var created, fbAt int64
-	if err := row.Scan(&n.ID, &created, &n.Text, &n.Why, &n.Ref, &n.Subject, &n.Source, &n.Weight, &n.Outcome, &n.Reason, &n.RuleID,
+	if err := row.Scan(&n.ID, &created, &n.Text, &n.Why, &n.Ref, &n.About, &n.Source, &n.Weight, &n.Outcome, &n.Reason, &n.RuleID,
 		&n.Asked, &n.Tainted, &n.Msg, &n.Held, &n.Feedback, &fbAt, &n.token); err != nil {
 		return nil, err
 	}
@@ -444,13 +448,13 @@ func (c *core) notifyWake(seq, eventSeq int, text string) {
 	// Its taint is the intentions': a reminder approved by the user is not
 	// held back because the brain read a mail earlier in the turn; that
 	// turn's taint is still kept with it.
-	subject := "" // the first intention's
+	about := "" // the first intention's
 	if len(w.IDs) > 0 && c.mem != nil {
 		if x, err := c.mem.intention(w.IDs[0]); err == nil {
-			subject = x.Subject
+			about = x.About
 		}
 	}
-	n := &notification{Text: truncate(strings.TrimSpace(text), notifyTextMax), Why: why, Ref: ref, Subject: subject, Source: notifyFromWake,
+	n := &notification{Text: truncate(strings.TrimSpace(text), notifyTextMax), Why: why, Ref: ref, About: about, Source: notifyFromWake,
 		Msg: seq, Tainted: strings.Join(c.turnTaint(), ", ")}
 	if _, err := c.notify(n, notifyItem{Weight: weightInterrupts, Ref: ref, Asked: w.Asked, Tainted: w.External}); err != nil {
 		log.Printf("notify: wake: %v", err)

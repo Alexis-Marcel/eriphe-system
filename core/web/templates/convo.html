@@ -50,5 +50,5 @@
 </details>
 {{end}}
 
-{{/* Why a spontaneous message was sent: its notification's why and subject. */}}
+{{/* Why a spontaneous message was sent: its notification's why and about. */}}
 {{define "msg-why"}}{{with .}}<details class="msg-why"><summary>{{t "chat.why"}}</summary><p>{{.Why}}{{if .Ref}} · {{if .Link}}<a href="{{.Link}}" class="mono">{{.Ref}}</a>{{else}}<span class="mono">{{.Ref}}</span>{{end}}{{end}}</p></details>{{end}}{{end}}

@@ -12,8 +12,8 @@ import (
 
 // The user's notification rules, as data the code applies (decideNotify):
 //
-//   - a topic rule: the weight of what is about a subject, or a kind of
-//     subject (project:getout, or every project), held between a floor and
+//   - a topic rule: the weight of what is about a thread or a key, or a
+//     kind of key (project:getout, or every project), held between a floor and
 //     a ceiling (a ceiling of 0: never), with "even at night", the one way
 //     through the quiet hours and the daily cap;
 //   - a quiet rule: the quiet window, for all nights, or for the nights
@@ -99,10 +99,10 @@ const (
 
 var ruleDays = []string{daysAll, daysWeekdays, daysWeekend}
 
-// ruleMatch is what a topic rule matches: a subject's key (subject.go),
-// a record's ref as written (skill:<name>), or a kind alone with its
-// colon (project:), which matches every subject or record of that kind; "" if
-// none.
+// ruleMatch is what a topic rule matches: a key (about_key.go), a
+// record's ref as written (thread:<id>, skill:<name>), or a kind alone
+// with its colon (project:), which matches every key or record of that
+// kind; "" if none.
 func ruleMatch(s string) string {
 	if k := ruleKind(s); k != "" {
 		return k
@@ -110,7 +110,7 @@ func ruleMatch(s string) string {
 	if r, ok := recordRef(s); ok {
 		return r
 	}
-	key, _ := subjectKey(s)
+	key, _ := aliasKey(s)
 	return key
 }
 
@@ -118,7 +118,7 @@ func ruleMatch(s string) string {
 // Without the colon a word is a topic (mail is topic:mail).
 func ruleKind(s string) string {
 	k, ok := strings.CutSuffix(strings.ToLower(strings.TrimSpace(s)), ":")
-	if ok && (isSubjectKind(k) || recordKinds[k]) {
+	if ok && (isAliasKind(k) || recordKinds[k]) {
 		return k + ":"
 	}
 	return ""
@@ -198,7 +198,7 @@ func (r *notifyRule) check() error {
 	case ruleTopic:
 		r.Match = ruleMatch(r.Match)
 		if r.Match == "" || len(r.Match) > 80 {
-			return errors.New("match is a subject like project:getout, person:lina or topic:facture, or a kind alone like project:")
+			return errors.New("match is a thread or a key like thread:12, project:getout, person:lina or topic:facture, or a kind alone like project:")
 		}
 		switch {
 		case r.Floor < 0 || r.Floor > weightInterrupts || r.Ceiling < 0 || r.Ceiling > weightInterrupts:
@@ -296,7 +296,7 @@ func (c *core) addNotifyRule(r notifyRule) (notifyRule, error) {
 		return r, err
 	}
 	if r.Kind == ruleTopic {
-		r.Match = c.store.keepSubject(r.Match, "") // a subject merged is kept under the other (subjects.go)
+		r.Match = c.store.noteAbout(r.Match) // a thread's alias is kept as its thread (names.go)
 	}
 	now := c.notifyTime().Unix()
 	tx, err := c.store.db.Begin()
@@ -383,13 +383,16 @@ func (c *core) deleteNotifyRule(id int64) error {
 // topicRule is the active topic rule for a ref: the longest match, a
 // match being the ref itself or one of its leading parts (project:getout
 // for project:getout:prod).
-// Both sides are compared as keys (subject.go), so a rule written as
+// Both sides are compared as keys (about_key.go), so a rule written as
 // factures matches the key topic:facture.
-// itemRule is the rule for a notification: its subject's, else its
-// record's (skill:<name>).
+// itemRule is the rule for a notification: what it is about's (its
+// thread's, else one of the thread's keys), else its record's
+// (skill:<name>).
 func itemRule(rules []notifyRule, it notifyItem) *notifyRule {
-	if r := topicRule(rules, it.Subject); r != nil {
-		return r
+	for _, about := range append([]string{it.About}, it.Aliases...) {
+		if r := topicRule(rules, about); r != nil {
+			return r
+		}
 	}
 	return topicRule(rules, it.Ref)
 }

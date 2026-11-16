@@ -36,11 +36,11 @@ func TestStatusQuestionOpensThreadOnStage(t *testing.T) {
 	c := focusCore(t)
 	const subject = "pr:example/infra#12"
 	c.front.begin(true) // Sam asks from the workspace
-	out, isErr := callBrainTool(t, c, "find_thread", map[string]any{"subject": subject})
+	out, isErr := callBrainTool(t, c, "find_thread", map[string]any{"alias": subject})
 	if isErr || len(foundThreads(out)) != 0 {
 		t.Fatalf("find: %v", out)
 	}
-	out, isErr = callBrainTool(t, c, "open_thread", map[string]any{"title": "PR de l'alerte", "goal": "La PR est fusionnée et déployée.", "subject": subject})
+	out, isErr = callBrainTool(t, c, "open_thread", map[string]any{"title": "PR de l'alerte", "goal": "La PR est fusionnée et déployée.", "alias": subject})
 	if isErr {
 		t.Fatalf("open: %v", out)
 	}
@@ -65,7 +65,7 @@ func TestStatusQuestionOpensThreadOnStage(t *testing.T) {
 
 	// Asked again later, in other words and case: the same thread.
 	c.front.begin(true)
-	out, _ = callBrainTool(t, c, "find_thread", map[string]any{"subject": strings.ToUpper(subject)})
+	out, _ = callBrainTool(t, c, "find_thread", map[string]any{"alias": strings.ToUpper(subject)})
 	if got := foundThreads(out); len(got) != 1 || int64(got[0].(map[string]any)["id"].(float64)) != id {
 		t.Fatalf("resume by subject: %v", out)
 	}
@@ -73,7 +73,7 @@ func TestStatusQuestionOpensThreadOnStage(t *testing.T) {
 	if out, isErr := callBrainTool(t, c, "close_thread", map[string]any{"thread_id": id, "summary": "Fusionnée et déployée."}); isErr {
 		t.Fatalf("close: %v", out)
 	}
-	out, _ = callBrainTool(t, c, "find_thread", map[string]any{"subject": subject})
+	out, _ = callBrainTool(t, c, "find_thread", map[string]any{"alias": subject})
 	if got := foundThreads(out); len(got) != 1 || got[0].(map[string]any)["state"] != threadDone {
 		t.Fatalf("an ended thread is found again: %v", out)
 	}
@@ -90,7 +90,7 @@ func TestStatusQuestionOpensThreadOnStage(t *testing.T) {
 // the PR's, and the turn is now about the research.
 func TestLaunchOpensThreadOnTheSide(t *testing.T) {
 	c := focusCore(t)
-	pr, err := c.openThread(threadIn{Title: "PR de l'alerte", Goal: "La PR est fusionnée.", Subject: "pr:example/infra#12"}, nil, byBrain)
+	pr, err := c.openThread(threadIn{Title: "PR de l'alerte", Goal: "La PR est fusionnée.", Alias: "pr:example/infra#12"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestLaunchOpensThreadOnTheSide(t *testing.T) {
 	}
 
 	c.front.begin(true) // the next message, from the workspace too
-	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Nom de marque", "goal": "Sam a choisi un nom libre.", "subject": "project:marque"})
+	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Nom de marque", "goal": "Sam a choisi un nom libre.", "alias": "project:marque"})
 	if isErr {
 		t.Fatalf("open: %v", out)
 	}
@@ -146,7 +146,7 @@ func TestCardsOfThreadTurnLinked(t *testing.T) {
 	}
 
 	// A second thread named: what follows is its own.
-	out, _ := callBrainTool(t, c, "open_thread", map[string]any{"title": "Nom de marque", "goal": "Un nom libre.", "subject": "project:marque"})
+	out, _ := callBrainTool(t, c, "open_thread", map[string]any{"title": "Nom de marque", "goal": "Un nom libre.", "alias": "project:marque"})
 	brand := int64(out["thread"].(map[string]any)["id"].(float64))
 	brainCalls(t, c, "p-3", mergeTool, map[string]any{"number": 13})
 	if refs := timelineCards(t, c, brand); refs == "" || strings.Contains(refs, merge) {
@@ -210,7 +210,7 @@ func TestOtherMatterOpensItsThread(t *testing.T) {
 	if c.turn.aboutThread() != pr.ID {
 		t.Fatalf("the turn is about %d, not %d", c.turn.aboutThread(), pr.ID)
 	}
-	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Ma journée", "goal": "Sam voit sa journée.", "subject": "topic:journee", "ends": endsDay})
+	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Ma journée", "goal": "Sam voit sa journée.", "alias": "topic:journee", "ends": endsDay})
 	if isErr {
 		t.Fatalf("open: %v", out)
 	}
@@ -284,7 +284,7 @@ func TestRunTaskNeedsAThread(t *testing.T) {
 // task the brain starts is a step of it.
 func turnOnThread(t *testing.T, c *core) Thread {
 	t.Helper()
-	th, err := c.openThread(threadIn{Title: "Travail", Goal: "Le travail est fait.", Subject: "topic:travail"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "Travail", Goal: "Le travail est fait.", Alias: "topic:travail"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,7 +469,7 @@ func TestBrainPromptThreads(t *testing.T) {
 	}
 	section := prompt[start:end]
 	for _, want := range []string{
-		"**Quand en ouvrir un.**", "`open_thread` avec son sujet", "reste du texte, sans thread",
+		"**Quand en ouvrir un.**", "`open_thread` avec sa clé", "reste du texte, sans thread",
 		"une étape `call` de fusion", "une étape `user`", "seulement le `check`, rien d'autre", "devient une étape `task` de ce thread", "Une tâche est toujours une étape d'un thread",
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",

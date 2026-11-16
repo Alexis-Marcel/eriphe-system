@@ -165,7 +165,7 @@ itself after 15 minutes.
 
 **Ask where something stands.** Type a question about a thing in the workspace's field ("Where is
 the pull request for the alerts? Is it merged?", "How is the move going?"): Eriphe answers with a
-tile in the center, the subject as its title, where it stands, what was checked, what comes next,
+tile in the center, the matter as its title, where it stands, what was checked, what comes next,
 and the proposal waiting for you right there (a merge to approve, say), and a one-line reply.
 It does not take the center from a tile you are reading unless you asked about something else;
 then that tile stays next to it. A simple question ("what time is my train?") stays a short answer.

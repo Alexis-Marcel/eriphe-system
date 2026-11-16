@@ -55,7 +55,7 @@ func surfSeq(c *core) int64 {
 // again.
 func TestThreadSurfaceLight(t *testing.T) {
 	c := startCore(t)
-	th, err := c.openThread(threadIn{Title: "PR 12", Goal: "Merged and deployed.", Subject: "pr:example/site#12"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "PR 12", Goal: "Merged and deployed.", Alias: "pr:example/site#12"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -155,14 +155,14 @@ func TestThreadStages(t *testing.T) {
 // budget nor steps; stopped from the page, it is dropped.
 func TestWebLightThreadPage(t *testing.T) {
 	tw, csrf, _ := webThread(t)
-	th, err := tw.c.openThread(threadIn{Title: "PR alerting", Goal: "Merged and deployed.", Subject: "pr:example/infra#12"}, nil, byBrain)
+	th, err := tw.c.openThread(threadIn{Title: "PR alerting", Goal: "Merged and deployed.", Alias: "pr:example/infra#12"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	path := "/threads/" + strconv.FormatInt(th.ID, 10)
 	for lang, words := range map[string][]string{
-		"fr": {"Ouvert", "<h1>PR alerting</h1>", "Sujet", "pr:example/infra#12"},
-		"en": {"Open", "<h1>PR alerting</h1>", "Subject", "pr:example/infra#12"},
+		"fr": {"Ouvert", "<h1>PR alerting</h1>", "Clé", "pr:example/infra#12"},
+		"en": {"Open", "<h1>PR alerting</h1>", "Key", "pr:example/infra#12"},
 	} {
 		code, body, _ := tw.do("GET", path, nil, map[string]string{"Cookie": "lang=" + lang})
 		if code != 200 {

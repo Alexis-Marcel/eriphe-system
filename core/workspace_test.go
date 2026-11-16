@@ -45,10 +45,10 @@ func TestNoRulesLeft(t *testing.T) {
 // and the others the surfaces' words recall; a proposed one waits.
 func TestComposerReadsWorkspacePreferences(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	mustAdd(t, c.mem, &Memory{Kind: kindPreference, Subject: workspaceSubject, Text: "Sam veut toujours voir devant une sauvegarde qui échoue."})
-	mustAdd(t, c.mem, &Memory{Kind: kindPreference, Subject: "owner", Text: "Sam ne lit jamais les lettres d'information."})
-	mustAdd(t, c.mem, &Memory{Kind: kindPreference, Subject: workspaceSubject, Text: "Sam aime les modules ronds.", Status: memProposed})
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: workspaceSubject, Text: "Sam a un grand écran."})
+	mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: workspaceEntity, Text: "Sam veut toujours voir devant une sauvegarde qui échoue."})
+	mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: "owner", Text: "Sam ne lit jamais les lettres d'information."})
+	mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: workspaceEntity, Text: "Sam aime les modules ronds.", Status: memProposed})
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: workspaceEntity, Text: "Sam a un grand écran."})
 	c.attend(attentionItem{Ref: "mail:7", Weight: 2, Why: "Lettre d'information de news.example.org", Source: "skill:mail"})
 
 	c.syncQueueSurfaces()
@@ -69,9 +69,9 @@ func TestComposerReadsWorkspacePreferences(t *testing.T) {
 
 	// The stamp the composer watches moves when one enters memory, with its words.
 	// updated_at counts seconds: the ones there move back two, not the clock.
-	c.mem.db.Exec(`UPDATE memories SET updated_at = updated_at - 2 WHERE kind = ? AND subject = ?`, kindPreference, workspaceSubject)
+	c.mem.db.Exec(`UPDATE memories SET updated_at = updated_at - 2 WHERE kind = ? AND about = ?`, kindPreference, workspaceEntity)
 	stamp, changed, _ := c.workspacePrefStamp()
-	x := mustAdd(t, c.mem, &Memory{Kind: kindPreference, Subject: workspaceSubject, Text: "Sam ne veut plus les lettres de news.example.org."})
+	x := mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: workspaceEntity, Text: "Sam ne veut plus les lettres de news.example.org."})
 	s2, changed2, words := c.workspacePrefStamp()
 	if s2 == stamp || changed2 < changed || words != x.Text {
 		t.Fatalf("stamp %q → %q, %d → %d, %q", stamp, s2, changed, changed2, words)
@@ -87,7 +87,7 @@ func TestComposerReadsWorkspacePreferences(t *testing.T) {
 func TestRememberWorkspacePreference(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	seq := ownerSays(c, "Sur l'espace, plus de notifications de sauvegarde")
-	out, err := c.brainRemember(rememberIn{Kind: kindPreference, Subject: workspaceSubject,
+	out, err := c.brainRemember(rememberIn{Kind: kindPreference, About: workspaceEntity,
 		Text: "Sam ne veut plus voir les notifications de sauvegarde sur son espace.", SourceRef: "msg:" + strconv.Itoa(seq)})
 	if err != nil || out["status"] != memActive {
 		t.Fatalf("remember: %v %v", out, err)

@@ -45,7 +45,7 @@ type evalTask struct {
 type evalMemory struct {
 	Key        string `json:"key"`
 	Kind       string `json:"kind"`
-	Subject    string `json:"subject"`
+	About      string `json:"about"`
 	At         string `json:"at"`
 	Text       string `json:"text"`
 	Supersedes string `json:"supersedes"`
@@ -140,7 +140,7 @@ func seedEval(t testing.TB, m *memStore, clock *fakeClock, c *evalCorpus) map[st
 	idOf := map[string]int64{}
 	for _, e := range xs {
 		clock.t = evalTime(t, e.At)
-		x := &Memory{Kind: e.Kind, Subject: e.Subject, Text: e.Text, Pinned: e.Pinned, SourceKind: srcExtraction,
+		x := &Memory{Kind: e.Kind, About: e.About, Text: e.Text, Pinned: e.Pinned, SourceKind: srcExtraction,
 			Trust: trustOwner, Status: memActive, SourceRef: "msg:1"}
 		evalExtras(x, e)
 		if e.AsKind != "" && containsStr(memoryKinds, e.AsKind) {

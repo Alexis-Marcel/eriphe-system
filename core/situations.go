@@ -75,9 +75,9 @@ func (c *core) taskNowText() string {
 // taskRememberIn is a task's remember: no owner kinds.
 type taskRememberIn struct {
 	Text     string `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact"`
-	Kind     string `json:"kind" jsonschema:"fact, person, decision, progress (where a subject stands: it becomes the summary of the subject's thread) or situation (where the user is or what they do for a while, with valid_to); never what the run itself did: its log keeps that"`
+	Kind     string `json:"kind" jsonschema:"fact, person, decision, progress (where a matter stands: it becomes the summary of its thread) or situation (where the user is or what they do for a while, with valid_to); never what the run itself did: its log keeps that"`
 	State    string `json:"state,omitempty" jsonschema:"for a progress: active, blocked, done or paused"`
-	Subject  string `json:"subject,omitempty" jsonschema:"kind:slug: owner, person:<slug>, project:<name>, home, topic:<word>"`
+	About    string `json:"about,omitempty" jsonschema:"kind:slug: owner, person:<slug>, project:<name>, home, topic:<word>"`
 	ValidTo  string `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD or YYYY-MM-DDTHH:MM; required for a situation"`
 	Keywords string `json:"keywords,omitempty" jsonschema:"other words to find it by"`
 }
@@ -97,7 +97,7 @@ func (c *core) taskMemoryServer(t *TaskRow) *mcp.Server {
 			func(ctx context.Context, in sinceIn) (map[string]any, error) {
 				return c.runSince(r, in)
 			})
-		tool(s, "remember", "Keep in Eriphe's memory what will be useful later: one fact, person, decision, progress (where a subject stands, kept as its thread's summary) or situation per call (a situation needs valid_to: « en déplacement à Lyon jusqu'au 14 »); not what this run did, which its log keeps. What a task that read someone else's content remembers is only proposed to the user.",
+		tool(s, "remember", "Keep in Eriphe's memory what will be useful later: one fact, person, decision, progress (where a matter stands, kept as its thread's summary) or situation per call (a situation needs valid_to: « en déplacement à Lyon jusqu'au 14 »); not what this run did, which its log keeps. What a task that read someone else's content remembers is only proposed to the user.",
 			func(ctx context.Context, in taskRememberIn) (map[string]any, error) {
 				return c.taskRemember(t.ID, in)
 			})
@@ -109,7 +109,7 @@ func (c *core) taskRecall(in recallIn) (map[string]any, error) {
 	if c.mem == nil {
 		return nil, errMemoryOff
 	}
-	xs, err := c.mem.recall(recallQuery{Query: in.Query, Kinds: in.Kinds, Subject: in.Subject, Limit: in.Limit})
+	xs, err := c.mem.recall(recallQuery{Query: in.Query, Kinds: in.Kinds, About: in.About, Limit: in.Limit})
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (c *core) taskRemember(id string, in taskRememberIn) (map[string]any, error
 		return nil, fmt.Errorf("kind must be one of %s", strings.Join(taskRememberKinds, ", "))
 	}
 	if strings.TrimSpace(in.Kind) == kindProgress { // its thread's summary (thread_progress.go)
-		th, err := c.progressThread(in.Subject, c.refThread("task:"+id))
+		th, err := c.progressThread(in.About, c.refThread("task:"+id))
 		if err != nil {
 			return nil, err
 		}
@@ -139,12 +139,12 @@ func (c *core) taskRemember(id string, in taskRememberIn) (map[string]any, error
 		}
 		return map[string]any{"thread": th, "note": note}, nil
 	}
-	x := &Memory{Kind: strings.TrimSpace(in.Kind), Subject: in.Subject, Text: in.Text, Keywords: in.Keywords}
+	x := &Memory{Kind: strings.TrimSpace(in.Kind), About: in.About, Text: in.Text, Keywords: in.Keywords}
 	var err error
 	if x.ValidTo, err = parseEnd(in.ValidTo); err != nil {
 		return nil, err
 	}
-	scan := scanMemoryText(x.Text, x.Subject, "", x.Keywords)
+	scan := scanMemoryText(x.Text, x.About, "", x.Keywords)
 	if scan.Reject != "" {
 		return nil, fmt.Errorf("refused: %s", scan.Reject)
 	}
@@ -159,7 +159,7 @@ func (c *core) taskRemember(id string, in taskRememberIn) (map[string]any, error
 		return nil, err
 	}
 	if x.Status == memProposed {
-		c.cardProposedBy(cardMemory, x.ID, func() string { return c.taskSubject(id) }, "task:"+id) // the task's, not the brain's turn
+		c.cardProposedBy(cardMemory, x.ID, func() string { return c.taskAbout(id) }, "task:"+id) // the task's, not the brain's turn
 		return map[string]any{"id": x.ID, "status": x.Status, "note": "Only proposed: the user approves it on a card."}, nil
 	}
 	return map[string]any{"id": x.ID, "status": x.Status}, nil

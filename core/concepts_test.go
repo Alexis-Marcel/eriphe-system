@@ -33,7 +33,7 @@ func intendCall(text, kind, remind string) benchCall {
 
 func rememberCall(kind, text string) benchCall {
 	return func(c *core, seq int) (map[string]any, error) {
-		return c.brainRemember(rememberIn{Text: text, Kind: kind, Subject: "owner", SourceRef: ref(seq)})
+		return c.brainRemember(rememberIn{Text: text, Kind: kind, About: "owner", SourceRef: ref(seq)})
 	}
 }
 
@@ -186,7 +186,7 @@ func TestConceptMapGiven(t *testing.T) {
 func TestRememberAboutConversation(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
 	seq := ownerSays(c, "Préviens-moi avant de lancer une tâche longue")
-	in := rememberIn{Text: "Veut être prévenu avant une tâche longue", Kind: kindPreference, Subject: "owner", SourceRef: ref(seq)}
+	in := rememberIn{Text: "Veut être prévenu avant une tâche longue", Kind: kindPreference, About: "owner", SourceRef: ref(seq)}
 	if _, err := c.brainRemember(in); err == nil || !strings.Contains(err.Error(), "about_conversation") {
 		t.Fatalf("not redirected: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestRecallShowsRules(t *testing.T) {
 	if rs := rules(recallIn{Query: "getout"}); len(rs) != 1 || rs[0].Kind != kindRule || !strings.Contains(rs[0].Rule, "even at night") {
 		t.Errorf("getout: %+v", rs)
 	}
-	if rs := rules(recallIn{Subject: "project:getout"}); len(rs) != 1 {
+	if rs := rules(recallIn{About: "project:getout"}); len(rs) != 1 {
 		t.Errorf("subject project:getout: %+v", rs)
 	}
 	if rs := rules(recallIn{Query: "factures"}); len(rs) != 1 || rs[0].State != ruleProposed {

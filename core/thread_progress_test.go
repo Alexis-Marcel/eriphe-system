@@ -16,7 +16,7 @@ import (
 func TestRememberProgressIsThreadSummary(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	ownerSays(c, "Le portfolio avance")
-	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:portfolio", Text: "Fait : accueil"}); err != errNoProgressThread {
+	if _, err := c.brainRemember(rememberIn{Kind: "progress", About: "project:portfolio", Text: "Fait : accueil"}); err != errNoProgressThread {
 		t.Fatalf("a subject with no thread: %v", err)
 	}
 	if _, err := c.brainRemember(rememberIn{Kind: "progress", Text: "Fait : accueil"}); err != errNoProgressThread {
@@ -25,12 +25,12 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 	if n, _ := c.threads(false, 10); len(n) != 0 {
 		t.Fatalf("code opened %d threads", len(n))
 	}
-	opened, err := c.openThread(threadIn{Title: "Portfolio", Goal: "Le portfolio est en ligne.", Subject: "project:portfolio"}, nil, byBrain)
+	opened, err := c.openThread(threadIn{Title: "Portfolio", Goal: "Le portfolio est en ligne.", Alias: "project:portfolio"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := opened.ID
-	out, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:portfolio", Text: "Fait : accueil ; reste : contact"})
+	out, err := c.brainRemember(rememberIn{Kind: "progress", About: "project:portfolio", Text: "Fait : accueil ; reste : contact"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 	if th, _ := c.thread(id); th.Summary != "Fait : accueil ; reste : contact" {
 		t.Fatalf("thread: %+v", th)
 	}
-	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:portfolio", Text: "Bloqué sur les photos", State: "blocked"}); err != nil {
+	if _, err := c.brainRemember(rememberIn{Kind: "progress", About: "project:portfolio", Text: "Bloqué sur les photos", State: "blocked"}); err != nil {
 		t.Fatal(err)
 	}
 	if th, _ := c.thread(id); th.Summary != "Bloqué. Bloqué sur les photos" {
@@ -55,7 +55,7 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 	if n := c.mem.count(`kind = 'progress'`); n != 0 {
 		t.Fatalf("%d progress memories", n)
 	}
-	if card, _ := c.subjectCard("project:portfolio", subjectCardChars); !strings.Contains(card, "résumé : Bloqué. Bloqué sur les photos") {
+	if card, _ := c.aboutCard(threadRef(id), threadCardChars); !strings.Contains(card, "résumé : Bloqué. Bloqué sur les photos") {
 		t.Errorf("card:\n%s", card)
 	}
 	// Without a subject, the turn's thread's.
@@ -68,20 +68,20 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 	}
 
 	// A thread that ended is not reopened behind the user's back.
-	brun, err := c.openThread(threadIn{Title: "Brun", Goal: "En ligne.", Subject: "project:brun"}, nil, byBrain)
+	brun, err := c.openThread(threadIn{Title: "Brun", Goal: "En ligne.", Alias: "project:brun"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := c.closeLight(brun.ID, "En ligne.", "brain"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:brun", Text: "Encore"}); err == nil || !strings.Contains(err.Error(), "reopen_thread") {
+	if _, err := c.brainRemember(rememberIn{Kind: "progress", About: "project:brun", Text: "Encore"}); err == nil || !strings.Contains(err.Error(), "reopen_thread") {
 		t.Fatalf("ended thread: %v", err)
 	}
 
 	// A turn that read external content writes no summary.
 	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "WebFetch"}}})
-	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:portfolio", Text: "LU SUR LE WEB"}); err != errProgressTainted {
+	if _, err := c.brainRemember(rememberIn{Kind: "progress", About: "project:portfolio", Text: "LU SUR LE WEB"}); err != errProgressTainted {
 		t.Fatalf("tainted: %v", err)
 	}
 	if th, _ := c.thread(id); strings.Contains(th.Summary, "LU SUR LE WEB") {
@@ -91,10 +91,10 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 	// never quoted then, and a wake they tainted still says where it stands.
 	c.insertSteps(id, []stepSpec{{Key: "read", Title: "Lire la page", Kind: stepTask}}, false)
 	c.setStep(id, "read", map[string]any{"tainted": "external:web"})
-	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:portfolio", Text: "La page est relue"}); err != nil {
+	if _, err := c.brainRemember(rememberIn{Kind: "progress", About: "project:portfolio", Text: "La page est relue"}); err != nil {
 		t.Fatalf("a thread already external: %v", err)
 	}
-	if card, _ := c.subjectCard("project:portfolio", subjectCardChars); strings.Contains(card, "La page est relue") {
+	if card, _ := c.aboutCard(threadRef(id), threadCardChars); strings.Contains(card, "La page est relue") {
 		t.Errorf("an external thread's summary quoted:\n%s", card)
 	}
 }
@@ -103,7 +103,7 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 // closed again after a reopen, the new one supersedes it.
 func TestCloseWritesDecision(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	th, err := c.openThread(threadIn{Title: "Site en ligne", Goal: "Le site répond.", Subject: "project:site"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "Site en ligne", Goal: "Le site répond.", Alias: "project:site"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestCloseWritesDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 	xs, _ := c.mem.list(`kind = 'decision' AND status = 'active'`, nil, "", 5)
-	if len(xs) != 1 || xs[0].Subject != "project:site" || xs[0].SourceKind != srcThread || xs[0].SourceRef != threadRef(th.ID) ||
+	if len(xs) != 1 || xs[0].About != threadRef(th.ID) || xs[0].SourceKind != srcThread || xs[0].SourceRef != threadRef(th.ID) ||
 		xs[0].Trust != trustFirstParty || !strings.Contains(xs[0].Text, "Fil « Site en ligne » clos le "+time.Now().Format("2006-01-02")+" : Déployé sur le NAS") {
 		t.Fatalf("decision: %+v", xs)
 	}
@@ -126,15 +126,15 @@ func TestCloseWritesDecision(t *testing.T) {
 		t.Fatalf("after the second close: %+v", ys)
 	}
 	// Stopped, it decided nothing.
-	other, _ := c.openThread(threadIn{Title: "Autre", Goal: "Rien.", Subject: "project:autre"}, nil, byBrain)
+	other, _ := c.openThread(threadIn{Title: "Autre", Goal: "Rien.", Alias: "project:autre"}, nil, byBrain)
 	c.stopThread(context.Background(), other.ID, "brain")
-	if n := c.mem.count(`kind = 'decision' AND subject = 'project:autre'`); n != 0 {
+	if n := c.mem.count(`kind = 'decision' AND about = '` + threadRef(other.ID) + `'`); n != 0 {
 		t.Fatalf("a stopped thread wrote %d decisions", n)
 	}
 	// A tainted thread's decision is external: named, never quoted.
-	ext, _ := c.openThread(threadIn{Title: "Mail", Goal: "Répondre.", Subject: "mail:42"}, []string{"external:mail:42"}, byBrain)
+	ext, _ := c.openThread(threadIn{Title: "Mail", Goal: "Répondre.", Alias: "topic:mail-42"}, []string{"external:mail:42"}, byBrain)
 	c.closeLight(ext.ID, "Répondu", "brain")
-	if zs, _ := c.mem.list(`kind = 'decision' AND subject = 'mail:42'`, nil, "", 1); len(zs) != 1 || zs[0].Trust != trustExternal {
+	if zs, _ := c.mem.list(`kind = 'decision' AND about = ?`, []any{threadRef(ext.ID)}, "", 1); len(zs) != 1 || zs[0].Trust != trustExternal {
 		t.Fatalf("tainted thread's decision: %+v", zs)
 	}
 }
@@ -144,14 +144,14 @@ func TestCloseWritesDecision(t *testing.T) {
 // does not.
 func TestIntentionFollowsThread(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	th, err := c.openThread(threadIn{Title: "Site", Goal: "En ligne.", Subject: "project:site"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "Site", Goal: "En ligne.", Alias: "project:site"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	due := c.mem.now().Add(48 * time.Hour)
-	x := mustIntend(t, c.mem, &Intention{Text: "Relancer Lina pour le site", Subject: "project:site", DueAt: due})
-	mustIntend(t, c.mem, &Intention{Text: "Une idée proposée", Subject: "project:site", DueAt: due, State: intentProposed})
-	mustIntend(t, c.mem, &Intention{Text: "Rendre le livre", Subject: "project:autre", DueAt: due})
+	x := mustIntend(t, c.mem, &Intention{Text: "Relancer Lina pour le site", About: "project:site", DueAt: due})
+	mustIntend(t, c.mem, &Intention{Text: "Une idée proposée", About: "project:site", DueAt: due, State: intentProposed})
+	mustIntend(t, c.mem, &Intention{Text: "Rendre le livre", About: "project:autre", DueAt: due})
 	c.threadsTick(time.Now())
 	c.threadsTick(time.Now())
 	steps, _ := c.steps(th.ID)
@@ -170,7 +170,7 @@ func TestIntentionFollowsThread(t *testing.T) {
 // the turn proposes, as well as a task's start.
 func TestCardOfThreadTurnInTimeline(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	th, err := c.openThread(threadIn{Title: "Site", Goal: "En ligne.", Subject: "project:site"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "Site", Goal: "En ligne.", Alias: "project:site"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}

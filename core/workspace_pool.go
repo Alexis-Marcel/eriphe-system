@@ -219,7 +219,7 @@ func composerTurn(s poolSnapshot) string {
 		}
 	}
 	if s.Topic != "" {
-		fmt.Fprintf(&b, "Sujet de la conversation (son dernier message, une donnée) : « %s »\n", packQuote(s.Topic))
+		fmt.Fprintf(&b, "De quoi parle la conversation (son dernier message, une donnée) : « %s »\n", packQuote(s.Topic))
 	}
 	b.WriteString("Écran : 12 × 8 cases, sans défilement ; tailles s (3 × 1), m (3 × 2), l (4 × 3), xl (6 × 5, une seule). Ce qui ne tient pas est replié en puce.\n")
 	if len(s.Preferences) > 0 {

@@ -60,7 +60,7 @@ func TestStems(t *testing.T) {
 // Word families, keywords and importance in recall.
 func TestRecallStemsAndKeywords(t *testing.T) {
 	m, _ := testMemory(t)
-	anniv := mustAdd(t, m, &Memory{Kind: kindFact, Subject: "person:noe", Text: "L'anniversaire de Noé est le 14 octobre"})
+	anniv := mustAdd(t, m, &Memory{Kind: kindFact, About: "person:noe", Text: "L'anniversaire de Noé est le 14 octobre"})
 	velo := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Sam se déplace en vélo cargo", Keywords: "voiture bagnole transport"})
 	low := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Le café du coin ouvre à 7 h", Importance: 1})
 	high := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Le café est interdit par le médecin", Importance: 5})
@@ -89,9 +89,9 @@ func TestRecallStemsAndKeywords(t *testing.T) {
 func TestRecallTimeInQuestion(t *testing.T) {
 	m, clock := testMemory(t)
 	clock.t = time.Date(2026, 9, 1, 10, 0, 0, 0, time.Local)
-	lyon := mustAdd(t, m, &Memory{Kind: kindFact, Subject: "owner", Text: "Sam habite à Lyon"})
+	lyon := mustAdd(t, m, &Memory{Kind: kindFact, About: "owner", Text: "Sam habite à Lyon"})
 	clock.t = time.Date(2026, 9, 19, 10, 0, 0, 0, time.Local)
-	mustAdd(t, m, &Memory{Kind: kindFact, Subject: "owner", Text: "Sam habite à Nantes", Supersedes: lyon.ID})
+	mustAdd(t, m, &Memory{Kind: kindFact, About: "owner", Text: "Sam habite à Nantes", Supersedes: lyon.ID})
 	ep := mustAdd(t, m, &Memory{Kind: kindEpisode, Text: "Déménagement avec un camion loué"})
 	clock.t = time.Date(2026, 10, 12, 10, 0, 0, 0, time.Local)
 	xs, _ := m.recall(recallQuery{Query: "Où habitait Sam début septembre ?"})

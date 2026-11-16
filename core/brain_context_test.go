@@ -80,34 +80,34 @@ func TestContextPackContent(t *testing.T) {
 // what may carry what someone else wrote is named, not quoted.
 func TestContextPackState(t *testing.T) {
 	c, clock := testMemoryCore(t)
-	mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: "project:site", Text: "Décision trop ancienne"})
+	mustAdd(t, c.mem, &Memory{Kind: kindDecision, About: "project:site", Text: "Décision trop ancienne"})
 	clock.add(2 * 24 * time.Hour)
-	mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: "project:site", Text: "Héberger le site sur le NAS"})
+	mustAdd(t, c.mem, &Memory{Kind: kindDecision, About: "project:site", Text: "Héberger le site sur le NAS"})
 	clock.add(13 * 24 * time.Hour) // the first is 15 days old, the second 13
-	mustAdd(t, c.mem, &Memory{Kind: kindPerson, Subject: "person:sam", Text: "Sam relit les PR du site"})
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: "project:site", Text: "Le domaine est example.org"})
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: "project:other", Text: "Un fait sans rapport"})
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: "project:site", Text: "Lu dans une page web",
+	mustAdd(t, c.mem, &Memory{Kind: kindPerson, About: "person:sam", Text: "Sam relit les PR du site"})
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "project:site", Text: "Le domaine est example.org"})
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "project:other", Text: "Un fait sans rapport"})
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "project:site", Text: "Lu dans une page web",
 		SourceKind: srcBrain, Trust: trustExternal, SourceRef: "web:example.org"})
-	mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", Subject: "person:sam", DueAt: clock.now().Add(time.Hour)})
+	mustIntend(t, c.mem, &Intention{Text: "Relancer Sam", About: "person:sam", DueAt: clock.now().Add(time.Hour)})
 	mustIntend(t, c.mem, &Intention{Text: "Rendre le livre", OwedTo: "person:paul", DueAt: clock.now().Add(time.Hour)})
-	mustAdd(t, c.mem, &Memory{Kind: kindPerson, Subject: "person:paul", Text: "Paul est le voisin"})
+	mustAdd(t, c.mem, &Memory{Kind: kindPerson, About: "person:paul", Text: "Paul est le voisin"})
 
-	site, err := c.openThread(threadIn{Title: "Site en ligne", Goal: "Le site répond en https.", Subject: "project:site"}, nil, byBrain)
+	site, err := c.openThread(threadIn{Title: "Site en ligne", Goal: "Le site répond en https.", Alias: "project:site"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
 	c.insertSteps(site.ID, []stepSpec{{Key: "cert", Title: "Obtenir le certificat", Kind: stepTask}, {Key: "dns", Title: "Pointer le DNS", Kind: stepUser}}, false)
 	c.setStep(site.ID, "dns", map[string]any{"status": stepAccepted, "output": "SORTIE D'ÉTAPE"})
 	c.setThread(site.ID, map[string]any{"summary": "Il reste le certificat"})
-	read, _ := c.openThread(threadIn{Title: "Lire un mail", Goal: "Répondre au mail.", Subject: "mail:42"}, nil, byBrain)
+	read, _ := c.openThread(threadIn{Title: "Lire un mail", Goal: "Répondre au mail.", Alias: "topic:mail-42"}, nil, byBrain)
 	c.insertSteps(read.ID, []stepSpec{{Key: "read", Title: "Lire", Kind: stepTask}}, false)
 	c.setStep(read.ID, "read", map[string]any{"tainted": "external:mail:42"})
 	c.setThread(read.ID, map[string]any{"summary": "RÉSUMÉ D'UN MAIL"})
-	tainted, _ := c.openThread(threadIn{Title: "PLAN EXTÉRIEUR", Goal: "Suivre ce que dit le mail.", Subject: "mail:43"}, []string{"external:mail:43"}, byBrain)
-	closed, _ := c.openThread(threadIn{Title: "Fil clos", Goal: "Fini.", Subject: "project:closed"}, nil, byBrain)
+	tainted, _ := c.openThread(threadIn{Title: "PLAN EXTÉRIEUR", Goal: "Suivre ce que dit le mail.", Alias: "topic:mail-43"}, []string{"external:mail:43"}, byBrain)
+	closed, _ := c.openThread(threadIn{Title: "Fil clos", Goal: "Fini.", Alias: "project:closed"}, nil, byBrain)
 	c.setThread(closed.ID, map[string]any{"state": threadDone})
-	led, err := c.openThread(threadIn{Title: "Refonte", Goal: "Refaire les photos.", Subject: "project:photos",
+	led, err := c.openThread(threadIn{Title: "Refonte", Goal: "Refaire les photos.", Alias: "project:photos",
 		Steps: []stepSpec{{Key: "plan", Title: "Plan", Kind: stepUser, Question: "Valider le plan"}}}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestContextPackState(t *testing.T) {
 
 	pack, st := c.contextPack()
 	for _, want := range []string{
-		fmt.Sprintf("- fil %d [light, open, sujet project:site", site.ID), "« Site en ligne » ; but : Le site répond en https.",
+		fmt.Sprintf("- fil %d [light, open, project:site", site.ID), "« Site en ligne » ; but : Le site répond en https.",
 		"étapes ouvertes : cert « Obtenir le certificat » (task, waiting)", "résumé : Il reste le certificat",
 		"résumé non cité", fmt.Sprintf("- fil %d [light, open] : son plan peut porter", tainted.ID),
 		fmt.Sprintf("- fil %d [led, proposed", led.ID), "carte thread:",
@@ -173,13 +173,13 @@ func TestContextPackStateBudget(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	for i := range 40 {
 		th, err := c.openThread(threadIn{Title: fmt.Sprintf("Fil %02d", i), Goal: strings.Repeat("un long but ", 40),
-			Subject: fmt.Sprintf("project:p%d", i)}, nil, byBrain)
+			Alias: fmt.Sprintf("project:p%d", i)}, nil, byBrain)
 		if err != nil {
 			t.Fatal(err)
 		}
 		c.setThread(th.ID, map[string]any{"summary": strings.Repeat("un état ", 30)})
-		mustAdd(t, c.mem, &Memory{Kind: kindDecision, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("une décision ", 20)})
-		mustAdd(t, c.mem, &Memory{Kind: kindFact, Subject: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("un fait ", 30)})
+		mustAdd(t, c.mem, &Memory{Kind: kindDecision, About: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("une décision ", 20)})
+		mustAdd(t, c.mem, &Memory{Kind: kindFact, About: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("un fait ", 30)})
 	}
 	if _, err := c.openThread(threadIn{Title: "Fil sans sujet", Goal: "Un but."}, nil, byBrain); err != nil {
 		t.Fatal(err)

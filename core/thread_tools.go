@@ -12,7 +12,7 @@ import (
 )
 
 // The brain's tools for threads (threads.go): it opens them, finds them
-// again by their subject, closes them on their goal and reopens them; a
+// again by their names, closes them on their goal and reopens them; a
 // light one it holds itself, a led one it opens with the user and, until
 // it has a lead of its own, leads.
 
@@ -50,7 +50,7 @@ type closeIn struct {
 
 type reopenIn struct {
 	Thread int64  `json:"thread_id"`
-	Why    string `json:"why" jsonschema:"what brings its subject back, in a sentence"`
+	Why    string `json:"why" jsonschema:"what brings it back, in a sentence"`
 }
 
 type tellLeadIn struct {
@@ -71,9 +71,9 @@ type linkThreadIn struct {
 }
 
 type findThreadIn struct {
-	Subject string `json:"subject,omitempty" jsonschema:"the subject of the matter (kind:slug), as given at its opening: project:site, pr:owner/repo#12"`
-	Text    string `json:"text,omitempty" jsonschema:"words of its title, goal, subject or summary"`
-	All     bool   `json:"all,omitempty" jsonschema:"without subject nor text: the ended ones too (with them, they are always included)"`
+	Alias string `json:"alias,omitempty" jsonschema:"a key of the matter (kind:slug: project:site, pr:owner/repo#12) or a name the user gives its thread"`
+	Text  string `json:"text,omitempty" jsonschema:"words of its title, goal, names or summary"`
+	All   bool   `json:"all,omitempty" jsonschema:"without alias nor text: the ended ones too (with them, they are always included)"`
 }
 
 // threadView is a thread with its plan, what it asks and its log.
@@ -83,6 +83,8 @@ type threadView struct {
 	Log   []ThreadLine `json:"log"`
 	Asks  int          `json:"cards_waiting,omitempty"`
 	Notes []itemNote   `json:"notes,omitempty"` // on its sources' items (thread_items.go)
+	Names []string     `json:"names,omitempty"` // its keys and names (names.go)
+	Card  string       `json:"card,omitempty"`  // what is known of it (thread_card.go), read_thread's
 }
 
 func (c *core) threadView(id int64, lines int) (threadView, error) {
@@ -94,12 +96,12 @@ func (c *core) threadView(id int64, lines int) (threadView, error) {
 	if err != nil {
 		return threadView{}, err
 	}
-	v := threadView{Thread: s, Steps: steps, Log: c.threadLog(id, lines), Notes: c.itemNotes(id)}
+	v := threadView{Thread: s, Steps: steps, Log: c.threadLog(id, lines), Notes: c.itemNotes(id), Names: c.threadNames(id)}
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_asks WHERE thread = ? AND state = ?`, id, askPending).Scan(&v.Asks)
 	return v, nil
 }
 
-// endsAgain makes the thread a subject already has end as the brain asks
+// endsAgain makes the thread an alias has already end as the brain asks
 // now (open_thread's ends), should it ask another: a light one only.
 func (c *core) endsAgain(old Thread, ends string) error {
 	ends = strings.ToLower(strings.TrimSpace(ends))
@@ -110,7 +112,7 @@ func (c *core) endsAgain(old Thread, ends string) error {
 		return fmt.Errorf("ends %q: goal, standing or day", ends)
 	}
 	if old.led() {
-		return fmt.Errorf("thread %d « %s » follows this subject and is led: it ends on its goal", old.ID, old.Title)
+		return fmt.Errorf("thread %d « %s » follows this matter and is led: it ends on its goal", old.ID, old.Title)
 	}
 	fields := map[string]any{"ends": ends}
 	if ends == endsDay {
@@ -119,33 +121,35 @@ func (c *core) endsAgain(old Thread, ends string) error {
 	return c.setThread(old.ID, fields)
 }
 
-// sameSubject is why a thread opened on a subject that had one is that
-// one again: a matter has one thread.
-const sameSubject = "même sujet"
+// sameMatter is why a thread opened on the alias of another is that one
+// again: a matter has one thread.
+const sameMatter = "même chose"
 
 // openThreadOnce opens a thread, one per matter, for the brain or a task
 // lent eriphe-threads (by: skill:<name>, task:<id>): a light one needs its
-// subject, and a subject that has a thread already gives that thread back
+// alias, and an alias that has a thread already gives that thread back
 // (reopened light if it ended) rather than a second one; again says so. A
-// led one on the subject of an active thread is refused: that thread's
-// plan changes instead. Only the brain changes how a thread found ends.
+// led one on the alias of a thread is refused: that thread's plan changes
+// instead. Only the brain changes how a thread found ends.
 func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread, again string, err error) {
 	led := strings.EqualFold(strings.TrimSpace(in.Mode), modeLed) || (strings.TrimSpace(in.Mode) == "" && len(in.Steps) > 0)
-	subject, err := c.subjectLookup(in.Subject)
+	alias, err := aliasKey(in.Alias)
 	if err != nil {
-		return s, "", fmt.Errorf("subject: %w", err)
+		return s, "", fmt.Errorf("alias: %w", err)
 	}
-	in.Subject = subject
-	if subject == "" {
+	in.Alias = alias
+	if alias == "" {
 		if !led {
-			return s, "", errors.New("subject is needed: the subject of the matter, kind:slug, to find its thread again (pr:owner/repo#12, project:site, topic:brand-name)")
+			return s, "", errors.New("alias is needed: the key of the matter, kind:slug, to find its thread again (pr:owner/repo#12, project:site, topic:brand-name)")
 		}
 		s, err = c.openThread(in, taint, by)
 		return s, "", err
 	}
-	found, err := c.findThreads(subject, "", true, 1) // active first, then the latest
-	if err != nil {
-		return s, "", err
+	var found []Thread
+	if id, ok := c.aliasThread(alias); ok {
+		if th, err := c.thread(id); err == nil {
+			found = append(found, th)
+		}
 	}
 	if len(found) == 0 {
 		s, err = c.openThread(in, taint, by)
@@ -159,22 +163,21 @@ func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread,
 	}
 	switch {
 	case led && old.active():
-		return s, "", fmt.Errorf("thread %d « %s » follows %s already: change its plan (add_step, amend_thread) rather than open another", old.ID, old.Title, old.Subject)
+		return s, "", fmt.Errorf("thread %d « %s » follows %s already: change its plan (add_step, amend_thread) rather than open another", old.ID, old.Title, alias)
 	case led:
-		s, err = c.openThread(in, taint, by)
-		return s, "", err
+		return s, "", fmt.Errorf("thread %d « %s » followed %s and ended: reopen it (reopen_thread) and go on with it, a matter has one thread", old.ID, old.Title, alias)
 	case old.active():
-		return old, fmt.Sprintf("Not a new thread: thread %d « %s » follows this subject already, and it is the one to go on with (its steps: read_thread).", old.ID, old.Title), nil
+		return old, fmt.Sprintf("Not a new thread: thread %d « %s » follows this matter already, and it is the one to go on with (its steps: read_thread).", old.ID, old.Title), nil
 	}
-	s, err = c.reopenThread(old.ID, sameSubject, by)
+	s, err = c.reopenThread(old.ID, sameMatter, by)
 	if err != nil {
 		return s, "", err
 	}
-	return s, fmt.Sprintf("Not a new thread: thread %d « %s » followed this subject and had ended; it is reopened, light, with its history (read_thread).", s.ID, s.Title), nil
+	return s, fmt.Sprintf("Not a new thread: thread %d « %s » followed this matter and had ended; it is reopened, light, with its history (read_thread).", s.ID, s.Title), nil
 }
 
 func registerThreadTools(s *mcp.Server, c *core) {
-	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). A matter has one thread: give its subject (required for a light one); a subject that has a thread already gives that thread back, reopened if it ended, instead of a second one. Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, call, user, choice, approval, check, deadline: as add_step's) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" For one task alone, use run_task.",
+	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). A matter has one thread: give its alias, the matter's key (required for a light one); an alias that has a thread already gives that thread back, reopened if it ended, instead of a second one. Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, call, user, choice, approval, check, deadline: as add_step's) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" For one task alone, use run_task.",
 		func(ctx context.Context, in threadIn) (map[string]any, error) {
 			for _, st := range in.Steps {
 				if st.Kind == "" || st.runsTask() {
@@ -197,16 +200,18 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return map[string]any{"thread": s, "note": "Only proposed: " + threadNote + " Never say it started before the user approves."}, nil
 		})
 
-	tool(s, "find_thread", "Find threads: by words of their title, goal, subject or summary (when you do not know the subject's ref), or by the subject they follow; without either, the open and waiting ones. Ended ones are listed too (done, dropped), to reopen one when its subject comes back.",
+	tool(s, "find_thread", "Find threads: by words of their title, goal, names or summary, or by an alias (kind:slug) or a name; without either, the open and waiting ones. Ended ones are listed too (done, dropped), to reopen one when its matter comes back.",
 		func(ctx context.Context, in findThreadIn) (map[string]any, error) {
-			ss, err := c.findThreads(in.Subject, in.Text, in.All, 30)
+			ss, err := c.findThreads(in.Alias, in.Text, in.All, 30)
 			return map[string]any{"threads": ss}, err
 		})
 
-	tool(s, "read_thread", "A thread: its mode, subject, state (open, waiting, done, dropped) and summary; led, its phase, budget and time spent, each step (status: waiting, running, reported: its agent says it is done, verified: its checks passed, accepted, rejected, blocked, dropped; its task, evidence and output) and its recent log.",
+	tool(s, "read_thread", "A thread: its mode, names, state (open, waiting, done, dropped) and summary, and its card (what eriphe-core knows of it: last decisions, facts and people, open intentions, cards waiting for the user, preferences; what may carry someone else's words is named, not quoted); led, its phase, budget and time spent, each step (status: waiting, running, reported: its agent says it is done, verified: its checks passed, accepted, rejected, blocked, dropped; its task, evidence and output) and its recent log.",
 		func(ctx context.Context, in threadIDIn) (threadView, error) {
 			v, err := c.threadView(in.Thread, 20)
 			if err == nil {
+				c.cardLookedUp(threadRef(v.ID)) // its turn's card was not enough (card_use.go)
+				v.Card, _ = c.aboutCard(threadRef(v.ID), threadCardChars)
 				c.turnThread(in.Thread)
 				for _, why := range readNotesTaint(v.Notes) {
 					c.turn.taint(why) // a note written after reading outside content
@@ -246,7 +251,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return c.addStep(ctx, in.Thread, in.Step, c.turnTaint(), "brain")
 		})
 
-	tool(s, "link_thread", "Join to a thread what eriphe-core does not link itself, an intention of another subject (ref intention:<id>: a deadline step, due when it is) or a card raised outside a turn about the thread (kind:id: in its timeline); or, with source, live data the thread carries, read by code without a model: what it is about (the user's mail, their agenda, pull requests to review: a free read of yours or a resource, with items to show each one it lists) or a monitor the user approved (a latency, an error rate: its latest number and its events, a limit crossed raises the thread; a skill still reacts to its events). Its value is at /<name> in the thread's surface's data, for your part to bind. An intention of the thread's subject and a card born in a turn about it are linked already; where it stands is remember kind progress.",
+	tool(s, "link_thread", "Join to a thread what eriphe-core does not link itself, an intention about another thread (ref intention:<id>: a deadline step, due when it is) or a card raised outside a turn about the thread (kind:id: in its timeline); or, with source, live data the thread carries, read by code without a model: what it is about (the user's mail, their agenda, pull requests to review: a free read of yours or a resource, with items to show each one it lists) or a monitor the user approved (a latency, an error rate: its latest number and its events, a limit crossed raises the thread; a skill still reacts to its events). Its value is at /<name> in the thread's surface's data, for your part to bind. An intention about the thread and a card born in a turn about it are linked already; where it stands is remember kind progress.",
 		func(ctx context.Context, in linkThreadIn) (map[string]any, error) {
 			c.turnThread(in.Thread)
 			if in.Source != nil {
@@ -317,7 +322,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return map[string]any{"note": note}, err
 		})
 
-	tool(s, "reopen_thread", "Reopen a thread that ended (done or dropped) when its subject comes back: it opens again, light, held by you, with its history.",
+	tool(s, "reopen_thread", "Reopen a thread that ended (done or dropped) when its matter comes back: it opens again, light, held by you, with its history.",
 		func(ctx context.Context, in reopenIn) (Thread, error) {
 			c.turnThread(in.Thread)
 			return c.reopenThread(in.Thread, in.Why, "brain")

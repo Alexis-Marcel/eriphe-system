@@ -53,9 +53,9 @@
 <form class="mem-search" method="get" action="/memory" role="search">
   <label class="search-box"><span class="sr-only">{{t "mem.search"}}</span>{{template "i-search"}}
     <input type="text" name="q" value="{{.Q}}" placeholder="{{t "mem.searchph"}}" autocomplete="off" spellcheck="false" aria-describedby="mem-search-h"></label>
-  <label class="select"><span class="sr-only">{{t "mem.subject"}}</span>
-    <select name="subject"><option value="">{{t "mem.anysubject"}}</option>
-      {{$cur := .Subject}}{{range .Subjects}}<option value="{{.}}" {{if eq . $cur}}selected{{end}}>{{.}}</option>{{end}}
+  <label class="select"><span class="sr-only">{{t "mem.on"}}</span>
+    <select name="about"><option value="">{{t "mem.anyabout"}}</option>
+      {{$cur := .On}}{{range .Ons}}<option value="{{.}}" {{if eq . $cur}}selected{{end}}>{{.}}</option>{{end}}
     </select></label>
   {{if .Kind}}<input type="hidden" name="kind" value="{{.Kind}}">{{end}}
   <label class="check"><input type="checkbox" name="past" value="1" {{if .Past}}checked{{end}}><span>{{t "mem.past"}}</span></label>
@@ -71,7 +71,7 @@
   <form class="mem-form" hx-post="/memory" hx-target="#mem-list" hx-swap="afterbegin" data-reset>
     <label class="field span2"><span>{{t "mem.text"}}</span><textarea name="text" rows="2" required maxlength="2000" placeholder="{{t "mem.textph"}}"></textarea></label>
     <label class="field"><span>{{t "mem.kind"}}</span><select name="kind">{{range .Kinds}}<option value="{{.}}" {{if eq . "fact"}}selected{{end}}>{{t (printf "kind.%s" .)}}</option>{{end}}</select></label>
-    <label class="field"><span>{{t "mem.subject"}}</span><input type="text" name="subject" maxlength="100" placeholder="{{t "mem.subjectph"}}" class="mono" spellcheck="false" autocomplete="off"></label>
+    <label class="field"><span>{{t "mem.on"}}</span><input type="text" name="about" maxlength="100" placeholder="{{t "mem.aboutph"}}" class="mono" spellcheck="false" autocomplete="off"></label>
     <label class="field"><span>{{t "mem.links"}}</span><textarea name="links" rows="1" placeholder="{{t "mem.linksph"}}" class="mono"></textarea></label>
     <div class="mem-form-end span2">
       <label class="check"><input type="checkbox" name="pin" value="1"><span>{{t "mem.pinit"}}</span></label>
@@ -82,11 +82,11 @@
 <div class="mem-list" id="mem-list">
 {{range .Items}}{{template "mem-card" .}}{{end}}
 </div>
-{{if not .Items}}{{if or .Q .Kind .Subject .Past (not .About)}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-memory"}}</span><p>{{if or .Q .Kind .Subject}}{{t "mem.nomatch"}}{{else}}{{t "mem.none"}}{{end}}</p></div>{{end}}{{end}}
+{{if not .Items}}{{if or .Q .Kind .On .Past (not .About)}}<div class="empty"><span class="empty-art" aria-hidden="true">{{template "i-memory"}}</span><p>{{if or .Q .Kind .On}}{{t "mem.nomatch"}}{{else}}{{t "mem.none"}}{{end}}</p></div>{{end}}{{end}}
 {{end}}
 
 {{/* What the assistant knows about me: the profile and what is about me
-(subject owner), the pinned first, with the cards' usual actions. */}}
+(about owner), the pinned first, with the cards' usual actions. */}}
 {{define "mem-about"}}
 <section class="panel mem-about" id="mem-about" aria-labelledby="mem-about-t">
   <header class="mem-about-head">

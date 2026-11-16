@@ -122,7 +122,7 @@
     <div><dt>{{t "stats.firstpass"}}</dt><dd><strong>{{.Rate .FirstPass .Finished}} %</strong> <span class="muted small">{{.FirstPass}}/{{.Finished}}</span></dd></div>
     <div{{if .Unsupported}} class="warn"{{end}}><dt>{{t "stats.unsupported"}}</dt><dd><strong>{{.Unsupported}}</strong>{{if .Unchecked}} <span class="muted small">· {{tf "stats.unchecked" .Unchecked}}</span>{{end}}</dd></div>
     <div><dt>{{t "stats.cost"}}</dt><dd>{{if .Costed}}<strong>{{money .CostPerAccepted}}</strong> <span class="muted small">· {{tokens .TokensPerAccepted}} {{t "stats.tokens"}} · {{.MinutesPerAccepted}} min</span>{{else}}<span class="muted small">{{t "stats.nocost"}}</span>{{end}}</dd></div>
-    {{with .Cards}}{{if .Pushed}}<div><dt><a href="/settings/subjects">{{t "stats.cards"}}</a></dt><dd>{{if .Judged}}<strong>{{$.Rate .Used .Judged}} %</strong> <span class="muted small">{{.Used}}/{{.Judged}}</span>{{else}}<span class="muted small">{{tf "stats.cards.waiting" .Waiting}}</span>{{end}}</dd></div>{{end}}{{end}}
+    {{with .Cards}}{{if .Pushed}}<div><dt>{{t "stats.cards"}}</dt><dd>{{if .Judged}}<strong>{{$.Rate .Used .Judged}} %</strong> <span class="muted small">{{.Used}}/{{.Judged}}</span>{{else}}<span class="muted small">{{tf "stats.cards.waiting" .Waiting}}</span>{{end}}</dd></div>{{end}}{{end}}
   </dl>{{end}}
   {{if .Failures}}<p class="tstats-fail"><span class="muted small">{{t "stats.failures"}}</span>{{range .Failures}} <span class="rc rc-{{if eq .Class "transient"}}open{{else if eq .Class "account"}}bad{{else}}none{{end}}">{{t (printf "stats.class.%s" .Class)}} {{.N}}</span>{{end}}</p>{{end}}
   {{if .Spend}}{{$roles := .SpendRoles}}<table class="tstats-spend">
@@ -331,7 +331,6 @@ The ways back follow the pages, never the browser's history. */}}
     <a href="/settings/monitors" {{if eq .Tab "monitors"}}aria-current="page"{{end}}>{{template "i-monitor"}}<span>{{t "settings.monitors"}}</span>{{template "chev"}}</a>
     <a href="/settings/surfaces" {{if eq .Tab "surfaces"}}aria-current="page"{{end}}>{{template "i-surface"}}<span>{{t "settings.surfaces"}}</span>{{template "chev"}}</a>
     <a href="/settings/learned" {{if eq .Tab "learned"}}aria-current="page"{{end}}>{{template "i-history"}}<span>{{t "learned.title"}}</span>{{template "chev"}}</a>
-    <a href="/settings/subjects" {{if eq .Tab "subjects"}}aria-current="page"{{end}}>{{template "i-list"}}<span>{{t "subjects.title"}}</span>{{template "chev"}}</a>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-connections">
     <h2 class="nav-group-title" id="sg-connections">{{t "settings.g.connections"}}</h2>

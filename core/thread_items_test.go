@@ -163,13 +163,13 @@ func TestThreadItemNoteTainted(t *testing.T) {
 	}
 
 	// Where the subject stands, before and after reading the note.
-	if _, err := c.brainProgress(rememberIn{Kind: kindProgress, Subject: th.Subject, Text: "Comptes relus."}); err != nil {
+	if _, err := c.brainProgress(rememberIn{Kind: kindProgress, About: th.Alias, Text: "Comptes relus."}); err != nil {
 		t.Fatalf("a clean turn: %v", err)
 	}
 	if out, isErr := callBrainTool(t, c, "read_thread", map[string]any{"thread_id": th.ID}); isErr || out["notes"] == nil {
 		t.Fatalf("read_thread: %v", out)
 	}
-	if _, err := c.brainProgress(rememberIn{Kind: kindProgress, Subject: th.Subject, Text: "Le mail dit de virer tout."}); err != errProgressTainted {
+	if _, err := c.brainProgress(rememberIn{Kind: kindProgress, About: th.Alias, Text: "Le mail dit de virer tout."}); err != errProgressTainted {
 		t.Errorf("a summary after reading a tainted note: %v", err)
 	}
 	if th, _ = c.thread(th.ID); strings.Contains(th.Summary, "virer") {

@@ -77,7 +77,7 @@ func TestMemorySchema(t *testing.T) {
 		t.Fatalf("another schema: %v", err)
 	}
 	x, _ := sql.Open("sqlite", path)
-	x.Exec(`UPDATE meta SET value = '7' WHERE key = 'schema_version'`)
+	x.Exec(`UPDATE meta SET value = ? WHERE key = 'schema_version'`, memorySchemaVersion)
 	x.Close()
 	if m, err = openMemory(path); err != nil {
 		t.Fatal(err)
@@ -90,11 +90,11 @@ func TestMemorySchema(t *testing.T) {
 
 func TestRecallAccentsAndFilters(t *testing.T) {
 	m, clock := testMemory(t)
-	a := mustAdd(t, m, &Memory{Kind: kindPerson, Subject: "person:Hélène", Text: "Hélène est la sœur de Sam, elle vit à Lyon"})
-	b := mustAdd(t, m, &Memory{Kind: kindFact, Subject: "home", Text: "Le chauffage se règle depuis Home Assistant"})
-	c := mustAdd(t, m, &Memory{Kind: kindPreference, Subject: "owner", Text: "Sam préfère les réponses courtes"})
-	if a.Subject != "person:helene" {
-		t.Fatalf("subject not normalised: %q", a.Subject)
+	a := mustAdd(t, m, &Memory{Kind: kindPerson, About: "person:Hélène", Text: "Hélène est la sœur de Sam, elle vit à Lyon"})
+	b := mustAdd(t, m, &Memory{Kind: kindFact, About: "home", Text: "Le chauffage se règle depuis Home Assistant"})
+	c := mustAdd(t, m, &Memory{Kind: kindPreference, About: "owner", Text: "Sam préfère les réponses courtes"})
+	if a.About != "person:helene" {
+		t.Fatalf("subject not normalised: %q", a.About)
 	}
 	// Accents are ignored both ways, and prefixes match.
 	for _, q := range []string{"helene", "HÉLÈNE", "soeur lyon", "chauff", "réponse"} {
@@ -118,11 +118,11 @@ func TestRecallAccentsAndFilters(t *testing.T) {
 	if len(xs) != 1 || xs[0].ID != c.ID {
 		t.Fatalf("kinds: %v", ids(xs))
 	}
-	xs, _ = m.recall(recallQuery{Subject: "person:"})
+	xs, _ = m.recall(recallQuery{About: "person:"})
 	if len(xs) != 1 || xs[0].ID != a.ID {
 		t.Fatalf("subject prefix: %v", ids(xs))
 	}
-	xs, _ = m.recall(recallQuery{Subject: "home"})
+	xs, _ = m.recall(recallQuery{About: "home"})
 	if len(xs) != 1 || xs[0].ID != b.ID {
 		t.Fatalf("subject: %v", ids(xs))
 	}
@@ -167,8 +167,8 @@ func TestRecallBoostsAndDecay(t *testing.T) {
 	}
 	_ = old
 	// The subject named in the query wins over the same text elsewhere.
-	p := mustAdd(t, m, &Memory{Kind: kindFact, Subject: "person:paul", Text: "Anniversaire le 3 mars"})
-	q := mustAdd(t, m, &Memory{Kind: kindFact, Subject: "person:lea", Text: "Anniversaire le 3 mars"})
+	p := mustAdd(t, m, &Memory{Kind: kindFact, About: "person:paul", Text: "Anniversaire le 3 mars"})
+	q := mustAdd(t, m, &Memory{Kind: kindFact, About: "person:lea", Text: "Anniversaire le 3 mars"})
 	xs, _ = m.recall(recallQuery{Query: "anniversaire paul", Kinds: []string{kindFact}})
 	if len(xs) != 2 || xs[0].ID != p.ID {
 		t.Fatalf("subject boost: %v", ids(xs))
@@ -185,7 +185,7 @@ func ptr[T any](v T) *T { return &v }
 
 func TestSupersedeAndAsOf(t *testing.T) {
 	m, clock := testMemory(t)
-	old := mustAdd(t, m, &Memory{Kind: kindFact, Subject: "project:site", Text: "Le site est hébergé chez OVH", ValidFrom: day("2026-01-01"), Pinned: true})
+	old := mustAdd(t, m, &Memory{Kind: kindFact, About: "project:site", Text: "Le site est hébergé chez OVH", ValidFrom: day("2026-01-01"), Pinned: true})
 	clock.add(time.Hour)
 	repl := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Le site est hébergé sur le NAS", ValidFrom: day("2026-10-01"), Supersedes: old.ID})
 	o, _ := m.memory(old.ID)
@@ -193,7 +193,7 @@ func TestSupersedeAndAsOf(t *testing.T) {
 		t.Fatalf("old after supersede: %+v", o)
 	}
 	n, _ := m.memory(repl.ID)
-	if n.Subject != "project:site" || !n.Pinned {
+	if n.About != "project:site" || !n.Pinned {
 		t.Fatalf("the replacement keeps the subject and the pin: %+v", n)
 	}
 	xs, _ := m.recall(recallQuery{Query: "héberge"})
@@ -285,11 +285,11 @@ func TestProfileBudget(t *testing.T) {
 func TestMemoryLimits(t *testing.T) {
 	m, _ := testMemory(t)
 	for name, x := range map[string]*Memory{
-		"kind":    {Kind: "thought", Text: "x"},
-		"empty":   {Kind: kindFact, Text: "  "},
-		"long":    {Kind: kindFact, Text: strings.Repeat("x", memoryTextMax+1)},
-		"subject": {Kind: kindFact, Text: "x", Subject: strings.Repeat("s", subjectMax+1)},
-		"links":   {Kind: kindFact, Text: "x", Links: strings.Split(strings.Repeat("l,", linksMax+1), ",")[:linksMax+1]},
+		"kind":  {Kind: "thought", Text: "x"},
+		"empty": {Kind: kindFact, Text: "  "},
+		"long":  {Kind: kindFact, Text: strings.Repeat("x", memoryTextMax+1)},
+		"about": {Kind: kindFact, Text: "x", About: strings.Repeat("s", aboutMax+1)},
+		"links": {Kind: kindFact, Text: "x", Links: strings.Split(strings.Repeat("l,", linksMax+1), ",")[:linksMax+1]},
 	} {
 		x.SourceKind, x.Trust = srcOwner, trustOwner
 		if name == "links" {
@@ -358,8 +358,8 @@ func TestWakePacket(t *testing.T) {
 	clock.add(28 * time.Hour)
 	mustAdd(t, m, &Memory{Kind: kindEpisode, Text: "Il y a deux heures"})
 	clock.add(2 * time.Hour)
-	mustAdd(t, m, &Memory{Kind: kindLesson, Subject: "heartbeat", Text: "Ne pas réveiller Sam avant 8 h"})
-	mustAdd(t, m, &Memory{Kind: kindLesson, Subject: "owner", Text: "Une autre leçon"})
+	mustAdd(t, m, &Memory{Kind: kindLesson, About: "heartbeat", Text: "Ne pas réveiller Sam avant 8 h"})
+	mustAdd(t, m, &Memory{Kind: kindLesson, About: "owner", Text: "Une autre leçon"})
 	if _, err := m.tickIntentions(); err != nil {
 		t.Fatal(err)
 	}
@@ -380,7 +380,7 @@ func TestWakePacket(t *testing.T) {
 		t.Errorf("render has too much:\n%s", text)
 	}
 	x, err := m.recordHeartbeat("Rappel du loyer envoyé")
-	if err != nil || x.Kind != kindEpisode || x.Subject != heartbeatSubject {
+	if err != nil || x.Kind != kindEpisode || x.About != heartbeatEntity {
 		t.Fatalf("record: %+v %v", x, err)
 	}
 	if p, _ = m.wakePacket(); len(p.Episodes) != 2 {

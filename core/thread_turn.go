@@ -40,7 +40,7 @@ func threadEventKey(seq int) string { return fmt.Sprintf("thread_msg:%d", seq) }
 // threadsDelivered sets the thread the turn is about from what it was
 // given: none, unless an event of a thread is among it, or a message of
 // the user's written about a thread (its surface open on the workspace,
-// or a surface whose subject has a live thread); the last one wins. A new
+// or a surface about a live thread); the last one wins. A new
 // delivery never keeps the thread of the turn before.
 func (c *core) threadsDelivered(msgs []Message) {
 	var id int64
@@ -55,8 +55,8 @@ func (c *core) threadsDelivered(msgs []Message) {
 }
 
 // threadAbout is the thread a message of the user's was written about: the
-// thread whose surface was open, or the live thread of the open surface's
-// subject; 0 if none.
+// thread whose surface was open, or the live thread the open surface is
+// about; 0 if none.
 func (c *core) threadAbout(m Message) int64 {
 	if m.Role != roleUser {
 		return 0
@@ -71,8 +71,8 @@ func (c *core) threadAbout(m Message) int64 {
 		}
 		return 0
 	}
-	if s, err := c.surface(sid); err == nil && s.Subject != "" {
-		if n, ok := c.liveThreadOf(s.Subject); ok {
+	if s, err := c.surface(sid); err == nil && s.About != "" {
+		if n, ok := c.liveThreadOf(s.About); ok {
 			return n
 		}
 	}
@@ -158,7 +158,7 @@ func (c *core) callToBrain(a accessQuestion, text, taint string) {
 }
 
 // taskOfThread makes the task the brain starts a task step of a thread:
-// the thread its turn is about, else the live thread of the subject the
+// the thread its turn is about, else the live thread the
 // user's message named. A task is never left loose and code never opens
 // a thread for it: with neither, the brain opens (or finds) the matter's
 // thread first. A led thread's plan changes with amend_thread, an ended
@@ -204,14 +204,14 @@ func (c *core) taskOfThread(ctx context.Context, in runRequest) (map[string]any,
 var errOpenThreadFirst = errors.New("a task is a step of a thread, and this turn is about none: open_thread the matter's thread first (it gives back the one that exists), then run_task; add_step adds a task to another thread")
 
 // taskThread is the thread a task the brain starts is a step of: the one
-// its turn is about, else the live thread of the subject the user's
+// its turn is about, else the live thread the user's
 // message named. A led one, an ended one or none is refused, saying what
 // to do instead.
 func (c *core) taskThread() (Thread, error) {
 	id := c.turn.aboutThread()
 	if id <= 0 {
-		if subject := c.turnSubject(); subject != "" {
-			if key, err := c.subjectLookup(subject); err == nil && key != "" {
+		if about := c.turnAbout(); about != "" {
+			if key, err := c.aboutLookup(about); err == nil && key != "" {
 				id, _ = c.liveThreadOf(key)
 			}
 		}

@@ -296,7 +296,7 @@ func TestTaskStartCardOutsideTurn(t *testing.T) {
 // or pending with no node.
 func TestRunTaskTellsStartState(t *testing.T) {
 	c := startCore(t)
-	th, err := c.openThread(threadIn{Title: "Dépôt", Goal: "Sam sait ce qu'il fait.", Subject: "project:depot"}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "Dépôt", Goal: "Sam sait ce qu'il fait.", Alias: "project:depot"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}

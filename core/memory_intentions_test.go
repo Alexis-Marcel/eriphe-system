@@ -145,7 +145,7 @@ func TestClockWakesBrain(t *testing.T) {
 	if items, _ := c.store.inbox("t-brain"); len(items) != 1 {
 		t.Fatalf("woken twice: %d", len(items))
 	}
-	if xs, _ := c.mem.list(`kind = 'episode' AND subject = 'topic:heartbeat'`, nil, "", 5); len(xs) != 1 {
+	if xs, _ := c.mem.list(`kind = 'episode' AND about = 'topic:heartbeat'`, nil, "", 5); len(xs) != 1 {
 		t.Fatalf("heartbeat episodes: %d", len(xs))
 	}
 	// An approved intention drawn from a mail: it reminds, the turn is tainted, it cannot allow.
@@ -186,7 +186,7 @@ func TestClockWakeAboutNoThread(t *testing.T) {
 	c, clock := testMemoryCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
-	s, err := c.openThread(threadIn{Title: "PR de l'alerte", Goal: "Fusionnée.", Subject: "pr:example/infra#12"}, nil, byBrain)
+	s, err := c.openThread(threadIn{Title: "PR de l'alerte", Goal: "Fusionnée.", Alias: "pr:example/infra#12"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,8 +209,8 @@ func TestClockWakeAboutNoThread(t *testing.T) {
 	if c.turn.aboutThread() != 0 || c.turnSource() != "" {
 		t.Errorf("the wake is about thread %d", c.turn.aboutThread())
 	}
-	if c.turnSubject() != "" {
-		t.Errorf("the wake is about %q", c.turnSubject())
+	if c.turnAbout() != "" {
+		t.Errorf("the wake is about %q", c.turnAbout())
 	}
 }
 

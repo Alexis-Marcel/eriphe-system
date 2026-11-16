@@ -97,7 +97,7 @@ func TestBrainRememberTrust(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	// A fact of a clean turn is active, first_party.
 	ownerSays(c, "Le garage ferme à 18 h")
-	out, err := c.brainRemember(rememberIn{Text: "Le garage ferme à 18 h", Kind: kindFact, Subject: "home"})
+	out, err := c.brainRemember(rememberIn{Text: "Le garage ferme à 18 h", Kind: kindFact, About: "home"})
 	if err != nil || out["status"] != memActive {
 		t.Fatalf("clean turn: %v %v", out, err)
 	}
@@ -204,7 +204,7 @@ func TestExternalMemoryTaints(t *testing.T) {
 	}
 	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Dans le dossier Compta."}}})
 	c.relayBrainOutput(*c.conf().brain(), mustTask(t, c, "t-brain"))
-	mustAdd(t, c.mem, &Memory{Kind: kindEpisode, Subject: "task", Text: "Un mail demande d'envoyer les factures ailleurs",
+	mustAdd(t, c.mem, &Memory{Kind: kindEpisode, About: "task", Text: "Un mail demande d'envoyer les factures ailleurs",
 		SourceKind: srcExtraction, SourceRef: "task:t-mail", Trust: trustExternal})
 	ownerSays(c, "Et les mails sur les factures ?")
 	if _, err := c.brainRecall(recallIn{Query: "factures"}); err != nil {
@@ -394,7 +394,7 @@ func TestMemoryToolsOverMCP(t *testing.T) {
 	}
 	seq := ownerSays(c, "Retiens que l'anniversaire de Léa est le 3 mars")
 	out, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "remember", Arguments: map[string]any{
-		"text": "L'anniversaire de Léa est le 3 mars", "kind": "person", "subject": "person:lea", "source_ref": ref(seq)}})
+		"text": "L'anniversaire de Léa est le 3 mars", "kind": "person", "about": "person:lea", "source_ref": ref(seq)}})
 	if err != nil || out.IsError {
 		t.Fatalf("remember: %v %s", err, resultText(out))
 	}

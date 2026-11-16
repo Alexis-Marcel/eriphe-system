@@ -105,11 +105,11 @@ type learnEntry struct {
 	Undo        string // proposed or rejected
 	UndoWhy     string
 
-	Subject string
-	Text    string // the memory's text as this entry left it
-	Before  string // its text before, for a change
-	Trust   string
-	Gone    bool // the memory was erased for good
+	About  string
+	Text   string // the memory's text as this entry left it
+	Before string // its text before, for a change
+	Trust  string
+	Gone   bool // the memory was erased for good
 }
 
 // Target names what the entry is about, for the brain and the page.
@@ -269,14 +269,14 @@ func (m *memStore) learnSkill(name, version, prev, who, reason, risk string) (*l
 
 const learnColumns = `l.id, l.time, l.kind, COALESCE(l.memory_id, 0), COALESCE(l.prev_id, 0), COALESCE(l.log_seq, 0), l.skill, l.version,
 	l.prev_version, l.action, l.status, l.source, l.risk, l.reason, l.evidence, l.who, COALESCE(l.reverts, 0), l.undo, l.undo_why,
-	COALESCE(x.subject, ''), COALESCE(x.text, ''), COALESCE(x.trust, ''), x.id IS NULL`
+	COALESCE(x.about, ''), COALESCE(x.text, ''), COALESCE(x.trust, ''), x.id IS NULL`
 
 func scanLearning(sc interface{ Scan(...any) error }) (*learnEntry, error) {
 	var e learnEntry
 	var at int64
 	var ev string
 	err := sc.Scan(&e.ID, &at, &e.Kind, &e.MemoryID, &e.PrevID, &e.LogSeq, &e.Skill, &e.Version, &e.PrevVersion, &e.Action, &e.Status,
-		&e.Source, &e.Risk, &e.Reason, &ev, &e.Who, &e.Reverts, &e.Undo, &e.UndoWhy, &e.Subject, &e.Text, &e.Trust, &e.Gone)
+		&e.Source, &e.Risk, &e.Reason, &ev, &e.Who, &e.Reverts, &e.Undo, &e.UndoWhy, &e.About, &e.Text, &e.Trust, &e.Gone)
 	if err != nil {
 		return nil, err
 	}
@@ -290,8 +290,8 @@ func scanLearning(sc interface{ Scan(...any) error }) (*learnEntry, error) {
 type learnFilter struct {
 	Kinds    []string
 	Statuses []string
-	Subject  string
-	Query    string // words of the topic: any of them in the text, the subject or the skill's name
+	About    string
+	Query    string // words of the topic: any of them in the text, what it is about or the skill's name
 	Since    time.Time
 	Until    time.Time
 	AfterID  int64
@@ -314,8 +314,8 @@ func (m *memStore) learnings(f learnFilter) ([]*learnEntry, error) {
 	}
 	in("l.kind", f.Kinds)
 	in("l.status", f.Statuses)
-	if s, _, _ := subjectFilter(f.Subject); s != "" {
-		where = append(where, `(x.subject = ? OR x.subject LIKE ? ESCAPE '\')`)
+	if s, _, _ := aboutFilter(f.About); s != "" {
+		where = append(where, `(x.about = ? OR x.about LIKE ? ESCAPE '\')`)
 		args = append(args, s, likeEscape(strings.TrimSuffix(s, ":"))+":%")
 	}
 	if !f.Since.IsZero() {
@@ -352,7 +352,7 @@ func (m *memStore) learnings(f learnFilter) ([]*learnEntry, error) {
 			rows.Close()
 			return nil, err
 		}
-		if len(words) > 0 && !matchesAny(foldAccents(strings.ToLower(e.Text+" "+e.Subject+" "+e.Skill)), words) {
+		if len(words) > 0 && !matchesAny(foldAccents(strings.ToLower(e.Text+" "+e.About+" "+e.Skill)), words) {
 			continue
 		}
 		if out = append(out, e); len(out) == limit {
@@ -499,7 +499,7 @@ func (m *memStore) undoMemory(e *learnEntry, who, reason string, evidence []stri
 			return nil, errors.New("the state before this change is no longer kept")
 		}
 		validTo, dueAt := before.ValidTo, before.DueAt
-		p := memoryPatch{Text: &before.Text, Subject: &before.Subject, Links: &before.Links, Kind: &before.Kind, ValidTo: &validTo,
+		p := memoryPatch{Text: &before.Text, About: &before.About, Links: &before.Links, Kind: &before.Kind, ValidTo: &validTo,
 			DueAt: &dueAt, State: &before.State, Pinned: &before.Pinned, Status: &before.Status, Keywords: &before.Keywords,
 			Importance: &before.Importance}
 		if _, err := m.updateTx(tx, x.ID, p, by, why); err != nil {
@@ -680,8 +680,8 @@ func (c *core) learnedTold(xs []*learnEntry) {
 // an external memory is named, not quoted.
 func learnedLine(e *learnEntry) string {
 	what := e.Kind
-	if e.Subject != "" {
-		what += ", " + e.Subject
+	if e.About != "" {
+		what += ", " + e.About
 	}
 	var text string
 	switch {

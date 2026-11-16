@@ -42,7 +42,7 @@ var whereStrings = map[string]map[string]string{
 		"where.up":                 "Monter",
 		"where.down":               "Descendre",
 		"where.delay":              "Passer au suivant après (minutes)",
-		"where.delay.hint":         "3 minutes pour un sujet « même la nuit ». Deux renvois au plus ; jamais pendant les heures calmes ; le brief n'est jamais renvoyé.",
+		"where.delay.hint":         "3 minutes pour une règle « même la nuit ». Deux renvois au plus ; jamais pendant les heures calmes ; le brief n'est jamais renvoyé.",
 		"where.save":               "Enregistrer",
 		"where.saved":              "Enregistré.",
 		"where.err.delay":          "Le délai va de 1 à 60 minutes.",

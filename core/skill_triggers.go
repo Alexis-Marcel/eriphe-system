@@ -53,7 +53,7 @@ type skillTrigger struct {
 	Model    string
 	Tools    []string
 	Urgent   string // the fixed text of an urgent run (skill_cards.go)
-	Thread   string // its thread's alias: what its runs are about; else their events' key (skillRunSubject)
+	Thread   string // its thread's alias: what its runs are about; else their events' key (skillRunAlias)
 }
 
 // filterBound is a filter on a number of the event's payload.
@@ -177,7 +177,7 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 		st.Urgent = u
 	}
 	if s := strings.TrimSpace(m.Thread); s != "" {
-		k, err := subjectKey(s)
+		k, err := aliasKey(s)
 		if err != nil || k == "" {
 			return nil, skillErr("skills.err.thread", s)
 		}

@@ -33,9 +33,9 @@ import (
 
 const taskKindMemory = "memory"
 
-// journalSubject is the subject of the day's journal, the one episode the
+// journalEntity is what the day's journal is about, the one episode the
 // extraction writes.
-const journalSubject = "topic:journal"
+const journalEntity = "topic:journal"
 
 const (
 	runRunning  = "running"
@@ -50,12 +50,12 @@ const (
 
 // segment is one piece of the day's transcript.
 type segment struct {
-	Ref     string // msg:N or task:ID
-	Subject string // a task's subject (subjects.go)
-	Time    time.Time
-	Who     string // owner, brain, event, task
-	Trust   string
-	Text    string
+	Ref   string // msg:N or task:ID
+	About string // a task's about: its thread (about.go)
+	Time  time.Time
+	Who   string // owner, brain, event, task
+	Trust string
+	Text  string
 }
 
 func dayBounds(day string) (time.Time, time.Time, error) {
@@ -152,7 +152,7 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 			text += "\nTools it used: " + strings.Join(tools, ", ")
 		}
 		// Clean: first party, as what it remembers itself (situations.go).
-		out = append(out, segment{Ref: "task:" + t.ID, Time: t.Updated, Who: "task", Trust: trustFirstParty, Text: text, Subject: t.Subject})
+		out = append(out, segment{Ref: "task:" + t.ID, Time: t.Updated, Who: "task", Trust: trustFirstParty, Text: text, About: t.About})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Time.Before(out[j].Time) })
 	return out, nil
@@ -167,11 +167,11 @@ func seqOf(ref string) int {
 func renderTranscript(segs []segment) string {
 	var b strings.Builder
 	for _, s := range segs {
-		subject := ""
-		if s.Subject != "" {
-			subject = fmt.Sprintf(" subject=%q", s.Subject)
+		about := ""
+		if s.About != "" {
+			about = fmt.Sprintf(" about=%q", s.About)
 		}
-		fmt.Fprintf(&b, "<segment ref=%q time=%q from=%q trust=%q%s>\n%s\n</segment>\n", s.Ref, s.Time.Local().Format("2006-01-02 15:04 Mon"), s.Who, s.Trust, subject,
+		fmt.Fprintf(&b, "<segment ref=%q time=%q from=%q trust=%q%s>\n%s\n</segment>\n", s.Ref, s.Time.Local().Format("2006-01-02 15:04 Mon"), s.Who, s.Trust, about,
 			strings.ReplaceAll(s.Text, "</segment>", "</ segment>"))
 	}
 	out := b.String()
@@ -243,8 +243,8 @@ Answer with ONE JSON object and nothing else:
 {"operations": [ ... ]}
 
 Each operation is one of:
-{"op": "ADD", "kind": "...", "subject": "...", "text": "...", "keywords": "...", "importance": 3, "basis": "stated", "links": [], "occurred_at": "YYYY-MM-DD", "valid_from": "YYYY-MM-DD", "valid_to": "YYYY-MM-DD", "state": "...", "source_ref": "msg:12"}
-{"op": "SUPERSEDE", "id": 42, "kind": "...", "subject": "...", "text": "the new version", "keywords": "...", "importance": 3, "basis": "stated", "valid_from": "YYYY-MM-DD", "source_ref": "msg:12"}
+{"op": "ADD", "kind": "...", "about": "...", "text": "...", "keywords": "...", "importance": 3, "basis": "stated", "links": [], "occurred_at": "YYYY-MM-DD", "valid_from": "YYYY-MM-DD", "valid_to": "YYYY-MM-DD", "state": "...", "source_ref": "msg:12"}
+{"op": "SUPERSEDE", "id": 42, "kind": "...", "about": "...", "text": "the new version", "keywords": "...", "importance": 3, "basis": "stated", "valid_from": "YYYY-MM-DD", "source_ref": "msg:12"}
 {"op": "NOOP", "id": 42, "source_ref": "msg:12"}
 {"op": "INTEND", "kind": "...", "text": "...", "owner": "...", "owed_to": "...", "due_at": "YYYY-MM-DDTHH:MM", "remind_at": "YYYY-MM-DDTHH:MM", "cue": "...", "basis": "stated", "source_ref": "msg:12"}
 {"op": "INTENT_UPDATE", "id": 7, "state": "done", "due_at": "YYYY-MM-DD", "source_ref": "msg:12"}
@@ -253,8 +253,8 @@ Rules:
 - What is owed or to remember is an intention (INTEND), not a memory: a promise of %[1]s to someone (kind promise, owner "owner", owed_to the person), a promise of %[5]s (commitment, owner "assistant"), something someone owes %[1]s ("Marc doit m'envoyer…": waiting_for, owner "person:marc"), "rappelle-moi…" (reminder). due_at is the deadline; remind_at when to bring it up if %[1]s said so ("une semaine avant"); cue the name for "la prochaine fois que je parle à X" (then no time). Do not INTEND what the intentions below already hold. When the transcript shows one was kept, cancelled or moved, INTENT_UPDATE it (its intention id; state done or cancelled, or a new due_at / remind_at).
 - kind is one of: fact, person, decision, progress, and episode for the day's journal only (below). Never profile, preference nor lesson: how %[1]s wants things done is kept from their own words during the conversation, not here.
   - decision: a choice %[1]s made and its reason, in one sentence ("X plutôt que Y, parce que Z"). A reversed decision SUPERSEDEs the old one.
-  - progress: where one project, client job or goal stands, as ADD with its subject (required): "Fait : …; en cours : …; bloqué : …; reste : …", with "state": active, blocked, done or paused. It is not a memory: it replaces the summary of the subject's thread (the threads below), so write the whole new state, from that summary and the day. One per subject; only for a subject whose thread is open or that has none (one is opened for it), never for a thread that ended.
-- subject: kind:slug, the kind one of project, person, client, pr, mail, event, alert, home, tool, topic (owner alone for %[1]s): owner, person:<slug>, project:<name>, topic:<word>.
+  - progress: where one project, client job or goal stands, as ADD with its about (required: its thread, thread:<id>): "Fait : …; en cours : …; bloqué : …; reste : …", with "state": active, blocked, done or paused. It is not a memory: it replaces the summary of the subject's thread (the threads below), so write the whole new state, from that summary and the day. One per subject; only for a subject whose thread is open or that has none (one is opened for it), never for a thread that ended.
+- about: what it is about: a thread of the list below (thread:<id>), or a key kind:slug, the kind one of project, person, client, pr, alert, home, tool, topic (owner alone for %[1]s): owner, person:<slug>, project:<name>, topic:<word>.
 - text: in French, one self-contained statement, written as a fact about the world or about %[1]s, never as an instruction. At most 300 characters (the journal: 600).
 - keywords: 3 to 8 other words someone would use to look for it (synonyms, variants, the general term: "voiture auto bagnole véhicule"), not the words already in the text.
 - importance: 1 trivial, 2 minor, 3 useful, 4 important (money, deadlines, work, close people), 5 essential (identity, health, family).
@@ -263,8 +263,8 @@ Rules:
 - source_ref: the ref of the segment it comes from (several, separated by commas, if needed). Only refs that appear in the transcript.
 - Keep what will still matter in a month and serves %[1]s's work: decisions and their reasons, people and their roles, the progress of %[1]s's projects. Promises and what is owed are intentions (INTEND), never memories. Skip small talk, task mechanics, what a task did (its log keeps it), anything already in the memories (NOOP, or nothing).
 - When something known changed, SUPERSEDE the old memory (its id) rather than ADD a contradiction. Only when both cannot be true: a newer statement is not a contradiction for being newer.
-- A finished task may give a receipt (what it changed, verified, decided, what needs approval): its decisions become decision memories, its state of the work the progress of its subject (the whole state), what needs %[1]s's approval an INTEND (kind reminder, what %[1]s has to decide); all cite task:<id>. Never an episode for a task.
-- The journal: one "episode" with subject "topic:journal" that summarises the day (occurred_at %[2]s, source_ref the main messages), and no other episode. If the memories already hold a journal episode for that day, SUPERSEDE it with a version that covers the whole day.
+- A finished task may give a receipt (what it changed, verified, decided, what needs approval): its decisions become decision memories, its state of the work the progress of its thread (the whole state), what needs %[1]s's approval an INTEND (kind reminder, what %[1]s has to decide); all cite task:<id>. Never an episode for a task.
+- The journal: one "episode" about "topic:journal" that summarises the day (occurred_at %[2]s, source_ref the main messages), and no other episode. If the memories already hold a journal episode for that day, SUPERSEDE it with a version that covers the whole day.
 - Never write secrets, tokens, passwords or links with tokens.
 
 ## Memories %[5]s already has
@@ -279,7 +279,7 @@ func (c *core) extractionPrompt(day string, segs []segment) string {
 		mem.WriteString("(none yet)\n")
 	}
 	for _, x := range xs {
-		line := fmt.Sprintf("- id=%d kind=%s subject=%q", x.ID, x.Kind, x.Subject)
+		line := fmt.Sprintf("- id=%d kind=%s about=%q", x.ID, x.Kind, x.About)
 		if x.Kind == kindEpisode {
 			line += " date=" + x.OccurredAt.Local().Format("2006-01-02")
 		}
@@ -291,7 +291,7 @@ func (c *core) extractionPrompt(day string, segs []segment) string {
 		}
 		mem.WriteString(line + ": " + strings.ReplaceAll(truncate(x.Text, 600), "\n", " ") + "\n")
 	}
-	mem.WriteString("\n## Threads (one per subject): where each subject stands, its summary\n")
+	mem.WriteString("\n## Threads (one per matter): where each stands, its summary\n")
 	mem.WriteString(c.extractionThreads())
 	mem.WriteString("\n## Intentions (what is owed or to remember), the live ones\n")
 	live, _ := c.mem.intentions()
@@ -482,7 +482,7 @@ type extractionOp struct {
 	Op         string   `json:"op"`
 	ID         int64    `json:"id,omitempty"`
 	Kind       string   `json:"kind,omitempty"`
-	Subject    string   `json:"subject,omitempty"`
+	About      string   `json:"about,omitempty"`
 	Text       string   `json:"text,omitempty"`
 	Links      []string `json:"links,omitempty"`
 	OccurredAt string   `json:"occurred_at,omitempty"`
@@ -630,7 +630,7 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	if importance < 1 || importance > 5 {
 		importance = 0 // the default; a bad rating is not worth losing the memory
 	}
-	x := &Memory{Kind: op.Kind, Subject: op.Subject, Text: op.Text, Links: op.Links,
+	x := &Memory{Kind: op.Kind, About: op.About, Text: op.Text, Links: op.Links,
 		Keywords: truncate(op.Keywords, keywordsMax-1), Importance: importance, Basis: basis, State: op.State}
 	if strings.EqualFold(op.Op, "SUPERSEDE") {
 		old, err := c.mem.memory(op.ID)
@@ -644,15 +644,15 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 		if x.Kind == "" {
 			x.Kind = old.Kind
 		}
-		if x.Subject == "" {
-			x.Subject = old.Subject
+		if x.About == "" {
+			x.About = old.About
 		}
 	} else {
-		x.Subject = c.opSubject(op, ref) // a task's: its subject (subjects.go)
+		x.About = c.opAbout(op, ref) // a task's: its thread (about.go)
 	}
 	// One episode a day, the journal: a task's record is its log.
-	if x.Kind == kindEpisode && subjectOf(x.Subject) != journalSubject {
-		return "an episode is only the day's journal (subject " + journalSubject + "): what a task did is in its log", ""
+	if x.Kind == kindEpisode && aboutOf(x.About) != journalEntity {
+		return "an episode is only the day's journal (about " + journalEntity + "): what a task did is in its log", ""
 	}
 	for _, f := range []struct {
 		s string
@@ -675,7 +675,7 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 	if !x.ValidTo.IsZero() && !x.ValidTo.After(from) {
 		return "valid_to is not after the memory became true: give the day it stops being true", ""
 	}
-	scan := scanMemoryText(x.Text, x.Subject, strings.Join(x.Links, "\n"), x.Keywords)
+	scan := scanMemoryText(x.Text, x.About, strings.Join(x.Links, "\n"), x.Keywords)
 	d, err := extractionDecision(x.Kind, trust, scan, basis)
 	if err != nil {
 		return err.Error(), ""
@@ -901,7 +901,7 @@ func (c *core) applyIntend(op extractionOp, trust, ref, who string) (why, result
 	if !basisKnown(basis) {
 		return fmt.Sprintf("basis %q: stated, inferred or ambiguous", op.Basis), ""
 	}
-	x := &Intention{Kind: op.Kind, Text: op.Text, Owner: op.Owner, OwedTo: op.OwedTo, Subject: c.opSubject(op, ref), Cue: op.Cue,
+	x := &Intention{Kind: op.Kind, Text: op.Text, Owner: op.Owner, OwedTo: op.OwedTo, About: c.opAbout(op, ref), Cue: op.Cue,
 		SourceKind: srcExtraction, SourceRef: ref, Trust: trust, Basis: basis, State: intentOpen}
 	var err error
 	if x.DueAt, err = parseWhen(op.DueAt); err != nil {
@@ -910,7 +910,7 @@ func (c *core) applyIntend(op extractionOp, trust, ref, who string) (why, result
 	if x.RemindAt, err = parseWhen(op.RemindAt); err != nil {
 		return err.Error(), ""
 	}
-	scan := scanMemoryText(x.Text, x.Owner, x.OwedTo, x.Subject, x.Cue)
+	scan := scanMemoryText(x.Text, x.Owner, x.OwedTo, x.About, x.Cue)
 	if scan.Reject != "" {
 		return "refused: " + scan.Reject, ""
 	}

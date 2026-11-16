@@ -23,7 +23,7 @@ func openedThread(t *testing.T, out map[string]any) Thread {
 func TestOpenThreadSameSubjectGivesItBack(t *testing.T) {
 	c := stepsCore(t)
 	first := lightThread(t, c)
-	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "PR encore", "goal": "Fusionnée.", "subject": " PR:Example/Infra#12 "})
+	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "PR encore", "goal": "Fusionnée.", "alias": " PR:Example/Infra#12 "})
 	if isErr {
 		t.Fatalf("open: %v", out)
 	}
@@ -40,7 +40,7 @@ func TestOpenThreadSameSubjectGivesItBack(t *testing.T) {
 	if err := c.closeLight(first.ID, "Fusionnée et déployée.", "brain"); err != nil {
 		t.Fatal(err)
 	}
-	out, isErr = callBrainTool(t, c, "open_thread", map[string]any{"title": "PR de nouveau", "goal": "Fusionnée.", "subject": first.Subject})
+	out, isErr = callBrainTool(t, c, "open_thread", map[string]any{"title": "PR de nouveau", "goal": "Fusionnée.", "alias": first.Alias})
 	if isErr {
 		t.Fatalf("open again: %v", out)
 	}
@@ -48,14 +48,14 @@ func TestOpenThreadSameSubjectGivesItBack(t *testing.T) {
 	if got.ID != first.ID || got.State != threadOpen || got.Mode != modeLight {
 		t.Fatalf("not reopened: %+v", got)
 	}
-	if log := c.threadLog(first.ID, 10); !strings.Contains(threadLogText(log), "Thread rouvert : "+sameSubject) {
+	if log := c.threadLog(first.ID, 10); !strings.Contains(threadLogText(log), "Thread rouvert : "+sameMatter) {
 		t.Errorf("the log: %s", threadLogText(log))
 	}
 	if all, _ := c.threads(false, 10); len(all) != 1 {
 		t.Errorf("%d threads for one subject", len(all))
 	}
 	// Another subject is another thread.
-	out, _ = callBrainTool(t, c, "open_thread", map[string]any{"title": "Autre", "goal": "Autre.", "subject": "pr:example/infra#13"})
+	out, _ = callBrainTool(t, c, "open_thread", map[string]any{"title": "Autre", "goal": "Autre.", "alias": "pr:example/infra#13"})
 	if openedThread(t, out).ID == first.ID {
 		t.Error("another subject gave the same thread")
 	}
@@ -72,11 +72,11 @@ func TestOpenThreadSubjectRules(t *testing.T) {
 	if all, _ := c.threads(false, 10); len(all) != 1 {
 		t.Errorf("%d threads", len(all))
 	}
-	light, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque", "goal": "Un nom libre.", "subject": "brand:velora"})
+	light, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque", "goal": "Un nom libre.", "alias": "brand:velora"})
 	if isErr {
 		t.Fatalf("open: %v", light)
 	}
-	out, isErr = callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque menée", "goal": "Un nom libre.", "subject": "brand:velora",
+	out, isErr = callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque menée", "goal": "Un nom libre.", "alias": "brand:velora",
 		"done_when": "Sam a un nom libre", "steps": []any{map[string]any{"key": "a", "title": "Chercher", "prompt": "Cherche."}}})
 	if !isErr {
 		t.Fatalf("a led thread beside the active one: %v", out)
@@ -88,7 +88,7 @@ func TestOpenThreadSubjectRules(t *testing.T) {
 // a task is never loose, and code never opens a thread for it.
 func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
 	c, led := threadCore(t)
-	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque Velora", "goal": "Sam sait si le nom est libre.", "subject": "brand:velora"})
+	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque Velora", "goal": "Sam sait si le nom est libre.", "alias": "brand:velora"})
 	if isErr {
 		t.Fatalf("open: %v", out)
 	}
@@ -181,7 +181,7 @@ func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
 // none, leaves the turn about no thread.
 func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
 	c, _ := threadCore(t)
-	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "PR alerting", "goal": "La PR est en prod.", "subject": "pr:example/infra#12"})
+	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "PR alerting", "goal": "La PR est en prod.", "alias": "pr:example/infra#12"})
 	if isErr {
 		t.Fatalf("open: %v", out)
 	}
@@ -208,7 +208,7 @@ func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
 	}
 
 	// A surface of the thread's subject: its thread.
-	if _, _, err := c.writeSurface("brain", surfaceIn{ID: "pr-12", Title: "PR 12", Subject: "pr:example/infra#12",
+	if _, _, err := c.writeSurface("brain", surfaceIn{ID: "pr-12", Title: "PR 12", About: "pr:example/infra#12",
 		Components: []byte(`[{"id":"root","component":"Text","text":"PR 12"}]`)}); err != nil {
 		t.Fatal(err)
 	}

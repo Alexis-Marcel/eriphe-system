@@ -86,7 +86,7 @@ func newMCPServer(c *core) *mcp.Server {
 			return out, nil
 		})
 
-	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). A task is always a task step of a light thread, which follows it: the thread the turn is about (one you opened, read or moved in this turn, or the one the user wrote from), else the live thread of the subject the user's message named; the result gives the thread and the step, and its end reaches you as the thread's event. In a turn about no thread, open_thread the matter's thread first (it gives back the one that exists); a led thread's plan changes with amend_thread, an ended thread is reopened first. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
+	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). A task is always a task step of a light thread, which follows it: the thread the turn is about (one you opened, read or moved in this turn, or the one the user wrote from), else the live thread the user's message named; the result gives the thread and the step, and its end reaches you as the thread's event. In a turn about no thread, open_thread the matter's thread first (it gives back the one that exists); a led thread's plan changes with amend_thread, an ended thread is reopened first. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
 		func(ctx context.Context, in runRequest) (map[string]any, error) {
 			return c.taskOfThread(ctx, in) // thread_turn.go
 		})
@@ -185,8 +185,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerNotifyTools(s, c)       // notify, notifications, rule
 	registerSinceTools(s, c)        // since
 	registerThreadTools(s, c)       // thread_tools.go
-	registerSubjectTools(s, c)      // name_subject (subjects.go)
-	registerSubjectCardTool(s, c)   // read_subject (subject_card.go)
+	registerNameTools(s, c)         // name_thread (names.go)
 	return s
 }
 

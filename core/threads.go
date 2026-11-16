@@ -19,8 +19,8 @@ import (
 // session of the study « Sessions de travail » (2026-11-09).
 //
 // A thread is light by default: held by the brain, opened at once with no
-// card and no budget, found again by its subject, closed only on its goal
-// and reopened when its subject comes back. Its state is open, waiting,
+// card and no budget, found again by its alias, closed only on its goal
+// and reopened when its matter comes back. Its state is open, waiting,
 // done or dropped.
 //
 // Led is an option for long autonomous work: a plan the user approves, a
@@ -52,7 +52,6 @@ const threadsSchema = `CREATE TABLE IF NOT EXISTS threads (
 	goal      TEXT NOT NULL,
 	done_when TEXT NOT NULL DEFAULT '',
 	mode      TEXT NOT NULL DEFAULT 'light', -- light: held by the brain; led: a plan, a lead, a budget
-	subject   TEXT NOT NULL DEFAULT '',      -- the matter it follows, a ref: project:site, pr:owner/repo#12
 	state     TEXT NOT NULL,                 -- open, waiting, done, dropped
 	phase     TEXT NOT NULL DEFAULT '',      -- a led thread's engine: proposed, running, paused, done, stopped, declined
 	held      TEXT NOT NULL DEFAULT '',
@@ -73,7 +72,6 @@ const threadsSchema = `CREATE TABLE IF NOT EXISTS threads (
 	ends      TEXT NOT NULL DEFAULT 'goal', -- how it ends: goal, standing, day
 	tidied    INTEGER NOT NULL DEFAULT 0   -- when the user tidied it away (« Ranger »), ended
 );
-CREATE INDEX IF NOT EXISTS threads_subject ON threads (subject);
 CREATE TABLE IF NOT EXISTS thread_steps (
 	thread   INTEGER NOT NULL,
 	key      TEXT NOT NULL,
@@ -119,11 +117,18 @@ CREATE TABLE IF NOT EXISTS thread_log (
 CREATE INDEX IF NOT EXISTS thread_log_thread ON thread_log (thread, id);`
 
 func init() {
-	extraSchema = append(extraSchema, threadsSchema, threadsLiveSubject)
+	extraSchema = append(extraSchema, threadsSchema)
 	// A threads table made before ends and tidied has neither.
 	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
 		if err := addColumn(db, "threads", "ends", "TEXT NOT NULL DEFAULT 'goal'"); err != nil {
 			return err
+		}
+		// A thread's alias is in the names now (names.go): the column is
+		// step 8's to convert, the one-live-thread index the names' key.
+		for _, q := range []string{`DROP INDEX IF EXISTS threads_live_subject`, `DROP INDEX IF EXISTS threads_subject`} {
+			if _, err := db.Exec(q); err != nil {
+				return err
+			}
 		}
 		return addColumn(db, "threads", "tidied", "INTEGER NOT NULL DEFAULT 0")
 	})
@@ -233,13 +238,13 @@ type Thread struct {
 	Title      string    `json:"title"`
 	Goal       string    `json:"goal"`
 	DoneWhen   string    `json:"done_when,omitempty"`
-	Mode       string    `json:"mode"`              // light or led
-	Subject    string    `json:"subject,omitempty"` // the matter it follows, a ref
-	State      string    `json:"state"`             // open, waiting, done, dropped
-	Phase      string    `json:"phase,omitempty"`   // a led thread's engine
-	Held       string    `json:"held,omitempty"`    // why the code paused it: budget
-	Budget     int       `json:"budget"`            // minutes of running time it may take
-	Amends     int       `json:"amends,omitempty"`  // changes of its plan made without asking
+	Mode       string    `json:"mode"`             // light or led
+	Alias      string    `json:"alias,omitempty"`  // its latest key in the names (names.go): pr:owner/repo#12
+	State      string    `json:"state"`            // open, waiting, done, dropped
+	Phase      string    `json:"phase,omitempty"`  // a led thread's engine
+	Held       string    `json:"held,omitempty"`   // why the code paused it: budget
+	Budget     int       `json:"budget"`           // minutes of running time it may take
+	Amends     int       `json:"amends,omitempty"` // changes of its plan made without asking
 	Summary    string    `json:"summary,omitempty"`
 	Tainted    string    `json:"tainted,omitempty"` // why its plan may carry what someone else wrote
 	Lead       string    `json:"lead,omitempty"`    // the assistant that leads it; empty: the brain
@@ -447,12 +452,19 @@ var stepKeyRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,23}$`)
 
 // The store.
 
-const threadCols = `id, title, goal, done_when, mode, subject, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended, summarized, seen, ends, tidied`
+const threadCols = `id, title, goal, done_when, mode, ` + threadAliasCol + `, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended, summarized, seen, ends, tidied`
+
+// threadAliasCol is a thread's latest key in the names, "" for none.
+const threadAliasCol = `COALESCE((SELECT name FROM names WHERE target = 'thread:' || threads.id AND instr(name, ':') > 0
+	AND name NOT LIKE 'thread:%' ORDER BY seen DESC, name LIMIT 1), '')`
+
+// threadOfAlias is the condition of a thread a key is an alias of.
+const threadOfAlias = `id IN (SELECT CAST(substr(target, 8) AS INTEGER) FROM names WHERE name = ? AND target LIKE 'thread:%')`
 
 func scanThread(row interface{ Scan(...any) error }) (Thread, error) {
 	var s Thread
 	var created, started, ended int64
-	err := row.Scan(&s.ID, &s.Title, &s.Goal, &s.DoneWhen, &s.Mode, &s.Subject, &s.State, &s.Phase, &s.Held, &s.Budget, &s.Amends, &s.Summary, &s.Tainted, &s.Lead,
+	err := row.Scan(&s.ID, &s.Title, &s.Goal, &s.DoneWhen, &s.Mode, &s.Alias, &s.State, &s.Phase, &s.Held, &s.Budget, &s.Amends, &s.Summary, &s.Tainted, &s.Lead,
 		&s.told, &s.Spent, &s.since, &created, &started, &ended, &s.summarized, &s.seen, &s.Ends, &s.tidied)
 	s.Created, s.Started, s.Ended = time.Unix(created, 0), unixOrZero(started), unixOrZero(ended)
 	return s, err
@@ -480,39 +492,6 @@ func (c *core) threads(activeOnly bool, limit int) ([]Thread, error) {
 // activeThreads is the condition of a thread open or waiting.
 const activeThreads = `state IN ('open', 'waiting')`
 
-// threadsLiveSubject holds one live thread a subject, whoever opens it
-// (the brain, a skill, a thread's lead): its condition is activeThreads.
-const threadsLiveSubject = `CREATE UNIQUE INDEX IF NOT EXISTS threads_live_subject ON threads (subject)
-	WHERE subject != '' AND ` + activeThreads
-
-// subjectFree tells that no live thread but except follows subject.
-func (c *core) subjectFree(subject string, except int64) error {
-	if subject == "" {
-		return nil
-	}
-	var id int64
-	var title string
-	err := c.store.db.QueryRow(`SELECT id, title FROM threads WHERE subject = ? AND id != ? AND `+activeThreads+` LIMIT 1`, subject, except).Scan(&id, &title)
-	if err == sql.ErrNoRows {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	return fmt.Errorf("thread %d « %s » follows %s already: a subject has one live thread; go on with it (read_thread, add_step)", id, title, subject)
-}
-
-// liveSubjectErr is an insert's error, said as subjectFree says it when it
-// is the index's.
-func (c *core) liveSubjectErr(subject string, err error) error {
-	if strings.Contains(err.Error(), "UNIQUE") {
-		if e := c.subjectFree(subject, 0); e != nil {
-			return e
-		}
-	}
-	return err
-}
-
 func (c *core) threadsWhere(where string, args ...any) ([]Thread, error) {
 	rows, err := c.store.db.Query(`SELECT `+threadCols+` FROM threads WHERE `+where, args...)
 	if err != nil {
@@ -530,24 +509,29 @@ func (c *core) threadsWhere(where string, args ...any) ([]Thread, error) {
 	return out, rows.Err()
 }
 
-// findThreads finds threads by their subject (its key, subject.go) or
-// by words of their title, goal, subject or summary, active ones first,
-// then the latest; ended ones too, to reopen one.
-func (c *core) findThreads(subject, text string, all bool, limit int) ([]Thread, error) {
+// findThreads finds threads by a key or a name (names.go), or by words
+// of their title, goal, names or summary, active ones first, then the
+// latest; ended ones too, to reopen one.
+func (c *core) findThreads(alias, text string, all bool, limit int) ([]Thread, error) {
 	var conds []string
 	var args []any
-	if subject != "" {
-		key, err := c.subjectLookup(subject)
+	if alias != "" {
+		key, err := c.aboutLookup(alias)
 		if err != nil {
-			return nil, fmt.Errorf("subject: %w", err)
+			return nil, fmt.Errorf("alias: %w", err)
 		}
-		conds = append(conds, `subject = ?`)
-		args = append(args, key)
+		id, ok := threadOfAbout(key)
+		if !ok {
+			return nil, nil
+		}
+		conds = append(conds, `id = ?`)
+		args = append(args, id)
 	}
 	for _, w := range strings.Fields(text) {
 		like := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.ToLower(w)) + "%"
-		conds = append(conds, `lower(title || ' ' || goal || ' ' || subject || ' ' || summary) LIKE ? ESCAPE '\'`)
-		args = append(args, like)
+		conds = append(conds, `(lower(title || ' ' || goal || ' ' || summary) LIKE ? ESCAPE '\'
+			OR id IN (SELECT CAST(substr(target, 8) AS INTEGER) FROM names WHERE target LIKE 'thread:%' AND lower(name) LIKE ? ESCAPE '\'))`)
+		args = append(args, like, like)
 	}
 	if len(conds) == 0 && !all {
 		conds = append(conds, activeThreads)
