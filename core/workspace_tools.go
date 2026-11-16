@@ -25,13 +25,12 @@ import (
 //
 //   - the brain: its own tools (newMCPServer), as brain, its turn's taint;
 //   - a thread's lead: its own tools (registerLeadTools), as lead:<thread>;
-//   - a task or a skill's run: eriphe-workspace, a server Eriphe provides,
-//     lent like any tool of the catalog ({kind: tool, ref: eriphe-workspace}
-//     in run_task, eriphe-workspace in a skill's tools). It is in the task's
-//     grant, its node relays it as any other (proxy.go), and a task without
-//     it in its grant does not reach it. A skill's run writes as
-//     skill:<name>, so its next run rewrites the same surface; any other
-//     task as task:<id>.
+//   - a task: eriphe-workspace, a server Eriphe provides, lent like any
+//     tool of the catalog ({kind: tool, ref: eriphe-workspace} in run_task;
+//     never in a skill's tools: a skill writes on its thread,
+//     task_threads.go). It is in the task's grant, its node relays it as any
+//     other (proxy.go), and a task without it in its grant does not reach
+//     it. It writes as task:<id>.
 //
 // An author writes and removes its own surfaces; the brain any (they stay
 // their author's). Writing a surface is not an external write: no card, no
@@ -66,7 +65,7 @@ func providedServer(name string) bool { return slices.Contains(providedServers, 
 
 // surfaceCaller is who calls the workspace's tools.
 type surfaceCaller struct {
-	author string // brain, skill:<name>, lead:<thread>, task:<id>
+	author string // brain, lead:<thread>, task:<id>
 	only   string // a task filling one of the brain's surfaces: that one only, as the brain's
 	// subject is what what it writes is about when it says nothing: the
 	// brain's turn's, a task's (a skill's run); nil: its author's.
@@ -81,7 +80,7 @@ type surfaceCaller struct {
 type surfaceLifetimeIn struct {
 	Until string `json:"until,omitempty" jsonschema:"remove it at this time: RFC3339 or YYYY-MM-DDTHH:MM in the user's zone, within 90 days"`
 	While string `json:"while,omitempty" jsonschema:"keep it while this ref is pending or running: task:<id>, thread:<id> or card:<id>"`
-	Kept  bool   `json:"kept,omitempty" jsonschema:"keep it as long as you, its author, are there (a skill, a lead's thread)"`
+	Kept  bool   `json:"kept,omitempty" jsonschema:"keep it as long as you, its author, are there (a lead's thread)"`
 }
 
 type surfaceWriteIn struct {
@@ -175,16 +174,11 @@ func (c *core) taskWorkspaceServer(t *TaskRow, grant []string) *mcp.Server {
 	return s
 }
 
-// taskCaller is who a task writes as: its skill, if it is a skill's run (the
-// next run writes the same surfaces); the task otherwise.
+// taskCaller is who a task writes as: the task.
 func (c *core) taskCaller(id string) surfaceCaller {
-	who := surfaceCaller{author: "task:" + id, only: c.store.get(taskSurfaceKey(id)),
+	return surfaceCaller{author: "task:" + id, only: c.store.get(taskSurfaceKey(id)),
 		taint: func() []string { return c.taskTaint(id) }, sawSource: func() { c.taskRead(id, workspaceSourceRead) },
 		subject: func() string { return c.taskSubject(id) }}
-	if r := c.runOfTask(id); r != nil {
-		who.author = "skill:" + r.Skill
-	}
-	return who
 }
 
 // taskSurfaceKey keeps the surface a task fills for the brain (run_task's
@@ -233,7 +227,7 @@ func providedInfo() []map[string]any {
 	for _, name := range workspaceTools {
 		tools = append(tools, map[string]any{"name": name, "value": gridFree})
 	}
-	return []map[string]any{{"name": workspaceServer, "use": "the user's workspace: a task or a skill writes its own surfaces there (surface_write, surface_remove), reads it (workspace_read) and the catalog (catalog_read). Free: writing a surface is not an external write; each writes its own only. Lend it as {kind: tool, ref: " + workspaceServer + "}, or in a skill's tools.",
+	return []map[string]any{{"name": workspaceServer, "use": "the user's workspace: a task writes its own surfaces there (surface_write, surface_remove), reads it (workspace_read) and the catalog (catalog_read). Free: writing a surface is not an external write; each writes its own only. Lend it as {kind: tool, ref: " + workspaceServer + "}; never to a skill, which writes on its thread (" + threadsServer + ").",
 		"tools": tools}}
 }
 

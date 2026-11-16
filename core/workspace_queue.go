@@ -39,6 +39,11 @@ import (
 // today (proposalSpans). The ids stay the same while a group lives, so the
 // composer and the brain keep naming them.
 //
+// An item about a thread (thread:<id>: a skill's set_thread raise, a
+// signal) is shown by its thread's surface, whatever its weight: the tile
+// takes the item's weight (threadSurfaceIn), nothing goes to q-notes. It
+// is seen once the user opened that surface and left it (queueItemsOf).
+//
 // A card an active thread's surface shows (a step's, one linked to it, the
 // thread's own: threadShownCards) is answered there and in no surface of
 // the queue: the thread's surface takes its weight (threadSurfaceIn). Only
@@ -144,6 +149,12 @@ func (c *core) queuePlace(it attentionItem, today time.Time, threads map[string]
 	if id, ok := strings.CutPrefix(it.Ref, refSurface+":"); ok {
 		e.surface, e.about = id, true
 		return e
+	}
+	if id, ok := raisedThread(it.Ref); ok {
+		if _, err := c.surface(threadSurfaceID(id)); err == nil {
+			e.surface, e.about = threadSurfaceID(id), true // its tile rises (threadSurfaceIn)
+			return e
+		}
 	}
 	e.p, e.shown = c.queuedProposal(it.Ref)
 	todays := e.shown && c.proposalToday(e.p, today)
@@ -324,16 +335,36 @@ func queueSubject(e queueEntry, lang string) string {
 
 // queueItemsOf are the open items a queue's surface shows.
 func (c *core) queueItemsOf(id string) []attentionItem {
-	if !strings.HasPrefix(id, queueSurfacePrefix) {
+	thread, isThread := threadOfSurface(id)
+	if !strings.HasPrefix(id, queueSurfacePrefix) && !isThread {
 		return nil
 	}
 	var out []attentionItem
 	for _, e := range c.queuePlan(time.Now()) {
-		if e.surface == id && !e.about {
+		switch {
+		case e.surface != id:
+		case !e.about, isThread && e.it.Ref == threadRef(thread): // a thread's raise: seen on its surface
 			out = append(out, e.it)
 		}
 	}
 	return out
+}
+
+// raisedThread is the thread an item is about, thread:<id>.
+func raisedThread(ref string) (int64, bool) {
+	raw, ok := strings.CutPrefix(ref, refThread+":")
+	if !ok {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	return n, err == nil && n > 0
+}
+
+// threadRaised is the weight of the open item about a thread, 0 for none.
+func (c *core) threadRaised(id int64) int {
+	var w int
+	c.store.db.QueryRow(`SELECT COALESCE(MAX(weight), 0) FROM attention WHERE ref = ?`, threadRef(id)).Scan(&w)
+	return w
 }
 
 // queueSurfaceDismissed is the user removing a queue's surface (Settings →

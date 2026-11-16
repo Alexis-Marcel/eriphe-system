@@ -20,12 +20,8 @@ import (
 //     wakes the lead that wrote that part. What else a lead writes lives
 //     while its thread does (while: thread:<id>, its default lifetime);
 //     code removes it when the thread ends (dropThreadSurfaces).
-//   - A skill writes its surface on its trigger, lent eriphe-workspace in
-//     its tools, as skill:<name>. when: surface.stale id=<id> matches it as
-//     any event; and a skill lent the workspace is run by a surface.stale
-//     about a surface it wrote, whatever its when (queueSkillEvent): a
-//     time trigger cannot name an event, and a skill at fixed times must
-//     hear it too. Its card and its page say so (skillTrigger.Text).
+//   - A skill writes no surface: it acts on its thread (task_threads.go),
+//     whose surface is code's.
 //   - An author is woken by a surface.stale once per surfaceStaleQuiet a
 //     surface: a rewrite the composer still finds stale does not loop.
 //   - The brain writes what the user asks; a recurring request is a skill.
@@ -86,8 +82,7 @@ func (c *core) staleWake(e journalEvent) string {
 // surfaceEventHeard listens to the journal for the authors code wakes:
 // the brain on a surface.missing; a lead on a surface.stale of a surface
 // it wrote, or of its thread's surface when it added the part there (code
-// keeps the rest up to date). A skill's are queued with its other events
-// (queueSkillEvent).
+// keeps the rest up to date).
 func (c *core) surfaceEventHeard(e journalEvent) {
 	switch e.Kind {
 	case evSurfaceMissing:

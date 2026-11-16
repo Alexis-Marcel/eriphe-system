@@ -95,7 +95,7 @@ const (
 var (
 	errNoSurface    = errors.New("no such surface")
 	surfaceIDRe     = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
-	surfaceAuthorRe = regexp.MustCompile(`^(brain|skill:[a-z0-9][a-z0-9-]{0,63}|lead:[0-9]{1,18}|task:[A-Za-z0-9_-]{1,64})$`)
+	surfaceAuthorRe = regexp.MustCompile(`^(brain|lead:[0-9]{1,18}|task:[A-Za-z0-9_-]{1,64})$`)
 )
 
 // surfaceSource is one read of a surface: a tool ("server/tool") with
@@ -311,7 +311,7 @@ type sourceRead struct {
 // field as an error.
 func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.ValidationError, error) {
 	if !surfaceAuthorRe.MatchString(author) {
-		return surface{}, nil, fmt.Errorf("author %q: brain, skill:<name>, lead:<thread>, task:<id>", author)
+		return surface{}, nil, fmt.Errorf("author %q: brain, lead:<thread>, task:<id>", author)
 	}
 	return c.writeSurface(author, in)
 }
@@ -1074,13 +1074,8 @@ func (c *core) refLive(ref string) bool {
 
 // authorLive tells whether a surface's author is still there to keep it.
 func (c *core) authorLive(author string) bool {
-	kind, id, _ := strings.Cut(author, ":")
-	switch kind {
-	case surfaceAuthorBrain, surfaceAuthorCore:
+	if author == surfaceAuthorBrain || author == surfaceAuthorCore {
 		return true
-	case "skill":
-		_, err := c.store.skill(id)
-		return err == nil
 	}
 	return c.refLive(author)
 }

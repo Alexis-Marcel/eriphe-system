@@ -51,7 +51,7 @@ func TestParseReceipt(t *testing.T) {
 // a receipt without one has none.
 func TestReceiptAttention(t *testing.T) {
 	text := "Une facture.\n```json\n" + `{"receipt": {"status": "done", "attention": [` +
-		`{"refs": ["mail:42", "agenda:2026-11-12", "shop:1", "mail:"], "weight": 4, "why": "` + strings.Repeat("é", 100) + `", "say": "Ta facture est due."},` +
+		`{"refs": ["mail:42", "thread:12", "agenda:2026-11-12", "mail:"], "weight": 4, "why": "` + strings.Repeat("é", 100) + `", "say": "Ta facture est due."},` +
 		`{"refs": "event:7", "weight": 2, "why": "a glance"},` +
 		`{"refs": ["task:t-1"], "weight": 6, "why": "too heavy"},` +
 		`{"refs": ["card:3"], "weight": 2.5, "why": "half"},` +
@@ -65,14 +65,14 @@ func TestReceiptAttention(t *testing.T) {
 		t.Fatalf("attention %+v", r.Attention)
 	}
 	a, b := r.Attention[0], r.Attention[1]
-	if !slices.Equal(a.Refs, []string{"mail:42", "agenda:2026-11-12"}) || a.Weight != 4 || a.Say != "Ta facture est due." ||
+	if !slices.Equal(a.Refs, []string{"mail:42", "thread:12"}) || a.Weight != 4 || a.Say != "Ta facture est due." ||
 		len([]rune(a.Why)) != signalWhyMax+1 { // cut, with its ellipsis
 		t.Errorf("first %+v", a)
 	}
 	if !slices.Equal(b.Refs, []string{"event:7"}) || b.Weight != 2 {
 		t.Errorf("one ref as a string %+v", b)
 	}
-	if len(r.dropped) != 6 { // shop:1, mail:, weight 6, weight 2.5, nothing:1, not an object
+	if len(r.dropped) != 6 { // agenda:… (no kind of a tool), mail:, weight 6, weight 2.5, nothing:1, not an object
 		t.Errorf("dropped %q", r.dropped)
 	}
 	if s := stripReceipt(text); s != "Une facture." {

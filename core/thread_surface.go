@@ -361,6 +361,11 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	if c.threadLive(&in, &out, data, s, now) {
 		in.Weight = max(in.Weight, threadWeightWatch)
 	}
+	// Raised (a skill's set_thread, a signal about it): it takes the
+	// item's weight, as a surface its item's (workspace_queue.go).
+	if w := c.threadRaised(s.ID); w > 0 {
+		in.Weight = max(in.Weight, queueSurfaceWeight(w))
+	}
 	// The tools and resources it reads, their items (thread_sources.go).
 	values := c.threadSourcesPart(&in, &out, data, s, now)
 

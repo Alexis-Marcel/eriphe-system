@@ -440,7 +440,7 @@ func TestSurfaceTaint(t *testing.T) {
 // surface opened.
 func TestSurfaceRefreshTriggers(t *testing.T) {
 	c, l := surfaceCore(t)
-	s, errs, err := c.surfaceWrite("skill:releves", surfaceIn{Title: "Dernière écriture", Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)},
+	s, errs, err := c.surfaceWrite("task:t-releves", surfaceIn{Title: "Dernière écriture", Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)},
 		Sources:    map[string]surfaceSource{"/latest": {Resource: "ledger", URI: "ledger://latest"}},
 		Components: json.RawMessage(`[{"id":"root","component":"Text","text":{"@path":"/latest/entry"}}]`)})
 	if err != nil || len(errs) > 0 {
@@ -541,7 +541,7 @@ func TestSurfaceLifetime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kept, _, _ := c.surfaceWrite("skill:matin", surfaceIn{Title: "c", Components: comps, Lifetime: surfaceLifetime{Kept: true}})
+	kept, _, _ := c.surfaceWrite("task:t-gone", surfaceIn{Title: "c", Components: comps, Lifetime: surfaceLifetime{Kept: true}})
 	mine, _, _ := c.surfaceWrite("brain", surfaceIn{Title: "d", Components: comps, Lifetime: surfaceLifetime{Kept: true}})
 	if _, _, err := c.surfaceWrite("task:t-1", surfaceIn{ID: mine.ID, Title: "e", Components: comps}); err == nil {
 		t.Fatal("another author wrote the brain's surface")
@@ -554,7 +554,7 @@ func TestSurfaceLifetime(t *testing.T) {
 
 	tickSurfacesWait(c, time.Now())
 	all, _ := c.surfaces()
-	if len(all) != 3 { // the skill is not there: its kept surface goes
+	if len(all) != 3 { // the task is not there: its kept surface goes
 		t.Fatalf("surfaces %v", all)
 	}
 	if d := received(t, ch, 1)[0].Message.DeleteSurface; d == nil || d.SurfaceID != kept.ID {

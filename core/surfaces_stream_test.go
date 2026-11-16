@@ -254,7 +254,7 @@ func TestSurfaceActionEndpoint(t *testing.T) {
 	c, l := surfaceCore(t)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
-	s, errs, err := c.surfaceWrite("skill:releves", surfaceIn{Title: "Comptes", Sources: balances, Components: accountsSurface(),
+	s, errs, err := c.surfaceWrite("task:t-releves", surfaceIn{Title: "Comptes", Sources: balances, Components: accountsSurface(),
 		Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)}})
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)

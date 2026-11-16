@@ -33,8 +33,6 @@ func authorWords(author, lang string) string {
 	switch kind {
 	case surfaceAuthorBrain:
 		return tr(lang, "surfaces.by.brain")
-	case "skill":
-		return fmt.Sprintf(tr(lang, "surfaces.by.skill"), id)
 	case "lead":
 		return fmt.Sprintf(tr(lang, "surfaces.by.lead"), id)
 	case "task":

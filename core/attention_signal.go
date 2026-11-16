@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // The attention signal: what an assistant (a skill's run, a thread's lead)
@@ -21,7 +20,7 @@ import (
 // attentionSignal is one block: the objects it is about, how much they
 // matter, why, and what Eriphe could say of them.
 type attentionSignal struct {
-	Refs   []string `json:"refs" jsonschema:"the objects it is about: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, thread:<id>, card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…)"`
+	Refs   []string `json:"refs" jsonschema:"the objects it is about: thread:<id> (its tile rises), card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…)"`
 	Weight int      `json:"weight" jsonschema:"5 interrupts the user, 4 needs the user now, 3 matters today, 2 a glance, 1 background"`
 	Why    string   `json:"why" jsonschema:"why it deserves attention, in the user's language, at most 80 characters"`
 	Say    string   `json:"say,omitempty" jsonschema:"what Eriphe could tell the user of it, in the user's language, one sentence; optional"`
@@ -38,18 +37,18 @@ const (
 // attentionInstruction tells an assistant how to write its signal, after
 // the receipt's own instruction (receiptInstruction).
 const attentionInstruction = "When something deserves the user's attention, add to the receipt an \"attention\" list, one entry per thing: " +
-	`"attention": [{"refs": ["mail:<id>"], "weight": 3, "why": "at most 80 characters, in the user's language", "say": "optional: what Eriphe could tell the user, one sentence in the user's language"}]` + ". " +
-	"refs name the objects it is about, each in one of these forms: mail:<id>, agenda:<YYYY-MM-DD>, event:<id>, thread:<id>, card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
+	`"attention": [{"refs": ["thread:<id>"], "weight": 3, "why": "at most 80 characters, in the user's language", "say": "optional: what Eriphe could tell the user, one sentence in the user's language"}]` + ". " +
+	"refs name the objects it is about, each in one of these forms: thread:<id> (the thread's tile rises on the workspace), card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a subject kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
 	"Leave refs out when the entry is about your final message itself. " +
 	"Leave the list out when nothing deserves it: the user is then told nothing."
 
 // The kinds of records an attention item may be about: kind:id. It may be
-// about a subject too (subject.go): mail:<message id>, event:<event id>,
-// project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…, the id as written.
+// about a subject too (subject.go): project:<name>, pr:<owner>/<repo>#<n>,
+// alert:<id>…, the id as written. No kind is a tool's: an item of a
+// thread's source is raised through its thread (task_threads.go).
 const (
-	refAgenda  = "agenda"  // agenda:<YYYY-MM-DD>, the user's day
-	refThread  = "thread"  // thread:<id>
+	refThread  = "thread"  // thread:<id>: its tile takes the weight (workspace_queue.go)
 	refCard    = "card"    // card:<id>, a card of the conversation
 	refTask    = "task"    // task:<id>
 	refSurface = "surface" // surface:<id>, a surface of the workspace (surfaces.go)
@@ -69,8 +68,8 @@ type errBadRef struct{ why string }
 func (e errBadRef) Error() string { return "bad ref: " + e.why }
 
 // parseRef reads a ref: a record's or a subject's kind (subject.go), a
-// colon, an id. An agenda's id is a date, a thread's and a card's a
-// number, a surface's its id; a subject's id is kept as written.
+// colon, an id. A thread's and a card's id is a number, a surface's its
+// id; a subject's id is kept as written.
 func parseRef(s string) (itemRef, error) {
 	kind, id, ok := strings.Cut(strings.TrimSpace(s), ":")
 	if !ok || id == "" {
@@ -78,10 +77,6 @@ func parseRef(s string) (itemRef, error) {
 	}
 	r := itemRef{Kind: kind, ID: id}
 	switch kind {
-	case refAgenda:
-		if _, err := time.Parse(time.DateOnly, id); err != nil {
-			return r, errBadRef{"an agenda is a date, YYYY-MM-DD"}
-		}
 	case refThread, refCard:
 		if n, err := strconv.ParseInt(id, 10, 64); err != nil || n <= 0 {
 			return r, errBadRef{"a " + kind + " is a number"}

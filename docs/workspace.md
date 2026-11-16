@@ -25,9 +25,8 @@ rather than showing an empty grid.
 Who writes the tiles:
 
 - **Eriphe**, when you ask it to show something;
-- **a skill**, the things Eriphe does on its own at set times or on an event (a morning
-  preparation, say), each keeping its own tiles up to date;
-- **a thread**, a matter Eriphe follows to its goal: every thread has its tile, kept up to date as
+- **a thread**, a matter Eriphe follows to its goal (a skill, the things Eriphe does on its own at
+  set times or on an event, works on its own thread): every thread has its tile, kept up to date as
   it moves: its goal, where it stands, what waits for you (its proposals, answered right there, and
   a **C'est fait** / **Done** button for a step only you can do), its steps on a timeline, the live data it follows (a list of your
   mails, the pull requests to review, a number of a service), read by Eriphe itself with no AI
@@ -69,28 +68,6 @@ something changes. It is **off by default**: turn it on in Settings → Agents �
 for this: tiles are simply ordered by importance, and everything else in this guide still works
 except that your general preferences ("always show…", "less of…") are not taken into account.
 
-## Arrival
-
-When you open the workspace in the morning, your day is already there. Eriphe brings a skill,
-**arrivee**, that prepares the workspace at 06:00 and again when you come back after three hours or
-more away. It looks at what you linked and writes a few tiles: the day's appointments, the messages
-that need an answer, projects with their deadline and next task, accounts if a tool for them is
-linked. Nothing useful for one of these, no tile: three right tiles are better than eight empty
-ones.
-
-Your shared folders are read too: if you keep notes or projects in one (tell Eriphe which, it
-remembers), the arrival skill reads them under the folder's rights, and a tile can show a note
-live: it is read again on its own schedule, and at once when Eriphe changes it. Reading a folder
-whose Lire is free asks nothing; a change Eriphe makes there follows its Modifier: on approval, a
-card shows you the file and what changes before anything is written.
-
-If a tile could be better with a tool the skill is not allowed to read, it adds a small "prepare
-more" tile with a button. The button asks Eriphe to propose a new version of the skill with that
-tool; you say yes or no on its card.
-
-The arrival skill is yours like any other: see it in Settings → Skills, change it ("prepare
-my arrival at 7 instead"), turn it off or remove it.
-
 ## Ask for something to be shown
 
 Write to Eriphe, in the workspace's column or in the conversation:
@@ -124,8 +101,9 @@ Say it with a time or an event:
 >
 > Every Monday, a summary of last week's invoices.
 
-Eriphe writes a **skill** for it: a short set of instructions with its trigger, which rewrites the
-same tile each time. You see it on a card in the conversation, in plain words, and **nothing runs
+Eriphe writes a **skill** for it: a short set of instructions with its trigger. Each time it runs,
+it works on its own thread: it notes what it found there, gives it a deadline or says it waits for
+you, and raises the thread's tile when something matters; it never writes a tile of its own. You see it on a card in the conversation, in plain words, and **nothing runs
 before you say yes**. Then it is in Settings → Skills with its runs; to change it or stop it, ask
 ("show the deliveries at 8 instead", "stop the invoices summary") or do it there.
 
@@ -222,8 +200,7 @@ specific tool.
 ## With nothing linked
 
 The workspace still works: it shows what waits for you (proposals, alerts, threads) and Eriphe's
-line. The arrival skill writes one tile saying what the workspace could show in the morning once
-you link appointments, a mailbox or notes. Link one and ask.
+line. Link appointments, a mailbox or notes, and ask.
 
 ## On a phone
 
