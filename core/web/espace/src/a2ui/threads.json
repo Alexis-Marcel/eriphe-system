@@ -79,7 +79,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Summary updated: 03:33",
+      "text": "Summary updated: 04:01",
       "variant": "caption"
      },
      {
@@ -171,13 +171,13 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T01:33:12+01:00",
+        "date": "2026-11-16T02:01:48+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T02:13:12+01:00",
+        "date": "2026-11-16T02:41:48+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
@@ -186,11 +186,11 @@
       "donelabel": "2 steps done",
       "facts": [
        "… and 1 earlier",
-       "02:13 · “Merge the branch”: done",
-       "03:33 · Summary updated",
-       "03:43 · “Resize the photos” started",
-       "03:53 · “Publish the site” waits for you",
-       "04:03 · Thread opened"
+       "02:41 · “Merge the branch”: done",
+       "04:01 · Summary updated",
+       "04:11 · “Resize the photos” started",
+       "04:21 · “Publish the site” waits for you",
+       "04:31 · Thread opened"
       ],
       "goal": "The club's site is online, with its photos.",
       "progress": {
@@ -201,13 +201,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T03:53:12+01:00",
+        "date": "2026-11-16T04:21:48+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T03:43:12+01:00",
+        "date": "2026-11-16T04:11:48+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "current"
@@ -230,6 +230,8 @@
        "why": "Where this thread stands, kept up to date by Eriphe.",
        "answers": true,
        "summary": "Merge the branch ✓ · Publish the site: yours",
+       "state": "yours",
+       "new": 6,
        "updated": "0001-01-01T00:00:00Z"
       }
      }
@@ -406,7 +408,7 @@
      },
      "thread": {
       "facts": [
-       "04:03 · Thread opened"
+       "04:31 · Thread opened"
       ],
       "goal": "The accounts followed, and what is to do.",
       "progress": {
@@ -520,6 +522,8 @@
        "why": "Where this thread stands, kept up to date by Eriphe.",
        "answers": true,
        "summary": "Open",
+       "state": "new",
+       "new": 4,
        "updated": "0001-01-01T00:00:00Z"
       }
      }
@@ -689,25 +693,25 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T01:33:12+01:00",
+        "date": "2026-11-16T02:01:48+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T02:13:12+01:00",
+        "date": "2026-11-16T02:41:48+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
        },
        {
-        "date": "2026-11-16T03:53:12+01:00",
+        "date": "2026-11-16T04:21:48+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T03:43:12+01:00",
+        "date": "2026-11-16T04:11:48+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "done"
@@ -721,15 +725,15 @@
       "donelabel": "5 steps done",
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 03:03"
+       "title": "Done ✓ · 03:31"
       },
       "facts": [
        "… and 2 earlier",
-       "03:03 · Done ✓",
-       "03:33 · Summary updated",
-       "03:43 · “Resize the photos” started",
-       "03:53 · “Publish the site” started",
-       "04:03 · Thread opened"
+       "03:31 · Done ✓",
+       "04:01 · Summary updated",
+       "04:11 · “Resize the photos” started",
+       "04:21 · “Publish the site” started",
+       "04:31 · Thread opened"
       ],
       "goal": "The club's site is online, with its photos.",
       "progress": {
@@ -749,6 +753,8 @@
        "why": "Where this thread stands, kept up to date by Eriphe.",
        "answers": true,
        "summary": "Done ✓",
+       "state": "done",
+       "new": 7,
        "updated": "0001-01-01T00:00:00Z"
       }
      }
@@ -836,7 +842,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Résumé mis à jour : 3 h 33",
+      "text": "Résumé mis à jour : 4 h 01",
       "variant": "caption"
      },
      {
@@ -928,13 +934,13 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T01:33:12+01:00",
+        "date": "2026-11-16T02:01:48+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T02:13:12+01:00",
+        "date": "2026-11-16T02:41:48+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
@@ -943,11 +949,11 @@
       "donelabel": "2 étapes faites",
       "facts": [
        "… et 1 plus tôt",
-       "2 h 13 · « Fusionner la branche » : fait",
-       "3 h 33 · Résumé mis à jour",
-       "3 h 43 · « Redimensionner les photos » a démarré",
-       "3 h 53 · « Publier le site » t'attend",
-       "4 h 03 · Thread ouvert"
+       "2 h 41 · « Fusionner la branche » : fait",
+       "4 h 01 · Résumé mis à jour",
+       "4 h 11 · « Redimensionner les photos » a démarré",
+       "4 h 21 · « Publier le site » t'attend",
+       "4 h 31 · Thread ouvert"
       ],
       "goal": "Le site du club est en ligne, avec ses photos.",
       "progress": {
@@ -958,13 +964,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T03:53:12+01:00",
+        "date": "2026-11-16T04:21:48+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T03:43:12+01:00",
+        "date": "2026-11-16T04:11:48+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "current"
@@ -987,6 +993,8 @@
        "why": "Où en est ce thread, tenu à jour par Eriphe.",
        "answers": true,
        "summary": "Fusionner la branche ✓ · Publier le site à toi",
+       "state": "yours",
+       "new": 6,
        "updated": "0001-01-01T00:00:00Z"
       }
      }
@@ -1163,7 +1171,7 @@
      },
      "thread": {
       "facts": [
-       "4 h 03 · Thread ouvert"
+       "4 h 31 · Thread ouvert"
       ],
       "goal": "Les comptes suivis, et ce qui est à faire.",
       "progress": {
@@ -1277,6 +1285,8 @@
        "why": "Où en est ce thread, tenu à jour par Eriphe.",
        "answers": true,
        "summary": "Ouvert",
+       "state": "new",
+       "new": 4,
        "updated": "0001-01-01T00:00:00Z"
       }
      }
@@ -1446,25 +1456,25 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T01:33:12+01:00",
+        "date": "2026-11-16T02:01:48+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T02:13:12+01:00",
+        "date": "2026-11-16T02:41:48+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
        },
        {
-        "date": "2026-11-16T03:53:12+01:00",
+        "date": "2026-11-16T04:21:48+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T03:43:12+01:00",
+        "date": "2026-11-16T04:11:48+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "done"
@@ -1478,15 +1488,15 @@
       "donelabel": "5 étapes faites",
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 3 h 03"
+       "title": "Fait ✓ · 3 h 31"
       },
       "facts": [
        "… et 2 plus tôt",
-       "3 h 03 · Fait ✓",
-       "3 h 33 · Résumé mis à jour",
-       "3 h 43 · « Redimensionner les photos » a démarré",
-       "3 h 53 · « Publier le site » a démarré",
-       "4 h 03 · Thread ouvert"
+       "3 h 31 · Fait ✓",
+       "4 h 01 · Résumé mis à jour",
+       "4 h 11 · « Redimensionner les photos » a démarré",
+       "4 h 21 · « Publier le site » a démarré",
+       "4 h 31 · Thread ouvert"
       ],
       "goal": "Le site du club est en ligne, avec ses photos.",
       "progress": {
@@ -1506,6 +1516,8 @@
        "why": "Où en est ce thread, tenu à jour par Eriphe.",
        "answers": true,
        "summary": "Fait ✓",
+       "state": "done",
+       "new": 7,
        "updated": "0001-01-01T00:00:00Z"
       }
      }

@@ -152,9 +152,16 @@ func TestQueueSurfaces(t *testing.T) {
 		t.Fatalf("mail id %q", id)
 	}
 
-	// Urgent: in front at once, no model.
-	if l := c.currentLayout(); l.Items[0].ID != "q-alert-7" || l.Items[0].Size != sizeXL {
+	// What waits for an answer first, then the urgent, at once, no model.
+	l := c.currentLayout()
+	if l.Items[0].ID != today.ID || tileStateOf(alert) != tileUrgent {
 		t.Fatalf("layout %s", tilesOf(l))
+	}
+	if tl, ok := tileOf(l, "q-alert-7"); !ok || tl.Size != sizeXL {
+		t.Fatalf("the urgent alert: %s", tilesOf(l))
+	}
+	if g, _ := surfaceByID(t, c, queueDecide); tileStateOf(g) != tileYours {
+		t.Fatalf("a group of cards is not yours: %q", tileStateOf(g))
 	}
 
 	// Again with nothing changed: nothing written.
@@ -308,8 +315,8 @@ func mustProposalID(t *testing.T, ref string) int64 {
 
 // Closing a group hides it for the session, its cards still waiting and
 // its other items ending; opening one reads only what it showed then;
-// removing it takes its items out of the queue. The composer sees each
-// item with the group that shows it.
+// removing it takes its items out of the queue. Each item is shown by its
+// group.
 func TestQueueGroupGestures(t *testing.T) {
 	tw, _ := newMemoryWeb(t)
 	c := tw.c
@@ -319,10 +326,9 @@ func TestQueueGroupGestures(t *testing.T) {
 	c.syncQueueSurfaces()
 	now := time.Now()
 
-	snap := c.poolSnapshot(momentChange, "")
 	shownBy := map[string]string{}
-	for _, it := range snap.Queue {
-		shownBy[it.Ref] = it.Surface
+	for _, e := range c.queuePlan(now) {
+		shownBy[e.it.Ref] = e.surface
 	}
 	if shownBy[cardItemRef(q.mems[0].ID)] != queueMemories || shownBy["note:1"] != queueNotes ||
 		shownBy[cardItemRef(q.today.ID)] != queueSurfaceID(cardItemRef(q.today.ID)) {

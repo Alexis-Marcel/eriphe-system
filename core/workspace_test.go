@@ -41,44 +41,33 @@ func TestNoRulesLeft(t *testing.T) {
 	}
 }
 
-// The composer's turn lists the user's workspace preferences from memory,
-// and the others the surfaces' words recall; a proposed one waits.
-func TestComposerReadsWorkspacePreferences(t *testing.T) {
+// What the user wants to see more or less of is read by the skills that
+// note a thread's items, with their run: the preferences about the
+// workspace, active ones only, the latest first; never a proposed one, nor
+// another kind.
+func TestWatchersReadSeePreferences(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: workspaceEntity, Text: "Sam veut toujours voir devant une sauvegarde qui échoue."})
+	mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: workspaceEntity, Text: "Sam veut toujours voir une sauvegarde qui échoue."})
 	mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: "owner", Text: "Sam ne lit jamais les lettres d'information."})
 	mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: workspaceEntity, Text: "Sam aime les modules ronds.", Status: memProposed})
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: workspaceEntity, Text: "Sam a un grand écran."})
-	c.attend(attentionItem{Ref: "mail:7", Weight: 2, Why: "Lettre d'information de news.example.org", Source: "skill:mail"})
-
-	c.syncQueueSurfaces()
-	s := c.poolSnapshot(momentChange, "")
-	if len(s.Preferences) != 2 || s.Preferences[0] != "Sam veut toujours voir devant une sauvegarde qui échoue." ||
-		s.Preferences[1] != "Sam ne lit jamais les lettres d'information." {
-		t.Fatalf("preferences %q", s.Preferences)
+	c.mem.db.Exec(`UPDATE memories SET updated_at = updated_at - 2 WHERE kind = ? AND about = ?`, kindPreference, workspaceEntity)
+	mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: workspaceEntity, Text: "Sam ne veut plus les lettres de news.example.org."})
+	got := c.seePreferences()
+	if len(got) != 2 || got[0] != "Sam ne veut plus les lettres de news.example.org." || got[1] != "Sam veut toujours voir une sauvegarde qui échoue." {
+		t.Fatalf("preferences %q", got)
 	}
-	turn := composerTurn(s)
-	for _, want := range []string{"Ses préférences", "- Sam veut toujours voir devant une sauvegarde qui échoue.", "- Sam ne lit jamais les lettres d'information."} {
-		if !strings.Contains(turn, want) {
-			t.Errorf("turn lacks %q:\n%s", want, turn)
+	sk := triggeredSkill{Name: "mails", Manifest: skillManifest{Description: "Trie les mails", Body: "Note chaque mail."},
+		Trigger: &skillTrigger{Tools: []string{threadsServer}}}
+	th := &Thread{ID: 3, Title: "Mes mails"}
+	prompt := skillRunPrompt(sk, nil, time.Now(), th, []string{"inbox"}, got)
+	for _, want := range []string{"ce que l'utilisateur veut voir", "- Sam ne veut plus les lettres de news.example.org.", "`none`"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("the run's prompt lacks %q:\n%s", want, prompt)
 		}
 	}
-	if strings.Contains(turn, "ronds") || strings.Contains(turn, "grand écran") {
-		t.Errorf("a proposed preference or a fact in the turn:\n%s", turn)
-	}
-
-	// The stamp the composer watches moves when one enters memory, with its words.
-	// updated_at counts seconds: the ones there move back two, not the clock.
-	c.mem.db.Exec(`UPDATE memories SET updated_at = updated_at - 2 WHERE kind = ? AND about = ?`, kindPreference, workspaceEntity)
-	stamp, changed, _ := c.workspacePrefStamp()
-	x := mustAdd(t, c.mem, &Memory{Kind: kindPreference, About: workspaceEntity, Text: "Sam ne veut plus les lettres de news.example.org."})
-	s2, changed2, words := c.workspacePrefStamp()
-	if s2 == stamp || changed2 < changed || words != x.Text {
-		t.Fatalf("stamp %q → %q, %d → %d, %q", stamp, s2, changed, changed2, words)
-	}
-	c.mem.forget(x.ID, "owner", "")
-	if s3, _, _ := c.workspacePrefStamp(); s3 == s2 {
-		t.Fatal("forgetting one did not move the stamp")
+	if p := skillRunPrompt(sk, nil, time.Now(), th, []string{"inbox"}, nil); strings.Contains(p, "veut voir") {
+		t.Errorf("no preference, still the line:\n%s", p)
 	}
 }
 

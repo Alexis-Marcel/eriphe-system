@@ -364,15 +364,6 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 		t.Errorf("tainted part: %s %q %+v", s.Components, s.Tainted, meta)
 	}
 
-	// Stale: the lead hears of its part.
-	c.subscribeEvents(c.surfaceEventHeard)
-	c.emit(journalEvent{Kind: evSurfaceStale, Key: sid, Source: "composer", Payload: map[string]any{"id": sid}})
-	var text string
-	c.store.db.QueryRow(`SELECT text FROM thread_inbox WHERE thread = ? ORDER BY id DESC LIMIT 1`, th.ID).Scan(&text)
-	if !strings.Contains(text, "Ta partie") {
-		t.Errorf("the lead was not told: %q", text)
-	}
-
 	if out, msg := callOn(t, lead, "surface_remove", map[string]any{"id": sid}); msg != "" || out["removed"] != "part" {
 		t.Fatalf("remove %v %s", out, msg)
 	}

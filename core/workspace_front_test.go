@@ -41,10 +41,6 @@ func TestWorkspaceFocusTurn(t *testing.T) {
 	if tile, _ := tileOf(l, "agenda"); sizeRank[tile.Size] < sizeRank[sizeL] {
 		t.Fatalf("not large: %s", tilesOf(l))
 	}
-	c.settleFocus(time.Now())
-	if snap := c.poolSnapshot(momentFocus, ""); !strings.Contains(composerTurn(snap), "Au centre : agenda") {
-		t.Fatalf("the composer reads it as the user's: %s", composerTurn(snap))
-	}
 	if ws := c.workspaceBlock(time.Now()); !strings.Contains(ws, "agenda « Agenda » · xl en 0,0 · au centre, mise par toi") &&
 		!strings.Contains(ws, "· au centre, mise par toi") {
 		t.Fatalf("the brain's next turn: %s", ws)
@@ -73,7 +69,6 @@ func TestWorkspaceStage(t *testing.T) {
 	c := focusCore(t)
 	now := time.Now()
 	c.focusSurface("agenda", now)
-	c.settleFocus(now)
 
 	// The brain answers on stage: agenda stays next to it, reduced.
 	c.front.begin(true)
@@ -87,9 +82,6 @@ func TestWorkspaceStage(t *testing.T) {
 	prev, ok := tileOf(l, "agenda")
 	if !ok || sizeRank[prev.Size] > sizeRank[sizeM] {
 		t.Fatalf("the previous one is not a reduced tile: %s", tilesOf(l))
-	}
-	if snap := c.poolSnapshot(momentFocus, ""); snap.Previous != "agenda" || !strings.Contains(composerTurn(snap), "Au centre juste avant : agenda") {
-		t.Fatalf("the composer does not know the previous: %q", snap.Previous)
 	}
 	if ws := c.workspaceBlock(now); !strings.Contains(ws, "· au centre juste avant") {
 		t.Fatalf("the brain does not read the previous: %s", ws)
@@ -107,7 +99,6 @@ func TestWorkspaceStage(t *testing.T) {
 
 	// Back ends the stage: no previous left.
 	c.focusSurface("", now.Add(2*time.Second))
-	c.settleFocus(now.Add(2 * time.Second))
 	if l := c.currentLayout(); l.Focus != "" || l.Previous != "" || l.FocusBy != "" {
 		t.Fatalf("back: focus %q previous %q by %q", l.Focus, l.Previous, l.FocusBy)
 	}
@@ -223,7 +214,7 @@ func TestFrontProposalListed(t *testing.T) {
 		Components: json.RawMessage(`[{"id":"root","component":"Proposal","proposalId":{"@path":"/p"}}]`)})
 	pool, _ := c.surfaces()
 	rel := c.focusRelations("pr-42", pool)
-	if len(rel) == 0 || !strings.HasPrefix(rel[0].ID, queueSurfacePrefix) || rel[0].words() != "même proposition" {
+	if len(rel) == 0 || !strings.HasPrefix(rel[0].ID, queueSurfacePrefix) || rel[0].Ref != "proposal:"+ref {
 		t.Fatalf("relations %+v", rel)
 	}
 }
@@ -238,7 +229,7 @@ func TestProposalRelates(t *testing.T) {
 	other := surface{ID: "q-other", Author: surfaceAuthorCore,
 		Components: json.RawMessage(`[{"id":"root","component":"Proposal","proposalId":"rule:2"}]`)}
 	got := surfaceRelations(brainView, []surface{brainView, queue, other}, nil)
-	if len(got) != 1 || got[0].ID != queue.ID || got[0].Kind != relRef || got[0].words() != "même proposition" {
+	if len(got) != 1 || got[0].ID != queue.ID || got[0].Kind != relRef || got[0].Ref != "proposal:access:4" {
 		t.Fatalf("relations %+v", got)
 	}
 	// A group of the queue: a list whose template shows each proposal.

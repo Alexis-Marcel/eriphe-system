@@ -37,7 +37,7 @@ import (
 // item has a surface of its own, q-<kind>-<id> (queueSurfaceID): weight 4
 // or 5 (a card a task waits on, an alert), or a proposal that takes place
 // today (proposalSpans). The ids stay the same while a group lives, so the
-// composer and the brain keep naming them.
+// brain keeps naming them.
 //
 // An item about a thread (thread:<id>: a skill's set_thread raise, a
 // signal) is shown by its thread's surface, whatever its weight: the tile
@@ -46,9 +46,9 @@ import (
 //
 // A card an active thread's surface shows (a step's, one linked to it, the
 // thread's own: threadShownCards) is answered there and in no surface of
-// the queue: the thread's surface takes its weight (threadSurfaceIn). Only
-// one that interrupts (weight 5) or takes place today keeps a surface of
-// its own as well.
+// the queue, whatever its weight: the thread's surface takes its weight and
+// its state, yours (threadSurfaceIn), so it comes first. The queue's tiles
+// are for the cards no thread shows.
 //
 // A surface's weight is its first item's (queueSurfaceWeight: 4 and 5 are
 // urgent, placed first by code). It lives while it has an item: the user
@@ -158,7 +158,7 @@ func (c *core) queuePlace(it attentionItem, today time.Time, threads map[string]
 	}
 	e.p, e.shown = c.queuedProposal(it.Ref)
 	todays := e.shown && c.proposalToday(e.p, today)
-	if thread, ok := threads[e.p.ref()]; ok && e.shown && it.Weight < weightInterrupts && !todays {
+	if thread, ok := threads[e.p.ref()]; ok && e.shown {
 		e.surface, e.about = threadSurfaceID(thread), true // answered there (thread_surface.go)
 		return e
 	}
@@ -209,6 +209,9 @@ func (c *core) queueSurfaces(plan []queueEntry, lang string) map[string]surfaceI
 	out := map[string]surfaceIn{}
 	for id, es := range by {
 		if in, ok := c.queueSurface(id, es, lang); ok {
+			if slices.ContainsFunc(es, func(e queueEntry) bool { return e.shown }) {
+				in.state = tileYours // a card waits for the user's answer
+			}
 			out[id] = in
 		}
 	}
@@ -419,7 +422,7 @@ func (c *core) syncQueueSurfaces() {
 // its components, its data (a group's items), title, why, weight and taint.
 func sameQueueSurface(s surface, in surfaceIn) bool {
 	return compactJSON(s.Components) == compactJSON(in.Components) && compactJSON(s.Data) == compactJSON(in.Data) &&
-		s.Title == in.Title && s.Why == in.Why && s.Weight == in.Weight &&
+		s.Title == in.Title && s.Why == in.Why && s.Weight == in.Weight && s.Look.State == in.state &&
 		(len(s.Look.AuthorTaint) > 0) == (len(in.Tainted) > 0)
 }
 

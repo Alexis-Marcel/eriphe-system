@@ -13,36 +13,6 @@ func oneText(text string) []map[string]any {
 
 // surface.missing reaches the brain as an event of the conversation, once
 // an hour for the same text, tainted when external.
-func TestSurfaceMissingTellsTheBrain(t *testing.T) {
-	c, now := skillCore(t)
-	c.subscribeEvents(c.surfaceEventHeard)
-	missing := func(text string, external bool) {
-		c.emit(journalEvent{Kind: evSurfaceMissing, Source: "composer", At: *now, External: external, Payload: map[string]any{"text": text}})
-	}
-	missing("l'agenda de la semaine", false)
-	if got := lastEvent(t, c); !strings.Contains(got, "[espace]") || !strings.Contains(got, "l'agenda de la semaine") {
-		t.Fatalf("event %q", got)
-	}
-	msgs, _ := c.store.undelivered()
-	n := len(msgs)
-	missing("l'agenda de la semaine", false)
-	if msgs, _ = c.store.undelivered(); len(msgs) != n {
-		t.Error("told twice within the hour")
-	}
-	missing("les mails d'un inconnu", true)
-	msgs, _ = c.store.undelivered()
-	if last := msgs[len(msgs)-1]; c.store.get(taintKey(last.Seq)) == "" {
-		t.Error("an external missing did not taint the brain's turn")
-	}
-	*now = now.Add(2 * time.Hour)
-	missing("l'agenda de la semaine", false)
-	if msgs, _ = c.store.undelivered(); len(msgs) != n+2 {
-		t.Errorf("not told again after the hour: %d", len(msgs))
-	}
-}
-
-// An item may be about a surface: surface:<id> is a ref of the queue,
-// and it leaves with its surface.
 func TestQueueSurfaceRefs(t *testing.T) {
 	c, _ := surfaceCore(t)
 	if !validAttentionRef("surface:revue-du-jour") || validAttentionRef("surface:Pas Un Id") {

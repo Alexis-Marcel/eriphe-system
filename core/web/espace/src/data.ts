@@ -27,8 +27,8 @@ import type { Layout } from "./types";
 //   (about, surface:<id>), so Eriphe knows what « ça » is;
 // - POST /api/espace/gesture: what left the grid unopened, what the user
 //   closed, moved or resized (workspace_gestures.go):
-//   the composer chooses again, memory's extraction reads them, and a
-//   close, a move or a resize holds for the session;
+//   memory's extraction reads them; a move or a resize is kept until
+//   placed again, a close holds for the session;
 // - GET /api/proposals/{ref}: a proposal a surface shows (the catalog's
 //   Proposal), answered by an "answer" action (answerProposal);
 // - GET /api/proposals?day=: the dated proposals that wait that day, which

@@ -54,6 +54,68 @@ func threadStatus(s Thread, steps []threadSurfaceStep, waits bool, weight int, l
 	return tr(lang, "thread.status.calm"), "default"
 }
 
+// threadTileState is a thread's tile state (workspace_layout.go): done
+// once ended; yours while something waits for the user; urgent from
+// weightUrgent (raised, a note due soon); new with something changed since
+// the user's last visit; running while a step runs; quiet otherwise.
+func threadTileState(s Thread, steps []threadSurfaceStep, waits bool, weight, fresh int) string {
+	switch {
+	case !s.active():
+		return tileDone
+	case waits:
+		return tileYours
+	case weight >= weightUrgent:
+		return tileUrgent
+	case fresh > 0:
+		return tileNew
+	}
+	for _, st := range steps {
+		if st.State == "current" {
+			return tileRunning
+		}
+	}
+	return tileQuiet
+}
+
+// threadNew counts what changed on a thread since the user's last visit
+// (visited, not seen: the badge goes once they open it): the header's
+// facts after it, and the notes written after it on items still listed.
+func (c *core) threadNew(s Thread, steps []threadSurfaceStep, lang string) int {
+	n := len(threadFacts(s, steps, s.visited, lang))
+	var notes int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_items WHERE thread = ? AND gone = 0 AND noted > ?`, s.ID, s.visited).Scan(&notes)
+	return n + notes
+}
+
+// pendingDue is the condition of a note still to deal with that has a due
+// date: to do, to look at, or not sorted, on an item still listed.
+const pendingDue = `due > 0 AND gone = 0 AND state IN ('act', 'look', '')`
+
+// notesDueBy tells whether a thread has a note still to deal with due by
+// then (or past).
+func (c *core) notesDueBy(thread int64, by time.Time) bool {
+	var n int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_items WHERE thread = ? AND `+pendingDue+` AND due <= ?`, thread, by.Unix()).Scan(&n)
+	return n > 0
+}
+
+// threadsDueBy are the threads with such a note.
+func (c *core) threadsDueBy(by time.Time) map[int64]bool {
+	out := map[int64]bool{}
+	rows, err := c.store.db.Query(`SELECT DISTINCT thread FROM thread_items WHERE `+pendingDue+` AND due <= ?`, by.Unix())
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			out[id] = true
+		}
+	}
+	return out
+}
+
 // blockHead composes the head: the goal, the Progress, the state line.
 func (c *core) blockHead(out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, word, tone string) {
 	type comp = map[string]any

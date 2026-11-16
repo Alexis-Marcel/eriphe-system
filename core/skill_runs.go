@@ -368,7 +368,11 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 			c.store.db.Exec(`UPDATE skill_runs SET thread = ? WHERE id = ?`, s.ID, runID)
 		}
 	}
-	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now, th, sources), Agent: sk.Trigger.Model, About: alias,
+	var prefs []string
+	if th != nil && len(sources) > 0 {
+		prefs = c.seePreferences() // it notes items: as the user wants to see them
+	}
+	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now, th, sources, prefs), Agent: sk.Trigger.Model, About: alias,
 		askStart: false, approvedInAdvance: true, cleanStart: !external}
 	for _, t := range sk.Trigger.Tools {
 		r.Resources = append(r.Resources, ResourceRef{Kind: "tool", Ref: t})
@@ -437,11 +441,20 @@ func skillVoice(lang string, threads bool) string {
 }
 
 // skillRunPrompt is a run's prompt: the skill, then its events.
-func skillRunPrompt(sk triggeredSkill, events []journalEvent, now time.Time, th *Thread, sources []string) string {
+// prefs are the user's preferences about what they see, for a run that
+// notes a thread's items (seePreferences).
+func skillRunPrompt(sk triggeredSkill, events []journalEvent, now time.Time, th *Thread, sources, prefs []string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Skill « %s » : %s\n\n%s\n\n", sk.Name, sk.Manifest.Description, sk.Manifest.Body)
 	if s := skillCanText(sk.Trigger, th, sources); s != "" {
 		b.WriteString(strings.TrimSpace(s) + "\n\n")
+	}
+	if len(prefs) > 0 {
+		b.WriteString("[ce que l'utilisateur veut voir, plus ou moins (ses préférences, de sa mémoire) : note les éléments en conséquence ; ce qu'il ne veut plus voir est `none`]\n")
+		for _, p := range prefs {
+			fmt.Fprintf(&b, "- %s\n", p)
+		}
+		b.WriteString("\n")
 	}
 	if len(events) == 0 {
 		fmt.Fprintf(&b, "[déclenchement : horaire « %s », %s]\n", sk.Trigger.At, now.Format("2006-01-02 15:04"))

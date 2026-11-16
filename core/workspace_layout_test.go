@@ -60,7 +60,7 @@ func overlaps(l workspaceLayout) string {
 // and biggest, one xl at most, on the grid without overlap.
 func TestLayoutByWeight(t *testing.T) {
 	pool := poolOf(30, 100, 60, 95, 80)
-	l := layoutOf(pool, fallbackChoice(momentChange, time.Now()), "")
+	l := layoutOf(pool, "")
 	if bad := overlaps(l); bad != "" {
 		t.Fatal(bad)
 	}
@@ -68,58 +68,75 @@ func TestLayoutByWeight(t *testing.T) {
 	if !strings.HasPrefix(got, "s-2/xl@0,0 s-4/l@6,0 s-5/l") || len(l.Items) != 5 || len(l.Chips) != 0 {
 		t.Fatalf("tiles %s, chips %v", got, chipsOf(l))
 	}
-	if l.Ambient != "urgent" || l.By != fallbackBy {
-		t.Errorf("ambient %s, by %s", l.Ambient, l.By)
+	if l.Ambient != "urgent" {
+		t.Errorf("ambient %s", l.Ambient)
 	}
 	// Nothing heavy: calm. One surface fills its rows.
-	one := layoutOf(poolOf(50), fallbackChoice(momentChange, time.Now()), "")
+	one := layoutOf(poolOf(50), "")
 	if len(one.Items) != 1 || one.Items[0].W != layoutCols || one.Ambient != "calm" {
 		t.Fatalf("one %+v", one)
 	}
 	// None: an empty layout, never nil lists.
-	empty := layoutOf(nil, fallbackChoice(momentChange, time.Now()), "")
+	empty := layoutOf(nil, "")
 	raw, _ := json.Marshal(empty)
 	if !strings.Contains(string(raw), `"items":[]`) || !strings.Contains(string(raw), `"chips":[]`) {
 		t.Fatalf("empty %s", raw)
 	}
 }
 
-// Urgent first: a surface of weight 80 or more is placed ahead of the
-// composer's choice, at once, even one the composer left out; a surface
-// written after the choice is placed by its weight; what the choice left
-// out is folded.
-func TestLayoutUrgentFirst(t *testing.T) {
-	pool := poolOf(50, 50, 50)
-	ch := workspaceChoice{By: composedBy, Seen: []string{"s-1", "s-2", "s-3"},
-		Items: []choiceItem{{ID: "s-2", Size: sizeXL, Why: "the composer's why"}, {ID: "s-1", Size: sizeM}, {ID: "nope", Size: sizeL}}}
-	l := layoutOf(pool, ch, "")
-	if got := tilesOf(l); got != "s-2/xl@0,0 s-1/l@6,0" || !slices.Equal(chipsOf(l), []string{"s-3"}) || l.Items[0].Why != "the composer's why" {
-		t.Fatalf("composer's choice: %s, chips %v, %+v", got, chipsOf(l), l.Items)
+// Code orders the workspace by each tile's state, no model: what waits
+// for the user, then what is urgent, then what is new, then what runs,
+// what is quiet and what ended; then the heaviest, the latest changed and
+// the id, so the same pool always gives the same layout.
+func TestLayoutOrderByState(t *testing.T) {
+	at := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC)
+	tile := func(id, state string, weight int) surface {
+		return surface{ID: id, Title: id, Author: "brain", Weight: weight, Updated: at, Look: surfaceLook{State: state}}
 	}
-	// An urgent surface arrives, unseen by the composer: in front at once.
-	pool = append(pool, surface{ID: "q-card-9", Title: "Paiement", Author: surfaceAuthorCore, Weight: queueSurfaceWeight(5), Why: "Attend ton accord"})
-	// And a plain new one: placed by weight after the choice.
-	pool = append(pool, surface{ID: "s-new", Title: "Nouvelle", Author: "brain", Weight: 40})
-	start := time.Now()
-	l = layoutOf(pool, ch, "")
-	if d := time.Since(start); d > 250*time.Millisecond { // well under 10 ms; a loaded runner is slower
-		t.Errorf("layout took %s", d)
+	pool := []surface{
+		tile("done", tileDone, 30),
+		tile("quiet", tileQuiet, 50),
+		tile("running", tileRunning, 50),
+		tile("new", tileNew, 50),
+		tile("urgent", tileUrgent, 80),
+		tile("yours", tileYours, 70),
+		tile("plain", "", 85), // no state written: by its weight, urgent
 	}
-	if l.Items[0].ID != "q-card-9" || l.Items[0].Size != sizeXL || l.Items[0].Col != 0 || l.Items[0].Row != 0 {
-		t.Fatalf("urgent not first: %s", tilesOf(l))
+	want := []string{"yours", "plain", "urgent", "new", "running", "quiet", "done"}
+	order := func(l workspaceLayout) []string {
+		var out []string
+		for _, t := range l.Items {
+			out = append(out, t.ID)
+		}
+		for _, c := range l.Chips {
+			out = append(out, c.ID)
+		}
+		return out
 	}
-	// One xl at most: the composer's xl is an l now.
-	if i := slices.IndexFunc(l.Items, func(t layoutTile) bool { return t.ID == "s-2" }); i < 0 || l.Items[i].Size != sizeL {
-		t.Fatalf("composer's xl: %s", tilesOf(l))
+	first := layoutOf(pool, "")
+	if got := order(first); !slices.Equal(got, want) {
+		t.Fatalf("order %v, want %v", got, want)
 	}
-	if !slices.ContainsFunc(l.Items, func(t layoutTile) bool { return t.ID == "s-new" }) || slices.Contains(chipsOf(l), "s-new") {
-		t.Fatalf("new surface: %s, chips %v", tilesOf(l), chipsOf(l))
+	// The same inputs in another order: the same layout.
+	for range 5 {
+		shuffled := slices.Clone(pool)
+		slices.Reverse(shuffled)
+		shuffled[0], shuffled[3] = shuffled[3], shuffled[0]
+		if got := layoutOf(shuffled, ""); tilesOf(got) != tilesOf(first) || !slices.Equal(chipsOf(got), chipsOf(first)) {
+			t.Fatalf("not deterministic: %s / %s", tilesOf(got), tilesOf(first))
+		}
 	}
-	if !slices.Equal(chipsOf(l), []string{"s-3"}) || l.Ambient != "urgent" {
-		t.Fatalf("chips %v, ambient %s", chipsOf(l), l.Ambient)
+	// Opened, a tile goes on stage; the heaviest of what waits stays in front of it.
+	l := layoutOf(pool, "quiet")
+	if l.Items[0].ID != "plain" || l.Items[1].ID != "urgent" || l.Items[2].ID != "quiet" || l.Items[2].Size != sizeXL {
+		t.Fatalf("focus: %s", tilesOf(l))
 	}
-	if bad := overlaps(l); bad != "" {
-		t.Fatal(bad)
+	if !l.Items[0].Urgent || l.Items[2].Urgent {
+		t.Fatalf("urgent flags: %+v", l.Items[:3])
+	}
+	// The page's metadata says the same state.
+	if tileStateOf(pool[6]) != tileUrgent || tileStateOf(surface{Weight: 40}) != tileQuiet {
+		t.Fatal("state by weight")
 	}
 }
 
@@ -130,7 +147,7 @@ func TestLayoutFoldWhenFull(t *testing.T) {
 	for range 30 {
 		weights = append(weights, 75)
 	}
-	l := layoutOf(poolOf(weights...), fallbackChoice(momentChange, time.Now()), "")
+	l := layoutOf(poolOf(weights...), "")
 	if bad := overlaps(l); bad != "" {
 		t.Fatal(bad)
 	}
@@ -151,11 +168,11 @@ func TestLayoutFoldWhenFull(t *testing.T) {
 	}
 }
 
-// What the user opened is placed first after the urgent, at l at least,
-// for focusFor or until they go back.
+// What the user opened is placed first after the urgent, xl (l when an
+// urgent one holds the xl), for focusFor or until they go back.
 func TestLayoutFocus(t *testing.T) {
 	pool := poolOf(100, 20, 50)
-	l := layoutOf(pool, fallbackChoice(momentChange, time.Now()), "s-2")
+	l := layoutOf(pool, "s-2")
 	if l.Focus != "s-2" || l.Items[0].ID != "s-1" || l.Items[1].ID != "s-2" || l.Items[1].Size != sizeL {
 		t.Fatalf("focus: %s", tilesOf(l))
 	}
@@ -164,10 +181,10 @@ func TestLayoutFocus(t *testing.T) {
 		t.Fatalf("urgent: %+v", l.Items[:2])
 	}
 	// Opened, an urgent surface stays where it is: first.
-	if l := layoutOf(pool, fallbackChoice(momentChange, time.Now()), "s-1"); l.Items[0].ID != "s-1" || l.Items[0].Size != sizeXL {
+	if l := layoutOf(pool, "s-1"); l.Items[0].ID != "s-1" || l.Items[0].Size != sizeXL {
 		t.Fatalf("urgent focus: %s", tilesOf(l))
 	}
-	if l := layoutOf(pool, fallbackChoice(momentChange, time.Now()), "gone"); l.Focus != "" || l.Items[0].ID != "s-1" {
+	if l := layoutOf(pool, "gone"); l.Focus != "" || l.Items[0].ID != "s-1" {
 		t.Fatalf("a focus not in the pool: %s", tilesOf(l))
 	}
 

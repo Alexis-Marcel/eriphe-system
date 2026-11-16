@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipLabel, shownChips, surfaceSummary, surfaceTitle, surfaceUpdated, surfaceWeight } from "./chips";
+import { chipLabel, shownChips, surfaceSummary, surfaceTitle, surfaceUpdated, surfaceState, surfaceNew, needsUser } from "./chips";
 
 // The chips' words: never a raw id, and those that say the same once,
 // with their count.
@@ -44,11 +44,15 @@ describe("chips", () => {
     expect(surfaceSummary(undefined)).toBeUndefined();
   });
 
-  it("read a surface's weight and when it was last written, else nothing", () => {
-    const s = { metadata: { extensions: { eriphe: { weight: 80, updated: "2026-11-15T16:00:00Z" } } } };
-    expect(surfaceWeight(s)).toBe(80);
+  it("read a surface's state, what is new on it and when it was last written, else nothing", () => {
+    const s = { metadata: { extensions: { eriphe: { state: "yours", new: 3, updated: "2026-11-15T16:00:00Z" } } } };
+    expect(surfaceState(s)).toBe("yours");
+    expect(surfaceNew(s)).toBe(3);
     expect(surfaceUpdated(s)).toBe("2026-11-15T16:00:00Z");
-    expect(surfaceWeight({ metadata: { extensions: { eriphe: { weight: "80" } } } })).toBe(0);
+    expect(surfaceState({ metadata: { extensions: { eriphe: { state: "loud", weight: 100 } } } })).toBe("quiet");
+    expect(surfaceNew({ metadata: { extensions: { eriphe: { new: "3" } } } })).toBe(0);
+    expect(surfaceState(undefined)).toBe("quiet");
     expect(surfaceUpdated(undefined)).toBe("");
+    expect(needsUser("yours") && needsUser("urgent") && !needsUser("new") && !needsUser("done")).toBe(true);
   });
 });

@@ -62,8 +62,6 @@ export function surfaceFixtures(lang: Lang): Message[] {
 // layout the event stream's "layout" carries (workspace_layout.go).
 export function sampleLayout(lang: Lang): Layout {
   return {
-    eriphe: "",
-    by: "fallback",
     ambient: "calm",
     items: [{ id: SAMPLE_SURFACE, title: words[lang].title, size: "l", col: 0, row: 0, w: 12, h: 3 }],
     chips: [],
@@ -165,11 +163,6 @@ const alert = {
   en: { title: "Waiting for an answer", text: "Last night's backup did not finish: the NAS disk was full at 3:12 am." },
 };
 
-const eriphe = {
-  fr: "Bonjour. Quatre propositions attendent ton accord, et la sauvegarde de cette nuit a échoué.",
-  en: "Hello. Four proposals wait for your yes, and last night's backup failed.",
-};
-
 const proposalTitle = { fr: "Proposition", en: "Proposal" };
 
 // sampleLines is the dev server's conversation (web_espace_exchange.go),
@@ -205,15 +198,17 @@ export function sampleEarlier(lang: Lang, before: number, now = Date.now()): Ear
 // (the to-do list, the queue's proposals and alert, three of the
 // gallery's) and where eriphe-core would lay them out on the 12 × 8 grid.
 export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: Layout; ids: string[]; exchange: Exchange } {
-  const card = (id: string, root: Record<string, unknown>): Message => ({
+  // Each with its state as eriphe-core computes it (tileStateOf): a card waits for the user.
+  const meta = (state: string) => ({ extensions: { eriphe: { state } } });
+  const card = (id: string, root: Record<string, unknown>, state = "yours"): Message => ({
     version: "1.0",
-    createSurface: { surfaceId: id, catalogId: CATALOG.id, components: [{ id: "root", ...root }] },
+    createSurface: { surfaceId: id, catalogId: CATALOG.id, components: [{ id: "root", ...root }], metadata: meta(state) },
   } as Message);
   const pick = (id: string) => galleryFixtures(lang).find((m) => "createSurface" in m && m.createSurface.surfaceId === id)!;
   const q = queueViews(lang);
   const messages: Message[] = [
     ...surfaceFixtures(lang),
-    card("q-alert", { component: "Alert", level: "warning", text: alert[lang].text }),
+    card("q-alert", { component: "Alert", level: "warning", text: alert[lang].text }, "urgent"),
     ...[0, 2].map((i) => card(`q-card-${i}`, { component: "Proposal", proposalId: q[i].ref })),
     // Cards that ask the same, one surface: a List of Proposals (workspace_queue.go).
     {
@@ -221,6 +216,7 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
       createSurface: {
         surfaceId: "q-group",
         catalogId: CATALOG.id,
+        metadata: meta("yours"),
         components: [
           { id: "root", component: "List", children: ["g1", "g3"] },
           { id: "g1", component: "Proposal", proposalId: q[1].ref },
@@ -235,18 +231,18 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
   ];
   const t = proposalTitle[lang];
   const en = lang === "en";
+  // In eriphe-core's order (workspace_layout.go): what waits for the user,
+  // then the urgent, the new, the quiet, what ended.
   const layout: Layout = {
-    eriphe: eriphe[lang],
-    by: "fallback",
     ambient: "decision",
     items: [
-      { id: "q-alert", title: alert[lang].title, size: "m", col: 0, row: 0, w: 3, h: 2, urgent: true },
-      { id: "q-card-0", title: t, size: "m", col: 3, row: 0, w: 3, h: 2 },
-      { id: SAMPLE_SURFACE, title: words[lang].title, size: "l", col: 6, row: 0, w: 6, h: 3 },
-      { id: "q-group", title: en ? "Reminders to keep" : "Rappels à garder", size: "s", col: 0, row: 2, w: 3, h: 1 },
-      { id: "q-card-2", title: t, size: "s", col: 3, row: 2, w: 3, h: 1 },
-      { id: "thread-101", title: en ? "The club's site" : "Le site du club", size: "l", col: 0, row: 3, w: 4, h: 3 },
-      { id: "thread-102", title: en ? "My accounts" : "Mes comptes", size: "l", col: 4, row: 3, w: 4, h: 3 },
+      { id: "thread-101", title: en ? "The club's site" : "Le site du club", size: "l", col: 0, row: 0, w: 4, h: 3 },
+      { id: "q-card-0", title: t, size: "m", col: 4, row: 0, w: 3, h: 2 },
+      { id: "q-group", title: en ? "Reminders to keep" : "Rappels à garder", size: "m", col: 7, row: 0, w: 5, h: 2 },
+      { id: "q-card-2", title: t, size: "s", col: 4, row: 2, w: 3, h: 1 },
+      { id: "q-alert", title: alert[lang].title, size: "s", col: 7, row: 2, w: 5, h: 1, urgent: true },
+      { id: "thread-102", title: en ? "My accounts" : "Mes comptes", size: "l", col: 0, row: 3, w: 4, h: 3 },
+      { id: SAMPLE_SURFACE, title: words[lang].title, size: "l", col: 4, row: 3, w: 4, h: 3 },
       { id: "thread-103", title: en ? "The terrace" : "La terrasse", size: "m", col: 8, row: 3, w: 4, h: 2 },
     ],
     chips: [

@@ -44,7 +44,7 @@ Who writes the tiles:
   thread comes to the center; ask Eriphe to launch something ("while I review it, look for a brand
   name") and its thread opens on the side, its tile updating as it goes, without taking the center
   from what you are reading. What Eriphe asks you about a thread (a merge to approve, say) waits
-  in that thread's tile, not again among the tiles below, unless it is urgent; a thread that read
+  in that thread's tile, not again among the tiles below; a thread that read
   something from outside keeps its questions there too, to answer in the conversation;
 - **Eriphe itself, for what waits for you**: a proposal to approve, an alert, a message held for
   later. These come and go with what they show.
@@ -65,13 +65,14 @@ titled with what it is about. Closing a group's tile hides it for the session; i
 wait for your answer (Eriphe offers them in the conversation), and the tile is back next session.
 Folded tiles with the same title share one chip, with their count.
 
-### Let an AI arrange it
+### The order of the tiles
 
-Choosing what is in front is done by the **workspace composer**, a small AI turn each time
-something changes. It is **off by default**: turn it on in Settings → Agents → Workspace composer
-("Compose with an AI") and pick its agent (a fast model is enough). Off, nothing is sent to an AI
-for this: tiles are simply ordered by importance, and everything else in this guide still works
-except that your general preferences ("always show…", "less of…") are not taken into account.
+No AI arranges the workspace: Eriphe orders the tiles itself, always the same way. First what you
+placed yourself, then what **waits for you** (« À toi »: a proposal to answer, a step only you can
+do), then what is **urgent** (an alert, a thread with something due within two hours), what is
+**new** since you last opened it, what is running, the quiet ones, and last what is done. Each
+tile's edge is coloured by that state, and a small badge says « À toi », « Urgent » or
+« Nouveau · 3 » (how many things changed since your last visit), even while another tile is open.
 
 ## Ask for something to be shown
 
@@ -128,15 +129,16 @@ Say what you want, about the whole workspace or one tile:
 
 Two kinds of request:
 
-- **Now**: "make the calendar big", "put this top right" arrange the screen for this session, as if
-  you had done it by hand.
-- **In general**: "always…", "never…", "less of…" are **preferences**. Eriphe remembers them as
-  memories about you, and the composer reads them every time it arranges the workspace. You manage
+- **Where things go**: "make the calendar big", "put this top right" arrange the screen as if you
+  had done it by hand, and it stays so until you change it.
+- **What to show**: "never…", "less of…", "no more newsletters" are **preferences**. Eriphe
+  remembers them as memories about you, and whatever watches your mail, your agenda or a service
+  for a thread reads them before noting what it found. You manage
   them like any memory: ask Eriphe what it remembers, or to forget one. There is no settings page
   for the workspace and no rule to maintain.
 
 Eriphe also sees what you do: a tile you closed stays away for the session, and a tile you moved
-stays where you put it. A preference only comes from your own words: Eriphe does not guess one from
+stays where you put it, past the session. A preference only comes from your own words: Eriphe does not guess one from
 your gestures.
 
 When you write while a tile is open, your message is about that tile: "this", "less of this",
@@ -151,10 +153,10 @@ Each tile has three small buttons in its corner, also reachable with the keyboar
 - the **cross** closes it **for the session**: it goes to the end of the chip strip, marked
   "closed for the session", and is not put back in front unless you open it or ask.
 
-What you moved or resized stays where you put it, at that size, for the session; the rest is
-arranged around it. A session lasts while you are active, with no break of more than an hour, and
-ends with the day (a late night after midnight counts as the same day). The next session starts
-fresh, with your preferences.
+What you moved or resized stays where you put it, at that size, until you move it again or ask
+Eriphe to reset the workspace; the rest is arranged around it. What you closed is back the next
+session. A session lasts while you are active, with no break of more than an hour, and ends with
+the day (a late night after midnight counts as the same day).
 
 ## Focus on one thing
 
@@ -210,7 +212,7 @@ line. Link appointments, a mailbox or notes, and ask.
 ## On a phone
 
 On a narrow screen the page scrolls, in one column: Eriphe's line and the field to write to it
-first, then the tiles one under the other, most important first (the order Eriphe chose, not their
+first, then the tiles one under the other, most important first (Eriphe's order, not their
 place on a computer's grid), then the folded chips at the end. A tile keeps only its cross: to make
 one bigger or move it, say so. Open a tile and it takes the whole screen, with **Back to the
 overview** and the field to write about it at the top.
@@ -252,5 +254,5 @@ address opens the conversation, which says how to set one up.
   it freely; a skill reads only the tools you approved on its card. Settings → Surfaces lists every
   tile with who wrote it, what it reads and when it last changed; remove any from there.
 
-Technical details (surfaces, sources, authors, the composer, the layout) are in the
+Technical details (surfaces, sources, authors, the layout) are in the
 [core README](../core/README.md#workspace-web).

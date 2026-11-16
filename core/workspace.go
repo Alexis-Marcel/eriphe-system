@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,27 +10,27 @@ import (
 // The composed workspace's memory and tools (#409). The workspace keeps no
 // rule and has no fixed control but the Oui / Non of a card:
 //
-//   - How the user wants it (what in front, what less, what never) is a
-//     preference memory about "topic:workspace": the brain remembers it
-//     from the user's words (the nightly extraction never writes a
-//     preference). The composer reads those preferences, and the user's
-//     other preferences that bear on the queue, with every snapshot
-//     (workspacePreferences), and composes again when one enters memory
-//     (workspacePrefStamp).
+//   - Code orders it (workspace_layout.go), no model. How the user wants
+//     it laid out (« l'agenda en grand ») the brain applies at once with
+//     workspace_arrange: a placement code keeps (workspace_gestures.go).
+//     What they want to see more or less of (« moins de lettres de news »)
+//     is a preference memory about "topic:workspace", from the user's words
+//     (the nightly extraction never writes a preference): whoever notes
+//     the items of a thread (the brain, a thread's lead, a skill that
+//     watches a source) reads it, and notes those items so.
 //   - What the user does on it: a surface opened, a tile that left the
 //     grid unopened, a tile closed, moved or resized, a message written
-//     about it, are gestures (workspace_log) the brain and the composer
-//     read. No counter and no score. What they do to the layout holds for
-//     their session (workspace_gestures.go).
+//     about it, are gestures (workspace_log) the brain reads. No counter
+//     and no score.
 //   - A message written while a surface is open carries its ref
 //     (messageAbout): « montre-m'en moins » is said to Eriphe in words.
 
 const (
 	workspaceEntity = "topic:workspace" // what a preference about the workspace is about
 
-	workspacePrefsMax  = 12 // workspace preferences a composer's turn reads, the latest first
-	workspaceRecallMax = 3  // other preferences recalled from the queue's words
-	workspacePrefMax   = 300
+	workspaceTitleMax = 120 // a surface's title, quoted to the brain
+	seePrefsMax       = 12  // the preferences about what the user sees a watcher reads, the latest first
+	seePrefMax        = 300 // runes of each
 
 	gestureOpened  = "opened"  // the user opened a surface (a focus)
 	gestureIgnored = "ignored" // a tile left the grid without being opened
@@ -62,48 +61,21 @@ CREATE INDEX IF NOT EXISTS workspace_log_time ON workspace_log (time);`
 
 func init() { extraSchema = append(extraSchema, workspaceLogSchema) }
 
-// Preferences.
-
-// workspacePreferences are the user's preferences the composer reads with a
-// snapshot: those about the workspace, the latest first, then the few
-// others the words of what is on it (titles, whys) recall. Active and current ones only: a
-// proposed preference waits for the user.
-func (c *core) workspacePreferences(words []string) []string {
+// seePreferences are the user's preferences about what they see (about
+// topic:workspace), the latest first: what a skill that notes a thread's
+// items reads with its run (skillRunPrompt). Active and current ones only:
+// a proposed preference waits for the user.
+func (c *core) seePreferences() []string {
 	if c.mem == nil {
 		return nil
 	}
 	xs, _ := c.mem.list(`kind = ? AND about = ? AND status = ? AND (valid_to IS NULL OR valid_to > ?)`,
-		[]any{kindPreference, workspaceEntity, memActive, c.mem.now().Unix()}, `updated_at DESC, id DESC`, workspacePrefsMax)
-	if q := strings.TrimSpace(strings.Join(words, " ")); q != "" {
-		more, _ := c.mem.recall(recallQuery{Query: q, Kinds: []string{kindPreference}, Limit: workspaceRecallMax})
-		xs = append(xs, more...)
-	}
-	var out []string
-	seen := map[int64]bool{}
+		[]any{kindPreference, workspaceEntity, memActive, c.mem.now().Unix()}, `updated_at DESC, id DESC`, seePrefsMax)
+	out := make([]string, 0, len(xs))
 	for _, x := range xs {
-		if seen[x.ID] {
-			continue
-		}
-		seen[x.ID] = true
-		out = append(out, truncate(oneLine(x.Text), workspacePrefMax))
+		out = append(out, truncate(oneLine(x.Text), seePrefMax))
 	}
 	return out
-}
-
-// workspacePrefStamp changes when a workspace preference enters memory, is
-// changed or leaves it; changed is the stamp of the latest change, words
-// that preference's text.
-func (c *core) workspacePrefStamp() (stamp string, changed int64, words string) {
-	if c.mem == nil {
-		return "", 0, ""
-	}
-	var n int
-	var last sql.NullInt64
-	c.mem.db.QueryRow(`SELECT COUNT(*), MAX(updated_at) FROM memories WHERE kind = ? AND about = ? AND status = ?`,
-		kindPreference, workspaceEntity, memActive).Scan(&n, &last)
-	c.mem.db.QueryRow(`SELECT text FROM memories WHERE kind = ? AND about = ? AND status = ? ORDER BY updated_at DESC, id DESC LIMIT 1`,
-		kindPreference, workspaceEntity, memActive).Scan(&words)
-	return fmt.Sprintf("%d:%d", n, last.Int64), last.Int64, words
 }
 
 // Gestures: what the user does on the workspace, for the extraction.
@@ -118,7 +90,7 @@ type gesture struct {
 }
 
 // gestureKinds are the gestures kept, and how the extraction (English)
-// and the composer and the brain (French) read each.
+// and the brain (French) read each.
 var gestureKinds = map[string]struct{ en, fr string }{
 	gestureOpened:  {"opened", "ouvert"},
 	gestureIgnored: {"left unopened (it was shown, then left the screen)", "laissé sans l'ouvrir"},

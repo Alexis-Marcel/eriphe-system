@@ -168,11 +168,15 @@ type surfaceIn struct {
 	// thread_surface.go): composed by code from parts each checked alone
 	// (its actions are not checked again as an author's); why its own
 	// parts may come from outside; whether its Proposals answer in place
-	// despite them; its one-line summary.
+	// despite them; its one-line summary. A surface code writes (a
+	// thread's, the queue's) also says its state (tileStateOf) and how
+	// many things changed since the user last opened it.
 	composed  bool
 	codeTaint []string
 	answers   bool
 	summary   string
+	state     string
+	fresh     int
 }
 
 // surface is one stored surface.
@@ -211,6 +215,8 @@ type surfaceLook struct {
 	CodeTaint []string `json:"code_taint,omitempty"`
 	Answers   bool     `json:"answers,omitempty"`
 	Summary   string   `json:"summary,omitempty"`
+	State     string   `json:"state,omitempty"` // yours, urgent, new, running, quiet, done (workspace_layout.go)
+	New       int      `json:"new,omitempty"`   // what changed since the user last opened it
 }
 
 // sourceState is a source's last read: when, and why it failed or waits.
@@ -402,7 +408,8 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 		return surface{}, errs, nil
 	}
 	look := surfaceLook{AuthorTaint: slices.Compact(slices.Sorted(slices.Values(in.Tainted))), Read: now.Unix(),
-		CodeTaint: slices.Compact(slices.Sorted(slices.Values(in.codeTaint))), Answers: in.answers, Summary: in.summary}
+		CodeTaint: slices.Compact(slices.Sorted(slices.Values(in.codeTaint))), Answers: in.answers, Summary: in.summary,
+		State: in.state, New: in.fresh}
 	noteReads(&look, reads, now)
 	rawData, _ := json.Marshal(data)
 	sources, _ := json.Marshal(orEmpty(in.Sources))
@@ -1321,6 +1328,8 @@ type surfaceMeta struct {
 	Tainted bool      `json:"tainted,omitempty"`
 	Answers bool      `json:"answers,omitempty"` // tainted, its Proposals answer in place all the same: code placed them (a thread's, thread_surface.go)
 	Summary string    `json:"summary,omitempty"` // one line, for a small tile or a chip
+	State   string    `json:"state"`             // yours, urgent, new, running, quiet, done: its colour and badge (tileStateOf)
+	New     int       `json:"new,omitempty"`     // what changed since the user last opened it: a badge
 	Updated time.Time `json:"updated"`
 }
 
@@ -1329,7 +1338,7 @@ func (c *core) createMessage(s surface) a2ui.Message {
 	view := c.surfaceView(s)
 	meta, _ := json.Marshal(map[string]any{"extensions": map[string]any{surfaceExtension: surfaceMeta{Title: s.Title,
 		Author: s.Author, Weight: s.Weight, Why: s.Why, Tainted: s.Tainted != "", Answers: s.Look.Answers, Summary: s.Look.Summary,
-		Updated: s.Updated.UTC()}}})
+		State: tileStateOf(s), New: s.Look.New, Updated: s.Updated.UTC()}}})
 	data, _ := json.Marshal(view.data)
 	return a2ui.Message{Version: a2ui.Version, CreateSurface: &a2ui.CreateSurface{SurfaceID: s.ID, CatalogID: a2ui.Eriphe().ID(),
 		Components: view.components, DataModel: data, Metadata: meta}}
@@ -1349,7 +1358,7 @@ func (c *core) rewriteMessages(old, s surface) []a2ui.Message {
 	}
 	gone := slices.ContainsFunc(ids(oldView.components), func(id string) bool { return !slices.Contains(ids(view.components), id) })
 	if gone || old.Title != s.Title || old.Weight != s.Weight || old.Why != s.Why || (old.Tainted == "") != (s.Tainted == "") ||
-		old.Look.Answers != s.Look.Answers || old.Look.Summary != s.Look.Summary {
+		old.Look.Answers != s.Look.Answers || old.Look.Summary != s.Look.Summary || tileStateOf(old) != tileStateOf(s) || old.Look.New != s.Look.New {
 		return []a2ui.Message{{Version: a2ui.Version, DeleteSurface: &a2ui.DeleteSurface{SurfaceID: s.ID}}, c.createMessage(s)}
 	}
 	data, _ := json.Marshal(view.data)

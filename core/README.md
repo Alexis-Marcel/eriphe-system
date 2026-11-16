@@ -1250,8 +1250,8 @@ by code from the thread's data (#468): it never depends on a model remembering t
   kept apart (`thread_part:<id>`), checked alone (A2UI, actions, links, bindings; no `thread_` id,
   no `/thread` data; its sources, each at `/<name>`, become the thread's, see above, so a change
   of the thread still rewrites the surface at once, never waiting for a tool), and shown under code's section, its root renamed `thread_part`, with who
-  added it. Writing it again replaces it, `surface_remove` takes it away; the surface stays. A
-  `surface.stale` about the surface wakes the lead that wrote the part; code keeps the rest.
+  added it. Writing it again replaces it, `surface_remove` takes it away; the surface stays; code
+  keeps the rest.
 - **Taint, per part**: a step whose task read external content shows « extérieur » in its detail,
   a part written after reading some says so beside who added it (and may not hold a `Proposal`,
   its media dropped as for any tainted author). For the models that read the workspace the surface
@@ -2868,11 +2868,11 @@ key kind), every card (weighted by its kind, above) and every assistant's
 [attention signal](#attention-signals-attention_signalgo) enters it; what is in front of the user
 already enters delivered (the brain's own message, a card under it). An item leaves once decided
 or gone. Each open item is a surface of the workspace, written by code while it is open
-([the queue as surfaces](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo));
+([the queue as surfaces](#the-layout-workspace_layoutgo));
 an item drawn from external content stays marked so, and the brain reads it as data. What the
 user wants shown more, less or never is not applied to the queue: it is a
-[preference in memory](#preferences-gestures-and-the-brains-tools-workspacego) the composer
-follows. The rest is delivered by code, in a message of its own written by eriphe-core as the
+[preference in memory](#preferences-gestures-and-the-brains-tools-workspacego) whoever notes
+items follows. The rest is delivered by code, in a message of its own written by eriphe-core as the
 brain's, the heaviest first, its cards under it (`attentionBreak`): **weight 4 and 5 at once**
 (nothing a running task or thread waits on is ever delayed; one message for what enters
 together); **weight 3 at the next breakpoint**, where an interruption costs the user least
@@ -3024,7 +3024,7 @@ it, that is the workspace opening (`/espace/boot`), the language switch in Setti
 settings or a channel's link code; before any, `web.lang`, else French. The fixed texts use it (the
 workspace queue's surfaces, the bot channels' messages), and so do the models' lines: a skill run's
 and a task's final message, a task's surface (`skillVoice`, `workerVoice`, `delegateSurfaceText`
-name it), the composer's turn, and a `[langue de l'utilisateur : …]` line at the head of each turn of
+name it), and a `[langue de l'utilisateur : …]` line at the head of each turn of
 the brain, the assistants and a thread's lead, for their notifications, cards, surfaces and
 summaries (the brain answers a message in the language it is written in). The fields of the tools
 the user reads (`notify`'s text and why, a rule's or a setting's why, an intention, attention's why
@@ -3073,74 +3073,81 @@ on IPv4 only, so that clients keep their own address. At most two
 argon2 hashes are computed at once. Changing the password ends the other sessions.
 The bearer-token API is unchanged for the CLI and the nodes.
 
-### The layout and the composer (`workspace_layout.go`, `workspace_pool.go`, `composer.go`)
+### The layout (`workspace_layout.go`)
 
 The workspace is one dynamic page of [surfaces](#surfaces-and-their-sources-surfacesgo). Where each
 is shown is **eriphe-core's**: a fixed grid of 12 × 8 cells that never scrolls, each surface a
 tile of one of four sizes (s 3 × 1, m 3 × 2, l 4 × 3, xl 6 × 5; one xl at most) or a chip in the
 strip above the grid when it is folded.
 
-**The composer chooses, code places.** The composer chooses from the pool what is shown now, in
-which order and how big (a *choice*); code lays that choice out (`layoutOf`, pure, no model) at
-once and again whenever the pool changes (`relayout`, called by every write and removal of a
-surface): the urgent ones first (weight 80 and up: the queue's 4 and 5), then the surface the user
-opened (at l at least, for 15 minutes or until they go back), then the choice in its order,
-then the surfaces written since the choice, by weight. Each tile goes at the first place where it
-fits, top left first; one that fits nowhere shrinks a size, then is folded; with room left, a
-surface of weight 40 or more grows a size (never into xl) if nothing else shrinks for it; tiles
-stretch over the empty columns on their rows. What the choice left out is folded too: nothing in
-the pool goes unseen while the strip has room (12 chips). Without a choice, or when the composer
-is off, slow or wrong, the choice is code's (`fallbackChoice`): everything by weight, the
-heaviest first. A new urgent surface is in front within milliseconds, never waiting for a model.
+**Code orders, no model** (#574). Code lays the pool out (`layoutStage`, pure) at once and again
+whenever it changes (`relayout`, called by every write and removal of a surface), always the same
+way for the same pool:
+
+1. what the user placed (or the brain at their request: `workspace_arrange`), at its place and
+   size;
+2. with a surface open, what is urgent (weight 80 and up) before it;
+3. the surface open, xl unless placed;
+4. the one on stage just before it, m at most;
+5. what relates to it, m at most; with nothing related, the rest:
+6. in the **tile order** (`tileOrder`): by state, then the heaviest, the latest changed, the id.
+
+**A tile's state** is code's (`tileStateOf`), never a model's: `yours` (something waits for the
+user: a card on it, a step of theirs), `urgent` (weight 80 and up; a thread with a note due within
+two hours, `dueSoon`), `new` (something changed since the user last opened it), `running` (a step
+runs), `quiet`, `done` (its thread ended), ranked in that order. A thread's surface carries the
+state its thread gives it (`threadTileState`, [thread_blocks.go](#threads)); a queue's surface that
+holds a card is `yours`; any other surface is `urgent` or `quiet` by its weight. The state and the
+count of what is new (`new`: the facts and notes after the user's last visit, `visited`) go in the
+surface's metadata (`extensions.eriphe.state`, `.new`): the page colours the tile's edge by it and
+shows a badge, « À toi », « Urgent », « Nouveau · 3 », outside the focus too. A note's due time
+coming within two hours is caught on the 15 s tick (`keepThreadSurfaces`), which writes the thread
+again, urgent.
+
+Each tile goes at the first place where it fits, top left first; one that fits nowhere shrinks a
+size, then is folded; with room left, a surface of weight 40 or more grows a size (never into xl)
+if nothing else shrinks for it; tiles stretch over the empty columns on their rows. Nothing in the
+pool goes unseen while the strip has room (12 chips). A new urgent surface is in front within
+milliseconds.
 
 **The layout** is sent to the workspace as the event stream's `layout` event (with `a2ui=1`),
 after the `a2ui` event of the surfaces it names and whenever it changes, and kept in kv
-(`workspace_layout`; the choice in `workspace_choice`, so a restart lays it out at once):
+(`workspace_layout`):
 
 ```json
-{"eriphe": "Le paiement attend ton accord.", "by": "composer", "ambient": "urgent",
- "focus": "week", "moment": "change", "at": "2026-11-12T09:00:00Z",
+{"ambient": "urgent", "focus": "week",
  "items": [{"id": "q-card-12", "title": "Accès à un outil", "size": "xl",
             "col": 0, "row": 0, "w": 6, "h": 5, "why": "Attend ton accord"}],
  "chips": [{"id": "news", "title": "Nouvelles", "why": "Rien de pressé"}]}
 ```
 
 `col` and `row` count from 0, `w` and `h` in cells; `ambient` is `urgent` with a tile of weight 90
-or more, `decision` with one of 80, `calm` otherwise; `by` is `composer` or `fallback`; `eriphe` is
-the composer's line, empty when code chose. With a surface open, a tile related to it has
+or more, `decision` with one of 80, `calm` otherwise. With a surface open, a tile related to it has
 `"related": true`; `focusBy` is `brain` when Eriphe put it on stage (below), and `previous` names
-the surface that was on stage just before it. A tile of weight 80 or more has `"urgent": true`: laying a surface the user
-opens out at once, the page keeps it in front.
+the surface that was on stage just before it. A tile of weight 80 or more has `"urgent": true`:
+laying a surface the user opens out at once, the page keeps it in front. A tile placed has
+`"pinned": true`.
 
 **Focus** (`workspace_focus.go`): one workspace, and opening a surface does what a separate
-dashboard would. The open action places it first at once (above); once the focus settles (0.8 s
-with no other opening, so a quick run of clicks is composed once, around the last), the composer
-chooses around it (moment `focus`): it large, what relates to it around, the rest folded; with the
-composer off, code does the same by closeness (`focusFallback`: it xl, the related at m at most;
-with nothing related, the rest fills the room left by weight).
+dashboard would. The open action places it first at once: xl, what relates to it around at m at
+most, the rest folded.
 What relates is found by code from what every surface declares, never from a tool's name
 (`surfaceRelations`, 6 at most, the closest first): the same source (a tool with the same
 arguments, or the same resource), the same ref it lives with (its `while`, or what its author
 stands for: a lead its thread, a task itself and the thread it is a step of, a skill itself),
 a day (a `Day` component on a date the open surface carries, or the reverse), then the same
-server. The composer's turn lists them with how they relate. Two choices are kept: the base one,
-made with nothing open (`workspace_choice`), and the one around the focus, in memory, for that
-focus only (opening the same surface again is the same focus). Back, closing it, its removal or
-its 15 minutes passing lay the base out again at once, with no model; it is composed again only
-when the pool or the queue changed meanwhile (or a choice was made for another reason while it
-was open). A choice made for a focus that ended while the composer thought is dropped. Opening a
-surface is not a gesture that recomposes (`gestureStamp`): the focus is; nor are the tiles a
-focus folds or gives back gestures `ignored` on the page.
+server. Back, closing it, its removal or its 15 minutes passing lay the workspace out again in
+its order. The tiles a focus folds or gives back are not gestures `ignored` on the page.
 
 **The stage** (`workspace_front.go`, #458): the workspace is one dashboard with a stage, the
 surface open in the center, large, and around it smaller tiles. Opening another tile puts it on
 stage; the one that was there stays next to it, reduced (m at most, never grown), live, never
-folded for the others (`layoutStage`; the layout's `previous`, the composer's turn « Au centre
-juste avant », the brain's « au centre juste avant »): nothing goes back, the user clicks it to
+folded for the others (`layoutStage`; the layout's `previous`, the brain's « au centre juste
+avant »): nothing goes back, the user clicks it to
 swap again. Back (or Escape) ends the stage and lays the base out, as above, with no previous.
 
 Opening a surface sends nothing to the brain (#550): opening one, or going back and forth between
-them, is no turn of the conversation; only the workspace recomposes around it. What the surface
+them, is no turn of the conversation; only the workspace is laid out again around it. What the surface
 shows (a thread's header, for a thread) says where things stand.
 
 **An answer on stage.** When the user asks from the workspace about a thing (« où en est la PR
@@ -3151,8 +3158,7 @@ only, allowed in the turn that answers a message of the user's sent from the wor
 its input, `· depuis l'espace`, or a button's ask), never on events alone, once per turn; it is
 display-only (it writes nothing, sends nothing, the next click takes the stage back), so a tainted
 turn may use it too: the surface keeps its taint and its Proposal the rules below. The layout
-says `focusBy: brain`, the composer's turn « l'assistant vient de mettre une surface au centre
-pour répondre à sa question », the brain's next turn « au centre, mise par toi ». A surface whose Proposal shows a proposal relates to the queue's tile showing the
+says `focusBy: brain`, the brain's next turn « au centre, mise par toi ». A surface whose Proposal shows a proposal relates to the queue's tile showing the
 same proposal (alone or in its group) (`proposal:<ref>`, « même proposition »), so a tainted answer, whose Proposal can only
 say « answer it in the conversation », gets the answerable tile next to it.
 
@@ -3177,13 +3183,12 @@ card may carry external content). An **urgent** item has a surface of its own, `
 alert), or a proposal that takes place today (its time, `proposalSpans`, never a tool's name); a
 card alone is a `Proposal` titled by its subject, an `Alert` by its weight (« Urgent »,
 « Attend ta réponse »). A card an active thread's surface shows (a step's, one linked to it, the
-thread's own: `threadShownCards`) is answered there and in no surface of the queue, even of weight
-4; the thread's surface takes its weight (× 20, at least 70). A tainted thread's surface does not
-answer its cards in place: they stay in the queue too. Only one of weight 5, or that takes
-place today, keeps a surface of its own too; once the thread ended, a card still waiting comes back
-to the queue (`threadMoved` kicks it). The group ids stay the same while they live, so the composer and the
-brain's workspace block keep naming them; the composer's queue lists each item with the surface
-showing it. A surface's weight is its first item's × 20 (`queueSurfaceWeight`), its taint any of
+thread's own: `threadShownCards`) is answered there and in no surface of the queue, whatever its
+weight: the thread's surface takes its weight (× 20, at least 70) and the state `yours`, first of
+the workspace. The queue's tiles are for the cards no thread shows. A tainted thread's surface
+does not answer its cards in place: they stay in the queue. Once the thread ended, a card still
+waiting comes back to the queue (`threadMoved` kicks it). The group ids stay the same while they
+live, so the brain's workspace block keeps naming them. A surface's weight is its first item's × 20 (`queueSurfaceWeight`), its taint any of
 its items'; its words are in the user's language (`userLang`, see below). It lives while it has
 an item: `syncQueueSurfaces` makes the queue's surfaces again whenever the queue changes (`attend`
 and `attentionDone` kick `runWorkspace`, never inline) and every 2 s, writing only what changed
@@ -3198,104 +3203,22 @@ and left it (went back, opened another, or the 15 minutes of the focus passed; `
 `runWorkspace`'s tick), only the items it showed when opened. A card stays until it is decided; an
 item still held (for a breakpoint or the brief) has not been delivered.
 
-The **composer** is a persistent assistant of role `composer`, like the brain and the thread
-leads: one warm task on a node, each choice a turn (`deliverComposer` gives it the snapshot,
-`relayComposer` hands its answer back at the turn's end). It has no power, no MCP server and none
-of its harness's tools (Claude Code's `--tools ""`), thinks at low effort
-(`CLAUDE_CODE_EFFORT_LEVEL=low`), and starts a fresh session with each task (`Fresh`), its task
-stopping after 30 turns: each turn carries all it needs. Its instructions are
-`composer-prompt.md` (French). It never writes content.
-
-A turn (`composerTurn`, from `poolSnapshot`) holds the moment (the time; the user's arrival after
-an absence, or their work and what changed: the pool or the queue, a new workspace preference),
-the user's language (Eriphe's line and the whys are written in
-it), the surface they opened and the conversation's topic (their last message, as data), the
-screen, their [preferences](#preferences-gestures-and-the-brains-tools-workspacego) from memory,
-their recent gestures (2 hours, 10 at most), the queue (each item with the surface showing it,
-held or not), and the pool: each surface's id, title, author, weight, why, age, the age of its
-data (its last write or read) and its last error, quoted as data, marked when external; then the
-ids it may use. There is no tool-agnostic "next event" yet: what the day holds comes through the
-surfaces that show it. It answers a lean JSON object:
-
-```json
-{"eriphe": "Le paiement attend ton accord.", "items": [{"id": "q-card-12", "size": "l", "why": "Attend ton accord"}],
- "missing": ["l'agenda de demain"], "stale": ["week"]}
-```
-
-Code checks it (`checkChoice`): an id not in the pool is dropped, an unknown size is the
-surface's by weight, the texts are cut (a why of 60 characters, the line of 140), 8 items, 3
-missing and 5 stale at most. No item is a choice (a quiet moment: all is folded, the urgent and
-the new placed all the same); an answer that is not JSON, or whose items are all unknown, is
-invalid, and code chooses by weight. A late answer is dropped. Nothing waits on the composer: it
-runs on its own goroutine (`runComposer`), the brain reads the queue itself.
-
-**Its signals are events.** `missing` and `stale` go to the [journal](#events) (source
-`composer`), where a skill reacts to them with `when` and the brain reads them through `since`:
-
-- `surface.missing`, payload `{text}`: what is missing for the moment; told once per text in
-  6 hours;
-- `surface.stale`, key and payload `id`, payload `author` and `title`: a surface whose data is too
-  old for the moment, or in error; told once per version of the surface. `when: surface.stale
-  id=week`.
-
-Both are external when the pool or the queue held content from outside.
-
-**When**: the pool and the queue are read every 2 s; a change chooses once the burst settles (3 s
-after the last change, 15 s at most after the first). A workspace preference entering memory (or
-changed) chooses at once, as a remark, with its words (`workspacePrefStamp`); one leaving it
-chooses again; a message of the user's does not. A gesture of the user's on the page (any but
-`ignored`, which the layout itself often causes, and `opened`, a focus) is a change like the
-pool's: the composer chooses again once the burst settles (`gestureStamp`); while a surface is
-open, it chooses around it. While the user has been away 20 minutes or more (`awaySince`), the next choice is for
-their return, and one is made ahead of it.
-
-**Settings → Agents → Workspace composer**: on or off, and its agent (a Sonnet one by default,
-else the default agent). Off by default; off, nothing is sent to a model, and code lays out by
-weight.
-
-**Bench** (`testdata/composer/`): invented moments of a fictional user (an arrival after a night,
-a busy noon, a new « never » preference, several threads running, a quiet evening, a mail that
-tries to order the composer, surfaces written by authors at an arrival, a preference that hides
-one of them), each with its pool and what a good choice does, by ref: `front` (must be tiles),
-`back` (must not be tiles, chips are fine), `hidden` (must not be chosen: the composer leaves it
-out and code folds it, a chip, never a tile), and `fallback_front` (whether the layout by weight
-already puts `front` in front). An item is an open item of the queue and the surface showing it
-(`q-<kind>-<id>`), its title the object's; or, with an `author`, a surface that author wrote
-(`surface:<id>`, weight 1 to 100), outside the queue. The reference `answer` is in the composer's
-format. `composer_bench_test.go` runs in CI with no model: every case is valid, its turn names its
-ids and its preferences, its answer passes `checkChoice` and, laid out by `layoutOf`, meets the
-case (a hidden surface folded), invented ids are cleaned, and the layout by weight does what
-`fallback_front` says. `composer_live_test.go` runs the cases on a real model when a model or the
-prompt changes:
-
-```sh
-cd core
-ERIPHE_LIVE_COMPOSER=1 go test -run TestComposerLive -v .
-# ERIPHE_LIVE_COMPOSER_RUNS=3 (default), ERIPHE_LIVE_COMPOSER_MODEL=sonnet (default),
-# ERIPHE_LIVE_COMPOSER_CLI=claude (default)
-```
-
-It needs no node: it calls the local Claude Code CLI (`claude -p`, signed in) with the composer's
-instructions appended to the system prompt, the same turn text as production (`composerTurn`), no
-tool, low effort and no session kept, and reports per case and in all the latency (mean, max; it
-includes the CLI's start), the cost, invalid answers, invented ids, agreement with the case and
-stability (the mean Jaccard of the tiles' ids between runs). It fails only when the CLI does;
-compare its numbers before switching the composer's model.
-
 ### Preferences, gestures and the brain's tools (`workspace.go`)
 
 The workspace keeps no rule and has no fixed control but a card's Oui / Non (the user's answer
 under the access policy). How the user wants it is memory; what the brain can do with it are
 tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspace.md).
 
-- **Preferences are memory.** « Les échecs de sauvegarde toujours devant », « plus de lettres de
-  news.example.org », « montre-m'en moins » are [memories](#memory) of kind `preference` about
-  `topic:workspace`, written as facts about the user. The brain remembers one from the user's
-  words (`remember`; a workspace preference is never sent to `rule`, whatever its words); the
-  nightly extraction never writes one, from the conversation or from gestures. The composer's turn
-  reads the active, current ones (12 at most, the latest first) and the few other preferences
-  the queue's titles and whys recall (`workspacePreferences`), and composes at once when one
-  enters memory, changes or leaves it (`workspacePrefStamp`). A proposed preference is not read.
+- **Preferences are memory.** « plus de lettres de news.example.org », « montre-m'en moins » are
+  [memories](#memory) of kind `preference` about `topic:workspace`, written as facts about the
+  user. The brain remembers one from the user's words (`remember`; a workspace preference is never
+  sent to `rule`, whatever its words); the nightly extraction never writes one, from the
+  conversation or from gestures. A preference about **content** is read by whoever notes items:
+  a triggered skill that tends a thread with sources gets the active, current ones in its run
+  (`seePreferences`, 12 at most, the latest first: « ce que l'utilisateur veut voir »), and leaves
+  out what the user no longer wants to see. A preference about **layout** (« l'agenda toujours en
+  grand ») is a placement: the brain keeps it with `workspace_arrange`. Code orders the rest. A
+  proposed preference is not read.
 - **Gestures** (`workspace.go`, `workspace_gestures.go`). The page tells eriphe-core what the user
   does to a surface (`surface:<id>`): `opened` (a tile or a chip opened: the page's own action
   `open`), `ignored` (a tile in front while the page was visible that left the grid, folded or
@@ -3307,19 +3230,17 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   and `about` once per surface in
   10 minutes, every close, and every move or resize but one that goes on the one just before
   (the same tile, within a minute: the arrow keys); 30 days at most. A surface's title is core's, never
-  the page's, and only when its author wrote it in a clean turn. Each gesture but `ignored`
-  makes the composer choose again (debounced), its turn listing the last ten; the brain reads
-  them too (`workspace_read`). No counter, no score in code.
-- **The session's placement** (`workspace_gestures.go`). What the user closed is not shown again
-  in the session: folded last in the chip strip, marked `closed`, whatever the composer chooses
-  (its turn says so); opening its chip shows it again. What they moved or resized is pinned
-  there, at that size: laid out first (the latest wins a place two want), never grown or
-  widened; the others are laid out around it (`layoutWith`). A **session** lasts while the user
-  is active (their messages, a tab in front, their answers to notifications, their
-  gestures on the workspace) with no gap of more than an hour, within one activity day (from
-  05:00: a night's work after midnight is the same day); past it, the placement goes and the
-  composer places everything again (`sessionStartIn`). Kept in kv (`workspace_placement`): a
-  restart keeps it.
+  the page's, and only when its author wrote it in a clean turn. The brain reads them
+  (`workspace_read`). No counter, no score in code.
+- **Placement** (`workspace_gestures.go`). What the user moved or resized is pinned there, at
+  that size, kept past the session until placed again, reset or its surface gone: laid out first
+  (the latest wins a place two want), never grown or widened; the others are laid out around it.
+  What the user closed is not shown again in the **session**: folded last in the chip strip,
+  marked `closed`; opening its chip shows it again. A session lasts while the user is active
+  (their messages, a tab in front, their answers to notifications, their gestures on the
+  workspace) with no gap of more than an hour, within one activity day (from 05:00: a night's work
+  after midnight is the same day; `sessionStartIn`). Kept in kv (`workspace_placement`): a restart
+  keeps both.
 - **The brain sees the workspace.** Each of its turns carries the workspace as the page shows it
   (`workspaceBlock`, French, a few lines; nothing when the workspace is empty):
 
@@ -3327,7 +3248,7 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   [l'espace de Sam, tel que sa page le montre (grille de 12 × 8, colonne et ligne depuis 0 ; …) :
   - agenda « Agenda du jour » · xl en 0,0 · ouverte
   - q-card-12 · l en 6,0
-  - notes « Notes » · m en 9,6 · placée pour la session
+  - notes « Notes » · m en 9,6 · placée par lui
   replié : news « Nouvelles », veille
   fermé par lui pour la session (ne le remets pas devant sans qu'il le demande) : meteo
   ses gestes : 10:02 ouvert agenda ; 10:03 fermé meteo ; 10:05 déplacé notes ; 10:06 écrit à propos de agenda]
@@ -3338,10 +3259,10 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   (`screen`: each tile's id, size, col, row and `pinned`; `open`, `folded`, `closed`).
 - **`workspace_arrange`** (`items`: 8 at most, each `{id, size, col, row}`, size s, m, l or xl,
   one xl at most, col and row both or neither; `reset`): the brain arranges the workspace as the
-  user asks (« mets l'agenda en grand »), as the user's own placement for the session: a
+  user asks (« mets l'agenda en grand »), as the user's own placement, kept: a
   surface with a place goes there, one without in the order given, top left first. An id that
   is no surface's, a size or a place off the grid is refused by name; a surface the user closed
-  and the brain places is shown again. `reset` drops the session's placements first (closed
+  and the brain places is shown again. `reset` drops the placements first (closed
   surfaces stay closed). It answers where each went (`{id, size, col, row}`, or `folded`).
 - **`workspace_focus`** (`id`): puts a surface on stage, as if the user had opened it
   ([an answer on stage](#workspace-web)). Refused outside the turn that answers a message the user
@@ -3422,13 +3343,13 @@ the workspace stays as it was.
 
 **On a phone** (`.narrow`, the width of `NARROW` in `Grid.tsx`, 900 px, `useNarrow`): one
 column and the page scrolls: Eriphe's column first, then the surfaces one under the other in the
-composer's order (the layout's `items`, never their place on the grid), then the chips
+code's order (the layout's `items`, never their place on the grid), then the chips
 (`stacked`). A tile keeps only its cross: no move nor size on a column. A surface open takes the
 whole screen (`.focused`, `.canvas.full`), alone, under a bar with Retour and the line to write to
 Eriphe about it.
 
 **The surfaces, where core says** (`web/espace/src/Grid.tsx`). The page draws each surface where
-the event stream's `layout` puts it ([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)):
+the event stream's `layout` puts it ([the layout](#the-layout-workspace_layoutgo)):
 a tile at its cells, by class (`.at-cN .at-rN .w-N .h-N .size-*`), its title over it and its why
 under it, Motion moving a tile that changed place and CSS fading a new one in (by `scale`, fill `backwards`,
 so the animation never holds a transform Motion sets); the folded
@@ -3665,7 +3586,7 @@ and update the commit in the two `NOTICE` files.
 ### Surfaces and their sources (`surfaces.go`)
 
 A surface is one tile of the workspace, stored with its **author** (`brain`,
-`lead:<thread>`, `task:<id>`, `core` for [the attention queue's](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo),
+`lead:<thread>`, `task:<id>`, `core` for [the attention queue's](#the-layout-workspace_layoutgo),
 or `thread:<id>` for [a thread's](#a-threads-surface-thread_surfacego);
 a task the brain [delegated a surface to](#the-assistants-workspace-tools-workspace_toolsgo) fills
 the brain's): a title, A2UI components, data, **sources**, a refresh, a
@@ -3779,7 +3700,7 @@ surface, possibly none): the page drops the surfaces it has and applies it. So i
 stream fell 256 changes behind, transparently. A `layout` event follows the first `a2ui` event
 and each later one, and is sent at once whenever the layout changes (`watchLayout`), only when it
 differs from the last sent: where each surface is
-([the layout](#the-layout-and-the-composer-workspace_layoutgo-workspace_poolgo-composergo)). A
+([the layout](#the-layout-workspace_layoutgo)). A
 `proposals` event (`{"refs": [...]}`) says which proposals were made or decided since
 ([proposals in surfaces](#proposals-in-the-surfaces-they-concern-surface_proposalsgo)). The SSE `id` stays the conversation's. Back from
 the page, with the session's cookie and CSRF token (401 without a session):
@@ -3918,7 +3839,7 @@ the surface; **composed**, values written in `data`. In CI with no model, every 
 its reference answer scores clean, and each fault is caught on a spoilt copy (a component off
 the catalog, a tool's name, too many components, a copied value, a binding the tool does not
 give, no source or another tool's, no data, a forbidden word, a button). `surfaces_live_test.go`
-runs the cases on a real model the way the composer's bench does: the brain's paragraph on
+runs the cases on a real model: the brain's paragraph on
 surfaces (`brain-prompt.md`), `surface_write` as an MCP client lists it (description and
 arguments' schema) and the catalog (`a2ui.CatalogPrompt`) appended to the system prompt, the
 tools and the request as the turn (a live request as the brain's; a summary as the task's that
@@ -3973,18 +3894,13 @@ only when the CLI does.
 **Who keeps which surface** (`surface_authors.go`, #423). Nothing is recurring by default.
 
 - **A thread's surface is code's** ([a thread's surface](#a-threads-surface-thread_surfacego)):
-  who holds the thread (the brain, or its lead) adds its part to it, and a `surface.stale` about
-  it wakes the lead that wrote that part.
+  who holds the thread (the brain, or its lead) adds its part to it.
 - **A skill writes no surface**: lent `eriphe-threads`, it acts on its thread, whose surface is
-  code's ([Triggered skills](#triggered-skills)). A lead is woken by a `surface.stale` once per
-  30 minutes a surface (`staleWake`), so a rewrite the composer still finds stale does not loop.
+  code's ([Triggered skills](#triggered-skills)).
 - **The brain** writes what the user asks; asked for something that comes back (« chaque matin »),
-  it writes a skill with `tools: [eriphe-threads]` that tends its thread. A `surface.missing` reaches it as an event of the
-  conversation (« [espace] Il manque … »), once an hour for the same text, its turn tainted when the
-  event is external: it writes the surface, a skill, or nothing.
-- **The events**: `surface.stale` (key and payload `id`: a surface out of date) and
-  `surface.missing` (payload `text`: what the composer would show and nothing does), emitted by the
-  composer; code reads their form, never their meaning.
+  it writes a skill with `tools: [eriphe-threads]` that tends its thread.
+- **No model judges the workspace**: nothing tells a surface stale or something missing; what a
+  thread shows is kept up to date by code from its sources and by whoever tends it.
 
 ### Signing in
 

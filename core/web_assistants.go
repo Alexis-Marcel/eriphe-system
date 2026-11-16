@@ -52,7 +52,7 @@ func plainStatus(v assistantView) string {
 }
 
 // brainCards are the brain's card, nil without a brain, and its helpers':
-// the other assistants but the composer.
+// the other assistants.
 func (w *web) brainCards(r *http.Request, v agentsPage) (*assistantCard, []assistantCard) {
 	var brain *assistantCard
 	var helpers []assistantCard
@@ -60,8 +60,6 @@ func (w *web) brainCards(r *http.Request, v agentsPage) (*assistantCard, []assis
 		switch {
 		case c.Spec.has(triggerConversation):
 			brain = &c
-		case c.Spec.Role == assistantRoleComposer:
-			// Its own panel (web_composition.go).
 		default:
 			helpers = append(helpers, c)
 		}

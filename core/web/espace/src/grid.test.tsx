@@ -21,8 +21,6 @@ const text = (id: string, words: string): Message => ({
 });
 
 const layout: Layout = {
-  eriphe: "Le paiement attend ton accord.",
-  by: "composer",
   ambient: "urgent",
   items: [
     { id: "pay", title: "Paiement", size: "xl", col: 0, row: 0, w: 6, h: 5, why: "Attend ton accord" },
@@ -118,7 +116,7 @@ describe("the grid of surfaces", () => {
   it("lays a surface open out in the centre, the others in a column beside it, compact", async () => {
     await render({ ...layout, focus: "week", items: [layout.items[0], { ...layout.items[1], related: true }] });
     const centre = tile("week")!;
-    expect(centre.className).toBe("mod tile size-m centre focus");
+    expect(centre.className).toBe("mod tile ts-quiet size-m centre focus");
     expect(centre.querySelector(".a2-text")?.textContent).toBe("Trois réunions");
     // No move nor size in the centre: the way back and the cross.
     expect(centre.querySelector("button.tile-move")).toBeNull();
@@ -152,7 +150,7 @@ describe("the grid of surfaces", () => {
   it("says each one's state in the column: related, closed, yours", async () => {
     const heavy: Message = {
       version: "1.0",
-      createSurface: { surfaceId: "heavy", catalogId: CATALOG.id, components: [{ id: "root", component: "Text", text: "Une alerte" }], metadata: { extensions: { eriphe: { title: "Alerte", weight: 100 } } } },
+      createSurface: { surfaceId: "heavy", catalogId: CATALOG.id, components: [{ id: "root", component: "Text", text: "Une alerte" }], metadata: { extensions: { eriphe: { title: "Alerte", state: "urgent" } } } },
     };
     await act(async () => adapter.applyMessages([heavy]));
     await render({
@@ -174,7 +172,7 @@ describe("the grid of surfaces", () => {
   it("marks what arrives or changes while a surface is open, without moving the focus", async () => {
     const card = (words: string, updated: string): Message => ({
       version: "1.0",
-      createSurface: { surfaceId: "card", catalogId: CATALOG.id, components: [{ id: "root", component: "Text", text: words }], metadata: { extensions: { eriphe: { title: "Carte", weight: 80, updated } } } },
+      createSurface: { surfaceId: "card", catalogId: CATALOG.id, components: [{ id: "root", component: "Text", text: words }], metadata: { extensions: { eriphe: { title: "Carte", state: "yours", updated } } } },
     });
     const focused: Layout = { ...layout, focus: "week" };
     await render(focused);
@@ -191,6 +189,28 @@ describe("the grid of surfaces", () => {
     // Written again while it lasts (a new item in its group): marked again.
     await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "card" } }, card("Envoyer à Sam ? · 2", "2026-11-15T16:05:00Z")]));
     expect(tile("card")!.querySelector(".side-new")).not.toBeNull();
+  });
+
+  it("colours each tile and chip by the state eriphe-core computed, with a badge for what needs the user or is new", async () => {
+    const withState = (id: string, eriphe: Record<string, unknown>): Message => ({
+      version: "1.0",
+      createSurface: { surfaceId: id, catalogId: CATALOG.id, components: [{ id: "root", component: "Text", text: id }], metadata: { extensions: { eriphe } } },
+    });
+    await act(async () => adapter.applyMessages([
+      { version: "1.0", deleteSurface: { surfaceId: "pay" } }, withState("pay", { title: "Paiement", state: "urgent" }),
+      { version: "1.0", deleteSurface: { surfaceId: "week" } }, withState("week", { title: "La semaine", state: "new", new: 2 }),
+      { version: "1.0", deleteSurface: { surfaceId: "news" } }, withState("news", { title: "Nouvelles", state: "yours" }),
+    ]));
+    await render(layout);
+    expect(tile("pay")!.classList.contains("ts-urgent")).toBe(true);
+    expect(tile("pay")!.querySelector(".tile-badge.b-urgent")?.textContent).toBe("espace.state.urgent");
+    expect(tile("week")!.querySelector(".tile-badge.b-new")?.textContent).toBe("espace.tile.new");
+    const chip = el.querySelector<HTMLElement>('.chip[data-surface="news"]')!;
+    expect(chip.classList.contains("ts-yours")).toBe(true);
+    expect(chip.querySelector(".tile-badge.b-yours")?.textContent).toBe("espace.state.yours");
+    // Opened, a tile has seen all: no « new » badge on it.
+    await render({ ...layout, focus: "week" });
+    expect(tile("week")!.querySelector(".tile-badge")).toBeNull();
   });
 
   it("closes a tile with its cross, without opening it", async () => {

@@ -3,7 +3,6 @@ package main
 import (
 	"cmp"
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
@@ -15,12 +14,10 @@ import (
 
 // Focus (#429): one workspace, and opening a surface does what a separate
 // dashboard would. The surface the user opens (the open action,
-// surface_actions.go) is placed first by code at once (workspace_layout.go);
-// once the focus settles (focusSettle, so a quick run of clicks recomposes
-// once), the composer recomposes around it: it large, what relates to it
-// around, the rest folded. Nothing is sent to the brain (#550): opening a
-// surface, or going back to one, is not a turn; what it shows says where
-// things stand.
+// surface_actions.go) is placed first by code at once (workspace_layout.go):
+// it large, what relates to it around, the rest folded. Nothing is sent to
+// the brain (#550) and no model is asked: opening a surface, or going back
+// to one, is not a turn; what it shows says where things stand.
 //
 //   - Relations are found by code, from what every surface declares, never
 //     from a tool's name (surfaceRelations): the same source, the same
@@ -28,14 +25,10 @@ import (
 //     thread, its lead and its steps' tasks, a task, a skill), the same
 //     proposal shown in a Proposal (the queue's tile of it), a day: a Day
 //     component on a date the focused surface carries, or the reverse.
-//   - Two choices are kept: the base one, composed with nothing open
-//     (workspaceChoice, kept in the store), and the one around the focus, in
-//     memory, for that focus only. Back (or the focus closed, removed or
-//     past focusFor) lays the base out again at once, with no model; it is
-//     composed again only when the pool or the queue changed meanwhile.
+//   - Back (or the focus closed, removed or past focusFor) lays the
+//     workspace out again at once, in its order.
 
 const (
-	momentFocus  = "focus" // the user opened a surface: the workspace is composed around it
 	relationsMax = 6
 	datesMax     = 64
 
@@ -46,34 +39,11 @@ const (
 	relDayItem = "dayitem" // carries a date of the day it shows
 )
 
-var focusSettle = 800 * time.Millisecond // a focus unchanged this long is composed around
-
-// relationWords are each relation as the composer reads it.
-var relationWords = map[string]string{
-	relSource:  "même source",
-	relServer:  "même outil",
-	relRef:     "même %s",
-	relDay:     "son jour",
-	relDayItem: "un élément de ce jour",
-}
-
-// refKindWords name what two surfaces share by its ref's kind.
-var refKindWords = map[string]string{"thread": "thread", "task": "tâche", "card": "proposition", "proposal": "proposition", "skill": "compétence"}
-
 // focusRelation is a surface related to the one open, and how.
 type focusRelation struct {
 	ID   string
 	Kind string // relSource, relServer, relRef, relDay, relDayItem
 	Ref  string // for relRef: the ref shared
-}
-
-// words is the relation in French, for a model's turn.
-func (r focusRelation) words() string {
-	if r.Kind == relRef {
-		kind, _, _ := strings.Cut(r.Ref, ":")
-		return fmt.Sprintf(relationWords[relRef], refKindWords[kind])
-	}
-	return relationWords[r.Kind]
 }
 
 var relationRank = map[string]int{relSource: 0, relRef: 1, relDay: 2, relDayItem: 2, relServer: 3}
@@ -298,138 +268,10 @@ func (c *core) focusRelations(id string, pool []surface) []focusRelation {
 	})
 }
 
-// focusState is what eriphe-core keeps of the focus (in layoutState): the
-// choice made around it and what the base was when it began.
+// focusState is what eriphe-core keeps of the focus (in layoutState).
 type focusState struct {
-	choice     *workspaceChoice // composed around For, since Since
-	choiceFor  string
-	choiceAt   time.Time
-	baseStamp  string        // the pool and the queue when the focus began
-	baseStale  bool          // the base choice's reason changed meanwhile: composed again on back
-	kick       chan struct{} // the focus changed (runComposer)
-	settledFor string        // the last focus settleFocus handled
-	by         string        // who put the focus there: "" the user, focusByBrain (workspace_front.go)
-	prev       string        // what was on stage before: a tile reduced next to it (workspace_front.go)
-}
-
-// focusKey names one focus: a surface opened at a time.
-func focusKey(id string, since time.Time) string {
-	if id == "" {
-		return ""
-	}
-	return id + "@" + strconv.FormatInt(since.UnixNano(), 10)
-}
-
-// focusKicked is the channel told when the focus changes.
-func (c *core) focusKicked() <-chan struct{} {
-	st := &c.layout
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	if st.f.kick == nil {
-		st.f.kick = make(chan struct{}, 1)
-	}
-	return st.f.kick
-}
-
-// focusChangedLocked notes a new focus (c.layout.mu held): from none, the
-// base is what back returns to; the composer is told.
-func (c *core) focusChangedLocked(was string) {
-	st := &c.layout
-	if was == "" && st.focus != "" {
-		st.f.baseStamp = c.baseStamp()
-		st.f.baseStale = false
-	}
-	if st.f.kick == nil {
-		st.f.kick = make(chan struct{}, 1)
-	}
-	select {
-	case st.f.kick <- struct{}{}:
-	default:
-	}
-}
-
-// baseStamp is what of the pool and the queue the base choice depends on.
-func (c *core) baseStamp() string { return c.queueStamp() + c.poolStamp() }
-
-// focusNow is the focus now and since when, "" for none: a surface that
-// is no longer there is open no more.
-func (c *core) focusNow(now time.Time) (string, time.Time) {
-	id := c.workspaceFocus(now)
-	if id != "" {
-		if _, err := c.surface(id); err != nil {
-			id = ""
-		}
-	}
-	st := &c.layout
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	if id == "" {
-		return "", time.Time{}
-	}
-	return id, st.focusSince
-}
-
-// layoutChoiceLocked is the choice laid out (c.layout.mu held): the one
-// composed around the focus while it lasts, the base otherwise.
-func (c *core) layoutChoiceLocked(focus string, pool []surface) workspaceChoice {
-	st := &c.layout
-	if f := st.f.choice; f != nil && focus != "" && st.f.choiceFor == focusKey(focus, st.focusSince) &&
-		slices.ContainsFunc(pool, func(s surface) bool { return s.ID == focus }) {
-		return *f
-	}
-	return c.choiceLocked()
-}
-
-// keepFocusChoice keeps a choice made around a focus, if that focus still
-// lasts; false when it ended or changed meanwhile: the choice is dropped.
-func (c *core) keepFocusChoice(id string, since time.Time, ch workspaceChoice) bool {
-	st := &c.layout
-	st.mu.Lock()
-	if st.focus != id || !st.focusSince.Equal(since) {
-		st.mu.Unlock()
-		return false
-	}
-	st.f.choice, st.f.choiceFor, st.f.choiceAt = &ch, focusKey(id, since), time.Now()
-	st.mu.Unlock()
-	c.relayout()
-	return true
-}
-
-// markBaseStale says the base choice must be composed again once the
-// focus ends: the pool, the queue or a preference changed meanwhile.
-func (c *core) markBaseStale() {
-	st := &c.layout
-	st.mu.Lock()
-	st.f.baseStale = true
-	st.mu.Unlock()
-}
-
-// focusFallback is the choice around a focus by code: it, then what relates
-// to it by closeness; everything seen, so the rest waits folded (the urgent
-// and what the user placed are placed by code all the same). With nothing
-// related, the rest fills the room left by weight.
-func focusFallback(s poolSnapshot) workspaceChoice {
-	ch := fallbackChoice(s.Moment, s.Now)
-	if _, ok := s.entry(s.Focus); !ok {
-		return ch
-	}
-	if len(s.Related) > 0 {
-		ch.Seen = []string{}
-		for _, e := range s.Pool {
-			ch.Seen = append(ch.Seen, e.ID)
-		}
-	}
-	ch.Items = append(ch.Items, choiceItem{ID: s.Focus, Size: sizeXL})
-	for _, r := range s.Related {
-		e, _ := s.entry(r.ID)
-		size := sizeOfWeight(e.Weight)
-		if sizeRank[size] > sizeRank[sizeM] {
-			size = sizeM
-		}
-		ch.Items = append(ch.Items, choiceItem{ID: r.ID, Size: size})
-	}
-	ch.Related = relatedIDs(s.Related)
-	return ch
+	by   string // who put the focus there: "" the user, focusByBrain (workspace_front.go)
+	prev string // what was on stage before: a tile reduced next to it (workspace_front.go)
 }
 
 func relatedIDs(rs []focusRelation) []string {
@@ -438,41 +280,4 @@ func relatedIDs(rs []focusRelation) []string {
 		out = append(out, r.ID)
 	}
 	return out
-}
-
-// settleFocus acts on the focus once it settled: a new one is composed
-// around; one that ended gives the base back,
-// composed again only if its reason changed (then true: the caller
-// recomposes).
-func (c *core) settleFocus(now time.Time) (recompose bool) {
-	id, since := c.focusNow(now)
-	key := focusKey(id, since)
-	st := &c.layout
-	st.mu.Lock()
-	if key == st.f.settledFor {
-		st.mu.Unlock()
-		return false
-	}
-	st.f.settledFor = key
-	if id == "" {
-		stale := st.f.baseStale || (st.f.baseStamp != "" && st.f.baseStamp != c.baseStamp())
-		st.f.choice, st.f.choiceFor, st.f.baseStamp, st.f.baseStale = nil, "", "", false
-		st.f.by, st.f.prev = "", ""
-		st.mu.Unlock()
-		c.relayout()
-		return stale
-	}
-	st.mu.Unlock()
-	c.recompose(momentFocus, "")
-	return false
-}
-
-// focusLapsed tells whether the focus ended with no one telling (its time
-// passed, or its surface went): the end is settled on the composer's tick.
-func (c *core) focusLapsed(now time.Time) bool {
-	id, _ := c.focusNow(now)
-	st := &c.layout
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	return id == "" && st.f.settledFor != ""
 }
