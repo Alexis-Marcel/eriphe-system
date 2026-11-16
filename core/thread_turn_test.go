@@ -202,7 +202,7 @@ func TestOtherMatterOpensItsThread(t *testing.T) {
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	pr := lightThread(t, c)
 	c.store.markDelivered(c.store.lastMessageSeq())
-	seq, _ := c.store.addMessage(roleUser, "J'ai quoi de prévu aujourd'hui ?", false)
+	seq, _ := c.store.addUserMessage("J'ai quoi de prévu aujourd'hui ?", nil, pr.ID)
 	c.noteAbout(seq, "surface:"+threadSurfaceID(pr.ID))
 	c.turn.start(int(seq), int(seq), 0)
 	msgs, _ := c.store.undelivered()

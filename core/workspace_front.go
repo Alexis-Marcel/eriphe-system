@@ -164,6 +164,7 @@ func (c *core) focusFromBrain(in workspaceFocusIn, now time.Time) (map[string]an
 		out["result"] = "already in front"
 		return out, nil
 	}
+	c.talkMoves(c.surfaceThread(id)) // the exchange goes with it, before the stream hears of it (thread_talk.go)
 	c.setFocus(id, now, focusByBrain)
 	if was != "" {
 		out["previous"] = was

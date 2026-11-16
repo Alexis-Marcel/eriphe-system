@@ -751,8 +751,9 @@ func cardAnswerKey(seq int) string { return fmt.Sprintf("card_answer:%d", seq) }
 // come from external content.
 func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 	var none convoCard
-	msgs, err := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE seq <= ? AND role IN ('user', 'brain')
-		ORDER BY seq DESC LIMIT 2`, seq)
+	// In the message's own thread: the card above it in its exchange (thread_talk.go).
+	msgs, err := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq <= ? AND role IN ('user', 'brain')
+		AND thread = (SELECT thread FROM messages WHERE seq = ?) ORDER BY seq DESC LIMIT 2`, seq, seq)
 	if err != nil || len(msgs) != 2 {
 		return none, false
 	}

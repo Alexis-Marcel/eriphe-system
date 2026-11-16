@@ -238,7 +238,10 @@ func (c *core) messageRef(m Message) string {
 	case m.Via != "":
 		ref += " · " + m.Via
 	}
-	if about := c.messageAbout(m.Seq); m.Role == roleUser && about != "" {
+	if m.Role == roleUser && m.Thread > 0 {
+		ref += fmt.Sprintf(" · fil %d", m.Thread) // it belongs to that thread (thread_talk.go); its card says the rest, never its words here
+	}
+	if about := c.messageAbout(m.Seq); m.Role == roleUser && about != "" && about != surfaceRefPrefix+threadSurfaceID(m.Thread) {
 		ref += " · à propos de " + about // the surface open on the workspace (workspace.go)
 	}
 	if m.FromWorkspace() && strings.HasPrefix(c.store.get(taintKey(m.Seq)), surfaceTaintPrefix) {
@@ -299,7 +302,8 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 			c.turn.taint(why) // a tainted task's result, an untrusted channel, a tool's result run on a card
 		}
 	}
-	c.threadsDelivered(msgs) // a thread's event: the turn is about it (thread_turn.go)
+	c.turn.answersIn(talkOf(msgs)) // where its answer goes (thread_talk.go)
+	c.threadsDelivered(msgs)       // a thread's message: the turn is about it (thread_turn.go)
 	// The threads and entities my message names: the turn is about them (names.go).
 	if named := c.namedBlock(msgs); named != "" {
 		parts = append(parts, named)
@@ -495,12 +499,15 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) (undecided string) {
 			// quietReply: its answer to a note that asks nothing of the
 			// user (a tool added…) stays out of the conversation.
 			// toolCallText: a tool call written as its answer is not one either.
-			if text, _ := e.Data["text"].(string); toolCallText(text) {
+			// Its suggested replies are never part of its text (brain_suggest.go).
+			said, _ := e.Data["text"].(string)
+			if text, replies := splitSuggestions(said); toolCallText(text) {
 				c.brainToolCallText(text)
 			} else if strings.TrimSpace(text) != "" && !quietReply(text) {
-				seq, err := c.store.addMessage(roleBrain, text, true)
+				seq, err := c.store.addThreadMessage(roleBrain, text, "", c.turn.talkThread(), true)
 				if err == nil {
 					c.markBrainMessage(int(seq))
+					c.suggestReplies(int(seq), replies)
 					c.attachTurnCards(int(seq))         // what it proposed in this turn (convo_cards.go)
 					c.notifyWake(int(seq), e.Seq, text) // the answer to a due intention reaches the phone
 				}

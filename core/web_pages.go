@@ -370,19 +370,24 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 		w.sendError(rw, r, err)
 		return
 	}
-	seq, err := w.c.store.addUserMessage(text, atts)
+	// Written with a thread open, it belongs to it (thread_talk.go).
+	about := strings.TrimSpace(r.PostFormValue("about"))
+	seq, err := w.c.store.addUserMessage(text, atts, w.c.openThreadOf(about))
 	if err != nil {
 		w.c.store.removeAttachments(atts)
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if about := strings.TrimSpace(r.PostFormValue("about")); about != "" {
+	if about != "" {
 		w.c.noteAbout(seq, about) // written with a surface open on the workspace (workspace.go)
 	}
-	if r.PostFormValue("from") == viaWorkspace {
-		w.c.noteFromWorkspace(seq) // typed in the workspace's input (workspace_front.go)
+	from := r.PostFormValue("from")
+	if from == viaWorkspace || from == viaSuggestion {
+		w.c.noteFromWorkspace(seq) // typed in the workspace's input, or a reply it suggested chosen (workspace_front.go)
 	}
-	w.c.resolveByText(r.Context(), int(seq)) // a plain yes or no to the card just above (convo_cards.go)
+	if from != viaSuggestion { // a click never decides a card (brain_suggest.go)
+		w.c.resolveByText(r.Context(), int(seq)) // a plain yes or no to the card just above (convo_cards.go)
+	}
 	w.c.ping()
 	w.notify()
 	rw.WriteHeader(http.StatusNoContent)

@@ -181,7 +181,7 @@ func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
 	turnOn := func(text, about string) {
 		t.Helper()
 		c.store.markDelivered(c.store.lastMessageSeq())
-		seq, _ := c.store.addMessage(roleUser, text, false)
+		seq, _ := c.store.addUserMessage(text, nil, c.openThreadOf(about)) // as handleSend writes it
 		if about != "" {
 			c.noteAbout(seq, about)
 		}

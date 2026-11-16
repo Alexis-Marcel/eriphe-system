@@ -139,7 +139,7 @@ func TestFromWorkspace(t *testing.T) {
 		t.Fatal("an event is from the workspace")
 	}
 	// With a surface open: both marks, in that order.
-	seq, _ := c.store.addUserMessage("Et ça ?", nil)
+	seq, _ := c.store.addUserMessage("Et ça ?", nil, 0)
 	c.noteFromWorkspace(seq)
 	writeTestSurface(t, c, surfaceIn{ID: "notes", Title: "Notes"})
 	c.noteAbout(seq, "surface:notes")
@@ -170,7 +170,7 @@ func TestFrontTurnDelivery(t *testing.T) {
 		_, err := c.focusFromBrain(workspaceFocusIn{ID: "projet"}, time.Now())
 		return err
 	}
-	seq, _ := c.store.addUserMessage("Où en est le projet ?", nil)
+	seq, _ := c.store.addUserMessage("Où en est le projet ?", nil, 0)
 	c.noteFromWorkspace(seq)
 	deliver()
 	items, _ := c.store.inbox("t-brain")
@@ -185,7 +185,7 @@ func TestFrontTurnDelivery(t *testing.T) {
 	if err := focus(); err == nil {
 		t.Fatal("a delivery of events only may put a surface on stage")
 	}
-	c.store.addUserMessage("Et demain ?", nil)
+	c.store.addUserMessage("Et demain ?", nil, 0)
 	deliver()
 	if err := focus(); err == nil {
 		t.Fatal("a message from the conversation may put a surface on stage")

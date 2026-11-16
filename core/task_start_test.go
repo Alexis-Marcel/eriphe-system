@@ -184,7 +184,7 @@ func TestTaskStartDeclined(t *testing.T) {
 	if got.State != stateStopped || slices.Contains(assignedIDs(t, c), task.ID) || c.store.repoGranted(task.ID, "owner/repo", catChange) {
 		t.Fatalf("declined start: %+v", got)
 	}
-	msgs, _ := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE role = ?`, roleEvent)
+	msgs, _ := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ?`, roleEvent)
 	if len(msgs) != 1 || !strings.Contains(msgs[0].Text, "refusé le lancement de la tâche "+task.ID) {
 		t.Fatalf("brain not told: %+v", msgs)
 	}

@@ -152,7 +152,8 @@ func (c *core) brainToolCallText(text string) {
 			return
 		}
 	}
-	if _, err := c.store.addMessage(roleEvent, toolCallReask, false); err == nil {
+	// The turn it asks again answers in the same thread (thread_talk.go).
+	if _, err := c.store.addThreadMessage(roleEvent, toolCallReask, "", c.turn.talkThread(), false); err == nil {
 		c.ping()
 	}
 }

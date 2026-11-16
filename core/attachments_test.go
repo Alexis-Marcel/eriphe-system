@@ -240,7 +240,7 @@ func attach(t *testing.T, c *core, name string, data []byte) Attachment {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seq, err := c.store.addUserMessage("see attached", atts)
+	seq, err := c.store.addUserMessage("see attached", atts, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

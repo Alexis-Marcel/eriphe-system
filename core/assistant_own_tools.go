@@ -92,7 +92,7 @@ func (c *core) assistantReport(a Assistant, in reportIn) (map[string]any, error)
 	line := fmt.Sprintf("Rapport de l'assistant %s : %s", a.displayName(), truncate(text, reportMax))
 	// Written delivered, then handed to the brain once its taint is kept:
 	// it is never read without it.
-	seq, err := c.store.addMessage(roleEvent, line, true)
+	seq, err := c.store.addThreadMessage(roleEvent, line, "", leadThread(a), true) // a lead's: its thread's (thread_talk.go)
 	if err != nil {
 		return nil, err
 	}
