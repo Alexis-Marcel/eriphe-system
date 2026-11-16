@@ -3136,6 +3136,14 @@ way for the same pool:
 5. what relates to it, m at most; with nothing related, the rest:
 6. in the **tile order** (`tileOrder`): by state, then the heaviest, the latest changed, the id.
 
+**A standing thread is a tile only when it has something for the user** (`foldsQuiet`): its
+surface says it folds (`look.folds`, set by code from the thread, `threadSurfaceIn`), and while
+its state is `quiet` or `running` it is left out of step 6: it is a chip, after those folded for
+room. `yours`, `urgent` or `new`, it is a tile again in the tile order. Opened (from its chip, as
+any), placed by the user, on stage before the one opened, or related to it, it is a tile all the
+same. Work and day threads, and every other surface, are unchanged. A thread surface written
+before it said whether it folds is written again by the 15 s tick (`keepThreadSurfaces`).
+
 **A tile's state** is code's (`tileStateOf`), never a model's: `yours` (something waits for the
 user: a card on it, a step of theirs), `urgent` (weight 80 and up; a thread with a note due within
 two hours, `dueSoon`), `new` (something changed since the user last opened it), `running` (a step

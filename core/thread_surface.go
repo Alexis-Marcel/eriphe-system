@@ -471,6 +471,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	// content can only ask (answerOf, surface_actions.go).
 	in.answers = true
 	in.summary = threadLine(s, steps, asks, lang)
+	in.folds = s.active() && s.standing() // a chip while it has nothing for the user (workspace_layout.go)
 	in.composed = true
 	return in, true
 }
@@ -578,7 +579,7 @@ func (c *core) keepThreadSurface(id int64) {
 
 // shownHash is what a surface written by code shows, as a hash.
 func shownHash(in surfaceIn) string {
-	raw, _ := json.Marshal([]any{in.Title, in.Why, in.Weight, in.Lifetime, string(in.Components), string(in.Data), in.Tainted, in.codeTaint, in.answers, in.summary, in.state, in.fresh})
+	raw, _ := json.Marshal([]any{in.Title, in.Why, in.Weight, in.Lifetime, string(in.Components), string(in.Data), in.Tainted, in.codeTaint, in.answers, in.summary, in.state, in.fresh, in.folds})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
@@ -596,6 +597,8 @@ func (c *core) keepThreadSurfaces() {
 			c.keepThreadSurface(s.ID)
 		} else if err == nil && due[s.ID] && sf.Weight < weightUrgent {
 			c.keepThreadSurface(s.ID) // a note's due time came close: it turns urgent
+		} else if err == nil && sf.Look.Folds != s.standing() {
+			c.keepThreadSurface(s.ID) // written before it said whether it folds, or its ends changed
 		}
 	}
 }

@@ -163,13 +163,16 @@ type surfaceIn struct {
 	// parts may come from outside; whether its Proposals answer in place
 	// despite them; its one-line summary. A surface code writes (a
 	// thread's, the queue's) also says its state (tileStateOf) and how
-	// many things changed since the user last opened it.
+	// many things changed since the user last opened it; a standing
+	// thread's, that it folds into a chip while it has nothing for the
+	// user (foldsQuiet).
 	composed  bool
 	codeTaint []string
 	answers   bool
 	summary   string
 	state     string
 	fresh     int
+	folds     bool
 }
 
 // surface is one stored surface.
@@ -210,6 +213,7 @@ type surfaceLook struct {
 	Summary   string   `json:"summary,omitempty"`
 	State     string   `json:"state,omitempty"` // yours, urgent, new, running, quiet, done (workspace_layout.go)
 	New       int      `json:"new,omitempty"`   // what changed since the user last opened it
+	Folds     bool     `json:"folds,omitempty"` // a chip while it has nothing for the user (foldsQuiet): a standing thread's
 }
 
 // sourceState is a source's last read: when, and why it failed or waits.
@@ -383,7 +387,7 @@ func (c *core) putSurface(author string, in surfaceIn) (surface, []a2ui.Validati
 	}
 	look := surfaceLook{AuthorTaint: slices.Compact(slices.Sorted(slices.Values(in.Tainted))), Read: now.Unix(),
 		CodeTaint: slices.Compact(slices.Sorted(slices.Values(in.codeTaint))), Answers: in.answers, Summary: in.summary,
-		State: in.state, New: in.fresh}
+		State: in.state, New: in.fresh, Folds: in.folds}
 	noteReads(&look, reads, now)
 	rawData, _ := json.Marshal(data)
 	sources, _ := json.Marshal(orEmpty(in.Sources))

@@ -22,7 +22,9 @@ import (
 // or what interrupts), then a surface opened (large, with what relates to
 // it around, the rest folded), then the others by state (yours, urgent,
 // new, running, quiet, done), weight, last change and id: the same pool
-// gives the same layout. Each is put at the first place where it fits, top
+// gives the same layout. A standing thread with nothing for the user
+// (quiet or running, foldsQuiet) is not one of those others: it is a chip,
+// a tile again once yours, urgent or new. Each is put at the first place where it fits, top
 // left first; one that fits nowhere shrinks a size, then is folded.
 //
 // The layout goes to the page as the event stream's "layout" event (JSON,
@@ -93,6 +95,15 @@ func tileStateOf(s surface) string {
 		return tileUrgent
 	}
 	return tileQuiet
+}
+
+// foldsQuiet tells a surface code folds into a chip while it has nothing
+// for the user: a standing thread's (Look.Folds), quiet or running. Yours,
+// urgent or new, it is a tile again, in the usual order; opened, placed by
+// the user, or on stage before the one opened, it is a tile all the same.
+func foldsQuiet(s surface) bool {
+	st := tileStateOf(s)
+	return s.Look.Folds && (st == tileQuiet || st == tileRunning)
 }
 
 // tileOrder is the workspace's order: by state, then the heaviest, the
@@ -232,7 +243,9 @@ func layoutStage(pool []surface, focus, previous string, related []string, pl us
 	}
 	if len(related) == 0 {
 		for _, s := range pool {
-			add(s, false)
+			if !foldsQuiet(s) {
+				add(s, false) // a standing thread with nothing for the user stays a chip
+			}
 		}
 	}
 

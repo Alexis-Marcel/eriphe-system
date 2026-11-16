@@ -77,6 +77,12 @@ do), then what is **urgent** (an alert, a thread with something due within two h
 tile's edge is coloured by that state, and a small badge says « À toi », « Urgent » or
 « Nouveau · 3 » (how many things changed since your last visit), even while another tile is open.
 
+A thread that follows something for you all along (your mail, your alerts, what a skill watches)
+takes a tile only when it has something for you: while it is quiet or simply running, it stays a
+chip in the strip above. It becomes a tile again, in that same order, once something waits for
+you on it, it turns urgent, or something new came since your last visit. A click on the chip
+opens it as usual; once you have seen it and leave it, it goes back to its chip.
+
 ## Ask for something to be shown
 
 Write to Eriphe, in the workspace's column or in the conversation:
