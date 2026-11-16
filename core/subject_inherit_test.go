@@ -28,21 +28,8 @@ func TestTurnThreadGivesItsSubject(t *testing.T) {
 	if isErr {
 		t.Fatalf("run_task: %v", step)
 	}
-	own, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume les mails.", "thread": "none"})
-	if isErr {
-		t.Fatalf("run_task none: %v", own)
-	}
-	given, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Relis le site.", "thread": "none", "subject": "Projet: Site"})
-	if isErr {
-		t.Fatalf("run_task given: %v", given)
-	}
-	for name, id := range map[string]any{"step": step["task"], "own": own["id"]} {
-		if got := subjectOfRow(c, "tasks", "id = ?", id); got != key {
-			t.Errorf("%s task under %q", name, got)
-		}
-	}
-	if got := subjectOfRow(c, "tasks", "id = ?", given["id"]); got != "project:site" {
-		t.Errorf("given task under %q", got)
+	if got := subjectOfRow(c, "tasks", "id = ?", step["task"]); got != key {
+		t.Errorf("step task under %q", got)
 	}
 	if out, _ := callBrainTool(t, c, "notify", map[string]any{"text": "Velora est prise.", "weight": 2, "why": "La recherche a fini."}); out["subject"] != key {
 		t.Errorf("notify: %v", out)

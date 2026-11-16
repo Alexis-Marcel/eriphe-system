@@ -865,7 +865,8 @@ func TestThreadBenchCases(t *testing.T) {
 				a.Calls = append(a.Calls, threadCall{Tool: "close_thread", Args: map[string]any{"thread_id": id, "summary": "Fusionnée."}})
 			})
 			if i := slices.IndexFunc(x.Wake.Answer.Calls, func(k threadCall) bool { return k.Tool == "remember" }); i >= 0 {
-				wake("progress under another subject", faultProgress, func(a *threadAnswer) { a.Calls[i].Args["subject"] = "project:autre" })
+				// A subject no thread follows: refused (open_thread first), never a thread opened.
+				wake("progress under another subject", faultRefused, func(a *threadAnswer) { a.Calls[i].Args["subject"] = "project:autre" })
 			}
 			wake("a question", faultReply, func(a *threadAnswer) { a.Reply = "C'est fusionné.\nTu veux que je déploie ?" })
 		})
@@ -956,7 +957,7 @@ func threadTurn(x threadCase, c *core, r *threadRun, event string) string {
 
 // threadToolsListed are the brain's tools a turn about threads uses.
 var threadToolsListed = []string{"find_thread", "open_thread", "read_thread", "add_step", "settle_step", "link_thread", "note_item",
-	"close_thread", "reopen_thread", "stop_thread", "off_thread", "run_task", "surface_write", "surface_remove", "workspace_read", "workspace_focus"}
+	"close_thread", "reopen_thread", "stop_thread", "run_task", "surface_write", "surface_remove", "workspace_read", "workspace_focus"}
 
 // threadInstructions are what the brain reads to keep threads: its prompt's
 // « Les threads », its paragraph on surfaces and on answering from the

@@ -194,11 +194,10 @@ func TestCardsOfThreadTurnLinked(t *testing.T) {
 }
 
 // « J'ai quoi de prévu aujourd'hui ? » written over a thread's surface:
-// the turn starts about that thread; the brain reads what it needs (here
-// another thread, for its deadline), says the turn is about none
-// (off_thread), and what it raises next, a card or a task, is no thread's.
-// A thread tool called after names one again.
-func TestOffThreadTurnLinksNothing(t *testing.T) {
+// the turn starts about that thread; the brain opens the thread of what
+// was asked (a day thread), and what it raises next, a card or a task, is
+// that thread's, never the one it was written over.
+func TestOtherMatterOpensItsThread(t *testing.T) {
 	c := stepsCore(t)
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	pr := lightThread(t, c)
@@ -211,48 +210,86 @@ func TestOffThreadTurnLinksNothing(t *testing.T) {
 	if c.turn.aboutThread() != pr.ID {
 		t.Fatalf("the turn is about %d, not %d", c.turn.aboutThread(), pr.ID)
 	}
-
-	other, err := c.openThread(threadIn{Title: "Factures", Goal: "Les factures sont envoyées.", Subject: "project:factures"}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
+	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Ma journée", "goal": "Sam voit sa journée.", "subject": "topic:journee", "ends": endsDay})
+	if isErr {
+		t.Fatalf("open: %v", out)
 	}
-	if _, isErr := callBrainTool(t, c, "read_thread", map[string]any{"thread_id": other.ID}); isErr {
-		t.Fatal("read_thread")
-	}
-	out, isErr := callBrainTool(t, c, "off_thread", map[string]any{})
-	if isErr || out["result"] != "about no thread" || int64(out["previous"].(float64)) != other.ID {
-		t.Fatalf("off_thread: %v", out)
-	}
-	if c.turn.aboutThread() != 0 {
-		t.Fatalf("the turn is still about %d", c.turn.aboutThread())
+	day := openedThread(t, out)
+	if c.turn.aboutThread() != day.ID {
+		t.Fatalf("the turn is about %d, not the day %d", c.turn.aboutThread(), day.ID)
 	}
 	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})
 	card := accessCard(t, c, "merge").Ref
-	if refs := timelineCards(t, c, pr.ID) + timelineCards(t, c, other.ID); refs != "" {
-		t.Errorf("the threads' cards: %q", refs)
+	if refs := timelineCards(t, c, pr.ID); refs != "" {
+		t.Errorf("the PR's cards: %q", refs)
+	}
+	if refs := timelineCards(t, c, day.ID); refs != card {
+		t.Errorf("the day's cards: %q, want %q", refs, card)
 	}
 	if s, _, _ := threadSurfaceOf(t, c, pr.ID); strings.Contains(string(s.Components), card) {
-		t.Errorf("the card waits on the thread's surface: %s", s.Components)
+		t.Errorf("the card waits on the PR's surface: %s", s.Components)
 	}
-	// A task started now follows a thread of its own, not this one
-	// (taskOfThread: a turn about no thread, nor about its subject).
-	if s := c.turnSubject(); s != "" {
-		t.Errorf("the turn's subject is %q", s)
+	// A task started now is a step of the day's thread.
+	if s, err := c.taskThread(); err != nil || s.ID != day.ID {
+		t.Errorf("a task would be a step of %d (%v)", s.ID, err)
 	}
-	if s, ok := c.taskThread("Préparer la journée"); !ok || s.ID == pr.ID || s.ID == other.ID {
-		t.Errorf("a task would follow thread %d (%v)", s.ID, ok)
-	}
+}
 
-	// Nothing to leave now. A thread tool after: its thread again.
-	if out, _ := callBrainTool(t, c, "off_thread", map[string]any{}); out["result"] != "about no thread already" || c.turn.aboutThread() != 0 {
-		t.Errorf("off_thread again: %v, turn about %d", out, c.turn.aboutThread())
+// run_task is always a step of a thread: in a turn about none it is
+// refused, telling to open the matter's thread first, and no thread is
+// opened by code; nor is a task ever left loose (thread none is gone).
+func TestRunTaskNeedsAThread(t *testing.T) {
+	c := startCore(t)
+	before, _ := c.threads(false, 50)
+	if _, err := c.taskThread(); err != errOpenThreadFirst {
+		t.Fatalf("a task in a turn about no thread: %v", err)
 	}
-	if _, isErr := callBrainTool(t, c, "read_thread", map[string]any{"thread_id": pr.ID}); isErr {
-		t.Fatal("read_thread")
+	out, isErr := callBrainTool(t, c, "run_task", map[string]any{"title": "Chercher", "prompt": "Cherche un nom."})
+	if !isErr {
+		t.Fatalf("a task in a turn about no thread: %v", out)
 	}
-	if c.turn.aboutThread() != pr.ID {
-		t.Errorf("read_thread after: turn about %d", c.turn.aboutThread())
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"prompt": "Cherche un nom.", "thread": "none"})
+	if !isErr {
+		t.Fatalf("thread none: %v", out)
 	}
+	if after, _ := c.threads(false, 50); len(after) != len(before) {
+		t.Errorf("code opened a thread: %d, then %d", len(before), len(after))
+	}
+	if ts, _ := c.store.tasks(false, 50); slices.ContainsFunc(ts, func(x *TaskRow) bool { return x.Kind == "worker" }) {
+		t.Errorf("a loose task started: %+v", ts)
+	}
+	// A turn about an ended thread: reopen it first.
+	pr := lightThread(t, c)
+	if err := c.closeLight(pr.ID, "Fusionnée.", "brain"); err != nil {
+		t.Fatal(err)
+	}
+	c.turnThread(pr.ID)
+	if _, err := c.taskThread(); err == nil || !strings.Contains(err.Error(), "reopen_thread") {
+		t.Errorf("a task in an ended thread's turn: %v", err)
+	}
+	// With a node named, the task is a step all the same, run there.
+	if _, err := c.reopenThread(pr.ID, "revient", "brain"); err != nil {
+		t.Fatal(err)
+	}
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"prompt": "Cherche.", "node": "nas"})
+	if isErr || int64(out["thread"].(float64)) != pr.ID {
+		t.Fatalf("a node named: %v", out)
+	}
+	if task, err := c.store.task(out["task"].(string)); err != nil || task.Node != "nas" {
+		t.Errorf("its task: %+v, %v", task, err)
+	}
+}
+
+// turnOnThread makes the brain's turn about a light thread of its own: a
+// task the brain starts is a step of it.
+func turnOnThread(t *testing.T, c *core) Thread {
+	t.Helper()
+	th, err := c.openThread(threadIn{Title: "Travail", Goal: "Le travail est fait.", Subject: "topic:travail"}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.turnThread(th.ID)
+	return th
 }
 
 // timelineCards are the refs of the cards linked to a thread.
@@ -433,7 +470,7 @@ func TestBrainPromptThreads(t *testing.T) {
 	section := prompt[start:end]
 	for _, want := range []string{
 		"**Quand en ouvrir un.**", "`open_thread` avec son sujet", "reste du texte, sans thread",
-		"une étape `call` de fusion", "une étape `user`", "seulement le `check`, rien d'autre", "devient une étape `task` de ce thread", "`thread` `none`",
+		"une étape `call` de fusion", "une étape `user`", "seulement le `check`, rien d'autre", "devient une étape `task` de ce thread", "Une tâche est toujours une étape d'un thread",
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",
 		"se range seul dans sa chronologie", "Sa réponse sur une de ces cartes",

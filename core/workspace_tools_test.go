@@ -192,6 +192,7 @@ func TestSurfaceDelegation(t *testing.T) {
 	if msg != "" {
 		t.Fatalf("placeholder: %s", msg)
 	}
+	turnOnThread(t, c)
 	if _, msg := callOn(t, brain, "run_task", map[string]any{"prompt": "Résume les mails.", "surface": "absente"}); !strings.Contains(msg, "placeholder") {
 		t.Fatalf("a surface not written: %s", msg)
 	}
@@ -199,7 +200,7 @@ func TestSurfaceDelegation(t *testing.T) {
 	if msg != "" {
 		t.Fatalf("run_task: %s", msg)
 	}
-	id := got["id"].(string)
+	id := got["task"].(string)
 	task, _ := c.store.task(id)
 	if task.Tools != workspaceServer || !strings.Contains(task.Prompt, "« mails-semaine »") || c.store.get(taskSurfaceKey(id)) != "mails-semaine" {
 		t.Fatalf("task %q %q", task.Tools, task.Prompt)

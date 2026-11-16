@@ -40,11 +40,12 @@ func captureTask(t *testing.T, c *core, id string) string {
 	if _, msg := callOn(t, brain, "surface_write", map[string]any{"id": id, "title": "Le site", "components": placeholder}); msg != "" {
 		t.Fatal(msg)
 	}
+	turnOnThread(t, c)
 	got, msg := callOn(t, brain, "run_task", map[string]any{"prompt": "Montre la page d'accueil de example.org.", "surface": id})
 	if msg != "" {
 		t.Fatalf("run_task: %s", msg)
 	}
-	task := got["id"].(string)
+	task := got["task"].(string)
 	c.store.updateTask(task, map[string]any{"node": "pc", "state": stateRunning})
 	return task
 }
