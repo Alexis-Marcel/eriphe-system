@@ -193,9 +193,11 @@ function sampleLines(lang: Lang, now: number): ExchangeLine[] {
   ];
 }
 
-// sampleExchange is the dev server's last exchange.
+// sampleExchange is the dev server's last exchange, with the replies
+// Eriphe suggests under its answer.
 export function sampleExchange(lang: Lang, now = Date.now()): Exchange {
-  return { lines: sampleLines(lang, now).slice(-2), earlier: true };
+  const suggestions = lang === "en" ? ["Show me the page", "Keep the mailto link"] : ["Montre-moi la page", "Garde le lien mailto"];
+  return { lines: sampleLines(lang, now).slice(-2), earlier: true, suggestions };
 }
 
 // sampleEarlier is the dev server's lines before a line, two at a time, as
