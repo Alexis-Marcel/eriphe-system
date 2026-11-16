@@ -45,16 +45,16 @@ func TestThreadFollowsMonitor(t *testing.T) {
 	if _, err := c.writeMonitor("idee", monitorSpec{Server: "monitor", Tool: "status", Every: 1, Path: "data.state"}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.linkMonitor(s.ID, "idee", byBrain); err == nil {
+	if _, err := c.addThreadSource(s.ID, threadSource{Monitor: "idee"}, byBrain); err == nil {
 		t.Fatal("a proposed monitor followed")
 	}
-	if _, err := c.linkMonitor(s.ID, "nope", byBrain); err == nil {
+	if _, err := c.addThreadSource(s.ID, threadSource{Monitor: "nope"}, byBrain); err == nil {
 		t.Fatal("an unknown monitor followed")
 	}
-	if _, isErr := callBrainTool(t, c, "link_thread", map[string]any{"thread_id": s.ID, "monitor": "cpu", "ref": "intention:1"}); !isErr {
+	if _, isErr := callBrainTool(t, c, "link_thread", map[string]any{"thread_id": s.ID, "source": map[string]any{"monitor": "cpu"}, "ref": "intention:1"}); !isErr {
 		t.Fatal("ref and monitor together")
 	}
-	if out, isErr := callBrainTool(t, c, "link_thread", map[string]any{"thread_id": s.ID, "monitor": "cpu"}); isErr {
+	if out, isErr := callBrainTool(t, c, "link_thread", map[string]any{"thread_id": s.ID, "source": map[string]any{"monitor": "cpu"}}); isErr {
 		t.Fatalf("link_thread: %v", out)
 	}
 
@@ -178,7 +178,7 @@ func TestThreadMonitorRemoved(t *testing.T) {
 	c, _, _ := pollCore(t)
 	approvedMonitor(t, c, "cpu", monitorSpec{Server: "monitor", Tool: "status", Args: map[string]any{"service": "web"}, Every: 1, Path: "data.state"})
 	s := lightThread(t, c)
-	if _, err := c.linkMonitor(s.ID, "cpu", byBrain); err != nil {
+	if _, err := c.addThreadSource(s.ID, threadSource{Monitor: "cpu"}, byBrain); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.deleteMonitor("cpu"); err != nil {

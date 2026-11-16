@@ -964,7 +964,8 @@ func (c *core) threadsTick(now time.Time) {
 	c.followIntentions(context.Background()) // thread_progress.go
 	c.threadDeadlines(now)                   // thread_steps.go
 	c.endDays(now)
-	c.keepThreadSurfaces() // thread_surface.go
+	c.threadSourcesDue(now) // thread_sources.go
+	c.keepThreadSurfaces()  // thread_surface.go
 	ss, err := c.threadsWhere(activeThreads + ` ORDER BY id DESC LIMIT 50`)
 	if err != nil {
 		return
