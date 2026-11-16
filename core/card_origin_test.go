@@ -49,7 +49,7 @@ func TestAccessCardNamesItsThreadAndTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(html, `<a href="/?open=thread-1">Fil « PR alerting »</a>`) || !strings.Contains(html, "Sur Oui, la tâche peut modifier") {
+	if !strings.Contains(html, `<a href="/espace?open=thread-1">Fil « PR alerting »</a>`) || !strings.Contains(html, "Sur Oui, la tâche peut modifier") {
 		t.Errorf("card html %s", html)
 	}
 	if text := cardText(x, p, "en"); !strings.Contains(text, "Thread “PR alerting”") || !strings.Contains(text, "On Yes, the task may change") {

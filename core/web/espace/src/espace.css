@@ -285,6 +285,7 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .side-state { display: inline-flex; align-items: center; gap: 5px; padding: 0 8px 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 19px; white-space: nowrap; }
 .side-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .st-yours { background: var(--urgent); color: #3a2a10; }
+.st-urgent { background: var(--late); color: #fff; }
 .st-related { background: color-mix(in oklab, var(--decision) 22%, white); color: #2c4f80; }
 .st-closed { background: #1a1f2712; color: var(--ink-soft); }
 .side-new { padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 18px; letter-spacing: 0.02em; background: var(--ink); color: var(--paper); }

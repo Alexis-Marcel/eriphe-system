@@ -309,7 +309,7 @@ export type ProposalView = {
   tainted?: boolean;
   fields?: { name: string; value: string }[];
   // Where it comes from, in words (the thread, the task that asks), with
-  // the thread's surface (/?open=thread-<thread>); what its Oui does: facts of
+  // the thread's surface (/espace?open=thread-<thread>); what its Oui does: facts of
   // eriphe-core's, never the model's words.
   thread?: number;
   from?: string;

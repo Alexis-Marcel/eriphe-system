@@ -1111,7 +1111,7 @@ the decision goes back to the user through the brain.
 **One drawing** (#574): a thread is shown by its surface on the workspace only, and acted on there
 ([a thread's surface](#a-threads-surface-thread_surfacego)): its cards, « C'est fait », a
 choice's options, Pause, Resume and Stop, all code's buttons. A link to a thread (a card's origin,
-the tasks panel, a skill's run) opens its surface: `/?open=thread-<id>`, which the page opens once
+the tasks panel, a skill's run) opens its surface: `/espace?open=thread-<id>`, which the page opens once
 the surface is there. The user's word to a lead is a message written with the thread open: the
 brain passes it on (`tell_lead`). The tasks panel of the conversation shows the threads open first.
 

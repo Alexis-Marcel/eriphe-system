@@ -189,7 +189,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
       () => failed(mine),
     );
   };
-  // A link to a surface (/?open=thread-<id>: a card's thread) opens it
+  // A link to a surface (/espace?open=thread-<id>: a card's thread) opens it
   // once it is on the workspace, then leaves the address.
   const [deep, setDeep] = useState(() => {
     const id = new URLSearchParams(location.search).get("open");

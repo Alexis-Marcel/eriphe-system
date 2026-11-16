@@ -379,7 +379,7 @@ ask it, in the conversation, rather than a form. */}}
         <span class="chip chip-thread-{{.Look}}"><span class="pulse" aria-hidden="true"></span>{{if .Waits}}{{t "threads.waits"}}{{else}}{{t (printf "thread.state.%s" .Look)}}{{end}}</span>
         {{if .Total}}<span class="muted small">{{tf "threads.progress" .Done .Total}}</span>{{end}}
       </div>
-      <h3><a class="stretched" href="/?open=thread-{{.ID}}">{{.Title}}</a></h3>
+      <h3><a class="stretched" href="/espace?open=thread-{{.ID}}">{{.Title}}</a></h3>
       {{template "thread-strip" .Progress}}
     </article>
   </li>{{end}}</ul>

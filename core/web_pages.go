@@ -908,7 +908,7 @@ func (w *web) handleLang(rw http.ResponseWriter, r *http.Request, s *session) {
 }
 
 // The tasks panel: the threads running, above the tasks; each opens its
-// surface on the workspace (/?open=thread-<id>).
+// surface on the workspace (/espace?open=thread-<id>).
 
 // threadRow is a thread in the tasks panel.
 type threadRow struct {
