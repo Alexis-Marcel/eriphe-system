@@ -17,7 +17,7 @@ import (
 func textSurface(t *testing.T, c *core, id, text string) {
 	t.Helper()
 	raw, _ := json.Marshal(text)
-	_, errs, err := c.surfaceWrite(surfaceAuthorBrain, surfaceIn{ID: id, Title: "Titre " + id,
+	_, errs, err := c.fixtureSurface(surfaceAuthorBrain, surfaceIn{ID: id, Title: "Titre " + id,
 		Components: json.RawMessage(`[{"id":"root","component":"Text","text":` + string(raw) + `}]`)})
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
@@ -136,7 +136,7 @@ func TestSurfaceStream(t *testing.T) {
 	// Changes, in the order they were made.
 	textSurface(t, tw.c, "second", "Deux")
 	textSurface(t, tw.c, "first", "Un, encore")
-	if err := tw.c.surfaceRemove("first", surfaceByUser); err != nil {
+	if err := tw.c.surfaceRemove("first", surfaceByLifetime); err != nil {
 		t.Fatal(err)
 	}
 	got := st.messages(4, snap.Seq)
@@ -167,10 +167,10 @@ func TestSurfaceStream(t *testing.T) {
 	}
 
 	// A reconnecting page starts from a snapshot, empty or not.
-	if err := tw.c.surfaceRemove("second", surfaceByUser); err != nil {
+	if err := tw.c.surfaceRemove("second", surfaceByLifetime); err != nil {
 		t.Fatal(err)
 	}
-	if err := tw.c.surfaceRemove("third", surfaceByUser); err != nil {
+	if err := tw.c.surfaceRemove("third", surfaceByLifetime); err != nil {
 		t.Fatal(err)
 	}
 	st2 := openA2UI(t, tw, "?a2ui=1")
@@ -254,7 +254,7 @@ func TestSurfaceActionEndpoint(t *testing.T) {
 	c, l := surfaceCore(t)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
-	s, errs, err := c.surfaceWrite("task:t-releves", surfaceIn{Title: "Comptes", Sources: balances, Components: accountsSurface(),
+	s, errs, err := c.fixtureSurface("task:t-releves", surfaceIn{Title: "Comptes", Sources: balances, Components: accountsSurface(),
 		Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)}})
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)

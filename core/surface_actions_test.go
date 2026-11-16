@@ -25,7 +25,7 @@ func writeSurface(t *testing.T, c *core, id string, comps string, data string, t
 	if tainted {
 		in.Sources = balances
 	}
-	s, errs, err := c.surfaceWrite(surfaceAuthorBrain, in)
+	s, errs, err := c.fixtureSurface(surfaceAuthorBrain, in)
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
 	}
@@ -279,7 +279,7 @@ func TestSurfaceActionGrammarOnWrite(t *testing.T) {
 		`{"event":{"name":"expand"}}`,
 		`{"event":{"name":"tab","context":{}}}`,
 	} {
-		if _, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "t", Components: button(ok)}); err != nil || len(errs) > 0 {
+		if _, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "t", Components: button(ok)}); err != nil || len(errs) > 0 {
 			t.Errorf("%s: %v %v", ok, err, errs)
 		}
 	}
@@ -291,7 +291,7 @@ func TestSurfaceActionGrammarOnWrite(t *testing.T) {
 		{`{"event":{"name":"expand","context":{"x":1}}}`, "/components/0/action/event/context", "no context"},
 		{`{"functionCall":{"@call":"formatString","args":{"value":"x"}}}`, "/components/0/action", "an event"},
 	} {
-		_, errs, _ := c.surfaceWrite("brain", surfaceIn{Title: "t", Components: button(tc.action)})
+		_, errs, _ := c.fixtureSurface("brain", surfaceIn{Title: "t", Components: button(tc.action)})
 		if len(errs) != 1 || errs[0].Path != tc.path || !strings.Contains(errs[0].Message, tc.want) {
 			t.Errorf("%s: %+v", tc.action, errs)
 		}

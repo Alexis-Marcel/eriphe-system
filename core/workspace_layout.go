@@ -504,7 +504,6 @@ func (c *core) relayout() workspaceLayout {
 		}
 		st.changed = make(chan struct{})
 		c.store.set(layoutKey, string(raw))
-		c.noteFront(l, pool, time.Now()) // what is in front, for the measure of use (workspace_use.go)
 	}
 	return l
 }

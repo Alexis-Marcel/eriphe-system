@@ -578,7 +578,7 @@ func mayAddPart(author string, thread int64) bool {
 // part, checked alone, kept apart, then the surface written again with it.
 func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteIn) (map[string]any, error) {
 	sid := threadSurfaceID(thread)
-	if who.only != "" || !mayAddPart(who.author, thread) {
+	if !mayAddPart(who.author, thread) {
 		return nil, fmt.Errorf("the surface %s is the thread's, kept by code: only who holds the thread adds a part to it", sid)
 	}
 	s, err := c.thread(thread)
@@ -662,9 +662,16 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 // removeThreadPart is surface_remove on a thread's surface: the holder's
 // part goes, the surface stays.
 func (c *core) removeThreadPart(who surfaceCaller, thread int64) (map[string]any, error) {
-	if who.only != "" || !mayAddPart(who.author, thread) {
+	if !mayAddPart(who.author, thread) {
 		return nil, fmt.Errorf("the surface %s is the thread's, kept by code while it lives", threadSurfaceID(thread))
 	}
+	c.dropThreadPart(thread)
+	c.keepThreadSurface(thread)
+	return map[string]any{"removed": "part", "note": "Your part is gone; the thread's surface stays while the thread does."}, nil
+}
+
+// dropThreadPart takes a thread's part away, with the sources it brought.
+func (c *core) dropThreadPart(thread int64) {
 	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, threadPartKey+strconv.FormatInt(thread, 10))
 	for _, src := range c.threadSources(thread) {
 		if src.By == byPart {
@@ -672,8 +679,6 @@ func (c *core) removeThreadPart(who surfaceCaller, thread int64) (map[string]any
 			c.sourceNotesGone(thread, src.Name, time.Now())
 		}
 	}
-	c.keepThreadSurface(thread)
-	return map[string]any{"removed": "part", "note": "Your part is gone; the thread's surface stays while the thread does."}, nil
 }
 
 func orEmptyMap(m map[string]any) map[string]any {

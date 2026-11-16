@@ -13,8 +13,8 @@ func aboutOfRow(c *core, table, where string, args ...any) string {
 }
 
 // What the brain makes in a turn about a thread is about the thread: a
-// task (a step of it), a notification, a memory, an intention, a surface.
-// An about given wins.
+// task (a step of it), a notification, a memory, an intention, the
+// thread's surface it adds its part to. An about given wins.
 func TestTurnThreadIsTheAbout(t *testing.T) {
 	c := startCore(t)
 	m, _ := testMemory(t)
@@ -54,11 +54,12 @@ func TestTurnThreadIsTheAbout(t *testing.T) {
 	if intent != key {
 		t.Errorf("intention under %q", intent)
 	}
-	if out, isErr := callBrainTool(t, c, "surface_write", map[string]any{"id": "velora", "title": "Velora",
+	sid := threadSurfaceID(openedThread(t, out).ID)
+	if out, isErr := callBrainTool(t, c, "surface_write", map[string]any{"id": sid,
 		"components": []any{map[string]any{"id": "root", "component": "Text", "text": "Prise."}}}); isErr {
 		t.Fatalf("surface_write: %v", out)
 	}
-	if got := aboutOfRow(c, "surfaces", "id = 'velora'"); got != key {
+	if got := aboutOfRow(c, "surfaces", "id = ?", sid); got != key {
 		t.Errorf("surface under %q", got)
 	}
 }
@@ -174,7 +175,7 @@ func TestSurfaceKeepsItsAbout(t *testing.T) {
 		if about == "" {
 			in.inherit = c.turnAbout()
 		}
-		if _, errs, err := c.surfaceWrite(surfaceAuthorBrain, in); err != nil || len(errs) > 0 {
+		if _, errs, err := c.fixtureSurface(surfaceAuthorBrain, in); err != nil || len(errs) > 0 {
 			t.Fatal(err, errs)
 		}
 	}

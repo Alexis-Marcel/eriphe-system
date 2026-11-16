@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -11,14 +12,14 @@ func oneText(text string) []map[string]any {
 	return []map[string]any{{"id": "root", "component": "Text", "text": text}}
 }
 
-// surface.missing reaches the brain as an event of the conversation, once
-// an hour for the same text, tainted when external.
+// An item about a surface (surface:<id>) is shown by that surface, not by
+// one of the queue's, and leaves with it.
 func TestQueueSurfaceRefs(t *testing.T) {
 	c, _ := surfaceCore(t)
 	if !validAttentionRef("surface:revue-du-jour") || validAttentionRef("surface:Pas Un Id") {
 		t.Fatal("surface refs")
 	}
-	if _, _, err := c.surfaceWrite("task:t-revue", surfaceIn{ID: "revue-du-jour", Title: "Revue", Components: []byte(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil {
+	if _, _, err := c.fixtureSurface("task:t-revue", surfaceIn{ID: "revue-du-jour", Title: "Revue", Components: []byte(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil {
 		t.Fatal(err)
 	}
 	kept, dropped := decodeSignals([]byte(`[{"refs": ["surface:revue-du-jour"], "weight": 2, "why": "La revue est prête"}]`))
@@ -36,9 +37,35 @@ func TestQueueSurfaceRefs(t *testing.T) {
 	if all, _ := c.surfaces(); len(all) != 1 {
 		t.Fatalf("surfaces %+v", all)
 	}
-	c.surfaceRemove("revue-du-jour", surfaceByUser)
+	c.surfaceRemove("revue-du-jour", surfaceByLifetime)
 	if items := c.attentionOpen(); len(items) != 0 {
 		t.Fatalf("an item outlived its surface: %+v", items)
+	}
+}
+
+// At start, what no code wrote goes: a surface an assistant, a task or a
+// skill wrote before only threads were shown; a thread's and the queue's
+// stay.
+func TestDropFreeSurfaces(t *testing.T) {
+	c, _ := surfaceCore(t)
+	comps := []byte(`[{"id":"root","component":"Text","text":"x"}]`)
+	for _, w := range []struct{ author, id string }{
+		{"brain", "revue"}, {"skill:arrivee", "arrivee"}, {"task:t-1", "page-site"}, {"lead:3", "suivi"},
+		{threadAuthor(1), threadSurfaceID(1)}, {surfaceAuthorCore, "q-decide"},
+	} {
+		if _, _, err := c.fixtureSurface(w.author, surfaceIn{ID: w.id, Title: "x", Components: comps}); err != nil {
+			t.Fatal(w, err)
+		}
+	}
+	c.dropFreeSurfaces()
+	all, _ := c.surfaces()
+	var left []string
+	for _, s := range all {
+		left = append(left, s.ID)
+	}
+	slices.Sort(left)
+	if !slices.Equal(left, []string{"q-decide", threadSurfaceID(1)}) {
+		t.Fatalf("left %v", left)
 	}
 }
 

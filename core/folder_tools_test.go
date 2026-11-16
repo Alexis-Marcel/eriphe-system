@@ -302,7 +302,7 @@ func TestFoldersSurfaceSource(t *testing.T) {
 	c, _ := folderFilesCore(t)
 	src := map[string]surfaceSource{"/note": {Tool: foldersServer + "/read_file", Args: map[string]any{"folder": "Clients", "path": "Projets/site.md"}}}
 	comps := json.RawMessage(`[{"id":"root","component":"Text","text":{"@path":"/note/text"}}]`)
-	s, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "Site", Components: comps, Sources: src})
+	s, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "Site", Components: comps, Sources: src})
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
 	}

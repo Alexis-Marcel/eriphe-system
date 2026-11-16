@@ -366,44 +366,4 @@ func TestQueueGroupGestures(t *testing.T) {
 	if got := c.queueItemsOf(queueNotes); len(got) != 0 {
 		t.Fatalf("notes %v", got)
 	}
-
-	// Removed: its items leave the queue, the cards wait in the conversation.
-	if err := c.surfaceRemove(queueMemories, surfaceByUser); err != nil {
-		t.Fatal(err)
-	}
-	if got := c.queueItemsOf(queueMemories); len(got) != 0 {
-		t.Fatalf("memories %v", got)
-	}
-	if x := cardOf(t, c, cardMemory, mustProposalID(t, q.mems[0].Ref)); x.State != cardPending {
-		t.Fatalf("card %+v", x)
-	}
-}
-
-// The queue's surfaces never meet the pool's cap, and an assistant cannot
-// write as code nor over code's surfaces.
-func TestQueueSurfacesOutsideTheCap(t *testing.T) {
-	c, _ := surfaceCore(t)
-	comps := json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)
-	for i := range surfacesMax {
-		if _, errs, err := c.surfaceWrite("brain", surfaceIn{ID: "s-" + strconv.Itoa(i), Title: "t", Components: comps,
-			Lifetime: surfaceLifetime{Kept: true}}); err != nil || len(errs) > 0 {
-			t.Fatal(i, err, errs)
-		}
-	}
-	c.attend(attentionItem{Ref: "alert:1", Weight: 5, Why: "Panne"})
-	c.syncQueueSurfaces()
-	if _, ok := surfaceByID(t, c, "q-alert-1"); !ok {
-		t.Fatal("a full pool refused the queue's surface")
-	}
-	if _, _, err := c.surfaceWrite(surfaceAuthorCore, surfaceIn{ID: "fake", Title: "t", Components: comps}); err == nil {
-		t.Fatal("an assistant wrote as code")
-	}
-	if _, _, err := c.surfaceWrite("brain", surfaceIn{ID: "q-alert-1", Title: "t", Components: comps}); err == nil {
-		t.Fatal("the brain wrote over code's surface")
-	}
-	// Kept while its item is open, whatever the clock: code removes it.
-	s, _ := c.surface("q-alert-1")
-	if c.surfaceEnded(s, time.Now().Add(48*time.Hour)) {
-		t.Fatal("the lifetime ended a queue surface")
-	}
 }

@@ -52,9 +52,6 @@ func TestUserLang(t *testing.T) {
 	if p := assistantRoles[assistantRoleLead].firstPrompt(c, Assistant{}, false); !strings.Contains(p, "en anglais") {
 		t.Fatalf("lead's first turn:\n%s", p)
 	}
-	if s := delegateSurfaceText("s-1", c.userLang()); !strings.Contains(s, "en anglais") {
-		t.Fatalf("task surface: %s", s)
-	}
 	c.noteUserLang("fr")
 	if h := c.turnHead(time.Now()); !strings.Contains(h, "en français, sa langue, en le tutoyant") {
 		t.Fatalf("turn head:\n%s", h)

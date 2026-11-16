@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// eriphe-capture: takes a picture of a web page for a surface of the
-// workspace, and gives it to eriphe-core (core/surfaces_capture.go).
+// eriphe-capture: takes a picture of a web page for the surface of the
+// thread the task is a step of, and gives it to eriphe-core
+// (core/surfaces_capture.go).
 //
-//   eriphe-capture <url> <surface> [out.png]   capture the page, then give it
-//   eriphe-capture --file <image> <surface>    give a PNG or a JPEG already made
+//   eriphe-capture <url> thread-<id> [out.png]   capture the page, then give it
+//   eriphe-capture --file <image> thread-<id>    give a PNG or a JPEG already made
 //
-// It prints {"src": "media:med_…", …}: write src as the url of an Image of
-// that surface. The page is opened in a headless Chromium (Debian's
+// It prints {"src": "media:med_…", …}: whoever holds the thread writes src
+// as the url of an Image in its part of that surface. The page is opened in a headless Chromium (Debian's
 // chromium-headless-shell, installed on first use through apt and the
 // machine's cache), with a fixed window (1280×800), a time limit, a profile
 // of its own thrown away after (no cookie, no sign-in), downloads refused,
@@ -34,11 +35,11 @@ function fail(msg) {
 }
 
 function usage() {
-  fail('usage: eriphe-capture <url> <surface> [out.png]  |  eriphe-capture --file <image> <surface>');
+  fail('usage: eriphe-capture <url> thread-<id> [out.png]  |  eriphe-capture --file <image> thread-<id>');
 }
 
 function checkSurface(id) {
-  if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id || '')) fail('the surface is its id: lowercase letters, digits and -');
+  if (!/^thread-[0-9]{1,18}$/.test(id || '')) fail('the surface is the surface of the thread the task is a step of: thread-<id>');
 }
 
 function checkURL(raw) {

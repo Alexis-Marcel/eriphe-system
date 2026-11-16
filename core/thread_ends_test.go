@@ -66,8 +66,14 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// « j'ai quoi demain ? »: the day thread's part.
+	if _, err := c.writeThreadPart(surfaceCaller{author: surfaceAuthorBrain, taint: func() []string { return nil }}, day.ID,
+		surfaceWriteIn{ID: threadSurfaceID(day.ID), Components: oneText("Dentiste à 10 h")}); err != nil {
+		t.Fatal(err)
+	}
+
 	// The tick before midnight changes nothing; the one after it ends the
-	// day thread.
+	// day thread, its part with it.
 	loc := c.userZone()
 	local := time.Now().In(loc)
 	midnight := time.Date(local.Year(), local.Month(), local.Day()+1, 0, 0, 0, 0, loc)
@@ -82,6 +88,9 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 	}
 	if _, err := c.surface(threadSurfaceID(day.ID)); err == nil {
 		t.Error("the day thread is still shown after its day")
+	}
+	if c.threadPartOf(day.ID) != nil {
+		t.Error("the day's part outlived its day")
 	}
 	if th, _ := c.thread(standing.ID); !th.active() {
 		t.Error("the standing thread ended")
@@ -105,6 +114,13 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 	c.threadsTick(time.Now())
 	if th, _ := c.thread(day.ID); !th.active() {
 		t.Error("a reopened day thread ended at once")
+	}
+	if s, err := c.surface(threadSurfaceID(day.ID)); err != nil || strings.Contains(string(s.Components), "Dentiste") {
+		t.Errorf("reopened, the day thread shows yesterday's part, or nothing: %v", err)
+	}
+	// Asked again the next day, the same thread, open.
+	if again, _, err := c.openThreadOnce(threadIn{Title: "Demain", Goal: "Ce que j'ai demain.", Alias: "topic:demain", Ends: endsDay}, nil, byBrain); err != nil || again.ID != day.ID || !again.active() {
+		t.Errorf("asked again: %+v %v", again, err)
 	}
 
 	// Asked to stand, the thread its subject has becomes a standing one; a
@@ -189,7 +205,7 @@ func TestThreadTidy(t *testing.T) {
 		t.Error("reopened, not shown")
 	}
 	button := fmt.Sprintf(`[{"id":"root","component":"Button","label":"Ranger","action":{"event":{"name":"tidy","context":{"thread":%d}}}}]`, th.ID)
-	if _, errs, err := c.surfaceWrite(surfaceAuthorBrain, surfaceIn{ID: "mine", Title: "Mine", Components: json.RawMessage(button)}); err == nil && len(errs) == 0 {
+	if _, errs, err := c.fixtureSurface(surfaceAuthorBrain, surfaceIn{ID: "mine", Title: "Mine", Components: json.RawMessage(button)}); err == nil && len(errs) == 0 {
 		t.Error("an author wrote tidy")
 	}
 }

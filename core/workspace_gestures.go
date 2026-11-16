@@ -385,7 +385,6 @@ func (c *core) queueSweep(now time.Time) {
 	res, err := c.store.db.Exec(`DELETE FROM attention WHERE `+ended, cutoff, cutoff)
 	if err == nil {
 		if n, _ := res.RowsAffected(); n > 0 {
-			surfacesRecap(c.store.db)
 			for _, id := range raised {
 				c.keepThreadSurface(id) // its tile gives the weight back
 			}

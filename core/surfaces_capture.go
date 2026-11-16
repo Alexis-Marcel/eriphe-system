@@ -16,17 +16,19 @@ import (
 	"time"
 )
 
-// Images a task hands to a surface (#470). Most sites forbid being framed,
-// and a surface never loads anything from outside (surfaces_media.go): to
-// show a page, a task lent eriphe-workspace captures it in its container
-// (eriphe-capture, worker/base) and posts the image to its node, which
-// relays it here with the node's secret and the task's id:
+// Images a task hands to its thread's surface (#470). Most sites forbid
+// being framed, and a surface never loads anything from outside
+// (surfaces_media.go): to show a page, a task step of a thread, lent
+// eriphe-workspace, captures it in its container (eriphe-capture,
+// worker/base) and posts the image to its node, which relays it here with
+// the node's secret and the task's id:
 //
-//	POST /v1/node/tasks/{id}/media?surface=<id>   (node secret, the image as body)
+//	POST /v1/node/tasks/{id}/media?surface=thread-<id>   (node secret, the image as body)
 //
-// eriphe-core keeps it in its data folder under a random id, for that
-// surface only, and answers its address, media:<id>, which the task writes
-// as an Image's url. The bytes never go through a model. surfaceView signs
+// eriphe-core keeps it in its data folder under a random id, for the
+// surface of the thread the task is a step of only, and answers its
+// address, media:<id>, which the thread's holder writes as an Image's url
+// in its part. The bytes never go through a model. surfaceView signs
 // that address for the page like any other (GET /espace/media), and only
 // on the surface it was given for. A PNG or a JPEG only, sniffed from its
 // bytes, 5 MiB at most, a few per surface; it goes with its surface
@@ -104,21 +106,16 @@ type errMediaRefused struct {
 
 func (e errMediaRefused) Error() string { return e.msg }
 
-// surfaceMediaPut keeps an image a task gives for one of its surfaces.
+// surfaceMediaPut keeps an image a task gives for its thread's surface:
+// the task is a step of that thread, and its holder writes the image in
+// its part.
 func (c *core) surfaceMediaPut(taskID, surfaceID string, data []byte) (*surfaceMedia, error) {
 	if !surfaceIDRe.MatchString(surfaceID) {
-		return nil, errMediaRefused{http.StatusBadRequest, "surface: the id of the surface the image is for"}
+		return nil, errMediaRefused{http.StatusBadRequest, "surface: the id of its thread's surface, thread-<id>"}
 	}
-	who := c.taskCaller(taskID)
-	switch {
-	case who.only != "":
-		if surfaceID != who.only {
-			return nil, errMediaRefused{http.StatusForbidden, "this task fills the surface " + who.only + " only"}
-		}
-	default:
-		if s, err := c.surface(surfaceID); err == nil && !mayChange(who.author, s.Author) {
-			return nil, errMediaRefused{http.StatusForbidden, "the surface " + surfaceID + " is " + s.Author + "'s"}
-		}
+	thread, ok := threadOfSurface(surfaceID)
+	if st, step := c.stepOfTask(taskID); !ok || !step || st.Thread != thread {
+		return nil, errMediaRefused{http.StatusForbidden, "an image goes to the surface of the thread the task is a step of, thread-<id>, only"}
 	}
 	if len(data) == 0 {
 		return nil, errMediaRefused{http.StatusBadRequest, "no image"}
@@ -215,7 +212,7 @@ func (c *core) sweepSurfaceMedia(all []surface, now time.Time) {
 }
 
 // handleTaskMedia is POST /v1/node/tasks/{id}/media, for nodes: an image a
-// task lent the workspace gives for one of its surfaces.
+// task lent the workspace gives for its thread's surface.
 func (c *core) handleTaskMedia(w http.ResponseWriter, r *http.Request) {
 	node, ok := c.nodeFromRequest(r)
 	if !ok {
@@ -248,6 +245,6 @@ func (c *core) handleTaskMedia(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"src": surfaceMediaScheme + m.ID, "type": m.Type, "size": m.Size,
-		"note": "Write src as an Image's url in the surface " + m.Surface + " (only there), with a Link to the page's address beside it.",
+		"note": "Give src to whoever holds the thread: it writes it as an Image's url in its part of " + m.Surface + " (only there), with a Link to the page's address beside it.",
 	})
 }

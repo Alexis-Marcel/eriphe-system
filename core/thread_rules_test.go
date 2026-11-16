@@ -134,14 +134,6 @@ func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
 			t.Errorf("%s: taken", name)
 		}
 	}
-	// A surface to fill: a step all the same, its task writing that one.
-	if _, _, err := c.surfaceWrite(surfaceAuthorBrain, surfaceIn{ID: "mails", Title: "Mails", Components: []byte(`[{"id":"root","component":"Placeholder","text":"…"}]`)}); err != nil {
-		t.Fatal(err)
-	}
-	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume les mails.", "surface": "mails"})
-	if isErr || out["step"] != stepTask+"-3" || c.store.get(taskSurfaceKey(out["task"].(string))) != "mails" {
-		t.Fatalf("a surface to fill: %v", out)
-	}
 	// A turn about a led thread: refused, its plan changes with amend_thread.
 	c.turn.about(led.ID)
 	if out, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume la veille."}); !isErr {
@@ -208,7 +200,7 @@ func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
 	}
 
 	// A surface of the thread's subject: its thread.
-	if _, _, err := c.writeSurface("brain", surfaceIn{ID: "pr-12", Title: "PR 12", About: "pr:example/infra#12",
+	if _, _, err := c.fixtureSurface("brain", surfaceIn{ID: "pr-12", Title: "PR 12", About: "pr:example/infra#12",
 		Components: []byte(`[{"id":"root","component":"Text","text":"PR 12"}]`)}); err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +210,7 @@ func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
 	}
 
 	// Another surface, a thread that is none, or nothing: no thread.
-	if _, _, err := c.writeSurface("brain", surfaceIn{ID: "meteo", Title: "Météo",
+	if _, _, err := c.fixtureSurface("brain", surfaceIn{ID: "meteo", Title: "Météo",
 		Components: []byte(`[{"id":"root","component":"Text","text":"Soleil"}]`)}); err != nil {
 		t.Fatal(err)
 	}
