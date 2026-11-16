@@ -12,34 +12,14 @@ func oneText(text string) []map[string]any {
 	return []map[string]any{{"id": "root", "component": "Text", "text": text}}
 }
 
-// An item about a surface (surface:<id>) is shown by that surface, not by
-// one of the queue's, and leaves with it.
-func TestQueueSurfaceRefs(t *testing.T) {
-	c, _ := surfaceCore(t)
-	if !validAttentionRef("surface:revue-du-jour") || validAttentionRef("surface:Pas Un Id") {
-		t.Fatal("surface refs")
+// An attention item names a thread, never a surface: what a surface
+// shows is its thread's, and a thread's tile rises with thread:<id>.
+func TestNoSurfaceAttentionRef(t *testing.T) {
+	if validAttentionRef("surface:revue-du-jour") {
+		t.Fatal("a surface ref is an attention ref")
 	}
-	if _, _, err := c.fixtureSurface("task:t-revue", surfaceIn{ID: "revue-du-jour", Title: "Revue", Components: []byte(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil {
-		t.Fatal(err)
-	}
-	kept, dropped := decodeSignals([]byte(`[{"refs": ["surface:revue-du-jour"], "weight": 2, "why": "La revue est prête"}]`))
-	if len(dropped) > 0 || c.attendSignals(kept, dropped, "", "skill:revue", false) != 1 {
+	if kept, dropped := decodeSignals([]byte(`[{"refs": ["surface:revue-du-jour"], "weight": 2, "why": "La revue est prête"}]`)); len(kept) != 1 || len(kept[0].Refs) != 0 || len(dropped) != 1 {
 		t.Fatalf("signal %v %v", kept, dropped)
-	}
-	if items := c.attentionOpen(); len(items) != 1 || items[0].Ref != "surface:revue-du-jour" || items[0].Weight != 2 {
-		t.Fatalf("queue %+v", items)
-	}
-	// Its own surface shows it: no surface of the queue's for it.
-	if queueSurfaceID("surface:revue-du-jour") != "revue-du-jour" {
-		t.Error("an item about a surface is not shown by it")
-	}
-	c.syncQueueSurfaces()
-	if all, _ := c.surfaces(); len(all) != 1 {
-		t.Fatalf("surfaces %+v", all)
-	}
-	c.surfaceRemove("revue-du-jour", surfaceByLifetime)
-	if items := c.attentionOpen(); len(items) != 0 {
-		t.Fatalf("an item outlived its surface: %+v", items)
 	}
 }
 

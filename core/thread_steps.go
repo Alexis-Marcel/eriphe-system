@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -185,67 +184,14 @@ func (s *stepSpec) normalizeTask() error {
 // threadRef is how a card or a surface names a thread.
 func threadRef(id int64) string { return "thread:" + strconv.FormatInt(id, 10) }
 
-// The change feed: what the workspace subscribes to.
-
-// threadFeedMax is as many moves as the feed keeps: a watcher further
-// behind reads everything again.
-const threadFeedMax = 64
-
-type threadMove struct {
-	seq    int64
-	thread int64
-}
-
-// threadFeed keeps the threads that moved lately, and wakes who waits.
-type threadFeed struct {
-	mu      sync.Mutex
-	seq     int64
-	moves   []threadMove
-	changed chan struct{}
-}
-
 // threadMoved notes that a thread changed: its state, a step, its log, a
 // card linked to it. Its surface on the workspace is written again
-// (keepThreadSurface, thread_surface.go); its page follows it with
-// watchThreads, and reads it again with threadTimeline. The attention
-// queue's surfaces are made again: a card it shows leaves them, and comes
-// back once it ended (queuePlace).
+// (keepThreadSurface, thread_surface.go), and the attention queue's
+// surfaces are made again: a card it shows leaves them, and comes back
+// once it ended (queuePlace).
 func (c *core) threadMoved(id int64) {
 	defer c.kickWorkspace()
-	defer c.keepThreadSurface(id)
-	f := &c.threadsFeed
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.seq++
-	f.moves = append(f.moves, threadMove{f.seq, id})
-	if len(f.moves) > threadFeedMax {
-		f.moves = f.moves[len(f.moves)-threadFeedMax:]
-	}
-	if f.changed != nil {
-		close(f.changed)
-		f.changed = nil
-	}
-}
-
-// watchThreads is what moved after seq (each thread once, all when the
-// watcher fell behind), the last seq, and a channel closed at the next
-// move.
-func (c *core) watchThreads(after int64) (ids []int64, all bool, seq int64, next <-chan struct{}) {
-	f := &c.threadsFeed
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.changed == nil {
-		f.changed = make(chan struct{})
-	}
-	if len(f.moves) > 0 && f.moves[0].seq > after+1 {
-		all = true
-	}
-	for _, m := range f.moves {
-		if m.seq > after && !slices.Contains(ids, m.thread) {
-			ids = append(ids, m.thread)
-		}
-	}
-	return ids, all, f.seq, f.changed
+	c.keepThreadSurface(id)
 }
 
 // Waking the holder.
@@ -799,89 +745,6 @@ func (c *core) endSteps(ctx context.Context, s Thread) {
 }
 
 // The timeline: what the thread's surface shows (#468).
-
-// TimelineStep is a step as the surface shows it.
-type TimelineStep struct {
-	Key       string    `json:"key"`
-	Title     string    `json:"title"`
-	Kind      string    `json:"kind"`
-	Status    string    `json:"status"`
-	Question  string    `json:"question,omitempty"` // a choice's, an approval's, what a user step asks
-	Options   []string  `json:"options,omitempty"`
-	Due       time.Time `json:"due,omitzero"`
-	Intention int64     `json:"intention,omitempty"`
-	Task      string    `json:"task,omitempty"`
-	Card      string    `json:"card,omitempty"`       // its card's ref: a call's, an approval's, a task's start
-	CardState string    `json:"card_state,omitempty"` // pending, approved, rejected, gone
-	CallState string    `json:"call_state,omitempty"` // a call approved: running, done, failed
-	Output    string    `json:"output,omitempty"`
-	Note      string    `json:"note,omitempty"`
-	Tainted   bool      `json:"tainted,omitempty"` // its output may carry what someone else wrote
-	Started   time.Time `json:"started,omitzero"`
-	Ended     time.Time `json:"ended,omitzero"`
-}
-
-// TimelineCard is a card linked to the thread.
-type TimelineCard struct {
-	Ref     string    `json:"ref"`
-	Kind    string    `json:"kind"`
-	State   string    `json:"state"`
-	Created time.Time `json:"created"`
-}
-
-// threadTimeline is a thread as its surface shows it: its steps with
-// their kind, state, times and card, the cards linked to it, its log.
-type threadTimeline struct {
-	Thread
-	Steps []TimelineStep `json:"steps"`
-	Cards []TimelineCard `json:"cards,omitempty"`
-	Log   []ThreadLine   `json:"log"`
-}
-
-// threadTimeline reads a thread for its surface; threadMoved says when to
-// read it again (watchThreads).
-func (c *core) threadTimeline(id int64) (threadTimeline, error) {
-	s, err := c.thread(id)
-	if err != nil {
-		return threadTimeline{}, err
-	}
-	steps, err := c.steps(id)
-	if err != nil {
-		return threadTimeline{}, err
-	}
-	v := threadTimeline{Thread: s, Steps: []TimelineStep{}, Log: c.threadLog(id, 40)}
-	seen := map[string]bool{}
-	for _, st := range steps {
-		x := TimelineStep{Key: st.Key, Title: st.Title, Kind: st.Kind, Status: st.Status, Question: st.Question, Options: st.Options,
-			Intention: st.Intention, Task: st.Task, Output: st.Output, Note: st.Note, Tainted: st.Tainted != "" || (st.Task != "" && c.taskResultTaint(st.Task) != ""),
-			Due: unixOrZero(st.DueAt), Started: unixOrZero(st.Started), Ended: unixOrZero(st.Ended)}
-		x.Card = c.stepCard(s.ID, st)
-		if x.Card != "" {
-			x.CardState = c.cardState(x.Card)
-			seen[x.Card] = true
-			if kind, pid, ok := parseProposalRef(x.Card); ok && kind == cardAccess {
-				x.CallState, _ = c.callState(pid)
-			}
-		}
-		v.Steps = append(v.Steps, x)
-	}
-	rows, err := c.store.db.Query(`SELECT ref, created FROM thread_cards WHERE thread = ? ORDER BY created, ref`, id)
-	if err == nil {
-		for rows.Next() {
-			var ref string
-			var at int64
-			if rows.Scan(&ref, &at) == nil && !seen[ref] {
-				kind, _, _ := parseProposalRef(ref)
-				v.Cards = append(v.Cards, TimelineCard{Ref: ref, Kind: kind, Created: time.Unix(at, 0)})
-			}
-		}
-		rows.Close() // one connection: the states are read after
-	}
-	for i := range v.Cards {
-		v.Cards[i].State = c.cardState(v.Cards[i].Ref)
-	}
-	return v, nil
-}
 
 // stepCard is the card of a step, if it has one: a call's, an approval's
 // (its thread's ask), a task's start.

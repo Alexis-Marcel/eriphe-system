@@ -1058,11 +1058,8 @@ alias), how its steps grow from what is found, when its surface `thread-<id>` ta
 (« where does it stand », from the workspace: `workspace_focus`) and when it opens on the side
 (« launch », « while I… »), and that a wake turn updates the thread without asking the user.
 
-For the thread's surface: `threadTimeline(id)` reads the thread with each step's kind, status,
-times, card ref and state (and an approved call's run state), whether it is tainted, the cards
-linked to it and the log; `threadMoved(id)` fires on every change (a step, the thread, its log, a
-linked card), and `watchThreads(after)` returns the threads that moved since and a channel closed
-at the next move, as `watchProposals` does.
+For the thread's surface: `threadMoved(id)` fires on every change (a step, the thread, its log, a
+linked card); it writes the thread's surface again and makes the attention queue's surfaces again.
 
 - **The plan card** (card kind `thread`) is the user's approval of the steps as planned: they start
   without asking again, their resources granted as on a clean start. A step added
@@ -3620,7 +3617,7 @@ author or id (`codeSurfaceOf`), and at start code removes any surface another au
 before (`dropFreeSurfaces`). No assistant, lead, task or skill writes a tile of its own: who
 holds a thread adds [its part](#a-threads-surface-thread_surfacego) to the thread's surface. A
 surface has a title, A2UI components, data, **sources**, a refresh, a **lifetime**, a weight (1
-to 100, 50 by default) and a why; code keeps its data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
+to 100) and a why; code keeps its data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
 author declares, so a tool linked tomorrow is a source with no code (`TestNoToolInSurfaces` holds
 the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider or host name;
 `TestSurfaceFromAnyTool` serves a live surface from a fake server nobody wrote for).
@@ -3652,10 +3649,9 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   each due surface (once, until its refresh is over) to a worker that reads 4 surfaces at once at
   most, each pass within 8 s (`refreshLater`, `surfaceReaders`, `surfaceRefreshCap`). Only a
   source whose value changed goes out, as `updateDataModel` at its pointer; a taint that appears or goes sends the surface again.
-- **Lifetime**, one of: `until` a date (90 days at most), `while` a ref is pending or running
-  (a thread's surface: `thread:<id>` not ended), or `kept` (the queue's, which code removes when
-  its items leave). None given: until a day later. Code removes an ended one on the surfaces'
-  loop.
+- **Lifetime**, exactly one, always given by code: `until` a date (90 days at most: an ended
+  thread's surface), `while` a thread is active (`thread:<id>` not ended), or `kept` (the queue's,
+  which code removes when its items leave). Code removes an ended one on the surfaces' loop.
 - **Who writes**: only its author writes it again or removes it, and code when its lifetime
   ended. Components and data of 64 KiB each.
 - **Actions** (`actionGuard`, `a2ui.CheckActions`): a button's action keeps to

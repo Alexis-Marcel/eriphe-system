@@ -140,18 +140,6 @@ func (c *core) setFocus(id string, now time.Time, by string) {
 	c.relayout()
 }
 
-// stageNow is who put the stage's surface there (focusByBrain, or "" for
-// the user) and what was on stage before it.
-func (c *core) stageNow(now time.Time) (by, previous string) {
-	if c.workspaceFocus(now) == "" {
-		return "", ""
-	}
-	st := &c.layout
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	return st.f.by, st.f.prev
-}
-
 // The brain's tool.
 
 const workspaceFocusHelp = "Put a surface on the stage of the user's workspace, as if they had opened it: in the center, large, what relates to it around; what was on stage stays next to it, smaller. Only in your answer to a message the user wrote in the workspace (« · depuis l'espace », « · bouton de l'espace »), once per turn: when they ask about a thing (where a pull request, a project, a session stands), write its surface, then put it on stage, and answer in one line. Not over a surface they have open, unless they asked about something else. Display only: it writes nothing."

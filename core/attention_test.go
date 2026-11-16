@@ -303,7 +303,6 @@ func TestParseRef(t *testing.T) {
 		{"project:portfolio", "project", "portfolio"},
 		{"pr:example/site#12", "pr", "example/site#12"},
 		{"alert:7", "alert", "7"},
-		{"surface:agenda", refSurface, "agenda"},
 		{" task:t-1 ", refTask, "t-1"},
 	} {
 		r, err := parseRef(tc.in)
@@ -312,7 +311,7 @@ func TestParseRef(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"", "mail", "mail:", "mail:INBOX/42", "event:ev-1@example.org", "note:1", "agenda:2026-11-12", "agenda:12/11/2026",
-		"thread:x", "thread:0", "card:-1", "surface:Not An Id", "task:" + strings.Repeat("x", 1001)} {
+		"thread:x", "thread:0", "card:-1", "surface:agenda", "task:" + strings.Repeat("x", 1001)} {
 		var e errBadRef
 		if _, err := parseRef(bad); !errors.As(err, &e) {
 			t.Errorf("%q parsed: %v", bad, err)

@@ -183,16 +183,6 @@ func (c *core) threadNames(id int64) []string {
 	return append(keys, names...)
 }
 
-// threadAlias is a thread's first key, "" for none.
-func (c *core) threadAlias(id int64) string {
-	for _, n := range c.threadNames(id) {
-		if isKeyName(n) {
-			return n
-		}
-	}
-	return ""
-}
-
 // errNotAnAlias refuses an entity as a thread's alias.
 func errNotAnAlias(key string) error {
 	return fmt.Errorf("%s is a person, the user, the home or Eriphe's own: a thread's alias names a matter (project:, pr:, alert:, topic:…)", key)

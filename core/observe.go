@@ -1,7 +1,6 @@
 package main
 
 import (
-	"slices"
 	"sync"
 	"time"
 )
@@ -76,27 +75,4 @@ func (o *observations) machine(node string, now time.Time) (machineObs, bool) {
 		return machineObs{}, false
 	}
 	return m, true
-}
-
-// nodes are the nodes with a fresh observation, sorted.
-func (o *observations) nodes(now time.Time) []string {
-	o.mu.Lock()
-	var out []string
-	for n := range o.machines {
-		out = append(out, n)
-	}
-	o.mu.Unlock()
-	out = slices.DeleteFunc(out, func(n string) bool { _, ok := o.machine(n, now); return !ok })
-	slices.Sort(out)
-	return out
-}
-
-// anyDND tells whether a machine of the user's is not to be disturbed now.
-func (o *observations) anyDND(now time.Time) bool {
-	for _, n := range o.nodes(now) {
-		if m, _ := o.machine(n, now); m.DND {
-			return true
-		}
-	}
-	return false
 }

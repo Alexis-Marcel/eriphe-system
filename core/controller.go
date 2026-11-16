@@ -71,7 +71,6 @@ type core struct {
 	layout      layoutState            // where the surfaces are on the workspace (workspace_layout.go)
 	front       frontTurn              // whether the brain's turn answers the user in the workspace (workspace_front.go)
 	props       proposalFeed           // the proposals that moved, for the workspace (surface_proposals.go)
-	threadsFeed threadFeed             // the threads that moved, for their surfaces (thread_steps.go)
 	threadReads sync.Map               // thread id → *threadReadAgain: its sources being read (thread_sources.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)

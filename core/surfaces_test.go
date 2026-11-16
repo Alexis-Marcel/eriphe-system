@@ -342,11 +342,12 @@ func TestSurfaceSourceGuards(t *testing.T) {
 		{"someone", "x"}, {"brain", "x"}, {"brain", "thread-1"}, {"brain", "q-decide"}, {"task:t-1", "x"}, {"skill:revue", "revue"},
 		{"lead:1", "thread-1"}, {"thread:1", "thread-2"}, {"thread:1", "x"}, {surfaceAuthorCore, "thread-1"}, {surfaceAuthorCore, "x"},
 	} {
-		if _, _, err := c.writeSurface(w.author, surfaceIn{ID: w.id, Title: "x", Components: accountsSurface(), Sources: balances}); err == nil {
+		if _, _, err := c.writeSurface(w.author, surfaceIn{ID: w.id, Title: "x", Components: accountsSurface(), Sources: balances, Weight: 50, Lifetime: surfaceLifetime{Kept: true}}); err == nil {
 			t.Errorf("%s wrote %s", w.author, w.id)
 		}
 	}
-	if _, _, err := c.writeSurface(threadAuthor(1), surfaceIn{ID: threadSurfaceID(1), Title: "x", Components: accountsSurface(), Sources: balances}); err != nil {
+	if _, _, err := c.writeSurface(threadAuthor(1), surfaceIn{ID: threadSurfaceID(1), Title: "x", Components: accountsSurface(), Sources: balances,
+		Weight: 50, Lifetime: surfaceLifetime{Kept: true}}); err != nil {
 		t.Errorf("a thread's own: %v", err)
 	}
 
@@ -548,11 +549,18 @@ func TestSurfaceStaleRead(t *testing.T) {
 func TestSurfaceLifetime(t *testing.T) {
 	c, _ := surfaceCore(t)
 	comps := json.RawMessage(`[{"id":"root","component":"Text","text":"En préparation"}]`)
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Runtime: "claude-code", State: stateRunning, Prompt: "x"})
-	until, _, _ := c.fixtureSurface("brain", surfaceIn{Title: "a", Components: comps, Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)}})
-	while, _, err := c.fixtureSurface("brain", surfaceIn{Title: "b", Components: comps, Lifetime: surfaceLifetime{While: "task:t-1"}})
+	th, err := c.openThread(threadIn{Title: "Revue", Goal: "La revue."}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
+	}
+	c.surfaceRemove(threadSurfaceID(th.ID), surfaceByLifetime) // only the fixtures counted
+	until, _, _ := c.fixtureSurface("brain", surfaceIn{Title: "a", Components: comps, Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)}})
+	while, _, err := c.fixtureSurface("brain", surfaceIn{Title: "b", Components: comps, Lifetime: surfaceLifetime{While: threadRef(th.ID)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.fixtureSurface("brain", surfaceIn{Title: "c", Components: comps, Lifetime: surfaceLifetime{While: "task:t-1"}}); err == nil {
+		t.Fatal("a lifetime while a task")
 	}
 	mine, _, _ := c.fixtureSurface("brain", surfaceIn{Title: "d", Components: comps, Lifetime: surfaceLifetime{Kept: true}})
 	if _, _, err := c.fixtureSurface("task:t-1", surfaceIn{ID: mine.ID, Title: "e", Components: comps}); err == nil {
@@ -568,7 +576,7 @@ func TestSurfaceLifetime(t *testing.T) {
 	if all, _ := c.surfaces(); len(all) != 3 {
 		t.Fatalf("surfaces %v", all)
 	}
-	c.store.updateTask("t-1", map[string]any{"state": stateStopped})
+	c.store.db.Exec(`UPDATE threads SET state = ?, ended = ? WHERE id = ?`, threadDone, time.Now().Unix(), th.ID) // ended, its own surface aside
 	tickSurfacesWait(c, time.Now().Add(2*time.Hour))
 	all, _ := c.surfaces()
 	if len(all) != 1 || all[0].ID != mine.ID {
@@ -735,6 +743,12 @@ func (c *core) fixtureSurface(author string, in surfaceIn) (surface, []a2ui.Vali
 		b := make([]byte, 6)
 		rand.Read(b)
 		in.ID = "s-" + hex.EncodeToString(b)
+	}
+	if in.Weight == 0 {
+		in.Weight = 50
+	}
+	if in.Lifetime == (surfaceLifetime{}) {
+		in.Lifetime.Until = time.Now().Add(24 * time.Hour).Truncate(time.Second)
 	}
 	return c.putSurface(author, in)
 }

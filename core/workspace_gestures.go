@@ -216,15 +216,6 @@ func (c *core) savePlacementLocked() {
 	}
 }
 
-// placementNow is the placement at now.
-func (c *core) placementNow(now time.Time) userPlacement {
-	start := c.workspaceSessionStart(now)
-	st := &c.layout
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	return c.placementLocked(start, nil)
-}
-
 // placementActive tells whether the user closed something this session:
 // the layout is made again as time passes, for the session's end.
 func (c *core) placementActive() bool {

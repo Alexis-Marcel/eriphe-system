@@ -100,6 +100,10 @@ var gestureKinds = map[string]struct{ en, fr string }{
 	gestureAbout:   {"wrote a message about", "écrit à propos de"},
 }
 
+// surfaceRefPrefix names a surface in a gesture and in what a message was
+// written about: surface:<id>.
+const surfaceRefPrefix = "surface:"
+
 var errGesture = errors.New("a gesture is opened, ignored, closed, moved, resized or about, with a surface:<id>")
 
 // noteGesture keeps a gesture on a surface (surface:<id>); opened, ignored
@@ -143,7 +147,7 @@ func (c *core) noteGesture(what, ref string, now time.Time) error {
 // gestureRef tells whether a gesture is about a surface (surface:<id>),
 // the one thing the workspace shows.
 func gestureRef(ref string) bool {
-	id, ok := strings.CutPrefix(ref, "surface:")
+	id, ok := strings.CutPrefix(ref, surfaceRefPrefix)
 	return ok && surfaceIDRe.MatchString(id)
 }
 

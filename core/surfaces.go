@@ -77,10 +77,8 @@ const (
 	surfaceReaders     = 4               // refreshes reading at once
 	surfaceRefreshCap  = 8 * time.Second // a scheduled refresh's reads, well under the tick
 	surfaceEveryDef    = 5               // minutes, when a surface has sources
-	surfaceUntilDef    = 24 * time.Hour
 	surfaceUntilMax    = 90 * 24 * time.Hour
 	surfaceOpenFresh   = 30 * time.Second // opened again sooner: no new read
-	surfaceWeightDef   = 50
 	surfaceSubBuffer   = 256
 	surfaceExtension   = "eriphe" // the key of Eriphe's metadata in createSurface
 	surfaceByLifetime  = "lifetime"
@@ -125,9 +123,9 @@ type surfaceRefresh struct {
 	Every int `json:"every,omitempty"` // minutes; 0: never on a clock
 }
 
-// surfaceLifetime is when code removes a surface: one of a date, a ref
-// that must stay pending or running (task:<id>, thread:<id>, card:<id>),
-// or as long as its author is there.
+// surfaceLifetime is when code removes a surface: one of a date, a thread
+// that must stay active (thread:<id>), or kept (the queue's, removed by
+// code when its items leave).
 type surfaceLifetime struct {
 	Until time.Time `json:"until,omitzero"`
 	While string    `json:"while,omitempty"`
@@ -143,7 +141,7 @@ type surfaceIn struct {
 	Sources    map[string]surfaceSource `json:"sources,omitempty"`
 	Refresh    surfaceRefresh           `json:"refresh,omitzero"`
 	Lifetime   surfaceLifetime          `json:"lifetime,omitzero"`
-	Weight     int                      `json:"weight,omitempty"` // 1 to 100; 50 if 0
+	Weight     int                      `json:"weight,omitempty"` // 1 to 100
 	Why        string                   `json:"why,omitempty"`
 	// About is what it is about, given; a new surface without one takes
 	// inherit (its writer's turn or task), else its author's (a thread's,
@@ -337,11 +335,8 @@ func (c *core) putSurface(author string, in surfaceIn) (surface, []a2ui.Validati
 		return surface{}, nil, fmt.Errorf("components and data of %d KiB at most each", surfaceJSONMax>>10)
 	case len(in.Sources) > surfaceSourcesMax:
 		return surface{}, nil, fmt.Errorf("%d sources at most", surfaceSourcesMax)
-	case in.Weight < 0 || in.Weight > 100:
+	case in.Weight < 1 || in.Weight > 100:
 		return surface{}, nil, errors.New("weight is 1 to 100")
-	}
-	if in.Weight == 0 {
-		in.Weight = surfaceWeightDef
 	}
 	now := time.Now()
 	life, err := c.checkLifetime(in.Lifetime, now)
@@ -374,15 +369,6 @@ func (c *core) putSurface(author string, in surfaceIn) (surface, []a2ui.Validati
 	}
 	if errs := a2ui.CheckLinks(in.ID, in.Components); len(errs) > 0 {
 		return surface{}, errs, nil
-	}
-	// A thread's surface id is its thread's (thread_surface.go).
-	if n, ok := threadOfSurface(in.ID); ok && author != threadAuthor(n) {
-		return surface{}, nil, fmt.Errorf("the surface %s is its thread's, kept by code: write another id", in.ID)
-	}
-	// The author's own surface only (the brain writes any, which stays its
-	// author's); the id of another's is taken.
-	if old, err := c.surface(in.ID); err == nil && !mayChange(author, old.Author) {
-		return surface{}, nil, fmt.Errorf("the surface %s is %s's: write another id", in.ID, old.Author)
 	}
 
 	// Its sources, read once (no lock held: a tool may be slow); those
@@ -422,7 +408,7 @@ func (c *core) putSurface(author string, in surfaceIn) (surface, []a2ui.Validati
 	c.surf.mu.Lock()
 	old, err := c.surface(in.ID)
 	switch {
-	case err == nil && !mayChange(author, old.Author):
+	case err == nil && old.Author != author: // the author's own surface only
 		c.surf.mu.Unlock()
 		return surface{}, nil, fmt.Errorf("the surface %s is %s's: write another id", in.ID, old.Author)
 	case errors.Is(err, errNoSurface):
@@ -476,10 +462,6 @@ func codeSurfaceOf(author, id string) error {
 	return fmt.Errorf("%q writes no surface: only code does, a thread's or the queue's", author)
 }
 
-// mayChange tells whether an author may write or remove a surface of
-// owner's: its own only.
-func mayChange(author, owner string) bool { return author == owner }
-
 // surfaceRemove removes a surface: by its author, or code when its
 // lifetime ended (surfaceByLifetime).
 func (c *core) surfaceRemove(id, by string) error {
@@ -489,7 +471,7 @@ func (c *core) surfaceRemove(id, by string) error {
 		c.surf.mu.Unlock()
 		return err
 	}
-	if !mayChange(by, s.Author) && by != surfaceByLifetime {
+	if by != s.Author && by != surfaceByLifetime {
 		c.surf.mu.Unlock()
 		return fmt.Errorf("the surface %s is %s's", id, s.Author)
 	}
@@ -513,7 +495,7 @@ func orEmpty(m map[string]surfaceSource) map[string]surfaceSource {
 	return m
 }
 
-// checkLifetime checks one lifetime, and gives the default one: a day.
+// checkLifetime checks one lifetime: code always gives one.
 func (c *core) checkLifetime(l surfaceLifetime, now time.Time) (surfaceLifetime, error) {
 	l.While = strings.TrimSpace(l.While)
 	n := 0
@@ -523,20 +505,12 @@ func (c *core) checkLifetime(l surfaceLifetime, now time.Time) (surfaceLifetime,
 		}
 	}
 	switch {
-	case n == 0:
-		return surfaceLifetime{Until: now.Add(surfaceUntilDef).Truncate(time.Second)}, nil
-	case n > 1:
-		return l, errors.New("one lifetime: until a date, while a ref, or kept")
+	case n != 1:
+		return l, errors.New("one lifetime: until a date, while a thread, or kept")
 	case !l.Until.IsZero() && (!l.Until.After(now) || l.Until.Sub(now) > surfaceUntilMax):
 		return l, errors.New("until is a date to come, within 90 days")
-	case l.While != "":
-		kind, _, _ := strings.Cut(l.While, ":")
-		if kind != "task" && kind != "thread" && kind != "card" {
-			return l, errors.New("while is a ref: task:<id>, thread:<id> or card:<id>")
-		}
-		if !c.refLive(l.While) {
-			return l, fmt.Errorf("%s is not pending or running", l.While)
-		}
+	case l.While != "" && !c.whileLive(l.While):
+		return l, fmt.Errorf("while is an active thread, thread:<id>: %s is not", l.While)
 	}
 	return l, nil
 }
@@ -1030,39 +1004,23 @@ func (c *core) surfaceEnded(s surface, now time.Time) bool {
 	case !l.Until.IsZero():
 		return !now.Before(l.Until)
 	case l.While != "":
-		return !c.refLive(l.While)
+		return !c.whileLive(l.While)
 	}
 	return false
 }
 
-// refLive tells whether a ref is still pending or running: a task not over
-// (its turn ended counts as over), a thread not ended, a card waiting.
-func (c *core) refLive(ref string) bool {
-	kind, id, _ := strings.Cut(ref, ":")
-	switch kind {
-	case "task":
-		t, err := c.store.task(id)
-		return err == nil && !finished(t.State) && t.State != stateIdle
-	case "thread", "lead":
-		n, err := strconv.ParseInt(id, 10, 64)
-		if err != nil {
-			return false
-		}
-		s, err := c.thread(n)
-		return err == nil && s.Ended.IsZero()
-	case "card":
-		n, err := strconv.ParseInt(id, 10, 64)
-		if err != nil {
-			return false
-		}
-		x, err := c.card(n)
-		if err != nil {
-			return false
-		}
-		x, _ = c.liveCard(x)
-		return x.State == cardPending
+// whileLive tells whether a lifetime's thread (thread:<id>) has not ended.
+func (c *core) whileLive(ref string) bool {
+	id, ok := strings.CutPrefix(ref, "thread:")
+	if !ok {
+		return false
 	}
-	return false
+	n, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return false
+	}
+	s, err := c.thread(n)
+	return err == nil && s.Ended.IsZero()
 }
 
 // surfaceOpened reads a surface's sources again because the user opened
