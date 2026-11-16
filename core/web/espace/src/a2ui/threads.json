@@ -14,6 +14,8 @@
        "thread_controls",
        "thread_yours",
        "thread_card_2",
+       "thread_children_title",
+       "thread_children",
        "thread_where",
        "thread_summary",
        "thread_summary_at",
@@ -73,6 +75,64 @@
       "proposalId": "card:20"
      },
      {
+      "id": "thread_child",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_child_item",
+       "thread_child_open"
+      ]
+     },
+     {
+      "id": "thread_child_item",
+      "component": "Item",
+      "detail": {
+       "@path": "status"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "note": {
+       "@path": "line"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "thread_child_open",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "surface": {
+          "@path": "surface"
+         }
+        },
+        "name": "open"
+       }
+      },
+      "label": "Open",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_children_title",
+      "component": "Text",
+      "text": "Sub-threads",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_children",
+      "component": "List",
+      "children": {
+       "componentId": "thread_child",
+       "path": "/thread/children"
+      }
+     },
+     {
       "id": "thread_where",
       "component": "Text",
       "text": "Where it stands",
@@ -88,7 +148,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Summary updated: 11:19",
+      "text": "Summary updated: 12:40",
       "variant": "caption"
      },
      {
@@ -130,15 +190,26 @@
     ],
     "dataModel": {
      "thread": {
+      "children": [
+       {
+        "thread": 3,
+        "surface": "thread-3",
+        "title": "The club's photos",
+        "status": "Up to date",
+        "line": "Open",
+        "level": "normal",
+        "mark": ""
+       }
+      ],
       "done": [
        {
-        "date": "2026-11-16T09:19:11+01:00",
+        "date": "2026-11-16T10:40:51+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:59:11+01:00",
+        "date": "2026-11-16T11:20:51+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
@@ -153,13 +224,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T11:39:11+01:00",
+        "date": "2026-11-16T13:00:51+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T11:29:11+01:00",
+        "date": "2026-11-16T12:50:51+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "current"
@@ -394,6 +465,7 @@
       "total": 4500
      },
      "thread": {
+      "children": [],
       "progress": {
        "label": "Yours"
       },
@@ -628,27 +700,28 @@
     ],
     "dataModel": {
      "thread": {
+      "children": [],
       "done": [
        {
-        "date": "2026-11-16T09:19:11+01:00",
+        "date": "2026-11-16T10:40:51+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:59:11+01:00",
+        "date": "2026-11-16T11:20:51+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
        },
        {
-        "date": "2026-11-16T11:39:11+01:00",
+        "date": "2026-11-16T13:00:51+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T11:29:11+01:00",
+        "date": "2026-11-16T12:50:51+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "done"
@@ -662,7 +735,7 @@
       "donelabel": "5 steps done",
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 10:49"
+       "title": "Done ✓ · 12:10"
       },
       "progress": {
        "current": 0,
@@ -882,6 +955,7 @@
       ]
      },
      "thread": {
+      "children": [],
       "sources": [
        {
         "cards": [],
@@ -992,6 +1066,8 @@
        "thread_controls",
        "thread_yours",
        "thread_card_2",
+       "thread_children_title",
+       "thread_children",
        "thread_where",
        "thread_summary",
        "thread_summary_at",
@@ -1051,6 +1127,64 @@
       "proposalId": "card:20"
      },
      {
+      "id": "thread_child",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_child_item",
+       "thread_child_open"
+      ]
+     },
+     {
+      "id": "thread_child_item",
+      "component": "Item",
+      "detail": {
+       "@path": "status"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "note": {
+       "@path": "line"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "thread_child_open",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "surface": {
+          "@path": "surface"
+         }
+        },
+        "name": "open"
+       }
+      },
+      "label": "Ouvrir",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_children_title",
+      "component": "Text",
+      "text": "Sous-fils",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_children",
+      "component": "List",
+      "children": {
+       "componentId": "thread_child",
+       "path": "/thread/children"
+      }
+     },
+     {
       "id": "thread_where",
       "component": "Text",
       "text": "Où on en est",
@@ -1066,7 +1200,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Résumé mis à jour : 11 h 19",
+      "text": "Résumé mis à jour : 12 h 40",
       "variant": "caption"
      },
      {
@@ -1108,15 +1242,26 @@
     ],
     "dataModel": {
      "thread": {
+      "children": [
+       {
+        "thread": 3,
+        "surface": "thread-3",
+        "title": "Les photos du club",
+        "status": "À jour",
+        "line": "Ouvert",
+        "level": "normal",
+        "mark": ""
+       }
+      ],
       "done": [
        {
-        "date": "2026-11-16T09:19:11+01:00",
+        "date": "2026-11-16T10:40:51+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:59:11+01:00",
+        "date": "2026-11-16T11:20:51+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
@@ -1131,13 +1276,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T11:39:11+01:00",
+        "date": "2026-11-16T13:00:51+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T11:29:11+01:00",
+        "date": "2026-11-16T12:50:51+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "current"
@@ -1372,6 +1517,7 @@
       "total": 4500
      },
      "thread": {
+      "children": [],
       "progress": {
        "label": "À toi"
       },
@@ -1606,27 +1752,28 @@
     ],
     "dataModel": {
      "thread": {
+      "children": [],
       "done": [
        {
-        "date": "2026-11-16T09:19:11+01:00",
+        "date": "2026-11-16T10:40:51+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:59:11+01:00",
+        "date": "2026-11-16T11:20:51+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
        },
        {
-        "date": "2026-11-16T11:39:11+01:00",
+        "date": "2026-11-16T13:00:51+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T11:29:11+01:00",
+        "date": "2026-11-16T12:50:51+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "done"
@@ -1640,7 +1787,7 @@
       "donelabel": "5 étapes faites",
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 10 h 49"
+       "title": "Fait ✓ · 12 h 10"
       },
       "progress": {
        "current": 0,
@@ -1860,6 +2007,7 @@
       ]
      },
      "thread": {
+      "children": [],
       "sources": [
        {
         "cards": [],

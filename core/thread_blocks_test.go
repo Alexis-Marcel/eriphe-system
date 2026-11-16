@@ -243,7 +243,7 @@ func TestThreadSurfacesFixture(t *testing.T) {
 		for _, e := range a2ui.Validate(langs[lang]) {
 			t.Errorf("%s: %+v", lang, e)
 		}
-		for _, want := range []string{`"Progress"`, `"Item"`, `"Fold"`, `"compact"`, `"thread_tidy"`} {
+		for _, want := range []string{`"Progress"`, `"Item"`, `"Fold"`, `"compact"`, `"thread_tidy"`, `"thread_children"`} {
 			if !strings.Contains(string(langs[lang]), want) {
 				t.Errorf("%s: no %s", lang, want)
 			}
@@ -341,6 +341,15 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 		out = append(out, a2ui.Message{Version: a2ui.Version, CreateSurface: &a2ui.CreateSurface{SurfaceID: threadSurfaceID(id), CatalogID: a2ui.CatalogID,
 			Components: comps, DataModel: in.Data, Metadata: meta}})
 	}
+	// The work thread's child, a step grown into a matter of its own: its
+	// row among the work thread's children (thread_children.go).
+	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, state, created, started, parent) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		pick("Les photos du club", "The club's photos"), "Les photos sont choisies.", modeLight, threadOpen, now.Unix(), now.Unix(), 101)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kid, _ := res.LastInsertId()
+	c.keepThreadSurface(kid)
 	work := th
 	work.Title, work.Goal = pick("Le site du club", "The club's site"), pick("Le site du club est en ligne, avec ses photos.", "The club's site is online, with its photos.")
 	work.Summary, work.summarized = pick("La page est prête ; il reste les photos et ton accord pour publier.", "The page is ready; the photos and your yes to publish are left."), now.Add(-30*time.Minute).Unix()

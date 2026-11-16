@@ -86,6 +86,9 @@ type threadView struct {
 	Notes []itemNote   `json:"notes,omitempty"` // on its sources' items (thread_items.go)
 	Names []string     `json:"names,omitempty"` // its keys and names (names.go)
 	Card  string       `json:"card,omitempty"`  // what is known of it (thread_card.go), read_thread's
+	// Its parent's title, and its children (thread_children.go).
+	ParentTitle string      `json:"parent_title,omitempty"`
+	Children    []threadKin `json:"children,omitempty"`
 }
 
 func (c *core) threadView(id int64, lines int) (threadView, error) {
@@ -97,7 +100,12 @@ func (c *core) threadView(id int64, lines int) (threadView, error) {
 	if err != nil {
 		return threadView{}, err
 	}
-	v := threadView{Thread: s, Steps: steps, Log: c.threadLog(id, lines), Notes: c.itemNotes(id), Names: c.threadNames(id)}
+	v := threadView{Thread: s, Steps: steps, Log: c.threadLog(id, lines), Notes: c.itemNotes(id), Names: c.threadNames(id), Children: kinOf(c.children(id))}
+	if s.Parent != 0 {
+		if p, err := c.thread(s.Parent); err == nil {
+			v.ParentTitle = p.Title
+		}
+	}
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_asks WHERE thread = ? AND state = ?`, id, askPending).Scan(&v.Asks)
 	return v, nil
 }
@@ -159,6 +167,11 @@ func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread,
 	if alias == "" && !led {
 		return s, "", errors.New("alias is needed: the key of the matter, kind:slug, to find its thread again (pr:owner/repo#12, project:site, topic:brand-name)")
 	}
+	if in.Parent != 0 {
+		if _, err := c.parentFor(in.Parent, 0); err != nil {
+			return s, "", err
+		}
+	}
 	var old Thread
 	found, taken := false, false
 	if alias != "" {
@@ -169,7 +182,8 @@ func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread,
 		}
 	}
 	if !found && !in.exact {
-		near := c.nearThreads(alias, in.Title)
+		// Its parent is not the same matter as its child.
+		near := slices.DeleteFunc(c.nearThreads(alias, in.Title), func(x Thread) bool { return in.Parent != 0 && x.ID == in.Parent })
 		why := oneLine(in.NewBy)
 		switch {
 		case in.Take > 0:
@@ -196,7 +210,17 @@ func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread,
 		s, err = c.openThread(in, taint, by)
 		return s, "", err
 	}
+	moved := ""
+	if in.Parent != 0 && old.Parent != in.Parent && !led {
+		// Found again under the parent its opener names: it moves there.
+		if err := c.moveUnder(old, in.Parent, by); err != nil {
+			return s, "", err
+		}
+		old.Parent = in.Parent
+		moved = fmt.Sprintf(" It is now a child of thread %d.", in.Parent)
+	}
 	s, again, err = c.matterThread(old, in, led, by)
+	again += moved
 	if err != nil || !taken || alias == "" {
 		return s, again, err
 	}
@@ -239,7 +263,7 @@ func (c *core) matterThread(old Thread, in threadIn, led bool, by string) (s Thr
 }
 
 func registerThreadTools(s *mcp.Server, c *core) {
-	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). A matter has one thread: give its alias, the matter's key (required for a light one); an alias that has a thread already gives that thread back, reopened if it ended, instead of a second one. When threads near the matter exist (ended ones too), it is refused and lists them: open again with take (the one that is it: given back, reopened if it ended, and given the alias) or new_because (why it is another matter). Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, call, user, choice, approval, check, deadline: as add_step's) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" For one task alone, use run_task.",
+	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). A matter has one thread: give its alias, the matter's key (required for a light one); an alias that has a thread already gives that thread back, reopened if it ended, instead of a second one. When threads near the matter exist (ended ones too), it is refused and lists them: open again with take (the one that is it: given back, reopened if it ended, and given the alias) or new_because (why it is another matter). Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, call, user, choice, approval, check, deadline: as add_step's) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" With parent, a child thread: a step of that thread that became a matter of its own (find_thread or read_thread on the parent first: its children are listed, take the one that exists). For one task alone, use run_task.",
 		func(ctx context.Context, in threadIn) (map[string]any, error) {
 			for _, st := range in.Steps {
 				if st.Kind == "" || st.runsTask() {
@@ -262,13 +286,17 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return map[string]any{"thread": s, "note": "Only proposed: " + threadNote + " Never say it started before the user approves."}, nil
 		})
 
-	tool(s, "find_thread", "Find threads: by words of their title, goal, names or summary, or by an alias (kind:slug) or a name; without either, the open and waiting ones. Ended ones are listed too (done, dropped), to reopen one when its matter comes back.",
+	tool(s, "find_thread", "Find threads: by words of their title, goal, names or summary, or by an alias (kind:slug) or a name; without either, the open and waiting ones. Ended ones are listed too (done, dropped), to reopen one when its matter comes back. Each says its parent, and its children (id, title, state).",
 		func(ctx context.Context, in findThreadIn) (map[string]any, error) {
 			ss, err := c.findThreads(in.Alias, in.Text, in.All, 30)
-			return map[string]any{"threads": ss}, err
+			found := make([]threadFound, 0, len(ss))
+			for _, s := range ss {
+				found = append(found, threadFound{Thread: s, Children: kinOf(c.children(s.ID))})
+			}
+			return map[string]any{"threads": found}, err
 		})
 
-	tool(s, "read_thread", "A thread: its mode, names, state (open, waiting, done, dropped) and summary, and its card (what eriphe-core knows of it: last decisions, facts and people, open intentions, cards waiting for the user, preferences; what may carry someone else's words is named, not quoted); led, its phase, budget and time spent, each step (status: waiting, running, reported: its agent says it is done, verified: its checks passed, accepted, rejected, blocked, dropped; its task, evidence and output) and its recent log.",
+	tool(s, "read_thread", "A thread: its mode, names, state (open, waiting, done, dropped) and summary, its parent and children, and its card (what eriphe-core knows of it: last decisions, facts and people, open intentions, cards waiting for the user, preferences; what may carry someone else's words is named, not quoted); led, its phase, budget and time spent, each step (status: waiting, running, reported: its agent says it is done, verified: its checks passed, accepted, rejected, blocked, dropped; its task, evidence and output) and its recent log.",
 		func(ctx context.Context, in threadIDIn) (threadView, error) {
 			v, err := c.threadView(in.Thread, 20)
 			if err == nil {
@@ -365,7 +393,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return map[string]any{"note": note}, err
 		})
 
-	tool(s, "close_thread", "Close a thread once its real goal is reached, never before: the summary says how. A light one closes at once, done. A led one you lead, once every step is accepted, rejected, dropped or blocked; with a done_when, a fresh agent checks the objective first, and you are told of its verdict. To give up instead, stop_thread.",
+	tool(s, "close_thread", "Close a thread once its real goal is reached, never before: the summary says how. A light one closes at once, done. A led one you lead, once every step is accepted, rejected, dropped or blocked; with a done_when, a fresh agent checks the objective first, and you are told of its verdict. Refused while it has active child threads: close or stop them first. To give up instead, stop_thread.",
 		func(ctx context.Context, in closeIn) (map[string]any, error) {
 			s, err := c.thread(in.Thread)
 			if err != nil {
@@ -399,7 +427,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return map[string]any{"note": "Passed to the lead."}, nil
 		})
 
-	tool(s, "stop_thread", "Stop a thread the user wants stopped, or that will not reach its goal: it is dropped; a led one's running tasks stop and its cards are withdrawn.",
+	tool(s, "stop_thread", "Stop a thread the user wants stopped, or that will not reach its goal: it is dropped; a led one's running tasks stop and its cards are withdrawn. Its active child threads stop with it.",
 		func(ctx context.Context, in threadIDIn) (map[string]any, error) {
 			if err := c.stopThread(ctx, in.Thread, "brain"); err != nil {
 				return nil, err

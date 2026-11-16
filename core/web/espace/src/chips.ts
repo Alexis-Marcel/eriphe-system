@@ -41,6 +41,20 @@ export function surfaceNew(s: unknown): number {
   return typeof n === "number" && n > 0 ? Math.floor(n) : 0;
 }
 
+// surfaceInside is the surface a surface opens inside, when eriphe-core
+// says one (a child thread's: its parent's); undefined for any other.
+export function surfaceInside(s: unknown): string | undefined {
+  const v = (s as { metadata?: { extensions?: { eriphe?: { inside?: unknown } } } } | undefined)?.metadata?.extensions?.eriphe?.inside;
+  return typeof v === "string" && v ? v : undefined;
+}
+
+// laidOut are the ids of the surfaces laid out on their own: all but those
+// that open inside another one there, never a tile nor a chip of their own.
+export function laidOut(pool: { id: string }[]): Set<string> {
+  const ids = new Set(pool.map((s) => s.id));
+  return new Set(pool.filter((s) => !ids.has(surfaceInside(s) ?? "")).map((s) => s.id));
+}
+
 // surfaceUpdated is when eriphe-core last wrote a surface again as a whole
 // (its metadata's updated): a new item in a group of the queue, a thread's
 // line that changed. "" when it has none.

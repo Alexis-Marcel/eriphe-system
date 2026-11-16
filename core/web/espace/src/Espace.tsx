@@ -5,6 +5,7 @@ import { Icon } from "./a2ui/icons";
 import { galleryFixtures, gallerySurfaces, sampleEarlier, sampleProposals, workspaceFixtures } from "./a2ui/fixtures";
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
+import { laidOut, surfaceTitle } from "./chips";
 import * as data from "./data";
 import { landed, lastSeq, Notices, Present, type Sent } from "./Exchange";
 import { CONVO } from "./Fallback";
@@ -61,13 +62,19 @@ export { focusedIn, unfocused };
 // layout core sends (shownLayout): a layout already on its way does not
 // undo the click.
 export const INTENT_FOR = 6_000;
-export type Intent = { open: string; at: number } | { back: Layout | null; at: number };
+// within: the surface the open came from, when it names another (a child
+// thread opened from its parent's row): what is not laid out opens inside it.
+export type Intent = { open: string; within?: string; at: number } | { back: Layout | null; at: number };
+
+// opened tells whether a layout has a surface open: on stage, or inside the
+// one on stage.
+const opened = (l: Layout, id: string) => l.inside === id || (l.focus === id && !l.inside);
 
 // shownLayout is core's layout with what the user asked and core has not
 // done yet; null once core agrees (or the wait is over): the intent ends.
 export function shownLayout(core: Layout, intent: Intent | null, now: number): Layout | null {
   if (!intent || now - intent.at > INTENT_FOR) return null;
-  if ("open" in intent) return core.focus === intent.open ? null : focusedIn(core, intent.open);
+  if ("open" in intent) return opened(core, intent.open) ? null : focusedIn(core, intent.open, intent.within);
   return core.focus ? unfocused(core, intent.back) : null;
 }
 
@@ -131,7 +138,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
       setLayout(sample.layout);
       setExchange(sample.exchange);
     }
-    const off = surfaces.onAction(() => say(t("espace.sent.sample")));
+    const off = surfaces.onAction((m) => data.opensSurface(m) || say(t("espace.sent.sample")));
     return () => {
       off();
       const ids = gallery ? gallerySurfaces(lang) : sample.ids;
@@ -155,23 +162,38 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const shown = useMemo(() => (placed && !narrow && !placed.focus ? fitted(placed, needs) : placed), [placed, needs, narrow]);
   const onSurfaces = !gallery && !!shown && (pool.length > 0 || shown.items.length + shown.chips.length > 0);
   const sfocus = onSurfaces ? shown?.focus ?? null : null;
-  const sfocusTitle = sfocus ? shown?.items.find((i) => i.id === sfocus)?.title ?? sfocus : null;
+  // What is open: the surface on stage, or the one open inside it (a child thread's).
+  const sopen = sfocus ? shown?.inside ?? sfocus : null;
+  const sfocusTitle = sopen ? (sopen === sfocus ? shown?.items.find((i) => i.id === sfocus)?.title : surfaceTitle(pool.find((p) => p.id === sopen))) ?? sopen : null;
   // On a phone the screen is the open surface's once it is drawn alone (stacked), not before:
   // a chip opened waits in the column until core places it.
-  const full = narrow && onSurfaces && stacked(shown!, new Set(pool.map((s) => s.id))).full;
+  const full = narrow && onSurfaces && stacked(shown!, laidOut(pool)).full;
   const sbefore = useRef<Layout | null>(null); // the layout before the focus
-  const openSurface = (id: string) => {
+  const openSurface = (id: string, within?: string) => {
     sopened.current.add(id);
     sclosed.current.delete(id);
     if (!placed?.focus) sbefore.current = placed;
-    if (!boot.live) return setLayout((l) => l && focusedIn(l, id));
-    const mine: Intent = { open: id, at: Date.now() };
+    if (!boot.live) return setLayout((l) => l && focusedIn(l, id, within));
+    const mine: Intent = { open: id, within, at: Date.now() };
     setIntent(mine);
     data.place("open", id).then(
       (ok) => ok || failed(mine),
       () => failed(mine),
     );
   };
+  // An open placed by code that names another surface (a thread's child, a
+  // child's parent) opens it, as a tile does: from within the surface it
+  // came from.
+  const openRef = useRef(openSurface);
+  openRef.current = openSurface;
+  useEffect(
+    () =>
+      surfaces.onAction((m) => {
+        const to = data.opensSurface(m);
+        if (to) openRef.current(to, m.action.surfaceId);
+      }),
+    [surfaces],
+  );
   // A link to a surface (/espace?open=thread-<id>: a card's thread) opens it
   // once it is on the workspace, then leaves the address.
   const [deep, setDeep] = useState(() => {
@@ -215,13 +237,13 @@ export function Espace({ boot }: { boot: data.Boot }) {
     sfocusWas.current = layout.focus;
   }, [layout, live, onSurfaces]);
   const backSurface = () => {
-    if (!sfocus) return;
+    if (!sopen) return;
     const before = sbefore.current;
     sbefore.current = null;
     if (!boot.live) return setLayout((l) => l && unfocused(l, before));
     const mine: Intent = { back: before, at: Date.now() };
     setIntent(mine);
-    data.place("back", sfocus).then(
+    data.place("back", sopen).then(
       (ok) => ok || failed(mine),
       () => failed(mine),
     );
@@ -236,7 +258,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
     if (!live) return say(t("espace.sent.sample"));
     const mine: Sent = { text: msg, after: lastSeq(exchange) };
     setSent(mine);
-    if (!(await data.send(msg, sfocus ? "surface:" + sfocus : null).catch(() => false))) {
+    if (!(await data.send(msg, sopen ? "surface:" + sopen : null).catch(() => false))) {
       setSent((s) => (s === mine ? null : s));
       say(t("espace.error"));
     }

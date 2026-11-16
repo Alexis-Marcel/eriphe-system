@@ -4,7 +4,9 @@
 // chip, a surface folded in the strip above it. pinned: the user placed it
 // (or Eriphe, at their request); related: it relates to the surface open (focus);
 // closed: the user closed it for the session; urgent: code places it before
-// a surface the user opens.
+// a surface the user opens. A surface that opens inside another (a child
+// thread's, in its parent's) is never a tile nor a chip: opened, the other
+// is on stage (focus) with it inside.
 export type TileSize = "s" | "m" | "l" | "xl";
 export type Tile = { id: string; title: string; size: TileSize; col: number; row: number; w: number; h: number; why?: string; pinned?: boolean; related?: boolean; urgent?: boolean };
 export type FoldedChip = { id: string; title: string; why?: string; closed?: boolean };
@@ -13,6 +15,7 @@ export type Layout = {
   focus?: string;
   focusBy?: string; // "brain": Eriphe put it on stage, answering the user (workspace_front.go)
   previous?: string; // what was on stage before it: a tile reduced next to it
+  inside?: string; // the surface open inside the one on stage: a child thread's, in its parent's
   items: Tile[];
   chips: FoldedChip[];
 };

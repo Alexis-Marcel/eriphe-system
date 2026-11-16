@@ -438,6 +438,9 @@ func (c *core) workspaceBlock(now time.Time) string {
 		case t.ID == l.Previous:
 			line += " · au centre juste avant"
 		}
+		if t.ID == l.Focus && l.Inside != "" {
+			line += ", " + name(l.Inside) + " ouverte dedans"
+		}
 		if t.Pinned {
 			line += " · placée par lui"
 		}
@@ -503,6 +506,9 @@ func (c *core) screenSeen(out map[string]any) {
 	out["screen"] = screen
 	if l.Focus != "" {
 		out["open"] = l.Focus
+	}
+	if l.Inside != "" {
+		out["open_inside"] = l.Inside
 	}
 	if len(folded) > 0 {
 		out["folded"] = folded

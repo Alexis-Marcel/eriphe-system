@@ -20,7 +20,11 @@ import (
 //   - local: open, back, expand, tab. The page's own gestures; core records
 //     them ("open", the user opened a tile or a chip, also places the
 //     surface first and reads its sources again; "back" gives the layout
-//     back).
+//     back). An author's carries no context. Code alone places an open
+//     that names another surface, {"surface": "<id>"}, on a thread's own
+//     surface: its child's row, a child's crumb back to its parent. The
+//     page opens that surface as it opens a tile; nothing reaches the
+//     brain.
 //   - stepDone: the user did a step of a thread that is theirs ("C'est
 //     fait"), {"thread": <id>, "step": "<key>"}. Only code places it, on
 //     the thread's own surface: an author never writes one.
