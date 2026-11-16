@@ -445,7 +445,9 @@ func (c *core) openSkillThread(sk triggeredSkill, alias, monitor string) (Thread
 // its thread now, so it shows from the start, its monitor's list read by
 // code; no model runs. only names one skill ("" for all). reopen, when the
 // user approves or turns a skill on, reopens its thread if it ended; else
-// (at start) only a skill whose alias has no thread gets one.
+// (at start) an ended one stays ended, an active one gets its monitor's
+// source should it lack it (refused, or the monitor approved after the
+// skill), and an alias with no thread gets one.
 func (c *core) openSkillThreads(only string, reopen bool) {
 	for _, sk := range c.triggeredSkills() {
 		if (only != "" && sk.Name != only) || !containsStr(sk.Trigger.Tools, threadsServer) {
@@ -457,8 +459,10 @@ func (c *core) openSkillThreads(only string, reopen bool) {
 		}
 		if !reopen {
 			if key, err := aliasKey(alias); err == nil {
-				if _, ok := c.aliasThread(key); ok {
-					continue
+				if id, ok := c.aliasThread(key); ok {
+					if th, err := c.thread(id); err != nil || !th.active() {
+						continue // ended: back at its next run, or its approval
+					}
 				}
 			}
 		}
