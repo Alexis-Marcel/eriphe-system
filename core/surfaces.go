@@ -165,7 +165,7 @@ type surfaceIn struct {
 	// thread's, the queue's) also says its state (tileStateOf) and how
 	// many things changed since the user last opened it; a standing
 	// thread's, that it folds into a chip while it has nothing for the
-	// user (foldsQuiet).
+	// user (foldsQuiet); a child thread's, the surface it opens inside.
 	composed  bool
 	codeTaint []string
 	answers   bool
@@ -173,6 +173,7 @@ type surfaceIn struct {
 	state     string
 	fresh     int
 	folds     bool
+	inside    string
 }
 
 // surface is one stored surface.
@@ -211,9 +212,10 @@ type surfaceLook struct {
 	CodeTaint []string `json:"code_taint,omitempty"`
 	Answers   bool     `json:"answers,omitempty"`
 	Summary   string   `json:"summary,omitempty"`
-	State     string   `json:"state,omitempty"` // yours, urgent, new, running, quiet, done (workspace_layout.go)
-	New       int      `json:"new,omitempty"`   // what changed since the user last opened it
-	Folds     bool     `json:"folds,omitempty"` // a chip while it has nothing for the user (foldsQuiet): a standing thread's
+	State     string   `json:"state,omitempty"`  // yours, urgent, new, running, quiet, done (workspace_layout.go)
+	New       int      `json:"new,omitempty"`    // what changed since the user last opened it
+	Folds     bool     `json:"folds,omitempty"`  // a chip while it has nothing for the user (foldsQuiet): a standing thread's
+	Inside    string   `json:"inside,omitempty"` // the surface it opens inside, never a tile of its own: a child thread's, its parent's (thread_children.go)
 }
 
 // sourceState is a source's last read: when, and why it failed or waits.
@@ -387,7 +389,7 @@ func (c *core) putSurface(author string, in surfaceIn) (surface, []a2ui.Validati
 	}
 	look := surfaceLook{AuthorTaint: slices.Compact(slices.Sorted(slices.Values(in.Tainted))), Read: now.Unix(),
 		CodeTaint: slices.Compact(slices.Sorted(slices.Values(in.codeTaint))), Answers: in.answers, Summary: in.summary,
-		State: in.state, New: in.fresh, Folds: in.folds}
+		State: in.state, New: in.fresh, Folds: in.folds, Inside: in.inside}
 	noteReads(&look, reads, now)
 	rawData, _ := json.Marshal(data)
 	sources, _ := json.Marshal(orEmpty(in.Sources))
@@ -970,6 +972,9 @@ func (c *core) tickSurfaces(ctx context.Context, now time.Time) {
 	for _, s := range all {
 		if c.surfaceEnded(s, now) {
 			c.surfaceRemove(s.ID, surfaceByLifetime)
+			if th, ok := threadOfAuthor(s.Author); ok {
+				c.keepThreadKin(th, false) // its parent's row, its ended children (thread_children.go)
+			}
 			continue
 		}
 		if s.Refresh.Every > 0 && len(s.Sources) > 0 && !s.NextAt.After(now) {
@@ -1270,6 +1275,7 @@ type surfaceMeta struct {
 	Summary string    `json:"summary,omitempty"` // one line, for a small tile or a chip
 	State   string    `json:"state"`             // yours, urgent, new, running, quiet, done: its colour and badge (tileStateOf)
 	New     int       `json:"new,omitempty"`     // what changed since the user last opened it: a badge
+	Inside  string    `json:"inside,omitempty"`  // the surface it opens inside, never a tile nor a chip of its own: a child thread's, its parent's
 	Updated time.Time `json:"updated"`
 }
 
@@ -1278,7 +1284,7 @@ func (c *core) createMessage(s surface) a2ui.Message {
 	view := c.surfaceView(s)
 	meta, _ := json.Marshal(map[string]any{"extensions": map[string]any{surfaceExtension: surfaceMeta{Title: s.Title,
 		Author: s.Author, Weight: s.Weight, Why: s.Why, Tainted: s.Tainted != "", Answers: s.Look.Answers, Summary: s.Look.Summary,
-		State: tileStateOf(s), New: s.Look.New, Updated: s.Updated.UTC()}}})
+		State: tileStateOf(s), New: s.Look.New, Inside: s.Look.Inside, Updated: s.Updated.UTC()}}})
 	data, _ := json.Marshal(view.data)
 	return a2ui.Message{Version: a2ui.Version, CreateSurface: &a2ui.CreateSurface{SurfaceID: s.ID, CatalogID: a2ui.Eriphe().ID(),
 		Components: view.components, DataModel: data, Metadata: meta}}
@@ -1298,7 +1304,7 @@ func (c *core) rewriteMessages(old, s surface) []a2ui.Message {
 	}
 	gone := slices.ContainsFunc(ids(oldView.components), func(id string) bool { return !slices.Contains(ids(view.components), id) })
 	if gone || old.Title != s.Title || old.Weight != s.Weight || old.Why != s.Why || (old.Tainted == "") != (s.Tainted == "") ||
-		old.Look.Answers != s.Look.Answers || old.Look.Summary != s.Look.Summary || tileStateOf(old) != tileStateOf(s) || old.Look.New != s.Look.New {
+		old.Look.Answers != s.Look.Answers || old.Look.Summary != s.Look.Summary || tileStateOf(old) != tileStateOf(s) || old.Look.New != s.Look.New || old.Look.Inside != s.Look.Inside {
 		return []a2ui.Message{{Version: a2ui.Version, DeleteSurface: &a2ui.DeleteSurface{SurfaceID: s.ID}}, c.createMessage(s)}
 	}
 	data, _ := json.Marshal(view.data)

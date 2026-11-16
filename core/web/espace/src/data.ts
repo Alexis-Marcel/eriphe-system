@@ -22,7 +22,9 @@ import type { Layout } from "./types";
 //   action is ask (a Button's request to Eriphe), answer (a Proposal's yes
 //   or no) or local (open, back, expand, tab), checked by eriphe-core
 //   (surface_actions.go); the page's own "open" (a tile or a chip) and
-//   "back" place a surface first on the layout, and give the layout back;
+//   "back" place a surface first on the layout, and give the layout back.
+//   An open that names another surface (opensSurface: a thread's child,
+//   a child's parent) is not sent: the page opens that surface;
 // - POST /messages: what the user writes, with the surface open
 //   (about, surface:<id>), so Eriphe knows what « ça » is;
 // - POST /api/espace/gesture: what left the grid unopened, what the user
@@ -252,7 +254,7 @@ export function stream(b: Boot, adapter: Adapter, onLayout: (l: Layout) => void 
     seq = ev.seq;
     adapter.applyMessages(ev.messages ?? []);
   });
-  const offAction = adapter.onAction((m) => void action(m).catch(() => false));
+  const offAction = adapter.onAction((m) => void (opensSurface(m) || action(m).catch(() => false)));
   const offError = adapter.onError((m) => void renderError(m).catch(() => false));
   return () => {
     off();
@@ -277,6 +279,14 @@ async function postJSON(path: string, body: unknown): Promise<boolean> {
 // action sends what the user did on a surface (an A2UI action).
 export function action(m: ActionMessage): Promise<boolean> {
   return postJSON("/api/espace/action", m);
+}
+
+// opensSurface is the surface an open action names, when code placed one
+// that does (a thread's row of a child, a child's crumb to its parent): the
+// page opens it as it opens a tile. null for any other action.
+export function opensSurface(m: ActionMessage): string | null {
+  const to = m.action.context?.surface;
+  return m.action.name === "open" && typeof to === "string" && /^[a-z0-9-]{1,64}$/.test(to) ? to : null;
 }
 
 // place says the user opened a surface (a tile or a folded chip): code

@@ -23,15 +23,19 @@ import (
 //  2. ended: once it ended, a banner saying how, with « Ranger » for a
 //     thread that ends on its goal (the only block that reads ends);
 //  3. yours: what waits for the user (threadYours, thread_header.go);
-//  4. items: each source that lists things, its items grouped by their
+//  4. children: one row each, its title, status word and line, opening it
+//     (blockChildren, thread_children.go);
+//  5. items: each source that lists things, its items grouped by their
 //     notes' state, each group counted on its line, with its action
 //     (threadSourcesPart, thread_sources.go);
-//  5. live: the monitors it follows and their last events (thread_live.go);
-//  6. where it stands, when it has a summary, then what changed since the
+//  6. live: the monitors it follows and their last events (thread_live.go);
+//  7. where it stands, when it has a summary, then what changed since the
 //     user's last visit, when something did (threadWhere, threadSince);
-//  7. steps: the done ones folded in one line, with the last yes given;
+//  8. steps: the done ones folded in one line, with the last yes given;
 //     the others as a Timeline; decided cards one line each (compact);
-//  8. the holder's part.
+//  9. the holder's part.
+//
+// A child's surface starts with its crumb back to its parent (blockParent).
 
 // threadStatus is a thread's state as its head says it: a word and a tone
 // (a Progress's). Read from what it shows: ended, what waits for the user,

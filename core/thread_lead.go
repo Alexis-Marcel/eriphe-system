@@ -312,6 +312,9 @@ func (c *core) finishThread(ctx context.Context, id int64, summary, by string) (
 	if summary = strings.TrimSpace(summary); summary == "" {
 		return "", errors.New("a summary for the user is needed")
 	}
+	if kids := c.activeChildren(id); len(kids) > 0 {
+		return "", activeChildrenError(s, kids)
+	}
 	steps, _ := c.steps(id)
 	var final *Step
 	for i, st := range steps {

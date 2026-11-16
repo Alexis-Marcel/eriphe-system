@@ -14,6 +14,8 @@
        "thread_controls",
        "thread_yours",
        "thread_card_2",
+       "thread_children_title",
+       "thread_children",
        "thread_where",
        "thread_summary",
        "thread_summary_at",
@@ -73,6 +75,64 @@
       "proposalId": "card:20"
      },
      {
+      "id": "thread_child",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_child_item",
+       "thread_child_open"
+      ]
+     },
+     {
+      "id": "thread_child_item",
+      "component": "Item",
+      "detail": {
+       "@path": "status"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "note": {
+       "@path": "line"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "thread_child_open",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "surface": {
+          "@path": "surface"
+         }
+        },
+        "name": "open"
+       }
+      },
+      "label": "Open",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_children_title",
+      "component": "Text",
+      "text": "Sub-threads",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_children",
+      "component": "List",
+      "children": {
+       "componentId": "thread_child",
+       "path": "/thread/children"
+      }
+     },
+     {
       "id": "thread_where",
       "component": "Text",
       "text": "Where it stands",
@@ -88,7 +148,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Summary updated: 11:19",
+      "text": "Summary updated: 12:51",
       "variant": "caption"
      },
      {
@@ -130,15 +190,26 @@
     ],
     "dataModel": {
      "thread": {
+      "children": [
+       {
+        "thread": 105,
+        "surface": "thread-105",
+        "title": "The club's photos",
+        "status": "Up to date",
+        "line": "Pick the 12 photos of the home page.",
+        "level": "normal",
+        "mark": ""
+       }
+      ],
       "done": [
        {
-        "date": "2026-11-16T09:19:11+01:00",
+        "date": "2026-11-16T10:51:11+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:59:11+01:00",
+        "date": "2026-11-16T11:31:11+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
@@ -153,13 +224,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T11:39:11+01:00",
+        "date": "2026-11-16T13:11:11+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T11:29:11+01:00",
+        "date": "2026-11-16T13:01:11+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "current"
@@ -394,6 +465,7 @@
       "total": 4500
      },
      "thread": {
+      "children": [],
       "progress": {
        "label": "Yours"
       },
@@ -628,27 +700,28 @@
     ],
     "dataModel": {
      "thread": {
+      "children": [],
       "done": [
        {
-        "date": "2026-11-16T09:19:11+01:00",
+        "date": "2026-11-16T10:51:11+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:59:11+01:00",
+        "date": "2026-11-16T11:31:11+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
        },
        {
-        "date": "2026-11-16T11:39:11+01:00",
+        "date": "2026-11-16T13:11:11+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T11:29:11+01:00",
+        "date": "2026-11-16T13:01:11+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "done"
@@ -662,7 +735,7 @@
       "donelabel": "5 steps done",
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 10:49"
+       "title": "Done ✓ · 12:21"
       },
       "progress": {
        "current": 0,
@@ -882,6 +955,7 @@
       ]
      },
      "thread": {
+      "children": [],
       "sources": [
        {
         "cards": [],
@@ -975,6 +1049,98 @@
      }
     }
    }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-105",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_parent",
+       "thread_state",
+       "thread_controls"
+      ]
+     },
+     {
+      "id": "thread_parent",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "surface": "thread-101"
+        },
+        "name": "open"
+       }
+      },
+      "icon": "arrowUp",
+      "label": {
+       "@path": "/thread/parent/title"
+      },
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 105
+        },
+        "name": "control"
+       }
+      },
+      "label": "Stop",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     }
+    ],
+    "dataModel": {
+     "thread": {
+      "children": [],
+      "parent": {
+       "surface": "thread-101",
+       "thread": 101,
+       "title": "The club's site"
+      },
+      "state": "Pick the 12 photos of the home page."
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "The club's photos",
+       "author": "thread:105",
+       "weight": 50,
+       "answers": true,
+       "summary": "Pick the 12 photos of the home page.",
+       "state": "new",
+       "new": 1,
+       "inside": "thread-101",
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
   }
  ],
  "fr": [
@@ -992,6 +1158,8 @@
        "thread_controls",
        "thread_yours",
        "thread_card_2",
+       "thread_children_title",
+       "thread_children",
        "thread_where",
        "thread_summary",
        "thread_summary_at",
@@ -1051,6 +1219,64 @@
       "proposalId": "card:20"
      },
      {
+      "id": "thread_child",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_child_item",
+       "thread_child_open"
+      ]
+     },
+     {
+      "id": "thread_child_item",
+      "component": "Item",
+      "detail": {
+       "@path": "status"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "note": {
+       "@path": "line"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "thread_child_open",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "surface": {
+          "@path": "surface"
+         }
+        },
+        "name": "open"
+       }
+      },
+      "label": "Ouvrir",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_children_title",
+      "component": "Text",
+      "text": "Sous-fils",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_children",
+      "component": "List",
+      "children": {
+       "componentId": "thread_child",
+       "path": "/thread/children"
+      }
+     },
+     {
       "id": "thread_where",
       "component": "Text",
       "text": "Où on en est",
@@ -1066,7 +1292,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Résumé mis à jour : 11 h 19",
+      "text": "Résumé mis à jour : 12 h 51",
       "variant": "caption"
      },
      {
@@ -1108,15 +1334,26 @@
     ],
     "dataModel": {
      "thread": {
+      "children": [
+       {
+        "thread": 105,
+        "surface": "thread-105",
+        "title": "Les photos du club",
+        "status": "À jour",
+        "line": "Choisis les 12 photos de la page d'accueil.",
+        "level": "normal",
+        "mark": ""
+       }
+      ],
       "done": [
        {
-        "date": "2026-11-16T09:19:11+01:00",
+        "date": "2026-11-16T10:51:11+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:59:11+01:00",
+        "date": "2026-11-16T11:31:11+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
@@ -1131,13 +1368,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T11:39:11+01:00",
+        "date": "2026-11-16T13:11:11+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T11:29:11+01:00",
+        "date": "2026-11-16T13:01:11+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "current"
@@ -1372,6 +1609,7 @@
       "total": 4500
      },
      "thread": {
+      "children": [],
       "progress": {
        "label": "À toi"
       },
@@ -1606,27 +1844,28 @@
     ],
     "dataModel": {
      "thread": {
+      "children": [],
       "done": [
        {
-        "date": "2026-11-16T09:19:11+01:00",
+        "date": "2026-11-16T10:51:11+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:59:11+01:00",
+        "date": "2026-11-16T11:31:11+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
        },
        {
-        "date": "2026-11-16T11:39:11+01:00",
+        "date": "2026-11-16T13:11:11+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T11:29:11+01:00",
+        "date": "2026-11-16T13:01:11+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "done"
@@ -1640,7 +1879,7 @@
       "donelabel": "5 étapes faites",
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 10 h 49"
+       "title": "Fait ✓ · 12 h 21"
       },
       "progress": {
        "current": 0,
@@ -1860,6 +2099,7 @@
       ]
      },
      "thread": {
+      "children": [],
       "sources": [
        {
         "cards": [],
@@ -1948,6 +2188,98 @@
        "summary": "1 pour info · 2 rien à faire",
        "state": "new",
        "new": 4,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-105",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_parent",
+       "thread_state",
+       "thread_controls"
+      ]
+     },
+     {
+      "id": "thread_parent",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "surface": "thread-101"
+        },
+        "name": "open"
+       }
+      },
+      "icon": "arrowUp",
+      "label": {
+       "@path": "/thread/parent/title"
+      },
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 105
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     }
+    ],
+    "dataModel": {
+     "thread": {
+      "children": [],
+      "parent": {
+       "surface": "thread-101",
+       "thread": 101,
+       "title": "Le site du club"
+      },
+      "state": "Choisis les 12 photos de la page d'accueil."
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Les photos du club",
+       "author": "thread:105",
+       "weight": 50,
+       "answers": true,
+       "summary": "Choisis les 12 photos de la page d'accueil.",
+       "state": "new",
+       "new": 1,
+       "inside": "thread-101",
        "updated": "0001-01-01T00:00:00Z"
       }
      }

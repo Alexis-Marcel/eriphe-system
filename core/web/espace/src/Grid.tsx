@@ -3,7 +3,7 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Adapter } from "./a2ui/adapter";
 import { OnStage } from "./a2ui/code";
 import { SurfaceView } from "./a2ui/Surfaces";
-import { chipLabel, needsUser, shownChips, surfaceNew, surfaceState, surfaceSummary, surfaceTitle, surfaceUpdated, type TileState } from "./chips";
+import { chipLabel, laidOut, needsUser, shownChips, surfaceNew, surfaceState, surfaceSummary, surfaceTitle, surfaceUpdated, type TileState } from "./chips";
 import { useWords } from "./i18n";
 import { COLS, DIMS, ROWS, SIZES, foldOut, needRows } from "./place";
 import type { FoldedChip, Layout, Tile, TileSize } from "./types";
@@ -191,7 +191,8 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
   const { t } = useWords();
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   const byID = new Map(surfaces.map((s) => [s.id, s]));
-  const have = new Set(byID.keys());
+  // A surface that opens inside another is never a tile nor a chip: only in it, open.
+  const have = laidOut(surfaces);
   const { tiles, chips, full } = narrow ? stacked(layout, have) : { ...drawn(layout, have), full: false };
   // The focus mode: a wide screen, and the surface open is drawn.
   const center = !narrow && layout.focus ? tiles.find((i) => i.id === layout.focus) : undefined;
@@ -312,6 +313,9 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
   // (focus mode), where it has no place, only the way back and its cross.
   const tileView = (tile: Tile, centre = false) => {
     const focus = layout.focus === tile.id;
+    // On stage with another open inside it (a child thread in its parent): that one shows, under its own title.
+    const inner = focus && layout.inside ? byID.get(layout.inside) : undefined;
+    const title = (inner && surfaceTitle(inner)) || tile.title;
     // A small tile shows a surface's one-line summary, when it has one, rather than a slice of it.
     const line = tile.size === "s" && !focus ? surfaceSummary(byID.get(tile.id)) : undefined;
     // Its state, code's: a coloured edge, and a badge for what needs the user or is new.
@@ -334,7 +338,7 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
         onClick={open}
       >
         <div className="tile-head">
-          <h2 className="tile-title">{tile.title}</h2>
+          <h2 className="tile-title">{title}</h2>
           {needsUser(st) && !focus && <span className={`tile-badge b-${st}`}>{t("espace.state." + st)}</span>}
           {!needsUser(st) && st !== "done" && n > 0 && <span className="tile-badge b-new">{t("espace.tile.new", n)}</span>}
           {!focus && <span className="tile-more">{t("espace.tile.more")}</span>}
@@ -366,7 +370,7 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
               <p className="tile-line">{line}</p>
             ) : (
               <OnStage.Provider value={focus}>
-                <SurfaceView surface={byID.get(tile.id)!} />
+                <SurfaceView key={inner?.id ?? tile.id} surface={inner ?? byID.get(tile.id)!} />
               </OnStage.Provider>
             )}
           </div>

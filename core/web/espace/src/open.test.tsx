@@ -192,3 +192,59 @@ describe("a click on the workspace", () => {
     expect(a.getAttribute("aria-label")).toBe("Réglages");
   });
 });
+
+// A child thread is never a tile nor a chip: opened from its parent's row,
+// it opens inside its parent, put on stage; its crumb opens the parent
+// again. Each is the page's own open of a surface, the action never sent
+// as is.
+describe("a child thread", () => {
+  const surface = (id: string, components: unknown[], eriphe: Record<string, unknown>) => ({
+    version: "1.0",
+    createSurface: { surfaceId: id, catalogId: CATALOG.id, components, metadata: { extensions: { eriphe } } },
+  });
+  const opens = (id: string, label: string, to: string) => ({
+    id,
+    component: "Button",
+    label,
+    action: { event: { name: "open", context: { surface: to } } },
+  });
+  const parent = surface("thread-1", [{ id: "root", component: "Column", children: ["thread_child_open"] }, opens("thread_child_open", "Ouvrir", "thread-2")], { title: "Le site" });
+  const child = surface(
+    "thread-2",
+    [{ id: "root", component: "Column", children: ["thread_parent", "says"] }, opens("thread_parent", "Le site", "thread-1"), { id: "says", component: "Text", text: "Signe le devis" }],
+    { title: "Le devis", inside: "thread-1" },
+  );
+  const layout: Layout = { ambient: "calm", items: [{ id: "thread-1", title: "Le site", size: "l", col: 0, row: 0, w: 4, h: 3 }], chips: [] };
+  const button = (label: string) => [...el.querySelectorAll<HTMLButtonElement>("button.a2-button")].find((b) => b.textContent === label)!;
+
+  it("opens inside its parent, and its crumb opens the parent again", async () => {
+    await act(async () =>
+      root.render(
+        <WordsContext.Provider value={{ t: makeT(words), lang: "fr" }}>
+          <Espace boot={{ lang: "fr", name: "Eriphe", csrf: "tok", strings: words, live: true }} />
+        </WordsContext.Provider>,
+      ),
+    );
+    await act(async () => {
+      FakeSource.emit("a2ui", { seq: 1, reset: true, messages: [parent, child] });
+      FakeSource.emit("layout", layout);
+    });
+    expect(el.querySelector('[data-surface="thread-2"]')).toBeNull(); // neither a tile nor a chip
+    await act(async () => button("Ouvrir").click());
+    expect(actions).toHaveLength(1);
+    expect(actions[0].body).toMatchObject({ action: { name: "open", surfaceId: "thread-2", sourceComponentId: "root", context: {} } });
+    // At once: the parent on stage, the child inside it, under its own title.
+    expect(tile("thread-1").classList.contains("focus")).toBe(true);
+    expect(tile("thread-1").querySelector(".tile-title")?.textContent).toBe("Le devis");
+    expect(tile("thread-1").textContent).toContain("Signe le devis");
+    await act(async () => actions[0].done(true));
+    await act(async () => FakeSource.emit("layout", { ...layout, focus: "thread-1", inside: "thread-2" }));
+    expect(tile("thread-1").textContent).toContain("Signe le devis");
+
+    // Its crumb: the parent again, on stage.
+    await act(async () => button("Le site").click());
+    expect(actions[1].body).toMatchObject({ action: { name: "open", surfaceId: "thread-1", context: {} } });
+    expect(tile("thread-1").textContent).not.toContain("Signe le devis");
+    expect(button("Ouvrir")).toBeTruthy();
+  });
+});

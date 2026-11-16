@@ -36,6 +36,7 @@ type threadIn struct {
 	Ends     string     `json:"ends,omitempty" jsonschema:"how it ends: goal (the default: closed once its goal is reached), standing (what the user manages continuously, their mail, their agenda, a supervision: never closed), day (a view for today, an answer shown: it ends by itself at midnight); standing and day are light"`
 	Take     int64      `json:"take,omitempty" jsonschema:"after a refusal that lists threads near this matter: the one that is it, given back (reopened if it ended) and given this alias"`
 	NewBy    string     `json:"new_because,omitempty" jsonschema:"after a refusal that lists threads near this matter: why this is another matter, in a few words; logged on the new thread"`
+	Parent   int64      `json:"parent,omitempty" jsonschema:"the thread this one is a child of: a step of that thread that became a matter of its own. An active top thread (a child has no children); the child opens inside it on the workspace, and what waits for the user in the child raises it. Given with an alias that has a thread already, that thread moves under it"`
 
 	exact bool // only the thread of its alias, no matcher: a skill's run (skillThread)
 }
@@ -53,6 +54,11 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 	alias, err := c.freeAlias(in.Alias)
 	if err != nil {
 		return Thread{}, fmt.Errorf("alias: %w", err)
+	}
+	if in.Parent != 0 {
+		if _, err := c.parentFor(in.Parent, Thread{Ends: in.Ends}); err != nil {
+			return Thread{}, err
+		}
 	}
 	if in.Mode == "" {
 		in.Mode = modeLight
@@ -76,8 +82,8 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 		if len(in.Steps) > 0 || in.Budget != 0 || in.DoneWhen != "" {
 			return Thread{}, errors.New("a light thread has no plan, budget nor done_when: open it led for planned, autonomous work")
 		}
-		res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, state, tainted, created, started, ends) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			truncate(in.Title, taskTitleMax), in.Goal, modeLight, threadOpen, strings.Join(taint, ", "), time.Now().Unix(), time.Now().Unix(), in.Ends)
+		res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, state, tainted, created, started, ends, parent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			truncate(in.Title, taskTitleMax), in.Goal, modeLight, threadOpen, strings.Join(taint, ", "), time.Now().Unix(), time.Now().Unix(), in.Ends, in.Parent)
 		if err != nil {
 			return Thread{}, err
 		}
@@ -106,8 +112,8 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 			return Thread{}, err
 		}
 	}
-	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, done_when, mode, state, phase, budget, tainted, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		truncate(in.Title, taskTitleMax), in.Goal, in.DoneWhen, modeLed, stateOf(phaseProposed), phaseProposed, in.Budget, strings.Join(taint, ", "), time.Now().Unix())
+	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, done_when, mode, state, phase, budget, tainted, created, parent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		truncate(in.Title, taskTitleMax), in.Goal, in.DoneWhen, modeLed, stateOf(phaseProposed), phaseProposed, in.Budget, strings.Join(taint, ", "), time.Now().Unix(), in.Parent)
 	if err != nil {
 		return Thread{}, err
 	}
@@ -734,21 +740,29 @@ func (c *core) stopThread(ctx context.Context, id int64, by string) error {
 	if s.standing() {
 		return errStanding
 	}
+	c.stopLocked(ctx, s, by, "")
+	return nil
+}
+
+// stopLocked stops an active thread, under threadMu: a light one is
+// dropped; a led one's running tasks stop and its cards are withdrawn. Its
+// active children stop with it (endChildren). why is its log line, ""
+// for the usual one.
+func (c *core) stopLocked(ctx context.Context, s Thread, by, why string) {
 	if !s.led() {
 		c.endLight(ctx, s, threadDropped, "")
-		c.logThread(id, by, "Thread abandonné.")
-		return nil
+		c.logThread(s.ID, by, orStr(why, "Thread abandonné."))
+		return
 	}
-	steps, _ := c.steps(id)
+	steps, _ := c.steps(s.ID)
 	for _, st := range steps {
 		if st.Status == stepRunning || st.Status == stepReported || st.Status == stepVerified {
 			c.stopStepTask(ctx, st)
-			c.setStep(id, st.Key, map[string]any{"status": stepBlocked, "note": "thread stopped", "ended": time.Now().Unix()})
+			c.setStep(s.ID, st.Key, map[string]any{"status": stepBlocked, "note": "thread stopped", "ended": time.Now().Unix()})
 		}
 	}
 	c.closeLocked(s, phaseStopped, "")
-	c.logThread(id, by, "Thread arrêté.")
-	return nil
+	c.logThread(s.ID, by, orStr(why, "Thread arrêté."))
 }
 
 // errStanding refuses to end a standing thread: what the user manages
@@ -776,6 +790,9 @@ func (c *core) closeLight(id int64, summary, by string) error {
 	if summary = strings.TrimSpace(summary); summary == "" {
 		return errors.New("a summary is needed: how its goal was reached. A thread closes only on its goal; to give up, stop it")
 	}
+	if kids := c.activeChildren(id); len(kids) > 0 {
+		return activeChildrenError(s, kids)
+	}
 	c.endLight(context.Background(), s, threadDone, summary)
 	c.logThread(id, by, "Thread clos : "+summary)
 	c.closeDecision(id) // thread_progress.go
@@ -783,7 +800,7 @@ func (c *core) closeLight(id int64, summary, by string) error {
 }
 
 // endLight ends a light thread: done or dropped; what still waits or
-// runs in it ends too.
+// runs in it ends too, its active children with it.
 func (c *core) endLight(ctx context.Context, s Thread, state, summary string) {
 	c.endSteps(ctx, s) // thread_steps.go
 	fields := map[string]any{"state": state, "ended": time.Now().Unix()}
@@ -791,6 +808,7 @@ func (c *core) endLight(ctx context.Context, s Thread, state, summary string) {
 		fields["summary"] = truncate(summary, 2000)
 	}
 	c.setThread(s.ID, fields)
+	c.endChildren(ctx, s) // thread_children.go
 	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: fmt.Sprintf("thread:%d", s.ID), Source: "thread",
 		Payload: map[string]any{"thread": s.ID, "state": state, "ends": s.Ends}})
 }
@@ -811,6 +829,12 @@ func (c *core) reopenThread(id int64, why, by string) (Thread, error) {
 	if why = oneLine(why); why == "" {
 		return s, errors.New("why is needed: what brings it back")
 	}
+	if s.Parent != 0 {
+		// A child never moves under a parent that ended (thread_children.go).
+		if p, err := c.thread(s.Parent); err == nil && !p.active() {
+			return s, fmt.Errorf("its parent thread %d « %s » is %s: reopen it first", p.ID, p.Title, p.State)
+		}
+	}
 	c.endSteps(context.Background(), s) // what its old plan left undone never starts by itself
 	fields := map[string]any{"mode": modeLight, "phase": "", "state": threadOpen, "held": "", "lead": "", "told": "", "since": 0, "ended": 0, "tidied": 0}
 	if s.Ends == endsDay {
@@ -821,7 +845,7 @@ func (c *core) reopenThread(id int64, why, by string) (Thread, error) {
 	return c.thread(id)
 }
 
-// closeLocked ends a led thread in phase state.
+// closeLocked ends a led thread in phase state; its active children stop.
 func (c *core) closeLocked(s Thread, state, summary string) {
 	now := time.Now()
 	fields := map[string]any{"phase": state, "ended": now.Unix(), "held": "", "spent": int64(s.elapsed(now) / time.Second), "since": 0}
@@ -832,8 +856,9 @@ func (c *core) closeLocked(s Thread, state, summary string) {
 	if state == phaseDone {
 		c.closeDecision(s.ID) // thread_progress.go
 	}
-	c.endSteps(context.Background(), s) // thread_steps.go
-	c.dropLead(s)                       // thread_lead.go
+	c.endSteps(context.Background(), s)    // thread_steps.go
+	c.dropLead(s)                          // thread_lead.go
+	c.endChildren(context.Background(), s) // thread_children.go
 	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: fmt.Sprintf("thread:%d", s.ID), Source: "thread",
 		Payload: map[string]any{"thread": s.ID, "state": stateOf(state), "phase": state}})
 }

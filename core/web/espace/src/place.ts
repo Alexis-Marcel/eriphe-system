@@ -104,11 +104,13 @@ export function widen(tiles: Tile[]): Tile[] {
 // size; each at the first place where it fits, top left first, shrinking a
 // size when it fits nowhere, folded last. A chip opened comes out of the
 // strip. eriphe-core's layout around it then gives it its size (xl) and
-// what relates to it.
-export function focusedIn(l: Layout, id: string): Layout {
+// what relates to it. A surface that is not laid out, opened from within
+// another (a child thread's, from its parent's row), opens inside that one,
+// put on stage.
+export function focusedIn(l: Layout, id: string, within?: string): Layout {
   const tile = l.items.find((t) => t.id === id);
   const chip = l.chips.find((c) => c.id === id);
-  if (!tile && !chip) return { ...l, focus: id };
+  if (!tile && !chip) return within && within !== id ? { ...focusedIn(l, within), inside: id } : { ...l, focus: id, inside: undefined };
   const open: Tile = tile ?? { id, title: chip!.title, why: chip!.why, size: "l", col: 0, row: 0, w: 4, h: 3 };
   const prev = l.focus && l.focus !== id ? l.items.find((t) => t.id === l.focus) : undefined;
   const others = l.items.filter((t) => t.id !== id && t.id !== prev?.id);
@@ -154,6 +156,7 @@ export function focusedIn(l: Layout, id: string): Layout {
     ...l,
     focus: placed.has(id) ? id : undefined,
     focusBy: undefined,
+    inside: undefined,
     previous: prev && placed.has(prev.id) ? prev.id : undefined,
     items: widen(items),
     chips: [...folded, ...l.chips.filter((c) => c.id !== id || !placed.has(id))],
@@ -163,7 +166,7 @@ export function focusedIn(l: Layout, id: string): Layout {
 // unfocused is the layout when the focus ends: the one before it when the
 // page kept it, else the same with nothing open, until core's comes.
 export function unfocused(l: Layout, before: Layout | null): Layout {
-  return before ?? { ...l, focus: undefined, items: l.items.map(({ related: _, ...i }) => i) };
+  return before ?? { ...l, focus: undefined, inside: undefined, items: l.items.map(({ related: _, ...i }) => i) };
 }
 
 // needRows is how many rows a tile needs: its chrome (what is not its

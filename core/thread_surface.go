@@ -25,9 +25,9 @@ import (
 //     writes or removes it as a whole (mayChange), and it does not count
 //     in surfacesMax.
 //   - Code's section: generic blocks in one fixed order, the same for
-//     every thread (thread_blocks.go): head, ended, yours, items, live,
-//     where, since, steps. Its component ids start with thread_, its data
-//     is under /thread.
+//     every thread (thread_blocks.go): a child's crumb, head, ended,
+//     yours, children, items, live, where, since, steps. Its component
+//     ids start with thread_, its data is under /thread.
 //   - The holder's part: who holds the thread (the brain, or its lead)
 //     may add one with surface_write on thread-<id> (a state block, points
 //     to see, a diff, a link). It is kept apart (threadPartKey), checked
@@ -47,6 +47,8 @@ import (
 //     extensions.eriphe.summary) for a small tile or a chip.
 //   - Lifetime: while the thread is active; once done or dropped, until
 //     the end of its day (an hour at least), then it leaves.
+//   - A child's surface opens inside its parent's, never a tile of its
+//     own (thread_children.go); a change of it writes its parent's again.
 //
 // keepThreadSurface is the hook: the store calls it at each change of a
 // thread (setThread, setStep, insertSteps, its cards), and the engine's
@@ -302,6 +304,9 @@ func (c *core) showThreadAgain(id int64, now time.Time) {
 	if err != nil || s.active() || s.tidied > 0 || s.Ends == endsDay {
 		return
 	}
+	if s.Parent != 0 {
+		c.showThreadAgain(s.Parent, now) // a child opens inside its parent
+	}
 	c.store.set(threadAgainKey+strconv.FormatInt(id, 10), strconv.FormatInt(now.Unix(), 10))
 	c.keepThreadSurface(id)
 }
@@ -363,6 +368,13 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		if !until.After(now) {
 			return in, false
 		}
+		if s.Parent != 0 {
+			// An ended child leaves with its parent's surface, whose children it
+			// is shown among (thread_children.go).
+			if _, err := c.surface(threadSurfaceID(s.Parent)); err != nil {
+				return in, false
+			}
+		}
 		in.Lifetime.Until = until.Truncate(time.Second)
 		in.Weight = threadWeightEnded
 	}
@@ -389,6 +401,12 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	if len(onRows) > 0 {
 		// It waits for the user on its rows: it takes their weight.
 		in.Weight = max(in.Weight, threadWeightYours, queueSurfaceWeight(cardWeight(cardCalls)))
+	}
+	// Its children (thread_children.go): what waits in one raises it.
+	kids := c.threadKidsOf(s, lang)
+	blockChildren(&out, data, kids.rows, lang)
+	if s.active() {
+		in.Weight = max(in.Weight, kids.weight)
 	}
 	// The tools and resources it reads, their items (thread_sources.go).
 	var seen threadItemsSeen
@@ -437,7 +455,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	}
 
 	var head threadComps
-	waits := s.active() && threadWaitsUser(steps, asks, linked)
+	waits := s.active() && (threadWaitsUser(steps, asks, linked) || kids.waits)
 	in.fresh = c.threadNew(s, steps, lang)
 	in.state = threadTileState(s, steps, waits, in.Weight, in.fresh)
 	word, tone := threadStatus(s, steps, waits, in.Weight, lang)
@@ -446,11 +464,15 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	if s.active() {
 		state = c.threadStateText(s, says, seen, len(in.codeTaint) > 0, now)
 	}
+	c.blockParent(&head, data, s)
 	c.blockHead(&head, data, s, steps, word, tone, state)
 	blockControls(&head, s, lang)
+	// A child's line may carry someone else's words: its parent shows it,
+	// marked on its row, not in its own state line.
+	in.codeTaint = append(in.codeTaint, kids.taint...)
 	out.list = append(head.list, out.list...)
 	out.children = append(head.children, out.children...)
-	if !slices.ContainsFunc(out.children, func(id string) bool { return id != "thread_controls" }) {
+	if !slices.ContainsFunc(out.children, func(id string) bool { return id != "thread_controls" && id != "thread_parent" }) {
 		// Nothing yet but its buttons: a standing thread before its first
 		// item, a thread just opened with no headline, say.
 		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": w("thread.item.none")})
@@ -498,6 +520,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		in.summary += threadExternalSep + w("thread.surface.external") // someone else's words may be in it
 	}
 	in.folds = s.active() && s.standing() // a chip while it has nothing for the user (workspace_layout.go)
+	in.inside = insideOf(s)               // a child opens inside its parent (thread_children.go)
 	in.composed = true
 	return in, true
 }
@@ -545,18 +568,29 @@ func threadLine(s Thread, steps []threadSurfaceStep, asks []int64, lang string) 
 // keepThreadSurface writes a thread's surface as its data says, when what
 // it shows changed: the hook of each change of a thread. An active thread
 // always has its surface; an ended one keeps it until its time is over,
-// and gets it again only when a link shows it again (showThreadAgain).
+// and gets it again only when a link shows it again (showThreadAgain). A
+// child's change writes its parent's next, which shows it.
 func (c *core) keepThreadSurface(id int64) {
 	if c.conf() == nil {
 		return // not configured yet: its tick gives it its surface
 	}
+	c.keepThreadKin(id, c.writeThreadSurface(id)) // thread_children.go
+}
+
+// writeThreadSurface is keepThreadSurface for one thread; it tells
+// whether the thread has its surface after.
+func (c *core) writeThreadSurface(id int64) (has bool) {
+	sid := threadSurfaceID(id)
+	defer func() {
+		_, err := c.surface(sid)
+		has = err == nil
+	}()
 	threadSurfaceMu.Lock()
 	defer threadSurfaceMu.Unlock()
 	s, err := c.thread(id)
 	if err != nil {
 		return
 	}
-	sid := threadSurfaceID(id)
 	_, err = c.surface(sid)
 	exists := err == nil
 	if !s.active() && !exists && c.threadAgain(id).IsZero() {
@@ -601,11 +635,12 @@ func (c *core) keepThreadSurface(id int64) {
 		return
 	}
 	c.store.set(key, shown)
+	return
 }
 
 // shownHash is what a surface written by code shows, as a hash.
 func shownHash(in surfaceIn) string {
-	raw, _ := json.Marshal([]any{in.Title, in.Why, in.Weight, in.Lifetime, string(in.Components), string(in.Data), in.Tainted, in.codeTaint, in.answers, in.summary, in.state, in.fresh, in.folds})
+	raw, _ := json.Marshal([]any{in.Title, in.Why, in.Weight, in.Lifetime, string(in.Components), string(in.Data), in.Tainted, in.codeTaint, in.answers, in.summary, in.state, in.fresh, in.folds, in.inside})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
@@ -696,6 +731,9 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 		if merged, err = mergeSources(merged, in.Sources, reads); err != nil {
 			return nil, err
 		}
+		// Code's data is there to bind too (/thread/children, /thread/steps):
+		// checked against what its surface shows now, never kept in the part.
+		merged[threadDataKey] = c.threadCodeData(sid)
 		errs = c.checkBindings(sid, comps, merged, in.Sources, reads)
 	}
 	if len(errs) > 0 {
@@ -718,6 +756,18 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 		note += " Its sources are the thread's: code reads them again, without a model, while the thread is active."
 	}
 	return map[string]any{"id": sid, "author": threadAuthor(thread), "part": true, "note": note}, nil
+}
+
+// threadCodeData is code's data on a thread's surface as it shows now,
+// /thread: an empty object when it has none yet.
+func (c *core) threadCodeData(sid string) map[string]any {
+	var data map[string]any
+	if sf, err := c.surface(sid); err == nil {
+		var all map[string]json.RawMessage
+		json.Unmarshal(sf.Data, &all)
+		json.Unmarshal(all[threadDataKey], &data)
+	}
+	return orEmptyMap(data)
 }
 
 // removeThreadPart is surface_remove on a thread's surface: the holder's

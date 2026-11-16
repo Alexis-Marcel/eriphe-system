@@ -27,6 +27,10 @@ import (
 // a tile again once yours, urgent or new. Each is put at the first place where it fits, top
 // left first; one that fits nowhere shrinks a size, then is folded.
 //
+// A surface that opens inside another (Look.Inside: a child thread's, its
+// parent's) is neither a tile nor a chip while that other is on the
+// workspace: opened, the other is on stage with it inside (onStage).
+//
 // The layout goes to the page as the event stream's "layout" event (JSON,
 // workspaceLayout), sent whenever it changes, after the "a2ui" event of the
 // surfaces it names. The last one is kept in kv (layoutKey).
@@ -124,6 +128,7 @@ type workspaceLayout struct {
 	Focus    string       `json:"focus,omitempty"`    // the surface the user opened
 	FocusBy  string       `json:"focusBy,omitempty"`  // brain: Eriphe put it on stage, answering the user (workspace_front.go)
 	Previous string       `json:"previous,omitempty"` // what was on stage before it, a tile reduced next to it (workspace_front.go)
+	Inside   string       `json:"inside,omitempty"`   // the surface open inside the one on stage: a child thread's, in its parent's
 	Items    []layoutTile `json:"items"`              // the tiles, each at its place on the grid
 	Chips    []layoutChip `json:"chips"`              // the folded surfaces, in order
 }
@@ -171,8 +176,15 @@ type layoutWant struct {
 // (related, found by code, workspace_focus.go: m at most, the rest folded),
 // then the others in their order (tileOrder).
 func layoutStage(pool []surface, focus, previous string, related []string, pl userPlacement) workspaceLayout {
+	all := pool
+	focus, inside := onStage(all, focus)
 	var closed []surface
-	pool = slices.DeleteFunc(slices.Clone(pool), func(s surface) bool {
+	var inner []string
+	pool = slices.DeleteFunc(slices.Clone(all), func(s surface) bool {
+		if laidInside(all, s) {
+			inner = append(inner, s.ID)
+			return true // in the surface it opens inside, only
+		}
 		if _, ok := pl.Closed[s.ID]; ok {
 			closed = append(closed, s)
 			return true
@@ -190,6 +202,7 @@ func layoutStage(pool []surface, focus, previous string, related []string, pl us
 	if _, ok := byID[focus]; !ok {
 		related = nil
 	}
+	related = slices.DeleteFunc(slices.Clone(related), func(id string) bool { return slices.Contains(inner, id) })
 	l := workspaceLayout{Items: []layoutTile{}, Chips: []layoutChip{}}
 
 	var wants []layoutWant
@@ -315,6 +328,9 @@ func layoutStage(pool []surface, focus, previous string, related []string, pl us
 	if l.Focus != "" && previous != l.Focus && slices.ContainsFunc(l.Items, func(t layoutTile) bool { return t.ID == previous }) {
 		l.Previous = previous
 	}
+	if l.Focus != "" {
+		l.Inside = inside
+	}
 	for _, w := range folded {
 		l.Chips = append(l.Chips, layoutChip{ID: w.s.ID, Title: w.s.Title, Why: w.why})
 	}
@@ -339,6 +355,23 @@ func layoutStage(pool []surface, focus, previous string, related []string, pl us
 		}
 	}
 	return l
+}
+
+// onStage is what opening a surface puts on stage: the surface itself, or,
+// for one that opens inside another on the workspace (a child thread's),
+// that other, with it inside.
+func onStage(pool []surface, id string) (focus, inside string) {
+	if i := slices.IndexFunc(pool, func(s surface) bool { return s.ID == id }); i >= 0 && laidInside(pool, pool[i]) {
+		return pool[i].Look.Inside, id
+	}
+	return id, ""
+}
+
+// laidInside tells whether a surface opens inside another of the pool,
+// and so is never laid out on its own; should that other be gone, it is
+// laid out as any.
+func laidInside(pool []surface, s surface) bool {
+	return s.Look.Inside != "" && slices.ContainsFunc(pool, func(p surface) bool { return p.ID == s.Look.Inside })
 }
 
 // keeps tells whether next places every tile spots placed, each at the
@@ -486,7 +519,8 @@ func (c *core) relayout() workspaceLayout {
 	pool, err := c.surfaces()
 	var related []string
 	if err == nil && focus != "" {
-		related = relatedIDs(c.focusRelations(focus, pool))
+		stage, _ := onStage(pool, focus)
+		related = relatedIDs(c.focusRelations(stage, pool))
 	}
 	start := c.workspaceSessionStart(now)
 	st := &c.layout

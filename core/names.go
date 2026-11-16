@@ -314,8 +314,8 @@ func (c *core) rekeyAbout(from, to string) error {
 }
 
 // mergeThreads merges a thread that ended into another, the same matter:
-// its names, and what is about it (memories, intentions, notifications,
-// cards, rules), are the other's from then on; its own steps and log stay
+// its names, its children, and what is about it (memories, intentions,
+// notifications, cards, rules), are the other's from then on; its own steps and log stay
 // with it, and thread:<from> names the other. Not undone.
 func (c *core) mergeThreads(from, to int64, by string) error {
 	if from == to {
@@ -332,8 +332,19 @@ func (c *core) mergeThreads(from, to int64, by string) error {
 	if a.active() {
 		return fmt.Errorf("thread %d « %s » is %s: only an ended thread is merged into another (close or stop it first)", a.ID, a.Title, a.State)
 	}
+	// Its children are the other's from then on: a child has no children.
+	kids := c.children(from)
+	if len(kids) > 0 && b.Parent != 0 {
+		return fmt.Errorf("thread %d has child threads (%s) and thread %d is a child: a child has no children", a.ID, kinList(kids), b.ID)
+	}
 	if err := c.rekeyAbout(threadRef(from), threadRef(to)); err != nil {
 		return err
+	}
+	if len(kids) > 0 {
+		if _, err := c.store.db.Exec(`UPDATE threads SET parent = ? WHERE parent = ?`, to, from); err != nil {
+			return err
+		}
+		c.keepThreadSurface(to)
 	}
 	if _, err := c.store.db.Exec(`INSERT OR REPLACE INTO names (name, target, seen) VALUES (?, ?, ?)`, threadRef(from), threadRef(to), time.Now().Unix()); err != nil {
 		return err

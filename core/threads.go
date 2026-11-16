@@ -70,7 +70,8 @@ const threadsSchema = `CREATE TABLE IF NOT EXISTS threads (
 	seen      INTEGER NOT NULL DEFAULT 0,  -- the user's visit before the last one: its surface tells what changed since
 	visited   INTEGER NOT NULL DEFAULT 0,  -- when the user last opened its surface
 	ends      TEXT NOT NULL DEFAULT 'goal', -- how it ends: goal, standing, day
-	tidied    INTEGER NOT NULL DEFAULT 0   -- when the user tidied it away (« Ranger »), ended
+	tidied    INTEGER NOT NULL DEFAULT 0,  -- when the user tidied it away (« Ranger »), ended
+	parent    INTEGER NOT NULL DEFAULT 0   -- the thread it is a child of, 0 for a top thread
 );
 CREATE TABLE IF NOT EXISTS thread_steps (
 	thread   INTEGER NOT NULL,
@@ -118,7 +119,7 @@ CREATE INDEX IF NOT EXISTS thread_log_thread ON thread_log (thread, id);`
 
 func init() {
 	extraSchema = append(extraSchema, threadsSchema)
-	// A threads table made before ends and tidied has neither.
+	// A threads table made before ends, tidied and parent has none of them.
 	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
 		if err := addColumn(db, "threads", "ends", "TEXT NOT NULL DEFAULT 'goal'"); err != nil {
 			return err
@@ -130,7 +131,10 @@ func init() {
 				return err
 			}
 		}
-		return addColumn(db, "threads", "tidied", "INTEGER NOT NULL DEFAULT 0")
+		if err := addColumn(db, "threads", "tidied", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return err
+		}
+		return addColumn(db, "threads", "parent", "INTEGER NOT NULL DEFAULT 0")
 	})
 }
 
@@ -249,6 +253,7 @@ type Thread struct {
 	Tainted    string    `json:"tainted,omitempty"` // why its plan may carry what someone else wrote
 	Lead       string    `json:"lead,omitempty"`    // the assistant that leads it; empty: the brain
 	Ends       string    `json:"ends"`              // goal, standing or day
+	Parent     int64     `json:"parent,omitempty"`  // the thread it is a child of (thread_children.go)
 	Spent      int64     `json:"spent"`             // seconds it ran, until since
 	since      int64     // when it last started running
 	summarized int64     // when its summary was last written
@@ -452,7 +457,7 @@ var stepKeyRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,23}$`)
 
 // The store.
 
-const threadCols = `id, title, goal, done_when, mode, ` + threadAliasCol + `, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended, summarized, seen, visited, ends, tidied`
+const threadCols = `id, title, goal, done_when, mode, ` + threadAliasCol + `, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended, summarized, seen, visited, ends, tidied, parent`
 
 // threadAliasCol is a thread's latest key in the names, "" for none.
 const threadAliasCol = `COALESCE((SELECT name FROM names WHERE target = 'thread:' || threads.id AND instr(name, ':') > 0
@@ -465,7 +470,7 @@ func scanThread(row interface{ Scan(...any) error }) (Thread, error) {
 	var s Thread
 	var created, started, ended int64
 	err := row.Scan(&s.ID, &s.Title, &s.Goal, &s.DoneWhen, &s.Mode, &s.Alias, &s.State, &s.Phase, &s.Held, &s.Budget, &s.Amends, &s.Summary, &s.Tainted, &s.Lead,
-		&s.told, &s.Spent, &s.since, &created, &started, &ended, &s.summarized, &s.seen, &s.visited, &s.Ends, &s.tidied)
+		&s.told, &s.Spent, &s.since, &created, &started, &ended, &s.summarized, &s.seen, &s.visited, &s.Ends, &s.tidied, &s.Parent)
 	s.Created, s.Started, s.Ended = time.Unix(created, 0), unixOrZero(started), unixOrZero(ended)
 	return s, err
 }

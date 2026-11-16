@@ -973,6 +973,32 @@ it only changes the thread's life:
 `open_thread` with `ends` on an alias whose thread exists gives that thread back ending as asked
 now (`endsAgain`): a light one only, a led one ends on its goal and the open is refused.
 
+**Child threads** (`thread_children.go`, `threads.parent`, #609): a step of a thread that becomes a
+matter of its own is a thread of its own, its child (`open_thread` `parent`). Nothing else tells a
+child from a top thread: it is light or led, ends on its goal or stands, as any other.
+
+- **Depth 2** (`parentFor`): a parent is an active top thread; a child has no children, and a
+  thread with children is never made a child. A standing thread, what the user manages
+  continuously, is a top thread: never opened, moved or turned (`ends`) into a child.
+  `open_thread` `parent` on an alias that has a thread already moves that thread under the parent,
+  once nothing else refuses the open (logged on it, the result says so); the parent itself is never
+  one of the threads near the child's matter. `name_thread` `merge` gives the merged
+  thread's children to the other, a top thread only.
+- **No active child under an ended parent**: `close_thread` on a parent with active children is
+  refused (light or led), naming them (`activeChildrenError`); a parent that ends any other way
+  (`stop_thread`, its plan declined, its day over) stops them with it (`endChildren`, logged « Arrêté
+  avec son thread parent »); a child of an ended parent does not reopen before its parent.
+  An ended child's surface leaves with its parent's (put away, its day over, its time on the
+  workspace past), and a child's surface that leaves takes its row from its parent's
+  (`keepThreadKin`, also after the tick removes a surface whose lifetime ended); a link that shows
+  an ended child again shows its parent again too.
+- `find_thread` lists each thread with its `parent` and its `children` (id, title, state);
+  `read_thread` gives its `parent`, `parent_title` and `children`: the brain finds the child that
+  exists before it opens another.
+- On the workspace, a child is never a tile nor a chip: it opens inside its parent (below, and
+  [the layout](#the-layout-workspace_layoutgo)). Its parent shows it among its children; what waits
+  for the user in a child raises its parent.
+
 | Who | Does |
 |---|---|
 | Brain | opens the thread with the user (`open_thread`: title, goal, headline, alias; led: `done_when`, budget, steps), the only voice |
@@ -1131,7 +1157,8 @@ by code from the thread's data (#468): it never depends on a model remembering t
   is drawn the same while active, but for one thing read from `ends`: a standing thread shows no
   Stop, as it never ends). No thread shows its goal, written by the brain for itself and the
   agents: what a thread shows the user is only words written for the user (its title, headline,
-  notes, summary):
+  notes, summary). A child's surface starts with its **crumb**, a Button with its parent's title
+  (`/thread/parent`) that opens the parent's surface:
   1. **head**: a `Progress` (the state word in a pill, « À toi », « Urgent », « En
      cours », « Terminé », coloured by its tone, and with steps a bar of them, done, running, to
      come, « 2/5 »; none for a calm thread with no steps), and the **state line**
@@ -1149,12 +1176,25 @@ by code from the thread's data (#468): it never depends on a model remembering t
      change of it, more time) and each step's (an approval's card, a task step's held start) as
      `Proposal` components bound to their refs, a choice to make, and for a step the user does
      (kind `user`) a « C'est fait » button;
-  4. **items**: each source that lists things (below);
-  5. **live**: the monitors it follows (below), then their last events as a `Timeline`;
-  6. **Où on en est** (active threads with a summary; an ended one says it in its banner): the
+  4. **children** (`blockChildren`, a thread that has some): « Sous-fils », then one row each, an
+     `Item` with its title, its status word (« À toi », « Urgent », « En cours », « À jour », or how
+     it ended) and its one line, read from the child's own surface as code wrote it (an active
+     child always, an ended one while its surface is on the workspace), « extérieur » on the row of
+     a child whose surface is tainted (and the parent tainted with it, `thread:<child>`, its state
+     line untouched), and an « Ouvrir » Button: a local `open` that names the child's surface
+     (`{"surface": "thread-<id>"}`), opened inside its parent. The rows are at `/thread/children`
+     (`thread`, `surface`, `title`, `status`, `line`, `level`, `mark`; an empty list for a thread
+     with none), where the holder's part may bind them: a part is checked against code's data as
+     its surface shows it (`threadCodeData`). **A child raises its parent**: one that waits for the
+     user makes its parent wait for the user (« À toi », its tile `yours`), and an active parent
+     takes the highest weight of its own and its children's. A child's change writes its parent's
+     surface again, the child's first (`keepThreadSurface`);
+  5. **items**: each source that lists things (below);
+  6. **live**: the monitors it follows (below), then their last events as a `Timeline`;
+  7. **Où on en est** (active threads with a summary; an ended one says it in its banner): the
      summary as remember (kind progress), the extraction or its close wrote it, with its date
      (`threads.summarized`, stamped by `setThread`); no model call; nothing while it has none;
-  7. **Depuis ta dernière visite** (`thread_header.go`): facts made by code from the thread's data
+  8. **Depuis ta dernière visite** (`thread_header.go`): facts made by code from the thread's data
      (a step started, done, failed or handing in its work, what was settled for its task, the
      summary written again, the thread's end), each with its time, since the user's visit before
      the last one, oldest first, the last 5 (« … et 2 plus tôt » before them); shown only after a
@@ -1163,11 +1203,11 @@ by code from the thread's data (#468): it never depends on a model remembering t
      on the surface: `seen` takes the last visit, `visited` is now, so the visit that opens it
      still shows what was new; opened again within 5 minutes, the same visit. Times are absolute
      (« 14 h 32 », « 13 nov. 9 h 05 »): the surface is written again only when it changes;
-  8. **steps**: the steps done folded in one line (a `Fold`: « 2 étapes faites · accord : Fusion »,
+  9. **steps**: the steps done folded in one line (a `Fold`: « 2 étapes faites · accord : Fusion »,
      the last call whose card was approved), opened to see them as a `Timeline` with their
      decided cards, each a compact `Proposal` (one line, opened by a click); then the other steps
      as a `Timeline`, a decided card of theirs compact under it;
-  9. the holder's part (below).
+  10. the holder's part (below).
 
   A step in a `Timeline` has its state, its time, its kind, its checks and the last word on it.
   Under a task step, what was settled for its task
@@ -3174,6 +3214,14 @@ any), placed by the user, on stage before the one opened, or related to it, it i
 same. Work and day threads, and every other surface, are unchanged. A thread surface written
 before it said whether it folds is written again by the 15 s tick (`keepThreadSurfaces`).
 
+**The workspace lays out top threads only.** A child thread's surface says the surface it opens
+inside (`look.inside`, its parent's; `extensions.eriphe.inside` for the page): while that one is
+in the pool, it is neither a tile nor a chip (`laidInside`). Opened (from its parent's row, a link
+`/espace?open=thread-<child>`, `workspace_focus`), its parent is on stage with it inside
+(`onStage`): the layout's `focus` is the parent and its `inside` the child, which the page draws
+in the parent's tile, under the child's title; what relates to the parent is around. Its crumb
+opens the parent again. A child whose parent's surface is gone is laid out as any surface.
+
 **A tile's state** is code's (`tileStateOf`), never a model's: `yours` (something waits for the
 user: a card on it, a step of theirs), `urgent` (weight 80 and up; a thread with a note due within
 two hours, `dueSoon`), `new` (something changed since the user last opened it), `running` (a step
@@ -3808,7 +3856,7 @@ writes.
 | `tidy` | never by an author: code places it on an ended thread's surface, its « Ranger », `{"thread": <id>}` | checked against the Button code wrote there (its thread); then `tidyThread`: the surface leaves, the thread is kept (409 once put away) |
 | `choose` | never by an author: code places it on a thread's surface, one Button per option of a choice step that waits, `{"thread": <id>, "step": "<key>", "option": "<option>"}` | checked against the Button code wrote there (its whole context), for a choice step that still waits and one of its own options; then `chooseStep` |
 | `control` | never by an author: code places it in the head of an active thread (Stop; Pause and Resume on one that runs steps), `{"thread": <id>, "do": "pause"\|"resume"\|"stop"}` | checked against the Button code wrote there (its whole context); then `pauseThread`, `resumeThread` (by the user) or `stopThread` |
-| local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer |
+| local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs. Code alone places an `open` that names another surface, `{"surface": "<id>"}`, on a thread's surface (a child's row, a child's crumb to its parent) | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer. An `open` that names another surface is not sent as is: the page opens that surface, as it opens a tile (`opensSurface`, `place("open", <id>)`), the one it came from as where it opens when it is not laid out |
 
 Anything else (another name, a function call, a component that carries no such action, an answer
 to a proposal the surface does not show, or on a tainted surface) is refused with 400 and told
