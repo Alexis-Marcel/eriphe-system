@@ -790,7 +790,7 @@ func (c *core) endLight(ctx context.Context, s Thread, state, summary string) {
 	c.setThread(s.ID, fields)
 	c.dropThreadSurfaces(s.ID) // surface_authors.go
 	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: fmt.Sprintf("thread:%d", s.ID), Source: "thread",
-		Payload: map[string]any{"thread": s.ID, "state": state}})
+		Payload: map[string]any{"thread": s.ID, "state": state, "ends": s.Ends}})
 }
 
 // reopenThread opens again a thread that ended, when its subject comes

@@ -12,6 +12,29 @@ import (
 	"time"
 )
 
+// A day thread's end at midnight is no breakpoint: what is held stays
+// held; another thread's end, the user there, is one.
+func TestDayEndIsNoBreakpoint(t *testing.T) {
+	c, _, now := pollCore(t)
+	c.attend(attentionItem{Ref: "mail:1", Weight: 3, Why: "a bill", Say: "Ta facture.", Source: "skill:mail", Time: *now})
+	ownerSays(c, "Salut")
+	brainSays(c, "Salut Sam.")
+	c.attentionAnswered(*now)
+	c.attend(attentionItem{Ref: "mail:2", Weight: 3, Why: "a parcel", Say: "Ton colis.", Source: "skill:mail", Time: *now})
+	c.attentionAnswered(*now)
+	if !attentionOf(c, "mail:2").Held {
+		t.Fatal("not held")
+	}
+	c.attentionOnEvent(journalEvent{Kind: evThreadEnded, Payload: map[string]any{"thread": 1, "ends": endsDay}})
+	if !attentionOf(c, "mail:2").Held {
+		t.Error("a day thread's end told what was held")
+	}
+	c.attentionOnEvent(journalEvent{Kind: evThreadEnded, Payload: map[string]any{"thread": 2, "ends": endsGoal}})
+	if it := attentionOf(c, "mail:2"); it != nil && it.Held {
+		t.Error("a thread's end, the user there, told nothing")
+	}
+}
+
 // Each end kind across a midnight tick (#571): a standing thread stays
 // open and shown, and refuses close and stop; a day thread ends at the
 // user's midnight and leaves the workspace at once; a goal thread ended
@@ -73,13 +96,32 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 		t.Errorf("the goal thread is %s", th.State)
 	}
 
-	// Reopened, a day thread's day is today's: the next tick keeps it.
+	// Reopened, a day thread's day is the reopening's: one opened
+	// yesterday, ended by the tick, then reopened, is kept by the next.
+	c.store.db.Exec(`UPDATE threads SET started = ? WHERE id = ?`, time.Now().Add(-48*time.Hour).Unix(), day.ID)
 	if _, err := c.reopenThread(day.ID, "Encore une question.", byBrain); err != nil {
 		t.Fatal(err)
 	}
 	c.threadsTick(time.Now())
 	if th, _ := c.thread(day.ID); !th.active() {
 		t.Error("a reopened day thread ended at once")
+	}
+
+	// Asked to stand, the thread its subject has becomes a standing one; a
+	// led one stays on its goal.
+	got, _, err := c.openThreadOnce(threadIn{Title: "PR 12", Goal: "Merged.", Subject: "pr:example/site#12", Ends: endsStanding}, nil)
+	if err != nil || got.ID != goal.ID || got.Ends != endsStanding || !got.active() {
+		t.Fatalf("again: %+v %v", got, err)
+	}
+	led, err := c.openThread(threadIn{Title: "Refonte", Goal: "En ligne.", Subject: "project:refonte", Steps: []stepSpec{{Key: "a", Title: "A", Kind: stepUser, Question: "Fais-le."}}}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.openThreadOnce(threadIn{Title: "Refonte", Goal: "En ligne.", Subject: "project:refonte", Ends: endsDay}, nil); err == nil {
+		t.Error("a led thread was made a day's")
+	}
+	if th, _ := c.thread(led.ID); th.Ends != endsGoal {
+		t.Errorf("led thread ends %q", th.Ends)
 	}
 
 	// A standing or day thread is light; ends is one of three.

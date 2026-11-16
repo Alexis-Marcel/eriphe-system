@@ -396,6 +396,9 @@ func (c *core) attentionOnEvent(e journalEvent) {
 	case evUserReturned:
 		c.attentionBreak(breakReturn, c.notifyTime())
 	case evThreadEnded:
+		if e.Payload["ends"] == endsDay {
+			return // its day is over at midnight: nothing the user finished
+		}
 		if s, err := c.userState(); err == nil && !s.Away {
 			c.attentionBreak(breakThread, s.Now)
 		}

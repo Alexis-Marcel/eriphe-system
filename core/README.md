@@ -951,7 +951,11 @@ it only changes the thread's life:
   a lead are refused too): it is never ended, so never hidden.
 - `day`: a view for the day (an answer shown, « j'ai quoi demain ? »). Light only; the engine's
   tick ends it (`done`) once the user's midnight passed since it started (`endDays`) and its
-  surface leaves at once. Reopened, its day is the reopening's.
+  surface leaves at once. Reopened, its day is the reopening's. Its `thread.ended` (payload `ends`
+  `day`) is no breakpoint of the attention queue: nothing held is told at midnight.
+
+`open_thread` with `ends` on a subject whose thread exists gives that thread back ending as asked
+now (`endsAgain`): a light one only, a led one ends on its goal and the open is refused.
 
 | Who | Does |
 |---|---|

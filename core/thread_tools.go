@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -96,6 +98,26 @@ func (c *core) threadView(id int64, lines int) (threadView, error) {
 	return v, nil
 }
 
+// endsAgain makes the thread a subject already has end as the brain asks
+// now (open_thread's ends), should it ask another: a light one only.
+func (c *core) endsAgain(old Thread, ends string) error {
+	ends = strings.ToLower(strings.TrimSpace(ends))
+	if ends == "" || ends == old.Ends {
+		return nil
+	}
+	if !slices.Contains(threadEnds, ends) {
+		return fmt.Errorf("ends %q: goal, standing or day", ends)
+	}
+	if old.led() {
+		return fmt.Errorf("thread %d « %s » follows this subject and is led: it ends on its goal", old.ID, old.Title)
+	}
+	fields := map[string]any{"ends": ends}
+	if ends == endsDay {
+		fields["started"] = time.Now().Unix() // its day is today's
+	}
+	return c.setThread(old.ID, fields)
+}
+
 // sameSubject is why a thread opened on a subject that had one is that
 // one again: a matter has one thread.
 const sameSubject = "même sujet"
@@ -128,6 +150,9 @@ func (c *core) openThreadOnce(in threadIn, taint []string) (s Thread, again stri
 		return s, "", err
 	}
 	old := found[0]
+	if err := c.endsAgain(old, in.Ends); err != nil {
+		return s, "", err
+	}
 	switch {
 	case led && old.active():
 		return s, "", fmt.Errorf("thread %d « %s » follows %s already: change its plan (add_step, amend_thread) rather than open another", old.ID, old.Title, old.Subject)
