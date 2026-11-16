@@ -1,29 +1,35 @@
 package main
 
 import (
-	"database/sql"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // The header of a thread's surface (#553): opening a thread tells in
 // seconds what changed, where it stands and what is the user's, without
-// rereading it. Three blocks (thread_blocks.go), all composed by code:
+// rereading it. Each block shows only when it has something to say
+// (thread_blocks.go), all composed by code:
 //
+//   - The state line: its headline (set_thread), else what its items
+//     count, else its state; when its items were sorted; « extérieur »
+//     once (threadStateText).
 //   - Depuis ta dernière visite: facts made by code from the thread's own
 //     data (its steps' starts and ends, its summary written again, its
 //     end) since the user's visit before the last one, oldest first, the
-//     last threadFactsMax; « Rien de nouveau depuis 14 h 32 » when none.
+//     last threadFactsMax; nothing before a first visit, nor when none.
 //     What was settled for its tasks is one: kept as a kind and its
 //     parameters (task_answer_log.go), worded here. Never the log's
 //     lines: they are French only, and may quote a lead.
 //   - Où on en est: the thread's summary, as remember (kind progress),
-//     the extraction or its close wrote it, with its date; no model call.
+//     the extraction or its close wrote it, with its date; no model call;
+//     nothing while it has none.
 //   - À toi: what waits for the user (its cards, a step of theirs); none
 //     when nothing waits, nor once it ended.
 //
@@ -182,28 +188,13 @@ func (c *core) threadSince(out *threadComps, data map[string]any, s Thread, step
 		}
 	}
 	slices.SortStableFunc(facts, func(a, b threadFact) int { return a.At.Compare(b.At) })
-	switch {
-	case s.seen == 0:
-		out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle", "text": w("thread.head.sofar")})
-	case len(facts) == 0:
-		out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle", "text": w("thread.head.since")})
-		// No fact code words, but the log says whether something moved
-		// (a step added, a plan changed, a card linked, a reopen): never
-		// « Rien de nouveau » then. Counted, never quoted.
-		var n int
-		var last sql.NullInt64
-		c.store.db.QueryRow(`SELECT COUNT(*), MAX(at) FROM thread_log WHERE thread = ? AND at > ?`, s.ID, s.seen).Scan(&n, &last)
-		if n > 0 && last.Valid {
-			out.add(comp{"id": "thread_moved", "component": "Text", "variant": "caption",
-				"text": fmt.Sprintf(w("thread.head.moved"), n, threadClock(time.Unix(last.Int64, 0), now, loc, lang))})
-		} else {
-			out.add(comp{"id": "thread_nothing", "component": "Text", "variant": "caption",
-				"text": fmt.Sprintf(w("thread.head.nothing"), threadClock(time.Unix(s.seen, 0), now, loc, lang))})
-		}
-	default:
-		out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle",
-			"text": fmt.Sprintf(w("thread.head.sincewhen"), threadClock(time.Unix(s.seen, 0), now, loc, lang))})
+	// Before a visit, all of it is new: the thread itself says it. After,
+	// only what happened since, when something did.
+	if s.seen == 0 || len(facts) == 0 {
+		return
 	}
+	out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle",
+		"text": fmt.Sprintf(w("thread.head.sincewhen"), threadClock(time.Unix(s.seen, 0), now, loc, lang))})
 	var lines []any
 	if n := len(facts) - threadFactsMax; n > 0 {
 		lines = append(lines, fmt.Sprintf(w("thread.head.earlier"), n))
@@ -221,24 +212,115 @@ func (c *core) threadSince(out *threadComps, data map[string]any, s Thread, step
 }
 
 // threadWhere composes « Où on en est »: the thread's summary, with its
-// date. An ended thread says it in its banner (blockEnded).
+// date; nothing while it has none. An ended thread says it in its banner
+// (blockEnded).
 func (c *core) threadWhere(out *threadComps, data map[string]any, s Thread, now time.Time) {
+	sum := strings.TrimSpace(s.Summary)
+	if sum == "" {
+		return
+	}
 	lang, loc := c.userLang(), c.userZone()
 	w := func(key string) string { return tr(lang, key) }
 	type comp = map[string]any
-
-	// Où on en est.
 	out.add(comp{"id": "thread_where", "component": "Text", "variant": "subtitle", "text": w("thread.head.where")})
-	if sum := strings.TrimSpace(s.Summary); sum != "" {
-		data["summary"] = sum
-		out.add(comp{"id": "thread_summary", "component": "Markdown", "text": map[string]any{"@path": "/thread/summary"}})
-		if s.summarized > 0 {
-			out.add(comp{"id": "thread_summary_at", "component": "Text", "variant": "caption",
-				"text": fmt.Sprintf(w("thread.head.summaryat"), threadClock(time.Unix(s.summarized, 0), now, loc, lang))})
-		}
-	} else {
-		out.add(comp{"id": "thread_nosummary", "component": "Text", "variant": "caption", "text": w("thread.head.nosummary")})
+	data["summary"] = sum
+	out.add(comp{"id": "thread_summary", "component": "Markdown", "text": map[string]any{"@path": "/thread/summary"}})
+	if s.summarized > 0 {
+		out.add(comp{"id": "thread_summary_at", "component": "Text", "variant": "caption",
+			"text": fmt.Sprintf(w("thread.head.summaryat"), threadClock(time.Unix(s.summarized, 0), now, loc, lang))})
 	}
+}
+
+// A thread's headline (set_thread headline): what a skill or a task tending
+// it says of it to the user, one line, shown at the top of its surface in
+// place of what code counts, and as its chip's line. Its author and taint
+// are code's: written after reading external content, the surface is
+// tainted for the models that read the workspace (codeTaint headline), and
+// its state line says « extérieur ».
+const (
+	threadHeadlineKey   = "thread_headline:" // + the thread's id: its headline, JSON
+	threadHeadlineMax   = 120                // runes
+	threadHeadlineTaint = "headline"
+)
+
+type threadHeadline struct {
+	Text    string   `json:"text"`
+	By      string   `json:"by"`
+	Tainted []string `json:"tainted,omitempty"`
+	At      int64    `json:"at"`
+}
+
+// threadHeadlineOf is a thread's headline, nil for none.
+func (c *core) threadHeadlineOf(id int64) *threadHeadline {
+	raw := c.store.get(threadHeadlineKey + strconv.FormatInt(id, 10))
+	if raw == "" {
+		return nil
+	}
+	var h threadHeadline
+	if json.Unmarshal([]byte(raw), &h) != nil || h.Text == "" {
+		return nil
+	}
+	return &h
+}
+
+// setThreadHeadline writes a thread's headline, or takes it away (text
+// empty), by who and with why its words may be someone else's.
+func (c *core) setThreadHeadline(id int64, text, by string, taint []string) error {
+	text = oneLine(text)
+	if utf8.RuneCountInString(text) > threadHeadlineMax {
+		return fmt.Errorf("a headline of %d characters at most", threadHeadlineMax)
+	}
+	key := threadHeadlineKey + strconv.FormatInt(id, 10)
+	if text == "" {
+		c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, key)
+	} else {
+		raw, _ := json.Marshal(threadHeadline{Text: text, By: by, Tainted: slices.Compact(slices.Sorted(slices.Values(taint))), At: time.Now().Unix()})
+		c.store.set(key, string(raw))
+	}
+	c.threadMoved(id)
+	return nil
+}
+
+// threadSays is what a thread says of itself in one line: its headline,
+// else what its items count (« 1 à faire · 2 pour info »); "" when it has
+// neither.
+func threadSays(h *threadHeadline, seen threadItemsSeen, lang string) string {
+	if h != nil {
+		return h.Text
+	}
+	var parts []string
+	for _, state := range itemGroups {
+		if n := seen.counts[state]; n > 0 && state != itemStateDone {
+			word := "thread.item.state." + state
+			if state == "" {
+				word = "thread.item.state.other"
+			}
+			parts = append(parts, fmt.Sprintf("%d %s", n, tr(lang, word)))
+		}
+	}
+	return strings.Join(parts, threadExternalSep)
+}
+
+// threadStateText is an active thread's state line, at the top of its
+// surface: what it says of itself (threadSays), else its state when that
+// says more; when its items were last sorted; « extérieur » once, when
+// some of what it shows may carry someone else's words.
+func (c *core) threadStateText(s Thread, says string, seen threadItemsSeen, tainted bool, now time.Time) string {
+	lang, loc := c.userLang(), c.userZone()
+	var parts []string
+	if says == "" {
+		says = c.threadStateLine(s, lang)
+	}
+	if says != "" {
+		parts = append(parts, says)
+	}
+	if seen.sorted > 0 {
+		parts = append(parts, fmt.Sprintf(tr(lang, "thread.state.sorted"), threadClock(time.Unix(seen.sorted, 0), now, loc, lang)))
+	}
+	if tainted {
+		parts = append(parts, tr(lang, "thread.surface.external"))
+	}
+	return strings.Join(parts, threadExternalSep)
 }
 
 // threadYours composes « À toi »: what waits for the user, the thread's

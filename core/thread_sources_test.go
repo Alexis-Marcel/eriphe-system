@@ -50,10 +50,15 @@ func TestThreadSourceItems(t *testing.T) {
 	if len(items) != 1 || strings.Join(items[0], ",") != "Courant" {
 		t.Fatalf("items %v", items)
 	}
-	if !strings.Contains(captions[0], "Source ledger") || !strings.Contains(captions[0], "sans modèle") || !strings.Contains(captions[0], "extérieur") {
+	// No line about the source while it reads well; « extérieur » once, in
+	// the state line.
+	if captions[0] != "" {
 		t.Errorf("caption %q", captions[0])
 	}
-	s, _, meta := threadSurfaceOf(t, c, th.ID)
+	s, thread, meta := threadSurfaceOf(t, c, th.ID)
+	if state, _ := thread["state"].(string); state != "1 pas encore trié · extérieur" {
+		t.Errorf("state line %q", state)
+	}
 	var data map[string]any
 	json.Unmarshal(s.Data, &data)
 	if total, _ := data["ledger"].(map[string]any)["total"].(float64); total != 120 {
@@ -246,4 +251,35 @@ func TestThreadPartSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	shown("ended")
+}
+
+// An item's row says what it is from its own fields: the paths its source
+// names, else its subject, title or name, and beside it its sender,
+// author or organizer, a person by their name; never its id while it has
+// some words, whatever the source.
+func TestThreadItemTitles(t *testing.T) {
+	value := map[string]any{"messages": []any{
+		map[string]any{"id": "bTEfYWxl", "from": "Sam <sam@example.org>", "subject": "Devis cuisine", "date": "2026-11-16T09:00:00Z"},
+		map[string]any{"id": "bTEfYmVy", "organizer": map[string]any{"displayName": "Alex", "email": "alex@example.org"}, "title": "Réunion"},
+		map[string]any{"id": "bTEfY2Fy", "from": "news@example.org"},
+		map[string]any{"id": "bTEfZGVm", "threadId": "x1", "body": "Bonjour", "url": "https://example.org/x"},
+		map[string]any{"id": "bTEfZW5k", "size": 3},
+		map[string]any{"id": "bTEfZml4", "subject": "Facture", "from": "Lou <lou@example.org>", "account": "perso"},
+	}}
+	src := storedSource{threadSource: threadSource{Name: "mails", Items: &sourceItems{Path: "messages", ID: "id"}}, Value: value}
+	var got []string
+	for _, it := range threadSourceItems(src, 0) {
+		detail, _ := it["detail"].(string)
+		got = append(got, it["title"].(string)+"|"+detail)
+	}
+	want := []string{"Devis cuisine|Sam", "Réunion|Alex", "news@example.org|", "Bonjour|", "bTEfZW5k|", "Facture|Lou"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("rows %v, want %v", got, want)
+	}
+
+	// Paths named: theirs.
+	src.Items.Title, src.Items.Detail = "account", "subject"
+	if it := threadSourceItems(src, 0)[5]; it["title"] != "perso" || it["detail"] != "Facture" {
+		t.Errorf("named paths: %v", it)
+	}
 }

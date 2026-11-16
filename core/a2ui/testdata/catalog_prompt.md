@@ -62,7 +62,7 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
 - **Tabs** : Des onglets, un enfant par onglet.
   tabs* [{title* texte · child* id d'un composant}, …]
 - **Fold** : Une ligne qui se déplie : ce qu'elle résume (« 4 étapes faites »), et en dessous un enfant, montré quand on l'ouvre.
-  label* texte · child* id d'un composant · open booléen (Ouverte d'abord (non par défaut))
+  label* texte · child* id d'un composant · aside id d'un composant (Sur sa ligne, au bout, ouverte ou non : une action sur tout ce qu'elle résume (« Archiver les 2 »)) · open booléen (Ouverte d'abord (non par défaut))
 - **Divider** : Un trait qui sépare.
 - **Button** : Un bouton qui déclenche une action.
   label* texte · action* action ({"event": {"name", "context"}} ou {"functionCall": appel}) · icon alert|arrowDown|arrowUp|calendar|chart|check|clock|close|cloud|document|error|event|folder|home|info|link|lock|mail|message|money|note|person|phone|place|refresh|search|server|settings|star|task|trendDown|trendUp|warning ou liaison · variant primary|default|quiet

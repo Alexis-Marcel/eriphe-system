@@ -18,13 +18,6 @@
        "thread_where",
        "thread_summary",
        "thread_summary_at",
-       "thread_since",
-       "thread_fact_0",
-       "thread_fact_1",
-       "thread_fact_2",
-       "thread_fact_3",
-       "thread_fact_4",
-       "thread_fact_5",
        "thread_done",
        "thread_steps"
       ]
@@ -103,56 +96,8 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Summary updated: 06:24",
+      "text": "Summary updated: 09:42",
       "variant": "caption"
-     },
-     {
-      "id": "thread_since",
-      "component": "Text",
-      "text": "So far",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_fact_0",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/0"
-      }
-     },
-     {
-      "id": "thread_fact_1",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/1"
-      }
-     },
-     {
-      "id": "thread_fact_2",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/2"
-      }
-     },
-     {
-      "id": "thread_fact_3",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/3"
-      }
-     },
-     {
-      "id": "thread_fact_4",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/4"
-      }
-     },
-     {
-      "id": "thread_fact_5",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/5"
-      }
      },
      {
       "id": "thread_card_1",
@@ -195,27 +140,19 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T04:24:58+01:00",
+        "date": "2026-11-16T07:42:01+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T05:04:58+01:00",
+        "date": "2026-11-16T08:22:01+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
        }
       ],
       "donelabel": "2 steps done",
-      "facts": [
-       "… and 1 earlier",
-       "05:04 · “Merge the branch”: done",
-       "06:24 · Summary updated",
-       "06:34 · “Resize the photos” started",
-       "06:44 · “Publish the site” waits for you",
-       "06:54 · Thread opened"
-      ],
       "goal": "The club's site is online, with its photos.",
       "progress": {
        "current": 2,
@@ -225,13 +162,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T06:44:58+01:00",
+        "date": "2026-11-16T10:02:01+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T06:34:58+01:00",
+        "date": "2026-11-16T09:52:01+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "current"
@@ -251,7 +188,6 @@
        "title": "The club's site",
        "author": "thread:101",
        "weight": 70,
-       "why": "Where this thread stands, kept up to date by Eriphe.",
        "answers": true,
        "summary": "Merge the branch ✓ · Publish the site: yours",
        "state": "yours",
@@ -272,25 +208,11 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "thread_goal",
        "thread_progress",
-       "thread_sources",
-       "thread_src_0_by",
-       "thread_src_0_counts",
+       "thread_state",
        "thread_src_0_cards",
-       "thread_src_0_groups",
-       "thread_where",
-       "thread_nosummary",
-       "thread_since",
-       "thread_fact_0"
+       "thread_src_0_groups"
       ]
-     },
-     {
-      "id": "thread_goal",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/goal"
-      }
      },
      {
       "id": "thread_progress",
@@ -301,27 +223,12 @@
       "tone": "attention"
      },
      {
-      "id": "thread_sources",
-      "component": "Text",
-      "text": "Data",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_src_0_by",
+      "id": "thread_state",
       "component": "Text",
       "text": {
-       "@path": "/thread/sources/0/caption"
+       "@path": "/thread/state"
       },
       "variant": "caption"
-     },
-     {
-      "id": "thread_src_0_counts",
-      "component": "List",
-      "children": {
-       "componentId": "thread_src_0_count",
-       "path": "/thread/sources/0/counts"
-      },
-      "direction": "horizontal"
      },
      {
       "id": "thread_src_0_cards",
@@ -375,14 +282,6 @@
       "variant": "default"
      },
      {
-      "id": "thread_src_0_group_body",
-      "component": "Column",
-      "children": [
-       "thread_src_0_group_offers",
-       "thread_src_0_rows"
-      ]
-     },
-     {
       "id": "thread_src_0_group_offers",
       "component": "List",
       "children": {
@@ -417,19 +316,10 @@
       "variant": "default"
      },
      {
-      "id": "thread_src_0_count",
-      "component": "Metric",
-      "label": {
-       "@path": "label"
-      },
-      "value": {
-       "@path": "value"
-      }
-     },
-     {
       "id": "thread_src_0_group",
       "component": "Fold",
-      "child": "thread_src_0_group_body",
+      "aside": "thread_src_0_group_offers",
+      "child": "thread_src_0_rows",
       "label": {
        "@path": "label"
       },
@@ -466,9 +356,6 @@
       "level": {
        "@path": "level"
       },
-      "mark": {
-       "@path": "mark"
-      },
       "note": {
        "@path": "note"
       },
@@ -490,31 +377,6 @@
       "compact": true,
       "proposalId": {
        "@path": "ref"
-      }
-     },
-     {
-      "id": "thread_where",
-      "component": "Text",
-      "text": "Where it stands",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_nosummary",
-      "component": "Text",
-      "text": "No summary yet.",
-      "variant": "caption"
-     },
-     {
-      "id": "thread_since",
-      "component": "Text",
-      "text": "So far",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_fact_0",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/0"
       }
      }
     ],
@@ -541,31 +403,12 @@
       "total": 4500
      },
      "thread": {
-      "facts": [
-       "06:54 · Thread opened"
-      ],
-      "goal": "The accounts followed, and what is to do.",
       "progress": {
        "label": "Yours"
       },
       "sources": [
        {
-        "caption": "Source ledger · read by code, no model",
         "cards": [],
-        "counts": [
-         {
-          "label": "to do",
-          "value": 1
-         },
-         {
-          "label": "to look at",
-          "value": 1
-         },
-         {
-          "label": "nothing to do",
-          "value": 1
-         }
-        ],
         "groups": [
          {
           "items": [
@@ -581,7 +424,6 @@
             "due": "2026-11-17",
             "id": "Courant",
             "level": "high",
-            "mark": "",
             "n": 0,
             "note": "Solde bas avant le loyer.",
             "offers": [
@@ -613,7 +455,6 @@
             "external": true,
             "id": "Joint",
             "level": "normal",
-            "mark": "external",
             "n": 2,
             "note": "Un virement inconnu, d'après le relevé.",
             "offers": [
@@ -643,7 +484,6 @@
             "due": "",
             "id": "Épargne",
             "level": "normal",
-            "mark": "",
             "n": 1,
             "note": "",
             "offers": [],
@@ -664,7 +504,6 @@
             "due": "",
             "id": "Livret",
             "level": "low",
-            "mark": "",
             "n": 3,
             "note": "Rien de neuf.",
             "offers": [],
@@ -680,7 +519,8 @@
         ],
         "name": "ledger"
        }
-      ]
+      ],
+      "state": "1 to do · 1 to look at · 1 not sorted yet · 1 nothing to do · sorted at 09:12 · external"
      }
     },
     "metadata": {
@@ -689,9 +529,8 @@
        "title": "My accounts",
        "author": "thread:102",
        "weight": 70,
-       "why": "Where this thread stands, kept up to date by Eriphe.",
        "answers": true,
-       "summary": "Open",
+       "summary": "1 to do · 1 to look at · 1 not sorted yet · 1 nothing to do",
        "state": "yours",
        "new": 4,
        "updated": "0001-01-01T00:00:00Z"
@@ -713,13 +552,6 @@
        "thread_goal",
        "thread_progress",
        "thread_ended",
-       "thread_since",
-       "thread_fact_0",
-       "thread_fact_1",
-       "thread_fact_2",
-       "thread_fact_3",
-       "thread_fact_4",
-       "thread_fact_5",
        "thread_done"
       ]
      },
@@ -782,54 +614,6 @@
       ]
      },
      {
-      "id": "thread_since",
-      "component": "Text",
-      "text": "So far",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_fact_0",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/0"
-      }
-     },
-     {
-      "id": "thread_fact_1",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/1"
-      }
-     },
-     {
-      "id": "thread_fact_2",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/2"
-      }
-     },
-     {
-      "id": "thread_fact_3",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/3"
-      }
-     },
-     {
-      "id": "thread_fact_4",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/4"
-      }
-     },
-     {
-      "id": "thread_fact_5",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/5"
-      }
-     },
-     {
       "id": "thread_card_1",
       "component": "Proposal",
       "compact": true,
@@ -863,25 +647,25 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T04:24:58+01:00",
+        "date": "2026-11-16T07:42:01+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T05:04:58+01:00",
+        "date": "2026-11-16T08:22:01+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
        },
        {
-        "date": "2026-11-16T06:44:58+01:00",
+        "date": "2026-11-16T10:02:01+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T06:34:58+01:00",
+        "date": "2026-11-16T09:52:01+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "done"
@@ -895,16 +679,8 @@
       "donelabel": "5 steps done",
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 05:54"
+       "title": "Done ✓ · 09:12"
       },
-      "facts": [
-       "… and 2 earlier",
-       "05:54 · Done ✓",
-       "06:24 · Summary updated",
-       "06:34 · “Resize the photos” started",
-       "06:44 · “Publish the site” started",
-       "06:54 · Thread opened"
-      ],
       "goal": "The club's site is online, with its photos.",
       "progress": {
        "current": 0,
@@ -920,11 +696,316 @@
        "title": "The terrace",
        "author": "thread:103",
        "weight": 30,
-       "why": "Where this thread stands, kept up to date by Eriphe.",
        "answers": true,
        "summary": "Done ✓",
        "state": "done",
        "new": 7,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-104",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_state",
+       "thread_src_0_cards",
+       "thread_src_0_groups"
+      ]
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_src_0_cards",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_card",
+       "path": "/thread/sources/0/cards"
+      }
+     },
+     {
+      "id": "thread_src_0_groups",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_group",
+       "path": "/thread/sources/0/groups"
+      },
+      "emptyText": "Nothing for now."
+     },
+     {
+      "id": "thread_src_0_row_offers",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_offer",
+       "path": "offers"
+      },
+      "direction": "horizontal"
+     },
+     {
+      "id": "thread_src_0_offer",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "item": {
+          "@path": "item"
+         },
+         "offer": {
+          "@path": "offer"
+         },
+         "source": {
+          "@path": "source"
+         },
+         "thread": 2
+        },
+        "name": "offer"
+       }
+      },
+      "label": {
+       "@path": "label"
+      },
+      "variant": "default"
+     },
+     {
+      "id": "thread_src_0_group_offers",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_group_offer",
+       "path": "offers"
+      },
+      "direction": "horizontal"
+     },
+     {
+      "id": "thread_src_0_group_offer",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "offer": {
+          "@path": "offer"
+         },
+         "source": {
+          "@path": "source"
+         },
+         "state": {
+          "@path": "state"
+         },
+         "thread": 2
+        },
+        "name": "offer"
+       }
+      },
+      "label": {
+       "@path": "label"
+      },
+      "variant": "default"
+     },
+     {
+      "id": "thread_src_0_group",
+      "component": "Fold",
+      "aside": "thread_src_0_group_offers",
+      "child": "thread_src_0_rows",
+      "label": {
+       "@path": "label"
+      },
+      "open": {
+       "@path": "open"
+      }
+     },
+     {
+      "id": "thread_src_0_rows",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_row",
+       "path": "items"
+      }
+     },
+     {
+      "id": "thread_src_0_row",
+      "component": "Column",
+      "children": [
+       "thread_src_0_item",
+       "thread_src_0_row_cards",
+       "thread_src_0_row_offers"
+      ]
+     },
+     {
+      "id": "thread_src_0_item",
+      "component": "Item",
+      "detail": {
+       "@path": "detail"
+      },
+      "due": {
+       "@path": "due"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "note": {
+       "@path": "note"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "thread_src_0_row_cards",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_card",
+       "path": "cards"
+      }
+     },
+     {
+      "id": "thread_src_0_card",
+      "component": "Proposal",
+      "compact": true,
+      "proposalId": {
+       "@path": "ref"
+      }
+     }
+    ],
+    "dataModel": {
+     "mails": {
+      "messages": [
+       {
+        "from": "Sam \u003csam@example.org\u003e",
+        "id": "bTEfYWxlcnQx",
+        "subject": "The kitchen quote"
+       },
+       {
+        "from": "Les Nouvelles \u003cnews@example.org\u003e",
+        "id": "bTEfbmV3czEy",
+        "subject": "The November letter"
+       },
+       {
+        "from": "Boutique \u003cshop@example.org\u003e",
+        "id": "bTEfcHJvbW8z",
+        "subject": "20% off this weekend"
+       }
+      ]
+     },
+     "thread": {
+      "sources": [
+       {
+        "cards": [],
+        "groups": [
+         {
+          "items": [
+           {
+            "by": "Noted by the skill “mails”",
+            "cards": [],
+            "detail": "Sam",
+            "due": "",
+            "external": true,
+            "id": "bTEfYWxlcnQx",
+            "level": "low",
+            "n": 0,
+            "note": "Sam sends the signed quote; nothing to answer.",
+            "offers": [],
+            "source": "mails",
+            "state": "info",
+            "title": "The kitchen quote"
+           }
+          ],
+          "label": "For your information · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Noted by the skill “mails”",
+            "cards": [],
+            "detail": "Les Nouvelles",
+            "due": "",
+            "external": true,
+            "id": "bTEfbmV3czEy",
+            "level": "low",
+            "n": 1,
+            "note": "",
+            "offers": [
+             {
+              "item": "bTEfbmV3czEy",
+              "label": "use “move funds”",
+              "offer": "2d85eae4b4ae",
+              "source": "mails",
+              "thread": 2,
+              "tool": "mcp__ledger__move_funds"
+             }
+            ],
+            "source": "mails",
+            "state": "none",
+            "title": "The November letter"
+           },
+           {
+            "by": "Noted by the skill “mails”",
+            "cards": [],
+            "detail": "Boutique",
+            "due": "",
+            "external": true,
+            "id": "bTEfcHJvbW8z",
+            "level": "low",
+            "n": 2,
+            "note": "",
+            "offers": [
+             {
+              "item": "bTEfcHJvbW8z",
+              "label": "use “move funds”",
+              "offer": "2d85eae4b4ae",
+              "source": "mails",
+              "thread": 2,
+              "tool": "mcp__ledger__move_funds"
+             }
+            ],
+            "source": "mails",
+            "state": "none",
+            "title": "20% off this weekend"
+           }
+          ],
+          "label": "Nothing to do · 2",
+          "offers": [
+           {
+            "label": "use “move funds” · 2",
+            "offer": "2d85eae4b4ae",
+            "source": "mails",
+            "state": "none",
+            "thread": 2
+           }
+          ],
+          "open": false
+         }
+        ],
+        "name": "mails"
+       }
+      ],
+      "state": "1 for your information · 2 nothing to do · sorted at 09:12 · external"
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "My mails",
+       "author": "thread:104",
+       "weight": 50,
+       "answers": true,
+       "summary": "1 for your information · 2 nothing to do",
+       "state": "new",
+       "new": 4,
        "updated": "0001-01-01T00:00:00Z"
       }
      }
@@ -951,13 +1032,6 @@
        "thread_where",
        "thread_summary",
        "thread_summary_at",
-       "thread_since",
-       "thread_fact_0",
-       "thread_fact_1",
-       "thread_fact_2",
-       "thread_fact_3",
-       "thread_fact_4",
-       "thread_fact_5",
        "thread_done",
        "thread_steps"
       ]
@@ -1036,56 +1110,8 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Résumé mis à jour : 6 h 24",
+      "text": "Résumé mis à jour : 9 h 42",
       "variant": "caption"
-     },
-     {
-      "id": "thread_since",
-      "component": "Text",
-      "text": "Jusqu'ici",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_fact_0",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/0"
-      }
-     },
-     {
-      "id": "thread_fact_1",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/1"
-      }
-     },
-     {
-      "id": "thread_fact_2",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/2"
-      }
-     },
-     {
-      "id": "thread_fact_3",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/3"
-      }
-     },
-     {
-      "id": "thread_fact_4",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/4"
-      }
-     },
-     {
-      "id": "thread_fact_5",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/5"
-      }
      },
      {
       "id": "thread_card_1",
@@ -1128,27 +1154,19 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T04:24:58+01:00",
+        "date": "2026-11-16T07:42:01+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T05:04:58+01:00",
+        "date": "2026-11-16T08:22:01+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
        }
       ],
       "donelabel": "2 étapes faites",
-      "facts": [
-       "… et 1 plus tôt",
-       "5 h 04 · « Fusionner la branche » : fait",
-       "6 h 24 · Résumé mis à jour",
-       "6 h 34 · « Redimensionner les photos » a démarré",
-       "6 h 44 · « Publier le site » t'attend",
-       "6 h 54 · Thread ouvert"
-      ],
       "goal": "Le site du club est en ligne, avec ses photos.",
       "progress": {
        "current": 2,
@@ -1158,13 +1176,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T06:44:58+01:00",
+        "date": "2026-11-16T10:02:01+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T06:34:58+01:00",
+        "date": "2026-11-16T09:52:01+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "current"
@@ -1184,7 +1202,6 @@
        "title": "Le site du club",
        "author": "thread:101",
        "weight": 70,
-       "why": "Où en est ce thread, tenu à jour par Eriphe.",
        "answers": true,
        "summary": "Fusionner la branche ✓ · Publier le site à toi",
        "state": "yours",
@@ -1205,25 +1222,11 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "thread_goal",
        "thread_progress",
-       "thread_sources",
-       "thread_src_0_by",
-       "thread_src_0_counts",
+       "thread_state",
        "thread_src_0_cards",
-       "thread_src_0_groups",
-       "thread_where",
-       "thread_nosummary",
-       "thread_since",
-       "thread_fact_0"
+       "thread_src_0_groups"
       ]
-     },
-     {
-      "id": "thread_goal",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/goal"
-      }
      },
      {
       "id": "thread_progress",
@@ -1234,27 +1237,12 @@
       "tone": "attention"
      },
      {
-      "id": "thread_sources",
-      "component": "Text",
-      "text": "Données",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_src_0_by",
+      "id": "thread_state",
       "component": "Text",
       "text": {
-       "@path": "/thread/sources/0/caption"
+       "@path": "/thread/state"
       },
       "variant": "caption"
-     },
-     {
-      "id": "thread_src_0_counts",
-      "component": "List",
-      "children": {
-       "componentId": "thread_src_0_count",
-       "path": "/thread/sources/0/counts"
-      },
-      "direction": "horizontal"
      },
      {
       "id": "thread_src_0_cards",
@@ -1308,14 +1296,6 @@
       "variant": "default"
      },
      {
-      "id": "thread_src_0_group_body",
-      "component": "Column",
-      "children": [
-       "thread_src_0_group_offers",
-       "thread_src_0_rows"
-      ]
-     },
-     {
       "id": "thread_src_0_group_offers",
       "component": "List",
       "children": {
@@ -1350,19 +1330,10 @@
       "variant": "default"
      },
      {
-      "id": "thread_src_0_count",
-      "component": "Metric",
-      "label": {
-       "@path": "label"
-      },
-      "value": {
-       "@path": "value"
-      }
-     },
-     {
       "id": "thread_src_0_group",
       "component": "Fold",
-      "child": "thread_src_0_group_body",
+      "aside": "thread_src_0_group_offers",
+      "child": "thread_src_0_rows",
       "label": {
        "@path": "label"
       },
@@ -1399,9 +1370,6 @@
       "level": {
        "@path": "level"
       },
-      "mark": {
-       "@path": "mark"
-      },
       "note": {
        "@path": "note"
       },
@@ -1423,31 +1391,6 @@
       "compact": true,
       "proposalId": {
        "@path": "ref"
-      }
-     },
-     {
-      "id": "thread_where",
-      "component": "Text",
-      "text": "Où on en est",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_nosummary",
-      "component": "Text",
-      "text": "Pas encore de résumé.",
-      "variant": "caption"
-     },
-     {
-      "id": "thread_since",
-      "component": "Text",
-      "text": "Jusqu'ici",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_fact_0",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/0"
       }
      }
     ],
@@ -1474,31 +1417,12 @@
       "total": 4500
      },
      "thread": {
-      "facts": [
-       "6 h 54 · Thread ouvert"
-      ],
-      "goal": "Les comptes suivis, et ce qui est à faire.",
       "progress": {
        "label": "À toi"
       },
       "sources": [
        {
-        "caption": "Source ledger · lu par le code, sans modèle",
         "cards": [],
-        "counts": [
-         {
-          "label": "à faire",
-          "value": 1
-         },
-         {
-          "label": "à regarder",
-          "value": 1
-         },
-         {
-          "label": "rien à faire",
-          "value": 1
-         }
-        ],
         "groups": [
          {
           "items": [
@@ -1514,7 +1438,6 @@
             "due": "2026-11-17",
             "id": "Courant",
             "level": "high",
-            "mark": "",
             "n": 0,
             "note": "Solde bas avant le loyer.",
             "offers": [
@@ -1546,7 +1469,6 @@
             "external": true,
             "id": "Joint",
             "level": "normal",
-            "mark": "extérieur",
             "n": 2,
             "note": "Un virement inconnu, d'après le relevé.",
             "offers": [
@@ -1576,7 +1498,6 @@
             "due": "",
             "id": "Épargne",
             "level": "normal",
-            "mark": "",
             "n": 1,
             "note": "",
             "offers": [],
@@ -1597,7 +1518,6 @@
             "due": "",
             "id": "Livret",
             "level": "low",
-            "mark": "",
             "n": 3,
             "note": "Rien de neuf.",
             "offers": [],
@@ -1613,7 +1533,8 @@
         ],
         "name": "ledger"
        }
-      ]
+      ],
+      "state": "1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire · trié à 9 h 12 · extérieur"
      }
     },
     "metadata": {
@@ -1622,9 +1543,8 @@
        "title": "Mes comptes",
        "author": "thread:102",
        "weight": 70,
-       "why": "Où en est ce thread, tenu à jour par Eriphe.",
        "answers": true,
-       "summary": "Ouvert",
+       "summary": "1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire",
        "state": "yours",
        "new": 4,
        "updated": "0001-01-01T00:00:00Z"
@@ -1646,13 +1566,6 @@
        "thread_goal",
        "thread_progress",
        "thread_ended",
-       "thread_since",
-       "thread_fact_0",
-       "thread_fact_1",
-       "thread_fact_2",
-       "thread_fact_3",
-       "thread_fact_4",
-       "thread_fact_5",
        "thread_done"
       ]
      },
@@ -1715,54 +1628,6 @@
       ]
      },
      {
-      "id": "thread_since",
-      "component": "Text",
-      "text": "Jusqu'ici",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_fact_0",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/0"
-      }
-     },
-     {
-      "id": "thread_fact_1",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/1"
-      }
-     },
-     {
-      "id": "thread_fact_2",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/2"
-      }
-     },
-     {
-      "id": "thread_fact_3",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/3"
-      }
-     },
-     {
-      "id": "thread_fact_4",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/4"
-      }
-     },
-     {
-      "id": "thread_fact_5",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/facts/5"
-      }
-     },
-     {
       "id": "thread_card_1",
       "component": "Proposal",
       "compact": true,
@@ -1796,25 +1661,25 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T04:24:58+01:00",
+        "date": "2026-11-16T07:42:01+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T05:04:58+01:00",
+        "date": "2026-11-16T08:22:01+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
        },
        {
-        "date": "2026-11-16T06:44:58+01:00",
+        "date": "2026-11-16T10:02:01+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T06:34:58+01:00",
+        "date": "2026-11-16T09:52:01+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "done"
@@ -1828,16 +1693,8 @@
       "donelabel": "5 étapes faites",
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 5 h 54"
+       "title": "Fait ✓ · 9 h 12"
       },
-      "facts": [
-       "… et 2 plus tôt",
-       "5 h 54 · Fait ✓",
-       "6 h 24 · Résumé mis à jour",
-       "6 h 34 · « Redimensionner les photos » a démarré",
-       "6 h 44 · « Publier le site » a démarré",
-       "6 h 54 · Thread ouvert"
-      ],
       "goal": "Le site du club est en ligne, avec ses photos.",
       "progress": {
        "current": 0,
@@ -1853,11 +1710,316 @@
        "title": "La terrasse",
        "author": "thread:103",
        "weight": 30,
-       "why": "Où en est ce thread, tenu à jour par Eriphe.",
        "answers": true,
        "summary": "Fait ✓",
        "state": "done",
        "new": 7,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-104",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_state",
+       "thread_src_0_cards",
+       "thread_src_0_groups"
+      ]
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_src_0_cards",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_card",
+       "path": "/thread/sources/0/cards"
+      }
+     },
+     {
+      "id": "thread_src_0_groups",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_group",
+       "path": "/thread/sources/0/groups"
+      },
+      "emptyText": "Rien pour l'instant."
+     },
+     {
+      "id": "thread_src_0_row_offers",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_offer",
+       "path": "offers"
+      },
+      "direction": "horizontal"
+     },
+     {
+      "id": "thread_src_0_offer",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "item": {
+          "@path": "item"
+         },
+         "offer": {
+          "@path": "offer"
+         },
+         "source": {
+          "@path": "source"
+         },
+         "thread": 2
+        },
+        "name": "offer"
+       }
+      },
+      "label": {
+       "@path": "label"
+      },
+      "variant": "default"
+     },
+     {
+      "id": "thread_src_0_group_offers",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_group_offer",
+       "path": "offers"
+      },
+      "direction": "horizontal"
+     },
+     {
+      "id": "thread_src_0_group_offer",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "offer": {
+          "@path": "offer"
+         },
+         "source": {
+          "@path": "source"
+         },
+         "state": {
+          "@path": "state"
+         },
+         "thread": 2
+        },
+        "name": "offer"
+       }
+      },
+      "label": {
+       "@path": "label"
+      },
+      "variant": "default"
+     },
+     {
+      "id": "thread_src_0_group",
+      "component": "Fold",
+      "aside": "thread_src_0_group_offers",
+      "child": "thread_src_0_rows",
+      "label": {
+       "@path": "label"
+      },
+      "open": {
+       "@path": "open"
+      }
+     },
+     {
+      "id": "thread_src_0_rows",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_row",
+       "path": "items"
+      }
+     },
+     {
+      "id": "thread_src_0_row",
+      "component": "Column",
+      "children": [
+       "thread_src_0_item",
+       "thread_src_0_row_cards",
+       "thread_src_0_row_offers"
+      ]
+     },
+     {
+      "id": "thread_src_0_item",
+      "component": "Item",
+      "detail": {
+       "@path": "detail"
+      },
+      "due": {
+       "@path": "due"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "note": {
+       "@path": "note"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "thread_src_0_row_cards",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_card",
+       "path": "cards"
+      }
+     },
+     {
+      "id": "thread_src_0_card",
+      "component": "Proposal",
+      "compact": true,
+      "proposalId": {
+       "@path": "ref"
+      }
+     }
+    ],
+    "dataModel": {
+     "mails": {
+      "messages": [
+       {
+        "from": "Sam \u003csam@example.org\u003e",
+        "id": "bTEfYWxlcnQx",
+        "subject": "Le devis de la cuisine"
+       },
+       {
+        "from": "Les Nouvelles \u003cnews@example.org\u003e",
+        "id": "bTEfbmV3czEy",
+        "subject": "La lettre de novembre"
+       },
+       {
+        "from": "Boutique \u003cshop@example.org\u003e",
+        "id": "bTEfcHJvbW8z",
+        "subject": "-20 % ce week-end"
+       }
+      ]
+     },
+     "thread": {
+      "sources": [
+       {
+        "cards": [],
+        "groups": [
+         {
+          "items": [
+           {
+            "by": "Noté par le skill « mails »",
+            "cards": [],
+            "detail": "Sam",
+            "due": "",
+            "external": true,
+            "id": "bTEfYWxlcnQx",
+            "level": "low",
+            "n": 0,
+            "note": "Sam envoie le devis signé ; rien à répondre.",
+            "offers": [],
+            "source": "mails",
+            "state": "info",
+            "title": "Le devis de la cuisine"
+           }
+          ],
+          "label": "Pour info · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Noté par le skill « mails »",
+            "cards": [],
+            "detail": "Les Nouvelles",
+            "due": "",
+            "external": true,
+            "id": "bTEfbmV3czEy",
+            "level": "low",
+            "n": 1,
+            "note": "",
+            "offers": [
+             {
+              "item": "bTEfbmV3czEy",
+              "label": "utiliser « move funds »",
+              "offer": "2d85eae4b4ae",
+              "source": "mails",
+              "thread": 2,
+              "tool": "mcp__ledger__move_funds"
+             }
+            ],
+            "source": "mails",
+            "state": "none",
+            "title": "La lettre de novembre"
+           },
+           {
+            "by": "Noté par le skill « mails »",
+            "cards": [],
+            "detail": "Boutique",
+            "due": "",
+            "external": true,
+            "id": "bTEfcHJvbW8z",
+            "level": "low",
+            "n": 2,
+            "note": "",
+            "offers": [
+             {
+              "item": "bTEfcHJvbW8z",
+              "label": "utiliser « move funds »",
+              "offer": "2d85eae4b4ae",
+              "source": "mails",
+              "thread": 2,
+              "tool": "mcp__ledger__move_funds"
+             }
+            ],
+            "source": "mails",
+            "state": "none",
+            "title": "-20 % ce week-end"
+           }
+          ],
+          "label": "Rien à faire · 2",
+          "offers": [
+           {
+            "label": "utiliser « move funds » · 2",
+            "offer": "2d85eae4b4ae",
+            "source": "mails",
+            "state": "none",
+            "thread": 2
+           }
+          ],
+          "open": false
+         }
+        ],
+        "name": "mails"
+       }
+      ],
+      "state": "1 pour info · 2 rien à faire · trié à 9 h 12 · extérieur"
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Mes mails",
+       "author": "thread:104",
+       "weight": 50,
+       "answers": true,
+       "summary": "1 pour info · 2 rien à faire",
+       "state": "new",
+       "new": 4,
        "updated": "0001-01-01T00:00:00Z"
       }
      }

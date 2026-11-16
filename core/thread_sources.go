@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // A thread's sources (#571): the live data it carries, read by code
@@ -77,10 +79,11 @@ var threadSourceNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 type sourceItems struct {
 	Path string `json:"path,omitempty" jsonschema:"the list in what it reads, a path as a monitor's (messages, data.items); empty: the whole result is the list"`
 	ID   string `json:"id" jsonschema:"each item's id, a path in the item (id, uid, number)"`
-	// What its row shows, read by code: paths in the item; the id when
-	// there is no title.
-	Title  string `json:"title,omitempty" jsonschema:"what its row says, a path in the item (subject, title, summary); its id without"`
-	Detail string `json:"detail,omitempty" jsonschema:"beside it, quieter: a path in the item (from, author, start)"`
+	// What its row shows, read by code: paths in the item; without, its
+	// first common field (itemTitleFields, itemDetailFields), its id only
+	// when it has no words at all.
+	Title  string `json:"title,omitempty" jsonschema:"what its row says to the user, a path in the item (subject, title, summary); without, code takes its subject, title or name"`
+	Detail string `json:"detail,omitempty" jsonschema:"beside it, quieter: a path in the item (from, author, start); without, code takes its from, sender, author or organizer"`
 }
 
 // threadSource is a source as it is given.
@@ -565,16 +568,22 @@ func threadSourceItems(src storedSource, most int) []map[string]any {
 			continue
 		}
 		seen[id] = true
-		row := map[string]any{"source": src.Name, "id": id, "n": i, "title": id}
-		for key, path := range map[string]string{"title": src.Items.Title, "detail": src.Items.Detail} {
-			if path == "" {
-				continue
-			}
-			if v, err := extract(it, path); err == nil && v != nil {
-				if text := truncate(oneLine(valueText(v)), threadItemTextMax); text != "" {
-					row[key] = text
-				}
-			}
+		row := map[string]any{"source": src.Name, "id": id, "n": i}
+		title, titleKey := itemField(it, src.Items.Title, itemTitleFields, false)
+		detail, detailKey := itemField(it, src.Items.Detail, itemDetailFields, true)
+		if title == "" {
+			title, titleKey = itemAnyText(it, id, src.Items.ID, detailKey)
+		}
+		switch {
+		case title != "":
+			row["title"] = title
+		case detail != "":
+			row["title"], detail = detail, "" // its only words
+		default:
+			row["title"] = id // nothing else says what it is
+		}
+		if detail != "" && detailKey != titleKey {
+			row["detail"] = detail
 		}
 		out = append(out, row)
 		if len(out) == most {
@@ -584,11 +593,109 @@ func threadSourceItems(src storedSource, most int) []map[string]any {
 	return out
 }
 
+// What an item's row says when its source names no path for it: the first
+// of these fields it has, at its top level, whatever the source (a mail's
+// subject and sender, an event's title and organizer, an issue's title and
+// author). Never its id while some words say what it is.
+var (
+	itemTitleFields  = []string{"subject", "title", "name", "summary", "label", "snippet", "text", "description"}
+	itemDetailFields = []string{"from", "sender", "author", "organizer", "owner", "creator", "user", "assignee"}
+)
+
+// itemField is the text at path in an item, else at the first of fields
+// it has; and the field it came from ("" for a path given).
+func itemField(it any, path string, fields []string, person bool) (string, string) {
+	if path != "" {
+		v, err := extract(it, path)
+		if err != nil {
+			return "", ""
+		}
+		return itemText(v, person), path
+	}
+	m, ok := it.(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	for _, k := range fields {
+		if text := itemText(m[k], person); text != "" {
+			return text, k
+		}
+	}
+	return "", ""
+}
+
+// itemAnyText is, for an item none of the common fields names, the first
+// short text it has at its top level that is not its id: a row says words
+// before an id.
+func itemAnyText(it any, id, idPath, skip string) (string, string) {
+	m, ok := it.(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		lk := strings.ToLower(k)
+		if k == idPath || k == skip || lk == "id" || strings.HasSuffix(lk, "_id") || strings.HasSuffix(k, "Id") || strings.HasSuffix(lk, "uid") {
+			continue
+		}
+		s, ok := m[k].(string)
+		if !ok || s == id || strings.Contains(s, "://") {
+			continue
+		}
+		if text := itemText(s, false); text != "" && utf8.RuneCountInString(s) <= threadItemTextMax {
+			return text, k
+		}
+	}
+	return "", ""
+}
+
+// itemText is a value as a row says it, one line: an object by its name;
+// for a person (a detail), "Sam <sam@example.org>" by their name too.
+func itemText(v any, person bool) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		s := strings.TrimSpace(x)
+		if name, _, ok := strings.Cut(s, " <"); ok && person && strings.HasSuffix(s, ">") {
+			if name = strings.Trim(strings.TrimSpace(name), `"`); name != "" {
+				s = name
+			}
+		}
+		return truncate(oneLine(s), threadItemTextMax)
+	case map[string]any:
+		for _, k := range []string{"name", "displayName", "display_name", "login", "email", "title"} {
+			if s, ok := x[k].(string); ok && strings.TrimSpace(s) != "" {
+				return itemText(s, person)
+			}
+		}
+		return ""
+	case []any:
+		var parts []string
+		for _, e := range x {
+			if s := itemText(e, person); s != "" {
+				parts = append(parts, s)
+			}
+		}
+		return truncate(strings.Join(parts, ", "), threadItemTextMax)
+	}
+	return truncate(oneLine(valueText(v)), threadItemTextMax)
+}
+
+// threadItemsSeen is what a thread's items say, for its state line: how
+// many of each state, and when they were last sorted.
+type threadItemsSeen struct {
+	counts map[string]int // by state, "" for not sorted yet
+	sorted int64          // the last note on an item still listed, unix
+}
+
 // threadSourcesPart composes what a thread's tool and resource sources
-// show in code's section (/thread/sources): each its caption (by, when
-// read, failing, « extérieur ») and its items; and their last reads, by
-// name, for the surface's data at /<name>.
-func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[string]any, s Thread, cards []itemCard, now time.Time) map[string]any {
+// show in code's section (/thread/sources): the items of those that list
+// some, grouped by their notes' state; a source's name only when the
+// thread lists the items of several, a word only when it cannot be read.
+// Their last reads, by name, are for the surface's data at /<name>. A
+// source of a server not trusted taints the surface: its state line says
+// « extérieur », once (threadStateText).
+func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[string]any, s Thread, cards []itemCard, seen *threadItemsSeen) map[string]any {
 	lang, loc := c.userLang(), c.userZone()
 	type comp = map[string]any
 	values := map[string]any{}
@@ -598,40 +705,52 @@ func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[strin
 			notes[n.Source+"\x00"+n.Item] = n
 		}
 	}
-	var shown []any
-	for _, src := range c.threadSources(s.ID) {
-		if src.kind() == srcMonitor {
-			continue
+	srcs := slices.DeleteFunc(c.threadSources(s.ID), func(x storedSource) bool { return x.kind() == srcMonitor })
+	lists := 0
+	for _, src := range srcs {
+		if src.Items != nil {
+			lists++
 		}
+	}
+	var shown []any
+	for _, src := range srcs {
 		if src.Value != nil {
 			values[src.Name] = src.Value // ended too: the holder's part still binds it
 		}
 		if !s.active() {
 			continue // no longer read: code's section shows none
 		}
-		n := strconv.Itoa(len(shown))
-		parts := []string{fmt.Sprintf(tr(lang, "thread.source.by"), src.Name)}
-		if src.Read > 0 {
-			parts = append(parts, fmt.Sprintf(tr(lang, "thread.live.read"), threadClock(time.Unix(src.Read, 0), now, loc, lang)))
-		}
-		switch {
-		case src.Waiting != "":
-			parts = append(parts, tr(lang, "thread.source.waiting"))
-		case src.Error != "":
-			parts = append(parts, tr(lang, "thread.live.failing"))
-		}
-		parts = append(parts, tr(lang, "thread.live.nomodel"))
 		if !c.trustsServer(src.surface().spec().Server) {
-			parts = append(parts, tr(lang, "thread.surface.external"))
 			in.codeTaint = append(in.codeTaint, "source:"+src.Name)
 		}
-		v := map[string]any{"name": src.Name, "caption": strings.Join(parts, threadExternalSep)}
-		if len(shown) == 0 {
-			out.add(comp{"id": "thread_sources", "component": "Text", "variant": "subtitle", "text": tr(lang, "thread.source.title")})
+		var parts []string
+		if lists > 1 && src.Items != nil {
+			parts = append(parts, src.Name)
 		}
-		out.add(comp{"id": "thread_src_" + n + "_by", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/sources/" + n + "/caption"}})
+		problem := ""
+		switch {
+		case src.Waiting != "":
+			problem = tr(lang, "thread.source.waiting")
+		case src.Error != "":
+			problem = tr(lang, "thread.live.failing")
+		}
+		if problem != "" {
+			if len(parts) == 0 {
+				parts = append(parts, src.Name)
+			}
+			parts = append(parts, problem)
+		}
+		if len(parts) == 0 && src.Items == nil {
+			continue // a value for the holder's part: nothing to say of it
+		}
+		n := strconv.Itoa(len(shown))
+		v := map[string]any{"name": src.Name}
+		if len(parts) > 0 {
+			v["caption"] = strings.Join(parts, threadExternalSep)
+			out.add(comp{"id": "thread_src_" + n + "_by", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/sources/" + n + "/caption"}})
+		}
 		if src.Items != nil {
-			c.itemsBlock(out, v, s.ID, src, notes, cards, n, lang, loc, &in.codeTaint)
+			c.itemsBlock(out, v, s.ID, src, notes, cards, n, lang, loc, &in.codeTaint, seen)
 		}
 		shown = append(shown, v)
 	}

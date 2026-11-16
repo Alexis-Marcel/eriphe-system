@@ -79,7 +79,7 @@ export const gallerySurfaces = (lang: Lang) => galleryFixtures(lang).map((m) => 
 
 // The threads as eriphe-core draws them (threads.json, written from the
 // code by ERIPHE_UPDATE_THREADS=1 go test -run TestThreadSurfacesFixture):
-// a work thread, one that lists items, one ended.
+// a work thread, one that lists items, one ended, a watcher's mails.
 export function threadFixtures(lang: Lang): Message[] {
   return threads[lang] as unknown as Message[];
 }
@@ -255,6 +255,7 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
       { id: "thread-102", title: en ? "My accounts" : "Mes comptes", size: "l", col: 0, row: 3, w: 4, h: 3 },
       { id: SAMPLE_SURFACE, title: words[lang].title, size: "l", col: 4, row: 3, w: 4, h: 3 },
       { id: "thread-103", title: en ? "The terrace" : "La terrasse", size: "m", col: 8, row: 3, w: 4, h: 2 },
+      { id: "thread-104", title: en ? "My mails" : "Mes mails", size: "m", col: 8, row: 5, w: 4, h: 2 },
     ],
     chips: [
       { id: "gallery-day", title: en ? "Today" : "Aujourd'hui" },

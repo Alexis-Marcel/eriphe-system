@@ -68,7 +68,7 @@ func TestThreadFollowsMonitor(t *testing.T) {
 		return sf.Weight
 	}
 	at(0, 47)
-	if v, _, caption := liveOf(t, c, s.ID); v != 47.0 || !strings.Contains(caption, "Surveillance cpu") || !strings.Contains(caption, "sans modèle") {
+	if v, _, caption := liveOf(t, c, s.ID); v != 47.0 || !strings.Contains(caption, "Surveillance cpu") || strings.Contains(caption, "sans modèle") {
 		t.Fatalf("first look: %v %q", v, caption)
 	}
 	at(1, 52)
@@ -83,6 +83,8 @@ func TestThreadFollowsMonitor(t *testing.T) {
 	// Crossed: in its timeline and its header, and the thread rises;
 	// nothing goes to the brain.
 	msgs := c.store.lastMessageSeq()
+	c.threadVisited(s.ID, now.Add(-2*time.Hour)) // seen before: its header tells what came since
+	c.threadVisited(s.ID, now.Add(-time.Hour))
 	at(2, 95)
 	if task, _ := c.store.task("t-brain"); task.State != stateIdle || c.store.lastMessageSeq() != msgs {
 		t.Errorf("the brain was told: %s, %d messages", task.State, c.store.lastMessageSeq()-msgs)

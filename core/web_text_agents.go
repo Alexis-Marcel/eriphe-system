@@ -67,7 +67,7 @@ var agentStrings = map[string]map[string]string{
 		"assistants.lead":                   "Chacun écrit ses faits, que {{name}}, tes règles et les assistants à qui on les prête lisent ; il rend compte à {{name}}. {{name}} t'en propose un quand une règle ne suffit pas, et tu le crées sur sa carte.",
 		"assistants.role.brain":             "cerveau",
 		"assistants.role.assistant":         "assistant",
-		"assistants.role.lead":              "chef de thread",
+		"assistants.role.lead":              "meneur de fil",
 		"assistants.powers":                 "Pouvoirs",
 		"assistants.power.reports":          "rend compte à {{name}}",
 		"assistants.power.notifies":         "te prévient",

@@ -340,7 +340,8 @@ func (c *core) threadPartOf(thread int64) *threadPart {
 func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64, part *threadPart, now time.Time) (surfaceIn, bool) {
 	lang, loc := c.userLang(), c.userZone()
 	w := func(key string) string { return tr(lang, key) }
-	in := surfaceIn{ID: threadSurfaceID(s.ID), Title: truncate(s.Title, surfaceTitleMax), Why: w("thread.surface.why"), Weight: threadWeight}
+	// No why: what the thread says of itself is its state line.
+	in := surfaceIn{ID: threadSurfaceID(s.ID), Title: truncate(s.Title, surfaceTitleMax), Weight: threadWeight}
 	if s.active() {
 		in.Lifetime.While = "thread:" + strconv.FormatInt(s.ID, 10)
 	} else {
@@ -368,7 +369,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 
 	type comp = map[string]any
 	var out threadComps
-	data := map[string]any{"goal": s.Goal}
+	data := map[string]any{}
 	var linked []string
 	if s.active() {
 		linked = c.linkedWaiting(s.ID, steps)
@@ -390,7 +391,8 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		in.Weight = max(in.Weight, threadWeightYours, queueSurfaceWeight(cardWeight(cardCalls)))
 	}
 	// The tools and resources it reads, their items (thread_sources.go).
-	values := c.threadSourcesPart(&in, &out, data, s, cards, now)
+	var seen threadItemsSeen
+	values := c.threadSourcesPart(&in, &out, data, s, cards, &seen)
 	// The monitors it follows, read by code (thread_live.go): past a
 	// limit, it rises.
 	watch, watchFacts := c.watchItems(&in, s, lang, loc)
@@ -413,15 +415,45 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	}
 	c.threadSince(&out, data, s, steps, watchFacts, now)
 	c.blockSteps(&out, data, s, steps)
+
+	// Taint, per part: the thread's own, each step that read outside, its
+	// headline; its sources', notes' and monitors' are counted already.
+	if s.Tainted != "" {
+		in.codeTaint = append(in.codeTaint, strings.Split(s.Tainted, ", ")...)
+	}
+	for _, st := range steps {
+		if st.External {
+			in.codeTaint = append(in.codeTaint, "step:"+st.Key)
+		}
+		for _, a := range st.Answers {
+			if a.Tainted != "" {
+				in.codeTaint = append(in.codeTaint, "answer:"+strconv.FormatInt(a.ID, 10))
+			}
+		}
+	}
+	headline := c.threadHeadlineOf(s.ID)
+	if headline != nil && len(headline.Tainted) > 0 {
+		in.codeTaint = append(in.codeTaint, threadHeadlineTaint)
+	}
+
 	var head threadComps
 	waits := s.active() && threadWaitsUser(steps, asks, linked)
 	in.fresh = c.threadNew(s, steps, lang)
 	in.state = threadTileState(s, steps, waits, in.Weight, in.fresh)
 	word, tone := threadStatus(s, steps, waits, in.Weight, lang)
-	c.blockHead(&head, data, s, steps, word, tone)
+	says := threadSays(headline, seen, lang)
+	state := ""
+	if s.active() {
+		state = c.threadStateText(s, says, seen, len(in.codeTaint) > 0, now)
+	}
+	c.blockHead(&head, data, s, steps, word, tone, state)
 	blockControls(&head, s, lang)
 	out.list = append(head.list, out.list...)
 	out.children = append(head.children, out.children...)
+	if len(out.children) == 0 {
+		// Nothing yet: a standing thread before its first item, say.
+		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": w("thread.item.none")})
+	}
 
 	composed := map[string]any{}
 	if part != nil {
@@ -451,26 +483,19 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	in.Components, _ = json.Marshal(comps)
 	in.Data, _ = json.Marshal(composed)
 
-	// Taint, per part: the thread's own, and each step that read outside.
-	if s.Tainted != "" {
-		in.codeTaint = append(in.codeTaint, strings.Split(s.Tainted, ", ")...)
-	}
-	for _, st := range steps {
-		if st.External {
-			in.codeTaint = append(in.codeTaint, "step:"+st.Key)
-		}
-		for _, a := range st.Answers {
-			if a.Tainted != "" {
-				in.codeTaint = append(in.codeTaint, "answer:"+strconv.FormatInt(a.ID, 10))
-			}
-		}
-	}
 	// Its Proposals answer in place, tainted or not: code bound them to the
 	// thread's cards, each showing its card's own text and taint, as the
 	// queue's tile would; only a part written after reading external
 	// content can only ask (answerOf, surface_actions.go).
 	in.answers = true
-	in.summary = threadLine(s, steps, asks, lang)
+	// Its one line, for a chip: what its headline or its items say, else
+	// its steps.
+	in.summary = says
+	if in.summary == "" || !s.active() {
+		in.summary = threadLine(s, steps, asks, lang)
+	} else if headline != nil && len(headline.Tainted) > 0 {
+		in.summary += threadExternalSep + w("thread.surface.external") // someone else's words may be in it
+	}
 	in.folds = s.active() && s.standing() // a chip while it has nothing for the user (workspace_layout.go)
 	in.composed = true
 	return in, true
@@ -597,8 +622,8 @@ func (c *core) keepThreadSurfaces() {
 			c.keepThreadSurface(s.ID)
 		} else if err == nil && due[s.ID] && sf.Weight < weightUrgent {
 			c.keepThreadSurface(s.ID) // a note's due time came close: it turns urgent
-		} else if err == nil && sf.Look.Folds != s.standing() {
-			c.keepThreadSurface(s.ID) // written before it said whether it folds, or its ends changed
+		} else if err == nil && (sf.Look.Folds != s.standing() || sf.Why != "") {
+			c.keepThreadSurface(s.ID) // written before it said whether it folds, or before it had no why; or its ends changed
 		}
 	}
 }

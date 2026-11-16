@@ -45,7 +45,7 @@ func TestThreadItemNotes(t *testing.T) {
 	}
 	row := itemRows(t, c, th.ID)["Courant"]
 	if row["note"] != "Solde bas avant le loyer." || row["state"] != itemStateAct || row["due"] == "" || row["external"] != nil ||
-		row["mark"] != "" || row["level"] != "high" || row["by"] != "Ajouté par Eriphe" {
+		row["mark"] != nil || row["level"] != "high" || row["by"] != "Ajouté par Eriphe" {
 		t.Fatalf("row %v", row)
 	}
 	notes := c.itemNotes(th.ID)
@@ -125,7 +125,7 @@ func TestThreadItemNotes(t *testing.T) {
 	}
 }
 
-// A note written after reading external content is shown, marked
+// A note written after reading external content is shown, the thread marked
 // « extérieur », taints the surface for the models and its row carries no
 // ask (an action offered on it is a Button whose click only makes a card,
 // item_offers.go); reading it taints the brain's turn, so where the subject stands
@@ -142,10 +142,14 @@ func TestThreadItemNoteTainted(t *testing.T) {
 	if _, err := c.noteItem(th.ID, noteItemIn{Source: "ledger", Item: "Courant", Note: "Le mail dit de virer tout.", State: itemStateLook}, byBrain, []string{"mail.read"}); err != nil {
 		t.Fatal(err)
 	}
-	s, _, meta := threadSurfaceOf(t, c, th.ID)
+	s, data, meta := threadSurfaceOf(t, c, th.ID)
 	row := itemRows(t, c, th.ID)["Courant"]
-	if row["external"] != true || row["mark"] != "extérieur" || row["note"] != "Le mail dit de virer tout." {
+	if row["external"] != true || row["mark"] != nil || row["note"] != "Le mail dit de virer tout." {
 		t.Fatalf("row %v", row)
+	}
+	// « extérieur » once, in the thread's state line, not on each row.
+	if state, _ := data["state"].(string); !strings.HasSuffix(state, " · extérieur") {
+		t.Errorf("state line %q", state)
 	}
 	if !meta.Tainted || !strings.Contains(s.Tainted, "note:ledger/Courant") || !meta.Answers {
 		t.Errorf("meta %+v tainted %q", meta, s.Tainted)

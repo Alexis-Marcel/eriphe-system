@@ -428,8 +428,8 @@ func skillVoice(lang string, threads bool) string {
 	acts := ""
 	if threads {
 		acts = "With the threads' tools (" + threadsServer + "), act on the thread you are given, or the one of the matter: note each item you looked at (note_item), " +
-			"say it waits for the user or give it a deadline (set_thread), raise it when it matters (set_thread raise, 1 to 5), add what the user must do or decide (add_step). " +
-			"That is what the user sees; you never close a thread nor decide for the user.\n"
+			"say it waits for the user or give it a deadline (set_thread), raise it when it matters (set_thread raise, 1 to 5), give it a headline when one line says where it stands better than the counts (set_thread headline), add what the user must do or decide (add_step). " +
+			"That is what the user sees; you never close a thread nor decide for the user. " + threadsUserReads + "\n"
 	}
 	return "You run in the background, started by one of the user's skills: nobody reads this conversation. " +
 		"Follow the skill's instructions on the events below. What you would do that changes something is asked to the user on a card " +

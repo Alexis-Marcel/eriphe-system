@@ -27,17 +27,21 @@ The tiles are of two kinds only:
 - **a thread**, a matter Eriphe follows to its goal (a skill, the things Eriphe does on its own at
   set times or on an event, works on its own thread): every thread has its tile, kept up to date as
   it moves, every thread drawn the same way: its goal and its state in a pill (« À toi », « En
-  cours », « Terminé »…) with a bar of its steps; what waits for you first (its proposals, answered
+  cours », « Terminé »…) with a bar of its steps, or for one that follows something all along only
+  its name and one line saying where it stands (« 1 pour info · 2 rien à faire · trié à 9 h 12 »,
+  or the line the skill tending it wrote for you), « extérieur » at its end, once, when some of what
+  the thread shows came from outside; what waits for you first (its proposals, answered
   right there, a **C'est fait** / **Done** button for a step only you can do, a button per option when it asks you to choose); **Stop** under its pill when you no longer want it (and **Pause** / **Resume** for one that runs steps on its own); the live data it
   follows (a list of your mails, the pull requests to review, a number of a service), read by
-  Eriphe itself with no AI model, each item it lists on its own line with what Eriphe noted about
-  it and by when, grouped by what it asks of you (« À faire », « À regarder », « Pour info », the
-  ones with nothing to do folded) with their counts, marked « extérieur » when that note came from
-  reading something from outside, and on an item's line the action proposed on it (archive this
+  Eriphe itself with no AI model, each item it lists on its own line, named by its own words (a
+  mail by its subject and sender, an event by its title), with what Eriphe noted about it and by
+  when, grouped by what it asks of you (« À faire », « À regarder », « Pour info », the ones with
+  nothing to do folded) with their counts on each group's line, and on an item's line the action proposed on it (archive this
   one, close that alert), a proposal you answer **Oui** / **Yes** or **Non** / **No** right there,
   which runs only that action on that item, and the actions Eriphe offers on it as buttons (a
   click only makes that proposal; a group whose items offer the same action offers it on them all
-  at once, one proposal for all); where it stands and what changed since your last visit; its
+  at once, on the group's line, folded or not, one proposal for all); where it stands, when Eriphe
+  wrote it, and what changed since your last visit, when something did; its
   steps, those done folded in one line (an approval you gave, one line too, opens on a click);
   and what Eriphe added (a diff, a link). Small, it shows one line (« Fusion ✓ · Déploiement à toi »). A step
   that read something from outside says « extérieur ». Once the thread is done, its tile stays

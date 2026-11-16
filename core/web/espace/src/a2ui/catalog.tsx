@@ -184,22 +184,38 @@ const Tabs = createComponentImplementation(
 const Divider = createComponentImplementation({ name: "Divider", schema: z.object({}) }, () => <hr className="a2-divider" />);
 
 // Fold is a line that opens in place: what it sums up (« 4 étapes faites
-// »), and under it its child, drawn only when open.
+// »), and under it its child, drawn only when open. Its aside stays on its
+// line, open or not: an action on all it sums up (« Archiver les 2 »).
 const Fold = createComponentImplementation(
   {
     name: "Fold",
-    schema: z.object({ label: CommonSchemas.DynamicString, child: CommonSchemas.Child, open: CommonSchemas.DynamicBoolean.optional() }),
+    schema: z.object({
+      label: CommonSchemas.DynamicString,
+      child: CommonSchemas.Child,
+      aside: CommonSchemas.Child.optional(),
+      open: CommonSchemas.DynamicBoolean.optional(),
+    }),
   },
   ({ props, buildChild }) => {
     const { t } = useWords();
     const id = useId();
     const [open, setOpen] = useState(props.open === true);
+    const toggle = (
+      <button type="button" className="a2-fold-head" aria-expanded={open} aria-controls={id} title={t(open ? "espace.a2.fold.close" : "espace.a2.fold.open")} onClick={() => setOpen(!open)}>
+        <span className="a2-fold-label">{str(props.label)}</span>
+        <span className="a2-fold-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
+      </button>
+    );
     return (
       <div className={`a2-fold${open ? " a2-fold-open" : ""}`}>
-        <button type="button" className="a2-fold-head" aria-expanded={open} aria-controls={id} title={t(open ? "espace.a2.fold.close" : "espace.a2.fold.open")} onClick={() => setOpen(!open)}>
-          <span className="a2-fold-label">{str(props.label)}</span>
-          <span className="a2-fold-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
-        </button>
+        {props.aside ? (
+          <div className="a2-fold-line">
+            {toggle}
+            <div className="a2-fold-aside">{buildChild(props.aside)}</div>
+          </div>
+        ) : (
+          toggle
+        )}
         {open && (
           <div id={id} className="a2-fold-body">
             {props.child ? buildChild(props.child) : null}

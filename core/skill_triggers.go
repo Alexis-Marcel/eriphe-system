@@ -90,7 +90,7 @@ func splitWhen(when string) (at, events string) {
 // someone follows it.
 func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 	if m.When == "" {
-		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "urgent": m.Urgent, "thread": m.Thread} {
+		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "urgent": m.Urgent, "thread": m.Thread, "title": m.Title} {
 			if v != "" {
 				return nil, skillErr("skills.err.nowhen", k)
 			}

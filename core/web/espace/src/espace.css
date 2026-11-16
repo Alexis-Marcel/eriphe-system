@@ -673,6 +673,9 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-fold-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .a2-fold-chev { margin-left: auto; color: var(--ink-soft); }
 .a2-fold-body { min-width: 0; padding: 0 2px; }
+.a2-fold-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.a2-fold-line > .a2-fold-head { flex: 1; min-width: 0; }
+.a2-fold-aside { flex: none; }
 
 /* Progress: a pill for the state, a bar for the steps. */
 .a2-progress { display: flex; align-items: center; gap: 10px; min-width: 0; }
