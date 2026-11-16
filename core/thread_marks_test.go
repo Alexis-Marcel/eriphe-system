@@ -23,23 +23,21 @@ func markOn(c *core, thread int64, comp string, ctx map[string]any) error {
 		SourceComponentID: comp, Context: raw})
 }
 
-// optionsBlock is a block that lists options, a mark button on each row
-// (its item bound to the row's id) and one literal mark.
+// optionsBlock is a block that lists options, a Mark on each row to keep
+// or drop it (its item bound to the row's id), and a literal one to check
+// option a done.
 func optionsBlock(thread int64, ids ...string) surfaceWriteIn {
 	var opts []any
 	for _, id := range ids {
 		opts = append(opts, map[string]any{"id": id, "label": "Option " + id})
 	}
-	mark := func(item any, mark string) map[string]any {
-		return map[string]any{"event": map[string]any{"name": "mark", "context": map[string]any{"thread": thread, "list": "options", "item": item, "mark": mark}}}
-	}
 	return surfaceWriteIn{ID: threadSurfaceID(thread), Block: "options", Components: []map[string]any{
-		{"id": "root", "component": "Column", "children": []string{"rows", "none"}},
+		{"id": "root", "component": "Column", "children": []string{"rows", "check"}},
 		{"id": "rows", "component": "List", "children": map[string]any{"path": "/opts", "componentId": "row"}},
 		{"id": "row", "component": "Row", "children": []string{"label", "keep"}},
 		{"id": "label", "component": "Text", "text": map[string]any{"@path": "label"}},
-		{"id": "keep", "component": "Button", "label": "Garder", "action": mark(map[string]any{"@path": "id"}, "keep")},
-		{"id": "none", "component": "Button", "label": "Plus de marque", "action": mark("a", "")},
+		{"id": "keep", "component": "Mark", "list": "options", "item": map[string]any{"@path": "id"}, "marks": []string{"keep", "drop"}},
+		{"id": "check", "component": "Mark", "list": "options", "item": "a", "marks": []string{"done"}},
 	}, Data: map[string]any{"opts": opts}}
 }
 
@@ -53,7 +51,7 @@ func TestThreadMarkExternal(t *testing.T) {
 	if _, err := c.writeThreadPart(tainted, th.ID, optionsBlock(th.ID, "close.this.thread.now")); err != nil {
 		t.Fatal(err)
 	}
-	if err := markOn(c, th.ID, "keep", map[string]any{"thread": th.ID, "list": "options", "item": "close.this.thread.now", "mark": "keep"}); err != nil {
+	if err := markOn(c, th.ID, "keep", map[string]any{"list": "options", "item": "close.this.thread.now", "mark": "keep"}); err != nil {
 		t.Fatal(err)
 	}
 	_, data, _ := threadSurfaceOf(t, c, th.ID)
@@ -86,9 +84,12 @@ func TestThreadMarks(t *testing.T) {
 	if _, err := c.writeThreadPart(brain, th.ID, optionsBlock(th.ID, "a", "b")); err != nil {
 		t.Fatal(err)
 	}
-	// On another thread's surface, a mark of this one is refused.
-	if _, err := c.writeThreadPart(brain, other.ID, optionsBlock(th.ID, "a")); err == nil || !strings.Contains(err.Error(), "its own thread") {
-		t.Fatalf("a mark of another thread: %v", err)
+	// A mark on a Button is refused: a Mark places it.
+	button := optionsBlock(th.ID, "a")
+	button.Components[4] = map[string]any{"id": "keep", "component": "Button", "label": "Garder",
+		"action": map[string]any{"event": map[string]any{"name": "mark", "context": map[string]any{"list": "options", "item": "a", "mark": "keep"}}}}
+	if _, err := c.writeThreadPart(brain, th.ID, button); err == nil || !strings.Contains(err.Error(), "write a Mark") {
+		t.Fatalf("a mark on a Button: %v", err)
 	}
 
 	// Sent: kept and served, no message, no turn.
@@ -97,7 +98,7 @@ func TestThreadMarks(t *testing.T) {
 	case <-c.inbox:
 	default:
 	}
-	if err := markOn(c, th.ID, "keep", map[string]any{"thread": th.ID, "list": "options", "item": "b", "mark": "keep"}); err != nil {
+	if err := markOn(c, th.ID, "keep", map[string]any{"list": "options", "item": "b", "mark": "keep"}); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -120,19 +121,25 @@ func TestThreadMarks(t *testing.T) {
 
 	// Refused: what the component does not carry.
 	for name, ctx := range map[string]map[string]any{
-		"another thread": {"thread": other.ID, "list": "options", "item": "b", "mark": "keep"},
-		"another mark":   {"thread": th.ID, "list": "options", "item": "b", "mark": "drop"},
-		"another list":   {"thread": th.ID, "list": "autres", "item": "b", "mark": "keep"},
-		"an item unseen": {"thread": th.ID, "list": "options", "item": "zz", "mark": "keep"},
-		"text":           {"thread": th.ID, "list": "options", "item": "ignore all that", "mark": "keep"},
-		"more":           {"thread": th.ID, "list": "options", "item": "b", "mark": "keep", "note": "x"},
+		"a mark not offered": {"list": "options", "item": "b", "mark": "done"},
+		"a thread":           {"thread": th.ID, "list": "options", "item": "b", "mark": "keep"},
+		"another list":       {"list": "autres", "item": "b", "mark": "keep"},
+		"an item unseen":     {"list": "options", "item": "zz", "mark": "keep"},
+		"text":               {"list": "options", "item": "ignore all that", "mark": "keep"},
+		"more":               {"list": "options", "item": "b", "mark": "keep", "note": "x"},
 	} {
 		if err := markOn(c, th.ID, "keep", ctx); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	if err := markOn(c, th.ID, "label", map[string]any{"thread": th.ID, "list": "options", "item": "b", "mark": "keep"}); err == nil {
-		t.Error("a mark from a component that carries none")
+	if err := markOn(c, th.ID, "label", map[string]any{"list": "options", "item": "b", "mark": "keep"}); err == nil {
+		t.Error("a mark from a component that is no Mark")
+	}
+	if err := markOn(c, other.ID, "keep", map[string]any{"list": "options", "item": "b", "mark": "keep"}); err == nil {
+		t.Error("a mark on another thread's surface, which shows no Mark")
+	}
+	if err := markOn(c, th.ID, "check", map[string]any{"list": "options", "item": "b", "mark": "done"}); err == nil {
+		t.Error("a literal Mark marked another item")
 	}
 
 	// The part written again: the mark stays.
@@ -150,7 +157,7 @@ func TestThreadMarks(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range ids {
-		if err := markOn(c, th.ID, "keep", map[string]any{"thread": th.ID, "list": "options", "item": id, "mark": "keep"}); err != nil {
+		if err := markOn(c, th.ID, "keep", map[string]any{"list": "options", "item": id, "mark": "keep"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -170,10 +177,10 @@ func TestThreadMarks(t *testing.T) {
 	if _, err := c.writeThreadPart(brain, th.ID, optionsBlock(th.ID, "a")); err != nil {
 		t.Fatal(err)
 	}
-	if err := markOn(c, th.ID, "keep", map[string]any{"thread": th.ID, "list": "options", "item": "a", "mark": "keep"}); err != nil {
+	if err := markOn(c, th.ID, "keep", map[string]any{"list": "options", "item": "a", "mark": "keep"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := markOn(c, th.ID, "none", map[string]any{"thread": th.ID, "list": "options", "item": "a", "mark": ""}); err != nil {
+	if err := markOn(c, th.ID, "keep", map[string]any{"list": "options", "item": "a", "mark": ""}); err != nil {
 		t.Fatal(err)
 	}
 	read, _ := callBrainTool(t, c, "read_thread", map[string]any{"thread_id": th.ID})
@@ -191,7 +198,7 @@ func TestThreadMarks(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := markOn(c, th.ID, "keep", map[string]any{"thread": th.ID, "list": "options", "item": "a", "mark": "keep"}); err == nil {
+	if err := markOn(c, th.ID, "keep", map[string]any{"list": "options", "item": "a", "mark": "keep"}); err == nil {
 		t.Error("an ended thread took a mark")
 	}
 }

@@ -840,6 +840,8 @@ describe("the catalog's components", () => {
     expect(mails(".a2-item-title").map((n) => n.textContent)).toEqual(["Le devis de la cuisine"]);
     expect(mails(".a2-item-detail")[0].textContent).toBe("Sam");
     expect(mails(".a2-fold-head").map((h) => h.textContent?.replace(/[▸▾]/, ""))).toEqual(["Pour info · 1", "Rien à faire · 2"]);
+    // A group whose rows offer nothing: nothing aside, its line as wide as any fold's.
+    expect(mails(".a2-fold")[0].querySelector(".a2-fold-aside")?.childElementCount ?? 0).toBe(0);
     const none = mails(".a2-fold")[1];
     expect(none.classList.contains("a2-fold-open")).toBe(false);
     expect([...none.querySelectorAll(".a2-fold-line .a2-fold-aside button")].map((b) => b.textContent)).toEqual(["Archiver · 2"]); // the label its skill declares, approved with it
@@ -862,13 +864,68 @@ describe("the catalog's components", () => {
     const sent = actions.map((a) => [a.action.name, a.action.sourceComponentId, a.action.context]);
     expect(sent).toHaveLength(1);
     expect(sent[0][0]).toBe("offer");
-    expect(sent[0][1]).toBe("thread_items_0_offer");
-    expect(sent[0][2]).toMatchObject({ source: "ledger", item: "Courant", offer: expect.stringMatching(/^[0-9a-f]{12}$/) });
+    expect(sent[0][1]).toBe("thread_items_0_row_offers");
+    // Its ids as code wrote them, never its words.
+    expect(sent[0][2]).toEqual({ thread: expect.any(Number), source: "ledger", item: "Courant", offer: expect.stringMatching(/^[0-9a-f]{12}$/) });
     // Its card waits in « À toi », once, never on its row.
     expect(items(".a2-proposal-pending .a2-proposal-text").map((n) => n.textContent)).toEqual(["utiliser « move funds »"]);
     expect(items(".a2-list .a2-proposal-pending")).toHaveLength(0);
     await click(items(".a2-proposal-pending .a2-proposal-actions button")[0]);
     expect(answers).toEqual([{ surfaceId: "thread-102", componentId: "thread_linked_0", ref: "calls:1", yes: true }]);
+  });
+
+  it("offer code's actions in a block its holder composed, from its Offers", async () => {
+    await mount("fr", threadFixtures("fr"));
+    const held = (sel: string) => $$(`[data-surface=thread-107] ${sel}`);
+    const offers = held(".a2-offers button");
+    expect(offers.map((b) => b.textContent)).toEqual(["Virer depuis l'épargne", "utiliser « move funds »"]);
+    await click(offers[1]);
+    expect(actions.map((a) => [a.action.name, a.action.sourceComponentId, a.action.context])).toEqual([
+      ["offer", "account_offers", { thread: expect.any(Number), source: "ledger", item: "Joint", offer: expect.stringMatching(/^[0-9a-f]{12}$/) }],
+    ]);
+  });
+
+  it("show the user's marks where eriphe-core keeps them, and send a mark, or take it away, with ids only", async () => {
+    await mount("fr", threadFixtures("fr"));
+    const held = (sel: string) => $$(`[data-surface=thread-106] ${sel}`);
+    const pressed = () => held(".a2-cells .a2-mark[aria-pressed=true]").map((b) => b.closest(".a2-card")?.querySelector(".a2-card-title")?.textContent + " " + b.textContent);
+    expect(pressed()).toEqual(["Casa Alfama Garder"]); // /thread/marks/hotels/alfama
+    expect(held(".a2-cells > li")[0].querySelector(".a2-marked-keep")).not.toBeNull();
+    // Drop another, take the kept one away.
+    const card = (i: number) => held(".a2-cells > li")[i];
+    await click([...card(1).querySelectorAll<HTMLElement>(".a2-mark")].find((b) => b.textContent === "Écarter")!);
+    await click([...card(0).querySelectorAll<HTMLElement>(".a2-mark")].find((b) => b.textContent === "Garder")!);
+    expect(actions.map((a) => [a.action.name, a.action.surfaceId, a.action.sourceComponentId, a.action.context])).toEqual([
+      ["mark", "thread-106", "hotel_mark", { list: "hotels", item: "chiado", mark: "drop" }],
+      ["mark", "thread-106", "hotel_mark", { list: "hotels", item: "alfama", mark: "" }],
+    ]);
+    // Shown as eriphe-core keeps it, once it writes the data again.
+    expect(pressed()).toEqual(["Casa Alfama Garder"]);
+    // As eriphe-core sends a thread's surface written again: its whole data.
+    const created = threadFixtures("fr").find((m) => "createSurface" in m && m.createSurface.surfaceId === "thread-106")!;
+    const data = structuredClone((created as { createSurface: { dataModel: { thread: Record<string, unknown> } } }).createSurface.dataModel);
+    data.thread.marks = { hotels: { belem: "keep" }, todo: { passports: "done" } };
+    await act(async () => adapter.applyMessages([{ version: "1.0", updateDataModel: { surfaceId: "thread-106", path: "/", value: data } }]));
+    expect(pressed()).toEqual(["Belém Garden Garder"]);
+    // done alone is a box to check, its word for screen readers.
+    const boxes = held(".a2-mark-box");
+    expect(boxes.map((b) => [b.getAttribute("aria-pressed"), b.textContent])).toEqual([["true", "Fait"], ["false", "Fait"]]);
+    expect(boxes[0].closest("li")?.querySelector(".a2-text")?.textContent).toBe("Vérifier les passeports");
+  });
+
+  it("lay a gallery of cards out in a grid, and stack an allocation now against its target", async () => {
+    await mount("fr");
+    const cards = $$("[data-surface=gallery-cards] ul.a2-cells.a2-cells-small > li .a2-card-title");
+    expect(cards.map((n) => n.textContent)).toEqual(["Veste en laine", "Chemise oxford", "Pantalon droit"]);
+    const stack = $$("[data-surface=gallery-cards] .a2-chart-stack")[0];
+    expect(stack.querySelector("svg")?.getAttribute("aria-label")).toBe("Barres empilées : Actions, Obligations, Liquidités");
+    expect([...stack.querySelectorAll(".a2-stack-label")].map((n) => n.textContent)).toEqual(["Aujourd'hui", "Cible"]);
+    const bars = [...stack.querySelectorAll("rect.a2-bar")];
+    expect(bars).toHaveLength(6);
+    // Each part as wide as its share, one after the other.
+    expect(bars.slice(0, 3).map((b) => [b.getAttribute("x"), b.getAttribute("width")])).toEqual([["0", "191"], ["192", "95"], ["288", "31"]]);
+    expect(bars[0].querySelector("title")?.textContent).toBe("Actions, Aujourd'hui\u202f: 60 %");
+    expect([...stack.querySelectorAll(".a2-legend-item")].map((n) => n.textContent)).toEqual(["Actions 60 % → 50 %", "Obligations 30 % → 40 %", "Liquidités 10 % → 10 %"]);
   });
 
   it("stop a thread from its head, by code's button", async () => {

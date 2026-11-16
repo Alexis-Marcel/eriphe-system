@@ -13,7 +13,7 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
-// offerClick clicks an offer Button of a thread's surface, its context as
+// offerClick clicks an offer of an Offers of a thread's surface, its context as
 // given (the page's, so a test may forge it).
 func offerClick(c *core, thread int64, component string, ctx map[string]any) error {
 	raw := map[string]json.RawMessage{}
@@ -122,9 +122,9 @@ func TestNoteActionsChecked(t *testing.T) {
 	if err := (threadCaller{grant: []string{threadsServer}}).lends("mcp__monitor__silence"); err == nil {
 		t.Error("a tool not lent is lent")
 	}
-	// An author may never write an offer: code places it.
+	// An author may never write an offer: an Offers shows code's.
 	errs := a2ui.CheckActions("s", 0, json.RawMessage(`[{"id":"b","component":"Button","label":"x","action":{"event":{"name":"offer","context":{"thread":1}}}}]`))
-	if len(errs) != 1 || !strings.Contains(errs[0].Message, "placed by code") {
+	if len(errs) != 1 || !strings.Contains(errs[0].Message, "Offers component only") {
 		t.Fatalf("errors %+v", errs)
 	}
 }
@@ -174,14 +174,14 @@ func TestItemOffers(t *testing.T) {
 		comp string
 		ctx  map[string]any
 	}{
-		"an empty item":              {"thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "", "offer": key}},
-		"an item not listed":         {"thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "z", "offer": key}},
-		"an action not on it":        {"thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": "0123456789ab"}},
-		"another thread":             {"thread_items_0_offer", map[string]any{"thread": id + 1, "source": "alertes", "item": "b", "offer": key}},
-		"item and state":             {"thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "state": "none", "offer": key}},
+		"an empty item":              {"thread_items_0_row_offers", map[string]any{"thread": id, "source": "alertes", "item": "", "offer": key}},
+		"an item not listed":         {"thread_items_0_row_offers", map[string]any{"thread": id, "source": "alertes", "item": "z", "offer": key}},
+		"an action not on it":        {"thread_items_0_row_offers", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": "0123456789ab"}},
+		"another thread":             {"thread_items_0_row_offers", map[string]any{"thread": id + 1, "source": "alertes", "item": "b", "offer": key}},
+		"item and state":             {"thread_items_0_row_offers", map[string]any{"thread": id, "source": "alertes", "item": "b", "state": "none", "offer": key}},
 		"another component":          {"thread_items_0_item", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}},
-		"another source":             {"thread_items_0_offer", map[string]any{"thread": id, "source": "autre", "item": "b", "offer": key}},
-		"a group with no such state": {"thread_items_0_group_offer", map[string]any{"thread": id, "source": "alertes", "state": "act", "offer": key}},
+		"another source":             {"thread_items_0_row_offers", map[string]any{"thread": id, "source": "autre", "item": "b", "offer": key}},
+		"a group with no such state": {"thread_items_0_group_offers", map[string]any{"thread": id, "source": "alertes", "state": "act", "offer": key}},
 	} {
 		if err := offerClick(c, id, tc.comp, tc.ctx); !errors.As(err, &refused) {
 			t.Errorf("%s: %v", name, err)
@@ -192,10 +192,10 @@ func TestItemOffers(t *testing.T) {
 	}
 
 	// Row b: one card bound to b, nothing run; clicked again, the same.
-	if err := offerClick(c, id, "thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
+	if err := offerClick(c, id, "thread_items_0_row_offers", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
 		t.Fatal(err)
 	}
-	if err := offerClick(c, id, "thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
+	if err := offerClick(c, id, "thread_items_0_row_offers", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
 		t.Fatal(err)
 	}
 	if asksCount(c) != 1 || len(silencedNow(fm)) != 0 {
@@ -224,7 +224,7 @@ func TestItemOffers(t *testing.T) {
 	// The group: one card, a call per item of it; its server trusted, its
 	// items' source named.
 	c.setServerTrust("monitor", true, "user")
-	if err := offerClick(c, id, "thread_items_0_group_offer", map[string]any{"thread": id, "source": "alertes", "state": itemStateNone, "offer": key}); err != nil {
+	if err := offerClick(c, id, "thread_items_0_group_offers", map[string]any{"thread": id, "source": "alertes", "state": itemStateNone, "offer": key}); err != nil {
 		t.Fatal(err)
 	}
 	if len(silencedNow(fm)) != 1 {
@@ -258,7 +258,7 @@ func TestItemOffers(t *testing.T) {
 	if label := row["offers"].([]any)[0].(map[string]any)["label"]; label == "Faire taire" || label != callVerb("mcp__monitor__silence {}", "fr") {
 		t.Fatalf("a tainted note's button says %q", label)
 	}
-	if err := offerClick(c, id, "thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
+	if err := offerClick(c, id, "thread_items_0_row_offers", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
 		t.Fatal(err)
 	}
 	c.store.db.QueryRow(`SELECT MAX(batch) FROM access_asks`).Scan(&batch)
@@ -283,7 +283,7 @@ func TestItemOffers(t *testing.T) {
 		t.Fatalf("a never tool offered: %v", row["offers"])
 	}
 	before := asksCount(c)
-	if err := offerClick(c, id, "thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "c", "offer": key}); !errors.As(err, &refused) {
+	if err := offerClick(c, id, "thread_items_0_row_offers", map[string]any{"thread": id, "source": "alertes", "item": "c", "offer": key}); !errors.As(err, &refused) {
 		t.Fatalf("a never tool asked: %v", err)
 	}
 	if asksCount(c) != before {

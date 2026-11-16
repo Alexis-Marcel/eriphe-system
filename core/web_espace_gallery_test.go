@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
@@ -48,27 +49,46 @@ func TestEspaceGalleryIsValid(t *testing.T) {
 				t.Errorf("%s: %+v", lang, e)
 			}
 		}
-		// Every component of the catalog is in it.
-		var surfaces []struct {
-			CreateSurface struct {
-				Components []struct {
-					Component string `json:"component"`
-				} `json:"components"`
-			} `json:"createSurface"`
-		}
-		if err := json.Unmarshal(msgs, &surfaces); err != nil {
+		// Every component of the catalog is in it, but those placed on a
+		// thread's own surface only: the threads code draws show them
+		// (threads.json).
+		used := componentsUsed(t, msgs)
+		threads, err := os.ReadFile(threadsFixture)
+		if err != nil {
 			t.Fatal(err)
 		}
-		used := map[string]bool{}
-		for _, s := range surfaces {
-			for _, c := range s.CreateSurface.Components {
-				used[c.Component] = true
-			}
-		}
+		var drawn map[string]json.RawMessage
+		json.Unmarshal(threads, &drawn)
+		onThreads := componentsUsed(t, drawn[lang])
 		for name := range cat.Components {
-			if !used[name] {
+			switch {
+			case slices.Contains(a2ui.ThreadOnly, name) && !onThreads[name]:
+				t.Errorf("%s threads lack %s", lang, name)
+			case !slices.Contains(a2ui.ThreadOnly, name) && !used[name]:
 				t.Errorf("%s gallery lacks %s", lang, name)
 			}
 		}
 	}
+}
+
+// componentsUsed are the component types surfaces created by msgs use.
+func componentsUsed(t *testing.T, msgs json.RawMessage) map[string]bool {
+	t.Helper()
+	var surfaces []struct {
+		CreateSurface struct {
+			Components []struct {
+				Component string `json:"component"`
+			} `json:"components"`
+		} `json:"createSurface"`
+	}
+	if err := json.Unmarshal(msgs, &surfaces); err != nil {
+		t.Fatal(err)
+	}
+	used := map[string]bool{}
+	for _, s := range surfaces {
+		for _, c := range s.CreateSurface.Components {
+			used[c.Component] = true
+		}
+	}
+	return used
 }

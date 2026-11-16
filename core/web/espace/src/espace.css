@@ -495,6 +495,32 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .a2-swatch { width: 12px; height: 3px; border-radius: 2px; background: currentColor; }
 .a2-legend-unit { margin-left: auto; }
+.a2-legend-values { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.a2-stack-label { font-size: 11px; fill: var(--ink-soft); }
+
+/* Grid: a gallery, as many cells to a row as fit. */
+.a2-cells { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.a2-cells-small { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+.a2-cells-medium { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.a2-cells-large { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.a2-cells > li { min-width: 0; display: flex; flex-direction: column; }
+
+/* Mark: the user's keep, drop or done, toggles pressed when theirs. What
+   they dropped fades; what they did is struck through. */
+.a2-marks { display: inline-flex; flex: none; gap: 6px; }
+.a2-mark { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border: 1px solid #1a1f2733; border-radius: 999px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 12px; cursor: pointer; }
+.a2-mark:hover { border-color: #1a1f2766; color: var(--ink); }
+.a2-mark[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.a2-mark-drop[aria-pressed="true"] { border-color: var(--ink-soft); background: var(--ink-soft); }
+.a2-mark:disabled { opacity: 0.5; cursor: default; }
+.a2-mark-box { width: 22px; height: 22px; padding: 0; justify-content: center; border-radius: 6px; }
+.a2-mark-box .a2-icon { opacity: 0; }
+.a2-mark-box[aria-pressed="true"] .a2-icon { opacity: 1; }
+.a2-cells > li:has(.a2-marked-drop), .a2-list > li:has(.a2-marked-drop) { opacity: 0.55; }
+.a2-list > li:has(.a2-marked-done) .a2-text { color: var(--ink-soft); text-decoration: line-through; }
+
+/* Offers: the actions code offers on a row or a group, one button each. */
+.a2-offers { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 
 /* Table */
 .a2-table-wrap { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
@@ -674,6 +700,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-fold-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .a2-fold-line > .a2-fold-head { flex: 1; min-width: 0; }
 .a2-fold-aside { flex: none; }
+.a2-fold-aside:empty { display: none; }
 
 /* Progress: a pill for the state, a bar for the steps. */
 .a2-progress { display: flex; align-items: center; gap: 10px; min-width: 0; }

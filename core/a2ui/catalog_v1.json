@@ -5,7 +5,7 @@
   "title": "Eriphe workspace catalog",
   "description": "The shapes a surface of Eriphe's workspace is made of. Shapes only: no component belongs to a tool.",
   "catalogId": "urn:eriphe:a2ui:workspace:v1",
-  "instructions": "Une surface est une tuile de l'espace de travail : un titre, et dedans des composants de ce catalogue. Elle s'écrit comme une liste plate de composants ; chacun a un `id` unique (lettres, chiffres et `_`, ni tiret ni chiffre au début), un `component` (un nom ci-dessous) et ses propriétés. Un seul composant a l'id `root` : la racine. Un composant désigne ses enfants par leur id (`child`, `children`, `tabs`), jamais en les écrivant dedans.\n\n**Valeurs.** Une propriété de type texte, nombre, booléen ou valeur prend un littéral (`\"Bonjour\"`, `42`), une liaison vers les données de la surface `{\"@path\": \"/ventes/total\"}` (un pointeur JSON) ou un appel de fonction `{\"@call\": \"formatNumber\", \"args\": {\"value\": {\"@path\": \"/total\"}}}`. Une propriété marquée « ou liaison » prend une liste littérale ou une liaison vers une liste de même forme.\n\n**Listes répétées.** `children` prend une liste d'ids `[\"a\", \"b\"]` ou un modèle `{\"path\": \"/mails\", \"componentId\": \"ligne\"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{\"@path\": \"sujet\"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.\n\n**Règles.**\n- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day ; un lien vers une page : Link ; du code ou un diff : Code).\n- Une surface dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.\n- Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et la surface reste à jour.\n- Un bouton ne fait qu'une action, d'une liste fermée ; il n'écrit jamais dans un outil. `ask` demande quelque chose à Eriphe avec tes propres mots : `{\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Relance la sauvegarde\"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code y ajoute la surface et le bouton, et Eriphe le reçoit comme un message de l'utilisateur. Sur la tuile d'un fil, `mark` laisse l'utilisateur garder, écarter ou cocher ce que le fil montre : `{\"event\": {\"name\": \"mark\", \"context\": {\"thread\": 12, \"list\": \"options\", \"item\": {\"@path\": \"id\"}, \"mark\": \"keep\"}}}` (`keep`, `drop`, `done`, ou `\"\"` pour la retirer), des ids seulement : son fil, `list` et `item` écrits tels quels ou liés à l'id d'une ligne ; le code garde la marque dans la donnée du fil, en `/thread/marks/<list>/<item>`. Les noms locaux `open`, `expand` et `tab` sont les gestes de la page, sans contexte : un bouton n'en a presque jamais besoin. Une proposition se montre avec un composant Proposal, qui seul envoie le oui ou le non (`answer`) ; jamais un bouton. Tout autre nom est refusé.\n- Un Link montre son adresse en clair et ne s'ouvre que si l'utilisateur clique. Son `url` est une adresse http(s) écrite telle quelle, ou une liaison vers un champ que l'outil rend déjà comme une adresse (`{\"@path\": \"url\"}` dans un modèle) ; jamais une adresse construite à partir des données : pas de formatString, rien d'ajouté à la requête, pas d'identifiant ni de mot de passe dans l'adresse. Une adresse qui ne suit pas cette règle est refusée, ou n'est pas montrée.\n- Du code se montre avec Code, tel quel ; un diff unifié avec `\"mode\": \"diff\"`. Pour relire des modifications : leur description (Markdown), le diff (Code), les vérifications (Timeline) et un Link « Ouvrir dans … » vers leur page, pour aller plus loin là où elles sont.\n- N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.\n\n## Exemple : des mails, liés aux données\n```json\n[\n  {\"id\": \"root\", \"component\": \"Card\", \"title\": \"Mails à traiter\", \"child\": \"mails\"},\n  {\"id\": \"mails\", \"component\": \"List\", \"children\": {\"path\": \"/messages\", \"componentId\": \"mail\"}, \"emptyText\": \"Rien à traiter\"},\n  {\"id\": \"mail\", \"component\": \"Message\", \"from\": {\"@path\": \"from\"}, \"date\": {\"@path\": \"date\"}, \"subject\": {\"@path\": \"subject\"}, \"excerpt\": {\"@path\": \"snippet\"}}\n]\n```\nDonnées : `{\"messages\": [{\"from\": \"Sam\", \"date\": \"2026-11-12T08:10:00Z\", \"subject\": \"Devis\", \"snippet\": \"Voici le devis…\"}]}`\n\n## Exemple : des chiffres composés une fois\n```json\n[\n  {\"id\": \"root\", \"component\": \"Row\", \"children\": [\"cpu\", \"disque\"]},\n  {\"id\": \"cpu\", \"component\": \"Metric\", \"label\": \"Processeur\", \"value\": 37, \"unit\": \"%\", \"delta\": -5, \"better\": \"down\"},\n  {\"id\": \"disque\", \"component\": \"Metric\", \"label\": \"Disque libre\", \"value\": 1.2, \"unit\": \"To\"}\n]\n```",
+  "instructions": "Une surface est une tuile de l'espace de travail : un titre, et dedans des composants de ce catalogue. Elle s'écrit comme une liste plate de composants ; chacun a un `id` unique (lettres, chiffres et `_`, ni tiret ni chiffre au début), un `component` (un nom ci-dessous) et ses propriétés. Un seul composant a l'id `root` : la racine. Un composant désigne ses enfants par leur id (`child`, `children`, `tabs`), jamais en les écrivant dedans.\n\n**Valeurs.** Une propriété de type texte, nombre, booléen ou valeur prend un littéral (`\"Bonjour\"`, `42`), une liaison vers les données de la surface `{\"@path\": \"/ventes/total\"}` (un pointeur JSON) ou un appel de fonction `{\"@call\": \"formatNumber\", \"args\": {\"value\": {\"@path\": \"/total\"}}}`. Une propriété marquée « ou liaison » prend une liste littérale ou une liaison vers une liste de même forme.\n\n**Listes répétées.** `children` prend une liste d'ids `[\"a\", \"b\"]` ou un modèle `{\"path\": \"/mails\", \"componentId\": \"ligne\"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{\"@path\": \"sujet\"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.\n\n**Règles.**\n- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; une répartition, aujourd'hui et la cible : Chart `stack` ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day ; des cartes en galerie : Grid ; un lien vers une page : Link ; du code ou un diff : Code). Des options, une liste à cocher, un brouillon ne sont pas des composants : compose-les de ceux-ci, avec Mark.\n- Une surface dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.\n- Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et la surface reste à jour.\n- Un bouton ne fait qu'une action, d'une liste fermée ; il n'écrit jamais dans un outil. `ask` demande quelque chose à Eriphe avec tes propres mots : `{\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Relance la sauvegarde\"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code y ajoute la surface et le bouton, et Eriphe le reçoit comme un message de l'utilisateur. Les noms locaux `open`, `expand` et `tab` sont les gestes de la page, sans contexte : un bouton n'en a presque jamais besoin. Une proposition se montre avec un composant Proposal, qui seul envoie le oui ou le non (`answer`) ; jamais un bouton. Tout autre nom est refusé : `mark` et `offer` ne s'écrivent pas sur un bouton.\n- Sur la tuile d'un fil, Mark laisse l'utilisateur garder, écarter ou cocher ce que le fil montre : `{\"component\": \"Mark\", \"list\": \"options\", \"item\": {\"@path\": \"id\"}, \"marks\": [\"keep\", \"drop\"]}` (`[\"done\"]` pour cocher). `list` et `item` sont des ids, écrits tels quels ou liés à l'id d'une ligne, jamais du texte ; le code garde la marque dans la donnée du fil, en `/thread/marks/<list>/<item>`, et Mark l'y lit. Offers montre les actions que le code offre sur les lignes du fil (`{\"@path\": \"offers\"}` dans le modèle de ses lignes, `/thread/items/<source>/groups/*/items`, ou de ses groupes, `/thread/items/<source>/groups`) : leurs mots sont du code, un clic fait une carte, rien ne s'exécute. Hors de la tuile d'un fil, ni l'un ni l'autre.\n- Un Link montre son adresse en clair et ne s'ouvre que si l'utilisateur clique. Son `url` est une adresse http(s) écrite telle quelle, ou une liaison vers un champ que l'outil rend déjà comme une adresse (`{\"@path\": \"url\"}` dans un modèle) ; jamais une adresse construite à partir des données : pas de formatString, rien d'ajouté à la requête, pas d'identifiant ni de mot de passe dans l'adresse. Une adresse qui ne suit pas cette règle est refusée, ou n'est pas montrée.\n- Du code se montre avec Code, tel quel ; un diff unifié avec `\"mode\": \"diff\"`. Pour relire des modifications : leur description (Markdown), le diff (Code), les vérifications (Timeline) et un Link « Ouvrir dans … » vers leur page, pour aller plus loin là où elles sont.\n- N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.\n\n## Exemple : des mails, liés aux données\n```json\n[\n  {\"id\": \"root\", \"component\": \"Card\", \"title\": \"Mails à traiter\", \"child\": \"mails\"},\n  {\"id\": \"mails\", \"component\": \"List\", \"children\": {\"path\": \"/messages\", \"componentId\": \"mail\"}, \"emptyText\": \"Rien à traiter\"},\n  {\"id\": \"mail\", \"component\": \"Message\", \"from\": {\"@path\": \"from\"}, \"date\": {\"@path\": \"date\"}, \"subject\": {\"@path\": \"subject\"}, \"excerpt\": {\"@path\": \"snippet\"}}\n]\n```\nDonnées : `{\"messages\": [{\"from\": \"Sam\", \"date\": \"2026-11-12T08:10:00Z\", \"subject\": \"Devis\", \"snippet\": \"Voici le devis…\"}]}`\n\n## Exemple : des chiffres composés une fois\n```json\n[\n  {\"id\": \"root\", \"component\": \"Row\", \"children\": [\"cpu\", \"disque\"]},\n  {\"id\": \"cpu\", \"component\": \"Metric\", \"label\": \"Processeur\", \"value\": 37, \"unit\": \"%\", \"delta\": -5, \"better\": \"down\"},\n  {\"id\": \"disque\", \"component\": \"Metric\", \"label\": \"Disque libre\", \"value\": 1.2, \"unit\": \"To\"}\n]\n```",
   "components": {
     "Text": {
       "type": "object",
@@ -106,6 +106,17 @@
       },
       "required": ["component", "children"]
     },
+    "Grid": {
+      "type": "object",
+      "description": "Des enfants en grille, autant par rangée qu'il en tient : une galerie de cartes.",
+      "properties": {
+        "component": {"const": "Grid"},
+        "children": {"$ref": "common_types.json#/$defs/ChildList"},
+        "size": {"type": "string", "enum": ["small", "medium", "large"], "default": "medium", "description": "La largeur d'une case."},
+        "emptyText": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Ce qui s'affiche quand la grille est vide."}
+      },
+      "required": ["component", "children"]
+    },
     "Card": {
       "type": "object",
       "description": "Un cadre autour d'un enfant, avec un titre.",
@@ -170,6 +181,20 @@
       "required": ["component", "label", "action"],
       "examples": [
         {"id": "relancer", "component": "Button", "label": "Relancer la sauvegarde", "action": {"event": {"name": "ask", "context": {"text": "Relance la sauvegarde de cette nuit"}}}}
+      ]
+    },
+    "Mark": {
+      "type": "object",
+      "description": "Sur la tuile d'un fil, la marque de l'utilisateur sur ce que le fil montre : un bouton à bascule par marque, enfoncé quand c'est la sienne ; le code la garde en `/thread/marks/<list>/<item>`.",
+      "properties": {
+        "component": {"const": "Mark"},
+        "list": {"$ref": "#/$defs/MarkId", "description": "La liste marquée, un id (« options »)."},
+        "item": {"$ref": "#/$defs/MarkId", "description": "La chose marquée : un id, ou lié à l'id d'une ligne."},
+        "marks": {"type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": {"type": "string", "enum": ["keep", "drop", "done"]}, "description": "keep et drop pour garder ou écarter, done pour cocher."}
+      },
+      "required": ["component", "list", "item", "marks"],
+      "examples": [
+        {"id": "garder", "component": "Mark", "list": "options", "item": "temporal", "marks": ["keep", "drop"]}
       ]
     },
     "Choice": {
@@ -248,10 +273,10 @@
     },
     "Chart": {
       "type": "object",
-      "description": "Une ou plusieurs séries en courbes ou en barres.",
+      "description": "Une ou plusieurs séries en courbes ou en barres ; stack : une barre par x, empilant les séries (une répartition, aujourd'hui et la cible).",
       "properties": {
         "component": {"const": "Chart"},
-        "kind": {"type": "string", "enum": ["line", "bar"]},
+        "kind": {"type": "string", "enum": ["line", "bar", "stack"]},
         "series": {
           "oneOf": [
             {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/Series"}},
@@ -262,7 +287,8 @@
       },
       "required": ["component", "kind", "series"],
       "examples": [
-        {"id": "conso", "component": "Chart", "kind": "bar", "unit": "kWh", "series": [{"name": "Maison", "points": [{"x": "lun.", "y": 12.5}, {"x": "mar.", "y": 9.8}]}]}
+        {"id": "conso", "component": "Chart", "kind": "bar", "unit": "kWh", "series": [{"name": "Maison", "points": [{"x": "lun.", "y": 12.5}, {"x": "mar.", "y": 9.8}]}]},
+        {"id": "repartition", "component": "Chart", "kind": "stack", "unit": "%", "series": [{"name": "Actions", "points": [{"x": "Aujourd'hui", "y": 60}, {"x": "Cible", "y": 50}]}, {"name": "Obligations", "points": [{"x": "Aujourd'hui", "y": 30}, {"x": "Cible", "y": 40}]}, {"name": "Liquidités", "points": [{"x": "Aujourd'hui", "y": 10}, {"x": "Cible", "y": 10}]}]}
       ]
     },
     "Table": {
@@ -359,6 +385,18 @@
       "required": ["component", "proposalId"],
       "examples": [
         {"id": "accord", "component": "Proposal", "proposalId": "intention:12"}
+      ]
+    },
+    "Offers": {
+      "type": "object",
+      "description": "Sur la tuile d'un fil, les actions que le code offre sur une ligne de `/thread/items/<source>` ou sur un groupe : un bouton chacune, aux mots du code ; un clic fait une carte, rien ne s'exécute.",
+      "properties": {
+        "component": {"const": "Offers"},
+        "offers": {"$ref": "common_types.json#/$defs/DataBinding", "description": "Les offers d'une ligne ou d'un groupe, jamais une autre donnée."}
+      },
+      "required": ["component", "offers"],
+      "examples": [
+        {"id": "actions", "component": "Offers", "offers": {"@path": "/thread/items/alertes/groups/0/offers"}}
       ]
     },
     "Alert": {
@@ -466,11 +504,13 @@
         {"$ref": "#/components/Row"},
         {"$ref": "#/components/Column"},
         {"$ref": "#/components/List"},
+        {"$ref": "#/components/Grid"},
         {"$ref": "#/components/Card"},
         {"$ref": "#/components/Tabs"},
         {"$ref": "#/components/Fold"},
         {"$ref": "#/components/Divider"},
         {"$ref": "#/components/Button"},
+        {"$ref": "#/components/Mark"},
         {"$ref": "#/components/Choice"},
         {"$ref": "#/components/TextField"},
         {"$ref": "#/components/DateField"},
@@ -483,6 +523,7 @@
         {"$ref": "#/components/Message"},
         {"$ref": "#/components/Day"},
         {"$ref": "#/components/Proposal"},
+        {"$ref": "#/components/Offers"},
         {"$ref": "#/components/Alert"},
         {"$ref": "#/components/Placeholder"}
       ],
@@ -509,6 +550,12 @@
     "LinkUrl": {
       "oneOf": [
         {"type": "string", "minLength": 1},
+        {"$ref": "common_types.json#/$defs/DataBinding"}
+      ]
+    },
+    "MarkId": {
+      "oneOf": [
+        {"type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.:@=+-]{0,127}$"},
         {"$ref": "common_types.json#/$defs/DataBinding"}
       ]
     },

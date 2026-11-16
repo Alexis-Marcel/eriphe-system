@@ -1071,6 +1071,139 @@
      ]
     }
    }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-cards",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Choisir",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "pieces",
+       "split"
+      ]
+     },
+     {
+      "id": "pieces",
+      "component": "Grid",
+      "size": "small",
+      "children": {
+       "path": "/pieces",
+       "componentId": "piece"
+      },
+      "emptyText": "Rien à montrer"
+     },
+     {
+      "id": "piece",
+      "component": "Card",
+      "title": {
+       "@path": "title"
+      },
+      "child": "piece_body"
+     },
+     {
+      "id": "piece_body",
+      "component": "Column",
+      "children": [
+       "piece_sub",
+       "piece_price"
+      ]
+     },
+     {
+      "id": "piece_sub",
+      "component": "Text",
+      "variant": "caption",
+      "text": {
+       "@path": "sub"
+      }
+     },
+     {
+      "id": "piece_price",
+      "component": "Text",
+      "text": {
+       "@path": "price"
+      }
+     },
+     {
+      "id": "split",
+      "component": "Chart",
+      "kind": "stack",
+      "unit": "%",
+      "series": {
+       "@path": "/split"
+      }
+     }
+    ],
+    "dataModel": {
+     "pieces": [
+      {
+       "title": "Veste en laine",
+       "sub": "Gris chiné",
+       "price": "180 €"
+      },
+      {
+       "title": "Chemise oxford",
+       "sub": "Bleu ciel",
+       "price": "65 €"
+      },
+      {
+       "title": "Pantalon droit",
+       "sub": "Marine",
+       "price": "90 €"
+      }
+     ],
+     "split": [
+      {
+       "name": "Actions",
+       "points": [
+        {
+         "x": "Aujourd'hui",
+         "y": 60
+        },
+        {
+         "x": "Cible",
+         "y": 50
+        }
+       ]
+      },
+      {
+       "name": "Obligations",
+       "points": [
+        {
+         "x": "Aujourd'hui",
+         "y": 30
+        },
+        {
+         "x": "Cible",
+         "y": 40
+        }
+       ]
+      },
+      {
+       "name": "Liquidités",
+       "points": [
+        {
+         "x": "Aujourd'hui",
+         "y": 10
+        },
+        {
+         "x": "Cible",
+         "y": 10
+        }
+       ]
+      }
+     ]
+    }
+   }
   }
  ],
  "en": [
@@ -2141,6 +2274,139 @@
        "due": "",
        "mark": "",
        "level": "low"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-cards",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Choose",
+      "child": "col"
+     },
+     {
+      "id": "col",
+      "component": "Column",
+      "children": [
+       "pieces",
+       "split"
+      ]
+     },
+     {
+      "id": "pieces",
+      "component": "Grid",
+      "size": "small",
+      "children": {
+       "path": "/pieces",
+       "componentId": "piece"
+      },
+      "emptyText": "Nothing to show"
+     },
+     {
+      "id": "piece",
+      "component": "Card",
+      "title": {
+       "@path": "title"
+      },
+      "child": "piece_body"
+     },
+     {
+      "id": "piece_body",
+      "component": "Column",
+      "children": [
+       "piece_sub",
+       "piece_price"
+      ]
+     },
+     {
+      "id": "piece_sub",
+      "component": "Text",
+      "variant": "caption",
+      "text": {
+       "@path": "sub"
+      }
+     },
+     {
+      "id": "piece_price",
+      "component": "Text",
+      "text": {
+       "@path": "price"
+      }
+     },
+     {
+      "id": "split",
+      "component": "Chart",
+      "kind": "stack",
+      "unit": "%",
+      "series": {
+       "@path": "/split"
+      }
+     }
+    ],
+    "dataModel": {
+     "pieces": [
+      {
+       "title": "Wool jacket",
+       "sub": "Heather grey",
+       "price": "€180"
+      },
+      {
+       "title": "Oxford shirt",
+       "sub": "Sky blue",
+       "price": "€65"
+      },
+      {
+       "title": "Straight trousers",
+       "sub": "Navy",
+       "price": "€90"
+      }
+     ],
+     "split": [
+      {
+       "name": "Stocks",
+       "points": [
+        {
+         "x": "Today",
+         "y": 60
+        },
+        {
+         "x": "Target",
+         "y": 50
+        }
+       ]
+      },
+      {
+       "name": "Bonds",
+       "points": [
+        {
+         "x": "Today",
+         "y": 30
+        },
+        {
+         "x": "Target",
+         "y": 40
+        }
+       ]
+      },
+      {
+       "name": "Cash",
+       "points": [
+        {
+         "x": "Today",
+         "y": 10
+        },
+        {
+         "x": "Target",
+         "y": 10
+        }
+       ]
       }
      ]
     }
