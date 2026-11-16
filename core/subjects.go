@@ -660,8 +660,8 @@ func (c *core) proposalSubject(kind string, id int64) string {
 // (monitor.*: topic:<name>), or a key written kind:slug. Another key (a
 // task's, a thread's, a surface's id) gives none.
 func skillRunSubject(st *skillTrigger, key string, events []journalEvent) string {
-	if st != nil && st.Subject != "" {
-		return st.Subject
+	if st != nil && st.Thread != "" {
+		return st.Thread
 	}
 	if strings.Contains(key, ":") {
 		return subjectOf(key)

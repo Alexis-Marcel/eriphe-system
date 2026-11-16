@@ -109,7 +109,7 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 
 	// Asked to stand, the thread its subject has becomes a standing one; a
 	// led one stays on its goal.
-	got, _, err := c.openThreadOnce(threadIn{Title: "PR 12", Goal: "Merged.", Subject: "pr:example/site#12", Ends: endsStanding}, nil)
+	got, _, err := c.openThreadOnce(threadIn{Title: "PR 12", Goal: "Merged.", Subject: "pr:example/site#12", Ends: endsStanding}, nil, byBrain)
 	if err != nil || got.ID != goal.ID || got.Ends != endsStanding || !got.active() {
 		t.Fatalf("again: %+v %v", got, err)
 	}
@@ -117,7 +117,7 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := c.openThreadOnce(threadIn{Title: "Refonte", Goal: "En ligne.", Subject: "project:refonte", Ends: endsDay}, nil); err == nil {
+	if _, _, err := c.openThreadOnce(threadIn{Title: "Refonte", Goal: "En ligne.", Subject: "project:refonte", Ends: endsDay}, nil, byBrain); err == nil {
 		t.Error("a led thread was made a day's")
 	}
 	if th, _ := c.thread(led.ID); th.Ends != endsGoal {

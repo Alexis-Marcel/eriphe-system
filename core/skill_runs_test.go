@@ -14,7 +14,7 @@ func TestSkillTriggerParse(t *testing.T) {
 	}
 	for _, ok := range []string{
 		"", "when: monitor.new\n", "when: monitor.received key=getout\nevery: 15m\n",
-		"when: time weekdays 08:00\nmodel: small\n", "when: monitor.new\ntools: [mail, calendar]\ncan: [open-thread]\n",
+		"when: time weekdays 08:00\nmodel: small\n", "when: monitor.new\ntools: [mail, calendar, eriphe-threads]\nthread: topic:mails\n",
 		"when: monitor.received key=maison status=couche\nevery: 1d\n",
 		"when: monitor.failed, monitor.recovered key=getout-prod\n", "when: monitor.failed,monitor.recovered\n",
 	} {
@@ -24,7 +24,7 @@ func TestSkillTriggerParse(t *testing.T) {
 	}
 	for _, bad := range []string{
 		"every: 15m\n", "when: Mail\n", "when: monitor.new key\n", "when: time\n", "when: time weekdays 08:00\nevery: 1h\n",
-		"when: monitor.new\nevery: 2m\n", "when: monitor.new\nevery: 3d\n", "when: monitor.new\ncan: [delete-all]\n",
+		"when: monitor.new\nevery: 2m\n", "when: monitor.new\nevery: 3d\n", "when: monitor.new\nthread: task:t-1\n",
 		"when: monitor.new\ntools: [Bad Name]\n",
 		"when: monitor.new, time\n", "when: monitor.new, Mail\n", "when: a.b, c.d, e.f, g.h, i.j, k.l\n", "when: , key=x\n",
 	} {
@@ -32,13 +32,13 @@ func TestSkillTriggerParse(t *testing.T) {
 			t.Errorf("%q accepted", bad)
 		}
 	}
-	m, _ := parseSkillMD(front("when: monitor.received key=getout\nevery: 15m\ntools: [monitor]\ncan: [open-thread]\n"))
+	m, _ := parseSkillMD(front("when: monitor.received key=getout\nevery: 15m\ntools: [monitor, eriphe-threads]\nthread: project:getout\n"))
 	tr := m.Trigger
 	if !tr.matches(journalEvent{Kind: evMonitorReceived, Key: "GetOut"}) || tr.matches(journalEvent{Kind: evMonitorReceived, Key: "other"}) ||
 		tr.matches(journalEvent{Kind: "monitor.new", Key: "getout"}) {
 		t.Fatal("matches")
 	}
-	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "thread") {
+	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "project:getout") {
 		t.Fatalf("text %q", s)
 	}
 	// Several kinds share the filters; the run says each event's kind.

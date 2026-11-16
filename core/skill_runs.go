@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS skill_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT, skill TEXT NOT NULL, sha TEXT NOT NULL, key TEXT NOT NULL DEFAULT '',
   events TEXT NOT NULL DEFAULT '[]', task TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
   external INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, ended INTEGER,
-  thread INTEGER NOT NULL DEFAULT 0); -- it may start a working thread (skill_cards.go)
+  thread INTEGER NOT NULL DEFAULT 0); -- the thread of its alias, lent eriphe-threads (task_threads.go)
 CREATE INDEX IF NOT EXISTS skill_runs_skill ON skill_runs (skill, id);
 CREATE INDEX IF NOT EXISTS skill_runs_task ON skill_runs (task);`
 
@@ -217,10 +217,7 @@ func (c *core) tickSkills(ctx context.Context, now time.Time) {
 			byKey[e.Key] = append(byKey[e.Key], e)
 		}
 		for _, key := range keys {
-			if r := c.openRun(sk.Name, key); r != nil {
-				if s, ok := c.liveThread(r); ok && r.State != skillRunOpen {
-					c.toRunThread(r, s, byKey[key]) // its thread's lead gets them (skill_cards.go)
-				}
+			if c.openRun(sk.Name, key) != nil {
 				continue // they wait for its task (skillTaskChanged)
 			}
 			c.startSkillRun(ctx, sk, key, byKey[key], now)
@@ -277,12 +274,11 @@ func scanSkillRun(row interface{ Scan(...any) error }) (*skillRun, error) {
 	return &r, nil
 }
 
-// openRun is a run of the skill and key still open: its task, or the work
-// thread it opened (skill_cards.go).
+// openRun is a run of the skill and key whose task is still open. Its
+// thread stays: the next run finds it again (skillThread).
 func (c *core) openRun(skill, key string) *skillRun {
-	r, err := scanSkillRun(c.store.db.QueryRow(`SELECT `+skillRunCols+` FROM skill_runs WHERE skill = ? AND key = ?
-		AND (state = ? OR (thread != 0 AND thread IN (SELECT id FROM threads WHERE mode = ? AND phase IN (?, ?, ?)))) ORDER BY id DESC LIMIT 1`,
-		skill, key, skillRunOpen, modeLed, phaseProposed, phaseRunning, phasePaused))
+	r, err := scanSkillRun(c.store.db.QueryRow(`SELECT `+skillRunCols+` FROM skill_runs WHERE skill = ? AND key = ? AND state = ? ORDER BY id DESC LIMIT 1`,
+		skill, key, skillRunOpen))
 	if err != nil {
 		return nil
 	}
@@ -359,7 +355,20 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 		c.endRun(runID, skillRunRefused, fmt.Sprintf("more than %d runs in 24 hours", runsPerDay))
 		return
 	}
-	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now), Agent: sk.Trigger.Model, Subject: skillRunSubject(sk.Trigger, key, events),
+	subject := skillRunSubject(sk.Trigger, key, events)
+	var th *Thread
+	var sources []string
+	if containsStr(sk.Trigger.Tools, threadsServer) && subject != "" {
+		// Lent eriphe-threads, it acts on the thread of its alias: code
+		// finds it, or opens it (task_threads.go).
+		if s, err := c.skillThread(sk, subject, events); err != nil {
+			log.Printf("skill %s: run %d: its thread: %v", sk.Name, runID, err)
+		} else {
+			th, sources = &s, c.itemSourceNames(s.ID)
+			c.store.db.Exec(`UPDATE skill_runs SET thread = ? WHERE id = ?`, s.ID, runID)
+		}
+	}
+	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now, th, sources), Agent: sk.Trigger.Model, Subject: subject,
 		askStart: false, approvedInAdvance: true, cleanStart: !external}
 	for _, t := range sk.Trigger.Tools {
 		r.Resources = append(r.Resources, ResourceRef{Kind: "tool", Ref: t})
@@ -421,10 +430,10 @@ func skillVoice(lang string) string {
 }
 
 // skillRunPrompt is a run's prompt: the skill, then its events.
-func skillRunPrompt(sk triggeredSkill, events []journalEvent, now time.Time) string {
+func skillRunPrompt(sk triggeredSkill, events []journalEvent, now time.Time, th *Thread, sources []string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Skill « %s » : %s\n\n%s\n\n", sk.Name, sk.Manifest.Description, sk.Manifest.Body)
-	if s := skillCanText(sk.Trigger); s != "" {
+	if s := skillCanText(sk.Trigger, th, sources); s != "" {
 		b.WriteString(strings.TrimSpace(s) + "\n\n")
 	}
 	if len(events) == 0 {
@@ -473,9 +482,7 @@ func (c *core) skillTaskChanged(id, state string, outcome turnOutcome) bool {
 		}
 		if events, err := c.store.events(id, 400); err == nil {
 			last, _ := lastTurn(events) // its status shows the text without its receipt
-			// Without its thread block, whose closing fence would hide a
-			// receipt that follows it.
-			rc, _ = parseReceipt(threadBlockRe.ReplaceAllString(last, ""))
+			rc, _ = parseReceipt(last)
 		}
 		c.tellRun(r, text, rc)
 		c.stop(ctx, id)
@@ -524,8 +531,7 @@ func (c *core) joinWaiting(ctx context.Context, r *skillRun) bool {
 	return true
 }
 
-// tellRun ends a run with its last message: a thread it asks for, its
-// kept calls on one card, and what its receipt's attention list weighs
+// tellRun ends a run with its last message: its kept calls on one card, and what its receipt's attention list weighs
 // (attention_signal.go). No entry tells nothing (the message stays in the
 // run's note), but kept calls: their card comes, now, with the message.
 // Else each entry with refs goes to the queue as it is; an entry without
@@ -538,15 +544,8 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 	if m, ok := c.skillManifestOf(r.SHA); ok {
 		st = m.Trigger
 	}
-	in, text, perr := threadOfMessage(text)
-	text = strings.TrimSpace(stripReceipt(text)) // one a thread block hid
+	text = strings.TrimSpace(stripReceipt(text))
 	note := ""
-	switch {
-	case perr != nil:
-		note = perr.Error()
-	case in != nil:
-		note = c.runThread(context.Background(), r, st, in)
-	}
 	var signals, own []attentionSignal
 	var dropped []string
 	weight := 0

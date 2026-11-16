@@ -109,7 +109,7 @@ func TestOneSubjectEverywhere(t *testing.T) {
 	if _, err := c.brainIntend(intendIn{Text: "Relire la page d'accueil.", Subject: "projet:site web", OwedTo: "Personne:Sam", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
-	th, _, err := c.openThreadOnce(threadIn{Title: "Site web", Goal: "Le site est en ligne.", Subject: "PROJECT: site_web"}, nil)
+	th, _, err := c.openThreadOnce(threadIn{Title: "Site web", Goal: "Le site est en ligne.", Subject: "PROJECT: site_web"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}

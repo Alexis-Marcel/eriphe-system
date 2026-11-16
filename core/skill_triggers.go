@@ -24,9 +24,10 @@ import (
 //	model: haiku                             the agent its tasks run with (Settings → Agents)
 //	tools: [mail, calendar]                  the catalog servers its tasks are lent
 //	                                         (eriphe-workspace: it keeps a surface, and a
-//	                                         surface.stale about it runs it whatever its when)
-//	can: [open-thread]                     what its tasks may start (#276)
-//	subject: project:site                    what its runs are about (subjects.go); without it, the events' key
+//	                                         surface.stale about it runs it whatever its when;
+//	                                         eriphe-threads: it acts on threads, task_threads.go)
+//	thread: topic:mails                      its thread's alias (kind:slug): what its runs are about;
+//	                                         without it, the events' key, or topic:<monitor>
 //
 // Each is checked when the skill is added: a version with a bad trigger is
 // refused. The user approves them with the rest of the skill, as one
@@ -34,14 +35,11 @@ import (
 
 const (
 	whenTime      = "time"
-	canThread     = "open-thread"
 	minSkillEvery = 5 * time.Minute
 	maxSkillEvery = 24 * time.Hour
 	maxSkillTools = 10
 	maxWhenKinds  = 5
 )
-
-var skillCans = []string{canThread}
 
 // skillTrigger is a skill's parsed trigger.
 type skillTrigger struct {
@@ -55,9 +53,8 @@ type skillTrigger struct {
 	Every    time.Duration     // 0: at once
 	Model    string
 	Tools    []string
-	Can      []string
 	Urgent   string // the fixed text of an urgent run (skill_cards.go)
-	Subject  string // what its runs are about; else their events' key (skillRunSubject)
+	Thread   string // its thread's alias: what its runs are about; else their events' key (skillRunSubject)
 }
 
 // filterBound is a filter on a number of the event's payload.
@@ -94,7 +91,7 @@ func splitWhen(when string) (at, events string) {
 // someone follows it.
 func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 	if m.When == "" {
-		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "can": m.Can, "urgent": m.Urgent, "subject": m.Subject} {
+		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "urgent": m.Urgent, "thread": m.Thread} {
 			if v != "" {
 				return nil, skillErr("skills.err.nowhen", k)
 			}
@@ -177,18 +174,12 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 		}
 		st.Urgent = u
 	}
-	if s := strings.TrimSpace(m.Subject); s != "" {
+	if s := strings.TrimSpace(m.Thread); s != "" {
 		k, err := subjectKey(s)
 		if err != nil || k == "" {
-			return nil, skillErr("skills.err.subject", s)
+			return nil, skillErr("skills.err.thread", s)
 		}
-		st.Subject = k
-	}
-	st.Can = frontList(m.Can)
-	for _, c := range st.Can {
-		if !slices.Contains(skillCans, c) {
-			return nil, skillErr("skills.err.can", c)
-		}
+		st.Thread = k
 	}
 	return st, nil
 }
@@ -279,8 +270,8 @@ func (st *skillTrigger) Text(lang string) string {
 	if containsStr(st.Tools, workspaceServer) {
 		parts = append(parts, tr(lang, "skills.trigger.stale"))
 	}
-	if slices.Contains(st.Can, canThread) {
-		parts = append(parts, tr(lang, "skills.trigger.thread"))
+	if containsStr(st.Tools, threadsServer) && st.Thread != "" {
+		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.thread"), st.Thread))
 	}
 	if st.Urgent != "" {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.urgent"), st.Urgent))

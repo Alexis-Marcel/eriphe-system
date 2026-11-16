@@ -123,12 +123,13 @@ func (c *core) endsAgain(old Thread, ends string) error {
 // one again: a matter has one thread.
 const sameSubject = "même sujet"
 
-// openThreadOnce opens a thread for the brain, one per matter: a light
-// one needs its subject, and a subject that has a thread already gives
-// that thread back (reopened light if it ended) rather than a second one;
-// again says so. A led one on the subject of an active thread is refused:
-// that thread's plan changes instead.
-func (c *core) openThreadOnce(in threadIn, taint []string) (s Thread, again string, err error) {
+// openThreadOnce opens a thread, one per matter, for the brain or a task
+// lent eriphe-threads (by: skill:<name>, task:<id>): a light one needs its
+// subject, and a subject that has a thread already gives that thread back
+// (reopened light if it ended) rather than a second one; again says so. A
+// led one on the subject of an active thread is refused: that thread's
+// plan changes instead. Only the brain changes how a thread found ends.
+func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread, again string, err error) {
 	led := strings.EqualFold(strings.TrimSpace(in.Mode), modeLed) || (strings.TrimSpace(in.Mode) == "" && len(in.Steps) > 0)
 	subject, err := c.subjectLookup(in.Subject)
 	if err != nil {
@@ -139,7 +140,7 @@ func (c *core) openThreadOnce(in threadIn, taint []string) (s Thread, again stri
 		if !led {
 			return s, "", errors.New("subject is needed: the subject of the matter, kind:slug, to find its thread again (pr:owner/repo#12, project:site, topic:brand-name)")
 		}
-		s, err = c.openThread(in, taint, byBrain)
+		s, err = c.openThread(in, taint, by)
 		return s, "", err
 	}
 	found, err := c.findThreads(subject, "", true, 1) // active first, then the latest
@@ -147,23 +148,25 @@ func (c *core) openThreadOnce(in threadIn, taint []string) (s Thread, again stri
 		return s, "", err
 	}
 	if len(found) == 0 {
-		s, err = c.openThread(in, taint, byBrain)
+		s, err = c.openThread(in, taint, by)
 		return s, "", err
 	}
 	old := found[0]
-	if err := c.endsAgain(old, in.Ends); err != nil {
-		return s, "", err
+	if by == byBrain {
+		if err := c.endsAgain(old, in.Ends); err != nil {
+			return s, "", err
+		}
 	}
 	switch {
 	case led && old.active():
 		return s, "", fmt.Errorf("thread %d « %s » follows %s already: change its plan (add_step, amend_thread) rather than open another", old.ID, old.Title, old.Subject)
 	case led:
-		s, err = c.openThread(in, taint, byBrain)
+		s, err = c.openThread(in, taint, by)
 		return s, "", err
 	case old.active():
 		return old, fmt.Sprintf("Not a new thread: thread %d « %s » follows this subject already, and it is the one to go on with (its steps: read_thread).", old.ID, old.Title), nil
 	}
-	s, err = c.reopenThread(old.ID, sameSubject, byBrain)
+	s, err = c.reopenThread(old.ID, sameSubject, by)
 	if err != nil {
 		return s, "", err
 	}
@@ -180,7 +183,7 @@ func registerThreadTools(s *mcp.Server, c *core) {
 					}
 				}
 			}
-			s, again, err := c.openThreadOnce(in, c.turnTaint())
+			s, again, err := c.openThreadOnce(in, c.turnTaint(), byBrain)
 			if err != nil {
 				return nil, err
 			}

@@ -1698,8 +1698,8 @@ turn is not tainted. Its front matter:
 | `when` | an event kind of the [journal](#events) (`monitor.new key=mails`, `monitor.changed key=getout-prod`), with filters on its key or payload (`monitor.received key=getout status=firing`), or a payload number compared (`user.returned away_minutes>=180`, `<=` too); or up to 5 kinds, by commas, that share the filters (`monitor.failed, monitor.recovered key=getout-prod`: one skill for one way of reacting, its run says each event's kind); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules); or both, the schedule then `;` and the events (`time daily 06:00; user.returned away_minutes>=180`): it runs at its times and on its events |
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
-| `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
-| `can` | what its tasks may start: `open-thread`, a led thread |
+| `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid; `eriphe-threads` to act on threads |
+| `thread` | its thread's alias, `kind:slug` (`topic:mails`); without it, its events' key when it names a thing (`topic:<monitor>`) |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
@@ -1738,25 +1738,40 @@ version, read with its diff.
   even without an attention entry; « the skill proposes N actions » when it wrote none, or when
   its message is held or not sent, held by the attention queue for its breakpoint): each action with its parameters. The yes runs
   them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
-- **A led thread**: with `can: [open-thread]`, the run is told it may end its last message with
-  a fenced ` ```thread ` block holding `open_thread`'s JSON. eriphe-core opens it (`by`
-  `skill:<name>`, tainted as the run). Its plan starts at once when every step only reads, writes
-  on a branch of its repository or calls catalog tools, each call still under the grid: the
-  skill's approval stands for it. Code approved that plan, not the user: the steps of a tainted
-  run's plan keep its taint, start unclean and ask their own start card for what they are lent
-  (a write on a branch included), as a step added since does; a Free write asks its card.
-  A folder lent beyond read, a credential, a file, or a write without a branch: the plan waits
-  for its card. While the thread is open, it is the run's: the
-  events of its key go to its lead (`tellLead`), not to a new run. Merging and deploying stay the
-  user's, on the thread's cards. Without `can`, the block is ignored and the note says why.
-- **Subject**: with `subject: kind:slug`, its runs are about that subject; without it, about their
-  events' key when it names a thing (a monitor's, or `kind:slug`; subjects.go). Their tasks, notifications, cards, signals and surfaces carry it.
+- **Its thread** (`task_threads.go`): its runs are about its alias, `thread: kind:slug`; without
+  it, their events' key when it names a thing (a monitor's, `topic:<name>`, or `kind:slug`;
+  subjects.go). Their tasks, notifications, cards and signals carry it. Lent `eriphe-threads`, a
+  run acts on the thread of that alias: code finds it when the run starts, reopens it if it
+  ended, or opens it **standing**, titled by the skill (`mails-pro` → « Mails pro ») with its
+  description as goal: words the user approved, never the run's. A run of a poll monitor's new
+  items gives that thread the monitor's read as a source with items (thread_sources.go), each
+  item by the id its `monitor.new` carries: the run notes them there. The run is told its thread
+  and its sources; the next run finds the same thread. Nothing creates a thread because a tool
+  is connected: it is born when a watcher acts on its alias, for any source.
+- **eriphe-threads**, a server Eriphe provides, lent like any tool (`tools: [eriphe-threads]`,
+  `{kind: tool, ref: eriphe-threads}` in `run_task`; `eriphe-threads.note_item` lends one tool).
+  Its tools ask nothing (writing on a thread is not an external write) and act as
+  `skill:<name>` (`task:<id>` for another task), with the task's taint read at each call:
+  - `find_thread`, `read_thread` (what others wrote taints the task);
+  - `open_thread` on an alias: the thread it has, reopened if it ended, else a new one, light or
+    standing (never `day`, and it never changes how a thread found ends); with steps, a led thread
+    whose plan waits for the user's card: nothing starts before the yes;
+  - `note_item` on an item of a source (tainted from a tainted run: shown « extérieur », never
+    quoted into a summary);
+  - `set_thread`: `waiting` (it waits for the user) or `open`, a deadline (its `deadline` step,
+    made or moved), a raise (an attention item `thread:<id>`, held to 3 from a tainted run);
+  - `add_step` of kind `user`, `deadline` or `call`: a call is one of the task's own tools, and
+    always a card, a free read included (`step_ask:<thread>:<key>`); what it adds taints the thread
+    from a tainted run;
+  - `link_thread` with a source: a read of one of its tools or servers, or an approved monitor; a
+    name alone takes away one it gave.
+
+  It never offers `settle_step`, `close_thread`, `stop_thread`, `reopen_thread` nor any approval:
+  skills propose, the user decides. A plan is never approved by code.
 - **Urgent**: with `urgent: <text>`, a run whose attention list weighs something 5 sends that
   fixed text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the
   run read enters it: a tainted run cannot write what wakes the user. Its own message goes as any
   weight 5's, under the rules; without `urgent`, a weight 5 is only that.
-- **A thread block and a receipt** may both end the message: the block is taken out first, so its
-  closing fence does not hide the receipt.
 - **Limits**: 100 runs a skill in 24 hours (a run past it is kept `refused`), 50 events a run;
   a triggered task's own end never triggers a skill.
 - **Tables**: `skill_queue` (events waiting, by skill and key), `skill_runs` (skill, version, key,
@@ -1766,7 +1781,7 @@ version, read with its diff.
 A triggered skill's page lists its runs over 30 days, the latest first:
 - when it ran, and its state (running, done, nothing to say, failed, not started);
 - its events (kind, key, a few words of their subject);
-- its task and the thread it opened;
+- its task and its thread;
 - its last message;
 - the actions it proposed, each answered there on its own (`POST
   /settings/skills/<name>/calls/<ask>/approve|reject`: a yes runs it as kept);

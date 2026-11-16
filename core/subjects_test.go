@@ -19,7 +19,7 @@ func TestSubjectsNotedWhenWritten(t *testing.T) {
 	if _, err := c.brainIntend(intendIn{Text: "Relire la page d'accueil.", Subject: "topic:accueil", OwedTo: "Personne:Sam", SourceRef: ref(seq)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := c.openThreadOnce(threadIn{Title: "Mise en ligne du site", Goal: "Le site est en ligne.", Subject: "project:site-web"}, nil); err != nil {
+	if _, _, err := c.openThreadOnce(threadIn{Title: "Mise en ligne du site", Goal: "Le site est en ligne.", Subject: "project:site-web"}, nil, byBrain); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.brainRule(ruleIn{Match: "alerte:backup", Floor: 5, Why: "Demandé.", SourceRef: ref(seq)}); err != nil {
@@ -118,7 +118,7 @@ func TestMergeSubjects(t *testing.T) {
 	seq := ownerSays(c, "Préviens-moi pour le site")
 	c.brainRemember(rememberIn{Text: "Le site passe en ligne vendredi.", Kind: kindFact, Subject: "project:site", SourceRef: ref(seq)})
 	c.brainIntend(intendIn{Text: "Relire l'accueil.", Subject: "project:site", SourceRef: ref(seq)})
-	th, _, err := c.openThreadOnce(threadIn{Title: "Site", Goal: "En ligne.", Subject: "project:site"}, nil)
+	th, _, err := c.openThreadOnce(threadIn{Title: "Site", Goal: "En ligne.", Subject: "project:site"}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestMergeSubjects(t *testing.T) {
 	if err != nil || got["subject"] != key {
 		t.Errorf("notify under %v %v", got["subject"], err)
 	}
-	if again, _, _ := c.openThreadOnce(threadIn{Title: "Site", Goal: "En ligne.", Subject: "project:site"}, nil); again.ID != th.ID {
+	if again, _, _ := c.openThreadOnce(threadIn{Title: "Site", Goal: "En ligne.", Subject: "project:site"}, nil, byBrain); again.ID != th.ID {
 		t.Errorf("a second thread %d", again.ID)
 	}
 	if named := c.subjectsNamed("le site public est lent"); !slices.Equal(named, []string{key}) {

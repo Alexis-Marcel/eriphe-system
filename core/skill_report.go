@@ -11,7 +11,7 @@ import (
 
 // What a triggered skill did (skill_runs.go), for its page in Settings →
 // Skills and for the brain's skill_runs: each run with its events, its
-// task, the thread it opened, its kept calls and what the user answered,
+// task, its thread, its kept calls and what the user answered,
 // whether it told the user, and its cost where the harness gave one; and
 // the totals over 30 days.
 
@@ -166,7 +166,7 @@ type skillRunsIn struct {
 }
 
 func registerSkillRunsTool(s *mcp.Server, c *core) {
-	tool(s, "skill_runs", "What the user's triggered skills did: per skill, its last runs (when, state: running, done, silent, failed or refused; the events' kinds and keys, not their text; its task, the thread it opened, the actions it proposed and the user's answer, whether it told the user, its cost) and its totals over 30 days. Read it before changing a skill, or when the user asks what one did.",
+	tool(s, "skill_runs", "What the user's triggered skills did: per skill, its last runs (when, state: running, done, silent, failed or refused; the events' kinds and keys, not their text; its task, its thread, the actions it proposed and the user's answer, whether it told the user, its cost) and its totals over 30 days. Read it before changing a skill, or when the user asks what one did.",
 		func(ctx context.Context, in skillRunsIn) (map[string]any, error) {
 			return c.brainSkillRuns(in), nil
 		})
