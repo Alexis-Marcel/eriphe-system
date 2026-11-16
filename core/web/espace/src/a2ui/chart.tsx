@@ -83,30 +83,34 @@ function Stack({ series, unit, lang, label }: ChartProps) {
   const { xLabel, withUnit, sep } = readers(xs, unit, lang);
   const value = (s: Series, x: string | number) => Math.max(0, s.points.find((p) => String(p.x) === String(x))?.y ?? 0);
   const longest = Math.max(...xs.map((x) => series.reduce((sum, s) => sum + value(s, x), 0))) || 1;
-  const ROW = 34, BAR = 14, h = xs.length * ROW;
+  const BAR = 14;
   const cls = (i: number) => `a2-s${i < SLOTS ? i : "x"}`;
+  // Each bar its own row, its label in the page's text: the bar stretches
+  // to the width, its height and its words stay the same at any size.
   return (
     <figure className="a2-chart a2-chart-stack">
-      <svg viewBox={`0 0 ${W} ${h}`} role="img" aria-label={label}>
-        {xs.map((x, xi) => {
+      <div className="a2-stack-rows" role="img" aria-label={label}>
+        {xs.map((x) => {
           let at = 0;
           return (
-            <g key={String(x)}>
-              <text className="a2-stack-label" x={0} y={xi * ROW + 11}>{xLabel(x)}</text>
-              {series.map((s, si) => {
-                const w = (value(s, x) / longest) * W;
-                const from = at;
-                at += w;
-                return w > 0 ? (
-                  <rect key={si} className={`a2-bar ${cls(si)}`} x={from} y={xi * ROW + 16} width={Math.max(1, w - 1)} height={BAR}>
-                    <title>{`${s.name ? s.name + ", " : ""}${xLabel(x)}${sep}${withUnit(value(s, x))}`}</title>
-                  </rect>
-                ) : null;
-              })}
-            </g>
+            <div key={String(x)} className="a2-stack-row">
+              <span className="a2-stack-label">{xLabel(x)}</span>
+              <svg viewBox={`0 0 ${W} ${BAR}`} preserveAspectRatio="none" aria-hidden="true">
+                {series.map((s, si) => {
+                  const w = (value(s, x) / longest) * W;
+                  const from = at;
+                  at += w;
+                  return w > 0 ? (
+                    <rect key={si} className={`a2-bar ${cls(si)}`} x={from} y={0} width={Math.max(1, w - 1)} height={BAR}>
+                      <title>{`${s.name ? s.name + ", " : ""}${xLabel(x)}${sep}${withUnit(value(s, x))}`}</title>
+                    </rect>
+                  ) : null;
+                })}
+              </svg>
+            </div>
           );
         })}
-      </svg>
+      </div>
       <figcaption className="a2-legend">
         {series.map((s, i) => (
           <span key={i} className="a2-legend-item">

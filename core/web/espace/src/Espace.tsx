@@ -5,7 +5,7 @@ import { Icon } from "./a2ui/icons";
 import { galleryFixtures, gallerySurfaces, sampleEarlier, sampleProposals, workspaceFixtures } from "./a2ui/fixtures";
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
-import { laidOut, surfaceTitle } from "./chips";
+import { laidOut, surfaceInside, surfaceTitle } from "./chips";
 import * as data from "./data";
 import { landed, lastSeq, Notices, Present, type Sent } from "./Exchange";
 import { CONVO } from "./Fallback";
@@ -170,7 +170,10 @@ export function Espace({ boot }: { boot: data.Boot }) {
   // a chip opened waits in the column until core places it.
   const full = narrow && onSurfaces && stacked(shown!, laidOut(pool)).full;
   const sbefore = useRef<Layout | null>(null); // the layout before the focus
-  const openSurface = (id: string, within?: string) => {
+  const openSurface = (id: string, from?: string) => {
+    // One that opens inside another (a child thread's, by a link to it)
+    // opens within it, as core puts it on stage (onStage).
+    const within = from ?? surfaceInside(pool.find((p) => p.id === id));
     sopened.current.add(id);
     sclosed.current.delete(id);
     if (!placed?.focus) sbefore.current = placed;

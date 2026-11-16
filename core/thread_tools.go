@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -421,7 +422,8 @@ func registerThreadTools(s *mcp.Server, c *core) {
 	tool(s, "note_item", "Note one item a thread's source lists (a mail, an event, a pull request), by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a due date. Code shows it on the item's row, read by the user as is (in their language, short, no ids); it stays while the source lists the item, and goes some days after it no longer does. A note written after reading external content is marked so and never quoted into a summary. With an action, the one you recommend and only when useful (never a menu), its row offers it (a tool and its input, \"$item\" where the item's id goes): a click makes a card the user approves, never more. The same item noted again replaces it; no note, state, due nor action takes it away.",
 		func(ctx context.Context, in noteItemIn) (map[string]any, error) {
 			c.turnThread(in.Thread)
-			note, err := c.noteItem(in.Thread, in, byBrain, c.turnTaint())
+			// Without thread_id, the turn's: the one it opened or works on.
+			note, err := c.noteItem(cmp.Or(in.Thread, c.turn.aboutThread()), in, byBrain, c.turnTaint())
 			return map[string]any{"note": note}, err
 		})
 

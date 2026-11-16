@@ -199,13 +199,13 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T12:41:07+01:00",
+         "date": "2026-11-16T13:56:04+01:00",
          "detail": "Task",
          "label": "Prepare the page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T13:21:07+01:00",
+         "date": "2026-11-16T14:36:04+01:00",
          "detail": "Proposed action",
          "label": "Merge the branch",
          "state": "done"
@@ -213,7 +213,7 @@
        ],
        "open": [
         {
-         "date": "2026-11-16T14:51:07+01:00",
+         "date": "2026-11-16T16:06:04+01:00",
          "detail": "Task · 12 of 30",
          "label": "Resize the photos",
          "state": "current"
@@ -661,7 +661,7 @@
       "children": [],
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 14:11"
+       "title": "Done ✓ · 15:26"
       },
       "items": {},
       "marks": {},
@@ -680,25 +680,25 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T12:41:07+01:00",
+         "date": "2026-11-16T13:56:04+01:00",
          "detail": "Task",
          "label": "Prepare the page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T13:21:07+01:00",
+         "date": "2026-11-16T14:36:04+01:00",
          "detail": "Proposed action",
          "label": "Merge the branch",
          "state": "done"
         },
         {
-         "date": "2026-11-16T15:01:07+01:00",
+         "date": "2026-11-16T16:16:04+01:00",
          "detail": "Your approval",
          "label": "Publish the site",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:51:07+01:00",
+         "date": "2026-11-16T16:06:04+01:00",
          "detail": "Task · 12 of 30",
          "label": "Resize the photos",
          "state": "done"
@@ -1607,6 +1607,177 @@
      }
     }
    }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-71",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_state",
+       "thread_controls",
+       "thread_external_hotels"
+      ]
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 71
+        },
+        "name": "control"
+       }
+      },
+      "label": "Stop",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_part_hotels",
+      "component": "Grid",
+      "children": {
+       "componentId": "hotel",
+       "path": "/hotels"
+      },
+      "size": "medium"
+     },
+     {
+      "id": "hotel",
+      "component": "Card",
+      "child": "hotel_body",
+      "title": {
+       "@path": "name"
+      }
+     },
+     {
+      "id": "hotel_body",
+      "component": "Column",
+      "children": [
+       "hotel_where",
+       "hotel_price",
+       "hotel_mark"
+      ]
+     },
+     {
+      "id": "hotel_where",
+      "component": "Text",
+      "text": {
+       "@path": "where"
+      }
+     },
+     {
+      "id": "hotel_price",
+      "component": "Text",
+      "text": {
+       "@path": "price"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "hotel_mark",
+      "component": "Mark",
+      "item": {
+       "@path": "id"
+      },
+      "list": "hotels",
+      "marks": [
+       "keep",
+       "drop"
+      ]
+     },
+     {
+      "id": "thread_mark_hotels",
+      "component": "Text",
+      "text": "external",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_external_hotels",
+      "component": "Column",
+      "children": [
+       "thread_mark_hotels",
+       "thread_part_hotels"
+      ]
+     }
+    ],
+    "dataModel": {
+     "hotels": [
+      {
+       "id": "ribeira",
+       "name": "Casa Ribeira",
+       "price": "€110 a night · 4.6",
+       "where": "Ribeira, by the river"
+      },
+      {
+       "id": "bolhao",
+       "name": "Bolhão Rooms",
+       "price": "€95 a night · 4.3",
+       "where": "Bolhão, central"
+      },
+      {
+       "id": "foz",
+       "name": "Foz Garden",
+       "price": "€85 a night · 4.5",
+       "where": "Foz, by the sea, 25 min out"
+      }
+     ],
+     "thread": {
+      "children": [],
+      "items": {},
+      "marks": {
+       "hotels": {
+        "ribeira": "keep"
+       }
+      },
+      "since": [],
+      "state": "Keep the hotels you like, drop the others. · external",
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Porto trip",
+       "author": "thread:71",
+       "weight": 50,
+       "tainted": true,
+       "answers": true,
+       "summary": "Keep the hotels you like, drop the others. · external",
+       "state": "new",
+       "new": 1,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
   }
  ],
  "fr": [
@@ -1809,13 +1980,13 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T12:41:07+01:00",
+         "date": "2026-11-16T13:56:03+01:00",
          "detail": "Tâche",
          "label": "Préparer la page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T13:21:07+01:00",
+         "date": "2026-11-16T14:36:03+01:00",
          "detail": "Action proposée",
          "label": "Fusionner la branche",
          "state": "done"
@@ -1823,7 +1994,7 @@
        ],
        "open": [
         {
-         "date": "2026-11-16T14:51:07+01:00",
+         "date": "2026-11-16T16:06:03+01:00",
          "detail": "Tâche · 12 sur 30",
          "label": "Redimensionner les photos",
          "state": "current"
@@ -2271,7 +2442,7 @@
       "children": [],
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 14 h 11"
+       "title": "Fait ✓ · 15 h 26"
       },
       "items": {},
       "marks": {},
@@ -2290,25 +2461,25 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T12:41:07+01:00",
+         "date": "2026-11-16T13:56:03+01:00",
          "detail": "Tâche",
          "label": "Préparer la page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T13:21:07+01:00",
+         "date": "2026-11-16T14:36:03+01:00",
          "detail": "Action proposée",
          "label": "Fusionner la branche",
          "state": "done"
         },
         {
-         "date": "2026-11-16T15:01:07+01:00",
+         "date": "2026-11-16T16:16:03+01:00",
          "detail": "Ta validation",
          "label": "Publier le site",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:51:07+01:00",
+         "date": "2026-11-16T16:06:03+01:00",
          "detail": "Tâche · 12 sur 30",
          "label": "Redimensionner les photos",
          "state": "done"
@@ -3212,6 +3383,1444 @@
        "summary": "1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire",
        "state": "yours",
        "new": 4,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-41",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_state",
+       "thread_controls",
+       "thread_part_etat",
+       "thread_part_a_faire"
+      ]
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 41
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_part_etat",
+      "component": "Row",
+      "children": [
+       "reste",
+       "fait"
+      ]
+     },
+     {
+      "id": "reste",
+      "component": "Metric",
+      "label": "Reste à faire",
+      "value": {
+       "@path": "/reste"
+      }
+     },
+     {
+      "id": "fait",
+      "component": "Metric",
+      "label": "Déjà fait",
+      "value": {
+       "@path": "/fait"
+      }
+     },
+     {
+      "id": "thread_part_a_faire",
+      "component": "List",
+      "children": {
+       "componentId": "tache",
+       "path": "/a_faire"
+      }
+     },
+     {
+      "id": "tache",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "tache_mark",
+       "tache_label"
+      ]
+     },
+     {
+      "id": "tache_mark",
+      "component": "Mark",
+      "item": {
+       "@path": "id"
+      },
+      "list": "demenagement",
+      "marks": [
+       "done"
+      ]
+     },
+     {
+      "id": "tache_label",
+      "component": "Text",
+      "text": {
+       "@path": "label"
+      }
+     }
+    ],
+    "dataModel": {
+     "a_faire": [
+      {
+       "id": "edf",
+       "label": "Transférer l'électricité"
+      },
+      {
+       "id": "poste",
+       "label": "Faire suivre le courrier"
+      },
+      {
+       "id": "cartons",
+       "label": "Commander les cartons"
+      },
+      {
+       "id": "ecole",
+       "label": "Inscrire les enfants à l'école"
+      }
+     ],
+     "fait": 2,
+     "reste": 4,
+     "thread": {
+      "children": [],
+      "items": {},
+      "marks": {
+       "demenagement": {
+        "cartons": "done"
+       }
+      },
+      "since": [],
+      "state": "Plus que 4 choses avant le 6 décembre.",
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Le déménagement",
+       "author": "thread:41",
+       "weight": 50,
+       "answers": true,
+       "summary": "Plus que 4 choses avant le 6 décembre.",
+       "state": "new",
+       "new": 1,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-11",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_progress",
+       "thread_controls",
+       "thread_external_etat"
+      ]
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "current": {
+       "@path": "/thread/progress/current"
+      },
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "default",
+      "total": {
+       "@path": "/thread/progress/total"
+      },
+      "value": {
+       "@path": "/thread/progress/value"
+      }
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 11
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_part_etat",
+      "component": "Column",
+      "children": [
+       "etat",
+       "lien"
+      ]
+     },
+     {
+      "id": "etat",
+      "component": "Metric",
+      "label": "État",
+      "value": {
+       "@path": "/etat"
+      }
+     },
+     {
+      "id": "lien",
+      "component": "Link",
+      "label": "Ouvrir la PR",
+      "url": {
+       "@path": "/url"
+      }
+     },
+     {
+      "id": "thread_mark_etat",
+      "component": "Text",
+      "text": "extérieur",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_external_etat",
+      "component": "Column",
+      "children": [
+       "thread_mark_etat",
+       "thread_part_etat"
+      ]
+     }
+    ],
+    "dataModel": {
+     "etat": "Fusionnée le 12 novembre à 18 h 40",
+     "thread": {
+      "children": [],
+      "items": {},
+      "marks": {},
+      "progress": {
+       "current": 0,
+       "label": "À jour",
+       "total": 1,
+       "value": 1
+      },
+      "since": [],
+      "steps": {
+       "cards": [],
+       "done": [
+        {
+         "date": "2026-11-16T16:26:03+01:00",
+         "detail": "extérieur · Vérification",
+         "label": "Vérifier que la règle est active",
+         "state": "done"
+        }
+       ],
+       "open": [],
+       "summary": "1 étape faite"
+      },
+      "summary": ""
+     },
+     "url": "https://code.example.org/sam/supervision/pull/42"
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "PR 42 · règles d'alerte",
+       "author": "thread:11",
+       "weight": 50,
+       "tainted": true,
+       "answers": true,
+       "summary": "Vérifier que la règle est active ✓",
+       "state": "new",
+       "new": 2,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-7",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_progress",
+       "thread_controls",
+       "thread_yours",
+       "thread_card_0",
+       "thread_part_etat"
+      ]
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "current": {
+       "@path": "/thread/progress/current"
+      },
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "urgent",
+      "total": {
+       "@path": "/thread/progress/total"
+      },
+      "value": {
+       "@path": "/thread/progress/value"
+      }
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 7
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_yours",
+      "component": "Text",
+      "text": "À toi",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_card_0",
+      "component": "Proposal",
+      "proposalId": "access:1"
+     },
+     {
+      "id": "thread_part_etat",
+      "component": "Column",
+      "children": [
+       "etat",
+       "points",
+       "diff",
+       "lien"
+      ]
+     },
+     {
+      "id": "etat",
+      "component": "Metric",
+      "label": "État",
+      "value": {
+       "@path": "/etat"
+      }
+     },
+     {
+      "id": "points",
+      "component": "List",
+      "children": {
+       "componentId": "ligne",
+       "path": "/points"
+      }
+     },
+     {
+      "id": "ligne",
+      "component": "Text",
+      "text": {
+       "@path": "point"
+      }
+     },
+     {
+      "id": "diff",
+      "component": "Code",
+      "mode": "diff",
+      "text": {
+       "@path": "/diff"
+      }
+     },
+     {
+      "id": "lien",
+      "component": "Link",
+      "label": "Ouvrir la PR",
+      "url": {
+       "@path": "/url"
+      }
+     }
+    ],
+    "dataModel": {
+     "diff": "+- alert: latence-p95\n+  expr: p95_ms \u003e 800\n+  for: 10m",
+     "etat": "Ouverte, prête à fusionner",
+     "points": [
+      {
+       "point": "Fichiers de règles valides"
+      },
+      {
+       "point": "Rejouées sur les pics du mois : 3 alertes, aucune fausse"
+      }
+     ],
+     "thread": {
+      "children": [],
+      "items": {},
+      "marks": {},
+      "progress": {
+       "current": 1,
+       "label": "À toi",
+       "total": 1,
+       "value": 0
+      },
+      "since": [],
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     },
+     "url": "https://code.example.org/sam/supervision/pull/42"
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "PR 42 · règles d'alerte",
+       "author": "thread:7",
+       "weight": 80,
+       "answers": true,
+       "summary": "Fusionner la PR à toi",
+       "state": "yours",
+       "new": 2,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-31",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_controls",
+       "thread_children_title",
+       "thread_children"
+      ]
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 31
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_child",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_child_item",
+       "thread_child_open"
+      ]
+     },
+     {
+      "id": "thread_child_item",
+      "component": "Item",
+      "detail": {
+       "@path": "status"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "note": {
+       "@path": "line"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "thread_child_open",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "surface": {
+          "@path": "surface"
+         }
+        },
+        "name": "open"
+       }
+      },
+      "label": "Ouvrir",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_children_title",
+      "component": "Text",
+      "text": "Sous-fils",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_children",
+      "component": "List",
+      "children": {
+       "componentId": "thread_child",
+       "path": "/thread/children"
+      }
+     }
+    ],
+    "dataModel": {
+     "thread": {
+      "children": [
+       {
+        "level": "normal",
+        "line": "Garde le sujet qui te plaît, écarte les autres.",
+        "mark": "",
+        "status": "À jour",
+        "surface": "thread-32",
+        "thread": 32,
+        "title": "Le sujet de la lettre"
+       }
+      ],
+      "items": {},
+      "marks": {},
+      "since": [],
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "La lettre du club de novembre",
+       "author": "thread:31",
+       "weight": 50,
+       "answers": true,
+       "summary": "Ouvert",
+       "state": "new",
+       "new": 1,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-32",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_parent",
+       "thread_state",
+       "thread_controls",
+       "thread_part_note",
+       "thread_part_options"
+      ]
+     },
+     {
+      "id": "thread_parent",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "surface": "thread-31"
+        },
+        "name": "open"
+       }
+      },
+      "icon": "arrowUp",
+      "label": {
+       "@path": "/thread/parent/title"
+      },
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 32
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_part_note",
+      "component": "Markdown",
+      "text": {
+       "@path": "/note"
+      }
+     },
+     {
+      "id": "thread_part_options",
+      "component": "List",
+      "children": {
+       "componentId": "option",
+       "path": "/options"
+      }
+     },
+     {
+      "id": "option",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "option_item",
+       "option_mark"
+      ]
+     },
+     {
+      "id": "option_item",
+      "component": "Item",
+      "note": {
+       "@path": "why"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "option_mark",
+      "component": "Mark",
+      "item": {
+       "@path": "id"
+      },
+      "list": "options",
+      "marks": [
+       "keep",
+       "drop"
+      ]
+     }
+    ],
+    "dataModel": {
+     "note": "Trois idées notées pour la lettre. **Le tournoi** a une date qui presse ; les deux autres peuvent attendre décembre.",
+     "options": [
+      {
+       "id": "tournoi",
+       "title": "Le tournoi d'hiver",
+       "why": "Les inscriptions ouvrent le 1er décembre : la lettre les annonce juste avant."
+      },
+      {
+       "id": "terrain",
+       "title": "Le nouveau terrain",
+       "why": "Des photos toutes prêtes, prises samedi."
+      },
+      {
+       "id": "benevoles",
+       "title": "Merci aux bénévoles",
+       "why": "Douze bénévoles cet automne : un mot qui fait plaisir."
+      }
+     ],
+     "thread": {
+      "children": [],
+      "items": {},
+      "marks": {
+       "options": {
+        "tournoi": "keep"
+       }
+      },
+      "parent": {
+       "surface": "thread-31",
+       "thread": 31,
+       "title": "La lettre du club de novembre"
+      },
+      "since": [],
+      "state": "Garde le sujet qui te plaît, écarte les autres.",
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Le sujet de la lettre",
+       "author": "thread:32",
+       "weight": 50,
+       "answers": true,
+       "summary": "Garde le sujet qui te plaît, écarte les autres.",
+       "state": "new",
+       "new": 1,
+       "inside": "thread-31",
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-61",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_controls",
+       "thread_part_chiffres",
+       "thread_part_repartition",
+       "thread_part_conseil"
+      ]
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 61
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_part_chiffres",
+      "component": "Row",
+      "children": [
+       "total",
+       "ecart"
+      ]
+     },
+     {
+      "id": "total",
+      "component": "Metric",
+      "label": "Total",
+      "unit": "€",
+      "value": {
+       "@path": "/total"
+      }
+     },
+     {
+      "id": "ecart",
+      "component": "Metric",
+      "label": "Plus grand écart à la cible",
+      "unit": "pts",
+      "value": {
+       "@path": "/ecart"
+      }
+     },
+     {
+      "id": "thread_part_repartition",
+      "component": "Chart",
+      "kind": "stack",
+      "series": {
+       "@path": "/repartition"
+      },
+      "unit": "%"
+     },
+     {
+      "id": "thread_part_conseil",
+      "component": "Column",
+      "children": [
+       "conseil_texte",
+       "conseil_bouton"
+      ]
+     },
+     {
+      "id": "conseil_texte",
+      "component": "Markdown",
+      "text": {
+       "@path": "/conseil"
+      }
+     },
+     {
+      "id": "conseil_bouton",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "text": "Propose-moi un rééquilibrage pour revenir à ma cible"
+        },
+        "name": "ask"
+       }
+      },
+      "label": "Propose un rééquilibrage",
+      "variant": "quiet"
+     }
+    ],
+    "dataModel": {
+     "conseil": "Les actions dépassent la cible de 10 points, les obligations sont 10 points en dessous : environ **4 800 €** à déplacer pour revenir à la cible.",
+     "ecart": 10,
+     "repartition": [
+      {
+       "name": "Actions",
+       "points": [
+        {
+         "x": "Aujourd'hui",
+         "y": 60
+        },
+        {
+         "x": "Cible",
+         "y": 50
+        }
+       ]
+      },
+      {
+       "name": "Obligations",
+       "points": [
+        {
+         "x": "Aujourd'hui",
+         "y": 30
+        },
+        {
+         "x": "Cible",
+         "y": 40
+        }
+       ]
+      },
+      {
+       "name": "Liquidités",
+       "points": [
+        {
+         "x": "Aujourd'hui",
+         "y": 10
+        },
+        {
+         "x": "Cible",
+         "y": 10
+        }
+       ]
+      }
+     ],
+     "thread": {
+      "children": [],
+      "items": {},
+      "marks": {},
+      "since": [],
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     },
+     "total": 48200
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Mon épargne",
+       "author": "thread:61",
+       "weight": 50,
+       "answers": true,
+       "summary": "Ouvert",
+       "state": "new",
+       "new": 1,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-51",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_state",
+       "thread_controls",
+       "thread_external_mails"
+      ]
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 51
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_part_mails",
+      "component": "List",
+      "children": {
+       "componentId": "groupe",
+       "path": "/thread/items/ecole/groups"
+      },
+      "emptyText": "Rien de l'école cette semaine"
+     },
+     {
+      "id": "groupe",
+      "component": "Column",
+      "children": [
+       "groupe_tete",
+       "groupe_lignes"
+      ]
+     },
+     {
+      "id": "groupe_tete",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "groupe_titre",
+       "groupe_offres"
+      ],
+      "justify": "spaceBetween"
+     },
+     {
+      "id": "groupe_titre",
+      "component": "Text",
+      "text": {
+       "@path": "label"
+      },
+      "variant": "subtitle"
+     },
+     {
+      "id": "groupe_offres",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
+      }
+     },
+     {
+      "id": "groupe_lignes",
+      "component": "List",
+      "children": {
+       "componentId": "ligne",
+       "path": "items"
+      }
+     },
+     {
+      "id": "ligne",
+      "component": "Column",
+      "children": [
+       "ligne_item",
+       "ligne_offres"
+      ]
+     },
+     {
+      "id": "ligne_item",
+      "component": "Item",
+      "detail": {
+       "@path": "detail"
+      },
+      "due": {
+       "@path": "due"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "note": {
+       "@path": "note"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "ligne_offres",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
+      }
+     },
+     {
+      "id": "thread_mark_mails",
+      "component": "Text",
+      "text": "extérieur",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_external_mails",
+      "component": "Column",
+      "children": [
+       "thread_mark_mails",
+       "thread_part_mails"
+      ]
+     }
+    ],
+    "dataModel": {
+     "ecole": {
+      "messages": [
+       {
+        "date": "2026-11-12T16:20:00+01:00",
+        "from": "École des Tilleuls \u003ccontact@ecole.example.org\u003e",
+        "id": "m-301",
+        "snippet": "Merci de rendre l'autorisation signée avant mercredi.",
+        "subject": "Sortie au musée jeudi : autorisation à rendre"
+       },
+       {
+        "date": "2026-11-10T09:05:00+01:00",
+        "from": "École des Tilleuls \u003ccontact@ecole.example.org\u003e",
+        "id": "m-298",
+        "snippet": "Vous trouverez ci-joint les menus.",
+        "subject": "Menus de la cantine, semaine 47"
+       },
+       {
+        "date": "2026-11-09T19:40:00+01:00",
+        "from": "Association des parents \u003cparents@ecole.example.org\u003e",
+        "id": "m-297",
+        "snippet": "Les parents qui le souhaitent peuvent apporter un gâteau.",
+        "subject": "Vente de gâteaux vendredi"
+       }
+      ]
+     },
+     "thread": {
+      "children": [],
+      "items": {
+       "ecole": {
+        "caption": "",
+        "cards": [],
+        "groups": [
+         {
+          "items": [
+           {
+            "by": "Ajouté par Eriphe",
+            "cards": [],
+            "detail": "École des Tilleuls",
+            "due": "2026-11-18",
+            "id": "m-301",
+            "level": "high",
+            "mark": "extérieur",
+            "n": 0,
+            "note": "Une autorisation de sortie à signer et rendre avant mercredi.",
+            "offers": [],
+            "source": "ecole",
+            "state": "act",
+            "title": "Sortie au musée jeudi : autorisation à rendre"
+           }
+          ],
+          "label": "À faire · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Ajouté par Eriphe",
+            "cards": [],
+            "detail": "Association des parents",
+            "due": "",
+            "id": "m-297",
+            "level": "low",
+            "mark": "extérieur",
+            "n": 2,
+            "note": "Une vente de gâteaux vendredi, si tu veux en apporter un.",
+            "offers": [
+             {
+              "item": "m-297",
+              "label": "utiliser « archive »",
+              "offer": "e00cc6156bf5",
+              "source": "ecole",
+              "thread": 51,
+              "tool": "mcp__postbox__archive"
+             }
+            ],
+            "source": "ecole",
+            "state": "info",
+            "title": "Vente de gâteaux vendredi"
+           }
+          ],
+          "label": "Pour info · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Ajouté par Eriphe",
+            "cards": [],
+            "detail": "École des Tilleuls",
+            "due": "",
+            "id": "m-298",
+            "level": "low",
+            "mark": "extérieur",
+            "n": 1,
+            "note": "Les menus de la semaine, rien à faire.",
+            "offers": [],
+            "source": "ecole",
+            "state": "none",
+            "title": "Menus de la cantine, semaine 47"
+           }
+          ],
+          "label": "Rien à faire · 1",
+          "offers": [
+           {
+            "label": "utiliser « archive » · 1",
+            "offer": "e00cc6156bf5",
+            "source": "ecole",
+            "state": "none",
+            "thread": 51
+           }
+          ],
+          "open": false
+         }
+        ],
+        "name": "ecole"
+       }
+      },
+      "marks": {},
+      "since": [],
+      "state": "1 à faire · 1 pour info · 1 rien à faire · trié à 16 h 26",
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Les mails de l'école",
+       "author": "thread:51",
+       "weight": 50,
+       "tainted": true,
+       "answers": true,
+       "summary": "1 à faire · 1 pour info · 1 rien à faire",
+       "state": "new",
+       "new": 4,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-21",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_controls",
+       "thread_state"
+      ]
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 21
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": "Rien pour l'instant.",
+      "variant": "caption"
+     }
+    ],
+    "dataModel": {
+     "thread": {
+      "children": [],
+      "items": {},
+      "marks": {},
+      "since": [],
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "PR 42 · règles d'alerte",
+       "author": "thread:21",
+       "weight": 50,
+       "answers": true,
+       "summary": "Ouvert",
+       "state": "new",
+       "new": 1,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-22",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_progress",
+       "thread_controls",
+       "thread_steps_open"
+      ]
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "current": {
+       "@path": "/thread/progress/current"
+      },
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "default",
+      "total": {
+       "@path": "/thread/progress/total"
+      },
+      "value": {
+       "@path": "/thread/progress/value"
+      }
+     },
+     {
+      "id": "thread_control_stop",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "do": "stop",
+         "thread": 22
+        },
+        "name": "control"
+       }
+      },
+      "label": "Arrêter",
+      "variant": "quiet"
+     },
+     {
+      "id": "thread_controls",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_control_stop"
+      ]
+     },
+     {
+      "id": "thread_steps_open",
+      "component": "Timeline",
+      "items": {
+       "@path": "/thread/steps/open"
+      }
+     }
+    ],
+    "dataModel": {
+     "thread": {
+      "children": [],
+      "items": {},
+      "marks": {},
+      "progress": {
+       "current": 1,
+       "label": "En cours",
+       "total": 1,
+       "value": 0
+      },
+      "since": [],
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [
+        {
+         "date": "2026-11-16T16:26:03+01:00",
+         "detail": "Tâche",
+         "label": "Rechercher la marque Velora",
+         "state": "current"
+        }
+       ],
+       "summary": ""
+      },
+      "summary": ""
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Marque Velora",
+       "author": "thread:22",
+       "weight": 50,
+       "answers": true,
+       "summary": "Rechercher la marque Velora …",
+       "state": "new",
+       "new": 2,
        "updated": "0001-01-01T00:00:00Z"
       }
      }

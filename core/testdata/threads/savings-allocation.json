@@ -1,0 +1,49 @@
+{
+  "id": "savings-allocation",
+  "what": "Où en est la répartition d'une épargne par rapport à sa cible : un thread léger, sa partie composée de chiffres, d'une barre empilée aujourd'hui contre la cible (Chart stack) et d'une note avec un bouton qui demande à Eriphe, dans ses propres mots.",
+  "lang": "fr",
+  "seed": 60,
+  "memory": ["Sam vise 50 % d'actions, 40 % d'obligations et 10 % de liquidités."],
+  "servers": [
+    {"name": "allocr", "use": "les placements de Sam", "trusted": true, "tools": [
+      {"name": "holdings", "description": "The holdings by asset class: the amount and the share of each, and the total.",
+        "input_schema": {"type": "object", "properties": {}},
+        "result": {"total": 48200, "currency": "EUR", "classes": [
+          {"name": "Actions", "amount": 28920, "share": 60},
+          {"name": "Obligations", "amount": 14460, "share": 30},
+          {"name": "Liquidités", "amount": 4820, "share": 10}]}}
+    ]}
+  ],
+  "request": "Où en est la répartition de mon épargne ?",
+  "expect": {"about": ["epargne"]},
+  "answer": {
+    "calls": [
+      {"tool": "open_thread", "args": {"title": "Mon épargne", "goal": "L'épargne de Sam est revenue à sa répartition cible.", "alias": "topic:epargne"}},
+      {"tool": "surface_write", "args": {"id": "thread-61", "block": "chiffres",
+        "data": {"total": 48200, "ecart": 10},
+        "components": [
+          {"id": "root", "component": "Row", "children": ["total", "ecart"]},
+          {"id": "total", "component": "Metric", "label": "Total", "value": {"@path": "/total"}, "unit": "€"},
+          {"id": "ecart", "component": "Metric", "label": "Plus grand écart à la cible", "value": {"@path": "/ecart"}, "unit": "pts"}
+        ]}},
+      {"tool": "surface_write", "args": {"id": "thread-61", "block": "repartition",
+        "data": {"repartition": [
+          {"name": "Actions", "points": [{"x": "Aujourd'hui", "y": 60}, {"x": "Cible", "y": 50}]},
+          {"name": "Obligations", "points": [{"x": "Aujourd'hui", "y": 30}, {"x": "Cible", "y": 40}]},
+          {"name": "Liquidités", "points": [{"x": "Aujourd'hui", "y": 10}, {"x": "Cible", "y": 10}]}]},
+        "components": [
+          {"id": "root", "component": "Chart", "kind": "stack", "unit": "%", "series": {"@path": "/repartition"}}
+        ]}},
+      {"tool": "surface_write", "args": {"id": "thread-61", "block": "conseil",
+        "data": {"conseil": "Les actions dépassent la cible de 10 points, les obligations sont 10 points en dessous : environ **4 800 €** à déplacer pour revenir à la cible."},
+        "components": [
+          {"id": "root", "component": "Column", "children": ["conseil_texte", "conseil_bouton"]},
+          {"id": "conseil_texte", "component": "Markdown", "text": {"@path": "/conseil"}},
+          {"id": "conseil_bouton", "component": "Button", "label": "Propose un rééquilibrage", "variant": "quiet",
+            "action": {"event": {"name": "ask", "context": {"text": "Propose-moi un rééquilibrage pour revenir à ma cible"}}}}
+        ]}},
+      {"tool": "workspace_focus", "args": {"id": "thread-61"}}
+    ],
+    "reply": "Les actions dépassent ta cible de 10 points, au centre : environ 4 800 € à déplacer."
+  }
+}

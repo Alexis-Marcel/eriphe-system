@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -34,7 +35,8 @@ import (
 //   - a status question (« où en est ») opens the matter's thread light
 //     with its subject (the code gives back the one the subject has, if
 //     any: finding it first is not asked), writes the brain's part
-//     on its surface thread-<id> (no other surface) and puts it on stage;
+//     on its surface thread-<id> (no other surface) and puts it on stage
+//     (a child thread opens there inside its parent);
 //     not merged, a call step on the change tool, whose card is the yes;
 //     already merged, only a check;
 //   - a wake after that change ran: a user step after it (Sam deploys
@@ -49,13 +51,19 @@ import (
 //   - always: no call refused, no change called outside a step, the reply
 //     in one line, no tool's name where Sam reads.
 //
+// The matters differ (a pull request, a research, a child thread choosing
+// a subject, a checklist, mails, an allocation, a trip's hotels): each part
+// is composed from the catalog's bricks only, and the page's fixture shows
+// them as their reference answers compose them, with the marks a case
+// gives (TestThreadSurfacesFixture).
+//
 // This test runs in CI with no model: every case is valid, its reference
 // answers score clean, and each fault the score looks for is caught on a
 // spoilt copy. threads_live_test.go runs the same turns on a real model.
 
 const (
 	threadBenchNow  = "2026-11-13 09:00"
-	threadBenchSeed = 6 // the threads before: the first opened is the 7th
+	threadBenchSeed = 6 // the threads before, unless a case says: the first opened is the 7th
 	threadReplyMax  = 200
 	threadRien      = "[rien]"
 )
@@ -66,6 +74,7 @@ type threadCase struct {
 	Lang    string         `json:"lang"`
 	Memory  []string       `json:"memory"`
 	Servers []threadServer `json:"servers"`
+	Seed    int            `json:"seed,omitempty"`  // the threads before (threadBenchSeed by default): the ids its turn announces
 	Stage   *threadIn      `json:"stage,omitempty"` // a thread on stage before the request
 	Request string         `json:"request"`
 	Expect  threadExpect   `json:"expect"`
@@ -73,8 +82,18 @@ type threadCase struct {
 	Wake    *struct {
 		Answer threadAnswer `json:"answer"`
 	} `json:"wake,omitempty"`
+	// What Sam marks afterwards on what the thread shows: the page's
+	// fixture shows the thread with them (TestThreadSurfacesFixture).
+	Marks []threadCaseMark `json:"marks,omitempty"`
 
 	file string
+}
+
+// threadCaseMark is a mark of Sam's on what a thread shows.
+type threadCaseMark struct {
+	List string `json:"list"`
+	Item string `json:"item"`
+	Mark string `json:"mark"`
 }
 
 type threadServer struct {
@@ -154,6 +173,11 @@ func (x threadCase) check() string {
 		return "a side case needs a thread on stage"
 	case x.Wake != nil && x.Expect.Merge == "":
 		return "a wake follows a change"
+	}
+	for _, m := range x.Marks {
+		if m.List == "" || m.Item == "" || !slices.Contains([]string{a2ui.MarkKeep, a2ui.MarkDrop, a2ui.MarkDone}, m.Mark) {
+			return "a mark needs a list, an item and keep, drop or done"
+		}
 	}
 	for _, s := range x.Servers {
 		if s.Name == "" || s.Use == "" || len(s.Tools) == 0 {
@@ -265,7 +289,7 @@ func benchThreadCore(t *testing.T, x threadCase) *core {
 	}
 	setBrain(c, &BrainConfig{Agent: "small", Tools: names})
 	// The threads before: ids the turn can announce.
-	if _, err := store.db.Exec(`INSERT INTO sqlite_sequence (name, seq) VALUES ('threads', ?)`, threadBenchSeed); err != nil {
+	if _, err := store.db.Exec(`INSERT INTO sqlite_sequence (name, seq) VALUES ('threads', ?)`, cmp.Or(x.Seed, threadBenchSeed)); err != nil {
 		t.Fatal(err)
 	}
 	if x.Stage != nil {
@@ -288,10 +312,17 @@ func nextThread(c *core) int64 {
 	return n + 1
 }
 
-// stageThread is the thread on stage, 0 if none.
+// stageThread is the thread open on stage, 0 if none.
 func stageThread(c *core) int64 {
-	id, _ := threadOfSurface(c.currentLayout().Focus)
+	id, _ := threadOfSurface(openOnStage(c))
 	return id
+}
+
+// openOnStage is the surface open on stage: the one on stage, or the one
+// open inside it (a child thread's, in its parent's).
+func openOnStage(c *core) string {
+	l := c.currentLayout()
+	return cmpOr(l.Inside, l.Focus)
 }
 
 // threadRun is a turn played on a core: what each call gave.
@@ -527,7 +558,8 @@ func (r *threadRun) score(c *core, x threadCase, a threadAnswer) threadScore {
 			}
 		}
 	}
-	reply := strings.TrimSpace(a.Reply)
+	said, _ := splitSuggestions(a.Reply) // the replies it suggests are chips, not its text
+	reply := strings.TrimSpace(said)
 	if r.phase == phaseWake && reply == threadRien {
 		reply = "rien"
 	}
@@ -583,7 +615,7 @@ func (r *threadRun) scoreAsk(c *core, x threadCase, opened []int64) threadScore 
 			changes++
 		}
 	}
-	focus := c.currentLayout().Focus
+	focus := openOnStage(c)
 	if x.Expect.Side {
 		if r.index("workspace_focus") >= 0 {
 			sc = append(sc, faultFocus)
@@ -712,6 +744,12 @@ func TestThreadBenchCases(t *testing.T) {
 			}
 			if got := r.opened(); len(got) != 1 || got[0] != r.next {
 				t.Fatalf("opened %v, announced %d", got, r.next)
+			}
+			// Sam's marks fall on what its part lets him mark.
+			for _, m := range x.Marks {
+				if !slices.Contains(partMarkLists(c.threadPartOf(r.next)), m.List) {
+					t.Errorf("a mark on %s, which no Mark of its part shows", m.List)
+				}
 			}
 			turn := threadTurn(x, c, r, "")
 			for _, want := range append([]string{x.Request, fmt.Sprintf("l'id %d", r.next)}, x.Memory...) {
@@ -878,6 +916,21 @@ func TestThreadBenchCases(t *testing.T) {
 			t.Errorf("no case of %s", what)
 		}
 	}
+}
+
+// partMarkLists are the lists the Marks of a part mark.
+func partMarkLists(p *threadPart) []string {
+	var out []string
+	for _, b := range p.Blocks {
+		var comps []map[string]any
+		json.Unmarshal(b.Components, &comps)
+		for _, comp := range comps {
+			if list, ok := comp["list"].(string); ok && comp["component"] == "Mark" {
+				out = append(out, list)
+			}
+		}
+	}
+	return out
 }
 
 func cloneAnswer(a threadAnswer) threadAnswer {

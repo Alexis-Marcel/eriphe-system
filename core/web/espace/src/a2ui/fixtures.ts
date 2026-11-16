@@ -2,6 +2,7 @@ import type { Earlier, Exchange, ExchangeLine } from "../data";
 import type { Lang } from "../i18n";
 import type { Layout } from "../types";
 import type { Message } from "./adapter";
+import { surfaceInside, surfaceTitle } from "../chips";
 import { CATALOG } from "./catalog";
 import gallery from "./gallery.json";
 import threads from "./threads.json";
@@ -79,7 +80,8 @@ export const gallerySurfaces = (lang: Lang) => galleryFixtures(lang).map((m) => 
 
 // The threads as eriphe-core draws them (threads.json, written from the
 // code by ERIPHE_UPDATE_THREADS=1 go test -run TestThreadSurfacesFixture):
-// a work thread, one that lists items, one ended, a watcher's mails, a child, one its holder composed.
+// a work thread, one that lists items, one ended, a watcher's mails, a child, two its holder composed,
+// and the threads' bench matters as their reference answers compose them (testdata/threads).
 export function threadFixtures(lang: Lang): Message[] {
   return threads[lang] as unknown as Message[];
 }
@@ -265,5 +267,12 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
       { id: "gallery-project", title: en ? "The terrace" : "La terrasse", why: en ? "Nothing urgent" : "Rien de pressé" },
     ],
   };
+  // Every other surface a chip, as core gives one to each it does not lay
+  // out (workspace_layout.go), but those that open inside another.
+  const placed = new Set([...layout.items, ...layout.chips].map((x) => x.id));
+  for (const m of messages) {
+    if (!("createSurface" in m) || placed.has(m.createSurface.surfaceId) || surfaceInside(m.createSurface)) continue;
+    layout.chips.push({ id: m.createSurface.surfaceId, title: surfaceTitle(m.createSurface) ?? m.createSurface.surfaceId });
+  }
   return { messages, layout, ids: messages.flatMap((m) => ("createSurface" in m ? [m.createSurface.surfaceId] : [])), exchange: sampleExchange(lang) };
 }
