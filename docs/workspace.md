@@ -32,7 +32,9 @@ Who writes the tiles:
   a **C'est fait** / **Done** button for a step only you can do), its steps on a timeline, and what
   Eriphe added (a diff, a link). Small, it shows one line (« Fusion ✓ · Déploiement à toi »). A step
   that read something from outside says « extérieur ». Once the thread is done, its tile stays
-  until the end of the day. Ask where something stands ("where is the alerting PR?") and its
+  until the end of the day, or until you press **Ranger** / **Put away** on it: the tile goes, the
+  thread is kept and comes back if its matter does. A thread for what you manage continuously
+  (your mail, your agenda) never ends; one made to show you something for today ends at midnight. Ask where something stands ("where is the alerting PR?") and its
   thread comes to the center; ask Eriphe to launch something ("while I review it, look for a brand
   name") and its thread opens on the side, its tile updating as it goes, without taking the center
   from what you are reading. What Eriphe asks you about a thread (a merge to approve, say) waits

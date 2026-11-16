@@ -32,6 +32,8 @@ import (
 //   - stepDone: « C'est fait » on a thread's surface, for a step the user
 //     does: the Button code wrote there, its thread and step as stored
 //     (thread_surface.go, settleUserStep).
+//   - tidy: « Ranger » on an ended thread's surface: the Button code wrote
+//     there, its thread as stored (thread_surface.go, tidyThread).
 //   - local (open, back, expand, tab): recorded; "open" (a tile or a chip)
 //     places the surface first on the layout, keeps the gesture and reads
 //     its sources again, in the background; "back" gives the layout back.
@@ -74,9 +76,11 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		ref, yes, refused = c.answerOf(s, a)
 	case a2ui.KindStep:
 		thread, step, refused = c.stepDoneOf(s, a) // thread_surface.go
+	case a2ui.KindTidy:
+		thread, refused = tidyOf(s, a) // thread_surface.go
 	case a2ui.KindLocal:
 	default:
-		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), stepDone (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
+		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), stepDone and tidy (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
 	}
 	if refused != nil {
 		refused.Message = "the user's action " + strconv.Quote(truncate(a.Name, 64)) + " on " + truncate(a.SourceComponentID, 64) + " was refused: " + refused.Message
@@ -103,6 +107,8 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		return c.answerFromSurface(ctx, ref, yes)
 	case a2ui.KindStep:
 		return c.settleUserStep(ctx, thread, step)
+	case a2ui.KindTidy:
+		return c.tidyThread(thread, "user")
 	}
 	switch a.Name {
 	case a2ui.ActionOpen:

@@ -74,7 +74,7 @@ func (w *web) handleSurfaceAction(rw http.ResponseWriter, r *http.Request, _ *se
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
 	case errors.Is(err, errNoSurface), errors.Is(err, errNoCard):
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": err.Error()})
-	case errors.Is(err, errCardDecided), errors.Is(err, errStepSettled):
+	case errors.Is(err, errCardDecided), errors.Is(err, errStepSettled), errors.Is(err, errNotTidy):
 		writeJSON(rw, http.StatusConflict, map[string]string{"error": err.Error()})
 	case err != nil:
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": err.Error()})

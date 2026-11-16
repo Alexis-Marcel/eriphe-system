@@ -69,7 +69,9 @@ const threadsSchema = `CREATE TABLE IF NOT EXISTS threads (
 	ended     INTEGER NOT NULL DEFAULT 0,
 	summarized INTEGER NOT NULL DEFAULT 0, -- when its summary was last written
 	seen      INTEGER NOT NULL DEFAULT 0,  -- the user's visit before the last one: its surface tells what changed since
-	visited   INTEGER NOT NULL DEFAULT 0   -- when the user last opened its surface
+	visited   INTEGER NOT NULL DEFAULT 0,  -- when the user last opened its surface
+	ends      TEXT NOT NULL DEFAULT 'goal', -- how it ends: goal, standing, day
+	tidied    INTEGER NOT NULL DEFAULT 0   -- when the user tidied it away (« Ranger »), ended
 );
 CREATE INDEX IF NOT EXISTS threads_subject ON threads (subject);
 CREATE TABLE IF NOT EXISTS thread_steps (
@@ -118,6 +120,13 @@ CREATE INDEX IF NOT EXISTS thread_log_thread ON thread_log (thread, id);`
 
 func init() {
 	extraSchema = append(extraSchema, threadsSchema, threadsLiveSubject)
+	// A threads table made before ends and tidied has neither.
+	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
+		if err := addColumn(db, "threads", "ends", "TEXT NOT NULL DEFAULT 'goal'"); err != nil {
+			return err
+		}
+		return addColumn(db, "threads", "tidied", "INTEGER NOT NULL DEFAULT 0")
+	})
 }
 
 // A thread's modes.
@@ -125,6 +134,16 @@ const (
 	modeLight = "light" // held by the brain: no plan card, no budget
 	modeLed   = "led"   // a plan the user approves, a lead, a budget
 )
+
+// How a thread ends (#571). Its family is never shown to the user: it only
+// changes its life.
+const (
+	endsGoal     = "goal"     // it ends on its goal; ended, it stays until « Ranger » or midnight
+	endsStanding = "standing" // what the user manages continuously: never closed, stopped nor hidden
+	endsDay      = "day"      // a view for the day: it ends by itself at the user's midnight
+)
+
+var threadEnds = []string{endsGoal, endsStanding, endsDay}
 
 // A thread's states, whatever its mode.
 const (
@@ -224,11 +243,13 @@ type Thread struct {
 	Summary    string    `json:"summary,omitempty"`
 	Tainted    string    `json:"tainted,omitempty"` // why its plan may carry what someone else wrote
 	Lead       string    `json:"lead,omitempty"`    // the assistant that leads it; empty: the brain
+	Ends       string    `json:"ends"`              // goal, standing or day
 	Spent      int64     `json:"spent"`             // seconds it ran, until since
 	since      int64     // when it last started running
 	summarized int64     // when its summary was last written
 	seen       int64     // the user's visit before the last one, 0 if none
 	told       string    // what the lead was last told of the whole thread: complete, stalled
+	tidied     int64     // when the user tidied it away, ended
 	Created    time.Time `json:"created"`
 	Started    time.Time `json:"started,omitzero"`
 	Ended      time.Time `json:"ended,omitzero"`
@@ -238,6 +259,10 @@ type Thread struct {
 func (s Thread) active() bool {
 	return s.State == threadOpen || s.State == threadWaiting
 }
+
+// standing tells whether it is what the user manages continuously: it
+// never ends.
+func (s Thread) standing() bool { return s.Ends == endsStanding }
 
 // led tells whether it has a plan, a lead and a budget.
 func (s Thread) led() bool { return s.Mode == modeLed }
@@ -420,13 +445,13 @@ var stepKeyRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,23}$`)
 
 // The store.
 
-const threadCols = `id, title, goal, done_when, mode, subject, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended, summarized, seen`
+const threadCols = `id, title, goal, done_when, mode, subject, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended, summarized, seen, ends, tidied`
 
 func scanThread(row interface{ Scan(...any) error }) (Thread, error) {
 	var s Thread
 	var created, started, ended int64
 	err := row.Scan(&s.ID, &s.Title, &s.Goal, &s.DoneWhen, &s.Mode, &s.Subject, &s.State, &s.Phase, &s.Held, &s.Budget, &s.Amends, &s.Summary, &s.Tainted, &s.Lead,
-		&s.told, &s.Spent, &s.since, &created, &started, &ended, &s.summarized, &s.seen)
+		&s.told, &s.Spent, &s.since, &created, &started, &ended, &s.summarized, &s.seen, &s.Ends, &s.tidied)
 	s.Created, s.Started, s.Ended = time.Unix(created, 0), unixOrZero(started), unixOrZero(ended)
 	return s, err
 }
