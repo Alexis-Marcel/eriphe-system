@@ -265,7 +265,7 @@ func TestThreadSurfacesFixture(t *testing.T) {
 		for _, e := range a2ui.Validate(langs[lang]) {
 			t.Errorf("%s: %+v", lang, e)
 		}
-		for _, want := range []string{`"Progress"`, `"Item"`, `"Fold"`, `"compact"`, `"thread_tidy"`, `"thread_children"`, `"thread_part_budget"`, `"` + threadExternalPrefix + `hotel"`} {
+		for _, want := range []string{`"Progress"`, `"Item"`, `"Fold"`, `"compact"`, `"thread_tidy"`, `"thread_children"`, `"thread_part_budget"`, `"` + threadExternalPrefix + `hotel"`, `"Mark"`, `"Grid"`, `"stack"`, `"Offers"`, `"alfama": "keep"`} {
 			if !strings.Contains(string(langs[lang]), want) {
 				t.Errorf("%s: no %s", lang, want)
 			}
@@ -407,9 +407,60 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 		raw, _ := json.Marshal([]any{comp})
 		return partBlock{Name: name, Author: surfaceAuthorBrain, Components: raw, Tainted: taint}
 	}
+	// Bricks of its own: options in a gallery of cards, each kept or
+	// dropped with a Mark (one kept already), and a list to check.
+	composed := func(name string, data map[string]any, comps ...map[string]any) partBlock {
+		comps[0]["id"] = partRoot(name)
+		raw, _ := json.Marshal(comps)
+		d, _ := json.Marshal(data)
+		return partBlock{Name: name, Author: surfaceAuthorBrain, Components: raw, Data: d}
+	}
+	type comp = map[string]any
+	at := func(p string) comp { return comp{"@path": p} }
+	hotels := []any{
+		comp{"id": "alfama", "name": "Casa Alfama", "why": pick("Vue sur le fleuve, 95 € la nuit", "River view, €95 a night")},
+		comp{"id": "chiado", "name": "Chiado Loft", "why": pick("Au centre, 120 € la nuit", "Central, €120 a night")},
+		comp{"id": "belem", "name": "Belém Garden", "why": pick("Calme, loin du centre", "Quiet, far from the centre")},
+	}
+	todo := []any{
+		comp{"id": "passports", "label": pick("Vérifier les passeports", "Check the passports")},
+		comp{"id": "insurance", "label": pick("Prendre l'assurance annulation", "Take the cancellation insurance")},
+	}
+	if err := c.setMark(106, "hotels", "alfama", a2ui.MarkKeep, false, now); err != nil {
+		t.Fatal(err)
+	}
 	add(106, held, nil, &threadPart{Blocks: []partBlock{
 		block("budget", map[string]any{"component": "Metric", "label": pick("Budget restant", "Budget left"), "value": "420 €"}),
 		block("hotel", map[string]any{"component": "Text", "text": pick("L'hôtel confirme la chambre pour le 12.", "The hotel confirms the room for the 12th.")}, "mail.read"),
+		composed("hotels", comp{"hotels": hotels},
+			comp{"component": "Grid", "children": comp{"path": "/hotels", "componentId": "hotel_card"}},
+			comp{"id": "hotel_card", "component": "Card", "title": at("name"), "child": "hotel_body"},
+			comp{"id": "hotel_body", "component": "Column", "children": []string{"hotel_why", "hotel_mark"}},
+			comp{"id": "hotel_why", "component": "Text", "variant": "caption", "text": at("why")},
+			comp{"id": "hotel_mark", "component": "Mark", "list": "hotels", "item": at("id"), "marks": []string{a2ui.MarkKeep, a2ui.MarkDrop}}),
+		composed("todo", comp{"todo": todo},
+			comp{"component": "List", "children": comp{"path": "/todo", "componentId": "todo_row"}},
+			comp{"id": "todo_row", "component": "Row", "align": "center", "children": []string{"todo_mark", "todo_label"}},
+			comp{"id": "todo_mark", "component": "Mark", "list": "todo", "item": at("id"), "marks": []string{a2ui.MarkDone}},
+			comp{"id": "todo_label", "component": "Text", "text": at("label")}),
+	}})
+	// A standing thread its holder composed from the accounts' data: the
+	// allocation now against its target, and the rows with the actions
+	// code offers on them (Offers), as the default would.
+	savings := standing
+	savings.Title = pick("Mes placements", "My savings")
+	split := func(name string, now, target float64) comp {
+		return comp{"name": name, "points": []any{comp{"x": pick("Aujourd'hui", "Today"), "y": now}, comp{"x": pick("Cible", "Target"), "y": target}}}
+	}
+	add(107, savings, nil, &threadPart{Blocks: []partBlock{
+		composed("split", comp{"split": []any{split(pick("Actions", "Stocks"), 60, 50), split(pick("Obligations", "Bonds"), 30, 40), split(pick("Liquidités", "Cash"), 10, 10)}},
+			comp{"component": "Chart", "kind": "stack", "unit": "%", "series": at("/split")}),
+		composed("accounts", nil,
+			comp{"component": "List", "children": comp{"path": "/thread/items/ledger/groups", "componentId": "account_group"}},
+			comp{"id": "account_group", "component": "List", "children": comp{"path": "items", "componentId": "account_row"}},
+			comp{"id": "account_row", "component": "Row", "align": "center", "children": []string{"account_item", "account_offers"}},
+			comp{"id": "account_item", "component": "Item", "title": at("title"), "note": at("note")},
+			comp{"id": "account_offers", "component": "Offers", "offers": at("offers")}),
 	}})
 	return out
 }

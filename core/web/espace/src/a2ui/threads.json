@@ -199,13 +199,13 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T12:18:18+01:00",
+         "date": "2026-11-16T12:41:07+01:00",
          "detail": "Task",
          "label": "Prepare the page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T12:58:18+01:00",
+         "date": "2026-11-16T13:21:07+01:00",
          "detail": "Proposed action",
          "label": "Merge the branch",
          "state": "done"
@@ -213,7 +213,7 @@
        ],
        "open": [
         {
-         "date": "2026-11-16T14:28:18+01:00",
+         "date": "2026-11-16T14:51:07+01:00",
          "detail": "Task · 12 of 30",
          "label": "Resize the photos",
          "state": "current"
@@ -291,74 +291,6 @@
       "proposalId": "calls:1"
      },
      {
-      "id": "thread_items_0_row_offers",
-      "component": "List",
-      "children": {
-       "componentId": "thread_items_0_offer",
-       "path": "offers"
-      },
-      "direction": "horizontal"
-     },
-     {
-      "id": "thread_items_0_offer",
-      "component": "Button",
-      "action": {
-       "event": {
-        "context": {
-         "item": {
-          "@path": "item"
-         },
-         "offer": {
-          "@path": "offer"
-         },
-         "source": {
-          "@path": "source"
-         },
-         "thread": 1
-        },
-        "name": "offer"
-       }
-      },
-      "label": {
-       "@path": "label"
-      },
-      "variant": "default"
-     },
-     {
-      "id": "thread_items_0_group_offers",
-      "component": "List",
-      "children": {
-       "componentId": "thread_items_0_group_offer",
-       "path": "offers"
-      },
-      "direction": "horizontal"
-     },
-     {
-      "id": "thread_items_0_group_offer",
-      "component": "Button",
-      "action": {
-       "event": {
-        "context": {
-         "offer": {
-          "@path": "offer"
-         },
-         "source": {
-          "@path": "source"
-         },
-         "state": {
-          "@path": "state"
-         },
-         "thread": 1
-        },
-        "name": "offer"
-       }
-      },
-      "label": {
-       "@path": "label"
-      },
-      "variant": "default"
-     },
-     {
       "id": "thread_items_0_cards",
       "component": "List",
       "children": {
@@ -385,6 +317,13 @@
       },
       "open": {
        "@path": "open"
+      }
+     },
+     {
+      "id": "thread_items_0_group_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
       }
      },
      {
@@ -432,6 +371,13 @@
       "children": {
        "componentId": "thread_items_0_card",
        "path": "cards"
+      }
+     },
+     {
+      "id": "thread_items_0_row_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
       }
      },
      {
@@ -715,7 +661,7 @@
       "children": [],
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 13:48"
+       "title": "Done ✓ · 14:11"
       },
       "items": {},
       "marks": {},
@@ -734,25 +680,25 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T12:18:18+01:00",
+         "date": "2026-11-16T12:41:07+01:00",
          "detail": "Task",
          "label": "Prepare the page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T12:58:18+01:00",
+         "date": "2026-11-16T13:21:07+01:00",
          "detail": "Proposed action",
          "label": "Merge the branch",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:38:18+01:00",
+         "date": "2026-11-16T15:01:07+01:00",
          "detail": "Your approval",
          "label": "Publish the site",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:28:18+01:00",
+         "date": "2026-11-16T14:51:07+01:00",
          "detail": "Task · 12 of 30",
          "label": "Resize the photos",
          "state": "done"
@@ -809,74 +755,6 @@
       "variant": "caption"
      },
      {
-      "id": "thread_items_0_row_offers",
-      "component": "List",
-      "children": {
-       "componentId": "thread_items_0_offer",
-       "path": "offers"
-      },
-      "direction": "horizontal"
-     },
-     {
-      "id": "thread_items_0_offer",
-      "component": "Button",
-      "action": {
-       "event": {
-        "context": {
-         "item": {
-          "@path": "item"
-         },
-         "offer": {
-          "@path": "offer"
-         },
-         "source": {
-          "@path": "source"
-         },
-         "thread": 2
-        },
-        "name": "offer"
-       }
-      },
-      "label": {
-       "@path": "label"
-      },
-      "variant": "default"
-     },
-     {
-      "id": "thread_items_0_group_offers",
-      "component": "List",
-      "children": {
-       "componentId": "thread_items_0_group_offer",
-       "path": "offers"
-      },
-      "direction": "horizontal"
-     },
-     {
-      "id": "thread_items_0_group_offer",
-      "component": "Button",
-      "action": {
-       "event": {
-        "context": {
-         "offer": {
-          "@path": "offer"
-         },
-         "source": {
-          "@path": "source"
-         },
-         "state": {
-          "@path": "state"
-         },
-         "thread": 2
-        },
-        "name": "offer"
-       }
-      },
-      "label": {
-       "@path": "label"
-      },
-      "variant": "default"
-     },
-     {
       "id": "thread_items_0_cards",
       "component": "List",
       "children": {
@@ -903,6 +781,13 @@
       },
       "open": {
        "@path": "open"
+      }
+     },
+     {
+      "id": "thread_items_0_group_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
       }
      },
      {
@@ -950,6 +835,13 @@
       "children": {
        "componentId": "thread_items_0_card",
        "path": "cards"
+      }
+     },
+     {
+      "id": "thread_items_0_row_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
       }
      },
      {
@@ -1201,7 +1093,9 @@
       "children": [
        "thread_controls",
        "thread_part_budget",
-       "thread_external_hotel"
+       "thread_external_hotel",
+       "thread_part_hotels",
+       "thread_part_todo"
       ]
      },
      {
@@ -1251,14 +1145,444 @@
        "thread_mark_hotel",
        "thread_part_hotel"
       ]
+     },
+     {
+      "id": "thread_part_hotels",
+      "component": "Grid",
+      "children": {
+       "componentId": "hotel_card",
+       "path": "/hotels"
+      }
+     },
+     {
+      "id": "hotel_card",
+      "component": "Card",
+      "child": "hotel_body",
+      "title": {
+       "@path": "name"
+      }
+     },
+     {
+      "id": "hotel_body",
+      "component": "Column",
+      "children": [
+       "hotel_why",
+       "hotel_mark"
+      ]
+     },
+     {
+      "id": "hotel_why",
+      "component": "Text",
+      "text": {
+       "@path": "why"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "hotel_mark",
+      "component": "Mark",
+      "item": {
+       "@path": "id"
+      },
+      "list": "hotels",
+      "marks": [
+       "keep",
+       "drop"
+      ]
+     },
+     {
+      "id": "thread_part_todo",
+      "component": "List",
+      "children": {
+       "componentId": "todo_row",
+       "path": "/todo"
+      }
+     },
+     {
+      "id": "todo_row",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "todo_mark",
+       "todo_label"
+      ]
+     },
+     {
+      "id": "todo_mark",
+      "component": "Mark",
+      "item": {
+       "@path": "id"
+      },
+      "list": "todo",
+      "marks": [
+       "done"
+      ]
+     },
+     {
+      "id": "todo_label",
+      "component": "Text",
+      "text": {
+       "@path": "label"
+      }
      }
     ],
     "dataModel": {
+     "hotels": [
+      {
+       "id": "alfama",
+       "name": "Casa Alfama",
+       "why": "River view, €95 a night"
+      },
+      {
+       "id": "chiado",
+       "name": "Chiado Loft",
+       "why": "Central, €120 a night"
+      },
+      {
+       "id": "belem",
+       "name": "Belém Garden",
+       "why": "Quiet, far from the centre"
+      }
+     ],
      "thread": {
       "children": [],
       "items": {},
-      "marks": {},
+      "marks": {
+       "hotels": {
+        "alfama": "keep"
+       }
+      },
       "since": [],
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     },
+     "todo": [
+      {
+       "id": "passports",
+       "label": "Check the passports"
+      },
+      {
+       "id": "insurance",
+       "label": "Take the cancellation insurance"
+      }
+     ]
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "The Lisbon trip",
+       "author": "thread:106",
+       "weight": 50,
+       "answers": true,
+       "summary": "Open",
+       "state": "new",
+       "new": 2,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-107",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_progress",
+       "thread_state",
+       "thread_yours",
+       "thread_linked_0",
+       "thread_part_split",
+       "thread_external_accounts"
+      ]
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "attention"
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_yours",
+      "component": "Text",
+      "text": "Yours",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_linked_0",
+      "component": "Proposal",
+      "proposalId": "calls:1"
+     },
+     {
+      "id": "thread_part_split",
+      "component": "Chart",
+      "kind": "stack",
+      "series": {
+       "@path": "/split"
+      },
+      "unit": "%"
+     },
+     {
+      "id": "thread_part_accounts",
+      "component": "List",
+      "children": {
+       "componentId": "account_group",
+       "path": "/thread/items/ledger/groups"
+      }
+     },
+     {
+      "id": "account_group",
+      "component": "List",
+      "children": {
+       "componentId": "account_row",
+       "path": "items"
+      }
+     },
+     {
+      "id": "account_row",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "account_item",
+       "account_offers"
+      ]
+     },
+     {
+      "id": "account_item",
+      "component": "Item",
+      "note": {
+       "@path": "note"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "account_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
+      }
+     },
+     {
+      "id": "thread_mark_accounts",
+      "component": "Text",
+      "text": "external",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_external_accounts",
+      "component": "Column",
+      "children": [
+       "thread_mark_accounts",
+       "thread_part_accounts"
+      ]
+     }
+    ],
+    "dataModel": {
+     "ledger": {
+      "accounts": [
+       {
+        "balance": 120,
+        "name": "Courant"
+       },
+       {
+        "balance": 3400,
+        "name": "Épargne"
+       },
+       {
+        "balance": 80,
+        "name": "Joint"
+       },
+       {
+        "balance": 900,
+        "name": "Livret"
+       }
+      ],
+      "total": 4500
+     },
+     "split": [
+      {
+       "name": "Stocks",
+       "points": [
+        {
+         "x": "Today",
+         "y": 60
+        },
+        {
+         "x": "Target",
+         "y": 50
+        }
+       ]
+      },
+      {
+       "name": "Bonds",
+       "points": [
+        {
+         "x": "Today",
+         "y": 30
+        },
+        {
+         "x": "Target",
+         "y": 40
+        }
+       ]
+      },
+      {
+       "name": "Cash",
+       "points": [
+        {
+         "x": "Today",
+         "y": 10
+        },
+        {
+         "x": "Target",
+         "y": 10
+        }
+       ]
+      }
+     ],
+     "thread": {
+      "children": [],
+      "items": {
+       "ledger": {
+        "caption": "",
+        "cards": [],
+        "groups": [
+         {
+          "items": [
+           {
+            "by": "Added by Eriphe",
+            "cards": [],
+            "detail": "120",
+            "due": "2026-11-17",
+            "id": "Courant",
+            "level": "high",
+            "mark": "external",
+            "n": 0,
+            "note": "Solde bas avant le loyer.",
+            "offers": [
+             {
+              "item": "Courant",
+              "label": "Move from savings",
+              "offer": "2d85eae4b4ae",
+              "source": "ledger",
+              "thread": 1,
+              "tool": "mcp__ledger__move_funds"
+             }
+            ],
+            "source": "ledger",
+            "state": "act",
+            "title": "Courant"
+           }
+          ],
+          "label": "To do · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Added by Eriphe",
+            "cards": [],
+            "detail": "80",
+            "due": "",
+            "id": "Joint",
+            "level": "normal",
+            "mark": "external",
+            "n": 2,
+            "note": "Un virement inconnu, d'après le relevé.",
+            "offers": [
+             {
+              "item": "Joint",
+              "label": "use “move funds”",
+              "offer": "2d85eae4b4ae",
+              "source": "ledger",
+              "thread": 1,
+              "tool": "mcp__ledger__move_funds"
+             }
+            ],
+            "source": "ledger",
+            "state": "look",
+            "title": "Joint"
+           }
+          ],
+          "label": "To look at · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "cards": [],
+            "detail": "3400",
+            "due": "",
+            "id": "Épargne",
+            "level": "normal",
+            "mark": "external",
+            "n": 1,
+            "note": "",
+            "offers": [],
+            "source": "ledger",
+            "title": "Épargne"
+           }
+          ],
+          "label": "Not sorted yet · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Added by Eriphe",
+            "cards": [],
+            "detail": "900",
+            "due": "",
+            "id": "Livret",
+            "level": "low",
+            "mark": "external",
+            "n": 3,
+            "note": "Rien de neuf.",
+            "offers": [],
+            "source": "ledger",
+            "state": "none",
+            "title": "Livret"
+           }
+          ],
+          "label": "Nothing to do · 1",
+          "offers": [],
+          "open": false
+         }
+        ],
+        "name": "ledger"
+       }
+      },
+      "marks": {},
+      "progress": {
+       "label": "Yours"
+      },
+      "since": [],
+      "state": "1 to do · 1 to look at · 1 not sorted yet · 1 nothing to do · sorted at 09:12",
       "steps": {
        "cards": [],
        "done": [],
@@ -1271,13 +1595,13 @@
     "metadata": {
      "extensions": {
       "eriphe": {
-       "title": "The Lisbon trip",
-       "author": "thread:106",
-       "weight": 50,
+       "title": "My savings",
+       "author": "thread:107",
+       "weight": 70,
        "answers": true,
-       "summary": "Open",
-       "state": "new",
-       "new": 2,
+       "summary": "1 to do · 1 to look at · 1 not sorted yet · 1 nothing to do",
+       "state": "yours",
+       "new": 4,
        "updated": "0001-01-01T00:00:00Z"
       }
      }
@@ -1485,13 +1809,13 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T12:18:18+01:00",
+         "date": "2026-11-16T12:41:07+01:00",
          "detail": "Tâche",
          "label": "Préparer la page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T12:58:18+01:00",
+         "date": "2026-11-16T13:21:07+01:00",
          "detail": "Action proposée",
          "label": "Fusionner la branche",
          "state": "done"
@@ -1499,7 +1823,7 @@
        ],
        "open": [
         {
-         "date": "2026-11-16T14:28:18+01:00",
+         "date": "2026-11-16T14:51:07+01:00",
          "detail": "Tâche · 12 sur 30",
          "label": "Redimensionner les photos",
          "state": "current"
@@ -1577,74 +1901,6 @@
       "proposalId": "calls:1"
      },
      {
-      "id": "thread_items_0_row_offers",
-      "component": "List",
-      "children": {
-       "componentId": "thread_items_0_offer",
-       "path": "offers"
-      },
-      "direction": "horizontal"
-     },
-     {
-      "id": "thread_items_0_offer",
-      "component": "Button",
-      "action": {
-       "event": {
-        "context": {
-         "item": {
-          "@path": "item"
-         },
-         "offer": {
-          "@path": "offer"
-         },
-         "source": {
-          "@path": "source"
-         },
-         "thread": 1
-        },
-        "name": "offer"
-       }
-      },
-      "label": {
-       "@path": "label"
-      },
-      "variant": "default"
-     },
-     {
-      "id": "thread_items_0_group_offers",
-      "component": "List",
-      "children": {
-       "componentId": "thread_items_0_group_offer",
-       "path": "offers"
-      },
-      "direction": "horizontal"
-     },
-     {
-      "id": "thread_items_0_group_offer",
-      "component": "Button",
-      "action": {
-       "event": {
-        "context": {
-         "offer": {
-          "@path": "offer"
-         },
-         "source": {
-          "@path": "source"
-         },
-         "state": {
-          "@path": "state"
-         },
-         "thread": 1
-        },
-        "name": "offer"
-       }
-      },
-      "label": {
-       "@path": "label"
-      },
-      "variant": "default"
-     },
-     {
       "id": "thread_items_0_cards",
       "component": "List",
       "children": {
@@ -1671,6 +1927,13 @@
       },
       "open": {
        "@path": "open"
+      }
+     },
+     {
+      "id": "thread_items_0_group_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
       }
      },
      {
@@ -1718,6 +1981,13 @@
       "children": {
        "componentId": "thread_items_0_card",
        "path": "cards"
+      }
+     },
+     {
+      "id": "thread_items_0_row_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
       }
      },
      {
@@ -2001,7 +2271,7 @@
       "children": [],
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 13 h 48"
+       "title": "Fait ✓ · 14 h 11"
       },
       "items": {},
       "marks": {},
@@ -2020,25 +2290,25 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T12:18:18+01:00",
+         "date": "2026-11-16T12:41:07+01:00",
          "detail": "Tâche",
          "label": "Préparer la page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T12:58:18+01:00",
+         "date": "2026-11-16T13:21:07+01:00",
          "detail": "Action proposée",
          "label": "Fusionner la branche",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:38:18+01:00",
+         "date": "2026-11-16T15:01:07+01:00",
          "detail": "Ta validation",
          "label": "Publier le site",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:28:18+01:00",
+         "date": "2026-11-16T14:51:07+01:00",
          "detail": "Tâche · 12 sur 30",
          "label": "Redimensionner les photos",
          "state": "done"
@@ -2095,74 +2365,6 @@
       "variant": "caption"
      },
      {
-      "id": "thread_items_0_row_offers",
-      "component": "List",
-      "children": {
-       "componentId": "thread_items_0_offer",
-       "path": "offers"
-      },
-      "direction": "horizontal"
-     },
-     {
-      "id": "thread_items_0_offer",
-      "component": "Button",
-      "action": {
-       "event": {
-        "context": {
-         "item": {
-          "@path": "item"
-         },
-         "offer": {
-          "@path": "offer"
-         },
-         "source": {
-          "@path": "source"
-         },
-         "thread": 2
-        },
-        "name": "offer"
-       }
-      },
-      "label": {
-       "@path": "label"
-      },
-      "variant": "default"
-     },
-     {
-      "id": "thread_items_0_group_offers",
-      "component": "List",
-      "children": {
-       "componentId": "thread_items_0_group_offer",
-       "path": "offers"
-      },
-      "direction": "horizontal"
-     },
-     {
-      "id": "thread_items_0_group_offer",
-      "component": "Button",
-      "action": {
-       "event": {
-        "context": {
-         "offer": {
-          "@path": "offer"
-         },
-         "source": {
-          "@path": "source"
-         },
-         "state": {
-          "@path": "state"
-         },
-         "thread": 2
-        },
-        "name": "offer"
-       }
-      },
-      "label": {
-       "@path": "label"
-      },
-      "variant": "default"
-     },
-     {
       "id": "thread_items_0_cards",
       "component": "List",
       "children": {
@@ -2189,6 +2391,13 @@
       },
       "open": {
        "@path": "open"
+      }
+     },
+     {
+      "id": "thread_items_0_group_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
       }
      },
      {
@@ -2236,6 +2445,13 @@
       "children": {
        "componentId": "thread_items_0_card",
        "path": "cards"
+      }
+     },
+     {
+      "id": "thread_items_0_row_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
       }
      },
      {
@@ -2487,7 +2703,9 @@
       "children": [
        "thread_controls",
        "thread_part_budget",
-       "thread_external_hotel"
+       "thread_external_hotel",
+       "thread_part_hotels",
+       "thread_part_todo"
       ]
      },
      {
@@ -2537,14 +2755,444 @@
        "thread_mark_hotel",
        "thread_part_hotel"
       ]
+     },
+     {
+      "id": "thread_part_hotels",
+      "component": "Grid",
+      "children": {
+       "componentId": "hotel_card",
+       "path": "/hotels"
+      }
+     },
+     {
+      "id": "hotel_card",
+      "component": "Card",
+      "child": "hotel_body",
+      "title": {
+       "@path": "name"
+      }
+     },
+     {
+      "id": "hotel_body",
+      "component": "Column",
+      "children": [
+       "hotel_why",
+       "hotel_mark"
+      ]
+     },
+     {
+      "id": "hotel_why",
+      "component": "Text",
+      "text": {
+       "@path": "why"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "hotel_mark",
+      "component": "Mark",
+      "item": {
+       "@path": "id"
+      },
+      "list": "hotels",
+      "marks": [
+       "keep",
+       "drop"
+      ]
+     },
+     {
+      "id": "thread_part_todo",
+      "component": "List",
+      "children": {
+       "componentId": "todo_row",
+       "path": "/todo"
+      }
+     },
+     {
+      "id": "todo_row",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "todo_mark",
+       "todo_label"
+      ]
+     },
+     {
+      "id": "todo_mark",
+      "component": "Mark",
+      "item": {
+       "@path": "id"
+      },
+      "list": "todo",
+      "marks": [
+       "done"
+      ]
+     },
+     {
+      "id": "todo_label",
+      "component": "Text",
+      "text": {
+       "@path": "label"
+      }
      }
     ],
     "dataModel": {
+     "hotels": [
+      {
+       "id": "alfama",
+       "name": "Casa Alfama",
+       "why": "Vue sur le fleuve, 95 € la nuit"
+      },
+      {
+       "id": "chiado",
+       "name": "Chiado Loft",
+       "why": "Au centre, 120 € la nuit"
+      },
+      {
+       "id": "belem",
+       "name": "Belém Garden",
+       "why": "Calme, loin du centre"
+      }
+     ],
      "thread": {
       "children": [],
       "items": {},
-      "marks": {},
+      "marks": {
+       "hotels": {
+        "alfama": "keep"
+       }
+      },
       "since": [],
+      "steps": {
+       "cards": [],
+       "done": [],
+       "open": [],
+       "summary": ""
+      },
+      "summary": ""
+     },
+     "todo": [
+      {
+       "id": "passports",
+       "label": "Vérifier les passeports"
+      },
+      {
+       "id": "insurance",
+       "label": "Prendre l'assurance annulation"
+      }
+     ]
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Le voyage à Lisbonne",
+       "author": "thread:106",
+       "weight": 50,
+       "answers": true,
+       "summary": "Ouvert",
+       "state": "new",
+       "new": 2,
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-107",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_progress",
+       "thread_state",
+       "thread_yours",
+       "thread_linked_0",
+       "thread_part_split",
+       "thread_external_accounts"
+      ]
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "attention"
+     },
+     {
+      "id": "thread_state",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/state"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_yours",
+      "component": "Text",
+      "text": "À toi",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_linked_0",
+      "component": "Proposal",
+      "proposalId": "calls:1"
+     },
+     {
+      "id": "thread_part_split",
+      "component": "Chart",
+      "kind": "stack",
+      "series": {
+       "@path": "/split"
+      },
+      "unit": "%"
+     },
+     {
+      "id": "thread_part_accounts",
+      "component": "List",
+      "children": {
+       "componentId": "account_group",
+       "path": "/thread/items/ledger/groups"
+      }
+     },
+     {
+      "id": "account_group",
+      "component": "List",
+      "children": {
+       "componentId": "account_row",
+       "path": "items"
+      }
+     },
+     {
+      "id": "account_row",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "account_item",
+       "account_offers"
+      ]
+     },
+     {
+      "id": "account_item",
+      "component": "Item",
+      "note": {
+       "@path": "note"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "account_offers",
+      "component": "Offers",
+      "offers": {
+       "@path": "offers"
+      }
+     },
+     {
+      "id": "thread_mark_accounts",
+      "component": "Text",
+      "text": "extérieur",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_external_accounts",
+      "component": "Column",
+      "children": [
+       "thread_mark_accounts",
+       "thread_part_accounts"
+      ]
+     }
+    ],
+    "dataModel": {
+     "ledger": {
+      "accounts": [
+       {
+        "balance": 120,
+        "name": "Courant"
+       },
+       {
+        "balance": 3400,
+        "name": "Épargne"
+       },
+       {
+        "balance": 80,
+        "name": "Joint"
+       },
+       {
+        "balance": 900,
+        "name": "Livret"
+       }
+      ],
+      "total": 4500
+     },
+     "split": [
+      {
+       "name": "Actions",
+       "points": [
+        {
+         "x": "Aujourd'hui",
+         "y": 60
+        },
+        {
+         "x": "Cible",
+         "y": 50
+        }
+       ]
+      },
+      {
+       "name": "Obligations",
+       "points": [
+        {
+         "x": "Aujourd'hui",
+         "y": 30
+        },
+        {
+         "x": "Cible",
+         "y": 40
+        }
+       ]
+      },
+      {
+       "name": "Liquidités",
+       "points": [
+        {
+         "x": "Aujourd'hui",
+         "y": 10
+        },
+        {
+         "x": "Cible",
+         "y": 10
+        }
+       ]
+      }
+     ],
+     "thread": {
+      "children": [],
+      "items": {
+       "ledger": {
+        "caption": "",
+        "cards": [],
+        "groups": [
+         {
+          "items": [
+           {
+            "by": "Ajouté par Eriphe",
+            "cards": [],
+            "detail": "120",
+            "due": "2026-11-17",
+            "id": "Courant",
+            "level": "high",
+            "mark": "extérieur",
+            "n": 0,
+            "note": "Solde bas avant le loyer.",
+            "offers": [
+             {
+              "item": "Courant",
+              "label": "Virer depuis l'épargne",
+              "offer": "2d85eae4b4ae",
+              "source": "ledger",
+              "thread": 1,
+              "tool": "mcp__ledger__move_funds"
+             }
+            ],
+            "source": "ledger",
+            "state": "act",
+            "title": "Courant"
+           }
+          ],
+          "label": "À faire · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Ajouté par Eriphe",
+            "cards": [],
+            "detail": "80",
+            "due": "",
+            "id": "Joint",
+            "level": "normal",
+            "mark": "extérieur",
+            "n": 2,
+            "note": "Un virement inconnu, d'après le relevé.",
+            "offers": [
+             {
+              "item": "Joint",
+              "label": "utiliser « move funds »",
+              "offer": "2d85eae4b4ae",
+              "source": "ledger",
+              "thread": 1,
+              "tool": "mcp__ledger__move_funds"
+             }
+            ],
+            "source": "ledger",
+            "state": "look",
+            "title": "Joint"
+           }
+          ],
+          "label": "À regarder · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "cards": [],
+            "detail": "3400",
+            "due": "",
+            "id": "Épargne",
+            "level": "normal",
+            "mark": "extérieur",
+            "n": 1,
+            "note": "",
+            "offers": [],
+            "source": "ledger",
+            "title": "Épargne"
+           }
+          ],
+          "label": "Pas encore trié · 1",
+          "offers": [],
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Ajouté par Eriphe",
+            "cards": [],
+            "detail": "900",
+            "due": "",
+            "id": "Livret",
+            "level": "low",
+            "mark": "extérieur",
+            "n": 3,
+            "note": "Rien de neuf.",
+            "offers": [],
+            "source": "ledger",
+            "state": "none",
+            "title": "Livret"
+           }
+          ],
+          "label": "Rien à faire · 1",
+          "offers": [],
+          "open": false
+         }
+        ],
+        "name": "ledger"
+       }
+      },
+      "marks": {},
+      "progress": {
+       "label": "À toi"
+      },
+      "since": [],
+      "state": "1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire · trié à 9 h 12",
       "steps": {
        "cards": [],
        "done": [],
@@ -2557,13 +3205,13 @@
     "metadata": {
      "extensions": {
       "eriphe": {
-       "title": "Le voyage à Lisbonne",
-       "author": "thread:106",
-       "weight": 50,
+       "title": "Mes placements",
+       "author": "thread:107",
+       "weight": 70,
        "answers": true,
-       "summary": "Ouvert",
-       "state": "new",
-       "new": 2,
+       "summary": "1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire",
+       "state": "yours",
+       "new": 4,
        "updated": "0001-01-01T00:00:00Z"
       }
      }

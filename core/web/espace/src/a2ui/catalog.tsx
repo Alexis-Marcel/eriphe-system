@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createComponentImplementation, type ReactComponentImplementation } from "@a2ui/react";
-import { Catalog, CommonSchemas } from "@a2ui/web_core/v1_0";
+import { Catalog, CommonSchemas, type ComponentContext } from "@a2ui/web_core/v1_0";
 import { z } from "zod";
 import { useWords, type Lang } from "../i18n";
 import { Chart as ChartView, cleanSeries } from "./chart";
@@ -94,6 +94,30 @@ const List = createComponentImplementation(
     if (!items.length) return props.emptyText ? <p className="a2-empty">{props.emptyText}</p> : null;
     return (
       <ul className={`a2-list a2-list-${props.direction ?? "vertical"}`}>
+        {items.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ul>
+    );
+  },
+);
+
+// Grid is a gallery: as many cells to a row as fit, each as wide as its
+// size says, all the same.
+const Grid = createComponentImplementation(
+  {
+    name: "Grid",
+    schema: z.object({
+      children: CommonSchemas.ChildList,
+      size: z.enum(["small", "medium", "large"]).optional(),
+      emptyText: CommonSchemas.DynamicString.optional(),
+    }),
+  },
+  ({ props, buildChild }) => {
+    const items = kids(props.children, buildChild);
+    if (!items.length) return props.emptyText ? <p className="a2-empty">{props.emptyText}</p> : null;
+    return (
+      <ul className={`a2-cells a2-cells-${props.size ?? "medium"}`}>
         {items.map((item, i) => (
           <li key={i}>{item}</li>
         ))}
@@ -350,6 +374,65 @@ const Button = createComponentImplementation(
   ),
 );
 
+// useDataAt is the surface's data at a path, kept up to date; undefined
+// with no path.
+function useDataAt(context: ComponentContext, path: string | null): unknown {
+  const [v, setV] = useState<unknown>(undefined);
+  useEffect(() => {
+    if (!path) {
+      setV(undefined);
+      return;
+    }
+    const sub = context.dataContext.subscribeDynamicValue<unknown>({ "@path": path }, setV);
+    setV(sub.value);
+    return () => sub.unsubscribe();
+  }, [context.dataContext, path]);
+  return v;
+}
+
+// Mark is the user's mark on something a thread shows: a toggle for each
+// mark it offers, pressed when it is theirs, read where eriphe-core keeps
+// it (/thread/marks/<list>/<item>). A click sends "mark" with ids only,
+// the mark or "" to take it away; eriphe-core checks it against this Mark
+// and writes the data again. done alone is a box to check.
+const MARK_ID = /^[A-Za-z0-9_][A-Za-z0-9_.:@=+-]{0,127}$/;
+const MarkId = z.union([z.string(), CommonSchemas.DataBinding]);
+const MARK_ICON = { keep: "star", drop: "close", done: "check" } as const;
+
+const Mark = createComponentImplementation(
+  {
+    name: "Mark",
+    schema: z.object({ list: MarkId, item: MarkId, marks: z.array(z.enum(["keep", "drop", "done"])).min(1) }),
+  },
+  ({ props, context }) => {
+    const { t } = useWords();
+    const list = str(props.list), item = str(props.item);
+    const ok = MARK_ID.test(list) && MARK_ID.test(item);
+    // Shown as eriphe-core keeps it, never ahead of it: it writes the
+    // data again once it took the mark.
+    const shown = str(useDataAt(context, ok ? `/thread/marks/${list}/${item}` : null));
+    const set = (m: string) => void context.dispatchAction({ event: { name: "mark", context: { list, item, mark: shown === m ? "" : m } } });
+    const marks = props.marks ?? [];
+    return (
+      <span className={`a2-marks${shown ? " a2-marked-" + shown : ""}`}>
+        {marks.map((m) => (
+          <button
+            key={m}
+            type="button"
+            className={`a2-mark a2-mark-${m}${marks.length === 1 && m === "done" ? " a2-mark-box" : ""}`}
+            aria-pressed={shown === m}
+            disabled={!ok}
+            onClick={() => set(m)}
+          >
+            <IconView name={MARK_ICON[m]} />
+            <span className={marks.length === 1 && m === "done" ? "sr-only" : undefined}>{t(`espace.a2.mark.${m}`)}</span>
+          </button>
+        ))}
+      </span>
+    );
+  },
+);
+
 // The fields write what the user does to the surface's data (the bound
 // path), as A2UI does: an action sent later carries it.
 type Setter<T> = { setValue?: (v: T) => void };
@@ -557,7 +640,7 @@ const Chart = createComponentImplementation(
   {
     name: "Chart",
     schema: z.object({
-      kind: z.enum(["line", "bar"]),
+      kind: z.enum(["line", "bar", "stack"]),
       series: listOr(Series),
       unit: CommonSchemas.DynamicString.optional(),
     }),
@@ -566,7 +649,7 @@ const Chart = createComponentImplementation(
     const { t, lang } = useWords();
     const series = cleanSeries(props.series);
     const names = series.map((s) => s.name).filter(Boolean).join(", ");
-    const label = t(props.kind === "bar" ? "espace.a2.chart.bar" : "espace.a2.chart.line", names || "—");
+    const label = t(`espace.a2.chart.${props.kind}`, names || "—");
     if (!series.some((s) => s.points.length)) return <p className="a2-empty">{t("espace.a2.chart.empty")}</p>;
     return <ChartView kind={props.kind} series={series} unit={str(props.unit) || undefined} lang={lang} label={label} />;
   },
@@ -978,6 +1061,38 @@ const Proposal = createComponentImplementation(
   },
 );
 
+// Offers shows the actions eriphe-core offers on a row of a thread, or on
+// a group of rows: its data, bound under /thread/items, one button each,
+// with code's words. A click sends "offer" with that offer's ids as code
+// wrote them, never its words; eriphe-core checks it against this Offers
+// and the store, and makes a card: nothing runs.
+const OFFER_KEYS = ["thread", "source", "item", "state", "offer"] as const;
+type Offer = { label: string } & Partial<Record<(typeof OFFER_KEYS)[number], unknown>>;
+
+const Offers = createComponentImplementation(
+  // A list the engine resolves; eriphe-core takes a binding only.
+  { name: "Offers", schema: z.object({ offers: listOr(z.record(z.string(), z.unknown())) }) },
+  ({ props, context }) => {
+    const offers = (Array.isArray(props.offers) ? props.offers : []).filter(
+      (o): o is Offer => !!o && typeof o === "object" && typeof o.label === "string" && typeof o.offer === "string",
+    );
+    if (!offers.length) return null;
+    const send = (o: Offer) => {
+      const ids = Object.fromEntries(OFFER_KEYS.filter((k) => k in o).map((k) => [k, o[k]]));
+      void context.dispatchAction({ event: { name: "offer", context: ids } });
+    };
+    return (
+      <span className="a2-offers">
+        {offers.map((o, i) => (
+          <button key={i} type="button" className="btn a2-button a2-button-default" onClick={() => send(o)}>
+            {o.label}
+          </button>
+        ))}
+      </span>
+    );
+  },
+);
+
 const ALERT_ICON = { info: "info", success: "check", warning: "warning", error: "error" } as const;
 
 const Alert = createComponentImplementation(
@@ -1033,11 +1148,13 @@ export const components: ReactComponentImplementation[] = [
   box("row"),
   box("column"),
   List,
+  Grid,
   Card,
   Tabs,
   Fold,
   Divider,
   Button,
+  Mark,
   Choice,
   TextField,
   DateField,
@@ -1050,6 +1167,7 @@ export const components: ReactComponentImplementation[] = [
   Message,
   Day,
   Proposal,
+  Offers,
   Alert,
   Placeholder,
 ];

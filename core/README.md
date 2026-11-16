@@ -1272,9 +1272,9 @@ by code from the thread's data (#468): it never depends on a model remembering t
     », « Pour info », « Rien à faire », « Traité », each `label` with its count, `open`, `items`,
     and the action its rows share as `offers`; the default draws each a `Fold`, that action as its
     `aside`, on its line, open or not, the last two folded); the cards decided on several of its
-    items at `/thread/items/<name>/cards`. The offers' buttons are code's, in the default
-    composition (`offerOf`). All bound by paths: a read again changes the data, not the
-    components.
+    items at `/thread/items/<name>/cards`. The offers are code's data: an `Offers` component shows
+    them, in the default composition and in a holder's block alike (`offerOf`). All bound by
+    paths: a read again changes the data, not the components.
 - **Notes on items** (#571, `thread_items.go`, table `thread_items`): the brain (`note_item`, with
   the thread) and a thread's lead (`note_item`, its own) note one item a source lists, by the
   source's name and the item's id: a short note (300 characters), a state (`act`, `look`, `info`,
@@ -1339,9 +1339,11 @@ by code from the thread's data (#468): it never depends on a model remembering t
   sources it gave: its holder writes it again, by blocks.
 - **The user's marks** (#610, `thread_marks.go`, table `thread_marks`): keep, drop or done on
   something a thread shows (an option, a lead, a line of a checklist), recorded by code in the
-  thread's data, never in the composed part: a holder's block places the closed action `mark`
-  (`{"thread", "list", "item", "mark"}`, [the actions of a surface](#the-actions-of-a-surface)),
-  code keeps it per thread, list and item (`""` takes it away) and serves it at
+  thread's data, never in the composed part: a holder's block places a `Mark` (its `list` and
+  `item`, ids written or bound to a row's id, and the `marks` it offers: `keep` and `drop`, or
+  `done` alone, a box to check), which sends the closed action `mark` (`{"list", "item",
+  "mark"}`, [the actions of a surface](#the-actions-of-a-surface)) and reads its state where code
+  keeps it; code keeps it per thread, list and item (`""` takes it away) and serves it at
   `/thread/marks/<list>/<item>` (`/thread/marks` always there, a binding under it never refused
   for a mark not set yet), so a rewrite of the part never loses one. A mark starts no turn: it is
   a gesture (`kept`, `dropped`, `done`, `unmarked`, its list and item in `workspace_log.detail`),
@@ -1914,12 +1916,20 @@ version, read with its diff.
   kept in `thread_items.actions`). Checked when noted: the tool is in the
   catalog and not Eriphe's own, the author may use it (a task: lent it), its input names the item
   and fits the tool's required properties, and the access policy does not refuse it (`never`);
-  checked again when shown and when clicked, so a `never` tool is never offered. In the default
-  composition, the row offers each as a `Button` code places (action `offer`, `{thread, source, item, offer}`, the offer
-  being the action's key); a state group offers an action two of its rows or more share
-  (« Archiver · 24 », `{thread, source, state, offer}`). A folded group (`none`, `done`) is no
-  list of buttons: its rows offer nothing, the group the action they share, even one row's. An author can never write `offer`
-  (`CheckActions`). A click runs nothing: code reads the note again from the store (the item
+  checked again when shown and when clicked, so a `never` tool is never offered. The row offers
+  each in its data, `offers` (`{label, thread, source, item, offer, tool}`, the offer being the
+  action's key); a state group offers an action two of its rows or more share
+  (« Archiver · 24 », `{label, thread, source, state, offer}`). A folded group (`none`, `done`) is
+  no list of buttons: its rows offer nothing, the group the action they share, even one row's.
+  An `Offers` component shows them, a button each with code's words: the default composition
+  places one on each row and on each group's line, and a holder's block that shows a source's
+  rows may place one too, bound to a row's or a group's `offers` under `/thread/items` and to
+  nothing else (`offersGuard` when written, `offersBound` when clicked: no author writes
+  `/thread`, so the words and the ids are always code's). An author can never write `offer`
+  (`CheckActions`). The page sends the offer's ids as code wrote them, never its words
+  (`{thread, source, item or state, offer}`); code checks them against the clicked `Offers` of
+  the thread's own surface, one of the offers its binding takes in the stored data
+  (`sentOffer`). A click runs nothing: code reads the note again from the store (the item
   still listed and shown, the action on its note) and makes one calls card with the exact call,
   bound to the item, linked to the thread, with no message; a group's click one card with a call
   per item shown in the group. A call already waiting on its item is not asked twice. A button's
@@ -3727,9 +3737,15 @@ template) or computed by a function (`{"@call": "formatDate", "args": {…}}`). 
 `core/a2ui` speaks it and owns the catalog of shapes a surface is made of:
 
 - **The catalog** (`a2ui/catalog_v1.json`, id `urn:eriphe:a2ui:workspace:v1`): a JSON Schema
-  2020-12 document by A2UI's catalog rules. Shapes only, never tools: Text, Markdown, Image,
-  Icon, Link, Code, Row, Column, List, Card, Tabs, Divider, Button, Choice, TextField, DateField, Metric,
-  Chart, Table, Timeline, Message, Day, Proposal, Alert, Placeholder; and the functions
+  2020-12 document by A2UI's catalog rules. Shapes only, never tools, none named after a
+  subject: Text, Markdown, Image, Icon, Link, Code, Row, Column, List, Grid (a gallery of cards,
+  as many to a row as fit), Card, Tabs, Fold, Divider, Button, Mark (the user's keep, drop or
+  done, on a thread's surface), Choice, TextField, DateField, Metric, Progress, Chart (`line`,
+  `bar`, or `stack`: one bar per x, the series its parts, an allocation now against its
+  target), Table, Timeline, Item, Message, Day, Proposal, Offers (code's offers on a thread's
+  rows), Alert, Placeholder. Steps, notes, options, checklists and drafts are compositions of
+  these (a `Timeline`, a `Markdown`, a `List` of `Item` and `Mark`, `Mark` with `done`, `Text`
+  sections), never components of their own; and the functions
   formatString, formatNumber, formatDate, formatRelative. A property that carries data takes a
   binding (Metric's `value`, Chart's `series`, Table's `rows`, Day's `events`…). Its descriptions
   and `instructions` are for the models, in French. Served to the app, with a session, at
@@ -3817,8 +3833,9 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   [the grammar](#the-actions-of-a-surface): an `ask` (a request to the brain) carries its
   author's own words only, `{"text": "…"}` (a value bound to the data, `@path` or `@call`, is
   refused, and so is any ask written in a turn that read external content, which may have
-  written it); a local name (`open`, `expand`, `tab`) carries no context; `answer`, another
-  name or a function call is refused.
+  written it); a local name (`open`, `expand`, `tab`) carries no context; `answer`, `mark`,
+  `offer` (their components send them), another name or a function call is refused. A `Mark` or
+  an `Offers` is placed on a thread's surface only (`a2ui.ThreadOnly`).
 - **Links** (`a2ui/links.go`): a Link's address is never built, so that it cannot carry out
   what its author read (A2UI #4045): `url` is a literal or a binding (`@path`), never a function
   call (the schema has no such form: no `formatString`). A literal must be http(s) with a host,
@@ -3906,7 +3923,8 @@ writes.
 |---|---|---|
 | `ask` | a Button's `{"event": {"name": "ask", "context": {"text": "…"}}}`: literal words, nothing else, never bound data; none at all from an author whose turn read external content | the text written on the clicked Button becomes a message of the user's to the brain, as if typed (`Via` `workspace:ask`, shown as « bouton de l'espace » / "workspace button"; `about` = `surface:<id>`, which the brain reads as `[Sam 10:02 #12 · bouton de l'espace · à propos de surface:…]`); a plain "oui" so sent decides no card. The brain is woken, never waited for. On a tainted surface the message taints the brain's turn (`surface:<id>`) and its line adds « surface au contenu extérieur »: what it shows is data |
 | `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does; a thread's, unless the thread itself is tainted or the Proposal is in a part written after reading external content), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
-| `mark` | by the holder of a thread, in a block of its part, on its own thread only: `{"thread": <its id>, "list": "<id>", "item": "<id>", "mark": "keep"\|"drop"\|"done"\|""}`, `thread` and `mark` literals, `list` and `item` literal ids or bound to the data (a row's id); allowed after reading external content (ids only) | checked against the component of the thread's own surface that carries it (`markOf`): the thread and the mark as written, `list` and `item` the literals or values its binding takes in the surface's data, each an id (`a2ui.MarkIDOK`: letters, digits, `_.:@=+-`, 128 at most, no `/`), the thread active; then recorded (`setMark`), a gesture for the brain's next turn, no turn of its own |
+| `mark` | never by an author: only the Mark component sends it, `{"list": "<id>", "item": "<id>", "mark": "keep"\|"drop"\|"done"\|""}` (the thread is the surface's), a mark it offers, or `""` when the user takes theirs away; the holder of a thread places a Mark in a block of its part, `list` and `item` literal ids or bound to the data (a row's id); allowed after reading external content (ids only) | checked against the clicked Mark of the thread's own surface (`markOf`): a mark it offers or `""`, `list` and `item` the literals or values its binding takes in the surface's data, each an id (`a2ui.MarkIDOK`: letters, digits, `_.:@=+-`, 128 at most, no `/`), the thread active; then recorded (`setMark`), a gesture for the brain's next turn, no turn of its own |
+| `offer` | never by an author: only the Offers component sends it, one of the offers code put in the thread's data (`/thread/items`), `{"thread": <id>, "source": "<name>", "item": "<id>"\|"state": "<state>", "offer": "<key>"}`, never its words | checked against the clicked Offers of the thread's own surface (`offerOf`): bound under `/thread/items`, the offer one its binding takes in the stored data; then the note is read again from the store (`offerCalls`) and a calls card is made: nothing runs |
 | `stepDone` | never by an author: code places it on a thread's surface, the « C'est fait » of a step the user does, `{"thread": <id>, "step": "<key>"}` | checked against the Button code wrote there (its thread and step), for a step of kind `user` that waits; then `settleUserStep`, the engine's `userStepDone` (409 once it no longer waits) |
 | `tidy` | never by an author: code places it on an ended thread's surface, its « Ranger », `{"thread": <id>}` | checked against the Button code wrote there (its thread); then `tidyThread`: the surface leaves, the thread is kept (409 once put away) |
 | `choose` | never by an author: code places it on a thread's surface, one Button per option of a choice step that waits, `{"thread": <id>, "step": "<key>", "option": "<option>"}` | checked against the Button code wrote there (its whole context), for a choice step that still waits and one of its own options; then `chooseStep` |

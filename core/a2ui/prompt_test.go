@@ -75,7 +75,7 @@ func TestPromptCoversTheCatalog(t *testing.T) {
 			t.Errorf("the prompt lacks %q", want)
 		}
 	}
-	if n := len(p); n > 16000 {
+	if n := len(p); n > 17000 {
 		t.Errorf("the prompt is %d bytes", n)
 	}
 }

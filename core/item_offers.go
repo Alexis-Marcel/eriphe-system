@@ -28,8 +28,13 @@ import (
 //     the item ("$item") and fits the tool's input schema, and the access
 //     policy does not refuse it (never). Checked again when shown and when
 //     clicked: a never tool is never offered.
-//   - A click (action offer, placed by code on the thread's own surface)
-//     never runs a tool: code reads the note again from the store, never
+//   - Its offers are code's data, on its row and its group in
+//     /thread/items/<source>; an Offers component shows them, one button
+//     each: code's default composition places one, and so may the
+//     holder's block that shows those rows (bound under /thread/items
+//     only, offersBound). The page sends one of them as is (action
+//     offer); nobody writes one.
+//   - A click never runs a tool: code reads the note again from the store, never
 //     the page, and makes one card bound to that item (kind calls,
 //     item_cards.go) with the exact call; a group's click one card with
 //     its N exact calls, one per item, on the items shown in that group.
@@ -388,20 +393,55 @@ func groupOffers(thread int64, source, state string, rows []any, least int, word
 	return out
 }
 
+// offerKeys are the keys of an offer the page sends back, as code wrote
+// them in its row's or group's data: the rest (its label, its tool) is
+// for the button only.
+var offerKeys = []string{"thread", "source", "item", "state", "offer"}
+
+// offersBound tells whether an Offers' binding, at each place it is
+// rendered (paths), reads code's offers: under /thread/items, which no
+// author writes.
+func offersBound(paths []string) bool {
+	return len(paths) > 0 && !slices.ContainsFunc(paths, func(p string) bool {
+		return !strings.HasPrefix(p, "/"+threadDataKey+"/items/")
+	})
+}
+
+// offersGuard keeps the Offers of a block written on a thread's surface
+// to code's offers: each bound under /thread/items, wherever it is
+// rendered (offersBound).
+func offersGuard(sid string, comps json.RawMessage) []a2ui.ValidationError {
+	var errs []a2ui.ValidationError
+	for _, b := range a2ui.Eriphe().BoundPaths(comps) {
+		if b.Type == "Offers" && b.Prop == "offers" && !offersBound([]string{b.Path}) {
+			errs = append(errs, a2ui.ValidationError{Code: a2ui.CodeValidationFailed, SurfaceID: sid, Path: "/components" + b.At,
+				Message: "an Offers binds the offers code puts on a row or a group of /thread/items/<source> (" + b.Path + " is not one)"})
+		}
+	}
+	return errs
+}
+
 // offerOf is what an offer click asks: the thread, the source, the item
-// (a row's) or the state (a group's), and the action, from the Button
-// code wrote on the thread's own surface; whatever the page sent, the
-// rest is read again from the store (offerCalls).
+// (a row's) or the state (a group's), and the action. The clicked
+// component is an Offers of the thread's own surface, bound to code's
+// offers (offersBound), and the page sent one of those its binding takes
+// in the data, as code wrote it; the rest is read again from the store
+// (offerCalls).
 func offerOf(s surface, a a2ui.Action) (thread int64, source, item, state, key string, refused *errActionRefused) {
 	th, ok := threadOfSurface(s.ID)
 	if !ok || s.Author != threadAuthor(th) {
-		return 0, "", "", "", "", &errActionRefused{Message: "an offer is a thread's own: placed by code on its surface"}
+		return 0, "", "", "", "", &errActionRefused{Message: "an offer is a thread's own: shown by an Offers on its surface"}
 	}
 	comp, at, ok := componentOf(s, a.SourceComponentID)
-	ev, _ := comp["action"].(map[string]any)
-	ev, _ = ev["event"].(map[string]any)
-	if !ok || !strings.HasPrefix(a.SourceComponentID, threadCompPrefix) || comp["component"] != "Button" || ev["name"] != a2ui.ActionOffer {
-		return 0, "", "", "", "", &errActionRefused{Path: at, Message: "an offer comes from a Button code placed for it"}
+	if !ok || comp["component"] != "Offers" {
+		return 0, "", "", "", "", &errActionRefused{Path: at, Message: "an offer comes from an Offers component"}
+	}
+	paths, values := boundValues(s, at, "offers")
+	if !offersBound(paths) {
+		return 0, "", "", "", "", &errActionRefused{Path: at, Message: "an Offers shows the offers code puts under /thread/items, and no other"}
+	}
+	if !slices.ContainsFunc(values, func(v any) bool { return sentOffer(v, a.Context) }) {
+		return 0, "", "", "", "", &errActionRefused{Path: at, Message: "this Offers shows no such offer"}
 	}
 	str := func(k string) string {
 		var v string
@@ -415,6 +455,32 @@ func offerOf(s surface, a a2ui.Action) (thread int64, source, item, state, key s
 		return 0, "", "", "", "", &errActionRefused{Path: at, Message: `an offer's context is {"thread", "source", "item" or "state", "offer"}, for this thread`}
 	}
 	return th, str("source"), str("item"), str("state"), str("offer"), nil
+}
+
+// sentOffer tells whether the page sent one of a list of offers as code
+// wrote it: its offerKeys, each the same, and nothing else.
+func sentOffer(list any, sent map[string]json.RawMessage) bool {
+	offers, _ := list.([]any)
+	return slices.ContainsFunc(offers, func(o any) bool {
+		m, _ := o.(map[string]any)
+		n := 0
+		for _, k := range offerKeys {
+			want, has := m[k]
+			raw, sends := sent[k]
+			if has != sends {
+				return false
+			}
+			if !has {
+				continue
+			}
+			var got any
+			if json.Unmarshal(raw, &got) != nil || fmt.Sprint(got) != fmt.Sprint(want) {
+				return false
+			}
+			n++
+		}
+		return n > 0 && n == len(sent)
+	})
 }
 
 // errOfferGone is an offer the store no longer has as clicked.

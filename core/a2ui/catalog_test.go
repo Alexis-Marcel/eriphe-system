@@ -11,9 +11,9 @@ import (
 // The catalog holds the shapes agreed for the workspace (#416), in this
 // order: a new one is a decision, not a side effect.
 func TestCatalogComponents(t *testing.T) {
-	want := []string{"Text", "Markdown", "Image", "Icon", "Link", "Code", "Row", "Column", "List", "Card", "Tabs", "Fold", "Divider",
-		"Button", "Choice", "TextField", "DateField", "Metric", "Progress", "Chart", "Table", "Timeline", "Item", "Message", "Day",
-		"Proposal", "Alert", "Placeholder"}
+	want := []string{"Text", "Markdown", "Image", "Icon", "Link", "Code", "Row", "Column", "List", "Grid", "Card", "Tabs", "Fold", "Divider",
+		"Button", "Mark", "Choice", "TextField", "DateField", "Metric", "Progress", "Chart", "Table", "Timeline", "Item", "Message", "Day",
+		"Proposal", "Offers", "Alert", "Placeholder"}
 	c := Eriphe()
 	if got := c.Components(); !slices.Equal(got, want) {
 		t.Errorf("components:\n got %v\nwant %v", got, want)
@@ -112,7 +112,7 @@ func TestCatalogLinks(t *testing.T) {
 			got[name] = strings.Join(parts, " ")
 		}
 	}
-	want := map[string]string{"Row": "children[]", "Column": "children[]", "List": "children[]", "Card": "child", "Fold": "aside child", "Tabs": "tabs/*/child"}
+	want := map[string]string{"Row": "children[]", "Column": "children[]", "List": "children[]", "Grid": "children[]", "Card": "child", "Fold": "aside child", "Tabs": "tabs/*/child"}
 	if len(got) != len(want) {
 		t.Errorf("links: %v", got)
 	}

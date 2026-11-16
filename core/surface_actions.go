@@ -330,6 +330,23 @@ func (c *core) proposalsShown(s surface, id string) []string {
 	return out
 }
 
+// boundValues are where a component's property is bound (at: the
+// component's place, "/components/<i>"), each path absolute through the
+// templates it is rendered in, and the values those take in the surface's
+// data.
+func boundValues(s surface, at, prop string) (paths []string, values []any) {
+	where := strings.TrimPrefix(at, "/components") + "/" + prop + "/@path"
+	var data any
+	json.Unmarshal(s.Data, &data)
+	for _, b := range a2ui.Eriphe().BoundPaths(s.Components) {
+		if b.At == where {
+			paths = append(paths, b.Path)
+			values = append(values, valuesAt(data, tokens(b.Path))...)
+		}
+	}
+	return paths, values
+}
+
 // valuesAt reads the values at a path, "*" for each item of a list.
 func valuesAt(v any, toks []string) []any {
 	if len(toks) == 0 {

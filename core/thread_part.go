@@ -383,6 +383,9 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 	if len(errs) == 0 {
 		errs = a2ui.CheckLinks(sid, comps)
 	}
+	if len(errs) == 0 {
+		errs = offersGuard(sid, comps)
+	}
 	// Its sources, read once to check what it binds (held surfaceReadCap at
 	// most: those still reading are checked against their schema).
 	reads, late := c.readSourcesWithin(in.Sources, surfaceReadCap)
@@ -433,7 +436,7 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 		return nil, err
 	}
 	c.keepThreadSurface(thread)
-	note := "Your block is on the thread's surface, under what code keeps there (its head, what waits for the user, its children), among your part's blocks in that order, in place of code's default from its data: compose what the user should see of its steps and items too (/thread/steps, /thread/items/<source>). Writing a block again replaces it alone, where it stands (before moves it); surface_remove with its name takes it away. Its title, weight, why and lifetime are code's."
+	note := "Your block is on the thread's surface, under what code keeps there (its head, what waits for the user, its children), among your part's blocks in that order, in place of code's default from its data: compose what the user should see of its steps and items too (/thread/steps, /thread/items/<source>, an Offers for the actions offered on its rows). Writing a block again replaces it alone, where it stands (before moves it); surface_remove with its name takes it away. Its title, weight, why and lifetime are code's."
 	if len(srcs) > 0 {
 		note += " Its sources are the thread's: code reads them again, without a model, while the thread is active."
 	}

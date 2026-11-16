@@ -477,7 +477,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 			out.add(comp{"id": threadExternalPrefix + b.Name, "component": "Column", "children": []string{marked, partRoot(b.Name)}})
 		}
 	} else {
-		threadDefault(&out, s.ID, data["steps"].(map[string]any), items.data, items.order, lang)
+		threadDefault(&out, data["steps"].(map[string]any), items.data, items.order, lang)
 	}
 	if !slices.ContainsFunc(out.children, func(id string) bool { return id != "thread_controls" && id != "thread_parent" }) {
 		// Nothing yet but its buttons: a standing thread before its first
