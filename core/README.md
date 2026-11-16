@@ -1184,9 +1184,10 @@ by code from the thread's data (#468): it never depends on a model remembering t
   `notes`, the lead's `thread`) taints the reader, so `remember` kind `progress` is then refused
   (`errProgressTainted`). No item row carries an action, so a tainted note's never asks. A note
   stays while its item is listed; once a good read no longer lists it (never a failed or refused
-  one), or its source is taken away, it is kept 7 days (`gone`, back if the item is listed
-  again), then the engine's tick takes it away (`pruneItemNotes`). A note on an item not listed
-  yet waits for it the same way.
+  one; every item the source lists counts, beyond the 200 shown), or its source is taken away,
+  it is kept 7 days (`gone`, back if the item is listed again; noting it again keeps that date),
+  then the engine's tick takes it away (`pruneItemNotes`). A note on an item not listed yet waits
+  for it the same way.
 - **A live thread** (#555, `thread_live.go`): one kind of source: who holds the thread may make it
   follow up to 3 monitors the user approved (`link_thread` with `source` `monitor`, its name; a
   proposed one is refused).

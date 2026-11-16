@@ -537,8 +537,8 @@ func (c *core) threadOpened(ctx context.Context, thread int64) {
 }
 
 // threadSourceItems are the items of what a source read: each with its id,
-// as many as threadItemsMax, in the order the source gives them.
-func threadSourceItems(src storedSource) []map[string]any {
+// in the order the source gives them, as many as most (0: all of them).
+func threadSourceItems(src storedSource, most int) []map[string]any {
 	if src.Items == nil || src.Value == nil {
 		return nil
 	}
@@ -560,7 +560,7 @@ func threadSourceItems(src storedSource) []map[string]any {
 		}
 		seen[id] = true
 		out = append(out, map[string]any{"source": src.Name, "id": id, "n": i})
-		if len(out) == threadItemsMax {
+		if len(out) == most {
 			break
 		}
 	}
@@ -616,7 +616,7 @@ func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[strin
 		if src.Items != nil {
 			// Each item, its note joined by code (thread_items.go). No row
 			// carries an action: a tainted note's never may ask.
-			items := threadSourceItems(src)
+			items := threadSourceItems(src, threadItemsMax)
 			rows := make([]any, 0, len(items))
 			for _, it := range items {
 				it["label"], it["detail"] = it["id"], ""

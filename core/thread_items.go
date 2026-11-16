@@ -130,7 +130,7 @@ func (c *core) noteItem(id int64, in noteItemIn, author string, taint []string) 
 	}
 	// An item its source no longer lists, or not yet: kept as gone, and
 	// back if a read lists it.
-	listed := slices.ContainsFunc(threadSourceItems(*src), func(it map[string]any) bool { return it["id"] == in.Item })
+	listed := slices.ContainsFunc(threadSourceItems(*src, 0), func(it map[string]any) bool { return it["id"] == in.Item })
 	now := time.Now().Unix()
 	gone := int64(0)
 	if !listed {
@@ -143,7 +143,8 @@ func (c *core) noteItem(id int64, in noteItemIn, author string, taint []string) 
 	tainted := strings.Join(slices.Compact(slices.Sorted(slices.Values(taint))), ", ")
 	if _, err := c.store.db.Exec(`INSERT INTO thread_items (thread, source, item, note, state, due, author, tainted, noted, gone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (thread, source, item) DO UPDATE SET note = excluded.note, state = excluded.state, due = excluded.due,
-		  author = excluded.author, tainted = excluded.tainted, noted = excluded.noted, gone = excluded.gone`,
+		  author = excluded.author, tainted = excluded.tainted, noted = excluded.noted,
+		  gone = CASE WHEN excluded.gone = 0 THEN 0 WHEN thread_items.gone > 0 THEN thread_items.gone ELSE excluded.gone END`,
 		id, in.Source, in.Item, in.Note, in.State, dueAt, author, tainted, now, gone); err != nil {
 		return "", err
 	}
@@ -180,7 +181,7 @@ func (c *core) itemNotes(thread int64) []itemNote {
 // listed is gone from now on.
 func (c *core) itemsListed(thread int64, src storedSource, now time.Time) {
 	listed := map[string]bool{}
-	for _, it := range threadSourceItems(src) {
+	for _, it := range threadSourceItems(src, 0) { // all it lists, beyond those shown
 		listed[it["id"].(string)] = true
 	}
 	rows, err := c.store.db.Query(`SELECT item, gone FROM thread_items WHERE thread = ? AND source = ?`, thread, src.Name)

@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -180,5 +182,63 @@ func TestThreadItemNoteTainted(t *testing.T) {
 	}
 	if row = itemRows(t, c, th.ID)["Courant"]; row["by"] != "Ajouté par son chef" || row["external"] != nil {
 		t.Errorf("lead's row %v", row)
+	}
+}
+
+// A thread's lead notes an item of its own thread: its name and its
+// session's taint are the note's; reading a tainted note (its thread)
+// taints its session. Every item a source lists counts, beyond those
+// shown; a note noted again keeps when its item left.
+func TestThreadItemNoteByLead(t *testing.T) {
+	c, th := threadCore(t)
+	c.decideCard(context.Background(), threadCard(t, c, askPlan).ID, true, "web")
+	th, _ = c.thread(th.ID)
+	a := c.conf().Assistants[th.Lead]
+	src := threadSource{Name: "prs", Tool: "github/list", Items: &sourceItems{Path: "items", ID: "id"}}
+	c.putThreadSource(th.ID, src, byBrain)
+	list := make([]any, 250)
+	for i := range list {
+		list[i] = map[string]any{"id": strconv.Itoa(i)}
+	}
+	read := func() {
+		c.keepSourceReads(th.ID, map[string]threadSource{"prs": src}, map[string]sourceRead{"prs": {value: map[string]any{"items": list}}}, time.Now())
+	}
+	read()
+	if rows := itemRows(t, c, th.ID); len(rows) != threadItemsMax {
+		t.Fatalf("%d rows shown", len(rows))
+	}
+
+	lead := connectServer(t, c.assistantServer(a, nil))
+	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Tainted = []string{"mail:7"} })
+	if out, msg := callOn(t, lead, "note_item", map[string]any{"source": "prs", "item": "230", "note": "À relire."}); msg != "" {
+		t.Fatalf("note_item: %v %s", out, msg)
+	}
+	notes := c.itemNotes(th.ID)
+	if len(notes) != 1 || notes[0].Author != "lead:"+strconv.FormatInt(th.ID, 10) || notes[0].Tainted != "mail:7" || notes[0].Gone != 0 {
+		t.Fatalf("notes %+v", notes)
+	}
+	read()
+	if notes = c.itemNotes(th.ID); notes[0].Gone != 0 {
+		t.Errorf("an item listed past those shown is gone: %+v", notes)
+	}
+
+	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Tainted = nil })
+	if out, msg := callOn(t, lead, "thread", map[string]any{}); msg != "" || out["notes"] == nil {
+		t.Fatalf("thread: %v %s", out, msg)
+	}
+	if st := c.assistantStatus(a.Name); !slices.Contains(st.Tainted, "note:prs/230") {
+		t.Errorf("reading a tainted note left its lead clean: %v", st.Tainted)
+	}
+
+	// Noted again once its item left: the clock goes on.
+	c.store.db.Exec(`UPDATE thread_items SET gone = ? WHERE thread = ?`, time.Now().Add(-6*24*time.Hour).Unix(), th.ID)
+	before := c.itemNotes(th.ID)[0].Gone
+	list = list[:10]
+	read()
+	if _, err := c.noteItem(th.ID, noteItemIn{Source: "prs", Item: "230", Note: "Toujours à relire."}, byBrain, nil); err != nil {
+		t.Fatal(err)
+	}
+	if after := c.itemNotes(th.ID)[0].Gone; after != before {
+		t.Errorf("noted again, gone %d → %d", before, after)
 	}
 }
