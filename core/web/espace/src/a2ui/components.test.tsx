@@ -787,7 +787,7 @@ describe("the catalog's components", () => {
     expect(document.querySelectorAll("[style]")).toHaveLength(0);
   });
 
-  it("draw a thread's items grouped by their notes, counted, a due date and « extérieur » aside, no action on a row", async () => {
+  it("draw a thread's items grouped by their notes, counted, a due date and « extérieur » aside, no button in the item itself", async () => {
     await mount("fr", threadFixtures("fr"));
     const items = (sel: string) => $$(`[data-surface=thread-102] ${sel}`);
     expect(items(".a2-list-horizontal .a2-metric").map((m) => m.textContent)).toEqual(["à faire1", "à regarder1", "rien à faire1"]);
@@ -799,6 +799,24 @@ describe("the catalog's components", () => {
     expect(high.querySelector(".a2-due")?.textContent).toMatch(/^pour /);
     expect(items(".a2-badge-external").map((b) => b.textContent)).toEqual(["extérieur"]);
     expect(items(".a2-item button")).toHaveLength(0);
+  });
+
+  it("offer a note's actions on its row, code's words for an outside one, and answer the row's card from its row", async () => {
+    await mount("fr", threadFixtures("fr"));
+    await act(async () => {});
+    const items = (sel: string) => $$(`[data-surface=thread-102] ${sel}`);
+    const offers = items("button.a2-button").filter((b) => !b.closest(".a2-proposal"));
+    expect(offers.map((b) => b.textContent)).toEqual(["Virer depuis l'épargne", "utiliser « move funds »"]);
+    await click(offers[0]);
+    const sent = actions.map((a) => [a.action.name, a.action.sourceComponentId, a.action.context]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0][0]).toBe("offer");
+    expect(sent[0][1]).toBe("thread_src_0_offer");
+    expect(sent[0][2]).toMatchObject({ source: "ledger", item: "Courant", offer: expect.stringMatching(/^[0-9a-f]{12}$/) });
+    // Its card, on its row: Oui says where it is.
+    expect(items(".a2-proposal-pending .a2-proposal-text").map((n) => n.textContent)).toEqual(["utiliser « move funds »"]);
+    await click(items(".a2-proposal-pending .a2-proposal-actions button")[0]);
+    expect(answers).toEqual([{ surfaceId: "thread-102", componentId: "thread_src_0_card", ref: "calls:1", yes: true, at: "/thread/sources/0/groups/0/items/0/cards/0" }]);
   });
 
   it("say how an ended thread ended, and put it away with « Ranger »", async () => {

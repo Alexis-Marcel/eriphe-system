@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -223,6 +224,25 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 			return eng
 		}
 		return fr
+	}
+	// An action offered on two items, one noted after reading outside
+	// (code's words on its button); clicked on the first: its card on its
+	// row (calls:1, the page's made-up card).
+	move := noteAction{Label: pick("Virer depuis l'épargne", "Move from savings"), Tool: "ledger/move_funds", Args: map[string]any{"to": offerItemArg}}
+	due := time.Now().Add(26 * time.Hour).Format("2006-01-02")
+	if _, err := c.noteItem(th.ID, noteItemIn{Source: "ledger", Item: "Courant", Note: "Solde bas avant le loyer.", State: itemStateAct, Due: due, Actions: []noteAction{move}}, byBrain, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.noteItem(th.ID, noteItemIn{Source: "ledger", Item: "Joint", Note: "Un virement inconnu, d'après le relevé.", State: itemStateLook, Actions: []noteAction{move}}, byBrain, []string{"mail.read"}); err != nil {
+		t.Fatal(err)
+	}
+	move.Tool = "mcp__ledger__move_funds"
+	calls, err := c.offerCalls(th.ID, "ledger", "Courant", "", move.key())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ref, err := c.offer(context.Background(), th.ID, calls); err != nil || ref != "calls:1" {
+		t.Fatalf("offer %q %v", ref, err)
 	}
 	var out []a2ui.Message
 	// Composed as the thread whose data it shows (the one with the source,

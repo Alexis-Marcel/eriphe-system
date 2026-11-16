@@ -631,7 +631,7 @@ func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[strin
 		}
 		out.add(comp{"id": "thread_src_" + n + "_by", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/sources/" + n + "/caption"}})
 		if src.Items != nil {
-			itemsBlock(out, v, src, notes, cards, n, lang, loc, now, &in.codeTaint)
+			c.itemsBlock(out, v, s.ID, src, notes, cards, n, lang, loc, &in.codeTaint)
 		}
 		shown = append(shown, v)
 	}

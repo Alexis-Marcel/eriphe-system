@@ -32,6 +32,10 @@ import (
 //   - control: the user pauses, resumes or stops a thread that runs,
 //     {"thread": <id>, "do": "pause"|"resume"|"stop"}. Only code places
 //     it, on the thread's own surface.
+//   - offer: the user takes an action offered on an item of a thread, or
+//     on a group of them, {"thread": <id>, "source": "<name>", "item":
+//     "<id>" or "state": "<state>", "offer": "<key>"}: a card is made for
+//     it, nothing runs. Only code places it, on the thread's own surface.
 //
 // Any other name, and any action that is not an event (a function call),
 // is refused. No action calls a tool that writes.
@@ -42,6 +46,7 @@ const (
 	ActionTidy     = "tidy"
 	ActionChoose   = "choose"
 	ActionControl  = "control"
+	ActionOffer    = "offer"
 	ActionOpen     = "open"
 	ActionBack     = "back"
 	ActionExpand   = "expand"
@@ -54,6 +59,7 @@ const (
 	KindTidy    = "tidy"
 	KindChoose  = "choose"
 	KindControl = "control"
+	KindOffer   = "offer"
 	KindLocal   = "local"
 
 	// AskTextMax is the longest ask, in characters.
@@ -79,6 +85,8 @@ func ActionKind(name string) string {
 		return KindChoose
 	case ActionControl:
 		return KindControl
+	case ActionOffer:
+		return KindOffer
 	case ActionOpen, ActionBack, ActionExpand, ActionTab:
 		return KindLocal
 	}
@@ -138,7 +146,7 @@ func CheckActions(surfaceID string, components json.RawMessage) []ValidationErro
 			fail(at+"/name", "stepDone is placed by code only, on a thread's own surface, for a step the user does")
 		case KindTidy:
 			fail(at+"/name", "tidy is placed by code only, on an ended thread's own surface")
-		case KindChoose, KindControl:
+		case KindChoose, KindControl, KindOffer:
 			fail(at+"/name", name+" is placed by code only, on a thread's own surface")
 		default:
 			fail(at+"/name", "no action "+strconv.Quote(name)+": a button asks Eriphe (ask) or acts in the page ("+strings.Join(LocalActions, ", ")+")")

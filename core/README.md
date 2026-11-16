@@ -1792,6 +1792,21 @@ version, read with its diff.
   thread's surface the answer must say it; `answerOf` checks the place is one its binding takes
   and the data there shows that card. Its results go to the run's note (a run's) or the thread's
   log, never to the brain; a calls card is answered by its buttons only, never by a plain « oui ».
+- **Actions offered on an item** (#575, `item_offers.go`): `note_item` takes `actions`, each a
+  label, a tool (`server/tool`) and its exact input with `"$item"` where the item's id goes (code
+  fills it in; at most 4, kept in `thread_items.actions`). Checked when noted: the tool is in the
+  catalog and not Eriphe's own, the author may use it (a task: lent it), its input names the item
+  and fits the tool's required properties, and the access policy does not refuse it (`never`);
+  checked again when shown and when clicked, so a `never` tool is never offered. The row offers
+  each as a `Button` code places (action `offer`, `{thread, source, item, offer}`, the offer
+  being the action's key); a state group offers an action two of its rows or more share
+  (« Archiver · 24 », `{thread, source, state, offer}`). An author can never write `offer`
+  (`CheckActions`). A click runs nothing: code reads the note again from the store (the item
+  still listed and shown, the action on its note) and makes one calls card with the exact call,
+  bound to the item, linked to the thread, with no message; a group's click one card with a call
+  per item shown in the group. A call already waiting on its item is not asked twice. A tainted
+  note's button says the tool's action (`callVerb`), never the author's label, and its card keeps
+  the note's taint.
 - **Its thread** (`task_threads.go`): its runs are about its alias, `thread: kind:slug`; without
   it, their events' key when it names a thing (a monitor's, `topic:<name>`, or `kind:slug`;
   about.go). Their tasks, notifications, cards and signals carry it. Lent `eriphe-threads`, a

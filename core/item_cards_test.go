@@ -112,7 +112,8 @@ func TestRunCallsSplitByItem(t *testing.T) {
 		t.Fatalf("cards by item %+v", byItem)
 	}
 	p := byItem["b"]
-	if o := p.Origin("fr"); o.Thread != id || !strings.Contains(o.From, "b") || !strings.Contains(o.From, "alertes") || p.Tainted == "" {
+	if o := p.Origin("fr"); o.Thread != id || o.From != "Fil « Veille alertes » · un élément du fil" || p.Tainted == "" {
+		// Kept tainted, of a server not trusted: the item is not named.
 		t.Fatalf("origin %+v tainted %q", o, p.Tainted)
 	}
 	run, ok := runCard(c, cardRunCalls)

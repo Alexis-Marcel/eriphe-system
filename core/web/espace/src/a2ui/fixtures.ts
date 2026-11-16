@@ -107,6 +107,17 @@ export function sampleProposals(lang: Lang): Proposals {
       text: en ? "Merge the branch into main" : "Fusionner la branche dans main",
     },
     {
+      // The card on an item's row (threads.json): an action offered there, clicked.
+      ref: "calls:1",
+      card: 9,
+      state: "pending",
+      kind: "calls",
+      text: en ? "use “move funds”" : "utiliser « move funds »",
+      from: en ? "Thread #102 · an item of the thread" : "Fil n° 102 · un élément du fil",
+      yes: en ? "On Yes, this call runs once, exactly as shown." : "Sur Oui, cet appel part une seule fois, tel qu'il est montré.",
+      fields: [{ name: en ? "use “move funds”" : "utiliser « move funds »", value: "to : Courant" }],
+    },
+    {
       ref: "intention:3",
       card: 8,
       state: "pending",
