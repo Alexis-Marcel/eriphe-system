@@ -204,15 +204,15 @@ func (c *core) taskOfThread(ctx context.Context, in runRequest) (map[string]any,
 var errOpenThreadFirst = errors.New("a task is a step of a thread, and this turn is about none: open_thread the matter's thread first (it gives back the one that exists), then run_task; add_step adds a task to another thread")
 
 // taskThread is the thread a task the brain starts is a step of: the one
-// its turn is about, else the live thread the user's
-// message named. A led one, an ended one or none is refused, saying what
+// its turn is about, else the thread the user's
+// message named, ended ones too. A led one, an ended one or none is refused, saying what
 // to do instead.
 func (c *core) taskThread() (Thread, error) {
 	id := c.turn.aboutThread()
 	if id <= 0 {
 		if about := c.turnAbout(); about != "" {
-			if key, err := c.aboutLookup(about); err == nil && key != "" {
-				id, _ = c.liveThreadOf(key)
+			if key, err := c.aboutLookup(about); err == nil {
+				id, _ = threadOfAbout(key) // ended too: it says to reopen it
 			}
 		}
 	}

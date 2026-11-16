@@ -548,6 +548,94 @@ func (c *core) named(text string) []string {
 	return out
 }
 
+// nearThreads are the threads, ended and tidied ones too, that may follow
+// the matter of a thread about to be opened: one of their names is in its
+// alias's words or its title, or its alias's words are all in their names
+// or title. The latest first, at most namedMax; a merged thread gives the
+// one it was merged into. The one candidate matcher of every path that
+// opens a thread (openThreadOnce).
+func (c *core) nearThreads(alias, title string) []Thread {
+	aliasStems := nameStems(strings.ReplaceAll(keyWords(alias), "-", " "))
+	if len(strings.Join(aliasStems, "")) < nameMin {
+		aliasStems = nil
+	}
+	text := textStems(strings.ReplaceAll(keyWords(alias), "-", " ") + " " + title)
+	var hits []string // targets, the latest first; resolved once the rows are read
+	// What the thread's words name, by the names known.
+	rows, err := c.store.db.Query(`SELECT name, target FROM names WHERE target LIKE 'thread:%' ORDER BY seen DESC, name`)
+	if err != nil {
+		log.Printf("names: %v", err)
+		return nil
+	}
+	theirs := map[string][]string{} // target → the stems of its names
+	for rows.Next() {
+		var name, target string
+		if rows.Scan(&name, &target) != nil {
+			continue
+		}
+		told := name
+		if isKeyName(name) {
+			told = strings.ReplaceAll(keyWords(name), "-", " ")
+		}
+		s := nameStems(told)
+		theirs[target] = append(theirs[target], s...)
+		if len(strings.Join(s, "")) >= nameMin && namedIn(text, s) {
+			hits = append(hits, target)
+		}
+	}
+	rows.Close()
+	// Threads whose names or title hold the alias's words.
+	if aliasStems != nil {
+		rows, err := c.store.db.Query(`SELECT id, title FROM threads ORDER BY id DESC`)
+		if err != nil {
+			log.Printf("threads: %v", err)
+			return nil
+		}
+		for rows.Next() {
+			var id int64
+			var t string
+			if rows.Scan(&id, &t) != nil {
+				continue
+			}
+			words := setOf(append(nameStems(t), theirs[threadRef(id)]...))
+			if namedIn(words, aliasStems) {
+				hits = append(hits, threadRef(id))
+			}
+		}
+		rows.Close()
+	}
+	var out []Thread
+	for _, target := range hits {
+		id, ok := threadOfAbout(c.store.resolveAbout(target))
+		if !ok || len(out) >= namedMax || slices.ContainsFunc(out, func(x Thread) bool { return x.ID == id }) {
+			continue
+		}
+		if s, err := c.thread(id); err == nil {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// nearMatch is why a thread is not opened: threads that may follow its
+// matter already. Taking one (take) or saying why it is another matter
+// (new_because) opens again.
+type nearMatch struct{ threads []Thread }
+
+func (e *nearMatch) Error() string {
+	var b strings.Builder
+	b.WriteString("not opened: a matter has one thread, and these may follow it already:")
+	for _, s := range e.threads {
+		fmt.Fprintf(&b, " thread %d « %s » (%s", s.ID, s.Title, s.State)
+		if s.Alias != "" {
+			b.WriteString(", " + s.Alias)
+		}
+		b.WriteString(");")
+	}
+	b.WriteString(" if one of them is this matter, open_thread again with take: its id (it is given back, reopened if it ended, and takes this alias); if this is another matter, open_thread again with new_because: why, in a few words.")
+	return b.String()
+}
+
 // namedBlock is what the user's messages name of the threads and entities
 // known, for the brain, and the turn is about them; "" if none. Only refs
 // and keys are written: a thread's title or a name may come from what

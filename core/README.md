@@ -934,7 +934,15 @@ gives it, a **state** (`open`, `waiting`, `done`,
   card and no budget, and needs its alias. **One thread an alias** (`openThreadOnce`): an alias
   that has a thread already gives that thread back instead of a second one, reopened light (why
   « même chose ») if it ended, and the result says so; a led open on the alias of a thread is
-  refused, naming it. `find_thread` finds threads by words of their title, goal, names or summary,
+  refused, naming it. **Threads near a matter** (`nearThreads`, the one candidate matcher): with
+  no thread on the alias, a thread one of whose names is in the new alias's words or title, or
+  whose names or title hold all the alias's words, ended and tidied ones included, refuses the open
+  (`nearMatch`, listing them, at most 5) until the opener takes one (`take`: given back, reopened
+  light if it ended, and given the alias, unless the turn or the task read external content) or
+  says why this is another matter (`new_because`, logged on the new thread). A task offered a
+  tainted thread this way reads its words (`taskRead`). A skill's run has no model to answer: its
+  thread is its alias's alone. `openThreadOnce` is the only path that opens a thread (a test holds
+  it). `find_thread` finds threads by words of their title, goal, names or summary,
   or by an alias or a name, the ended ones included; `close_thread` closes it
   only on its goal, with how it was reached as its summary (`done`); `stop_thread` drops it;
   `reopen_thread` opens it again, light, when its matter comes back, its steps and log kept.

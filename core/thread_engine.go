@@ -33,6 +33,10 @@ type threadIn struct {
 	Budget   int        `json:"budget_minutes,omitempty" jsonschema:"led: minutes of running time it may take, 60 by default; past it the engine pauses and asks the user"`
 	Steps    []stepSpec `json:"steps,omitempty" jsonschema:"led: the plan, each step with its key, title, kind, the steps it comes after, and for a task its prompt, agent, resources and contract"`
 	Ends     string     `json:"ends,omitempty" jsonschema:"how it ends: goal (the default: closed once its goal is reached), standing (what the user manages continuously, their mail, their agenda, a supervision: never closed), day (a view for today, an answer shown: it ends by itself at midnight); standing and day are light"`
+	Take     int64      `json:"take,omitempty" jsonschema:"after a refusal that lists threads near this matter: the one that is it, given back (reopened if it ended) and given this alias"`
+	NewBy    string     `json:"new_because,omitempty" jsonschema:"after a refusal that lists threads near this matter: why this is another matter, in a few words; logged on the new thread"`
+
+	exact bool // only the thread of its alias, no matcher: a skill's run (skillThread)
 }
 
 // openThread records a thread. A light one is open at once: no card, no
