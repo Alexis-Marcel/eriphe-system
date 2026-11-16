@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -126,11 +127,17 @@ func (c *core) endsAgain(old Thread, ends string) error {
 const sameMatter = "même chose"
 
 // openThreadOnce opens a thread, one per matter, for the brain or a task
-// lent eriphe-threads (by: skill:<name>, task:<id>): a light one needs its
-// alias, and an alias that has a thread already gives that thread back
-// (reopened light if it ended) rather than a second one; again says so. A
-// led one on the alias of a thread is refused: that thread's plan changes
-// instead. Only the brain changes how a thread found ends.
+// lent eriphe-threads (by: skill:<name>, task:<id>); it is the only path
+// that opens one. A light one needs its alias, and an alias that has a
+// thread already gives that thread back (reopened light if it ended)
+// rather than a second one; again says so. Without one, threads near the
+// matter (nearThreads, ended ones too) refuse it, listed (*nearMatch),
+// until the opener takes one (take: given back, and given the alias
+// unless the opener read external content) or says why this is another
+// matter (new_because, logged). A skill's run has no model to answer: its
+// thread is its alias's alone (exact). A led one on the alias of a thread
+// is refused: that thread's plan changes instead. Only the brain changes
+// how a thread found ends.
 func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread, again string, err error) {
 	led := strings.EqualFold(strings.TrimSpace(in.Mode), modeLed) || (strings.TrimSpace(in.Mode) == "" && len(in.Steps) > 0)
 	alias, err := aliasKey(in.Alias)
@@ -138,24 +145,68 @@ func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread,
 		return s, "", fmt.Errorf("alias: %w", err)
 	}
 	in.Alias = alias
+	if alias == "" && !led {
+		return s, "", errors.New("alias is needed: the key of the matter, kind:slug, to find its thread again (pr:owner/repo#12, project:site, topic:brand-name)")
+	}
+	var old Thread
+	found, taken := false, false
+	if alias != "" {
+		if id, ok := c.aliasThread(alias); ok {
+			if th, err := c.thread(id); err == nil {
+				old, found = th, true
+			}
+		}
+	}
+	if !found && !in.exact {
+		near := c.nearThreads(alias, in.Title)
+		why := oneLine(in.NewBy)
+		switch {
+		case in.Take > 0:
+			i := slices.IndexFunc(near, func(x Thread) bool { return x.ID == in.Take })
+			if i < 0 {
+				return s, "", fmt.Errorf("take: thread %d is not one of the threads near this matter; find_thread, or open it with new_because", in.Take)
+			}
+			old, found, taken = near[i], true, true
+		case len(near) > 0 && why == "":
+			return s, "", &nearMatch{near}
+		case len(near) > 0:
+			s, err = c.openThread(in, taint, by)
+			if err == nil {
+				var refs []string
+				for _, x := range near {
+					refs = append(refs, strconv.FormatInt(x.ID, 10))
+				}
+				c.logThread(s.ID, by, fmt.Sprintf("Ouvert à côté des threads %s : %s", strings.Join(refs, ", "), why))
+			}
+			return s, "", err
+		}
+	}
+	if !found {
+		s, err = c.openThread(in, taint, by)
+		return s, "", err
+	}
+	s, again, err = c.matterThread(old, in, led, by)
+	if err != nil || !taken || alias == "" {
+		return s, again, err
+	}
+	if len(taint) > 0 {
+		// A key drawn from someone else's words never binds their matter to
+		// a thread: the thread is given back, the alias stays free.
+		return s, again + " This turn read external content: the alias is not given to it.", nil
+	}
+	if err := c.giveAlias(s.ID, alias); err != nil {
+		return s, again + " The alias is not given to it: " + err.Error(), nil
+	}
+	return s, again, nil
+}
+
+// matterThread gives back the thread that follows a matter already: as it
+// is when active, reopened light when it ended; a led open is refused.
+func (c *core) matterThread(old Thread, in threadIn, led bool, by string) (s Thread, again string, err error) {
+	alias := in.Alias
 	if alias == "" {
-		if !led {
-			return s, "", errors.New("alias is needed: the key of the matter, kind:slug, to find its thread again (pr:owner/repo#12, project:site, topic:brand-name)")
-		}
-		s, err = c.openThread(in, taint, by)
-		return s, "", err
+		alias = "this matter"
 	}
-	var found []Thread
-	if id, ok := c.aliasThread(alias); ok {
-		if th, err := c.thread(id); err == nil {
-			found = append(found, th)
-		}
-	}
-	if len(found) == 0 {
-		s, err = c.openThread(in, taint, by)
-		return s, "", err
-	}
-	old := found[0]
 	if by == byBrain {
 		if err := c.endsAgain(old, in.Ends); err != nil {
 			return s, "", err
@@ -177,7 +228,7 @@ func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread,
 }
 
 func registerThreadTools(s *mcp.Server, c *core) {
-	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). A matter has one thread: give its alias, the matter's key (required for a light one); an alias that has a thread already gives that thread back, reopened if it ended, instead of a second one. Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, call, user, choice, approval, check, deadline: as add_step's) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" For one task alone, use run_task.",
+	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). A matter has one thread: give its alias, the matter's key (required for a light one); an alias that has a thread already gives that thread back, reopened if it ended, instead of a second one. When threads near the matter exist (ended ones too), it is refused and lists them: open again with take (the one that is it: given back, reopened if it ended, and given the alias) or new_because (why it is another matter). Light by default (no steps): it opens at once, with no card and no budget, and you hold it. Led (with steps): long autonomous work of several steps toward the goal, not only code; give done_when (what must be true at the end), a budget of minutes, and the plan: steps with a key, a title, a kind (task, call, user, choice, approval, check, deadline: as add_step's) and the keys of the steps they come after. Independent steps run in parallel, never two writing the same repository branch or folder; each task step is given the outputs of the steps it comes after. "+threadNote+" For one task alone, use run_task.",
 		func(ctx context.Context, in threadIn) (map[string]any, error) {
 			for _, st := range in.Steps {
 				if st.Kind == "" || st.runsTask() {
