@@ -27,11 +27,16 @@ Who writes the tiles:
 - **Eriphe**, when you ask it to show something;
 - **a thread**, a matter Eriphe follows to its goal (a skill, the things Eriphe does on its own at
   set times or on an event, works on its own thread): every thread has its tile, kept up to date as
-  it moves: its goal, where it stands, what waits for you (its proposals, answered right there, and
-  a **C'est fait** / **Done** button for a step only you can do), its steps on a timeline, the live data it follows (a list of your
-  mails, the pull requests to review, a number of a service), read by Eriphe itself with no AI
-  model, each item it lists on its own line with what Eriphe noted about it (marked « extérieur » when that
-  note came from reading something from outside), and what Eriphe added (a diff, a link). Small, it shows one line (« Fusion ✓ · Déploiement à toi »). A step
+  it moves, every thread drawn the same way: its goal and its state in a pill (« À toi », « En
+  cours », « Terminé »…) with a bar of its steps; what waits for you first (its proposals, answered
+  right there, and a **C'est fait** / **Done** button for a step only you can do); the live data it
+  follows (a list of your mails, the pull requests to review, a number of a service), read by
+  Eriphe itself with no AI model, each item it lists on its own line with what Eriphe noted about
+  it and by when, grouped by what it asks of you (« À faire », « À regarder », « Pour info », the
+  ones with nothing to do folded) with their counts, marked « extérieur » when that note came from
+  reading something from outside; where it stands and what changed since your last visit; its
+  steps, those done folded in one line (an approval you gave, one line too, opens on a click);
+  and what Eriphe added (a diff, a link). Small, it shows one line (« Fusion ✓ · Déploiement à toi »). A step
   that read something from outside says « extérieur ». Once the thread is done, its tile stays
   until the end of the day, or until you press **Ranger** / **Put away** on it: the tile goes, the
   thread is kept and comes back if its matter does. A thread for what you manage continuously

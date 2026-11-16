@@ -61,6 +61,8 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
   child* id d'un composant · title texte
 - **Tabs** : Des onglets, un enfant par onglet.
   tabs* [{title* texte · child* id d'un composant}, …]
+- **Fold** : Une ligne qui se déplie : ce qu'elle résume (« 4 étapes faites »), et en dessous un enfant, montré quand on l'ouvre.
+  label* texte · child* id d'un composant · open booléen (Ouverte d'abord (non par défaut))
 - **Divider** : Un trait qui sépare.
 - **Button** : Un bouton qui déclenche une action.
   label* texte · action* action ({"event": {"name", "context"}} ou {"functionCall": appel}) · icon alert|arrowDown|arrowUp|calendar|chart|check|clock|close|cloud|document|error|event|folder|home|info|link|lock|mail|message|money|note|person|phone|place|refresh|search|server|settings|star|task|trendDown|trendUp|warning ou liaison · variant primary|default|quiet
@@ -73,6 +75,8 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
   value* texte (Une liaison vers la date ISO 8601) · label texte · mode date|time|dateTime
 - **Metric** : Un chiffre clé et son évolution.
   label* texte · value* texte ou nombre · better up|down (Le sens qui est une bonne nouvelle) · delta nombre (L'écart signé depuis la dernière fois) · deltaLabel texte (Depuis quand, en quelques mots (« depuis hier »)) · unit texte
+- **Progress** : Où en est une chose : un mot d'état en pastille et, quand elle a des étapes, une barre de leur avancée (faites, en cours, sur le total).
+  label* texte (Le mot d'état (« En cours », « À toi »)) · current nombre (Combien sont en cours) · tone default|attention|urgent|success|muted (Sa couleur : attention pour ce qui attend l'utilisateur, urgent, success pour ce qui est fini, muted pour ce qui dort) · total nombre (Combien en tout ; sans total, la pastille seule) · value nombre (Combien sont faites)
 - **Chart** : Une ou plusieurs séries en courbes ou en barres.
   kind* line|bar · series* [{name* texte fixe · points* [{x* texte fixe ou nombre fixe (Une date ISO 8601, un nombre ou une étiquette) · y* nombre fixe}, …]}, …] ou liaison · unit texte (L'unité des valeurs)
   Exemple : `{"id": "conso", "component": "Chart", "kind": "bar", "series": [{"name": "Maison", "points": [{"x": "lun.", "y": 12.5}, {"x": "mar.", "y": 9.8}]}], "unit": "kWh"}`
@@ -82,13 +86,15 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
 - **Timeline** : Des étapes dans l'ordre, chacune avec son état.
   items* [{label* texte fixe · state* done|current|pending|failed · date texte fixe (Date ISO 8601) · detail texte fixe}, …] ou liaison
   Exemple : `{"id": "deploiement", "component": "Timeline", "items": [{"label": "Construire", "state": "done"}, {"label": "Tester", "state": "current"}, {"label": "Publier", "state": "pending"}]}`
+- **Item** : Une ligne d'une liste : ce qu'elle est, à côté d'où elle vient, en dessous une note ; à droite une échéance et une marque.
+  title* texte · detail texte (À côté du titre, plus discret (qui l'envoie, d'où elle vient)) · due texte (Son échéance, date ISO 8601, en pastille) · level texte (high (elle attend l'utilisateur, en avant), normal (par défaut) ou low (une ligne, discrète)) · mark texte (Une marque courte (« extérieur »)) · note texte (Ce qu'il faut en savoir, en une phrase)
 - **Message** : Un message : un mail, un message d'une messagerie, une note reçue.
   from* texte · body texte (Le texte entier, quand il compte) · date texte (Date ISO 8601) · excerpt texte (Le début, en une ou deux lignes) · subject texte
 - **Day** : Une journée et ses événements, dans l'ordre des heures. Les propositions datées qui attendent un oui ou un non s'y montrent d'elles-mêmes en fantôme à leur heure, avec ce qu'elles chevauchent ; on y répond par leur carte ou un Proposal.
   date* texte (Le jour, AAAA-MM-JJ) · events* [{title* texte fixe · start* texte fixe (Date et heure ISO 8601, ou la date seule pour toute la journée) · allDay booléen fixe · end texte fixe · place texte fixe}, …] ou liaison · proposals booléen fixe (Montrer les propositions datées de ce jour (oui par défaut) ; false pour une journée qui n'est pas celle de l'utilisateur)
   Exemple : `{"id": "demain", "component": "Day", "date": "2026-11-13", "events": [{"end": "2026-11-13T10:00:00+01:00", "place": "Centre", "start": "2026-11-13T09:30:00+01:00", "title": "Dentiste"}]}`
 - **Proposal** : Une proposition d'Eriphe qui attend un oui ou un non (créer un événement, répondre à un message, lancer une tâche…), montrée là où elle compte : ses boutons Oui et Non envoient `answer`, que le code lie à cette proposition et à aucune autre. Sa référence est l'une de celles que workspace_read liste (proposals), écrite telle quelle ou liée à la donnée. Elle se met à jour quand on y répond ailleurs. Sur une surface au contenu extérieur, elle se répond dans la conversation.
-  proposalId* texte (La référence de la proposition, type:numéro)
+  proposalId* texte (La référence de la proposition, type:numéro) · compact booléen fixe (Une fois décidée, une ligne qui se déplie au clic ; tant qu'elle attend, entière)
   Exemple : `{"id": "accord", "component": "Proposal", "proposalId": "intention:12"}`
 - **Alert** : Un avertissement qui doit se voir.
   text* texte · level info|success|warning|error · title texte

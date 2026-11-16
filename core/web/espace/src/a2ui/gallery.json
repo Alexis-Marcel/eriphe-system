@@ -933,6 +933,144 @@
      }
     ]
    }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-items",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Les invitations",
+      "child": "body"
+     },
+     {
+      "id": "body",
+      "component": "Column",
+      "children": [
+       "state",
+       "answer",
+       "info",
+       "done"
+      ]
+     },
+     {
+      "id": "state",
+      "component": "Progress",
+      "label": "À toi",
+      "tone": "attention",
+      "value": {
+       "@path": "/done"
+      },
+      "current": 1,
+      "total": {
+       "@path": "/total"
+      }
+     },
+     {
+      "id": "answer",
+      "component": "Fold",
+      "label": "À répondre · 2",
+      "open": true,
+      "child": "rows"
+     },
+     {
+      "id": "rows",
+      "component": "List",
+      "children": {
+       "path": "/rows",
+       "componentId": "row"
+      }
+     },
+     {
+      "id": "row",
+      "component": "Item",
+      "title": {
+       "@path": "title"
+      },
+      "detail": {
+       "@path": "detail"
+      },
+      "note": {
+       "@path": "note"
+      },
+      "due": {
+       "@path": "due"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "level": {
+       "@path": "level"
+      }
+     },
+     {
+      "id": "info",
+      "component": "Fold",
+      "label": "Pour info · 1",
+      "child": "inforows"
+     },
+     {
+      "id": "inforows",
+      "component": "List",
+      "children": {
+       "path": "/info",
+       "componentId": "inforow"
+      }
+     },
+     {
+      "id": "inforow",
+      "component": "Item",
+      "title": {
+       "@path": "title"
+      },
+      "detail": {
+       "@path": "detail"
+      },
+      "level": "low"
+     },
+     {
+      "id": "done",
+      "component": "Proposal",
+      "proposalId": "access:5",
+      "compact": true
+     }
+    ],
+    "dataModel": {
+     "done": 2,
+     "total": 5,
+     "rows": [
+      {
+       "title": "Repas du club",
+       "detail": "Sam",
+       "note": "Il faut dire oui ou non avant jeudi.",
+       "due": "2026-11-19",
+       "mark": "",
+       "level": "high"
+      },
+      {
+       "title": "Anniversaire de Lina",
+       "detail": "Lina",
+       "note": "Samedi 14 h, au parc.",
+       "due": "",
+       "mark": "extérieur",
+       "level": "normal"
+      }
+     ],
+     "info": [
+      {
+       "title": "Nouveau planning de la piscine",
+       "detail": "La mairie",
+       "note": "",
+       "due": "",
+       "mark": "",
+       "level": "low"
+      }
+     ]
+    }
+   }
   }
  ],
  "en": [
@@ -1868,6 +2006,144 @@
       "text": "Preparing a summary of the invoices…"
      }
     ]
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-items",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Card",
+      "title": "Invitations",
+      "child": "body"
+     },
+     {
+      "id": "body",
+      "component": "Column",
+      "children": [
+       "state",
+       "answer",
+       "info",
+       "done"
+      ]
+     },
+     {
+      "id": "state",
+      "component": "Progress",
+      "label": "Yours",
+      "tone": "attention",
+      "value": {
+       "@path": "/done"
+      },
+      "current": 1,
+      "total": {
+       "@path": "/total"
+      }
+     },
+     {
+      "id": "answer",
+      "component": "Fold",
+      "label": "To answer · 2",
+      "open": true,
+      "child": "rows"
+     },
+     {
+      "id": "rows",
+      "component": "List",
+      "children": {
+       "path": "/rows",
+       "componentId": "row"
+      }
+     },
+     {
+      "id": "row",
+      "component": "Item",
+      "title": {
+       "@path": "title"
+      },
+      "detail": {
+       "@path": "detail"
+      },
+      "note": {
+       "@path": "note"
+      },
+      "due": {
+       "@path": "due"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "level": {
+       "@path": "level"
+      }
+     },
+     {
+      "id": "info",
+      "component": "Fold",
+      "label": "For your information · 1",
+      "child": "inforows"
+     },
+     {
+      "id": "inforows",
+      "component": "List",
+      "children": {
+       "path": "/info",
+       "componentId": "inforow"
+      }
+     },
+     {
+      "id": "inforow",
+      "component": "Item",
+      "title": {
+       "@path": "title"
+      },
+      "detail": {
+       "@path": "detail"
+      },
+      "level": "low"
+     },
+     {
+      "id": "done",
+      "component": "Proposal",
+      "proposalId": "access:5",
+      "compact": true
+     }
+    ],
+    "dataModel": {
+     "done": 2,
+     "total": 5,
+     "rows": [
+      {
+       "title": "Club dinner",
+       "detail": "Sam",
+       "note": "Say yes or no before Thursday.",
+       "due": "2026-11-19",
+       "mark": "",
+       "level": "high"
+      },
+      {
+       "title": "Lina's birthday",
+       "detail": "Lina",
+       "note": "Saturday 2 pm, at the park.",
+       "due": "",
+       "mark": "external",
+       "level": "normal"
+      }
+     ],
+     "info": [
+      {
+       "title": "New pool timetable",
+       "detail": "The town hall",
+       "note": "",
+       "due": "",
+       "mark": "",
+       "level": "low"
+      }
+     ]
+    }
    }
   }
  ]

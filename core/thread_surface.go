@@ -24,13 +24,10 @@ import (
 //   - Its author is thread:<id>, code's for that thread: nobody else
 //     writes or removes it as a whole (mayChange), and it does not count
 //     in surfacesMax.
-//   - Code's section: the goal, the state when it says more than the
-//     header, the header (thread_header.go: since the user's last visit,
-//     where it stands with the summary, what waits for the user: the
-//     thread's cards as Proposals, a user step's « C'est fait »), then the
-//     steps as a Timeline (each with its kind, state, time, checks and
-//     note). Its component ids start with thread_, its data is under
-//     /thread.
+//   - Code's section: generic blocks in one fixed order, the same for
+//     every thread (thread_blocks.go): head, ended, yours, items, live,
+//     where, since, steps. Its component ids start with thread_, its data
+//     is under /thread.
 //   - The holder's part: who holds the thread (the brain, or its lead)
 //     may add one with surface_write on thread-<id> (a state block, points
 //     to see, a diff, a link). It is kept apart (threadPartKey), checked
@@ -342,77 +339,38 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	type comp = map[string]any
 	var out threadComps
 	data := map[string]any{"goal": s.Goal}
-	out.add(comp{"id": "thread_goal", "component": "Text", "text": map[string]any{"@path": "/thread/goal"}})
-	if state := c.threadStateLine(s, lang); state != "" {
-		data["state"] = state
-		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/state"}})
+	var linked []string
+	if s.active() {
+		linked = c.linkedWaiting(s.ID, steps)
 	}
-	if !s.active() && s.Ends == endsGoal {
-		// « Ranger »: the user puts the ended thread away (tidyOf).
-		out.add(comp{"id": threadTidyID, "component": "Button", "label": w("thread.surface.tidy"),
-			"action": map[string]any{"event": map[string]any{"name": a2ui.ActionTidy, "context": map[string]any{"thread": s.ID}}}})
-	}
-	// Since the user's last visit, where it stands, what is theirs
-	// (thread_header.go).
-	watch, watchFacts := c.watchItems(&in, s, lang, loc)
-	c.threadHeader(&in, &out, data, s, steps, asks, watchFacts, now)
+	// The blocks, in their order (thread_blocks.go); the head is composed
+	// last, once the weight is known, and put first.
+	c.blockEnded(&out, data, s, now)
+	c.threadYours(&in, &out, s, steps, asks, linked)
+	// The tools and resources it reads, their items (thread_sources.go).
+	values := c.threadSourcesPart(&in, &out, data, s, now)
 	// The monitors it follows, read by code (thread_live.go): past a
 	// limit, it rises.
+	watch, watchFacts := c.watchItems(&in, s, lang, loc)
 	if c.threadLive(&in, &out, data, s, now) {
 		in.Weight = max(in.Weight, threadWeightWatch)
 	}
+	blockWatch(&out, data, watch)
 	// Raised (a skill's set_thread, a signal about it): it takes the
 	// item's weight, as a surface its item's (workspace_queue.go).
 	if w := c.threadRaised(s.ID); w > 0 {
 		in.Weight = max(in.Weight, queueSurfaceWeight(w))
 	}
-	// The tools and resources it reads, their items (thread_sources.go).
-	values := c.threadSourcesPart(&in, &out, data, s, now)
-
-	if len(steps) > 0 || len(watch) > 0 {
-		items := make([]any, 0, len(steps)+len(watch))
-		for _, st := range steps {
-			item := map[string]any{"label": st.Label, "state": st.State}
-			if !st.At.IsZero() {
-				item["date"] = st.At.In(loc).Format(time.RFC3339)
-			}
-			var parts []string
-			if k := tr(lang, "thread.surface.kind."+st.Kind); k != "thread.surface.kind."+st.Kind {
-				parts = append(parts, k)
-			}
-			if st.Check != "" {
-				parts = append(parts, w("thread.surface.check."+st.Check))
-			}
-			if note := oneLine(st.Note); note != "" {
-				parts = append(parts, note)
-			}
-			if st.External {
-				parts = append([]string{w("thread.surface.external")}, parts...)
-			}
-			if len(parts) > 0 {
-				item["detail"] = truncate(strings.Join(parts, threadExternalSep), threadDetailMax)
-			}
-			items = append(items, item)
-			// What was settled for its task, under it.
-			for _, a := range st.Answers {
-				answer := map[string]any{"label": a.text(lang), "state": "done", "date": a.At.In(loc).Format(time.RFC3339)}
-				if a.Tainted != "" {
-					answer["detail"] = w("thread.surface.external")
-				}
-				items = append(items, answer)
-			}
-		}
-		items = append(items, watch...) // its monitors' last events, after its steps
-		data["steps"] = items
-		out.add(comp{"id": "thread_steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/steps"}})
-		// A call's card, once decided, shows how its run went, under the
-		// steps.
-		for i, st := range steps {
-			if st.Card != "" && (!st.Waits || !s.active()) {
-				out.add(comp{"id": "thread_card_" + strconv.Itoa(i), "component": "Proposal", "proposalId": st.Card})
-			}
-		}
+	if s.active() {
+		c.threadWhere(&out, data, s, now)
 	}
+	c.threadSince(&out, data, s, steps, watchFacts, now)
+	c.blockSteps(&out, data, s, steps)
+	var head threadComps
+	word, tone := threadStatus(s, steps, s.active() && threadWaitsUser(steps, asks, linked), in.Weight, lang)
+	c.blockHead(&head, data, s, steps, word, tone)
+	out.list = append(head.list, out.list...)
+	out.children = append(head.children, out.children...)
 
 	composed := map[string]any{}
 	if part != nil {

@@ -183,6 +183,33 @@ const Tabs = createComponentImplementation(
 
 const Divider = createComponentImplementation({ name: "Divider", schema: z.object({}) }, () => <hr className="a2-divider" />);
 
+// Fold is a line that opens in place: what it sums up (« 4 étapes faites
+// »), and under it its child, drawn only when open.
+const Fold = createComponentImplementation(
+  {
+    name: "Fold",
+    schema: z.object({ label: CommonSchemas.DynamicString, child: CommonSchemas.Child, open: CommonSchemas.DynamicBoolean.optional() }),
+  },
+  ({ props, buildChild }) => {
+    const { t } = useWords();
+    const id = useId();
+    const [open, setOpen] = useState(props.open === true);
+    return (
+      <div className={`a2-fold${open ? " a2-fold-open" : ""}`}>
+        <button type="button" className="a2-fold-head" aria-expanded={open} aria-controls={id} title={t(open ? "espace.a2.fold.close" : "espace.a2.fold.open")} onClick={() => setOpen(!open)}>
+          <span className="a2-fold-label">{str(props.label)}</span>
+          <span className="a2-fold-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
+        </button>
+        {open && (
+          <div id={id} className="a2-fold-body">
+            {props.child ? buildChild(props.child) : null}
+          </div>
+        )}
+      </div>
+    );
+  },
+);
+
 // --- Content ------------------------------------------------------------
 
 const Markdown = createComponentImplementation(
@@ -467,6 +494,46 @@ const Metric = createComponentImplementation(
   },
 );
 
+// Progress says where a thing stands: its state word in a pill, coloured
+// by its tone, and when it has steps a bar of them, done, running, to come.
+const TONES = ["default", "attention", "urgent", "success", "muted"] as const;
+const PROGRESS_MAX = 40; // segments drawn at most
+
+const Progress = createComponentImplementation(
+  {
+    name: "Progress",
+    schema: z.object({
+      label: CommonSchemas.DynamicString,
+      tone: z.enum(TONES).optional(),
+      value: CommonSchemas.DynamicNumber.optional(),
+      current: CommonSchemas.DynamicNumber.optional(),
+      total: CommonSchemas.DynamicNumber.optional(),
+    }),
+  },
+  ({ props }) => {
+    const { t } = useWords();
+    const total = Math.max(0, Math.min(PROGRESS_MAX, Math.round(num(props.total) ?? 0)));
+    const done = Math.max(0, Math.min(total, Math.round(num(props.value) ?? 0)));
+    const current = Math.max(0, Math.min(total - done, Math.round(num(props.current) ?? 0)));
+    const said = t("espace.a2.progress", done, total) + (current ? `, ${t("espace.a2.progress.current", current)}` : "");
+    return (
+      <div className={`a2-progress a2-tone-${props.tone ?? "default"}`}>
+        <span className="a2-pill">{str(props.label)}</span>
+        {total > 0 && (
+          <>
+            <span className="a2-bar" role="img" aria-label={said}>
+              {Array.from({ length: total }, (_, i) => (
+                <span key={i} className={i < done ? "a2-seg-done" : i < done + current ? "a2-seg-now" : "a2-seg"} />
+              ))}
+            </span>
+            <span className="a2-progress-count" aria-hidden="true">{done}/{total}</span>
+          </>
+        )}
+      </div>
+    );
+  },
+);
+
 const Point = z.object({ x: z.union([z.string(), z.number()]), y: z.number() });
 const Series = z.object({ name: z.string(), points: z.array(Point) });
 
@@ -578,6 +645,53 @@ const Timeline = createComponentImplementation(
           );
         })}
       </ol>
+    );
+  },
+);
+
+// Item is one line of a list: what it is and, quieter, where it comes
+// from; under it a note; aside its due date and a short mark (« extérieur
+// »). Its level puts it forward (high: it waits for the user) or makes it
+// one quiet line (low).
+const LEVELS = ["high", "normal", "low"];
+
+const Item = createComponentImplementation(
+  {
+    name: "Item",
+    schema: z.object({
+      title: CommonSchemas.DynamicString,
+      detail: CommonSchemas.DynamicString.optional(),
+      note: CommonSchemas.DynamicString.optional(),
+      due: CommonSchemas.DynamicString.optional(),
+      mark: CommonSchemas.DynamicString.optional(),
+      level: CommonSchemas.DynamicString.optional(),
+    }),
+  },
+  ({ props }) => {
+    const { t, lang } = useWords();
+    const level = LEVELS.includes(str(props.level)) ? str(props.level) : "normal";
+    const detail = str(props.detail), note = str(props.note), mark = str(props.mark);
+    const due = wall(str(props.due));
+    return (
+      <div className={`a2-item a2-item-${level}`}>
+        <div className="a2-item-main">
+          <p className="a2-item-head">
+            <span className="a2-item-title">{str(props.title)}</span>
+            {detail && <span className="a2-item-detail">{detail}</span>}
+          </p>
+          {note && <p className="a2-item-note">{note}</p>}
+        </div>
+        {(due || mark) && (
+          <div className="a2-item-side">
+            {mark && <span className="a2-badge a2-badge-external">{mark}</span>}
+            {due && (
+              <time className="a2-due" dateTime={str(props.due)}>
+                {t("espace.a2.item.due", when(lang, due))}
+              </time>
+            )}
+          </div>
+        )}
+      </div>
     );
   },
 );
@@ -727,11 +841,12 @@ function decidedWord(state: string, keeps: boolean): string {
 // surface showing external content can only ask: there, no Oui or Non, the
 // proposal is answered in the conversation.
 const Proposal = createComponentImplementation(
-  { name: "Proposal", schema: z.object({ proposalId: CommonSchemas.DynamicString }) },
+  { name: "Proposal", schema: z.object({ proposalId: CommonSchemas.DynamicString, compact: z.boolean().optional() }) },
   ({ props, context }) => {
     const { t } = useWords();
     const src = useProposals();
     const ref = str(props.proposalId);
+    const [whole, setWhole] = useState(false); // a compact one opened
     const [p, setP] = useState<ProposalView | null | undefined>(undefined);
     const [busy, setBusy] = useState<"yes" | "no" | null>(null); // the answer on its way
     const [failed, setFailed] = useState(false);
@@ -785,6 +900,16 @@ const Proposal = createComponentImplementation(
         ? t(`espace.a2.proposal.${exec === "failed" ? "execfailed" : exec}`)
         : t(decidedWord(p.state, Boolean(keeps)));
     const icon = pending ? "star" : exec === "failed" || p.state !== "approved" ? "close" : exec === "running" ? "clock" : "check";
+    // Compact and decided: one line, opened in place by a click.
+    if (props.compact && !pending && !whole) {
+      return (
+        <button type="button" className={`a2-proposal-line${exec ? " a2-proposal-exec-" + exec : ""}`} aria-expanded="false" onClick={() => setWhole(true)}>
+          <IconView name={icon} />
+          <span className="a2-proposal-line-kicker">{kicker}</span>
+          <span className="a2-proposal-line-text">{p.text}</span>
+        </button>
+      );
+    }
     return (
       <section
         className={`a2-proposal a2-proposal-${pending ? "pending" : "decided"}${exec ? " a2-proposal-exec-" + exec : ""}`}
@@ -892,15 +1017,18 @@ export const components: ReactComponentImplementation[] = [
   List,
   Card,
   Tabs,
+  Fold,
   Divider,
   Button,
   Choice,
   TextField,
   DateField,
   Metric,
+  Progress,
   Chart,
   Table,
   Timeline,
+  Item,
   Message,
   Day,
   Proposal,

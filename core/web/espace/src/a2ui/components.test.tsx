@@ -6,7 +6,7 @@ import { makeT, WordsContext, type Lang } from "../i18n";
 import strings from "../strings.json";
 import { createAdapter, type ActionMessage, type Adapter, type ErrorMessage, type Message } from "./adapter";
 import { CATALOG } from "./catalog";
-import { galleryFixtures, sampleProposals } from "./fixtures";
+import { galleryFixtures, sampleProposals, threadFixtures } from "./fixtures";
 import { safeHref } from "./markdown";
 import { ProposalsContext, type Answer, type Moved, type Proposals } from "./proposals";
 import { Surfaces } from "./Surfaces";
@@ -101,10 +101,10 @@ const one = (components: unknown[], dataModel: unknown = {}): Message[] => [
 // What each component of the catalog renders as, to find it.
 const MARK: Record<string, string> = {
   Text: ".a2-text", Markdown: ".a2-markdown", Image: ".a2-image-off", Icon: ".a2-row > .a2-icon", Link: "a.a2-link", Code: ".a2-code-diff .a2-diff-add", Row: ".a2-row",
-  Column: ".a2-column", List: ".a2-list", Card: ".a2-card", Tabs: ".a2-tabs", Divider: "hr.a2-divider",
+  Column: ".a2-column", List: ".a2-list", Card: ".a2-card", Tabs: ".a2-tabs", Fold: ".a2-fold", Divider: "hr.a2-divider",
   Button: "button.a2-button", Choice: "fieldset.a2-choice", TextField: ".a2-field input[type=text]",
-  DateField: ".a2-field input[type=datetime-local]", Metric: ".a2-metric", Chart: ".a2-chart", Table: "table.a2-table",
-  Timeline: "ol.a2-timeline", Message: "article.a2-message", Day: ".a2-day", Proposal: ".a2-proposal-pending",
+  DateField: ".a2-field input[type=datetime-local]", Metric: ".a2-metric", Progress: ".a2-progress", Chart: ".a2-chart", Table: "table.a2-table",
+  Timeline: "ol.a2-timeline", Item: ".a2-item", Message: "article.a2-message", Day: ".a2-day", Proposal: ".a2-proposal-pending",
   Alert: ".a2-alert", Placeholder: ".a2-placeholder",
 };
 
@@ -736,5 +736,55 @@ describe("the catalog's components", () => {
     ], { icon: "nothing" }));
     expect($$(".a2-row > svg.a2-icon")).toHaveLength(1);
     expect($$("button svg.a2-icon path").length).toBeGreaterThan(0);
+  });
+
+  it("draw a thread as code composes it: its state, a bar of its steps, those done folded, a decided card one line", async () => {
+    await mount("fr", threadFixtures("fr"));
+    await act(async () => {});
+    expect(errors).toEqual([]);
+    const work = (sel: string) => $$(`[data-surface=thread-101] ${sel}`);
+    expect(work(".a2-progress")[0].className).toContain("a2-tone-attention");
+    expect(work(".a2-pill")[0].textContent).toBe("À toi");
+    expect(work(".a2-bar > span")).toHaveLength(5);
+    expect(work(".a2-seg-done")).toHaveLength(2);
+    expect(work(".a2-seg-now")).toHaveLength(2);
+    expect(work(".a2-bar")[0].getAttribute("aria-label")).toBe("2 sur 5 faites, 2 en cours");
+    // What waits for the user, whole; the steps done, one line, closed.
+    expect(work(".a2-proposal-pending")).toHaveLength(1);
+    const fold = work(".a2-fold-head")[0];
+    expect(fold.textContent).toContain("2 étapes faites");
+    expect(fold.getAttribute("aria-expanded")).toBe("false");
+    expect(work(".a2-proposal-line")).toHaveLength(0);
+    await click(fold);
+    const line = work(".a2-proposal-line")[0];
+    expect(line.textContent).toContain("Fusionner la branche dans main");
+    expect(work(".a2-proposal-decided")).toHaveLength(0);
+    await click(line);
+    expect(work(".a2-proposal-decided")).toHaveLength(1);
+    expect(document.querySelectorAll("[style]")).toHaveLength(0);
+  });
+
+  it("draw a thread's items grouped by their notes, counted, a due date and « extérieur » aside, no action on a row", async () => {
+    await mount("fr", threadFixtures("fr"));
+    const items = (sel: string) => $$(`[data-surface=thread-102] ${sel}`);
+    expect(items(".a2-list-horizontal .a2-metric").map((m) => m.textContent)).toEqual(["à faire1", "à regarder1", "rien à faire1"]);
+    expect(items(".a2-fold-head").map((h) => h.textContent?.replace(/[▸▾]/, ""))).toEqual(["À faire · 1", "À regarder · 1", "Pas encore trié · 1", "Rien à faire · 1"]);
+    expect(items(".a2-fold").map((f) => f.classList.contains("a2-fold-open"))).toEqual([true, true, true, false]);
+    const high = items(".a2-item-high")[0];
+    expect(high.querySelector(".a2-item-title")?.textContent).toBe("Courant");
+    expect(high.querySelector(".a2-item-note")?.textContent).toBe("Solde bas avant le loyer.");
+    expect(high.querySelector(".a2-due")?.textContent).toMatch(/^pour /);
+    expect(items(".a2-badge-external").map((b) => b.textContent)).toEqual(["extérieur"]);
+    expect(items(".a2-item button")).toHaveLength(0);
+  });
+
+  it("say how an ended thread ended, and put it away with « Ranger »", async () => {
+    await mount("fr", threadFixtures("fr"));
+    const done = (sel: string) => $$(`[data-surface=thread-103] ${sel}`);
+    expect(done(".a2-alert-success .a2-alert-text")[0].textContent).toBe("Le devis est signé et les travaux commencent lundi.");
+    expect(done(".a2-pill")[0].textContent).toBe("Terminé");
+    const tidy = done("button.a2-button").find((b) => b.textContent === "Ranger")!;
+    await click(tidy);
+    expect(actions.map((a) => [a.action.name, a.action.surfaceId, a.action.sourceComponentId, a.action.context])).toEqual([["tidy", "thread-103", "thread_tidy", { thread: 103 }]]);
   });
 });

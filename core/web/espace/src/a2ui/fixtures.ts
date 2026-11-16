@@ -4,6 +4,7 @@ import type { Layout } from "../types";
 import type { Message } from "./adapter";
 import { CATALOG } from "./catalog";
 import gallery from "./gallery.json";
+import threads from "./threads.json";
 import type { Moved, Proposals, ProposalView } from "./proposals";
 
 // Made-up A2UI messages, in the shape eriphe-core sends, for the dev server
@@ -78,6 +79,13 @@ export function galleryFixtures(lang: Lang): Message[] {
 
 export const gallerySurfaces = (lang: Lang) => galleryFixtures(lang).map((m) => ("createSurface" in m ? m.createSurface.surfaceId : ""));
 
+// The threads as eriphe-core draws them (threads.json, written from the
+// code by ERIPHE_UPDATE_THREADS=1 go test -run TestThreadSurfacesFixture):
+// a work thread, one that lists items, one ended.
+export function threadFixtures(lang: Lang): Message[] {
+  return threads[lang] as unknown as Message[];
+}
+
 // Made-up proposals for the gallery: its Proposal's, and a dated one its
 // Day shows as a ghost. Answering one changes nothing but its state on the
 // page, and says it moved, as eriphe-core's stream would.
@@ -92,6 +100,14 @@ export function sampleProposals(lang: Lang): Proposals {
       why: en ? "You opened none of the last five." : "Tu n'as ouvert aucune des cinq dernières.",
     },
     ...queueViews(lang),
+    {
+      ref: "access:5",
+      card: 5,
+      state: "approved",
+      exec: "done",
+      kind: "access",
+      text: en ? "Merge the branch into main" : "Fusionner la branche dans main",
+    },
     {
       ref: "intention:3",
       card: 8,
@@ -215,6 +231,7 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
     pick("gallery-day"),
     pick("gallery-figures"),
     pick("gallery-project"),
+    ...threadFixtures(lang),
   ];
   const t = proposalTitle[lang];
   const en = lang === "en";
@@ -228,10 +245,15 @@ export function workspaceFixtures(lang: Lang): { messages: Message[]; layout: La
       { id: SAMPLE_SURFACE, title: words[lang].title, size: "l", col: 6, row: 0, w: 6, h: 3 },
       { id: "q-group", title: en ? "Reminders to keep" : "Rappels à garder", size: "s", col: 0, row: 2, w: 3, h: 1 },
       { id: "q-card-2", title: t, size: "s", col: 3, row: 2, w: 3, h: 1 },
-      { id: "gallery-day", title: en ? "Today" : "Aujourd'hui", size: "l", col: 0, row: 3, w: 4, h: 3 },
-      { id: "gallery-figures", title: en ? "Home" : "Maison", size: "l", col: 4, row: 3, w: 4, h: 3 },
+      { id: "thread-101", title: en ? "The club's site" : "Le site du club", size: "l", col: 0, row: 3, w: 4, h: 3 },
+      { id: "thread-102", title: en ? "My accounts" : "Mes comptes", size: "l", col: 4, row: 3, w: 4, h: 3 },
+      { id: "thread-103", title: en ? "The terrace" : "La terrasse", size: "m", col: 8, row: 3, w: 4, h: 2 },
     ],
-    chips: [{ id: "gallery-project", title: en ? "The terrace" : "La terrasse", why: en ? "Nothing urgent" : "Rien de pressé" }],
+    chips: [
+      { id: "gallery-day", title: en ? "Today" : "Aujourd'hui" },
+      { id: "gallery-figures", title: en ? "Home" : "Maison" },
+      { id: "gallery-project", title: en ? "The terrace" : "La terrasse", why: en ? "Nothing urgent" : "Rien de pressé" },
+    ],
   };
   return { messages, layout, ids: messages.flatMap((m) => ("createSurface" in m ? [m.createSurface.surfaceId] : [])), exchange: sampleExchange(lang) };
 }

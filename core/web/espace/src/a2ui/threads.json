@@ -1,0 +1,1516 @@
+{
+ "en": [
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-101",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_goal",
+       "thread_progress",
+       "thread_yours",
+       "thread_card_2",
+       "thread_where",
+       "thread_summary",
+       "thread_summary_at",
+       "thread_since",
+       "thread_fact_0",
+       "thread_fact_1",
+       "thread_fact_2",
+       "thread_fact_3",
+       "thread_fact_4",
+       "thread_fact_5",
+       "thread_done",
+       "thread_steps"
+      ]
+     },
+     {
+      "id": "thread_goal",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/goal"
+      }
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "current": {
+       "@path": "/thread/progress/current"
+      },
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "attention",
+      "total": {
+       "@path": "/thread/progress/total"
+      },
+      "value": {
+       "@path": "/thread/progress/value"
+      }
+     },
+     {
+      "id": "thread_yours",
+      "component": "Text",
+      "text": "Yours",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_card_2",
+      "component": "Proposal",
+      "proposalId": "card:20"
+     },
+     {
+      "id": "thread_where",
+      "component": "Text",
+      "text": "Where it stands",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_summary",
+      "component": "Markdown",
+      "text": {
+       "@path": "/thread/summary"
+      }
+     },
+     {
+      "id": "thread_summary_at",
+      "component": "Text",
+      "text": "Summary updated: 03:33",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_since",
+      "component": "Text",
+      "text": "So far",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_fact_0",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/0"
+      }
+     },
+     {
+      "id": "thread_fact_1",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/1"
+      }
+     },
+     {
+      "id": "thread_fact_2",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/2"
+      }
+     },
+     {
+      "id": "thread_fact_3",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/3"
+      }
+     },
+     {
+      "id": "thread_fact_4",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/4"
+      }
+     },
+     {
+      "id": "thread_fact_5",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/5"
+      }
+     },
+     {
+      "id": "thread_card_1",
+      "component": "Proposal",
+      "compact": true,
+      "proposalId": "access:5"
+     },
+     {
+      "id": "thread_done_steps",
+      "component": "Timeline",
+      "items": {
+       "@path": "/thread/done"
+      }
+     },
+     {
+      "id": "thread_done_list",
+      "component": "Column",
+      "children": [
+       "thread_done_steps",
+       "thread_card_1"
+      ]
+     },
+     {
+      "id": "thread_done",
+      "component": "Fold",
+      "child": "thread_done_list",
+      "label": {
+       "@path": "/thread/donelabel"
+      }
+     },
+     {
+      "id": "thread_steps",
+      "component": "Timeline",
+      "items": {
+       "@path": "/thread/steps"
+      }
+     }
+    ],
+    "dataModel": {
+     "thread": {
+      "done": [
+       {
+        "date": "2026-11-16T01:33:12+01:00",
+        "detail": "Task",
+        "label": "Prepare the page",
+        "state": "done"
+       },
+       {
+        "date": "2026-11-16T02:13:12+01:00",
+        "detail": "Proposed action",
+        "label": "Merge the branch",
+        "state": "done"
+       }
+      ],
+      "donelabel": "2 steps done",
+      "facts": [
+       "… and 1 earlier",
+       "02:13 · “Merge the branch”: done",
+       "03:33 · Summary updated",
+       "03:43 · “Resize the photos” started",
+       "03:53 · “Publish the site” waits for you",
+       "04:03 · Thread opened"
+      ],
+      "goal": "The club's site is online, with its photos.",
+      "progress": {
+       "current": 2,
+       "label": "Yours",
+       "total": 5,
+       "value": 2
+      },
+      "steps": [
+       {
+        "date": "2026-11-16T03:53:12+01:00",
+        "detail": "Your approval",
+        "label": "Publish the site",
+        "state": "current"
+       },
+       {
+        "date": "2026-11-16T03:43:12+01:00",
+        "detail": "Task · 12 of 30",
+        "label": "Resize the photos",
+        "state": "current"
+       },
+       {
+        "detail": "Check",
+        "label": "Objective check",
+        "state": "pending"
+       }
+      ],
+      "summary": "The page is ready; the photos and your yes to publish are left."
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "The club's site",
+       "author": "thread:101",
+       "weight": 70,
+       "why": "Where this thread stands, kept up to date by Eriphe.",
+       "answers": true,
+       "summary": "Merge the branch ✓ · Publish the site: yours",
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-102",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_goal",
+       "thread_progress",
+       "thread_sources",
+       "thread_src_0_by",
+       "thread_src_0_counts",
+       "thread_src_0_groups",
+       "thread_where",
+       "thread_nosummary",
+       "thread_since",
+       "thread_fact_0"
+      ]
+     },
+     {
+      "id": "thread_goal",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/goal"
+      }
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "default"
+     },
+     {
+      "id": "thread_sources",
+      "component": "Text",
+      "text": "Data",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_src_0_by",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/sources/0/caption"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_src_0_counts",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_count",
+       "path": "/thread/sources/0/counts"
+      },
+      "direction": "horizontal"
+     },
+     {
+      "id": "thread_src_0_groups",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_group",
+       "path": "/thread/sources/0/groups"
+      },
+      "emptyText": "Nothing for now."
+     },
+     {
+      "id": "thread_src_0_count",
+      "component": "Metric",
+      "label": {
+       "@path": "label"
+      },
+      "value": {
+       "@path": "value"
+      }
+     },
+     {
+      "id": "thread_src_0_group",
+      "component": "Fold",
+      "child": "thread_src_0_rows",
+      "label": {
+       "@path": "label"
+      },
+      "open": {
+       "@path": "open"
+      }
+     },
+     {
+      "id": "thread_src_0_rows",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_row",
+       "path": "items"
+      }
+     },
+     {
+      "id": "thread_src_0_row",
+      "component": "Item",
+      "detail": {
+       "@path": "detail"
+      },
+      "due": {
+       "@path": "due"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "note": {
+       "@path": "note"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "thread_where",
+      "component": "Text",
+      "text": "Where it stands",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_nosummary",
+      "component": "Text",
+      "text": "No summary yet.",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_since",
+      "component": "Text",
+      "text": "So far",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_fact_0",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/0"
+      }
+     }
+    ],
+    "dataModel": {
+     "ledger": {
+      "accounts": [
+       {
+        "balance": 120,
+        "name": "Courant"
+       },
+       {
+        "balance": 3400,
+        "name": "Épargne"
+       },
+       {
+        "balance": 80,
+        "name": "Joint"
+       },
+       {
+        "balance": 900,
+        "name": "Livret"
+       }
+      ],
+      "total": 4500
+     },
+     "thread": {
+      "facts": [
+       "04:03 · Thread opened"
+      ],
+      "goal": "The accounts followed, and what is to do.",
+      "progress": {
+       "label": "Up to date"
+      },
+      "sources": [
+       {
+        "caption": "Source ledger · read by code, no model",
+        "counts": [
+         {
+          "label": "to do",
+          "value": 1
+         },
+         {
+          "label": "to look at",
+          "value": 1
+         },
+         {
+          "label": "nothing to do",
+          "value": 1
+         }
+        ],
+        "groups": [
+         {
+          "items": [
+           {
+            "by": "Added by Eriphe",
+            "detail": "120",
+            "due": "2026-11-17",
+            "id": "Courant",
+            "level": "high",
+            "mark": "",
+            "n": 0,
+            "note": "Solde bas avant le loyer.",
+            "source": "ledger",
+            "state": "act",
+            "title": "Courant"
+           }
+          ],
+          "label": "To do · 1",
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Added by Eriphe",
+            "detail": "80",
+            "due": "",
+            "external": true,
+            "id": "Joint",
+            "level": "normal",
+            "mark": "external",
+            "n": 2,
+            "note": "Un virement inconnu, d'après le relevé.",
+            "source": "ledger",
+            "state": "look",
+            "title": "Joint"
+           }
+          ],
+          "label": "To look at · 1",
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "detail": "3400",
+            "due": "",
+            "id": "Épargne",
+            "level": "normal",
+            "mark": "",
+            "n": 1,
+            "note": "",
+            "source": "ledger",
+            "title": "Épargne"
+           }
+          ],
+          "label": "Not sorted yet · 1",
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Added by Eriphe",
+            "detail": "900",
+            "due": "",
+            "id": "Livret",
+            "level": "low",
+            "mark": "",
+            "n": 3,
+            "note": "Rien de neuf.",
+            "source": "ledger",
+            "state": "none",
+            "title": "Livret"
+           }
+          ],
+          "label": "Nothing to do · 1",
+          "open": false
+         }
+        ],
+        "name": "ledger"
+       }
+      ]
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "My accounts",
+       "author": "thread:102",
+       "weight": 50,
+       "why": "Where this thread stands, kept up to date by Eriphe.",
+       "answers": true,
+       "summary": "Open",
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-103",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_goal",
+       "thread_progress",
+       "thread_ended",
+       "thread_since",
+       "thread_fact_0",
+       "thread_fact_1",
+       "thread_fact_2",
+       "thread_fact_3",
+       "thread_fact_4",
+       "thread_fact_5",
+       "thread_done"
+      ]
+     },
+     {
+      "id": "thread_goal",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/goal"
+      }
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "current": {
+       "@path": "/thread/progress/current"
+      },
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "success",
+      "total": {
+       "@path": "/thread/progress/total"
+      },
+      "value": {
+       "@path": "/thread/progress/value"
+      }
+     },
+     {
+      "id": "thread_ended_says",
+      "component": "Alert",
+      "level": "success",
+      "text": {
+       "@path": "/thread/ended/text"
+      },
+      "title": {
+       "@path": "/thread/ended/title"
+      }
+     },
+     {
+      "id": "thread_tidy",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "thread": 103
+        },
+        "name": "tidy"
+       }
+      },
+      "label": "Put away",
+      "variant": "primary"
+     },
+     {
+      "id": "thread_ended",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_ended_says",
+       "thread_tidy"
+      ]
+     },
+     {
+      "id": "thread_since",
+      "component": "Text",
+      "text": "So far",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_fact_0",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/0"
+      }
+     },
+     {
+      "id": "thread_fact_1",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/1"
+      }
+     },
+     {
+      "id": "thread_fact_2",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/2"
+      }
+     },
+     {
+      "id": "thread_fact_3",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/3"
+      }
+     },
+     {
+      "id": "thread_fact_4",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/4"
+      }
+     },
+     {
+      "id": "thread_fact_5",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/5"
+      }
+     },
+     {
+      "id": "thread_card_1",
+      "component": "Proposal",
+      "compact": true,
+      "proposalId": "access:5"
+     },
+     {
+      "id": "thread_done_steps",
+      "component": "Timeline",
+      "items": {
+       "@path": "/thread/done"
+      }
+     },
+     {
+      "id": "thread_done_list",
+      "component": "Column",
+      "children": [
+       "thread_done_steps",
+       "thread_card_1"
+      ]
+     },
+     {
+      "id": "thread_done",
+      "component": "Fold",
+      "child": "thread_done_list",
+      "label": {
+       "@path": "/thread/donelabel"
+      }
+     }
+    ],
+    "dataModel": {
+     "thread": {
+      "done": [
+       {
+        "date": "2026-11-16T01:33:12+01:00",
+        "detail": "Task",
+        "label": "Prepare the page",
+        "state": "done"
+       },
+       {
+        "date": "2026-11-16T02:13:12+01:00",
+        "detail": "Proposed action",
+        "label": "Merge the branch",
+        "state": "done"
+       },
+       {
+        "date": "2026-11-16T03:53:12+01:00",
+        "detail": "Your approval",
+        "label": "Publish the site",
+        "state": "done"
+       },
+       {
+        "date": "2026-11-16T03:43:12+01:00",
+        "detail": "Task · 12 of 30",
+        "label": "Resize the photos",
+        "state": "done"
+       },
+       {
+        "detail": "Check",
+        "label": "Objective check",
+        "state": "done"
+       }
+      ],
+      "donelabel": "5 steps done",
+      "ended": {
+       "text": "The quote is signed and the work starts on Monday.",
+       "title": "Done ✓ · 03:03"
+      },
+      "facts": [
+       "… and 2 earlier",
+       "03:03 · Done ✓",
+       "03:33 · Summary updated",
+       "03:43 · “Resize the photos” started",
+       "03:53 · “Publish the site” started",
+       "04:03 · Thread opened"
+      ],
+      "goal": "The club's site is online, with its photos.",
+      "progress": {
+       "current": 0,
+       "label": "Done",
+       "total": 5,
+       "value": 5
+      }
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "The terrace",
+       "author": "thread:103",
+       "weight": 30,
+       "why": "Where this thread stands, kept up to date by Eriphe.",
+       "answers": true,
+       "summary": "Done ✓",
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  }
+ ],
+ "fr": [
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-101",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_goal",
+       "thread_progress",
+       "thread_yours",
+       "thread_card_2",
+       "thread_where",
+       "thread_summary",
+       "thread_summary_at",
+       "thread_since",
+       "thread_fact_0",
+       "thread_fact_1",
+       "thread_fact_2",
+       "thread_fact_3",
+       "thread_fact_4",
+       "thread_fact_5",
+       "thread_done",
+       "thread_steps"
+      ]
+     },
+     {
+      "id": "thread_goal",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/goal"
+      }
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "current": {
+       "@path": "/thread/progress/current"
+      },
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "attention",
+      "total": {
+       "@path": "/thread/progress/total"
+      },
+      "value": {
+       "@path": "/thread/progress/value"
+      }
+     },
+     {
+      "id": "thread_yours",
+      "component": "Text",
+      "text": "À toi",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_card_2",
+      "component": "Proposal",
+      "proposalId": "card:20"
+     },
+     {
+      "id": "thread_where",
+      "component": "Text",
+      "text": "Où on en est",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_summary",
+      "component": "Markdown",
+      "text": {
+       "@path": "/thread/summary"
+      }
+     },
+     {
+      "id": "thread_summary_at",
+      "component": "Text",
+      "text": "Résumé mis à jour : 3 h 33",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_since",
+      "component": "Text",
+      "text": "Jusqu'ici",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_fact_0",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/0"
+      }
+     },
+     {
+      "id": "thread_fact_1",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/1"
+      }
+     },
+     {
+      "id": "thread_fact_2",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/2"
+      }
+     },
+     {
+      "id": "thread_fact_3",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/3"
+      }
+     },
+     {
+      "id": "thread_fact_4",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/4"
+      }
+     },
+     {
+      "id": "thread_fact_5",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/5"
+      }
+     },
+     {
+      "id": "thread_card_1",
+      "component": "Proposal",
+      "compact": true,
+      "proposalId": "access:5"
+     },
+     {
+      "id": "thread_done_steps",
+      "component": "Timeline",
+      "items": {
+       "@path": "/thread/done"
+      }
+     },
+     {
+      "id": "thread_done_list",
+      "component": "Column",
+      "children": [
+       "thread_done_steps",
+       "thread_card_1"
+      ]
+     },
+     {
+      "id": "thread_done",
+      "component": "Fold",
+      "child": "thread_done_list",
+      "label": {
+       "@path": "/thread/donelabel"
+      }
+     },
+     {
+      "id": "thread_steps",
+      "component": "Timeline",
+      "items": {
+       "@path": "/thread/steps"
+      }
+     }
+    ],
+    "dataModel": {
+     "thread": {
+      "done": [
+       {
+        "date": "2026-11-16T01:33:12+01:00",
+        "detail": "Tâche",
+        "label": "Préparer la page",
+        "state": "done"
+       },
+       {
+        "date": "2026-11-16T02:13:12+01:00",
+        "detail": "Action proposée",
+        "label": "Fusionner la branche",
+        "state": "done"
+       }
+      ],
+      "donelabel": "2 étapes faites",
+      "facts": [
+       "… et 1 plus tôt",
+       "2 h 13 · « Fusionner la branche » : fait",
+       "3 h 33 · Résumé mis à jour",
+       "3 h 43 · « Redimensionner les photos » a démarré",
+       "3 h 53 · « Publier le site » t'attend",
+       "4 h 03 · Thread ouvert"
+      ],
+      "goal": "Le site du club est en ligne, avec ses photos.",
+      "progress": {
+       "current": 2,
+       "label": "À toi",
+       "total": 5,
+       "value": 2
+      },
+      "steps": [
+       {
+        "date": "2026-11-16T03:53:12+01:00",
+        "detail": "Ta validation",
+        "label": "Publier le site",
+        "state": "current"
+       },
+       {
+        "date": "2026-11-16T03:43:12+01:00",
+        "detail": "Tâche · 12 sur 30",
+        "label": "Redimensionner les photos",
+        "state": "current"
+       },
+       {
+        "detail": "Vérification",
+        "label": "Contrôle de l'objectif",
+        "state": "pending"
+       }
+      ],
+      "summary": "La page est prête ; il reste les photos et ton accord pour publier."
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Le site du club",
+       "author": "thread:101",
+       "weight": 70,
+       "why": "Où en est ce thread, tenu à jour par Eriphe.",
+       "answers": true,
+       "summary": "Fusionner la branche ✓ · Publier le site à toi",
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-102",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_goal",
+       "thread_progress",
+       "thread_sources",
+       "thread_src_0_by",
+       "thread_src_0_counts",
+       "thread_src_0_groups",
+       "thread_where",
+       "thread_nosummary",
+       "thread_since",
+       "thread_fact_0"
+      ]
+     },
+     {
+      "id": "thread_goal",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/goal"
+      }
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "default"
+     },
+     {
+      "id": "thread_sources",
+      "component": "Text",
+      "text": "Données",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_src_0_by",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/sources/0/caption"
+      },
+      "variant": "caption"
+     },
+     {
+      "id": "thread_src_0_counts",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_count",
+       "path": "/thread/sources/0/counts"
+      },
+      "direction": "horizontal"
+     },
+     {
+      "id": "thread_src_0_groups",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_group",
+       "path": "/thread/sources/0/groups"
+      },
+      "emptyText": "Rien pour l'instant."
+     },
+     {
+      "id": "thread_src_0_count",
+      "component": "Metric",
+      "label": {
+       "@path": "label"
+      },
+      "value": {
+       "@path": "value"
+      }
+     },
+     {
+      "id": "thread_src_0_group",
+      "component": "Fold",
+      "child": "thread_src_0_rows",
+      "label": {
+       "@path": "label"
+      },
+      "open": {
+       "@path": "open"
+      }
+     },
+     {
+      "id": "thread_src_0_rows",
+      "component": "List",
+      "children": {
+       "componentId": "thread_src_0_row",
+       "path": "items"
+      }
+     },
+     {
+      "id": "thread_src_0_row",
+      "component": "Item",
+      "detail": {
+       "@path": "detail"
+      },
+      "due": {
+       "@path": "due"
+      },
+      "level": {
+       "@path": "level"
+      },
+      "mark": {
+       "@path": "mark"
+      },
+      "note": {
+       "@path": "note"
+      },
+      "title": {
+       "@path": "title"
+      }
+     },
+     {
+      "id": "thread_where",
+      "component": "Text",
+      "text": "Où on en est",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_nosummary",
+      "component": "Text",
+      "text": "Pas encore de résumé.",
+      "variant": "caption"
+     },
+     {
+      "id": "thread_since",
+      "component": "Text",
+      "text": "Jusqu'ici",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_fact_0",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/0"
+      }
+     }
+    ],
+    "dataModel": {
+     "ledger": {
+      "accounts": [
+       {
+        "balance": 120,
+        "name": "Courant"
+       },
+       {
+        "balance": 3400,
+        "name": "Épargne"
+       },
+       {
+        "balance": 80,
+        "name": "Joint"
+       },
+       {
+        "balance": 900,
+        "name": "Livret"
+       }
+      ],
+      "total": 4500
+     },
+     "thread": {
+      "facts": [
+       "4 h 03 · Thread ouvert"
+      ],
+      "goal": "Les comptes suivis, et ce qui est à faire.",
+      "progress": {
+       "label": "À jour"
+      },
+      "sources": [
+       {
+        "caption": "Source ledger · lu par le code, sans modèle",
+        "counts": [
+         {
+          "label": "à faire",
+          "value": 1
+         },
+         {
+          "label": "à regarder",
+          "value": 1
+         },
+         {
+          "label": "rien à faire",
+          "value": 1
+         }
+        ],
+        "groups": [
+         {
+          "items": [
+           {
+            "by": "Ajouté par Eriphe",
+            "detail": "120",
+            "due": "2026-11-17",
+            "id": "Courant",
+            "level": "high",
+            "mark": "",
+            "n": 0,
+            "note": "Solde bas avant le loyer.",
+            "source": "ledger",
+            "state": "act",
+            "title": "Courant"
+           }
+          ],
+          "label": "À faire · 1",
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Ajouté par Eriphe",
+            "detail": "80",
+            "due": "",
+            "external": true,
+            "id": "Joint",
+            "level": "normal",
+            "mark": "extérieur",
+            "n": 2,
+            "note": "Un virement inconnu, d'après le relevé.",
+            "source": "ledger",
+            "state": "look",
+            "title": "Joint"
+           }
+          ],
+          "label": "À regarder · 1",
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "detail": "3400",
+            "due": "",
+            "id": "Épargne",
+            "level": "normal",
+            "mark": "",
+            "n": 1,
+            "note": "",
+            "source": "ledger",
+            "title": "Épargne"
+           }
+          ],
+          "label": "Pas encore trié · 1",
+          "open": true
+         },
+         {
+          "items": [
+           {
+            "by": "Ajouté par Eriphe",
+            "detail": "900",
+            "due": "",
+            "id": "Livret",
+            "level": "low",
+            "mark": "",
+            "n": 3,
+            "note": "Rien de neuf.",
+            "source": "ledger",
+            "state": "none",
+            "title": "Livret"
+           }
+          ],
+          "label": "Rien à faire · 1",
+          "open": false
+         }
+        ],
+        "name": "ledger"
+       }
+      ]
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "Mes comptes",
+       "author": "thread:102",
+       "weight": 50,
+       "why": "Où en est ce thread, tenu à jour par Eriphe.",
+       "answers": true,
+       "summary": "Ouvert",
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "thread-103",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "thread_goal",
+       "thread_progress",
+       "thread_ended",
+       "thread_since",
+       "thread_fact_0",
+       "thread_fact_1",
+       "thread_fact_2",
+       "thread_fact_3",
+       "thread_fact_4",
+       "thread_fact_5",
+       "thread_done"
+      ]
+     },
+     {
+      "id": "thread_goal",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/goal"
+      }
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "current": {
+       "@path": "/thread/progress/current"
+      },
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "success",
+      "total": {
+       "@path": "/thread/progress/total"
+      },
+      "value": {
+       "@path": "/thread/progress/value"
+      }
+     },
+     {
+      "id": "thread_ended_says",
+      "component": "Alert",
+      "level": "success",
+      "text": {
+       "@path": "/thread/ended/text"
+      },
+      "title": {
+       "@path": "/thread/ended/title"
+      }
+     },
+     {
+      "id": "thread_tidy",
+      "component": "Button",
+      "action": {
+       "event": {
+        "context": {
+         "thread": 103
+        },
+        "name": "tidy"
+       }
+      },
+      "label": "Ranger",
+      "variant": "primary"
+     },
+     {
+      "id": "thread_ended",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "thread_ended_says",
+       "thread_tidy"
+      ]
+     },
+     {
+      "id": "thread_since",
+      "component": "Text",
+      "text": "Jusqu'ici",
+      "variant": "subtitle"
+     },
+     {
+      "id": "thread_fact_0",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/0"
+      }
+     },
+     {
+      "id": "thread_fact_1",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/1"
+      }
+     },
+     {
+      "id": "thread_fact_2",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/2"
+      }
+     },
+     {
+      "id": "thread_fact_3",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/3"
+      }
+     },
+     {
+      "id": "thread_fact_4",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/4"
+      }
+     },
+     {
+      "id": "thread_fact_5",
+      "component": "Text",
+      "text": {
+       "@path": "/thread/facts/5"
+      }
+     },
+     {
+      "id": "thread_card_1",
+      "component": "Proposal",
+      "compact": true,
+      "proposalId": "access:5"
+     },
+     {
+      "id": "thread_done_steps",
+      "component": "Timeline",
+      "items": {
+       "@path": "/thread/done"
+      }
+     },
+     {
+      "id": "thread_done_list",
+      "component": "Column",
+      "children": [
+       "thread_done_steps",
+       "thread_card_1"
+      ]
+     },
+     {
+      "id": "thread_done",
+      "component": "Fold",
+      "child": "thread_done_list",
+      "label": {
+       "@path": "/thread/donelabel"
+      }
+     }
+    ],
+    "dataModel": {
+     "thread": {
+      "done": [
+       {
+        "date": "2026-11-16T01:33:12+01:00",
+        "detail": "Tâche",
+        "label": "Préparer la page",
+        "state": "done"
+       },
+       {
+        "date": "2026-11-16T02:13:12+01:00",
+        "detail": "Action proposée",
+        "label": "Fusionner la branche",
+        "state": "done"
+       },
+       {
+        "date": "2026-11-16T03:53:12+01:00",
+        "detail": "Ta validation",
+        "label": "Publier le site",
+        "state": "done"
+       },
+       {
+        "date": "2026-11-16T03:43:12+01:00",
+        "detail": "Tâche · 12 sur 30",
+        "label": "Redimensionner les photos",
+        "state": "done"
+       },
+       {
+        "detail": "Vérification",
+        "label": "Contrôle de l'objectif",
+        "state": "done"
+       }
+      ],
+      "donelabel": "5 étapes faites",
+      "ended": {
+       "text": "Le devis est signé et les travaux commencent lundi.",
+       "title": "Fait ✓ · 3 h 03"
+      },
+      "facts": [
+       "… et 2 plus tôt",
+       "3 h 03 · Fait ✓",
+       "3 h 33 · Résumé mis à jour",
+       "3 h 43 · « Redimensionner les photos » a démarré",
+       "3 h 53 · « Publier le site » a démarré",
+       "4 h 03 · Thread ouvert"
+      ],
+      "goal": "Le site du club est en ligne, avec ses photos.",
+      "progress": {
+       "current": 0,
+       "label": "Terminé",
+       "total": 5,
+       "value": 5
+      }
+     }
+    },
+    "metadata": {
+     "extensions": {
+      "eriphe": {
+       "title": "La terrasse",
+       "author": "thread:103",
+       "weight": 30,
+       "why": "Où en est ce thread, tenu à jour par Eriphe.",
+       "answers": true,
+       "summary": "Fait ✓",
+       "updated": "0001-01-01T00:00:00Z"
+      }
+     }
+    }
+   }
+  }
+ ]
+}

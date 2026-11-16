@@ -149,7 +149,9 @@ func TestThreadHeaderFactsAndYours(t *testing.T) {
 		in := surfaceIn{Weight: threadWeight}
 		var out threadComps
 		data := map[string]any{}
-		c.threadHeader(&in, &out, data, s, steps, nil, nil, now)
+		c.threadSince(&out, data, s, steps, nil, now)
+		c.threadWhere(&out, data, s, now)
+		c.threadYours(&in, &out, s, steps, nil, nil)
 		texts := map[string]string{}
 		facts, _ := data["facts"].([]any)
 		for _, comp := range out.list {
@@ -177,13 +179,10 @@ func TestThreadHeaderFactsAndYours(t *testing.T) {
 	if _, ok := h["thread_user_5"]; !ok || h["thread_yours"] != "À toi" || in.Weight != threadWeightYours {
 		t.Errorf("yours: %v weight %d", h, in.Weight)
 	}
-	if _, ok := h["thread_yours_none"]; ok {
-		t.Errorf("nothing for now, while a step waits: %v", h)
-	}
 
-	// Nothing waits: « Rien pour l'instant. », the usual weight.
+	// Nothing waits: no « À toi », the usual weight.
 	h, in = header(steps[:5])
-	if h["thread_yours_none"] != "Rien pour l'instant." || in.Weight != threadWeight {
+	if _, ok := h["thread_yours"]; ok || in.Weight != threadWeight {
 		t.Errorf("nothing yours: %v weight %d", h, in.Weight)
 	}
 	// An ended thread has no « À toi ».

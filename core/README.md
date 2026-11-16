@@ -1129,30 +1129,45 @@ by code from the thread's data (#468): it never depends on a model remembering t
 - **Its author is `thread:<id>`**, code's for that thread (not `core`, the attention queue's):
   nobody else writes or removes it as a whole (`mayChange`), no other author may take its id, and
   it does not count in the 100 surfaces at most.
-- **Code's section**: the goal; the state and who holds it when it says more than the header
-  (« En cours · mené par son chef », « En attente · tenu par Eriphe »; not for a light thread the
-  brain holds that is open); a header in three parts (#553, `thread_header.go`):
-  - **Depuis ta dernière visite**: facts made by code from the thread's data (a step started,
-    done, failed or handing in its work, what was settled for its task, the summary written
-    again, the thread's end), each
-    with its time, since the user's visit before the last one, oldest first, the last 5 (« … et 2
-    plus tôt » before them); with none, the log tells whether anything else moved (a step added,
-    a plan changed, a card linked, a reopen: « 3 changement(s), le dernier à 15 h 10. », counted,
-    never quoted), else « Rien de nouveau depuis 14 h 32. »; « Jusqu'ici » and
-    what happened since its opening before any visit. Never the log's lines (French only, and
-    they may quote a lead). A visit is the page's `open` action on the surface: `seen` takes the
-    last visit, `visited` is now, so the visit that opens it still shows what was new; opened
-    again within 5 minutes, the same visit. Times are absolute (« 14 h 32 », « 13 nov. 9 h 05 »):
-    the surface is written again only when it changes.
-  - **Où on en est**: the summary as remember (kind progress), the extraction or its close wrote
-    it, with its date (`threads.summarized`, stamped by `setThread`); no model call.
-  - **À toi** (active threads): the thread's own cards (its plan, a change of it, more time) and
-    each step's (an approval's card, a task step's held start) as `Proposal` components bound to
-    their refs, a choice to make, and for a step the user does (kind `user`) a « C'est fait »
-    button; « Rien pour l'instant. » when nothing waits.
+- **Code's section: generic blocks** (#574, `thread_blocks.go`), the same code for every thread,
+  in one fixed order; a block shows only when the thread has what it shows, never by the kind of
+  thread (work, standing or day: the family is never shown, and a thread with its `ends` changed
+  is drawn the same while active):
+  1. **head**: the goal, a `Progress` (the state word in a pill, « À toi », « Urgent », « En
+     cours », « À jour », « Terminé », coloured by its tone, and with steps a bar of them, done,
+     running, to come, « 2/5 »), the state and who holds it when it says more (« En cours ·
+     mené par son chef »);
+  2. **ended**: once it ended, an `Alert` saying how and when, with where it stood (« Fait ✓ ·
+     14 h 02 » and the summary), and **« Ranger »** beside it for a thread that ends on its goal:
+     the only block that reads `ends`;
+  3. **À toi** (active threads, only when something waits): the thread's own cards (its plan, a
+     change of it, more time) and each step's (an approval's card, a task step's held start) as
+     `Proposal` components bound to their refs, a choice to make, and for a step the user does
+     (kind `user`) a « C'est fait » button;
+  4. **items**: each source that lists things (below);
+  5. **live**: the monitors it follows (below), then their last events as a `Timeline`;
+  6. **Où on en est** (active threads; an ended one says it in its banner): the summary as
+     remember (kind progress), the extraction or its close wrote it, with its date
+     (`threads.summarized`, stamped by `setThread`); no model call;
+  7. **Depuis ta dernière visite** (`thread_header.go`): facts made by code from the thread's data
+     (a step started, done, failed or handing in its work, what was settled for its task, the
+     summary written again, the thread's end), each with its time, since the user's visit before
+     the last one, oldest first, the last 5 (« … et 2 plus tôt » before them); with none, the log
+     tells whether anything else moved (a step added, a plan changed, a card linked, a reopen:
+     « 3 changement(s), le dernier à 15 h 10. », counted, never quoted), else « Rien de nouveau
+     depuis 14 h 32. »; « Jusqu'ici » and what happened since its opening before any visit. Never
+     the log's lines (French only, and they may quote a lead). A visit is the page's `open` action
+     on the surface: `seen` takes the last visit, `visited` is now, so the visit that opens it
+     still shows what was new; opened again within 5 minutes, the same visit. Times are absolute
+     (« 14 h 32 », « 13 nov. 9 h 05 »): the surface is written again only when it changes;
+  8. **steps**: the steps done folded in one line (a `Fold`: « 2 étapes faites · accord : Fusion »,
+     the last call whose card was approved), opened to see them as a `Timeline` with their
+     decided cards, each a compact `Proposal` (one line, opened by a click); then the other steps
+     as a `Timeline`, a decided card of theirs compact under it;
+  9. the holder's part (below).
 
-  Then the steps as a `Timeline` (each with its state, its time, its kind, its checks and the
-  last word on it), none when it has no step. Under a task step, what was settled for its task
+  A step in a `Timeline` has its state, its time, its kind, its checks and the last word on it.
+  Under a task step, what was settled for its task
   (#564): Eriphe's reply to its question (« Question de l'assistant → Eriphe a répondu : … »),
   its checks fixed, a release Eriphe asked on a card and the user's answer on it. Kept as facts
   in `thread_answers` (a kind, its refs, Eriphe's reply, the brain turn's taint) by
@@ -1183,17 +1198,23 @@ by code from the thread's data (#468): it never depends on a model remembering t
     then be larger than an author's), and in code's section, under « Données », its caption
     (« Source <name> · lu à 14 h 32 · lu par le code, sans modèle », « extérieur » for a server not
     trusted, which taints the surface for the models, `source:<name>`; its Proposals still
-    answer). With `items` (`path` to the list, `id` in each item, a monitor's path syntax), each
-    item, by its id, is a row of `/thread/sources/<n>/items` (`source`, `id`, `n` its place in the
-    list), at most 200, in a `List`: what the thread lists is shown with no model. A read again
-    changes the data, not the components.
+    answer). With `items` (`path` to the list, `id` in each item, a monitor's path syntax; `title`
+    and `detail`, paths in the item, what its row says, its id without), each item, by its id, is
+    a row (`source`, `id`, `n` its place in the list, `title`, `detail`, its note's `note`,
+    `state`, `due`, `mark`, `level`), at most 200, drawn as an `Item`: what the thread lists is
+    shown with no model. The rows are grouped by their notes' state at
+    `/thread/sources/<n>/groups` (« À faire », « À regarder », « Pas encore trié », « Pour info »,
+    « Rien à faire », « Traité », each a `Fold` with its count; the last two folded), their counts
+    by state at `/thread/sources/<n>/counts` (`Metric`s side by side). All bound by paths: a read
+    again changes the data, not the components.
 - **Notes on items** (#571, `thread_items.go`, table `thread_items`): the brain (`note_item`, with
   the thread) and a thread's lead (`note_item`, its own) note one item a source lists, by the
   source's name and the item's id: a short note (300 characters), a state (`act`, `look`, `info`,
   `none`, `done`) and a due date; the same item noted again replaces it, nothing at all takes it
   away; 500 a thread. Its `author` (`brain`, `lead:<id>`) and `tainted` (the brain turn's taint,
   the lead session's) are code's, never given. Code joins it to its item's row (`note`, `state`,
-  `due`, `by`, `detail`; `external` for a tainted one, which taints the surface for the models,
+  `due`, `by`, `level`: `high` for `act`, `low` for `info`, `none`, `done`; `external` and the
+  mark « extérieur » for a tainted one, which taints the surface for the models,
   `note:<source>/<item>`). A tainted note is shown, never quoted into a summary: it is in no
   summary, fact, one-line summary or message code writes, and reading it (`read_thread`'s
   `notes`, the lead's `thread`) taints the reader, so `remember` kind `progress` is then refused
@@ -1209,8 +1230,8 @@ by code from the thread's data (#468): it never depends on a model remembering t
   Under the header, « En direct »: each monitor's latest number as a `Metric` and its last 24 as a
   `Chart` (kept in its look, `monitorLook.Points`), with « Surveillance <name> · lu à 14 h 32 ·
   lu par le code, sans modèle »; each look writes the surface again (after its state is saved).
-  Its events (`thread_watch`: kind, number, limit, holds, taint) land at the end of the
-  `Timeline`, the last 5, and in the header's facts, worded from the kind and numbers only
+  Its events (`thread_watch`: kind, number, limit, holds, taint) are a `Timeline` under
+  the live values, the last 5, and in the header's facts, worded from the kind and numbers only
   (« cpu : 95, au-dessus du seuil de 90 »), never a changed value, a new item or an error's text.
   While a cross monitor is past its limit, or its looks fail, the thread's weight rises to 65;
   back under, it comes down. A monitor of a server not trusted makes the surface « extérieur »
