@@ -203,11 +203,11 @@ func TestSurfaceKeepsItsSubject(t *testing.T) {
 	}
 }
 
-// A skill's run is about the subject it declares, else its events' key
+// A skill's run is about the thread alias it declares, else its events' key
 // when it names a thing; a bad subject refuses the skill.
 func TestSkillRunSubject(t *testing.T) {
-	st, err := parseSkillTrigger(skillManifest{When: "monitor.failed key=sauvegarde", Subject: "Alerte: sauvegarde"})
-	if err != nil || st.Subject != "alert:sauvegarde" {
+	st, err := parseSkillTrigger(skillManifest{When: "monitor.failed key=sauvegarde", Thread: "Alerte: sauvegarde"})
+	if err != nil || st.Thread != "alert:sauvegarde" {
 		t.Fatalf("declared: %+v %v", st, err)
 	}
 	monitor := []journalEvent{{Kind: "monitor.failed", Key: "sauvegarde"}}
@@ -227,10 +227,10 @@ func TestSkillRunSubject(t *testing.T) {
 			t.Errorf("%q %v: %q, want %q", tc.key, tc.events, got, tc.want)
 		}
 	}
-	if _, err := parseSkillTrigger(skillManifest{When: "monitor.new", Subject: "task:t-1"}); err == nil {
+	if _, err := parseSkillTrigger(skillManifest{When: "monitor.new", Thread: "task:t-1"}); err == nil {
 		t.Error("a record as a skill's subject")
 	}
-	if _, err := parseSkillTrigger(skillManifest{Subject: "project:site"}); err == nil {
+	if _, err := parseSkillTrigger(skillManifest{Thread: "project:site"}); err == nil {
 		t.Error("a subject without when")
 	}
 	c, now := skillCore(t)

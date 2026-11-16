@@ -9,8 +9,8 @@ import (
 	"unicode/utf8"
 )
 
-// Notes on a thread's items (#571): what the brain or a thread's lead
-// writes about one item a source of the thread lists (a mail, an event, a
+// Notes on a thread's items (#571): what the brain, a thread's lead or a
+// task lent eriphe-threads (a skill's run, task_threads.go) writes about one item a source of the thread lists (a mail, an event, a
 // pull request), by the source's name and the item's id: a short note, a
 // state, a due date (note_item).
 //
@@ -34,7 +34,7 @@ const threadItemsSchema = `CREATE TABLE IF NOT EXISTS thread_items (
 	note    TEXT NOT NULL DEFAULT '',
 	state   TEXT NOT NULL DEFAULT '',   -- act, look, info, none, done
 	due     INTEGER NOT NULL DEFAULT 0,
-	author  TEXT NOT NULL,              -- brain, lead:<thread>
+	author  TEXT NOT NULL,              -- brain, lead:<thread>, skill:<name>, task:<id>
 	tainted TEXT NOT NULL DEFAULT '',   -- why its words may be someone else's
 	noted   INTEGER NOT NULL,
 	gone    INTEGER NOT NULL DEFAULT 0, -- the first good read that no longer listed its item; 0 while listed
@@ -75,7 +75,7 @@ type itemNote struct {
 // noteItemIn is note_item's input; the brain names the thread, a lead's is
 // its own.
 type noteItemIn struct {
-	Thread int64  `json:"thread_id,omitempty" jsonschema:"the thread (a lead: leave it out, it is yours)"`
+	Thread int64  `json:"thread_id,omitempty" jsonschema:"the thread (a lead, a skill's run: leave it out for yours)"`
 	Source string `json:"source" jsonschema:"the name of the thread's source that lists the item (one with items)"`
 	Item   string `json:"item" jsonschema:"the item's id, as the source gives it"`
 	Note   string `json:"note,omitempty" jsonschema:"what the user should know of it, in their language, one short sentence; empty with no state: the note is taken away"`
@@ -226,8 +226,13 @@ func (c *core) pruneItemNotes(now time.Time) {
 
 // noteAuthor is who wrote a note, as its row says it.
 func noteAuthor(author, lang string) string {
-	if strings.HasPrefix(author, threadNoteAuthor) {
+	switch {
+	case strings.HasPrefix(author, threadNoteAuthor):
 		return tr(lang, "thread.surface.part.lead")
+	case strings.HasPrefix(author, "skill:"):
+		return fmt.Sprintf(tr(lang, "thread.item.by.skill"), strings.TrimPrefix(author, "skill:"))
+	case strings.HasPrefix(author, "task:"):
+		return tr(lang, "thread.item.by.task")
 	}
 	return tr(lang, "thread.surface.part.brain")
 }

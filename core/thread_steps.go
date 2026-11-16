@@ -360,6 +360,7 @@ func (c *core) startCallStep(s Thread, st Step) error {
 	if err != nil {
 		return err
 	}
+	run = run && !c.callAsks(s.ID, st.Key) // a task proposes, the user says yes
 	now := time.Now().Unix()
 	raw := callInput(st.stepSpec)
 	if run {
@@ -683,6 +684,9 @@ func (c *core) addStep(ctx context.Context, id int64, sp stepSpec, taint []strin
 	}
 	if tainted != s.Tainted {
 		c.setThread(id, map[string]any{"tainted": tainted})
+	}
+	if sp.callsTool() && byTask(by) {
+		c.store.set(callAskKey+strconv.FormatInt(id, 10)+":"+sp.Key, "1") // a task's call: always its card (task_threads.go)
 	}
 	if err := c.insertSteps(id, specs, false); err != nil {
 		return Step{}, err

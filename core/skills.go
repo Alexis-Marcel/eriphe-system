@@ -233,9 +233,9 @@ type skillManifest struct {
 	AllowedTools string // shown, never honoured: Eriphe's permissions decide
 	Body         string // the instructions, after the front matter
 	// Its trigger, as written (skill_triggers.go): when, every, model,
-	// tools, can.
-	When, Every, Model, Tools, Can, Urgent, Subject string
-	Trigger                                         *skillTrigger
+	// tools, urgent, thread.
+	When, Every, Model, Tools, Urgent, Thread string
+	Trigger                                   *skillTrigger
 }
 
 // The name of a skill (agentskills.io): lowercase letters, digits and
@@ -289,8 +289,8 @@ func parseSkillMD(raw []byte) (skillManifest, error) {
 		keys[k] = v
 	}
 	m.Name, m.Description, m.AllowedTools = keys["name"], keys["description"], keys["allowed-tools"]
-	m.When, m.Every, m.Model, m.Tools, m.Can, m.Urgent = keys["when"], keys["every"], keys["model"], keys["tools"], keys["can"], keys["urgent"]
-	m.Subject = keys["subject"]
+	m.When, m.Every, m.Model, m.Tools, m.Urgent = keys["when"], keys["every"], keys["model"], keys["tools"], keys["urgent"]
+	m.Thread = keys["thread"]
 	switch {
 	case !skillName.MatchString(m.Name):
 		return m, skillErr("skills.err.name", m.Name)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -18,13 +17,8 @@ import (
 //     card (kind runcalls), with its message: each action and its
 //     parameters; the yes runs them all as kept, the no none. The brain is
 //     not told of their results: the run's note keeps them.
-//   - With can: [open-thread], its last message may carry a thread
-//     to open, as a fenced ```thread block of open_thread's input. Its
-//     plan starts at once when every step only reads, writes on a branch of
-//     its repository or calls catalog tools (each call still under the
-//     grid): the skill's approval stands for it. Otherwise the plan waits for
-//     its card. The thread is the run's: the events of its key go to its
-//     lead while it is open.
+//   - Lent eriphe-threads, it acts on threads with tools (task_threads.go),
+//     never with its message.
 //   - With urgent: <fixed text>, a run that weighs something 5 in its
 //     attention list sends that fixed text over the quiet hours and the
 //     daily cap, once per run, as an urgent rule does: nothing the run read
@@ -35,8 +29,6 @@ const (
 	runCallsWait   = "Pas exécutée maintenant : eriphe-core la garde, telle quelle, pour une carte que l'utilisateur verra à la fin de ton tour ; s'il dit oui, elle sera exécutée. N'insiste pas et continue ; dis-le dans ton message final."
 	urgentSkillWhy = "Ton skill « %s » est urgent : tu as approuvé ce message pour être prévenu à toute heure."
 )
-
-var threadBlockRe = regexp.MustCompile("(?s)```thread\\s*\\n(.*?)```")
 
 // askRunCall keeps a run's call for its card and answers the task: not run.
 func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[string]any) {
@@ -170,71 +162,6 @@ func (c *core) runCallDone(a accessQuestion, text string) {
 	log.Printf("skill run %d: card %d: %s", a.Run, a.ID, truncate(text, 120))
 }
 
-// threadOfMessage takes a ```thread block out of a run's last message.
-func threadOfMessage(text string) (*threadIn, string, error) {
-	m := threadBlockRe.FindStringSubmatchIndex(text)
-	if m == nil {
-		return nil, text, nil
-	}
-	rest := strings.TrimSpace(text[:m[0]] + text[m[1]:])
-	var in threadIn
-	if err := json.Unmarshal([]byte(text[m[2]:m[3]]), &in); err != nil {
-		return nil, rest, fmt.Errorf("its thread block is not open_thread's JSON: %w", err)
-	}
-	return &in, rest, nil
-}
-
-// runThread opens the thread a run asked for, if its skill may.
-func (c *core) runThread(ctx context.Context, r *skillRun, tr *skillTrigger, in *threadIn) string {
-	if tr == nil || !containsStr(tr.Can, canThread) {
-		return "a thread was asked, but the skill may not open one (can: [open-thread])"
-	}
-	var taint []string
-	if why := c.taskResultTaint(r.Task); why != "" {
-		taint = []string{why}
-	}
-	in.Mode = modeLed // a skill's run opens planned work, its lead hears the key's events
-	s, err := c.openThread(*in, taint, "skill:"+r.Skill)
-	if err != nil {
-		return "the thread could not open: " + err.Error()
-	}
-	c.store.db.Exec(`UPDATE skill_runs SET thread = ? WHERE id = ?`, s.ID, r.ID)
-	if !safePlan(in.Steps) {
-		return fmt.Sprintf("thread %d opened; its plan waits for its card", s.ID)
-	}
-	var ask int64
-	if c.store.db.QueryRow(`SELECT id FROM thread_asks WHERE thread = ? AND kind = ? AND state = ?`, s.ID, askPlan, askPending).Scan(&ask) == nil {
-		if err := c.decideThreadAskBy(ctx, ask, true, true); err != nil {
-			return fmt.Sprintf("thread %d opened; its plan waits for its card (%v)", s.ID, err)
-		}
-	}
-	return fmt.Sprintf("thread %d opened and started", s.ID)
-}
-
-// safePlan: every step only reads, writes on a branch of its repository or
-// calls catalog tools (each call under the grid). A folder lent beyond
-// read, a credential, a file: the plan waits for the user.
-func safePlan(steps []stepSpec) bool {
-	for _, st := range steps {
-		for _, rr := range st.Resources {
-			switch rr.Kind {
-			case "repo":
-				if rr.Access == "write" && rr.Branch == "" {
-					return false
-				}
-			case "tool":
-			case "folder", "place":
-				if rr.Access != "" && rr.Access != "read" {
-					return false
-				}
-			default:
-				return false
-			}
-		}
-	}
-	return true
-}
-
 // runUrgent sends a skill's fixed urgent text, once per run.
 func (c *core) runUrgent(r *skillRun, tr *skillTrigger) {
 	if tr == nil || tr.Urgent == "" || c.store.get(fmt.Sprintf("skill_urgent:%d", r.ID)) != "" {
@@ -248,48 +175,22 @@ func (c *core) runUrgent(r *skillRun, tr *skillTrigger) {
 	}
 }
 
-// liveThread is the run's thread while it is open.
-func (c *core) liveThread(r *skillRun) (Thread, bool) {
-	var id int64
-	c.store.db.QueryRow(`SELECT thread FROM skill_runs WHERE id = ?`, r.ID).Scan(&id)
-	if id == 0 {
-		return Thread{}, false
-	}
-	s, err := c.thread(id)
-	if err != nil {
-		return Thread{}, false
-	}
-	switch s.Phase {
-	case phaseProposed, phaseRunning, phasePaused:
-		return s, true
-	}
-	return Thread{}, false
-}
-
-// toRunThread gives the events of a key to the lead of its run's thread.
-func (c *core) toRunThread(r *skillRun, s Thread, queued []queuedEvent) {
-	var events []journalEvent
-	var taint []string
-	for _, q := range queued {
-		if e, ok := c.journalEvent(q.Event); ok {
-			events = append(events, e)
-			if e.External && len(taint) == 0 {
-				taint = []string{"skill events: " + e.Kind}
-			}
-		}
-	}
-	c.tellLead(s, "De nouveaux événements sont arrivés pour ce thread.\n"+eventsText(events), taint)
-	c.dequeue(queued)
-}
-
-// skillCanText is what a run is told of what its skill allows.
-func skillCanText(tr *skillTrigger) string {
+// skillCanText is what a run is told of what its skill allows, and of
+// its thread, if it has one (skillThread).
+func skillCanText(tr *skillTrigger, th *Thread, sources []string) string {
 	var b strings.Builder
-	if containsStr(tr.Can, canThread) {
-		b.WriteString("\n\nSi le travail demande plusieurs étapes (enquêter, corriger, ouvrir une PR), ouvre un thread mené : " +
-			"termine ton message final par un bloc ```thread contenant le JSON de open_thread : " +
-			`{"title", "goal", "done_when", "budget_minutes", "steps": [{"key", "title", "kind": "task", "after": [], "prompt", "agent", "resources": [{"kind": "repo", "ref": "owner/name", "access": "write", "branch": "eriphe/…"}]}]}` +
-			". Une étape qui n'écrit que sur sa branche démarre seule ; la fusion et le déploiement restent à l'utilisateur.")
+	if containsStr(tr.Tools, threadsServer) {
+		if th != nil {
+			fmt.Fprintf(&b, "\n\nTon fil : le thread %d « %s » (%s). Tu agis dessus avec les outils de %s, sans redonner son id : "+
+				"note chaque élément de ses sources (note_item), dis s'il attend l'utilisateur ou fixe une échéance (set_thread), fais-le remonter s'il le faut (set_thread raise), "+
+				"ajoute ce que l'utilisateur doit faire ou décider (add_step : user, deadline, ou call : une action qu'il approuve sur sa carte). Tu ne le clos jamais.",
+				th.ID, th.Title, th.Subject, threadsServer)
+			if len(sources) > 0 {
+				fmt.Fprintf(&b, " Ses sources qui listent des éléments : %s ; un élément s'y note par son id, celui que donnent ses événements.", strings.Join(sources, ", "))
+			}
+		} else {
+			b.WriteString("\n\nTu agis sur les fils avec les outils de " + threadsServer + " : trouve celui d'un sujet (find_thread) avant d'en ouvrir un (open_thread).")
+		}
 	}
 	if tr.Urgent != "" {
 		b.WriteString("\n\nSi c'est grave et que l'utilisateur doit le savoir tout de suite, même la nuit, donne-lui le poids 5 dans ta liste attention : " +

@@ -316,7 +316,12 @@ func unmarshalResources(raw string) []ResourceRef {
 // does not lift it: the brain asks me, and starts the task in the turn of
 // my answer.
 func (c *core) taintedResources(r runRequest) error {
-	tainted := c.turnTaint()
+	return c.taintedLent(r, c.turnTaint())
+}
+
+// taintedLent is taintedResources for who read tainted: a brain's turn,
+// or a task that plans steps (task_threads.go).
+func (c *core) taintedLent(r runRequest, tainted []string) error {
 	if len(tainted) == 0 {
 		return nil
 	}

@@ -182,7 +182,7 @@ func (c *core) updateDefaultSkill(name string, parts []skillFile, sha string) {
 }
 
 // askedMore is what a version asks for beyond the one before: a tool
-// Eriphe does not provide, a can, an urgent text, a script. The servers
+// Eriphe does not provide, an urgent text, a script. The servers
 // Eriphe provides grant nothing beyond the user's access policy.
 func askedMore(old, next *skillVersion) []string {
 	var ot, nt skillTrigger
@@ -196,11 +196,6 @@ func askedMore(old, next *skillVersion) []string {
 	for _, t := range nt.Tools {
 		if !providedServer(t) && !slices.Contains(ot.Tools, t) {
 			out = append(out, t)
-		}
-	}
-	for _, x := range nt.Can {
-		if !slices.Contains(ot.Can, x) {
-			out = append(out, "can: "+x)
 		}
 	}
 	if nt.Urgent != "" && nt.Urgent != ot.Urgent {
