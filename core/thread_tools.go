@@ -139,6 +139,17 @@ const sameMatter = "même chose"
 // is refused: that thread's plan changes instead. Only the brain changes
 // how a thread found ends.
 func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread, again string, err error) {
+	// Its headline, the line the user reads at its top, checked before
+	// anything opens; given, it is the thread's, new or given back.
+	headline, err := headlineText(in.Headline)
+	if err != nil {
+		return s, "", err
+	}
+	defer func() {
+		if err == nil && s.ID != 0 && headline != "" {
+			c.setThreadHeadline(s.ID, headline, by, taint)
+		}
+	}()
 	led := strings.EqualFold(strings.TrimSpace(in.Mode), modeLed) || (strings.TrimSpace(in.Mode) == "" && len(in.Steps) > 0)
 	alias, err := aliasKey(in.Alias)
 	if err != nil {

@@ -450,8 +450,9 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	blockControls(&head, s, lang)
 	out.list = append(head.list, out.list...)
 	out.children = append(head.children, out.children...)
-	if len(out.children) == 0 {
-		// Nothing yet: a standing thread before its first item, say.
+	if !slices.ContainsFunc(out.children, func(id string) bool { return id != "thread_controls" }) {
+		// Nothing yet but its buttons: a standing thread before its first
+		// item, a thread just opened with no headline, say.
 		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": w("thread.item.none")})
 	}
 

@@ -26,7 +26,8 @@ var threadMu sync.Mutex
 // threadIn is a thread as the brain opens it.
 type threadIn struct {
 	Title    string     `json:"title" jsonschema:"what the user reads for the thread, in a few words in their language: Refonte du service photos"`
-	Goal     string     `json:"goal" jsonschema:"its real outcome, in one or two sentences: what must have happened for it to be done (merged and deployed, not only reviewed)"`
+	Goal     string     `json:"goal" jsonschema:"its real outcome, in one or two sentences: what must have happened for it to be done (merged and deployed, not only reviewed); for you and the agents, never shown to the user"`
+	Headline string     `json:"headline,omitempty" jsonschema:"what the user reads at the top of the thread and on its chip: one line addressed to them, in their language, at most 120 characters, no ids (« Tes 4 projets en cours, avec leur prochaine étape »); open_thread on its alias again with another one replaces it"`
 	Alias    string     `json:"alias,omitempty" jsonschema:"the key of the matter it follows, kind:slug, to find it again: project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, topic:<words>; a key is one thread's (a mail or an event is an item, note_item, not a key)"`
 	Mode     string     `json:"mode,omitempty" jsonschema:"light (the default without steps: you hold it, no card, no budget) or led (the default with steps: a plan the user approves on a card, a lead, a budget)"`
 	DoneWhen string     `json:"done_when,omitempty" jsonschema:"led: what must be true at the end, checkable: the objective the thread is judged on"`
@@ -1015,7 +1016,7 @@ func (c *core) threadProposal(p proposal) proposal {
 		steps, _ := c.steps(s.ID)
 		p.Fields = stepFields(steps, func(st Step) bool { return st.Planned })
 		p.text = func(lang string) string {
-			return fmt.Sprintf(tr(lang, "thread.card.plan"), s.Title, strings.TrimRight(s.Goal, ". "), len(p.Fields), s.Budget)
+			return fmt.Sprintf(tr(lang, "thread.card.plan"), s.Title, len(p.Fields), s.Budget) // never its goal: the agents' words
 		}
 	case askAmend:
 		var in amendIn
