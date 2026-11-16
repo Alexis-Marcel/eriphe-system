@@ -335,7 +335,8 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 		return surface{}, nil, fmt.Errorf("a title of %d characters at most", surfaceTitleMax)
 	case utf8.RuneCountInString(in.Why) > surfaceWhyMax:
 		return surface{}, nil, fmt.Errorf("a why of %d characters at most", surfaceWhyMax)
-	case len(in.Components) > surfaceJSONMax || len(in.Data) > surfaceJSONMax:
+	case len(in.Components) > surfaceJSONMax || len(in.Data) > surfaceJSONMax && !in.composed || len(in.Data) > surfaceJSONMax+surfaceSourcesMax*surfaceValueMax:
+		// What code composes carries its thread's sources' last reads.
 		return surface{}, nil, fmt.Errorf("components and data of %d KiB at most each", surfaceJSONMax>>10)
 	case len(in.Sources) > surfaceSourcesMax:
 		return surface{}, nil, fmt.Errorf("%d sources at most", surfaceSourcesMax)
@@ -1092,6 +1093,10 @@ func (c *core) surfaceOpened(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	if th, ok := threadOfSurface(id); ok && s.Author == threadAuthor(th) {
+		c.threadOpened(ctx, th) // its thread's sources (thread_sources.go)
+		return nil
+	}
 	if len(s.Sources) == 0 || time.Since(time.Unix(s.Look.Read, 0)) < surfaceOpenFresh {
 		return nil
 	}
@@ -1102,6 +1107,7 @@ func (c *core) surfaceOpened(ctx context.Context, id string) error {
 // surfaceResourceUpdated is the pool's hook: a server said a resource
 // changed; the surfaces that read it read it again.
 func (c *core) surfaceResourceUpdated(server, uri string) {
+	c.threadResourceUpdated(server, uri) // thread_sources.go
 	all, err := c.surfaces()
 	if err != nil {
 		return
@@ -1136,6 +1142,9 @@ func (c *core) followSurfaceResources() {
 				want[src.Resource] = append(want[src.Resource], src.URI)
 			}
 		}
+	}
+	for _, r := range c.threadResources() { // thread_sources.go
+		want[r.server] = append(want[r.server], r.uri)
 	}
 	for name, uris := range want {
 		if u := c.pool.get(name); u != nil {

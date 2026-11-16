@@ -1144,8 +1144,37 @@ by code from the thread's data (#468): it never depends on a model remembering t
   `task_answer_log.go`, worded by code in the user's language, never the task's question; a
   reply written on a tainted turn says « extérieur » and taints the surface (`answer:<id>`). Its component ids start with `thread_`, its data
   is under `/thread`.
-- **A live thread** (#555, `thread_live.go`): who holds the thread may make it follow up to 3
-  monitors the user approved (`link_thread` with `monitor`, its name; a proposed one is refused).
+- **A thread's sources** (#571, `thread_sources.go`, table `thread_sources`): live data the thread
+  carries, read by code without a model, under a surface source's rules (`sourceWhy`: a free read
+  of the brain's, or a resource the server lists; `checkSources` when added). A source has a name
+  and one kind: a `tool` (server/tool with fixed `args`), a `resource` (a server and its `uri`), or
+  a `monitor` the user approved (below). The brain adds one with `link_thread` `source` (the same
+  name replaces it; a name alone takes it away); the holder's part brings its own with
+  `surface_write` `sources` (each at `/<name>`, `refresh.every` its interval): they become the
+  thread's (`by` `part`), replaced when the part is written again, gone when it is removed; a
+  part may not give again a source the thread has already (it binds `/<name>`). They are stored
+  with their first read before the part is, so the part is never written bound to a value not
+  there yet; while one has never given anything, a part that binds it is held quietly (no error
+  for its author). At most 8 a thread, 3 of them monitors.
+  - A tool or a resource is read at once when added (in the background), every `every` minutes (5
+    by default) at the engine's tick (`threadSourcesDue`), when its server says the resource
+    changed (`threadResourceUpdated`; the pool follows the resources of active threads), and when
+    the user opens the thread's surface (`threadOpened`, not within 30 s of the last read); only
+    while the thread is active, one read of a thread at a time. Its last good read is kept on the
+    source (`value`); a read that fails or is refused keeps it, and says why (« en attente »). A
+    read never runs under the engine's lock nor inside a surface write: the surface is written
+    from the last reads, so a change of the thread never waits for a tool.
+  - On the surface: its last read at `/<name>`, the thread ended too (where the part binds it; code's composed data may
+    then be larger than an author's), and in code's section, under « Données », its caption
+    (« Source <name> · lu à 14 h 32 · lu par le code, sans modèle », « extérieur » for a server not
+    trusted, which taints the surface for the models, `source:<name>`; its Proposals still
+    answer). With `items` (`path` to the list, `id` in each item, a monitor's path syntax), each
+    item, by its id, is a row of `/thread/sources/<n>/items` (`source`, `id`, `n` its place in the
+    list), at most 200, in a `List`: what the thread lists is shown with no model. A read again
+    changes the data, not the components.
+- **A live thread** (#555, `thread_live.go`): one kind of source: who holds the thread may make it
+  follow up to 3 monitors the user approved (`link_thread` with `source` `monitor`, its name; a
+  proposed one is refused).
   Under the header, « En direct »: each monitor's latest number as a `Metric` and its last 24 as a
   `Chart` (kept in its look, `monitorLook.Points`), with « Surveillance <name> · lu à 14 h 32 ·
   lu par le code, sans modèle »; each look writes the surface again (after its state is saved).
@@ -1155,8 +1184,7 @@ by code from the thread's data (#468): it never depends on a model remembering t
   While a cross monitor is past its limit, or its looks fail, the thread's weight rises to 65;
   back under, it comes down. A monitor of a server not trusted makes the surface « extérieur »
   for the models (`monitor:<name>`), its Proposals still answer in place. Nothing wakes the
-  brain: a skill reacts to the monitor's events as before. The holder's part still takes no
-  sources.
+  brain: a skill reacts to the monitor's events as before.
 - **Rewritten at each change** of the thread: the store's `setThread`, `setStep`, `insertSteps`,
   a card asked, decided or withdrawn call `keepThreadSurface`, which writes only when what the
   surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active
@@ -1168,8 +1196,8 @@ by code from the thread's data (#468): it never depends on a model remembering t
 - **The holder's part**: who holds the thread (the brain, or its lead) may add one with
   `surface_write` on `thread-<id>`: a state block, points to see, a diff (`Code`), a `Link`. It is
   kept apart (`thread_part:<id>`), checked alone (A2UI, actions, links, bindings; no `thread_` id,
-  no `/thread` data, no sources: a change of the thread rewrites the surface at once, never
-  waiting for a tool), and shown under code's section, its root renamed `thread_part`, with who
+  no `/thread` data; its sources, each at `/<name>`, become the thread's, see above, so a change
+  of the thread still rewrites the surface at once, never waiting for a tool), and shown under code's section, its root renamed `thread_part`, with who
   added it. Writing it again replaces it, `surface_remove` takes it away; the surface stays. A
   `surface.stale` about the surface wakes the lead that wrote the part; code keeps the rest.
 - **Taint, per part**: a step whose task read external content shows « extérieur » in its detail,

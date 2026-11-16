@@ -35,10 +35,10 @@ import (
 //     may add one with surface_write on thread-<id> (a state block, points
 //     to see, a diff, a link). It is kept apart (threadPartKey), checked
 //     alone, and shown under code's section, its root renamed thread_part.
-//     A new write replaces it, surface_remove takes it away. Composed
-//     only, no sources: a change of the thread rewrites the surface at
-//     once and never waits for a tool. Live data comes from a monitor
-//     the thread follows (thread_live.go), read by code.
+//     A new write replaces it, surface_remove takes it away. Its sources
+//     become the thread's (thread_sources.go): read by code, the surface
+//     written from their last read, so a change of the thread rewrites it
+//     at once and never waits for a tool.
 //   - Taint, per part: a step whose task read external content, and a
 //     part written after reading some, say « extérieur » where they show.
 //     For the models that read the workspace, the surface is tainted as
@@ -361,6 +361,8 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	if c.threadLive(&in, &out, data, s, now) {
 		in.Weight = max(in.Weight, threadWeightWatch)
 	}
+	// The tools and resources it reads, their items (thread_sources.go).
+	values := c.threadSourcesPart(&in, &out, data, s, now)
 
 	if len(steps) > 0 || len(watch) > 0 {
 		items := make([]any, 0, len(steps)+len(watch))
@@ -426,6 +428,9 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 			composed = map[string]any{}
 		}
 		in.Tainted = part.Tainted
+	}
+	for name, v := range values {
+		composed[name] = v // where the holder's part binds it
 	}
 	composed[threadDataKey] = data
 	comps := append([]comp{{"id": "root", "component": "Column", "children": out.children}}, out.list...)
@@ -550,7 +555,9 @@ func (c *core) keepThreadSurface(id int64) {
 		}
 		in, _ = c.threadSurfaceIn(s, steps, asks, nil, time.Now())
 		_, errs, err = c.writeSurface(threadAuthor(id), in)
-		if err == nil && len(errs) == 0 {
+		// A source of the thread not read yet (or failing) holds the part
+		// quietly until it is: nothing for its author to fix.
+		if err == nil && len(errs) == 0 && !c.sourceUnread(id) {
 			c.surfaceError(sid, a2ui.Error{Code: a2ui.CodeValidationFailed, SurfaceID: sid, Message: "the part added to the thread's surface is left out: " + truncate(why, 400)})
 		}
 	}
@@ -602,8 +609,9 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 	if !s.active() {
 		return nil, fmt.Errorf("the thread is %s: its surface takes no new part", s.State)
 	}
-	if len(in.Sources) > 0 || in.Refresh.Every != 0 {
-		return nil, errors.New("a part of a thread's surface is composed: no sources nor refresh (write the values in data, or a surface of your own for live data)")
+	srcs, err := c.partSources(thread, in)
+	if err != nil {
+		return nil, err
 	}
 	if in.Components == nil {
 		return nil, errors.New("components are needed: a flat list, one with id root")
@@ -639,8 +647,16 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 	if len(errs) == 0 {
 		errs = a2ui.CheckLinks(sid, comps)
 	}
+	// Its sources, read once to check what it binds (held surfaceReadCap at
+	// most: those still reading are checked against their schema).
+	reads, late := c.readSourcesWithin(in.Sources, surfaceReadCap)
+	merged := orEmptyMap(in.Data)
 	if len(errs) == 0 {
-		errs = c.checkBindings(sid, comps, orEmptyMap(in.Data), nil, nil)
+		var err error
+		if merged, err = mergeSources(merged, in.Sources, reads); err != nil {
+			return nil, err
+		}
+		errs = c.checkBindings(sid, comps, merged, in.Sources, reads)
 	}
 	if len(errs) > 0 {
 		return nil, invalidSurface(errs)
@@ -652,10 +668,16 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 	}
 	comps, _ = json.Marshal(in.Components)
 	raw, _ := json.Marshal(threadPart{Author: who.author, Components: comps, Data: data, Tainted: slices.Compact(slices.Sorted(slices.Values(tainted)))})
+	// Its sources first, with what their first read gave: the part is
+	// never written bound to a value not there yet.
+	c.setPartSources(thread, srcs, reads, late)
 	c.store.set(threadPartKey+strconv.FormatInt(thread, 10), string(raw))
 	c.keepThreadSurface(thread)
-	return map[string]any{"id": sid, "author": threadAuthor(thread), "part": true,
-		"note": "Your part is on the thread's surface, under what code keeps there (its steps, its state, its cards). Writing it again replaces it; surface_remove takes it away. Its title, weight, why and lifetime are code's."}, nil
+	note := "Your part is on the thread's surface, under what code keeps there (its steps, its state, its cards). Writing it again replaces it; surface_remove takes it away. Its title, weight, why and lifetime are code's."
+	if len(srcs) > 0 {
+		note += " Its sources are the thread's: code reads them again, without a model, while the thread is active."
+	}
+	return map[string]any{"id": sid, "author": threadAuthor(thread), "part": true, "note": note}, nil
 }
 
 // removeThreadPart is surface_remove on a thread's surface: the holder's
@@ -665,6 +687,7 @@ func (c *core) removeThreadPart(who surfaceCaller, thread int64) (map[string]any
 		return nil, fmt.Errorf("the surface %s is the thread's, kept by code while it lives", threadSurfaceID(thread))
 	}
 	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, threadPartKey+strconv.FormatInt(thread, 10))
+	c.store.db.Exec(`DELETE FROM thread_sources WHERE thread = ? AND by = ?`, thread, byPart)
 	c.keepThreadSurface(thread)
 	return map[string]any{"removed": "part", "note": "Your part is gone; the thread's surface stays while the thread does."}, nil
 }

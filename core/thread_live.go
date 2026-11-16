@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -29,15 +28,10 @@ import (
 // server not trusted makes the surface « extérieur » for the models
 // (codeTaint monitor:<name>); its Proposals still answer in place.
 //
-// A thread's holder's part stays composed: no sources (thread_surface.go).
+// A thread's tools and resources it reads are its other sources
+// (thread_sources.go).
 
-const threadLiveSchema = `CREATE TABLE IF NOT EXISTS thread_monitors (
-	thread  INTEGER NOT NULL,
-	monitor TEXT NOT NULL,
-	created INTEGER NOT NULL,
-	PRIMARY KEY (thread, monitor)
-);
-CREATE TABLE IF NOT EXISTS thread_watch (
+const threadLiveSchema = `CREATE TABLE IF NOT EXISTS thread_watch (
 	id      INTEGER PRIMARY KEY AUTOINCREMENT,
 	thread  INTEGER NOT NULL,
 	monitor TEXT NOT NULL,
@@ -86,39 +80,10 @@ func notePoint(st *monitorLook, got any, now time.Time) {
 	}
 }
 
-// linkMonitor makes a thread follow a monitor, by its name: one the user
-// approved.
-func (c *core) linkMonitor(id int64, name, by string) (string, error) {
-	threadMu.Lock()
-	defer threadMu.Unlock()
-	s, err := c.thread(id)
-	if err != nil {
-		return "", err
-	}
-	if !s.active() {
-		return "", fmt.Errorf("the thread is %s: reopen it first", s.Look())
-	}
-	name = strings.TrimSpace(name)
-	m, err := c.monitorNamed(name)
-	if err != nil {
-		return "", fmt.Errorf("no monitor %q (see monitors)", name)
-	}
-	if m.State == monitorProposed {
-		return "", errors.New("the monitor waits for the user's approval on its card: link it once approved")
-	}
-	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_monitors WHERE thread = ? AND monitor != ?`, id, name).Scan(&n)
-	if n >= threadMonitorsMax {
-		return "", fmt.Errorf("a thread follows %d monitors at most", threadMonitorsMax)
-	}
-	c.store.db.Exec(`INSERT OR IGNORE INTO thread_monitors (thread, monitor, created) VALUES (?, ?, ?)`, id, name, time.Now().Unix())
-	c.logThread(id, by, "Surveillance suivie : "+name+".")
-	return "Monitor linked: its latest number and its events show on the thread's surface, read by code; a limit crossed raises the thread for the user. A skill still reacts to its events.", nil
-}
-
-// threadMonitors are the monitors a thread follows, that still exist.
+// threadMonitors are the monitors a thread follows (its sources of kind
+// monitor, thread_sources.go), that still exist.
 func (c *core) threadMonitors(thread int64) []*monitor {
-	rows, err := c.store.db.Query(`SELECT monitor FROM thread_monitors WHERE thread = ? ORDER BY created, monitor`, thread)
+	rows, err := c.store.db.Query(`SELECT name FROM thread_sources WHERE thread = ? AND kind = ? ORDER BY created, name`, thread, srcMonitor)
 	if err != nil {
 		return nil
 	}
@@ -141,8 +106,8 @@ func (c *core) threadMonitors(thread int64) []*monitor {
 
 // threadsFollowing are the active threads that follow a monitor.
 func (c *core) threadsFollowing(name string) []int64 {
-	rows, err := c.store.db.Query(`SELECT m.thread FROM thread_monitors m JOIN threads t ON t.id = m.thread
-		WHERE m.monitor = ? AND t.`+activeThreads+` ORDER BY m.thread`, name)
+	rows, err := c.store.db.Query(`SELECT m.thread FROM thread_sources m JOIN threads t ON t.id = m.thread
+		WHERE m.kind = ? AND m.name = ? AND t.`+activeThreads+` ORDER BY m.thread`, srcMonitor, name)
 	if err != nil {
 		return nil
 	}
@@ -196,7 +161,7 @@ func (c *core) monitorToThreads(m *monitor, kind string, p map[string]any) {
 // nor a later one of the same name.
 func (c *core) monitorGone(name string) {
 	ids := c.threadsFollowing(name)
-	c.store.db.Exec(`DELETE FROM thread_monitors WHERE monitor = ?`, name)
+	c.store.db.Exec(`DELETE FROM thread_sources WHERE kind = ? AND name = ?`, srcMonitor, name)
 	for _, id := range ids {
 		c.keepThreadSurface(id)
 	}

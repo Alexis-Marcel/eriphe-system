@@ -323,10 +323,10 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 
 	// Checked alone.
 	for name, bad := range map[string]map[string]any{
-		"code's id":   {"id": sid, "title": "x", "components": []map[string]any{{"id": "root", "component": "Text", "text": "x"}, {"id": "thread_x", "component": "Text", "text": "y"}}},
-		"code's data": {"id": sid, "title": "x", "components": oneText("x"), "data": map[string]any{"thread": 1}},
-		"sources":     {"id": sid, "title": "x", "components": boundText("/n"), "sources": map[string]any{"/n": map[string]any{"tool": "ledger/balances"}}},
-		"stepDone":    {"id": sid, "title": "x", "components": []map[string]any{{"id": "root", "component": "Button", "label": "Fait", "action": map[string]any{"event": map[string]any{"name": "stepDone", "context": map[string]any{"thread": th.ID, "step": "names"}}}}}},
+		"code's id":    {"id": sid, "title": "x", "components": []map[string]any{{"id": "root", "component": "Text", "text": "x"}, {"id": "thread_x", "component": "Text", "text": "y"}}},
+		"code's data":  {"id": sid, "title": "x", "components": oneText("x"), "data": map[string]any{"thread": 1}},
+		"not a source": {"id": sid, "title": "x", "components": boundText("/n"), "sources": map[string]any{"/n": map[string]any{"tool": "ledger/balances"}}}, // no ledger here: sources themselves are allowed (thread_sources_test.go)
+		"stepDone":     {"id": sid, "title": "x", "components": []map[string]any{{"id": "root", "component": "Button", "label": "Fait", "action": map[string]any{"event": map[string]any{"name": "stepDone", "context": map[string]any{"thread": th.ID, "step": "names"}}}}}},
 	} {
 		if _, msg := callOn(t, lead, "surface_write", bad); msg == "" {
 			t.Errorf("%s: accepted", name)
