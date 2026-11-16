@@ -3394,7 +3394,10 @@ exchange: the user's last message and Eriphe's lines after it (`lastExchange`: t
 however many events came between; with no message of the user's, Eriphe's last line; an error as a
 line that says it, never its raw text; an event's line and the first run's messages never), the
 message Eriphe is writing (the draft, by the same rule as the conversation's) and whether it is at
-work (`brainState`). A message the user sends shows alone at once, with Eriphe at work: it is the
+work (`brainState`). Eriphe's lines are each brain turn's answer only, what it writes after its
+last tool call: a note written before a tool call of the same turn is meant for no one and never
+copied, and a text stays the draft until its turn's next tool call or its end decides it
+(`answerText`, `brain.go`). A message the user sends shows alone at once, with Eriphe at work: it is the
 last exchange now. Eriphe's newest line is large while nothing follows it, the user's messages
 small bubbles; a link to the whole conversation by Eriphe's name. All of it is the stream's
 `exchange` event (JSON, `exchangeEvent`, each text cut at 4000 characters, `earlier` when lines

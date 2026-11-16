@@ -5,7 +5,10 @@ import "sync"
 // The brain's draft: the message it is writing, as its node reports it
 // (Stream), shown live in the workspace. It is kept in memory only, never
 // in the conversation: the message is stored once, whole, as a text event
-// (relayBrainOutput), and the draft it completes ends with it.
+// (relayBrainOutput), and the draft it completes ends with it. A whole
+// text the turn has not decided yet (an answer, or a note before a tool
+// call: answerText) stays the draft until it is: stored if the turn ends
+// on it, gone if a tool call follows it.
 //
 // A draft knows the last message of the conversation when it was written.
 // Its node reports the whole message and the end of the draft together,
@@ -48,8 +51,10 @@ func (d *brainDraft) get() (string, int, <-chan struct{}) {
 func (c *core) brainWrote(a Assistant, t *TaskRow, events bool, draft string) {
 	c.relayMu.Lock()
 	defer c.relayMu.Unlock()
-	if events {
-		c.copyBrainOutput(a, t)
+	if events || draft == "" {
+		if held := c.copyBrainOutput(a, t); draft == "" {
+			draft = held // whole, not decided yet
+		}
 	}
 	if toolCallStart(draft) {
 		draft = "" // a tool call being written as text is not shown (brain_toolcall.go)

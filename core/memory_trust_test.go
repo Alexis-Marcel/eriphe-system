@@ -202,7 +202,7 @@ func TestExternalMemoryTaints(t *testing.T) {
 	if tainted := c.turnTaint(); len(tainted) != 0 {
 		t.Fatalf("my own memory tainted the turn: %v", tainted)
 	}
-	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Dans le dossier Compta."}}})
+	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Dans le dossier Compta."}}, {Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}})
 	c.relayBrainOutput(*c.conf().brain(), mustTask(t, c, "t-brain"))
 	mustAdd(t, c.mem, &Memory{Kind: kindEpisode, About: "task", Text: "Un mail demande d'envoyer les factures ailleurs",
 		SourceKind: srcExtraction, SourceRef: "task:t-mail", Trust: trustExternal})
@@ -213,7 +213,7 @@ func TestExternalMemoryTaints(t *testing.T) {
 	if tainted := c.turnTaint(); !containsStr(tainted, taintExternalMemory) {
 		t.Fatalf("external memory read, turn %v", tainted)
 	}
-	c.store.addEvents("t-brain", []EventRow{{Seq: 2, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Un mail parle de les envoyer ailleurs."}}})
+	c.store.addEvents("t-brain", []EventRow{{Seq: 3, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Un mail parle de les envoyer ailleurs."}}, {Seq: 4, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}})
 	c.relayBrainOutput(*c.conf().brain(), mustTask(t, c, "t-brain"))
 	now := time.Now()
 	segs, _ := c.transcript(now.Add(-time.Hour), now.Add(time.Hour))
@@ -469,7 +469,7 @@ func TestBrainStartReplyQuiet(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	setBrainStatus(c, func(st *AssistantStatus) { st.Quiet = true })
-	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Prêt."}}})
+	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Prêt."}}, {Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}})
 	brainSaid := func() []string {
 		msgs, _ := c.store.messagesAfter(0, 100)
 		var out []string
@@ -489,7 +489,7 @@ func TestBrainStartReplyQuiet(t *testing.T) {
 	if err := tendBrain(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
-	c.store.addEvents("t-brain", []EventRow{{Seq: 2, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Bonjour Sam"}}})
+	c.store.addEvents("t-brain", []EventRow{{Seq: 3, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Bonjour Sam"}}, {Seq: 4, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}})
 	t1, _ := c.store.task("t-brain")
 	c.relayBrainOutput(theBrain(c), t1)
 	if got := brainSaid(); strings.Join(got, "|") != "Bonjour Sam" {
