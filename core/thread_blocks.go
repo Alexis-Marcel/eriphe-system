@@ -11,19 +11,24 @@ import (
 
 // A thread's surface is composed of generic blocks (#574), the same code
 // for every thread, in one fixed order; a block shows only when the
-// thread has what it shows, never by the kind of thread:
+// thread has what it shows, never by the kind of thread; how it ends is
+// read twice: a standing one shows no goal (its title and state line say
+// what it keeps) and no Stop, and the banner of an ended one:
 //
-//  1. head: its goal, a Progress (the state word in a pill, and a bar of
-//     its steps when it has some), the state line when it says more, and
-//     for a thread that runs steps, Pause or Resume, and Stop;
+//  1. head: the goal of one that ends on it, a Progress (the state word in
+//     a pill, and a bar of its steps when it has some; none for a calm
+//     thread with no steps), the state line (threadStateText: its headline
+//     or its items' counts, when sorted, « extérieur » once), and for a
+//     thread that runs steps, Pause or Resume, and Stop;
 //  2. ended: once it ended, a banner saying how, with « Ranger » for a
 //     thread that ends on its goal (the only block that reads ends);
 //  3. yours: what waits for the user (threadYours, thread_header.go);
 //  4. items: each source that lists things, its items grouped by their
-//     notes' state, with their counts (threadSourcesPart, thread_sources.go);
+//     notes' state, each group counted on its line, with its action
+//     (threadSourcesPart, thread_sources.go);
 //  5. live: the monitors it follows and their last events (thread_live.go);
-//  6. where it stands, then what changed since the user's last visit
-//     (threadWhere, threadSince);
+//  6. where it stands, when it has a summary, then what changed since the
+//     user's last visit, when something did (threadWhere, threadSince);
 //  7. steps: the done ones folded in one line, with the last yes given;
 //     the others as a Timeline; decided cards one line each (compact);
 //  8. the holder's part.
@@ -117,10 +122,25 @@ func (c *core) threadsDueBy(by time.Time) map[int64]bool {
 	return out
 }
 
-// blockHead composes the head: the goal, the Progress, the state line.
-func (c *core) blockHead(out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, word, tone string) {
+// blockHead composes the head: the goal of a thread that ends on it (a
+// standing one says what it is by its title and its state line), the
+// Progress when it says more than « À jour » or has steps to show, the
+// state line.
+func (c *core) blockHead(out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, word, tone, state string) {
 	type comp = map[string]any
-	out.add(comp{"id": "thread_goal", "component": "Text", "text": map[string]any{"@path": "/thread/goal"}})
+	if !s.standing() && strings.TrimSpace(s.Goal) != "" {
+		data["goal"] = s.Goal
+		out.add(comp{"id": "thread_goal", "component": "Text", "text": map[string]any{"@path": "/thread/goal"}})
+	}
+	if state != "" {
+		data["state"] = state
+	}
+	if len(steps) == 0 && word == tr(c.userLang(), "thread.status.calm") {
+		if state != "" {
+			out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/state"}})
+		}
+		return
+	}
 	progress := map[string]any{"label": word}
 	bar := comp{"id": "thread_progress", "component": "Progress", "label": map[string]any{"@path": "/thread/progress/label"}, "tone": tone}
 	if len(steps) > 0 {
@@ -140,8 +160,7 @@ func (c *core) blockHead(out *threadComps, data map[string]any, s Thread, steps 
 	}
 	data["progress"] = progress
 	out.add(bar)
-	if state := c.threadStateLine(s, c.userLang()); state != "" && s.active() {
-		data["state"] = state
+	if state != "" {
 		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/state"}})
 	}
 }

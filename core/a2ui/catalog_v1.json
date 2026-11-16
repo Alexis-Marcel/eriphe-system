@@ -144,6 +144,7 @@
         "component": {"const": "Fold"},
         "label": {"$ref": "common_types.json#/$defs/DynamicString"},
         "child": {"$ref": "common_types.json#/$defs/Child"},
+        "aside": {"$ref": "common_types.json#/$defs/Child", "description": "Sur sa ligne, au bout, ouverte ou non : une action sur tout ce qu'elle résume (« Archiver les 2 »)."},
         "open": {"$ref": "common_types.json#/$defs/DynamicBoolean", "description": "Ouverte d'abord (non par défaut)."}
       },
       "required": ["component", "label", "child"]

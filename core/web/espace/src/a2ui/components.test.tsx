@@ -787,18 +787,43 @@ describe("the catalog's components", () => {
     expect(document.querySelectorAll("[style]")).toHaveLength(0);
   });
 
-  it("draw a thread's items grouped by their notes, counted, a due date and « extérieur » aside, no button in the item itself", async () => {
+  it("draw a thread's items grouped by their notes, counted on their lines and in its state line, a due date aside, no button in the item itself", async () => {
     await mount("fr", threadFixtures("fr"));
     const items = (sel: string) => $$(`[data-surface=thread-102] ${sel}`);
-    expect(items(".a2-list-horizontal .a2-metric").map((m) => m.textContent)).toEqual(["à faire1", "à regarder1", "rien à faire1"]);
+    expect(items(".a2-metric")).toHaveLength(0);
     expect(items(".a2-fold-head").map((h) => h.textContent?.replace(/[▸▾]/, ""))).toEqual(["À faire · 1", "À regarder · 1", "Pas encore trié · 1", "Rien à faire · 1"]);
     expect(items(".a2-fold").map((f) => f.classList.contains("a2-fold-open"))).toEqual([true, true, true, false]);
     const high = items(".a2-item-high")[0];
     expect(high.querySelector(".a2-item-title")?.textContent).toBe("Courant");
     expect(high.querySelector(".a2-item-note")?.textContent).toBe("Solde bas avant le loyer.");
     expect(high.querySelector(".a2-due")?.textContent).toMatch(/^pour /);
-    expect(items(".a2-badge-external").map((b) => b.textContent)).toEqual(["extérieur"]);
+    // « extérieur » once, in the state line at the top, not on a row.
+    expect(items(".a2-badge-external")).toHaveLength(0);
+    expect(items(".a2-text-caption")[0].textContent).toBe("1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire · trié à 9 h 12 · extérieur");
     expect(items(".a2-item button")).toHaveLength(0);
+  });
+
+  it("draw a watcher's standing thread as the user reads it: a state line, rows titled by their own words, what has nothing to do folded with its action on its line", async () => {
+    await mount("fr", threadFixtures("fr"));
+    await act(async () => {});
+    const mails = (sel: string) => $$(`[data-surface=thread-104] ${sel}`);
+    // No goal, no « À jour » pill, no source line, no counts in boxes, no history.
+    expect(mails(".a2-progress")).toHaveLength(0);
+    expect(mails(".a2-metric")).toHaveLength(0);
+    expect(mails(".a2-text").map((n) => n.textContent)).toEqual(["1 pour info · 2 rien à faire · trié à 9 h 12 · extérieur"]);
+    expect(mails(".a2-item-title").map((n) => n.textContent)).toEqual(["Le devis de la cuisine"]);
+    expect(mails(".a2-item-detail")[0].textContent).toBe("Sam");
+    expect(mails(".a2-fold-head").map((h) => h.textContent?.replace(/[▸▾]/, ""))).toEqual(["Pour info · 1", "Rien à faire · 2"]);
+    const none = mails(".a2-fold")[1];
+    expect(none.classList.contains("a2-fold-open")).toBe(false);
+    expect([...none.querySelectorAll(".a2-fold-line .a2-fold-aside button")].map((b) => b.textContent)).toEqual(["Archiver · 2"]); // the label its skill declares, approved with it
+    // Unfolded: its rows offer nothing, the group's action is enough.
+    await click(none.querySelector(".a2-fold-head") as HTMLElement);
+    expect(none.classList.contains("a2-fold-open")).toBe(true);
+    expect(none.querySelectorAll(".a2-item-title")).toHaveLength(2);
+    expect([...none.querySelectorAll("button.a2-button")].filter((b) => !b.closest(".a2-fold-aside"))).toHaveLength(0);
+    expect(mails("button.a2-button").map((b) => b.textContent)).toEqual(["Archiver · 2"]);
+    expect(document.body.textContent).not.toMatch(/bTEf/);
   });
 
   it("offer a note's actions on its row, code's words for an outside one, and answer the row's card from its row", async () => {

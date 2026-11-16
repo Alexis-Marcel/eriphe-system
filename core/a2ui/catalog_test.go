@@ -112,7 +112,7 @@ func TestCatalogLinks(t *testing.T) {
 			got[name] = strings.Join(parts, " ")
 		}
 	}
-	want := map[string]string{"Row": "children[]", "Column": "children[]", "List": "children[]", "Card": "child", "Fold": "child", "Tabs": "tabs/*/child"}
+	want := map[string]string{"Row": "children[]", "Column": "children[]", "List": "children[]", "Card": "child", "Fold": "aside child", "Tabs": "tabs/*/child"}
 	if len(got) != len(want) {
 		t.Errorf("links: %v", got)
 	}

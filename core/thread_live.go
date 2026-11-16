@@ -307,10 +307,8 @@ func (c *core) threadLive(in *surfaceIn, out *threadComps, data map[string]any, 
 		case m.State == monitorPaused:
 			parts = append(parts, tr(lang, "thread.live.paused"))
 		}
-		parts = append(parts, tr(lang, "thread.live.nomodel"))
 		if !c.trustsServer(m.Spec.Server) {
-			parts = append(parts, tr(lang, "thread.surface.external"))
-			in.codeTaint = append(in.codeTaint, "monitor:"+m.Name)
+			in.codeTaint = append(in.codeTaint, "monitor:"+m.Name) // the state line says « extérieur »
 		}
 		v["caption"] = strings.Join(parts, threadExternalSep)
 		live = append(live, v)
@@ -329,7 +327,7 @@ func (c *core) watchItems(in *surfaceIn, s Thread, lang string, loc *time.Locati
 		text := e.text(lang)
 		detail := tr(lang, "thread.watch.by")
 		if e.Tainted != "" {
-			detail = tr(lang, "thread.surface.external") + threadExternalSep + detail
+			detail = tr(lang, "thread.surface.external") + threadExternalSep + detail // its own, as a step's: shown ended too
 			in.codeTaint = append(in.codeTaint, e.Tainted)
 		}
 		items = append(items, map[string]any{"label": text, "state": e.state(), "date": e.At.In(loc).Format(time.RFC3339), "detail": detail})

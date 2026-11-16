@@ -226,13 +226,19 @@ func filesFromZip(data []byte) ([]skillFile, error) {
 type skillManifest struct {
 	Name         string
 	Description  string
-	AllowedTools string // shown, never honoured: Eriphe's permissions decide
-	Body         string // the instructions, after the front matter
+	Title        string        // the name of its thread for the user (title:), its own words the user approved with it
+	Actions      []skillAction // the actions its runs may offer on an item, each with its label the user approved (actions:)
+	AllowedTools string        // shown, never honoured: Eriphe's permissions decide
+	Body         string        // the instructions, after the front matter
 	// Its trigger, as written (skill_triggers.go): when, every, model,
 	// tools, urgent, thread.
 	When, Every, Model, Tools, Urgent, Thread string
 	Trigger                                   *skillTrigger
 }
+
+// skillTitleMax is the most runes of a skill's title, its thread's name
+// for the user (title: in its front matter).
+const skillTitleMax = 60
 
 // The name of a skill (agentskills.io): lowercase letters, digits and
 // hyphens, 64 at most, no hyphen at either end nor two in a row.
@@ -256,7 +262,7 @@ func parseSkillMD(raw []byte) (skillManifest, error) {
 	}
 	_, body, _ = strings.Cut(body, "\n")
 	m.Body = strings.TrimSpace(body)
-	keys := map[string]string{}
+	keys, lists := map[string]string{}, map[string][]string{}
 	lines := strings.Split(front, "\n")
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
@@ -283,15 +289,31 @@ func parseSkillMD(raw []byte) (skillManifest, error) {
 			v = v[1 : len(v)-1]
 		}
 		keys[k] = v
+		if len(more) > 0 {
+			lists[k] = more
+		}
 	}
 	m.Name, m.Description, m.AllowedTools = keys["name"], keys["description"], keys["allowed-tools"]
 	m.When, m.Every, m.Model, m.Tools, m.Urgent = keys["when"], keys["every"], keys["model"], keys["tools"], keys["urgent"]
-	m.Thread = keys["thread"]
+	m.Thread, m.Title = keys["thread"], strings.TrimSpace(keys["title"])
 	switch {
 	case !skillName.MatchString(m.Name):
 		return m, skillErr("skills.err.name", m.Name)
 	case m.Description == "" || utf8.RuneCountInString(m.Description) > 1024:
 		return m, skillErr("skills.err.description", "")
+	case utf8.RuneCountInString(m.Title) > skillTitleMax || strings.ContainsAny(m.Title, "\n\r"):
+		return m, skillErr("skills.err.title", "")
+	}
+	acts := lists["actions"]
+	if len(acts) == 0 && strings.TrimSpace(keys["actions"]) != "" {
+		acts = []string{keys["actions"]}
+	}
+	for _, line := range acts {
+		a, ok := parseSkillAction(line)
+		if !ok || len(m.Actions) == skillActionsMax {
+			return m, skillErr("skills.err.actions", line)
+		}
+		m.Actions = append(m.Actions, a)
 	}
 	var err error
 	m.Trigger, err = parseSkillTrigger(m)

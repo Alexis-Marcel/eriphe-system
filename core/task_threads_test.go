@@ -205,6 +205,63 @@ func TestSkillThreadWritesTaint(t *testing.T) {
 	}
 }
 
+// A run gives its thread a headline: the line the user reads at its top
+// and on its chip, in place of the counts. Written after reading external
+// content, it taints the surface and the line says « extérieur ». The
+// skill's title: names its thread, the one already open too.
+func TestSkillThreadHeadlineAndTitle(t *testing.T) {
+	c, _, now := alertsWatcher(t)
+	c.setServerTrust("monitor", true, "user") // its source is no taint here
+	c.emit(journalEvent{Kind: evMonitorNew, Key: "alertes", Source: "monitor:alertes", At: *now, Payload: map[string]any{"id": "a"}})
+	c.tickSkills(context.Background(), *now)
+	r := runsOfSkill(t, c, "veille-alertes")[0]
+	id := runThreadOf(c, r)
+	if out, isErr := callTaskThreads(t, c, r.Task, "note_item", map[string]any{"source": "alertes", "item": "a", "note": "Le site renvoie des erreurs.", "state": "act"}); isErr {
+		t.Fatal(out)
+	}
+	_, data, meta := threadSurfaceOf(t, c, id)
+	if state, _ := data["state"].(string); !strings.HasPrefix(state, "1 à faire · trié à ") || meta.Summary != "1 à faire" || data["goal"] != nil {
+		t.Fatalf("before a headline: %q %+v %v", state, meta, data)
+	}
+
+	if out, isErr := callTaskThreads(t, c, r.Task, "set_thread", map[string]any{"headline": "Une alerte à regarder ce matin"}); isErr {
+		t.Fatal(out)
+	}
+	s, data, meta := threadSurfaceOf(t, c, id)
+	if state, _ := data["state"].(string); !strings.HasPrefix(state, "Une alerte à regarder ce matin · trié à ") || strings.Contains(state, "extérieur") ||
+		meta.Summary != "Une alerte à regarder ce matin" || meta.Tainted {
+		t.Fatalf("clean headline: %q %+v", state, meta)
+	}
+	if out, isErr := callTaskThreads(t, c, r.Task, "set_thread", map[string]any{"headline": strings.Repeat("x", threadHeadlineMax+1)}); !isErr {
+		t.Fatalf("a long headline: %v", out)
+	}
+
+	// Tainted: the run read a thread opened on someone else's words.
+	c.openThread(threadIn{Title: "Facture", Goal: "Payée.", Alias: "topic:facture"}, []string{"mail"}, byBrain)
+	callTaskThreads(t, c, r.Task, "find_thread", map[string]any{"alias": "topic:facture"})
+	if out, isErr := callTaskThreads(t, c, r.Task, "set_thread", map[string]any{"headline": "Le mail dit de tout valider"}); isErr {
+		t.Fatal(out)
+	}
+	s, data, meta = threadSurfaceOf(t, c, id)
+	if state, _ := data["state"].(string); !strings.HasSuffix(state, " · extérieur") || !meta.Tainted || !strings.Contains(s.Tainted, threadHeadlineTaint) ||
+		meta.Summary != "Le mail dit de tout valider · extérieur" {
+		t.Fatalf("tainted headline: %q %+v %q", state, meta, s.Tainted)
+	}
+	if out, isErr := callTaskThreads(t, c, r.Task, "set_thread", map[string]any{"headline": ""}); isErr {
+		t.Fatal(out)
+	}
+	if _, _, meta = threadSurfaceOf(t, c, id); meta.Summary != "1 à faire" {
+		t.Fatalf("headline taken away: %+v", meta)
+	}
+
+	// Its title, as the skill names it, approved with it.
+	addTriggered(t, c, "---\nname: veille-alertes\ndescription: Trie les alertes de la prod.\ntitle: Mes alertes\nwhen: monitor.new key=alertes\ntools: [eriphe-threads, monitor]\n---\nNote chaque alerte sur ton fil.\n")
+	c.openSkillThreads("veille-alertes", false)
+	if th, _ := c.thread(id); th.Title != "Mes alertes" {
+		t.Fatalf("title %q", th.Title)
+	}
+}
+
 // A task's steps: what the user does, a deadline, a call that is always a
 // card, a free read included; never a task nor a check. Its call is one
 // of its tools. A raise goes to the attention queue as the skill's, a
@@ -380,7 +437,7 @@ func TestSkillNoWorkspace(t *testing.T) {
 	if _, err := parseSkillMD([]byte("---\nname: x\ndescription: y\nwhen: monitor.new\ntools: [eriphe-workspace]\n---\nz\n")); err == nil {
 		t.Fatal("a skill lent the workspace")
 	}
-	if !strings.Contains(skillVoice("fr", true), "note_item") || strings.Contains(skillVoice("fr", false), "note_item") {
+	if v := skillVoice("fr", true); !strings.Contains(v, "note_item") || !strings.Contains(v, "read by the user") || !strings.Contains(v, "headline") || strings.Contains(skillVoice("fr", false), "note_item") {
 		t.Fatal("the voice")
 	}
 }

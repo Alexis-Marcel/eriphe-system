@@ -90,10 +90,10 @@ type noteItemIn struct {
 	Thread  int64        `json:"thread_id,omitempty" jsonschema:"the thread (a lead, a skill's run: leave it out for yours)"`
 	Source  string       `json:"source" jsonschema:"the name of the thread's source that lists the item (one with items)"`
 	Item    string       `json:"item" jsonschema:"the item's id, as the source gives it"`
-	Note    string       `json:"note,omitempty" jsonschema:"what the user should know of it, in their language, one short sentence; empty with no state: the note is taken away"`
+	Note    string       `json:"note,omitempty" jsonschema:"what the user reads under the item: what it is about and what they should do of it, in their language, one short concrete sentence, no ids nor jargon; empty with no state: the note is taken away"`
 	State   string       `json:"state,omitempty" jsonschema:"act (the user has something to do: answer, decide), look (to look at), info (to know), none (nothing to do) or done (handled)"`
 	Due     string       `json:"due,omitempty" jsonschema:"by when, YYYY-MM-DD or YYYY-MM-DDTHH:MM (local time)"`
-	Actions []noteAction `json:"actions,omitempty" jsonschema:"what the user could do with it, offered on its row: each a tool you may use and its exact input, \"$item\" where the item's id goes (code puts it). A click makes a card the user approves, never more; a tool the user's policy refuses is never offered"`
+	Actions []noteAction `json:"actions,omitempty" jsonschema:"the one action you recommend on it, only when useful (never a menu), offered on its row: a tool you may use and its exact input, \"$item\" where the item's id goes (code puts it). A click makes a card the user approves, never more; a tool the user's policy refuses is never offered"`
 }
 
 // noteItem writes, replaces or takes away the note on an item of one of a
@@ -268,13 +268,12 @@ func noteAuthor(author, lang string) string {
 }
 
 // noteRow puts a note on its item's row: its words, its state, its due
-// date, who wrote it and whether it may carry someone else's words
-// (« extérieur »: never an action on it).
+// date, who wrote it and whether it may carry someone else's words (never
+// an action on it; the thread's state line says « extérieur », once).
 func noteRow(row map[string]any, n itemNote, lang string, loc *time.Location) {
 	row["note"], row["state"], row["by"] = n.Note, n.State, noteAuthor(n.Author, lang)
 	if n.Tainted != "" {
 		row["external"] = true
-		row["mark"] = tr(lang, "thread.surface.external")
 	}
 	if n.Due > 0 {
 		due := time.Unix(n.Due, 0).In(loc)
@@ -302,14 +301,15 @@ func itemLevel(state string) string {
 }
 
 // itemsBlock composes the items of a source that lists things, in code's
-// section of a thread's surface: their counts by state, then their rows
-// grouped by state, each with its note joined by code, and the cards on
-// it (item_cards.go); the cards on several of its items above them. Bound
-// by paths, so that a read again changes the data, not the components. No
-// row asks: a tainted note's never may; a row offers its note's actions
-// and a group those its rows share, each click a card (item_offers.go). A
-// group with a card that waits is open.
-func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src storedSource, notes map[string]itemNote, cards []itemCard, n, lang string, loc *time.Location, taint *[]string) {
+// section of a thread's surface: their rows grouped by state, each group
+// counted on its line, each row with its note joined by code, and the
+// cards on it (item_cards.go); the cards on several of its items above
+// them. Bound by paths, so that a read again changes the data, not the
+// components. No row asks: a tainted note's never may; a row offers its
+// note's actions and a group those its rows share on its line, each click
+// a card (item_offers.go). A group with a card that waits is open. seen
+// gathers the counts and when they were sorted, for the state line.
+func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src storedSource, notes map[string]itemNote, cards []itemCard, n, lang string, loc *time.Location, taint *[]string, seen *threadItemsSeen) {
 	type comp = map[string]any
 	byState := map[string][]any{}
 	waits := map[string]bool{} // the groups with a card that waits
@@ -325,8 +325,9 @@ func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src 
 		}
 	}
 	offers := false // a row or a group offers an action: their buttons
+	words := c.offerWords(lang)
 	for _, it := range threadSourceItems(src, threadItemsMax) {
-		for _, k := range []string{"detail", "note", "due", "mark"} { // each row has what its Item binds
+		for _, k := range []string{"detail", "note", "due"} { // each row has what its Item binds
 			if _, ok := it[k]; !ok {
 				it[k] = ""
 			}
@@ -338,10 +339,11 @@ func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src 
 		if note, ok := notes[src.Name+"\x00"+id]; ok {
 			noteRow(it, note, lang, loc)
 			state = note.State
+			seen.sorted = max(seen.sorted, note.Noted)
 			if note.Tainted != "" {
 				*taint = append(*taint, threadNoteTaint+src.Name+"/"+note.Item)
 			}
-			if o := c.rowOffers(thread, note, lang); len(o) > 0 {
+			if o := c.rowOffers(thread, note, words); len(o) > 0 {
 				it["offers"], offers = o, true
 			}
 		}
@@ -351,53 +353,65 @@ func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src 
 			waits[state] = waits[state] || x.(map[string]any)["pending"] == true
 		}
 	}
-	var counts, groups []any
+	var groups []any
 	for _, state := range itemGroups {
 		rows := byState[state]
 		if len(rows) == 0 {
 			continue
 		}
+		if seen.counts == nil {
+			seen.counts = map[string]int{}
+		}
+		seen.counts[state] += len(rows)
 		name := tr(lang, "thread.item.group."+state)
 		if state == "" {
 			name = tr(lang, "thread.item.group.other")
 		}
-		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": waits[state] || state != itemStateNone && state != itemStateDone,
-			"items": rows, "offers": emptyList(groupOffers(thread, src.Name, state, rows, lang))})
-		if state != "" {
-			counts = append(counts, map[string]any{"label": tr(lang, "thread.item.state."+state), "value": len(rows)})
+		// A folded group (nothing to do, done) is not a list of buttons:
+		// its rows offer none, the group the action they share, even one's.
+		folded := state == itemStateNone || state == itemStateDone
+		least := 2
+		if folded {
+			least = 1
 		}
+		groupOffer := groupOffers(thread, src.Name, state, rows, least, words)
+		if folded {
+			for _, r := range rows {
+				r.(map[string]any)["offers"] = []any{}
+			}
+		}
+		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": waits[state] || !folded,
+			"items": rows, "offers": emptyList(groupOffer)})
 	}
-	v["counts"], v["groups"], v["cards"] = emptyList(counts), emptyList(groups), emptyList(sourceCards)
+	v["groups"], v["cards"] = emptyList(groups), emptyList(sourceCards)
 	at := "/thread/sources/" + n
 	id := "thread_src_" + n
-	out.add(comp{"id": id + "_counts", "component": "List", "direction": "horizontal", "children": map[string]any{"path": at + "/counts", "componentId": id + "_count"}})
 	out.add(comp{"id": id + "_cards", "component": "List", "children": map[string]any{"path": at + "/cards", "componentId": id + "_card"}})
 	out.add(comp{"id": id + "_groups", "component": "List", "children": map[string]any{"path": at + "/groups", "componentId": id + "_group"}, "emptyText": tr(lang, "thread.item.none")})
-	row, group := []string{id + "_item", id + "_row_cards"}, id+"_rows"
+	row := []string{id + "_item", id + "_row_cards"}
+	group := comp{"id": id + "_group", "component": "Fold", "label": map[string]any{"@path": "label"}, "open": map[string]any{"@path": "open"}, "child": id + "_rows"}
 	if offers {
 		// Each offer a Button code places: a click makes a card, never
 		// more (offerOf); its context bound to the data, read again from
-		// the store.
+		// the store. A group's on its line, folded or not.
 		bound := func(k string) map[string]any { return map[string]any{"@path": k} }
 		row = append(row, id+"_row_offers")
-		group = id + "_group_body"
+		group["aside"] = id + "_group_offers"
 		out.inner(
 			comp{"id": id + "_row_offers", "component": "List", "direction": "horizontal", "children": map[string]any{"path": "offers", "componentId": id + "_offer"}},
 			comp{"id": id + "_offer", "component": "Button", "label": bound("label"), "variant": "default",
 				"action": map[string]any{"event": map[string]any{"name": a2ui.ActionOffer, "context": map[string]any{"thread": thread, "source": bound("source"), "item": bound("item"), "offer": bound("offer")}}}},
-			comp{"id": id + "_group_body", "component": "Column", "children": []string{id + "_group_offers", id + "_rows"}},
 			comp{"id": id + "_group_offers", "component": "List", "direction": "horizontal", "children": map[string]any{"path": "offers", "componentId": id + "_group_offer"}},
 			comp{"id": id + "_group_offer", "component": "Button", "label": bound("label"), "variant": "default",
 				"action": map[string]any{"event": map[string]any{"name": a2ui.ActionOffer, "context": map[string]any{"thread": thread, "source": bound("source"), "state": bound("state"), "offer": bound("offer")}}}},
 		)
 	}
 	out.inner(
-		comp{"id": id + "_count", "component": "Metric", "label": map[string]any{"@path": "label"}, "value": map[string]any{"@path": "value"}},
-		comp{"id": id + "_group", "component": "Fold", "label": map[string]any{"@path": "label"}, "open": map[string]any{"@path": "open"}, "child": group},
+		group,
 		comp{"id": id + "_rows", "component": "List", "children": map[string]any{"path": "items", "componentId": id + "_row"}},
 		comp{"id": id + "_row", "component": "Column", "children": row},
 		comp{"id": id + "_item", "component": "Item", "title": map[string]any{"@path": "title"}, "detail": map[string]any{"@path": "detail"},
-			"note": map[string]any{"@path": "note"}, "due": map[string]any{"@path": "due"}, "mark": map[string]any{"@path": "mark"}, "level": map[string]any{"@path": "level"}},
+			"note": map[string]any{"@path": "note"}, "due": map[string]any{"@path": "due"}, "level": map[string]any{"@path": "level"}},
 		comp{"id": id + "_row_cards", "component": "List", "children": map[string]any{"path": "cards", "componentId": id + "_card"}},
 		// One template for the cards of a row and those of the source: an
 		// answer says which (at), checked against the data (answerOf).

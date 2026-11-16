@@ -35,14 +35,23 @@ import (
 //     its N exact calls, one per item, on the items shown in that group.
 //     The user's Oui on that card runs them as kept; the same call on the
 //     same item already waiting is not asked twice.
-//   - Its words: a button says the author's label, or, for a note written
-//     after reading external content, the tool's action (callVerb): a
-//     tainted note's words are never the user's. Its card is code's
-//     words, and keeps the note's taint (« extérieur », buttons only).
+//   - One action an item at most: the one its author recommends, only
+//     when useful; Eriphe is not a menu of buttons. A folded group (none,
+//     done) shows no row's button, only the action its rows share.
+//   - Its words are never a run's: a skill declares its actions once, in
+//     its SKILL.md (actions:, each a label, a tool and the arguments it
+//     must have), approved by the user with it; an action of its run's
+//     note that matches one says that label, tainted note or not (the
+//     user approved those words, the run only chose the item). Any other
+//     action of a task says the tool's own words (toolWords: its title in
+//     the catalog, else its name). The brain's and a lead's say their
+//     label, but for a note written after reading external content: the
+//     tool's words then. Its card is code's words, and keeps the note's
+//     taint (« extérieur », buttons only).
 
 const (
 	offerItemArg  = "$item" // where the item's id goes in an action's input
-	offersMax     = 4       // actions on one note
+	offersMax     = 1       // actions on one note: the one recommended
 	offerLabelMax = 40      // runes of an action's label
 	offerArgsMax  = 2000    // bytes of an action's input
 )
@@ -139,7 +148,7 @@ func (c *core) offerAllowed(tool string, input map[string]any) bool {
 // tells whether the author may use a tool (nil: any of the catalog).
 func (c *core) checkActions(list []noteAction, item string, may func(tool string) error) ([]noteAction, error) {
 	if len(list) > offersMax {
-		return nil, fmt.Errorf("%d actions on an item at most", offersMax)
+		return nil, fmt.Errorf("%d action on an item at most: the one you recommend, only when useful", offersMax)
 	}
 	var out []noteAction
 	seen := map[string]bool{}
@@ -206,31 +215,147 @@ func fitsSchema(schema, input map[string]any) error {
 	return nil
 }
 
-// offerLabel is what an action's button says: its author's label, or the
-// tool's action for a note written after reading external content.
-func offerLabel(a noteAction, n itemNote, lang string) string {
-	if n.Tainted != "" {
-		return callVerb(a.Tool+" {}", lang)
+// skillAction is an action a skill declares in its SKILL.md (actions:):
+// « Archiver: mail/move_message folder=Archive », its label, its tool,
+// and the arguments an action must have to be it.
+type skillAction struct {
+	Label string
+	Tool  string            // mcp__server__tool
+	Args  map[string]string // each argument it must have, as text
+}
+
+const skillActionsMax = 8
+
+// parseSkillAction reads « label: server/tool key=value … ».
+func parseSkillAction(line string) (skillAction, bool) {
+	line = strings.Trim(strings.TrimSpace(line), `"'`)
+	i := strings.LastIndex(line, ": ")
+	if i < 0 {
+		return skillAction{}, false
+	}
+	a := skillAction{Label: oneLine(line[:i]), Args: map[string]string{}}
+	fields := strings.Fields(line[i+2:])
+	if len(fields) == 0 || a.Label == "" || utf8.RuneCountInString(a.Label) > offerLabelMax {
+		return skillAction{}, false
+	}
+	name, ok := toolName(fields[0])
+	if !ok {
+		return skillAction{}, false
+	}
+	a.Tool = name
+	for _, f := range fields[1:] {
+		k, v, ok := strings.Cut(f, "=")
+		if !ok || k == "" {
+			return skillAction{}, false
+		}
+		a.Args[k] = v
+	}
+	return a, true
+}
+
+// matches tells whether an action noted is this declared one: its tool,
+// and each argument it must have.
+func (s skillAction) matches(a noteAction) bool {
+	if s.Tool != a.Tool {
+		return false
+	}
+	for k, v := range s.Args {
+		got, ok := a.Args[k]
+		if !ok || fmt.Sprint(got) != v {
+			return false
+		}
+	}
+	return true
+}
+
+// skillActionsOf are the actions a skill declares, in its approved
+// version; none for a skill off or unknown.
+func (c *core) skillActionsOf(name string) []skillAction {
+	ks, err := c.store.skills()
+	if err != nil {
+		return nil
+	}
+	for _, k := range ks {
+		if k.Name == name && k.Active() {
+			if m, ok := c.skillManifestOf(k.Approved); ok {
+				return m.Actions
+			}
+		}
+	}
+	return nil
+}
+
+// toolWords is a tool as a button says it: its title in the catalog (its
+// server's words for it), else its name (callVerb).
+func (c *core) toolWords(tool, lang string) string {
+	if server, name, ok := splitToolName(tool); ok && c.pool != nil {
+		if u := c.pool.get(server); u != nil {
+			if t := u.toolByClaudeName(name); t != nil {
+				title := strings.TrimSpace(t.Title)
+				if title == "" && t.Annotations != nil {
+					title = strings.TrimSpace(t.Annotations.Title)
+				}
+				if title != "" {
+					return truncate(oneLine(title), offerLabelMax)
+				}
+			}
+		}
+	}
+	return callVerb(tool+" {}", lang)
+}
+
+// offerWords says what an action's button says (offerLabel), the
+// actions skills declare read once.
+type offerWords struct {
+	c     *core
+	lang  string
+	skill map[string][]skillAction
+}
+
+func (c *core) offerWords(lang string) *offerWords {
+	return &offerWords{c: c, lang: lang, skill: map[string][]skillAction{}}
+}
+
+// label is what an action's button says: a skill's run's, the label its
+// skill declares for it; another task's, the tool's words; the brain's or
+// a lead's, its label, but the tool's words for a note written after
+// reading external content.
+func (w *offerWords) label(a noteAction, n itemNote) string {
+	if name, ok := strings.CutPrefix(n.Author, "skill:"); ok {
+		decl, seen := w.skill[name]
+		if !seen {
+			decl = w.c.skillActionsOf(name)
+			w.skill[name] = decl
+		}
+		for _, d := range decl {
+			if d.matches(a) {
+				return d.Label
+			}
+		}
+		return w.c.toolWords(a.Tool, w.lang)
+	}
+	if byTask(n.Author) || n.Tainted != "" || a.Label == "" {
+		return w.c.toolWords(a.Tool, w.lang)
 	}
 	return a.Label
 }
 
 // rowOffers are the actions a row offers, as its buttons bind them: those
 // of its note the policy still allows.
-func (c *core) rowOffers(thread int64, n itemNote, lang string) []any {
+func (c *core) rowOffers(thread int64, n itemNote, words *offerWords) []any {
 	var out []any
 	for _, a := range n.Actions {
 		if !c.offerAllowed(a.Tool, a.bound(n.Item)) {
 			continue
 		}
-		out = append(out, map[string]any{"label": offerLabel(a, n, lang), "thread": thread, "source": n.Source, "item": n.Item, "offer": a.key(), "tool": a.Tool})
+		out = append(out, map[string]any{"label": words.label(a, n), "thread": thread, "source": n.Source, "item": n.Item, "offer": a.key(), "tool": a.Tool})
 	}
 	return out
 }
 
 // groupOffers are the actions a state group offers on its items: each
-// that two of its rows or more offer, with how many.
-func groupOffers(thread int64, source, state string, rows []any, lang string) []any {
+// that at least least of its rows offer, with how many.
+func groupOffers(thread int64, source, state string, rows []any, least int, words *offerWords) []any {
 	type group struct {
 		label string
 		n     int
@@ -249,15 +374,15 @@ func groupOffers(thread int64, source, state string, rows []any, lang string) []
 				keys = append(keys, k)
 			}
 			if g.label != o["label"] {
-				g.label = callVerb(o["tool"].(string)+" {}", lang) // labels that differ: the action's own
+				g.label = words.c.toolWords(o["tool"].(string), words.lang) // labels that differ: the tool's own words
 			}
 			g.n++
 		}
 	}
 	var out []any
 	for _, k := range keys {
-		if g := by[k]; g.n >= 2 {
-			out = append(out, map[string]any{"label": fmt.Sprintf(tr(lang, "thread.offer.group"), g.label, g.n), "thread": thread, "source": source, "state": state, "offer": k})
+		if g := by[k]; g.n >= least {
+			out = append(out, map[string]any{"label": fmt.Sprintf(tr(words.lang, "thread.offer.group"), g.label, g.n), "thread": thread, "source": source, "state": state, "offer": k})
 		}
 	}
 	return out

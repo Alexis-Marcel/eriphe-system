@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -23,15 +25,24 @@ const (
 )
 
 type writeSkillIn struct {
-	Name         string   `json:"name" jsonschema:"lowercase letters, digits and hyphens: mails-rdv"`
-	Description  string   `json:"description" jsonschema:"when it applies, in a sentence"`
-	Instructions string   `json:"instructions" jsonschema:"what to do, in French, in markdown: the task that follows it sees only this and the events"`
-	When         string   `json:"when,omitempty" jsonschema:"what runs it by itself: an event kind (monitor.changed, monitor.new, monitor.crossed, monitor.failed: a monitor that polls a tool or a resource (write_monitor; the mail received: monitor.new key=<its name>); monitor.received: an incoming address the user made; keyed by the monitor's name; task.ended, thread.ended, user.returned), with filters key=…, field=value or a payload number field>=n, field<=n (monitor.received key=getout status=firing; user.returned away_minutes>=180); several kinds by commas share the filters, for one way of reacting (monitor.failed, monitor.recovered key=getout-prod: lost and back): a skill per way of reacting (its urgent text, every), as many kinds as that reaction needs; or time with a schedule (time weekdays 08:00, time every 2h 08:00-20:00); or both, the schedule then ; and the events (time daily 06:00; user.returned away_minutes>=180); empty for a skill only followed when asked"`
-	Every        string   `json:"every,omitempty" jsonschema:"with when on an event: batch them, at most one run per period (15m, 1h, 1d): the run gets every event of the period"`
-	Model        string   `json:"model,omitempty" jsonschema:"an agent of list_agents for its runs: a small one to sort mail; the default one if empty"`
-	Tools        []string `json:"tools,omitempty" jsonschema:"the catalog servers its runs are lent (list_tools): mail, calendar…; each call is still decided by the user's grid. eriphe-threads to act on threads: its thread (thread), and any other it finds or opens; never eriphe-workspace: what a skill finds goes on its thread"`
-	Urgent       string   `json:"urgent,omitempty" jsonschema:"with when: a fixed message (160 characters, no link) sent at any hour when a run weighs something 5 in its attention list: « Prod GetOut en panne, regarde Eriphe »"`
-	Thread       string   `json:"thread,omitempty" jsonschema:"with when: its thread's alias, kind:slug (topic:mails, project:getout); left out, a monitor's name (topic:<name>) or an event key written kind:slug. Lent eriphe-threads, its runs act on that thread: the first opens it, standing, titled by the skill; the next ones find it again. Its runs' notifications and cards carry it"`
+	Name         string             `json:"name" jsonschema:"lowercase letters, digits and hyphens: mails-rdv"`
+	Description  string             `json:"description" jsonschema:"when it applies, in a sentence"`
+	Instructions string             `json:"instructions" jsonschema:"what to do, in French, in markdown: the task that follows it sees only this and the events"`
+	When         string             `json:"when,omitempty" jsonschema:"what runs it by itself: an event kind (monitor.changed, monitor.new, monitor.crossed, monitor.failed: a monitor that polls a tool or a resource (write_monitor; the mail received: monitor.new key=<its name>); monitor.received: an incoming address the user made; keyed by the monitor's name; task.ended, thread.ended, user.returned), with filters key=…, field=value or a payload number field>=n, field<=n (monitor.received key=getout status=firing; user.returned away_minutes>=180); several kinds by commas share the filters, for one way of reacting (monitor.failed, monitor.recovered key=getout-prod: lost and back): a skill per way of reacting (its urgent text, every), as many kinds as that reaction needs; or time with a schedule (time weekdays 08:00, time every 2h 08:00-20:00); or both, the schedule then ; and the events (time daily 06:00; user.returned away_minutes>=180); empty for a skill only followed when asked"`
+	Every        string             `json:"every,omitempty" jsonschema:"with when on an event: batch them, at most one run per period (15m, 1h, 1d): the run gets every event of the period"`
+	Model        string             `json:"model,omitempty" jsonschema:"an agent of list_agents for its runs: a small one to sort mail; the default one if empty"`
+	Tools        []string           `json:"tools,omitempty" jsonschema:"the catalog servers its runs are lent (list_tools): mail, calendar…; each call is still decided by the user's grid. eriphe-threads to act on threads: its thread (thread), and any other it finds or opens; never eriphe-workspace: what a skill finds goes on its thread"`
+	Urgent       string             `json:"urgent,omitempty" jsonschema:"with when: a fixed message (160 characters, no link) sent at any hour when a run weighs something 5 in its attention list: « Prod GetOut en panne, regarde Eriphe »"`
+	Thread       string             `json:"thread,omitempty" jsonschema:"with when: its thread's alias, kind:slug (topic:mails, project:getout); left out, a monitor's name (topic:<name>) or an event key written kind:slug. Lent eriphe-threads, its runs act on that thread: the first opens it, standing, titled by the skill; the next ones find it again. Its runs' notifications and cards carry it"`
+	Title        string             `json:"title,omitempty" jsonschema:"with when: its thread's name for the user, in their language, a few words (« Mes mails »); left out, its name made a title"`
+	Actions      []writeSkillAction `json:"actions,omitempty" jsonschema:"the actions its runs may recommend on an item of its thread (note_item), with the words their button says, approved by the user with the skill: a run's own label is never shown. At most one per item is offered, only when useful; never a menu"`
+}
+
+// writeSkillAction is an action a skill declares (actions: in SKILL.md).
+type writeSkillAction struct {
+	Label string            `json:"label" jsonschema:"what its button says, a verb in the user's language: « Archiver »"`
+	Tool  string            `json:"tool" jsonschema:"server/tool, one of its tools: mail/move_message"`
+	Args  map[string]string `json:"args,omitempty" jsonschema:"the arguments the action must have to be this one, as text with no space: {\"folder\": \"Archive\"}; the item's own argument is not one"`
 }
 
 func registerSkillWriteTool(s *mcp.Server, c *core) {
@@ -64,6 +75,20 @@ func writtenSkillMD(in writeSkillIn) string {
 	}
 	if s := oneLine(in.Thread); s != "" {
 		fmt.Fprintf(&b, "thread: %s\n", s)
+	}
+	if s := oneLine(in.Title); s != "" {
+		fmt.Fprintf(&b, "title: %s\n", s)
+	}
+	if len(in.Actions) > 0 {
+		b.WriteString("actions:\n")
+		for _, a := range in.Actions {
+			line := strings.NewReplacer(`"`, "", "\n", " ").Replace(oneLine(a.Label)) + ": " + strings.TrimSpace(a.Tool)
+			keys := slices.Sorted(maps.Keys(a.Args))
+			for _, k := range keys {
+				line += " " + k + "=" + a.Args[k]
+			}
+			fmt.Fprintf(&b, "  - \"%s\"\n", line)
+		}
 	}
 	b.WriteString("---\n\n")
 	b.WriteString(strings.TrimSpace(in.Instructions))
@@ -146,6 +171,18 @@ func (c *core) skillProposal(p proposal) proposal {
 		fs := []cardField{}
 		if m.Trigger != nil {
 			fs = append(fs, cardField{Name: tr(lang, "card.skill.when"), Value: m.Trigger.Text(lang)})
+		}
+		if m.Title != "" {
+			fs = append(fs, cardField{Name: tr(lang, "card.skill.title"), Value: m.Title})
+		}
+		// The words its runs' buttons will say: approved here, never a
+		// run's (item_offers.go).
+		if len(m.Actions) > 0 {
+			var lines []string
+			for _, a := range m.Actions {
+				lines = append(lines, "« "+a.Label+" » : "+callVerb(a.Tool+" {}", lang))
+			}
+			fs = append(fs, cardField{Name: tr(lang, "card.skill.actions"), Value: strings.Join(lines, "\n")})
 		}
 		return append(fs, cardField{Name: tr(lang, "card.skill.instructions"), Value: truncate(m.Body, cardValueMax)})
 	}

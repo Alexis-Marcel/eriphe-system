@@ -1126,11 +1126,19 @@ by code from the thread's data (#468): it never depends on a model remembering t
 - **Code's section: generic blocks** (#574, `thread_blocks.go`), the same code for every thread,
   in one fixed order; a block shows only when the thread has what it shows, never by the kind of
   thread (work, standing or day: the family is never shown, and a thread with its `ends` changed
-  is drawn the same while active):
-  1. **head**: the goal, a `Progress` (the state word in a pill, « À toi », « Urgent », « En
-     cours », « À jour », « Terminé », coloured by its tone, and with steps a bar of them, done,
-     running, to come, « 2/5 »), the state and who holds it when it says more (« En cours ·
-     mené par son chef »);
+  is drawn the same while active, but for two things read from `ends`: a standing thread shows
+  no goal, as its title and state line say what it keeps, and no Stop, as it never ends):
+  1. **head**: the goal of a thread that ends on it (a standing one says what it is by its title
+     and its state line), a `Progress` (the state word in a pill, « À toi », « Urgent », « En
+     cours », « Terminé », coloured by its tone, and with steps a bar of them, done, running, to
+     come, « 2/5 »; none for a calm thread with no steps), and the **state line**
+     (`threadStateText`): its headline (below), else what its items count (« 1 pour info · 2 rien
+     à faire »), else its state and who holds it when that says more (« En cours · mené par son
+     chef »); then when its items were last sorted (« trié à 9 h 12 », the last note's time), and
+     « extérieur » once when anything the surface shows may carry someone else's words (its
+     sources, notes, monitors, steps, headline: the surface's `codeTaint`). The same words, but
+     the time, are its chip's line (the page's `summary`), else its steps' one line. A thread
+     with nothing yet to show says « Rien pour l'instant. ». Its surface has no `why`;
   2. **ended**: once it ended, an `Alert` saying how and when, with where it stood (« Fait ✓ ·
      14 h 02 » and the summary), and **« Ranger »** beside it for a thread that ends on its goal:
      the only block that reads `ends`;
@@ -1140,16 +1148,14 @@ by code from the thread's data (#468): it never depends on a model remembering t
      (kind `user`) a « C'est fait » button;
   4. **items**: each source that lists things (below);
   5. **live**: the monitors it follows (below), then their last events as a `Timeline`;
-  6. **Où on en est** (active threads; an ended one says it in its banner): the summary as
-     remember (kind progress), the extraction or its close wrote it, with its date
-     (`threads.summarized`, stamped by `setThread`); no model call;
+  6. **Où on en est** (active threads with a summary; an ended one says it in its banner): the
+     summary as remember (kind progress), the extraction or its close wrote it, with its date
+     (`threads.summarized`, stamped by `setThread`); no model call; nothing while it has none;
   7. **Depuis ta dernière visite** (`thread_header.go`): facts made by code from the thread's data
      (a step started, done, failed or handing in its work, what was settled for its task, the
      summary written again, the thread's end), each with its time, since the user's visit before
-     the last one, oldest first, the last 5 (« … et 2 plus tôt » before them); with none, the log
-     tells whether anything else moved (a step added, a plan changed, a card linked, a reopen:
-     « 3 changement(s), le dernier à 15 h 10. », counted, never quoted), else « Rien de nouveau
-     depuis 14 h 32. »; « Jusqu'ici » and what happened since its opening before any visit. Never
+     the last one, oldest first, the last 5 (« … et 2 plus tôt » before them); shown only after a
+     first visit and when there are some (before a visit, all of the thread is new). Never
      the log's lines (French only, and they may quote a lead). A visit is the page's `open` action
      on the surface: `seen` takes the last visit, `visited` is now, so the visit that opens it
      still shows what was new; opened again within 5 minutes, the same visit. Times are absolute
@@ -1189,26 +1195,32 @@ by code from the thread's data (#468): it never depends on a model remembering t
     read never runs under the engine's lock nor inside a surface write: the surface is written
     from the last reads, so a change of the thread never waits for a tool.
   - On the surface: its last read at `/<name>`, the thread ended too (where the part binds it; code's composed data may
-    then be larger than an author's), and in code's section, under « Données », its caption
-    (« Source <name> · lu à 14 h 32 · lu par le code, sans modèle », « extérieur » for a server not
-    trusted, which taints the surface for the models, `source:<name>`; its Proposals still
-    answer). With `items` (`path` to the list, `id` in each item, a monitor's path syntax; `title`
-    and `detail`, paths in the item, what its row says, its id without), each item, by its id, is
+    then be larger than an author's). A server not trusted taints the surface for the models
+    (`source:<name>`; its Proposals still answer) and the state line says « extérieur ». Code's
+    section says nothing of a source that reads well: a line only when it cannot be read (« mails
+    · n'arrive plus à lire », « en attente »), and its name above its items when the thread lists
+    those of several. With `items` (`path` to the list, `id` in each item, a monitor's path
+    syntax; `title` and `detail`, paths in the item, what its row says), each item, by its id, is
     a row (`source`, `id`, `n` its place in the list, `title`, `detail`, its note's `note`,
-    `state`, `due`, `mark`, `level`), at most 200, drawn as an `Item`: what the thread lists is
-    shown with no model. The rows are grouped by their notes' state at
-    `/thread/sources/<n>/groups` (« À faire », « À regarder », « Pas encore trié », « Pour info »,
-    « Rien à faire », « Traité », each a `Fold` with its count; the last two folded), their counts
-    by state at `/thread/sources/<n>/counts` (`Metric`s side by side). All bound by paths: a read
-    again changes the data, not the components.
+    `state`, `due`, `level`), at most 200, drawn as an `Item`: what the thread lists is shown with
+    no model. Without `title`, code takes the item's first `subject`, `title`, `name`,
+    `summary`, `label`, `snippet`, `text` or `description`, else its first short text that is not
+    an id; without `detail`, its `from`, `sender`, `author`, `organizer`, `owner`, `creator`,
+    `user` or `assignee`; a person (« Sam <sam@example.org> », or an object with a `name`,
+    `displayName`, `login` or `email`) by their name. Its id shows only when it has no words at
+    all: a monitor's source (`monitorThreadSource`) needs no paths. The rows are grouped by their
+    notes' state at `/thread/sources/<n>/groups` (« À faire », « À regarder », « Pas encore trié
+    », « Pour info », « Rien à faire », « Traité », each a `Fold` with its count on its line, and
+    the action its rows share as the Fold's `aside`, on its line, open or not; the last two
+    folded). All bound by paths: a read again changes the data, not the components.
 - **Notes on items** (#571, `thread_items.go`, table `thread_items`): the brain (`note_item`, with
   the thread) and a thread's lead (`note_item`, its own) note one item a source lists, by the
   source's name and the item's id: a short note (300 characters), a state (`act`, `look`, `info`,
   `none`, `done`) and a due date; the same item noted again replaces it, nothing at all takes it
   away; 500 a thread. Its `author` (`brain`, `lead:<id>`) and `tainted` (the brain turn's taint,
   the lead session's) are code's, never given. Code joins it to its item's row (`note`, `state`,
-  `due`, `by`, `level`: `high` for `act`, `low` for `info`, `none`, `done`; `external` and the
-  mark « extérieur » for a tainted one, which taints the surface for the models,
+  `due`, `by`, `level`: `high` for `act`, `low` for `info`, `none`, `done`; `external` for a tainted one,
+  which taints the surface for the models and makes its state line say « extérieur », once,
   `note:<source>/<item>`). A tainted note is shown, never quoted into a summary: it is in no
   summary, fact, one-line summary or message code writes, and reading it (`read_thread`'s
   `notes`, the lead's `thread`) taints the reader, so `remember` kind `progress` is then refused
@@ -1741,7 +1753,9 @@ turn is not tainted. Its front matter:
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid; `eriphe-threads` to act on threads |
 | `thread` | its thread's alias, `kind:slug` (`topic:mails`); without it, its events' key when it names a thing (`topic:<monitor>`) |
+| `title` | its thread's name for the user, 60 characters at most (`title: Mes mails`); without it, its name made a title (`mails-pro` → « Mails pro »). A new version's title renames its thread, the one already open too |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
+| `actions` | the actions its runs may offer on an item, with their words: a list, one a line, `Label: server/tool key=value …` (`- "Archiver: mail/move_message folder=Archive"`), 8 at most, a label of 40 characters at most. An action a run notes (`note_item`) that has this tool and these arguments says this label on its button, its note tainted or not: the user approved these words with the version, the run only chose the item. Any other action of a run says the tool's own words |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
 the rest of the skill, as one version: Settings → Skills shows it in words, and a change is a new
@@ -1754,7 +1768,9 @@ version, read with its diff.
   events start it clean.
 - **It acts on its thread** when lent `eriphe-threads` (`skillVoice`): it notes the items it
   looked at, says the thread waits for the user or gives it a deadline, raises it, adds what the
-  user must do or decide. That is what the user sees, ordered by code; a skill writes no surface
+  user must do or decide, gives it a headline. That is what the user sees, as is: it is told to
+  write in the user's language, short and concrete, with no ids nor jargon (`threadsUserReads`,
+  also the server's instructions). It is ordered by code; a skill writes no surface
   (`eriphe-workspace` is refused in its `tools`). The run's note says how many notes it wrote.
 - **Its last message** is optional, the run's report, weighed by its receipt's
   [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
@@ -1797,26 +1813,31 @@ version, read with its diff.
   thread's surface the answer must say it; `answerOf` checks the place is one its binding takes
   and the data there shows that card. Its results go to the run's note (a run's) or the thread's
   log, never to the brain; a calls card is answered by its buttons only, never by a plain « oui ».
-- **Actions offered on an item** (#575, `item_offers.go`): `note_item` takes `actions`, each a
-  label, a tool (`server/tool`) and its exact input with `"$item"` where the item's id goes (code
-  fills it in; at most 4, kept in `thread_items.actions`). Checked when noted: the tool is in the
+- **Actions offered on an item** (#575, `item_offers.go`): `note_item` takes `actions`, one at
+  most (the one its author recommends, only when useful: never a menu), a label, a tool
+  (`server/tool`) and its exact input with `"$item"` where the item's id goes (code fills it in;
+  kept in `thread_items.actions`). Checked when noted: the tool is in the
   catalog and not Eriphe's own, the author may use it (a task: lent it), its input names the item
   and fits the tool's required properties, and the access policy does not refuse it (`never`);
   checked again when shown and when clicked, so a `never` tool is never offered. The row offers
   each as a `Button` code places (action `offer`, `{thread, source, item, offer}`, the offer
   being the action's key); a state group offers an action two of its rows or more share
-  (« Archiver · 24 », `{thread, source, state, offer}`). An author can never write `offer`
+  (« Archiver · 24 », `{thread, source, state, offer}`). A folded group (`none`, `done`) is no
+  list of buttons: its rows offer nothing, the group the action they share, even one row's. An author can never write `offer`
   (`CheckActions`). A click runs nothing: code reads the note again from the store (the item
   still listed and shown, the action on its note) and makes one calls card with the exact call,
   bound to the item, linked to the thread, with no message; a group's click one card with a call
-  per item shown in the group. A call already waiting on its item is not asked twice. A tainted
-  note's button says the tool's action (`callVerb`), never the author's label, and its card keeps
-  the note's taint.
+  per item shown in the group. A call already waiting on its item is not asked twice. A button's
+  words are never a run's: a skill's run's says the label its skill's approved version declares
+  for that action (`actions:`, tool and arguments matched), tainted note or not; any other action
+  of a task says the tool's own words (`toolWords`: its title from its server, else `callVerb`).
+  The brain's and a lead's say their label, but for a tainted note: the tool's words. Its card
+  keeps the note's taint.
 - **Its thread** (`task_threads.go`): its runs are about its alias, `thread: kind:slug`; without
   it, their events' key when it names a thing (a monitor's, `topic:<name>`, or `kind:slug`;
   about.go). Their tasks, notifications, cards and signals carry it. Lent `eriphe-threads`, a
   run acts on the thread of that alias: code finds it when the run starts, reopens it if it
-  ended, or opens it **standing**, titled by the skill (`mails-pro` → « Mails pro ») with its
+  ended, or opens it **standing**, titled by its `title:` (else `mails-pro` → « Mails pro ») with its
   description as goal: words the user approved, never the run's. A run of a poll monitor's new
   items gives that thread the monitor's read as a source with items (thread_sources.go), each
   item by the id its `monitor.new` carries: the run notes them there. The run is told its thread
@@ -1843,7 +1864,11 @@ version, read with its diff.
   - `note_item` on an item of a source (tainted from a tainted run: shown « extérieur », never
     quoted into a summary);
   - `set_thread`: `waiting` (it waits for the user) or `open`, a deadline (its `deadline` step,
-    made or moved), a raise (an attention item `thread:<id>`, held to 3 from a tainted run);
+    made or moved), a raise (an attention item `thread:<id>`, held to 3 from a tainted run), a
+    `headline` (120 characters, `""` takes it away): the line the user reads at the top of the
+    thread and on its chip, in place of its items' counts; kept apart (`thread_headline:<id>`)
+    with its author and the run's taint, code's: from a tainted run it taints the surface
+    (`headline`) and the state line says « extérieur »;
   - `add_step` of kind `user`, `deadline` or `call`: a call is one of the task's own tools, and
     always a card, a free read included (`step_ask:<thread>:<key>`); what it adds taints the thread
     from a tainted run;
@@ -1878,9 +1903,9 @@ brain reads the same with **`skill_runs`** (`name`, `limit`; free). It gets the 
 keys and the runs' outcomes, but not their text: what a run read stays on its page.
 
 **Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
-`every`, `model`, `tools`, `thread`, `urgent`) writes a `SKILL.md` and adds it as a version waiting for
+`every`, `model`, `tools`, `thread`, `urgent`, `title`, `actions`) writes a `SKILL.md` and adds it as a version waiting for
 approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog
-servers). Its card (kind `skill`) says the trigger in words and the instructions; the yes approves
+servers). Its card (kind `skill`) says the trigger in words, its thread's name, its buttons' words and the instructions; the yes approves
 exactly that version, the no drops it. Written on a tainted turn, the card says so. A triggered
 task has no such tool.
 

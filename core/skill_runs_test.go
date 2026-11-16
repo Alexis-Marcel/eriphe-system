@@ -382,4 +382,28 @@ func TestWriteSkill(t *testing.T) {
 	if _, err := c.writeSkill(writeSkillIn{Name: "x", Description: "y", Instructions: "z", When: "Mail"}, nil); err == nil {
 		t.Fatal("a bad trigger accepted")
 	}
+	// Its thread's name and its buttons' words: on its card, approved
+	// with it.
+	if _, err := c.writeSkill(writeSkillIn{Name: "tri", Description: "y", Instructions: "z", When: "monitor.new", Tools: []string{"monitor"},
+		Title: "Mes alertes", Actions: []writeSkillAction{{Label: `Faire "taire"`, Tool: "monitor/silence", Args: map[string]string{"for": "1h"}}}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	k, _ := c.store.skill("tri")
+	v, _ := c.store.skillVersion(k.Pending)
+	if a := v.Manifest.Actions; v.Manifest.Title != "Mes alertes" || len(a) != 1 || a[0].Label != "Faire taire" || a[0].Tool != "mcp__monitor__silence" || a[0].Args["for"] != "1h" {
+		t.Fatalf("manifest %+v", v.Manifest)
+	}
+	var fields []cardField
+	for _, x := range c.pendingProposals() {
+		if x.Kind == cardSkill && x.ID == c.skillRowID("tri") {
+			fields = x.Fields
+		}
+	}
+	if len(fields) != 4 || fields[1].Value != "Mes alertes" || !strings.HasPrefix(fields[2].Value, "« Faire taire » : ") {
+		t.Fatalf("card fields %+v", fields)
+	}
+	if _, err := c.writeSkill(writeSkillIn{Name: "tri", Description: "y", Instructions: "z", When: "monitor.new",
+		Actions: []writeSkillAction{{Label: "Faire taire", Tool: "monitor/silence", Args: map[string]string{"for": "1 h"}}}}, nil); err == nil {
+		t.Fatal("an argument with a space accepted")
+	}
 }

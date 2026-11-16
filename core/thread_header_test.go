@@ -42,8 +42,9 @@ func headerOf(t *testing.T, c *core, id int64) map[string]string {
 
 // Opening a thread's surface moves its visits: the header tells what
 // changed since the visit before, so the one that opens it still sees
-// what was new; back later with nothing new, « Rien de nouveau depuis » the
-// last visit. Opened again within threadVisitSame, the same visit.
+// what was new; never visited, or back with nothing new, it says nothing
+// of it, nor « Pas encore de résumé ». Opened again within
+// threadVisitSame, the same visit.
 func TestThreadHeaderSinceVisit(t *testing.T) {
 	c := startCore(t)
 	th, err := c.openThread(threadIn{Title: "Site", Goal: "The contact page is online.", Alias: "project:site"}, nil, byBrain)
@@ -55,33 +56,22 @@ func TestThreadHeaderSinceVisit(t *testing.T) {
 	c.store.db.Exec(`UPDATE thread_log SET at = ? WHERE thread = ?`, now.Add(-5*time.Hour).Unix(), th.ID)
 	clock := func(at time.Time) string { return threadClock(at, now, c.userZone(), "fr") }
 
-	// Never visited: what happened so far.
+	// Never visited: all of it is new, the thread says it; no history, no
+	// « Pas encore de résumé ».
 	c.keepThreadSurface(th.ID)
 	h := headerOf(t, c, th.ID)
-	if h["thread_since"] != "Jusqu'ici" || !strings.HasSuffix(h["thread_fact_0"], "Thread ouvert") || h["thread_nosummary"] == "" {
+	if h["thread_since"] != "" || h["thread_fact_0"] != "" || h["thread_where"] != "" {
 		t.Fatalf("never visited: %v", h)
 	}
 
-	// The page opens it: still what was new at that visit.
+	// The page opens it, then back later, nothing moved: still nothing.
 	first := now.Add(-3 * time.Hour)
 	c.threadVisited(th.ID, first)
-	if h = headerOf(t, c, th.ID); h["thread_since"] != "Jusqu'ici" {
-		t.Fatalf("first visit: %v", h)
-	}
-
-	// Back later, nothing moved: nothing new since the first visit.
 	second := now.Add(-2 * time.Hour)
 	c.threadVisited(th.ID, second)
-	h = headerOf(t, c, th.ID)
-	if h["thread_since"] != "Depuis ta dernière visite" || h["thread_nothing"] != "Rien de nouveau depuis "+clock(first)+"." || h["thread_fact_0"] != "" {
+	c.logThread(th.ID, "engine", "Carte liée : access:7.") // a move code words no fact of
+	if h = headerOf(t, c, th.ID); h["thread_since"] != "" || h["thread_fact_0"] != "" {
 		t.Fatalf("nothing new: %v", h)
-	}
-
-	// Something moved that code words no fact of (a line in its log: a
-	// step added, a plan changed, a card linked): never « Rien de nouveau ».
-	c.logThread(th.ID, "engine", "Carte liée : access:7.")
-	if h = headerOf(t, c, th.ID); h["thread_nothing"] != "" || !strings.HasPrefix(h["thread_moved"], "1 changement(s), le dernier à ") {
-		t.Fatalf("moved: %v", h)
 	}
 
 	// The summary written again: a fact, and where it stands, dated.

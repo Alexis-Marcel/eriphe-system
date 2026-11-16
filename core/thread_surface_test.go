@@ -80,7 +80,7 @@ func TestThreadSurfaceLight(t *testing.T) {
 	if s.Author != ref || s.Lifetime.While != ref || s.Title != "PR 12" || data["goal"] != "Merged and deployed." {
 		t.Fatalf("surface %+v data %v", s, data)
 	}
-	if meta.Summary != "Ouvert" || !strings.Contains(meta.Why, "tenu à jour") || meta.Tainted || !meta.Answers {
+	if meta.Summary != "Ouvert" || meta.Why != "" || meta.Tainted || !meta.Answers {
 		t.Errorf("meta %+v", meta)
 	}
 	// Open and held by the brain: the header says it all, no state line,

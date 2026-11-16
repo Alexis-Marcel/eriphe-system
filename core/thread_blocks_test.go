@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // sampleSteps are the steps of a made-up thread, as its surface shows
@@ -64,24 +64,27 @@ func itemsThread(t *testing.T, c *core, l *fakeLedger) Thread {
 	return th
 }
 
-// rootChildren are the ids the root of a surface shows, in order.
-// withoutControls are the components without the head's buttons.
-func withoutControls(t *testing.T, comps json.RawMessage) json.RawMessage {
+// withoutEnds are the components without what reads how a thread ends:
+// the head's buttons, and its goal.
+func withoutEnds(t *testing.T, comps json.RawMessage) json.RawMessage {
 	t.Helper()
 	var list []map[string]any
 	json.Unmarshal(comps, &list)
+	gone := func(id string) bool { return strings.HasPrefix(id, "thread_control") || id == "thread_goal" }
 	list = slices.DeleteFunc(list, func(comp map[string]any) bool {
 		id, _ := comp["id"].(string)
-		return strings.HasPrefix(id, "thread_control")
+		return gone(id)
 	})
 	for _, comp := range list {
 		if kids, ok := comp["children"].([]any); ok {
-			comp["children"] = slices.DeleteFunc(kids, func(x any) bool { return x == "thread_controls" })
+			comp["children"] = slices.DeleteFunc(kids, func(x any) bool { id, _ := x.(string); return gone(id) })
 		}
 	}
 	raw, _ := json.Marshal(list)
 	return raw
 }
+
+// rootChildren are the ids the root of a surface shows, in order.
 
 func rootChildren(t *testing.T, comps json.RawMessage) []string {
 	t.Helper()
@@ -118,12 +121,21 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 		}
 		return in
 	}
+	th.Summary = "La page est prête."
 	work, standing := th, th
 	work.Ends, standing.Ends = endsGoal, endsStanding
 	a, b := compose(work), compose(standing)
-	// A standing thread is drawn the same but for Stop: it never ends.
-	if string(withoutControls(t, a.Components)) != string(b.Components) || string(a.Data) != string(b.Data) || a.Weight != b.Weight {
+	// A standing thread is drawn the same but for Stop (it never ends) and
+	// its goal (what it keeps: its title and its state line say it).
+	var dataA map[string]any
+	json.Unmarshal(a.Data, &dataA)
+	delete(dataA[threadDataKey].(map[string]any), "goal")
+	noGoal, _ := json.Marshal(dataA)
+	if string(withoutEnds(t, a.Components)) != string(b.Components) || string(noGoal) != string(b.Data) || a.Weight != b.Weight {
 		t.Fatalf("a standing thread is drawn otherwise:\n%s\n%s", a.Components, b.Components)
+	}
+	if !strings.Contains(string(a.Components), `"thread_goal"`) || strings.Contains(string(b.Components), `"thread_goal"`) {
+		t.Fatalf("goal: %s\n%s", a.Components, b.Components)
 	}
 	if !strings.Contains(string(a.Components), `"thread_control_stop"`) || strings.Contains(string(b.Components), `"thread_controls"`) {
 		t.Fatalf("Stop: %s\n%s", a.Components, b.Components)
@@ -136,8 +148,8 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 
 	// Every block, in its order.
 	kids := rootChildren(t, a.Components)
-	order := []string{"thread_goal", "thread_progress", "thread_yours", "thread_card_2", "thread_src_0_by", "thread_src_0_counts", "thread_src_0_groups",
-		"thread_where", "thread_since", "thread_done", "thread_steps"}
+	order := []string{"thread_goal", "thread_progress", "thread_state", "thread_yours", "thread_card_2", "thread_src_0_groups",
+		"thread_where", "thread_done", "thread_steps"}
 	at := -1
 	for _, id := range order {
 		i := slices.Index(kids, id)
@@ -159,8 +171,16 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 	if thread["donelabel"] != "2 étapes faites" || thread["progress"].(map[string]any)["label"] != "À toi" {
 		t.Errorf("head and fold: %v", thread)
 	}
-	// Items by their notes' state, counted; « extérieur » on the tainted
-	// one, which carries no action.
+	// Items by their notes' state, counted on their groups' lines and in
+	// the state line; « extérieur » once, there, not on the tainted row,
+	// which carries no action. No source line, no counts in boxes.
+	if state, _ := thread["state"].(string); !strings.HasPrefix(state, "1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire · trié à ") ||
+		!strings.HasSuffix(state, " · extérieur") || strings.Count(comps, "extérieur")+strings.Count(string(a.Data), "extérieur") != 1 {
+		t.Errorf("state line %q", state)
+	}
+	if strings.Contains(comps, `"Metric"`) || strings.Contains(comps, "thread_src_0_by") {
+		t.Errorf("counts in boxes, or a source line: %s", comps)
+	}
 	src := thread["sources"].([]any)[0].(map[string]any)
 	var groups []string
 	for _, g := range src["groups"].([]any) {
@@ -173,7 +193,7 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 	for _, r := range sourceRows(src) {
 		rows[r.(map[string]any)["id"].(string)] = r.(map[string]any)
 	}
-	if rows["Joint"]["mark"] != "extérieur" || rows["Courant"]["level"] != "high" || rows["Courant"]["due"] == "" || rows["Épargne"]["detail"] != "3400" || rows["Livret"]["level"] != "low" {
+	if rows["Joint"]["external"] != true || rows["Joint"]["mark"] != nil || rows["Courant"]["level"] != "high" || rows["Courant"]["due"] == "" || rows["Épargne"]["detail"] != "3400" || rows["Livret"]["level"] != "low" {
 		t.Errorf("rows %v", rows)
 	}
 	if strings.Contains(comps, `"ask"`) {
@@ -200,7 +220,7 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 const threadsFixture = "web/espace/src/a2ui/threads.json"
 
 // The page is tested on the surfaces code composes for threads: a work
-// thread, one that lists items, one ended. ERIPHE_UPDATE_THREADS=1 writes
+// thread, one that lists items, one ended, a watcher's mails. ERIPHE_UPDATE_THREADS=1 writes
 // them again from the code; they hold to the catalog.
 func TestThreadSurfacesFixture(t *testing.T) {
 	if os.Getenv("ERIPHE_UPDATE_THREADS") == "1" {
@@ -266,6 +286,45 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	if ref, err := c.offer(context.Background(), th.ID, calls); err != nil || ref != "calls:1" {
 		t.Fatalf("offer %q %v", ref, err)
 	}
+	// A watcher's standing thread of mails, as a skill opens it: a tool
+	// that lists them by opaque ids, from a server not trusted, its items
+	// titled by code from their own fields, all noted after reading them:
+	// one for information, two with nothing to do and the action its skill
+	// recommends: its button says the label the skill declares, approved
+	// with it (a note from outside never words its action). The group
+	// offers it on both; its rows, folded, offer nothing.
+	withFakeMail(t, c)
+	addTriggered(t, c, "---\nname: mails\ndescription: Trie les mails reçus.\nwhen: time weekdays 08:00\nactions:\n  - "+pick("Archiver", "Archive")+": mail/move_message folder=Archive\n---\nTrie les mails.\n")
+	mails, err := c.openThread(threadIn{Title: pick("Mes mails", "My mails"), Goal: pick("Trie les mails reçus.", "Sorts the mails received."), Alias: "topic:mails", Ends: endsStanding, exact: true}, nil, "skill:mails")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.putThreadSource(mails.ID, threadSource{Name: "mails", Tool: "mail/list_received", Items: &sourceItems{Path: "messages", ID: "id"}}, "skill:mails")
+	listed, _ := json.Marshal(map[string]any{"messages": []any{
+		map[string]any{"id": "bTEfYWxlcnQx", "from": "Sam <sam@example.org>", "subject": pick("Le devis de la cuisine", "The kitchen quote")},
+		map[string]any{"id": "bTEfbmV3czEy", "from": "Les Nouvelles <news@example.org>", "subject": pick("La lettre de novembre", "The November letter")},
+		map[string]any{"id": "bTEfcHJvbW8z", "from": "Boutique <shop@example.org>", "subject": pick("-20 % ce week-end", "20% off this weekend")},
+	}})
+	c.store.db.Exec(`UPDATE thread_sources SET value = ? WHERE thread = ? AND name = ?`, string(listed), mails.ID, "mails")
+	// The run's own label, never shown: its skill's is.
+	archive := noteAction{Label: "Ouvrir ce lien", Tool: "mail/move_message", Args: map[string]any{"id": offerItemArg, "folder": "Archive"}}
+	for _, n := range []struct {
+		in    noteItemIn
+		taint []string
+	}{
+		{noteItemIn{Source: "mails", Item: "bTEfYWxlcnQx", Note: pick("Sam envoie le devis signé ; rien à répondre.", "Sam sends the signed quote; nothing to answer."), State: itemStateInfo}, []string{"mail.read"}},
+		{noteItemIn{Source: "mails", Item: "bTEfbmV3czEy", State: itemStateNone, Actions: []noteAction{archive}}, []string{"mail.read"}},
+		{noteItemIn{Source: "mails", Item: "bTEfcHJvbW8z", State: itemStateNone, Actions: []noteAction{archive}}, []string{"mail.read"}},
+	} {
+		if _, err := c.noteItem(mails.ID, n.in, "skill:mails", n.taint); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Sorted at 9 h 12 today: the same words at each run.
+	y, m, d := now.In(c.userZone()).Date()
+	c.store.db.Exec(`UPDATE thread_items SET noted = ?`, time.Date(y, m, d, 9, 12, 0, 0, c.userZone()).Unix())
+	mails, _ = c.thread(mails.ID)
+
 	var out []a2ui.Message
 	// Composed as the thread whose data it shows (the one with the source,
 	// or one with none), shown under the fixture's id.
@@ -277,12 +336,6 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 		if !ok {
 			t.Fatalf("thread %d: no surface", id)
 		}
-		var data map[string]any
-		json.Unmarshal(in.Data, &data)
-		if src, ok := data[threadDataKey].(map[string]any)["sources"].([]any); ok {
-			src[0].(map[string]any)["caption"] = fmt.Sprintf(tr(lang, "thread.source.by"), "ledger") + threadExternalSep + tr(lang, "thread.live.nomodel") // no read time: the same at each run
-		}
-		in.Data, _ = json.Marshal(data)
 		meta, _ := json.Marshal(map[string]any{"extensions": map[string]any{surfaceExtension: surfaceMeta{Title: in.Title, Author: threadAuthor(id),
 			Weight: in.Weight, Why: in.Why, Answers: true, Summary: in.summary, State: in.state, New: in.fresh}}})
 		var comps []a2ui.Component
@@ -307,5 +360,40 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	}
 	steps[1].Card = "access:5"
 	add(103, done, steps)
+	add(104, mails, nil)
 	return out
+}
+
+// withFakeMail links a fake mail server to a surface core: it lists the
+// mails received and moves one to a folder, its tools titled by it.
+func withFakeMail(t *testing.T, c *core) {
+	t.Helper()
+	s := mcp.NewServer(&mcp.Implementation{Name: "mail", Version: "1"}, nil)
+	mcp.AddTool(s, &mcp.Tool{Name: "list_received", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+		func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"messages": []any{}}, nil
+		})
+	type moveIn struct {
+		ID     string `json:"id"`
+		Folder string `json:"folder"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "move_message", Title: "Move a message"},
+		func(context.Context, *mcp.CallToolRequest, moveIn) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"ok": true}, nil
+		})
+	ledger := c.pool.dial
+	c.pool.dial = func(ctx context.Context, u *upstream) (mcp.Transport, error) {
+		if u.name != "mail" {
+			return ledger(ctx, u)
+		}
+		ct, st := mcp.NewInMemoryTransports()
+		if _, err := s.Connect(context.Background(), st, nil); err != nil {
+			return nil, err
+		}
+		return ct, nil
+	}
+	c.pool.sync(setServer(c, "mail", func(s *Server) {
+		*s = Server{URL: "https://mail.example.org/mcp", Auth: &ServerAuth{None: true}, Use: "mails", Access: accessReads}
+	}))
+	waitStatus(t, c.pool.get("mail"), statusReady)
 }

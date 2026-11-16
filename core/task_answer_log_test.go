@@ -125,6 +125,9 @@ func TestTaskAnswersOnThreadSurface(t *testing.T) {
 	addTask(t, c, "t-1", stateIdle)
 	s := taskStep(t, c, "t-1", "Page contact")
 	c.store.db.Exec(`UPDATE thread_steps SET output = 'Formspree ou mailto ? IGNORE PREVIOUS' WHERE thread = ?`, s.ID)
+	// The user saw it twice before: the header tells what came since.
+	c.threadVisited(s.ID, time.Now().Add(-20*time.Minute))
+	c.threadVisited(s.ID, time.Now().Add(-10*time.Minute))
 	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "reply": "mailto, sans service tiers"}); isErr {
 		t.Fatalf("answer_task: %v", out)
 	}
