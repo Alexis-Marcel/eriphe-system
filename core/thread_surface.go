@@ -304,6 +304,9 @@ func (c *core) showThreadAgain(id int64, now time.Time) {
 	if err != nil || s.active() || s.tidied > 0 || s.Ends == endsDay {
 		return
 	}
+	if s.Parent != 0 {
+		c.showThreadAgain(s.Parent, now) // a child opens inside its parent
+	}
 	c.store.set(threadAgainKey+strconv.FormatInt(id, 10), strconv.FormatInt(now.Unix(), 10))
 	c.keepThreadSurface(id)
 }
@@ -364,6 +367,13 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 		}
 		if !until.After(now) {
 			return in, false
+		}
+		if s.Parent != 0 {
+			// An ended child leaves with its parent's surface, whose children it
+			// is shown among (thread_children.go).
+			if _, err := c.surface(threadSurfaceID(s.Parent)); err != nil {
+				return in, false
+			}
 		}
 		in.Lifetime.Until = until.Truncate(time.Second)
 		in.Weight = threadWeightEnded
@@ -564,22 +574,23 @@ func (c *core) keepThreadSurface(id int64) {
 	if c.conf() == nil {
 		return // not configured yet: its tick gives it its surface
 	}
-	if parent := c.writeThreadSurface(id); parent != 0 {
-		c.writeThreadSurface(parent)
-	}
+	c.keepThreadKin(id, c.writeThreadSurface(id)) // thread_children.go
 }
 
-// writeThreadSurface is keepThreadSurface for one thread; it gives back
-// the thread's parent, 0 for a top thread.
-func (c *core) writeThreadSurface(id int64) (parent int64) {
+// writeThreadSurface is keepThreadSurface for one thread; it tells
+// whether the thread has its surface after.
+func (c *core) writeThreadSurface(id int64) (has bool) {
+	sid := threadSurfaceID(id)
+	defer func() {
+		_, err := c.surface(sid)
+		has = err == nil
+	}()
 	threadSurfaceMu.Lock()
 	defer threadSurfaceMu.Unlock()
 	s, err := c.thread(id)
 	if err != nil {
-		return 0
+		return
 	}
-	parent = s.Parent
-	sid := threadSurfaceID(id)
 	_, err = c.surface(sid)
 	exists := err == nil
 	if !s.active() && !exists && c.threadAgain(id).IsZero() {

@@ -110,18 +110,32 @@ func (c *core) threadView(id int64, lines int) (threadView, error) {
 	return v, nil
 }
 
-// endsAgain makes the thread an alias has already end as the brain asks
-// now (open_thread's ends), should it ask another: a light one only.
-func (c *core) endsAgain(old Thread, ends string) error {
+// endsChange is how the brain asks the thread an alias has already to end
+// now (open_thread's ends): "" for no change; a light one only, and never
+// standing for a child.
+func endsChange(old Thread, ends string) (string, error) {
 	ends = strings.ToLower(strings.TrimSpace(ends))
 	if ends == "" || ends == old.Ends {
-		return nil
+		return "", nil
 	}
 	if !slices.Contains(threadEnds, ends) {
-		return fmt.Errorf("ends %q: goal, standing or day", ends)
+		return "", fmt.Errorf("ends %q: goal, standing or day", ends)
 	}
 	if old.led() {
-		return fmt.Errorf("thread %d « %s » follows this matter and is led: it ends on its goal", old.ID, old.Title)
+		return "", fmt.Errorf("thread %d « %s » follows this matter and is led: it ends on its goal", old.ID, old.Title)
+	}
+	if ends == endsStanding && old.Parent != 0 {
+		return "", fmt.Errorf("thread %d « %s » is a child of thread %d: a standing thread is a top thread, never a child", old.ID, old.Title, old.Parent)
+	}
+	return ends, nil
+}
+
+// endsAgain makes the thread an alias has already end as the brain asks
+// now (endsChange).
+func (c *core) endsAgain(old Thread, ends string) error {
+	ends, err := endsChange(old, ends)
+	if err != nil || ends == "" {
+		return err
 	}
 	fields := map[string]any{"ends": ends}
 	if ends == endsDay {
@@ -168,7 +182,7 @@ func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread,
 		return s, "", errors.New("alias is needed: the key of the matter, kind:slug, to find its thread again (pr:owner/repo#12, project:site, topic:brand-name)")
 	}
 	if in.Parent != 0 {
-		if _, err := c.parentFor(in.Parent, 0); err != nil {
+		if _, err := c.parentFor(in.Parent, Thread{Ends: in.Ends}); err != nil {
 			return s, "", err
 		}
 	}
@@ -212,7 +226,20 @@ func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread,
 	}
 	moved := ""
 	if in.Parent != 0 && old.Parent != in.Parent && !led {
-		// Found again under the parent its opener names: it moves there.
+		// Found again under the parent its opener names: it moves there,
+		// once all that could refuse the open said yes.
+		as := old
+		as.Parent = in.Parent
+		if by == byBrain {
+			if ends, err := endsChange(as, in.Ends); err != nil {
+				return s, "", err
+			} else if ends != "" {
+				as.Ends = ends
+			}
+		}
+		if _, err := c.parentFor(in.Parent, as); err != nil {
+			return s, "", err
+		}
 		if err := c.moveUnder(old, in.Parent, by); err != nil {
 			return s, "", err
 		}

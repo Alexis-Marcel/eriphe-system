@@ -15,12 +15,14 @@ import (
 // goal or stands, as any other.
 //
 //   - Depth 2: a child has no children, and a thread with children is
-//     never made a child (parentFor).
+//     never made a child (parentFor). A standing thread, what the user
+//     manages continuously, is a top thread: never a child.
 //   - No active child under an ended parent: closing a parent with active
 //     children is refused, naming them (activeChildrenError); a parent
 //     that ends any other way (stopped, its plan declined, its day over)
 //     stops them (endChildren); a child of an ended parent does not
-//     reopen before it.
+//     reopen before it. An ended child's surface leaves with its parent's
+//     (keepThreadKin), and a link that shows it again shows its parent.
 //   - The workspace lays out top threads only. A child's surface says
 //     the surface it opens inside (surfaceLook.Inside): it is never a
 //     tile nor a chip; opened, its parent is on stage with it inside
@@ -46,41 +48,45 @@ func (c *core) activeChildren(id int64) []Thread {
 }
 
 // parentFor is the thread a thread may be the child of: one that exists,
-// is active and is a top thread. child is the thread to put under it, 0
-// for a new one: never the parent itself, nor a thread with children.
-func (c *core) parentFor(parent, child int64) (Thread, error) {
+// is active and is a top thread. child is the thread to put under it, as
+// it will end (ID 0 for a new one): never the parent itself, a standing
+// thread, nor a thread with children.
+func (c *core) parentFor(parent int64, child Thread) (Thread, error) {
 	p, err := c.thread(parent)
 	switch {
 	case errors.Is(err, errNoThread):
 		return p, fmt.Errorf("parent: no thread %d", parent)
 	case err != nil:
 		return p, err
-	case parent == child:
+	case parent == child.ID:
 		return p, errors.New("parent: a thread is not its own child")
+	case child.standing():
+		return p, errors.New("parent: a standing thread is what the user manages continuously, a top thread: never a child")
 	case p.Parent != 0:
 		return p, fmt.Errorf("parent: thread %d « %s » is a child of thread %d already, and a child has no children: open it under thread %d, or as a top thread", p.ID, p.Title, p.Parent, p.Parent)
 	case !p.active():
 		return p, fmt.Errorf("parent: thread %d « %s » is %s: reopen it first, or open this one as a top thread", p.ID, p.Title, p.State)
 	}
-	if child != 0 {
-		if kids := c.children(child); len(kids) > 0 {
-			return p, fmt.Errorf("parent: thread %d has child threads (%s), and a child has no children", child, kinList(kids))
+	if child.ID != 0 {
+		if kids := c.children(child.ID); len(kids) > 0 {
+			return p, fmt.Errorf("parent: thread %d has child threads (%s), and a child has no children", child.ID, kinList(kids))
 		}
 	}
 	return p, nil
 }
 
 // moveUnder makes a thread found again for a matter (open_thread on its
-// alias) the child of parent, as its opener asks.
+// alias) the child of parent, as its opener asks; checked by parentFor
+// first.
 func (c *core) moveUnder(s Thread, parent int64, by string) error {
-	p, err := c.parentFor(parent, s.ID)
+	p, err := c.thread(parent)
 	if err != nil {
 		return err
 	}
 	if err := c.setThread(s.ID, map[string]any{"parent": parent}); err != nil {
 		return err
 	}
-	c.logThread(s.ID, by, fmt.Sprintf("Rangé sous le fil %d « %s ».", p.ID, p.Title))
+	c.logThread(s.ID, by, fmt.Sprintf("Rangé sous le thread %d « %s ».", p.ID, p.Title))
 	if s.Parent != 0 {
 		c.keepThreadSurface(s.Parent) // it leaves its old parent's children
 	}
@@ -104,7 +110,7 @@ func kinList(ts []Thread) string {
 // endChildren stops a thread's active children: it ended. Under threadMu.
 func (c *core) endChildren(ctx context.Context, s Thread) {
 	for _, kid := range c.activeChildren(s.ID) {
-		c.stopLocked(ctx, kid, "engine", fmt.Sprintf("Arrêté avec son fil parent %d « %s ».", s.ID, s.Title))
+		c.stopLocked(ctx, kid, "engine", fmt.Sprintf("Arrêté avec son thread parent %d « %s ».", s.ID, s.Title))
 	}
 }
 
@@ -164,8 +170,8 @@ func (c *core) threadKidsOf(s Thread, lang string) threadKids {
 			continue
 		}
 		row := threadChild{Thread: kid.ID, Surface: sid, Title: kid.Title, Level: "normal"}
-		if has {
-			row.Line = sf.Look.Summary
+		if has && sf.Look.Summary != tr(lang, "thread.state."+kid.Look()) && sf.Look.Summary != tr(lang, "thread.line."+kid.State) {
+			row.Line = sf.Look.Summary // not when it only says its state again, as its status word does
 		}
 		switch {
 		case !kid.active():
@@ -230,6 +236,30 @@ func (c *core) blockParent(out *threadComps, data map[string]any, s Thread) {
 	out.add(map[string]any{"id": "thread_parent", "component": "Button", "icon": "arrowUp", "variant": "quiet",
 		"label":  map[string]any{"@path": "/thread/parent/title"},
 		"action": map[string]any{"event": map[string]any{"name": a2ui.ActionOpen, "context": map[string]any{"surface": sid}}}})
+}
+
+// keepThreadKin writes again the surfaces a thread's own depends on: its
+// parent's, which shows it among its children; and, once its own surface
+// is gone, its ended children's, which leave with it (threadSurfaceIn).
+func (c *core) keepThreadKin(id int64, shown bool) {
+	if c.conf() == nil {
+		return
+	}
+	s, err := c.thread(id)
+	if err != nil {
+		return
+	}
+	if s.Parent != 0 {
+		c.writeThreadSurface(s.Parent)
+	}
+	if shown {
+		return
+	}
+	for _, kid := range c.children(id) {
+		if !kid.active() {
+			c.writeThreadSurface(kid.ID)
+		}
+	}
 }
 
 // insideOf is the surface a thread's surface opens inside: its parent's.

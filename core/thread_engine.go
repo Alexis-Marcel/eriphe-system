@@ -56,7 +56,7 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 		return Thread{}, fmt.Errorf("alias: %w", err)
 	}
 	if in.Parent != 0 {
-		if _, err := c.parentFor(in.Parent, 0); err != nil {
+		if _, err := c.parentFor(in.Parent, Thread{Ends: in.Ends}); err != nil {
 			return Thread{}, err
 		}
 	}

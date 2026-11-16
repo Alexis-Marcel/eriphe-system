@@ -335,23 +335,30 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 			t.Fatalf("thread %d: no surface", id)
 		}
 		meta, _ := json.Marshal(map[string]any{"extensions": map[string]any{surfaceExtension: surfaceMeta{Title: in.Title, Author: threadAuthor(id),
-			Weight: in.Weight, Why: in.Why, Answers: true, Summary: in.summary, State: in.state, New: in.fresh}}})
+			Weight: in.Weight, Why: in.Why, Answers: true, Summary: in.summary, State: in.state, New: in.fresh, Inside: in.inside}}})
 		var comps []a2ui.Component
 		json.Unmarshal(in.Components, &comps)
 		out = append(out, a2ui.Message{Version: a2ui.Version, CreateSurface: &a2ui.CreateSurface{SurfaceID: threadSurfaceID(id), CatalogID: a2ui.CatalogID,
 			Components: comps, DataModel: in.Data, Metadata: meta}})
 	}
-	// The work thread's child, a step grown into a matter of its own: its
-	// row among the work thread's children (thread_children.go).
-	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, state, created, started, parent) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		pick("Les photos du club", "The club's photos"), "Les photos sont choisies.", modeLight, threadOpen, now.Unix(), now.Unix(), 101)
-	if err != nil {
-		t.Fatal(err)
-	}
-	kid, _ := res.LastInsertId()
-	c.keepThreadSurface(kid)
 	work := th
 	work.Title, work.Goal = pick("Le site du club", "The club's site"), pick("Le site du club est en ligne, avec ses photos.", "The club's site is online, with its photos.")
+	// The work thread's child, a step grown into a matter of its own (105):
+	// its row among the work thread's children, its crumb back to it
+	// (thread_children.go). The work thread is in the store as 101 for it.
+	for _, q := range []struct {
+		id     int64
+		title  string
+		parent int64
+	}{{101, work.Title, 0}, {105, pick("Les photos du club", "The club's photos"), 101}} {
+		if _, err := c.store.db.Exec(`INSERT INTO threads (id, title, goal, mode, state, created, started, parent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			q.id, q.title, q.title+".", modeLight, threadOpen, now.Unix(), now.Unix(), q.parent); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c.setThreadHeadline(105, pick("Choisis les 12 photos de la page d'accueil.", "Pick the 12 photos of the home page."), byBrain, nil)
+	c.keepThreadSurface(105)
+	kid, _ := c.thread(105)
 	work.Summary, work.summarized = pick("La page est prête ; il reste les photos et ton accord pour publier.", "The page is ready; the photos and your yes to publish are left."), now.Add(-30*time.Minute).Unix()
 	add(101, work, sampleSteps(lang, now))
 	standing := th
@@ -368,6 +375,7 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	steps[1].Card = "access:5"
 	add(103, done, steps)
 	add(104, mails, nil)
+	add(105, kid, nil)
 	return out
 }
 

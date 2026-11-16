@@ -63,6 +63,32 @@ func TestChildThreadDepth(t *testing.T) {
 	if _, err := c.openThread(threadIn{Title: "X", Goal: "X.", Alias: "topic:x", Parent: 999}, nil, byBrain); err == nil {
 		t.Fatal("a parent that is not")
 	}
+	// A standing thread is a top thread: never opened, moved nor turned
+	// into a child.
+	mails, err := c.openThread(threadIn{Title: "Mails", Goal: "Les mails.", Alias: "topic:mails", Ends: endsStanding}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.openThread(threadIn{Title: "Agenda", Goal: "L'agenda.", Alias: "topic:agenda", Ends: endsStanding, Parent: parent.ID}, nil, byBrain); err == nil || !strings.Contains(err.Error(), "never a child") {
+		t.Fatalf("a standing child: %v", err)
+	}
+	if _, _, err := c.openThreadOnce(threadIn{Title: "Mails", Goal: "Les mails.", Alias: "topic:mails", Parent: parent.ID}, nil, byBrain); err == nil || !strings.Contains(err.Error(), "never a child") {
+		t.Fatalf("a standing thread moved under: %v", err)
+	}
+	if m, _ := c.thread(mails.ID); m.Parent != 0 {
+		t.Fatal("moved")
+	}
+	if _, _, err := c.openThreadOnce(threadIn{Title: "Le devis", Goal: "Le devis, fait.", Alias: "topic:devis", Ends: endsStanding}, nil, byBrain); err == nil || !strings.Contains(err.Error(), "never a child") {
+		t.Fatalf("a child turned standing: %v", err)
+	}
+	// An open refused for another reason moves nothing.
+	loose, _ := c.openThread(threadIn{Title: "Le portail", Goal: "Le portail est posé.", Alias: "topic:portail"}, nil, byBrain)
+	if _, _, err := c.openThreadOnce(threadIn{Title: "Le portail", Goal: "Le portail est posé.", Alias: "topic:portail", Parent: parent.ID, Ends: "someday"}, nil, byBrain); err == nil {
+		t.Fatal("ends someday")
+	}
+	if l, _ := c.thread(loose.ID); l.Parent != 0 {
+		t.Fatal("moved by a refused open")
+	}
 	ended, _ := c.openThread(threadIn{Title: "Fini", Goal: "Fini.", Alias: "topic:fini"}, nil, byBrain)
 	c.closeLight(ended.ID, "Fait.", byBrain)
 	if _, err := c.openThread(threadIn{Title: "Y", Goal: "Y.", Alias: "topic:y", Parent: ended.ID}, nil, byBrain); err == nil || !strings.Contains(err.Error(), "reopen it first") {
@@ -116,7 +142,7 @@ func TestChildThreadStopCascades(t *testing.T) {
 	if k, _ := c.thread(done.ID); k.State != threadDone {
 		t.Fatalf("an ended child changed: %s", k.State)
 	}
-	if !slices.ContainsFunc(c.threadLog(kid.ID, 5), func(l ThreadLine) bool { return strings.Contains(l.Text, "fil parent") }) {
+	if !slices.ContainsFunc(c.threadLog(kid.ID, 5), func(l ThreadLine) bool { return strings.Contains(l.Text, "thread parent") }) {
 		t.Errorf("log %v", c.threadLog(kid.ID, 5))
 	}
 	if _, err := c.reopenThread(kid.ID, "Le devis revient", byBrain); err == nil || !strings.Contains(err.Error(), "reopen it first") {
@@ -204,6 +230,49 @@ func TestChildThreadTaintsParent(t *testing.T) {
 	row := threadData(t, c, parent.ID)["children"].([]any)[0].(map[string]any)
 	if row["mark"] != "extérieur" {
 		t.Errorf("row %v", row)
+	}
+}
+
+// An ended child's surface leaves with its parent's: put away, its
+// parent takes it along, never left as a tile of its own; and a child's
+// surface that leaves takes its row from its parent's.
+func TestChildSurfaceLeavesWithParent(t *testing.T) {
+	c, _ := surfaceCore(t)
+	parent := lightThread(t, c)
+	kid := childThread(t, c, parent.ID, "Le devis", "topic:devis")
+	psid, ksid := threadSurfaceID(parent.ID), threadSurfaceID(kid.ID)
+	c.closeLight(kid.ID, "Signé.", byBrain)
+	c.closeLight(parent.ID, "Fusionnée.", byBrain)
+	if _, err := c.surface(ksid); err != nil {
+		t.Fatal("an ended child's surface left before its parent's")
+	}
+	if err := c.tidyThread(parent.ID, byUser); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.surface(psid); err == nil {
+		t.Fatal("the parent stayed")
+	}
+	if _, err := c.surface(ksid); err == nil {
+		t.Fatal("the child stayed without its parent")
+	}
+	if l := c.relayout(); slices.Contains(chipsOf(l), ksid) || slices.ContainsFunc(l.Items, func(x layoutTile) bool { return x.ID == ksid }) {
+		t.Fatalf("the child laid out: %s %v", tilesOf(l), chipsOf(l))
+	}
+
+	// Its lifetime over, an ended child leaves its active parent's rows.
+	c2, _ := surfaceCore(t)
+	p2 := lightThread(t, c2)
+	k2 := childThread(t, c2, p2.ID, "Le devis", "topic:devis")
+	c2.closeLight(k2.ID, "Signé.", byBrain)
+	if rows := threadData(t, c2, p2.ID)["children"].([]any); len(rows) != 1 {
+		t.Fatalf("rows %v", rows)
+	}
+	c2.tickSurfaces(context.Background(), time.Now().Add(72*time.Hour))
+	if _, err := c2.surface(threadSurfaceID(k2.ID)); err == nil {
+		t.Fatal("the child's surface outlived its lifetime")
+	}
+	if rows := threadData(t, c2, p2.ID)["children"].([]any); len(rows) != 0 {
+		t.Fatalf("a row for a child no longer shown: %v", rows)
 	}
 }
 

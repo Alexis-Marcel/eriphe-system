@@ -179,8 +179,10 @@ func layoutStage(pool []surface, focus, previous string, related []string, pl us
 	all := pool
 	focus, inside := onStage(all, focus)
 	var closed []surface
+	var inner []string
 	pool = slices.DeleteFunc(slices.Clone(all), func(s surface) bool {
 		if laidInside(all, s) {
+			inner = append(inner, s.ID)
 			return true // in the surface it opens inside, only
 		}
 		if _, ok := pl.Closed[s.ID]; ok {
@@ -200,6 +202,7 @@ func layoutStage(pool []surface, focus, previous string, related []string, pl us
 	if _, ok := byID[focus]; !ok {
 		related = nil
 	}
+	related = slices.DeleteFunc(slices.Clone(related), func(id string) bool { return slices.Contains(inner, id) })
 	l := workspaceLayout{Items: []layoutTile{}, Chips: []layoutChip{}}
 
 	var wants []layoutWant

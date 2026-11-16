@@ -972,6 +972,9 @@ func (c *core) tickSurfaces(ctx context.Context, now time.Time) {
 	for _, s := range all {
 		if c.surfaceEnded(s, now) {
 			c.surfaceRemove(s.ID, surfaceByLifetime)
+			if th, ok := threadOfAuthor(s.Author); ok {
+				c.keepThreadKin(th, false) // its parent's row, its ended children (thread_children.go)
+			}
 			continue
 		}
 		if s.Refresh.Every > 0 && len(s.Sources) > 0 && !s.NextAt.After(now) {

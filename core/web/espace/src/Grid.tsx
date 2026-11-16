@@ -370,7 +370,7 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
               <p className="tile-line">{line}</p>
             ) : (
               <OnStage.Provider value={focus}>
-                <SurfaceView surface={inner ?? byID.get(tile.id)!} />
+                <SurfaceView key={inner?.id ?? tile.id} surface={inner ?? byID.get(tile.id)!} />
               </OnStage.Provider>
             )}
           </div>

@@ -978,14 +978,20 @@ matter of its own is a thread of its own, its child (`open_thread` `parent`). No
 child from a top thread: it is light or led, ends on its goal or stands, as any other.
 
 - **Depth 2** (`parentFor`): a parent is an active top thread; a child has no children, and a
-  thread with children is never made a child. `open_thread` `parent` on an alias that has a thread
-  already moves that thread under the parent (logged on it, the result says so); the parent itself
-  is never one of the threads near the child's matter. `name_thread` `merge` gives the merged
+  thread with children is never made a child. A standing thread, what the user manages
+  continuously, is a top thread: never opened, moved or turned (`ends`) into a child.
+  `open_thread` `parent` on an alias that has a thread already moves that thread under the parent,
+  once nothing else refuses the open (logged on it, the result says so); the parent itself is never
+  one of the threads near the child's matter. `name_thread` `merge` gives the merged
   thread's children to the other, a top thread only.
 - **No active child under an ended parent**: `close_thread` on a parent with active children is
   refused (light or led), naming them (`activeChildrenError`); a parent that ends any other way
   (`stop_thread`, its plan declined, its day over) stops them with it (`endChildren`, logged « Arrêté
-  avec son fil parent »); a child of an ended parent does not reopen before its parent.
+  avec son thread parent »); a child of an ended parent does not reopen before its parent.
+  An ended child's surface leaves with its parent's (put away, its day over, its time on the
+  workspace past), and a child's surface that leaves takes its row from its parent's
+  (`keepThreadKin`, also after the tick removes a surface whose lifetime ended); a link that shows
+  an ended child again shows its parent again too.
 - `find_thread` lists each thread with its `parent` and its `children` (id, title, state);
   `read_thread` gives its `parent`, `parent_title` and `children`: the brain finds the child that
   exists before it opens another.
