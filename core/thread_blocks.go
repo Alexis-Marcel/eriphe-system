@@ -2,40 +2,36 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
-// A thread's surface is composed of generic blocks (#574), the same code
-// for every thread, in one fixed order; a block shows only when the
-// thread has what it shows, never by the kind of thread; how it ends is
-// read twice: a standing one shows no goal (its title and state line say
-// what it keeps) and no Stop, and the banner of an ended one:
+// A thread's surface has a thin frame of code's (#611), the same for
+// every thread, in one fixed order; a block shows only when the thread has
+// what it shows, never by the kind of thread; how it ends is read twice: a
+// standing one has no Stop, and the banner of an ended one:
 //
-//  1. head: the goal of one that ends on it, a Progress (the state word in
-//     a pill, and a bar of its steps when it has some; none for a calm
-//     thread with no steps), the state line (threadStateText: its headline
-//     or its items' counts, when sorted, « extérieur » once), and for a
-//     thread that runs steps, Pause or Resume, and Stop;
-//  2. ended: once it ended, a banner saying how, with « Ranger » for a
+//  1. head: a child's crumb back to its parent (blockParent), a Progress
+//     (the state word in a pill, and a bar of its steps when it has some;
+//     none for a calm thread with no steps), the state line
+//     (threadStateText: its headline or its items' counts, when sorted),
+//     and for an active thread Pause or Resume (one that runs steps) and
+//     Stop; once it ended, a banner saying how, with « Ranger » for a
 //     thread that ends on its goal (the only block that reads ends);
-//  3. yours: what waits for the user (threadYours, thread_header.go);
-//  4. children: one row each, its title, status word and line, opening it
+//  2. yours: every card, ask, choice and step of the user's that waits,
+//     each once (threadYours, thread_header.go);
+//  3. children: one row each, its title, status word and line, opening it
 //     (blockChildren, thread_children.go);
-//  5. items: each source that lists things, its items grouped by their
-//     notes' state, each group counted on its line, with its action
-//     (threadSourcesPart, thread_sources.go);
-//  6. live: the monitors it follows and their last events (thread_live.go);
-//  7. where it stands, when it has a summary, then what changed since the
-//     user's last visit, when something did (threadWhere, threadSince);
-//  8. steps: the done ones folded in one line, with the last yes given;
-//     the others as a Timeline; decided cards one line each (compact);
-//  9. the holder's part.
+//  4. then what is composed: the holder's blocks (thread_part.go), or,
+//     while it has written none, the default composition from the thread's
+//     data (thread_default.go).
 //
-// A child's surface starts with its crumb back to its parent (blockParent).
+// Everything else is the thread's data, under /thread, for the default
+// composition and the holder's blocks to bind alike: its steps
+// (threadStepsData), each source's items (threadItemsOf), its children,
+// the user's marks.
 
 // threadStatus is a thread's state as its head says it: a word and a tone
 // (a Progress's). Read from what it shows: ended, what waits for the user,
@@ -261,70 +257,43 @@ func stepItem(st threadSurfaceStep, lang string, loc *time.Location) []any {
 	return out
 }
 
-// blockSteps composes the steps: those done folded in one line (« 4
-// étapes faites · accord : Fusion »), opened to see them and their
-// decided cards, each one line; then the others as a Timeline, a decided
-// card of theirs one line under it. A card that waits is the user's
-// (threadYours) while the thread is active.
-func (c *core) blockSteps(out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep) {
-	if len(steps) == 0 {
-		return
-	}
+// threadStepsData is a thread's steps at /thread/steps: those done (done,
+// Timeline items, with what was settled for their tasks), the line that
+// says them (summary: « 2 étapes faites · accord : Fusion », the last call
+// whose card was approved), the others (open), and the cards decided on
+// them (cards: a call's, with how its run went). While the thread is
+// active, a step that waits for the user (its card, a choice, its doing)
+// is not there: it is in « À toi », once.
+func (c *core) threadStepsData(s Thread, steps []threadSurfaceStep) map[string]any {
 	lang, loc := c.userLang(), c.userZone()
-	type comp = map[string]any
-	shownHere := func(st threadSurfaceStep) bool { return st.Card != "" && (!st.Waits || !s.active()) }
-	var done, rest []any
-	var doneCards, restCards []string
+	done, open, cards := []any{}, []any{}, []any{}
 	ndone, yes := 0, ""
-	for i, st := range steps {
-		id := "thread_card_" + strconv.Itoa(i)
-		if st.State == "done" {
-			ndone++
-			done = append(done, stepItem(st, lang, loc)...)
-			if shownHere(st) {
-				doneCards = append(doneCards, id)
-				out.inner(comp{"id": id, "component": "Proposal", "proposalId": st.Card, "compact": true})
-				if c.cardState(st.Card) == cardApproved {
-					yes = st.Label
-				}
-			}
+	for _, st := range steps {
+		if st.Waits && s.active() {
 			continue
 		}
-		rest = append(rest, stepItem(st, lang, loc)...)
-		if shownHere(st) {
-			restCards = append(restCards, id)
+		if st.Card != "" {
+			cards = append(cards, map[string]any{"ref": st.Card})
+		}
+		if st.State != "done" {
+			open = append(open, stepItem(st, lang, loc)...)
+			continue
+		}
+		ndone++
+		done = append(done, stepItem(st, lang, loc)...)
+		if st.Card != "" && c.cardState(st.Card) == cardApproved {
+			yes = st.Label
 		}
 	}
+	summary := ""
 	if ndone > 0 {
-		label := fmt.Sprintf(tr(lang, "thread.steps.done"), ndone)
+		summary = fmt.Sprintf(tr(lang, "thread.steps.done"), ndone)
 		if ndone == 1 {
-			label = tr(lang, "thread.steps.done1")
+			summary = tr(lang, "thread.steps.done1")
 		}
 		if yes != "" {
-			label += threadExternalSep + fmt.Sprintf(tr(lang, "thread.steps.yes"), yes)
+			summary += threadExternalSep + fmt.Sprintf(tr(lang, "thread.steps.yes"), yes)
 		}
-		data["done"] = done
-		data["donelabel"] = label
-		out.inner(comp{"id": "thread_done_steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/done"}},
-			comp{"id": "thread_done_list", "component": "Column", "children": append([]string{"thread_done_steps"}, doneCards...)})
-		out.add(comp{"id": "thread_done", "component": "Fold", "label": map[string]any{"@path": "/thread/donelabel"}, "child": "thread_done_list"})
 	}
-	if len(rest) > 0 {
-		data["steps"] = rest
-		out.add(comp{"id": "thread_steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/steps"}})
-	}
-	for _, id := range restCards {
-		i, _ := strconv.Atoi(strings.TrimPrefix(id, "thread_card_"))
-		out.add(comp{"id": id, "component": "Proposal", "proposalId": steps[i].Card, "compact": true})
-	}
-}
-
-// blockWatch composes the last events of the monitors a thread follows,
-// as a Timeline, under its live values.
-func blockWatch(out *threadComps, data map[string]any, watch []any) {
-	if len(watch) == 0 {
-		return
-	}
-	data["watch"] = watch
-	out.add(map[string]any{"id": "thread_watch", "component": "Timeline", "items": map[string]any{"@path": "/thread/watch"}})
+	return map[string]any{"done": done, "summary": summary, "open": open, "cards": cards}
 }

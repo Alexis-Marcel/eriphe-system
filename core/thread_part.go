@@ -33,9 +33,12 @@ import (
 //   - Its sources become the thread's (thread_sources.go): read by code
 //     at /<name>. Two blocks may give the same source, alike; a source no
 //     block gives any more goes.
-//   - Taint, per block: a block written after reading external content
-//     says « extérieur », and the surface is tainted for the models while
-//     it is there.
+//   - Taint, per block: a block written after reading external content,
+//     or that binds a source of a server not trusted, says « extérieur »
+//     beside it (partBlock.external), and the surface is tainted for the
+//     models while a tainted block is there.
+//   - While it has no block, the thread shows its default composition
+//     instead (thread_default.go): a block written takes its place.
 //
 // The blocks are stored in order as one value (threadPartKey + the
 // thread's id). What the user marks on what a block shows is code's, in
@@ -142,6 +145,31 @@ func (p *threadPart) sourceNames(except string) map[string]bool {
 		}
 	}
 	return out
+}
+
+// external tells whether a block may show someone else's words: written
+// after reading external content, or binding a source of a server not
+// trusted (untrusted, by name), at /<name> or /thread/items/<name>. The
+// surface then says « extérieur » beside it, and only there.
+func (b partBlock) external(untrusted map[string]bool) bool {
+	if len(b.Tainted) > 0 {
+		return true
+	}
+	for name := range b.Sources {
+		if untrusted[name] {
+			return true
+		}
+	}
+	for _, bound := range a2ui.Eriphe().BoundPaths(b.Components) {
+		at := tokens(bound.Path)
+		if len(at) > 2 && at[0] == threadDataKey && at[1] == "items" {
+			at = at[2:]
+		}
+		if len(at) > 0 && untrusted[at[0]] {
+			return true
+		}
+	}
+	return false
 }
 
 // tainted is why its blocks may carry someone else's words.
@@ -405,7 +433,7 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 		return nil, err
 	}
 	c.keepThreadSurface(thread)
-	note := "Your block is on the thread's surface, under what code keeps there (its steps, its state, its cards), among your part's blocks in that order. Writing a block again replaces it alone, where it stands (before moves it); surface_remove with its name takes it away. Its title, weight, why and lifetime are code's."
+	note := "Your block is on the thread's surface, under what code keeps there (its head, what waits for the user, its children), among your part's blocks in that order, in place of code's default from its data: compose what the user should see of its steps and items too (/thread/steps, /thread/items/<source>). Writing a block again replaces it alone, where it stands (before moves it); surface_remove with its name takes it away. Its title, weight, why and lifetime are code's."
 	if len(srcs) > 0 {
 		note += " Its sources are the thread's: code reads them again, without a model, while the thread is active."
 	}

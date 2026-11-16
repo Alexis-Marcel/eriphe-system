@@ -296,8 +296,6 @@ body.resizing .espace { transition: none; }
 .side-new { padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 18px; letter-spacing: 0.02em; background: var(--ink); color: var(--paper); }
 .side-title { font-weight: 600; font-size: 14.5px; line-height: 1.3; overflow-wrap: anywhere; }
 .side-line { font-size: 12.5px; line-height: 1.4; color: var(--ink-soft); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.side-body { min-width: 0; font-size: 13px; }
-.side-body > .a2-proposal, .side-body > .a2-alert { padding: 0; background: none; box-shadow: none; border-radius: 0; }
 /* What needs the user: ringed; arrived while the focus lasts, it pulses a few times. */
 .side-item.needs { box-shadow: 0 0 0 2px var(--urgent), 0 16px 40px -24px #000c; }
 .side-item.needs.fresh { animation: side-pulse 1.6s ease-out 4; }

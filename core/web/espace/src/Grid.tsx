@@ -35,13 +35,12 @@ import type { FoldedChip, Layout, Tile, TileSize } from "./types";
 //
 // A surface open re-lays the workspace out (focus mode, on a wide screen):
 // it large in the centre, a working area that scrolls; everything else in
-// a column at the side (sideOf), compact: a state chip, its title, one
-// line; still live, and a click on one opens it instead. No dim, no blur:
-// the others are smaller, not hidden. What needs the user (urgent: a card
-// a task waits on, an alert) comes first in the column, whole, so that its
-// Oui / Non answers there without leaving the focus; what arrives or
-// changes while the focus lasts says « nouveau », and pulses when it needs
-// the user. It never takes the centre: only the user (or Eriphe, asked)
+// a column at the side (sideOf), folded: a state chip, its title, its one
+// line, whatever its state; still live, and a click on one opens it
+// instead. No dim, no blur: the others are smaller, not hidden. What needs
+// the user (urgent: a card a task waits on, an alert) comes first in the
+// column, its state saying so; what arrives or changes while the focus
+// lasts says « nouveau », and pulses when it needs the user. It never takes the centre: only the user (or Eriphe, asked)
 // moves the focus. Back (Esc, the panel's button, the centre's arrow)
 // gives the grid again. Each surface keeps its Motion layoutId from the
 // grid to the centre or the column and back: the re-layout is animated.
@@ -130,7 +129,7 @@ export function stacked(layout: Layout, have: Set<string>): { tiles: Tile[]; chi
 }
 
 // A surface in the focus mode's column. needs: it needs the user (urgent,
-// by the layout or by its weight): first in the column, shown whole.
+// by the layout or by its weight): first in the column, one line as all.
 export type SideItem = { id: string; title: string; why?: string; needs: boolean; related?: boolean; closed?: boolean };
 
 // sideOf is the column beside the surface open: what the grid would draw
@@ -427,14 +426,8 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
                     </span>
                   )}
                   <span className="side-title">{title}</span>
-                  {line && !item.needs && <span className="side-line">{line}</span>}
+                  {line && <span className="side-line">{line}</span>}
                 </button>
-                {/* What needs the user is whole: its Oui / Non answers here, the focus stays. */}
-                {item.needs && s && (
-                  <div className="side-body">
-                    <SurfaceView surface={s} />
-                  </div>
-                )}
               </motion.article>
             );
           })}

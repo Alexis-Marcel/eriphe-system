@@ -636,7 +636,7 @@ func (c *core) setThread(id int64, fields map[string]any) error {
 		fields["state"] = stateOf(p)
 	}
 	if _, ok := fields["summary"]; ok {
-		fields["summarized"] = time.Now().Unix() // « Où on en est » dates it (thread_header.go)
+		fields["summarized"] = time.Now().Unix() // the summary written again is a fact (thread_header.go)
 	}
 	var sets []string
 	var args []any

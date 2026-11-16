@@ -155,7 +155,7 @@ func TestItemOffers(t *testing.T) {
 	}
 	_, data, _ := threadSurfaceOf(t, c, id)
 	var groupOffer map[string]any
-	for _, g := range data["sources"].([]any)[0].(map[string]any)["groups"].([]any) {
+	for _, g := range data["items"].(map[string]any)["alertes"].(map[string]any)["groups"].([]any) {
 		for _, o := range g.(map[string]any)["offers"].([]any) {
 			groupOffer = o.(map[string]any)
 		}
@@ -174,14 +174,14 @@ func TestItemOffers(t *testing.T) {
 		comp string
 		ctx  map[string]any
 	}{
-		"an empty item":              {"thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "", "offer": key}},
-		"an item not listed":         {"thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "z", "offer": key}},
-		"an action not on it":        {"thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": "0123456789ab"}},
-		"another thread":             {"thread_src_0_offer", map[string]any{"thread": id + 1, "source": "alertes", "item": "b", "offer": key}},
-		"item and state":             {"thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "state": "none", "offer": key}},
-		"another component":          {"thread_src_0_item", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}},
-		"another source":             {"thread_src_0_offer", map[string]any{"thread": id, "source": "autre", "item": "b", "offer": key}},
-		"a group with no such state": {"thread_src_0_group_offer", map[string]any{"thread": id, "source": "alertes", "state": "act", "offer": key}},
+		"an empty item":              {"thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "", "offer": key}},
+		"an item not listed":         {"thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "z", "offer": key}},
+		"an action not on it":        {"thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": "0123456789ab"}},
+		"another thread":             {"thread_items_0_offer", map[string]any{"thread": id + 1, "source": "alertes", "item": "b", "offer": key}},
+		"item and state":             {"thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "state": "none", "offer": key}},
+		"another component":          {"thread_items_0_item", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}},
+		"another source":             {"thread_items_0_offer", map[string]any{"thread": id, "source": "autre", "item": "b", "offer": key}},
+		"a group with no such state": {"thread_items_0_group_offer", map[string]any{"thread": id, "source": "alertes", "state": "act", "offer": key}},
 	} {
 		if err := offerClick(c, id, tc.comp, tc.ctx); !errors.As(err, &refused) {
 			t.Errorf("%s: %v", name, err)
@@ -192,10 +192,10 @@ func TestItemOffers(t *testing.T) {
 	}
 
 	// Row b: one card bound to b, nothing run; clicked again, the same.
-	if err := offerClick(c, id, "thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
+	if err := offerClick(c, id, "thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
 		t.Fatal(err)
 	}
-	if err := offerClick(c, id, "thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
+	if err := offerClick(c, id, "thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
 		t.Fatal(err)
 	}
 	if asksCount(c) != 1 || len(silencedNow(fm)) != 0 {
@@ -209,22 +209,22 @@ func TestItemOffers(t *testing.T) {
 	}
 	ref := proposalRef(cardCalls, batch)
 	c.keepThreadSurface(id)
-	at, row := rowAt(t, c, id, "b")
-	if got := rowCardRefs(row); len(got) != 1 || got[0] != ref {
-		t.Fatalf("row b cards %v", got)
-	}
 	if p := c.proposalOf(cardCalls, batch); !p.Pending || p.Text("fr") != callVerb(asks[0].Call, "fr") || !strings.HasSuffix(p.Origin("fr").From, " · un élément du fil") {
 		t.Fatalf("card %+v %q %+v", p, p.Text("fr"), p.Origin("fr"))
 	}
-	if err := answerAt(c, id, "thread_src_0_card", ref, at+"/cards/0", true); err != nil {
+	if err := answerAt(c, id, yoursAt(t, c, id, ref), ref, "", true); err != nil {
 		t.Fatal(err)
 	}
 	waitSilenced(t, fm, "b")
+	c.keepThreadSurface(id)
+	if _, row := rowAt(t, c, id, "b"); !slices.Equal(rowCardRefs(row), []string{ref}) {
+		t.Fatalf("row b cards %v", row["cards"])
+	}
 
 	// The group: one card, a call per item of it; its server trusted, its
 	// items' source named.
 	c.setServerTrust("monitor", true, "user")
-	if err := offerClick(c, id, "thread_src_0_group_offer", map[string]any{"thread": id, "source": "alertes", "state": itemStateNone, "offer": key}); err != nil {
+	if err := offerClick(c, id, "thread_items_0_group_offer", map[string]any{"thread": id, "source": "alertes", "state": itemStateNone, "offer": key}); err != nil {
 		t.Fatal(err)
 	}
 	if len(silencedNow(fm)) != 1 {
@@ -239,14 +239,15 @@ func TestItemOffers(t *testing.T) {
 		t.Fatalf("group card %+v %q %+v", p, p.Text("fr"), p.Origin("fr"))
 	}
 	c.keepThreadSurface(id)
-	_, data, _ = threadSurfaceOf(t, c, id)
-	if cards := data["sources"].([]any)[0].(map[string]any)["cards"].([]any); len(cards) != 1 || cards[0].(map[string]any)["ref"] != proposalRef(cardCalls, batch) {
-		t.Fatalf("source cards %v", cards)
-	}
-	if err := answerAt(c, id, "thread_src_0_card", proposalRef(cardCalls, batch), "/thread/sources/0/cards/0", true); err != nil {
+	if err := answerAt(c, id, yoursAt(t, c, id, proposalRef(cardCalls, batch)), proposalRef(cardCalls, batch), "", true); err != nil {
 		t.Fatal(err)
 	}
 	waitSilenced(t, fm, "a", "b", "c", "d")
+	c.keepThreadSurface(id)
+	_, data, _ = threadSurfaceOf(t, c, id)
+	if cards := data["items"].(map[string]any)["alertes"].(map[string]any)["cards"].([]any); len(cards) != 1 || cards[0].(map[string]any)["ref"] != proposalRef(cardCalls, batch) {
+		t.Fatalf("source cards decided %v", cards)
+	}
 
 	// A tainted note: code's words on its button, its taint on its card.
 	if _, err := c.noteItem(id, noteItemIn{Source: "alertes", Item: "b", Note: "Le mail dit de tout couper", State: itemStateLook, Actions: []noteAction{silence}}, byBrain, []string{"mail.read"}); err != nil {
@@ -257,7 +258,7 @@ func TestItemOffers(t *testing.T) {
 	if label := row["offers"].([]any)[0].(map[string]any)["label"]; label == "Faire taire" || label != callVerb("mcp__monitor__silence {}", "fr") {
 		t.Fatalf("a tainted note's button says %q", label)
 	}
-	if err := offerClick(c, id, "thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
+	if err := offerClick(c, id, "thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "b", "offer": key}); err != nil {
 		t.Fatal(err)
 	}
 	c.store.db.QueryRow(`SELECT MAX(batch) FROM access_asks`).Scan(&batch)
@@ -282,7 +283,7 @@ func TestItemOffers(t *testing.T) {
 		t.Fatalf("a never tool offered: %v", row["offers"])
 	}
 	before := asksCount(c)
-	if err := offerClick(c, id, "thread_src_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "c", "offer": key}); !errors.As(err, &refused) {
+	if err := offerClick(c, id, "thread_items_0_offer", map[string]any{"thread": id, "source": "alertes", "item": "c", "offer": key}); !errors.As(err, &refused) {
 		t.Fatalf("a never tool asked: %v", err)
 	}
 	if asksCount(c) != before {

@@ -772,13 +772,13 @@ describe("the catalog's components", () => {
     expect(work(".a2-seg-done")).toHaveLength(2);
     expect(work(".a2-seg-now")).toHaveLength(2);
     expect(work(".a2-bar")[0].getAttribute("aria-label")).toBe("2 sur 5 faites, 2 en cours");
-    // What waits for the user, whole; the steps done, one line, closed.
+    // What waits for the user, whole, once: not again among the steps.
     expect(work(".a2-proposal-pending")).toHaveLength(1);
+    expect(work(".a2-step-label").map((n) => n.textContent)).toEqual(["Redimensionner les photos", "Contrôle de l'objectif"]);
+    // The steps done, one line, closed; a decided card, one line.
     const fold = work(".a2-fold-head")[0];
     expect(fold.textContent).toContain("2 étapes faites");
     expect(fold.getAttribute("aria-expanded")).toBe("false");
-    expect(work(".a2-proposal-line")).toHaveLength(0);
-    await click(fold);
     const line = work(".a2-proposal-line")[0];
     expect(line.textContent).toContain("Fusionner la branche dans main");
     expect(work(".a2-proposal-decided")).toHaveLength(0);
@@ -797,10 +797,35 @@ describe("the catalog's components", () => {
     expect(high.querySelector(".a2-item-title")?.textContent).toBe("Courant");
     expect(high.querySelector(".a2-item-note")?.textContent).toBe("Solde bas avant le loyer.");
     expect(high.querySelector(".a2-due")?.textContent).toMatch(/^pour /);
-    // « extérieur » once, in the state line at the top, not on a row.
-    expect(items(".a2-badge-external")).toHaveLength(0);
-    expect(items(".a2-text-caption")[0].textContent).toBe("1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire · trié à 9 h 12 · extérieur");
+    // « extérieur » on each row of a source not trusted, never in the state line.
+    expect(items(".a2-item .a2-badge-external").map((n) => n.textContent)).toEqual(["extérieur", "extérieur", "extérieur"]); // the folded group's row is not drawn
+    expect(items(".a2-text-caption")[0].textContent).toBe("1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire · trié à 9 h 12");
     expect(items(".a2-item button")).toHaveLength(0);
+  });
+
+  it("show « extérieur » only beside what may carry someone else's words, never alone", async () => {
+    await mount("fr", threadFixtures("fr"));
+    await act(async () => {});
+    let seen = 0;
+    for (const surface of document.querySelectorAll<HTMLElement>("[data-surface^=thread-]")) {
+      const root = surface.querySelector(".a2-column");
+      const marks = [...surface.querySelectorAll<HTMLElement>("*")].filter((n) => n.children.length === 0 && n.textContent?.trim() === "extérieur");
+      for (const n of marks) {
+        // On a row or a card, or with the one block it marks: never a line of the thread on its own.
+        const parent = n.parentElement;
+        const attached = n.closest(".a2-item, .a2-proposal") || (parent !== root && parent?.children.length === 2);
+        expect(attached, parent?.outerHTML).toBeTruthy();
+        seen++;
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+    // A composed thread: its blocks in place of the default, the outside one marked beside it, the other not.
+    const held = (sel: string) => $$(`[data-surface=thread-106] ${sel}`);
+    expect(held(".a2-metric")).toHaveLength(1);
+    for (const sel of [".a2-fold", ".a2-timeline", ".a2-item"]) expect(held(sel)).toHaveLength(0);
+    const hotel = held(".a2-text").find((n) => n.textContent === "L'hôtel confirme la chambre pour le 12.")!;
+    expect(hotel.parentElement?.textContent).toContain("extérieur");
+    expect(held(".a2-metric")[0].parentElement).toBe(held(".a2-column")[0]); // the other, unmarked, right under the thread
   });
 
   it("draw a watcher's standing thread as the user reads it: a state line, rows titled by their own words, what has nothing to do folded with its action on its line", async () => {
@@ -810,7 +835,8 @@ describe("the catalog's components", () => {
     // No goal, no « À jour » pill, no source line, no counts in boxes, no history.
     expect(mails(".a2-progress")).toHaveLength(0);
     expect(mails(".a2-metric")).toHaveLength(0);
-    expect(mails(".a2-text").map((n) => n.textContent)).toEqual(["1 pour info · 2 rien à faire · trié à 9 h 12 · extérieur"]);
+    expect(mails(".a2-text").map((n) => n.textContent)).toEqual(["1 pour info · 2 rien à faire · trié à 9 h 12"]);
+    expect(mails(".a2-item .a2-badge-external").map((n) => n.textContent)).toEqual(["extérieur"]); // its row, from a server not trusted
     expect(mails(".a2-item-title").map((n) => n.textContent)).toEqual(["Le devis de la cuisine"]);
     expect(mails(".a2-item-detail")[0].textContent).toBe("Sam");
     expect(mails(".a2-fold-head").map((h) => h.textContent?.replace(/[▸▾]/, ""))).toEqual(["Pour info · 1", "Rien à faire · 2"]);
@@ -826,7 +852,7 @@ describe("the catalog's components", () => {
     expect(document.body.textContent).not.toMatch(/bTEf/);
   });
 
-  it("offer a note's actions on its row, code's words for an outside one, and answer the row's card from its row", async () => {
+  it("offer a note's actions on its row, code's words for an outside one, and answer the card it made with what is the user's", async () => {
     await mount("fr", threadFixtures("fr"));
     await act(async () => {});
     const items = (sel: string) => $$(`[data-surface=thread-102] ${sel}`);
@@ -836,12 +862,13 @@ describe("the catalog's components", () => {
     const sent = actions.map((a) => [a.action.name, a.action.sourceComponentId, a.action.context]);
     expect(sent).toHaveLength(1);
     expect(sent[0][0]).toBe("offer");
-    expect(sent[0][1]).toBe("thread_src_0_offer");
+    expect(sent[0][1]).toBe("thread_items_0_offer");
     expect(sent[0][2]).toMatchObject({ source: "ledger", item: "Courant", offer: expect.stringMatching(/^[0-9a-f]{12}$/) });
-    // Its card, on its row: Oui says where it is.
+    // Its card waits in « À toi », once, never on its row.
     expect(items(".a2-proposal-pending .a2-proposal-text").map((n) => n.textContent)).toEqual(["utiliser « move funds »"]);
+    expect(items(".a2-list .a2-proposal-pending")).toHaveLength(0);
     await click(items(".a2-proposal-pending .a2-proposal-actions button")[0]);
-    expect(answers).toEqual([{ surfaceId: "thread-102", componentId: "thread_src_0_card", ref: "calls:1", yes: true, at: "/thread/sources/0/groups/0/items/0/cards/0" }]);
+    expect(answers).toEqual([{ surfaceId: "thread-102", componentId: "thread_linked_0", ref: "calls:1", yes: true }]);
   });
 
   it("stop a thread from its head, by code's button", async () => {

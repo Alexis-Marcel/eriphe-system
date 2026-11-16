@@ -23,6 +23,8 @@ func partRoots(t *testing.T, c *core, thread int64) []string {
 		for _, id := range comp["children"].([]any) {
 			if name, ok := strings.CutPrefix(id.(string), threadPartRoot+"_"); ok {
 				out = append(out, name)
+			} else if name, ok := strings.CutPrefix(id.(string), threadExternalPrefix); ok {
+				out = append(out, name) // with its mark, « extérieur »
 			}
 		}
 	}
@@ -198,4 +200,72 @@ func TestPartBlockLeftOutAlone(t *testing.T) {
 	}
 	close(hold)
 	waitFor(t, func() bool { return slices.Equal(partRoots(t, c, th.ID), []string{"note", "derniere"}) })
+}
+
+// A block composes from code's data (#611): its steps and a source's
+// items bind as the default draws them, with no step yet and once the
+// thread ended alike; one bound to a source not trusted says « extérieur »
+// beside it, another not.
+func TestPartBindsThreadData(t *testing.T) {
+	c, _ := surfaceCore(t)
+	th := lightThread(t, c)
+	if _, err := c.addThreadSource(th.ID, threadSource{Name: "ledger", Tool: "ledger/balances",
+		Items: &sourceItems{Path: "accounts", ID: "name"}}, byBrain); err != nil {
+		t.Fatal(err)
+	}
+	c.surf.refreshing.Wait()
+	sid := threadSurfaceID(th.ID)
+	brain := surfaceCaller{author: surfaceAuthorBrain, taint: func() []string { return nil }}
+	rows := []map[string]any{
+		{"id": "root", "component": "Column", "children": []any{"steps", "groups"}},
+		{"id": "steps", "component": "Timeline", "items": map[string]any{"@path": "/thread/steps/open"}},
+		{"id": "groups", "component": "List", "children": map[string]any{"path": "/thread/items/ledger/groups", "componentId": "group"}},
+		{"id": "group", "component": "List", "children": map[string]any{"path": "items", "componentId": "row"}},
+		{"id": "row", "component": "Item", "title": map[string]any{"@path": "title"}, "mark": map[string]any{"@path": "mark"}},
+	}
+	for _, in := range []surfaceWriteIn{
+		{ID: sid, Block: "comptes", Components: rows},
+		{ID: sid, Block: "mot", Components: oneText("Rien d'autre.")},
+	} {
+		if _, err := c.writeThreadPart(brain, th.ID, in); err != nil {
+			t.Fatalf("%s: %v", in.Block, err)
+		}
+	}
+	s, _, _ := threadSurfaceOf(t, c, th.ID)
+	var list []map[string]any
+	json.Unmarshal(s.Components, &list)
+	ids := map[string]bool{}
+	for _, comp := range list {
+		ids[comp["id"].(string)] = true
+	}
+	if !ids[threadExternalPrefix+"comptes"] || !ids[threadMarkPrefix+"comptes"] || ids[threadExternalPrefix+"mot"] || !ids[partRoot("mot")] {
+		t.Errorf("« extérieur » beside the wrong blocks: %v", ids)
+	}
+	if ids["thread_items_0_groups"] {
+		t.Error("the default stayed")
+	}
+
+	// Ended: no longer read, the same keys empty, the block still there.
+	c.setThread(th.ID, map[string]any{"state": threadDone})
+	_, data, _ := threadSurfaceOf(t, c, th.ID)
+	if got := partRoots(t, c, th.ID); !slices.Equal(got, []string{"comptes", "mot"}) {
+		t.Errorf("ended: blocks %v", got)
+	}
+	if _, srcs := itemSources(data); srcs["ledger"]["groups"] == nil {
+		t.Errorf("ended: %v", data["items"])
+	}
+}
+
+// A block is « extérieur » by the source it binds, by whole names.
+func TestPartBlockExternal(t *testing.T) {
+	untrusted := map[string]bool{"mail": true}
+	for _, tc := range []struct {
+		path string
+		want bool
+	}{{"/mail/0/subject", true}, {"/thread/items/mail/groups", true}, {"/mails/0", false}, {"/thread/items/mails/groups", false}, {"/thread/steps/open", false}} {
+		comps, _ := json.Marshal([]map[string]any{{"id": "root", "component": "Text", "text": map[string]any{"@path": tc.path}}})
+		if got := (partBlock{Components: comps}).external(untrusted); got != tc.want {
+			t.Errorf("%s: %v", tc.path, got)
+		}
+	}
 }

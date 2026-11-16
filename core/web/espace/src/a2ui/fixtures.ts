@@ -79,7 +79,7 @@ export const gallerySurfaces = (lang: Lang) => galleryFixtures(lang).map((m) => 
 
 // The threads as eriphe-core draws them (threads.json, written from the
 // code by ERIPHE_UPDATE_THREADS=1 go test -run TestThreadSurfacesFixture):
-// a work thread, one that lists items, one ended, a watcher's mails.
+// a work thread, one that lists items, one ended, a watcher's mails, a child, one its holder composed.
 export function threadFixtures(lang: Lang): Message[] {
   return threads[lang] as unknown as Message[];
 }
@@ -107,7 +107,7 @@ export function sampleProposals(lang: Lang): Proposals {
       text: en ? "Merge the branch into main" : "Fusionner la branche dans main",
     },
     {
-      // The card on an item's row (threads.json): an action offered there, clicked.
+      // The card an action offered on an item made (threads.json): clicked, it waits in « À toi ».
       ref: "calls:1",
       card: 9,
       state: "pending",

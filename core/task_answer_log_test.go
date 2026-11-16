@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -133,9 +132,8 @@ func TestTaskAnswersOnThreadSurface(t *testing.T) {
 	}
 	want := "Question de l'assistant → Eriphe a répondu : mailto, sans service tiers"
 	sf, data, meta := threadSurfaceOf(t, c, s.ID)
-	items, _ := data["steps"].([]any)
 	var labels []string
-	for _, it := range items {
+	for _, it := range stepItems(data) {
 		m, _ := it.(map[string]any)
 		l, _ := m["label"].(string)
 		labels = append(labels, l)
@@ -146,9 +144,9 @@ func TestTaskAnswersOnThreadSurface(t *testing.T) {
 	if i := slices.Index(labels, want); i < 1 || labels[i-1] != "Page contact" {
 		t.Fatalf("the answer is not under its step: %q", labels)
 	}
-	facts := strings.Join(slices.Collect(maps.Values(headerOf(t, c, s.ID))), "\n")
-	if !strings.Contains(facts, "« Page contact » : "+want) {
-		t.Errorf("not in the header's facts:\n%s", facts)
+	since, _ := sinceOf(t, c, s.ID)
+	if facts := strings.Join(since, "\n"); !strings.Contains(facts, "« Page contact » : "+want) {
+		t.Errorf("not in the facts since the last visit:\n%s", facts)
 	}
 	if strings.Contains(string(sf.Data), "IGNORE PREVIOUS") || strings.Contains(string(sf.Components), "IGNORE PREVIOUS") {
 		t.Error("the task's question shows")

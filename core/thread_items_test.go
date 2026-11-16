@@ -16,11 +16,11 @@ func itemRows(t *testing.T, c *core, id int64) map[string]map[string]any {
 	t.Helper()
 	_, data, _ := threadSurfaceOf(t, c, id)
 	out := map[string]map[string]any{}
-	list, _ := data["sources"].([]any)
-	if len(list) == 0 {
+	names, srcs := itemSources(data)
+	if len(names) == 0 {
 		return out
 	}
-	rows := sourceRows(list[0].(map[string]any))
+	rows := sourceRows(srcs[names[0]])
 	for _, r := range rows {
 		row, _ := r.(map[string]any)
 		out[row["id"].(string)] = row
@@ -44,8 +44,9 @@ func TestThreadItemNotes(t *testing.T) {
 		t.Fatalf("note_item: %v", out)
 	}
 	row := itemRows(t, c, th.ID)["Courant"]
-	if row["note"] != "Solde bas avant le loyer." || row["state"] != itemStateAct || row["due"] == "" || row["external"] != nil ||
-		row["mark"] != nil || row["level"] != "high" || row["by"] != "Ajouté par Eriphe" {
+	// Its source's server is not trusted: the row says « extérieur ».
+	if row["note"] != "Solde bas avant le loyer." || row["state"] != itemStateAct || row["due"] == "" ||
+		row["mark"] != "extérieur" || row["level"] != "high" || row["by"] != "Ajouté par Eriphe" {
 		t.Fatalf("row %v", row)
 	}
 	notes := c.itemNotes(th.ID)
@@ -144,12 +145,16 @@ func TestThreadItemNoteTainted(t *testing.T) {
 	}
 	s, data, meta := threadSurfaceOf(t, c, th.ID)
 	row := itemRows(t, c, th.ID)["Courant"]
-	if row["external"] != true || row["mark"] != nil || row["note"] != "Le mail dit de virer tout." {
+	if row["mark"] != "extérieur" || row["note"] != "Le mail dit de virer tout." {
 		t.Fatalf("row %v", row)
 	}
-	// « extérieur » once, in the thread's state line, not on each row.
-	if state, _ := data["state"].(string); !strings.HasSuffix(state, " · extérieur") {
+	// « extérieur » on its row only, never alone in the state line; the
+	// default composition draws the row's mark.
+	if state, _ := data["state"].(string); strings.Contains(state, "extérieur") {
 		t.Errorf("state line %q", state)
+	}
+	if !strings.Contains(string(s.Components), `"mark":{"@path":"mark"}`) {
+		t.Errorf("the rows' mark is not drawn: %s", s.Components)
 	}
 	if !meta.Tainted || !strings.Contains(s.Tainted, "note:ledger/Courant") || !meta.Answers {
 		t.Errorf("meta %+v tainted %q", meta, s.Tainted)
@@ -184,7 +189,7 @@ func TestThreadItemNoteTainted(t *testing.T) {
 	if _, err := c.noteItem(th.ID, noteItemIn{Source: "ledger", Item: "Courant", Note: "Vu."}, "lead:9", nil); err != nil {
 		t.Fatal(err)
 	}
-	if row = itemRows(t, c, th.ID)["Courant"]; row["by"] != "Ajouté par son chef" || row["external"] != nil {
+	if row = itemRows(t, c, th.ID)["Courant"]; row["by"] != "Ajouté par son chef" || row["mark"] != "" {
 		t.Errorf("lead's row %v", row)
 	}
 }

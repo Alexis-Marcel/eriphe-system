@@ -1151,32 +1151,36 @@ by code from the thread's data (#468): it never depends on a model remembering t
 - **Its author is `thread:<id>`**, code's for that thread (not `core`, the attention queue's):
   nobody else writes or removes it as a whole (`mayChange`), and no other author may take its id
   (`codeSurfaceOf`).
-- **Code's section: generic blocks** (#574, `thread_blocks.go`), the same code for every thread,
-  in one fixed order; a block shows only when the thread has what it shows, never by the kind of
-  thread (work, standing or day: the family is never shown, and a thread with its `ends` changed
-  is drawn the same while active, but for one thing read from `ends`: a standing thread shows no
-  Stop, as it never ends). No thread shows its goal, written by the brain for itself and the
-  agents: what a thread shows the user is only words written for the user (its title, headline,
-  notes, summary). A child's surface starts with its **crumb**, a Button with its parent's title
-  (`/thread/parent`) that opens the parent's surface:
-  1. **head**: a `Progress` (the state word in a pill, « À toi », « Urgent », « En
-     cours », « Terminé », coloured by its tone, and with steps a bar of them, done, running, to
-     come, « 2/5 »; none for a calm thread with no steps), and the **state line**
-     (`threadStateText`): its headline (below), else what its items count (« 1 pour info · 2 rien
-     à faire »), else its state and who holds it when that says more (« En cours · mené par son
-     chef »); then when its items were last sorted (« trié à 9 h 12 », the last note's time), and
-     « extérieur » once when anything the surface shows may carry someone else's words (its
-     sources, notes, monitors, steps, headline: the surface's `codeTaint`). The same words, but
-     the time, are its chip's line (the page's `summary`), else its steps' one line. A thread
-     with nothing yet to show says « Rien pour l'instant. ». Its surface has no `why`;
-  2. **ended**: once it ended, an `Alert` saying how and when, with where it stood (« Fait ✓ ·
-     14 h 02 » and the summary, else its headline; never its goal), and **« Ranger »** beside it for a thread that ends on its goal:
-     the only block that reads `ends`;
-  3. **À toi** (active threads, only when something waits): the thread's own cards (its plan, a
-     change of it, more time) and each step's (an approval's card, a task step's held start) as
-     `Proposal` components bound to their refs, a choice to make, and for a step the user does
-     (kind `user`) a « C'est fait » button;
-  4. **children** (`blockChildren`, a thread that has some): « Sous-fils », then one row each, an
+- **Code's frame: thin** (#574, #611, `thread_blocks.go`), the same code for every thread, in one
+  fixed order; a block shows only when the thread has what it shows, never by the kind of thread
+  (work, standing or day: the family is never shown, and a thread with its `ends` changed is drawn
+  the same while active, but for one thing read from `ends`: a standing thread shows no Stop, as it
+  never ends). No thread shows its goal, written by the brain for itself and the agents: what a
+  thread shows the user is only words written for the user (its title, headline, notes, summary).
+  Code keeps only:
+  1. **the head**: a child's **crumb** first, a Button with its parent's title (`/thread/parent`)
+     that opens the parent's surface; a `Progress` (the state word in a pill, « À toi », « Urgent
+     », « En cours », « Terminé », coloured by its tone, and with steps a bar of them, done,
+     running, to come, « 2/5 »; none for a calm thread with no steps); the **state line**
+     (`threadStateText`): its headline (below), with « extérieur » beside it when it may carry
+     someone else's words, else what its items count (« 1 pour info · 2 rien à faire »), else its
+     state and who holds it when that says more (« En cours · mené par son chef »); then when its
+     items were last sorted (« trié à 9 h 12 », the last note's time); the controls (Pause or
+     Resume for a thread that runs steps, Stop); once it ended, an `Alert` saying how and when,
+     with where it stood (« Fait ✓ · 14 h 02 » and the summary, else its headline; never its
+     goal), and **« Ranger »** beside it for a thread that ends on its goal, the only block that
+     reads `ends`. The same words as the state line, but the time, are its chip's line (the page's
+     `summary`), else its steps' one line. A thread with nothing yet to show says « Rien pour
+     l'instant. ». Its surface has no `why`;
+  2. **À toi** (active threads, only when something waits): every card, ask, choice and approval
+     that commits the user, each once: the thread's own cards (its plan, a change of it, more
+     time), the cards linked to it (a card raised for it, the card an action offered on one of its
+     items made, `item_cards.go`), each step's (an approval's card, a task step's held start, a
+     call's) as `Proposal` components bound to their refs, a choice to make (one Button per
+     option), and for a step the user does (kind `user`) a « C'est fait » button. What waits there
+     is in no other place of the surface: a step that waits is not in `/thread/steps`, a card that
+     waits on no row;
+  3. **children** (`blockChildren`, a thread that has some): « Sous-fils », then one row each, an
      `Item` with its title, its status word (« À toi », « Urgent », « En cours », « À jour », or how
      it ended) and its one line, read from the child's own surface as code wrote it (an active
      child always, an ended one while its surface is on the workspace), « extérieur » on the row of
@@ -1184,39 +1188,48 @@ by code from the thread's data (#468): it never depends on a model remembering t
      line untouched), and an « Ouvrir » Button: a local `open` that names the child's surface
      (`{"surface": "thread-<id>"}`), opened inside its parent. The rows are at `/thread/children`
      (`thread`, `surface`, `title`, `status`, `line`, `level`, `mark`; an empty list for a thread
-     with none), where the holder's part may bind them: a block is checked against code's data as
-     its surface shows it (`threadCodeData`). **A child raises its parent**: one that waits for the
-     user makes its parent wait for the user (« À toi », its tile `yours`), and an active parent
-     takes the highest weight of its own and its children's. A child's change writes its parent's
-     surface again, the child's first (`keepThreadSurface`);
-  5. **items**: each source that lists things (below);
-  6. **live**: the monitors it follows (below), then their last events as a `Timeline`;
-  7. **Où on en est** (active threads with a summary; an ended one says it in its banner): the
-     summary as remember (kind progress), the extraction or its close wrote it, with its date
-     (`threads.summarized`, stamped by `setThread`); no model call; nothing while it has none;
-  8. **Depuis ta dernière visite** (`thread_header.go`): facts made by code from the thread's data
-     (a step started, done, failed or handing in its work, what was settled for its task, the
-     summary written again, the thread's end), each with its time, since the user's visit before
-     the last one, oldest first, the last 5 (« … et 2 plus tôt » before them); shown only after a
-     first visit and when there are some (before a visit, all of the thread is new). Never
-     the log's lines (French only, and they may quote a lead). A visit is the page's `open` action
-     on the surface: `seen` takes the last visit, `visited` is now, so the visit that opens it
-     still shows what was new; opened again within 5 minutes, the same visit. Times are absolute
-     (« 14 h 32 », « 13 nov. 9 h 05 »): the surface is written again only when it changes;
-  9. **steps**: the steps done folded in one line (a `Fold`: « 2 étapes faites · accord : Fusion »,
-     the last call whose card was approved), opened to see them as a `Timeline` with their
-     decided cards, each a compact `Proposal` (one line, opened by a click); then the other steps
-     as a `Timeline`, a decided card of theirs compact under it;
-  10. the holder's part, its blocks in their order (below).
+     with none). **A child raises its parent**: one that waits for the user makes its parent wait
+     for the user (« À toi », its tile `yours`), and an active parent takes the highest weight of
+     its own and its children's. A child's change writes its parent's surface again, the child's
+     first (`keepThreadSurface`);
+  4. then **what is composed**: the holder's blocks in their order (below), or, while the holder
+     has written none, the **default composition** (`thread_default.go`), the same for every
+     thread, drawn from the thread's data by the paths a block binds alike: its steps when it has
+     some (those done folded in one line, a `Fold` saying « 2 étapes faites · accord : Fusion »,
+     the last call whose card was approved, opened to see them as a `Timeline`; the others as a
+     `Timeline`; the cards decided on them, each a compact `Proposal`, one line opened by a
+     click), then each source's data, in the order the thread added them (below). The first
+     block written takes its place; the last block removed brings it back.
 
-  A step in a `Timeline` has its state, its time, its kind, its checks and the last word on it.
-  Under a task step, what was settled for its task
-  (#564): Eriphe's reply to its question (« Question de l'assistant → Eriphe a répondu : … »),
-  its checks fixed, a release Eriphe asked on a card and the user's answer on it. Kept as facts
-  in `thread_answers` (a kind, its refs, Eriphe's reply, the brain turn's taint) by
-  `task_answer_log.go`, worded by code in the user's language, never the task's question; a
-  reply written on a tainted turn says « extérieur » and taints the surface (`answer:<id>`). Its component ids start with `thread_`, its data
-  is under `/thread`, the user's marks with it (`/thread/marks`, below).
+  **The thread's data**, code's, under `/thread`, there with or without blocks for the default
+  and the holder's blocks to bind (a block is checked against code's data as its surface shows
+  it, `threadCodeData`):
+  - `/thread/steps`: `done` and `open`, `Timeline` items (a step's state, its time, its kind, its
+    checks and the last word on it; while the thread is active, a step that waits for the user is
+    not there: it is in « À toi »), `summary` (the line of the steps done, `""` with none),
+    `cards` (`{ref}`, the cards decided on its steps: a call's, with how its run went). Under a
+    task step, what was settled for its task (#564): Eriphe's reply to its question (« Question
+    de l'assistant → Eriphe a répondu : … »), its checks fixed, a release Eriphe asked on a card
+    and the user's answer on it. Kept as facts in `thread_answers` (a kind, its refs, Eriphe's
+    reply, the brain turn's taint) by `task_answer_log.go`, worded by code in the user's language,
+    never the task's question; a reply written on a tainted turn says « extérieur » in its detail
+    and taints the surface (`answer:<id>`);
+  - `/thread/items/<source>`: each source's data (below); once the thread ended, no longer read, the
+    same keys empty (`endedItems`), so a block bound to them still holds;
+  - `/thread/children`, `/thread/parent`, `/thread/marks` (below);
+  - `/thread/since`: facts made by code from the thread's data (a step started, done, failed or
+    handing in its work, what was settled for its task, the summary written again, the thread's
+    end), each a line with its time, since the user's visit before the last one, oldest first,
+    the last 5 (« … et 2 plus tôt » before them); none before a first visit (all of the thread is
+    new then). Never the log's lines (French only, and they may quote a lead). A visit is the
+    page's `open` action on the surface: `seen` takes the last visit, `visited` is now, so the
+    visit that opens it still shows what was new; opened again within 5 minutes, the same visit.
+    Times are absolute (« 14 h 32 », « 13 nov. 9 h 05 »): the surface is written again only when
+    it changes. What changed since the last visit counts on its tile (`threadNew`);
+  - `/thread/summary`: the summary as remember (kind progress), the extraction or its close wrote
+    it; no model call.
+
+  Code's component ids start with `thread_`.
 - **A thread's sources** (#571, `thread_sources.go`, table `thread_sources`): live data the thread
   carries, read by code without a model, under a surface source's rules (`sourceWhy`: a free read
   of the brain's, or a resource the server lists; `checkSources` when added). A source has a name
@@ -1239,32 +1252,37 @@ by code from the thread's data (#468): it never depends on a model remembering t
     read never runs under the engine's lock nor inside a surface write: the surface is written
     from the last reads, so a change of the thread never waits for a tool.
   - On the surface: its last read at `/<name>`, the thread ended too (where the part binds it; code's composed data may
-    then be larger than an author's). A server not trusted taints the surface for the models
-    (`source:<name>`; its Proposals still answer) and the state line says « extérieur ». Code's
-    section says nothing of a source that reads well: a line only when it cannot be read (« mails
-    · n'arrive plus à lire », « en attente »), and its name above its items when the thread lists
-    those of several. With `items` (`path` to the list, `id` in each item, a monitor's path
-    syntax; `title` and `detail`, paths in the item, what its row says), each item, by its id, is
-    a row (`source`, `id`, `n` its place in the list, `title`, `detail`, its note's `note`,
-    `state`, `due`, `level`), at most 200, drawn as an `Item`: what the thread lists is shown with
-    no model. Without `title`, code takes the item's first `subject`, `title`, `name`,
+    then be larger than an author's); and, while the thread is active, its data at
+    `/thread/items/<name>`. A server not trusted taints the surface for the models
+    (`source:<name>`; its Proposals still answer) and each of its rows says « extérieur » (`mark`),
+    as does a block that gives it or binds it (`partBlock.external`). Its `caption` says nothing of
+    a source that reads well: words only when it cannot be read (« mails · n'arrive plus à lire »,
+    « en attente »), and its name when the thread lists the items of several. With `items` (`path`
+    to the list, `id` in each item, a monitor's path syntax; `title` and `detail`, paths in the
+    item, what its row says), each item, by its id, is a row (`source`, `id`, `n` its place in the
+    list, `title`, `detail`, its note's `note`, `state`, `due`, `by`, `level`, `mark`, the cards
+    decided on it within a day as `cards`, the action its note offers as `offers`), at most 200,
+    drawn as an `Item` by the default composition: what the thread lists is shown with no model. Without `title`, code takes the item's first `subject`, `title`, `name`,
     `summary`, `label`, `snippet`, `text` or `description`, else its first short text that is not
     an id; without `detail`, its `from`, `sender`, `author`, `organizer`, `owner`, `creator`,
     `user` or `assignee`; a person (« Sam <sam@example.org> », or an object with a `name`,
     `displayName`, `login` or `email`) by their name. Its id shows only when it has no words at
     all: a monitor's source (`monitorThreadSource`) needs no paths. The rows are grouped by their
-    notes' state at `/thread/sources/<n>/groups` (« À faire », « À regarder », « Pas encore trié
-    », « Pour info », « Rien à faire », « Traité », each a `Fold` with its count on its line, and
-    the action its rows share as the Fold's `aside`, on its line, open or not; the last two
-    folded). All bound by paths: a read again changes the data, not the components.
+    notes' state at `/thread/items/<name>/groups` (« À faire », « À regarder », « Pas encore trié
+    », « Pour info », « Rien à faire », « Traité », each `label` with its count, `open`, `items`,
+    and the action its rows share as `offers`; the default draws each a `Fold`, that action as its
+    `aside`, on its line, open or not, the last two folded); the cards decided on several of its
+    items at `/thread/items/<name>/cards`. The offers' buttons are code's, in the default
+    composition (`offerOf`). All bound by paths: a read again changes the data, not the
+    components.
 - **Notes on items** (#571, `thread_items.go`, table `thread_items`): the brain (`note_item`, with
   the thread) and a thread's lead (`note_item`, its own) note one item a source lists, by the
   source's name and the item's id: a short note (300 characters), a state (`act`, `look`, `info`,
   `none`, `done`) and a due date; the same item noted again replaces it, nothing at all takes it
   away; 500 a thread. Its `author` (`brain`, `lead:<id>`) and `tainted` (the brain turn's taint,
   the lead session's) are code's, never given. Code joins it to its item's row (`note`, `state`,
-  `due`, `by`, `level`: `high` for `act`, `low` for `info`, `none`, `done`; `external` for a tainted one,
-  which taints the surface for the models and makes its state line say « extérieur », once,
+  `due`, `by`, `level`: `high` for `act`, `low` for `info`, `none`, `done`; `mark` « extérieur »
+  for a tainted one, on its row only, which taints the surface for the models,
   `note:<source>/<item>`). A tainted note is shown, never quoted into a summary: it is in no
   summary, fact, one-line summary or message code writes, and reading it (`read_thread`'s
   `notes`, the lead's `thread`) taints the reader, so `remember` kind `progress` is then refused
@@ -1277,23 +1295,25 @@ by code from the thread's data (#468): it never depends on a model remembering t
 - **A live thread** (#555, `thread_live.go`): one kind of source: who holds the thread may make it
   follow up to 3 monitors the user approved (`link_thread` with `source` `monitor`, its name; a
   proposed one is refused).
-  Under the header, « En direct »: each monitor's latest number as a `Metric` and its last 24 as a
-  `Chart` (kept in its look, `monitorLook.Points`), with « Surveillance <name> · lu à 14 h 32 ·
-  lu par le code, sans modèle »; each look writes the surface again (after its state is saved).
-  Its events (`thread_watch`: kind, number, limit, holds, taint) are a `Timeline` under
-  the live values, the last 5, and in the header's facts, worded from the kind and numbers only
-  (« cpu : 95, au-dessus du seuil de 90 »), never a changed value, a new item or an error's text.
-  While a cross monitor is past its limit, or its looks fail, the thread's weight rises to 65;
-  back under, it comes down. A monitor of a server not trusted makes the surface « extérieur »
-  for the models (`monitor:<name>`), its Proposals still answer in place. Nothing wakes the
-  brain: a skill reacts to the monitor's events as before.
+  Its data at `/thread/items/<name>` (`monitorData`): its latest number (`value`) and its last 24
+  (`series`, kept in its look, `monitorLook.Points`), with « Surveillance <name> · lu à 14 h 32 ·
+  lu par le code, sans modèle » (`caption`); each look writes the surface again (after its state
+  is saved). Its events (`thread_watch`: kind, number, limit, holds, taint) are `Timeline` items
+  (`events`), the last 5, worded from the kind and numbers only (« cpu : 95, au-dessus du seuil
+  de 90 »), never a changed value, a new item or an error's text. The default composition draws
+  them as a `Metric`, a `Chart` and a `Timeline`. While a cross monitor is past its limit, or its
+  looks fail, the thread's weight rises to 65; back under, it comes down. A monitor of a server
+  not trusted says « extérieur » on its caption and makes the surface tainted for the models
+  (`monitor:<name>`), its Proposals still answer in place. Nothing wakes the brain: a skill reacts
+  to the monitor's events as before.
 - **Rewritten at each change** of the thread: the store's `setThread`, `setStep`, `insertSteps`,
   a card asked, decided or withdrawn call `keepThreadSurface`, which writes only when what the
   surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active
   thread that has none its surface (a surface another author wrote at its id goes). Steps are
   shown through a generic list (`threadSurfaceStep`: key, label, kind, state, time, card ref,
-  checks, note, external, waits, yours: a card shown while it waits; a call's card stays after
-  with how its run went; a card gone is not shown), so
+  checks, note, external, waits, yours: while its card, choice or doing waits it is in « À toi »;
+  a call's card stays after in `/thread/steps/cards` with how its run went; a card gone is not
+  shown), so
   a new kind of step plugs in by its mapping (`threadSurfaceSteps`).
 - **The holder's part** (#610, `thread_part.go`): who holds the thread (the brain, or its lead)
   composes it by **named blocks**: a state, points to see, a diff (`Code`), a `Link`, each its
@@ -1306,8 +1326,11 @@ by code from the thread's data (#468): it never depends on a model remembering t
   and sources, the thread's own sources and code's `/thread`; no `thread_` id, no `/thread` data,
   no component id nor data key another block holds, the error naming it; its sources, each at
   `/<name>`, become the thread's, see above, so a change of the thread still rewrites the surface
-  at once, never waiting for a tool), and shown under code's section, each root renamed
-  `thread_part_<block>`, with who added them. The call answers the blocks in order, as
+  at once, never waiting for a tool), and shown under code's frame in place of the default
+  composition, each root renamed `thread_part_<block>`; a block that may carry someone else's
+  words (written after reading external content, or giving or binding a source not trusted) is
+  shown in a `Column` (`thread_external_<block>`) with « extérieur » above it
+  (`thread_mark_<block>`), the others as they are. The call answers the blocks in order, as
   `workspace_read` (`blocks`, on a thread one holds) and `read_thread` do; the surface stays;
   code keeps the rest. A block that does not hold with the rest when code writes the surface (a
   source not read yet, or failing) is left out alone, the others shown, and named in the
@@ -1329,9 +1352,11 @@ by code from the thread's data (#468): it never depends on a model remembering t
   someone else's words, so it is kept and served, but its gesture does not quote its list and item
   (« élément extérieur, non cité »), and `read_thread` (the lead's `thread`, a task's) taints its
   reader (`mark:<list>/<item>`), as a tainted note does.
-- **Taint, per part**: a step whose task read external content shows « extérieur » in its detail,
-  a block written after reading some says so beside who added it (and may not hold a `Proposal`,
-  its media dropped as for any tainted author). For the models that read the workspace the surface
+- **Taint, per part**: « extérieur » shows only beside what may carry someone else's words, never
+  alone: a step whose task read external content in its detail, a row on its `Item`, a monitor on
+  its caption, a child on its row, the headline in the state line, a block beside it (a block
+  written after reading external content may not hold a `Proposal`, its media dropped as for any
+  tainted author). For the models that read the workspace the surface
   is tainted as soon as one part is (`look.code_taint`, `look.author_taint`). Its Proposals still
   answer in place (`look.answers`, the page's `extensions.eriphe.answers`), as the attention
   queue's do: code bound each to one of the thread's own cards, unless the thread itself is
@@ -1873,16 +1898,15 @@ version, read with its diff.
   (`access_asks.thread`, `source`, `item`) and is on that item's card (kind `calls`, `batch` = its
   first call's id), not on the run's: when the run ends, each item gets its card, raised for the
   thread (`cardNow`), with its taint. The same call on the same item still waiting, from any run,
-  is the card already there. The thread's surface shows it on the item's row (a `Proposal` bound in
-  the row, `/thread/sources/<n>/groups/<g>/items/<i>/cards`, its group opened while it waits;
-  folded there a day once decided), one on several items under the source
-  (`/thread/sources/<n>/cards`), and one whose row is not drawn with what waits for the user; it
-  takes the thread's weight and state (yours), and leaves the attention queue while the thread is
-  active. Its words are code's: the action by its tool, its origin the thread and the item by its
-  source and id, Oui running each call once as kept. Oui and Non come from its row only: a
-  `Proposal` bound inside a list sends where it is (`at`, its place in the data), and on a
-  thread's surface the answer must say it; `answerOf` checks the place is one its binding takes
-  and the data there shows that card. Its results go to the run's note (a run's) or the thread's
+  is the card already there. While it waits, the thread's surface shows it once, with what waits
+  for the user (« À toi », a `Proposal` bound to its ref); it takes the thread's weight and state
+  (yours), and leaves the attention queue while the thread is active. Decided, it stays a day in
+  the item's data, on its row (`/thread/items/<source>/groups/<g>/items/<i>/cards`), or under the
+  source for one on several items (`/thread/items/<source>/cards`), a compact `Proposal` in the
+  default composition. Its words are code's: the action by its tool, its origin the thread and
+  the item by its source and id, Oui running each call once as kept. A `Proposal` bound inside a
+  list sends where it is (`at`, its place in the data); `answerOf` checks the place is one its
+  binding takes and the data there shows that card. Its results go to the run's note (a run's) or the thread's
   log, never to the brain; a calls card is answered by its buttons only, never by a plain « oui ».
 - **Actions offered on an item** (#575, `item_offers.go`): `note_item` takes `actions`, one at
   most (the one its author recommends, only when useful: never a menu), a label, a tool
@@ -1890,8 +1914,8 @@ version, read with its diff.
   kept in `thread_items.actions`). Checked when noted: the tool is in the
   catalog and not Eriphe's own, the author may use it (a task: lent it), its input names the item
   and fits the tool's required properties, and the access policy does not refuse it (`never`);
-  checked again when shown and when clicked, so a `never` tool is never offered. The row offers
-  each as a `Button` code places (action `offer`, `{thread, source, item, offer}`, the offer
+  checked again when shown and when clicked, so a `never` tool is never offered. In the default
+  composition, the row offers each as a `Button` code places (action `offer`, `{thread, source, item, offer}`, the offer
   being the action's key); a state group offers an action two of its rows or more share
   (« Archiver · 24 », `{thread, source, state, offer}`). A folded group (`none`, `done`) is no
   list of buttons: its rows offer nothing, the group the action they share, even one row's. An author can never write `offer`
@@ -1940,7 +1964,7 @@ version, read with its diff.
     `headline` (120 characters, `""` takes it away): the line the user reads at the top of the
     thread and on its chip, in place of its items' counts; kept apart (`thread_headline:<id>`)
     with its author and the run's taint, code's: from a tainted run it taints the surface
-    (`headline`) and the state line says « extérieur »;
+    (`headline`) and the state line says « extérieur » beside it;
   - `add_step` of kind `user`, `deadline` or `call`: a call is one of the task's own tools, and
     always a card, a free read included (`step_ask:<thread>:<key>`); what it adds taints the thread
     from a tainted run;
@@ -3528,11 +3552,11 @@ A tile that leaves the grid unopened while the page is visible is sent as `ignor
 **A surface open re-lays the workspace out** (`Grid.tsx`, focus mode, on a wide screen). The
 surface open is large in the centre, a working area that scrolls, with the way back (←) and its
 cross; everything else is in a column at the side (`sideOf`), the strip's chips included:
-compact (a state chip, the title, one line: the surface's `extensions.eriphe.summary`, else its
-why), live, and a click on one opens it instead. Nothing is dimmed nor blurred. What needs the
-user (urgent: `urgent` in the layout, or a weight of 80 and up in `extensions.eriphe.weight`)
-comes first, marked « À toi », and is shown whole, so its Oui / Non answers there without leaving
-the focus; « Lié » marks what relates to the surface open, « Fermé » what was closed. What arrives
+folded, whatever its state (a state chip, the title, one line: the surface's
+`extensions.eriphe.summary`, else its why; never the surface itself), live, and a click on one
+opens it instead. Nothing is dimmed nor blurred. What needs the user (urgent: `urgent` in the
+layout, or a weight of 80 and up in `extensions.eriphe.weight`) comes first, marked « À toi »,
+and opened to answer; « Lié » marks what relates to the surface open, « Fermé » what was closed. What arrives
 or is written again while the focus lasts (its `extensions.eriphe.updated` changed: a new item in a
 group of the queue, a thread's line) says « nouveau », and pulses a few times when it needs the
 user; it never takes the centre. Each surface keeps its Motion `layoutId` from the grid or the

@@ -79,10 +79,7 @@ var threadStrings = map[string]map[string]string{
 		"thread.line.asks":             "une carte à toi",
 
 		// The header of a thread's surface (thread_header.go).
-		"thread.head.sincewhen":     "Depuis ta dernière visite, %s",
 		"thread.head.earlier":       "… et %d plus tôt",
-		"thread.head.where":         "Où on en est",
-		"thread.head.summaryat":     "Résumé mis à jour : %s",
 		"thread.status.urgent":      "Urgent",
 		"thread.status.calm":        "À jour",
 		"thread.steps.done":         "%d étapes faites",
@@ -103,7 +100,6 @@ var threadStrings = map[string]map[string]string{
 		"thread.fact.reported":      "« %s » a rendu son travail",
 		"thread.fact.ended":         "« %s » s'est arrêtée",
 		"thread.fact.summary":       "Résumé mis à jour",
-		"thread.live.title":         "En direct",
 		"thread.source.waiting":     "en attente",
 		"thread.item.state.act":     "à faire",
 		"thread.item.state.look":    "à regarder",
@@ -214,10 +210,7 @@ var threadStrings = map[string]map[string]string{
 		"thread.line.yours":            "%s: yours",
 		"thread.line.asks":             "a card for you",
 
-		"thread.head.sincewhen":     "Since your last visit, %s",
 		"thread.head.earlier":       "… and %d earlier",
-		"thread.head.where":         "Where it stands",
-		"thread.head.summaryat":     "Summary updated: %s",
 		"thread.status.urgent":      "Urgent",
 		"thread.status.calm":        "Up to date",
 		"thread.steps.done":         "%d steps done",
@@ -238,7 +231,6 @@ var threadStrings = map[string]map[string]string{
 		"thread.fact.reported":      "“%s” handed in its work",
 		"thread.fact.ended":         "“%s” stopped",
 		"thread.fact.summary":       "Summary updated",
-		"thread.live.title":         "Live",
 		"thread.source.waiting":     "waiting",
 		"thread.item.state.act":     "to do",
 		"thread.item.state.look":    "to look at",

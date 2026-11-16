@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +30,17 @@ func threadSurfaceOf(t *testing.T, c *core, id int64) (surface, map[string]any, 
 	return s, th, meta.Extensions[surfaceExtension]
 }
 
+// itemSources are the sources a thread's data gives (/thread/items): their
+// names, sorted, and each one's data by name.
+func itemSources(data map[string]any) ([]string, map[string]map[string]any) {
+	all, _ := data["items"].(map[string]any)
+	by := map[string]map[string]any{}
+	for name, v := range all {
+		by[name], _ = v.(map[string]any)
+	}
+	return slices.Sorted(maps.Keys(by)), by
+}
+
 // sourceRows are the rows a source of a thread's surface shows, its
 // groups' in order.
 func sourceRows(src map[string]any) []any {
@@ -40,14 +53,25 @@ func sourceRows(src map[string]any) []any {
 	return rows
 }
 
-// timelineOf is the steps the surface's Timeline shows: label → state, and
-// each one's detail.
+// stepItems are a thread's steps as its data gives them (/thread/steps):
+// those done, then the others, each a Timeline item.
+func stepItems(data map[string]any) []any {
+	steps, _ := data["steps"].(map[string]any)
+	done, _ := steps["done"].([]any)
+	open, _ := steps["open"].([]any)
+	return append(append([]any{}, done...), open...)
+}
+
+// timelineOf is the Timeline items a thread's data gives: its steps, and
+// its monitors' events (/thread/items/<monitor>/events): label → state,
+// and each one's detail.
 func timelineOf(data map[string]any) (map[string]string, map[string]string) {
 	states, details := map[string]string{}, map[string]string{}
-	var items []any
-	for _, key := range []string{"done", "steps", "watch"} { // the steps done (folded), the others, its monitors' events
-		list, _ := data[key].([]any)
-		items = append(items, list...)
+	items := stepItems(data)
+	sources, _ := data["items"].(map[string]any)
+	for _, src := range sources {
+		events, _ := src.(map[string]any)["events"].([]any)
+		items = append(items, events...)
 	}
 	for _, it := range items {
 		m, _ := it.(map[string]any)
@@ -198,7 +222,8 @@ func TestThreadSurfaceFollowsSteps(t *testing.T) {
 	}
 	s, data, meta = threadSurfaceOf(t, c, th.ID)
 	states, details := timelineOf(data)
-	if states["Find names"] != "done" || states["Sam's pick"] != "current" ||
+	// The approval that waits is the user's: in « À toi », not in the steps.
+	if _, listed := states["Sam's pick"]; states["Find names"] != "done" || listed ||
 		!strings.HasPrefix(details["Find names"], "extérieur · Tâche") || !strings.Contains(details["Find names"], "Lumen is free.") {
 		t.Fatalf("accepted: %v %v", states, details)
 	}
@@ -327,7 +352,10 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 		t.Fatalf("part %v %s", out, msg)
 	}
 	s, data, _ := threadSurfaceOf(t, c, th.ID)
-	if !strings.Contains(string(s.Components), `"thread_part_pr"`) || !strings.Contains(string(s.Components), "Ajouté par son chef") ||
+	// In place of the default composition: no steps drawn by code, though
+	// they stay in its data; no caption saying who composed it.
+	if !slices.Contains(rootChildren(t, s.Components), "thread_part_pr") || strings.Contains(string(s.Components), "thread_steps_") ||
+		strings.Contains(string(s.Components), "Ajouté par") || len(stepItems(data)) == 0 ||
 		!strings.Contains(string(s.Data), `"diff"`) || data["state"] == nil || s.Tainted != "" {
 		t.Fatalf("part not shown: %s %s", s.Components, s.Data)
 	}
@@ -362,7 +390,12 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 		t.Fatal(msg)
 	}
 	s, _, meta := threadSurfaceOf(t, c, th.ID)
-	if !strings.Contains(string(s.Components), "Ajouté par son chef · extérieur") || !strings.Contains(s.Tainted, "mail:7") || !meta.Answers {
+	// « extérieur » beside that block only, the other one unmarked.
+	kids := rootChildren(t, s.Components)
+	if !slices.Contains(kids, threadExternalPrefix+"avis") || !slices.Contains(kids, "thread_part_pr") || slices.Contains(kids, threadExternalPrefix+"pr") ||
+		!strings.Contains(string(s.Components), `{"children":["`+threadMarkPrefix+`avis","thread_part_avis"],"component":"Column","id":"`+threadExternalPrefix+`avis"}`) ||
+		!strings.Contains(string(s.Components), `{"component":"Text","id":"`+threadMarkPrefix+`avis","text":"extérieur","variant":"caption"}`) ||
+		strings.Count(string(s.Components), "extérieur") != 1 || !strings.Contains(s.Tainted, "mail:7") || !meta.Answers {
 		t.Errorf("tainted part: %s %q %+v", s.Components, s.Tainted, meta)
 	}
 
@@ -437,7 +470,7 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 		t.Fatalf("part %v %s", out, msg)
 	}
 	s, _, _ := threadSurfaceOf(t, c, th.ID)
-	if !strings.Contains(string(s.Components), "12/12") || !strings.Contains(string(s.Components), "Ajouté par") {
+	if !strings.Contains(string(s.Components), "12/12") || strings.Contains(string(s.Components), "Ajouté par") {
 		t.Fatalf("not shown: %s", s.Components)
 	}
 	read, _ := callOn(t, brain, "workspace_read", map[string]any{})
@@ -454,9 +487,13 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 
 	c.insertSteps(th.ID, []stepSpec{{Key: "which", Title: "Le nom", Kind: stepChoice, Question: "Lequel ?", Options: []string{"Lumen", "Rivet"}}}, false)
 	c.setStep(th.ID, "which", map[string]any{"status": stepRunning})
-	s, _, meta := threadSurfaceOf(t, c, th.ID)
+	s, data, meta := threadSurfaceOf(t, c, th.ID)
 	if !strings.Contains(string(s.Components), `"thread_choice_0"`) || meta.Summary != "Le nom à toi" {
 		t.Errorf("a choice that waits: %s %+v", s.Components, meta)
+	}
+	// Once, in « À toi »: not in its steps, which a block may bind.
+	if strings.Count(string(s.Components)+string(s.Data), "Le nom") != 1 || len(stepItems(data)) != 0 {
+		t.Errorf("a choice shown twice: %s %s", s.Components, s.Data)
 	}
 }
 
@@ -475,7 +512,7 @@ func TestThreadSurfaceCallStep(t *testing.T) {
 	st := stepOf(t, c, th, "merge")
 	s, _, meta := threadSurfaceOf(t, c, th.ID)
 	comps := string(s.Components)
-	if !strings.Contains(comps, `"id":"thread_card_0","proposalId":"`+st.Card+`"`) || strings.Index(comps, "thread_card_0") > strings.Index(comps, `"thread_steps"`) ||
+	if !strings.Contains(comps, `"id":"thread_card_0","proposalId":"`+st.Card+`"`) || strings.Count(comps, st.Card) != 1 || strings.Contains(comps, `"thread_steps_`) ||
 		meta.Summary != "Merge the PR à toi" || s.Weight != queueSurfaceWeight(weightBlocksATask) || !meta.Answers {
 		t.Fatalf("call card: %s %+v", comps, meta)
 	}
@@ -490,10 +527,12 @@ func TestThreadSurfaceCallStep(t *testing.T) {
 	// The step's status is stored, then its thread's surface written again
 	// (threadMoved), by the call's own goroutine: the surface follows.
 	shown := func() bool {
-		s, _, meta = threadSurfaceOf(t, c, th.ID)
+		var data map[string]any
+		s, data, meta = threadSurfaceOf(t, c, th.ID)
 		comps = string(s.Components)
-		return strings.Contains(comps, `"thread_done_steps","thread_card_0"`) && strings.Contains(comps, `"compact":true,"component":"Proposal","id":"thread_card_0","proposalId":"`+st.Card+`"`) &&
-			!strings.Contains(meta.Summary, "à toi")
+		cards, _ := data["steps"].(map[string]any)["cards"].([]any)
+		return strings.Contains(comps, `"thread_steps_fold"`) && strings.Contains(comps, `{"compact":true,"component":"Proposal","id":"thread_steps_card","proposalId":{"@path":"ref"}}`) &&
+			len(cards) == 1 && cards[0].(map[string]any)["ref"] == st.Card && !strings.Contains(meta.Summary, "à toi")
 	}
 	for deadline := time.Now().Add(5 * time.Second); !shown() && time.Now().Before(deadline); {
 		time.Sleep(10 * time.Millisecond)

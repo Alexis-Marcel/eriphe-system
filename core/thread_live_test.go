@@ -1,23 +1,25 @@
 package main
 
 import (
-	"maps"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 )
 
-// liveOf is what a thread's surface shows of its first monitor: its
-// value, its points and its caption.
+// liveOf is what a thread's data gives of its monitor cpu
+// (/thread/items/cpu): its value, its points and its caption; the default
+// composition draws its number.
 func liveOf(t *testing.T, c *core, id int64) (any, int, string) {
 	t.Helper()
-	_, data, _ := threadSurfaceOf(t, c, id)
-	live, _ := data["live"].([]any)
-	if len(live) == 0 {
-		t.Fatalf("no live part: %v", data)
+	sf, data, _ := threadSurfaceOf(t, c, id)
+	items, _ := data["items"].(map[string]any)
+	m, _ := items["cpu"].(map[string]any)
+	if m == nil {
+		t.Fatalf("no monitor in the thread's items: %v", data)
 	}
-	m, _ := live[0].(map[string]any)
+	if !strings.Contains(string(sf.Components), `"value":{"@path":"/thread/items/cpu/value"}`) {
+		t.Fatalf("the default composition does not draw its number: %s", sf.Components)
+	}
 	n := 0
 	if series, ok := m["series"].([]any); ok && len(series) > 0 {
 		points, _ := series[0].(map[string]any)["points"].([]any)
@@ -94,10 +96,6 @@ func TestThreadFollowsMonitor(t *testing.T) {
 	states, details := timelineOf(data)
 	if states[crossed] != "failed" || !strings.Contains(details[crossed], "surveillance") {
 		t.Fatalf("timeline %v %v", states, details)
-	}
-	h := headerOf(t, c, s.ID)
-	if !slices.ContainsFunc(slices.Collect(maps.Values(h)), func(x string) bool { return strings.Contains(x, crossed) }) {
-		t.Errorf("not in the header: %v", h)
 	}
 	if w := weight(); w != threadWeightWatch {
 		t.Errorf("weight %d past the limit", w)
@@ -190,7 +188,7 @@ func TestThreadMonitorRemoved(t *testing.T) {
 	if ids := c.threadsFollowing("cpu"); len(ids) != 0 {
 		t.Errorf("still followed by %v", ids)
 	}
-	if _, data, _ := threadSurfaceOf(t, c, s.ID); data["live"] != nil {
-		t.Errorf("still live: %v", data["live"])
+	if _, data, _ := threadSurfaceOf(t, c, s.ID); data["items"].(map[string]any)["cpu"] != nil {
+		t.Errorf("still live: %v", data["items"])
 	}
 }
