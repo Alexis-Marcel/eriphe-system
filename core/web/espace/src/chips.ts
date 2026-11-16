@@ -18,16 +18,28 @@ export function surfaceSummary(s: unknown): string | undefined {
   return typeof t === "string" && t.trim() ? t.trim() : undefined;
 }
 
-// surfaceWeight is a surface's weight (1 to 100) as eriphe-core gives it;
-// 80 and up is urgent (weightUrgent, workspace_layout.go): it needs the
-// user. 0 when it has none.
-export function surfaceWeight(s: unknown): number {
-  const w = (s as { metadata?: { extensions?: { eriphe?: { weight?: unknown } } } } | undefined)?.metadata?.extensions?.eriphe?.weight;
-  return typeof w === "number" ? w : 0;
+// A tile's state, computed by eriphe-core (tileStateOf, workspace_layout.go):
+// its colour and badge. yours and urgent need the user.
+export type TileState = "yours" | "urgent" | "new" | "running" | "quiet" | "done";
+const STATES: TileState[] = ["yours", "urgent", "new", "running", "quiet", "done"];
+
+// surfaceState is a surface's state as eriphe-core gives it, "quiet" when
+// it gives none.
+export function surfaceState(s: unknown): TileState {
+  const v = (s as { metadata?: { extensions?: { eriphe?: { state?: unknown } } } } | undefined)?.metadata?.extensions?.eriphe?.state;
+  return STATES.includes(v as TileState) ? (v as TileState) : "quiet";
 }
 
-// URGENT is the weight from which a surface needs the user (weightUrgent).
-export const URGENT = 80;
+// needsUser tells a state that needs the user: something waits for them,
+// or is urgent.
+export const needsUser = (st: TileState) => st === "yours" || st === "urgent";
+
+// surfaceNew is how many things changed on a surface since the user last
+// opened it (a thread's): its badge; 0 for none.
+export function surfaceNew(s: unknown): number {
+  const n = (s as { metadata?: { extensions?: { eriphe?: { new?: unknown } } } } | undefined)?.metadata?.extensions?.eriphe?.new;
+  return typeof n === "number" && n > 0 ? Math.floor(n) : 0;
+}
 
 // surfaceUpdated is when eriphe-core last wrote a surface again as a whole
 // (its metadata's updated): a new item in a group of the queue, a thread's

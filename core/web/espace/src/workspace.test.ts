@@ -52,7 +52,7 @@ describe("workspace", () => {
   });
 
   const grid: Layout = {
-    eriphe: "", by: "composer", ambient: "calm", focus: "week",
+    ambient: "calm", focus: "week",
     items: [
       { id: "week", title: "La semaine", size: "m", col: 0, row: 0, w: 6, h: 2 },
       { id: "pay", title: "Paiement", size: "s", col: 6, row: 0, w: 3, h: 1 },
@@ -84,18 +84,16 @@ describe("workspace", () => {
   });
 
   it("opens a surface at once and goes back to the layout before", () => {
-    const before: Layout = { ...grid, focus: undefined, eriphe: "Ta journée." };
+    const before: Layout = { ...grid, focus: undefined };
     const open = focusedIn(before, "pay");
     expect(open.focus).toBe("pay");
-    expect(open.eriphe).toBe("Ta journée.");
-    // eriphe-core recomposes around it: the composer's line, no other.
-    const around: Layout = { ...open, eriphe: "Autour du paiement.", items: [grid.items[1], { ...grid.items[0], related: true }] };
+    // eriphe-core lays it out around it: what relates to it marked.
+    const around: Layout = { ...open, items: [grid.items[1], { ...grid.items[0], related: true }] };
     // Back: the layout before, kept by the page with nothing behind it.
     expect(unfocused(around, before)).toBe(before);
     // With eriphe-core behind, nothing open at once, nothing marked, until it gives the one before back.
     const back = unfocused(around, null);
     expect(back.focus).toBeUndefined();
     expect(back.items.some((i) => i.related)).toBe(false);
-    expect(back.eriphe).toBe("Autour du paiement.");
   });
 });

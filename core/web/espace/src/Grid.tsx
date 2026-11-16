@@ -3,7 +3,7 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Adapter } from "./a2ui/adapter";
 import { OnStage } from "./a2ui/code";
 import { SurfaceView } from "./a2ui/Surfaces";
-import { URGENT, chipLabel, shownChips, surfaceSummary, surfaceTitle, surfaceUpdated, surfaceWeight } from "./chips";
+import { chipLabel, needsUser, shownChips, surfaceNew, surfaceState, surfaceSummary, surfaceTitle, surfaceUpdated, type TileState } from "./chips";
 import { useWords } from "./i18n";
 import { COLS, DIMS, ROWS, SIZES, foldOut, needRows } from "./place";
 import type { FoldedChip, Layout, Tile, TileSize } from "./types";
@@ -47,8 +47,8 @@ import type { FoldedChip, Layout, Tile, TileSize } from "./types";
 // grid to the centre or the column and back: the re-layout is animated.
 // Core's places on the grid around the focus are not used on a wide screen.
 //
-// On a phone (narrow) the grid does not hold: one column, the tiles in the
-// composer's order, the chips after them, only the cross on a tile; a
+// On a phone (narrow) the grid does not hold: one column, the tiles in
+// eriphe-core's order, the chips after them, only the cross on a tile; a
 // surface open is drawn alone, on the whole screen (stacked).
 
 const spring = { type: "spring", stiffness: 260, damping: 30 } as const;
@@ -120,7 +120,7 @@ export function drawn(layout: Layout, have: Set<string>): { tiles: Tile[]; chips
 }
 
 // stacked is the workspace on a phone: one column, the tiles in the
-// composer's order (the layout's items, never their place on the grid),
+// eriphe-core's order (the layout's items, never their place on the grid),
 // the chips after them; with a surface open, that surface alone, on the
 // whole screen.
 export function stacked(layout: Layout, have: Set<string>): { tiles: Tile[]; chips: FoldedChip[]; full: boolean } {
@@ -136,15 +136,15 @@ export type SideItem = { id: string; title: string; why?: string; needs: boolean
 // sideOf is the column beside the surface open: what the grid would draw
 // but it, the tiles in core's order then the chips, the closed last; what
 // needs the user first of all.
-export function sideOf(layout: Layout, have: Set<string>, weight: (id: string) => number = () => 0): SideItem[] {
+export function sideOf(layout: Layout, have: Set<string>, state: (id: string) => TileState = () => "quiet"): SideItem[] {
   const { tiles, chips } = drawn(layout, have);
   const all: SideItem[] = [
     ...tiles
       .filter((i) => i.id !== layout.focus)
-      .map((i) => ({ id: i.id, title: i.title, why: i.why, needs: !!i.urgent || weight(i.id) >= URGENT, related: i.related })),
+      .map((i) => ({ id: i.id, title: i.title, why: i.why, needs: !!i.urgent || needsUser(state(i.id)), related: i.related })),
     ...chips
       .filter((c) => c.id !== layout.focus)
-      .map((c) => ({ id: c.id, title: c.title, why: c.why, needs: !c.closed && weight(c.id) >= URGENT, closed: c.closed })),
+      .map((c) => ({ id: c.id, title: c.title, why: c.why, needs: !c.closed && needsUser(state(c.id)), closed: c.closed })),
   ];
   return [...all.filter((i) => i.needs), ...all.filter((i) => !i.needs && !i.closed), ...all.filter((i) => i.closed)];
 }
@@ -291,10 +291,16 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
       {shownChips(chips, (id) => surfaceTitle(byID.get(id)), t("espace.chip.untitled")).map((c) => {
         // A surface's one-line summary, when it has one, says more than why it is there.
         const line = c.ids.length === 1 ? surfaceSummary(byID.get(c.id)) : undefined;
+        const st = c.closed ? "quiet" : surfaceState(byID.get(c.id));
+        const n = c.closed ? 0 : surfaceNew(byID.get(c.id));
         return (
-          <motion.div key={c.id} layoutId={narrow ? undefined : "surface-" + c.id} transition={spring} role="listitem" className={`chip${c.closed ? " closed" : ""}`} data-surface={c.id}>
+          <motion.div key={c.id} layoutId={narrow ? undefined : "surface-" + c.id} transition={spring} role="listitem" className={`chip ts-${st}${c.closed ? " closed" : ""}`} data-surface={c.id}>
             <button className="chip-open" onClick={() => onOpen(c.id)} title={t("espace.chip.open", chipLabel(c))}>
-              <span className="chip-text">{chipLabel(c)}</span>
+              <span className="chip-text">
+                {chipLabel(c)}
+                {needsUser(st) && <span className={`tile-badge b-${st}`}>{t("espace.state." + st)}</span>}
+                {!needsUser(st) && st !== "done" && n > 0 && <span className="tile-badge b-new">{t("espace.tile.new", n)}</span>}
+              </span>
               {c.closed ? <span className="chip-from">{t("espace.chip.closed")}</span> : (line || c.why) && <span className="chip-from">{line || c.why}</span>}
             </button>
           </motion.div>
@@ -308,6 +314,9 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
     const focus = layout.focus === tile.id;
     // A small tile shows a surface's one-line summary, when it has one, rather than a slice of it.
     const line = tile.size === "s" && !focus ? surfaceSummary(byID.get(tile.id)) : undefined;
+    // Its state, code's: a coloured edge, and a badge for what needs the user or is new.
+    const st = surfaceState(byID.get(tile.id));
+    const n = focus ? 0 : surfaceNew(byID.get(tile.id));
     const open = (e: MouseEvent) => {
       if (!focus && !(e.target as HTMLElement).closest(interactive)) onOpen(tile.id);
     };
@@ -321,11 +330,13 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
         exit={{ opacity: 0 }}
         data-surface={tile.id}
         aria-label={tile.title}
-        className={`mod tile size-${tile.size}${place}${focus ? " focus" : ""}${tile.pinned ? " pinned" : ""}${drag?.id === tile.id ? " dragging" : ""}`}
+        className={`mod tile ts-${st} size-${tile.size}${place}${focus ? " focus" : ""}${tile.pinned ? " pinned" : ""}${drag?.id === tile.id ? " dragging" : ""}`}
         onClick={open}
       >
         <div className="tile-head">
           <h2 className="tile-title">{tile.title}</h2>
+          {needsUser(st) && !focus && <span className={`tile-badge b-${st}`}>{t("espace.state." + st)}</span>}
+          {!needsUser(st) && st !== "done" && n > 0 && <span className="tile-badge b-new">{t("espace.tile.new", n)}</span>}
           {!focus && <span className="tile-more">{t("espace.tile.more")}</span>}
           <div className="tile-tools">
             {centre && (
@@ -379,7 +390,7 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
   // The focus mode: the surface open in the centre, the others in the
   // column beside it, each compact and live; what needs the user whole.
   if (center) {
-    const side = sideOf(layout, have, (id) => surfaceWeight(byID.get(id)));
+    const side = sideOf(layout, have, (id) => surfaceState(byID.get(id)));
     return (
       <main className="canvas focus-mode" aria-label={t("espace.canvas")} ref={canvas}>
         {tileView(center, true)}

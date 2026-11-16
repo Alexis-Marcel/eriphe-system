@@ -7,8 +7,6 @@ import type { Layout, Tile } from "./types";
 const t = (id: string, size: Tile["size"], col: number, row: number, w: number, h: number, more: Partial<Tile> = {}): Tile => ({ id, title: id, size, col, row, w, h, ...more });
 
 const base: Layout = {
-  eriphe: "Ta journée.",
-  by: "composer",
   ambient: "decision",
   items: [
     t("alert", "m", 0, 0, 3, 2, { urgent: true }),

@@ -198,8 +198,6 @@ const surface = (id: string, words: string) => ({
 
 // A layout with the thread's surface open, or none open.
 const layout = (focus?: string): Layout => ({
-  eriphe: "Bonjour. Trois fils avancent.",
-  by: "composer",
   ambient: "calm",
   focus,
   items: [
@@ -230,22 +228,19 @@ async function submit(text: string) {
 }
 
 describe("the last exchange, in the left column", () => {
-  it("starts with the arrival message, large while nothing follows; then the last exchange, Eriphe's newest line large", async () => {
+  it("starts with no line of a model's about the workspace; then the last exchange, Eriphe's newest line large", async () => {
     await open();
     await act(async () => new Promise((r) => setTimeout(r, 400))); // typed
-    const first = left().querySelector(".present-arrival")!;
-    expect(first.textContent).toContain("Bonjour. Trois fils avancent.");
-    expect(first.classList.contains("latest")).toBe(true);
+    expect(left().querySelector(".present-arrival")).toBeNull();
     expect(el.querySelector<HTMLAnchorElement>(".eriphe-all")!.getAttribute("href")).toBe("/conversation");
 
     await submit("quel temps demain ?");
     const sent = posts.find((p) => p.url === "/messages")!;
     expect(sent.form?.get("text")).toBe("quel temps demain ?");
     expect(sent.form?.get("about")).toBeNull(); // nothing open
-    // Shown at once, as a bubble, Eriphe at work; the arrival no longer large.
+    // Shown at once, as a bubble, Eriphe at work.
     expect(left().querySelector(".present-bubble")!.textContent).toBe("quel temps demain ?");
     expect(left().querySelector(".exchange-dots")).not.toBeNull();
-    expect(first.classList.contains("latest")).toBe(false);
 
     await act(async () => FakeSource.emit("exchange", { lines: [{ seq: 5, role: "user", text: "quel temps demain ?", time: at(1) }], draft: "Demain, il" }));
     expect(left().querySelectorAll(".present-bubble")).toHaveLength(1);

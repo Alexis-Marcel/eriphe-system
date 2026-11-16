@@ -103,7 +103,8 @@ export function widen(tiles: Tile[]): Tile[] {
 // folded for the others, then the other tiles in core's order at their
 // size; each at the first place where it fits, top left first, shrinking a
 // size when it fits nowhere, folded last. A chip opened comes out of the
-// strip. Core's composition around it may then make it larger.
+// strip. eriphe-core's layout around it then gives it its size (xl) and
+// what relates to it.
 export function focusedIn(l: Layout, id: string): Layout {
   const tile = l.items.find((t) => t.id === id);
   const chip = l.chips.find((c) => c.id === id);

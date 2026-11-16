@@ -206,7 +206,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
     if (boot.live) data.gesture(what, "surface:" + id, to).catch(() => false);
   };
   // A tile that left the grid unopened, while the page was seen, is
-  // ignored: a gesture for the composer and memory.
+  // ignored: a gesture for memory.
   const sopened = useRef(new Set<string>());
   const sclosed = useRef(new Set<string>());
   const stiles = useRef<string[]>([]);
@@ -233,14 +233,9 @@ export function Espace({ boot }: { boot: data.Boot }) {
   };
   // Nothing to show: Eriphe says so, never an empty grid without a word.
   const nothing = !gallery && !!shown && !onSurfaces;
-  // The message Eriphe composed for the user's arrival: the first of the
-  // left column, not a headline; kept while a layout says none (a focus).
-  const [arrival, setArrival] = useState("");
-  const composed = shown?.eriphe ?? "";
-  useEffect(() => {
-    if (composed) setArrival(composed);
-  }, [composed]);
-  const text = useTyped(said ?? arrival);
+  // What Eriphe just said, typed: the first of the left column, not a
+  // headline. No model writes a line about the workspace: its tiles say it.
+  const text = useTyped(said ?? "");
 
   // A message goes to Eriphe with the surface open, if any: « montre-m'en
   // moins », « lance une recherche là-dessus ». It shows in the exchange at

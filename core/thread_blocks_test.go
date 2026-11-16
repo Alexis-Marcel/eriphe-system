@@ -242,7 +242,7 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 		}
 		in.Data, _ = json.Marshal(data)
 		meta, _ := json.Marshal(map[string]any{"extensions": map[string]any{surfaceExtension: surfaceMeta{Title: in.Title, Author: threadAuthor(id),
-			Weight: in.Weight, Why: in.Why, Answers: true, Summary: in.summary}}})
+			Weight: in.Weight, Why: in.Why, Answers: true, Summary: in.summary, State: in.state, New: in.fresh}}})
 		var comps []a2ui.Component
 		json.Unmarshal(in.Components, &comps)
 		out = append(out, a2ui.Message{Version: a2ui.Version, CreateSurface: &a2ui.CreateSurface{SurfaceID: threadSurfaceID(id), CatalogID: a2ui.CatalogID,

@@ -49,6 +49,8 @@ var espaceStrings = map[string]map[string]string{
 		"espace.side":            "Les autres fils",
 		"espace.side.new":        "nouveau",
 		"espace.state.yours":     "À toi",
+		"espace.state.urgent":    "Urgent",
+		"espace.tile.new":        "Nouveau · %d",
 		"espace.state.related":   "Lié",
 		"espace.state.closed":    "Fermé",
 
@@ -158,6 +160,8 @@ var espaceStrings = map[string]map[string]string{
 		"espace.side":            "The other threads",
 		"espace.side.new":        "new",
 		"espace.state.yours":     "Yours",
+		"espace.state.urgent":    "Urgent",
+		"espace.tile.new":        "New · %d",
 		"espace.state.related":   "Related",
 		"espace.state.closed":    "Closed",
 

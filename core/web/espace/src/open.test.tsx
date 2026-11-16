@@ -47,8 +47,6 @@ const text = (id: string, words: string) => ({
 });
 
 const grid: Layout = {
-  eriphe: "Ta journée.",
-  by: "composer",
   ambient: "calm",
   items: [
     { id: "today", title: "Aujourd'hui", size: "l", col: 0, row: 0, w: 6, h: 3 },

@@ -7,7 +7,7 @@ import { localURL } from "./presence";
 // What the workspace shows of the conversation (the stream's "exchange"
 // event, web_espace_exchange.go), not a second chat: the left column keeps
 // to the last exchange, the user's last message and Eriphe's answer, after
-// the message Eriphe composed for the arrival. What the user says updates
+// what the page itself just said (a sample's note, an error). What the user says updates
 // a thread or a surface at the centre, so rereading is rare: scrolling up
 // the column shows a button that brings the lines before, a few at a time;
 // the conversation (/conversation) has them all.
@@ -98,8 +98,8 @@ function Line({ line, latest }: { line: ExchangeLine; latest: boolean }) {
 // scrolled up (the button shows).
 type Before = { head: number; lines: ExchangeLine[]; more: boolean; asked: boolean };
 
-// Present is the left column's conversation: the arrival message, then
-// the last exchange, Eriphe's newest line large. Scrolling up shows the
+// Present is the left column's conversation: what the page just said
+// (arrival), then the last exchange, Eriphe's newest line large. Scrolling up shows the
 // button that brings the lines before it (load); they stay until the next
 // exchange.
 export function Present({ arrival, x, sent, load }: {

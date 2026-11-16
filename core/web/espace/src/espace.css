@@ -189,6 +189,16 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 
 /* A surface's tile: its title over it; it enters by CSS, Motion moves it */
 .tile { animation: tile-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; } /* not forwards: Motion moves it after */
+/* A tile's state, code's (tileStateOf): a coloured edge, and a badge for
+   what needs the user or is new. */
+.tile.ts-yours, .chip.ts-yours { box-shadow: inset 4px 0 0 var(--urgent); }
+.tile.ts-urgent, .chip.ts-urgent { box-shadow: inset 4px 0 0 var(--late); }
+.tile.ts-new, .chip.ts-new { box-shadow: inset 4px 0 0 var(--decision); }
+.tile.ts-done { opacity: 0.86; }
+.tile-badge { flex: none; display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1.6; white-space: nowrap; vertical-align: 1px; }
+.b-yours { color: #3a2a10; background: var(--urgent); }
+.b-urgent { color: #fff; background: var(--late); }
+.b-new { color: #1f3a5f; background: color-mix(in oklab, var(--decision) 35%, #fff); }
 /* Its title, over the content as a kicker: whole, on as many lines as it takes. */
 .tile-title { margin: 0 0 6px; font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--ink-soft); overflow-wrap: anywhere; }
 .size-s .tile-title { margin-bottom: 2px; font-size: 12px; }
