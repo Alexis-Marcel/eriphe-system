@@ -257,7 +257,7 @@ func registerLeadTools(c *core, s *mcp.Server, a Assistant) {
 			}
 			return v, err
 		})
-	tool(s, "note_item", "Note one item your thread's source lists, by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a due date. Code shows it on the item's row. A note written after reading external content is marked so and never quoted into a summary. No note, state nor due takes it away.",
+	tool(s, "note_item", "Note one item your thread's source lists, by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a due date. Code shows it on the item's row. A note written after reading external content is marked so and never quoted into a summary. With actions, its row offers each (a tool and its input, \"$item\" where the item's id goes): a click makes a card the user approves, never more. No note, state, due nor action takes it away.",
 		func(ctx context.Context, in noteItemIn) (map[string]any, error) {
 			note, err := c.noteItem(id, in, threadNoteAuthor+strconv.FormatInt(id, 10), c.assistantTaint(a))
 			return map[string]any{"note": note}, err

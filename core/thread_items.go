@@ -1,12 +1,16 @@
 package main
 
 import (
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // Notes on a thread's items (#571): what the brain, a thread's lead or a
@@ -38,10 +42,17 @@ const threadItemsSchema = `CREATE TABLE IF NOT EXISTS thread_items (
 	tainted TEXT NOT NULL DEFAULT '',   -- why its words may be someone else's
 	noted   INTEGER NOT NULL,
 	gone    INTEGER NOT NULL DEFAULT 0, -- the first good read that no longer listed its item; 0 while listed
+	actions TEXT NOT NULL DEFAULT '',   -- the actions offered on it, as JSON (item_offers.go)
 	PRIMARY KEY (thread, source, item)
 );`
 
-func init() { extraSchema = append(extraSchema, threadItemsSchema) }
+func init() {
+	extraSchema = append(extraSchema, threadItemsSchema)
+	// A table made before the offered actions lacks their column.
+	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
+		return addColumn(db, "thread_items", "actions", "TEXT NOT NULL DEFAULT ''")
+	})
+}
 
 const (
 	threadNoteMax    = 300                // runes of a note
@@ -61,32 +72,40 @@ var itemStates = []string{itemStateAct, itemStateLook, itemStateInfo, itemStateN
 
 // itemNote is a note on an item, as read back.
 type itemNote struct {
-	Source  string `json:"source"`
-	Item    string `json:"item"`
-	Note    string `json:"note,omitempty"`
-	State   string `json:"state,omitempty"`
-	Due     int64  `json:"due,omitempty"`
-	Author  string `json:"author"`
-	Tainted string `json:"tainted,omitempty"`
-	Noted   int64  `json:"noted"`
-	Gone    int64  `json:"gone,omitempty"` // its item left its source then
+	Source  string       `json:"source"`
+	Item    string       `json:"item"`
+	Note    string       `json:"note,omitempty"`
+	State   string       `json:"state,omitempty"`
+	Due     int64        `json:"due,omitempty"`
+	Author  string       `json:"author"`
+	Tainted string       `json:"tainted,omitempty"`
+	Noted   int64        `json:"noted"`
+	Gone    int64        `json:"gone,omitempty"`    // its item left its source then
+	Actions []noteAction `json:"actions,omitempty"` // offered on its row (item_offers.go)
 }
 
 // noteItemIn is note_item's input; the brain names the thread, a lead's is
 // its own.
 type noteItemIn struct {
-	Thread int64  `json:"thread_id,omitempty" jsonschema:"the thread (a lead, a skill's run: leave it out for yours)"`
-	Source string `json:"source" jsonschema:"the name of the thread's source that lists the item (one with items)"`
-	Item   string `json:"item" jsonschema:"the item's id, as the source gives it"`
-	Note   string `json:"note,omitempty" jsonschema:"what the user should know of it, in their language, one short sentence; empty with no state: the note is taken away"`
-	State  string `json:"state,omitempty" jsonschema:"act (the user has something to do: answer, decide), look (to look at), info (to know), none (nothing to do) or done (handled)"`
-	Due    string `json:"due,omitempty" jsonschema:"by when, YYYY-MM-DD or YYYY-MM-DDTHH:MM (local time)"`
+	Thread  int64        `json:"thread_id,omitempty" jsonschema:"the thread (a lead, a skill's run: leave it out for yours)"`
+	Source  string       `json:"source" jsonschema:"the name of the thread's source that lists the item (one with items)"`
+	Item    string       `json:"item" jsonschema:"the item's id, as the source gives it"`
+	Note    string       `json:"note,omitempty" jsonschema:"what the user should know of it, in their language, one short sentence; empty with no state: the note is taken away"`
+	State   string       `json:"state,omitempty" jsonschema:"act (the user has something to do: answer, decide), look (to look at), info (to know), none (nothing to do) or done (handled)"`
+	Due     string       `json:"due,omitempty" jsonschema:"by when, YYYY-MM-DD or YYYY-MM-DDTHH:MM (local time)"`
+	Actions []noteAction `json:"actions,omitempty" jsonschema:"what the user could do with it, offered on its row: each a tool you may use and its exact input, \"$item\" where the item's id goes (code puts it). A click makes a card the user approves, never more; a tool the user's policy refuses is never offered"`
 }
 
 // noteItem writes, replaces or takes away the note on an item of one of a
 // thread's sources. author and taint are who writes it and why its words
 // may be someone else's: code's, never given.
 func (c *core) noteItem(id int64, in noteItemIn, author string, taint []string) (string, error) {
+	return c.noteItemBy(id, in, author, taint, nil)
+}
+
+// noteItemBy is noteItem by an author who may offer only the tools may
+// allows (nil: any of the catalog).
+func (c *core) noteItemBy(id int64, in noteItemIn, author string, taint []string, may func(tool string) error) (string, error) {
 	in.Source, in.Item = strings.TrimSpace(in.Source), strings.TrimSpace(in.Item)
 	in.Note, in.State = oneLine(in.Note), strings.ToLower(strings.TrimSpace(in.State))
 	switch {
@@ -118,7 +137,11 @@ func (c *core) noteItem(id int64, in noteItemIn, author string, taint []string) 
 	if src == nil || src.Items == nil {
 		return "", fmt.Errorf("the thread has no source %q that lists items (link_thread source with items)", in.Source)
 	}
-	if in.Note == "" && in.State == "" && due.IsZero() {
+	actions, err := c.checkActions(in.Actions, in.Item, may)
+	if err != nil {
+		return "", err
+	}
+	if in.Note == "" && in.State == "" && due.IsZero() && len(actions) == 0 {
 		c.store.db.Exec(`DELETE FROM thread_items WHERE thread = ? AND source = ? AND item = ?`, id, in.Source, in.Item)
 		c.threadMoved(id)
 		return "Note taken away.", nil
@@ -141,11 +164,16 @@ func (c *core) noteItem(id int64, in noteItemIn, author string, taint []string) 
 		dueAt = due.Unix()
 	}
 	tainted := strings.Join(slices.Compact(slices.Sorted(slices.Values(taint))), ", ")
-	if _, err := c.store.db.Exec(`INSERT INTO thread_items (thread, source, item, note, state, due, author, tainted, noted, gone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (thread, source, item) DO UPDATE SET note = excluded.note, state = excluded.state, due = excluded.due,
+	acts := ""
+	if len(actions) > 0 {
+		raw, _ := json.Marshal(actions)
+		acts = string(raw)
+	}
+	if _, err := c.store.db.Exec(`INSERT INTO thread_items (thread, source, item, note, state, due, author, tainted, noted, gone, actions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (thread, source, item) DO UPDATE SET note = excluded.note, state = excluded.state, due = excluded.due, actions = excluded.actions,
 		  author = excluded.author, tainted = excluded.tainted, noted = excluded.noted,
 		  gone = CASE WHEN excluded.gone = 0 THEN 0 WHEN thread_items.gone > 0 THEN thread_items.gone ELSE excluded.gone END`,
-		id, in.Source, in.Item, in.Note, in.State, dueAt, author, tainted, now, gone); err != nil {
+		id, in.Source, in.Item, in.Note, in.State, dueAt, author, tainted, now, gone, acts); err != nil {
 		return "", err
 	}
 	c.threadMoved(id)
@@ -161,7 +189,7 @@ func (c *core) noteItem(id int64, in noteItemIn, author string, taint []string) 
 
 // itemNotes are a thread's notes, by source then item.
 func (c *core) itemNotes(thread int64) []itemNote {
-	rows, err := c.store.db.Query(`SELECT source, item, note, state, due, author, tainted, noted, gone FROM thread_items WHERE thread = ? ORDER BY source, item`, thread)
+	rows, err := c.store.db.Query(`SELECT source, item, note, state, due, author, tainted, noted, gone, actions FROM thread_items WHERE thread = ? ORDER BY source, item`, thread)
 	if err != nil {
 		return nil
 	}
@@ -169,7 +197,9 @@ func (c *core) itemNotes(thread int64) []itemNote {
 	var out []itemNote
 	for rows.Next() {
 		var n itemNote
-		if rows.Scan(&n.Source, &n.Item, &n.Note, &n.State, &n.Due, &n.Author, &n.Tainted, &n.Noted, &n.Gone) == nil {
+		var acts string
+		if rows.Scan(&n.Source, &n.Item, &n.Note, &n.State, &n.Due, &n.Author, &n.Tainted, &n.Noted, &n.Gone, &acts) == nil {
+			json.Unmarshal([]byte(acts), &n.Actions)
 			out = append(out, n)
 		}
 	}
@@ -276,9 +306,10 @@ func itemLevel(state string) string {
 // grouped by state, each with its note joined by code, and the cards on
 // it (item_cards.go); the cards on several of its items above them. Bound
 // by paths, so that a read again changes the data, not the components. No
-// row asks: a tainted note's never may. A group with a card that waits is
-// open.
-func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[string]itemNote, cards []itemCard, n, lang string, loc *time.Location, now time.Time, taint *[]string) {
+// row asks: a tainted note's never may; a row offers its note's actions
+// and a group those its rows share, each click a card (item_offers.go). A
+// group with a card that waits is open.
+func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src storedSource, notes map[string]itemNote, cards []itemCard, n, lang string, loc *time.Location, taint *[]string) {
 	type comp = map[string]any
 	byState := map[string][]any{}
 	waits := map[string]bool{} // the groups with a card that waits
@@ -293,6 +324,7 @@ func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[
 			rowCards[x.Item] = append(rowCards[x.Item], map[string]any{"ref": x.Ref, "pending": x.Pending})
 		}
 	}
+	offers := false // a row or a group offers an action: their buttons
 	for _, it := range threadSourceItems(src, threadItemsMax) {
 		for _, k := range []string{"detail", "note", "due", "mark"} { // each row has what its Item binds
 			if _, ok := it[k]; !ok {
@@ -301,12 +333,16 @@ func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[
 		}
 		id := it["id"].(string)
 		it["cards"] = emptyList(rowCards[id])
+		it["offers"] = []any{}
 		state := ""
-		if note, ok := notes[src.Name+"\x00"+it["id"].(string)]; ok {
+		if note, ok := notes[src.Name+"\x00"+id]; ok {
 			noteRow(it, note, lang, loc)
 			state = note.State
 			if note.Tainted != "" {
 				*taint = append(*taint, threadNoteTaint+src.Name+"/"+note.Item)
+			}
+			if o := c.rowOffers(thread, note, lang); len(o) > 0 {
+				it["offers"], offers = o, true
 			}
 		}
 		it["level"] = itemLevel(state)
@@ -325,7 +361,8 @@ func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[
 		if state == "" {
 			name = tr(lang, "thread.item.group.other")
 		}
-		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": waits[state] || state != itemStateNone && state != itemStateDone, "items": rows})
+		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": waits[state] || state != itemStateNone && state != itemStateDone,
+			"items": rows, "offers": emptyList(groupOffers(thread, src.Name, state, rows, lang))})
 		if state != "" {
 			counts = append(counts, map[string]any{"label": tr(lang, "thread.item.state."+state), "value": len(rows)})
 		}
@@ -336,11 +373,29 @@ func itemsBlock(out *threadComps, v map[string]any, src storedSource, notes map[
 	out.add(comp{"id": id + "_counts", "component": "List", "direction": "horizontal", "children": map[string]any{"path": at + "/counts", "componentId": id + "_count"}})
 	out.add(comp{"id": id + "_cards", "component": "List", "children": map[string]any{"path": at + "/cards", "componentId": id + "_card"}})
 	out.add(comp{"id": id + "_groups", "component": "List", "children": map[string]any{"path": at + "/groups", "componentId": id + "_group"}, "emptyText": tr(lang, "thread.item.none")})
+	row, group := []string{id + "_item", id + "_row_cards"}, id+"_rows"
+	if offers {
+		// Each offer a Button code places: a click makes a card, never
+		// more (offerOf); its context bound to the data, read again from
+		// the store.
+		bound := func(k string) map[string]any { return map[string]any{"@path": k} }
+		row = append(row, id+"_row_offers")
+		group = id + "_group_body"
+		out.inner(
+			comp{"id": id + "_row_offers", "component": "List", "direction": "horizontal", "children": map[string]any{"path": "offers", "componentId": id + "_offer"}},
+			comp{"id": id + "_offer", "component": "Button", "label": bound("label"), "variant": "default",
+				"action": map[string]any{"event": map[string]any{"name": a2ui.ActionOffer, "context": map[string]any{"thread": thread, "source": bound("source"), "item": bound("item"), "offer": bound("offer")}}}},
+			comp{"id": id + "_group_body", "component": "Column", "children": []string{id + "_group_offers", id + "_rows"}},
+			comp{"id": id + "_group_offers", "component": "List", "direction": "horizontal", "children": map[string]any{"path": "offers", "componentId": id + "_group_offer"}},
+			comp{"id": id + "_group_offer", "component": "Button", "label": bound("label"), "variant": "default",
+				"action": map[string]any{"event": map[string]any{"name": a2ui.ActionOffer, "context": map[string]any{"thread": thread, "source": bound("source"), "state": bound("state"), "offer": bound("offer")}}}},
+		)
+	}
 	out.inner(
 		comp{"id": id + "_count", "component": "Metric", "label": map[string]any{"@path": "label"}, "value": map[string]any{"@path": "value"}},
-		comp{"id": id + "_group", "component": "Fold", "label": map[string]any{"@path": "label"}, "open": map[string]any{"@path": "open"}, "child": id + "_rows"},
+		comp{"id": id + "_group", "component": "Fold", "label": map[string]any{"@path": "label"}, "open": map[string]any{"@path": "open"}, "child": group},
 		comp{"id": id + "_rows", "component": "List", "children": map[string]any{"path": "items", "componentId": id + "_row"}},
-		comp{"id": id + "_row", "component": "Column", "children": []string{id + "_item", id + "_row_cards"}},
+		comp{"id": id + "_row", "component": "Column", "children": row},
 		comp{"id": id + "_item", "component": "Item", "title": map[string]any{"@path": "title"}, "detail": map[string]any{"@path": "detail"},
 			"note": map[string]any{"@path": "note"}, "due": map[string]any{"@path": "due"}, "mark": map[string]any{"@path": "mark"}, "level": map[string]any{"@path": "level"}},
 		comp{"id": id + "_row_cards", "component": "List", "children": map[string]any{"path": "cards", "componentId": id + "_card"}},

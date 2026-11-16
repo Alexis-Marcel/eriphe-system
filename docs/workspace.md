@@ -35,7 +35,9 @@ The tiles are of two kinds only:
   ones with nothing to do folded) with their counts, marked « extérieur » when that note came from
   reading something from outside, and on an item's line the action proposed on it (archive this
   one, close that alert), a proposal you answer **Oui** / **Yes** or **Non** / **No** right there,
-  which runs only that action on that item; where it stands and what changed since your last visit; its
+  which runs only that action on that item, and the actions Eriphe offers on it as buttons (a
+  click only makes that proposal; a group whose items offer the same action offers it on them all
+  at once, one proposal for all); where it stands and what changed since your last visit; its
   steps, those done folded in one line (an approval you gave, one line too, opens on a click);
   and what Eriphe added (a diff, a link). Small, it shows one line (« Fusion ✓ · Déploiement à toi »). A step
   that read something from outside says « extérieur ». Once the thread is done, its tile stays

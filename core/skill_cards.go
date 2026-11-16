@@ -206,7 +206,7 @@ func skillCanText(tr *skillTrigger, th *Thread, sources []string) string {
 				th.ID, th.Title, th.Alias, threadsServer)
 			if len(sources) > 0 {
 				fmt.Fprintf(&b, " Ses sources qui listent des éléments : %s ; un élément s'y note par son id, celui que donnent ses événements. "+
-					"Une action que tu proposes sur un élément (un appel d'un de tes outils qui le nomme par son id) devient une carte sur sa ligne : l'utilisateur y répond, elle ne fait que cet appel.", strings.Join(sources, ", "))
+					"Une action que tu proposes sur un élément (un appel d'un de tes outils qui le nomme par son id) devient une carte sur sa ligne : l'utilisateur y répond, elle ne fait que cet appel. Pour lui laisser le choix, propose-la plutôt dans la note (note_item actions, \"$item\" là où va son id) : sa ligne l'offre en bouton, un clic en fait la carte.", strings.Join(sources, ", "))
 			}
 		} else {
 			b.WriteString("\n\nTu agis sur les fils avec les outils de " + threadsServer + " : trouve celui d'une chose (find_thread) avant d'en ouvrir un (open_thread).")

@@ -40,6 +40,10 @@ import (
 //   - choose, control: an option of a thread's choice step, Pause, Resume
 //     or Stop: the Buttons code wrote on its surface, their context as
 //     stored (thread_surface.go, chooseOf, controlOf).
+//   - offer: an action offered on an item of a thread's source, or on a
+//     group of them: the Button code wrote on its surface; the note and
+//     its action read again from the store, it makes one card bound to
+//     the item(s) and runs nothing (item_offers.go).
 //   - local (open, back, expand, tab): recorded; "open" (a tile or a chip)
 //     places the surface first on the layout, keeps the gesture and reads
 //     its sources again, in the background; "back" gives the layout back.
@@ -71,10 +75,11 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 	if err != nil {
 		return err
 	}
-	var text, ref, step, option, do string
+	var text, ref, step, option, do, source, item, state, offer string
 	var yes bool
 	var thread int64
 	var refused *errActionRefused
+	var offerCallsOf []offerCall
 	switch a2ui.ActionKind(a.Name) {
 	case a2ui.KindAsk:
 		text, refused = askOf(s, a)
@@ -88,9 +93,19 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		thread, step, option, refused = c.chooseOf(s, a)
 	case a2ui.KindControl:
 		thread, do, refused = controlOf(s, a)
+	case a2ui.KindOffer:
+		thread, source, item, state, offer, refused = offerOf(s, a) // item_offers.go
+		var calls []offerCall
+		if refused == nil {
+			calls, err = c.offerCalls(thread, source, item, state, offer)
+			if err != nil {
+				refused = &errActionRefused{Message: err.Error()}
+			}
+		}
+		offerCallsOf = calls
 	case a2ui.KindLocal:
 	default:
-		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), stepDone, tidy, choose and control (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
+		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), stepDone, tidy, choose, control and offer (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
 	}
 	if refused != nil {
 		refused.Message = "the user's action " + strconv.Quote(truncate(a.Name, 64)) + " on " + truncate(a.SourceComponentID, 64) + " was refused: " + refused.Message
@@ -124,6 +139,12 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		return err
 	case a2ui.KindControl:
 		return c.controlThread(ctx, thread, do)
+	case a2ui.KindOffer:
+		_, err := c.offer(ctx, thread, offerCallsOf)
+		if errors.Is(err, errOfferAsked) {
+			return nil // its card waits on the row already
+		}
+		return err
 	}
 	switch a.Name {
 	case a2ui.ActionOpen:

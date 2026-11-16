@@ -245,13 +245,13 @@ func (c *core) taskThreadsServer(t *TaskRow, grant []string) *mcp.Server {
 			})
 	}
 	if lent("note_item") {
-		tool(s, "note_item", "Note one item a thread's source lists (a mail, an event, a pull request), by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a due date. Code shows it on the item's row. Written after reading external content, it is marked so and never quoted into a summary. The same item noted again replaces it; no note, state nor due takes it away.",
+		tool(s, "note_item", "Note one item a thread's source lists (a mail, an event, a pull request), by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a due date. Code shows it on the item's row. Written after reading external content, it is marked so and never quoted into a summary. With actions, its row offers each (one of your tools and its input, \"$item\" where the item's id goes): a click makes a card the user approves, never more. The same item noted again replaces it; no note, state, due nor action takes it away.",
 			func(ctx context.Context, in noteItemIn) (map[string]any, error) {
 				id, err := w.thread(c, in.Thread)
 				if err != nil {
 					return nil, err
 				}
-				note, err := c.noteItem(id, in, w.author, w.taint(c))
+				note, err := c.noteItemBy(id, in, w.author, w.taint(c), w.lends) // it offers only the tools it is lent
 				return map[string]any{"note": note}, err
 			})
 	}
