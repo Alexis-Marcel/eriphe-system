@@ -14,7 +14,7 @@ import (
 // The threads' bench on a real model: each turn of testdata/threads (a
 // case's request, and its wake if it has one), ERIPHE_LIVE_THREADS_RUNS
 // times (1 by default), through the local Claude Code CLI as the surfaces'
-// bench runs it (runClaude): the brain's « Les threads », its paragraphs on
+// bench runs it (runClaude): the brain's « Les fils », its paragraphs on
 // surfaces and the workspace, its tools for threads and the workspace (as
 // an MCP client lists them) and the catalog appended to the system prompt,
 // the case's turn as the prompt, no tool, low effort, no session kept. It

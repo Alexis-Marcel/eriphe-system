@@ -118,6 +118,16 @@ you, and raises the thread's tile when something matters; it never writes a tile
 before you say yes**. Then it is in Settings → Skills with its runs; to change it or stop it, ask
 ("show the deliveries at 8 instead", "stop the invoices summary") or do it there.
 
+To follow something continuously, say so:
+
+> Keep an eye on my mail.
+>
+> Show me the pull requests waiting for my review.
+
+Eriphe writes a skill that runs each time something new arrives and keeps one thread for it, which
+never ends: each new item gets its line, with what Eriphe noted about it and the actions it
+offers. That skill too waits for your yes on its card.
+
 ## Shape it by talking
 
 Say what you want, about the whole workspace or one tile:
