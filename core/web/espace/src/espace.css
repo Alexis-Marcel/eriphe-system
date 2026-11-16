@@ -87,8 +87,8 @@ button, input, select { font: inherit; }
   background: color-mix(in oklab, var(--paper) 6%, transparent); color: var(--paper);
 }
 .eriphe-input input::placeholder { color: color-mix(in oklab, var(--paper) 50%, transparent); }
-/* The last exchange, the left column (Exchange.tsx's Present): the arrival
-   message, then the last exchange; Eriphe's newest line large while nothing
+/* The last exchange, the left column (Exchange.tsx's Present): Eriphe's
+   newest line large while nothing
    follows it, the older ones smaller; the user's as small bubbles. It takes
    the column's room and scrolls, kept at its end; scrolled up, a button
    brings the messages before. */
@@ -100,8 +100,8 @@ button, input, select { font: inherit; }
 .present-earlier:hover, .present-earlier:focus-visible { color: var(--paper); border-color: color-mix(in oklab, var(--paper) 55%, transparent); }
 .present-earlier:disabled { opacity: 0.5; cursor: progress; }
 .present-msg { overflow-wrap: anywhere; }
-.present-said, .present-brain { margin: 0; font-size: 14px; line-height: 1.45; color: color-mix(in oklab, var(--paper) 72%, transparent); transition: font-size 0.35s ease, color 0.35s; }
-.present-msg.latest .present-said, .present-brain.latest { font-family: var(--display); font-size: 19px; line-height: 1.38; letter-spacing: -0.005em; color: var(--paper); }
+.present-brain { margin: 0; font-size: 14px; line-height: 1.45; color: color-mix(in oklab, var(--paper) 72%, transparent); transition: font-size 0.35s ease, color 0.35s; }
+.present-brain.latest { font-family: var(--display); font-size: 19px; line-height: 1.38; letter-spacing: -0.005em; color: var(--paper); }
 .present-brain .a2-markdown > :first-child { margin-top: 0; }
 .present-brain .a2-markdown > :last-child { margin-bottom: 0; }
 .present-brain.draft { opacity: 0.75; }

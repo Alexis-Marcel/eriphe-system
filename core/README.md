@@ -3341,8 +3341,7 @@ opens tiles is a return (`user.returned`).
 
 **The last exchange** (`web_espace_exchange.go`, `Exchange.tsx`). Not a second chat: what the
 user says updates a thread or a surface at the centre, so the left column keeps to the last
-exchange. First the message composed for the arrival (the layout's `eriphe`, kept while a layout
-says none), then the user's last message and Eriphe's lines after it (`lastExchange`: the last 12,
+exchange: the user's last message and Eriphe's lines after it (`lastExchange`: the last 12,
 however many events came between; with no message of the user's, Eriphe's last line; an error as a
 line that says it, never its raw text; an event's line and the first run's messages never), the
 message Eriphe is writing (the draft, by the same rule as the conversation's) and whether it is at

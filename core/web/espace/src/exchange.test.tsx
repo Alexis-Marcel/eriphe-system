@@ -231,7 +231,6 @@ describe("the last exchange, in the left column", () => {
   it("starts with no line of a model's about the workspace; then the last exchange, Eriphe's newest line large", async () => {
     await open();
     await act(async () => new Promise((r) => setTimeout(r, 400))); // typed
-    expect(left().querySelector(".present-arrival")).toBeNull();
     expect(el.querySelector<HTMLAnchorElement>(".eriphe-all")!.getAttribute("href")).toBe("/conversation");
 
     await submit("quel temps demain ?");
@@ -329,7 +328,7 @@ describe("earlier messages", () => {
     await settle();
     expect(posts.some((p) => p.url === "/api/espace/earlier?before=9")).toBe(true);
     expect(bubbles()).toEqual(["quel temps demain ?", "et après-demain ?"]);
-    // The newest line is still the large one; the arrival sits between.
+    // The newest line is still the large one.
     expect(left().querySelector(".present-brain.latest")!.textContent).toBe("Du soleil.");
 
     await act(async () => earlierButton()!.click());

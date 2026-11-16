@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
-import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { createAdapter } from "./a2ui/adapter";
 import { Icon } from "./a2ui/icons";
 import { galleryFixtures, gallerySurfaces, sampleEarlier, sampleProposals, workspaceFixtures } from "./a2ui/fixtures";
@@ -71,24 +71,8 @@ export function shownLayout(core: Layout, intent: Intent | null, now: number): L
   return core.focus ? unfocused(core, intent.back) : null;
 }
 
-function useTyped(text: string) {
-  const reduced = useReducedMotion();
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    if (reduced) {
-      setN(text.length);
-      return;
-    }
-    setN(0);
-    const timer = setInterval(() => setN((v) => (v >= text.length ? (clearInterval(timer), v) : v + 3)), 16);
-    return () => clearInterval(timer);
-  }, [text, reduced]);
-  return text.slice(0, n);
-}
-
 export function Espace({ boot }: { boot: data.Boot }) {
   const { t, lang } = useWords();
-  const [said, setSaid] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [wide, setWide] = useState(false);
   const narrow = useNarrow();
@@ -177,7 +161,6 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const full = narrow && onSurfaces && stacked(shown!, new Set(pool.map((s) => s.id))).full;
   const sbefore = useRef<Layout | null>(null); // the layout before the focus
   const openSurface = (id: string) => {
-    setSaid(null);
     sopened.current.add(id);
     sclosed.current.delete(id);
     if (!placed?.focus) sbefore.current = placed;
@@ -245,9 +228,6 @@ export function Espace({ boot }: { boot: data.Boot }) {
   };
   // Nothing to show: Eriphe says so, never an empty grid without a word.
   const nothing = !gallery && !!shown && !onSurfaces;
-  // What Eriphe just said, typed: the first of the left column, not a
-  // headline. No model writes a line about the workspace: its tiles say it.
-  const text = useTyped(said ?? "");
 
   // A message goes to Eriphe with the surface open, if any: « montre-m'en
   // moins », « lance une recherche là-dessus ». It shows in the exchange at
@@ -305,7 +285,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
               <Icon name="settings" />
             </a>
           </div>
-          <Present arrival={text} x={exchange} sent={sent} load={loadEarlier} />
+          <Present x={exchange} sent={sent} load={loadEarlier} />
           {live && nothing && <p className="eriphe-sample quiet">{t("espace.empty")}</p>}
           {!live && <p className="eriphe-sample">{t("espace.sample")}</p>}
           {down && (

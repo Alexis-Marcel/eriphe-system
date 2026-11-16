@@ -98,12 +98,10 @@ function Line({ line, latest }: { line: ExchangeLine; latest: boolean }) {
 // scrolled up (the button shows).
 type Before = { head: number; lines: ExchangeLine[]; more: boolean; asked: boolean };
 
-// Present is the left column's conversation: what the page just said
-// (arrival), then the last exchange, Eriphe's newest line large. Scrolling up shows the
-// button that brings the lines before it (load); they stay until the next
-// exchange.
-export function Present({ arrival, x, sent, load }: {
-  arrival: string;
+// Present is the left column's conversation: the last exchange, Eriphe's
+// newest line large. Scrolling up shows the button that brings the lines
+// before it (load); they stay until the next exchange.
+export function Present({ x, sent, load }: {
   x: Exchange | null;
   sent: Sent | null;
   load: (before: number) => Promise<Earlier>;
@@ -118,7 +116,7 @@ export function Present({ arrival, x, sent, load }: {
   const [busy, setBusy] = useState(false);
 
   const lastItem = items.at(-1);
-  const latest = writing ? null : lastItem ? (lastItem.kind === "draft" || lastItem.line.role === "brain" ? lastItem : null) : "arrival";
+  const latest = writing ? null : lastItem && (lastItem.kind === "draft" || lastItem.line.role === "brain") ? lastItem : null;
 
   const box = useRef<HTMLDivElement>(null);
   const top = useRef({ top: 0, height: 0, client: 0 });
@@ -186,11 +184,6 @@ export function Present({ arrival, x, sent, load }: {
       {before.lines.map((l) => (
         <Line key={l.seq} line={l} latest={false} />
       ))}
-      {arrival && (
-        <div className={`present-msg present-arrival${latest === "arrival" ? " latest" : ""}`}>
-          <p className="present-said">{arrival}</p>
-        </div>
-      )}
       {items.map((it) =>
         it.kind === "draft" ? (
           <Said key="draft" line={{ seq: 0, role: "brain", text: it.text, time: "" }} className={`present-msg present-brain draft${latest === it ? " latest" : ""}`} />
