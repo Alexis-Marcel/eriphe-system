@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -10,41 +9,30 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
-// headerOf is the header's texts of a thread's surface, by component id:
-// literal ones, and the facts bound under /thread/facts.
-func headerOf(t *testing.T, c *core, id int64) map[string]string {
+// sinceOf is what a thread's data says changed since the user's visit
+// before the last one (/thread/since), and its summary (/thread/summary);
+// the frame draws neither: what is composed binds them.
+func sinceOf(t *testing.T, c *core, id int64) ([]string, string) {
 	t.Helper()
 	s, data, _ := threadSurfaceOf(t, c, id)
-	var list []map[string]any
-	json.Unmarshal(s.Components, &list)
-	out := map[string]string{}
-	facts, _ := data["facts"].([]any)
-	for _, comp := range list {
-		cid, _ := comp["id"].(string)
-		switch text := comp["text"].(type) {
-		case string:
-			out[cid] = text
-		case map[string]any:
-			if p, _ := text["@path"].(string); strings.HasPrefix(p, "/thread/facts/") {
-				n := 0
-				for _, r := range strings.TrimPrefix(p, "/thread/facts/") {
-					n = n*10 + int(r-'0')
-				}
-				out[cid], _ = facts[n].(string)
-			}
+	for _, drawn := range []string{"thread_since", "thread_fact_", "thread_where", "thread_summary"} {
+		if strings.Contains(string(s.Components), `"id":"`+drawn) {
+			t.Fatalf("the frame draws %s: %s", drawn, s.Components)
 		}
 	}
-	if sum, ok := data["summary"].(string); ok {
-		out["thread_summary"] = sum
+	var lines []string
+	list, _ := data["since"].([]any)
+	for _, l := range list {
+		lines = append(lines, l.(string))
 	}
-	return out
+	sum, _ := data["summary"].(string)
+	return lines, sum
 }
 
-// Opening a thread's surface moves its visits: the header tells what
-// changed since the visit before, so the one that opens it still sees
-// what was new; never visited, or back with nothing new, it says nothing
-// of it, nor « Pas encore de résumé ». Opened again within
-// threadVisitSame, the same visit.
+// Opening a thread's surface moves its visits: its data tells what changed
+// since the visit before, so the one that opens it still sees what was
+// new; never visited, or back with nothing new, nothing. Opened again
+// within threadVisitSame, the same visit.
 func TestThreadHeaderSinceVisit(t *testing.T) {
 	c := startCore(t)
 	th, err := c.openThread(threadIn{Title: "Site", Goal: "The contact page is online.", Alias: "project:site"}, nil, byBrain)
@@ -54,14 +42,11 @@ func TestThreadHeaderSinceVisit(t *testing.T) {
 	now := time.Now()
 	c.store.db.Exec(`UPDATE threads SET created = ? WHERE id = ?`, now.Add(-5*time.Hour).Unix(), th.ID)
 	c.store.db.Exec(`UPDATE thread_log SET at = ? WHERE thread = ?`, now.Add(-5*time.Hour).Unix(), th.ID)
-	clock := func(at time.Time) string { return threadClock(at, now, c.userZone(), "fr") }
 
-	// Never visited: all of it is new, the thread says it; no history, no
-	// « Pas encore de résumé ».
+	// Never visited: all of it is new, the thread says it.
 	c.keepThreadSurface(th.ID)
-	h := headerOf(t, c, th.ID)
-	if h["thread_since"] != "" || h["thread_fact_0"] != "" || h["thread_where"] != "" {
-		t.Fatalf("never visited: %v", h)
+	if since, sum := sinceOf(t, c, th.ID); len(since) != 0 || sum != "" {
+		t.Fatalf("never visited: %q %q", since, sum)
 	}
 
 	// The page opens it, then back later, nothing moved: still nothing.
@@ -70,17 +55,15 @@ func TestThreadHeaderSinceVisit(t *testing.T) {
 	second := now.Add(-2 * time.Hour)
 	c.threadVisited(th.ID, second)
 	c.logThread(th.ID, "engine", "Carte liée : access:7.") // a move code words no fact of
-	if h = headerOf(t, c, th.ID); h["thread_since"] != "" || h["thread_fact_0"] != "" {
-		t.Fatalf("nothing new: %v", h)
+	if since, _ := sinceOf(t, c, th.ID); len(since) != 0 {
+		t.Fatalf("nothing new: %q", since)
 	}
 
-	// The summary written again: a fact, and where it stands, dated.
+	// The summary written again: a fact, and the summary in the data.
 	c.setThread(th.ID, map[string]any{"summary": "The contact page is written (PR 14)."})
 	th, _ = c.thread(th.ID)
-	h = headerOf(t, c, th.ID)
-	if h["thread_since"] != "Depuis ta dernière visite, "+clock(first) || !strings.HasSuffix(h["thread_fact_0"], "Résumé mis à jour") ||
-		h["thread_summary"] != "The contact page is written (PR 14)." || h["thread_summary_at"] != "Résumé mis à jour : "+clock(time.Unix(th.summarized, 0)) {
-		t.Fatalf("a fact: %v", h)
+	if since, sum := sinceOf(t, c, th.ID); len(since) != 1 || !strings.HasSuffix(since[0], "Résumé mis à jour") || sum != "The contact page is written (PR 14)." {
+		t.Fatalf("a fact: %q %q", since, sum)
 	}
 
 	// Opened again within threadVisitSame: the same visit, seen stays.
@@ -100,8 +83,8 @@ func TestThreadHeaderSinceVisit(t *testing.T) {
 	if s.Look.Action == nil || s.Look.Action.Name != a2ui.ActionOpen {
 		t.Errorf("the open was not noted: %+v", s.Look.Action)
 	}
-	if h = headerOf(t, c, th.ID); h["thread_since"] != "Depuis ta dernière visite, "+clock(second.Add(time.Minute)) {
-		t.Errorf("after open: %v", h)
+	if since, _ := sinceOf(t, c, th.ID); len(since) != 1 || !strings.HasSuffix(since[0], "Résumé mis à jour") {
+		t.Errorf("after open, the summary written since: %q", since)
 	}
 }
 
@@ -135,51 +118,42 @@ func TestThreadHeaderFactsAndYours(t *testing.T) {
 	}
 
 	// More than threadFactsMax: the last ones, and how many came before.
-	header := func(steps []threadSurfaceStep) (map[string]string, surfaceIn) {
+	extra := append(steps, threadSurfaceStep{Label: "Notes", State: "done", Started: at(-30), Ended: at(-20)})
+	since := c.threadSinceData(s, extra, now)
+	if len(since) != 6 || !strings.HasPrefix(since[0].(string), "… et 1 plus tôt") || !strings.HasSuffix(since[5].(string), "« Notes » : fait") {
+		t.Errorf("capped: %v", since)
+	}
+
+	yours := func(steps []threadSurfaceStep) (map[string]string, surfaceIn) {
 		in := surfaceIn{Weight: threadWeight}
 		var out threadComps
-		data := map[string]any{}
-		c.threadSince(&out, data, s, steps, nil, now)
-		c.threadWhere(&out, data, s, now)
 		c.threadYours(&in, &out, s, steps, nil, nil)
 		texts := map[string]string{}
-		facts, _ := data["facts"].([]any)
-		for _, comp := range out.list {
-			id, _ := comp["id"].(string)
-			if text, ok := comp["text"].(string); ok {
-				texts[id] = text
-			} else if strings.HasPrefix(id, "thread_fact_") {
-				n := int(id[len(id)-1] - '0')
-				texts[id], _ = facts[n].(string)
-			}
-		}
 		for _, id := range out.children {
-			if _, ok := texts[id]; !ok {
-				texts[id] = ""
+			texts[id] = ""
+		}
+		for _, comp := range out.list {
+			if text, ok := comp["text"].(string); ok {
+				texts[comp["id"].(string)] = text
 			}
 		}
 		return texts, in
 	}
-	extra := append(steps, threadSurfaceStep{Label: "Notes", State: "done", Started: at(-30), Ended: at(-20)})
-	h, in := header(extra)
-	if !strings.HasPrefix(h["thread_fact_0"], "… et 1 plus tôt") || !strings.HasSuffix(h["thread_fact_5"], "« Notes » : fait") || h["thread_fact_6"] != "" {
-		t.Errorf("capped: %v", h)
-	}
 	// À toi: the user's step, with its « C'est fait », and the weight.
-	if _, ok := h["thread_user_5"]; !ok || h["thread_yours"] != "À toi" || in.Weight != threadWeightYours {
+	if h, in := yours(extra); h["thread_user_5_label"] != "Deploy" || h["thread_yours"] != "À toi" || in.Weight != threadWeightYours {
 		t.Errorf("yours: %v weight %d", h, in.Weight)
 	}
-
 	// Nothing waits: no « À toi », the usual weight.
-	h, in = header(steps[:5])
-	if _, ok := h["thread_yours"]; ok || in.Weight != threadWeight {
+	if h, in := yours(steps[:5]); h["thread_yours"] != "" || len(h) != 0 || in.Weight != threadWeight {
 		t.Errorf("nothing yours: %v weight %d", h, in.Weight)
 	}
-	// An ended thread has no « À toi ».
+	// An ended thread has no « À toi »; its end is a fact.
 	s.State, s.Ended = threadDone, at(-10)
-	h, _ = header(steps[:5])
-	if _, ok := h["thread_yours"]; ok || !strings.HasSuffix(h["thread_fact_4"], "Fait ✓") {
+	if h, _ := yours(extra); len(h) != 0 {
 		t.Errorf("ended: %v", h)
+	}
+	if since := c.threadSinceData(s, steps[:5], now); !strings.HasSuffix(since[len(since)-1].(string), "Fait ✓") {
+		t.Errorf("ended: %v", since)
 	}
 }
 

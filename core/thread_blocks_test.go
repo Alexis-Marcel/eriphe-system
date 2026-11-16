@@ -144,42 +144,50 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 		t.Fatal("a day thread is drawn otherwise")
 	}
 
-	// Every block, in its order.
+	// The frame, then the default composition, in their order.
 	kids := rootChildren(t, a.Components)
-	order := []string{"thread_progress", "thread_state", "thread_yours", "thread_card_2", "thread_src_0_groups",
-		"thread_where", "thread_done", "thread_steps"}
-	at := -1
-	for _, id := range order {
-		i := slices.Index(kids, id)
-		if i <= at {
-			t.Fatalf("%s out of order: %v", id, kids)
-		}
-		at = i
+	order := []string{"thread_progress", "thread_state", "thread_controls", "thread_yours", "thread_card_2",
+		"thread_steps_fold", "thread_steps_open", "thread_steps_cards", "thread_items_0_cards", "thread_items_0_groups"}
+	if !slices.Equal(kids, order) {
+		t.Fatalf("root %v, want %v", kids, order)
 	}
 	comps := string(a.Components)
-	// The decided card is folded with the steps done, one line; the one
-	// that waits is the user's, whole.
-	if slices.Contains(kids, "thread_card_1") || !strings.Contains(comps, `{"compact":true,"component":"Proposal","id":"thread_card_1","proposalId":"access:5"}`) ||
-		strings.Contains(comps, `"compact":true,"component":"Proposal","id":"thread_card_2"`) {
-		t.Errorf("cards: %s", comps)
-	}
+	// The card that waits is the user's, whole, once; the decided one is in
+	// the steps' data, one line (compact) where the default draws it.
 	var data map[string]any
 	json.Unmarshal(a.Data, &data)
 	thread := data[threadDataKey].(map[string]any)
-	if thread["donelabel"] != "2 étapes faites" || thread["progress"].(map[string]any)["label"] != "À toi" {
+	stepData := thread["steps"].(map[string]any)
+	if strings.Count(comps, `"card:20"`) != 1 || strings.Contains(comps, `"access:5"`) ||
+		!strings.Contains(comps, `{"compact":true,"component":"Proposal","id":"thread_steps_card","proposalId":{"@path":"ref"}}`) {
+		t.Errorf("cards: %s", comps)
+	}
+	if cards := stepData["cards"].([]any); len(cards) != 1 || cards[0].(map[string]any)["ref"] != "access:5" {
+		t.Errorf("decided cards %v", cards)
+	}
+	if stepData["summary"] != "2 étapes faites" || thread["progress"].(map[string]any)["label"] != "À toi" {
 		t.Errorf("head and fold: %v", thread)
 	}
+	// The step that waits for the user is in « À toi » only.
+	var labels []string
+	for _, it := range stepItems(thread) {
+		labels = append(labels, it.(map[string]any)["label"].(string))
+	}
+	if slices.Contains(labels, "Publier le site") || len(labels) != 4 {
+		t.Errorf("steps %v", labels)
+	}
 	// Items by their notes' state, counted on their groups' lines and in
-	// the state line; « extérieur » once, there, not on the tainted row,
-	// which carries no action. No source line, no counts in boxes.
+	// the state line; « extérieur » on each row of the source not trusted,
+	// never in the state line. No source line, no counts in boxes.
 	if state, _ := thread["state"].(string); !strings.HasPrefix(state, "1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire · trié à ") ||
-		!strings.HasSuffix(state, " · extérieur") || strings.Count(comps, "extérieur")+strings.Count(string(a.Data), "extérieur") != 1 {
+		strings.Contains(state, "extérieur") {
 		t.Errorf("state line %q", state)
 	}
-	if strings.Contains(comps, `"Metric"`) || strings.Contains(comps, "thread_src_0_by") {
-		t.Errorf("counts in boxes, or a source line: %s", comps)
+	if strings.Contains(comps, `"Metric"`) || strings.Contains(comps, "thread_items_0_caption") || strings.Contains(comps, "extérieur") {
+		t.Errorf("counts in boxes, a source line, or « extérieur » alone: %s", comps)
 	}
-	src := thread["sources"].([]any)[0].(map[string]any)
+	_, srcs := itemSources(thread)
+	src := srcs["ledger"]
 	var groups []string
 	for _, g := range src["groups"].([]any) {
 		groups = append(groups, g.(map[string]any)["label"].(string))
@@ -191,11 +199,24 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 	for _, r := range sourceRows(src) {
 		rows[r.(map[string]any)["id"].(string)] = r.(map[string]any)
 	}
-	if rows["Joint"]["external"] != true || rows["Joint"]["mark"] != nil || rows["Courant"]["level"] != "high" || rows["Courant"]["due"] == "" || rows["Épargne"]["detail"] != "3400" || rows["Livret"]["level"] != "low" {
+	if rows["Joint"]["mark"] != "extérieur" || rows["Épargne"]["mark"] != "extérieur" || rows["Courant"]["level"] != "high" || rows["Courant"]["due"] == "" ||
+		rows["Épargne"]["detail"] != "3400" || rows["Livret"]["level"] != "low" {
 		t.Errorf("rows %v", rows)
 	}
 	if strings.Contains(comps, `"ask"`) {
 		t.Errorf("an ask on the surface: %s", comps)
+	}
+
+	// A block of the holder's: the default composition goes, the frame
+	// stays, the data too for the block to bind.
+	part := &threadPart{Blocks: []partBlock{{Name: "etat", Author: surfaceAuthorBrain, Components: json.RawMessage(`[{"id":"thread_part_etat","component":"Text","text":"Prêt."}]`)}}}
+	held, _ := c.threadSurfaceIn(work, sampleSteps("fr", now), nil, part, now)
+	if kids := rootChildren(t, held.Components); !slices.Equal(kids, []string{"thread_progress", "thread_state", "thread_controls", "thread_yours", "thread_card_2", "thread_part_etat"}) {
+		t.Errorf("with a block: %v", kids)
+	}
+	if strings.Contains(string(held.Components), "thread_steps_") || strings.Contains(string(held.Components), "thread_items_") ||
+		!strings.Contains(string(held.Data), `"groups"`) || !strings.Contains(string(held.Data), `"summary":"2 étapes faites"`) {
+		t.Errorf("with a block, the default stays, or the data goes: %s %s", held.Components, held.Data)
 	}
 
 	// Ended: the banner; « Ranger » only for what ends on its goal.
@@ -218,8 +239,9 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 const threadsFixture = "web/espace/src/a2ui/threads.json"
 
 // The page is tested on the surfaces code composes for threads: a work
-// thread, one that lists items, one ended, a watcher's mails. ERIPHE_UPDATE_THREADS=1 writes
-// them again from the code; they hold to the catalog.
+// thread, one that lists items, one ended, a watcher's mails, a child, one
+// its holder composed. ERIPHE_UPDATE_THREADS=1 writes them again from the
+// code; they hold to the catalog.
 func TestThreadSurfacesFixture(t *testing.T) {
 	if os.Getenv("ERIPHE_UPDATE_THREADS") == "1" {
 		out := map[string][]a2ui.Message{}
@@ -243,7 +265,7 @@ func TestThreadSurfacesFixture(t *testing.T) {
 		for _, e := range a2ui.Validate(langs[lang]) {
 			t.Errorf("%s: %+v", lang, e)
 		}
-		for _, want := range []string{`"Progress"`, `"Item"`, `"Fold"`, `"compact"`, `"thread_tidy"`, `"thread_children"`} {
+		for _, want := range []string{`"Progress"`, `"Item"`, `"Fold"`, `"compact"`, `"thread_tidy"`, `"thread_children"`, `"thread_part_budget"`, `"` + threadExternalPrefix + `hotel"`} {
 			if !strings.Contains(string(langs[lang]), want) {
 				t.Errorf("%s: no %s", lang, want)
 			}
@@ -326,11 +348,11 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	var out []a2ui.Message
 	// Composed as the thread whose data it shows (the one with the source,
 	// or one with none), shown under the fixture's id.
-	add := func(id int64, s Thread, steps []threadSurfaceStep) {
+	add := func(id int64, s Thread, steps []threadSurfaceStep, part *threadPart) {
 		if s.Ends != endsStanding {
 			s.ID = id
 		}
-		in, ok := c.threadSurfaceIn(s, steps, nil, nil, now)
+		in, ok := c.threadSurfaceIn(s, steps, nil, part, now)
 		if !ok {
 			t.Fatalf("thread %d: no surface", id)
 		}
@@ -360,11 +382,11 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	c.keepThreadSurface(105)
 	kid, _ := c.thread(105)
 	work.Summary, work.summarized = pick("La page est prête ; il reste les photos et ton accord pour publier.", "The page is ready; the photos and your yes to publish are left."), now.Add(-30*time.Minute).Unix()
-	add(101, work, sampleSteps(lang, now))
+	add(101, work, sampleSteps(lang, now), nil)
 	standing := th
 	standing.Title, standing.Goal, standing.Ends = pick("Mes comptes", "My accounts"), pick("Les comptes suivis, et ce qui est à faire.", "The accounts followed, and what is to do."), endsStanding
 	standing.Summary, standing.summarized = "", 0
-	add(102, standing, nil)
+	add(102, standing, nil, nil)
 	done := work
 	done.Title, done.State, done.Ended = pick("La terrasse", "The terrace"), threadDone, now.Add(-time.Hour)
 	done.Summary = pick("Le devis est signé et les travaux commencent lundi.", "The quote is signed and the work starts on Monday.")
@@ -373,9 +395,22 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 		steps[i].State, steps[i].Waits, steps[i].Card = "done", false, ""
 	}
 	steps[1].Card = "access:5"
-	add(103, done, steps)
-	add(104, mails, nil)
-	add(105, kid, nil)
+	add(103, done, steps, nil)
+	add(104, mails, nil, nil)
+	add(105, kid, nil, nil)
+	// A thread its holder composed: its blocks in place of the default, one
+	// written after reading outside, « extérieur » beside it alone.
+	held := work
+	held.Title, held.Summary = pick("Le voyage à Lisbonne", "The Lisbon trip"), ""
+	block := func(name string, comp map[string]any, taint ...string) partBlock {
+		comp["id"] = partRoot(name)
+		raw, _ := json.Marshal([]any{comp})
+		return partBlock{Name: name, Author: surfaceAuthorBrain, Components: raw, Tainted: taint}
+	}
+	add(106, held, nil, &threadPart{Blocks: []partBlock{
+		block("budget", map[string]any{"component": "Metric", "label": pick("Budget restant", "Budget left"), "value": "420 €"}),
+		block("hotel", map[string]any{"component": "Text", "text": pick("L'hôtel confirme la chambre pour le 12.", "The hotel confirms the room for the 12th.")}, "mail.read"),
+	}})
 	return out
 }
 

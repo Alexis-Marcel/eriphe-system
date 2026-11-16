@@ -11,7 +11,6 @@ import (
 	"maps"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,8 +29,9 @@ import (
 //     part binds it. A read that fails or waits keeps the last good one:
 //     a place is never blanked by a failure.
 //   - items {path, id} names the list in what it reads and the id of each
-//     item, as a monitor's new does: code shows its items, one per id, in
-//     code's section (/thread/sources), never a model.
+//     item, as a monitor's new does: code reads its items, one per id,
+//     into the thread's data (/thread/items/<name>), never a model; the
+//     default composition draws them until the holder composes its part.
 //   - Who holds the thread adds one with link_thread (source), or with
 //     a block of its part of the thread's surface (surface_write with
 //     block and sources: that block's own, replaced with it, gone with
@@ -41,8 +41,9 @@ import (
 //     only while the thread is active. A read never holds the engine nor a
 //     surface write: the surface is written from what was read last.
 //   - What a source of a server not trusted gives is data from outside:
-//     the surface says « extérieur » and is tainted for the models
-//     (codeTaint source:<name>); its cards still answer in place.
+//     each of its rows, and a block that binds it, says « extérieur », and
+//     the surface is tainted for the models (codeTaint source:<name>); its
+//     cards still answer in place.
 
 const threadSourcesSchema = `CREATE TABLE IF NOT EXISTS thread_sources (
 	thread  INTEGER NOT NULL,
@@ -691,74 +692,107 @@ type threadItemsSeen struct {
 	sorted int64          // the last note on an item still listed, unix
 }
 
-// threadSourcesPart composes what a thread's tool and resource sources
-// show in code's section (/thread/sources): the items of those that list
-// some, grouped by their notes' state; a source's name only when the
-// thread lists the items of several, a word only when it cannot be read.
-// Their last reads, by name, are for the surface's data at /<name>. A
-// source of a server not trusted taints the surface: its state line says
-// « extérieur », once (threadStateText).
-func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[string]any, s Thread, cards []itemCard, seen *threadItemsSeen) map[string]any {
+// threadItems is what a thread's sources give its surface: their last
+// reads by name, for /<name>; each one's data by name, for
+// /thread/items/<name>, in the order the thread added them; what their
+// items say, for the state line.
+type threadItems struct {
+	values    map[string]any  // last good reads, the thread ended too: the holder's part still binds them
+	data      map[string]any  // by source, while the thread is active
+	order     []string        // the names in data, in the thread's order
+	untrusted map[string]bool // the sources of a server not trusted
+	seen      threadItemsSeen
+	hot       bool // a monitor past its limit, or failing
+}
+
+// threadItemsOf reads a thread's sources for its surface. Each source of
+// an active thread has its data at /thread/items/<name>: a word on how it
+// reads (caption: its name when the thread lists the items of several,
+// « en attente » or « n'arrive plus à lire » when it cannot be read); for
+// a tool or a resource that lists things, its items (itemsData); for a
+// monitor, its number and its events (monitorData). What a source of a
+// server not trusted gives taints the surface, and says « extérieur »
+// where it shows: on each of its rows, on a monitor's line. Once the thread
+// ended, the same keys stay, empty (endedItems).
+func (c *core) threadItemsOf(in *surfaceIn, s Thread, cards []itemCard, now time.Time) threadItems {
 	lang, loc := c.userLang(), c.userZone()
-	type comp = map[string]any
-	values := map[string]any{}
-	notes := map[string]itemNote{}
-	for _, n := range c.itemNotes(s.ID) {
-		if n.Gone == 0 {
-			notes[n.Source+"\x00"+n.Item] = n
-		}
-	}
-	srcs := slices.DeleteFunc(c.threadSources(s.ID), func(x storedSource) bool { return x.kind() == srcMonitor })
+	out := threadItems{values: map[string]any{}, data: map[string]any{}, untrusted: map[string]bool{}}
+	srcs := c.threadSources(s.ID)
 	lists := 0
 	for _, src := range srcs {
-		if src.Items != nil {
+		if src.Items != nil && src.kind() != srcMonitor {
 			lists++
 		}
 	}
-	var shown []any
+	notes := map[string]itemNote{}
+	var events []threadWatchEvent
+	if s.active() {
+		for _, n := range c.itemNotes(s.ID) {
+			if n.Gone == 0 {
+				notes[n.Source+"\x00"+n.Item] = n
+			}
+		}
+		events = c.watchEvents(s.ID, threadWatchShown)
+	}
 	for _, src := range srcs {
+		if src.kind() == srcMonitor {
+			m, err := c.monitorNamed(src.Monitor)
+			if err != nil {
+				continue
+			}
+			out.untrusted[src.Name] = !c.trustsServer(m.Spec.Server)
+			if !s.active() {
+				out.data[src.Name] = endedItems(src)
+				continue
+			}
+			v, hot := c.monitorData(in, m, events, now)
+			out.hot = out.hot || hot
+			out.data[src.Name], out.order = v, append(out.order, src.Name)
+			continue
+		}
 		if src.Value != nil {
-			values[src.Name] = src.Value // ended too: the holder's part still binds it
+			out.values[src.Name] = src.Value
 		}
+		out.untrusted[src.Name] = !c.trustsServer(src.surface().spec().Server)
 		if !s.active() {
-			continue // no longer read: code's section shows none
+			out.data[src.Name] = endedItems(src) // no longer read
+			continue
 		}
-		if !c.trustsServer(src.surface().spec().Server) {
+		if out.untrusted[src.Name] {
 			in.codeTaint = append(in.codeTaint, "source:"+src.Name)
 		}
 		var parts []string
 		if lists > 1 && src.Items != nil {
 			parts = append(parts, src.Name)
 		}
-		problem := ""
 		switch {
 		case src.Waiting != "":
-			problem = tr(lang, "thread.source.waiting")
+			parts = append(parts, tr(lang, "thread.source.waiting"))
 		case src.Error != "":
-			problem = tr(lang, "thread.live.failing")
+			parts = append(parts, tr(lang, "thread.live.failing"))
 		}
-		if problem != "" {
-			if len(parts) == 0 {
-				parts = append(parts, src.Name)
-			}
-			parts = append(parts, problem)
+		if len(parts) == 1 && (src.Waiting != "" || src.Error != "") {
+			parts = append([]string{src.Name}, parts...)
 		}
-		if len(parts) == 0 && src.Items == nil {
-			continue // a value for the holder's part: nothing to say of it
-		}
-		n := strconv.Itoa(len(shown))
-		v := map[string]any{"name": src.Name}
-		if len(parts) > 0 {
-			v["caption"] = strings.Join(parts, threadExternalSep)
-			out.add(comp{"id": "thread_src_" + n + "_by", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/sources/" + n + "/caption"}})
-		}
+		v := map[string]any{"name": src.Name, "caption": strings.Join(parts, threadExternalSep)}
 		if src.Items != nil {
-			c.itemsBlock(out, v, s.ID, src, notes, cards, n, lang, loc, &in.codeTaint, seen)
+			c.itemsData(v, s.ID, src, out.untrusted[src.Name], notes, cards, lang, loc, &in.codeTaint, &out.seen)
 		}
-		shown = append(shown, v)
+		out.data[src.Name], out.order = v, append(out.order, src.Name)
 	}
-	if len(shown) > 0 {
-		data["sources"] = shown
+	return out
+}
+
+// endedItems is a source's data once its thread ended: no longer read nor
+// drawn by the default, but the same keys, empty, so a block bound to them
+// still holds.
+func endedItems(src storedSource) map[string]any {
+	v := map[string]any{"name": src.Name, "caption": ""}
+	switch {
+	case src.kind() == srcMonitor:
+		v["value"], v["series"], v["events"] = nil, []any{}, []any{}
+	case src.Items != nil:
+		v["groups"], v["cards"] = []any{}, []any{}
 	}
-	return values
+	return v
 }

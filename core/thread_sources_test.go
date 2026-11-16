@@ -15,9 +15,9 @@ func sourcesOf(t *testing.T, c *core, id int64) ([]string, [][]string) {
 	_, data, _ := threadSurfaceOf(t, c, id)
 	var captions []string
 	var items [][]string
-	list, _ := data["sources"].([]any)
-	for _, x := range list {
-		m, _ := x.(map[string]any)
+	names, srcs := itemSources(data)
+	for _, name := range names {
+		m := srcs[name]
 		caption, _ := m["caption"].(string)
 		captions = append(captions, caption)
 		var ids []string
@@ -50,14 +50,17 @@ func TestThreadSourceItems(t *testing.T) {
 	if len(items) != 1 || strings.Join(items[0], ",") != "Courant" {
 		t.Fatalf("items %v", items)
 	}
-	// No line about the source while it reads well; « extérieur » once, in
-	// the state line.
+	// No line about the source while it reads well; « extérieur » on each
+	// of its rows, not in the state line.
 	if captions[0] != "" {
 		t.Errorf("caption %q", captions[0])
 	}
 	s, thread, meta := threadSurfaceOf(t, c, th.ID)
-	if state, _ := thread["state"].(string); state != "1 pas encore trié · extérieur" {
+	if state, _ := thread["state"].(string); state != "1 pas encore trié" {
 		t.Errorf("state line %q", state)
+	}
+	if row := itemRows(t, c, th.ID)["Courant"]; row["mark"] != "extérieur" {
+		t.Errorf("row %v", row)
 	}
 	var data map[string]any
 	json.Unmarshal(s.Data, &data)

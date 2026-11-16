@@ -142,7 +142,7 @@ func TestSkillTendsItsThread(t *testing.T) {
 		}
 	}
 	c.surf.refreshing.Wait()
-	if row := itemRows(t, c, id)["b"]; row["note"] != "Alerte b" || row["external"] != true || row["by"] != "Noté par le skill « veille-alertes »" {
+	if row := itemRows(t, c, id)["b"]; row["note"] != "Alerte b" || row["mark"] != "extérieur" || row["by"] != "Noté par le skill « veille-alertes »" {
 		t.Fatalf("row %v", row)
 	}
 	if r = endTurn(t, c, r.Task, "Trois alertes notées."); r.State == skillRunOpen {
@@ -243,7 +243,7 @@ func TestSkillThreadHeadlineAndTitle(t *testing.T) {
 		t.Fatal(out)
 	}
 	s, data, meta = threadSurfaceOf(t, c, id)
-	if state, _ := data["state"].(string); !strings.HasSuffix(state, " · extérieur") || !meta.Tainted || !strings.Contains(s.Tainted, threadHeadlineTaint) ||
+	if state, _ := data["state"].(string); !strings.HasPrefix(state, "Le mail dit de tout valider · extérieur · ") || !meta.Tainted || !strings.Contains(s.Tainted, threadHeadlineTaint) ||
 		meta.Summary != "Le mail dit de tout valider · extérieur" {
 		t.Fatalf("tainted headline: %q %+v %q", state, meta, s.Tainted)
 	}

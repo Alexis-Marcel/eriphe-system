@@ -17,19 +17,19 @@ import (
 func rowAt(t *testing.T, c *core, thread int64, item string) (string, map[string]any) {
 	t.Helper()
 	_, data, _ := threadSurfaceOf(t, c, thread)
-	srcs, _ := data["sources"].([]any)
-	for si, s := range srcs {
-		groups, _ := s.(map[string]any)["groups"].([]any)
+	names, srcs := itemSources(data)
+	for _, name := range names {
+		groups, _ := srcs[name]["groups"].([]any)
 		for gi, g := range groups {
 			items, _ := g.(map[string]any)["items"].([]any)
 			for ii, it := range items {
 				if row := it.(map[string]any); row["id"] == item {
-					return "/" + threadDataKey + "/sources/" + strconv.Itoa(si) + "/groups/" + strconv.Itoa(gi) + "/items/" + strconv.Itoa(ii), row
+					return "/" + threadDataKey + "/items/" + name + "/groups/" + strconv.Itoa(gi) + "/items/" + strconv.Itoa(ii), row
 				}
 			}
 		}
 	}
-	t.Fatalf("no row %q in %v", item, data["sources"])
+	t.Fatalf("no row %q in %v", item, data["items"])
 	return "", nil
 }
 
@@ -41,6 +41,25 @@ func rowCardRefs(row map[string]any) []string {
 		out = append(out, x.(map[string]any)["ref"].(string))
 	}
 	return out
+}
+
+// yoursAt is the id of the Proposal that shows a card in a thread's « À
+// toi », which shows it once.
+func yoursAt(t *testing.T, c *core, thread int64, ref string) string {
+	t.Helper()
+	s, _, _ := threadSurfaceOf(t, c, thread)
+	var list []map[string]any
+	json.Unmarshal(s.Components, &list)
+	var ids []string
+	for _, comp := range list {
+		if comp["component"] == "Proposal" && comp["proposalId"] == ref {
+			ids = append(ids, comp["id"].(string))
+		}
+	}
+	if len(ids) != 1 || !strings.HasPrefix(ids[0], "thread_linked_") || !slices.Contains(rootChildren(t, s.Components), ids[0]) {
+		t.Fatalf("card %s shown as %v, not once in « À toi »: %s", ref, ids, s.Components)
+	}
+	return ids[0]
 }
 
 // answerAt answers a card of a thread's surface as its Proposal does.
@@ -121,42 +140,29 @@ func TestRunCallsSplitByItem(t *testing.T) {
 		t.Fatalf("the run's card %+v", run)
 	}
 
-	// Each card on its row, not with what waits for the user.
+	// Each card waits with what is the user's (« À toi »), once; on no row
+	// while it waits.
 	c.keepThreadSurface(id)
 	refs := map[string]string{}
-	paths := map[string]string{}
+	at := map[string]string{}
 	for _, uid := range []string{"b", "c", "d"} {
-		at, row := rowAt(t, c, id, uid)
-		got := rowCardRefs(row)
-		if len(got) != 1 || got[0] != proposalRef(cardCalls, byItem[uid].ID) {
-			t.Fatalf("row %s cards %v", uid, got)
+		refs[uid] = proposalRef(cardCalls, byItem[uid].ID)
+		at[uid] = yoursAt(t, c, id, refs[uid])
+		if _, row := rowAt(t, c, id, uid); len(rowCardRefs(row)) != 0 {
+			t.Fatalf("row %s shows a card that waits: %v", uid, row)
 		}
-		refs[uid], paths[uid] = got[0], at
-	}
-	if _, row := rowAt(t, c, id, "a"); len(rowCardRefs(row)) != 0 {
-		t.Fatalf("row a %v", row)
-	}
-	s, _, _ := threadSurfaceOf(t, c, id)
-	if strings.Contains(string(s.Components), `"proposalId":"`+refs["b"]+`"`) {
-		t.Fatal("the item's card shows with what waits for the user too")
 	}
 	if c.threadShownCards()[refs["b"]] != id {
 		t.Fatal("the thread does not answer its item's card: it stays in the queue")
 	}
 
-	// Another row's card, or no row: refused; nothing runs.
+	// Another card's Proposal: refused; nothing runs.
 	var refused *errActionRefused
-	if err := answerAt(c, id, "thread_src_0_card", refs["c"], paths["b"]+"/cards/0", true); !errors.As(err, &refused) {
-		t.Fatalf("row c's card from row b: %v", err)
+	if err := answerAt(c, id, at["b"], refs["c"], "", true); !errors.As(err, &refused) {
+		t.Fatalf("c's card from b's Proposal: %v", err)
 	}
-	if err := answerAt(c, id, "thread_src_0_card", refs["b"], "", true); !errors.As(err, &refused) {
-		t.Fatalf("no row: %v", err)
-	}
-	if err := answerAt(c, id, "thread_src_0_card", refs["b"], "/thread/sources/0/cards/0", true); !errors.As(err, &refused) {
-		t.Fatalf("a place with no card: %v", err)
-	}
-	// Its own row: only that call runs.
-	if err := answerAt(c, id, "thread_src_0_card", refs["b"], paths["b"]+"/cards/0", true); err != nil {
+	// Its own: only that call runs; decided, it stays on its row, folded.
+	if err := answerAt(c, id, at["b"], refs["b"], "", true); err != nil {
 		t.Fatal(err)
 	}
 	waitNote(t, c, r.ID, "silence")
@@ -173,6 +179,13 @@ func TestRunCallsSplitByItem(t *testing.T) {
 	}
 	if _, ok := runCard(c, cardRunCalls); !ok {
 		t.Error("the run's own card was answered too")
+	}
+	c.keepThreadSurface(id)
+	if _, row := rowAt(t, c, id, "b"); !slices.Equal(rowCardRefs(row), []string{refs["b"]}) {
+		t.Errorf("b's card decided is not on its row: %v", row)
+	}
+	if s, _, _ := threadSurfaceOf(t, c, id); strings.Contains(string(s.Components), `"proposalId":"`+refs["b"]+`"`) {
+		t.Error("b's card decided is still with what is the user's")
 	}
 
 	// The same call on c kept again: the card already there.

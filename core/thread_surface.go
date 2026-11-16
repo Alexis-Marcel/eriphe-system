@@ -25,22 +25,28 @@ import (
 //   - Its author is thread:<id>, code's for that thread: nobody else
 //     writes or removes it as a whole (mayChange), and it does not count
 //     in surfacesMax.
-//   - Code's section: generic blocks in one fixed order, the same for
-//     every thread (thread_blocks.go): a child's crumb, head, ended,
-//     yours, children, items, live, where, since, steps. Its component
-//     ids start with thread_, its data is under /thread, the user's marks
-//     with it (/thread/marks, thread_marks.go).
-//   - The holder's part: who holds the thread (the brain, or its lead)
-//     composes it by named blocks with surface_write on thread-<id> (a
-//     state, points to see, a diff, a link), each kept apart, checked
-//     alone, and shown under code's section in its order (thread_part.go).
-//     Their sources become the thread's (thread_sources.go): read by code,
-//     the surface written from their last read, so a change of the thread
-//     rewrites it at once and never waits for a tool.
-//   - Taint, per part: a step whose task read external content, and a
-//     block written after reading some, say « extérieur » where they show.
-//     For the models that read the workspace, the surface is tainted as
-//     soon as one part is (surfaceLook.CodeTaint, AuthorTaint). Its
+//   - Code's frame, thin and the same for every thread (thread_blocks.go):
+//     the head (a child's crumb, the status word, the state line, the
+//     controls, how it ended), « À toi » (every card, ask, choice and step
+//     that waits for the user, each once) and its children. Its component
+//     ids start with thread_.
+//   - Its data, code's, under /thread, for whatever is composed to bind:
+//     its steps (/thread/steps), each source's items
+//     (/thread/items/<source>), its children, the user's marks
+//     (/thread/marks, thread_marks.go).
+//   - What is composed: the holder's part, who holds the thread (the
+//     brain, or its lead) composing it by named blocks with surface_write
+//     on thread-<id> (a state, points to see, a diff, a link), each kept
+//     apart, checked alone, and shown under the frame in its order
+//     (thread_part.go); their sources become the thread's
+//     (thread_sources.go): read by code, the surface written from their
+//     last read, so a change of the thread rewrites it at once and never
+//     waits for a tool. While the holder has written no block, the
+//     default composition from the thread's data (thread_default.go).
+//   - Taint, per part: a row, a step or a block that may carry someone
+//     else's words says « extérieur » beside it, never alone. For the
+//     models that read the workspace, the surface is tainted as soon as
+//     one part is (surfaceLook.CodeTaint, AuthorTaint). Its
 //     Proposals still answer in place (surfaceLook.Answers) unless the
 //     thread itself is tainted: code placed them, each bound to one of
 //     the thread's own cards, as the attention queue's (#443).
@@ -58,21 +64,23 @@ import (
 // which maps a step to what the surface shows of it.
 
 const (
-	threadSurfacePrefix = "thread-"       // + the thread's id: its surface
-	threadCompPrefix    = "thread_"       // code's component ids
-	threadDataKey       = "thread"        // code's data, /thread
-	threadPartRoot      = "thread_part"   // + _<block>: a block of the holder's part's root, renamed
-	threadPartKey       = "thread_part:"  // + the thread's id: the holder's part, its blocks as JSON
-	threadShownKey      = "thread_shown:" // + the thread's id: a hash of what its surface shows
-	threadAgainKey      = "thread_again:" // + the thread's id: when a link showed it again once ended, unix
-	threadPartMax       = 24 << 10        // components and data of a part's blocks together, each
-	threadAfterEnd      = time.Hour       // a done thread's surface stays this long at least
-	threadLineMax       = 80              // runes of the one-line summary
-	threadDetailMax     = 200             // runes of a step's detail
-	threadExternalSep   = " · "           // between the parts of a line
-	threadWeight        = 50              // an active thread's surface
-	threadWeightYours   = 70              // one that waits for the user
-	threadWeightEnded   = 30              // one that ended
+	threadSurfacePrefix  = "thread-"          // + the thread's id: its surface
+	threadCompPrefix     = "thread_"          // code's component ids
+	threadDataKey        = "thread"           // code's data, /thread
+	threadPartRoot       = "thread_part"      // + _<block>: a block of the holder's part's root, renamed
+	threadExternalPrefix = "thread_external_" // + <block>: a block that may show someone else's words, with its mark
+	threadMarkPrefix     = "thread_mark_"     // + <block>: that mark, « extérieur »
+	threadPartKey        = "thread_part:"     // + the thread's id: the holder's part, its blocks as JSON
+	threadShownKey       = "thread_shown:"    // + the thread's id: a hash of what its surface shows
+	threadAgainKey       = "thread_again:"    // + the thread's id: when a link showed it again once ended, unix
+	threadPartMax        = 24 << 10           // components and data of a part's blocks together, each
+	threadAfterEnd       = time.Hour          // a done thread's surface stays this long at least
+	threadLineMax        = 80                 // runes of the one-line summary
+	threadDetailMax      = 200                // runes of a step's detail
+	threadExternalSep    = " · "              // between the parts of a line
+	threadWeight         = 50                 // an active thread's surface
+	threadWeightYours    = 70                 // one that waits for the user
+	threadWeightEnded    = 30                 // one that ended
 )
 
 // threadSurfaceMu makes the surface writes one at a time: two changes of
@@ -361,44 +369,38 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	}
 
 	type comp = map[string]any
-	var out threadComps
+	var head, out threadComps
 	data := map[string]any{}
 	var linked []string
 	if s.active() {
 		linked = c.linkedWaiting(s.ID, steps)
 	}
-	// The blocks, in their order (thread_blocks.go); the head is composed
-	// last, once the weight is known, and put first.
+	// The frame (thread_blocks.go): the head is composed last, once the
+	// weight is known, and put first.
 	c.blockEnded(&out, data, s, now)
-	// The cards on its items show on their rows, not with what waits for
-	// the user; one whose row is not drawn shows there (item_cards.go).
-	var cards []itemCard
-	var onRows map[string]bool
-	if s.active() {
-		cards = c.threadItemCards(s.ID, now)
-		cards, onRows = c.drawnItemCards(s.ID, cards)
-	}
-	c.threadYours(&in, &out, s, steps, asks, slices.DeleteFunc(slices.Clone(linked), func(ref string) bool { return onRows[ref] }))
-	if len(onRows) > 0 {
-		// It waits for the user on its rows: it takes their weight.
-		in.Weight = max(in.Weight, threadWeightYours, queueSurfaceWeight(cardWeight(cardCalls)))
-	}
+	c.threadYours(&in, &out, s, steps, asks, linked)
 	// Its children (thread_children.go): what waits in one raises it.
 	kids := c.threadKidsOf(s, lang)
 	blockChildren(&out, data, kids.rows, lang)
 	if s.active() {
 		in.Weight = max(in.Weight, kids.weight)
 	}
-	// The tools and resources it reads, their items (thread_sources.go).
-	var seen threadItemsSeen
-	values := c.threadSourcesPart(&in, &out, data, s, cards, &seen)
-	// The monitors it follows, read by code (thread_live.go): past a
-	// limit, it rises.
-	watch, watchFacts := c.watchItems(&in, s, lang, loc)
-	if c.threadLive(&in, &out, data, s, now) {
+
+	// Its data, code's, there to bind whatever is composed: its steps, its
+	// sources' items (thread_sources.go), monitors among them: past a
+	// limit, one makes it rise (thread_live.go).
+	var cards []itemCard
+	if s.active() {
+		cards = c.threadItemCards(s.ID, now)
+	}
+	items := c.threadItemsOf(&in, s, cards, now)
+	if items.hot {
 		in.Weight = max(in.Weight, threadWeightWatch)
 	}
-	blockWatch(&out, data, watch)
+	data["steps"] = c.threadStepsData(s, steps)
+	data["items"] = items.data
+	data["since"] = c.threadSinceData(s, steps, now)
+	data["summary"] = strings.TrimSpace(s.Summary)
 	// Raised (a skill's set_thread, a signal about it): it takes the
 	// item's weight, as a surface its item's (workspace_queue.go).
 	if w := c.threadRaised(s.ID); w > 0 {
@@ -409,11 +411,6 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	if s.active() && c.notesDueBy(s.ID, now.Add(dueSoon)) {
 		in.Weight = max(in.Weight, weightUrgent)
 	}
-	if s.active() {
-		c.threadWhere(&out, data, s, now)
-	}
-	c.threadSince(&out, data, s, steps, watchFacts, now)
-	c.blockSteps(&out, data, s, steps)
 
 	// Taint, per part: the thread's own, each step that read outside, its
 	// headline; its sources', notes' and monitors' are counted already.
@@ -434,44 +431,32 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	if headline != nil && len(headline.Tainted) > 0 {
 		in.codeTaint = append(in.codeTaint, threadHeadlineTaint)
 	}
+	// A child's line may carry someone else's words: its parent shows it,
+	// marked on its row.
+	in.codeTaint = append(in.codeTaint, kids.taint...)
 
-	var head threadComps
 	waits := s.active() && (threadWaitsUser(steps, asks, linked) || kids.waits)
 	in.fresh = c.threadNew(s, steps, lang)
 	in.state = threadTileState(s, steps, waits, in.Weight, in.fresh)
 	word, tone := threadStatus(s, steps, waits, in.Weight, lang)
-	says := threadSays(headline, seen, lang)
 	state := ""
 	if s.active() {
-		state = c.threadStateText(s, says, seen, len(in.codeTaint) > 0, now)
+		state = c.threadStateText(s, headline, items.seen, now)
 	}
 	c.blockParent(&head, data, s)
 	c.blockHead(&head, data, s, steps, word, tone, state)
 	blockControls(&head, s, lang)
-	// A child's line may carry someone else's words: its parent shows it,
-	// marked on its row, not in its own state line.
-	in.codeTaint = append(in.codeTaint, kids.taint...)
 	out.list = append(head.list, out.list...)
 	out.children = append(head.children, out.children...)
-	if !slices.ContainsFunc(out.children, func(id string) bool { return id != "thread_controls" && id != "thread_parent" }) {
-		// Nothing yet but its buttons: a standing thread before its first
-		// item, a thread just opened with no headline, say.
-		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": w("thread.item.none")})
-	}
 
+	// What is composed: the holder's blocks, in their order (thread_part.go),
+	// each its root under the frame, their data side by side, no key in
+	// two; « extérieur » beside each that may carry someone else's words.
+	// While it has none, the default composition from the thread's data
+	// (thread_default.go).
 	composed := map[string]any{}
 	if part != nil {
-		// The holder's blocks, in their order (thread_part.go), each its
-		// root under code's; their data side by side, no key in two.
-		label := w("thread.surface.part.lead")
-		if slices.ContainsFunc(part.Blocks, func(b partBlock) bool { return !strings.HasPrefix(b.Author, "lead:") }) {
-			label = w("thread.surface.part.brain")
-		}
 		in.Tainted = part.tainted()
-		if len(in.Tainted) > 0 {
-			label += threadExternalSep + w("thread.surface.external")
-		}
-		out.add(comp{"id": "thread_by", "component": "Text", "variant": "caption", "text": label})
 		in.blockAt = map[int]string{}
 		for _, b := range part.Blocks {
 			var list []comp
@@ -482,11 +467,24 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 				in.blockAt[1+len(out.list)+i] = b.Name // after the root
 			}
 			out.inner(list...)
-			out.children = append(out.children, partRoot(b.Name))
 			maps.Copy(composed, d)
+			if !b.external(items.untrusted) {
+				out.children = append(out.children, partRoot(b.Name))
+				continue
+			}
+			marked := threadMarkPrefix + b.Name
+			out.inner(comp{"id": marked, "component": "Text", "variant": "caption", "text": w("thread.surface.external")})
+			out.add(comp{"id": threadExternalPrefix + b.Name, "component": "Column", "children": []string{marked, partRoot(b.Name)}})
 		}
+	} else {
+		threadDefault(&out, s.ID, data["steps"].(map[string]any), items.data, items.order, lang)
 	}
-	for name, v := range values {
+	if !slices.ContainsFunc(out.children, func(id string) bool { return id != "thread_controls" && id != "thread_parent" }) {
+		// Nothing yet but its buttons: a standing thread before its first
+		// item, a thread just opened with no headline, say.
+		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": w("thread.item.none")})
+	}
+	for name, v := range items.values {
 		composed[name] = v // where the holder's part binds it
 	}
 	// The user's marks, code's, always there to bind (thread_marks.go): a
@@ -504,7 +502,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	in.answers = true
 	// Its one line, for a chip: what its headline or its items say, else
 	// its steps.
-	in.summary = says
+	in.summary = threadSays(headline, items.seen, lang)
 	if in.summary == "" || !s.active() {
 		in.summary = threadLine(s, steps, asks, lang)
 	} else if headline != nil && len(headline.Tainted) > 0 {

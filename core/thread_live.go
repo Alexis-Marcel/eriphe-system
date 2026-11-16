@@ -11,22 +11,24 @@ import (
 // A live thread (#555): a thread may follow monitors (monitors.go), which
 // are sources the user approved and that code reads on a clock, without a
 // model. Who holds the thread links one by name (link_thread, monitor);
-// then, on the thread's surface, composed by code:
+// then, in the thread's data at /thread/items/<monitor> (monitorData),
+// drawn by the default composition until the holder composes its part:
 //
-//   - its latest number (a Metric) and the last ones (a Chart), each look
-//     writing the surface again; with when it was read and « aucun
-//     modèle »: the number is the monitor's, not Eriphe's;
+//   - its latest number and the last ones, each look writing the surface
+//     again; with when it was read and « aucun modèle »: the number is the
+//     monitor's, not Eriphe's;
 //   - each of its events (crossed, changed, new, failed, recovered,
-//     received) as a line of the timeline and a fact of the header, worded
-//     by code from the event's kind and numbers only (thread_watch): never
-//     a changed value, a new item or an error's text;
+//     received) as a Timeline item, worded by code from the event's kind
+//     and numbers only (thread_watch): never a changed value, a new item
+//     or an error's text;
 //   - while a limit it watches is crossed, or its looks fail, the thread's
 //     weight rises: it comes to the user without a model speaking.
 //
 // Nothing wakes the brain here: a skill reacts to a monitor's events as
 // before (skill_triggers.go). What a monitor reads is data: a monitor of a
-// server not trusted makes the surface « extérieur » for the models
-// (codeTaint monitor:<name>); its Proposals still answer in place.
+// server not trusted says « extérieur » on its own line and makes the
+// surface tainted for the models (codeTaint monitor:<name>); its
+// Proposals still answer in place.
 //
 // A thread's tools and resources it reads are its other sources
 // (thread_sources.go).
@@ -261,77 +263,56 @@ func (e threadWatchEvent) state() string {
 	return "done"
 }
 
-// threadLive composes the live part of an active thread's surface: each
-// monitor it follows, its latest number and the last ones. True when one
-// is past its limit or failing: the thread's weight rises.
-func (c *core) threadLive(in *surfaceIn, out *threadComps, data map[string]any, s Thread, now time.Time) bool {
-	if !s.active() {
-		return false
-	}
-	ms := c.threadMonitors(s.ID)
-	if len(ms) == 0 {
-		return false
-	}
+// monitorData is the data of a monitor an active thread follows, at
+// /thread/items/<monitor>: who reads it and when, how it stands (caption,
+// with « extérieur » for a server not trusted, which taints the surface),
+// its latest number (value) and the last ones (series), its last events
+// (events, Timeline items). hot: past its limit or failing, the thread's
+// weight rises.
+func (c *core) monitorData(in *surfaceIn, m *monitor, events []threadWatchEvent, now time.Time) (v map[string]any, hot bool) {
 	lang, loc := c.userLang(), c.userZone()
-	type comp = map[string]any
-	hot := false
-	var live []any
-	out.add(comp{"id": "thread_live", "component": "Text", "variant": "subtitle", "text": tr(lang, "thread.live.title")})
-	for i, m := range ms {
-		n := strconv.Itoa(i)
-		alert := m.State == monitorOn && (m.Spec.Cond == condCross && m.Look.Hit || m.Look.Failed)
-		hot = hot || alert
-		v := map[string]any{"name": m.Name}
-		parts := []string{fmt.Sprintf(tr(lang, "thread.live.by"), m.Name)}
-		if k := len(m.Look.Points); k > 0 {
-			last := m.Look.Points[k-1]
-			v["value"] = last.V
-			parts = append(parts, fmt.Sprintf(tr(lang, "thread.live.read"), threadClock(time.Unix(last.At, 0), now, loc, lang)))
-			out.add(comp{"id": "thread_live_" + n, "component": "Metric", "label": m.Name, "value": map[string]any{"@path": "/thread/live/" + n + "/value"}})
-			if k > 1 {
-				points := make([]any, 0, k)
-				for _, p := range m.Look.Points {
-					points = append(points, map[string]any{"x": threadClock(time.Unix(p.At, 0), now, loc, lang), "y": p.V})
-				}
-				v["series"] = []any{map[string]any{"name": m.Name, "points": points}}
-				out.add(comp{"id": "thread_live_" + n + "_chart", "component": "Chart", "kind": "line", "series": map[string]any{"@path": "/thread/live/" + n + "/series"}})
+	alert := m.State == monitorOn && (m.Spec.Cond == condCross && m.Look.Hit || m.Look.Failed)
+	v = map[string]any{"name": m.Name, "value": nil, "series": []any{}} // the same keys before its first look
+	parts := []string{fmt.Sprintf(tr(lang, "thread.live.by"), m.Name)}
+	if k := len(m.Look.Points); k > 0 {
+		last := m.Look.Points[k-1]
+		v["value"] = last.V
+		parts = append(parts, fmt.Sprintf(tr(lang, "thread.live.read"), threadClock(time.Unix(last.At, 0), now, loc, lang)))
+		if k > 1 {
+			points := make([]any, 0, k)
+			for _, p := range m.Look.Points {
+				points = append(points, map[string]any{"x": threadClock(time.Unix(p.At, 0), now, loc, lang), "y": p.V})
 			}
-		} else if m.Look.Checked > 0 {
-			parts = append(parts, fmt.Sprintf(tr(lang, "thread.live.read"), threadClock(time.Unix(m.Look.Checked, 0), now, loc, lang)))
+			v["series"] = []any{map[string]any{"name": m.Name, "points": points}}
 		}
-		switch {
-		case m.Look.Failed:
-			parts = append(parts, tr(lang, "thread.live.failing"))
-		case alert:
-			parts = append(parts, tr(lang, "thread.live.past"))
-		case m.State == monitorPaused:
-			parts = append(parts, tr(lang, "thread.live.paused"))
-		}
-		if !c.trustsServer(m.Spec.Server) {
-			in.codeTaint = append(in.codeTaint, "monitor:"+m.Name) // the state line says « extérieur »
-		}
-		v["caption"] = strings.Join(parts, threadExternalSep)
-		live = append(live, v)
-		out.add(comp{"id": "thread_live_" + n + "_by", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/live/" + n + "/caption"}})
+	} else if m.Look.Checked > 0 {
+		parts = append(parts, fmt.Sprintf(tr(lang, "thread.live.read"), threadClock(time.Unix(m.Look.Checked, 0), now, loc, lang)))
 	}
-	data["live"] = live
-	return hot
-}
-
-// watchItems are a thread's last monitor events as Timeline items, and
-// as facts for its header.
-func (c *core) watchItems(in *surfaceIn, s Thread, lang string, loc *time.Location) ([]any, []threadFact) {
-	var items []any
-	var facts []threadFact
-	for _, e := range c.watchEvents(s.ID, threadWatchShown) {
-		text := e.text(lang)
+	switch {
+	case m.Look.Failed:
+		parts = append(parts, tr(lang, "thread.live.failing"))
+	case alert:
+		parts = append(parts, tr(lang, "thread.live.past"))
+	case m.State == monitorPaused:
+		parts = append(parts, tr(lang, "thread.live.paused"))
+	}
+	if !c.trustsServer(m.Spec.Server) {
+		in.codeTaint = append(in.codeTaint, "monitor:"+m.Name)
+		parts = append(parts, tr(lang, "thread.surface.external"))
+	}
+	v["caption"] = strings.Join(parts, threadExternalSep)
+	list := []any{}
+	for _, e := range events {
+		if e.Monitor != m.Name {
+			continue
+		}
 		detail := tr(lang, "thread.watch.by")
 		if e.Tainted != "" {
-			detail = tr(lang, "thread.surface.external") + threadExternalSep + detail // its own, as a step's: shown ended too
+			detail = tr(lang, "thread.surface.external") + threadExternalSep + detail // its own, as a step's
 			in.codeTaint = append(in.codeTaint, e.Tainted)
 		}
-		items = append(items, map[string]any{"label": text, "state": e.state(), "date": e.At.In(loc).Format(time.RFC3339), "detail": detail})
-		facts = append(facts, threadFact{e.At, text + threadExternalSep + detail})
+		list = append(list, map[string]any{"label": e.text(lang), "state": e.state(), "date": e.At.In(loc).Format(time.RFC3339), "detail": detail})
 	}
-	return items, facts
+	v["events"] = list
+	return v, alert
 }

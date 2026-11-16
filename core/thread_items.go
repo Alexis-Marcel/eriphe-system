@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // Notes on a thread's items (#571): what the brain, a thread's lead or a
@@ -268,13 +266,9 @@ func noteAuthor(author, lang string) string {
 }
 
 // noteRow puts a note on its item's row: its words, its state, its due
-// date, who wrote it and whether it may carry someone else's words (never
-// an action on it; the thread's state line says « extérieur », once).
+// date and who wrote it (never an action on it).
 func noteRow(row map[string]any, n itemNote, lang string, loc *time.Location) {
 	row["note"], row["state"], row["by"] = n.Note, n.State, noteAuthor(n.Author, lang)
-	if n.Tainted != "" {
-		row["external"] = true
-	}
 	if n.Due > 0 {
 		due := time.Unix(n.Due, 0).In(loc)
 		row["due"] = due.Format(time.RFC3339)
@@ -300,19 +294,19 @@ func itemLevel(state string) string {
 	return "normal"
 }
 
-// itemsBlock composes the items of a source that lists things, in code's
-// section of a thread's surface: their rows grouped by state, each group
-// counted on its line, each row with its note joined by code, and the
-// cards on it (item_cards.go); the cards on several of its items above
-// them. Bound by paths, so that a read again changes the data, not the
-// components. No row asks: a tainted note's never may; a row offers its
-// note's actions and a group those its rows share on its line, each click
-// a card (item_offers.go). A group with a card that waits is open. seen
-// gathers the counts and when they were sorted, for the state line.
-func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src storedSource, notes map[string]itemNote, cards []itemCard, n, lang string, loc *time.Location, taint *[]string, seen *threadItemsSeen) {
-	type comp = map[string]any
+// itemsData is the data of a source that lists things, at
+// /thread/items/<source> (v): its rows grouped by their notes' state
+// (groups), each group counted on its line, each row with its note joined
+// by code and the cards decided on it; the cards decided on several of its
+// items (cards). A card that still waits is the user's, in « À toi », never
+// on a row. A row whose words may be someone else's (its note written
+// after reading external content, or a source not trusted: external)
+// carries « extérieur » (mark) and taints the surface. No row asks: a row
+// offers its note's actions and a group those its rows share, each click a
+// card (item_offers.go). seen gathers the counts and when they were
+// sorted, for the state line.
+func (c *core) itemsData(v map[string]any, thread int64, src storedSource, external bool, notes map[string]itemNote, cards []itemCard, lang string, loc *time.Location, taint *[]string, seen *threadItemsSeen) {
 	byState := map[string][]any{}
-	waits := map[string]bool{} // the groups with a card that waits
 	rowCards := map[string][]any{}
 	var sourceCards []any
 	for _, x := range cards {
@@ -321,13 +315,13 @@ func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src 
 		case x.Item == "":
 			sourceCards = append(sourceCards, map[string]any{"ref": x.Ref})
 		default:
-			rowCards[x.Item] = append(rowCards[x.Item], map[string]any{"ref": x.Ref, "pending": x.Pending})
+			rowCards[x.Item] = append(rowCards[x.Item], map[string]any{"ref": x.Ref})
 		}
 	}
-	offers := false // a row or a group offers an action: their buttons
+	mark := tr(lang, "thread.surface.external")
 	words := c.offerWords(lang)
 	for _, it := range threadSourceItems(src, threadItemsMax) {
-		for _, k := range []string{"detail", "note", "due"} { // each row has what its Item binds
+		for _, k := range []string{"detail", "note", "due"} { // each row has what an Item binds
 			if _, ok := it[k]; !ok {
 				it[k] = ""
 			}
@@ -335,23 +329,25 @@ func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src 
 		id := it["id"].(string)
 		it["cards"] = emptyList(rowCards[id])
 		it["offers"] = []any{}
+		it["mark"] = ""
+		if external {
+			it["mark"] = mark
+		}
 		state := ""
 		if note, ok := notes[src.Name+"\x00"+id]; ok {
 			noteRow(it, note, lang, loc)
 			state = note.State
 			seen.sorted = max(seen.sorted, note.Noted)
 			if note.Tainted != "" {
+				it["mark"] = mark
 				*taint = append(*taint, threadNoteTaint+src.Name+"/"+note.Item)
 			}
 			if o := c.rowOffers(thread, note, words); len(o) > 0 {
-				it["offers"], offers = o, true
+				it["offers"] = o
 			}
 		}
 		it["level"] = itemLevel(state)
 		byState[state] = append(byState[state], it)
-		for _, x := range rowCards[id] {
-			waits[state] = waits[state] || x.(map[string]any)["pending"] == true
-		}
 	}
 	var groups []any
 	for _, state := range itemGroups {
@@ -380,43 +376,10 @@ func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src 
 				r.(map[string]any)["offers"] = []any{}
 			}
 		}
-		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": waits[state] || !folded,
+		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": !folded,
 			"items": rows, "offers": emptyList(groupOffer)})
 	}
 	v["groups"], v["cards"] = emptyList(groups), emptyList(sourceCards)
-	at := "/thread/sources/" + n
-	id := "thread_src_" + n
-	out.add(comp{"id": id + "_cards", "component": "List", "children": map[string]any{"path": at + "/cards", "componentId": id + "_card"}})
-	out.add(comp{"id": id + "_groups", "component": "List", "children": map[string]any{"path": at + "/groups", "componentId": id + "_group"}, "emptyText": tr(lang, "thread.item.none")})
-	row := []string{id + "_item", id + "_row_cards"}
-	group := comp{"id": id + "_group", "component": "Fold", "label": map[string]any{"@path": "label"}, "open": map[string]any{"@path": "open"}, "child": id + "_rows"}
-	if offers {
-		// Each offer a Button code places: a click makes a card, never
-		// more (offerOf); its context bound to the data, read again from
-		// the store. A group's on its line, folded or not.
-		bound := func(k string) map[string]any { return map[string]any{"@path": k} }
-		row = append(row, id+"_row_offers")
-		group["aside"] = id + "_group_offers"
-		out.inner(
-			comp{"id": id + "_row_offers", "component": "List", "direction": "horizontal", "children": map[string]any{"path": "offers", "componentId": id + "_offer"}},
-			comp{"id": id + "_offer", "component": "Button", "label": bound("label"), "variant": "default",
-				"action": map[string]any{"event": map[string]any{"name": a2ui.ActionOffer, "context": map[string]any{"thread": thread, "source": bound("source"), "item": bound("item"), "offer": bound("offer")}}}},
-			comp{"id": id + "_group_offers", "component": "List", "direction": "horizontal", "children": map[string]any{"path": "offers", "componentId": id + "_group_offer"}},
-			comp{"id": id + "_group_offer", "component": "Button", "label": bound("label"), "variant": "default",
-				"action": map[string]any{"event": map[string]any{"name": a2ui.ActionOffer, "context": map[string]any{"thread": thread, "source": bound("source"), "state": bound("state"), "offer": bound("offer")}}}},
-		)
-	}
-	out.inner(
-		group,
-		comp{"id": id + "_rows", "component": "List", "children": map[string]any{"path": "items", "componentId": id + "_row"}},
-		comp{"id": id + "_row", "component": "Column", "children": row},
-		comp{"id": id + "_item", "component": "Item", "title": map[string]any{"@path": "title"}, "detail": map[string]any{"@path": "detail"},
-			"note": map[string]any{"@path": "note"}, "due": map[string]any{"@path": "due"}, "level": map[string]any{"@path": "level"}},
-		comp{"id": id + "_row_cards", "component": "List", "children": map[string]any{"path": "cards", "componentId": id + "_card"}},
-		// One template for the cards of a row and those of the source: an
-		// answer says which (at), checked against the data (answerOf).
-		comp{"id": id + "_card", "component": "Proposal", "proposalId": map[string]any{"@path": "ref"}, "compact": true},
-	)
 }
 
 func emptyList(list []any) []any {

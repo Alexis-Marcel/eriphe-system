@@ -12,32 +12,35 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
-// The header of a thread's surface (#553): opening a thread tells in
-// seconds what changed, where it stands and what is the user's, without
-// rereading it. Each block shows only when it has something to say
-// (thread_blocks.go), all composed by code:
+// The head of a thread's surface (#553, #611): opening a thread tells in
+// seconds where it stands and what is the user's, without rereading it.
+// Composed by code (thread_blocks.go):
 //
 //   - The state line: its headline (set_thread), else what its items
 //     count, else its state; when its items were sorted; « extérieur »
-//     once (threadStateText).
-//   - Depuis ta dernière visite: facts made by code from the thread's own
-//     data (its steps' starts and ends, its summary written again, its
-//     end) since the user's visit before the last one, oldest first, the
-//     last threadFactsMax; nothing before a first visit, nor when none.
-//     What was settled for its tasks is one: kept as a kind and its
-//     parameters (task_answer_log.go), worded here. Never the log's
-//     lines: they are French only, and may quote a lead.
-//   - Où on en est: the thread's summary, as remember (kind progress),
-//     the extraction or its close wrote it, with its date; no model call;
-//     nothing while it has none.
-//   - À toi: what waits for the user (its cards, a step of theirs); none
-//     when nothing waits, nor once it ended.
+//     beside its headline when that may carry someone else's words
+//     (threadStateText).
+//   - À toi: what waits for the user (its cards, a choice, a step of
+//     theirs), each once; none when nothing waits, nor once it ended.
+//
+// What it does not draw is in its data, for what is composed to bind:
+//
+//   - /thread/since: facts made by code from the thread's own data (its
+//     steps' starts and ends, its summary written again, its end) since
+//     the user's visit before the last one, oldest first, the last
+//     threadFactsMax; none before a first visit. What was settled for its
+//     tasks is one: kept as a kind and its parameters
+//     (task_answer_log.go), worded here. Never the log's lines: they are
+//     French only, and may quote a lead.
+//   - /thread/summary: the thread's summary, as remember (kind progress),
+//     the extraction or its close wrote it; no model call.
 //
 // The visit: the user opening a thread's surface (the page's action
 // "open", surfaceAction) moves its visits: seen takes the last one,
-// visited is now; the header tells what changed since seen, so the visit
-// that opens it still shows what was new. Opened again within
-// threadVisitSame, it is the same visit: seen stays.
+// visited is now; since tells what changed since seen, so the visit that
+// opens it still shows what was new. Opened again within threadVisitSame,
+// it is the same visit: seen stays. What changed since the last visit
+// counts on its tile (threadNew).
 
 const (
 	threadFactsMax  = 5               // facts the header shows, the last ones
@@ -174,61 +177,25 @@ func (c *core) threadStateLine(s Thread, lang string) string {
 	return state
 }
 
-// threadSince composes « Depuis ta dernière visite »: the facts since
-// the user's visit before the last one, its monitors' events among them.
-func (c *core) threadSince(out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, more []threadFact, now time.Time) {
+// threadSinceData are the facts since the user's visit before the last
+// one, at /thread/since, each a line with its time (« 14 h 32 · Fusion
+// faite »), the last threadFactsMax after a line counting the others;
+// none before a first visit (all of the thread is new).
+func (c *core) threadSinceData(s Thread, steps []threadSurfaceStep, now time.Time) []any {
+	lines := []any{}
+	if s.seen == 0 {
+		return lines
+	}
 	lang, loc := c.userLang(), c.userZone()
-	w := func(key string) string { return tr(lang, key) }
-	type comp = map[string]any
-
 	facts := threadFacts(s, steps, s.seen, lang)
-	for _, f := range more { // its monitors' events (thread_live.go)
-		if f.At.Unix() > s.seen {
-			facts = append(facts, f)
-		}
-	}
-	slices.SortStableFunc(facts, func(a, b threadFact) int { return a.At.Compare(b.At) })
-	// Before a visit, all of it is new: the thread itself says it. After,
-	// only what happened since, when something did.
-	if s.seen == 0 || len(facts) == 0 {
-		return
-	}
-	out.add(comp{"id": "thread_since", "component": "Text", "variant": "subtitle",
-		"text": fmt.Sprintf(w("thread.head.sincewhen"), threadClock(time.Unix(s.seen, 0), now, loc, lang))})
-	var lines []any
 	if n := len(facts) - threadFactsMax; n > 0 {
-		lines = append(lines, fmt.Sprintf(w("thread.head.earlier"), n))
+		lines = append(lines, fmt.Sprintf(tr(lang, "thread.head.earlier"), n))
 		facts = facts[n:]
 	}
 	for _, f := range facts {
 		lines = append(lines, threadClock(f.At, now, loc, lang)+threadExternalSep+f.Text)
 	}
-	if len(lines) > 0 {
-		data["facts"] = lines
-		for i := range lines {
-			out.add(comp{"id": "thread_fact_" + strconv.Itoa(i), "component": "Text", "text": map[string]any{"@path": "/thread/facts/" + strconv.Itoa(i)}})
-		}
-	}
-}
-
-// threadWhere composes « Où on en est »: the thread's summary, with its
-// date; nothing while it has none. An ended thread says it in its banner
-// (blockEnded).
-func (c *core) threadWhere(out *threadComps, data map[string]any, s Thread, now time.Time) {
-	sum := strings.TrimSpace(s.Summary)
-	if sum == "" {
-		return
-	}
-	lang, loc := c.userLang(), c.userZone()
-	w := func(key string) string { return tr(lang, key) }
-	type comp = map[string]any
-	out.add(comp{"id": "thread_where", "component": "Text", "variant": "subtitle", "text": w("thread.head.where")})
-	data["summary"] = sum
-	out.add(comp{"id": "thread_summary", "component": "Markdown", "text": map[string]any{"@path": "/thread/summary"}})
-	if s.summarized > 0 {
-		out.add(comp{"id": "thread_summary_at", "component": "Text", "variant": "caption",
-			"text": fmt.Sprintf(w("thread.head.summaryat"), threadClock(time.Unix(s.summarized, 0), now, loc, lang))})
-	}
+	return lines
 }
 
 // A thread's headline (open_thread or set_thread headline): what the brain,
@@ -313,22 +280,23 @@ func threadSays(h *threadHeadline, seen threadItemsSeen, lang string) string {
 
 // threadStateText is an active thread's state line, at the top of its
 // surface: what it says of itself (threadSays), else its state when that
-// says more; when its items were last sorted; « extérieur » once, when
-// some of what it shows may carry someone else's words.
-func (c *core) threadStateText(s Thread, says string, seen threadItemsSeen, tainted bool, now time.Time) string {
+// says more, with « extérieur » beside a headline that may carry someone
+// else's words (h tainted), never alone; when its items were last sorted.
+// What else may carry someone else's words says it where it shows: a row,
+// a step, a block.
+func (c *core) threadStateText(s Thread, h *threadHeadline, seen threadItemsSeen, now time.Time) string {
 	lang, loc := c.userLang(), c.userZone()
 	var parts []string
-	if says == "" {
-		says = c.threadStateLine(s, lang)
-	}
-	if says != "" {
+	if says := threadSays(h, seen, lang); says != "" {
 		parts = append(parts, says)
+		if h != nil && len(h.Tainted) > 0 {
+			parts = append(parts, tr(lang, "thread.surface.external"))
+		}
+	} else if state := c.threadStateLine(s, lang); state != "" {
+		parts = append(parts, state)
 	}
 	if seen.sorted > 0 {
 		parts = append(parts, fmt.Sprintf(tr(lang, "thread.state.sorted"), threadClock(time.Unix(seen.sorted, 0), now, loc, lang)))
-	}
-	if tainted {
-		parts = append(parts, tr(lang, "thread.surface.external"))
 	}
 	return strings.Join(parts, threadExternalSep)
 }

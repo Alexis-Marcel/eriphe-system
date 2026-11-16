@@ -162,9 +162,10 @@ describe("a click on the workspace", () => {
     expect(arrived.classList.contains("side-item")).toBe(true);
     expect(arrived.className).toContain("needs");
     expect(arrived.className).toContain("fresh");
-    // First of the column, whole: its content answers there.
+    // First of the column, one line: its title, its content open only.
     expect(el.querySelector("aside.side > article")).toBe(arrived);
-    expect(arrived.querySelector(".side-body .a2-text")?.textContent).toBe("Envoyer le récapitulatif à Sam ?");
+    expect(arrived.querySelector(".side-title")?.textContent).toBe("À décider");
+    expect(arrived.querySelector(".a2-text")).toBeNull();
     // A click opens it instead, by core, at once.
     await act(async () => arrived.querySelector<HTMLButtonElement>("button.side-open")!.click());
     expect(actions[1].body).toMatchObject({ action: { name: "open", surfaceId: "q-card-7" } });

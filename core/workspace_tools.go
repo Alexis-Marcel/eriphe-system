@@ -101,13 +101,13 @@ func errNotAPart(id string) error {
 // its components and functions from the catalog itself.
 func surfaceWriteHelp() string {
 	cat := a2ui.Eriphe()
-	return "Write one named block (block) of your part of a thread's surface (thread-<id>, a tile of the user's workspace, kept by code) when you hold the thread, in A2UI v1.0, shown under what code keeps. A new name adds a block, last or before another (before); a name there replaces that block alone, where it stands; without a block nothing is written. workspace_read and the result list your blocks in order. Any other id is refused: open the thing's thread first. " +
+	return "Write one named block (block) of your part of a thread's surface (thread-<id>, a tile of the user's workspace, kept by code) when you hold the thread, in A2UI v1.0, shown under what code keeps (head, what waits for the user, children); your blocks replace code's default (its steps, its sources' items). A new name adds a block, last or before another (before); a name there replaces that block alone, where it stands; without a block nothing is written. workspace_read and the result list your blocks in order. Any other id is refused: open the thing's thread first. " +
 		"Each block is checked alone. components is a flat list; each has an id (letters, digits, _) no other block of yours has, a component and its properties; one has id root; " +
 		"children are named by id (child, children, tabs), or repeated with a template {path: /items, componentId: row} (inside it, a path without / reads the item). " +
 		"A value is a literal, a binding {\"@path\": \"/a/b\"} into the data, or {\"@call\": function, args}. " +
 		"Components: " + strings.Join(cat.Components(), ", ") + ". Functions: " + strings.Join(cat.Functions(), ", ") + ". " +
 		"Components are shapes, never tools: no tool or service name in them. " +
-		"Fill it live (sources: code reads a tool or a resource again, no model) or composed (data you wrote); it may bind the thread's sources and code's /thread. Your ids do not start with thread_; your data has no key thread, nor another block's key. " +
+		"Fill it live (sources: code reads a tool or a resource again, no model) or composed (data you wrote); it may bind the thread's sources and code's /thread: /thread/steps, /thread/items/<source>, /thread/children, /thread/marks. Your ids do not start with thread_; your data has no key thread, nor another block's key. " +
 		"Call catalog_read once before your first block. A wrong block comes back as A2UI errors with their path: fix it and write it again. " +
 		"An image is never loaded from outside: a page that cannot be shown otherwise is captured by a task step of the thread, lent eriphe-workspace, never a sign-in or private page: it runs eriphe-capture <url> thread-<id> and gives you the src it prints (media:…), an Image's url in your block, with a Link to the page beside it. " +
 		"A source slow to answer leaves the block waiting; a binding it does not give is told to you then (workspace_read, your next surface_write). " +

@@ -23,13 +23,13 @@ import (
 //   - A triggered skill's run never holds on a call (skill_cards.go): a
 //     call it keeps whose input names exactly one item its thread's
 //     sources list, of the call's own server, is that item's. When the run
-//     ends, each item's calls are one card, on its row; its other calls
+//     ends, each item's calls are one card, for that item; its other calls
 //     are the run's card, as before. The same call kept again on the same
 //     item, by another run, is the card already there.
-//   - The card shows on its item's row (itemsBlock) while it waits; one
-//     whose row is not drawn (an item past the rows shown, or no longer
-//     listed) shows with what waits for the user, and an ended thread's
-//     goes back to the attention queue. Oui runs each call as kept, with
+//   - While it waits, the card is the user's: shown once, with what waits
+//     for them on the thread's surface (« À toi », threadYours); an ended
+//     thread's goes back to the attention queue. Decided, it stays a day
+//     in its item's data, on its row (itemsData). Oui runs each call as kept, with
 //     the policy read again (catalogCall); Non runs none. A run's results
 //     go to its note, the others' to the thread's log: the brain is not
 //     told.
@@ -343,82 +343,37 @@ func (c *core) proposedBatches() []int64 {
 	return out
 }
 
-// itemCard is a calls card a thread's surface shows: on its item's row
-// when it acts on one, else under its source.
+// itemCard is a calls card decided on a thread's items: on its item's row
+// when it acts on one, else under its source (itemsData).
 type itemCard struct {
-	Ref     string
-	Source  string
-	Item    string // "" for a card on several items
-	Pending bool
+	Ref    string
+	Source string
+	Item   string // "" for a card on several items
 }
 
-// threadItemCards are a thread's calls cards that wait, and those decided
-// within itemCardsKeep (folded on their row), oldest first.
+// threadItemCards are a thread's calls cards decided within itemCardsKeep
+// (folded on their row), oldest first. One that waits is the user's, with
+// what waits for them (threadYours), never on a row.
 func (c *core) threadItemCards(thread int64, now time.Time) []itemCard {
 	rows, err := c.store.db.Query(`SELECT batch, MIN(source), MIN(item), MAX(item), MAX(state = ?), MAX(decided) FROM access_asks
 		WHERE thread = ? AND batch != 0 GROUP BY batch ORDER BY batch`, startProposed, thread)
 	if err != nil {
 		return nil
 	}
-	type found struct {
-		batch          int64
-		source, lo, hi string
-		waits          bool
-		decided        int64
-	}
-	var all []found
-	for rows.Next() {
-		var f found
-		if rows.Scan(&f.batch, &f.source, &f.lo, &f.hi, &f.waits, &f.decided) == nil {
-			all = append(all, f)
-		}
-	}
-	rows.Close()
+	defer rows.Close()
 	var out []itemCard
-	for _, f := range all {
-		ref := proposalRef(cardCalls, f.batch)
-		pending := f.waits && c.cardState(ref) == cardPending
-		if !pending && (f.waits || now.Sub(time.Unix(f.decided, 0)) > itemCardsKeep) {
-			continue // a run's that waits for its end, or decided long ago
+	for rows.Next() {
+		var batch, decided int64
+		var source, lo, hi string
+		var waits bool
+		if rows.Scan(&batch, &source, &lo, &hi, &waits, &decided) != nil || waits || now.Sub(time.Unix(decided, 0)) > itemCardsKeep {
+			continue // it waits still, or was decided long ago
 		}
-		x := itemCard{Ref: ref, Source: f.source, Pending: pending}
-		if f.lo == f.hi {
-			x.Item = f.lo
+		x := itemCard{Ref: proposalRef(cardCalls, batch), Source: source}
+		if lo == hi {
+			x.Item = lo
 		}
 		out = append(out, x)
 	}
 	return out
-}
-
-// drawnItemCards are the cards a thread's surface draws on its sources
-// (itemsBlock): on its item's row while the source shows it, under the
-// source for one on several items; and the refs of those waiting. A card
-// not drawn shows with what waits for the user (threadYours).
-func (c *core) drawnItemCards(thread int64, cards []itemCard) ([]itemCard, map[string]bool) {
-	if len(cards) == 0 {
-		return nil, nil
-	}
-	rows := map[string]bool{}
-	sources := map[string]bool{}
-	for _, src := range c.threadSources(thread) {
-		if src.Items == nil || src.kind() == srcMonitor {
-			continue
-		}
-		sources[src.Name] = true
-		for _, it := range threadSourceItems(src, threadItemsMax) {
-			rows[src.Name+"\x00"+it["id"].(string)] = true
-		}
-	}
-	var out []itemCard
-	waiting := map[string]bool{}
-	for _, x := range cards {
-		if x.Item == "" && !sources[x.Source] || x.Item != "" && !rows[x.Source+"\x00"+x.Item] {
-			continue
-		}
-		out = append(out, x)
-		if x.Pending {
-			waiting[x.Ref] = true
-		}
-	}
-	return out, waiting
 }

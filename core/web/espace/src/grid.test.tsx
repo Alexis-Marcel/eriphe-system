@@ -165,8 +165,33 @@ describe("the grid of surfaces", () => {
     expect(state("week")).toBe("espace.state.related");
     expect(state("news")).toBe("espace.state.closed");
     expect(state("late")).toBeUndefined();
-    // What needs the user is whole in the column: it answers there.
-    expect(tile("heavy")!.querySelector(".side-body .a2-text")?.textContent).toBe("Une alerte");
+    // What needs the user is folded too: its title and its line, never its surface.
+    expect(tile("heavy")!.querySelector(".a2-text")).toBeNull();
+    expect(tile("heavy")!.querySelector(".side-title")?.textContent).toBe("Alerte");
+  });
+
+  it("folds every tile of the column to one line, its title and its summary, whatever its state", async () => {
+    const thread = (id: string, state: string): Message => ({
+      version: "1.0",
+      createSurface: {
+        surfaceId: id,
+        catalogId: CATALOG.id,
+        components: [
+          { id: "root", component: "Column", children: ["p", "s"] },
+          { id: "p", component: "Progress", label: "À toi", tone: "attention" },
+          { id: "s", component: "Proposal", proposalId: "card:1" },
+        ],
+        metadata: { extensions: { eriphe: { title: "Le site", state, summary: "Publier le site à toi" } } },
+      },
+    });
+    await act(async () => adapter.applyMessages([thread("yours", "yours"), thread("calm", "quiet")]));
+    await render({ ...layout, focus: "pay", chips: [{ id: "yours", title: "Le site" }, { id: "calm", title: "Le site" }] });
+    for (const id of ["yours", "calm"]) {
+      const item = tile(id)!;
+      expect(item.querySelector(".side-title")?.textContent).toBe("Le site");
+      expect(item.querySelector(".side-line")?.textContent).toBe("Publier le site à toi");
+      expect(item.querySelector(".a2-progress, .a2-proposal")).toBeNull();
+    }
   });
 
   it("marks what arrives or changes while a surface is open, without moving the focus", async () => {
