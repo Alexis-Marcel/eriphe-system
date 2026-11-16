@@ -253,6 +253,7 @@ type Thread struct {
 	since      int64     // when it last started running
 	summarized int64     // when its summary was last written
 	seen       int64     // the user's visit before the last one, 0 if none
+	visited    int64     // the user's last visit, 0 if none: what changed since is new
 	told       string    // what the lead was last told of the whole thread: complete, stalled
 	tidied     int64     // when the user tidied it away, ended
 	Created    time.Time `json:"created"`
@@ -452,7 +453,7 @@ var stepKeyRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,23}$`)
 
 // The store.
 
-const threadCols = `id, title, goal, done_when, mode, ` + threadAliasCol + `, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended, summarized, seen, ends, tidied`
+const threadCols = `id, title, goal, done_when, mode, ` + threadAliasCol + `, state, phase, held, budget, amends, summary, tainted, lead, told, spent, since, created, started, ended, summarized, seen, visited, ends, tidied`
 
 // threadAliasCol is a thread's latest key in the names, "" for none.
 const threadAliasCol = `COALESCE((SELECT name FROM names WHERE target = 'thread:' || threads.id AND instr(name, ':') > 0
@@ -465,7 +466,7 @@ func scanThread(row interface{ Scan(...any) error }) (Thread, error) {
 	var s Thread
 	var created, started, ended int64
 	err := row.Scan(&s.ID, &s.Title, &s.Goal, &s.DoneWhen, &s.Mode, &s.Alias, &s.State, &s.Phase, &s.Held, &s.Budget, &s.Amends, &s.Summary, &s.Tainted, &s.Lead,
-		&s.told, &s.Spent, &s.since, &created, &started, &ended, &s.summarized, &s.seen, &s.Ends, &s.tidied)
+		&s.told, &s.Spent, &s.since, &created, &started, &ended, &s.summarized, &s.seen, &s.visited, &s.Ends, &s.tidied)
 	s.Created, s.Started, s.Ended = time.Unix(created, 0), unixOrZero(started), unixOrZero(ended)
 	return s, err
 }

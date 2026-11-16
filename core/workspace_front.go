@@ -33,7 +33,8 @@ import (
 //     follows the #443 rules).
 //   - The layout says who put it there (focusBy): the page and the brain's
 //     next turn know Eriphe did, not the user.
-//   - Back (the page's) ends the stage: the base composition comes back.
+//   - Back (the page's) ends the stage: the workspace in its order comes
+//     back.
 
 const (
 	focusByBrain = placedByBrain // the layout's focusBy: Eriphe put it in front
@@ -74,7 +75,7 @@ func (f *frontTurn) begin(workspace bool) {
 }
 
 var (
-	errFrontNotHere = errors.New("only in your answer to a message the user wrote in the workspace (« · depuis l'espace », « · bouton de l'espace »): elsewhere what is in front is the user's and the composer's; write the surface, the composer places it")
+	errFrontNotHere = errors.New("only in your answer to a message the user wrote in the workspace (« · depuis l'espace », « · bouton de l'espace »): elsewhere what is in front is the user's and code's: write the surface, code places it")
 	errFrontOnce    = errors.New("one surface in front per turn")
 )
 
@@ -124,7 +125,6 @@ func (c *core) setFocus(id string, now time.Time, by string) {
 		if id == "" {
 			st.focusSince = time.Time{}
 		}
-		c.focusChangedLocked(was)
 	}
 	if by == focusByBrain {
 		c.loadPlacementLocked()
@@ -154,7 +154,7 @@ func (c *core) stageNow(now time.Time) (by, previous string) {
 
 // The brain's tool.
 
-const workspaceFocusHelp = "Put a surface on the stage of the user's workspace, as if they had opened it: in the center, large, the workspace composed around it; what was on stage stays next to it, smaller. Only in your answer to a message the user wrote in the workspace (« · depuis l'espace », « · bouton de l'espace »), once per turn: when they ask about a thing (where a pull request, a project, a session stands), write its surface, then put it on stage, and answer in one line. Not over a surface they have open, unless they asked about something else. Display only: it writes nothing."
+const workspaceFocusHelp = "Put a surface on the stage of the user's workspace, as if they had opened it: in the center, large, what relates to it around; what was on stage stays next to it, smaller. Only in your answer to a message the user wrote in the workspace (« · depuis l'espace », « · bouton de l'espace »), once per turn: when they ask about a thing (where a pull request, a project, a session stands), write its surface, then put it on stage, and answer in one line. Not over a surface they have open, unless they asked about something else. Display only: it writes nothing."
 
 type workspaceFocusIn struct {
 	ID string `json:"id" jsonschema:"the surface to put in front, as surface_write or workspace_read gives its id"`

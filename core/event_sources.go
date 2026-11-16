@@ -28,7 +28,6 @@ const (
 // queue's breakpoints and caps (attention.go), and the purge.
 func (c *core) runEvents(ctx context.Context) {
 	c.subscribeEvents(c.attentionOnEvent)
-	c.subscribeEvents(c.surfaceEventHeard) // surface_authors.go
 	tick := time.NewTicker(eventsTickEvery)
 	defer tick.Stop()
 	var purged time.Time

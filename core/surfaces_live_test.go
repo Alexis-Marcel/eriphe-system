@@ -13,7 +13,7 @@ import (
 
 // The surfaces' bench on a real model: each case of testdata/surfaces,
 // ERIPHE_LIVE_SURFACES_RUNS times (1 by default), through the local Claude
-// Code CLI the way the composer's bench runs (runClaude): the brain's
+// Code CLI (runClaude, claude_live_test.go): the brain's
 // paragraph on surfaces, surface_write's description and the catalog
 // appended to the system prompt, the case's request and tools as the turn,
 // no tool, low effort, no session kept. It needs no node, only `claude`

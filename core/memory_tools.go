@@ -282,8 +282,8 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	if c.mem == nil {
 		return nil, errMemoryOff
 	}
-	// How the user wants the workspace is a preference the composer reads,
-	// whatever its words (workspace.go).
+	// How the user wants the workspace is a preference the watchers read
+	// when they note items, whatever its words (workspace.go).
 	if strings.TrimSpace(in.Kind) == kindProgress {
 		return c.brainProgress(in) // its thread's summary (thread_progress.go)
 	}

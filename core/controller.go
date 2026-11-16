@@ -67,7 +67,6 @@ type core struct {
 	skillRuns   skillRunner            // the triggered skills (skill_runs.go)
 	out         channelOut             // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
-	composer    composerState          // the workspace's composition (composer.go)
 	surf        surfaceHub             // the surfaces' changes and their subscribers (surfaces.go)
 	layout      layoutState            // where the surfaces are on the workspace (workspace_layout.go)
 	front       frontTurn              // whether the brain's turn answers the user in the workspace (workspace_front.go)

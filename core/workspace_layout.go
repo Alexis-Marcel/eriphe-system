@@ -14,16 +14,16 @@ import (
 // l 4×3, xl 6×5, one xl at most), or a chip in the strip above the grid
 // when it is folded.
 //
-// The composer (composer.go) chooses from the pool of surfaces what is shown
-// now and how big (a workspaceChoice). Code lays that choice out (layoutOf)
-// at once, never waiting for a model, and lays out again whenever the pool
-// changes (relayout): the urgent ones first (weight 80 and up: the queue's
-// 4 and 5, what a task waits on or what interrupts), then a surface the
-// user opened, then the composer's choice in its order, then the
-// surfaces it has not seen yet, by weight. Each is put at the first place
-// where it fits, top left first; one that fits nowhere shrinks a size, then
-// is folded. What the choice left out is folded too: nothing in the pool
-// goes unseen while the chip strip has room.
+// Code orders the workspace, no model (#574), and lays it out again
+// whenever the pool changes (relayout). Each surface has a state code
+// computed (tileStateOf: yours, urgent, new, running, quiet, done) and a
+// weight; the order is what the user placed first, then the heaviest of
+// what waits (weight 80 and up: the queue's 4 and 5, what a task waits on
+// or what interrupts), then a surface opened (large, with what relates to
+// it around, the rest folded), then the others by state (yours, urgent,
+// new, running, quiet, done), weight, last change and id: the same pool
+// gives the same layout. Each is put at the first place where it fits, top
+// left first; one that fits nowhere shrinks a size, then is folded.
 //
 // The layout goes to the page as the event stream's "layout" event (JSON,
 // workspaceLayout), sent whenever it changes, after the "a2ui" event of the
@@ -35,7 +35,6 @@ const (
 	layoutChipsMax = 12
 	layoutWhyMax   = 60
 	layoutKey      = "workspace_layout"
-	choiceKey      = "workspace_choice"
 
 	weightUrgent = 80 // a surface this heavy is placed first by code
 	weightGrow   = 40 // a surface this heavy grows a size when the grid has room
@@ -69,44 +68,53 @@ func sizeOfWeight(w int) string {
 	return sizeS
 }
 
+// A tile's state (#574), computed by code, never by a model: what the
+// page colours and badges, and the first key of the workspace's order.
+const (
+	tileYours   = "yours"   // something waits for the user: a card, a step of theirs
+	tileUrgent  = "urgent"  // weight 80 and up, or a note due within dueSoon
+	tileNew     = "new"     // something changed since the user last opened it
+	tileRunning = "running" // a step runs
+	tileQuiet   = "quiet"   // nothing to do
+	tileDone    = "done"    // its thread ended
+
+	dueSoon = 2 * time.Hour // a note due this close (or past) makes its thread urgent
+)
+
+var tileRank = map[string]int{tileYours: 0, tileUrgent: 1, tileNew: 2, tileRunning: 3, tileQuiet: 4, tileDone: 5}
+
+// tileStateOf is a surface's state: the one code wrote with it (a
+// thread's, a queue's), else by its weight.
+func tileStateOf(s surface) string {
+	if _, ok := tileRank[s.Look.State]; ok {
+		return s.Look.State
+	}
+	if s.Weight >= weightUrgent {
+		return tileUrgent
+	}
+	return tileQuiet
+}
+
+// tileOrder is the workspace's order: by state, then the heaviest, the
+// latest changed, and the id, so the same pool is always laid out the
+// same.
+func tileOrder(a, b surface) int {
+	return cmp.Or(cmp.Compare(tileRank[tileStateOf(a)], tileRank[tileStateOf(b)]), cmp.Compare(b.Weight, a.Weight),
+		b.Updated.Compare(a.Updated), cmp.Compare(a.ID, b.ID))
+}
+
 // queueSurfaceWeight is a surface's weight for an attention item's (1 to
 // 5): 5 is 100, 4 is 80 (urgent), 3 is 60, 2 is 40, 1 is 20.
 func queueSurfaceWeight(w int) int { return min(max(w, 1), 5) * 20 }
 
-// workspaceChoice is what the composer chose (or code, by weight): the
-// surfaces shown now, in order, with their size and why; Seen, the pool
-// it chose from, so a surface written since is placed by weight at once.
-type workspaceChoice struct {
-	Eriphe string       `json:"eriphe"`
-	Items  []choiceItem `json:"items"`
-	Seen   []string     `json:"seen"`
-	By     string       `json:"by"` // composer or fallback
-	Moment string       `json:"moment,omitempty"`
-	At     time.Time    `json:"at"`
-	// Related, for a choice around a focus: the surfaces code found related
-	// to it (workspace_focus.go), marked on the page.
-	Related []string `json:"related,omitempty"`
-}
-
-type choiceItem struct {
-	ID   string `json:"id"`
-	Size string `json:"size"`
-	Why  string `json:"why,omitempty"`
-}
-
 // workspaceLayout is what the page lays out: the event stream's "layout".
 type workspaceLayout struct {
-	Eriphe   string       `json:"eriphe"`             // Eriphe's line, "" when the composer did not write one
-	By       string       `json:"by"`                 // composer or fallback
 	Ambient  string       `json:"ambient"`            // calm, decision or urgent: by the heaviest tile
 	Focus    string       `json:"focus,omitempty"`    // the surface the user opened
 	FocusBy  string       `json:"focusBy,omitempty"`  // brain: Eriphe put it on stage, answering the user (workspace_front.go)
 	Previous string       `json:"previous,omitempty"` // what was on stage before it, a tile reduced next to it (workspace_front.go)
 	Items    []layoutTile `json:"items"`              // the tiles, each at its place on the grid
 	Chips    []layoutChip `json:"chips"`              // the folded surfaces, in order
-	Moment   string       `json:"moment,omitempty"`   // the choice's moment
-	At       time.Time    `json:"at,omitzero"`        // when the choice was made
-	Missing  []string     `json:"missing,omitempty"`  // what the composer said is missing (surface.missing)
 }
 
 // layoutTile is one surface on the grid: col and row from 0, w and h in
@@ -120,7 +128,7 @@ type layoutTile struct {
 	W       int    `json:"w"`
 	H       int    `json:"h"`
 	Why     string `json:"why,omitempty"`
-	Pinned  bool   `json:"pinned,omitempty"`  // placed by the user, or by the brain at their request, this session
+	Pinned  bool   `json:"pinned,omitempty"`  // placed by the user, or by the brain at their request
 	Related bool   `json:"related,omitempty"` // related to the surface open (workspace_focus.go)
 	Urgent  bool   `json:"urgent,omitempty"`  // placed before a surface the user opens (weightUrgent): the page keeps it in front when it lays an opening out at once
 }
@@ -142,25 +150,22 @@ type layoutWant struct {
 	pin   *tilePin
 }
 
-// layoutOf lays a choice out over the pool, with the surface the user
-// opened ("" for none). It is pure: no model, no store.
-func layoutOf(pool []surface, ch workspaceChoice, focus string) workspaceLayout {
-	return layoutWith(pool, ch, focus, userPlacement{})
+// layoutOf lays the pool out, with the surface the user opened ("" for
+// none). It is pure: no model, no store.
+func layoutOf(pool []surface, focus string) workspaceLayout {
+	return layoutStage(pool, focus, "", nil, userPlacement{})
 }
 
-// layoutWith lays a choice out with the user's placement of the session
-// (workspace_gestures.go): what they closed is folded last, marked closed,
-// and never opened; what they placed (or the brain placed at their
-// request) comes first, at its place when it has one, at its size, and
-// keeps both: no growing, no widening. Then the order of layoutOf.
-func layoutWith(pool []surface, ch workspaceChoice, focus string, pl userPlacement) workspaceLayout {
-	return layoutStage(pool, ch, focus, "", pl)
-}
-
-// layoutStage is layoutWith with the surface that was on stage before the
-// focus (previous): it stays a tile, reduced (m at most), next to the
-// stage, never folded for the others (workspace_front.go).
-func layoutStage(pool []surface, ch workspaceChoice, focus, previous string, pl userPlacement) workspaceLayout {
+// layoutStage lays the pool out with the user's placement (workspace_gestures.go):
+// what they closed is folded last, marked closed, and never opened; what
+// they placed (or the brain placed at their request) comes first, at its
+// place when it has one, at its size, and keeps both: no growing, no
+// widening. Then the heaviest of what waits, then the surface opened
+// (focus: xl), the one on stage before it (previous: a tile, m at most,
+// never folded for the others, workspace_front.go) and those related to it
+// (related, found by code, workspace_focus.go: m at most, the rest folded),
+// then the others in their order (tileOrder).
+func layoutStage(pool []surface, focus, previous string, related []string, pl userPlacement) workspaceLayout {
 	var closed []surface
 	pool = slices.DeleteFunc(slices.Clone(pool), func(s surface) bool {
 		if _, ok := pl.Closed[s.ID]; ok {
@@ -172,26 +177,15 @@ func layoutStage(pool []surface, ch workspaceChoice, focus, previous string, pl 
 	if _, ok := pl.Closed[focus]; ok {
 		focus = ""
 	}
-	slices.SortStableFunc(pool, func(a, b surface) int {
-		return cmp.Or(cmp.Compare(b.Weight, a.Weight), b.Updated.Compare(a.Updated), cmp.Compare(a.ID, b.ID))
-	})
+	slices.SortStableFunc(pool, tileOrder)
 	byID := map[string]surface{}
 	for _, s := range pool {
 		byID[s.ID] = s
 	}
-	chosen := map[string]choiceItem{}
-	for _, it := range ch.Items {
-		if _, ok := byID[it.ID]; ok {
-			if _, dup := chosen[it.ID]; !dup {
-				chosen[it.ID] = it
-			}
-		}
+	if _, ok := byID[focus]; !ok {
+		related = nil
 	}
-	seen := map[string]bool{}
-	for _, id := range ch.Seen {
-		seen[id] = true
-	}
-	l := workspaceLayout{Eriphe: ch.Eriphe, By: ch.By, Moment: ch.Moment, At: ch.At, Items: []layoutTile{}, Chips: []layoutChip{}}
+	l := workspaceLayout{Items: []layoutTile{}, Chips: []layoutChip{}}
 
 	var wants []layoutWant
 	added := map[string]bool{}
@@ -201,19 +195,13 @@ func layoutStage(pool []surface, ch workspaceChoice, focus, previous string, pl 
 		}
 		added[s.ID] = true
 		w := layoutWant{s: s, size: sizeOfWeight(s.Weight), why: s.Why, focus: focus}
-		if it, ok := chosen[s.ID]; ok {
-			if _, known := tileDims[it.Size]; known {
-				w.size = it.Size
-			}
-			w.why = cmp.Or(it.Why, w.why)
-		}
 		if p, ok := pl.Pins[s.ID]; ok {
 			w.pin = &p
 			if _, known := tileDims[p.Size]; known {
 				w.size = p.Size
 			}
-		} else if focus && sizeRank[w.size] < sizeRank[sizeL] {
-			w.size = sizeL
+		} else if focus {
+			w.size = sizeXL
 		}
 		w.why = truncate(oneLine(w.why), layoutWhyMax)
 		wants = append(wants, w)
@@ -223,9 +211,11 @@ func layoutStage(pool []surface, ch workspaceChoice, focus, previous string, pl 
 			add(s, id == focus)
 		}
 	}
-	for _, s := range pool {
-		if s.Weight >= weightUrgent && s.ID != focus {
-			add(s, false)
+	if _, ok := byID[focus]; ok {
+		for _, s := range pool {
+			if s.Weight >= weightUrgent && s.ID != focus {
+				add(s, false) // what waits stays in front of what the user opened
+			}
 		}
 	}
 	if s, ok := byID[focus]; ok {
@@ -238,13 +228,16 @@ func layoutStage(pool []surface, ch workspaceChoice, focus, previous string, pl 
 			}
 		}
 	}
-	for _, it := range ch.Items {
-		if s, ok := byID[it.ID]; ok {
+	for _, id := range related {
+		if s, ok := byID[id]; ok && !added[id] {
 			add(s, false)
+			if w := &wants[len(wants)-1]; w.pin == nil && sizeRank[w.size] > sizeRank[sizeM] {
+				w.size = sizeM
+			}
 		}
 	}
-	for _, s := range pool {
-		if !seen[s.ID] {
+	if len(related) == 0 {
+		for _, s := range pool {
 			add(s, false)
 		}
 	}
@@ -267,10 +260,10 @@ func layoutStage(pool []surface, ch workspaceChoice, focus, previous string, pl 
 			at[i] = &[2]int{w.pin.Col, w.pin.Row}
 		}
 	}
-	related := map[string]bool{}
+	isRelated := map[string]bool{}
 	if l.Focus != "" {
-		for _, id := range ch.Related {
-			related[id] = id != l.Focus
+		for _, id := range related {
+			isRelated[id] = id != l.Focus
 		}
 	}
 	spots := packTilesAt(sizes, at)
@@ -306,7 +299,7 @@ func layoutStage(pool []surface, ch workspaceChoice, focus, previous string, pl 
 			continue
 		}
 		d := tileDims[s.size]
-		l.Items = append(l.Items, layoutTile{ID: w.s.ID, Title: w.s.Title, Size: s.size, Col: s.col, Row: s.row, W: d[0], H: d[1], Why: w.why, Pinned: w.pin != nil, Related: related[w.s.ID], Urgent: w.s.Weight >= weightUrgent})
+		l.Items = append(l.Items, layoutTile{ID: w.s.ID, Title: w.s.Title, Size: s.size, Col: s.col, Row: s.row, W: d[0], H: d[1], Why: w.why, Pinned: w.pin != nil, Related: isRelated[w.s.ID], Urgent: w.s.Weight >= weightUrgent})
 	}
 	widenTiles(l.Items)
 	if l.Focus != "" && !slices.ContainsFunc(l.Items, func(t layoutTile) bool { return t.ID == l.Focus }) {
@@ -434,79 +427,28 @@ func widenTiles(tiles []layoutTile) {
 	}
 }
 
-// fallbackChoice is the choice by weight: nothing seen, so every surface is
-// laid out by its weight, the heaviest first.
-func fallbackChoice(moment string, now time.Time) workspaceChoice {
-	return workspaceChoice{By: fallbackBy, Moment: moment, At: now, Items: []choiceItem{}}
-}
-
 // layoutState is what eriphe-core keeps of the layout: the choice it lays
 // out, the surface opened, the last layout and who waits for the next.
 type layoutState struct {
 	mu         sync.Mutex
-	choice     *workspaceChoice
-	loaded     bool
 	focus      string
 	focusAt    time.Time  // when it was last opened: it lasts focusFor from then
 	focusSince time.Time  // when it began: opened again, it is the same focus
-	f          focusState // the choice around it, the base to go back to (workspace_focus.go)
+	f          focusState // who put it there, what was on stage before (workspace_front.go)
 	last       workspaceLayout
 	raw        string
 	changed    chan struct{} // closed when the layout changes
 	kick       chan struct{} // the queue changed: its surfaces are made again (workspace_queue.go)
 	syncMu     sync.Mutex    // one sync of the queue's surfaces at a time
 
-	missingSent map[string]time.Time // surface.missing told, by text
-	staleSent   map[string]time.Time // surface.stale told, by id: the surface's version it was told for
-
 	user       userPlacement       // what the user closed and placed this session (workspace_gestures.go)
 	userLoaded bool                // user was read from the store
 	read       map[string][]string // queue surfaces the user opened: the refs of the items other than cards they showed, which end once the user leaves it
 }
 
-func (c *core) choiceLocked() workspaceChoice {
-	st := &c.layout
-	if !st.loaded {
-		st.loaded = true
-		var ch workspaceChoice
-		if raw := c.store.get(choiceKey); raw != "" && json.Unmarshal([]byte(raw), &ch) == nil {
-			st.choice = &ch
-		}
-	}
-	if st.choice == nil {
-		return fallbackChoice(momentStart, time.Time{})
-	}
-	return *st.choice
-}
-
-// lastChoice is the last choice kept, nil before the first.
-func (c *core) lastChoice() *workspaceChoice {
-	st := &c.layout
-	st.mu.Lock()
-	defer st.mu.Unlock()
-	c.choiceLocked()
-	if st.choice == nil {
-		return nil
-	}
-	ch := *st.choice
-	return &ch
-}
-
-// keepChoice keeps a choice, in memory and in the store, and lays it out.
-func (c *core) keepChoice(ch workspaceChoice) workspaceLayout {
-	st := &c.layout
-	st.mu.Lock()
-	st.choice, st.loaded = &ch, true
-	st.mu.Unlock()
-	if raw, err := json.Marshal(ch); err == nil {
-		c.store.set(choiceKey, string(raw))
-	}
-	return c.relayout()
-}
-
 // focusSurface is the surface the user opened: code places it first, for
-// focusFor or until another is opened; the workspace is then composed
-// around it (workspace_focus.go). "" ends the focus: the layout before it
+// focusFor or until another is opened, what relates to it around
+// (workspace_focus.go). "" ends the focus: the layout before it
 // comes back.
 func (c *core) focusSurface(id string, now time.Time) { c.setFocus(id, now, "") } // workspace_front.go
 
@@ -529,12 +471,16 @@ func (c *core) workspaceFocus(now time.Time) string {
 	return st.focus
 }
 
-// relayout lays the pool out again, with the choice kept: at once, no
-// model. Those waiting for the layout are told when it changed.
+// relayout lays the pool out again: at once, no model. Those waiting for
+// the layout are told when it changed.
 func (c *core) relayout() workspaceLayout {
 	now := time.Now()
 	focus := c.workspaceFocus(now)
 	pool, err := c.surfaces()
+	var related []string
+	if err == nil && focus != "" {
+		related = relatedIDs(c.focusRelations(focus, pool))
+	}
 	start := c.workspaceSessionStart(now)
 	st := &c.layout
 	st.mu.Lock()
@@ -546,7 +492,7 @@ func (c *core) relayout() workspaceLayout {
 	if focus != "" {
 		previous = st.f.prev
 	}
-	l := layoutStage(pool, c.layoutChoiceLocked(focus, pool), focus, previous, c.placementLocked(start))
+	l := layoutStage(pool, focus, previous, related, c.placementLocked(start, pool))
 	if l.Focus != "" {
 		l.FocusBy = st.f.by
 	}

@@ -16,18 +16,18 @@ import (
 // it (#426).
 //
 //   - Gestures (workspace.go's workspace_log): opened, ignored, closed,
-//     moved, resized, about (a message written with it open). Each one but
-//     ignored and opened makes the composer choose again, once the burst
-//     settles (gestureStamp); opened is a focus, composed around
-//     (workspace_focus.go); the extraction reads them all.
-//   - The session's placement: what the user closed is not shown again
-//     (folded last, marked closed) and what they moved or resized is
-//     pinned there, at that size, for the session. A session lasts while
-//     the user is active, with no gap of more than an hour, within one day
-//     (from 05:00, the activity day of notify_quiet.go): past it, the
-//     placement goes and the composer places everything again. The brain
-//     places too, at the user's request (workspace_arrange), as the user
-//     would. Kept in kv (placementKey): a restart keeps it.
+//     moved, resized, about (a message written with it open). Opened is a
+//     focus, laid out around (workspace_focus.go); the extraction reads
+//     them all.
+//   - The placement: what the user moved or resized is pinned there, at
+//     that size, until they or the brain place it again or reset
+//     (workspace_arrange), or the surface goes: how the user wants the
+//     workspace laid out is kept, applied by code. The brain places too,
+//     at the user's request, as the user would (« l'agenda en grand »).
+//     What the user closed is not shown again (folded last, marked closed)
+//     for the session: it lasts while the user is active, with no gap of
+//     more than an hour, within one day (from 05:00, the activity day of
+//     notify_quiet.go). Kept in kv (placementKey): a restart keeps it.
 //   - The queue: closing a surface of the queue (author core) hides it for
 //     the session and ends its items other than cards (cards wait for
 //     their answer); an item other than a card also ends once the user
@@ -47,7 +47,7 @@ const (
 	placementSizes = "s, m, l, xl"
 )
 
-// placement is what the user closed and placed this session.
+// userPlacement is what the user placed, and closed this session.
 type userPlacement struct {
 	Closed map[string]int64   `json:"closed,omitempty"` // id → when (unix)
 	Pins   map[string]tilePin `json:"pins,omitempty"`
@@ -164,9 +164,10 @@ func (c *core) workspaceSessionStart(now time.Time) time.Time {
 	return sessionStartIn(ts, now, loc)
 }
 
-// placementLocked is the session's placement (c.layout.mu held): what was
-// closed or placed before start is dropped, for good.
-func (c *core) placementLocked(start time.Time) userPlacement {
+// placementLocked is the placement (c.layout.mu held): what was closed
+// before the session's start is dropped, for good; a pin stays while its
+// surface does (pool, when given: a pin of a surface gone goes).
+func (c *core) placementLocked(start time.Time, pool []surface) userPlacement {
 	st := &c.layout
 	c.loadPlacementLocked()
 	changed := false
@@ -176,10 +177,16 @@ func (c *core) placementLocked(start time.Time) userPlacement {
 			changed = true
 		}
 	}
-	for id, p := range st.user.Pins {
-		if p.At < start.Unix() {
-			delete(st.user.Pins, id)
-			changed = true
+	if pool != nil {
+		here := map[string]bool{}
+		for _, s := range pool {
+			here[s.ID] = true
+		}
+		for id := range st.user.Pins {
+			if !here[id] {
+				delete(st.user.Pins, id)
+				changed = true
+			}
 		}
 	}
 	if changed {
@@ -209,32 +216,32 @@ func (c *core) savePlacementLocked() {
 	}
 }
 
-// placementNow is the session's placement at now.
+// placementNow is the placement at now.
 func (c *core) placementNow(now time.Time) userPlacement {
 	start := c.workspaceSessionStart(now)
 	st := &c.layout
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return c.placementLocked(start)
+	return c.placementLocked(start, nil)
 }
 
-// placementActive tells whether the session holds a placement: the layout
-// is made again as time passes, for the session's end.
+// placementActive tells whether the user closed something this session:
+// the layout is made again as time passes, for the session's end.
 func (c *core) placementActive() bool {
 	st := &c.layout
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	c.loadPlacementLocked()
-	return !st.user.empty()
+	return len(st.user.Closed) > 0
 }
 
-// changePlacement changes the session's placement, keeps it, and lays the
-// workspace out again.
+// changePlacement changes the placement, keeps it, and lays the workspace
+// out again.
 func (c *core) changePlacement(now time.Time, change func(*userPlacement)) workspaceLayout {
 	start := c.workspaceSessionStart(now)
 	st := &c.layout
 	st.mu.Lock()
-	c.placementLocked(start)
+	c.placementLocked(start, nil)
 	if st.user.Closed == nil {
 		st.user.Closed = map[string]int64{}
 	}
@@ -328,7 +335,7 @@ func (c *core) closeSurface(id string, now time.Time) error {
 }
 
 // placeSurface is the user moving a surface or changing its size (what:
-// moved or resized): pinned there, at that size, for the session.
+// moved or resized): pinned there, at that size, until placed again.
 func (c *core) placeSurface(id, what, size string, col, row int, now time.Time) error {
 	if what != gestureMoved && what != gestureResized {
 		return errGesture
@@ -351,16 +358,6 @@ func (c *core) placeSurface(id, what, size string, col, row int, now time.Time) 
 func fitsGrid(size string, col, row int) bool {
 	d, ok := tileDims[size]
 	return ok && col >= 0 && row >= 0 && col+d[0] <= layoutCols && row+d[1] <= layoutRows
-}
-
-// gestureStamp changes with each gesture but ignored and opened: the
-// composer chooses again (runComposer). An ignored gesture is the layout's
-// own doing often (a tile the composer folded): it would loop. An opening
-// is a focus, composed around once it settles (workspace_focus.go).
-func (c *core) gestureStamp() string {
-	var id int64
-	c.store.db.QueryRow(`SELECT COALESCE(MAX(id), 0) FROM workspace_log WHERE what NOT IN (?, ?)`, gestureIgnored, gestureOpened).Scan(&id)
-	return fmt.Sprintf("g%d", id)
 }
 
 // The queue's natural end.
@@ -435,7 +432,7 @@ func (c *core) workspaceBlock(now time.Time) string {
 	}
 	name := func(id string) string {
 		if t := clean[id]; t != "" {
-			return fmt.Sprintf("%s « %s »", id, packQuote(truncate(t, poolTitleMax)))
+			return fmt.Sprintf("%s « %s »", id, packQuote(truncate(t, workspaceTitleMax)))
 		}
 		return id
 	}
@@ -452,7 +449,7 @@ func (c *core) workspaceBlock(now time.Time) string {
 			line += " · au centre juste avant"
 		}
 		if t.Pinned {
-			line += " · placée pour la session"
+			line += " · placée par lui"
 		}
 		b.WriteString(line)
 	}
@@ -490,7 +487,7 @@ func (c *core) workspaceBlock(now time.Time) string {
 }
 
 // screenSeen adds the page to what workspace_read says: each tile's size
-// and place (pinned: placed by the user this session), the one open, what
+// and place (pinned: placed by the user, or by you at their request), the one open, what
 // is folded and what the user closed this session.
 func (c *core) screenSeen(out map[string]any) {
 	l := c.currentLayout()
@@ -536,11 +533,11 @@ type arrangeItemIn struct {
 
 type workspaceArrangeIn struct {
 	Items []arrangeItemIn `json:"items,omitempty" jsonschema:"the surfaces to place, the first first (8 at most)"`
-	Reset bool            `json:"reset,omitempty" jsonschema:"first drop every placement of the session (the user's and yours): the composer places everything again; what the user closed stays closed"`
+	Reset bool            `json:"reset,omitempty" jsonschema:"first drop every placement (the user's and yours): code lays everything out in its order again; what the user closed stays closed"`
 }
 
 // arrangeWorkspace places surfaces as the user asked the brain: as the
-// user's own placement, for the session. Every id must be a surface's.
+// user's own placement, kept until placed again. Every id must be a surface's.
 func (c *core) arrangeWorkspace(in workspaceArrangeIn, now time.Time) ([]map[string]any, error) {
 	if len(in.Items) == 0 && !in.Reset {
 		return nil, errors.New("give items to place, or reset")
@@ -616,7 +613,7 @@ func (c *core) arrangeWorkspace(in workspaceArrangeIn, now time.Time) ([]map[str
 }
 
 func registerWorkspaceArrange(s *mcp.Server, c *core) {
-	tool(s, "workspace_arrange", "Arrange the user's workspace as they ask (« mets le résumé en grand », « mets ça en haut à droite », « remets tout comme avant »): each surface at a size, at a place on the 12 × 8 grid or in the order given, as if the user had placed it; it holds for their session (until they are away more than an hour, or the next day). Ids are those of the workspace part of your turn. Only on the user's request: what the workspace shows on its own is the composer's.",
+	tool(s, "workspace_arrange", "Arrange the user's workspace as they ask (« mets le résumé en grand », « mets ça en haut à droite », « remets tout comme avant »): each surface at a size, at a place on the 12 × 8 grid or in the order given, as if the user had placed it; it is kept until they or you place it again, or reset. A preference about how the workspace is laid out (« le résumé toujours en grand ») is applied with it, at once. Ids are those of the workspace part of your turn. Only on the user's request: otherwise code orders the workspace (what waits for the user first, then what is urgent, then what is new).",
 		func(ctx context.Context, in workspaceArrangeIn) (map[string]any, error) {
 			placed, err := c.arrangeWorkspace(in, time.Now())
 			if err != nil {

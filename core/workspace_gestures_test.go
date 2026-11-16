@@ -106,22 +106,7 @@ func TestGestureKinds(t *testing.T) {
 	if strings.Join(whats, " ") != want {
 		t.Fatalf("gestures %v, want %s", whats, want)
 	}
-	turn := composerTurn(poolSnapshot{Gestures: gs, Now: now})
-	for _, w := range []string{"fermé agenda", "déplacé agenda", "redimensionné agenda", "écrit à propos de agenda", "laissé sans l'ouvrir agenda"} {
-		if !strings.Contains(turn, w) {
-			t.Errorf("the composer's turn lacks %q", w)
-		}
-	}
-	// A gesture but ignored makes the composer choose again.
-	stamp := c.gestureStamp()
-	c.noteGesture(gestureIgnored, "surface:dehors", now)
-	if c.gestureStamp() != stamp {
-		t.Error("an ignored gesture recomposes: it would loop")
-	}
 	c.noteGesture(gestureResized, "surface:dehors", now)
-	if c.gestureStamp() == stamp {
-		t.Error("a resize does not recompose")
-	}
 	// A resize in steps (a click a size, the arrow keys) is one gesture.
 	c.noteGesture(gestureResized, "surface:dehors", now.Add(20*time.Second))
 	c.noteGesture(gestureResized, "surface:dehors", now.Add(40*time.Second))
@@ -163,13 +148,12 @@ func TestCloseCardSurfaceKeepsCard(t *testing.T) {
 }
 
 // What the user closed is not shown again in the session, folded last,
-// even when the composer chooses it; it is back the next session, or when
-// the user opens it.
+// through a restart too; it is back the next session, or when the user
+// opens it.
 func TestClosedNotShownAgainThisSession(t *testing.T) {
 	c, _ := surfaceCore(t)
 	writeTestSurface(t, c, surfaceIn{ID: "agenda", Title: "Agenda", Weight: 60})
 	writeTestSurface(t, c, surfaceIn{ID: "meteo", Title: "Météo", Weight: 40})
-	c.keepChoice(workspaceChoice{By: "composer", Items: []choiceItem{{ID: "meteo", Size: sizeL}, {ID: "agenda", Size: sizeM}}, Seen: []string{"agenda", "meteo"}})
 	now := time.Now()
 	c.focusSurface("meteo", now)
 	if err := c.closeSurface("meteo", now); err != nil {
@@ -182,15 +166,10 @@ func TestClosedNotShownAgainThisSession(t *testing.T) {
 	if ch, ok := chipOf(l, "meteo"); !ok || !ch.Closed || l.Chips[len(l.Chips)-1].ID != "meteo" {
 		t.Fatalf("chips %+v", l.Chips)
 	}
-	// The composer chooses it again: still closed, through a restart too.
-	c.keepChoice(workspaceChoice{By: "composer", Items: []choiceItem{{ID: "meteo", Size: sizeXL}}, Seen: []string{"agenda", "meteo"}})
+	// Still closed through a restart.
 	c.layout.userLoaded, c.layout.user = false, userPlacement{}
 	if _, ok := tileOf(c.relayout(), "meteo"); ok {
-		t.Fatal("closed, back after the composer chose it")
-	}
-	if snap := c.poolSnapshot(momentChange, ""); !snap.Closed["meteo"] || !strings.Contains(composerTurn(snap), "meteo · « Météo »") ||
-		!strings.Contains(composerTurn(snap), "fermée par lui pour la session") {
-		t.Fatalf("the composer is not told: %v", snap.Closed)
+		t.Fatal("closed, back after a restart")
 	}
 	// Opened from its chip: shown again.
 	c.focusSurface("meteo", now)
@@ -280,7 +259,7 @@ func TestLayoutWithPlacement(t *testing.T) {
 			"s-5": {Size: sizeXL, Order: 0, At: 9, By: placedByBrain},
 		},
 	}
-	l := layoutWith(pool, fallbackChoice(momentChange, time.Time{}), "s-3", pl)
+	l := layoutStage(pool, "s-3", "", nil, pl)
 	if o := overlaps(l); o != "" {
 		t.Fatal(o)
 	}
@@ -302,7 +281,7 @@ func TestLayoutWithPlacement(t *testing.T) {
 	// A place off the grid or taken is packed as any other.
 	pl.Pins["s-2"] = tilePin{Size: sizeM, Col: 10, Row: 0, Placed: true, At: 8}
 	pl.Pins["s-1"] = tilePin{Size: sizeM, Col: 8, Row: 6, Placed: true, At: 7}
-	l = layoutWith(pool, fallbackChoice(momentChange, time.Time{}), "", pl)
+	l = layoutStage(pool, "", "", nil, pl)
 	if o := overlaps(l); o != "" {
 		t.Fatal(o)
 	}
@@ -334,8 +313,8 @@ func TestWorkspaceBlock(t *testing.T) {
 	b := c.workspaceBlock(now)
 	for _, w := range []string{
 		"[l'espace de Sam, tel que sa page le montre",
-		"\n- agenda « Agenda du jour » · l en 0,0 · ouverte",
-		"\n- dehors · m en 9,6 · placée pour la session",
+		"\n- agenda « Agenda du jour » · xl en 0,0 · ouverte",
+		"\n- dehors · m en 9,6 · placée par lui",
 		"fermé par lui pour la session (ne le remets pas devant sans qu'il le demande) : meteo",
 		"ouvert agenda ; ", "déplacé dehors ; ", "fermé meteo]",
 	} {

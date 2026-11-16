@@ -361,13 +361,21 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	if w := c.threadRaised(s.ID); w > 0 {
 		in.Weight = max(in.Weight, queueSurfaceWeight(w))
 	}
+	// A note due soon (or past) makes it urgent: the tick writes it again
+	// as the time comes (keepThreadSurfaces).
+	if s.active() && c.notesDueBy(s.ID, now.Add(dueSoon)) {
+		in.Weight = max(in.Weight, weightUrgent)
+	}
 	if s.active() {
 		c.threadWhere(&out, data, s, now)
 	}
 	c.threadSince(&out, data, s, steps, watchFacts, now)
 	c.blockSteps(&out, data, s, steps)
 	var head threadComps
-	word, tone := threadStatus(s, steps, s.active() && threadWaitsUser(steps, asks, linked), in.Weight, lang)
+	waits := s.active() && threadWaitsUser(steps, asks, linked)
+	in.fresh = c.threadNew(s, steps, lang)
+	in.state = threadTileState(s, steps, waits, in.Weight, in.fresh)
+	word, tone := threadStatus(s, steps, waits, in.Weight, lang)
 	c.blockHead(&head, data, s, steps, word, tone)
 	out.list = append(head.list, out.list...)
 	out.children = append(head.children, out.children...)
@@ -533,7 +541,7 @@ func (c *core) keepThreadSurface(id int64) {
 
 // shownHash is what a surface written by code shows, as a hash.
 func shownHash(in surfaceIn) string {
-	raw, _ := json.Marshal([]any{in.Title, in.Why, in.Weight, in.Lifetime, string(in.Components), string(in.Data), in.Tainted, in.codeTaint, in.answers, in.summary})
+	raw, _ := json.Marshal([]any{in.Title, in.Why, in.Weight, in.Lifetime, string(in.Components), string(in.Data), in.Tainted, in.codeTaint, in.answers, in.summary, in.state, in.fresh})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
@@ -545,9 +553,12 @@ func (c *core) keepThreadSurfaces() {
 	if err != nil {
 		return
 	}
+	due := c.threadsDueBy(time.Now().Add(dueSoon))
 	for _, s := range ss {
 		if sf, err := c.surface(threadSurfaceID(s.ID)); errors.Is(err, errNoSurface) || (err == nil && sf.Author != threadAuthor(s.ID)) {
 			c.keepThreadSurface(s.ID)
+		} else if err == nil && due[s.ID] && sf.Weight < weightUrgent {
+			c.keepThreadSurface(s.ID) // a note's due time came close: it turns urgent
 		}
 	}
 }

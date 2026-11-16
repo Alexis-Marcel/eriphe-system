@@ -117,7 +117,7 @@ func TestWebLayout(t *testing.T) {
 }
 
 // The workspace's language is the one it was opened in: the queue's
-// surfaces and Eriphe's line follow it.
+// surfaces follow it.
 func TestWorkspaceLangFromBoot(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -130,8 +130,5 @@ func TestWorkspaceLangFromBoot(t *testing.T) {
 	resp.Body.Close()
 	if got := tw.c.userLang(); got != "en" {
 		t.Fatalf("lang %q", got)
-	}
-	if turn := composerTurn(tw.c.poolSnapshot(momentChange, "")); !strings.Contains(turn, "en anglais") {
-		t.Fatalf("turn:\n%s", turn)
 	}
 }
