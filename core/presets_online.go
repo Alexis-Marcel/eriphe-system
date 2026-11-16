@@ -334,6 +334,12 @@ var onlineServices = []onlineService{
 			"Le plan gratuit ne permet que de lire ; les brouillons demandent un plan payant. L'envoi se fait dans Beehiiv."},
 		en: [3]string{"Beehiiv newsletter: posts, subscribers, stats.", "Beehiiv: my newsletter, subscribers and stats",
 			"The free plan reads only; drafts need a paid plan. Sending is done in Beehiiv."}},
+	// Substack's own server only reads: no public API writes a post.
+	{id: "substack", title: "Substack", url: "https://mcp.substack.com/api/v1/mcp", cat: "social", readsOnly: true,
+		fr: [3]string{"Stats de ta publication Substack : abonnés, posts, revenus.", "Substack : les stats de ma publication",
+			"Pour l'admin d'une publication. Substack ne laisse rien publier par une app : les articles se publient dans Substack, les Notes peuvent passer par Buffer."},
+		en: [3]string{"Your Substack publication's stats: subscribers, posts, revenue.", "Substack: my publication's stats",
+			"For a publication's admin. Substack lets no app publish: posts are published in Substack, Notes can go through Buffer."}},
 	{id: "kit", title: "Kit", url: "https://app.kit.com/mcp", cat: "social", paid: true,
 		fr: [3]string{"Newsletter Kit (ConvertKit) : abonnés, envois, stats.", "Kit : ma newsletter, abonnés et envois",
 			"Plans Kit payants (Creator, Pro). L'envoi se confirme dans Kit."},
