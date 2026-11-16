@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -453,14 +452,13 @@ func (c *core) tellLead(s Thread, text string, taint []string) {
 // user must hear or answer.
 func (c *core) tellBrain(s Thread, text string, taint []string) {
 	line := fmt.Sprintf("[thread %d « %s »] %s", s.ID, s.Title, text)
-	seq, err := c.store.addMessage(roleEvent, line, true)
+	seq, err := c.store.addThreadMessage(roleEvent, line, "", s.ID, true) // its turn is about the thread (thread_turn.go)
 	if err != nil {
 		return
 	}
 	if len(taint) > 0 {
 		c.store.set(taintKey(int(seq)), strings.Join(taint, ", "))
 	}
-	c.store.set(threadEventKey(int(seq)), strconv.FormatInt(s.ID, 10)) // its turn is about the thread (thread_turn.go)
 	c.store.undeliver(int(seq), int(seq))
 	c.ping()
 }

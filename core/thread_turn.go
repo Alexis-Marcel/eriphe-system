@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 )
 
@@ -33,50 +32,18 @@ func (t *brainTurn) aboutThread() int64 {
 	return t.thread
 }
 
-// threadEventKey marks an event of the conversation as one of a thread's
-// (tellBrain): its delivery makes the turn about it.
-func threadEventKey(seq int) string { return fmt.Sprintf("thread_msg:%d", seq) }
-
 // threadsDelivered sets the thread the turn is about from what it was
-// given: none, unless an event of a thread is among it, or a message of
-// the user's written about a thread (its surface open on the workspace,
-// or a surface about a live thread); the last one wins. A new
-// delivery never keeps the thread of the turn before.
+// given: the last message that belongs to a thread (an event of a thread,
+// or a message of the user's written with it open: thread_talk.go); none
+// otherwise. A new delivery never keeps the thread of the turn before.
 func (c *core) threadsDelivered(msgs []Message) {
 	var id int64
 	for _, m := range msgs {
-		if n, err := strconv.ParseInt(c.store.get(threadEventKey(m.Seq)), 10, 64); err == nil && n > 0 {
-			id = n
-		} else if n := c.threadAbout(m); n > 0 {
-			id = n
+		if m.Thread > 0 {
+			id = m.Thread
 		}
 	}
 	c.turn.about(id)
-}
-
-// threadAbout is the thread a message of the user's was written about: the
-// thread whose surface was open, or the live thread the open surface is
-// about; 0 if none.
-func (c *core) threadAbout(m Message) int64 {
-	if m.Role != roleUser {
-		return 0
-	}
-	sid, ok := strings.CutPrefix(c.messageAbout(m.Seq), surfaceRefPrefix)
-	if !ok {
-		return 0
-	}
-	if n, ok := threadOfSurface(sid); ok {
-		if _, err := c.thread(n); err == nil {
-			return n
-		}
-		return 0
-	}
-	if s, err := c.surface(sid); err == nil && s.About != "" {
-		if n, ok := c.liveThreadOf(s.About); ok {
-			return n
-		}
-	}
-	return 0
 }
 
 // turnThread notes that the brain's turn named a thread, by a tool of its
@@ -143,15 +110,12 @@ func (c *core) callToBrain(a accessQuestion, text, taint string) {
 	} else {
 		id = 0
 	}
-	seq, err := c.store.addMessage(roleEvent, text, true)
+	seq, err := c.store.addThreadMessage(roleEvent, text, "", id, true)
 	if err != nil {
 		return
 	}
 	if taint != "" {
 		c.store.set(taintKey(int(seq)), taint)
-	}
-	if id > 0 {
-		c.store.set(threadEventKey(int(seq)), strconv.FormatInt(id, 10))
 	}
 	c.store.undeliver(int(seq), int(seq))
 	c.ping()

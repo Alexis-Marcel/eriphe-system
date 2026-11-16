@@ -174,15 +174,16 @@ func (s *Store) removeAttachments(atts []Attachment) {
 }
 
 // addUserMessage adds my message with its attachments, at once: the brain
-// never sees the message without them.
-func (s *Store) addUserMessage(text string, atts []Attachment) (int64, error) {
+// never sees the message without them. thread is the thread it belongs to
+// (thread_talk.go), 0 for the home.
+func (s *Store) addUserMessage(text string, atts []Attachment, thread int64) (int64, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
 	now := time.Now().Unix()
-	res, err := tx.Exec(`INSERT INTO messages (time, role, text, delivered) VALUES (?, ?, ?, 0)`, now, roleUser, text)
+	res, err := tx.Exec(`INSERT INTO messages (time, role, text, delivered, thread) VALUES (?, ?, ?, 0, ?)`, now, roleUser, text, thread)
 	if err != nil {
 		return 0, err
 	}

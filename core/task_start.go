@@ -254,8 +254,9 @@ func (c *core) taskStartDeclined(id int64) {
 	if err != nil {
 		return
 	}
-	c.store.addMessage(roleEvent, fmt.Sprintf("%s a refusé le lancement de la tâche %s : elle ne démarre pas. Ne la relance pas telle quelle ; "+
-		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), false)
+	thread, _ := c.threadOfTask(s.TaskID) // its step's thread's (thread_talk.go)
+	c.store.addThreadMessage(roleEvent, fmt.Sprintf("%s a refusé le lancement de la tâche %s : elle ne démarre pas. Ne la relance pas telle quelle ; "+
+		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), "", thread, false)
 	c.ping()
 }
 

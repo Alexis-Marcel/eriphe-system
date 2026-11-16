@@ -35,8 +35,8 @@ import type { Layout } from "./types";
 //   Proposal), answered by an "answer" action (answerProposal);
 // - GET /api/proposals?day=: the dated proposals that wait that day, which
 //   a Day shows as ghosts (dayProposals);
-// - GET /api/espace/earlier?before=: the conversation's lines before the
-//   last exchange, a few at a time (earlier).
+// - GET /api/espace/earlier?before=&thread=: a thread's (or the home's)
+//   lines before the last exchange, a few at a time (earlier).
 // No control of the page keeps a rule or a preference: the user says it to
 // Eriphe, who remembers it.
 // A request without a session gets 401: the page goes to the sign-in. With
@@ -175,19 +175,30 @@ export type SurfaceEvent = { seq: number; reset?: boolean; messages: Message[] }
 // error, without its text.
 export type ExchangeLine = { seq: number; role: "user" | "brain" | "error"; text?: string; via?: string; time: string; external?: boolean };
 
-// The "exchange" event: the user's last message and Eriphe's lines after
-// it, whether lines come before it (earlier), the message Eriphe is
-// writing, and whether it is at work.
-export type Exchange = { lines: ExchangeLine[]; earlier?: boolean; draft?: string; thinking?: boolean };
+// The "exchange" event: the exchange of the thread open (thread, its
+// title), or the home's without one; the user's last message there and
+// Eriphe's lines after it, whether lines come before it (earlier), the
+// message Eriphe is writing, whether it is at work, and the replies its
+// last line suggests.
+export type Exchange = {
+  thread?: number;
+  title?: string;
+  lines: ExchangeLine[];
+  earlier?: boolean;
+  draft?: string;
+  thinking?: boolean;
+  suggestions?: string[];
+};
 
 // Earlier is a few lines of the conversation before a line, oldest first,
 // and whether more come before them.
 export type Earlier = { lines: ExchangeLine[]; more: boolean };
 
-// earlier reads the lines of the conversation before the line seq, for
-// the user who scrolls up the left column.
-export async function earlier(before: number): Promise<Earlier> {
-  return (await getJSON<Earlier>(`/api/espace/earlier?before=${before}`)) ?? { lines: [], more: false };
+// earlier reads the lines of a thread's exchange (none: the home's)
+// before the line seq, for the user who scrolls up the left column.
+export async function earlier(before: number, thread?: number): Promise<Earlier> {
+  const of = thread ? `&thread=${thread}` : "";
+  return (await getJSON<Earlier>(`/api/espace/earlier?before=${before}${of}`)) ?? { lines: [], more: false };
 }
 
 // A notification routed to this tab (inApp, route_send.go): shown in the
@@ -211,7 +222,8 @@ export function stream(b: Boot, adapter: Adapter, onLayout: (l: Layout) => void 
       listen("exchange", (e) => {
         try {
           const x = JSON.parse(e.data) as Exchange;
-          on({ ...x, lines: Array.isArray(x.lines) ? x.lines : [] });
+          const suggestions = Array.isArray(x.suggestions) ? x.suggestions.filter((s) => typeof s === "string") : undefined;
+          on({ ...x, lines: Array.isArray(x.lines) ? x.lines : [], suggestions });
         } catch {
           /* not an exchange */
         }
@@ -392,10 +404,12 @@ export function answerMessage(a: Answer): ActionMessage {
 }
 
 // send writes to the brain, in the conversation, marked as typed in the
-// workspace (so Eriphe may answer with a surface on stage); about is the
-// surface open while it was written (surface:<id>).
-export async function send(text: string, about?: string | null): Promise<boolean> {
-  const body = new URLSearchParams({ text, from: "workspace" });
+// workspace (so Eriphe may answer with a surface on stage), or as a reply
+// it suggested, chosen (from "suggestion": never a card's answer); about is
+// the surface open while it was written (surface:<id>): with a thread
+// open, the message belongs to it.
+export async function send(text: string, about?: string | null, from: "workspace" | "suggestion" = "workspace"): Promise<boolean> {
+  const body = new URLSearchParams({ text, from });
   if (about) body.set("about", about);
   return post("/messages", body);
 }

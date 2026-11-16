@@ -62,6 +62,8 @@ var espaceStrings = map[string]map[string]string{
 		"espace.exchange.all":      "Toute la conversation",
 		"espace.exchange.earlier":  "Messages d'avant",
 		"espace.exchange.external": "Écrit après avoir lu un contenu extérieur",
+		"espace.exchange.on":       "Sur « %s »",
+		"espace.exchange.replies":  "Réponses suggérées",
 		"espace.notices":           "Notifications",
 		"espace.notice.close":      "Fermer",
 
@@ -176,6 +178,8 @@ var espaceStrings = map[string]map[string]string{
 		"espace.exchange.all":      "The whole conversation",
 		"espace.exchange.earlier":  "Earlier messages",
 		"espace.exchange.external": "Written after reading external content",
+		"espace.exchange.on":       "On “%s”",
+		"espace.exchange.replies":  "Suggested replies",
 		"espace.notices":           "Notifications",
 		"espace.notice.close":      "Dismiss",
 

@@ -14,10 +14,16 @@ import { localURL } from "./presence";
 //
 // The page places it all as text; Eriphe's text is Markdown, drawn by the
 // page's own renderer (a2ui/markdown.tsx), which makes no HTML of it.
+//
+// The conversation leads (#613): the exchange is the one of the thread
+// open, which the column names (« Sur « titre » »), the home's when none
+// is. Under Eriphe's latest answer, the replies it suggested, in its own
+// words: a click sends the sentence as the user's message, there.
 
 // Sent is a message the user just wrote here, shown before eriphe-core has
-// it: after is the exchange's last seq when it was sent.
-export type Sent = { text: string; after: number };
+// it: after is the exchange's last seq when it was sent, about the surface
+// open then (null: none), where it shows until it lands.
+export type Sent = { text: string; after: number; about: string | null };
 
 export function lastSeq(x: Exchange | null): number {
   return x?.lines.reduce((m, l) => Math.max(m, l.seq), 0) ?? 0;
@@ -38,13 +44,18 @@ export type Item = { kind: "line"; line: ExchangeLine } | { kind: "draft"; text:
 
 // present is the last exchange as the column shows it: the message sent,
 // alone until it lands (it is the last exchange then), or the event's
-// lines; the draft; and whether Eriphe is at work.
-export function present(x: Exchange | null, sent: Sent | null): { items: Item[]; writing: boolean } {
+// lines; the draft; whether Eriphe is at work; and the replies it
+// suggests, only under its answer, the exchange's last line, when nothing
+// else is on its way.
+export function present(x: Exchange | null, sent: Sent | null): { items: Item[]; writing: boolean; replies: string[] } {
   const p = pendingOf(x, sent);
   const items: Item[] = p ? [{ kind: "line", line: { seq: -1, role: "user", text: p.text, time: "" } }] : (x?.lines ?? []).map((line) => ({ kind: "line", line }));
   const draft = x?.draft ?? "";
   if (draft) items.push({ kind: "draft", text: draft });
-  return { items, writing: !draft && (!!p || !!x?.thinking) };
+  const writing = !draft && (!!p || !!x?.thinking);
+  const last = items.at(-1);
+  const answered = !p && !draft && !writing && last?.kind === "line" && last.line.role === "brain" && !last.line.external;
+  return { items, writing, replies: answered ? (x?.suggestions ?? []).slice(0, 3) : [] };
 }
 
 // upward tells whether a key scrolls the column up.
@@ -98,16 +109,34 @@ function Line({ line, latest }: { line: ExchangeLine; latest: boolean }) {
 // scrolled up (the button shows).
 type Before = { head: number; lines: ExchangeLine[]; more: boolean; asked: boolean };
 
+// Replies are the replies Eriphe suggests under its answer: a click sends
+// the sentence, as the user's own.
+function Replies({ replies, onReply }: { replies: string[]; onReply: (text: string) => void }) {
+  const { t } = useWords();
+  if (replies.length === 0) return null;
+  return (
+    <div className="exchange-replies" role="group" aria-label={t("espace.exchange.replies")}>
+      {replies.map((r) => (
+        <button key={r} type="button" className="exchange-reply" onClick={() => onReply(r)}>
+          {r}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // Present is the left column's conversation: the last exchange, Eriphe's
-// newest line large. Scrolling up shows the button that brings the lines
-// before it (load); they stay until the next exchange.
-export function Present({ x, sent, load }: {
+// newest line large, the replies it suggests under it (onReply sends one).
+// Scrolling up shows the button that brings the lines before it (load);
+// they stay until the next exchange.
+export function Present({ x, sent, load, onReply }: {
   x: Exchange | null;
   sent: Sent | null;
   load: (before: number) => Promise<Earlier>;
+  onReply: (text: string) => void;
 }) {
   const { t } = useWords();
-  const { items, writing } = present(x, sent);
+  const { items, writing, replies } = present(x, sent);
   const pending = !!pendingOf(x, sent);
   const head = pending ? -1 : (x?.lines[0]?.seq ?? 0);
   const [state, setState] = useState<Before>({ head, lines: [], more: false, asked: false });
@@ -192,6 +221,7 @@ export function Present({ x, sent, load }: {
         ),
       )}
       {writing && <Dots />}
+      <Replies replies={replies} onReply={onReply} />
     </div>
   );
 }

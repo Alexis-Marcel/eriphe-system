@@ -376,7 +376,7 @@ func valuesAt(v any, toks []string) []any {
 // askFromSurface writes an ask as a message of the user's, about the
 // surface, and wakes the brain; it does not wait for it.
 func (c *core) askFromSurface(s surface, text string) error {
-	seq, err := c.store.addMessageVia(roleUser, text, viaWorkspaceAsk, false)
+	seq, err := c.store.addThreadMessage(roleUser, text, viaWorkspaceAsk, c.surfaceThread(s.ID), false) // thread_talk.go
 	if err != nil {
 		return err
 	}

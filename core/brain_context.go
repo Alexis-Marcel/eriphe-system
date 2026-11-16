@@ -514,7 +514,7 @@ func (c *core) packTasks() (perms, tasks []string) {
 // Events are left out: they quote what tasks said.
 func (c *core) packMessages(budget int) (lines []string, dropped int) {
 	user := c.conf().User
-	msgs, err := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages
+	msgs, err := c.store.queryMessages(`SELECT `+messageCols+` FROM messages
 		WHERE delivered = 1 AND role IN ('user', 'brain') ORDER BY seq DESC LIMIT ?`, packMessagesRead)
 	if err != nil {
 		return nil, 0

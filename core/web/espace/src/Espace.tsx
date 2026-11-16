@@ -104,12 +104,13 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const [gallery] = useState(() => new URLSearchParams(location.search).has("gallery"));
   const proposals = useMemo(() => (live ? coreProposals : sampleProposals(lang)), [live, lang]);
 
-  // The conversation's last exchange (Exchange.tsx), in the left column;
-  // the lines before it on request (load).
+  // The last exchange of the thread open, or of the home (Exchange.tsx),
+  // in the left column; the lines before it on request (load).
   const [exchange, setExchange] = useState<data.Exchange | null>(null);
   const [sent, setSent] = useState<Sent | null>(null);
   const onExchange = useCallback((x: data.Exchange) => setExchange(x), []);
-  const loadEarlier = useCallback((before: number) => (live ? data.earlier(before) : Promise.resolve(sampleEarlier(lang, before))), [live, lang]);
+  const thread = exchange?.thread;
+  const loadEarlier = useCallback((before: number) => (live ? data.earlier(before, thread) : Promise.resolve(sampleEarlier(lang, before))), [live, lang, thread]);
   useEffect(() => {
     if (landed(exchange, sent)) setSent(null);
   }, [exchange, sent]);
@@ -252,17 +253,20 @@ export function Espace({ boot }: { boot: data.Boot }) {
   const nothing = !gallery && !!shown && !onSurfaces;
 
   // A message goes to Eriphe with the surface open, if any: « montre-m'en
-  // moins », « lance une recherche là-dessus ». It shows in the exchange at
-  // once, Eriphe's answer under it as it comes.
-  const send = async (msg: string) => {
+  // moins », « lance une recherche là-dessus »; with a thread open, it
+  // belongs to it. It shows in the exchange at once, Eriphe's answer under
+  // it as it comes. A reply Eriphe suggested goes the same way, chosen.
+  const about = sopen ? "surface:" + sopen : null;
+  const send = async (msg: string, from: "workspace" | "suggestion" = "workspace") => {
     if (!live) return say(t("espace.sent.sample"));
-    const mine: Sent = { text: msg, after: lastSeq(exchange) };
+    const mine: Sent = { text: msg, after: lastSeq(exchange), about };
     setSent(mine);
-    if (!(await data.send(msg, sopen ? "surface:" + sopen : null).catch(() => false))) {
+    if (!(await data.send(msg, about, from).catch(() => false))) {
       setSent((s) => (s === mine ? null : s));
       say(t("espace.error"));
     }
   };
+  const reply = (msg: string) => send(msg, "suggestion");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -307,7 +311,8 @@ export function Espace({ boot }: { boot: data.Boot }) {
               <Icon name="settings" />
             </a>
           </div>
-          <Present x={exchange} sent={sent} load={loadEarlier} />
+          {exchange?.title && <p className="exchange-on">{t("espace.exchange.on", exchange.title)}</p>}
+          <Present x={exchange} sent={sent?.about === about ? sent : null} load={loadEarlier} onReply={reply} />
           {live && nothing && <p className="eriphe-sample quiet">{t("espace.empty")}</p>}
           {!live && <p className="eriphe-sample">{t("espace.sample")}</p>}
           {down && (

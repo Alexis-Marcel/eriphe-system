@@ -58,6 +58,8 @@ const words = {
   "espace.exchange.all": "Toute la conversation",
   "espace.exchange.earlier": "Messages d'avant",
   "espace.exchange.external": "Écrit après avoir lu un contenu extérieur",
+  "espace.exchange.on": "Sur « %s »",
+  "espace.exchange.replies": "Réponses suggérées",
   "espace.notice.close": "Fermer",
 };
 
@@ -82,7 +84,7 @@ beforeEach(() => {
       presenceNotes = [];
       return new Response(JSON.stringify({ notes }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
-    const before = /^\/api\/espace\/earlier\?before=(\d+)$/.exec(url);
+    const before = /^\/api\/espace\/earlier\?before=(\d+)(&thread=\d+)?$/.exec(url);
     if (before) {
       const page = earlierPages[Number(before[1])] ?? { lines: [], more: false };
       return new Response(JSON.stringify(page), { status: 200, headers: { "Content-Type": "application/json" } });
@@ -384,7 +386,9 @@ describe("earlier messages", () => {
 });
 
 describe("a message written with a thread open", () => {
-  it("goes about the thread, and shows in the left column, never in the thread's card", async () => {
+  const on = () => el.querySelector(".exchange-on")?.textContent ?? null;
+
+  it("belongs to the thread: the column shows its exchange and names it, never in the thread's card", async () => {
     await open("thread-3");
     await submit("mets plutôt un formulaire Formspree");
     expect(posts.find((p) => p.url === "/messages")!.form?.get("about")).toBe("surface:thread-3");
@@ -392,15 +396,103 @@ describe("a message written with a thread open", () => {
     expect(left().querySelector(".exchange-dots")).not.toBeNull();
     await act(async () =>
       FakeSource.emit("exchange", {
+        thread: 3,
+        title: "Site portfolio",
         lines: [
           { seq: 5, role: "user", text: "mets plutôt un formulaire Formspree", time: at(1) },
           { seq: 6, role: "brain", text: "D'accord : **Formspree** plutôt que mailto.", time: at(0) },
         ],
       }),
     );
+    expect(on()).toBe("Sur « Site portfolio »");
     expect(left().querySelector(".present-brain strong")!.textContent).toBe("Formspree");
-    expect(card().querySelector(".present-bubble, .present-brain, .exchange-dots")).toBeNull();
+    expect(card().querySelector(".present-bubble, .present-brain, .exchange-dots, .exchange-replies")).toBeNull();
     expect(card().textContent).not.toContain("Formspree");
+
+    // Back home: the home's exchange, unnamed.
+    await act(async () => {
+      FakeSource.emit("layout", layout());
+      FakeSource.emit("exchange", { lines: [{ seq: 2, role: "user", text: "bonjour", time: at(9) }] });
+    });
+    expect(on()).toBeNull();
+    expect(bubbles()).toEqual(["bonjour"]);
+  });
+
+  it("shows a message being sent only where it was written", async () => {
+    await open("thread-3");
+    await act(async () => FakeSource.emit("exchange", { thread: 3, title: "Site portfolio", lines: [{ seq: 4, role: "brain", text: "Prêt.", time: at(2) }] }));
+    await submit("et le pied de page ?");
+    expect(bubbles()).toEqual(["et le pied de page ?"]);
+    // The user goes back home before it lands: not in the home's column.
+    await act(async () => {
+      FakeSource.emit("layout", layout());
+      FakeSource.emit("exchange", { lines: [{ seq: 2, role: "user", text: "bonjour", time: at(9) }] });
+    });
+    expect(bubbles()).toEqual(["bonjour"]);
+  });
+
+  it("brings the thread's earlier lines, not the home's", async () => {
+    earlierPages[9] = { lines: [{ seq: 7, role: "user", text: "le menu ?", time: at(5) }], more: false };
+    await open("thread-3");
+    await act(async () =>
+      FakeSource.emit("exchange", {
+        thread: 3,
+        title: "Site portfolio",
+        lines: [{ seq: 9, role: "user", text: "et le logo ?", time: at(1) }],
+        earlier: true,
+      }),
+    );
+    await act(async () => void left().dispatchEvent(new WheelEvent("wheel", { deltaY: -40, bubbles: true })));
+    await act(async () => left().querySelector<HTMLButtonElement>(".present-earlier")!.click());
+    await settle();
+    expect(posts.some((p) => p.url === "/api/espace/earlier?before=9&thread=3")).toBe(true);
+    expect(bubbles()).toEqual(["le menu ?", "et le logo ?"]);
+  });
+});
+
+describe("the replies Eriphe suggests", () => {
+  const replies = () => [...left().querySelectorAll<HTMLButtonElement>(".exchange-replies .exchange-reply")];
+  const answered = (more: Partial<data.Exchange> = {}) =>
+    FakeSource.emit("exchange", {
+      thread: 3,
+      title: "Site portfolio",
+      lines: [
+        { seq: 5, role: "user", text: "la PR est prête ?", time: at(1) },
+        { seq: 6, role: "brain", text: "Oui, les tests passent.", time: at(0) },
+      ],
+      suggestions: ["Fusionne-la", "Montre-moi le diff"],
+      ...more,
+    });
+
+  it("shows them as chips under the answer; a click sends the sentence as the user's message, in the thread", async () => {
+    await open("thread-3");
+    await act(async () => answered());
+    expect(replies().map((b) => b.textContent)).toEqual(["Fusionne-la", "Montre-moi le diff"]);
+    expect(left().querySelector(".exchange-replies")!.getAttribute("aria-label")).toBe("Réponses suggérées");
+
+    await act(async () => replies()[1].click());
+    await settle();
+    const sent = posts.filter((p) => p.url === "/messages").at(-1)!;
+    expect(sent.form?.get("text")).toBe("Montre-moi le diff");
+    expect(sent.form?.get("from")).toBe("suggestion");
+    expect(sent.form?.get("about")).toBe("surface:thread-3");
+    // Sent: shown as the user's, the chips gone while Eriphe answers.
+    expect(bubbles()).toEqual(["Montre-moi le diff"]);
+    expect(replies()).toHaveLength(0);
+  });
+
+  it("shows none while Eriphe writes, under a line that is not its answer, or after external content", async () => {
+    await open("thread-3");
+    await act(async () => answered({ draft: "Je regarde" }));
+    expect(replies()).toHaveLength(0);
+    await act(async () => answered({ thinking: true }));
+    expect(replies()).toHaveLength(0);
+    await act(async () => answered({ lines: [{ seq: 7, role: "user", text: "et ?", time: at(0) }] }));
+    expect(replies()).toHaveLength(0);
+    await act(async () => answered({ lines: [{ seq: 6, role: "brain", text: "Lu dans le mail.", time: at(0), external: true }] }));
+    expect(replies()).toHaveLength(0);
+    await act(async () => answered({ suggestions: ["a", "b", "c", "d"] }));
+    expect(replies()).toHaveLength(3);
   });
 });
 
@@ -409,18 +501,20 @@ describe("what the page places", () => {
   const brain = (seq: number) => ({ seq, role: "brain" as const, text: "r" + seq, time: "2026-11-15T10:00:00Z" });
 
   it("knows when the message sent has landed", () => {
-    const sent = { text: "salut", after: 4 };
+    const sent = { text: "salut", after: 4, about: null };
     expect(landed({ lines: [brain(4)] }, sent)).toBe(false);
     expect(landed({ lines: [user(5)] }, sent)).toBe(true);
   });
 
   it("shows the message sent alone until it lands, then the exchange; Eriphe at work while nothing answers", () => {
     const x = { lines: [user(1), brain(2)] };
-    expect(present(x, null)).toEqual({ items: [{ kind: "line", line: user(1) }, { kind: "line", line: brain(2) }], writing: false });
-    const sent = present(x, { text: "et ?", after: 2 });
+    expect(present(x, null)).toEqual({ items: [{ kind: "line", line: user(1) }, { kind: "line", line: brain(2) }], writing: false, replies: [] });
+    expect(present({ ...x, suggestions: ["Oui"] }, null).replies).toEqual(["Oui"]);
+    const sent = present({ ...x, suggestions: ["Oui"] }, { text: "et ?", after: 2, about: null });
     expect(sent.items.map((i) => (i.kind === "line" ? i.line.text : ""))).toEqual(["et ?"]);
     expect(sent.writing).toBe(true);
-    const drafting = present({ lines: [user(3)], draft: "Alors" }, { text: "m3", after: 2 });
+    expect(sent.replies).toEqual([]);
+    const drafting = present({ lines: [user(3)], draft: "Alors" }, { text: "m3", after: 2, about: null });
     expect(drafting.items.map((i) => i.kind)).toEqual(["line", "draft"]);
     expect(drafting.writing).toBe(false);
   });

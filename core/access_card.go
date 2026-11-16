@@ -785,6 +785,7 @@ func (c *core) accessDecidedTold(id int64, approve bool) {
 	if approve {
 		word = "accepté"
 	}
-	c.store.addMessage(roleEvent, fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), false)
+	thread, _ := c.threadOfTask(a.TaskID) // its step's thread's (thread_talk.go)
+	c.store.addThreadMessage(roleEvent, fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), "", thread, false)
 	c.ping()
 }

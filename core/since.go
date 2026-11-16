@@ -275,7 +275,7 @@ func intentionHappenings(c *core, from time.Time, limit int) ([]happening, error
 // messageHappenings are the user's messages and the brain's, short; a brain
 // message that went out as a notification is that notification already.
 func messageHappenings(c *core, from time.Time, limit int) ([]happening, error) {
-	msgs, err := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages
+	msgs, err := c.store.queryMessages(`SELECT `+messageCols+` FROM messages
 		WHERE role IN ('user', 'brain') AND time >= ? AND seq NOT IN (SELECT msg FROM notifications WHERE msg IS NOT NULL)
 		ORDER BY seq LIMIT ?`, from.Unix(), limit)
 	if err != nil {

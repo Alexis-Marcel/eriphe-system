@@ -1056,15 +1056,16 @@ block it. What a tool said, or an intention drawn from external content, taints 
 what still waits or runs in it: its tasks stop, its step cards are withdrawn (`callStepGone`).
 
 **The brain's turn about a thread** (`thread_turn.go`): a turn that names a thread (a thread tool
-called on it, or the delivered event of one of its steps, `thread_msg:<seq>`) is about it until it
+called on it, or a delivered message that belongs to it: an event of one of its steps, a message of
+the user's written in it, by the messages' `thread` column) is about it until it
 names another. The cards it raises meanwhile (one of its own calls' access cards, a task's start)
 are that thread's and show in its timeline; while one waits, the thread's surface shows it under
 « À toi », answered in place (and not again in the attention queue's surfaces), and a decision
 moves the thread (`linkedCardMoved`). How a call kept on a linked card went (run on a yes, or
-refused) comes back as that thread's event (`callToBrain`: `[thread N « title »] …`, marked
-`thread_msg:<seq>`), so the turn that reads it is about the thread. A new delivery
-(or a heartbeat) starts about no thread, unless it carries a thread's event or a message of the
-user's written over a thread's surface (or a surface about it); a thread tool on an id that
+refused) comes back as that thread's event (`callToBrain`: `[thread N « title »] …`, belonging
+to it), so the turn that reads it is about the thread. A new delivery
+(or a heartbeat) starts about no thread, unless it carries a message that belongs to a thread (an
+event of it, or a message of the user's written with it open); a thread tool on an id that
 is no thread changes nothing. The user writing over a thread's surface about something else
 (« j'ai quoi de prévu aujourd'hui ? »): the brain opens or finds that other matter's thread
 (`open_thread`, a `day` one for what is only today's) before its first card or task, and the turn is
@@ -3466,7 +3467,8 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
 - **A message about what is open.** A message written on `/espace` while a surface is open
   carries it (`POST /messages` with `about` `surface:<id>`; kept as `about_msg:<seq>` when it names
   a surface): the brain reads it as `[Sam 10:02 #12 · depuis l'espace · à propos de surface:…]`. « Montre-m'en moins », « lance une
-  recherche là-dessus » are said in words.
+  recherche là-dessus » are said in words. With a thread open, the message belongs to it (see
+  **The conversation leads**, below): the brain reads `· fil 7` instead.
 
 ### The composed workspace, the home page (`/`)
 
@@ -3519,9 +3521,52 @@ marked as such. Scrolling up the column (a wheel, a touch, a scroll or an upward
 **Messages d'avant**, which brings the lines before, 10 at a time
 (`GET /api/espace/earlier?before=<seq>`, `{lines, more}`, the same filter); they stay, the view
 kept where it was, until the next exchange. The brain's memory and the stored messages are
-untouched: only what the column shows. A message written with a thread's surface open still makes
-the turn about that thread (`threadAbout`); the thread's card shows no exchange. The
+untouched: only what the column shows. The thread's card shows no exchange. The
 cards the user must answer are not repeated there: they are the queue's surfaces (`q-card-*`).
+
+**The conversation leads** (#613, `thread_talk.go`, `brain_suggest.go`). One brain, one queue: every message of the
+conversation belongs to a thread or to the home, in its `thread` column (`0`: the home; messages
+from before it belong to the home).
+
+- **A message written with a thread open belongs to it.** `handleSend` resolves the `about` the
+  page sends (`surfaceThread`): a thread's own surface (`thread-<id>`, a child's opened inside its
+  parent included) or a surface about a live thread. A button's `ask` on such a surface too. The
+  message is a turn like any other, the thread named: the brain reads
+  `[Sam 10:02 #12 · depuis l'espace · fil 7]` (its id only: a title may carry someone else's words,
+  and the thread's card gives the rest), and the turn is about it (`threadsDelivered`). A channel's, the CLI's and the API's messages belong to the home.
+- **The brain's answer belongs to the thread of what it answers**, fixed at delivery (`talkOf`, kept
+  in the turn as `talk`): the last message of the user's in the delivery, else the last event of a
+  thread; the home for anything else. The thread the turn names later (a tool on another thread)
+  is for its cards only. A failure of the turn (the error line) and the note that asks it again for
+  a tool call written as text belong there too; a heartbeat's answer and a failure to start, to the
+  home. An event of a thread (a step moved, a card linked to it decided, its lead's report, a task
+  step's start declined or access decided) belongs to it; the catalog's, a machine's and the
+  brain's own notes and notifications to the home.
+- **The exchange goes with what Eriphe puts on stage.** When the brain answers with
+  `workspace_focus` on a thread, the turn's messages (the user's it answers, what it said since)
+  move to that thread (`talkMoves`): the question was about it, and the column shows it there.
+- **The column.** The stream's `exchange` event is the exchange of the thread open in the last
+  layout (`threadOpen`: `inside`, else `focus`), with `thread` and `title`; the page says
+  « Sur « titre » » / "On “title”" above it. With none open, the home's. The stream sends it again
+  when the layout changes. `GET /api/espace/earlier` takes `thread=<id>`. Eriphe's draft shows in
+  the exchange its turn answers in only, and its work (`thinking`) there or under a message of the
+  user's still waiting. A message being sent shows only where it was written. A plain "oui" decides
+  the card just above in its own thread only (`resolveByText`).
+- **Suggested replies.** The brain may close an answer with up to 3 replies in its own words, one
+  per line, in a block: `<suggestions>` … `</suggestions>`. Code cuts it where the text is stored
+  (`copyBrainOutput`) and where the draft is kept (`brainWrote`, prefix-safe: a marker being
+  written is never shown), so the workspace, the conversation, channels, the voice, push and the
+  memory never see it. From the marker on, nothing is text, even unclosed (it fails closed). A
+  reply over 80 characters, empty, repeated or holding `<`/`>` is dropped, never cut. They are kept
+  beside the message (`suggest_msg:<seq>`) only when its turn read no external content
+  (`suggestReplies`): a tainted turn offers none, whatever it wrote. A trailing block rather than a
+  tool: the answer is the text after the last tool call (`answerText`), so a tool after it would
+  make it a working note, and one before would suggest replies to an answer not written yet. The
+  `exchange` event carries them (`suggestions`) only for its last line, the brain's, clean, with no
+  draft; the page shows them as chips under it, hidden while a message is on its way or Eriphe
+  writes. A chip sends its sentence as the user's message, in the thread open (`POST /messages`
+  with `from` `suggestion`): typed in the workspace for the brain, but it never decides a card (no
+  click does). It is no A2UI action: the click grammar is unchanged.
 
 **The fallback.** The conversation is where the user lands when the workspace cannot open. The
 shell (`templates/espace.html`) has no JavaScript of its own: without JavaScript a `<noscript>`

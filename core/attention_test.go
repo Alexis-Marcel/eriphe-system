@@ -22,7 +22,7 @@ func shownAtOnce(t *testing.T, c *core, x convoCard, weight int) {
 	if err != nil || len(msgs) != 1 || msgs[0].Seq != x.Seq || msgs[0].Role != roleBrain || strings.TrimSpace(msgs[0].Text) == "" {
 		t.Fatalf("no message of its own: %+v %v", msgs, err)
 	}
-	if msgs, _ := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE role = ?`, roleUser); len(msgs) != 0 {
+	if msgs, _ := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ?`, roleUser); len(msgs) != 0 {
 		t.Fatalf("a user message: %+v", msgs)
 	}
 	w, err := newWeb(c, WebConfig{})
@@ -104,7 +104,7 @@ func TestAttentionWeightByKind(t *testing.T) {
 
 func brainMessages(t *testing.T, c *core) []Message {
 	t.Helper()
-	msgs, err := c.store.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE role = ? ORDER BY seq`, roleBrain)
+	msgs, err := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? ORDER BY seq`, roleBrain)
 	if err != nil {
 		t.Fatal(err)
 	}

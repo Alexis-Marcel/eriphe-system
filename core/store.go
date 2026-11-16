@@ -119,7 +119,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS messages (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL,
   role TEXT NOT NULL, text TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0,
-  via TEXT NOT NULL DEFAULT '');
+  via TEXT NOT NULL DEFAULT '',
+  thread INTEGER NOT NULL DEFAULT 0); -- the thread it belongs to, 0 for the home (thread_talk.go)
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS inbox (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, kind TEXT NOT NULL,
@@ -505,6 +506,10 @@ type Message struct {
 	// Via is where I said it, when not in the workspace or the CLI: "voix,
 	// Bureau". For an error, where the brain failed: "turn" or "start".
 	Via string `json:"via,omitempty"`
+	// Thread is the thread the message belongs to, 0 for the home: mine
+	// written with it open, the brain's answer to it, its events
+	// (thread_talk.go).
+	Thread int64 `json:"thread,omitempty"`
 	// Attachments are the files of my message (attachments.go).
 	Attachments []Attachment `json:"attachments,omitempty"`
 	// Notice is what the workspace shows of an event: nil for the brain's
@@ -516,13 +521,21 @@ type Message struct {
 	Why   *msgWhy    `json:"-"`
 }
 
+// messageCols are a message's columns, as queryMessages reads them.
+const messageCols = "seq, time, role, text, via, thread"
+
 func (s *Store) addMessage(role, text string, delivered bool) (int64, error) {
 	return s.addMessageVia(role, text, "", delivered)
 }
 
 func (s *Store) addMessageVia(role, text, via string, delivered bool) (int64, error) {
-	res, err := s.db.Exec(`INSERT INTO messages (time, role, text, delivered, via) VALUES (?, ?, ?, ?, ?)`,
-		time.Now().Unix(), role, text, delivered, via)
+	return s.addThreadMessage(role, text, via, 0, delivered)
+}
+
+// addThreadMessage adds a message that belongs to a thread (0: the home).
+func (s *Store) addThreadMessage(role, text, via string, thread int64, delivered bool) (int64, error) {
+	res, err := s.db.Exec(`INSERT INTO messages (time, role, text, delivered, via, thread) VALUES (?, ?, ?, ?, ?, ?)`,
+		time.Now().Unix(), role, text, delivered, via, thread)
 	if err != nil {
 		return 0, err
 	}
@@ -531,7 +544,7 @@ func (s *Store) addMessageVia(role, text, via string, delivered bool) (int64, er
 
 // undelivered returns the messages and events waiting for the brain.
 func (s *Store) undelivered() ([]Message, error) {
-	return s.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE delivered = 0 AND role IN ('user', 'event') ORDER BY seq`)
+	return s.queryMessages(`SELECT ` + messageCols + ` FROM messages WHERE delivered = 0 AND role IN ('user', 'event') ORDER BY seq`)
 }
 
 // undeliver hands the messages from..to back to the brain: the task they
@@ -551,7 +564,7 @@ func (s *Store) markDelivered(upTo int) error {
 }
 
 func (s *Store) messagesAfter(after, limit int) ([]Message, error) {
-	return s.queryMessages(`SELECT seq, time, role, text, via FROM messages WHERE seq > ? ORDER BY seq LIMIT ?`, after, limit)
+	return s.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq > ? ORDER BY seq LIMIT ?`, after, limit)
 }
 
 // hasBrainMessage tells whether the brain has ever written in the conversation.
@@ -577,7 +590,7 @@ func (s *Store) queryMessages(q string, args ...any) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		var t int64
-		if err := rows.Scan(&m.Seq, &t, &m.Role, &m.Text, &m.Via); err != nil {
+		if err := rows.Scan(&m.Seq, &t, &m.Role, &m.Text, &m.Via, &m.Thread); err != nil {
 			return nil, err
 		}
 		m.Time = time.Unix(t, 0)

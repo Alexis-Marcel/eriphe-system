@@ -140,7 +140,7 @@ func TestBrainWorkingNoteNotShown(t *testing.T) {
 	if text, _, _ := c.draft.get(); text != "" {
 		t.Fatalf("draft after the turn = %q", text)
 	}
-	lines, _, err := c.store.lastExchange()
+	lines, _, err := c.store.lastExchange(0)
 	if err != nil {
 		t.Fatal(err)
 	}
