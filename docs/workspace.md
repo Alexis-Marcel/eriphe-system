@@ -31,7 +31,8 @@ Who writes the tiles:
   it moves: its goal, where it stands, what waits for you (its proposals, answered right there, and
   a **C'est fait** / **Done** button for a step only you can do), its steps on a timeline, the live data it follows (a list of your
   mails, the pull requests to review, a number of a service), read by Eriphe itself with no AI
-  model, each item it lists on its own line, and what Eriphe added (a diff, a link). Small, it shows one line (« Fusion ✓ · Déploiement à toi »). A step
+  model, each item it lists on its own line with what Eriphe noted about it (marked « extérieur » when that
+  note came from reading something from outside), and what Eriphe added (a diff, a link). Small, it shows one line (« Fusion ✓ · Déploiement à toi »). A step
   that read something from outside says « extérieur ». Once the thread is done, its tile stays
   until the end of the day, or until you press **Ranger** / **Put away** on it: the tile goes, the
   thread is kept and comes back if its matter does. A thread for what you manage continuously

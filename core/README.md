@@ -1172,6 +1172,22 @@ by code from the thread's data (#468): it never depends on a model remembering t
     item, by its id, is a row of `/thread/sources/<n>/items` (`source`, `id`, `n` its place in the
     list), at most 200, in a `List`: what the thread lists is shown with no model. A read again
     changes the data, not the components.
+- **Notes on items** (#571, `thread_items.go`, table `thread_items`): the brain (`note_item`, with
+  the thread) and a thread's lead (`note_item`, its own) note one item a source lists, by the
+  source's name and the item's id: a short note (300 characters), a state (`act`, `look`, `info`,
+  `none`, `done`) and a due date; the same item noted again replaces it, nothing at all takes it
+  away; 500 a thread. Its `author` (`brain`, `lead:<id>`) and `tainted` (the brain turn's taint,
+  the lead session's) are code's, never given. Code joins it to its item's row (`note`, `state`,
+  `due`, `by`, `detail`; `external` for a tainted one, which taints the surface for the models,
+  `note:<source>/<item>`). A tainted note is shown, never quoted into a summary: it is in no
+  summary, fact, one-line summary or message code writes, and reading it (`read_thread`'s
+  `notes`, the lead's `thread`) taints the reader, so `remember` kind `progress` is then refused
+  (`errProgressTainted`). No item row carries an action, so a tainted note's never asks. A note
+  stays while its item is listed; once a good read no longer lists it (never a failed or refused
+  one; every item the source lists counts, beyond the 200 shown), or its source is taken away,
+  it is kept 7 days (`gone`, back if the item is listed again; noting it again keeps that date),
+  then the engine's tick takes it away (`pruneItemNotes`). A note on an item not listed yet waits
+  for it the same way.
 - **A live thread** (#555, `thread_live.go`): one kind of source: who holds the thread may make it
   follow up to 3 monitors the user approved (`link_thread` with `source` `monitor`, its name; a
   proposed one is refused).

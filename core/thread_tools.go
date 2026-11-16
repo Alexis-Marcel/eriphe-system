@@ -82,6 +82,7 @@ type threadView struct {
 	Steps []Step       `json:"steps"`
 	Log   []ThreadLine `json:"log"`
 	Asks  int          `json:"cards_waiting,omitempty"`
+	Notes []itemNote   `json:"notes,omitempty"` // on its sources' items (thread_items.go)
 }
 
 func (c *core) threadView(id int64, lines int) (threadView, error) {
@@ -93,7 +94,7 @@ func (c *core) threadView(id int64, lines int) (threadView, error) {
 	if err != nil {
 		return threadView{}, err
 	}
-	v := threadView{Thread: s, Steps: steps, Log: c.threadLog(id, lines)}
+	v := threadView{Thread: s, Steps: steps, Log: c.threadLog(id, lines), Notes: c.itemNotes(id)}
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_asks WHERE thread = ? AND state = ?`, id, askPending).Scan(&v.Asks)
 	return v, nil
 }
@@ -204,6 +205,9 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			v, err := c.threadView(in.Thread, 20)
 			if err == nil {
 				c.turnThread(in.Thread)
+				for _, why := range readNotesTaint(v.Notes) {
+					c.turn.taint(why) // a note written after reading outside content
+				}
 				for _, st := range v.Steps {
 					if st.Tainted != "" {
 						c.turn.taint(st.Tainted) // a call's result, an external intention
@@ -282,6 +286,13 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			}
 			c.turnThread(in.Thread)
 			return c.chooseStep(ctx, in.Thread, in.Step, in.Option, "user")
+		})
+
+	tool(s, "note_item", "Note one item a thread's source lists (a mail, an event, a pull request), by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a due date. Code shows it on the item's row; it stays while the source lists the item, and goes some days after it no longer does. A note written after reading external content is marked so and never quoted into a summary. The same item noted again replaces it; no note, state nor due takes it away.",
+		func(ctx context.Context, in noteItemIn) (map[string]any, error) {
+			c.turnThread(in.Thread)
+			note, err := c.noteItem(in.Thread, in, byBrain, c.turnTaint())
+			return map[string]any{"note": note}, err
 		})
 
 	tool(s, "close_thread", "Close a thread once its real goal is reached, never before: the summary says how. A light one closes at once, done. A led one you lead, once every step is accepted, rejected, dropped or blocked; with a done_when, a fresh agent checks the objective first, and you are told of its verdict. To give up instead, stop_thread.",

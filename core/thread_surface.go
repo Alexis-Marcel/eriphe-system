@@ -687,7 +687,12 @@ func (c *core) removeThreadPart(who surfaceCaller, thread int64) (map[string]any
 		return nil, fmt.Errorf("the surface %s is the thread's, kept by code while it lives", threadSurfaceID(thread))
 	}
 	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, threadPartKey+strconv.FormatInt(thread, 10))
-	c.store.db.Exec(`DELETE FROM thread_sources WHERE thread = ? AND by = ?`, thread, byPart)
+	for _, src := range c.threadSources(thread) {
+		if src.By == byPart {
+			c.store.db.Exec(`DELETE FROM thread_sources WHERE thread = ? AND name = ?`, thread, src.Name)
+			c.sourceNotesGone(thread, src.Name, time.Now())
+		}
+	}
 	c.keepThreadSurface(thread)
 	return map[string]any{"removed": "part", "note": "Your part is gone; the thread's surface stays while the thread does."}, nil
 }

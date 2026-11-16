@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -235,6 +236,7 @@ func (c *core) dropThreadSource(id int64, name, by string) (string, error) {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return "", fmt.Errorf("the thread has no source %q", name)
 	}
+	c.sourceNotesGone(id, name, time.Now()) // thread_items.go
 	c.logThread(id, by, "Source retirée : "+name+".")
 	c.kickWorkspace()
 	return "Source removed.", nil
@@ -340,8 +342,14 @@ func (c *core) keepSourceReads(thread int64, srcs map[string]threadSource, reads
 		if r.err == "" && r.why == "" {
 			raw, _ := json.Marshal(r.value)
 			// Written again meanwhile as another source: this read is not its.
-			_, err = c.store.db.Exec(`UPDATE thread_sources SET value = ?, read = ?, error = '', waiting = '', next_at = ? WHERE thread = ? AND name = ? AND spec = ?`,
+			var res sql.Result
+			res, err = c.store.db.Exec(`UPDATE thread_sources SET value = ?, read = ?, error = '', waiting = '', next_at = ? WHERE thread = ? AND name = ? AND spec = ?`,
 				string(raw), now.Unix(), next, thread, name, string(spec))
+			if err == nil && src.Items != nil {
+				if n, _ := res.RowsAffected(); n > 0 {
+					c.itemsListed(thread, storedSource{threadSource: src, Value: r.value}, now) // thread_items.go
+				}
+			}
 		} else {
 			_, err = c.store.db.Exec(`UPDATE thread_sources SET error = ?, waiting = ?, next_at = ? WHERE thread = ? AND name = ? AND spec = ?`,
 				r.err, r.why, next, thread, name, string(spec))
@@ -414,6 +422,7 @@ func (c *core) setPartSources(thread int64, srcs map[string]threadSource, reads 
 		rows.Close()
 		for _, name := range gone {
 			c.store.db.Exec(`DELETE FROM thread_sources WHERE thread = ? AND name = ?`, thread, name)
+			c.sourceNotesGone(thread, name, time.Now())
 		}
 	}
 	if len(srcs) == 0 {
@@ -528,8 +537,8 @@ func (c *core) threadOpened(ctx context.Context, thread int64) {
 }
 
 // threadSourceItems are the items of what a source read: each with its id,
-// as many as threadItemsMax, in the order the source gives them.
-func threadSourceItems(src storedSource) []map[string]any {
+// in the order the source gives them, as many as most (0: all of them).
+func threadSourceItems(src storedSource, most int) []map[string]any {
 	if src.Items == nil || src.Value == nil {
 		return nil
 	}
@@ -551,7 +560,7 @@ func threadSourceItems(src storedSource) []map[string]any {
 		}
 		seen[id] = true
 		out = append(out, map[string]any{"source": src.Name, "id": id, "n": i})
-		if len(out) == threadItemsMax {
+		if len(out) == most {
 			break
 		}
 	}
@@ -566,6 +575,12 @@ func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[strin
 	lang, loc := c.userLang(), c.userZone()
 	type comp = map[string]any
 	values := map[string]any{}
+	notes := map[string]itemNote{}
+	for _, n := range c.itemNotes(s.ID) {
+		if n.Gone == 0 {
+			notes[n.Source+"\x00"+n.Item] = n
+		}
+	}
 	var shown []any
 	for _, src := range c.threadSources(s.ID) {
 		if src.kind() == srcMonitor {
@@ -599,15 +614,26 @@ func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[strin
 		}
 		out.add(comp{"id": "thread_src_" + n + "_by", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/sources/" + n + "/caption"}})
 		if src.Items != nil {
-			items := threadSourceItems(src)
+			// Each item, its note joined by code (thread_items.go). No row
+			// carries an action: a tainted note's never may ask.
+			items := threadSourceItems(src, threadItemsMax)
 			rows := make([]any, 0, len(items))
 			for _, it := range items {
-				it["label"] = it["id"]
+				it["label"], it["detail"] = it["id"], ""
+				if note, ok := notes[src.Name+"\x00"+it["id"].(string)]; ok {
+					noteRow(it, note, lang, loc, now)
+					if note.Tainted != "" {
+						in.codeTaint = append(in.codeTaint, threadNoteTaint+src.Name+"/"+note.Item)
+					}
+				}
 				rows = append(rows, it)
 			}
 			v["items"] = rows
-			out.add(comp{"id": "thread_src_" + n + "_items", "component": "List", "children": map[string]any{"path": "/thread/sources/" + n + "/items", "componentId": "thread_src_" + n + "_item"}})
-			out.inner(comp{"id": "thread_src_" + n + "_item", "component": "Text", "text": map[string]any{"@path": "label"}})
+			item := "thread_src_" + n + "_item"
+			out.add(comp{"id": "thread_src_" + n + "_items", "component": "List", "children": map[string]any{"path": "/thread/sources/" + n + "/items", "componentId": item}})
+			out.inner(comp{"id": item, "component": "Column", "children": []any{item + "_label", item + "_detail"}},
+				comp{"id": item + "_label", "component": "Text", "text": map[string]any{"@path": "label"}},
+				comp{"id": item + "_detail", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "detail"}})
 		}
 		shown = append(shown, v)
 	}
