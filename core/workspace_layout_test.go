@@ -242,3 +242,9 @@ func TestRelayout(t *testing.T) {
 		t.Fatalf("after removal %s", tilesOf(l))
 	}
 }
+
+// layoutOf lays the pool out, with the surface the user opened ("" for
+// none), and no placement of the user's.
+func layoutOf(pool []surface, focus string) workspaceLayout {
+	return layoutStage(pool, focus, "", nil, userPlacement{})
+}

@@ -20,7 +20,7 @@ import (
 // attentionSignal is one block: the objects it is about, how much they
 // matter, why, and what Eriphe could say of them.
 type attentionSignal struct {
-	Refs   []string `json:"refs" jsonschema:"the objects it is about: thread:<id> (its tile rises), card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…)"`
+	Refs   []string `json:"refs" jsonschema:"the objects it is about: thread:<id> (its tile rises), card:<id>, task:<id>, or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…)"`
 	Weight int      `json:"weight" jsonschema:"5 interrupts the user, 4 needs the user now, 3 matters today, 2 a glance, 1 background"`
 	Why    string   `json:"why" jsonschema:"why it deserves attention, in the user's language, at most 80 characters"`
 	Say    string   `json:"say,omitempty" jsonschema:"what Eriphe could tell the user of it, in the user's language, one sentence; optional"`
@@ -38,7 +38,7 @@ const (
 // the receipt's own instruction (receiptInstruction).
 const attentionInstruction = "When something deserves the user's attention, add to the receipt an \"attention\" list, one entry per thing: " +
 	`"attention": [{"refs": ["thread:<id>"], "weight": 3, "why": "at most 80 characters, in the user's language", "say": "optional: what Eriphe could tell the user, one sentence in the user's language"}]` + ". " +
-	"refs name the objects it is about, each in one of these forms: thread:<id> (the thread's tile rises on the workspace), card:<id>, task:<id>, surface:<id> (a surface of the workspace), or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
+	"refs name the objects it is about, each in one of these forms: thread:<id> (the thread's tile rises on the workspace), card:<id>, task:<id>, or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
 	"Leave refs out when the entry is about your final message itself. " +
 	"Leave the list out when nothing deserves it: the user is then told nothing."
@@ -48,10 +48,9 @@ const attentionInstruction = "When something deserves the user's attention, add 
 // alert:<id>…, the id as written. No kind is a tool's: an item of a
 // thread's source is raised through its thread (task_threads.go).
 const (
-	refThread  = "thread"  // thread:<id>: its tile takes the weight (workspace_queue.go)
-	refCard    = "card"    // card:<id>, a card of the conversation
-	refTask    = "task"    // task:<id>
-	refSurface = "surface" // surface:<id>, a surface of the workspace (surfaces.go)
+	refThread = "thread" // thread:<id>: its tile takes the weight (workspace_queue.go)
+	refCard   = "card"   // card:<id>, a card of the conversation
+	refTask   = "task"   // task:<id>
 )
 
 // itemRef is a ref, parsed.
@@ -80,10 +79,6 @@ func parseRef(s string) (itemRef, error) {
 	case refThread, refCard:
 		if n, err := strconv.ParseInt(id, 10, 64); err != nil || n <= 0 {
 			return r, errBadRef{"a " + kind + " is a number"}
-		}
-	case refSurface:
-		if !surfaceIDRe.MatchString(id) {
-			return r, errBadRef{"a surface is its id"}
 		}
 	case refTask:
 	default:

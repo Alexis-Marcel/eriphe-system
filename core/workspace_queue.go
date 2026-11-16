@@ -97,12 +97,8 @@ func queueGroupOf(kind string) string {
 var queueIDPart = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,40}$`)
 
 // queueSurfaceID is the surface of an urgent item's ref: q-<kind>-<id>, or
-// a hash of the ref when its id is not one a surface's id may hold; the
-// surface itself for surface:<id>.
+// a hash of the ref when its id is not one a surface's id may hold.
 func queueSurfaceID(ref string) string {
-	if id, ok := strings.CutPrefix(ref, refSurface+":"); ok {
-		return id // an item about a surface is shown by that surface (#423)
-	}
 	kind, id, _ := strings.Cut(strings.ToLower(ref), ":")
 	if !queueIDPart.MatchString(kind) || len(kind) > 16 {
 		kind = "item"
@@ -146,10 +142,6 @@ func (c *core) queuePlan(now time.Time) []queueEntry {
 // threads are the cards an active thread's surface shows, by ref.
 func (c *core) queuePlace(it attentionItem, today time.Time, threads map[string]int64) queueEntry {
 	e := queueEntry{it: it}
-	if id, ok := strings.CutPrefix(it.Ref, refSurface+":"); ok {
-		e.surface, e.about = id, true
-		return e
-	}
 	if id, ok := raisedThread(it.Ref); ok {
 		if _, err := c.surface(threadSurfaceID(id)); err == nil {
 			e.surface, e.about = threadSurfaceID(id), true // its tile rises (threadSurfaceIn)

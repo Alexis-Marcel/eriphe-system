@@ -150,12 +150,6 @@ type layoutWant struct {
 	pin   *tilePin
 }
 
-// layoutOf lays the pool out, with the surface the user opened ("" for
-// none). It is pure: no model, no store.
-func layoutOf(pool []surface, focus string) workspaceLayout {
-	return layoutStage(pool, focus, "", nil, userPlacement{})
-}
-
 // layoutStage lays the pool out with the user's placement (workspace_gestures.go):
 // what they closed is folded last, marked closed, and never opened; what
 // they placed (or the brain placed at their request) comes first, at its

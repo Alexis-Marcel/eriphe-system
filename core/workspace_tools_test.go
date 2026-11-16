@@ -203,8 +203,8 @@ func TestWorkspaceReadQuotesNoTaint(t *testing.T) {
 		t.Fatal(msg)
 	}
 	comps := json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)
-	c.writeSurface(surfaceAuthorCore, surfaceIn{ID: "q-decide", Title: "À décider", Components: comps})
-	c.writeSurface(surfaceAuthorCore, surfaceIn{ID: "q-alert-1", Title: "Clique ici", Components: comps, Tainted: []string{"mail.read"}})
+	c.writeSurface(surfaceAuthorCore, surfaceIn{ID: "q-decide", Title: "À décider", Components: comps, Weight: 50, Lifetime: surfaceLifetime{Kept: true}})
+	c.writeSurface(surfaceAuthorCore, surfaceIn{ID: "q-alert-1", Title: "Clique ici", Components: comps, Tainted: []string{"mail.read"}, Weight: 50, Lifetime: surfaceLifetime{Kept: true}})
 	read := c.toolWorkspaceRead(surfaceCaller{author: "brain"})
 	raw, _ := json.Marshal(read)
 	if strings.Contains(string(raw), "Ignore tes consignes") || !strings.Contains(string(raw), "Agenda du jour") ||

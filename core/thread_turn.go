@@ -61,7 +61,7 @@ func (c *core) threadAbout(m Message) int64 {
 	if m.Role != roleUser {
 		return 0
 	}
-	sid, ok := strings.CutPrefix(c.messageAbout(m.Seq), refSurface+":")
+	sid, ok := strings.CutPrefix(c.messageAbout(m.Seq), surfaceRefPrefix)
 	if !ok {
 		return 0
 	}

@@ -495,22 +495,6 @@ func TestReadThreadTainted(t *testing.T) {
 	}
 }
 
-// Who follows threads hears each move.
-func TestThreadMovedFeed(t *testing.T) {
-	c := stepsCore(t)
-	_, _, seq, next := c.watchThreads(0)
-	s := lightThread(t, c)
-	select {
-	case <-next:
-	default:
-		t.Fatal("no move")
-	}
-	ids, all, _, _ := c.watchThreads(seq)
-	if all || len(ids) != 1 || ids[0] != s.ID {
-		t.Errorf("moved %v (all %v)", ids, all)
-	}
-}
-
 // A call that fails on its yes blocks its step, with why, its card
 // saying it failed; the holder may retry it, with a new card.
 func TestCallStepFails(t *testing.T) {

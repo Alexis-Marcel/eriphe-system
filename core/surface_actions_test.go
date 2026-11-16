@@ -331,7 +331,7 @@ func TestSurfaceActionAnswerQueue(t *testing.T) {
 
 	// Tainted, code's own still answers.
 	y := cardOf(t, c, cardRule, other.ID)
-	_, errs, err := c.writeSurface(surfaceAuthorCore, surfaceIn{ID: "q-card-test", Title: "Règle", Tainted: []string{"attention"},
+	_, errs, err := c.writeSurface(surfaceAuthorCore, surfaceIn{ID: "q-card-test", Title: "Règle", Tainted: []string{"attention"}, Weight: 50,
 		Components: json.RawMessage(`[{"id":"root","component":"Proposal","proposalId":"` + y.Ref + `"}]`), Lifetime: surfaceLifetime{Kept: true}})
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)

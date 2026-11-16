@@ -35,9 +35,8 @@ import (
 //     cards at a time (attentionCardsPerBreak), the rest waiting.
 //
 // The queue never pushes to a device: only a notification decided at weight
-// 5 does (notify.go). An item may be about a surface (surface:<id>): it
-// lends it its weight, and leaves the queue with it; one about a thread
-// (thread:<id>) raises that thread's tile (workspace_queue.go).
+// 5 does (notify.go). An item about a thread (thread:<id>) raises that
+// thread's tile (workspace_queue.go).
 //
 // Nothing waits on a held item: the brain reads the open items in its turn
 // (attentionBlock), the held ones marked so, and answers as usual. The
@@ -273,12 +272,6 @@ func (c *core) attentionWhere(where string, args ...any) []attentionItem {
 				continue
 			}
 			it.tainted = it.tainted || p.Tainted != ""
-		}
-		if id, ok := strings.CutPrefix(it.Ref, refSurface+":"); ok {
-			if _, err := c.surface(id); err != nil {
-				c.attentionDone(it.Ref) // its surface is gone
-				continue
-			}
 		}
 		out = append(out, it)
 	}

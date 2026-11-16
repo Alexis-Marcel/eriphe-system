@@ -183,3 +183,12 @@ func TestPlacementKept(t *testing.T) {
 		t.Fatal("the pin of a surface gone stayed")
 	}
 }
+
+// placementNow is the placement at now.
+func (c *core) placementNow(now time.Time) userPlacement {
+	start := c.workspaceSessionStart(now)
+	st := &c.layout
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return c.placementLocked(start, nil)
+}

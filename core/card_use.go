@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -275,13 +274,4 @@ func (s *Store) cardUses(since time.Time, about string) []cardUse {
 // String says the counts in a line, for the log and tests.
 func (u cardUse) String() string {
 	return fmt.Sprintf("%s %d pushed, %d wrote, %d answered, %d no, %d waiting", u.Place, u.Pushed, u.Wrote, u.Answered, u.Unused, u.Waiting)
-}
-
-// cardUsesLine says them all.
-func cardUsesLine(us []cardUse) string {
-	var parts []string
-	for _, u := range us {
-		parts = append(parts, u.String())
-	}
-	return strings.Join(parts, "; ")
 }

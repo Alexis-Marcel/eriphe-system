@@ -97,7 +97,7 @@ func TestThreadSurfaceLight(t *testing.T) {
 	if err := c.surfaceRemove(sid, surfaceAuthorBrain); err == nil {
 		t.Error("the brain removed a thread's surface")
 	}
-	if _, _, err := c.fixtureSurface("skill:revue", surfaceIn{ID: threadSurfaceID(th.ID + 1), Title: "x", Components: whole.Components}); err == nil {
+	if _, _, err := c.writeSurface("skill:revue", surfaceIn{ID: threadSurfaceID(th.ID + 1), Title: "x", Components: whole.Components, Weight: 50, Lifetime: surfaceLifetime{Kept: true}}); err == nil {
 		t.Error("a skill took the id of a thread's surface")
 	}
 

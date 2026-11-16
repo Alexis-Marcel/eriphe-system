@@ -55,20 +55,20 @@ import (
 // which maps a step to what the surface shows of it.
 
 const (
-	threadSurfacePrefix = "thread-"        // + the thread's id: its surface
-	threadCompPrefix    = "thread_"        // code's component ids
-	threadDataKey       = "thread"         // code's data, /thread
-	threadPartRoot      = "thread_part"    // the holder's part's root, renamed
-	threadPartKey       = "thread_part:"   // + the thread's id: the holder's part, JSON
-	threadShownKey      = "thread_shown:"  // + the thread's id: a hash of what its surface shows
-	threadPartMax       = 24 << 10         // components and data of a part, each
-	threadAfterEnd      = time.Hour        // a done thread's surface stays this long at least
-	threadLineMax       = 80               // runes of the one-line summary
-	threadDetailMax     = 200              // runes of a step's detail
-	threadExternalSep   = " · "            // between the parts of a line
-	threadWeight        = surfaceWeightDef // an active thread's surface
-	threadWeightYours   = 70               // one that waits for the user
-	threadWeightEnded   = 30               // one that ended
+	threadSurfacePrefix = "thread-"       // + the thread's id: its surface
+	threadCompPrefix    = "thread_"       // code's component ids
+	threadDataKey       = "thread"        // code's data, /thread
+	threadPartRoot      = "thread_part"   // the holder's part's root, renamed
+	threadPartKey       = "thread_part:"  // + the thread's id: the holder's part, JSON
+	threadShownKey      = "thread_shown:" // + the thread's id: a hash of what its surface shows
+	threadPartMax       = 24 << 10        // components and data of a part, each
+	threadAfterEnd      = time.Hour       // a done thread's surface stays this long at least
+	threadLineMax       = 80              // runes of the one-line summary
+	threadDetailMax     = 200             // runes of a step's detail
+	threadExternalSep   = " · "           // between the parts of a line
+	threadWeight        = 50              // an active thread's surface
+	threadWeightYours   = 70              // one that waits for the user
+	threadWeightEnded   = 30              // one that ended
 )
 
 // threadSurfaceMu makes the surface writes one at a time: two changes of
