@@ -480,3 +480,16 @@ func (c *core) callAsks(thread int64, key string) bool {
 
 // byTask tells an author that is a task's: a skill's run, or another.
 func byTask(by string) bool { return strings.HasPrefix(by, "skill:") || strings.HasPrefix(by, "task:") }
+
+// threadOfTask is the thread a task is a step of: its id and title.
+func (c *core) threadOfTask(id string) (int64, string) {
+	st, ok := c.stepOfTask(id)
+	if !ok {
+		return 0, ""
+	}
+	s, err := c.thread(st.Thread)
+	if err != nil {
+		return 0, ""
+	}
+	return s.ID, s.Title
+}

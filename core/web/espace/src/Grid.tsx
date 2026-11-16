@@ -399,7 +399,7 @@ export function Grid({ adapter, layout, narrow = false, onOpen, onClose = () => 
             const s = byID.get(item.id);
             const title = (item.title && item.title !== item.id ? item.title : undefined) ?? surfaceTitle(s) ?? t("espace.chip.untitled");
             const line = surfaceSummary(s) || item.why;
-            const state = item.needs ? "yours" : item.closed ? "closed" : item.related ? "related" : undefined;
+            const state = item.needs ? (surfaceState(s) === "urgent" ? "urgent" : "yours") : item.closed ? "closed" : item.related ? "related" : undefined;
             const isNew = fresh(item.id);
             const open = (e: MouseEvent) => {
               if (!(e.target as HTMLElement).closest(interactive)) onOpen(item.id);

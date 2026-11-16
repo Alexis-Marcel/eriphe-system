@@ -14,7 +14,8 @@ import (
 // thread has what it shows, never by the kind of thread:
 //
 //  1. head: its goal, a Progress (the state word in a pill, and a bar of
-//     its steps when it has some), the state line when it says more;
+//     its steps when it has some), the state line when it says more, and
+//     for a thread that runs steps, Pause or Resume, and Stop;
 //  2. ended: once it ended, a banner saying how, with « Ranger » for a
 //     thread that ends on its goal (the only block that reads ends);
 //  3. yours: what waits for the user (threadYours, thread_header.go);
@@ -143,6 +144,35 @@ func (c *core) blockHead(out *threadComps, data map[string]any, s Thread, steps 
 		data["state"] = state
 		out.add(comp{"id": "thread_state", "component": "Text", "variant": "caption", "text": map[string]any{"@path": "/thread/state"}})
 	}
+}
+
+// blockControls composes the head's buttons for a thread that runs steps
+// (led, which ends on its goal): Pause while it runs, Resume while paused
+// (more time when its budget held it), and Stop. A light thread has none:
+// it reads no ends, so every light thread is drawn the same. Each is
+// code's (controlOf).
+func blockControls(out *threadComps, s Thread, lang string) {
+	if !s.active() || !s.led() {
+		return
+	}
+	type comp = map[string]any
+	button := func(do, label, variant string) string {
+		id := "thread_control_" + do
+		out.inner(comp{"id": id, "component": "Button", "label": tr(lang, label), "variant": variant,
+			"action": map[string]any{"event": map[string]any{"name": a2ui.ActionControl, "context": map[string]any{"thread": s.ID, "do": do}}}})
+		return id
+	}
+	var row []string
+	switch {
+	case s.Phase == phaseRunning:
+		row = append(row, button("pause", "thread.surface.pause", "default"))
+	case s.Phase == phasePaused && s.Held == heldBudget:
+		row = append(row, button("resume", "thread.surface.resume.more", "primary"))
+	case s.Phase == phasePaused:
+		row = append(row, button("resume", "thread.surface.resume", "primary"))
+	}
+	row = append(row, button("stop", "thread.surface.stop", "quiet"))
+	out.add(comp{"id": "thread_controls", "component": "Row", "align": "center", "children": row})
 }
 
 // blockEnded composes the banner of an ended thread: how it ended and

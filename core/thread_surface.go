@@ -119,6 +119,7 @@ type threadSurfaceStep struct {
 	Note     string       // the last word on it
 	External bool         // what it reports may come from outside
 	Waits    bool         // it waits for the user: its card, their choice, their doing
+	Options  []string     // a choice that waits: what the user picks from
 	Yours    bool         // the user does it and has not yet: « C'est fait »
 	Answers  []taskAnswer // what was settled for its task: Eriphe's answers, a release asked and the user's answer (task_answer_log.go)
 }
@@ -176,7 +177,10 @@ func (c *core) threadSurfaceSteps(s Thread, steps []Step) []threadSurfaceStep {
 		}
 		v.External = st.Tainted != "" || (st.Task != "" && c.taskResultTaint(st.Task) != "")
 		v.Yours = st.Kind == stepUser && st.Status == stepRunning
-		v.Waits = v.Waits || v.Yours || (st.Kind == stepChoice && st.Status == stepRunning)
+		if st.Kind == stepChoice && st.Status == stepRunning {
+			v.Waits, v.Options = true, st.Options
+		}
+		v.Waits = v.Waits || v.Yours
 		out = append(out, v)
 	}
 	return out
@@ -377,6 +381,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	in.state = threadTileState(s, steps, waits, in.Weight, in.fresh)
 	word, tone := threadStatus(s, steps, waits, in.Weight, lang)
 	c.blockHead(&head, data, s, steps, word, tone)
+	blockControls(&head, s, lang)
 	out.list = append(head.list, out.list...)
 	out.children = append(head.children, out.children...)
 
@@ -707,6 +712,79 @@ func (c *core) stepDoneOf(s surface, a a2ui.Action) (int64, string, *errActionRe
 		return 0, "", &errActionRefused{Path: at, Message: "step " + strconv.Quote(step) + " does not wait for the user"}
 	}
 	return thread, step, nil
+}
+
+// threadButtonOf is the context a code's button of a thread's surface
+// carries for an action (choose, control): the clicked Button is code's
+// (its id starts with thread_), on its thread's own surface, carries that
+// action for that thread, and the page sends its context unchanged.
+func threadButtonOf(s surface, a a2ui.Action, name string) (int64, map[string]any, *errActionRefused) {
+	thread, ok := threadOfAuthor(s.Author)
+	comp, at, found := componentOf(s, a.SourceComponentID)
+	if !ok || !found || comp["component"] != "Button" || !strings.HasPrefix(a.SourceComponentID, threadCompPrefix) {
+		return 0, nil, &errActionRefused{Path: at, Message: name + " comes from a thread's own button, on its surface"}
+	}
+	act, _ := comp["action"].(map[string]any)
+	ev, _ := act["event"].(map[string]any)
+	carried, _ := ev["context"].(map[string]any)
+	n, _ := carried["thread"].(float64)
+	if ev["name"] != name || int64(n) != thread {
+		return 0, nil, &errActionRefused{Path: at + "/action", Message: "this component carries no " + name}
+	}
+	if len(a.Context) != len(carried) {
+		return 0, nil, &errActionRefused{Path: at + "/action", Message: "a " + name + "'s context is the one its button carries"}
+	}
+	for k, want := range carried {
+		var got any
+		if json.Unmarshal(a.Context[k], &got) != nil || fmt.Sprint(got) != fmt.Sprint(want) {
+			return 0, nil, &errActionRefused{Path: at + "/action", Message: "a " + name + "'s context is the one its button carries"}
+		}
+	}
+	return thread, carried, nil
+}
+
+// chooseOf is the choice a button of a thread's surface makes: a choice
+// step of that thread that still waits, one of its options.
+func (c *core) chooseOf(s surface, a a2ui.Action) (int64, string, string, *errActionRefused) {
+	thread, ctx, refused := threadButtonOf(s, a, a2ui.ActionChoose)
+	if refused != nil {
+		return 0, "", "", refused
+	}
+	step, _ := ctx["step"].(string)
+	option, _ := ctx["option"].(string)
+	st, err := c.step(thread, step)
+	if err != nil || st.Kind != stepChoice || st.Status != stepRunning || !slices.Contains(st.Options, option) {
+		return 0, "", "", &errActionRefused{Message: "step " + strconv.Quote(step) + " does not wait for that choice"}
+	}
+	return thread, step, option, nil
+}
+
+// controlOf is what a button of a thread's surface does to it: pause,
+// resume or stop.
+func controlOf(s surface, a a2ui.Action) (int64, string, *errActionRefused) {
+	thread, ctx, refused := threadButtonOf(s, a, a2ui.ActionControl)
+	if refused != nil {
+		return 0, "", refused
+	}
+	do, _ := ctx["do"].(string)
+	if !slices.Contains(threadControls, do) {
+		return 0, "", &errActionRefused{Message: "no control " + strconv.Quote(do)}
+	}
+	return thread, do, nil
+}
+
+// threadControls are what the user does to a thread that runs.
+var threadControls = []string{"pause", "resume", "stop"}
+
+// controlThread does a control the user clicked.
+func (c *core) controlThread(ctx context.Context, thread int64, do string) error {
+	switch do {
+	case "pause":
+		return c.pauseThread(thread, byUser)
+	case "resume":
+		return c.resumeThread(ctx, thread, byUser)
+	}
+	return c.stopThread(ctx, thread, byUser)
 }
 
 // threadTidyID is the id of « Ranger » on an ended thread's surface.

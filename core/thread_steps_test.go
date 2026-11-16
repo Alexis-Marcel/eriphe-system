@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"net/url"
+	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -259,8 +260,8 @@ func TestThreadEndWithdrawsStepCard(t *testing.T) {
 	}
 }
 
-// A user step waits for « C'est fait », sent from the thread's page with
-// the user's session; the holder may settle it from evidence instead.
+// A user step waits for « C'est fait », sent from the thread's surface
+// with the user's session; the holder may settle it from evidence instead.
 func TestUserStepDone(t *testing.T) {
 	dir := t.TempDir()
 	secret := filepath.Join(dir, "claude")
@@ -284,18 +285,19 @@ func TestUserStepDone(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	code, body, _ := tw.do("GET", "/threads/1", nil, nil)
-	if code != 200 || !strings.Contains(body, "Sign the form at the town hall") || !strings.Contains(body, "C&#39;est fait") || !strings.Contains(body, "À toi de faire") {
-		t.Fatalf("page: %d", code)
+	sf, _, _ := threadSurfaceOf(t, c, s.ID)
+	if !strings.Contains(string(sf.Components), "Sign the form") || !strings.Contains(string(sf.Components), "C'est fait") {
+		t.Fatalf("surface: %s", sf.Components)
 	}
-	if code, _, _ := tw.do("POST", "/threads/1/done", url.Values{"step": {"sign"}}, nil); code == 200 {
+	done := actionOn("stepDone", sf.ID, "thread_user_0_done", fmt.Sprintf(`{"thread":%d,"step":"sign"}`, s.ID))
+	if code, _ := postJSON(tw, "/api/espace/action", done, ""); code == http.StatusNoContent {
 		t.Error("done without the session's token")
 	}
 	if st := stepOf(t, c, s, "sign"); st.Status != stepRunning {
 		t.Fatalf("settled without the token: %+v", st)
 	}
-	if code, body, _ := tw.post("/threads/1/done", url.Values{"step": {"sign"}}, csrf); code != 200 || !strings.Contains(body, "Acceptée") {
-		t.Fatalf("done: %d", code)
+	if code, b := postJSON(tw, "/api/espace/action", done, csrf); code != http.StatusNoContent {
+		t.Fatalf("done: %d %s", code, b)
 	}
 	eventSeq(t, c, "étape « Sign the form » (sign, user) → accepted. Sam dit que c'est fait.")
 	if _, err := c.userStepDone(ctx, s.ID, "sign", "user"); err == nil {

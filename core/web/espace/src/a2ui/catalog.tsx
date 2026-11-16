@@ -941,7 +941,7 @@ const Proposal = createComponentImplementation(
             ))}
           </dl>
         )}
-        {p.from && <p className="a2-proposal-from">{p.thread ? <a href={`/threads/${p.thread}`}>{p.from}</a> : p.from}</p>}
+        {p.from && <p className="a2-proposal-from">{p.thread ? <a href={`/espace?open=thread-${p.thread}`}>{p.from}</a> : p.from}</p>}
         {pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
         {pending && elsewhere && <p className="a2-proposal-why a2-proposal-inchat">{t("espace.a2.proposal.inchat")}</p>}
         {pending && !elsewhere && (

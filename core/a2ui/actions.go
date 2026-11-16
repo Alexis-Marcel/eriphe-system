@@ -25,6 +25,12 @@ import (
 //     the thread's own surface: an author never writes one.
 //   - tidy: « Ranger », the user puts an ended thread away, {"thread":
 //     <id>}. Only code places it, on the thread's own surface.
+//   - choose: the user picks an option of a thread's choice step,
+//     {"thread": <id>, "step": "<key>", "option": "<option>"}. Only code
+//     places it, one button per option, on the thread's own surface.
+//   - control: the user pauses, resumes or stops a thread that runs,
+//     {"thread": <id>, "do": "pause"|"resume"|"stop"}. Only code places
+//     it, on the thread's own surface.
 //
 // Any other name, and any action that is not an event (a function call),
 // is refused. No action calls a tool that writes.
@@ -33,17 +39,21 @@ const (
 	ActionAnswer   = "answer"
 	ActionStepDone = "stepDone"
 	ActionTidy     = "tidy"
+	ActionChoose   = "choose"
+	ActionControl  = "control"
 	ActionOpen     = "open"
 	ActionBack     = "back"
 	ActionExpand   = "expand"
 	ActionTab      = "tab"
 
 	// The kinds of action.
-	KindAsk    = "ask"
-	KindAnswer = "answer"
-	KindStep   = "step"
-	KindTidy   = "tidy"
-	KindLocal  = "local"
+	KindAsk     = "ask"
+	KindAnswer  = "answer"
+	KindStep    = "step"
+	KindTidy    = "tidy"
+	KindChoose  = "choose"
+	KindControl = "control"
+	KindLocal   = "local"
 
 	// AskTextMax is the longest ask, in characters.
 	AskTextMax = 1000
@@ -64,6 +74,10 @@ func ActionKind(name string) string {
 		return KindStep
 	case ActionTidy:
 		return KindTidy
+	case ActionChoose:
+		return KindChoose
+	case ActionControl:
+		return KindControl
 	case ActionOpen, ActionBack, ActionExpand, ActionTab:
 		return KindLocal
 	}
@@ -123,6 +137,8 @@ func CheckActions(surfaceID string, components json.RawMessage) []ValidationErro
 			fail(at+"/name", "stepDone is placed by code only, on a thread's own surface, for a step the user does")
 		case KindTidy:
 			fail(at+"/name", "tidy is placed by code only, on an ended thread's own surface")
+		case KindChoose, KindControl:
+			fail(at+"/name", name+" is placed by code only, on a thread's own surface")
 		default:
 			fail(at+"/name", "no action "+strconv.Quote(name)+": a button asks Eriphe (ask) or acts in the page ("+strings.Join(LocalActions, ", ")+")")
 		}

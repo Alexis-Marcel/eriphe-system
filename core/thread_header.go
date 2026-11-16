@@ -274,6 +274,18 @@ func (c *core) threadYours(in *surfaceIn, out *threadComps, s Thread, steps []th
 		case !st.Waits:
 		case st.Card != "":
 			out.add(comp{"id": "thread_card_" + n, "component": "Proposal", "proposalId": st.Card})
+		case len(st.Options) > 0:
+			// A choice: one button per option, each bound by code to it (chooseOf).
+			kids := []string{"thread_choice_" + n + "_label"}
+			out.inner(comp{"id": kids[0], "component": "Text", "text": st.Label})
+			for j, o := range st.Options {
+				id := "thread_choice_" + n + "_" + strconv.Itoa(j)
+				out.inner(comp{"id": id, "component": "Button", "label": o, "variant": "default",
+					"action": map[string]any{"event": map[string]any{"name": a2ui.ActionChoose,
+						"context": map[string]any{"thread": s.ID, "step": st.Key, "option": o}}}})
+				kids = append(kids, id)
+			}
+			out.add(comp{"id": "thread_choice_" + n, "component": "Row", "align": "center", "children": kids})
 		case !st.Yours:
 			out.add(comp{"id": "thread_wait_" + n, "component": "Text", "text": st.Label})
 		default:

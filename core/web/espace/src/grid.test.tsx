@@ -147,7 +147,7 @@ describe("the grid of surfaces", () => {
     expect(back).toBe(1);
   });
 
-  it("says each one's state in the column: related, closed, yours", async () => {
+  it("says each one's state in the column: related, closed, urgent", async () => {
     const heavy: Message = {
       version: "1.0",
       createSurface: { surfaceId: "heavy", catalogId: CATALOG.id, components: [{ id: "root", component: "Text", text: "Une alerte" }], metadata: { extensions: { eriphe: { title: "Alerte", state: "urgent" } } } },
@@ -161,7 +161,7 @@ describe("the grid of surfaces", () => {
     });
     const state = (id: string) => tile(id)!.querySelector(".side-state")?.textContent;
     expect([...el.querySelectorAll<HTMLElement>("aside.side > article")].map((s) => s.dataset.surface)).toEqual(["heavy", "week", "late", "news"]);
-    expect(state("heavy")).toBe("espace.state.yours");
+    expect(state("heavy")).toBe("espace.state.urgent");
     expect(state("week")).toBe("espace.state.related");
     expect(state("news")).toBe("espace.state.closed");
     expect(state("late")).toBeUndefined();
