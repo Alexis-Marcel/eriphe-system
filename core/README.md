@@ -1555,7 +1555,9 @@ Skills** (`web_skills.go`):
 - **A new version** (the same name, uploaded again) waits for approval with its diff against the
   approved one, file by file. Tasks keep the approved version until the user approves the new one
   (the hash they read is checked) or keeps the old one.
-- **On or off**, and **delete**. Bundles no skill points at any more are deleted, but for the last five versions a skill replaced or had when deleted (`skill_kept`), which the [learning journal](#what-eriphe-learned) needs to undo a change; they are never given to a task.
+- **On or off**, and **delete**. A skill the code turned off says why on its page and in the
+  list (`skills.off_why`); approving a new version turns it back on. A version that no longer
+  reads (its front matter refused) is shown still, with the reason. Bundles no skill points at any more are deleted, but for the last five versions a skill replaced or had when deleted (`skill_kept`), which the [learning journal](#what-eriphe-learned) needs to undo a change; they are never given to a task.
 
 **In tasks.** Every worker task gets the skills that are approved and on when it starts, as its
 spec's `skills` (name and sha256 of each, `skills_tasks.go`). Its node fetches each bundle with its
@@ -4610,6 +4612,18 @@ intentions (memory.db) carry an `about` column next to their ref (which record: 
   step 8 of #578 to convert, then drop). memory.db goes from schema 7 to 8 (`migrateAbout`): the
   columns renamed, the full-text index rebuilt on `about`. Values are kept as they are: converting
   them (keys to `thread:<id>`, the old `subjects` table to names) is step 8's.
+- **The one-shot conversion** (`convert_one_thread.go`, step 8 of #578; deleted once the single
+  install has run it): once per database, behind the kv flag `one_thread_converted`. At core.db's
+  open, the subjects become names (a thread's subject its alias, the latest thread of a key wins;
+  a merged subject names what it went into; titles and aliases name their target), the about
+  columns and topic rules are kept under their target (a `mail:` or `event:` about is dropped),
+  `threads.subject`, `subjects`, `thread_monitors` and their kv go, the default skill `arrivee` is
+  deleted, and a skill whose approved version no longer reads or uses `can`/`subject` is turned
+  off (`skills.off.old`). When the memory attaches, a matter that memories are about and no thread
+  follows (not an entity: person, tool, owner, home, Eriphe's topics; not a key a stored skill or a
+  monitor keeps, whose watcher opens its standing thread) becomes an ended thread, tidied away
+  (Q7); then the memories' and intentions' abouts, owners and owed_to are rekeyed, the stems and
+  the full-text index rebuilt. Counts are logged.
 
 ## Memory
 

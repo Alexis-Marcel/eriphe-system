@@ -182,6 +182,7 @@ func openStore(path string) (*Store, error) {
 			return nil, err
 		}
 	}
+	convertOneThread(db) // once, an install made before #578 (convert_one_thread.go)
 	return &Store{db: db, dir: filepath.Dir(path)}, nil
 }
 
