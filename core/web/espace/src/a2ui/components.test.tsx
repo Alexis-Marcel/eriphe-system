@@ -326,6 +326,17 @@ describe("the catalog's components", () => {
     expect($$(".a2-chart")[1].querySelectorAll("polyline")).toHaveLength(1);
   });
 
+  it("attach a mark to what follows it, as words a screen reader reads first", async () => {
+    await mount("fr", threadFixtures("fr"));
+    const marks = $$(".a2-text-mark");
+    expect(marks.length).toBeGreaterThan(0);
+    for (const m of marks) {
+      expect(m.tagName).toBe("SPAN");
+      expect(m.textContent).toBe("extérieur");
+      expect(m.nextElementSibling).not.toBeNull(); // the block it marks
+    }
+  });
+
   it("show a step's state and its date", async () => {
     await mount("fr");
     expect($$("[data-surface=gallery-project] .a2-step").map((s) => s.className.replace("a2-step a2-step-", ""))).toEqual(["done", "done", "current", "pending"]);

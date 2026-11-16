@@ -394,7 +394,7 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 	kids := rootChildren(t, s.Components)
 	if !slices.Contains(kids, threadExternalPrefix+"avis") || !slices.Contains(kids, "thread_part_pr") || slices.Contains(kids, threadExternalPrefix+"pr") ||
 		!strings.Contains(string(s.Components), `{"children":["`+threadMarkPrefix+`avis","thread_part_avis"],"component":"Column","id":"`+threadExternalPrefix+`avis"}`) ||
-		!strings.Contains(string(s.Components), `{"component":"Text","id":"`+threadMarkPrefix+`avis","text":"extérieur","variant":"caption"}`) ||
+		!strings.Contains(string(s.Components), `{"component":"Text","id":"`+threadMarkPrefix+`avis","text":"extérieur","variant":"mark"}`) ||
 		strings.Count(string(s.Components), "extérieur") != 1 || !strings.Contains(s.Tainted, "mail:7") || !meta.Answers {
 		t.Errorf("tainted part: %s %q %+v", s.Components, s.Tainted, meta)
 	}

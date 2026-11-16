@@ -473,7 +473,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 				continue
 			}
 			marked := threadMarkPrefix + b.Name
-			out.inner(comp{"id": marked, "component": "Text", "variant": "caption", "text": w("thread.surface.external")})
+			out.inner(comp{"id": marked, "component": "Text", "variant": "mark", "text": w("thread.surface.external")})
 			out.add(comp{"id": threadExternalPrefix + b.Name, "component": "Column", "children": []string{marked, partRoot(b.Name)}})
 		}
 	} else {

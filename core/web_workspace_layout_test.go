@@ -86,7 +86,7 @@ func TestWebLayout(t *testing.T) {
 	tw.c.attend(attentionItem{Ref: "alert:3", Weight: 5, Why: "Panne", Say: "Le serveur ne répond plus."})
 	tw.c.syncQueueSurfaces()
 	nextLayout(t, layouts, func(l workspaceLayout) bool {
-		return len(l.Items) == 2 && l.Items[0].ID == "q-alert-3" && l.Items[0].Size == sizeXL && l.Ambient == "urgent"
+		return len(l.Items) == 2 && l.Items[0].ID == "q-alert-3" && l.Items[0].Size == sizeXL
 	})
 
 	// Opened: first, and a gesture about the surface.

@@ -124,7 +124,6 @@ func queueSurfaceWeight(w int) int { return min(max(w, 1), 5) * 20 }
 
 // workspaceLayout is what the page lays out: the event stream's "layout".
 type workspaceLayout struct {
-	Ambient  string       `json:"ambient"`            // calm, decision or urgent: by the heaviest tile
 	Focus    string       `json:"focus,omitempty"`    // the surface the user opened
 	FocusBy  string       `json:"focusBy,omitempty"`  // brain: Eriphe put it on stage, answering the user (workspace_front.go)
 	Previous string       `json:"previous,omitempty"` // what was on stage before it, a tile reduced next to it (workspace_front.go)
@@ -344,15 +343,6 @@ func layoutStage(pool []surface, focus, previous string, related []string, pl us
 	}
 	if len(l.Chips) > layoutChipsMax {
 		l.Chips = l.Chips[:layoutChipsMax]
-	}
-	l.Ambient = "calm"
-	for _, t := range l.Items {
-		switch w := byID[t.ID].Weight; {
-		case w >= 90:
-			l.Ambient = "urgent"
-		case w >= weightUrgent && l.Ambient == "calm":
-			l.Ambient = "decision"
-		}
 	}
 	return l
 }

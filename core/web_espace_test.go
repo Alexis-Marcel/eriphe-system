@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -20,7 +21,7 @@ func TestEspaceFonts(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	_, css, _ := tw.do("GET", "/static/espace/espace.css", nil, nil)
-	urls := regexp.MustCompile(`url\(\./(espace-[a-z-]+\.woff2)\)`).FindAllStringSubmatch(css, -1)
+	urls := regexp.MustCompile(`url\(\./(espace-[A-Za-z-]+\.woff2)\)`).FindAllStringSubmatch(css, -1)
 	if len(urls) != 2 {
 		t.Fatalf("fonts in the stylesheet: %v", urls)
 	}
@@ -29,6 +30,19 @@ func TestEspaceFonts(t *testing.T) {
 		if code != http.StatusOK || h.Get("Content-Type") != "font/woff2" {
 			t.Errorf("%s: %d %s", u[1], code, h.Get("Content-Type"))
 		}
+	}
+}
+
+// The fonts go with their license, beside them in the sources: Geist is
+// under the SIL Open Font License, which travels with every copy.
+func TestEspaceFontsLicense(t *testing.T) {
+	ofl, err := os.ReadFile("web/espace/src/fonts/OFL.txt")
+	if err != nil || !bytes.Contains(ofl, []byte("SIL OPEN FONT LICENSE Version 1.1")) {
+		t.Fatalf("OFL.txt: %v", err)
+	}
+	fonts, _ := filepath.Glob("web/espace/src/fonts/*.woff2")
+	if len(fonts) != 2 {
+		t.Errorf("fonts: %v", fonts)
 	}
 }
 

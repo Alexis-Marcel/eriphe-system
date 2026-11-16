@@ -1,20 +1,21 @@
-/* The workspace's two typefaces, served by eriphe-core with the app (the
-   CSP allows fonts from 'self' only): Bricolage Grotesque for what Eriphe
-   says and the titles, Hanken Grotesk for the rest. Variable fonts, Latin
-   only, both under the SIL Open Font License (@fontsource-variable). */
+/* The workspace's typeface, Geist, served by eriphe-core with the app (the
+   CSP allows fonts from 'self' only; nothing is fetched elsewhere). The
+   files are Vercel's, as released in the geist package 1.9.2, unchanged:
+   the sans as one variable font for every weight the workspace uses, the
+   mono in its one weight. SIL Open Font License 1.1: fonts/OFL.txt. */
 
 @font-face {
-  font-family: "Bricolage Grotesque Variable";
-  font-style: normal;
-  font-display: swap;
-  font-weight: 200 800;
-  src: url("../node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2") format("woff2-variations");
-}
-
-@font-face {
-  font-family: "Hanken Grotesk Variable";
+  font-family: "Geist";
   font-style: normal;
   font-display: swap;
   font-weight: 100 900;
-  src: url("../node_modules/@fontsource-variable/hanken-grotesk/files/hanken-grotesk-latin-wght-normal.woff2") format("woff2-variations");
+  src: url("./fonts/Geist-Variable.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("./fonts/GeistMono-Regular.woff2") format("woff2");
 }

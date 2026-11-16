@@ -199,13 +199,13 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T13:56:04+01:00",
+         "date": "2026-11-16T14:24:31+01:00",
          "detail": "Task",
          "label": "Prepare the page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:36:04+01:00",
+         "date": "2026-11-16T15:04:31+01:00",
          "detail": "Proposed action",
          "label": "Merge the branch",
          "state": "done"
@@ -213,7 +213,7 @@
        ],
        "open": [
         {
-         "date": "2026-11-16T16:06:04+01:00",
+         "date": "2026-11-16T16:34:31+01:00",
          "detail": "Task · 12 of 30",
          "label": "Resize the photos",
          "state": "current"
@@ -661,7 +661,7 @@
       "children": [],
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 15:26"
+       "title": "Done ✓ · 15:54"
       },
       "items": {},
       "marks": {},
@@ -680,25 +680,25 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T13:56:04+01:00",
+         "date": "2026-11-16T14:24:31+01:00",
          "detail": "Task",
          "label": "Prepare the page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:36:04+01:00",
+         "date": "2026-11-16T15:04:31+01:00",
          "detail": "Proposed action",
          "label": "Merge the branch",
          "state": "done"
         },
         {
-         "date": "2026-11-16T16:16:04+01:00",
+         "date": "2026-11-16T16:44:31+01:00",
          "detail": "Your approval",
          "label": "Publish the site",
          "state": "done"
         },
         {
-         "date": "2026-11-16T16:06:04+01:00",
+         "date": "2026-11-16T16:34:31+01:00",
          "detail": "Task · 12 of 30",
          "label": "Resize the photos",
          "state": "done"
@@ -1136,7 +1136,7 @@
       "id": "thread_mark_hotel",
       "component": "Text",
       "text": "external",
-      "variant": "caption"
+      "variant": "mark"
      },
      {
       "id": "thread_external_hotel",
@@ -1388,7 +1388,7 @@
       "id": "thread_mark_accounts",
       "component": "Text",
       "text": "external",
-      "variant": "caption"
+      "variant": "mark"
      },
      {
       "id": "thread_external_accounts",
@@ -1711,7 +1711,7 @@
       "id": "thread_mark_hotels",
       "component": "Text",
       "text": "external",
-      "variant": "caption"
+      "variant": "mark"
      },
      {
       "id": "thread_external_hotels",
@@ -1980,13 +1980,13 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T13:56:03+01:00",
+         "date": "2026-11-16T14:24:30+01:00",
          "detail": "Tâche",
          "label": "Préparer la page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:36:03+01:00",
+         "date": "2026-11-16T15:04:30+01:00",
          "detail": "Action proposée",
          "label": "Fusionner la branche",
          "state": "done"
@@ -1994,7 +1994,7 @@
        ],
        "open": [
         {
-         "date": "2026-11-16T16:06:03+01:00",
+         "date": "2026-11-16T16:34:30+01:00",
          "detail": "Tâche · 12 sur 30",
          "label": "Redimensionner les photos",
          "state": "current"
@@ -2442,7 +2442,7 @@
       "children": [],
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 15 h 26"
+       "title": "Fait ✓ · 15 h 54"
       },
       "items": {},
       "marks": {},
@@ -2461,25 +2461,25 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T13:56:03+01:00",
+         "date": "2026-11-16T14:24:30+01:00",
          "detail": "Tâche",
          "label": "Préparer la page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T14:36:03+01:00",
+         "date": "2026-11-16T15:04:30+01:00",
          "detail": "Action proposée",
          "label": "Fusionner la branche",
          "state": "done"
         },
         {
-         "date": "2026-11-16T16:16:03+01:00",
+         "date": "2026-11-16T16:44:30+01:00",
          "detail": "Ta validation",
          "label": "Publier le site",
          "state": "done"
         },
         {
-         "date": "2026-11-16T16:06:03+01:00",
+         "date": "2026-11-16T16:34:30+01:00",
          "detail": "Tâche · 12 sur 30",
          "label": "Redimensionner les photos",
          "state": "done"
@@ -2917,7 +2917,7 @@
       "id": "thread_mark_hotel",
       "component": "Text",
       "text": "extérieur",
-      "variant": "caption"
+      "variant": "mark"
      },
      {
       "id": "thread_external_hotel",
@@ -3169,7 +3169,7 @@
       "id": "thread_mark_accounts",
       "component": "Text",
       "text": "extérieur",
-      "variant": "caption"
+      "variant": "mark"
      },
      {
       "id": "thread_external_accounts",
@@ -3635,7 +3635,7 @@
       "id": "thread_mark_etat",
       "component": "Text",
       "text": "extérieur",
-      "variant": "caption"
+      "variant": "mark"
      },
      {
       "id": "thread_external_etat",
@@ -3663,7 +3663,7 @@
        "cards": [],
        "done": [
         {
-         "date": "2026-11-16T16:26:03+01:00",
+         "date": "2026-11-16T16:54:30+01:00",
          "detail": "extérieur · Vérification",
          "label": "Vérifier que la règle est active",
          "state": "done"
@@ -4485,7 +4485,7 @@
       "id": "thread_mark_mails",
       "component": "Text",
       "text": "extérieur",
-      "variant": "caption"
+      "variant": "mark"
      },
      {
       "id": "thread_external_mails",
@@ -4618,7 +4618,7 @@
       },
       "marks": {},
       "since": [],
-      "state": "1 à faire · 1 pour info · 1 rien à faire · trié à 16 h 26",
+      "state": "1 à faire · 1 pour info · 1 rien à faire · trié à 16 h 54",
       "steps": {
        "cards": [],
        "done": [],
@@ -4800,7 +4800,7 @@
        "done": [],
        "open": [
         {
-         "date": "2026-11-16T16:26:03+01:00",
+         "date": "2026-11-16T16:54:31+01:00",
          "detail": "Tâche",
          "label": "Rechercher la marque Velora",
          "state": "current"

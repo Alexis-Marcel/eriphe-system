@@ -47,7 +47,6 @@ const text = (id: string, words: string) => ({
 });
 
 const grid: Layout = {
-  ambient: "calm",
   items: [
     { id: "today", title: "Aujourd'hui", size: "l", col: 0, row: 0, w: 6, h: 3 },
     { id: "pay", title: "Paiement", size: "s", col: 6, row: 0, w: 3, h: 1 },
@@ -215,7 +214,7 @@ describe("a child thread", () => {
     [{ id: "root", component: "Column", children: ["thread_parent", "says"] }, opens("thread_parent", "Le site", "thread-1"), { id: "says", component: "Text", text: "Signe le devis" }],
     { title: "Le devis", inside: "thread-1" },
   );
-  const layout: Layout = { ambient: "calm", items: [{ id: "thread-1", title: "Le site", size: "l", col: 0, row: 0, w: 4, h: 3 }], chips: [] };
+  const layout: Layout = { items: [{ id: "thread-1", title: "Le site", size: "l", col: 0, row: 0, w: 4, h: 3 }], chips: [] };
   const button = (label: string) => [...el.querySelectorAll<HTMLButtonElement>("button.a2-button")].find((b) => b.textContent === label)!;
 
   it("opens inside its parent, and its crumb opens the parent again", async () => {
