@@ -38,9 +38,9 @@ The tiles are of two kinds only:
   when, grouped by what it asks of you (« À faire », « À regarder », « Pour info », the ones with
   nothing to do folded) with their counts on each group's line, and on an item's line the action proposed on it (archive this
   one, close that alert), a proposal you answer **Oui** / **Yes** or **Non** / **No** right there,
-  which runs only that action on that item, and the actions Eriphe offers on it as buttons (a
-  click only makes that proposal; a group whose items offer the same action offers it on them all
-  at once, on the group's line, folded or not, one proposal for all); where it stands, when Eriphe
+  which runs only that action on that item, and at most one action Eriphe recommends on it as a button, only when useful (a
+  click only makes that proposal; its words are the ones you approved with the skill, else the tool's own; a group whose items offer the same action offers it on them all
+  at once, on the group's line, folded or not, one proposal for all, and a folded group shows no button on its lines); where it stands, when Eriphe
   wrote it, and what changed since your last visit, when something did; its
   steps, those done folded in one line (an approval you gave, one line too, opens on a click);
   and what Eriphe added (a diff, a link). Small, it shows one line (« Fusion ✓ · Déploiement à toi »). A step
@@ -135,8 +135,8 @@ To follow something continuously, say so:
 > Show me the pull requests waiting for my review.
 
 Eriphe writes a skill that runs each time something new arrives and keeps one thread for it, which
-never ends: each new item gets its line, with what Eriphe noted about it and the actions it
-offers. That skill too waits for your yes on its card.
+never ends: each new item gets its line, with what Eriphe noted about it and the one action it
+recommends, if any. That skill too waits for your yes on its card.
 
 ## Shape it by talking
 

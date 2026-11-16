@@ -93,7 +93,7 @@ type noteItemIn struct {
 	Note    string       `json:"note,omitempty" jsonschema:"what the user reads under the item: what it is about and what they should do of it, in their language, one short concrete sentence, no ids nor jargon; empty with no state: the note is taken away"`
 	State   string       `json:"state,omitempty" jsonschema:"act (the user has something to do: answer, decide), look (to look at), info (to know), none (nothing to do) or done (handled)"`
 	Due     string       `json:"due,omitempty" jsonschema:"by when, YYYY-MM-DD or YYYY-MM-DDTHH:MM (local time)"`
-	Actions []noteAction `json:"actions,omitempty" jsonschema:"what the user could do with it, offered on its row: each a tool you may use and its exact input, \"$item\" where the item's id goes (code puts it). A click makes a card the user approves, never more; a tool the user's policy refuses is never offered"`
+	Actions []noteAction `json:"actions,omitempty" jsonschema:"the one action you recommend on it, only when useful (never a menu), offered on its row: a tool you may use and its exact input, \"$item\" where the item's id goes (code puts it). A click makes a card the user approves, never more; a tool the user's policy refuses is never offered"`
 }
 
 // noteItem writes, replaces or takes away the note on an item of one of a
@@ -325,6 +325,7 @@ func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src 
 		}
 	}
 	offers := false // a row or a group offers an action: their buttons
+	words := c.offerWords(lang)
 	for _, it := range threadSourceItems(src, threadItemsMax) {
 		for _, k := range []string{"detail", "note", "due"} { // each row has what its Item binds
 			if _, ok := it[k]; !ok {
@@ -342,7 +343,7 @@ func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src 
 			if note.Tainted != "" {
 				*taint = append(*taint, threadNoteTaint+src.Name+"/"+note.Item)
 			}
-			if o := c.rowOffers(thread, note, lang); len(o) > 0 {
+			if o := c.rowOffers(thread, note, words); len(o) > 0 {
 				it["offers"], offers = o, true
 			}
 		}
@@ -366,8 +367,21 @@ func (c *core) itemsBlock(out *threadComps, v map[string]any, thread int64, src 
 		if state == "" {
 			name = tr(lang, "thread.item.group.other")
 		}
-		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": waits[state] || state != itemStateNone && state != itemStateDone,
-			"items": rows, "offers": emptyList(groupOffers(thread, src.Name, state, rows, lang))})
+		// A folded group (nothing to do, done) is not a list of buttons:
+		// its rows offer none, the group the action they share, even one's.
+		folded := state == itemStateNone || state == itemStateDone
+		least := 2
+		if folded {
+			least = 1
+		}
+		groupOffer := groupOffers(thread, src.Name, state, rows, least, words)
+		if folded {
+			for _, r := range rows {
+				r.(map[string]any)["offers"] = []any{}
+			}
+		}
+		groups = append(groups, map[string]any{"label": fmt.Sprintf("%s · %d", name, len(rows)), "open": waits[state] || !folded,
+			"items": rows, "offers": emptyList(groupOffer)})
 	}
 	v["groups"], v["cards"] = emptyList(groups), emptyList(sourceCards)
 	at := "/thread/sources/" + n

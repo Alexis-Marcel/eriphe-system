@@ -816,7 +816,13 @@ describe("the catalog's components", () => {
     expect(mails(".a2-fold-head").map((h) => h.textContent?.replace(/[▸▾]/, ""))).toEqual(["Pour info · 1", "Rien à faire · 2"]);
     const none = mails(".a2-fold")[1];
     expect(none.classList.contains("a2-fold-open")).toBe(false);
-    expect([...none.querySelectorAll(".a2-fold-line .a2-fold-aside button")].map((b) => b.textContent)).toEqual(["utiliser « move funds » · 2"]); // a note from outside: code words its action
+    expect([...none.querySelectorAll(".a2-fold-line .a2-fold-aside button")].map((b) => b.textContent)).toEqual(["Archiver · 2"]); // the label its skill declares, approved with it
+    // Unfolded: its rows offer nothing, the group's action is enough.
+    await click(none.querySelector(".a2-fold-head") as HTMLElement);
+    expect(none.classList.contains("a2-fold-open")).toBe(true);
+    expect(none.querySelectorAll(".a2-item-title")).toHaveLength(2);
+    expect([...none.querySelectorAll("button.a2-button")].filter((b) => !b.closest(".a2-fold-aside"))).toHaveLength(0);
+    expect(mails("button.a2-button").map((b) => b.textContent)).toEqual(["Archiver · 2"]);
     expect(document.body.textContent).not.toMatch(/bTEf/);
   });
 

@@ -1755,6 +1755,7 @@ turn is not tainted. Its front matter:
 | `thread` | its thread's alias, `kind:slug` (`topic:mails`); without it, its events' key when it names a thing (`topic:<monitor>`) |
 | `title` | its thread's name for the user, 60 characters at most (`title: Mes mails`); without it, its name made a title (`mails-pro` → « Mails pro »). A new version's title renames its thread, the one already open too |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
+| `actions` | the actions its runs may offer on an item, with their words: a list, one a line, `Label: server/tool key=value …` (`- "Archiver: mail/move_message folder=Archive"`), 8 at most, a label of 40 characters at most. An action a run notes (`note_item`) that has this tool and these arguments says this label on its button, its note tainted or not: the user approved these words with the version, the run only chose the item. Any other action of a run says the tool's own words |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
 the rest of the skill, as one version: Settings → Skills shows it in words, and a change is a new
@@ -1812,21 +1813,26 @@ version, read with its diff.
   thread's surface the answer must say it; `answerOf` checks the place is one its binding takes
   and the data there shows that card. Its results go to the run's note (a run's) or the thread's
   log, never to the brain; a calls card is answered by its buttons only, never by a plain « oui ».
-- **Actions offered on an item** (#575, `item_offers.go`): `note_item` takes `actions`, each a
-  label, a tool (`server/tool`) and its exact input with `"$item"` where the item's id goes (code
-  fills it in; at most 4, kept in `thread_items.actions`). Checked when noted: the tool is in the
+- **Actions offered on an item** (#575, `item_offers.go`): `note_item` takes `actions`, one at
+  most (the one its author recommends, only when useful: never a menu), a label, a tool
+  (`server/tool`) and its exact input with `"$item"` where the item's id goes (code fills it in;
+  kept in `thread_items.actions`). Checked when noted: the tool is in the
   catalog and not Eriphe's own, the author may use it (a task: lent it), its input names the item
   and fits the tool's required properties, and the access policy does not refuse it (`never`);
   checked again when shown and when clicked, so a `never` tool is never offered. The row offers
   each as a `Button` code places (action `offer`, `{thread, source, item, offer}`, the offer
   being the action's key); a state group offers an action two of its rows or more share
-  (« Archiver · 24 », `{thread, source, state, offer}`). An author can never write `offer`
+  (« Archiver · 24 », `{thread, source, state, offer}`). A folded group (`none`, `done`) is no
+  list of buttons: its rows offer nothing, the group the action they share, even one row's. An author can never write `offer`
   (`CheckActions`). A click runs nothing: code reads the note again from the store (the item
   still listed and shown, the action on its note) and makes one calls card with the exact call,
   bound to the item, linked to the thread, with no message; a group's click one card with a call
-  per item shown in the group. A call already waiting on its item is not asked twice. A tainted
-  note's button says the tool's action (`callVerb`), never the author's label, and its card keeps
-  the note's taint.
+  per item shown in the group. A call already waiting on its item is not asked twice. A button's
+  words are never a run's: a skill's run's says the label its skill's approved version declares
+  for that action (`actions:`, tool and arguments matched), tainted note or not; any other action
+  of a task says the tool's own words (`toolWords`: its title from its server, else `callVerb`).
+  The brain's and a lead's say their label, but for a tainted note: the tool's words. Its card
+  keeps the note's taint.
 - **Its thread** (`task_threads.go`): its runs are about its alias, `thread: kind:slug`; without
   it, their events' key when it names a thing (a monitor's, `topic:<name>`, or `kind:slug`;
   about.go). Their tasks, notifications, cards and signals carry it. Lent `eriphe-threads`, a
@@ -1897,9 +1903,9 @@ brain reads the same with **`skill_runs`** (`name`, `limit`; free). It gets the 
 keys and the runs' outcomes, but not their text: what a run read stays on its page.
 
 **Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
-`every`, `model`, `tools`, `thread`, `urgent`) writes a `SKILL.md` and adds it as a version waiting for
+`every`, `model`, `tools`, `thread`, `urgent`, `title`, `actions`) writes a `SKILL.md` and adds it as a version waiting for
 approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog
-servers). Its card (kind `skill`) says the trigger in words and the instructions; the yes approves
+servers). Its card (kind `skill`) says the trigger in words, its thread's name, its buttons' words and the instructions; the yes approves
 exactly that version, the no drops it. Written on a tainted turn, the card says so. A triggered
 task has no such tool.
 

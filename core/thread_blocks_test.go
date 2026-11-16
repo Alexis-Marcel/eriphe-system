@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // sampleSteps are the steps of a made-up thread, as its surface shows
@@ -288,8 +289,12 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	// A watcher's standing thread of mails, as a skill opens it: a tool
 	// that lists them by opaque ids, from a server not trusted, its items
 	// titled by code from their own fields, all noted after reading them:
-	// one for information, two with nothing to do and an action each,
-	// worded by code (a note from outside never words its action).
+	// one for information, two with nothing to do and the action its skill
+	// recommends: its button says the label the skill declares, approved
+	// with it (a note from outside never words its action). The group
+	// offers it on both; its rows, folded, offer nothing.
+	withFakeMail(t, c)
+	addTriggered(t, c, "---\nname: mails\ndescription: Trie les mails reçus.\nwhen: time weekdays 08:00\nactions:\n  - "+pick("Archiver", "Archive")+": mail/move_message folder=Archive\n---\nTrie les mails.\n")
 	mails, err := c.openThread(threadIn{Title: pick("Mes mails", "My mails"), Goal: pick("Trie les mails reçus.", "Sorts the mails received."), Alias: "topic:mails", Ends: endsStanding, exact: true}, nil, "skill:mails")
 	if err != nil {
 		t.Fatal(err)
@@ -301,7 +306,8 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 		map[string]any{"id": "bTEfcHJvbW8z", "from": "Boutique <shop@example.org>", "subject": pick("-20 % ce week-end", "20% off this weekend")},
 	}})
 	c.store.db.Exec(`UPDATE thread_sources SET value = ? WHERE thread = ? AND name = ?`, string(listed), mails.ID, "mails")
-	archive := noteAction{Label: pick("Archiver", "Archive"), Tool: "ledger/move_funds", Args: map[string]any{"to": offerItemArg}}
+	// The run's own label, never shown: its skill's is.
+	archive := noteAction{Label: "Ouvrir ce lien", Tool: "mail/move_message", Args: map[string]any{"id": offerItemArg, "folder": "Archive"}}
 	for _, n := range []struct {
 		in    noteItemIn
 		taint []string
@@ -356,4 +362,38 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	add(103, done, steps)
 	add(104, mails, nil)
 	return out
+}
+
+// withFakeMail links a fake mail server to a surface core: it lists the
+// mails received and moves one to a folder, its tools titled by it.
+func withFakeMail(t *testing.T, c *core) {
+	t.Helper()
+	s := mcp.NewServer(&mcp.Implementation{Name: "mail", Version: "1"}, nil)
+	mcp.AddTool(s, &mcp.Tool{Name: "list_received", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
+		func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"messages": []any{}}, nil
+		})
+	type moveIn struct {
+		ID     string `json:"id"`
+		Folder string `json:"folder"`
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "move_message", Title: "Move a message"},
+		func(context.Context, *mcp.CallToolRequest, moveIn) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"ok": true}, nil
+		})
+	ledger := c.pool.dial
+	c.pool.dial = func(ctx context.Context, u *upstream) (mcp.Transport, error) {
+		if u.name != "mail" {
+			return ledger(ctx, u)
+		}
+		ct, st := mcp.NewInMemoryTransports()
+		if _, err := s.Connect(context.Background(), st, nil); err != nil {
+			return nil, err
+		}
+		return ct, nil
+	}
+	c.pool.sync(setServer(c, "mail", func(s *Server) {
+		*s = Server{URL: "https://mail.example.org/mcp", Auth: &ServerAuth{None: true}, Use: "mails", Access: accessReads}
+	}))
+	waitStatus(t, c.pool.get("mail"), statusReady)
 }

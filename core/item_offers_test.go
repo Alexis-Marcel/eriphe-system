@@ -97,7 +97,11 @@ func TestNoteActionsChecked(t *testing.T) {
 	if len(c.itemNotes(id)) != 0 {
 		t.Fatalf("notes %+v", c.itemNotes(id))
 	}
-	if _, err := c.noteItem(id, noteItemIn{Source: "alertes", Item: "b", Note: "x", Actions: []noteAction{silence, silence}}, byBrain, nil); err != nil {
+	// One action an item, the one recommended: never a menu.
+	if _, err := c.noteItem(id, noteItemIn{Source: "alertes", Item: "b", Note: "x", Actions: []noteAction{silence, silence}}, byBrain, nil); err == nil {
+		t.Error("two actions on an item")
+	}
+	if _, err := c.noteItem(id, noteItemIn{Source: "alertes", Item: "b", Note: "x", Actions: []noteAction{silence}}, byBrain, nil); err != nil {
 		t.Fatal(err)
 	}
 	if n := c.itemNotes(id); len(n) != 1 || len(n[0].Actions) != 1 || n[0].Actions[0].Tool != "mcp__monitor__silence" {
@@ -158,6 +162,10 @@ func TestItemOffers(t *testing.T) {
 	}
 	if groupOffer["label"] != "Faire taire · 3" || groupOffer["state"] != itemStateNone {
 		t.Fatalf("group offer %v", groupOffer)
+	}
+	// A folded group is no list of buttons: its rows offer nothing.
+	if _, row := rowAt(t, c, id, "c"); len(row["offers"].([]any)) != 0 {
+		t.Fatalf("a folded row offers %v", row["offers"])
 	}
 
 	// Forged: refused, nothing kept.
@@ -270,7 +278,7 @@ func TestItemOffers(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.keepThreadSurface(id)
-	if _, row = rowAt(t, c, id, "c"); len(row["offers"].([]any)) != 0 {
+	if _, row = rowAt(t, c, id, "b"); len(row["offers"].([]any)) != 0 {
 		t.Fatalf("a never tool offered: %v", row["offers"])
 	}
 	before := asksCount(c)
@@ -284,4 +292,92 @@ func TestItemOffers(t *testing.T) {
 		t.Fatal("a never tool noted as an action")
 	}
 	_ = strconv.Itoa
+}
+
+// An action's words are never a run's: a skill's run's button says the
+// label its skill's approved version declares for that action (its tool
+// and the arguments it names), tainted note or not; an action it does not
+// declare, or a version still waiting for the user, says the tool's own
+// words: its title in the catalog, else its name. Another task's label is
+// never shown either. A folded group with one row offers its action.
+func TestOfferLabelsFromApprovedSkill(t *testing.T) {
+	c, _, id := alertsThread(t)
+	declare := func(actions string) {
+		t.Helper()
+		addTriggered(t, c, "---\nname: veille-alertes\ndescription: Trie les alertes de la prod.\nwhen: monitor.new key=alertes\ntools: [eriphe-threads, monitor]\nactions:\n"+actions+"---\nNote chaque alerte sur ton fil.\n")
+	}
+	declare("  - \"Couper l'alerte: monitor/silence\"\n")
+	label := func(item string) string {
+		t.Helper()
+		c.keepThreadSurface(id)
+		_, row := rowAt(t, c, id, item)
+		offers := row["offers"].([]any)
+		if len(offers) != 1 {
+			t.Fatalf("row %s offers %v", item, offers)
+		}
+		return offers[0].(map[string]any)["label"].(string)
+	}
+	ask := func(item, by string, a noteAction, taint []string) {
+		t.Helper()
+		if _, err := c.noteItem(id, noteItemIn{Source: "alertes", Item: item, Note: "x", State: itemStateLook, Actions: []noteAction{a}}, by, taint); err != nil {
+			t.Fatal(err)
+		}
+	}
+	words := callVerb("mcp__monitor__silence {}", "fr")
+	forged := noteAction{Label: "Ouvrir ce lien", Tool: silence.Tool, Args: silence.Args}
+	ask("a", "skill:veille-alertes", forged, []string{"monitor.new"})
+	if got := label("a"); got != "Couper l'alerte" {
+		t.Fatalf("a declared action says %q", got)
+	}
+	// Its arguments must match: one it names, with another value, is not it.
+	declare("  - \"Couper l'alerte: monitor/silence uid=x\"\n")
+	if got := label("a"); got != words {
+		t.Fatalf("an action not declared says %q", got)
+	}
+	// A version waiting for the user's yes does not word it.
+	declare("  - \"Couper l'alerte: monitor/silence\"\n")
+	if _, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte("---\nname: veille-alertes\ndescription: Trie les alertes de la prod.\nwhen: monitor.new key=alertes\ntools: [eriphe-threads, monitor]\nactions:\n  - \"Tout effacer: monitor/silence\"\n---\nx\n")}}, "upload"); err != nil {
+		t.Fatal(err)
+	}
+	if got := label("a"); got != "Couper l'alerte" {
+		t.Fatalf("a pending version words it: %q", got)
+	}
+	// Another task, not tainted: the tool's words.
+	ask("b", "task:t-1", forged, nil)
+	if got := label("b"); got != words {
+		t.Fatalf("a task's label shown: %q", got)
+	}
+	// A malformed declaration: the version is refused.
+	if _, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte("---\nname: veille-alertes\ndescription: x\nactions:\n  - Couper sans outil\n---\nx\n")}}, "upload"); err == nil {
+		t.Fatal("an action with no tool accepted")
+	}
+}
+
+// A tool's words on a button: its title from its server, else its name.
+func TestToolWords(t *testing.T) {
+	c, _ := surfaceCore(t)
+	withFakeMail(t, c)
+	if got := c.toolWords("mcp__mail__move_message", "fr"); got != "Move a message" {
+		t.Fatalf("titled: %q", got)
+	}
+	if got := c.toolWords("mcp__ledger__move_funds", "fr"); got != callVerb("mcp__ledger__move_funds {}", "fr") {
+		t.Fatalf("untitled: %q", got)
+	}
+}
+
+func TestParseSkillAction(t *testing.T) {
+	a, ok := parseSkillAction(`"Archiver: mail/move_message folder=Archive"`)
+	if !ok || a.Label != "Archiver" || a.Tool != "mcp__mail__move_message" || a.Args["folder"] != "Archive" {
+		t.Fatalf("%+v %v", a, ok)
+	}
+	if !a.matches(noteAction{Tool: "mcp__mail__move_message", Args: map[string]any{"id": offerItemArg, "folder": "Archive"}}) ||
+		a.matches(noteAction{Tool: "mcp__mail__move_message", Args: map[string]any{"id": offerItemArg, "folder": "Trash"}}) ||
+		a.matches(noteAction{Tool: "mcp__mail__delete", Args: map[string]any{"id": offerItemArg, "folder": "Archive"}}) {
+		t.Fatal("matches")
+	}
+	for _, bad := range []string{"Archiver", ": mail/move", "Archiver: move", "Archiver: mail/move folder"} {
+		if _, ok := parseSkillAction(bad); ok {
+			t.Errorf("%q parsed", bad)
+		}
+	}
 }

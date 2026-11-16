@@ -96,7 +96,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Summary updated: 09:42",
+      "text": "Summary updated: 10:00",
       "variant": "caption"
      },
      {
@@ -140,13 +140,13 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T07:42:01+01:00",
+        "date": "2026-11-16T08:00:53+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T08:22:01+01:00",
+        "date": "2026-11-16T08:40:53+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
@@ -162,13 +162,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T10:02:01+01:00",
+        "date": "2026-11-16T10:20:53+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T09:52:01+01:00",
+        "date": "2026-11-16T10:10:53+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "current"
@@ -647,25 +647,25 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T07:42:01+01:00",
+        "date": "2026-11-16T08:00:53+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T08:22:01+01:00",
+        "date": "2026-11-16T08:40:53+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
        },
        {
-        "date": "2026-11-16T10:02:01+01:00",
+        "date": "2026-11-16T10:20:53+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:52:01+01:00",
+        "date": "2026-11-16T10:10:53+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "done"
@@ -679,7 +679,7 @@
       "donelabel": "5 steps done",
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 09:12"
+       "title": "Done ✓ · 09:30"
       },
       "goal": "The club's site is online, with its photos.",
       "progress": {
@@ -938,16 +938,7 @@
             "level": "low",
             "n": 1,
             "note": "",
-            "offers": [
-             {
-              "item": "bTEfbmV3czEy",
-              "label": "use “move funds”",
-              "offer": "2d85eae4b4ae",
-              "source": "mails",
-              "thread": 2,
-              "tool": "mcp__ledger__move_funds"
-             }
-            ],
+            "offers": [],
             "source": "mails",
             "state": "none",
             "title": "The November letter"
@@ -962,16 +953,7 @@
             "level": "low",
             "n": 2,
             "note": "",
-            "offers": [
-             {
-              "item": "bTEfcHJvbW8z",
-              "label": "use “move funds”",
-              "offer": "2d85eae4b4ae",
-              "source": "mails",
-              "thread": 2,
-              "tool": "mcp__ledger__move_funds"
-             }
-            ],
+            "offers": [],
             "source": "mails",
             "state": "none",
             "title": "20% off this weekend"
@@ -980,8 +962,8 @@
           "label": "Nothing to do · 2",
           "offers": [
            {
-            "label": "use “move funds” · 2",
-            "offer": "2d85eae4b4ae",
+            "label": "Archive · 2",
+            "offer": "3a0be1c6b461",
             "source": "mails",
             "state": "none",
             "thread": 2
@@ -1110,7 +1092,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Résumé mis à jour : 9 h 42",
+      "text": "Résumé mis à jour : 10 h 00",
       "variant": "caption"
      },
      {
@@ -1154,13 +1136,13 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T07:42:01+01:00",
+        "date": "2026-11-16T08:00:53+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T08:22:01+01:00",
+        "date": "2026-11-16T08:40:53+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
@@ -1176,13 +1158,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T10:02:01+01:00",
+        "date": "2026-11-16T10:20:53+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T09:52:01+01:00",
+        "date": "2026-11-16T10:10:53+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "current"
@@ -1661,25 +1643,25 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T07:42:01+01:00",
+        "date": "2026-11-16T08:00:53+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T08:22:01+01:00",
+        "date": "2026-11-16T08:40:53+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
        },
        {
-        "date": "2026-11-16T10:02:01+01:00",
+        "date": "2026-11-16T10:20:53+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T09:52:01+01:00",
+        "date": "2026-11-16T10:10:53+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "done"
@@ -1693,7 +1675,7 @@
       "donelabel": "5 étapes faites",
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 9 h 12"
+       "title": "Fait ✓ · 9 h 30"
       },
       "goal": "Le site du club est en ligne, avec ses photos.",
       "progress": {
@@ -1952,16 +1934,7 @@
             "level": "low",
             "n": 1,
             "note": "",
-            "offers": [
-             {
-              "item": "bTEfbmV3czEy",
-              "label": "utiliser « move funds »",
-              "offer": "2d85eae4b4ae",
-              "source": "mails",
-              "thread": 2,
-              "tool": "mcp__ledger__move_funds"
-             }
-            ],
+            "offers": [],
             "source": "mails",
             "state": "none",
             "title": "La lettre de novembre"
@@ -1976,16 +1949,7 @@
             "level": "low",
             "n": 2,
             "note": "",
-            "offers": [
-             {
-              "item": "bTEfcHJvbW8z",
-              "label": "utiliser « move funds »",
-              "offer": "2d85eae4b4ae",
-              "source": "mails",
-              "thread": 2,
-              "tool": "mcp__ledger__move_funds"
-             }
-            ],
+            "offers": [],
             "source": "mails",
             "state": "none",
             "title": "-20 % ce week-end"
@@ -1994,8 +1958,8 @@
           "label": "Rien à faire · 2",
           "offers": [
            {
-            "label": "utiliser « move funds » · 2",
-            "offer": "2d85eae4b4ae",
+            "label": "Archiver · 2",
+            "offer": "3a0be1c6b461",
             "source": "mails",
             "state": "none",
             "thread": 2
