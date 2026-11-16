@@ -918,7 +918,7 @@ describe("the catalog's components", () => {
     const cards = $$("[data-surface=gallery-cards] ul.a2-cells.a2-cells-small > li .a2-card-title");
     expect(cards.map((n) => n.textContent)).toEqual(["Veste en laine", "Chemise oxford", "Pantalon droit"]);
     const stack = $$("[data-surface=gallery-cards] .a2-chart-stack")[0];
-    expect(stack.querySelector("svg")?.getAttribute("aria-label")).toBe("Barres empilées : Actions, Obligations, Liquidités");
+    expect(stack.querySelector("[role=img]")?.getAttribute("aria-label")).toBe("Barres empilées : Actions, Obligations, Liquidités");
     expect([...stack.querySelectorAll(".a2-stack-label")].map((n) => n.textContent)).toEqual(["Aujourd'hui", "Cible"]);
     const bars = [...stack.querySelectorAll("rect.a2-bar")];
     expect(bars).toHaveLength(6);
@@ -926,6 +926,49 @@ describe("the catalog's components", () => {
     expect(bars.slice(0, 3).map((b) => [b.getAttribute("x"), b.getAttribute("width")])).toEqual([["0", "191"], ["192", "95"], ["288", "31"]]);
     expect(bars[0].querySelector("title")?.textContent).toBe("Actions, Aujourd'hui\u202f: 60 %");
     expect([...stack.querySelectorAll(".a2-legend-item")].map((n) => n.textContent)).toEqual(["Actions 60 % → 50 %", "Obligations 30 % → 40 %", "Liquidités 10 % → 10 %"]);
+  });
+
+  it("draw the bench's matters as their reference answers compose them, from the catalog's bricks alone", async () => {
+    await mount("fr", threadFixtures("fr"));
+    await act(async () => {});
+    expect(errors).toEqual([]);
+    const on = (id: number) => (sel: string) => $$(`[data-surface=thread-${id}] ${sel}`);
+    // A child thread choosing a subject: its crumb back to its parent, the note written before the options, one kept.
+    const subject = on(32);
+    expect(subject(".a2-markdown")).toHaveLength(1);
+    expect(subject(".a2-markdown")[0].compareDocumentPosition(subject(".a2-item")[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(subject(".a2-item-title").map((n) => n.textContent)).toEqual(["Le tournoi d'hiver", "Le nouveau terrain", "Merci aux bénévoles"]);
+    expect(subject(".a2-mark[aria-pressed=true]").map((b) => b.closest("li")?.querySelector(".a2-item-title")?.textContent + " " + b.textContent)).toEqual([
+      "Le tournoi d'hiver Garder",
+    ]);
+    expect(on(31)(".a2-item-title").map((n) => n.textContent)).toContain("Le sujet de la lettre"); // the parent lists its child
+    // A checklist: what is left in figures, each task a box to check, one checked.
+    const move = on(41);
+    expect(move(".a2-metric")).toHaveLength(2);
+    expect(move(".a2-mark-box").map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false"]);
+    // Mails from a server not trusted: « extérieur » beside the block, code's offers on the rows that have one.
+    const mails = on(51);
+    expect(mails(".a2-item-title")).toHaveLength(3);
+    // Noted after reading outside: code's words on the offers, a row's and a group's, never the note's.
+    expect(mails(".a2-offers button").map((b) => b.textContent)).toEqual(["utiliser « archive »", "utiliser « archive » · 1"]);
+    expect(mails("*").some((n) => n.children.length === 0 && n.textContent === "extérieur")).toBe(true);
+    // An allocation now against its target, and a button that asks in Eriphe's words.
+    const savings = on(61);
+    expect(savings(".a2-chart-stack .a2-stack-label").map((n) => n.textContent)).toEqual(["Aujourd'hui", "Cible"]);
+    await click(savings("button.a2-button").find((b) => b.textContent === "Propose un rééquilibrage")!);
+    expect(actions.map((a) => [a.action.name, a.action.context])).toEqual([["ask", { text: "Propose-moi un rééquilibrage pour revenir à ma cible" }]]);
+    expect(document.querySelectorAll("[style]")).toHaveLength(0);
+  });
+
+  it("lay a trip's hotels out as a gallery of cards, kept or dropped, in English", async () => {
+    await mount("en", threadFixtures("en"));
+    await act(async () => {});
+    expect(errors).toEqual([]);
+    const trip = (sel: string) => $$(`[data-surface=thread-71] ${sel}`);
+    expect(trip("ul.a2-cells > li .a2-card-title").map((n) => n.textContent)).toEqual(["Casa Ribeira", "Bolhão Rooms", "Foz Garden"]);
+    expect(trip(".a2-mark[aria-pressed=true]").map((b) => b.closest("li")?.querySelector(".a2-card-title")?.textContent)).toEqual(["Casa Ribeira"]);
+    // Written after reading outside: no button of the holder's, only the marks and code's head.
+    expect(trip("button").filter((b) => !b.classList.contains("a2-mark")).map((b) => b.textContent)).toEqual(["Stop"]);
   });
 
   it("stop a thread from its head, by code's button", async () => {

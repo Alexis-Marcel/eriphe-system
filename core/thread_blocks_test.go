@@ -239,9 +239,11 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 const threadsFixture = "web/espace/src/a2ui/threads.json"
 
 // The page is tested on the surfaces code composes for threads: a work
-// thread, one that lists items, one ended, a watcher's mails, a child, one
-// its holder composed. ERIPHE_UPDATE_THREADS=1 writes them again from the
-// code; they hold to the catalog.
+// thread, one that lists items, one ended, a watcher's mails, a child, two
+// its holder composed, and the threads' bench matters as their reference
+// answers compose them through surface_write (benchMatters).
+// ERIPHE_UPDATE_THREADS=1 writes them again from the code; they hold to
+// the catalog.
 func TestThreadSurfacesFixture(t *testing.T) {
 	if os.Getenv("ERIPHE_UPDATE_THREADS") == "1" {
 		out := map[string][]a2ui.Message{}
@@ -264,6 +266,20 @@ func TestThreadSurfacesFixture(t *testing.T) {
 	for _, lang := range []string{"fr", "en"} {
 		for _, e := range a2ui.Validate(langs[lang]) {
 			t.Errorf("%s: %+v", lang, e)
+		}
+		var created []struct {
+			CreateSurface struct {
+				SurfaceID string `json:"surfaceId"`
+			} `json:"createSurface"`
+		}
+		json.Unmarshal(langs[lang], &created)
+		seen := map[string]bool{}
+		for _, m := range created {
+			if id := m.CreateSurface.SurfaceID; seen[id] {
+				t.Errorf("%s: %s twice: the bench's cases need ids of their own (seed)", lang, id)
+			} else {
+				seen[id] = true
+			}
 		}
 		for _, want := range []string{`"Progress"`, `"Item"`, `"Fold"`, `"compact"`, `"thread_tidy"`, `"thread_children"`, `"thread_part_budget"`, `"` + threadExternalPrefix + `hotel"`, `"Mark"`, `"Grid"`, `"stack"`, `"Offers"`, `"alfama": "keep"`} {
 			if !strings.Contains(string(langs[lang]), want) {
@@ -398,24 +414,34 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	add(103, done, steps, nil)
 	add(104, mails, nil, nil)
 	add(105, kid, nil, nil)
-	// A thread its holder composed: its blocks in place of the default, one
-	// written after reading outside, « extérieur » beside it alone.
+	// Threads their holder composed, each block written as the brain
+	// writes it (surface_write: checked alone, its taint the turn's) on the
+	// thread whose data it binds, then shown under the fixture's id.
+	type comp = map[string]any
+	brain := func(taint ...string) surfaceCaller {
+		return surfaceCaller{author: surfaceAuthorBrain, taint: func() []string { return taint }}
+	}
+	composed := func(blocks ...func() (string, surfaceCaller, comp, []comp)) *threadPart {
+		for _, b := range blocks {
+			name, who, data, comps := b()
+			comps[0]["id"] = "root"
+			if _, err := c.writeThreadPart(who, th.ID, surfaceWriteIn{ID: threadSurfaceID(th.ID), Block: name, Components: comps, Data: data}); err != nil {
+				t.Fatalf("block %s: %v", name, err)
+			}
+		}
+		part := c.threadPartOf(th.ID)
+		c.savePart(th.ID, nil)
+		return part
+	}
+	block := func(name string, who surfaceCaller, data comp, comps ...comp) func() (string, surfaceCaller, comp, []comp) {
+		return func() (string, surfaceCaller, comp, []comp) { return name, who, data, comps }
+	}
+	// Its blocks in place of the default, one written after reading
+	// outside, « extérieur » beside it alone; bricks of its own: options in
+	// a gallery of cards, each kept or dropped with a Mark (one kept
+	// already), and a list to check.
 	held := work
 	held.Title, held.Summary = pick("Le voyage à Lisbonne", "The Lisbon trip"), ""
-	block := func(name string, comp map[string]any, taint ...string) partBlock {
-		comp["id"] = partRoot(name)
-		raw, _ := json.Marshal([]any{comp})
-		return partBlock{Name: name, Author: surfaceAuthorBrain, Components: raw, Tainted: taint}
-	}
-	// Bricks of its own: options in a gallery of cards, each kept or
-	// dropped with a Mark (one kept already), and a list to check.
-	composed := func(name string, data map[string]any, comps ...map[string]any) partBlock {
-		comps[0]["id"] = partRoot(name)
-		raw, _ := json.Marshal(comps)
-		d, _ := json.Marshal(data)
-		return partBlock{Name: name, Author: surfaceAuthorBrain, Components: raw, Data: d}
-	}
-	type comp = map[string]any
 	at := func(p string) comp { return comp{"@path": p} }
 	hotels := []any{
 		comp{"id": "alfama", "name": "Casa Alfama", "why": pick("Vue sur le fleuve, 95 € la nuit", "River view, €95 a night")},
@@ -429,21 +455,21 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	if err := c.setMark(106, "hotels", "alfama", a2ui.MarkKeep, false, now); err != nil {
 		t.Fatal(err)
 	}
-	add(106, held, nil, &threadPart{Blocks: []partBlock{
-		block("budget", map[string]any{"component": "Metric", "label": pick("Budget restant", "Budget left"), "value": "420 €"}),
-		block("hotel", map[string]any{"component": "Text", "text": pick("L'hôtel confirme la chambre pour le 12.", "The hotel confirms the room for the 12th.")}, "mail.read"),
-		composed("hotels", comp{"hotels": hotels},
+	add(106, held, nil, composed(
+		block("budget", brain(), nil, comp{"component": "Metric", "label": pick("Budget restant", "Budget left"), "value": "420 €"}),
+		block("hotel", brain("mail.read"), nil, comp{"component": "Text", "text": pick("L'hôtel confirme la chambre pour le 12.", "The hotel confirms the room for the 12th.")}),
+		block("hotels", brain(), comp{"hotels": hotels},
 			comp{"component": "Grid", "children": comp{"path": "/hotels", "componentId": "hotel_card"}},
 			comp{"id": "hotel_card", "component": "Card", "title": at("name"), "child": "hotel_body"},
 			comp{"id": "hotel_body", "component": "Column", "children": []string{"hotel_why", "hotel_mark"}},
 			comp{"id": "hotel_why", "component": "Text", "variant": "caption", "text": at("why")},
 			comp{"id": "hotel_mark", "component": "Mark", "list": "hotels", "item": at("id"), "marks": []string{a2ui.MarkKeep, a2ui.MarkDrop}}),
-		composed("todo", comp{"todo": todo},
+		block("todo", brain(), comp{"todo": todo},
 			comp{"component": "List", "children": comp{"path": "/todo", "componentId": "todo_row"}},
 			comp{"id": "todo_row", "component": "Row", "align": "center", "children": []string{"todo_mark", "todo_label"}},
 			comp{"id": "todo_mark", "component": "Mark", "list": "todo", "item": at("id"), "marks": []string{a2ui.MarkDone}},
 			comp{"id": "todo_label", "component": "Text", "text": at("label")}),
-	}})
+	))
 	// A standing thread its holder composed from the accounts' data: the
 	// allocation now against its target, and the rows with the actions
 	// code offers on them (Offers), as the default would.
@@ -452,16 +478,54 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 	split := func(name string, now, target float64) comp {
 		return comp{"name": name, "points": []any{comp{"x": pick("Aujourd'hui", "Today"), "y": now}, comp{"x": pick("Cible", "Target"), "y": target}}}
 	}
-	add(107, savings, nil, &threadPart{Blocks: []partBlock{
-		composed("split", comp{"split": []any{split(pick("Actions", "Stocks"), 60, 50), split(pick("Obligations", "Bonds"), 30, 40), split(pick("Liquidités", "Cash"), 10, 10)}},
+	add(107, savings, nil, composed(
+		block("split", brain(), comp{"split": []any{split(pick("Actions", "Stocks"), 60, 50), split(pick("Obligations", "Bonds"), 30, 40), split(pick("Liquidités", "Cash"), 10, 10)}},
 			comp{"component": "Chart", "kind": "stack", "unit": "%", "series": at("/split")}),
-		composed("accounts", nil,
+		block("accounts", brain(), nil,
 			comp{"component": "List", "children": comp{"path": "/thread/items/ledger/groups", "componentId": "account_group"}},
 			comp{"id": "account_group", "component": "List", "children": comp{"path": "items", "componentId": "account_row"}},
 			comp{"id": "account_row", "component": "Row", "align": "center", "children": []string{"account_item", "account_offers"}},
 			comp{"id": "account_item", "component": "Item", "title": at("title"), "note": at("note")},
 			comp{"id": "account_offers", "component": "Offers", "offers": at("offers")}),
-	}})
+	))
+	return append(out, benchMatters(t, lang)...)
+}
+
+// benchMatters are the threads' bench matters in a language
+// (testdata/threads), composed as their reference answers compose them,
+// through the brain's own tools, then marked by Sam as the case says:
+// the thread each opens, and the one on stage it opened beside or under.
+func benchMatters(t *testing.T, lang string) []a2ui.Message {
+	t.Helper()
+	var out []a2ui.Message
+	for _, x := range loadThreadCases(t) {
+		if x.Lang != lang {
+			continue
+		}
+		c, r, sc := playAsk(t, x, x.Answer)
+		if len(sc) > 0 {
+			t.Fatalf("%s: %s", x.ID, sc)
+		}
+		c.store.set(userLangKey, lang)
+		id := r.opened()[0]
+		for _, m := range x.Marks {
+			if err := c.setMark(id, m.List, m.Item, m.Mark, false, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, th := range []int64{r.stage, id} {
+			if th == 0 {
+				continue
+			}
+			c.keepThreadSurface(th)
+			s, err := c.surface(threadSurfaceID(th))
+			if err != nil {
+				t.Fatalf("%s: thread %d: %v", x.ID, th, err)
+			}
+			s.Updated = time.Time{} // the same file at each run
+			out = append(out, c.createMessage(s))
+		}
+	}
 	return out
 }
 

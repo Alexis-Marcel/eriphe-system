@@ -85,7 +85,7 @@ type itemNote struct {
 // noteItemIn is note_item's input; the brain names the thread, a lead's is
 // its own.
 type noteItemIn struct {
-	Thread  int64        `json:"thread_id,omitempty" jsonschema:"the thread (a lead, a skill's run: leave it out for yours)"`
+	Thread  int64        `json:"thread_id,omitempty" jsonschema:"the thread; leave it out for the one you work on (your turn's, your lead's, your run's)"`
 	Source  string       `json:"source" jsonschema:"the name of the thread's source that lists the item (one with items)"`
 	Item    string       `json:"item" jsonschema:"the item's id, as the source gives it"`
 	Note    string       `json:"note,omitempty" jsonschema:"what the user reads under the item: what it is about and what they should do of it, in their language, one short concrete sentence, no ids nor jargon; empty with no state: the note is taken away"`

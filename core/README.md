@@ -1277,7 +1277,7 @@ by code from the thread's data (#468): it never depends on a model remembering t
     them, in the default composition and in a holder's block alike (`offerOf`). All bound by
     paths: a read again changes the data, not the components.
 - **Notes on items** (#571, `thread_items.go`, table `thread_items`): the brain (`note_item`, with
-  the thread) and a thread's lead (`note_item`, its own) note one item a source lists, by the
+  the thread, its turn's by default) and a thread's lead (`note_item`, its own) note one item a source lists, by the
   source's name and the item's id: a short note (300 characters), a state (`act`, `look`, `info`,
   `none`, `done`) and a due date; the same item noted again replaces it, nothing at all takes it
   away; 500 a thread. Its `author` (`brain`, `lead:<id>`) and `tainted` (the brain turn's taint,
@@ -4075,8 +4075,16 @@ the fake change runs) adds a `user` step after it (Sam deploys himself) and a `c
 never closing the thread; « pendant que je relis la PR, cherche… » while a thread is on stage
 opens a second one with a task step, no `workspace_focus`, the stage and its thread untouched.
 Always: no call refused, no change called outside a step, a reply in one line (`[rien]` for a
-wake), no server or tool name in the reply, the thread, its steps or the part. A turn announces
-the id the next thread gets (`threadBenchSeed`). In CI with no model, every case is valid, its
+wake, the replies it suggests left out), no server or tool name in the reply, the thread, its
+steps or the part. A turn announces the id the next thread gets (`threadBenchSeed`, or the case's
+`seed`: each case has ids of its own). The matters differ (a PR, a research, a child thread
+choosing a subject under the publication on stage, a checklist, mails from a server not trusted,
+an allocation, a trip's hotels), each part composed from the catalog's bricks only (options with a
+`Mark`, a `Grid` of cards, a `Chart` `stack`, a source's rows and groups with their `Offers`);
+a case may give Sam's `marks` after the turn. `ERIPHE_UPDATE_THREADS=1 go test -run
+TestThreadSurfacesFixture` writes the surfaces these reference answers leave (and the stage's) into
+the page's fixture (`web/espace/src/a2ui/threads.json`), so the espace's tests and its dev server
+(`npm run dev`, `?open=thread-<id>`) render what the brain's own tools composed. In CI with no model, every case is valid, its
 reference answers score clean, and each fault is caught on a spoilt copy. `threads_live_test.go`
 runs the turns on a real model: « Les fils », the paragraphs
 on the brain's part of a thread and on the workspace's messages, the brain's tools for threads and the workspace as

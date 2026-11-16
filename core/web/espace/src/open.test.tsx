@@ -248,4 +248,23 @@ describe("a child thread", () => {
     expect(tile("thread-1").textContent).not.toContain("Signe le devis");
     expect(button("Ouvrir")).toBeTruthy();
   });
+
+  it("opens inside its parent from a link to it (a card of the child's)", async () => {
+    history.replaceState(null, "", "/?open=thread-2");
+    await act(async () =>
+      root.render(
+        <WordsContext.Provider value={{ t: makeT(words), lang: "fr" }}>
+          <Espace boot={{ lang: "fr", name: "Eriphe", csrf: "tok", strings: words, live: true }} />
+        </WordsContext.Provider>,
+      ),
+    );
+    await act(async () => {
+      FakeSource.emit("a2ui", { seq: 1, reset: true, messages: [parent, child] });
+      FakeSource.emit("layout", layout);
+    });
+    expect(actions[0].body).toMatchObject({ action: { name: "open", surfaceId: "thread-2" } });
+    // At once, as core will: the parent on stage, the child inside it.
+    expect(tile("thread-1").classList.contains("focus")).toBe(true);
+    expect(tile("thread-1").textContent).toContain("Signe le devis");
+  });
 });

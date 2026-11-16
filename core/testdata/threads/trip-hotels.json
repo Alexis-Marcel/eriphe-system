@@ -1,0 +1,42 @@
+{
+  "id": "trip-hotels",
+  "what": "The hotels found for a trip, from a booking site that is not trusted: a light thread whose part lays them out as a gallery of cards (Grid), each kept or dropped by Sam (Mark); written after reading outside content, « extérieur » beside it, and no button.",
+  "lang": "en",
+  "seed": 70,
+  "memory": ["Sam travels to Porto from 4 to 7 December, with a budget of €120 a night."],
+  "servers": [
+    {"name": "staysearch", "use": "hotel search for Sam's trips", "trusted": false, "tools": [
+      {"name": "hotels", "description": "Hotels available in a city for given dates: id, name, area, price a night, rating.",
+        "input_schema": {"type": "object", "properties": {"city": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}}, "required": ["city", "from", "to"]},
+        "result": {"city": "Porto", "hotels": [
+          {"id": "ribeira", "name": "Casa Ribeira", "area": "Ribeira, by the river", "price": 110, "rating": 4.6},
+          {"id": "bolhao", "name": "Bolhão Rooms", "area": "Bolhão, central", "price": 95, "rating": 4.3},
+          {"id": "foz", "name": "Foz Garden", "area": "Foz, by the sea, 25 min out", "price": 85, "rating": 4.5},
+          {"id": "aliados", "name": "Aliados Suites", "area": "Aliados, central", "price": 140, "rating": 4.7}]}}
+    ]}
+  ],
+  "request": "Show me the hotels you found for Porto.",
+  "expect": {"about": ["porto"]},
+  "answer": {
+    "calls": [
+      {"tool": "open_thread", "args": {"title": "Porto trip", "goal": "Sam's stay in Porto from 4 to 7 December is booked.", "alias": "trip:porto",
+        "headline": "Keep the hotels you like, drop the others."}},
+      {"tool": "surface_write", "args": {"id": "thread-71", "block": "hotels",
+        "data": {"hotels": [
+          {"id": "ribeira", "name": "Casa Ribeira", "where": "Ribeira, by the river", "price": "€110 a night · 4.6"},
+          {"id": "bolhao", "name": "Bolhão Rooms", "where": "Bolhão, central", "price": "€95 a night · 4.3"},
+          {"id": "foz", "name": "Foz Garden", "where": "Foz, by the sea, 25 min out", "price": "€85 a night · 4.5"}]},
+        "components": [
+          {"id": "root", "component": "Grid", "size": "medium", "children": {"path": "/hotels", "componentId": "hotel"}},
+          {"id": "hotel", "component": "Card", "title": {"@path": "name"}, "child": "hotel_body"},
+          {"id": "hotel_body", "component": "Column", "children": ["hotel_where", "hotel_price", "hotel_mark"]},
+          {"id": "hotel_where", "component": "Text", "text": {"@path": "where"}},
+          {"id": "hotel_price", "component": "Text", "variant": "caption", "text": {"@path": "price"}},
+          {"id": "hotel_mark", "component": "Mark", "list": "hotels", "item": {"@path": "id"}, "marks": ["keep", "drop"]}
+        ]}},
+      {"tool": "workspace_focus", "args": {"id": "thread-71"}}
+    ],
+    "reply": "Three hotels within your budget, in the middle: keep the ones you like."
+  },
+  "marks": [{"list": "hotels", "item": "ribeira", "mark": "keep"}]
+}

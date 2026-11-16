@@ -475,9 +475,25 @@ func TestBrainPromptThreads(t *testing.T) {
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",
 		"se range seul dans sa chronologie", "Sa réponse sur une de ces cartes",
+		// Working inside a thread (#607): a child for a matter of its own,
+		// the part by named blocks, the bricks, the user's marks.
+		"`open_thread` avec `parent`", "`find_thread`", "`block`", "`before`", "`surface_remove`", "jamais tout",
+		"`Mark`", "`Grid`", "`\"kind\": \"stack\"`", "`Offers`", "n'appelle pas de réponse",
 	} {
 		if !strings.Contains(section, want) {
 			t.Errorf("« Les fils » lacks %q", want)
+		}
+	}
+	// Its suggested replies, for any answer: its own words, none after reading outside.
+	for _, want := range []string{"`<suggestions>`", "au plus 3", "sur un tour contaminé, eriphe-core n'en montre aucune"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("the prompt lacks %q", want)
+		}
+	}
+	// What the epic replaced is gone: buttons drawn on a row by default.
+	for _, gone := range []string{"composition par défaut", "en boutons sur sa ligne"} {
+		if strings.Contains(prompt, gone) || strings.Contains(leadPrompt, gone) {
+			t.Errorf("the prompts still say %q", gone)
 		}
 	}
 }
