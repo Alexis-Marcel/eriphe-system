@@ -819,6 +819,13 @@ describe("the catalog's components", () => {
     expect(answers).toEqual([{ surfaceId: "thread-102", componentId: "thread_src_0_card", ref: "calls:1", yes: true, at: "/thread/sources/0/groups/0/items/0/cards/0" }]);
   });
 
+  it("stop a thread from its head, by code's button", async () => {
+    await mount("fr", threadFixtures("fr"));
+    const stop = $$("[data-surface=thread-101] button.a2-button").find((b) => b.textContent === "Arrêter")!;
+    await click(stop);
+    expect(actions.map((a) => [a.action.name, a.action.sourceComponentId, a.action.context])).toEqual([["control", "thread_control_stop", { thread: 101, do: "stop" }]]);
+  });
+
   it("say how an ended thread ended, and put it away with « Ranger »", async () => {
     await mount("fr", threadFixtures("fr"));
     const done = (sel: string) => $$(`[data-surface=thread-103] ${sel}`);

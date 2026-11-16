@@ -157,7 +157,12 @@ func (w *web) handleGesture(rw http.ResponseWriter, r *http.Request, _ *session)
 	}
 }
 
+// handleEspace is the app's page. A link to a thread (?open=thread-<id>)
+// shows an ended one again first, so the page finds its surface to open.
 func (w *web) handleEspace(rw http.ResponseWriter, r *http.Request, s *session) {
+	if id, ok := threadOfSurface(r.URL.Query().Get("open")); ok {
+		w.c.showThreadAgain(id, time.Now())
+	}
 	w.render(rw, r, s, "espace", "espace", page{Title: "nav.espace"})
 }
 

@@ -65,6 +65,24 @@ func itemsThread(t *testing.T, c *core, l *fakeLedger) Thread {
 }
 
 // rootChildren are the ids the root of a surface shows, in order.
+// withoutControls are the components without the head's buttons.
+func withoutControls(t *testing.T, comps json.RawMessage) json.RawMessage {
+	t.Helper()
+	var list []map[string]any
+	json.Unmarshal(comps, &list)
+	list = slices.DeleteFunc(list, func(comp map[string]any) bool {
+		id, _ := comp["id"].(string)
+		return strings.HasPrefix(id, "thread_control")
+	})
+	for _, comp := range list {
+		if kids, ok := comp["children"].([]any); ok {
+			comp["children"] = slices.DeleteFunc(kids, func(x any) bool { return x == "thread_controls" })
+		}
+	}
+	raw, _ := json.Marshal(list)
+	return raw
+}
+
 func rootChildren(t *testing.T, comps json.RawMessage) []string {
 	t.Helper()
 	var list []map[string]any
@@ -103,8 +121,12 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 	work, standing := th, th
 	work.Ends, standing.Ends = endsGoal, endsStanding
 	a, b := compose(work), compose(standing)
-	if string(a.Components) != string(b.Components) || string(a.Data) != string(b.Data) || a.Weight != b.Weight {
+	// A standing thread is drawn the same but for Stop: it never ends.
+	if string(withoutControls(t, a.Components)) != string(b.Components) || string(a.Data) != string(b.Data) || a.Weight != b.Weight {
 		t.Fatalf("a standing thread is drawn otherwise:\n%s\n%s", a.Components, b.Components)
+	}
+	if !strings.Contains(string(a.Components), `"thread_control_stop"`) || strings.Contains(string(b.Components), `"thread_controls"`) {
+		t.Fatalf("Stop: %s\n%s", a.Components, b.Components)
 	}
 	day := th
 	day.Ends = endsDay
