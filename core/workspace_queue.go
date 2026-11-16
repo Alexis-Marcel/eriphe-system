@@ -370,15 +370,6 @@ func (c *core) threadRaised(id int64) int {
 	return w
 }
 
-// queueSurfaceDismissed is the user removing a queue's surface (Settings →
-// Surfaces): its items leave the queue, or code would write it again. A
-// card stays to be answered in the conversation.
-func (c *core) queueSurfaceDismissed(id string) {
-	for _, it := range c.queueItemsOf(id) {
-		c.attentionDone(it.Ref)
-	}
-}
-
 // syncQueueSurfaces makes the queue's surfaces what the queue is: one per
 // group and per urgent item, written again only when it changed, removed
 // once its items left.

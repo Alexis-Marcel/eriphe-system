@@ -22,9 +22,8 @@ On a computer the screen never scrolls. Eriphe chooses what is in front and how 
 first, then what matters now, the rest folded. When nothing needs you, it says so in a sentence
 rather than showing an empty grid.
 
-Who writes the tiles:
+The tiles are of two kinds only:
 
-- **Eriphe**, when you ask it to show something;
 - **a thread**, a matter Eriphe follows to its goal (a skill, the things Eriphe does on its own at
   set times or on an event, works on its own thread): every thread has its tile, kept up to date as
   it moves, every thread drawn the same way: its goal and its state in a pill (« À toi », « En
@@ -80,24 +79,26 @@ Write to Eriphe, in the workspace's column or in the conversation:
 
 > Show me this week's unread mails.
 
-A tile appears at once marked **In preparation**, then fills. There are two kinds of tile:
+Eriphe opens a thread for it, one made for today, and writes what you asked for in that thread's
+tile; ask the same thing again that day and it is the same thread. At midnight it ends and its
+tile goes; asked again the next day, it opens again with that day's answer. What Eriphe writes
+there is of two kinds:
 
-- **Live**: the tile reads a tool directly, and Eriphe's core reads it again by itself, every few
+- **Live**: it reads a tool directly, and Eriphe's core reads it again by itself, every few
   minutes, when the tool says something changed, and when you open the tile. No AI is involved
   after the tile is written, so it costs nothing to keep fresh. Unread mails, appointments, a
   balance, a counter are live.
 - **A summary, written once**: something that needs understanding ("summarize what happened on the
-  backup server this week", "which of these mails need an answer from me") is written by an
-  assistant, often as a background task, and shows the values as they were when it was written,
+  backup server this week", "which of these mails need an answer from me") is worked out by an
+  assistant, often as a background task of the thread, and shows the values as they were when it was written,
   with their date. It does not change on its own; ask again, or make it recurring (below).
 
-A tile you ask for once lasts about a day, then goes. Titles say what you see ("Unread this week",
+What you ask for once lasts the day, then goes. Titles say what you see ("Unread this week",
 "To answer"), never the name of the tool behind it.
 
 A live tile only reads what you let Eriphe read freely: a tool whose reading needs your approval
-each time, or that you blocked, cannot feed a live tile. Eriphe tells you, and Settings → Surfaces
-shows what each tile reads and its last error; change the tool's access if you want it, or ask for
-a summary instead.
+each time, or that you blocked, cannot feed a live tile. Eriphe tells you; change the tool's access
+if you want it, or ask for a summary instead.
 
 ## Make it come back
 
@@ -193,7 +194,7 @@ then that tile stays next to it. A simple question ("what time is my train?") st
   content was read, and a proposal shown there has no Yes / No but says "answer it in the
   conversation". The tiles Eriphe keeps for what waits for you are the exception: their Yes / No
   stay, with the warning "Comes from external content: check what is about to be done." A ghost on
-  a day reads "Proposed · external content", and Settings → Surfaces tags such tiles external. A
+  a day reads "Proposed · external content", and such tiles say « extérieur ». A
   mail that says "click here to approve" cannot make anything happen.
 
 ## A new tool, no code
@@ -251,8 +252,8 @@ address opens the conversation, which says how to set one up.
 - **Outside content is data.** Whatever a mail or a page says, Eriphe reads it as information,
   never as instructions; tiles that show it cannot trigger actions (above).
 - **Tiles read only what you allow.** A live tile reads a tool only if its access lets Eriphe read
-  it freely; a skill reads only the tools you approved on its card. Settings → Surfaces lists every
-  tile with who wrote it, what it reads and when it last changed; remove any from there.
+  it freely; a skill reads only the tools you approved on its card. Every tile is a thread's or
+  one of what waits for you: no assistant, skill or task puts a tile of its own on your workspace.
 
 Technical details (surfaces, sources, authors, the layout) are in the
 [core README](../core/README.md#workspace-web).

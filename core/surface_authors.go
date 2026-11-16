@@ -1,37 +1,25 @@
 package main
 
-import (
-	"strconv"
-	"time"
-)
-
-// Who keeps the workspace's surfaces (#423). Nothing is recurring by
-// default: an author writes what it has the context for.
+// Who keeps the workspace's surfaces (#423, #574): code only.
 //
 //   - A thread's surface is code's (thread_surface.go): written from the
 //     thread's data at each of its changes. Who holds the thread (the
-//     brain, or its lead) adds its part to it. What else a lead writes
-//     lives while its thread does (while: thread:<id>, its default
-//     lifetime); code removes it when the thread ends (dropThreadSurfaces).
-//   - A skill writes no surface: it acts on its thread (task_threads.go),
-//     whose surface is code's.
-//   - The brain writes what the user asks; a recurring request is a skill.
-//     No model judges a surface stale or the workspace short of one: live
-//     data is read again by code, and code orders the workspace
-//     (workspace_layout.go).
+//     brain, or its lead) adds its part to it; nobody writes a tile of
+//     their own.
+//   - What waits for the user that no thread shows is the attention
+//     queue's (workspace_queue.go), code's too.
+//   - A skill acts on its thread (task_threads.go). A recurring request is
+//     a skill; a one-off one shown is a day thread. No model judges a
+//     surface stale or the workspace short of one: live data is read again
+//     by code, and code orders the workspace (workspace_layout.go).
 
-// dropThreadSurfaces removes at once the surfaces whose lifetime ended
-// with a thread: its lead's, and those kept while it ran. Its own surface
-// stays a while (thread_surface.go).
-func (c *core) dropThreadSurfaces(thread int64) {
-	id := strconv.FormatInt(thread, 10)
+// dropFreeSurfaces removes, at start, every surface neither code's queue
+// nor a thread wrote: what an assistant wrote before only threads were
+// shown, which nothing would keep or let the user take away.
+func (c *core) dropFreeSurfaces() {
 	all, _ := c.surfaces()
-	now := time.Now()
 	for _, s := range all {
-		if s.ID == threadSurfaceID(thread) {
-			continue
-		}
-		if (s.Author == "lead:"+id || s.Lifetime.While == "thread:"+id) && c.surfaceEnded(s, now) {
+		if !keptByCode(s.Author) {
 			c.surfaceRemove(s.ID, surfaceByLifetime)
 		}
 	}

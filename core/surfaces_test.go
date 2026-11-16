@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -234,7 +236,7 @@ func TestSurfaceFromAnyTool(t *testing.T) {
 	if len(snap) != 0 {
 		t.Fatalf("snapshot %v", snap)
 	}
-	s, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "Comptes", Components: accountsSurface(), Sources: balances, Why: "Sam asked"})
+	s, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "Comptes", Components: accountsSurface(), Sources: balances, Why: "Sam asked"})
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
 	}
@@ -284,7 +286,7 @@ func TestSurfaceFromAnyTool(t *testing.T) {
 	// removes no component). Each step a valid stream.
 	extra := `{"id":"note","component":"Text","text":"Sam"}`
 	more := json.RawMessage(strings.Replace(string(accountsSurface(extra)), `["total","list"]`, `["total","list","note"]`, 1))
-	if _, errs, err := c.surfaceWrite("brain", surfaceIn{ID: s.ID, Title: "Comptes", Components: more, Sources: balances, Why: "Sam asked"}); err != nil || len(errs) > 0 {
+	if _, errs, err := c.fixtureSurface("brain", surfaceIn{ID: s.ID, Title: "Comptes", Components: more, Sources: balances, Why: "Sam asked"}); err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
 	}
 	rw := received(t, ch, 2)
@@ -292,7 +294,7 @@ func TestSurfaceFromAnyTool(t *testing.T) {
 		t.Fatalf("rewrite %+v", rw)
 	}
 	validStream(t, create, upd, rw[0], rw[1])
-	if _, _, err := c.surfaceWrite("brain", surfaceIn{ID: s.ID, Title: "Mes comptes", Components: accountsSurface(), Sources: balances}); err != nil {
+	if _, _, err := c.fixtureSurface("brain", surfaceIn{ID: s.ID, Title: "Mes comptes", Components: accountsSurface(), Sources: balances}); err != nil {
 		t.Fatal(err)
 	}
 	again := received(t, ch, 2)
@@ -320,7 +322,7 @@ func TestSurfaceSourceGuards(t *testing.T) {
 		"one inside another": {"/a": {Tool: "ledger/balances"}, "/a/b": {Resource: "ledger", URI: "ledger://latest"}},
 	} {
 		comps := json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)
-		if _, _, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Components: comps, Sources: srcs}); err == nil {
+		if _, _, err := c.fixtureSurface("brain", surfaceIn{Title: "x", Components: comps, Sources: srcs}); err == nil {
 			t.Errorf("%s: written", name)
 		}
 	}
@@ -331,15 +333,24 @@ func TestSurfaceSourceGuards(t *testing.T) {
 		{Title: "x", Components: accountsSurface(), Sources: balances, Lifetime: surfaceLifetime{While: "task:t-none"}},
 		{Title: "x", Components: accountsSurface(), Sources: balances, Data: json.RawMessage(`[1]`)},
 	} {
-		if _, _, err := c.surfaceWrite("brain", bad); err == nil {
+		if _, _, err := c.fixtureSurface("brain", bad); err == nil {
 			t.Errorf("%+v: written", bad)
 		}
 	}
-	if _, _, err := c.surfaceWrite("someone", surfaceIn{Title: "x", Components: accountsSurface(), Sources: balances}); err == nil {
-		t.Error("an unknown author wrote")
+	// Only code writes a surface: a thread its own, the queue its q-… ones.
+	for _, w := range []struct{ author, id string }{
+		{"someone", "x"}, {"brain", "x"}, {"brain", "thread-1"}, {"brain", "q-decide"}, {"task:t-1", "x"}, {"skill:revue", "revue"},
+		{"lead:1", "thread-1"}, {"thread:1", "thread-2"}, {"thread:1", "x"}, {surfaceAuthorCore, "thread-1"}, {surfaceAuthorCore, "x"},
+	} {
+		if _, _, err := c.writeSurface(w.author, surfaceIn{ID: w.id, Title: "x", Components: accountsSurface(), Sources: balances}); err == nil {
+			t.Errorf("%s wrote %s", w.author, w.id)
+		}
+	}
+	if _, _, err := c.writeSurface(threadAuthor(1), surfaceIn{ID: threadSurfaceID(1), Title: "x", Components: accountsSurface(), Sources: balances}); err != nil {
+		t.Errorf("a thread's own: %v", err)
 	}
 
-	s, _, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Components: accountsSurface(), Sources: balances})
+	s, _, err := c.fixtureSurface("brain", surfaceIn{Title: "x", Components: accountsSurface(), Sources: balances})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +370,7 @@ func TestSurfaceSourceGuards(t *testing.T) {
 // in its tool's outputSchema, or in the composed data.
 func TestSurfaceBindingCheck(t *testing.T) {
 	c, _ := surfaceCore(t)
-	_, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Sources: balances, Components: json.RawMessage(`[
+	_, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "x", Sources: balances, Components: json.RawMessage(`[
 		{"id":"root","component":"Column","children":["a","b","list","c"]},
 		{"id":"a","component":"Metric","label":"x","value":{"@path":"/ledger/sum"}},
 		{"id":"b","component":"Metric","label":"x","value":{"@path":"/ledger/total"}},
@@ -384,7 +395,7 @@ func TestSurfaceBindingCheck(t *testing.T) {
 	}
 	// photo is never in this result (omitempty), but the outputSchema has
 	// it; /note is in the composed data.
-	_, errs, err = c.surfaceWrite("brain", surfaceIn{Title: "x", Sources: balances, Data: json.RawMessage(`{"note":"Sam"}`),
+	_, errs, err = c.fixtureSurface("brain", surfaceIn{Title: "x", Sources: balances, Data: json.RawMessage(`{"note":"Sam"}`),
 		Components: json.RawMessage(`[
 		{"id":"root","component":"Column","children":["list","c"]},
 		{"id":"list","component":"List","children":{"path":"/ledger/accounts","componentId":"pic"}},
@@ -394,7 +405,7 @@ func TestSurfaceBindingCheck(t *testing.T) {
 		t.Fatal(err, errs)
 	}
 	// Bad A2UI comes back as A2UI's errors.
-	_, errs, _ = c.surfaceWrite("brain", surfaceIn{Title: "x", Components: json.RawMessage(`[{"id":"root","component":"Nope"}]`)})
+	_, errs, _ = c.fixtureSurface("brain", surfaceIn{Title: "x", Components: json.RawMessage(`[{"id":"root","component":"Nope"}]`)})
 	if len(errs) == 0 {
 		t.Fatal("a wrong component was written")
 	}
@@ -405,7 +416,7 @@ func TestSurfaceBindingCheck(t *testing.T) {
 func TestSurfaceTaint(t *testing.T) {
 	c, _ := surfaceCore(t)
 	c.setServerTrust("ledger", true, "Sam")
-	s, _, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Components: accountsSurface(), Sources: balances})
+	s, _, err := c.fixtureSurface("brain", surfaceIn{Title: "x", Components: accountsSurface(), Sources: balances})
 	if err != nil || s.Tainted != "" {
 		t.Fatalf("%v, tainted %q", err, s.Tainted)
 	}
@@ -423,7 +434,7 @@ func TestSurfaceTaint(t *testing.T) {
 	c.setServerTrust("ledger", true, "Sam")
 	c.refreshSurface(context.Background(), s.ID, nil, time.Now())
 	received(t, ch, 2)
-	s, _, err = c.surfaceWrite("brain", surfaceIn{ID: s.ID, Title: "x", Components: accountsSurface(), Sources: balances,
+	s, _, err = c.fixtureSurface("brain", surfaceIn{ID: s.ID, Title: "x", Components: accountsSurface(), Sources: balances,
 		Tainted: []string{"web.fetch"}})
 	if err != nil || s.Tainted != "web.fetch" {
 		t.Fatalf("%v, tainted %q", err, s.Tainted)
@@ -440,7 +451,7 @@ func TestSurfaceTaint(t *testing.T) {
 // surface opened.
 func TestSurfaceRefreshTriggers(t *testing.T) {
 	c, l := surfaceCore(t)
-	s, errs, err := c.surfaceWrite("task:t-releves", surfaceIn{Title: "Dernière écriture", Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)},
+	s, errs, err := c.fixtureSurface("task:t-releves", surfaceIn{Title: "Dernière écriture", Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)},
 		Sources:    map[string]surfaceSource{"/latest": {Resource: "ledger", URI: "ledger://latest"}},
 		Components: json.RawMessage(`[{"id":"root","component":"Text","text":{"@path":"/latest/entry"}}]`)})
 	if err != nil || len(errs) > 0 {
@@ -508,7 +519,7 @@ func TestSurfaceRefreshTriggers(t *testing.T) {
 func TestSurfaceStaleRead(t *testing.T) {
 	c, l := surfaceCore(t)
 	comps := json.RawMessage(`[{"id":"root","component":"Text","text":{"@path":"/x/entry"}}]`)
-	s, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Components: comps,
+	s, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "x", Components: comps,
 		Sources: map[string]surfaceSource{"/x": {Resource: "ledger", URI: "ledger://latest"}}})
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
@@ -519,7 +530,7 @@ func TestSurfaceStaleRead(t *testing.T) {
 	go func() { c.refreshSurface(context.Background(), s.ID, nil, time.Now()); close(done) }()
 	waitFor(t, func() bool { l.mu.Lock(); defer l.mu.Unlock(); return l.hold == nil })
 	other := json.RawMessage(`[{"id":"root","component":"Metric","label":"x","value":{"@path":"/x/total"}}]`)
-	if _, errs, err := c.surfaceWrite("brain", surfaceIn{ID: s.ID, Title: "x", Components: other, Sources: map[string]surfaceSource{"/x": {Tool: "ledger/balances"}}}); err != nil || len(errs) > 0 {
+	if _, errs, err := c.fixtureSurface("brain", surfaceIn{ID: s.ID, Title: "x", Components: other, Sources: map[string]surfaceSource{"/x": {Tool: "ledger/balances"}}}); err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
 	}
 	close(hold)
@@ -530,20 +541,21 @@ func TestSurfaceStaleRead(t *testing.T) {
 	}
 }
 
-// Code removes a surface when its lifetime ends; only its author, the user
-// or code removes it, and only its author writes it again.
+// Code removes a surface when its lifetime ends (a date, or while a ref
+// lives, as a thread's surface); a kept one stays (the queue's, removed by
+// code); only its author or code removes it, and only its author writes it
+// again.
 func TestSurfaceLifetime(t *testing.T) {
 	c, _ := surfaceCore(t)
 	comps := json.RawMessage(`[{"id":"root","component":"Text","text":"En préparation"}]`)
 	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Runtime: "claude-code", State: stateRunning, Prompt: "x"})
-	until, _, _ := c.surfaceWrite("brain", surfaceIn{Title: "a", Components: comps, Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)}})
-	while, _, err := c.surfaceWrite("brain", surfaceIn{Title: "b", Components: comps, Lifetime: surfaceLifetime{While: "task:t-1"}})
+	until, _, _ := c.fixtureSurface("brain", surfaceIn{Title: "a", Components: comps, Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)}})
+	while, _, err := c.fixtureSurface("brain", surfaceIn{Title: "b", Components: comps, Lifetime: surfaceLifetime{While: "task:t-1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	kept, _, _ := c.surfaceWrite("task:t-gone", surfaceIn{Title: "c", Components: comps, Lifetime: surfaceLifetime{Kept: true}})
-	mine, _, _ := c.surfaceWrite("brain", surfaceIn{Title: "d", Components: comps, Lifetime: surfaceLifetime{Kept: true}})
-	if _, _, err := c.surfaceWrite("task:t-1", surfaceIn{ID: mine.ID, Title: "e", Components: comps}); err == nil {
+	mine, _, _ := c.fixtureSurface("brain", surfaceIn{Title: "d", Components: comps, Lifetime: surfaceLifetime{Kept: true}})
+	if _, _, err := c.fixtureSurface("task:t-1", surfaceIn{ID: mine.ID, Title: "e", Components: comps}); err == nil {
 		t.Fatal("another author wrote the brain's surface")
 	}
 	if err := c.surfaceRemove(mine.ID, "task:t-1"); err == nil {
@@ -553,16 +565,12 @@ func TestSurfaceLifetime(t *testing.T) {
 	defer cancel()
 
 	tickSurfacesWait(c, time.Now())
-	all, _ := c.surfaces()
-	if len(all) != 3 { // the task is not there: its kept surface goes
+	if all, _ := c.surfaces(); len(all) != 3 {
 		t.Fatalf("surfaces %v", all)
-	}
-	if d := received(t, ch, 1)[0].Message.DeleteSurface; d == nil || d.SurfaceID != kept.ID {
-		t.Fatalf("delete %+v", d)
 	}
 	c.store.updateTask("t-1", map[string]any{"state": stateStopped})
 	tickSurfacesWait(c, time.Now().Add(2*time.Hour))
-	all, _ = c.surfaces()
+	all, _ := c.surfaces()
 	if len(all) != 1 || all[0].ID != mine.ID {
 		t.Fatalf("surfaces %v", all)
 	}
@@ -571,7 +579,7 @@ func TestSurfaceLifetime(t *testing.T) {
 			t.Fatalf("deleted %s", id)
 		}
 	}
-	if err := c.surfaceRemove(mine.ID, surfaceByUser); err != nil {
+	if err := c.surfaceRemove(mine.ID, surfaceByLifetime); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -592,7 +600,7 @@ func TestSurfaceLinks(t *testing.T) {
 		{"id":"open","component":"Link","label":{"@path":"name"},"url":{"@path":"photo"}},
 		{"id":"home","component":"Link","url":"https://example.org/projets"},
 		{"id":"more","component":"Link","label":"Plus","url":{"@path":"/more"}}]`)
-	s, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Components: comps, Sources: balances,
+	s, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "x", Components: comps, Sources: balances,
 		Data: json.RawMessage(`{"more":"https://example.org/plus"}`), Tainted: []string{"mail.read"}})
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
@@ -608,7 +616,7 @@ func TestSurfaceLinks(t *testing.T) {
 
 	refused := func(name, comps, data, path, words string) {
 		t.Helper()
-		_, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Components: json.RawMessage(comps), Sources: balances, Data: json.RawMessage(data)})
+		_, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "x", Components: json.RawMessage(comps), Sources: balances, Data: json.RawMessage(data)})
 		if err != nil || len(errs) == 0 || errs[0].Path != path || !strings.Contains(errs[0].Message, words) {
 			t.Errorf("%s: %v %v", name, err, errs)
 		}
@@ -648,7 +656,7 @@ func TestSurfaceMedia(t *testing.T) {
 		{"id":"list","component":"List","children":{"path":"/ledger/accounts","componentId":"pic"}},
 		{"id":"pic","component":"Image","url":{"@path":"photo"}},
 		{"id":"logo","component":"Image","url":"https://img.example.org/logo.png?d=secret"}]`)
-	s, errs, err := c.surfaceWrite("brain", surfaceIn{Title: "x", Components: comps, Sources: balances, Tainted: []string{"mail.read"}})
+	s, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "x", Components: comps, Sources: balances, Tainted: []string{"mail.read"}})
 	if err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
 	}
@@ -664,7 +672,7 @@ func TestSurfaceMedia(t *testing.T) {
 		t.Fatalf("a tainted author's address kept: %s", raw)
 	}
 	// Untainted, the author's address goes through the endpoint too.
-	s, _, _ = c.surfaceWrite("brain", surfaceIn{ID: s.ID, Title: "x", Components: comps, Sources: balances})
+	s, _, _ = c.fixtureSurface("brain", surfaceIn{ID: s.ID, Title: "x", Components: comps, Sources: balances})
 	raw, _ = json.Marshal(c.surfaceView(s).components)
 	if !strings.Contains(string(raw), "/espace/media?") {
 		t.Fatalf("components %s", raw)
@@ -717,4 +725,16 @@ func TestSurfaceMedia(t *testing.T) {
 			t.Errorf("%s: %d, want %d", path, code, want)
 		}
 	}
+}
+
+// fixtureSurface stores a surface for a test of what code does with any
+// surface (refresh, layout, actions, stream), past writeSurface's check of
+// its author: a new id when none.
+func (c *core) fixtureSurface(author string, in surfaceIn) (surface, []a2ui.ValidationError, error) {
+	if in.ID == "" {
+		b := make([]byte, 6)
+		rand.Read(b)
+		in.ID = "s-" + hex.EncodeToString(b)
+	}
+	return c.putSurface(author, in)
 }

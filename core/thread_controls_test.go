@@ -47,7 +47,7 @@ func TestThreadSurfaceChoice(t *testing.T) {
 		t.Errorf("chosen twice: %d", code)
 	}
 	button := fmt.Sprintf(`[{"id":"root","component":"Button","label":"Aster","action":{"event":{"name":"choose","context":%s}}}]`, aster)
-	if _, errs, err := c.surfaceWrite(surfaceAuthorBrain, surfaceIn{ID: "mine", Title: "Mine", Components: json.RawMessage(button)}); err == nil && len(errs) == 0 {
+	if _, errs, err := c.fixtureSurface(surfaceAuthorBrain, surfaceIn{ID: "mine", Title: "Mine", Components: json.RawMessage(button)}); err == nil && len(errs) == 0 {
 		t.Error("an author wrote choose")
 	}
 }

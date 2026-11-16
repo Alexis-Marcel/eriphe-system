@@ -174,7 +174,7 @@ func TestThreadPartSources(t *testing.T) {
 	sid := threadSurfaceID(th.ID)
 	brain := surfaceCaller{author: surfaceAuthorBrain, taint: func() []string { return nil }}
 	part := func() surfaceWriteIn {
-		return surfaceWriteIn{ID: sid, Title: "x", Components: boundText("/bal/total"),
+		return surfaceWriteIn{ID: sid, Components: boundText("/bal/total"),
 			Sources: map[string]surfaceSource{"/bal": {Tool: "ledger/balances"}}}
 	}
 	if _, err := c.writeThreadPart(brain, th.ID, part()); err != nil {
@@ -190,16 +190,16 @@ func TestThreadPartSources(t *testing.T) {
 		t.Errorf("no value at /bal: %s", s.Data)
 	}
 	for name, bad := range map[string]surfaceWriteIn{
-		"nested":      {ID: sid, Title: "x", Components: boundText("/a/b"), Sources: map[string]surfaceSource{"/a/b": {Tool: "ledger/balances"}}},
-		"code's data": {ID: sid, Title: "x", Components: boundText("/thread"), Sources: map[string]surfaceSource{"/thread": {Tool: "ledger/balances"}}},
-		"not a read":  {ID: sid, Title: "x", Components: boundText("/m"), Sources: map[string]surfaceSource{"/m": {Tool: "ledger/move_funds"}}},
-		"unbound":     {ID: sid, Title: "x", Components: boundText("/bal/nope"), Sources: map[string]surfaceSource{"/bal": {Tool: "ledger/balances"}}},
+		"nested":      {ID: sid, Components: boundText("/a/b"), Sources: map[string]surfaceSource{"/a/b": {Tool: "ledger/balances"}}},
+		"code's data": {ID: sid, Components: boundText("/thread"), Sources: map[string]surfaceSource{"/thread": {Tool: "ledger/balances"}}},
+		"not a read":  {ID: sid, Components: boundText("/m"), Sources: map[string]surfaceSource{"/m": {Tool: "ledger/move_funds"}}},
+		"unbound":     {ID: sid, Components: boundText("/bal/nope"), Sources: map[string]surfaceSource{"/bal": {Tool: "ledger/balances"}}},
 	} {
 		if _, err := c.writeThreadPart(brain, th.ID, bad); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	if _, err := c.writeThreadPart(brain, th.ID, surfaceWriteIn{ID: sid, Title: "x", Components: oneText("x")}); err != nil {
+	if _, err := c.writeThreadPart(brain, th.ID, surfaceWriteIn{ID: sid, Components: oneText("x")}); err != nil {
 		t.Fatal(err)
 	}
 	if srcs := c.threadSources(th.ID); len(srcs) != 0 {
@@ -234,7 +234,7 @@ func TestThreadPartSources(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.surf.refreshing.Wait()
-	again := surfaceWriteIn{ID: sid, Title: "x", Components: boundText("/accounts/total"),
+	again := surfaceWriteIn{ID: sid, Components: boundText("/accounts/total"),
 		Sources: map[string]surfaceSource{"/accounts": {Tool: "ledger/balances"}}}
 	if _, err := c.writeThreadPart(brain, th.ID, again); err == nil {
 		t.Error("a part took the name of the thread's source")

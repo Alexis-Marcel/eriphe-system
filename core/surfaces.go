@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,7 +67,6 @@ const surfacesSchema = `CREATE TABLE IF NOT EXISTS surfaces (
 func init() { extraSchema = append(extraSchema, surfacesSchema) }
 
 const (
-	surfacesMax        = 100
 	surfaceSourcesMax  = 8
 	surfaceTitleMax    = 120
 	surfaceWhyMax      = 500
@@ -86,16 +83,14 @@ const (
 	surfaceWeightDef   = 50
 	surfaceSubBuffer   = 256
 	surfaceExtension   = "eriphe" // the key of Eriphe's metadata in createSurface
-	surfaceByUser      = "user"
 	surfaceByLifetime  = "lifetime"
 	surfaceAuthorBrain = "brain"
 	surfaceAuthorCore  = "core" // code itself: the attention queue's surfaces (workspace_queue.go), never an assistant
 )
 
 var (
-	errNoSurface    = errors.New("no such surface")
-	surfaceIDRe     = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
-	surfaceAuthorRe = regexp.MustCompile(`^(brain|lead:[0-9]{1,18}|task:[A-Za-z0-9_-]{1,64})$`)
+	errNoSurface = errors.New("no such surface")
+	surfaceIDRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 )
 
 // surfaceSource is one read of a surface: a tool ("server/tool") with
@@ -309,27 +304,23 @@ type sourceRead struct {
 	why   string // sourceWhy refused it: nothing was called
 }
 
-// surfaceWrite writes a surface for its author: a new one (in.ID empty, or
-// an id not taken), or one of the author's own again. Its sources are read
-// once, so the paths its components bind are checked against what they
-// give. What is wrong with the A2UI or the bindings comes back as
-// validation errors, for the author to fix; a refused source or a wrong
+// writeSurface writes a surface for code (#574): the attention queue's
+// (surfaceAuthorCore) and each thread's (thread:<id>), no assistant's. A
+// new one (in.ID empty, or an id not taken), or one of the author's own
+// again. Its sources are read once, so the paths its components bind are
+// checked against what they give. What is wrong with the A2UI or the
+// bindings comes back as validation errors; a refused source or a wrong
 // field as an error.
-func (c *core) surfaceWrite(author string, in surfaceIn) (surface, []a2ui.ValidationError, error) {
-	if !surfaceAuthorRe.MatchString(author) {
-		return surface{}, nil, fmt.Errorf("author %q: brain, lead:<thread>, task:<id>", author)
-	}
-	return c.writeSurface(author, in)
-}
-
-// writeSurface is surfaceWrite for any author, code's own (surfaceAuthorCore,
-// thread:<id>) too: its surfaces do not count in surfacesMax, so a full pool
-// never refuses what the queue or a thread needs to show.
 func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.ValidationError, error) {
 	in.ID = strings.TrimSpace(in.ID)
-	if in.ID == "" {
-		in.ID = newSurfaceID()
+	if err := codeSurfaceOf(author, in.ID); err != nil {
+		return surface{}, nil, err
 	}
+	return c.putSurface(author, in)
+}
+
+// putSurface checks and stores a surface writeSurface let through.
+func (c *core) putSurface(author string, in surfaceIn) (surface, []a2ui.ValidationError, error) {
 	if !surfaceIDRe.MatchString(in.ID) {
 		return surface{}, nil, errors.New("a surface's id is lowercase letters, digits and dashes")
 	}
@@ -351,9 +342,6 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 	}
 	if in.Weight == 0 {
 		in.Weight = surfaceWeightDef
-	}
-	if !keptByCode(author) {
-		in.Weight = c.authorWeight(in.ID, in.Weight)
 	}
 	now := time.Now()
 	life, err := c.checkLifetime(in.Lifetime, now)
@@ -438,12 +426,6 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 		c.surf.mu.Unlock()
 		return surface{}, nil, fmt.Errorf("the surface %s is %s's: write another id", in.ID, old.Author)
 	case errors.Is(err, errNoSurface):
-		var n int
-		c.store.db.QueryRow(`SELECT COUNT(*) FROM surfaces WHERE author != ? AND author NOT LIKE 'thread:%'`, surfaceAuthorCore).Scan(&n)
-		if n >= surfacesMax && !keptByCode(author) {
-			c.surf.mu.Unlock()
-			return surface{}, nil, fmt.Errorf("%d surfaces at most: remove one first", surfacesMax)
-		}
 		_, err = c.store.db.Exec(`INSERT INTO surfaces (`+surfaceCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			in.ID, in.Title, author, string(in.Components), string(sources), string(rawData), dataAt, string(refresh), string(lifetime),
 			in.Weight, in.Why, tainted, string(rawLook), next, now.Unix(), now.Unix(), about)
@@ -475,16 +457,31 @@ func (c *core) writeSurface(author string, in surfaceIn) (surface, []a2ui.Valida
 	return s, nil, err
 }
 
-// mayChange tells whether an author may write or remove a surface of
-// owner's: its own; the brain any but code's (the attention queue's, kept
-// by code while its item is open: workspace_queue.go; a thread's, kept
-// while it lives: thread_surface.go).
-func mayChange(author, owner string) bool {
-	return author == owner || (author == surfaceAuthorBrain && !keptByCode(owner))
+// codeSurfaceOf checks that a surface is code's to write: a thread's own
+// (thread:<id> writes thread-<id>), or the attention queue's (core writes
+// q-…). No assistant, task, lead nor skill writes a surface (#574).
+func codeSurfaceOf(author, id string) error {
+	if thread, ok := threadOfAuthor(author); ok {
+		if id != threadSurfaceID(thread) {
+			return fmt.Errorf("%s writes the surface %s only", author, threadSurfaceID(thread))
+		}
+		return nil
+	}
+	if author == surfaceAuthorCore {
+		if !strings.HasPrefix(id, queueSurfacePrefix) {
+			return fmt.Errorf("the queue's surfaces are %s…", queueSurfacePrefix)
+		}
+		return nil
+	}
+	return fmt.Errorf("%q writes no surface: only code does, a thread's or the queue's", author)
 }
 
-// surfaceRemove removes a surface: by its author, the user (surfaceByUser)
-// or code when its lifetime ended (surfaceByLifetime).
+// mayChange tells whether an author may write or remove a surface of
+// owner's: its own only.
+func mayChange(author, owner string) bool { return author == owner }
+
+// surfaceRemove removes a surface: by its author, or code when its
+// lifetime ended (surfaceByLifetime).
 func (c *core) surfaceRemove(id, by string) error {
 	c.surf.mu.Lock()
 	s, err := c.surface(id)
@@ -492,7 +489,7 @@ func (c *core) surfaceRemove(id, by string) error {
 		c.surf.mu.Unlock()
 		return err
 	}
-	if !mayChange(by, s.Author) && by != surfaceByUser && by != surfaceByLifetime {
+	if !mayChange(by, s.Author) && by != surfaceByLifetime {
 		c.surf.mu.Unlock()
 		return fmt.Errorf("the surface %s is %s's", id, s.Author)
 	}
@@ -504,18 +501,9 @@ func (c *core) surfaceRemove(id, by string) error {
 	c.surf.mu.Unlock()
 	c.dropSurfaceMedia(id) // surfaces_capture.go
 	log.Printf("surface %s removed by %s", id, by)
-	if s.Author == surfaceAuthorCore && by == surfaceByUser {
-		c.queueSurfaceDismissed(id) // its item leaves the queue too (workspace_queue.go)
-	}
 	c.followSurfaceResources()
 	c.relayout()
 	return nil
-}
-
-func newSurfaceID() string {
-	b := make([]byte, 6)
-	rand.Read(b)
-	return "s-" + hex.EncodeToString(b)
 }
 
 func orEmpty(m map[string]surfaceSource) map[string]surfaceSource {
@@ -1043,8 +1031,6 @@ func (c *core) surfaceEnded(s surface, now time.Time) bool {
 		return !now.Before(l.Until)
 	case l.While != "":
 		return !c.refLive(l.While)
-	case l.Kept:
-		return !c.authorLive(s.Author)
 	}
 	return false
 }
@@ -1077,14 +1063,6 @@ func (c *core) refLive(ref string) bool {
 		return x.State == cardPending
 	}
 	return false
-}
-
-// authorLive tells whether a surface's author is still there to keep it.
-func (c *core) authorLive(author string) bool {
-	if author == surfaceAuthorBrain || author == surfaceAuthorCore {
-		return true
-	}
-	return c.refLive(author)
 }
 
 // surfaceOpened reads a surface's sources again because the user opened
@@ -1456,42 +1434,4 @@ func rewriteAt(v any, toks []string, fn func(string) string) any {
 		}
 	}
 	return v
-}
-
-// An author's surface (the brain's, a skill's, a lead's, a task's) weighs
-// at most surfaceAuthorMax: being placed first is the attention queue's,
-// from the weight of an item about it (surface:<id>, queueSurfaceWeight).
-
-const surfaceAuthorMax = weightUrgent - 1
-
-// authorWeight is the weight an author's surface is kept at: its own,
-// capped, raised to its open item's.
-func (c *core) authorWeight(id string, w int) int {
-	w = min(w, surfaceAuthorMax)
-	var item int
-	c.store.db.QueryRow(`SELECT COALESCE(MAX(weight), 0) FROM attention WHERE ref = ?`, refSurface+":"+id).Scan(&item)
-	if item > 0 {
-		w = max(w, queueSurfaceWeight(item))
-	}
-	return w
-}
-
-func init() { schemaFixes = append(schemaFixes, surfacesRecap) }
-
-// surfacesRecap gives back a weight lent: an author's surface with no open
-// item weighs surfaceAuthorMax at most. Run when an item about a surface
-// leaves, with the queue's sweep, and at start.
-func surfacesRecap(db *sql.DB) error {
-	_, err := db.Exec(`UPDATE surfaces SET weight = ? WHERE weight > ? AND author != ? AND author NOT LIKE 'thread:%'
-		AND NOT EXISTS (SELECT 1 FROM attention a WHERE a.ref = 'surface:' || surfaces.id)`, surfaceAuthorMax, surfaceAuthorMax, surfaceAuthorCore)
-	return err
-}
-
-// surfaceLent raises a surface to the weight of its open item.
-func (c *core) surfaceLent(id string) {
-	var item int
-	c.store.db.QueryRow(`SELECT COALESCE(MAX(weight), 0) FROM attention WHERE ref = ?`, refSurface+":"+id).Scan(&item)
-	if item > 0 {
-		c.store.db.Exec(`UPDATE surfaces SET weight = MAX(weight, ?) WHERE id = ?`, queueSurfaceWeight(item), id)
-	}
 }

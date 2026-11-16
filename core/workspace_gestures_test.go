@@ -17,7 +17,7 @@ func writeTestSurface(t *testing.T, c *core, in surfaceIn) {
 	if in.Components == nil {
 		in.Components = textComps
 	}
-	if _, errs, err := c.surfaceWrite("brain", in); err != nil || len(errs) > 0 {
+	if _, errs, err := c.fixtureSurface("brain", in); err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
 	}
 }

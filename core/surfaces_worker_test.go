@@ -19,7 +19,7 @@ func TestSurfaceRefreshOffMonitorsTick(t *testing.T) {
 	n := surfaceReaders + 2
 	var ids []string
 	for i := range n {
-		s, errs, err := c.surfaceWrite("brain", surfaceIn{Title: fmt.Sprintf("feed %d", i), Components: comps, Sources: latest})
+		s, errs, err := c.fixtureSurface("brain", surfaceIn{Title: fmt.Sprintf("feed %d", i), Components: comps, Sources: latest})
 		if err != nil || len(errs) > 0 {
 			t.Fatal(err, errs)
 		}

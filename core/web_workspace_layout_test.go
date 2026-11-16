@@ -104,16 +104,6 @@ func TestWebLayout(t *testing.T) {
 		t.Fatalf("back: %d", code)
 	}
 	nextLayout(t, layouts, func(l workspaceLayout) bool { return l.Focus == "" && l.Items[0].ID == "q-alert-3" })
-
-	// The user removes the alert's surface (Settings → Surfaces): its item leaves the queue.
-	if err := tw.c.surfaceRemove("q-alert-3", surfaceByUser); err != nil {
-		t.Fatal(err)
-	}
-	tw.c.syncQueueSurfaces()
-	if attentionOf(tw.c, "alert:3") != nil {
-		t.Fatal("the item stayed")
-	}
-	nextLayout(t, layouts, func(l workspaceLayout) bool { return len(l.Items) == 1 && l.Items[0].ID == "first" })
 }
 
 // The workspace's language is the one it was opened in: the queue's

@@ -796,7 +796,7 @@ func TestThreadBenchCases(t *testing.T) {
 			} else {
 				ask("no focus", faultStage, func(a *threadAnswer) { a.drop("workspace_focus") })
 				ask("no part", faultNoPart, func(a *threadAnswer) { a.drop("surface_write") })
-				ask("a surface of its own", faultOther, func(a *threadAnswer) {
+				ask("a surface of its own: refused by code", faultRefused, func(a *threadAnswer) {
 					a.Calls[a.at("surface_write")].Args["id"] = "pr-42"
 					a.Calls[a.at("workspace_focus")].Args["id"] = "pr-42"
 				})

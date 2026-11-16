@@ -293,7 +293,6 @@ type stepSpec struct {
 	Resources []ResourceRef  `json:"resources,omitempty" jsonschema:"task: what it is lent, as run_task's resources"`
 	Contract  *taskContract  `json:"contract,omitempty" jsonschema:"task: as run_task's contract; its checks are the step's evidence"`
 	Node      string         `json:"node,omitempty" jsonschema:"task: node name; empty lets the scheduler choose"`
-	Surface   string         `json:"surface,omitempty" jsonschema:"task: the id of a surface you wrote as a placeholder, for its task to fill (run_task's surface)"`
 	Question  string         `json:"question,omitempty" jsonschema:"choice or approval: what the user is asked; user: what only the user does, in their language"`
 	Options   []string       `json:"options,omitempty" jsonschema:"choice: what the user picks from, 2 to 6"`
 	Tool      string         `json:"tool,omitempty" jsonschema:"call, or a check that reads: the tool to call, one of yours, by its full name"`

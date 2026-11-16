@@ -190,7 +190,7 @@ func TestLayoutFocus(t *testing.T) {
 
 	c, _ := surfaceCore(t)
 	for _, id := range []string{"first", "second"} {
-		if _, errs, err := c.surfaceWrite("brain", surfaceIn{ID: id, Title: id, Components: json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil || len(errs) > 0 {
+		if _, errs, err := c.fixtureSurface("brain", surfaceIn{ID: id, Title: id, Components: json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil || len(errs) > 0 {
 			t.Fatal(err, errs)
 		}
 	}
@@ -212,7 +212,7 @@ func TestRelayout(t *testing.T) {
 	if len(l.Items) != 0 {
 		t.Fatalf("layout %+v", l)
 	}
-	if _, errs, err := c.surfaceWrite("brain", surfaceIn{ID: "one", Title: "One", Weight: 90,
+	if _, errs, err := c.fixtureSurface("brain", surfaceIn{ID: "one", Title: "One", Weight: weightUrgent - 1,
 		Components: json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil || len(errs) > 0 {
 		t.Fatal(err, errs)
 	}
@@ -235,7 +235,7 @@ func TestRelayout(t *testing.T) {
 	if json.Unmarshal([]byte(c.store.get(layoutKey)), &stored) != nil || tilesOf(stored) != "one/l@0,0" {
 		t.Fatalf("stored %q", c.store.get(layoutKey))
 	}
-	if err := c.surfaceRemove("one", surfaceByUser); err != nil {
+	if err := c.surfaceRemove("one", surfaceByLifetime); err != nil {
 		t.Fatal(err)
 	}
 	if l := c.currentLayout(); len(l.Items) != 0 {

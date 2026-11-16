@@ -91,13 +91,13 @@ func TestThreadSurfaceLight(t *testing.T) {
 
 	// Code's: the brain writes a part, never the whole, and removes nothing.
 	whole := surfaceIn{ID: sid, Title: "Mine", Components: json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)}
-	if _, _, err := c.surfaceWrite(surfaceAuthorBrain, whole); err == nil {
+	if _, _, err := c.fixtureSurface(surfaceAuthorBrain, whole); err == nil {
 		t.Error("the brain rewrote a thread's surface")
 	}
 	if err := c.surfaceRemove(sid, surfaceAuthorBrain); err == nil {
 		t.Error("the brain removed a thread's surface")
 	}
-	if _, _, err := c.surfaceWrite("skill:revue", surfaceIn{ID: threadSurfaceID(th.ID + 1), Title: "x", Components: whole.Components}); err == nil {
+	if _, _, err := c.fixtureSurface("skill:revue", surfaceIn{ID: threadSurfaceID(th.ID + 1), Title: "x", Components: whole.Components}); err == nil {
 		t.Error("a skill took the id of a thread's surface")
 	}
 
@@ -295,7 +295,7 @@ func TestThreadSurfaceUserStep(t *testing.T) {
 		t.Errorf("no surface: %d %s", code, b)
 	}
 	button := `[{"id":"root","component":"Button","label":"Fait","action":{"event":{"name":"stepDone","context":{"thread":1,"step":"deploy"}}}}]`
-	if _, errs, err := c.surfaceWrite(surfaceAuthorBrain, surfaceIn{ID: "mine", Title: "Mine", Components: json.RawMessage(button)}); err == nil && len(errs) == 0 {
+	if _, errs, err := c.fixtureSurface(surfaceAuthorBrain, surfaceIn{ID: "mine", Title: "Mine", Components: json.RawMessage(button)}); err == nil && len(errs) == 0 {
 		t.Error("an author wrote stepDone")
 	}
 }
@@ -316,7 +316,7 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 	}
 	sid := threadSurfaceID(th.ID)
 	lead := connectServer(t, c.assistantServer(a, nil))
-	part := map[string]any{"id": sid, "title": "x", "components": []map[string]any{
+	part := map[string]any{"id": sid, "components": []map[string]any{
 		{"id": "root", "component": "Column", "children": []string{"diff", "pr"}},
 		{"id": "diff", "component": "Code", "mode": "diff", "text": map[string]any{"@path": "/diff"}},
 		{"id": "pr", "component": "Link", "label": "Ouvrir la PR", "url": "https://example.org/pr/12"},
@@ -339,10 +339,10 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 
 	// Checked alone.
 	for name, bad := range map[string]map[string]any{
-		"code's id":    {"id": sid, "title": "x", "components": []map[string]any{{"id": "root", "component": "Text", "text": "x"}, {"id": "thread_x", "component": "Text", "text": "y"}}},
-		"code's data":  {"id": sid, "title": "x", "components": oneText("x"), "data": map[string]any{"thread": 1}},
-		"not a source": {"id": sid, "title": "x", "components": boundText("/n"), "sources": map[string]any{"/n": map[string]any{"tool": "ledger/balances"}}}, // no ledger here: sources themselves are allowed (thread_sources_test.go)
-		"stepDone":     {"id": sid, "title": "x", "components": []map[string]any{{"id": "root", "component": "Button", "label": "Fait", "action": map[string]any{"event": map[string]any{"name": "stepDone", "context": map[string]any{"thread": th.ID, "step": "names"}}}}}},
+		"code's id":    {"id": sid, "components": []map[string]any{{"id": "root", "component": "Text", "text": "x"}, {"id": "thread_x", "component": "Text", "text": "y"}}},
+		"code's data":  {"id": sid, "components": oneText("x"), "data": map[string]any{"thread": 1}},
+		"not a source": {"id": sid, "components": boundText("/n"), "sources": map[string]any{"/n": map[string]any{"tool": "ledger/balances"}}}, // no ledger here: sources themselves are allowed (thread_sources_test.go)
+		"stepDone":     {"id": sid, "components": []map[string]any{{"id": "root", "component": "Button", "label": "Fait", "action": map[string]any{"event": map[string]any{"name": "stepDone", "context": map[string]any{"thread": th.ID, "step": "names"}}}}}},
 	} {
 		if _, msg := callOn(t, lead, "surface_write", bad); msg == "" {
 			t.Errorf("%s: accepted", name)
@@ -351,12 +351,12 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 
 	// After reading outside content: marked, no Proposal; its cards still answer in place.
 	c.updateAssistant(a.Name, func(st *AssistantStatus) { st.Tainted = []string{"mail:7"} })
-	withProposal := map[string]any{"id": sid, "title": "x", "components": []map[string]any{
+	withProposal := map[string]any{"id": sid, "components": []map[string]any{
 		{"id": "root", "component": "Column", "children": []string{"p"}}, {"id": "p", "component": "Proposal", "proposalId": "rule:1"}}}
 	if _, msg := callOn(t, lead, "surface_write", withProposal); !strings.Contains(msg, "Proposal") {
 		t.Errorf("a tainted part placed a Proposal: %q", msg)
 	}
-	if _, msg := callOn(t, lead, "surface_write", map[string]any{"id": sid, "title": "x", "components": oneText("Lumen semble libre.")}); msg != "" {
+	if _, msg := callOn(t, lead, "surface_write", map[string]any{"id": sid, "components": oneText("Lumen semble libre.")}); msg != "" {
 		t.Fatal(msg)
 	}
 	s, _, meta := threadSurfaceOf(t, c, th.ID)
@@ -406,9 +406,9 @@ func TestThreadSurfaceHeldStartAndTick(t *testing.T) {
 	}
 
 	// Gone, or its id taken by a lead's own before: the tick gives it back.
-	c.surfaceRemove(s.ID, surfaceByUser)
+	c.surfaceRemove(s.ID, surfaceByLifetime)
 	lead := fmt.Sprintf("lead:%d", th.ID)
-	if _, _, err := c.writeSurface(lead, surfaceIn{ID: "lead-made", Title: "x", Components: json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil {
+	if _, _, err := c.fixtureSurface(lead, surfaceIn{ID: "lead-made", Title: "x", Components: json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)}); err != nil {
 		t.Fatal(err)
 	}
 	c.store.db.Exec(`UPDATE surfaces SET id = ? WHERE id = 'lead-made'`, s.ID)
@@ -429,7 +429,7 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 	}
 	sid := threadSurfaceID(th.ID)
 	brain := connectServer(t, newMCPServer(c))
-	out, msg := callOn(t, brain, "surface_write", map[string]any{"id": sid, "title": "x", "components": []map[string]any{
+	out, msg := callOn(t, brain, "surface_write", map[string]any{"id": sid, "components": []map[string]any{
 		{"id": "root", "component": "Metric", "label": "Contrôles", "value": "12/12"}}})
 	if msg != "" || out["part"] != true {
 		t.Fatalf("part %v %s", out, msg)
@@ -439,7 +439,7 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 		t.Fatalf("not shown: %s", s.Components)
 	}
 	read, _ := callOn(t, brain, "workspace_read", map[string]any{})
-	raw, _ := json.Marshal(read["surfaces"])
+	raw, _ := json.Marshal(read["threads"])
 	if !strings.Contains(string(raw), `"id":"`+sid+`"`) || !strings.Contains(string(raw), `"yours":true`) {
 		t.Errorf("workspace_read: %s", raw)
 	}

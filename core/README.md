@@ -712,7 +712,7 @@ whatever address it dials) and one client certificate per node.
 | `list_tasks` | recent tasks |
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card) and on the thread's surface, under the step and in its header's facts, so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
-| `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write the workspace, as `brain` ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)); `run_task`'s `surface` names a placeholder for the task to fill |
+| `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write its part of a thread's surface, as `brain`, and read the threads on screen ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
 
 The scheduler takes the requested node if it is online and fits. Otherwise it works in two passes,
 like Kubernetes': it **filters** the online nodes that offer the agent's runtime and carry all its
@@ -1092,10 +1092,8 @@ and goes when the thread ends. Its trigger `thread:<id>` wakes it with what happ
 (`thread_inbox`), one turn at a time; its own tools are `thread`, `settle_step`,
 `amend_thread`, `close_thread`, `report` and the [workspace's tools](#the-assistants-workspace-tools-workspace_toolsgo).
 It does not write **its thread's surface**: code does ([below](#a-threads-surface-thread_surfacego));
-it may add its part to it (`lead-prompt.md`: a state block, points to see, a diff, a link). What
-else it writes without a lifetime follows its thread (`while: thread:<id>`), and the thread's end
-removes it at once (`dropThreadSurfaces`, with every surface kept `while` the thread, the thread's
-own aside). It never talks to the user nor starts a task. The
+it may add its part to it (`lead-prompt.md`: a state block, points to see, a diff, a link), and
+writes no other surface. It never talks to the user nor starts a task. The
 brain no longer judges a thread that has a lead: it passes the user's words with `tell_lead`, and
 hears the lead's reports, the choices to ask, the budget's card and the end. A report may carry an
 [attention signal](#attention-signals-attention_signalgo) (`attention`, the same block as a skill's
@@ -1121,8 +1119,8 @@ Every thread, light or led, has its live surface on the workspace, `thread-<id>`
 by code from the thread's data (#468): it never depends on a model remembering to write it.
 
 - **Its author is `thread:<id>`**, code's for that thread (not `core`, the attention queue's):
-  nobody else writes or removes it as a whole (`mayChange`), no other author may take its id, and
-  it does not count in the 100 surfaces at most.
+  nobody else writes or removes it as a whole (`mayChange`), and no other author may take its id
+  (`codeSurfaceOf`).
 - **Code's section: generic blocks** (#574, `thread_blocks.go`), the same code for every thread,
   in one fixed order; a block shows only when the thread has what it shows, never by the kind of
   thread (work, standing or day: the family is never shown, and a thread with its `ends` changed
@@ -2884,8 +2882,7 @@ minute, never in the quiet hours); **weight 1 and 2 only at the user's return** 
 (`user.returned`), together: the brief (« Pendant ton absence : … »), three light cards at most
 each time, the rest waiting for the next. A delivered notification leaves its hold and points to
 the message; the return writes the kv `last_brief`. The queue never pushes to a device: only a
-notification decided now at weight 5 does (the brain's notifications, `notify.go`). An
-item about a surface (`surface:<id>`) lends it its weight. The brain's turn lists the open items
+notification decided now at weight 5 does (the brain's notifications, `notify.go`). The brain's turn lists the open items
 (`[en attente de … : …]`), the heaviest first, a held one marked « retenu »: nothing the brain
 does waits on it. A plain yes or no answers a card in words only when the message is
 the user's own (workspace, Telegram or a trusted channel; never a channel the user did not trust, nor `/v1/messages`, whose token may
@@ -3025,8 +3022,7 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 it, that is the workspace opening (`/espace/boot`), the language switch in Settings, the channel
 settings or a channel's link code; before any, `web.lang`, else French. The fixed texts use it (the
 workspace queue's surfaces, the bot channels' messages), and so do the models' lines: a skill run's
-and a task's final message, a task's surface (`skillVoice`, `workerVoice`, `delegateSurfaceText`
-name it), and a `[langue de l'utilisateur : …]` line at the head of each turn of
+and a task's final message (`skillVoice`, `workerVoice` name it), and a `[langue de l'utilisateur : …]` line at the head of each turn of
 the brain, the assistants and a thread's lead, for their notifications, cards, surfaces and
 summaries (the brain answers a message in the language it is written in). The fields of the tools
 the user reads (`notify`'s text and why, a rule's or a setting's why, an intention, attention's why
@@ -3194,10 +3190,8 @@ live, so the brain's workspace block keeps naming them. A surface's weight is it
 its items'; its words are in the user's language (`userLang`, see below). It lives while it has
 an item: `syncQueueSurfaces` makes the queue's surfaces again whenever the queue changes (`attend`
 and `attentionDone` kick `runWorkspace`, never inline) and every 2 s, writing only what changed
-(components, data, title, why, weight, taint) and removing what left. Code's surfaces are outside
-the pool's cap (100), and no assistant writes or removes them, the brain neither; the user
-removing one (Settings → Surfaces) takes its items out of the queue (a card stays to be answered
-in the conversation). The user closing a queue's surface on the page hides it for the session and
+(components, data, title, why, weight, taint) and removing what left. No assistant writes or
+removes them, the brain neither. The user closing a queue's surface on the page hides it for the session and
 ends its items other than cards: a card waits for its answer (it may not be in the conversation
 yet), its surface back the next session. An item other than a card also ends on its own once the
 user has seen it: a day after it was delivered (or raised again), or once they opened its surface
@@ -3587,13 +3581,14 @@ and update the commit in the two `NOTICE` files.
 
 ### Surfaces and their sources (`surfaces.go`)
 
-A surface is one tile of the workspace, stored with its **author** (`brain`,
-`lead:<thread>`, `task:<id>`, `core` for [the attention queue's](#the-layout-workspace_layoutgo),
-or `thread:<id>` for [a thread's](#a-threads-surface-thread_surfacego);
-a task the brain [delegated a surface to](#the-assistants-workspace-tools-workspace_toolsgo) fills
-the brain's): a title, A2UI components, data, **sources**, a refresh, a
-**lifetime**, a weight (1 to 100, 50 by default) and a why. A model writes it; code keeps its
-data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
+A surface is one tile of the workspace, and code writes every one (#574): its **author** is
+`thread:<id>` for [a thread's](#a-threads-surface-thread_surfacego) (`thread-<id>`) or `core` for
+[the attention queue's](#the-layout-workspace_layoutgo) (`q-…`); `writeSurface` refuses any other
+author or id (`codeSurfaceOf`), and at start code removes any surface another author wrote
+before (`dropFreeSurfaces`). No assistant, lead, task or skill writes a tile of its own: who
+holds a thread adds [its part](#a-threads-surface-thread_surfacego) to the thread's surface. A
+surface has a title, A2UI components, data, **sources**, a refresh, a **lifetime**, a weight (1
+to 100, 50 by default) and a why; code keeps its data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
 author declares, so a tool linked tomorrow is a source with no code (`TestNoToolInSurfaces` holds
 the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider or host name;
 `TestSurfaceFromAnyTool` serves a live surface from a fake server nobody wrote for).
@@ -3626,12 +3621,11 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   most, each pass within 8 s (`refreshLater`, `surfaceReaders`, `surfaceRefreshCap`). Only a
   source whose value changed goes out, as `updateDataModel` at its pointer; a taint that appears or goes sends the surface again.
 - **Lifetime**, one of: `until` a date (90 days at most), `while` a ref is pending or running
-  (`task:<id>` not over nor idle, `thread:<id>` not ended, `card:<id>` waiting), or `kept` while
-  its author is there (a skill that exists, a lead's thread not ended, a task running; the brain
-  always). None given: until a day later. Code removes an ended one on the surfaces' loop.
-- **Who writes**: only its author writes it again (another author's id is refused) or removes
-  it; the brain writes and removes any (it stays its author's: a skill's next run still writes
-  it); the user and code remove any. 100 surfaces, components and data of 64 KiB each.
+  (a thread's surface: `thread:<id>` not ended), or `kept` (the queue's, which code removes when
+  its items leave). None given: until a day later. Code removes an ended one on the surfaces'
+  loop.
+- **Who writes**: only its author writes it again or removes it, and code when its lifetime
+  ended. Components and data of 64 KiB each.
 - **Actions** (`actionGuard`, `a2ui.CheckActions`): a button's action keeps to
   [the grammar](#the-actions-of-a-surface): an `ask` (a request to the brain) carries its
   author's own words only, `{"text": "…"}` (a value bound to the data, `@path` or `@call`, is
@@ -3657,15 +3651,16 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   address only (the accesses' dialer: never its own network, the LAN or the cloud's metadata),
   without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
   `nosniff`, a sandbox CSP and 10 minutes of private cache.
-- **Captured pages** (`surfaces_capture.go`, #470): most sites refuse being framed, so a task lent
-  `eriphe-workspace` shows a page as an image. `eriphe-capture <url> <surface>` (worker/base)
-  captures it in the task's container and posts the PNG to its node (`ERIPHE_MEDIA_URL`, task
-  secret), which relays it to `POST /v1/node/tasks/{id}/media?surface=<id>` (node secret).
-  eriphe-core checks the task (on that node, running, its grant covering `surface_write`) and the
-  surface (its delegated one only, else one it may write), sniffs a PNG or a JPEG only, 5 MiB at
-  most, 10 per surface, keeps it under `surface-media/<random id>` (table `surface_media`) and
-  answers `{src: "media:med_…"}`; the bytes never go through a model. The task writes `src` as an
-  `Image`'s `url`, with the page's address as a `Link`; `surfaceView` signs it like any media address, even on a tainted surface (it
+- **Captured pages** (`surfaces_capture.go`, #470): most sites refuse being framed, so a task
+  step of a thread, lent `eriphe-workspace`, shows a page as an image.
+  `eriphe-capture <url> thread-<id>` (worker/base) captures it in the task's container and posts
+  the PNG to its node (`ERIPHE_MEDIA_URL`, task secret), which relays it to
+  `POST /v1/node/tasks/{id}/media?surface=thread-<id>` (node secret). eriphe-core checks the task
+  (on that node, running, its grant covering `surface_write`) and the surface (the surface of the
+  thread the task is a step of, no other), sniffs a PNG or a JPEG only, 5 MiB at most, 10 per
+  surface, keeps it under `surface-media/<random id>` (table `surface_media`) and answers
+  `{src: "media:med_…"}`; the bytes never go through a model. Whoever holds the thread writes
+  `src` as an `Image`'s `url` in its part, with the page's address as a `Link`; `surfaceView` signs it like any media address, even on a tainted surface (it
   carries nothing out), but only on the surface it was given for, and `/espace/media` reads it
   from disk with the same headers. The page's CSP is unchanged. It goes with its surface
   (`surfaceRemove`), and one its surface no longer shows goes after an hour (`tickSurfaces`).
@@ -3676,8 +3671,8 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
 
 | Call | Does |
 |---|---|
-| `c.surfaceWrite(author, surfaceIn) (surface, []a2ui.ValidationError, error)` | writes a new surface (`ID` empty or free) or the author's own again; validation errors for the A2UI and the bindings, an error for the rest (a refused source, a field) |
-| `c.surfaceRemove(id, by) error` | by its author, the brain (not code's: the queue's), `surfaceByUser` (a queue's surface: its item leaves the queue too) or `surfaceByLifetime` |
+| `c.writeSurface(author, surfaceIn) (surface, []a2ui.ValidationError, error)` | code writes a surface: `thread:<id>` its `thread-<id>`, `core` its `q-…` (`codeSurfaceOf`; any other author or id refused); validation errors for the A2UI and the bindings, an error for the rest (a refused source, a field) |
+| `c.surfaceRemove(id, by) error` | by its author, or `surfaceByLifetime` |
 | `c.surfaces() ([]surface, error)`, `c.surface(id) (surface, error)` | all (heaviest, then latest first), one (`errNoSurface`) |
 | `c.surfaceOpened(ctx, id) error` | the user opened it: its sources read again |
 | `c.surfaceSubscribe() (snapshot []surfaceChange, changes <-chan surfaceChange, cancel func())` | the surfaces now (one `createSurface` each), then every change, nothing missed between |
@@ -3771,95 +3766,48 @@ A proposal shows where it matters (#428), with no code for any tool:
 
 ### The assistants' workspace tools (`workspace_tools.go`)
 
-Any assistant writes the workspace with five tools; the **author is the caller**, never a field:
+The workspace shows threads only (#574): an assistant writes **its part of a thread's surface**,
+never a tile of its own. Five tools; the **author is the caller**, never a field:
 
 | Tool | Does |
 |---|---|
-| `surface_write` | create or update a surface: `id` (empty: a new one), `title`, `components`, `data`, `sources`, `refresh {every}`, `lifetime {until \| while \| kept}`, `weight`, `why`. Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong surface comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `waiting` (sources still reading), `failed`, `previous_error` (the last error found on it, which this write clears) |
-| `surface_remove` | remove one of the caller's surfaces |
-| `workspace_read` | each surface (id, title, author, sources, lifetime, weight, why, last update, `waiting`, the user's `last_action` on it; for the caller's own, `failed` and the last `error`), the user's gestures of the last hour (what, ref, time), what the brain put in front, the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title or why written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
+| `surface_write` | write the caller's part of a thread's surface: `id` is `thread-<id>` of a thread it holds, `components`, `data`, `sources`, `refresh {every}` ([a thread's part](#a-threads-surface-thread_surfacego)). Any other id is refused, the refusal saying the way: find or open the thing's thread first (`open_thread`; `ends: day` for what is shown for today). Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong part comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `part` |
+| `surface_remove` | take the caller's part away from a thread's surface; the surface stays |
+| `workspace_read` | the threads on screen (`threads`: surface id, thread, title, state, new, `yours` when the caller holds it, the thread's sources, last update, `waiting`, the user's last action on it; for one it holds, `failed` and the last `error`), the queue's surfaces (`queue`: id, title, state), the user's gestures of the last hour (what, ref, time), the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
 | `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand |
-| `sources_read` | what code may read for a surface (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: a run lent only the workspace learns which sources it may declare, and code reads them under the access policy (`sourceWhy`). Without a shape, the author binds what it expects and `surface_write`'s error names the fields the result has. With nothing linked, it says so |
+| `sources_read` | what code may read for a part (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: code reads them under the access policy (`sourceWhy`). Without a shape, the author binds what it expects and `surface_write`'s error names the fields the result has. With nothing linked, it says so |
 
-- **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A
-  thread's lead, on its own tools (`registerLeadTools`), as `lead:<thread>`. A task or a skill's
-  run through **`eriphe-workspace`, a server Eriphe provides**: lent like any catalog server
-  (`{kind: tool, ref: eriphe-workspace}` or `eriphe-workspace.<tool>` in `run_task`'s resources,
-  never in a skill's `tools`), checked by `checkGrant`, listed by `list_tools` under
-  `provided`, put in the task's spec by `specServers` and relayed by its node at
-  `/v1/node/tasks/<id>/mcp/eriphe-workspace` like the others (`taskMCPHandler` serves the tools its
-  grant covers; a task not lent it gets 403). The name is reserved. A task writes as `task:<id>`;
-  a skill is never lent it (it writes on its thread, `eriphe-threads`).
-- **No approval.** Writing a surface is not an external write: the lent tools are allowed in
-  advance (the spec's `allowedTools`), and each caller writes its own surfaces only.
+- **A one-off request is a day thread.** « J'ai quoi demain ? » is a thread opened with
+  `ends: day` and its alias, the brain's part on its surface; asked again, `open_thread` on the
+  same alias gives the same thread back. At the user's midnight code ends it and takes its part
+  away (`endDays`, `dropThreadPart`): reopened the next day, the brain writes it again. A
+  recurring request is a skill, which acts on its thread (`eriphe-threads`) and writes no surface.
+- **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint; it
+  holds every light thread. A thread's lead, on its own tools (`registerLeadTools`), as
+  `lead:<thread>`, for its thread. A task through **`eriphe-workspace`, a server Eriphe
+  provides**: lent like any catalog server (`{kind: tool, ref: eriphe-workspace}` or
+  `eriphe-workspace.<tool>` in `run_task`'s resources, never in a skill's `tools`), checked by
+  `checkGrant`, listed by `list_tools` under `provided`, put in the task's spec by `specServers`
+  and relayed by its node at `/v1/node/tasks/<id>/mcp/eriphe-workspace` like the others
+  (`taskMCPHandler` serves the tools its grant covers; a task not lent it gets 403). The name is
+  reserved. A task holds no thread: it reads the workspace and gives captured images
+  (below); what it found goes back to the brain, which writes its part.
+- **No approval.** Writing a part is not an external write: the lent tools are allowed in
+  advance (the spec's `allowedTools`), and each caller writes on the threads it holds only.
 - **Taint.** Calling `eriphe-workspace` does not taint a task by itself, as eriphe-core's own tools
   do not (`eventsTaint`): `workspace_read` quotes nothing written after external content, and
   `sources_read`'s descriptions are the catalog's, which the brain reads untainted in its own
   tool list (a tool's description is never counted as read content), and the proposals it lists
-  leave out the text of one drawn from external content. What tells a task what a source gave
+  leave out the text of one drawn from external content. What tells a caller what a source gave
   does: a binding's error naming a result's fields, a source's failure, the last error
-  of its surface (`workspaceSourceRead` in its reads). A run that wrote its placeholders keeps its
-  buttons (`ask`) until then.
-- **Delegation.** For work that takes time, the brain writes a placeholder at once (a
-  `Placeholder`) and starts a task with `run_task`'s `surface` (its id): the surface must exist,
-  the task is lent `eriphe-workspace` and told in its prompt which surface to fill. That task
-  writes that id only (an empty id is that one), as the brain's delegate (the brain's rights);
-  any other id is refused, on write and on remove (`task_surface:<id>` in the store).
-- **Never held long.** `surface_write` waits 3 s at most (`surfaceReadCap`) for the sources'
-  first read. A source still reading then is accepted waiting (`look.sources[ptr].waiting`), the
-  surface written with its composed data and the bindings under it checked against the tool's
-  `outputSchema` only; the read goes on in the background (`surfaces_late.go`), fills the surface
-  as a refresh would (`applyReads`), then the bindings are checked against what it gave. What is
-  wrong goes to the author through `surfaceError`, the page's render errors' seam: it reads it in
-  `workspace_read`, and in its next `surface_write`'s `previous_error`. A surface written again
-  meanwhile is not told about.
-- **Settings → Surfaces** (`/settings/surfaces`, `web_surfaces.go`): every surface with its title,
-  author, sources, lifetime, last update, waiting and external tags, its last error; the user
-  removes any. Above them, how the workspace served the user these last 7 days (below).
-- **The measure of use** (`workspace_use.go`). Each time a surface becomes a tile of the layout
-  its time in front starts, and it ends when the surface leaves the tiles (`noteFront` on each
-  new layout, in `workspace_front`, kept 30 days, read from the store so a restart starts none
-  twice; whether it ended because the surface left the pool). With the gestures (`workspace_log`),
-  each time in front is opened (an `opened` gesture while there), ignored (folded while still in
-  the pool, unopened, or an `ignored` or `closed` gesture came first), removed first (unopened,
-  the surface gone: its proposal answered, its lifetime over, taken away) or still in front; a
-  surface the user opened from the fold (opened at most 2 s before it
-  became a tile) was not put in front by code and is not counted (`surfaceUseOf`, pure). The page
-  says how many were put in front, opened, ignored (and their share of the opened and ignored),
-  removed first, still in front, and the median time to open. No model, and nothing fed back: it is for reading.
-
-**The surfaces' bench** (`testdata/surfaces/`, `surfaces_bench_test.go`). Invented requests of a
-fictional user, Sam, to see something, each with the tools linked for it (invented servers:
-their description, `inputSchema`, `outputSchema` and what a read gave) and a reference answer,
-`surface_write`'s arguments: live data (balances, the week's unread mails with their arguments,
-an error rate as a chart) and summaries (a supervision summary, a week in English, a channel
-whose messages carry an injection). An answer is scored by writing it as production does
-(`surfaceWrite` as the brain, its turn tainted, on a core linked to the case's fake servers: valid
-A2UI, catalog components, bindings that exist in the result or the `outputSchema`, the button
-guard), then: components of the catalog, no server or `server/tool` name shown, sane sizes, a
-case's forbidden words absent, no button where the case says so, and by kind: **live**, every
-source a tool of the case's (with the arguments it expects) and no value a read gave copied into
-the surface; **composed**, values written in `data`. In CI with no model, every case is valid,
-its reference answer scores clean, and each fault is caught on a spoilt copy (a component off
-the catalog, a tool's name, too many components, a copied value, a binding the tool does not
-give, no source or another tool's, no data, a forbidden word, a button). `surfaces_live_test.go`
-runs the cases on a real model: the brain's paragraph on
-surfaces (`brain-prompt.md`), `surface_write` as an MCP client lists it (description and
-arguments' schema) and the catalog (`a2ui.CatalogPrompt`) appended to the system prompt, the
-tools and the request as the turn (a live request as the brain's; a summary as the task's that
-fills a placeholder, with `delegateSurface`'s words), no tool, low effort:
-
-```sh
-cd core
-ERIPHE_LIVE_SURFACES=1 go test -run TestSurfacesLive -v .
-# ERIPHE_LIVE_SURFACES_RUNS=1 (default), ERIPHE_LIVE_SURFACES_MODEL=sonnet (default),
-# ERIPHE_LIVE_SURFACES_CLI=claude (default), ERIPHE_LIVE_SURFACES_CASES=<id>,<id> (all by default)
-```
-
-It reports per case and in all: validity, catalog adherence, sources declared, values copied,
-composed data, tool names shown, agreement, latency and cost (about 1 to 4 cents a case with
-Sonnet). It fails only when the CLI does. Its question from the workspace is about a thing that is
-not followed (an appointment); a matter to follow is the threads' bench's.
+  of its part (`workspaceSourceRead` in its reads).
+- **Never held long.** `surface_write` waits 3 s at most (`surfaceReadCap`) for its sources'
+  first read. A source still reading then is accepted waiting, the part written and the bindings
+  under it checked against the tool's `outputSchema` only; the read goes on as the thread's
+  source, and fills the surface when it ends.
+- **Gone with it**: Settings → Surfaces, a skill's or a task's own tile, `run_task`'s `surface`
+  (a task filling a placeholder), the cap of 100 surfaces, an author's surface weight and the
+  measure of use that page showed.
 
 **The threads' bench** (`testdata/threads/`, `threads_bench_test.go`, #471). Invented requests of
 Sam about a matter to follow, each with the tools linked for it (invented servers: what each does,
@@ -3879,7 +3827,7 @@ Always: no call refused, no change called outside a step, a reply in one line (`
 wake), no server or tool name in the reply, the thread, its steps or the part. A turn announces
 the id the next thread gets (`threadBenchSeed`). In CI with no model, every case is valid, its
 reference answers score clean, and each fault is caught on a spoilt copy. `threads_live_test.go`
-runs the turns on a real model the way the surfaces' bench does: « Les threads », the paragraphs
+runs the turns on a real model: « Les threads », the paragraphs
 on surfaces and on the workspace's messages, the brain's tools for threads and the workspace as
 an MCP client lists them and the catalog appended to the system prompt; a wake is played after
 the case's reference first turn, so each turn is judged on its own:

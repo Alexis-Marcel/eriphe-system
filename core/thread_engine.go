@@ -314,9 +314,6 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 	if err != nil {
 		return nil, err
 	}
-	if st.Surface != "" {
-		c.store.set(taskSurfaceKey(t.ID), st.Surface) // it writes that one only (workspace_tools.go)
-	}
 	if approved {
 		c.grantLent(t) // access_card.go
 		if len(taint) == 0 {
@@ -793,7 +790,6 @@ func (c *core) endLight(ctx context.Context, s Thread, state, summary string) {
 		fields["summary"] = truncate(summary, 2000)
 	}
 	c.setThread(s.ID, fields)
-	c.dropThreadSurfaces(s.ID) // surface_authors.go
 	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: fmt.Sprintf("thread:%d", s.ID), Source: "thread",
 		Payload: map[string]any{"thread": s.ID, "state": state, "ends": s.Ends}})
 }
@@ -837,7 +833,6 @@ func (c *core) closeLocked(s Thread, state, summary string) {
 	}
 	c.endSteps(context.Background(), s) // thread_steps.go
 	c.dropLead(s)                       // thread_lead.go
-	c.dropThreadSurfaces(s.ID)          // surface_authors.go
 	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: fmt.Sprintf("thread:%d", s.ID), Source: "thread",
 		Payload: map[string]any{"thread": s.ID, "state": stateOf(state), "phase": state}})
 }
@@ -905,6 +900,7 @@ func (c *core) endDays(now time.Time) {
 		threadMu.Lock()
 		if cur, err := c.thread(s.ID); err == nil && cur.active() && cur.Ends == endsDay {
 			c.endLight(context.Background(), cur, threadDone, "")
+			c.dropThreadPart(s.ID) // what it showed was that day's: reopened, it is written again
 			c.logThread(s.ID, "engine", "Journée finie : le fil se termine.")
 		}
 		threadMu.Unlock()

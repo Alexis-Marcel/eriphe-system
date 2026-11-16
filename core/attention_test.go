@@ -414,25 +414,3 @@ func TestAttentionHeldWakeToldAtReturn(t *testing.T) {
 		t.Error("held forever")
 	}
 }
-
-// An author's surface weighs below the urgent placement; an item about it
-// lends it its own weight, given back when the item leaves.
-func TestSurfaceWeightFromItsItem(t *testing.T) {
-	c, _ := surfaceCore(t)
-	writeTestSurface(t, c, surfaceIn{ID: "revue", Title: "Revue", Weight: 100})
-	if s, _ := c.surface("revue"); s.Weight != surfaceAuthorMax {
-		t.Fatalf("an author's surface weighs %d", s.Weight)
-	}
-	c.attend(attentionItem{Ref: "surface:revue", Weight: 5, Why: "la revue attend", Source: "skill:revue"})
-	if s, _ := c.surface("revue"); s.Weight != queueSurfaceWeight(5) {
-		t.Fatalf("its item does not lend its weight: %d", s.Weight)
-	}
-	writeTestSurface(t, c, surfaceIn{ID: "revue", Title: "Revue", Weight: 30})
-	if s, _ := c.surface("revue"); s.Weight != queueSurfaceWeight(5) {
-		t.Fatalf("rewritten, it lost its item's weight: %d", s.Weight)
-	}
-	c.attentionDone("surface:revue")
-	if s, _ := c.surface("revue"); s.Weight != surfaceAuthorMax {
-		t.Fatalf("its lent weight stays: %d", s.Weight)
-	}
-}

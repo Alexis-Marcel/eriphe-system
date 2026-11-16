@@ -137,9 +137,6 @@ func (c *core) attendHeld(it attentionItem) {
 			due = CASE WHEN due = 0 THEN excluded.due WHEN excluded.due = 0 THEN due ELSE MIN(due, excluded.due) END`,
 		it.Ref, it.Weight, truncate(oneLine(it.Why), attentionWhyMax), truncate(oneLine(it.Say), attentionWhyMax), it.Source, it.Time.Unix(),
 		boolInt(it.tainted), delivered, due, it.About)
-	if id, ok := strings.CutPrefix(it.Ref, refSurface+":"); ok {
-		c.surfaceLent(id)
-	}
 	if id, ok := raisedThread(it.Ref); ok {
 		c.keepThreadSurface(id) // its tile takes the weight
 	}
@@ -158,9 +155,6 @@ func attentionCap(weight int) time.Duration {
 // attentionDone takes an item out: the user answered it, or it is gone.
 func (c *core) attentionDone(ref string) {
 	c.store.db.Exec(`DELETE FROM attention WHERE ref = ?`, ref)
-	if strings.HasPrefix(ref, refSurface+":") {
-		surfacesRecap(c.store.db)
-	}
 	if id, ok := raisedThread(ref); ok {
 		c.keepThreadSurface(id) // its tile gives the weight back
 	}
