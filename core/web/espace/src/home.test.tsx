@@ -131,7 +131,7 @@ describe("the workspace on a phone", () => {
     expect(el.querySelector("main.canvas")!.classList.contains("column")).toBe(true);
     // No widening of a panel on a column; the conversation is a link away.
     expect(el.querySelector('.eriphe-head a.eriphe-all[href="/conversation"]')).not.toBeNull();
-    expect(el.querySelector(".eriphe-links button")).toBeNull();
+    expect(el.querySelector(".panel-grip")).toBeNull();
 
     const tiles = el.querySelectorAll("main.canvas article.tile").length;
     const first = el.querySelector<HTMLElement>("main.canvas article")!;
@@ -153,5 +153,36 @@ describe("the workspace on a phone", () => {
     await draw();
     expect(el.querySelector(".espace")!.classList.contains("narrow")).toBe(false);
     expect(el.querySelector("main.canvas")!.classList.contains("column")).toBe(false);
+  });
+
+  it("lets the conversation's edge be dragged, kept in this browser, and reset", async () => {
+    phone(false);
+    localStorage.removeItem("espace.panel");
+    vi.stubGlobal("innerWidth", 1600);
+    await draw();
+    const page = el.querySelector<HTMLElement>(".espace")!;
+    const grip = el.querySelector<HTMLElement>(".panel-grip")!;
+    expect(grip.getAttribute("role")).toBe("separator");
+    expect(page.style.gridTemplateColumns).toBe("");
+    const at = (type: string, x: number) => new MouseEvent(type, { bubbles: true, clientX: x });
+    await act(async () => {
+      grip.dispatchEvent(at("pointerdown", 280));
+      window.dispatchEvent(at("pointermove", 420));
+      window.dispatchEvent(at("pointerup", 420));
+    });
+    expect(page.style.gridTemplateColumns).toBe("420px minmax(0px, 1fr)");
+    expect(localStorage.getItem("espace.panel")).toBe("420");
+    // Never wider than the cap, never narrower than the floor.
+    await act(async () => {
+      grip.dispatchEvent(at("pointerdown", 420));
+      window.dispatchEvent(at("pointermove", 5000));
+      window.dispatchEvent(at("pointerup", 5000));
+    });
+    expect(page.style.gridTemplateColumns).toBe("640px minmax(0px, 1fr)");
+    await act(async () => grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })));
+    expect(page.style.gridTemplateColumns).toBe("616px minmax(0px, 1fr)");
+    await act(async () => grip.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(page.style.gridTemplateColumns).toBe("");
+    expect(localStorage.getItem("espace.panel")).toBeNull();
   });
 });

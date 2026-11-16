@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent as KeyEvent, type PointerEvent as PtrEvent, type ReactElement } from "react";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { createAdapter } from "./a2ui/adapter";
 import { Icon } from "./a2ui/icons";
@@ -73,8 +73,8 @@ export function shownLayout(core: Layout, intent: Intent | null, now: number): L
 
 export function Espace({ boot }: { boot: data.Boot }) {
   const { t, lang } = useWords();
+  const [panel, panelGrip] = usePanelWidth(t("espace.resize"));
   const [toast, setToast] = useState<string | null>(null);
-  const [wide, setWide] = useState(false);
   const narrow = useNarrow();
 
   const say = (m: string) => {
@@ -274,7 +274,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className={`espace ambient-${ambient}${wide ? " wide" : ""}${narrow ? " narrow" : ""}${full ? " focused" : ""}`}>
+      <div className={`espace ambient-${ambient}${narrow ? " narrow" : ""}${full ? " focused" : ""}`} style={!narrow && panel ? { gridTemplateColumns: `${panel}px minmax(0, 1fr)` } : undefined}>
         <aside className="eriphe-panel" aria-live="polite">
           <div className="eriphe-head">
             <p className="eriphe-name">{boot.name}</p>
@@ -299,9 +299,7 @@ export function Espace({ boot }: { boot: data.Boot }) {
           <form className="eriphe-input" onSubmit={onSubmit}>
             <input name="text" autoComplete="off" placeholder={hint} aria-label={hint} />
           </form>
-          <div className="eriphe-links">
-            {!narrow && <button className="linkish" onClick={() => setWide(!wide)} aria-pressed={wide}>{t(wide ? "espace.narrow" : "espace.wide")}</button>}
-          </div>
+          {!narrow && panelGrip}
         </aside>
 
         <div className="stage">
@@ -327,4 +325,59 @@ export function Espace({ boot }: { boot: data.Boot }) {
       </div>
     </MotionConfig>
   );
+}
+
+// The conversation's width: the user drags its right edge (or uses the
+// arrow keys on it); double-click goes back to the default. Kept in this
+// browser only.
+const PANEL_KEY = "espace.panel";
+const PANEL_MIN = 240;
+const PANEL_MAX = 640;
+const clampPanel = (w: number) => Math.round(Math.max(PANEL_MIN, Math.min(PANEL_MAX, w, window.innerWidth / 2)));
+
+function usePanelWidth(label: string): [number | null, ReactElement] {
+  const [w, setW] = useState<number | null>(() => {
+    const v = Number(localStorage.getItem(PANEL_KEY));
+    return v > 0 ? clampPanel(v) : null;
+  });
+  const save = (v: number | null) => {
+    setW(v);
+    if (v === null) localStorage.removeItem(PANEL_KEY);
+    else localStorage.setItem(PANEL_KEY, String(v));
+  };
+  const onPointerDown = (e: PtrEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const panel = e.currentTarget.parentElement!;
+    const left = panel.getBoundingClientRect().left;
+    const move = (ev: PointerEvent) => save(clampPanel(ev.clientX - left));
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.classList.remove("resizing");
+    };
+    document.body.classList.add("resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const onKeyDown = (e: KeyEvent<HTMLDivElement>) => {
+    const now = w ?? e.currentTarget.parentElement!.getBoundingClientRect().width;
+    if (e.key === "ArrowLeft") save(clampPanel(now - 24));
+    else if (e.key === "ArrowRight") save(clampPanel(now + 24));
+    else return;
+    e.preventDefault();
+  };
+  const grip = (
+    <div
+      className="panel-grip"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      title={label}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onKeyDown={onKeyDown}
+      onDoubleClick={() => save(null)}
+    />
+  );
+  return [w, grip];
 }
