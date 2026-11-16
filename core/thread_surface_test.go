@@ -77,15 +77,16 @@ func TestThreadSurfaceLight(t *testing.T) {
 	}
 	sid, ref := threadSurfaceID(th.ID), fmt.Sprintf("thread:%d", th.ID)
 	s, data, meta := threadSurfaceOf(t, c, th.ID)
-	if s.Author != ref || s.Lifetime.While != ref || s.Title != "PR 12" || data["goal"] != "Merged and deployed." {
+	if s.Author != ref || s.Lifetime.While != ref || s.Title != "PR 12" || strings.Contains(string(s.Data), "Merged and deployed") {
 		t.Fatalf("surface %+v data %v", s, data)
 	}
 	if meta.Summary != "Ouvert" || meta.Why != "" || meta.Tainted || !meta.Answers {
 		t.Errorf("meta %+v", meta)
 	}
-	// Open and held by the brain: the header says it all, no state line,
-	// no empty timeline, no « À toi » with nothing in it.
-	if strings.Contains(string(s.Components), "thread_steps") || data["state"] != nil || strings.Contains(string(s.Components), "thread_yours") {
+	// Open and held by the brain: nothing yet, no state line, no empty
+	// timeline, no « À toi » with nothing in it.
+	if strings.Contains(string(s.Components), "thread_steps") || data["state"] != nil || strings.Contains(string(s.Components), "thread_yours") ||
+		!strings.Contains(string(s.Components), "Rien pour l'instant.") {
 		t.Errorf("components %s data %v", s.Components, data)
 	}
 
@@ -327,7 +328,7 @@ func TestThreadSurfaceLeadPart(t *testing.T) {
 	}
 	s, data, _ := threadSurfaceOf(t, c, th.ID)
 	if !strings.Contains(string(s.Components), `"thread_part"`) || !strings.Contains(string(s.Components), "Ajouté par son chef") ||
-		!strings.Contains(string(s.Data), `"diff"`) || data["goal"] == nil || s.Tainted != "" {
+		!strings.Contains(string(s.Data), `"diff"`) || data["state"] == nil || s.Tainted != "" {
 		t.Fatalf("part not shown: %s %s", s.Components, s.Data)
 	}
 

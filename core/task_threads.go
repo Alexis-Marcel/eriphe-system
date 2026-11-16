@@ -118,15 +118,16 @@ func threadsInfo() map[string]any {
 // taskOpenIn is open_thread's input for a task: light or standing, or led
 // with a plan that waits for its card.
 type taskOpenIn struct {
-	Title  string     `json:"title" jsonschema:"its name for the user, a few words in their language (« Mes mails », « Le devis de la terrasse »), no ids"`
-	Goal   string     `json:"goal" jsonschema:"its real outcome, or for a standing one what it keeps, in one or two sentences"`
-	Alias  string     `json:"alias" jsonschema:"its alias, kind:slug, to find it again: pr:<owner>/<repo>#<n>, project:<name>, topic:<words>; one thread an alias"`
-	Ends   string     `json:"ends,omitempty" jsonschema:"goal (the default: it ends once its goal is reached, by the user or Eriphe) or standing (what the user manages continuously: never closed)"`
-	Steps  []stepSpec `json:"steps,omitempty" jsonschema:"a plan for long work (investigate, fix, open a pull request): the thread is led, and nothing starts before the user approves the plan on its card"`
-	Budget int        `json:"budget_minutes,omitempty" jsonschema:"with steps: minutes of running time it may take"`
-	Done   string     `json:"done_when,omitempty" jsonschema:"with steps: what must be true at the end"`
-	Take   int64      `json:"take,omitempty" jsonschema:"after a refusal that lists threads near this matter: the one that is it, given back (reopened if it ended)"`
-	NewBy  string     `json:"new_because,omitempty" jsonschema:"after a refusal that lists threads near this matter: why this is another matter, in a few words"`
+	Title    string     `json:"title" jsonschema:"its name for the user, a few words in their language (« Mes mails », « Le devis de la terrasse »), no ids"`
+	Goal     string     `json:"goal" jsonschema:"its real outcome, or for a standing one what it keeps, in one or two sentences; for you and the agents, never shown to the user"`
+	Headline string     `json:"headline,omitempty" jsonschema:"what the user reads at the top of the thread and on its chip: one line addressed to them, in their language, at most 120 characters, no ids; set_thread headline changes it later"`
+	Alias    string     `json:"alias" jsonschema:"its alias, kind:slug, to find it again: pr:<owner>/<repo>#<n>, project:<name>, topic:<words>; one thread an alias"`
+	Ends     string     `json:"ends,omitempty" jsonschema:"goal (the default: it ends once its goal is reached, by the user or Eriphe) or standing (what the user manages continuously: never closed)"`
+	Steps    []stepSpec `json:"steps,omitempty" jsonschema:"a plan for long work (investigate, fix, open a pull request): the thread is led, and nothing starts before the user approves the plan on its card"`
+	Budget   int        `json:"budget_minutes,omitempty" jsonschema:"with steps: minutes of running time it may take"`
+	Done     string     `json:"done_when,omitempty" jsonschema:"with steps: what must be true at the end"`
+	Take     int64      `json:"take,omitempty" jsonschema:"after a refusal that lists threads near this matter: the one that is it, given back (reopened if it ended)"`
+	NewBy    string     `json:"new_because,omitempty" jsonschema:"after a refusal that lists threads near this matter: why this is another matter, in a few words"`
 }
 
 // setThreadIn is set_thread's input.
@@ -228,7 +229,7 @@ func (c *core) taskThreadsServer(t *TaskRow, grant []string) *mcp.Server {
 						}
 					}
 				}
-				s, again, err := c.openThreadOnce(threadIn{Title: in.Title, Goal: in.Goal, Alias: in.Alias, Ends: ends,
+				s, again, err := c.openThreadOnce(threadIn{Title: in.Title, Goal: in.Goal, Headline: in.Headline, Alias: in.Alias, Ends: ends,
 					Steps: in.Steps, Budget: in.Budget, DoneWhen: in.Done, Take: in.Take, NewBy: in.NewBy}, w.taint(c), w.author)
 				if near := (*nearMatch)(nil); errors.As(err, &near) {
 					for _, x := range near.threads {

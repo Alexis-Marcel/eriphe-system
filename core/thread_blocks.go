@@ -122,16 +122,12 @@ func (c *core) threadsDueBy(by time.Time) map[int64]bool {
 	return out
 }
 
-// blockHead composes the head: the goal of a thread that ends on it (a
-// standing one says what it is by its title and its state line), the
-// Progress when it says more than « À jour » or has steps to show, the
-// state line.
+// blockHead composes the head: the Progress when it says more than « À
+// jour » or has steps to show, the state line. Never the goal: it is the
+// agents' target, written for them, not for the user; the thread says what
+// it is by its title and its state line (its headline).
 func (c *core) blockHead(out *threadComps, data map[string]any, s Thread, steps []threadSurfaceStep, word, tone, state string) {
 	type comp = map[string]any
-	if !s.standing() && strings.TrimSpace(s.Goal) != "" {
-		data["goal"] = s.Goal
-		out.add(comp{"id": "thread_goal", "component": "Text", "text": map[string]any{"@path": "/thread/goal"}})
-	}
 	if state != "" {
 		data["state"] = state
 	}
@@ -208,8 +204,8 @@ func (c *core) blockEnded(out *threadComps, data map[string]any, s Thread, now t
 		title += threadExternalSep + threadClock(s.Ended, now, loc, lang)
 	}
 	text := strings.TrimSpace(s.Summary)
-	if text == "" {
-		text = s.Goal
+	if h := c.threadHeadlineOf(s.ID); text == "" && h != nil {
+		text = h.Text // never its goal: the agents' words
 	}
 	data["ended"] = map[string]any{"title": title, "text": text}
 	level := "info"

@@ -10,7 +10,6 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "thread_goal",
        "thread_progress",
        "thread_controls",
        "thread_yours",
@@ -21,13 +20,6 @@
        "thread_done",
        "thread_steps"
       ]
-     },
-     {
-      "id": "thread_goal",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/goal"
-      }
      },
      {
       "id": "thread_progress",
@@ -96,7 +88,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Summary updated: 10:00",
+      "text": "Summary updated: 11:19",
       "variant": "caption"
      },
      {
@@ -140,20 +132,19 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T08:00:53+01:00",
+        "date": "2026-11-16T09:19:11+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T08:40:53+01:00",
+        "date": "2026-11-16T09:59:11+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
        }
       ],
       "donelabel": "2 steps done",
-      "goal": "The club's site is online, with its photos.",
       "progress": {
        "current": 2,
        "label": "Yours",
@@ -162,13 +153,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T10:20:53+01:00",
+        "date": "2026-11-16T11:39:11+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T10:10:53+01:00",
+        "date": "2026-11-16T11:29:11+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "current"
@@ -549,18 +540,10 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "thread_goal",
        "thread_progress",
        "thread_ended",
        "thread_done"
       ]
-     },
-     {
-      "id": "thread_goal",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/goal"
-      }
      },
      {
       "id": "thread_progress",
@@ -647,25 +630,25 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T08:00:53+01:00",
+        "date": "2026-11-16T09:19:11+01:00",
         "detail": "Task",
         "label": "Prepare the page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T08:40:53+01:00",
+        "date": "2026-11-16T09:59:11+01:00",
         "detail": "Proposed action",
         "label": "Merge the branch",
         "state": "done"
        },
        {
-        "date": "2026-11-16T10:20:53+01:00",
+        "date": "2026-11-16T11:39:11+01:00",
         "detail": "Your approval",
         "label": "Publish the site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T10:10:53+01:00",
+        "date": "2026-11-16T11:29:11+01:00",
         "detail": "Task · 12 of 30",
         "label": "Resize the photos",
         "state": "done"
@@ -679,9 +662,8 @@
       "donelabel": "5 steps done",
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 09:30"
+       "title": "Done ✓ · 10:49"
       },
-      "goal": "The club's site is online, with its photos.",
       "progress": {
        "current": 0,
        "label": "Done",
@@ -1006,7 +988,6 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "thread_goal",
        "thread_progress",
        "thread_controls",
        "thread_yours",
@@ -1017,13 +998,6 @@
        "thread_done",
        "thread_steps"
       ]
-     },
-     {
-      "id": "thread_goal",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/goal"
-      }
      },
      {
       "id": "thread_progress",
@@ -1092,7 +1066,7 @@
      {
       "id": "thread_summary_at",
       "component": "Text",
-      "text": "Résumé mis à jour : 10 h 00",
+      "text": "Résumé mis à jour : 11 h 19",
       "variant": "caption"
      },
      {
@@ -1136,20 +1110,19 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T08:00:53+01:00",
+        "date": "2026-11-16T09:19:11+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T08:40:53+01:00",
+        "date": "2026-11-16T09:59:11+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
        }
       ],
       "donelabel": "2 étapes faites",
-      "goal": "Le site du club est en ligne, avec ses photos.",
       "progress": {
        "current": 2,
        "label": "À toi",
@@ -1158,13 +1131,13 @@
       },
       "steps": [
        {
-        "date": "2026-11-16T10:20:53+01:00",
+        "date": "2026-11-16T11:39:11+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "current"
        },
        {
-        "date": "2026-11-16T10:10:53+01:00",
+        "date": "2026-11-16T11:29:11+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "current"
@@ -1545,18 +1518,10 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "thread_goal",
        "thread_progress",
        "thread_ended",
        "thread_done"
       ]
-     },
-     {
-      "id": "thread_goal",
-      "component": "Text",
-      "text": {
-       "@path": "/thread/goal"
-      }
      },
      {
       "id": "thread_progress",
@@ -1643,25 +1608,25 @@
      "thread": {
       "done": [
        {
-        "date": "2026-11-16T08:00:53+01:00",
+        "date": "2026-11-16T09:19:11+01:00",
         "detail": "Tâche",
         "label": "Préparer la page",
         "state": "done"
        },
        {
-        "date": "2026-11-16T08:40:53+01:00",
+        "date": "2026-11-16T09:59:11+01:00",
         "detail": "Action proposée",
         "label": "Fusionner la branche",
         "state": "done"
        },
        {
-        "date": "2026-11-16T10:20:53+01:00",
+        "date": "2026-11-16T11:39:11+01:00",
         "detail": "Ta validation",
         "label": "Publier le site",
         "state": "done"
        },
        {
-        "date": "2026-11-16T10:10:53+01:00",
+        "date": "2026-11-16T11:29:11+01:00",
         "detail": "Tâche · 12 sur 30",
         "label": "Redimensionner les photos",
         "state": "done"
@@ -1675,9 +1640,8 @@
       "donelabel": "5 étapes faites",
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 9 h 30"
+       "title": "Fait ✓ · 10 h 49"
       },
-      "goal": "Le site du club est en ligne, avec ses photos.",
       "progress": {
        "current": 0,
        "label": "Terminé",

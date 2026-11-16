@@ -231,8 +231,8 @@ func (c *core) threadWhere(out *threadComps, data map[string]any, s Thread, now 
 	}
 }
 
-// A thread's headline (set_thread headline): what a skill or a task tending
-// it says of it to the user, one line, shown at the top of its surface in
+// A thread's headline (open_thread or set_thread headline): what the brain,
+// a skill or a task tending it says of it to the user, one line, shown at the top of its surface in
 // place of what code counts, and as its chip's line. Its author and taint
 // are code's: written after reading external content, the surface is
 // tainted for the models that read the workspace (codeTaint headline), and
@@ -263,12 +263,22 @@ func (c *core) threadHeadlineOf(id int64) *threadHeadline {
 	return &h
 }
 
+// headlineText is a headline as it is stored: one line, of
+// threadHeadlineMax runes at most.
+func headlineText(text string) (string, error) {
+	text = oneLine(text)
+	if utf8.RuneCountInString(text) > threadHeadlineMax {
+		return "", fmt.Errorf("a headline of %d characters at most", threadHeadlineMax)
+	}
+	return text, nil
+}
+
 // setThreadHeadline writes a thread's headline, or takes it away (text
 // empty), by who and with why its words may be someone else's.
 func (c *core) setThreadHeadline(id int64, text, by string, taint []string) error {
-	text = oneLine(text)
-	if utf8.RuneCountInString(text) > threadHeadlineMax {
-		return fmt.Errorf("a headline of %d characters at most", threadHeadlineMax)
+	text, err := headlineText(text)
+	if err != nil {
+		return err
 	}
 	key := threadHeadlineKey + strconv.FormatInt(id, 10)
 	if text == "" {

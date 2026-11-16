@@ -65,12 +65,12 @@ func itemsThread(t *testing.T, c *core, l *fakeLedger) Thread {
 }
 
 // withoutEnds are the components without what reads how a thread ends:
-// the head's buttons, and its goal.
+// the head's buttons.
 func withoutEnds(t *testing.T, comps json.RawMessage) json.RawMessage {
 	t.Helper()
 	var list []map[string]any
 	json.Unmarshal(comps, &list)
-	gone := func(id string) bool { return strings.HasPrefix(id, "thread_control") || id == "thread_goal" }
+	gone := func(id string) bool { return strings.HasPrefix(id, "thread_control") }
 	list = slices.DeleteFunc(list, func(comp map[string]any) bool {
 		id, _ := comp["id"].(string)
 		return gone(id)
@@ -125,17 +125,15 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 	work, standing := th, th
 	work.Ends, standing.Ends = endsGoal, endsStanding
 	a, b := compose(work), compose(standing)
-	// A standing thread is drawn the same but for Stop (it never ends) and
-	// its goal (what it keeps: its title and its state line say it).
-	var dataA map[string]any
-	json.Unmarshal(a.Data, &dataA)
-	delete(dataA[threadDataKey].(map[string]any), "goal")
-	noGoal, _ := json.Marshal(dataA)
-	if string(withoutEnds(t, a.Components)) != string(b.Components) || string(noGoal) != string(b.Data) || a.Weight != b.Weight {
+	// A standing thread is drawn the same but for Stop (it never ends).
+	// Neither shows its goal: the agents' words, not the user's.
+	if string(withoutEnds(t, a.Components)) != string(b.Components) || string(a.Data) != string(b.Data) || a.Weight != b.Weight {
 		t.Fatalf("a standing thread is drawn otherwise:\n%s\n%s", a.Components, b.Components)
 	}
-	if !strings.Contains(string(a.Components), `"thread_goal"`) || strings.Contains(string(b.Components), `"thread_goal"`) {
-		t.Fatalf("goal: %s\n%s", a.Components, b.Components)
+	for _, x := range []surfaceIn{a, b} {
+		if th.Goal == "" || strings.Contains(string(x.Components), "thread_goal") || strings.Contains(string(x.Data), th.Goal) {
+			t.Fatalf("goal shown: %s\n%s", x.Components, x.Data)
+		}
 	}
 	if !strings.Contains(string(a.Components), `"thread_control_stop"`) || strings.Contains(string(b.Components), `"thread_controls"`) {
 		t.Fatalf("Stop: %s\n%s", a.Components, b.Components)
@@ -148,7 +146,7 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 
 	// Every block, in its order.
 	kids := rootChildren(t, a.Components)
-	order := []string{"thread_goal", "thread_progress", "thread_state", "thread_yours", "thread_card_2", "thread_src_0_groups",
+	order := []string{"thread_progress", "thread_state", "thread_yours", "thread_card_2", "thread_src_0_groups",
 		"thread_where", "thread_done", "thread_steps"}
 	at := -1
 	for _, id := range order {
@@ -203,7 +201,7 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 	// Ended: the banner; « Ranger » only for what ends on its goal.
 	work.State, work.Ended = threadDone, now
 	ended := compose(work)
-	if kids := rootChildren(t, ended.Components); kids[2] != "thread_ended" || !strings.Contains(string(ended.Components), `"id":"`+threadTidyID+`"`) {
+	if kids := rootChildren(t, ended.Components); kids[1] != "thread_ended" || !strings.Contains(string(ended.Components), `"id":"`+threadTidyID+`"`) {
 		t.Errorf("ended: %v", kids)
 	}
 	if strings.Contains(string(ended.Components), "thread_where") || strings.Contains(string(ended.Components), "thread_yours") {

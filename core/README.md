@@ -925,7 +925,9 @@ deployed, an appointment, a brand name to find, a service to rebuild. An assista
 thread has one (its goal); a task is one step. It replaced the work session (#464): one object for
 every matter.
 
-A thread has a title, a goal (its real outcome), an **alias** (a key in the names, see [About and
+A thread has a title, a goal (its real outcome: the brain's and the agents' target, never shown to
+the user), a **headline** (the one line the user reads at its top and on its chip, written for
+them: `open_thread` or `set_thread`), an **alias** (a key in the names, see [About and
 names](#about-and-names): `project:site`, `pr:owner/repo#12`, `alert:<id>`) and the names the user
 gives it, a **state** (`open`, `waiting`, `done`,
 `dropped`), a summary, and its times. Its **mode** is one of two:
@@ -973,7 +975,7 @@ now (`endsAgain`): a light one only, a led one ends on its goal and the open is 
 
 | Who | Does |
 |---|---|
-| Brain | opens the thread with the user (`open_thread`: title, goal, alias; led: `done_when`, budget, steps), the only voice |
+| Brain | opens the thread with the user (`open_thread`: title, goal, headline, alias; led: `done_when`, budget, steps), the only voice |
 | Lead | a led thread's temporary assistant (role `lead`, `thread_lead.go`): judges each step on its evidence (`settle_step`: accept, retry, reject), amends the plan (`amend_thread`), closes it (`close_thread`), reports to the brain. The brain when no agent can run one |
 | Engine (code, no model) | starts each step once those it comes `after` are accepted, in parallel, passes them their outputs, asks the cards, holds the limits |
 | User | approves the plan, answers the choices and approvals, gives more time |
@@ -1126,10 +1128,11 @@ by code from the thread's data (#468): it never depends on a model remembering t
 - **Code's section: generic blocks** (#574, `thread_blocks.go`), the same code for every thread,
   in one fixed order; a block shows only when the thread has what it shows, never by the kind of
   thread (work, standing or day: the family is never shown, and a thread with its `ends` changed
-  is drawn the same while active, but for two things read from `ends`: a standing thread shows
-  no goal, as its title and state line say what it keeps, and no Stop, as it never ends):
-  1. **head**: the goal of a thread that ends on it (a standing one says what it is by its title
-     and its state line), a `Progress` (the state word in a pill, « À toi », « Urgent », « En
+  is drawn the same while active, but for one thing read from `ends`: a standing thread shows no
+  Stop, as it never ends). No thread shows its goal, written by the brain for itself and the
+  agents: what a thread shows the user is only words written for the user (its title, headline,
+  notes, summary):
+  1. **head**: a `Progress` (the state word in a pill, « À toi », « Urgent », « En
      cours », « Terminé », coloured by its tone, and with steps a bar of them, done, running, to
      come, « 2/5 »; none for a calm thread with no steps), and the **state line**
      (`threadStateText`): its headline (below), else what its items count (« 1 pour info · 2 rien
@@ -1140,7 +1143,7 @@ by code from the thread's data (#468): it never depends on a model remembering t
      the time, are its chip's line (the page's `summary`), else its steps' one line. A thread
      with nothing yet to show says « Rien pour l'instant. ». Its surface has no `why`;
   2. **ended**: once it ended, an `Alert` saying how and when, with where it stood (« Fait ✓ ·
-     14 h 02 » and the summary), and **« Ranger »** beside it for a thread that ends on its goal:
+     14 h 02 » and the summary, else its headline; never its goal), and **« Ranger »** beside it for a thread that ends on its goal:
      the only block that reads `ends`;
   3. **À toi** (active threads, only when something waits): the thread's own cards (its plan, a
      change of it, more time) and each step's (an approval's card, a task step's held start) as
@@ -1859,7 +1862,8 @@ version, read with its diff.
   `skill:<name>` (`task:<id>` for another task), with the task's taint read at each call:
   - `find_thread`, `read_thread` (what others wrote taints the task);
   - `open_thread` on an alias: the thread it has, reopened if it ended, else a new one, light or
-    standing (never `day`, and it never changes how a thread found ends); with steps, a led thread
+    standing (never `day`, and it never changes how a thread found ends), with an optional
+    `headline` stored as `set_thread`'s; with steps, a led thread
     whose plan waits for the user's card: nothing starts before the yes;
   - `note_item` on an item of a source (tainted from a tainted run: shown « extérieur », never
     quoted into a summary);
