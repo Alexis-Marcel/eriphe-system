@@ -429,21 +429,56 @@ func (c *core) relayBrainOutput(a Assistant, t *TaskRow) {
 	c.copyBrainOutput(a, t)
 }
 
-func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
+// What the brain writes in a turn is not all for the user: a text followed,
+// in the same turn, by a tool call is a note it wrote on its way to work
+// (a word on what it will read next), meant for no one. Only the texts
+// after its last tool call are its answer. A text stays undecided until
+// the turn's next tool call or its end: it is not copied while it is, and
+// the report that brings what follows it decides it.
+
+// answerText tells whether the text event at events[i] is part of its
+// turn's answer, and whether that is known yet: a tool call after it in
+// the same turn makes it a working note, the turn's end an answer.
+func answerText(events []EventRow, i int) (answer, decided bool) {
+	for _, e := range events[i+1:] {
+		switch e.Type {
+		case "tool_use":
+			return false, true
+		case "turn_end":
+			return true, true
+		}
+	}
+	return false, false
+}
+
+// copyBrainOutput copies the brain's new events into the conversation, up
+// to its first undecided text, and returns the undecided texts: the
+// message it may be writing, which the workspace shows as its draft.
+func (c *core) copyBrainOutput(a Assistant, t *TaskRow) (undecided string) {
 	st := c.assistantStatus(a.Name)
 	done := st.SeenSeq
 	events, err := c.store.events(t.ID, 500)
 	if err != nil {
-		return
+		return ""
 	}
 	last := done
 	failed := "" // the turn's failure, said once at its end
-	for _, e := range events {
+	for i, e := range events {
 		if e.Seq <= done {
 			continue
 		}
-		last = e.Seq
 		raw, bad := turnFailure(e)
+		answer := false
+		if e.Type == "text" && !bad {
+			var decided bool
+			if answer, decided = answerText(events, i); !decided {
+				if !st.Quiet {
+					undecided = heldTexts(events[i:])
+				}
+				break // left, with what follows it, for the next report
+			}
+		}
+		last = e.Seq
 		switch {
 		case e.Type == "error":
 			// The node's own notes (a session not resumed…) are not the turn's end.
@@ -454,7 +489,8 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 			if failed == "" {
 				failed = raw
 			}
-		case e.Type == "text" && !st.Quiet:
+		case e.Type == "text" && answer && !st.Quiet:
+			// A working note (answerText) is not for the user.
 			// Its answer to the start prompt ("Prêt.") is not news for the conversation.
 			// quietReply: its answer to a note that asks nothing of the
 			// user (a tool added…) stays out of the conversation.
@@ -485,6 +521,20 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) {
 	if last != done {
 		c.updateAssistant(a.Name, func(st *AssistantStatus) { st.SeenSeq = last })
 	}
+	return undecided
+}
+
+// heldTexts is what the brain wrote in events not yet decided, the first
+// one included: the texts that may be its answer, not a failure's.
+func heldTexts(events []EventRow) string {
+	var held []string
+	for _, e := range events {
+		text, _ := e.Data["text"].(string)
+		if _, bad := turnFailure(e); e.Type == "text" && !bad && strings.TrimSpace(text) != "" && !quietReply(text) && !toolCallText(text) {
+			held = append(held, text)
+		}
+	}
+	return strings.Join(held, "\n\n")
 }
 
 //go:embed brain-prompt.md

@@ -14,14 +14,16 @@ import (
 	"time"
 )
 
-// The brain's node reports its draft with every report: eriphe-core keeps
-// it in memory, and stores the message it becomes once, whole.
-func TestBrainDraftReport(t *testing.T) {
+// brainReports is a core with a brain task and a worker's on node pc,
+// and its node's report endpoint: report sends a report as the node does,
+// brainMessages is what the brain said in the conversation.
+func brainReports(t *testing.T) (c *core, report func(id string, r nodeReport), brainMessages func() []string) {
+	t.Helper()
 	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := newCore(&Config{Brain: &BrainConfig{}}, store)
+	c = newCore(&Config{Brain: &BrainConfig{}}, store)
 	store.registerNode("pc", hashSecret("node-secret"))
 	store.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateRunning, Node: "pc"})
 	store.insertTask(&TaskRow{ID: "t-work", Kind: "worker", Runtime: "claude-code", State: stateRunning, Node: "pc"})
@@ -29,8 +31,8 @@ func TestBrainDraftReport(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/node/tasks/{id}/report", c.handleReport)
 	srv := httptest.NewServer(mux)
-	defer srv.Close()
-	report := func(id string, r nodeReport) {
+	t.Cleanup(srv.Close)
+	report = func(id string, r nodeReport) {
 		t.Helper()
 		raw, _ := json.Marshal(r)
 		req, _ := http.NewRequest("POST", srv.URL+"/v1/node/tasks/"+id+"/report", bytes.NewReader(raw))
@@ -45,7 +47,7 @@ func TestBrainDraftReport(t *testing.T) {
 			t.Fatalf("report: %s", resp.Status)
 		}
 	}
-	brainMessages := func() []string {
+	brainMessages = func() []string {
 		msgs, _ := store.messagesAfter(0, 100)
 		var out []string
 		for _, m := range msgs {
@@ -55,6 +57,14 @@ func TestBrainDraftReport(t *testing.T) {
 		}
 		return out
 	}
+	return c, report, brainMessages
+}
+
+// The brain's node reports its draft with every report: eriphe-core keeps
+// it in memory, and stores the message it becomes once, whole.
+func TestBrainDraftReport(t *testing.T) {
+	c, report, brainMessages := brainReports(t)
+	store := c.store
 
 	store.addMessage(roleUser, "Hi", true)
 	_, _, changed := c.draft.get()
@@ -80,9 +90,18 @@ func TestBrainDraftReport(t *testing.T) {
 		t.Fatalf("draft = %q", text)
 	}
 
-	// The whole message lands before the draft ends.
-	report("t-brain", nodeReport{State: stateIdle, Events: []EventRow{
+	// The whole message comes before its turn's end: it stays the draft
+	// until the turn decides it, and is stored when the turn ends on it.
+	report("t-brain", nodeReport{State: stateRunning, Events: []EventRow{
 		{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Hello."}}}})
+	if text, _, _ := c.draft.get(); text != "Hello." {
+		t.Fatalf("draft of the whole message = %q", text)
+	}
+	if msgs := brainMessages(); len(msgs) != 0 {
+		t.Fatalf("stored before its turn decided it: %q", msgs)
+	}
+	report("t-brain", nodeReport{State: stateIdle, Events: []EventRow{
+		{Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success", "result": "Hello."}}}})
 	text, after, _ := c.draft.get()
 	if msgs := brainMessages(); len(msgs) != 1 || msgs[0] != "Hello." {
 		t.Fatalf("brain messages = %q", msgs)
@@ -95,6 +114,48 @@ func TestBrainDraftReport(t *testing.T) {
 	c.relayBrainOutput(theBrain(c), bt)
 	if msgs := brainMessages(); len(msgs) != 1 {
 		t.Fatalf("copied twice: %q", msgs)
+	}
+}
+
+// A note the brain writes before a tool call, in the middle of its turn,
+// is meant for no one (#608): only what it writes after its last tool
+// call is its answer. The note comes in a report of its own, the tool
+// call and the answer in the next.
+func TestBrainWorkingNoteNotShown(t *testing.T) {
+	c, report, brainMessages := brainReports(t)
+	c.store.addMessage(roleEvent, "[thread 1 « Publication »] A step reported its work.", true)
+
+	report("t-brain", nodeReport{State: stateRunning, Events: []EventRow{
+		{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Need the whole report."}}}})
+	if msgs := brainMessages(); len(msgs) != 0 {
+		t.Fatalf("an undecided text was stored: %q", msgs)
+	}
+	report("t-brain", nodeReport{State: stateIdle, Events: []EventRow{
+		{Seq: 2, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "mcp__eriphe-core__task_status", "input": map[string]any{"task_id": "t-step"}}},
+		{Seq: 3, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Seven topics are on the tile."}},
+		{Seq: 4, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success", "result": "Seven topics are on the tile."}}}})
+	if msgs := brainMessages(); len(msgs) != 1 || msgs[0] != "Seven topics are on the tile." {
+		t.Fatalf("brain messages = %q", msgs)
+	}
+	if text, _, _ := c.draft.get(); text != "" {
+		t.Fatalf("draft after the turn = %q", text)
+	}
+	lines, _, err := c.store.lastExchange()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 1 || lines[0].Text != "Seven topics are on the tile." {
+		t.Fatalf("exchange = %+v", lines)
+	}
+
+	// A note and its tool call in one report, a turn that ends on a tool
+	// call: nothing for the user.
+	report("t-brain", nodeReport{State: stateIdle, Events: []EventRow{
+		{Seq: 5, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Checking the step."}},
+		{Seq: 6, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "mcp__eriphe-core__settle_step", "input": map[string]any{}}},
+		{Seq: 7, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}}})
+	if msgs := brainMessages(); len(msgs) != 1 {
+		t.Fatalf("brain messages = %q", msgs)
 	}
 }
 

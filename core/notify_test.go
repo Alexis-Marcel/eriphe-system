@@ -324,6 +324,7 @@ func TestWakeAnswerPushed(t *testing.T) {
 	c.store.addEvents("t-brain", []EventRow{
 		{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Pense à appeler le garage avant midi."}},
 		{Seq: 2, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Autre chose ?"}},
+		{Seq: 3, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}},
 	})
 	c.relayBrainOutput(theBrain(c), mustTask(t, c, "t-brain"))
 	c.push.pending.Wait()
@@ -344,7 +345,7 @@ func TestWakeAnswerPushed(t *testing.T) {
 func TestWakeExternalHeld(t *testing.T) {
 	c, b := notifyCore(t, at(t, "2026-11-04", "09:00"))
 	c.setWakeTurn(wakeTurnOf([]*Intention{{ID: 8, Text: "Payer la facture", Trust: trustExternal}}, 0))
-	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "La facture est à payer."}}})
+	c.store.addEvents("t-brain", []EventRow{{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "La facture est à payer."}}, {Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}})
 	c.relayBrainOutput(theBrain(c), mustTask(t, c, "t-brain"))
 	c.push.pending.Wait()
 	if len(b.received()) != 0 {
