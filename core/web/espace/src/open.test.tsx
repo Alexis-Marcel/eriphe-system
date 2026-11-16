@@ -96,6 +96,27 @@ async function draw() {
 
 const tile = (id: string) => el.querySelector<HTMLElement>(`article[data-surface="${id}"]`)!;
 
+describe("a link to a surface", () => {
+  it("opens it once it is on the workspace (/?open=<id>, a card's thread), then leaves the address", async () => {
+    history.replaceState(null, "", "/?open=pay");
+    await draw();
+    expect(actions).toHaveLength(1);
+    expect(actions[0].body).toMatchObject({ action: { name: "open", surfaceId: "pay" } });
+    expect(tile("pay").classList.contains("focus")).toBe(true);
+    expect(location.search).toBe("");
+    // Not twice.
+    await act(async () => FakeSource.emit("layout", grid));
+    expect(actions).toHaveLength(1);
+  });
+
+  it("ignores an id that is no surface's id", async () => {
+    history.replaceState(null, "", "/?open=" + encodeURIComponent("<x>"));
+    await draw();
+    expect(actions).toHaveLength(0);
+    history.replaceState(null, "", "/");
+  });
+});
+
 describe("a click on the workspace", () => {
   it("opens a surface in front at once, whatever core's layout says meanwhile", async () => {
     await draw();

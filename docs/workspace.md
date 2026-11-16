@@ -29,7 +29,7 @@ Who writes the tiles:
   set times or on an event, works on its own thread): every thread has its tile, kept up to date as
   it moves, every thread drawn the same way: its goal and its state in a pill (« À toi », « En
   cours », « Terminé »…) with a bar of its steps; what waits for you first (its proposals, answered
-  right there, and a **C'est fait** / **Done** button for a step only you can do); the live data it
+  right there, a **C'est fait** / **Done** button for a step only you can do, a button per option when it asks you to choose); for a thread that runs steps, **Pause** / **Resume** and **Stop** under its pill; the live data it
   follows (a list of your mails, the pull requests to review, a number of a service), read by
   Eriphe itself with no AI model, each item it lists on its own line with what Eriphe noted about
   it and by when, grouped by what it asks of you (« À faire », « À regarder », « Pour info », the

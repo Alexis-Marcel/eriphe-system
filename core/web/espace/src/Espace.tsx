@@ -189,6 +189,18 @@ export function Espace({ boot }: { boot: data.Boot }) {
       () => failed(mine),
     );
   };
+  // A link to a surface (/?open=thread-<id>: a card's thread) opens it
+  // once it is on the workspace, then leaves the address.
+  const [deep, setDeep] = useState(() => {
+    const id = new URLSearchParams(location.search).get("open");
+    return id && /^[a-z0-9-]{1,64}$/.test(id) ? id : null;
+  });
+  useEffect(() => {
+    if (!deep || !layout || !pool.some((s) => s.id === deep)) return;
+    setDeep(null);
+    history.replaceState(null, "", location.pathname);
+    openSurface(deep);
+  }, [deep, layout, pool]); // eslint-disable-line react-hooks/exhaustive-deps
   // What core refused or never got: the page goes back to core's layout, and says so.
   const failed = (mine: Intent) => {
     setIntent((i) => (i === mine ? null : i));

@@ -372,14 +372,14 @@ ask it, in the conversation, rather than a form. */}}
 {{/* The threads running, on top of the tasks panel (parts.html). */}}
 {{define "side-threads"}}{{if .}}
 <section class="side-thread" aria-labelledby="side-thread-t">
-  <div class="side-sub"><h3 id="side-thread-t">{{t "threads.title"}}</h3><a class="small" href="/threads">{{t "threads.all"}}</a></div>
+  <div class="side-sub"><h3 id="side-thread-t">{{t "threads.title"}}</h3></div>
   <ul class="cards">{{range .}}<li>
     <article class="card thread-card{{if .Waits}} needs-you{{end}}">
       <div class="card-top">
         <span class="chip chip-thread-{{.Look}}"><span class="pulse" aria-hidden="true"></span>{{if .Waits}}{{t "threads.waits"}}{{else}}{{t (printf "thread.state.%s" .Look)}}{{end}}</span>
         {{if .Total}}<span class="muted small">{{tf "threads.progress" .Done .Total}}</span>{{end}}
       </div>
-      <h3><a class="stretched" href="/threads/{{.ID}}">{{.Title}}</a></h3>
+      <h3><a class="stretched" href="/?open=thread-{{.ID}}">{{.Title}}</a></h3>
       {{template "thread-strip" .Progress}}
     </article>
   </li>{{end}}</ul>

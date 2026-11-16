@@ -995,7 +995,7 @@ accepted.
   then done or failed, as `setCallState`) and the step settles: `accepted`, or `blocked` with why;
   on a no it is `rejected`. The brain hears it from its thread, not as the card's usual event.
 - `user`: what only the user does (`question`). The user answers « C'est fait »
-  (`POST /threads/{id}/done` with `step`, their session and CSRF token; `userStepDone`), or the
+  on the thread's surface (`stepDone`, their session and CSRF token; `userStepDone`), or the
   holder settles it from evidence (`settle_step` accept, with what shows it in `note`).
 - `check`: a task (`prompt`, read-only resources) or a read call (`tool`, and `expect`: words its
   result must contain). Its outcome settles it: a task's receipt `done` with no failed check, or the
@@ -1108,18 +1108,12 @@ folders) and given the goal and what each step produced; only its receipt with s
 failed check closes the thread. Otherwise the lead hears what is missing; after 2 checks that fail,
 the decision goes back to the user through the brain.
 
-**The work interface** (`web_threads.go`, `threads.html`, `threads.css`, `threads.js`):
-`/threads` lists them; `/threads/{id}` shows one, kept live by its own event stream
-(`/threads/{id}/events`, event `thread`, the page's live part re-rendered on each change). From top
-to bottom: where it stands (a led thread's phase, a light one's state), its goal and actions
-(pause, resume, stop); its facts (`done_when`, its key; led: time against the budget, its
-lead, steps accepted); **what waits for the user** (the plan card, start cards, choices
-as buttons); the summary once done; the plan as stages on a rail (a step stands one stage after the
-deepest step it needs, those of one stage run together, the final check last); the log. Each step
-wears a mark for how far its evidence goes: a ring for what the agent claims, a check inside for what
-the checks verified, filled once the lead accepted, a red cross for a failed check or a rejection.
-Under the live part, a line to the lead (`POST /threads/{id}/lead`) is queued on its inbox as the
-user's words. The tasks panel of the conversation shows the threads open first.
+**One drawing** (#574): a thread is shown by its surface on the workspace only, and acted on there
+([a thread's surface](#a-threads-surface-thread_surfacego)): its cards, « C'est fait », a
+choice's options, Pause, Resume and Stop, all code's buttons. A link to a thread (a card's origin,
+the tasks panel, a skill's run) opens its surface: `/?open=thread-<id>`, which the page opens once
+the surface is there. The user's word to a lead is a message written with the thread open: the
+brain passes it on (`tell_lead`). The tasks panel of the conversation shows the threads open first.
 
 #### A thread's surface (`thread_surface.go`)
 
@@ -1269,8 +1263,16 @@ by code from the thread's data (#468): it never depends on a model remembering t
   they leave the attention queue for it), 30 once ended.
 - **« C'est fait »** sends `stepDone` with `{"thread": <id>, "step": "<key>"}`
   ([the actions of a surface](#the-actions-of-a-surface)); code checks it against the button it
-  wrote, then `settleUserStep` settles the step through `userStepDone` (`thread_steps.go`), as
-  the thread's page does; 409 for a step that no longer waits.
+  wrote, then `settleUserStep` settles the step through `userStepDone` (`thread_steps.go`); 409
+  for a step that no longer waits.
+- **A choice** that waits shows one button per option, each sending `choose` with
+  `{"thread": <id>, "step": "<key>", "option": "<option>"}`; code checks it against the button it
+  wrote (`chooseOf`: the step still waits, the option is one of its own), then `chooseStep`.
+- **Pause, Resume, Stop** (`thread_controls`), in the head of a thread that runs steps (led) while
+  it is active: `control` with `{"thread": <id>, "do": "pause"|"resume"|"stop"}`, checked against
+  the button (`controlOf`), then `pauseThread`, `resumeThread` (by the user: more time when its
+  budget held it, « Donner plus de temps ») or `stopThread`. A light thread has none, so every
+  light thread is drawn the same.
 - **« Ranger »** (`thread_tidy`), on an ended `goal` thread's surface only, sends `tidy` with
   `{"thread": <id>}`; code checks it against the button it wrote (`tidyOf`), then `tidyThread`
   puts the thread away: its surface leaves at once (a day thread's leaves at its end, a standing
@@ -3724,6 +3726,8 @@ writes.
 | `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does; a thread's, unless the thread itself is tainted or the Proposal is in a part written after reading external content), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
 | `stepDone` | never by an author: code places it on a thread's surface, the « C'est fait » of a step the user does, `{"thread": <id>, "step": "<key>"}` | checked against the Button code wrote there (its thread and step), for a step of kind `user` that waits; then `settleUserStep`, the engine's `userStepDone` (409 once it no longer waits) |
 | `tidy` | never by an author: code places it on an ended thread's surface, its « Ranger », `{"thread": <id>}` | checked against the Button code wrote there (its thread); then `tidyThread`: the surface leaves, the thread is kept (409 once put away) |
+| `choose` | never by an author: code places it on a thread's surface, one Button per option of a choice step that waits, `{"thread": <id>, "step": "<key>", "option": "<option>"}` | checked against the Button code wrote there (its whole context), for a choice step that still waits and one of its own options; then `chooseStep` |
+| `control` | never by an author: code places it in the head of a thread that runs steps, `{"thread": <id>, "do": "pause"\|"resume"\|"stop"}` | checked against the Button code wrote there (its whole context); then `pauseThread`, `resumeThread` (by the user) or `stopThread` |
 | local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer |
 
 Anything else (another name, a function call, a component that carries no such action, an answer

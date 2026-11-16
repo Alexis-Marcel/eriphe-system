@@ -453,7 +453,7 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 	c.insertSteps(th.ID, []stepSpec{{Key: "which", Title: "Le nom", Kind: stepChoice, Question: "Lequel ?", Options: []string{"Lumen", "Rivet"}}}, false)
 	c.setStep(th.ID, "which", map[string]any{"status": stepRunning})
 	s, _, meta := threadSurfaceOf(t, c, th.ID)
-	if !strings.Contains(string(s.Components), `"thread_wait_0"`) || meta.Summary != "Le nom à toi" {
+	if !strings.Contains(string(s.Components), `"thread_choice_0"`) || meta.Summary != "Le nom à toi" {
 		t.Errorf("a choice that waits: %s %+v", s.Components, meta)
 	}
 }

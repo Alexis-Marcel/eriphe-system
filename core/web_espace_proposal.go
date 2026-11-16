@@ -22,7 +22,7 @@ type proposalView struct {
 	Why     string      `json:"why,omitempty"`
 	Tainted bool        `json:"tainted,omitempty"`
 	Fields  []cardField `json:"fields,omitempty"`
-	Thread  int64       `json:"thread,omitempty"`  // the thread it is raised for: /threads/<id> (card_origin.go)
+	Thread  int64       `json:"thread,omitempty"`  // the thread it is raised for: /?open=thread-<id> (card_origin.go)
 	From    string      `json:"from,omitempty"`    // the thread and the task that ask, in words
 	Yes     string      `json:"yes,omitempty"`     // what Oui does, in words
 	When    []spanView  `json:"when,omitempty"`    // when it takes place, if it has a time

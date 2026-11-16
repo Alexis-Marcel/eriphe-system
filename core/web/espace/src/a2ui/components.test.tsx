@@ -559,7 +559,7 @@ describe("the catalog's components", () => {
     };
     await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "access:4" }]), { read: async () => view, answer: async () => true });
     await act(async () => {});
-    expect($(".a2-proposal-from a").getAttribute("href")).toBe("/threads/3");
+    expect($(".a2-proposal-from a").getAttribute("href")).toBe("/?open=thread-3");
     expect(text(".a2-proposal-from")).toBe("Fil « PR alerting »");
     expect(text(".a2-proposal-yes")).toBe("Sur Oui, la tâche peut modifier dans github jusqu'à sa fin.");
   });

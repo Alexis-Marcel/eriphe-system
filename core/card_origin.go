@@ -23,7 +23,7 @@ import (
 
 // cardOrigin is where a card comes from and what its Oui does, in words.
 type cardOrigin struct {
-	Thread int64  // the thread it is raised for, 0 when none: its page is /threads/<id>
+	Thread int64  // the thread it is raised for, 0 when none: its surface opens at /?open=thread-<id>
 	From   string // the thread and the task that ask, "" when neither
 	Yes    string // what Oui does, "" when the card does not say
 }

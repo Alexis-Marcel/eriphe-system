@@ -20,7 +20,7 @@
   {{if .Fields}}<dl class="pcard-call">{{range .Fields}}<dt>{{.Name}}</dt><dd>{{if gt (len .Value) 160}}<details><summary>{{short .Value 120}}</summary><p>{{.Value}}</p></details>{{else}}{{.Value}}{{end}}</dd>{{end}}</dl>{{end}}
   {{if .Tainted}}<p class="pcard-why">{{t "card.tainted.hint"}}</p>{{end}}
   {{if .Why}}<p class="pcard-why">{{.Why}}</p>{{end}}
-  {{if .From}}<p class="pcard-from">{{if .Thread}}<a href="/threads/{{.Thread}}">{{.From}}</a>{{else}}{{.From}}{{end}}</p>{{end}}
+  {{if .From}}<p class="pcard-from">{{if .Thread}}<a href="/?open=thread-{{.Thread}}">{{.From}}</a>{{else}}{{.From}}{{end}}</p>{{end}}
   {{if and .Yes (eq .State "pending")}}<p class="pcard-yes">{{.Yes}}</p>{{end}}
   {{if eq .State "pending"}}
   <div class="pcard-actions">
