@@ -1002,9 +1002,9 @@ state** (`thread_progress.go`): its summary is the only record of where the subj
 by `remember` kind `progress` (and a task's `remember`, and the nightly extraction), never from a
 turn or a source that read external content (unless the thread's own steps read some already: its
 summary is then never quoted; the extraction's never); its log says who wrote it (`brain`, `task`,
-`extraction`); a subject with no thread gets a light one opened by
-the code (title `Suivi de <key>`; closed done at once when the progress says done), a subject whose
-thread ended is refused until the brain reopens it. The code links the rest: an open intention of a
+`extraction`). The code never opens a thread for it: a progress of a subject with no thread is
+refused (« open_thread first »; the extraction drops it), one whose thread ended is refused until
+the brain reopens it; without a subject, it is the turn's thread's (a task's: its step's thread). The code links the rest: an open intention of a
 live light thread's subject becomes its deadline step (`intention-<id>`, once, at the engine's
 pass), a card born in a turn about the thread, or raised with the source `thread:<id>` or by the
 task of one of its steps, shows in its timeline (`thread_cards`). Closing a thread on its goal
@@ -1028,20 +1028,21 @@ refused) comes back as that thread's event (`callToBrain`: `[thread N « title �
 `thread_msg:<seq>`), so the turn that reads it is about the thread. A new delivery
 (or a heartbeat) starts about no thread, unless it carries a thread's event or a message of the
 user's written over a thread's surface (or a surface of its subject); a thread tool on an id that
-is no thread changes nothing. `off_thread` (no argument) is the brain saying the turn is about no
-thread after all: the user wrote over a thread's surface about something else (« j'ai quoi de prévu
-aujourd'hui ? »); called right before the first card or task, the cards and tasks it raises next are no thread's,
-until a thread tool names one again.
+is no thread changes nothing. The user writing over a thread's surface about something else
+(« j'ai quoi de prévu aujourd'hui ? »): the brain opens or finds that other matter's thread
+(`open_thread`, a `day` one for what is only today's) before its first card or task, and the turn is
+about that one from then on.
 `run_task` in a turn about a light, active thread (`taskOfThread`) is a `task` step of that thread
 (the same prompt, title, agent, resources and contract; key `task`, `task-2`…), so the thread's
 surface follows it and its end comes back as the thread's event; its result gives the thread, the
 step and its task. What `run_task` refuses of the task itself (no prompt, an agent or a resource
 that is none) is refused before any step is born; a task that still cannot start leaves its step
-blocked and the call refused. In a turn about no thread, the task is a step of the live light thread
-of the turn's subject, else of a light thread opened for it (`taskThread`, titled by the task): every
-piece of work has its thread, and the turn is about it afterwards. It stays a task of its own with
-`thread: none` (rare: fire-and-forget work), a `surface` to fill or a `node` named, in a turn about a
-thread led or ended, or when the thread cannot take one more step. The prompt
+blocked and the call refused. A `surface` to fill and a `node` named go with the step. In a turn
+about no thread, the task is a step of the live light thread of the subject the user's message
+named (`taskThread`); with none, `run_task` is refused (« open_thread first »): a task is never left
+loose, and the code never opens a thread for it. A turn about a led thread is refused too (its plan
+changes with `amend_thread`), and so is one about an ended thread (reopen it first), or a thread
+that cannot take one more step. The prompt
 (`brain-prompt.md`, « Les threads ») says when the brain opens or resumes a thread (a question about
 a matter, a request of more than one step, an alert worth following: `open_thread` with its
 subject), how its steps grow from what is found, when its surface `thread-<id>` takes the stage
@@ -3376,7 +3377,7 @@ marked as such. Scrolling up the column (a wheel, a touch, a scroll or an upward
 (`GET /api/espace/earlier?before=<seq>`, `{lines, more}`, the same filter); they stay, the view
 kept where it was, until the next exchange. The brain's memory and the stored messages are
 untouched: only what the column shows. A message written with a thread's surface open still makes
-the turn about that thread (`threadAbout`, `off_thread`); the thread's card shows no exchange. The
+the turn about that thread (`threadAbout`); the thread's card shows no exchange. The
 cards the user must answer are not repeated there: they are the queue's surfaces (`q-card-*`).
 
 **The fallback.** The conversation is where the user lands when the workspace cannot open. The

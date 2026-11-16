@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -87,41 +86,9 @@ func newMCPServer(c *core) *mcp.Server {
 			return out, nil
 		})
 
-	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). It becomes a task step of a light thread, so the thread follows it: the thread the turn is about (one you opened, read or moved in this turn, or the one the user wrote from), else the live thread of the turn's subject, else a light thread opened for it, titled by the task; the result gives the thread and the step, and its end reaches you as the thread's event. thread none starts it on its own, rarely: only fire-and-forget work no one follows; it then returns the task with its id. A surface to fill, a node named, or a turn about a led or ended thread also keep it on its own. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
-		func(ctx context.Context, rin runTaskIn) (any, error) {
-			in := rin.runRequest
-			if out, ok, err := c.taskOfThread(ctx, rin); ok || err != nil { // thread_turn.go
-				return out, err
-			}
-			if err := c.delegateSurface(&in); err != nil { // workspace_tools.go
-				return nil, err
-			}
-			if err := c.taintedResources(in); err != nil { // resources.go
-				return nil, err
-			}
-			if in.Subject == "" {
-				in.Subject = c.turnSubject() // the turn's thread, or the subject my message named (subjects.go)
-			}
-			tainted := c.turnTaint()
-			in.askStart = true // what is the user's is asked now, not at the push (task_start.go)
-			in.byBrain = true  // its card goes with the brain's message
-			in.taint = tainted
-			in.cleanStart = len(tainted) == 0 && c.turnFromUser()
-			t, err := c.runTask(ctx, in)
-			if err == nil && len(tainted) > 0 {
-				// What it may do was decided at its start, this is why (access_card.go).
-				c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(tainted, ", "))
-			}
-			if err == nil && in.Surface != "" {
-				c.store.set(taskSurfaceKey(t.ID), in.Surface) // it writes that one only
-			}
-			if err == nil && in.cleanStart {
-				c.store.set(lentByUserKey(t.ID), "1") // a clean start (lend.go)
-			}
-			if err != nil {
-				return nil, err
-			}
-			return runTaskOut{TaskRow: t, Start: c.startState(t)}, nil // task_start.go
+	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). A task is always a task step of a light thread, which follows it: the thread the turn is about (one you opened, read or moved in this turn, or the one the user wrote from), else the live thread of the subject the user's message named; the result gives the thread and the step, and its end reaches you as the thread's event. In a turn about no thread, open_thread the matter's thread first (it gives back the one that exists); a led thread's plan changes with amend_thread, an ended thread is reopened first. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
+		func(ctx context.Context, in runRequest) (map[string]any, error) {
+			return c.taskOfThread(ctx, in) // thread_turn.go
 		})
 
 	type idIn struct {

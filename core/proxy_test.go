@@ -567,8 +567,14 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 			Data: map[string]any{"id": pid, "tool_name": "Bash", "input": map[string]any{"command": "go test ./..."}}}})
 	}
 	cs := connectTo(t, newMCPServer(c))
+	// A task is a step of a thread: the turn's.
+	th, err := c.openThread(threadIn{Title: "Issue", Goal: "Elle est traitée.", Subject: "topic:issue"}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
 	run := func(tools ...string) *mcp.CallToolResult {
-		args := map[string]any{"prompt": "do it", "thread": "none"} // its own; as a thread's step below
+		c.turnThread(th.ID)
+		args := map[string]any{"prompt": "do it"}
 		var lent []map[string]any
 		for _, ref := range tools {
 			lent = append(lent, map[string]any{"kind": resTool, "ref": ref})
@@ -587,7 +593,7 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 	c.brainCalledCatalog("b-1", "github", "get_issue")
 	wait("t-1", "p1")
 	for _, tools := range [][]string{{"github"}, {"github.create_issue"}, {"notes"}} {
-		if out := run(tools...); out.IsError || !strings.Contains(resultText(out), "approval to start") {
+		if out := run(tools...); out.IsError || !strings.Contains(resultText(out), `"start":"waits_for_card"`) {
 			t.Fatalf("tainted run_task with %v = %s", tools, resultText(out))
 		}
 	}
@@ -596,25 +602,23 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 			t.Fatalf("tainted run_task with %v = %s", tools, resultText(out))
 		}
 	}
-	// As the step of the thread opened for it, held the same.
-	out, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "run_task", Arguments: map[string]any{"prompt": "do it",
-		"resources": []map[string]any{{"kind": resTool, "ref": "github"}}}})
+	// A step of the turn's thread, held.
+	out := run("github")
 	var step struct {
 		Thread int64  `json:"thread"`
 		Task   string `json:"task"`
 	}
-	if err != nil || json.Unmarshal([]byte(resultText(out)), &step) != nil || step.Thread == 0 || !c.heldTask(step.Task) {
-		t.Fatalf("tainted run_task as a step = %s, %v", resultText(out), err)
+	if json.Unmarshal([]byte(resultText(out)), &step) != nil || step.Thread != th.ID || !c.heldTask(step.Task) {
+		t.Fatalf("tainted run_task as a step = %s", resultText(out))
 	}
 
 	// A user's message does not make a tainted start clean.
 	seq, _ := c.store.addMessage(roleUser, "lance-la", true)
 	c.turn.start(int(seq), int(seq), 0)
 	c.turn.taint("github.get_issue")
-	var started TaskRow
-	json.Unmarshal([]byte(resultText(run("github.get_*"))), &started)
-	if started.ID == "" || c.store.get(lentByUserKey(started.ID)) != "" {
-		t.Fatalf("a tainted start marked clean: %+v", started)
+	json.Unmarshal([]byte(resultText(run("github.get_*"))), &step)
+	if step.Task == "" || c.store.get(lentByUserKey(step.Task)) != "" {
+		t.Fatalf("a tainted start marked clean: %+v", step)
 	}
 
 	c.turn.start(2, 2, 0)

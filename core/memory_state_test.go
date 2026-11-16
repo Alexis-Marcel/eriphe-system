@@ -31,14 +31,25 @@ func TestExtractionDurableState(t *testing.T) {
 	if len(d) != 1 || d[0].Importance != 4 || d[0].Basis != basisStated {
 		t.Fatalf("decision: %+v", d)
 	}
-	// A progress is its subject's thread summary: a light thread opened
-	// for it, then written over; no memory.
+	// A progress is its subject's thread summary, written over; no
+	// memory. A subject no thread follows: dropped, no thread opened.
+	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:portfolio", "text": "Fait : accueil",
+		"state": "active", "source_ref": "msg:1"}`); res != "" || !strings.Contains(why, "open_thread") {
+		t.Fatalf("progress with no thread: %s %s", res, why)
+	}
+	if ts, _ := c.threads(false, 10); len(ts) != 0 {
+		t.Fatalf("a thread opened by code: %+v", ts)
+	}
+	th, err := c.openThread(threadIn{Title: "Portfolio", Goal: "En ligne.", Subject: "project:portfolio"}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := th.ID
 	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:portfolio", "text": "Fait : accueil ; reste : contact",
 		"state": "active", "source_ref": "msg:1"}`); res != "added" {
 		t.Fatalf("progress: %s %s", res, why)
 	}
-	id, ok := c.liveThreadOf("project:portfolio")
-	if th, _ := c.thread(id); !ok || th.Mode != modeLight || th.Summary != "Fait : accueil ; reste : contact" {
+	if th, _ := c.thread(id); th.Summary != "Fait : accueil ; reste : contact" {
 		t.Fatalf("thread: %+v", th)
 	}
 	if why, res := apply(`{"op": "ADD", "kind": "progress", "subject": "project:portfolio", "text": "Fait : accueil ; bloqué : photos", "state": "blocked", "source_ref": "msg:2"}`); res != "added" {

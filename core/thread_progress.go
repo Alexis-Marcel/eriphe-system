@@ -12,10 +12,11 @@ import (
 // The thread holds its subject's state (#512, step 6). Where a subject
 // stands is never a memory: it is the summary of the subject's thread, one
 // text, written over as the subject moves. remember (kind progress), a
-// task's remember and the nightly extraction write it there; a subject
-// with no thread yet gets a light one, opened by the code, no model. A
-// subject whose thread ended is not reopened behind the user's back: the
-// brain reopens it (reopen_thread) when the subject comes back.
+// task's remember and the nightly extraction write it there. Code never
+// opens a thread for it: with no live thread, a progress is refused
+// ("open_thread first"), and the extraction drops it. A thread that ended
+// is not reopened behind the user's back: the brain reopens it
+// (reopen_thread) when the subject comes back.
 //
 // What the code links on its own: an open intention of the thread's
 // subject becomes its deadline step (followIntentions), a card born in a
@@ -56,88 +57,85 @@ func progressSummary(text, state string) string {
 // words: a thread's summary is quoted in every card of its subject.
 var errProgressTainted = errors.New("not kept: where a subject stands is its thread's summary, quoted to you in every card of the subject, so it is never drawn from external content; write it from the user's words or your own, or tell the user")
 
-// noteProgress writes where a subject stands as its thread's summary: the
-// live thread's, else a light thread the code opens for it (one already
-// ended, if done). A subject whose thread ended is refused: reopen it
-// first. It returns the thread and a note for the model.
-func (c *core) noteProgress(subject, text, state, by string) (int64, string, error) {
-	key, err := c.subjectIs(subject, "")
+// errNoProgressThread refuses a progress with no thread: code never opens
+// one for it.
+var errNoProgressThread = errors.New("where a matter stands is its thread's summary, and none follows it: open_thread first (it gives back the one that exists), then note where it stands")
+
+// progressThread is the thread a progress is written on: the live thread
+// of its subject, else the one given (the turn's, the task's step's). An
+// ended thread is refused (reopen it first), and so is none at all: code
+// never opens a thread for a progress.
+func (c *core) progressThread(subject string, given int64) (int64, error) {
+	if subject != "" {
+		key, err := c.subjectLookup(subject)
+		if err != nil {
+			return 0, fmt.Errorf("subject: %w", err)
+		}
+		if id, ok := c.liveThreadOf(key); ok {
+			return id, nil
+		}
+		if old, err := c.threadsWhere(`subject = ? ORDER BY id DESC LIMIT 1`, key); err == nil && len(old) == 1 {
+			return 0, fmt.Errorf("thread %d « %s » followed %s and is %s: reopen_thread it if the matter came back, then note where it stands", old[0].ID, old[0].Title, key, old[0].State)
+		}
+		return 0, errNoProgressThread
+	}
+	if given <= 0 {
+		return 0, errNoProgressThread
+	}
+	s, err := c.thread(given)
 	if err != nil {
-		return 0, "", fmt.Errorf("subject: %w", err)
+		return 0, errNoProgressThread
 	}
-	if key == "" {
-		return 0, "", errors.New("a progress needs its subject (kind:slug): it is kept as the summary of that subject's thread")
+	if !s.active() {
+		return 0, fmt.Errorf("thread %d « %s » is %s: reopen_thread it if the matter came back, then note where it stands", s.ID, s.Title, s.State)
 	}
+	return s.ID, nil
+}
+
+// noteProgress writes where a matter stands as its thread's summary. It
+// returns a note for the model.
+func (c *core) noteProgress(id int64, text, state, by string) (string, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
-		return 0, "", errors.New("text is required")
+		return "", errors.New("text is required")
 	}
 	state = strings.ToLower(strings.TrimSpace(state))
 	if state == "" {
 		state = progressActive
 	}
 	if !containsStr(progressStates, state) {
-		return 0, "", errors.New("the state of a progress is active, blocked, done or paused")
+		return "", errors.New("the state of a progress is active, blocked, done or paused")
 	}
-	if scan := scanMemoryText(text, key); scan.Reject != "" {
-		return 0, "", fmt.Errorf("refused: %s", scan.Reject)
+	s, err := c.thread(id)
+	if err != nil {
+		return "", err
 	}
-	summary := truncate(progressSummary(text, state), 2000)
+	if scan := scanMemoryText(text, s.Subject); scan.Reject != "" {
+		return "", fmt.Errorf("refused: %s", scan.Reject)
+	}
 	threadMu.Lock()
 	defer threadMu.Unlock()
-	if id, ok := c.liveThreadOf(key); ok {
-		c.setThread(id, map[string]any{"summary": summary})
-		c.logThread(id, by, "Résumé mis à jour.")
-		note := fmt.Sprintf("Kept as the summary of thread %d, the one of %s.", id, key)
-		if state == progressDone {
-			note += " If its goal is reached, close it with close_thread."
-		}
-		return id, note, nil
-	}
-	if old, err := c.threadsWhere(`subject = ? ORDER BY id DESC LIMIT 1`, key); err == nil && len(old) == 1 {
-		return 0, "", fmt.Errorf("thread %d « %s » followed %s and is %s: reopen_thread it if the subject came back, then note where it stands", old[0].ID, old[0].Title, key, old[0].State)
-	}
-	id, err := c.openProgressThread(key, summary, state == progressDone, time.Now())
-	if err != nil {
-		return 0, "", err
-	}
+	c.setThread(id, map[string]any{"summary": truncate(progressSummary(text, state), 2000)})
+	c.logThread(id, by, "Résumé mis à jour.")
+	note := fmt.Sprintf("Kept as the summary of thread %d « %s ».", id, s.Title)
 	if state == progressDone {
-		return id, fmt.Sprintf("Kept as the summary of thread %d, opened for %s and closed done.", id, key), nil
+		note += " If its goal is reached, close it with close_thread."
 	}
-	c.keepThreadSurface(id) // thread_surface.go
-	return id, fmt.Sprintf("Kept as the summary of thread %d, a light thread opened for %s: you hold it.", id, key), nil
+	return note, nil
 }
 
-// openProgressThread opens a light thread for a subject that had none,
-// with where it stands as its summary; done, it is closed at once. Only
-// the key names it: a subject's title may be someone else's words.
-func (c *core) openProgressThread(key, summary string, done bool, at time.Time) (int64, error) {
-	state, ended := threadOpen, int64(0)
-	if done {
-		state, ended = threadDone, at.Unix()
-	}
-	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, mode, subject, state, summary, summarized, created, started, ended) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		truncate("Suivi de "+key, taskTitleMax), "Suivre où en est "+key+".", modeLight, key, state, summary, at.Unix(), at.Unix(), at.Unix(), ended)
-	if err != nil {
-		return 0, c.liveSubjectErr(key, err)
-	}
-	id, _ := res.LastInsertId()
-	c.logThread(id, "engine", "Thread ouvert par eriphe-core : l'avancement de "+key+" y est tenu.")
-	return id, nil
-}
-
-// brainProgress is remember's kind progress: the thread's summary, from
-// a turn that read external content only when that summary is never
-// quoted anyway (summaryUnquoted).
+// brainProgress is remember's kind progress: the summary of its subject's
+// thread, else of the turn's; from a turn that read external content only
+// when that summary is never quoted anyway (threadExternal).
 func (c *core) brainProgress(in rememberIn) (map[string]any, error) {
-	subject := in.Subject
-	if subject == "" {
-		subject = c.turnSubject() // the turn's thread, or the subject my message named
+	id, err := c.progressThread(in.Subject, c.turn.aboutThread())
+	if err != nil {
+		return nil, err
 	}
-	if taint := c.turnTaint(); len(taint) > 0 && !c.summaryUnquoted(subject) {
+	if taint := c.turnTaint(); len(taint) > 0 && !c.summaryUnquoted(id) {
 		return nil, errProgressTainted
 	}
-	id, note, err := c.noteProgress(subject, in.Text, in.State, byBrain)
+	note, err := c.noteProgress(id, in.Text, in.State, byBrain)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +144,8 @@ func (c *core) brainProgress(in rememberIn) (map[string]any, error) {
 }
 
 // applyProgress is an extraction's progress: its subject's thread summary,
-// never from external content nor from an unclear reading.
+// never from external content nor from an unclear reading; with no live
+// thread, dropped.
 func (c *core) applyProgress(op extractionOp, trust, ref string) (why, result string) {
 	if trust == trustExternal {
 		return "a progress drawn from external content is not kept: a thread's summary is quoted in its subject's cards", ""
@@ -154,10 +153,27 @@ func (c *core) applyProgress(op extractionOp, trust, ref string) (why, result st
 	if strings.EqualFold(strings.TrimSpace(op.Basis), basisAmbiguous) {
 		return "an ambiguous progress is not kept", ""
 	}
-	if _, _, err := c.noteProgress(c.opSubject(op, ref), op.Text, op.State, "extraction"); err != nil {
+	id, err := c.progressThread(c.opSubject(op, ref), c.refThread(ref))
+	if err != nil {
+		return err.Error(), ""
+	}
+	if _, err := c.noteProgress(id, op.Text, op.State, "extraction"); err != nil {
 		return err.Error(), ""
 	}
 	return "", "added"
+}
+
+// refThread is the thread of the first task step a source ref names
+// (task:<id>, comma separated); 0 if none.
+func (c *core) refThread(ref string) int64 {
+	for _, p := range strings.Split(ref, ",") {
+		if id, ok := strings.CutPrefix(strings.TrimSpace(p), "task:"); ok {
+			if st, ok := c.stepOfTask(id); ok {
+				return st.Thread
+			}
+		}
+	}
+	return 0
 }
 
 // extractionThreads are the live threads the extraction is shown, with
@@ -182,18 +198,10 @@ func (c *core) extractionThreads() string {
 	return b.String()
 }
 
-// summaryUnquoted tells whether the live thread of a subject is one whose
-// summary is never quoted (threadExternal): its steps read external
-// content already, so a wake it tainted may still say where it stands.
-func (c *core) summaryUnquoted(subject string) bool {
-	key := c.store.canonSubject(subjectOf(subject))
-	if key == "" {
-		return false
-	}
-	id, ok := c.liveThreadOf(key)
-	if !ok {
-		return false
-	}
+// summaryUnquoted tells whether a thread's summary is never quoted
+// (threadExternal): its steps read external content already, so a wake it
+// tainted may still say where it stands.
+func (c *core) summaryUnquoted(id int64) bool {
 	s, err := c.thread(id)
 	return err == nil && c.threadExternal(s)
 }

@@ -303,10 +303,13 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 	taint = appendNew(taint, handed...)
 	approved := planned // what it is lent was approved with the plan
 	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract, Subject: s.Subject,
-		askStart: true, cleanStart: planned && len(taint) == 0, approvedInAdvance: approved, taint: taint}
+		Node: st.Node, askStart: true, cleanStart: planned && len(taint) == 0, approvedInAdvance: approved, taint: taint}
 	t, err := c.runTask(ctx, r)
 	if err != nil {
 		return nil, err
+	}
+	if st.Surface != "" {
+		c.store.set(taskSurfaceKey(t.ID), st.Surface) // it writes that one only (workspace_tools.go)
 	}
 	if approved {
 		c.grantLent(t) // access_card.go

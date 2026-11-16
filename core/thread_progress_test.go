@@ -2,28 +2,42 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-// remember kind progress writes its subject's thread summary: a light
-// thread opened for a subject that has none, the same one written over
-// after; never a memory, never from a tainted turn, never on a thread that
-// ended; the card shows it.
+// remember kind progress writes its subject's thread summary, written
+// over after; never a memory, never from a tainted turn, never on a thread
+// that ended; and code never opens a thread for it: a subject with none is
+// refused (open_thread first). The card shows it.
 func TestRememberProgressIsThreadSummary(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	ownerSays(c, "Le portfolio avance")
+	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:portfolio", Text: "Fait : accueil"}); err != errNoProgressThread {
+		t.Fatalf("a subject with no thread: %v", err)
+	}
+	if _, err := c.brainRemember(rememberIn{Kind: "progress", Text: "Fait : accueil"}); err != errNoProgressThread {
+		t.Fatalf("a turn about no thread: %v", err)
+	}
+	if n, _ := c.threads(false, 10); len(n) != 0 {
+		t.Fatalf("code opened %d threads", len(n))
+	}
+	opened, err := c.openThread(threadIn{Title: "Portfolio", Goal: "Le portfolio est en ligne.", Subject: "project:portfolio"}, nil, byBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := opened.ID
 	out, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:portfolio", Text: "Fait : accueil ; reste : contact"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, ok := c.liveThreadOf("project:portfolio")
-	if !ok || out["thread"] != id {
-		t.Fatalf("no thread: %v", out)
+	if out["thread"] != id {
+		t.Fatalf("not its thread: %v", out)
 	}
-	th, _ := c.thread(id)
-	if th.Mode != modeLight || th.Summary != "Fait : accueil ; reste : contact" || th.Title != "Suivi de project:portfolio" {
+	if th, _ := c.thread(id); th.Summary != "Fait : accueil ; reste : contact" {
 		t.Fatalf("thread: %+v", th)
 	}
 	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:portfolio", Text: "Bloqué sur les photos", State: "blocked"}); err != nil {
@@ -34,6 +48,9 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 	}
 	if n, _ := c.threads(false, 10); len(n) != 1 {
 		t.Fatalf("%d threads", len(n))
+	}
+	if ts, _ := c.threadsWhere(`title LIKE 'Suivi de%'`); len(ts) != 0 {
+		t.Fatalf("a thread opened by code: %+v", ts)
 	}
 	if n := c.mem.count(`kind = 'progress'`); n != 0 {
 		t.Fatalf("%d progress memories", n)
@@ -50,14 +67,14 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 		t.Fatalf("summary: %q", th.Summary)
 	}
 
-	// Done, on a subject with no thread: one opened and closed done.
-	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:brun", Text: "En ligne", State: "done"}); err != nil {
+	// A thread that ended is not reopened behind the user's back.
+	brun, err := c.openThread(threadIn{Title: "Brun", Goal: "En ligne.", Subject: "project:brun"}, nil, byBrain)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if ts, _ := c.threadsWhere(`subject = 'project:brun'`); len(ts) != 1 || ts[0].State != threadDone || ts[0].Summary != "Terminé. En ligne" {
-		t.Fatalf("done: %+v", ts)
+	if err := c.closeLight(brun.ID, "En ligne.", "brain"); err != nil {
+		t.Fatal(err)
 	}
-	// A thread that ended is not reopened behind the user's back.
 	if _, err := c.brainRemember(rememberIn{Kind: "progress", Subject: "project:brun", Text: "Encore"}); err == nil || !strings.Contains(err.Error(), "reopen_thread") {
 		t.Fatalf("ended thread: %v", err)
 	}
@@ -166,5 +183,29 @@ func TestCardOfThreadTurnInTimeline(t *testing.T) {
 	}
 	if refs := timelineCards(t, c, th.ID); refs != proposalRef(cardMemory, out["id"].(int64)) {
 		t.Fatalf("timeline: %q", refs)
+	}
+}
+
+// Threads are born in one place, openThread, which the brain, a task and
+// a skill's run reach through openThreadOnce: no other code path writes a
+// thread (no « Suivi de… » opened for a progress, none for a task).
+func TestThreadsBornInOnePlace(t *testing.T) {
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		raw, _ := os.ReadFile(f)
+		src := string(raw)
+		n := strings.Count(src, "INSERT INTO threads ")
+		if f == "thread_engine.go" {
+			n -= 2 // openThread: a light thread, a led one
+		}
+		if n != 0 {
+			t.Errorf("%s writes a thread outside openThread (%d)", f, n)
+		}
+		if strings.Contains(src, `"Suivi de `) {
+			t.Errorf("%s titles a thread by code", f)
+		}
 	}
 }
