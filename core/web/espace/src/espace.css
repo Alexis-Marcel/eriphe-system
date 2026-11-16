@@ -53,7 +53,6 @@ button, input, select { font: inherit; }
   transition: --gx 1.4s ease, --gy 1.4s ease, --glow 1.4s ease, grid-template-columns 0.4s ease;
   overflow: hidden;
 }
-.espace.wide { grid-template-columns: minmax(360px, 480px) minmax(0, 1fr); }
 .ambient-calm { --glow: var(--calm); --gx: 78%; --gy: 8%; }
 .ambient-urgent { --glow: var(--urgent); --gx: 60%; --gy: 30%; }
 .ambient-decision { --glow: var(--decision); --gx: 55%; --gy: 22%; }
@@ -130,8 +129,14 @@ a.notice-text { text-decoration: none; }
 a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 .notice-close { flex: none; padding: 0 4px; border: 0; background: none; color: var(--ink-soft); font-size: 18px; line-height: 1; cursor: pointer; }
 
-.eriphe-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; margin-top: auto; padding-top: 8px; font-size: 13px; }
-.eriphe-links a, .eriphe-links .linkish { color: color-mix(in oklab, var(--paper) 75%, transparent); }
+/* The conversation's right edge: drag it to change its width. */
+.eriphe-panel { position: relative; }
+.panel-grip { position: absolute; top: 18px; bottom: 18px; right: 0; width: 10px; cursor: col-resize; touch-action: none; }
+.panel-grip::after { content: ""; position: absolute; top: 50%; left: 3px; width: 4px; height: 40px; margin-top: -20px; border-radius: 2px; background: color-mix(in oklab, var(--paper) 18%, transparent); opacity: 0; transition: opacity 0.15s; }
+.eriphe-panel:hover .panel-grip::after, .panel-grip:focus-visible::after, body.resizing .panel-grip::after { opacity: 1; }
+.panel-grip:focus-visible { outline: none; }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing .espace { transition: none; }
 
 /* The stage: chips at the top, then the canvas of surfaces (or the gallery's list), on one screen */
 .stage { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
@@ -323,7 +328,7 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
   html, body, #root { height: auto; min-height: 100%; }
   body { overflow: auto; }
 }
-.espace.narrow, .espace.narrow.wide {
+.espace.narrow {
   height: auto; min-height: 100dvh; overflow: visible;
   grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; align-content: start; padding: 12px; gap: 12px;
 }
@@ -341,7 +346,7 @@ a.notice-text:hover, a.notice-text:focus-visible { text-decoration: underline; }
 /* A surface open on a phone: the screen is its own. */
 .espace.narrow.focused { height: 100dvh; min-height: 0; overflow: hidden; grid-template-rows: auto minmax(0, 1fr); }
 .narrow.focused .eriphe-panel { flex-direction: row; flex-wrap: wrap; align-items: center; padding: 10px 12px; }
-.narrow.focused .eriphe-name, .narrow.focused .eriphe-all, .narrow.focused .eriphe-links, .narrow.focused .eriphe-sample:not(.eriphe-offline) { display: none; }
+.narrow.focused .eriphe-name, .narrow.focused .eriphe-all, .narrow.focused .eriphe-sample:not(.eriphe-offline) { display: none; }
 .narrow.focused .eriphe-input { flex: 1; min-width: 12em; }
 .narrow.focused .present { flex-basis: 100%; max-height: 30vh; }
 .narrow.focused .stage { min-height: 0; }

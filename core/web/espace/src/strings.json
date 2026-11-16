@@ -78,7 +78,6 @@
     "espace.input": "Write to Eriphe",
     "espace.input.about": "Write to Eriphe about %s",
     "espace.loading": "One moment…",
-    "espace.narrow": "Narrow the conversation",
     "espace.notice.close": "Dismiss",
     "espace.notices": "Notifications",
     "espace.offline": "No news from Eriphe for a while: the workspace is out of date.",
@@ -88,6 +87,7 @@
     "espace.queue.reminders": "Reminders to keep",
     "espace.queue.urgent": "Urgent",
     "espace.queue.waits": "Waiting for you",
+    "espace.resize": "Drag to resize the conversation",
     "espace.sample": "Example: this data is made up, until you have threads of your own.",
     "espace.sent.sample": "Example: nothing is sent.",
     "espace.settings": "Settings",
@@ -102,7 +102,6 @@
     "espace.tile.move": "Move %s (drag, or the arrow keys)",
     "espace.tile.new": "New · %d",
     "espace.tile.size": "Size of %s: %s (click, + or −)",
-    "espace.wide": "Widen the conversation",
     "nav.espace": "Composed workspace"
   },
   "fr": {
@@ -184,7 +183,6 @@
     "espace.input": "Écris à Eriphe",
     "espace.input.about": "Écris à Eriphe, sur %s",
     "espace.loading": "Un instant…",
-    "espace.narrow": "Réduire la conversation",
     "espace.notice.close": "Fermer",
     "espace.notices": "Notifications",
     "espace.offline": "Plus de nouvelles d'Eriphe depuis un moment : l'espace n'est plus à jour.",
@@ -194,6 +192,7 @@
     "espace.queue.reminders": "Rappels à garder",
     "espace.queue.urgent": "Urgent",
     "espace.queue.waits": "Attend ta réponse",
+    "espace.resize": "Glisser pour changer la largeur de la conversation",
     "espace.sample": "Exemple : ces données sont fictives, en attendant tes propres fils.",
     "espace.sent.sample": "Exemple : rien n'est envoyé.",
     "espace.settings": "Réglages",
@@ -208,7 +207,6 @@
     "espace.tile.move": "Déplacer %s (glisser, ou les flèches)",
     "espace.tile.new": "Nouveau · %d",
     "espace.tile.size": "Taille de %s : %s (clic, + ou −)",
-    "espace.wide": "Élargir la conversation",
     "nav.espace": "Espace composé"
   }
 }

@@ -3447,7 +3447,8 @@ ringed in blue. Eriphe's words and the titles are in Bricolage Grotesque, the re
 Grotesk, served by eriphe-core with the app (`@fontsource-variable`, Latin, SIL Open Font
 License; `font-src 'self'`). With no
 surface at all, Eriphe says so in the column (`espace.empty`): never an empty grid without a word.
-The chat is a narrow column, the whole height, wider on demand, with a link to the conversation
+The chat is a narrow column, the whole height; its right edge can be dragged to set its width
+(240-640 px, kept in the browser, double-click resets), with a link to the conversation
 at its foot and a quiet gear by Eriphe's name that opens the settings (`/settings`), and a message
 written there goes to the conversation; there is no menu and no button that keeps a rule: what the user wants of a surface
 is said to Eriphe.
