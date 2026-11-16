@@ -555,7 +555,9 @@ func (c *core) keepThreadSurface(id int64) {
 		}
 		in, _ = c.threadSurfaceIn(s, steps, asks, nil, time.Now())
 		_, errs, err = c.writeSurface(threadAuthor(id), in)
-		if err == nil && len(errs) == 0 {
+		// A source of the thread not read yet (or failing) holds the part
+		// quietly until it is: nothing for its author to fix.
+		if err == nil && len(errs) == 0 && !c.sourceUnread(id) {
 			c.surfaceError(sid, a2ui.Error{Code: a2ui.CodeValidationFailed, SurfaceID: sid, Message: "the part added to the thread's surface is left out: " + truncate(why, 400)})
 		}
 	}
@@ -666,8 +668,10 @@ func (c *core) writeThreadPart(who surfaceCaller, thread int64, in surfaceWriteI
 	}
 	comps, _ = json.Marshal(in.Components)
 	raw, _ := json.Marshal(threadPart{Author: who.author, Components: comps, Data: data, Tainted: slices.Compact(slices.Sorted(slices.Values(tainted)))})
-	c.store.set(threadPartKey+strconv.FormatInt(thread, 10), string(raw))
+	// Its sources first, with what their first read gave: the part is
+	// never written bound to a value not there yet.
 	c.setPartSources(thread, srcs, reads, late)
+	c.store.set(threadPartKey+strconv.FormatInt(thread, 10), string(raw))
 	c.keepThreadSurface(thread)
 	note := "Your part is on the thread's surface, under what code keeps there (its steps, its state, its cards). Writing it again replaces it; surface_remove takes it away. Its title, weight, why and lifetime are code's."
 	if len(srcs) > 0 {

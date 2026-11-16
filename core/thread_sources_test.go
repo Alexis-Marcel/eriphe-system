@@ -215,4 +215,35 @@ func TestThreadPartSources(t *testing.T) {
 	if srcs := c.threadSources(th.ID); len(srcs) != 0 {
 		t.Errorf("removed, its sources stayed: %+v", srcs)
 	}
+
+	// Written with its source, the part shows at once, and still once the
+	// thread ended; a source the thread has already is bound, not given
+	// again.
+	if _, err := c.writeThreadPart(brain, th.ID, part()); err != nil {
+		t.Fatal(err)
+	}
+	shown := func(when string) {
+		t.Helper()
+		s, _, _ := threadSurfaceOf(t, c, th.ID)
+		if !strings.Contains(string(s.Components), `"thread_part"`) || s.Look.LastError != nil {
+			t.Fatalf("%s: the part is left out: %s %+v", when, s.Components, s.Look.LastError)
+		}
+	}
+	shown("written")
+	if _, err := c.addThreadSource(th.ID, threadSource{Name: "accounts", Tool: "ledger/balances"}, byBrain); err != nil {
+		t.Fatal(err)
+	}
+	c.surf.refreshing.Wait()
+	again := surfaceWriteIn{ID: sid, Title: "x", Components: boundText("/accounts/total"),
+		Sources: map[string]surfaceSource{"/accounts": {Tool: "ledger/balances"}}}
+	if _, err := c.writeThreadPart(brain, th.ID, again); err == nil {
+		t.Error("a part took the name of the thread's source")
+	}
+	if srcs := c.threadSources(th.ID); len(srcs) != 2 || srcs[0].Name != "accounts" || srcs[0].By != byBrain || srcs[1].By != byPart {
+		t.Errorf("sources %+v", srcs)
+	}
+	if err := c.closeLight(th.ID, "fait", byBrain); err != nil {
+		t.Fatal(err)
+	}
+	shown("ended")
 }

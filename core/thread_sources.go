@@ -369,6 +369,9 @@ func (c *core) partSources(thread int64, in surfaceWriteIn) (map[string]threadSo
 		if !ok || strings.Contains(name, "/") {
 			return nil, fmt.Errorf("source %q: on a thread's surface, a source is at /<name>, a name of lowercase letters, digits and dashes", ptr)
 		}
+		if slices.ContainsFunc(c.threadSources(thread), func(x storedSource) bool { return x.Name == name && x.By != byPart }) {
+			return nil, fmt.Errorf("source %s is the thread's already (link_thread): bind /%s without giving it again", ptr, name)
+		}
 		src := threadSource{Name: name, Tool: s.Tool, Args: s.Args, Resource: s.Resource, URI: s.URI, Every: in.Refresh.Every}
 		if err := src.check(); err != nil {
 			return nil, err
@@ -504,6 +507,14 @@ func (c *core) threadResources() []threadResource {
 	return out
 }
 
+// sourceUnread tells whether a thread has a tool or a resource source that
+// gave nothing yet: what binds it waits for it.
+func (c *core) sourceUnread(thread int64) bool {
+	var n int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_sources WHERE thread = ? AND kind != ? AND value = ''`, thread, srcMonitor).Scan(&n)
+	return n > 0
+}
+
 // threadOpened reads a thread's sources again because the user opened its
 // surface, unless they were read moments ago.
 func (c *core) threadOpened(ctx context.Context, thread int64) {
@@ -552,9 +563,6 @@ func threadSourceItems(src storedSource) []map[string]any {
 // read, failing, « extérieur ») and its items; and their last reads, by
 // name, for the surface's data at /<name>.
 func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[string]any, s Thread, now time.Time) map[string]any {
-	if !s.active() {
-		return nil
-	}
 	lang, loc := c.userLang(), c.userZone()
 	type comp = map[string]any
 	values := map[string]any{}
@@ -564,7 +572,10 @@ func (c *core) threadSourcesPart(in *surfaceIn, out *threadComps, data map[strin
 			continue
 		}
 		if src.Value != nil {
-			values[src.Name] = src.Value
+			values[src.Name] = src.Value // ended too: the holder's part still binds it
+		}
+		if !s.active() {
+			continue // no longer read: code's section shows none
 		}
 		n := strconv.Itoa(len(shown))
 		parts := []string{fmt.Sprintf(tr(lang, "thread.source.by"), src.Name)}

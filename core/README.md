@@ -1151,8 +1151,11 @@ by code from the thread's data (#468): it never depends on a model remembering t
   a `monitor` the user approved (below). The brain adds one with `link_thread` `source` (the same
   name replaces it; a name alone takes it away); the holder's part brings its own with
   `surface_write` `sources` (each at `/<name>`, `refresh.every` its interval): they become the
-  thread's (`by` `part`), replaced when the part is written again, gone when it is removed. At
-  most 8 a thread, 3 of them monitors.
+  thread's (`by` `part`), replaced when the part is written again, gone when it is removed; a
+  part may not give again a source the thread has already (it binds `/<name>`). They are stored
+  with their first read before the part is, so the part is never written bound to a value not
+  there yet; while one has never given anything, a part that binds it is held quietly (no error
+  for its author). At most 8 a thread, 3 of them monitors.
   - A tool or a resource is read at once when added (in the background), every `every` minutes (5
     by default) at the engine's tick (`threadSourcesDue`), when its server says the resource
     changed (`threadResourceUpdated`; the pool follows the resources of active threads), and when
@@ -1161,7 +1164,7 @@ by code from the thread's data (#468): it never depends on a model remembering t
     source (`value`); a read that fails or is refused keeps it, and says why (« en attente »). A
     read never runs under the engine's lock nor inside a surface write: the surface is written
     from the last reads, so a change of the thread never waits for a tool.
-  - On the surface: its last read at `/<name>` (where the part binds it; code's composed data may
+  - On the surface: its last read at `/<name>`, the thread ended too (where the part binds it; code's composed data may
     then be larger than an author's), and in code's section, under « Données », its caption
     (« Source <name> · lu à 14 h 32 · lu par le code, sans modèle », « extérieur » for a server not
     trusted, which taints the surface for the models, `source:<name>`; its Proposals still
