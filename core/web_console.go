@@ -10,8 +10,8 @@ import (
 )
 
 // The workspace's view of the conversation (#455): not a second chat, the
-// last exchange only, in the left column. What the user says updates a
-// thread or a surface at the centre, so rereading the conversation is
+// last exchange only, in the console. What the user says updates a
+// node of the graph, so rereading the conversation is
 // rare: the user's last message and what Eriphe said after it, the message
 // being written, and whether Eriphe is at work. The workspace's stream
 // (/events?a2ui=1, web_sse.go) sends it as JSON, its "exchange" event, when

@@ -77,7 +77,7 @@ type TaskRow struct {
 	Resources []ResourceRef `json:"resources,omitempty"`
 	// Pinned: its device was chosen by hand, and it never moves.
 	Pinned bool `json:"pinned,omitempty"`
-	// About is what it is about: its thread, its skill's, the brain's
+	// About is what it is about: its node, its skill's, the brain's
 	// turn's, or the one it was given (about.go).
 	About string `json:"about,omitempty"`
 	// Desired, when inserted: held while its start waits for the user

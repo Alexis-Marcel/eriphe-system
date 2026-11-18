@@ -17,7 +17,7 @@ import (
 )
 
 // The workspace's pages and actions. They call the same methods as the API
-// and the brain's tools: the workspace is one more surface, not a new path.
+// and the brain's tools: the workspace is one more way in, not a new path.
 
 const shownMessages = 150
 

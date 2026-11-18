@@ -211,7 +211,7 @@ func TestBrainOpenWorldReadFollowsTheTurn(t *testing.T) {
 }
 
 // Eriphe-core never reads the open web by itself, for a monitor or a
-// surface: their arguments may come from a tainted turn.
+// block's source: their arguments may come from a tainted turn.
 func TestOpenWorldIsNoSource(t *testing.T) {
 	c, _, _ := pollCore(t)
 	if why := c.sourceWhy(monitorSpec{Server: "monitor", Tool: "status"}); why != "" {
@@ -223,7 +223,7 @@ func TestOpenWorldIsNoSource(t *testing.T) {
 }
 
 // A server the user trusts keeps its reads of the open web free: allowed
-// in advance, on a tainted turn, and as a monitor's or surface's source.
+// in advance, on a tainted turn, and as a monitor's or block's source.
 func TestTrustedOpenWorldReadIsFree(t *testing.T) {
 	c := newMailCore(t, accessFree)
 	fetch := "mcp__mail__fetch_page"

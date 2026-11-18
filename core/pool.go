@@ -98,7 +98,7 @@ type providedUpstream struct {
 	server func() *mcp.Server
 	facts  func(t *mcp.Tool, input map[string]any) catalogFacts
 	// offered tells whether it has anything to offer now: lent to the
-	// brain and read for surfaces only then.
+	// brain and read for blocks' sources only then.
 	offered func() bool
 }
 

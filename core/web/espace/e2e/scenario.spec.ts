@@ -162,16 +162,17 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
   await expect(said).toContainText("C'est toi qui archives");
   await mailPage.locator(".pg-archive").click();
   const ask = mailPage.locator(".pg-ask");
-  await expect(ask).toContainText("Une bulle part avec.");
+  await expect(ask).toContainText("2 bulles partent avec.");
   await ask.getByRole("button", { name: "Archiver" }).click();
   await expect(mailPage).toHaveCount(0);
   await expect(page.locator(`[data-node="${mail}"]`)).toHaveCount(0);
   await expect(page.locator(".gr-core[aria-label^=\"Recherche sur l'erreur\"]")).toHaveCount(0);
+  await expect(page.locator('.gr-core[aria-label="Production"]')).toHaveCount(0);
   await page.locator(".hud-archives .hud-btn").click();
   const archived = page.locator(".hud-arch li");
   await expect(archived).toHaveCount(1);
   await expect(archived).toContainText(external);
-  await expect(archived).toContainText("avec une bulle");
+  await expect(archived).toContainText("avec 2 bulles");
   await page.locator(".hud-archives .hud-btn").click();
 
   // What Eriphe knows, read only: what it knew before, the one read in a
@@ -298,12 +299,15 @@ test("the workspace on a small screen", async ({ page }) => {
   // the archived mail is not there; its title never was
   await expect(page.getByText("Urgent : la prod renvoie des 500")).toHaveCount(0);
 
-  await rows.filter({ hasText: "Production" }).locator("button").click();
-  const prod = page.locator('article.pg[aria-label="Production"]');
-  await expect(prod).toBeVisible();
-  await expect(prod).toContainText("42");
-  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Production");
-  await prod.getByRole("button", { name: "Fermer cette page" }).click();
+  // nor the prod's page, its child
+  await expect(rows.filter({ hasText: "Production" })).toHaveCount(0);
+
+  await rows.filter({ hasText: "Ma journée" }).locator("button").click();
+  const day = page.locator('article.pg[aria-label="Ma journée"]');
+  await expect(day).toBeVisible();
+  await expect(day).toContainText("Point produit");
+  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Ma journée");
+  await day.getByRole("button", { name: "Fermer cette page" }).click();
   await expect(page.locator("article.pg")).toHaveCount(0);
   await expect(rows.first()).toBeVisible();
   expect(problems).toEqual([]);

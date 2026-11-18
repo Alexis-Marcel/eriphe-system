@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// sources_read: what an author may declare as a surface's source, as the
+// sources_read: what an author may declare as a block's source, as the
 // catalog has it now (#427). A skill or a task lent only the workspace
 // sees no other tool, yet code reads its sources under the access policy
 // (sourceWhy): this tells it which reads exist, their arguments and the
@@ -21,7 +21,7 @@ const (
 	sourcesShownMax = 200
 )
 
-// readOffer is one read code may make for a surface.
+// readOffer is one read code may make for a block.
 type readOffer struct {
 	Tool        string          `json:"tool,omitempty"`     // server/tool
 	Resource    string          `json:"resource,omitempty"` // the server, with uri
@@ -104,7 +104,7 @@ func shownSchema(s any) json.RawMessage {
 const workspaceSourceRead = "eriphe-workspace: a source's result or error"
 
 // saw marks the caller told what a source gave.
-func (w surfaceCaller) saw() {
+func (w catalogCaller) saw() {
 	if w.sawSource != nil {
 		w.sawSource()
 	}

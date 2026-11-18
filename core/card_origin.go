@@ -6,7 +6,7 @@ import (
 )
 
 // A card read alone (#551): besides what it asks, an access card and a
-// task's start card say where they come from (the thread, the task) and
+// task's start card say where they come from (the node, the task) and
 // what their Oui does. Facts the code knows only, never words of the
 // model's next to Oui and Non:
 //

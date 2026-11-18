@@ -172,7 +172,7 @@ type memStore struct {
 	// The user's name: in nearly every memory, so not a word to look for.
 	owner func() string
 	// The names (names.go): an about written is noted there, and kept
-	// under its thread when it is a thread's alias. nil: as given.
+	// under the target it names. nil: as given.
 	names aboutBook
 	// The readable mirror (memory_mirror.go), written after every change;
 	// nil: none.

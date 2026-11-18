@@ -600,7 +600,7 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 			t.Fatalf("tainted run_task with %v = %s", tools, resultText(out))
 		}
 	}
-	// A task about the turn's thread, held.
+	// A task about the turn's node, held.
 	out := run("github")
 	var step struct {
 		Task string `json:"task"`

@@ -2,7 +2,7 @@ package main
 
 // The user's language: what Eriphe writes for the user to read is in it,
 // the fixed texts (the tr tables) as the models' lines (notifications, a
-// task's result, the workspace's surfaces). One rule: the language of the
+// task's result, the graph's nodes). One rule: the language of the
 // last signed-in page that set it: the workspace opening (/espace/boot),
 // the language switch in Settings, the channel settings, a channel's link
 // code. Before any, the configured web.lang, else French. What only the
@@ -46,7 +46,7 @@ func userLangEN(lang string) string {
 // at the head of each turn (the brain, the assistants):
 // the language can change between two turns.
 func langLine(lang string) string {
-	return "[langue de l'utilisateur : écris " + userLangFR(lang) + ", tout ce qu'il lit (notifications, surfaces, cartes, résumés)]"
+	return "[langue de l'utilisateur : écris " + userLangFR(lang) + ", tout ce qu'il lit (notifications, nœuds, cartes, résumés)]"
 }
 
 // userLangFR is the user's language for an instruction written in French.

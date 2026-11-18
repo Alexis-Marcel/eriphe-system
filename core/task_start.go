@@ -87,7 +87,7 @@ func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
 
 // holdTask keeps the start of a task for the user's answer. Started by the
 // brain, its card goes with the brain's next message of this turn; started
-// by anyone else (a thread's step), no turn will carry it: it is shown at
+// by anyone else (a node's step), no turn will carry it: it is shown at
 // once, with a message of its own (cardNow).
 func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string, byBrain bool) error {
 	raw, _ := json.Marshal(needs)
@@ -98,7 +98,7 @@ func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string, byBrain
 	}
 	id, _ := res.LastInsertId()
 	if byBrain {
-		c.cardProposed(cardTaskStart, id) // in a turn about a thread, in its timeline
+		c.cardProposed(cardTaskStart, id) // in the turn, with the brain's next message
 	} else {
 		c.cardNow(cardTaskStart, id, fmt.Sprintf(tr(c.userLang(), "taskstart.held.message"), t.label()), "task:"+t.ID)
 	}

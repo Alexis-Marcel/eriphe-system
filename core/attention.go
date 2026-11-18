@@ -25,10 +25,10 @@ import (
 // as the brain's, the cards under it (attentionBreak):
 //
 //   - weight 4 and 5 at once (attentionNow): 5 interrupts, 4 is what a
-//     running task or thread waits on, never delayed;
+//     running task or node waits on, never delayed;
 //   - weight 3 at the next breakpoint, where an interruption costs the user
 //     least (Iqbal & Bailey, OASIS): the end of the brain's answer to a
-//     user message, the end of a thread while the user is there, the
+//     user message, the end of a node's work while the user is there, the
 //     user's return after an absence (user.returned); two hours at most
 //     (its cap), never in the quiet hours;
 //   - weight 1 and 2 only at the user's return, together: the brief, a few
@@ -87,7 +87,7 @@ type attentionItem struct {
 	Why    string `json:"why"`
 	Say    string `json:"say,omitempty"`
 	Source string `json:"source"`
-	// About is what it is about; left empty, its source's (a thread's,
+	// About is what it is about; left empty, its source's (a node's,
 	// a task's: sourceAbout).
 	About string    `json:"about,omitempty"`
 	Time  time.Time `json:"time"`
@@ -111,7 +111,7 @@ func (c *core) attend(it attentionItem) {
 // attendHeld puts an item in the queue, delivered when the caller
 // delivered it, else held: one who enters several delivers them together
 // (attentionNow). A delivered item stays delivered; a held one keeps its
-// earliest cap. An item about a surface lends it its weight.
+// earliest cap.
 func (c *core) attendHeld(it attentionItem) {
 	it.Weight = min(max(it.Weight, 1), 5)
 	if it.Time.IsZero() {
@@ -157,7 +157,7 @@ func cardItemRef(id int64) string { return "card:" + strconv.FormatInt(id, 10) }
 // name one: parseRef): the one a skill's message becomes too (runSignal).
 func noteItemRef(id int64) string { return "notification:" + strconv.FormatInt(id, 10) }
 
-// cardWeight is a card's weight by its kind: what a task or a thread waits
+// cardWeight is a card's weight by its kind: what a task or a node waits
 // on, at once; what the user asked to be done (a skill, a monitor, a run's
 // calls), at the next breakpoint; a reminder to keep, and the small things
 // (a memory, a rule, a setting), at the return.

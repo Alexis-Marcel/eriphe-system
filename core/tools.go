@@ -182,7 +182,7 @@ func newMCPServer(c *core) *mcp.Server {
 	registerMonitorTools(s, c)      // write_monitor, monitors (monitors.go)
 	registerViewTool(s, c)          // propose_view (view_card.go)
 	registerNodeTools(s, c)         // node_open, node_find, node_read, node_write, node_edit, node_set, node_link, node_show, item_note, node_settle (node_tools.go)
-	registerBrainSurfaceTools(s, c) // catalog_read, sources_read (node_catalog.go)
+	registerBrainCatalogTools(s, c) // catalog_read, sources_read (node_catalog.go)
 	registerNotifyTools(s, c)       // notify, notifications, rule
 	registerSinceTools(s, c)        // since
 	return s

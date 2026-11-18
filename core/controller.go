@@ -493,7 +493,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	}
 	if kind == "worker" {
 		c.lendSkills(&spec) // skills_tasks.go
-		// What is known of its thread, after what it is asked (thread_card.go).
+		// What is known of what it is about, after what it is asked (about_card.go).
 		if card := c.startCard(about, placeTask, t.ID); card != "" {
 			spec.Prompt += "\n\n" + card
 		}

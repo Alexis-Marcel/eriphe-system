@@ -126,11 +126,11 @@ func TestStripReceipt(t *testing.T) {
 	}
 }
 
-// A receipt right after a block tagged otherwise (go, thread) is read and
+// A receipt right after a block tagged otherwise (go, eriphe:block) is read and
 // taken out: the tagged block's closing fence is not the receipt's opening
 // one (#522).
 func TestReceiptAfterTaggedBlock(t *testing.T) {
-	for _, tag := range []string{"go", "thread", "sh"} {
+	for _, tag := range []string{"go", "eriphe:block plan", "sh"} {
 		text := "Done.\n```" + tag + "\nfmt.Println(\"x\")\n```\n```json\n{\"receipt\": {\"status\": \"done\"}}\n```"
 		if r, ok := parseReceipt(text); !ok || r.Status != "done" {
 			t.Errorf("%s: receipt not read", tag)

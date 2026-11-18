@@ -133,7 +133,7 @@ func (c *core) since(n DeviceRow) time.Time {
 // always-on one) and another can take it, or it runs on a device that may
 // sleep while an always-on one can take it now (only at idle, between two turns). It stops the task; the
 // controller starts the next one, which the scheduler places, without
-// resuming: the session is on the old device, and the thread is eriphe-core's.
+// resuming: the session is on the old device, and the conversation is eriphe-core's.
 // It reports whether it moved it.
 func (c *core) moveResident(a Assistant, r assistantRole, t *TaskRow) bool {
 	if a.Device != "" || t.Device == "" || !r.resident() {

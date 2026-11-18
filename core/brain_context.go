@@ -13,7 +13,7 @@ import (
 )
 
 // The context pack: what a fresh session of the brain is given so that it
-// loses nothing of the thread. eriphe-core keeps the conversation, the
+// loses nothing of the conversation. eriphe-core keeps the conversation, the
 // tasks and the memory; the harness session (--resume) is only a cache of
 // them. A session that cannot be resumed (the first one, a resume that kept
 // failing, another harness) or is not worth it (too large, or its cache
@@ -23,7 +23,7 @@ import (
 // It goes in the session's first turn, never in the system prompt: the
 // system prompt is rebuilt on every request (--system-prompt-snapshot off),
 // so a pack there would be sent again with each of them, and again to a
-// resumed session that already holds the thread. A first turn is read once
+// resumed session that already holds the conversation. A first turn is read once
 // and stays in the session's history like any other.
 //
 // The profile is in the system prompt already. The pack holds, within a
@@ -543,7 +543,7 @@ func (c *core) packMessages(budget int) (lines []string, dropped int) {
 }
 
 // brainFirstPrompt is the first turn of the brain's task: a resumed
-// session already has the thread; a fresh one gets the pack.
+// session already has the conversation; a fresh one gets the pack.
 func (c *core) brainFirstPrompt(a Assistant, resume bool) string {
 	if resume {
 		return brainStartPrompt

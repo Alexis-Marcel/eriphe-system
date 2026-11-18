@@ -185,7 +185,7 @@ func TestProposalMoves(t *testing.T) {
 	}
 }
 
-// The workspace's stream sends the refs that moved, for the surfaces that
+// The workspace's stream sends the refs that moved, for the blocks that
 // show them to read them again.
 func TestProposalsEvent(t *testing.T) {
 	tw, csrf := newMemoryWeb(t)

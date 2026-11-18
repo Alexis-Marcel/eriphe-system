@@ -98,10 +98,10 @@ func TestHomeChoice(t *testing.T) {
 	if _, body, _ := tw.do("GET", "/espace", nil, nil); !strings.Contains(body, espaceShell) {
 		t.Error("/espace does not open the workspace")
 	}
-	// A link to a thread (a card's origin, the tasks panel) opens the
+	// A link to a node (a card's origin, the tasks panel) opens the
 	// workspace whatever the home page, its address kept for the page.
-	if code, body, _ := tw.do("GET", "/espace?open=thread-1", nil, nil); code != http.StatusOK || !strings.Contains(body, espaceShell) {
-		t.Errorf("a link to a thread: %d", code)
+	if code, body, _ := tw.do("GET", "/espace?open=node-k3m9", nil, nil); code != http.StatusOK || !strings.Contains(body, espaceShell) {
+		t.Errorf("a link to a node: %d", code)
 	}
 	if _, body, _ := tw.do("GET", "/settings/account", nil, nil); !strings.Contains(body, `value="conversation" aria-pressed="true"`) {
 		t.Error("the settings do not show the conversation chosen")

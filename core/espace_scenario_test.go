@@ -541,8 +541,10 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 	case strings.Contains(said, "Réponds que je regarde"):
 		// What reads nothing of the mail first: the mail is someone else's
 		// words, and what the turn writes after reading it is marked so.
+		// The prod has no view: a child of the mail, with a live block,
+		// shown beside it (the prompt's « Les vues »).
 		mail := node
-		out := b.self("node_open", map[string]any{"title": "Production", "lifetime": "standing", "body": "Les erreurs de l'app.\n\n```eriphe:block errors\n" +
+		out := b.self("node_open", map[string]any{"title": "Production", "parent": mail, "body": "Les erreurs de l'app.\n\n```eriphe:block errors\n" +
 			`{"components": [{"id": "root", "component": "Metric", "label": "Erreurs 5xx par minute", "value": {"@path": "/errors/rate"}}], "sources": {"errors": {"tool": "prod/erreurs"}}}` + "\n```\n"})
 		if id, _ := out["id"].(string); id != "" {
 			keep("prod", id)
