@@ -69,8 +69,7 @@ export function Console({ boot }: { boot: api.Boot }) {
 
       {!conv && (
         <div className="cs-aside" aria-live="polite">
-          {/* Another node's: what was shown leaves at once. */}
-          <AnimatePresence mode="wait" key={talk ?? ""}>
+          <AnimatePresence mode="wait">
             {aside && (
               <motion.div key={`${talk}-${aside.slice(0, 40)}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.35 }}>
                 <div className="cs-said">

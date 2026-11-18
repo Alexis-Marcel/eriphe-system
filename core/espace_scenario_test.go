@@ -166,6 +166,9 @@ func (sc *scenario) seed() {
 			sc.t.Fatal(err)
 		}
 		sc.nodes[name] = d.Node.Meta.ID
+		// A second apart: the graph lays out roots in the order they were
+		// made, to the second, and the scenario is the same each run.
+		time.Sleep(time.Second)
 	}
 	mk("day", nodestore.New{Title: "Ma journée", Lifetime: nodefile.Standing, Body: "Ce qui se passe aujourd'hui.\n"})
 	mk("substack", nodestore.New{Title: "Substack", Lifetime: nodefile.Standing, Goal: "Lancer la newsletter", Body: "La newsletter : des articles sur le métier.\n"})

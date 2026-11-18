@@ -26,10 +26,10 @@ import strings from "../strings.json";
 // goes to the sign-in.
 
 // The workspace as the user left it (espaceView, web_gestures.go): the
-// pages open, the one the console talked to, the theme ("" follows the
-// system).
+// pages open, the one the console talked to, the last of Eriphe's shows
+// taken, the theme ("" follows the system).
 export type Theme = "" | "light" | "dark";
-export type View = { open: string[]; talk?: string; theme?: Theme };
+export type View = { open: string[]; talk?: string; shown?: number; theme?: Theme };
 export type Place = { x: number; y: number };
 
 export type Boot = {
@@ -94,10 +94,11 @@ async function post(path: string, body?: URLSearchParams): Promise<boolean> {
 }
 
 // sendJSON sends a gesture's JSON: its status and what came back.
-async function sendJSON<T>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T | null }> {
+async function sendJSON<T>(method: string, path: string, body?: unknown, keepalive = false): Promise<{ status: number; data: T | null }> {
   const r = signedOut(
     await fetch(path, {
       method,
+      keepalive,
       credentials: "same-origin",
       headers: { "X-CSRF-Token": csrf, "Content-Type": "application/json", ...json },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -208,8 +209,9 @@ export async function place(id: string, p: Place | null): Promise<boolean> {
   return r.status === 204;
 }
 
-export async function putView(v: View): Promise<boolean> {
-  return (await sendJSON("PUT", "/api/espace/view", v)).status === 204;
+// putView keeps what is open; keepalive, as the page leaves.
+export async function putView(v: View, keepalive = false): Promise<boolean> {
+  return (await sendJSON("PUT", "/api/espace/view", v, keepalive)).status === 204;
 }
 
 // A line of the conversation (exchangeLine, web_console.go): the user's

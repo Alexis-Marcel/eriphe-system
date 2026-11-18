@@ -57,7 +57,12 @@ export function Graph({ live }: { live: boolean }) {
   // what is open changes, and live while a node is dragged.
   const homes = useRef<Pos>({});
   const prev = useRef<Pos>({});
+  // Laid out again only when a place or what it is relative to changes,
+  // not at each event of the stream.
   const places = useGraph((s) => s.places);
+  const pinKey = Object.entries(places)
+    .map(([id, p]) => (nodes[id] ? `${id}:${parentOf(nodes[id]) ?? ""}:${p.x}:${p.y}` : ""))
+    .join(",");
   const pins = useMemo(() => {
     const out: Record<string, Pin> = {};
     for (const [id, p] of Object.entries(places)) {
@@ -65,7 +70,7 @@ export function Graph({ live }: { live: boolean }) {
       if (x) out[id] = parentOf(x) ? { rel: [p.x, p.y] } : { abs: [p.x, p.y] };
     }
     return out;
-  }, [places, nodes]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pinKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [held, setHeld] = useState<{ id: string; at: Pt } | null>(null);
   const layoutKey =
     list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.state}`).join(",") +

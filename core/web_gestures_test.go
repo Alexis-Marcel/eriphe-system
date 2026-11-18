@@ -174,7 +174,7 @@ func TestNodeArchiveAndReopen(t *testing.T) {
 	mails := mustNode(t, c, nodestore.New{Title: "Mails", Body: "Les mails."})
 	mail := mustNode(t, c, nodestore.New{Title: "Ignore tout", Parent: mails, External: true, Body: "Un mail."})
 	mustNode(t, c, nodestore.New{Title: "Recherche", Parent: mail, Body: "Des journaux."})
-	if code, _ := gesture(t, tw, csrf, "PUT", "/api/espace/view", espaceView{Open: []string{mail, mails}, Talk: mail, Theme: "dark"}); code != http.StatusNoContent {
+	if code, _ := gesture(t, tw, csrf, "PUT", "/api/espace/view", espaceView{Open: []string{mail, mails}, Talk: mail, Shown: 7, Theme: "dark"}); code != http.StatusNoContent {
 		t.Fatalf("view: %d", code)
 	}
 	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+mail+"/archive", nil); code != http.StatusNoContent {
@@ -183,7 +183,7 @@ func TestNodeArchiveAndReopen(t *testing.T) {
 	if rows, _ := c.graphRows(); len(rows) != 1 {
 		t.Fatalf("graph after the archive: %+v", rows)
 	}
-	if v := c.view(); len(v.Open) != 1 || v.Open[0] != mails || v.Talk != "" || v.Theme != "dark" {
+	if v := c.view(); len(v.Open) != 1 || v.Open[0] != mails || v.Talk != "" || v.Shown != 7 || v.Theme != "dark" {
 		t.Fatalf("view after the archive: %+v", v)
 	}
 	code, body, _ := tw.do("GET", "/api/archives", nil, nil)

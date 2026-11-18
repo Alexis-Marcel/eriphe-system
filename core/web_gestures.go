@@ -351,11 +351,14 @@ func (w *web) handleNodePlace(rw http.ResponseWriter, r *http.Request, _ *sessio
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// espaceView is the workspace as the user left it: the pages open (the
-// first the one the console talked to) and the display settings.
+// espaceView is the workspace as the user left it: the pages open, the one
+// the console talked to, the last of Eriphe's shows it took (so that a page
+// the user closed does not open again with the next visit) and the display
+// settings.
 type espaceView struct {
 	Open  []string `json:"open"`
 	Talk  string   `json:"talk,omitempty"`
+	Shown int      `json:"shown,omitempty"`
 	Theme string   `json:"theme,omitempty"` // "" (the system's), light or dark
 }
 
@@ -406,6 +409,9 @@ func (w *web) handleEspaceView(rw http.ResponseWriter, r *http.Request, _ *sessi
 	if in.Theme != "" && in.Theme != "light" && in.Theme != "dark" {
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "theme is light, dark or empty"})
 		return
+	}
+	if in.Shown < 0 {
+		in.Shown = 0
 	}
 	if len(in.Open) > espaceOpenMax {
 		in.Open = in.Open[:espaceOpenMax]

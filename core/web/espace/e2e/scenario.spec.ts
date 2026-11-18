@@ -95,6 +95,9 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
 
   // 9. The user approves the send; Style finishes, and code starts Plan
   // with no turn of the brain.
+  // The camera frames the page the console talks to: the mail's, from the
+  // ticker, comes in front.
+  await tick.click();
   await card.getByRole("button", { name: "Oui" }).click();
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).sent).toEqual(["sam@example.org: Je regarde dans l'heure."]);
   await request.post("/e2e/finish/style");
@@ -180,30 +183,45 @@ test("the workspace as the user left it", async ({ page }) => {
   await page.waitForURL((u) => u.pathname !== "/login");
   await page.goto("/espace");
 
+  // Home: no page open, the whole graph in view.
+  await page.locator(".hud-brand").click();
+  await expect(page.locator("article.pg")).toHaveCount(0);
+  await expect.poll(async () => (await (await page.request.get("/espace/boot")).json()).view.open).toEqual([]);
   const node = page.locator(".gr-node", { has: page.locator('.gr-core[aria-label="Mails"]') });
   const core = node.locator(".gr-core");
   await expect(core).toBeVisible();
-  await page.waitForTimeout(1500); // the graph settles
+  await settled(node);
   const from = await at(node);
   const box = (await core.boundingBox())!;
+  const placed = page.waitForResponse((r) => r.url().endsWith("/place") && r.request().method() === "PUT");
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width / 2 + i * 12, box.y + box.height / 2 + i * 6);
   await page.mouse.up();
+  expect((await placed).status()).toBe(204);
   await expect.poll(async () => (await at(node))[0]).not.toBeCloseTo(from[0], 0);
+  const dropped = await settled(node);
 
+  // eriphe-core keeps the place where it was dropped; with no page open,
+  // the subject is exactly there on the next visit.
+  const id = (await node.getAttribute("data-node"))!;
+  const kept = (await (await page.request.get("/espace/boot")).json()).places[id] as { x: number; y: number };
+  expect(Math.hypot(kept.x - dropped[0], kept.y - dropped[1])).toBeLessThan(2);
+  await page.reload();
+  await expect(core).toBeVisible();
+  await expect.poll(async () => Math.hypot((await at(node))[0] - kept.x, (await at(node))[1] - kept.y)).toBeLessThan(0.5);
+
+  // The page open and the theme come back too.
   await page.locator('.gr-core[aria-label="Substack"]').click();
   await expect(page.locator('article.pg[aria-label="Substack"]')).toBeVisible();
+  const view = page.waitForResponse((r) => r.url().endsWith("/api/espace/view") && r.request().method() === "PUT");
   await page.getByRole("button", { name: "Thème clair ou sombre" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await page.waitForTimeout(1500); // what is open is kept a moment after it changes; the graph settles
-  const kept = await at(node);
-
+  expect((await view).status()).toBe(204);
+  await expect.poll(async () => (await (await page.request.get("/espace/boot")).json()).view).toMatchObject({ theme: "dark", open: [expect.any(String)] });
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator('article.pg[aria-label="Substack"]')).toBeVisible();
-  // Where it was dropped, the page open making room around it as before.
-  await expect.poll(async () => Math.abs((await at(node))[0] - kept[0]) + Math.abs((await at(node))[1] - kept[1])).toBeLessThan(4);
 
   await page.getByRole("button", { name: "Thème clair ou sombre" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -215,9 +233,23 @@ async function at(node: Locator): Promise<[number, number]> {
   return node.evaluate((el) => [parseFloat((el as HTMLElement).style.left), parseFloat((el as HTMLElement).style.top)]);
 }
 
-// openMail opens the mail's page from its bubble, the console talking to it.
+// openMail opens the mail's page alone, from its bubble with the whole graph
+// in view: the console talks to it.
 async function openMail(page: Page, id: string) {
-  const mailPage = page.locator(`article.pg[aria-label="${external}"]`);
-  if (!(await mailPage.count())) await page.locator(`[data-node="${id}"] .gr-core`).click();
-  await mailPage.locator(".pg-head").click({ position: { x: 10, y: 10 } });
+  await page.locator(".hud-brand").click();
+  await expect(page.locator("article.pg")).toHaveCount(0);
+  await page.locator(`[data-node="${id}"] .gr-core`).click();
+  await expect(page.locator(`article.pg[aria-label="${external}"]`)).toBeVisible();
+}
+
+// settled is where a bubble is once it stopped moving.
+async function settled(node: Locator): Promise<[number, number]> {
+  let last = await at(node);
+  for (let i = 0; i < 40; i++) {
+    await node.page().waitForTimeout(150);
+    const now = await at(node);
+    if (Math.hypot(now[0] - last[0], now[1] - last[1]) < 0.01) return now;
+    last = now;
+  }
+  return last;
 }

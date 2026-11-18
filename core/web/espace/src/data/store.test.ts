@@ -99,12 +99,14 @@ describe("the store", () => {
   });
 
   it("comes back as the user left it: its pages once their nodes come, the places, the theme", () => {
-    let s = restore(empty(), { open: ["a1", "gone", "b"], talk: "a1", theme: "dark" }, { a: { x: 10, y: -4 } });
-    expect(s).toMatchObject({ open: ["a1", "gone", "b"], talk: "a1", theme: "dark", places: { a: { x: 10, y: -4 } } });
+    let s = restore(empty(), { open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark" }, { a: { x: 10, y: -4 } });
+    expect(s).toMatchObject({ open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark", places: { a: { x: 10, y: -4 } } });
     s = applyNodes(s, { reset: true, nodes: [node("a"), node("a1", { parent: "a" }), node("b")] });
     expect(s.open).toEqual(["a1", "b"]);
     expect(s.talk).toBe("a1");
-    expect(viewOf(s)).toEqual({ open: ["a1", "b"], talk: "a1", theme: "dark" });
+    expect(viewOf(s)).toEqual({ open: ["a1", "b"], talk: "a1", shown: 4, theme: "dark" });
+    // A show the user already took, given again as the stream opens, opens nothing.
+    expect(applyShow(s, { node: "a", seq: 4, at: new Date().toISOString() }).open).toEqual(["a1", "b"]);
     // What eriphe-core kept that is not a view reads as nothing.
     expect(restore(empty(), { open: [3 as unknown as string], talk: "x", theme: "pink" as never }, undefined)).toMatchObject({ open: [], talk: null, theme: "", places: {} });
   });

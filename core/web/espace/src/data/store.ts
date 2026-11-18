@@ -54,16 +54,18 @@ export const empty = (): State => ({
 });
 
 // restore is the workspace as the user left it: its pages open (kept when
-// their nodes come), the one the console talked to, the places, the theme.
+// their nodes come), the one the console talked to, the last show taken
+// (one the user saw is not shown again), the places, the theme.
 export function restore(s: State, v: View | undefined, places: Record<string, Place> | undefined): State {
   const open = Array.isArray(v?.open) ? v.open.filter((id) => typeof id === "string") : [];
   const talk = v?.talk && open.includes(v.talk) ? v.talk : (open.at(-1) ?? null);
   const theme: Theme = v?.theme === "light" || v?.theme === "dark" ? v.theme : "";
-  return { ...s, open, talk, theme, places: places && typeof places === "object" ? { ...places } : {} };
+  const shown = typeof v?.shown === "number" && v.shown > 0 ? v.shown : s.shown;
+  return { ...s, open, talk, theme, shown, places: places && typeof places === "object" ? { ...places } : {} };
 }
 
 // viewOf is what eriphe-core keeps of what is open.
-export const viewOf = (s: State): View => ({ open: s.open, talk: s.talk ?? undefined, theme: s.theme });
+export const viewOf = (s: State): View => ({ open: s.open, talk: s.talk ?? undefined, shown: s.shown || undefined, theme: s.theme });
 
 // placeAt keeps where the user dropped a bubble; null forgets it.
 export function placeAt(s: State, id: string, p: Place | null): State {
