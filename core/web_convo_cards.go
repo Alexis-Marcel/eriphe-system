@@ -27,8 +27,8 @@ type cardView struct {
 	Why     string
 	Tainted string
 	Fields  []cardField
-	Thread  int64  // the thread it is raised for (card_origin.go)
-	From    string // the thread and the task that ask
+	Node    string // the node it belongs to (card_origin.go)
+	From    string // the node and the task that ask
 	Yes     string // what Oui does
 	Digest  *digestView
 }
@@ -75,7 +75,7 @@ func (w *web) cardView(x convoCard, lang string) cardView {
 	}
 	v.Why, v.Tainted, v.Fields = p.Why, p.Tainted, p.FieldsIn(lang)
 	o := p.Origin(lang)
-	v.Thread, v.From, v.Yes = o.Thread, o.From, o.Yes
+	v.Node, v.From, v.Yes = o.Node, o.From, o.Yes
 	return v
 }
 

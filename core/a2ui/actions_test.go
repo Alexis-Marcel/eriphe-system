@@ -18,17 +18,17 @@ func TestCheckActionsRefusesThreadActions(t *testing.T) {
 	}
 }
 
-// Mark and Offers are on a thread's surface only.
+// Mark and Offers are in a node's block only (thread -1).
 func TestCheckActionsThreadOnly(t *testing.T) {
 	comps := json.RawMessage(`[{"id":"root","component":"Column","children":["m","o"]},
 		{"id":"m","component":"Mark","list":"options","item":"a","marks":["keep"]},
 		{"id":"o","component":"Offers","offers":{"@path":"/thread/items/mails/groups/0/offers"}}]`)
-	if errs := CheckActions("thread-12", 12, comps); len(errs) > 0 {
-		t.Errorf("on a thread's surface: %+v", errs)
+	if errs := CheckActions("block:x", -1, comps); len(errs) > 0 {
+		t.Errorf("in a node's block: %+v", errs)
 	}
 	errs := CheckActions("q-x", 0, comps)
-	if len(errs) != 2 || errs[0].Path != "/components/1" || errs[1].Path != "/components/2" || !strings.Contains(errs[0].Message, "thread's surface only") {
-		t.Errorf("on no thread's surface: %+v", errs)
+	if len(errs) != 2 || errs[0].Path != "/components/1" || errs[1].Path != "/components/2" || !strings.Contains(errs[0].Message, "node's block only") {
+		t.Errorf("on a surface: %+v", errs)
 	}
 }
 

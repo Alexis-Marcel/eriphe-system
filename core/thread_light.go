@@ -22,14 +22,13 @@ var threadMu sync.Mutex
 
 // threadIn is a thread as the brain opens it.
 type threadIn struct {
-	Title    string `json:"title" jsonschema:"what the user reads for the thread, in a few words in their language: Refonte du service photos"`
-	Goal     string `json:"goal" jsonschema:"its real outcome, in one or two sentences: what must have happened for it to be done (merged and deployed, not only reviewed); for you and the agents, never shown to the user"`
-	Headline string `json:"headline,omitempty" jsonschema:"what the user reads at the top of the thread and on its chip: one line addressed to them, in their language, at most 120 characters, no ids (« Tes 4 projets en cours, avec leur prochaine étape »); open_thread on its alias again with another one replaces it"`
-	Alias    string `json:"alias,omitempty" jsonschema:"the key of the matter it follows, kind:slug, to find it again: project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, topic:<words>; a key is one thread's (a mail or an event is an item, note_item, not a key)"`
-	Ends     string `json:"ends,omitempty" jsonschema:"how it ends: goal (the default: closed once its goal is reached), standing (what the user manages continuously, their mail, their agenda, a supervision: never closed), day (a view for today, an answer shown: it ends by itself at midnight)"`
-	Take     int64  `json:"take,omitempty" jsonschema:"after a refusal that lists threads near this matter: the one that is it, given back (reopened if it ended) and given this alias"`
-	NewBy    string `json:"new_because,omitempty" jsonschema:"after a refusal that lists threads near this matter: why this is another matter, in a few words; logged on the new thread"`
-	Parent   int64  `json:"parent,omitempty" jsonschema:"the thread this one is a child of: a part of that thread that became a matter of its own. An active top thread (a child has no children); the child opens inside it on the workspace, and what waits for the user in the child raises it. Given with an alias that has a thread already, that thread moves under it"`
+	Title  string `json:"title" jsonschema:"what the user reads for the thread, in a few words in their language: Refonte du service photos"`
+	Goal   string `json:"goal" jsonschema:"its real outcome, in one or two sentences: what must have happened for it to be done (merged and deployed, not only reviewed); for you and the agents, never shown to the user"`
+	Alias  string `json:"alias,omitempty" jsonschema:"the key of the matter it follows, kind:slug, to find it again: project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, topic:<words>; a key is one thread's (a mail or an event is an item of a node's source, not a key)"`
+	Ends   string `json:"ends,omitempty" jsonschema:"how it ends: goal (the default: closed once its goal is reached) or standing (what the user manages continuously, their mail, their agenda, a supervision: never closed)"`
+	Take   int64  `json:"take,omitempty" jsonschema:"after a refusal that lists threads near this matter: the one that is it, given back (reopened if it ended) and given this alias"`
+	NewBy  string `json:"new_because,omitempty" jsonschema:"after a refusal that lists threads near this matter: why this is another matter, in a few words; logged on the new thread"`
+	Parent int64  `json:"parent,omitempty" jsonschema:"the thread this one is a child of: a part of that thread that became a matter of its own. An active top thread (a child has no children); the child opens inside it on the workspace, and what waits for the user in the child raises it. Given with an alias that has a thread already, that thread moves under it"`
 
 	exact bool // only the thread of its alias, no matcher
 }
@@ -57,7 +56,7 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 	case in.Goal == "":
 		return Thread{}, errors.New("a goal is needed")
 	case !slices.Contains(threadEnds, in.Ends):
-		return Thread{}, fmt.Errorf("ends %q: goal, standing or day", in.Ends)
+		return Thread{}, fmt.Errorf("ends %q: goal or standing", in.Ends)
 	}
 	res, err := c.store.db.Exec(`INSERT INTO threads (title, goal, state, tainted, created, started, ends, parent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		truncate(in.Title, taskTitleMax), in.Goal, threadOpen, strings.Join(taint, ", "), time.Now().Unix(), time.Now().Unix(), in.Ends, in.Parent)
@@ -69,7 +68,7 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 		log.Printf("thread %d: alias %s: %v", id, alias, err)
 	}
 	c.logThread(id, by, "Thread ouvert : "+in.Goal)
-	c.keepThreadSurface(id) // thread_surface.go
+	c.threadMoved(id)
 	return c.thread(id)
 }
 
@@ -162,34 +161,9 @@ func (c *core) reopenThread(id int64, why, by string) (Thread, error) {
 			return s, fmt.Errorf("its parent thread %d « %s » is %s: reopen it first", p.ID, p.Title, p.State)
 		}
 	}
-	fields := map[string]any{"state": threadOpen, "ended": 0, "tidied": 0}
-	if s.Ends == endsDay {
-		fields["started"] = time.Now().Unix() // its day is today's
-	}
-	c.setThread(id, fields)
+	c.setThread(id, map[string]any{"state": threadOpen, "ended": 0, "tidied": 0})
 	c.logThread(id, by, "Thread rouvert : "+why)
 	return c.thread(id)
-}
-
-// endDays ends the day threads opened before the user's last midnight:
-// done, and gone from the workspace at once.
-func (c *core) endDays(now time.Time) {
-	loc := c.userZone()
-	local := now.In(loc)
-	midnight := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
-	ss, err := c.threadsWhere(`ends = ? AND `+activeThreads+` AND started < ? ORDER BY id`, endsDay, midnight.Unix())
-	if err != nil {
-		return
-	}
-	for _, s := range ss {
-		threadMu.Lock()
-		if cur, err := c.thread(s.ID); err == nil && cur.active() && cur.Ends == endsDay {
-			c.endLight(context.Background(), cur, threadDone, "")
-			c.dropThreadPart(s.ID) // what it showed was that day's: reopened, it is written again
-			c.logThread(s.ID, "engine", "Journée finie : le fil se termine.")
-		}
-		threadMu.Unlock()
-	}
 }
 
 // tidyThread is « Ranger » on an ended thread's surface: the user puts it
@@ -211,19 +185,13 @@ func (c *core) tidyThread(id int64, by string) error {
 }
 
 // errNotTidy is « Ranger » on a thread that is not one to put away: active,
-// standing, of a day, or put away already. 409.
+// standing, or put away already. 409.
 var errNotTidy = errors.New("only an ended thread with a goal is put away, once")
 
-// threadsTick is the threads' pass, every 15 seconds: the day threads that
-// ended, the live sources due, the item notes to forget, the surface of
-// an active thread that has none; and the steps of the graph's works
-// (node_steps.go).
+// threadsTick is the engine's pass, every 15 seconds: the steps of the
+// graph's works (node_steps.go).
 func (c *core) threadsTick(now time.Time) {
-	c.endDays(now)
-	c.threadSourcesDue(now) // thread_sources.go
-	c.pruneItemNotes(now)   // thread_items.go
-	c.keepThreadSurfaces()  // thread_surface.go
-	c.stepsTick()           // node_steps.go
+	c.stepsTick()
 }
 
 // byTask tells an author that is a task's: a skill's run, or another.
@@ -233,13 +201,9 @@ func byTask(by string) bool { return strings.HasPrefix(by, "skill:") || strings.
 func threadRef(id int64) string { return "thread:" + strconv.FormatInt(id, 10) }
 
 // threadMoved notes that a thread changed: its state, its log, a card
-// linked to it. Its surface on the workspace is written again
-// (keepThreadSurface, thread_surface.go), and the attention queue's
-// surfaces are made again: a card it shows leaves them, and comes back
-// once it ended (queuePlace).
+// linked to it. The attention queue's surfaces are made again.
 func (c *core) threadMoved(id int64) {
-	defer c.kickWorkspace()
-	c.keepThreadSurface(id)
+	c.kickWorkspace()
 }
 
 const threadCardsSchema = `CREATE TABLE IF NOT EXISTS thread_cards (
@@ -280,6 +244,24 @@ func (c *core) linkThread(id int64, ref, by string) (string, error) {
 func (c *core) linkCard(id int64, ref string) {
 	c.store.db.Exec(`INSERT OR IGNORE INTO thread_cards (thread, ref, created) VALUES (?, ?, ?)`, id, ref, time.Now().Unix())
 	c.threadMoved(id)
+}
+
+// threadWaits tells a thread one of whose linked cards waits for the
+// user.
+func (c *core) threadWaits(id int64) bool {
+	rows, err := c.store.db.Query(`SELECT ref FROM thread_cards WHERE thread = ?`, id)
+	if err != nil {
+		return false
+	}
+	var refs []string
+	for rows.Next() {
+		var ref string
+		if rows.Scan(&ref) == nil {
+			refs = append(refs, ref)
+		}
+	}
+	rows.Close()
+	return slices.ContainsFunc(refs, func(ref string) bool { return c.cardState(ref) == cardPending })
 }
 
 // cardRaisedFor links a card raised for a thread to it: its source is

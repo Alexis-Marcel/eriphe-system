@@ -142,10 +142,10 @@ func (c *core) setFocus(id string, now time.Time, by string) {
 
 // The brain's tool.
 
-const workspaceFocusHelp = "Put a thread's tile (thread-<id>) on the stage of the user's workspace, as if they had opened it: in the center, large, what relates to it around; what was on stage stays next to it, smaller. Only in your answer to a message the user wrote in the workspace (« · depuis l'espace », « · bouton de l'espace »), once per turn: when they ask about a thing (where a pull request or a project stands), find or open its thread, add your part if it helps, then put it on stage, and answer in one line. Not over a thread they have open, unless they asked about something else. Display only: it writes nothing."
+const workspaceFocusHelp = "Put a thread's tile (thread-<id>) on the stage of the user's workspace, as if they had opened it: in the center, large, what relates to it around; what was on stage stays next to it, smaller. Only in your answer to a message the user wrote in the workspace (« · depuis l'espace », « · bouton de l'espace »), once per turn: when they ask about a thing (where a pull request or a project stands), find or open its thread, then put it on stage, and answer in one line. Not over a thread they have open, unless they asked about something else. Display only: it writes nothing."
 
 type workspaceFocusIn struct {
-	ID string `json:"id" jsonschema:"the surface to put in front, as surface_write or workspace_read gives its id"`
+	ID string `json:"id" jsonschema:"the surface to put in front, as workspace_read gives its id"`
 }
 
 // focusFromBrain is workspace_focus: the surface in front, in the turn

@@ -97,7 +97,7 @@ The body is markdown. A **block** is a fenced section that starts with a line
 | `components` | the author | A flat list of components of Eriphe's catalog (`core/a2ui/catalog_v1.json`), one with id `root`. |
 | `data` | the author | An object: the values its components read. |
 | `sources` | the author | Live sources read by code, by name: each one's value is at `/<name>`. |
-| `snapshot` | code | The sources' last good values, with `at`, so that the file reads well offline. |
+| `snapshot` | code | The sources' last good values by name, with `at` (when they were read), so that the file reads well offline. |
 | `marks` | code | The user's marks: by list, then by item, `keep`, `drop` or `done`. |
 | `external` | code | `true` when the block was written after reading external content, or binds a source of a server that is not trusted. |
 
@@ -124,7 +124,15 @@ A source is one of:
 `every` is 1 to 1440 minutes (code's default when absent). A tool or a resource that lists things
 may say where its items are: `"items": {"path": "messages", "id": "id", "title": "subject",
 "detail": "from"}`. A source's name is lowercase letters, digits, `_` and `-`, 40 at most; it is not
-also a key of `data`, and `marks` is no source's or data key's name.
+also a key of `data`, and `marks` is no source's or data key's name, nor `at` a source's (the
+snapshot's time).
+
+Code reads the sources without a model, as the brain's free reads are: a source new or changed at
+once, then every `every` minutes, a resource at its update, a monitor at each of its looks. A read
+that fails keeps the last good value. A value that changed is written into the block's `snapshot`
+with `at`, in a version by `eriphe`, once a quarter of an hour at most per block; a block that
+reads a server that is not trusted is marked `external`. An author's write made on a version older
+than code's snapshot is not stale: it applies over it, the snapshot kept.
 
 ### Code's fields
 

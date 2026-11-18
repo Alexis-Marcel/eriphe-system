@@ -28,7 +28,7 @@ func TestAccessCardNamesItsTask(t *testing.T) {
 	x := cardOf(t, c, cardAccess, id)
 	x, p := c.liveCard(x)
 	v := w.proposalView(x, p, "en")
-	if v.Thread != 0 || v.From != "" || v.Yes != "On Yes, the task may change in github until it ends." {
+	if v.Node != "" || v.From != "" || v.Yes != "On Yes, the task may change in github until it ends." {
 		t.Errorf("proposal %+v", v)
 	}
 	if !strings.Contains(v.Text, "Trie les mails") {
@@ -74,7 +74,7 @@ func TestAccessCardOfNoThread(t *testing.T) {
 	id := c.newAccessAsk(accessQuestion{TaskID: "t-1", Permission: "p-1", Need: accessNeed{"mail", catSend, ""}})
 	x, p := c.liveCard(cardOf(t, c, cardAccess, id))
 	v := w.proposalView(x, p, "en")
-	if v.Thread != 0 || v.From != "" || v.Yes != "On Yes, the task may send in mail until it ends." {
+	if v.Node != "" || v.From != "" || v.Yes != "On Yes, the task may send in mail until it ends." {
 		t.Errorf("proposal %+v", v)
 	}
 	html, err := w.fragment("en", "home", "card", w.cardView(x, "en"))
@@ -121,7 +121,7 @@ func TestCardYesSaysWhatItDoes(t *testing.T) {
 		}
 	}
 	waitingTask(c, "t-1")
-	if o := c.startOrigin("t-1", "fr"); o.Thread != 0 || o.From != "tâche « Trie les mails »" || o.Yes != "Sur Oui, la tâche démarre avec ces accès." {
+	if o := c.startOrigin("t-1", "fr"); o.Node != "" || o.From != "tâche « Trie les mails »" || o.Yes != "Sur Oui, la tâche démarre avec ces accès." {
 		t.Errorf("start %+v", o)
 	}
 }

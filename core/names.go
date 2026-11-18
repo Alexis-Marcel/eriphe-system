@@ -344,7 +344,7 @@ func (c *core) mergeThreads(from, to int64, by string) error {
 		if _, err := c.store.db.Exec(`UPDATE threads SET parent = ? WHERE parent = ?`, to, from); err != nil {
 			return err
 		}
-		c.keepThreadSurface(to)
+		c.threadMoved(to)
 	}
 	if _, err := c.store.db.Exec(`INSERT OR REPLACE INTO names (name, target, seen) VALUES (?, ?, ?)`, threadRef(from), threadRef(to), time.Now().Unix()); err != nil {
 		return err

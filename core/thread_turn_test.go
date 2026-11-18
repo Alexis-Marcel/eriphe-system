@@ -4,232 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 )
 
 // The brain's part is played here as its prompt asks it (brain-prompt.md,
 // « Les fils »): the tools it calls, in order, and what eriphe-core
 // makes of them.
-
-// threadSurface is the thread's own surface, thread-<id>, that code wrote
-// at its opening (thread_surface.go).
-func threadSurface(t *testing.T, c *core, id int64) string {
-	t.Helper()
-	sid := fmt.Sprintf("thread-%d", id)
-	if sid != threadSurfaceID(id) {
-		t.Fatalf("the thread's surface is %s", threadSurfaceID(id))
-	}
-	if _, err := c.surface(sid); err != nil {
-		t.Fatalf("thread %d has no surface: %v", id, err)
-	}
-	return sid
-}
-
-// « Où en est la PR de l'alerte ? » from the workspace: no thread yet, so
-// one opens, light, and its surface takes the stage; asked again, the same
-// thread is found by its subject, never a second one.
-func TestStatusQuestionOpensThreadOnStage(t *testing.T) {
-	c := focusCore(t)
-	const subject = "pr:example/infra#12"
-	c.front.begin(true) // Sam asks from the workspace
-	out, isErr := callBrainTool(t, c, "find_thread", map[string]any{"alias": subject})
-	if isErr || len(foundThreads(out)) != 0 {
-		t.Fatalf("find: %v", out)
-	}
-	out, isErr = callBrainTool(t, c, "open_thread", map[string]any{"title": "PR de l'alerte", "goal": "La PR est fusionnée et déployée.", "alias": subject})
-	if isErr {
-		t.Fatalf("open: %v", out)
-	}
-	th := out["thread"].(map[string]any)
-	id := int64(th["id"].(float64))
-	if th["state"] != threadOpen {
-		t.Fatalf("not open: %v", th)
-	}
-	if c.turn.aboutThread() != id {
-		t.Errorf("the turn is about %d, not %d", c.turn.aboutThread(), id)
-	}
-	if asks, _ := c.cardsWhere(`state = ?`, cardPending); len(asks) != 0 {
-		t.Errorf("a thread asked a card: %+v", asks)
-	}
-	sid := threadSurface(t, c, id)
-	if out, isErr := callBrainTool(t, c, "workspace_focus", map[string]any{"id": sid}); isErr || out["result"] != "in front" {
-		t.Fatalf("focus: %v", out)
-	}
-	if l := c.currentLayout(); l.Focus != sid || l.FocusBy != focusByBrain {
-		t.Fatalf("stage: %q by %q", l.Focus, l.FocusBy)
-	}
-
-	// Asked again later, in other words and case: the same thread.
-	c.front.begin(true)
-	out, _ = callBrainTool(t, c, "find_thread", map[string]any{"alias": strings.ToUpper(subject)})
-	if got := foundThreads(out); len(got) != 1 || int64(got[0].(map[string]any)["id"].(float64)) != id {
-		t.Fatalf("resume by subject: %v", out)
-	}
-	// Closed on its goal, then back: reopened, not opened anew.
-	if out, isErr := callBrainTool(t, c, "close_thread", map[string]any{"thread_id": id, "summary": "Fusionnée et déployée."}); isErr {
-		t.Fatalf("close: %v", out)
-	}
-	out, _ = callBrainTool(t, c, "find_thread", map[string]any{"alias": subject})
-	if got := foundThreads(out); len(got) != 1 || got[0].(map[string]any)["state"] != threadDone {
-		t.Fatalf("an ended thread is found again: %v", out)
-	}
-	if out, isErr := callBrainTool(t, c, "reopen_thread", map[string]any{"thread_id": id, "why": "L'alerte revient."}); isErr || out["state"] != threadOpen {
-		t.Fatalf("reopen: %v", out)
-	}
-	if all, _ := c.threads(false, 10); len(all) != 1 {
-		t.Errorf("%d threads for one matter", len(all))
-	}
-}
-
-// « Pendant que je relis la PR, cherche un nom de marque » while the PR's
-// thread is on stage: a second thread opens on the side; the stage stays
-// the PR's, and the turn is now about the research.
-func TestLaunchOpensThreadOnTheSide(t *testing.T) {
-	c := focusCore(t)
-	pr, err := c.openThread(threadIn{Title: "PR de l'alerte", Goal: "La PR est fusionnée.", Alias: "pr:example/infra#12"}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.front.begin(true)
-	sid := threadSurface(t, c, pr.ID)
-	if _, err := c.focusFromBrain(workspaceFocusIn{ID: sid}, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-
-	c.front.begin(true) // the next message, from the workspace too
-	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Nom de marque", "goal": "Sam a choisi un nom libre.", "alias": "project:marque"})
-	if isErr {
-		t.Fatalf("open: %v", out)
-	}
-	research := int64(out["thread"].(map[string]any)["id"].(float64))
-	threadSurface(t, c, research)
-	if l := c.currentLayout(); l.Focus != sid {
-		t.Errorf("the research took the stage: %q", l.Focus)
-	}
-	if c.turn.aboutThread() != research {
-		t.Errorf("the turn is about %d, not the research %d", c.turn.aboutThread(), research)
-	}
-}
-
-// The brain's own calls in a turn about a thread raise cards that land in
-// its timeline: the thread last named in the turn; a new delivery about
-// nothing links nothing.
-func TestCardsOfThreadTurnLinked(t *testing.T) {
-	c := stepsCore(t)
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
-	pr := lightThread(t, c)
-	if _, isErr := callBrainTool(t, c, "read_thread", map[string]any{"thread_id": pr.ID}); isErr {
-		t.Fatal("read_thread")
-	}
-	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})
-	merge := accessCard(t, c, "merge").Ref
-	if refs := timelineCards(t, c, pr.ID); refs != merge {
-		t.Fatalf("the PR's cards: %q, want %q", refs, merge)
-	}
-	// It waits on the thread's surface, answered there.
-	if s, _, _ := threadSurfaceOf(t, c, pr.ID); !strings.Contains(string(s.Components), `"proposalId":"`+merge+`"`) {
-		t.Errorf("the card is not on the thread's surface: %s", s.Components)
-	}
-	// The same call asked again: the same card, still linked once.
-	brainCalls(t, c, "p-2", mergeTool, map[string]any{"number": 12})
-	if refs := timelineCards(t, c, pr.ID); refs != merge {
-		t.Errorf("asked again: %q", refs)
-	}
-	// A thread tool on an id that is no thread changes nothing.
-	callBrainTool(t, c, "read_thread", map[string]any{"thread_id": 999})
-	if c.turn.aboutThread() != pr.ID {
-		t.Errorf("an unknown thread retargeted the turn: %d", c.turn.aboutThread())
-	}
-
-	// A second thread named: what follows is its own.
-	out, _ := callBrainTool(t, c, "open_thread", map[string]any{"title": "Nom de marque", "goal": "Un nom libre.", "alias": "project:marque"})
-	brand := int64(out["thread"].(map[string]any)["id"].(float64))
-	brainCalls(t, c, "p-3", mergeTool, map[string]any{"number": 13})
-	if refs := timelineCards(t, c, brand); refs == "" || strings.Contains(refs, merge) {
-		t.Errorf("the brand's cards: %q", refs)
-	}
-	if refs := timelineCards(t, c, pr.ID); refs != merge {
-		t.Errorf("the PR's cards after: %q", refs)
-	}
-	// Decided, it waits there no more.
-	xs, _ := c.cardsWhere(`ref = ?`, merge)
-	if len(xs) != 1 {
-		t.Fatalf("cards of %s: %+v", merge, xs)
-	}
-	if _, err := c.decideCard(context.Background(), xs[0].ID, false, "web"); err != nil {
-		t.Fatal(err)
-	}
-	if s, _, _ := threadSurfaceOf(t, c, pr.ID); strings.Contains(string(s.Components), `"proposalId":"`+merge+`"`) {
-		t.Errorf("a decided card still waits on the surface: %s", s.Components)
-	}
-
-	// A task started by the brain in that turn: its start card too.
-	c.store.insertTask(&TaskRow{ID: "t-9", Kind: "worker", Device: "box", Runtime: "claude-code", Prompt: "Cherche", State: statePending})
-	if err := c.holdTask(&TaskRow{ID: "t-9", Title: "Chercher des noms"}, nil, nil, true); err != nil {
-		t.Fatal(err)
-	}
-	if refs := timelineCards(t, c, brand); !strings.Contains(refs, cardTaskStart+":") {
-		t.Errorf("the start card is not the brand's: %q", refs)
-	}
-
-	// A new delivery about nothing: the next card is no thread's. (The no
-	// above was told as the PR's event, read in a turn of its own.)
-	c.store.markDelivered(c.store.lastMessageSeq())
-	seq, _ := c.store.addMessage(roleUser, "Et la météo ?", true)
-	c.turn.start(int(seq), int(seq), 0)
-	msgs, _ := c.store.undelivered()
-	c.threadsDelivered(msgs)
-	if c.turn.aboutThread() != 0 {
-		t.Fatalf("a new turn kept thread %d", c.turn.aboutThread())
-	}
-	before := timelineCards(t, c, pr.ID) + timelineCards(t, c, brand)
-	brainCalls(t, c, "p-4", mergeTool, map[string]any{"number": 14})
-	if after := timelineCards(t, c, pr.ID) + timelineCards(t, c, brand); after != before {
-		t.Errorf("a card of no thread was linked: %q", after)
-	}
-}
-
-// « J'ai quoi de prévu aujourd'hui ? » written over a thread's surface:
-// the turn starts about that thread; the brain opens the thread of what
-// was asked (a day thread), and what it raises next, a card or a task, is
-// that thread's, never the one it was written over.
-func TestOtherMatterOpensItsThread(t *testing.T) {
-	c := stepsCore(t)
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
-	pr := lightThread(t, c)
-	c.store.markDelivered(c.store.lastMessageSeq())
-	seq, _ := c.store.addUserMessage("J'ai quoi de prévu aujourd'hui ?", nil, pr.ID)
-	c.noteAbout(seq, "surface:"+threadSurfaceID(pr.ID))
-	c.turn.start(int(seq), int(seq), 0)
-	msgs, _ := c.store.undelivered()
-	c.threadsDelivered(msgs)
-	if c.turn.aboutThread() != pr.ID {
-		t.Fatalf("the turn is about %d, not %d", c.turn.aboutThread(), pr.ID)
-	}
-	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Ma journée", "goal": "Sam voit sa journée.", "alias": "topic:journee", "ends": endsDay})
-	if isErr {
-		t.Fatalf("open: %v", out)
-	}
-	day := openedThread(t, out)
-	if c.turn.aboutThread() != day.ID {
-		t.Fatalf("the turn is about %d, not the day %d", c.turn.aboutThread(), day.ID)
-	}
-	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})
-	card := accessCard(t, c, "merge").Ref
-	if refs := timelineCards(t, c, pr.ID); refs != "" {
-		t.Errorf("the PR's cards: %q", refs)
-	}
-	if refs := timelineCards(t, c, day.ID); refs != card {
-		t.Errorf("the day's cards: %q, want %q", refs, card)
-	}
-	if s, _, _ := threadSurfaceOf(t, c, pr.ID); strings.Contains(string(s.Components), card) {
-		t.Errorf("the card waits on the PR's surface: %s", s.Components)
-	}
-}
 
 // turnOnThread makes the brain's turn about a light thread of its own: a
 // task the brain starts is a step of it.
@@ -269,18 +51,20 @@ func TestBrainPromptThreads(t *testing.T) {
 	}
 	section := prompt[start:end]
 	for _, want := range []string{
-		"**Quand en ouvrir un.**", "`open_thread` avec sa clé", "reste du texte, sans fil", "tout ce qui se **montre** est un fil", "`take`", "`new_because`",
+		"**Quand en ouvrir un.**", "`open_thread` avec sa clé", "reste du texte, sans fil", "`take`", "`new_because`",
 		"propose sa fusion", "seulement la vérification, rien d'autre", "Une tâche parle du fil de son tour",
 		// Work in steps (#630): code runs and accepts them, the brain settles exceptions.
 		"**Un travail en étapes.**", "`node_open` avec `steps`", "`[nœud <id> « titre »] …`", "`node_settle`", "sans te réveiller",
-		"un **veilleur**", "`item_note`", "`note_item`", "`stop_thread`", "une recherche",
+		"`item_note`", "`stop_thread`", "une recherche",
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",
 		"se range seul dans sa chronologie", "Sa réponse sur une de ces cartes",
 		// Working inside a thread (#607): a child for a matter of its own,
-		// the part by named blocks, the bricks, the user's marks.
-		"`open_thread` avec `parent`", "`find_thread`", "`block`", "`before`", "`surface_remove`", "jamais tout",
-		"`Mark`", "`Grid`", "`\"kind\": \"stack\"`", "`Offers`", "n'appelle pas de réponse",
+		// the bricks.
+		"`open_thread` avec `parent`", "`find_thread`", "`Mark`", "`Grid`", "`\"kind\": \"stack\"`",
+		// Views (#631): one card, its live blocks, its skill in its node.
+		"## Les vues", "`propose_view`", "un seul oui les crée", "la dernière bonne valeur reste", "marqué extérieur",
+		"« Répondre à Sam »", "attend son oui sur une carte",
 	} {
 		if !strings.Contains(section, want) {
 			t.Errorf("« Les fils » lacks %q", want)
@@ -293,7 +77,7 @@ func TestBrainPromptThreads(t *testing.T) {
 		}
 	}
 	// What the epic replaced is gone: buttons drawn on a row by default.
-	for _, gone := range []string{"composition par défaut", "en boutons sur sa ligne"} {
+	for _, gone := range []string{"composition par défaut", "en boutons sur sa ligne", "`note_item`", "`surface_write`", "un fil `day`", "eriphe-capture", "/thread/marks"} {
 		if strings.Contains(prompt, gone) {
 			t.Errorf("the prompts still say %q", gone)
 		}
@@ -308,80 +92,6 @@ func foundThreads(out map[string]any) []any {
 
 // cardItem is a card's item in the attention queue.
 func cardItem(x convoCard) string { return "card:" + strconv.FormatInt(x.ID, 10) }
-
-// A card raised for a thread is answered on its surface, not again in the
-// attention queue: the thread's surface takes its weight. Once the thread
-// ended, the card still waiting comes back to the queue.
-func TestThreadCardsLeaveTheQueue(t *testing.T) {
-	c := stepsCore(t)
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
-	pr := lightThread(t, c)
-	callBrainTool(t, c, "read_thread", map[string]any{"thread_id": pr.ID})
-	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})
-	merge := accessCard(t, c, "merge")
-	// A card of no thread, for comparison: it keeps its own surface.
-	c.turn.about(0)
-	brainCalls(t, c, "p-2", mergeTool, map[string]any{"number": 99})
-	var alone convoCard
-	xs, _ := c.cardsWhere(`kind = ? AND state = ? ORDER BY id`, cardAccess, cardPending)
-	for _, x := range xs {
-		if x.ID != merge.ID {
-			alone = x
-		}
-	}
-
-	c.syncQueueSurfaces()
-	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(merge))); ok {
-		t.Error("the thread's card has a surface of its own in the queue")
-	}
-	if g, ok := surfaceByID(t, c, queueDecide); ok && slices.Contains(groupRefs(t, g), merge.Ref) {
-		t.Error("the thread's card is listed in the queue's group")
-	}
-	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(alone))); !ok {
-		t.Error("a card of no thread left the queue")
-	}
-	s, _, _ := threadSurfaceOf(t, c, pr.ID)
-	if !strings.Contains(string(s.Components), `"proposalId":"`+merge.Ref+`"`) {
-		t.Fatalf("the card is not on the thread's surface: %s", s.Components)
-	}
-	if want := queueSurfaceWeight(weightBlocksATask); s.Weight != want {
-		t.Errorf("the thread's surface weighs %d, not its card's %d", s.Weight, want)
-	}
-	for _, e := range c.queuePlan(time.Now()) {
-		if e.it.Ref == cardItem(merge) && e.surface != threadSurfaceID(pr.ID) {
-			t.Errorf("the composer reads the card on %q", e.surface)
-		}
-	}
-
-	// A tainted thread's surface answers its cards in place too: they
-	// leave the queue for it, no tile beside it.
-	bad, err := c.openThread(threadIn{Title: "Mail", Goal: "Merge what the mail asks."}, []string{"mail:7"}, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.turn.about(bad.ID)
-	brainCalls(t, c, "p-3", mergeTool, map[string]any{"number": 13})
-	xs, _ = c.cardsWhere(`kind = ? AND state = ? ORDER BY id DESC`, cardAccess, cardPending)
-	if len(xs) == 0 || c.threadShownCards()[xs[0].Ref] != bad.ID {
-		t.Fatalf("the tainted thread's card: %+v", xs)
-	}
-	c.syncQueueSurfaces()
-	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(xs[0]))); ok {
-		t.Error("a tainted thread's card has a tile beside it")
-	}
-	if s, _, _ := threadSurfaceOf(t, c, bad.ID); s.Weight != queueSurfaceWeight(weightBlocksATask) {
-		t.Errorf("the tainted thread's surface weighs %d", s.Weight)
-	}
-
-	// The thread stopped: the card still waits, back in the queue.
-	if err := c.stopThread(context.Background(), pr.ID, "brain"); err != nil {
-		t.Fatal(err)
-	}
-	c.syncQueueSurfaces()
-	if _, ok := surfaceByID(t, c, queueSurfaceID(cardItem(merge))); !ok {
-		t.Error("a card of an ended thread shows nowhere")
-	}
-}
 
 // The result of a call approved on a card linked to a thread comes back as
 // that thread's event: the turn that reads it is about the thread. A card

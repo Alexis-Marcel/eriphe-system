@@ -63,8 +63,8 @@ func TestParseSkillMD(t *testing.T) {
 		"skills.err.frontmatter": "# no header",
 		"skills.err.name":        "---\nname: Bad_Name\ndescription: x\n---\n",
 		"skills.err.description": "---\nname: ok\n---\n",
-		"skills.err.title":       "---\nname: ok\ndescription: x\ntitle: " + strings.Repeat("a", skillTitleMax+1) + "\nwhen: every 1h\n---\n",
-		"skills.err.nowhen":      "---\nname: ok\ndescription: x\ntitle: Mes mails\n---\n",
+		"skills.err.node":        "---\nname: ok\ndescription: x\nnode: Mes mails\nwhen: monitor.new\n---\n",
+		"skills.err.nowhen":      "---\nname: ok\ndescription: x\nnode: k3x9m2p7qa\n---\n",
 	} {
 		var se *skillError
 		if _, err := parseSkillMD([]byte(md)); !errors.As(err, &se) || se.Key != key {

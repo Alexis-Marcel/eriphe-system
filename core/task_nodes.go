@@ -241,7 +241,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 				err = probe.AuthorBody(in.Body)
 			}
 			if err == nil {
-				_, err = c.nodeGuard(probe, blockNames(probe), tainted != "", w.grant)
+				_, err = c.nodeGuard(probe, blockNames(probe), tainted != "", c.lentTo(w.grant))
 			}
 			if err != nil {
 				return nil, err
@@ -332,7 +332,7 @@ func (c *core) writeTaskNode(task, expect string, grant []string, fn func(*nodef
 				names = append(names, b.Name)
 			}
 		}
-		outside, err := c.nodeGuard(n, names, tainted, grant)
+		outside, err := c.nodeGuard(n, names, tainted, c.lentTo(grant))
 		if err != nil {
 			return err
 		}
@@ -369,11 +369,12 @@ func (c *core) externalSources(d *nodestore.Doc, author string) error {
 	return err
 }
 
-// nodeGuard checks the blocks a task wrote (names) in its node: the
-// actions' grammar, nothing asked when tainted, no Offers (code's), no
-// Link to a source's value, sources it is lent. It tells the blocks that
-// read a source of a server not trusted.
-func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, grant []string) (map[string]bool, error) {
+// nodeGuard checks the blocks an author wrote (names) in a node: the
+// actions' grammar, nothing asked when tainted, no Offers, no Link to a
+// source's value, sources the author may give (sourceOK: those a task is
+// lent, lentTo). It tells the blocks that read a source of a server not
+// trusted.
+func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceOK func(nodefile.Source) error) (map[string]bool, error) {
 	outside := map[string]bool{}
 	var problems []string
 	for _, name := range names {
@@ -389,7 +390,7 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, grant [
 			at := "/components/" + strconv.Itoa(i)
 			switch comp["component"] {
 			case "Offers":
-				errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: at, Message: "Offers are put by code on an item's row: note the item (item_note) instead"})
+				errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: at, Message: "no Offers in a node: note the item (item_note), and an action on it is its tool's call, kept for the user's yes"})
 			case "Proposal":
 				if tainted {
 					errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: at, Message: "a Proposal written after reading external content could be answered as something else: leave it out"})
@@ -412,7 +413,7 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, grant [
 			problems = append(problems, fmt.Sprintf("block %s: %s: %s", name, e.Path, e.Message))
 		}
 		for _, src := range slices.Sorted(maps.Keys(b.Sources)) {
-			if err := c.lentSource(b.Sources[src], grant); err != nil {
+			if err := sourceOK(b.Sources[src]); err != nil {
 				problems = append(problems, fmt.Sprintf("block %s: source %s: %v", name, src, err))
 			}
 		}
@@ -422,6 +423,11 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, grant [
 		return nil, errors.New(strings.Join(problems, "; "))
 	}
 	return outside, nil
+}
+
+// lentTo is nodeGuard's check for a task with grant.
+func (c *core) lentTo(grant []string) func(nodefile.Source) error {
+	return func(src nodefile.Source) error { return c.lentSource(src, grant) }
 }
 
 // lentSource refuses a source the task could not read itself: a tool or

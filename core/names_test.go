@@ -69,7 +69,7 @@ func TestAboutNotedWhenWritten(t *testing.T) {
 		t.Errorf("alias %q", th.Alias)
 	}
 	// A mail or an event is an item, never an about.
-	if _, err := aboutKey("mail:abc"); err == nil || !strings.Contains(err.Error(), "note_item") {
+	if _, err := aboutKey("mail:abc"); err == nil || !strings.Contains(err.Error(), "item_note") {
 		t.Errorf("mail:abc: %v", err)
 	}
 	if _, err := c.openThread(threadIn{Title: "Un mail", Goal: "Répondre.", Alias: "event:42"}, nil, byBrain); err == nil {

@@ -34,12 +34,13 @@ func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[s
 		return
 	}
 	raw, _ := json.Marshal(input)
-	var thread int64
-	c.store.db.QueryRow(`SELECT thread FROM skill_runs WHERE id = ?`, r.ID).Scan(&thread)
-	source, item, onItem := c.callItem(thread, tool, input)
+	// Its node: the item's when it acts on one of its node's items, else
+	// its run's node (item_cards.go).
+	node := c.taskNode(t.ID)
+	source, item, onItem := c.callItem(node, tool, input)
 	var id int64
 	switch {
-	case onItem && c.itemAskWaiting(thread, source, item, tool, string(raw)) != 0:
+	case onItem && c.itemAskWaiting(node, source, item, tool, string(raw)) != 0:
 		// The same call on the same item waits already: its card.
 	case !onItem && c.store.db.QueryRow(`SELECT id FROM access_asks WHERE run = ? AND batch = 0 AND call LIKE ? AND input = ? AND state = ?`,
 		r.ID, tool+" %", string(raw), startProposed).Scan(&id) == nil:
@@ -48,15 +49,12 @@ func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[s
 		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		cancel()
 		n := c.callNeed(tool, input, c.pool.facts(tool, input))
-		if !onItem {
-			thread = 0
-		}
-		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, thread, source, item)
+		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, node, source, item)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, pid, n.Server, n.Category, n.Account, tool+" "+string(fields), string(raw),
-			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID, thread, source, item)
+			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID, node, source, item)
 		if id, _ := rowsID(res, err); onItem && id > 0 {
 			// One card per item: the one its other calls on it are on.
-			batch := c.runItemBatch(r.ID, thread, source, item)
+			batch := c.runItemBatch(r.ID, node, source, item)
 			if batch == 0 {
 				batch = id
 			}

@@ -75,7 +75,7 @@ const (
 	cardTextAnswer = 30 * time.Minute // a plain yes or no answers a card this recent only
 )
 
-var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls, cardCalls, cardMonitor}
+var proposalKinds = []string{cardMemory, cardIntention, cardRule, cardSetting, cardTaskStart, cardUnlearn, cardAccess, cardSkill, cardRunCalls, cardCalls, cardMonitor, cardViewKind}
 
 // cardUnlearn is an undo of the learning journal the brain proposed on a
 // tainted turn (learning_tools.go).
@@ -257,6 +257,8 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		return c.callsProposal(p) // item_cards.go
 	case cardMonitor:
 		return c.monitorProposal(p) // monitors.go
+	case cardViewKind:
+		return c.viewProposalOf(p) // view_card.go
 	case cardUnlearn:
 		if c.mem == nil {
 			return p
@@ -375,6 +377,9 @@ func (c *core) pendingProposals() []proposal {
 	for _, id := range c.proposedMonitors() {
 		add(cardMonitor, id)
 	}
+	for _, id := range c.proposedViews() {
+		add(cardViewKind, id)
+	}
 	if m := c.mem; m != nil {
 		rows, err := m.db.Query(`SELECT id FROM learning_log WHERE undo = ? AND status != ? ORDER BY id`, undoProposed, learnReverted)
 		if err == nil {
@@ -436,6 +441,8 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideCalls(ctx, id, approve)
 	case cardMonitor:
 		return c.decideMonitor(id, approve)
+	case cardViewKind:
+		return c.decideView(id, approve)
 	case cardUnlearn:
 		if approve {
 			_, err := c.unlearn(id, "owner", p.Why, nil)

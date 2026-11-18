@@ -54,14 +54,6 @@ func TestTurnThreadIsTheAbout(t *testing.T) {
 	if intent != key {
 		t.Errorf("intention under %q", intent)
 	}
-	sid := threadSurfaceID(openedThread(t, out).ID)
-	if out, isErr := callBrainTool(t, c, "surface_write", map[string]any{"id": sid, "block": "prise",
-		"components": []any{map[string]any{"id": "root", "component": "Text", "text": "Prise."}}}); isErr {
-		t.Fatalf("surface_write: %v", out)
-	}
-	if got := aboutOfRow(c, "surfaces", "id = ?", sid); got != key {
-		t.Errorf("surface under %q", got)
-	}
 }
 
 // Without a thread, the one thread or entity my message names is the
@@ -197,35 +189,33 @@ func TestSurfaceKeepsItsAbout(t *testing.T) {
 	}
 }
 
-// A skill's run is about the thread alias it declares, else its events' key
-// when it names a thing; a bad subject refuses the skill.
+// A skill's run is about its events' key when it names a thing; a node
+// that is not a node's id refuses the skill.
 func TestSkillRunSubject(t *testing.T) {
-	st, err := parseSkillTrigger(skillManifest{When: "monitor.failed key=sauvegarde", Thread: "Alerte: sauvegarde"})
-	if err != nil || st.Thread != "alert:sauvegarde" {
+	st, err := parseSkillTrigger(skillManifest{When: "monitor.failed key=sauvegarde", Node: "k3x9m2p7qa"})
+	if err != nil || st.Node != "k3x9m2p7qa" {
 		t.Fatalf("declared: %+v %v", st, err)
 	}
 	monitor := []journalEvent{{Kind: "monitor.failed", Key: "sauvegarde"}}
 	for _, tc := range []struct {
-		st     *skillTrigger
 		key    string
 		events []journalEvent
 		want   string
 	}{
-		{st, "autre", nil, "alert:sauvegarde"},
-		{&skillTrigger{}, "sauvegarde", monitor, "topic:sauvegarde"},
-		{&skillTrigger{}, "pr:example/infra#12", nil, "pr:example/infra#12"},
-		{&skillTrigger{}, "t-20261114-1", []journalEvent{{Kind: "task.ended"}}, ""},
-		{&skillTrigger{}, "", monitor, ""},
+		{"sauvegarde", monitor, "topic:sauvegarde"},
+		{"pr:example/infra#12", nil, "pr:example/infra#12"},
+		{"t-20261114-1", []journalEvent{{Kind: "task.ended"}}, ""},
+		{"", monitor, ""},
 	} {
-		if got := skillRunAlias(tc.st, tc.key, tc.events); got != tc.want {
+		if got := skillRunAlias(tc.key, tc.events); got != tc.want {
 			t.Errorf("%q %v: %q, want %q", tc.key, tc.events, got, tc.want)
 		}
 	}
-	if _, err := parseSkillTrigger(skillManifest{When: "monitor.new", Thread: "task:t-1"}); err == nil {
-		t.Error("a record as a skill's subject")
+	if _, err := parseSkillTrigger(skillManifest{When: "monitor.new", Node: "Mes mails"}); err == nil {
+		t.Error("a node that is no id")
 	}
-	if _, err := parseSkillTrigger(skillManifest{Thread: "project:site"}); err == nil {
-		t.Error("a subject without when")
+	if _, err := parseSkillTrigger(skillManifest{Node: "k3x9m2p7qa"}); err == nil {
+		t.Error("a node without when")
 	}
 	c, now := skillCore(t)
 	sk := triggeredSkill{Name: "veille", Trigger: &skillTrigger{When: "monitor.failed", Kind: "monitor.failed", Kinds: []string{"monitor.failed"}}}

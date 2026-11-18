@@ -24,14 +24,14 @@ func TestNoSurfaceAttentionRef(t *testing.T) {
 }
 
 // At start, what no code wrote goes: a surface an assistant, a task or a
-// skill wrote before only threads were shown; a thread's and the queue's
-// stay.
+// skill wrote before only threads were shown, and a thread's (#631: a
+// thread has no surface any more); the queue's stay.
 func TestDropFreeSurfaces(t *testing.T) {
 	c, _ := surfaceCore(t)
 	comps := []byte(`[{"id":"root","component":"Text","text":"x"}]`)
 	for _, w := range []struct{ author, id string }{
 		{"brain", "revue"}, {"skill:arrivee", "arrivee"}, {"task:t-1", "page-site"}, {"assistant:veille", "suivi"},
-		{threadAuthor(1), threadSurfaceID(1)}, {surfaceAuthorCore, "q-decide"},
+		{"thread:1", "thread-1"}, {surfaceAuthorCore, "q-decide"},
 	} {
 		if _, _, err := c.fixtureSurface(w.author, surfaceIn{ID: w.id, Title: "x", Components: comps}); err != nil {
 			t.Fatal(w, err)
@@ -44,7 +44,7 @@ func TestDropFreeSurfaces(t *testing.T) {
 		left = append(left, s.ID)
 	}
 	slices.Sort(left)
-	if !slices.Equal(left, []string{"q-decide", threadSurfaceID(1)}) {
+	if !slices.Equal(left, []string{"q-decide"}) {
 		t.Fatalf("left %v", left)
 	}
 }

@@ -40,15 +40,8 @@ func init() {
 	})
 }
 
-// surfaceThread is the thread a surface stands for: a thread's own surface
-// (thread-<id>), or the live thread a surface is about; 0 for none.
+// surfaceThread is the live thread a surface is about; 0 for none.
 func (c *core) surfaceThread(id string) int64 {
-	if n, ok := threadOfSurface(id); ok {
-		if _, err := c.thread(n); err == nil {
-			return n
-		}
-		return 0
-	}
 	if s, err := c.surface(id); err == nil && s.About != "" {
 		if n, ok := c.liveThreadOf(s.About); ok {
 			return n

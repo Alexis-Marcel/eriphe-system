@@ -43,8 +43,8 @@ CREATE TABLE IF NOT EXISTS access_asks (
 	created       INTEGER NOT NULL,
 	decided       INTEGER NOT NULL DEFAULT 0,
 	run           INTEGER NOT NULL DEFAULT 0, -- a triggered skill's run (skill_cards.go)
-	thread        INTEGER NOT NULL DEFAULT 0, -- with item: the thread whose item it acts on (item_cards.go)
-	source        TEXT NOT NULL DEFAULT '',   -- the thread's source that lists the item
+	node          TEXT NOT NULL DEFAULT '',   -- the node it belongs to: its item's, else its run's (item_cards.go)
+	source        TEXT NOT NULL DEFAULT '',   -- with item: the node's source that lists it
 	item          TEXT NOT NULL DEFAULT '',   -- the item's id in that source
 	batch         INTEGER NOT NULL DEFAULT 0); -- the card it is on, kind calls: its first call's id`
 
@@ -52,7 +52,7 @@ func init() {
 	extraSchema = append(extraSchema, accessCardSchema)
 	// A table made before the item cards lacks their columns.
 	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
-		for _, col := range []struct{ name, def string }{{"thread", "INTEGER NOT NULL DEFAULT 0"}, {"source", "TEXT NOT NULL DEFAULT ''"},
+		for _, col := range []struct{ name, def string }{{"node", "TEXT NOT NULL DEFAULT ''"}, {"source", "TEXT NOT NULL DEFAULT ''"},
 			{"item", "TEXT NOT NULL DEFAULT ''"}, {"batch", "INTEGER NOT NULL DEFAULT 0"}} {
 			if err := addColumn(db, "access_asks", col.name, col.def); err != nil {
 				return err
@@ -234,8 +234,8 @@ type accessQuestion struct {
 	Tainted    string
 	State      string
 	Run        int64  // a triggered skill's run: its card is the run's (skill_cards.go)
-	Thread     int64  // with Item: the thread whose item it acts on (item_cards.go)
-	Source     string // the thread's source that lists the item
+	Node       string // the node it belongs to: its item's, else its run's (item_cards.go)
+	Source     string // with Item: the node's source that lists it
 	Item       string // the item's id in that source
 	Batch      int64  // the calls card it is on, 0 when none
 	source     string // who raised it, when not its task: thread:<id>
@@ -244,9 +244,9 @@ type accessQuestion struct {
 func (c *core) accessAskOf(id int64) (accessQuestion, error) {
 	var a accessQuestion
 	var refs string
-	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state, run, thread, source, item, batch FROM access_asks WHERE id = ?`, id).
+	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state, run, node, source, item, batch FROM access_asks WHERE id = ?`, id).
 		Scan(&a.ID, &a.TaskID, &a.Permission, &a.Need.Server, &a.Need.Category, &a.Need.Account, &a.Call, &a.Input, &refs, &a.Tainted, &a.State, &a.Run,
-			&a.Thread, &a.Source, &a.Item, &a.Batch)
+			&a.Node, &a.Source, &a.Item, &a.Batch)
 	json.Unmarshal([]byte(refs), &a.Refs)
 	return a, err
 }

@@ -1,6 +1,7 @@
 package nodefile
 
 import (
+	"bytes"
 	"fmt"
 	"maps"
 	"slices"
@@ -164,4 +165,34 @@ func (b *Block) keepCode(prev *Block) error {
 	}
 	b.has = has{completed: b.has.completed}
 	return nil
+}
+
+// AuthorBytes is the node as its authors wrote it: its front matter and
+// body in their canonical form, without code's fields (a block's
+// snapshot, marks and external, the node's external). Two versions alike
+// there differ only by what code wrote: an author's write made on one
+// applies on the other.
+func (n *Node) AuthorBytes() ([]byte, error) {
+	m := n.Meta
+	m.External = false
+	front, err := encodeMeta(m)
+	if err != nil {
+		return nil, err
+	}
+	var b bytes.Buffer
+	b.Write(front)
+	for _, s := range n.segs {
+		if s.block == nil {
+			b.WriteString(s.text)
+			continue
+		}
+		bare := *s.block
+		bare.Snapshot, bare.Marks, bare.External = nil, nil, false
+		out, err := bare.canonical()
+		if err != nil {
+			return nil, err
+		}
+		b.Write(out)
+	}
+	return b.Bytes(), nil
 }

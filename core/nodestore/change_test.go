@@ -1,6 +1,7 @@
 package nodestore
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -112,5 +113,76 @@ func TestCreateAfterSiblings(t *testing.T) {
 		return nil
 	}); err == nil {
 		t.Error("after changed by a write")
+	}
+}
+
+// A write made on a version code changed since, its code's fields only
+// (a source's snapshot), applies on the last version with them kept; one
+// made on a version an author changed since is stale.
+func TestWriteOverCodeChange(t *testing.T) {
+	s, _ := newEnv(t).open(t)
+	block := "\n```eriphe:block mails\n{\"components\": {\"component\": \"Text\", \"text\": \"Mails\"}, \"sources\": {\"inbox\": {\"tool\": \"mail/list\"}}}\n```\n"
+	d := mustCreate(t, s, New{Title: "Mails", Body: "Inbox." + block})
+	snap, err := s.Change("n1", d.Version.Hash, "eriphe", func(n *nodefile.Node) error {
+		return n.SetSnapshot("mails", []byte(`{"inbox": {"messages": []}}`))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d3, err := s.Write("n1", "Inbox, sorted."+block, d.Version.Hash, "task:t1")
+	if err != nil {
+		t.Fatalf("a write over a snapshot refused: %v", err)
+	}
+	if d3.Version.N != 3 || d3.Node.Block("mails").Snapshot == nil || !strings.Contains(d3.Node.Text(), "sorted") {
+		t.Fatalf("written: v%d\n%s", d3.Version.N, d3.Raw)
+	}
+	if _, err := s.Write("n1", "Again."+block, snap.Version.Hash, "task:t2"); err == nil {
+		t.Fatal("a write over an author's change written")
+	}
+}
+
+// A node is created with an id given beforehand, never one taken.
+func TestCreateWithID(t *testing.T) {
+	s, _ := newEnv(t).open(t)
+	id := s.NewID()
+	d := mustCreate(t, s, New{ID: id, Title: "Mails", Lifetime: nodefile.Standing})
+	if d.Node.Meta.ID != id {
+		t.Fatalf("id %s, not %s", d.Node.Meta.ID, id)
+	}
+	if _, err := s.Create(New{ID: id, Title: "Again", Author: "brain"}); err == nil {
+		t.Fatal("an id taken given again")
+	}
+	if _, err := s.Create(New{ID: "Not-an-id", Title: "Bad", Author: "brain"}); err == nil {
+		t.Fatal("a bad id accepted")
+	}
+	if s.NewID() == id {
+		t.Fatal("NewID gave a taken id")
+	}
+}
+
+// Check says what Create would refuse, and makes nothing: a secret, too
+// many blocks, an id taken.
+func TestCheckMakesNothing(t *testing.T) {
+	s, _ := newEnv(t).open(t)
+	id := s.NewID()
+	if err := s.Check(New{ID: id, Title: "Mails", Lifetime: nodefile.Standing, Author: "user", Body: "Les mails."}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Get(id); err == nil {
+		t.Fatal("Check made the node")
+	}
+	if err := s.Check(New{Title: "Keys", Author: "user", Body: "ghp_0123456789abcdefghij"}); err == nil {
+		t.Fatal("a secret passed")
+	}
+	var many strings.Builder
+	for i := 0; i <= MaxBlocks; i++ {
+		fmt.Fprintf(&many, "```eriphe:block b%d\n{\"components\": {\"component\": \"Text\", \"text\": \"x\"}}\n```\n\n", i)
+	}
+	if err := s.Check(New{Title: "Many", Author: "user", Body: many.String()}); err == nil || !strings.Contains(err.Error(), "blocks at most") {
+		t.Fatalf("too many blocks: %v", err)
+	}
+	mustCreate(t, s, New{ID: id, Title: "Mails", Lifetime: nodefile.Standing})
+	if err := s.Check(New{ID: id, Title: "Again", Author: "user"}); err == nil {
+		t.Fatal("an id taken passed")
 	}
 }

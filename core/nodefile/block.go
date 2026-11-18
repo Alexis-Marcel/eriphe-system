@@ -26,6 +26,10 @@ var SourceRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 // and no source is so named.
 const MarksKey = "marks"
 
+// SnapshotAt is the key of a snapshot that says when it was read; no
+// source is so named.
+const SnapshotAt = "at"
+
 // The marks the user may set.
 const (
 	MarkKeep = "keep"
@@ -455,6 +459,8 @@ func (s Source) check(name string) string {
 		return fmt.Sprintf("source %q: a name is lowercase letters, digits, _ and -, 40 at most", name)
 	case name == MarksKey:
 		return "source /" + MarksKey + " is code's: the user's marks"
+	case name == SnapshotAt:
+		return "source " + SnapshotAt + ": the name is code's, when its snapshot was read"
 	case kinds != 1:
 		return "source " + name + ": one of tool, resource or monitor"
 	case s.Resource != "" && s.URI == "":

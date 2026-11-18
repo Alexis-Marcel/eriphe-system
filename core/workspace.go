@@ -147,7 +147,7 @@ var errGesture = errors.New("a gesture is opened, ignored, closed, moved, resize
 // move or resize but those that go on the one just before (gestureSteps);
 // those older than gestureKeep go. Its title is the one core has, and only
 // when its author wrote it in a clean turn: never the page's. A mark's is
-// never said this way: only the mark action notes it (noteMarkGesture).
+// never said this way: only a mark notes it.
 func (c *core) noteGesture(what, ref string, now time.Time) error {
 	if _, ok := gestureKinds[what]; !ok || isMarkGesture(what) {
 		return errGesture
@@ -176,19 +176,6 @@ func (c *core) noteGesture(what, ref string, now time.Time) error {
 		}
 	}
 	return c.logGesture(what, ref, title, "", now)
-}
-
-// noteMarkGesture keeps the mark the user set on a thread's surface, its
-// list and item (ids, checked by the mark action) in the detail, unless it
-// is external (set on a tainted surface): the brain reads it with the
-// workspace's other gestures at its next turn.
-func (c *core) noteMarkGesture(thread int64, list, item, mark string, external bool, now time.Time) error {
-	sid := threadSurfaceID(thread)
-	detail := list + "/" + item
-	if external {
-		detail = ""
-	}
-	return c.logGesture(markGestures[mark], surfaceRefPrefix+sid, c.surfaceCleanTitle(sid), detail, now)
 }
 
 // logGesture writes a gesture down; those older than gestureKeep go.

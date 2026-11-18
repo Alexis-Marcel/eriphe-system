@@ -121,8 +121,8 @@ func (c *core) proposalAbout(kind string, id int64) string {
 			}
 		}
 	case cardCalls:
-		if asks := c.batchAsks(id); len(asks) > 0 && asks[0].Thread > 0 {
-			return c.sourceAbout(threadRef(asks[0].Thread))
+		if asks := c.batchAsks(id); len(asks) > 0 {
+			return c.sourceAbout("task:" + asks[0].TaskID)
 		}
 	case cardRunCalls:
 		var task string
@@ -134,14 +134,11 @@ func (c *core) proposalAbout(kind string, id int64) string {
 	return ""
 }
 
-// skillRunAlias is the alias of a skill's run's thread: the one its
-// trigger declares, else its events' key where it names a thing: a
-// monitor's (monitor.*: topic:<name>), or a key written kind:slug. Another
-// key (a task's, a thread's, a surface's id) gives none.
-func skillRunAlias(st *skillTrigger, key string, events []journalEvent) string {
-	if st != nil && st.Thread != "" {
-		return st.Thread
-	}
+// skillRunAlias is what a skill's run is about: its events' key where it
+// names a thing: a monitor's (monitor.*: topic:<name>), or a key written
+// kind:slug. Another key (a task's, a thread's, a surface's id) gives
+// none.
+func skillRunAlias(key string, events []journalEvent) string {
 	if strings.Contains(key, ":") {
 		k, _ := aliasKey(key)
 		return k

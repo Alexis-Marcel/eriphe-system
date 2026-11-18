@@ -23,6 +23,7 @@
 package nodestore
 
 import (
+	"bytes"
 	"crypto/rand"
 	"database/sql"
 	"errors"
@@ -188,6 +189,19 @@ func randomID() string {
 	return string(b)
 }
 
+// NewID is an id no node has yet, for a node to create later with it
+// (New.ID): a card shows what its yes creates.
+func (s *Store) NewID() string {
+	id := s.opts.NewID()
+	for range 8 {
+		if _, err := s.summary(id); errors.Is(err, ErrNotFound) {
+			break
+		}
+		id = s.opts.NewID()
+	}
+	return id // Create says so if it is taken
+}
+
 // slug is a file name's part from a title: lowercase ASCII letters and
 // digits, words joined by a dash, 40 characters at most.
 func slug(title string) string {
@@ -220,6 +234,7 @@ func traceFile(file string) string { return strings.TrimSuffix(file, ".md") + ".
 
 // New is a node to create.
 type New struct {
+	ID       string // its id when it was given beforehand (a card that shows it); a new one when empty
 	Title    string
 	Parent   string
 	Links    []string
@@ -235,6 +250,39 @@ type New struct {
 func (s *Store) Create(nw New) (*Doc, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	n, err := s.prepare(nw)
+	if err != nil {
+		return nil, err
+	}
+	file := slug(n.Meta.Title) + "-" + n.Meta.ID + ".md"
+	return s.save(n, file, nil, nw.Author, "create")
+}
+
+// Check tells whether Create would make the node, and makes nothing: a
+// card that shows a node before it exists is never one that cannot be
+// answered yes.
+func (s *Store) Check(nw New) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n, err := s.prepare(nw)
+	if err != nil {
+		return err
+	}
+	if len(n.Blocks()) > MaxBlocks {
+		return fmt.Errorf("a node holds %d blocks at most, this one would hold %d", MaxBlocks, len(n.Blocks()))
+	}
+	raw, err := n.Bytes()
+	if err != nil {
+		return err
+	}
+	if len(raw) > MaxBytes {
+		return fmt.Errorf("a node is %d KiB at most, this one would be %d KiB", MaxBytes>>10, len(raw)>>10)
+	}
+	return nil
+}
+
+// prepare checks a node to create and builds it.
+func (s *Store) prepare(nw New) (*nodefile.Node, error) {
 	if nw.Lifetime == "" {
 		nw.Lifetime = nodefile.Work
 	}
@@ -260,7 +308,12 @@ func (s *Store) Create(nw New) (*Doc, error) {
 			return nil, fmt.Errorf("after %s: a step waits only for steps of its own parent", a)
 		}
 	}
-	id := s.opts.NewID()
+	id := nw.ID
+	if id == "" {
+		id = s.opts.NewID()
+	} else if !nodefile.IDOK(id) {
+		return nil, fmt.Errorf("id %q: lowercase letters and digits, 32 at most", id)
+	}
 	if _, err := s.summary(id); err == nil {
 		return nil, fmt.Errorf("id %s is taken", id)
 	}
@@ -280,8 +333,7 @@ func (s *Store) Create(nw New) (*Doc, error) {
 			n.SetBlockExternal(b.Name, true)
 		}
 	}
-	file := slug(n.Meta.Title) + "-" + id + ".md"
-	return s.save(n, file, nil, nw.Author, "create")
+	return n, nil
 }
 
 // Write replaces a node's body (its text and blocks) with an author's,
@@ -309,7 +361,7 @@ func (s *Store) change(id, expect, author, op string, fn func(*nodefile.Node) er
 	if expect == "" {
 		return nil, errors.New("expect is needed: the hash of the version this write was made on")
 	}
-	if expect != "" && expect != cur.Version.Hash {
+	if expect != cur.Version.Hash && !s.onlyCodeSince(cur, expect) {
 		return nil, fmt.Errorf("%w: written on %s, the last version is v%d (%s)", ErrConflict, short(expect), cur.Version.N, short(cur.Version.Hash))
 	}
 	n, err := nodefile.Parse(cur.Raw)
@@ -348,6 +400,29 @@ func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error)
 		}
 		return s.refuse(string(raw))
 	})
+}
+
+// onlyCodeSince tells whether a node's versions since the one whose hash
+// is expect changed only code's fields (a source's snapshot, the user's
+// marks, external): a write made on that version then applies on the
+// last one, code's fields kept. A live block's snapshot never makes an
+// author's write stale.
+func (s *Store) onlyCodeSince(cur *Doc, expect string) bool {
+	var n int
+	if s.db.QueryRow(`SELECT n FROM node_versions WHERE id = ? AND hash = ?`, cur.Node.Meta.ID, expect).Scan(&n) != nil || n >= cur.Version.N {
+		return false
+	}
+	raw, err := s.fileAt(expect, cur.File)
+	if err != nil {
+		return false
+	}
+	was, err := nodefile.Parse(raw)
+	if err != nil {
+		return false
+	}
+	a, err1 := was.AuthorBytes()
+	b, err2 := cur.Node.AuthorBytes()
+	return err1 == nil && err2 == nil && bytes.Equal(a, b)
 }
 
 func short(hash string) string {

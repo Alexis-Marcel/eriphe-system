@@ -125,7 +125,7 @@ func aliasKey(s string) (string, error) {
 	case recordKinds[kind]:
 		return "", fmt.Errorf("%s is a record, not a key: a key is kind:slug, kind %s", s, strings.Join(aliasKinds, ", "))
 	case hasColon && itemKinds[strings.ToLower(strings.TrimSpace(rawKind))]:
-		return "", fmt.Errorf("%s: a mail or an event is an item of a thread's source (note_item), not a key: give its thread, or the matter's key", s)
+		return "", fmt.Errorf("%s: a mail or an event is an item of a node's source (item_note), not a key: give the matter's key", s)
 	case kind == "":
 		kind, rest = aliasTopic, s
 	case !isAliasKind(kind):

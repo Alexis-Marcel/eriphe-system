@@ -26,7 +26,7 @@ var threadStrings = map[string]map[string]string{
 		"step.final.title":      "Contrôle de l'objectif",
 		"thread.state.dropped":  "Abandonné",
 
-		// A thread's surface on the workspace (thread_surface.go).
+		// A thread on the workspace.
 		"thread.surface.brain":         "tenu par {{name}}",
 		"thread.surface.yours":         "À toi",
 		"thread.children":              "Sous-fils",

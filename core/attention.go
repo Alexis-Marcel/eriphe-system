@@ -136,9 +136,6 @@ func (c *core) attendHeld(it attentionItem) {
 			due = CASE WHEN due = 0 THEN excluded.due WHEN excluded.due = 0 THEN due ELSE MIN(due, excluded.due) END`,
 		it.Ref, it.Weight, truncate(oneLine(it.Why), attentionWhyMax), truncate(oneLine(it.Say), attentionWhyMax), it.Source, it.Time.Unix(),
 		boolInt(it.tainted), delivered, due, it.About)
-	if id, ok := raisedThread(it.Ref); ok {
-		c.keepThreadSurface(id) // its tile takes the weight
-	}
 	c.kickWorkspace() // its surface (workspace_queue.go)
 }
 
@@ -154,9 +151,6 @@ func attentionCap(weight int) time.Duration {
 // attentionDone takes an item out: the user answered it, or it is gone.
 func (c *core) attentionDone(ref string) {
 	c.store.db.Exec(`DELETE FROM attention WHERE ref = ?`, ref)
-	if id, ok := raisedThread(ref); ok {
-		c.keepThreadSurface(id) // its tile gives the weight back
-	}
 	c.kickWorkspace()
 }
 
@@ -390,9 +384,6 @@ func (c *core) attentionOnEvent(e journalEvent) {
 	case evUserReturned:
 		c.attentionBreak(breakReturn, c.notifyTime())
 	case evThreadEnded:
-		if e.Payload["ends"] == endsDay {
-			return // its day is over at midnight: nothing the user finished
-		}
 		if s, err := c.userState(); err == nil && !s.Away {
 			c.attentionBreak(breakThread, s.Now)
 		}

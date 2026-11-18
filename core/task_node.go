@@ -77,7 +77,7 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest, held bool) error {
 	if held {
 		state = nodestore.Waiting
 	}
-	if r.inNode != "" { // a step's task works in the step's node (node_steps.go)
+	if r.inNode != "" { // a step's task in the step's node (node_steps.go), a skill's run in its standing node
 		if _, err := c.store.db.Exec(`INSERT INTO task_nodes (task, node) VALUES (?, ?)`, t.ID, r.inNode); err != nil {
 			return err
 		}
@@ -121,6 +121,12 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest, held bool) error {
 	return nil
 }
 
+// standingWork tells a standing node: tasks work in it, none ends it.
+func (c *core) standingWork(id string) bool {
+	sum, err := c.nodes.Get(id)
+	return err == nil && sum.Lifetime == nodefile.Standing
+}
+
 // taskAuthor is who a task writes as: skill:<name> for a skill's run,
 // task:<id> for another.
 func (c *core) taskAuthor(task string) string {
@@ -138,6 +144,9 @@ func (c *core) taskNodeState(task, state string) {
 	}
 	if st, ok := c.nodeStep(id); ok && (st.Task != task || state != stateWaitingPermission && state != stateRunning && state != statePending) {
 		return // a step's node: its engine says where it stands (node_steps.go)
+	}
+	if c.standingWork(id) && (state == stateStopped || state == stateFailed || state == stateLost) {
+		state = stateIdle // a standing node outlives the runs that work in it
 	}
 	var to string
 	switch state {
@@ -159,7 +168,8 @@ func (c *core) taskNodeState(task, state string) {
 
 // fileTaskReport files a task's report, its last message, in its node:
 // whole in its trace (in several entries past the store's limit for
-// one), and as its doc when the task wrote none. Filed once a turn: the
+// one), and as its doc when the task wrote none (never a standing
+// node's: its runs report in its trace only). Filed once a turn: the
 // same report is not filed again. It says what went wrong, for the
 // brain; "" when nothing did.
 func (c *core) fileTaskReport(task string, r *checkedReceipt) string {
@@ -204,7 +214,7 @@ func (c *core) fileTaskReport(task string, r *checkedReceipt) string {
 	if err != nil {
 		return strings.Join(problems, " ; ")
 	}
-	if strings.TrimSpace(d.Node.Text()) == "" && len(d.Node.Blocks()) == 0 {
+	if strings.TrimSpace(d.Node.Text()) == "" && len(d.Node.Blocks()) == 0 && d.Node.Meta.Lifetime != nodefile.Standing {
 		if _, err := c.writeTaskBody(task, report, d.Version.Hash, nil); err != nil {
 			problems = append(problems, "il n'a pas pu devenir son document : "+err.Error())
 		}

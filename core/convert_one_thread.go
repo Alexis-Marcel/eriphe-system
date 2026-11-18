@@ -717,9 +717,7 @@ func (c *core) oneThreadWatched() map[string]bool {
 			if err != nil || v.Manifest.Trigger == nil {
 				continue
 			}
-			if v.Manifest.Trigger.Thread != "" {
-				add(v.Manifest.Trigger.Thread)
-			} else if key := v.Manifest.Trigger.Filters["key"]; key != "" {
+			if key := v.Manifest.Trigger.Filters["key"]; key != "" {
 				add(key)
 			}
 		}
