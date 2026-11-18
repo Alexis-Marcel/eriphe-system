@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// eriphe-capture: takes a picture of a web page for the surface of the
-// thread the task is a step of, and gives it to eriphe-core
-// (core/surfaces_capture.go).
+// eriphe-capture: takes a picture of a web page for the task's own node,
+// and gives it to eriphe-core, which keeps it in the node's files
+// (core/web_media.go).
 //
-//   eriphe-capture <url> thread-<id> [out.png]   capture the page, then give it
-//   eriphe-capture --file <image> thread-<id>    give a PNG or a JPEG already made
+//   eriphe-capture <url> <node-id> [out.png]   capture the page, then give it
+//   eriphe-capture --file <image> <node-id>    give a PNG or a JPEG already made
 //
-// It prints {"src": "media:med_…", …}: whoever holds the thread writes src
-// as the url of an Image in its part of that surface. The page is opened in a headless Chromium (Debian's
+// The node's id is the task's own (node_read gives it). It prints
+// {"src": "media:med_….png", …}: the task writes src as the url of an Image
+// in a block of its node. The page is opened in a headless Chromium (Debian's
 // chromium-headless-shell, installed on first use through apt and the
 // machine's cache), with a fixed window (1280×800), a time limit, a profile
 // of its own thrown away after (no cookie, no sign-in), downloads refused,
@@ -35,11 +36,11 @@ function fail(msg) {
 }
 
 function usage() {
-  fail('usage: eriphe-capture <url> thread-<id> [out.png]  |  eriphe-capture --file <image> thread-<id>');
+  fail('usage: eriphe-capture <url> <node-id> [out.png]  |  eriphe-capture --file <image> <node-id>');
 }
 
-function checkSurface(id) {
-  if (!/^thread-[0-9]{1,18}$/.test(id || '')) fail('the surface is the surface of the thread the task is a step of: thread-<id>');
+function checkNode(id) {
+  if (!/^[a-z0-9]{1,40}$/.test(id || '')) fail("the node is the task's own: its id, as node_read gives it");
 }
 
 function checkURL(raw) {
@@ -200,15 +201,15 @@ async function capture(url, out) {
   }
 }
 
-async function give(file, surface) {
+async function give(file, node) {
   const where = process.env.ERIPHE_MEDIA_URL;
   const secret = process.env.ERIPHE_TASK_SECRET;
-  if (!where || !secret) fail('this task is not lent the workspace (eriphe-workspace): the image stays in ' + file);
+  if (!where || !secret) fail('this task has no node of its own (eriphe-nodes): the image stays in ' + file);
   const data = fs.readFileSync(file);
   const isPNG = data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
   const isJPEG = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
   if (!isPNG && !isJPEG) fail('a PNG or a JPEG only');
-  const res = await fetch(where + '?surface=' + encodeURIComponent(surface), {
+  const res = await fetch(where + '?node=' + encodeURIComponent(node), {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + secret, 'Content-Type': isPNG ? 'image/png' : 'image/jpeg' },
     body: data,
@@ -223,14 +224,14 @@ async function main() {
   const argv = process.argv.slice(2);
   if (argv[0] === '--file') {
     if (argv.length !== 3) usage();
-    checkSurface(argv[2]);
+    checkNode(argv[2]);
     const got = await give(argv[1], argv[2]);
     process.stdout.write(JSON.stringify({ ...got, file: argv[1] }) + '\n');
     return;
   }
   if (argv.length < 2 || argv.length > 3) usage();
   const url = checkURL(argv[0]);
-  checkSurface(argv[1]);
+  checkNode(argv[1]);
   const out = argv[2] || path.join(os.tmpdir(), 'eriphe-capture-' + Date.now() + '.png');
   await capture(url, out);
   const got = await give(out, argv[1]);

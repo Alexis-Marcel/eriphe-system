@@ -227,21 +227,23 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 			p.Parts = append(p.Parts, pagePart{Text: part.Text})
 			continue
 		}
-		b := c.blockView(part.Block, reads)
+		b := c.blockView(id, part.Block, reads)
 		p.Parts = append(p.Parts, pagePart{Block: &b})
 	}
 	p.Cards = w.nodeCards(id, lang)
 	return p, nil
 }
 
-// blockView is a block ready to draw. Its media addresses go through
-// eriphe-core's endpoint (web_media.go), never loaded from outside: one a
-// source gave, or one the author wrote when the block is not external
-// (then a model that read something from outside may have written it, to
-// carry what it read out in its address: A2UI #4045), else it is dropped.
+// blockView is a block of node id ready to draw. Its media addresses go
+// through eriphe-core's endpoint (web_media.go), never loaded from
+// outside: one a source gave, or one the author wrote when the block is
+// not external (then a model that read something from outside may have
+// written it, to carry what it read out in its address: A2UI #4045), else
+// it is dropped. A media:<name> address is one of node id's own files,
+// whoever wrote it: it carries nothing out.
 // A Link's address goes as it is, but one that is not an address a Link
 // may open goes as "".
-func (c *core) blockView(b *nodefile.Block, reads []nodeRead) pageBlock {
+func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlock {
 	v := pageBlock{Name: b.Name, External: b.External, Components: []a2ui.Component{}, Data: map[string]any{}}
 	if err := b.Validate(); err != nil {
 		v.Error = err.Error()
@@ -282,7 +284,7 @@ func (c *core) blockView(b *nodefile.Block, reads []nodeRead) pageBlock {
 		kind, _ := comp["component"].(string)
 		for prop, val := range comp {
 			if s, ok := val.(string); ok && a2ui.IsMedia(kind, prop) {
-				comp[prop] = c.mediaOrDrop(s, authorOK)
+				comp[prop] = c.mediaOrDrop(id, s, authorOK)
 			}
 			if s, ok := val.(string); ok && a2ui.IsLink(kind, prop) {
 				comp[prop] = linkOrDrop(s)
@@ -304,7 +306,7 @@ func (c *core) blockView(b *nodefile.Block, reads []nodeRead) pageBlock {
 		}
 		_, fromSource := b.Sources[at[0]]
 		ok := fromSource || authorOK
-		rewriteAt(v.Data, at, func(u string) string { return c.mediaOrDrop(u, ok) })
+		rewriteAt(v.Data, at, func(u string) string { return c.mediaOrDrop(id, u, ok) })
 	}
 	return v
 }
@@ -327,7 +329,7 @@ func (c *core) sourceValue(id, block, name string) (any, bool) {
 	if _, ok := b.Sources[name]; !ok {
 		return nil, false
 	}
-	v := c.blockView(b, c.nodeReads(id))
+	v := c.blockView(id, b, c.nodeReads(id))
 	val, ok := v.Data[name]
 	return val, ok
 }

@@ -3459,7 +3459,25 @@ A block is drawn as its author wrote it, its data kept fresh by its [live source
   without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
   `nosniff`, a sandbox CSP and 10 minutes of private cache.
 
-A task's pictures (`POST /v1/device/tasks/{id}/media`, `eriphe-capture`) are not kept: the route answers 410 until a node keeps its files.
+### Captured pages (`web_media.go`)
+
+Most sites refuse being framed, and a block never loads an address from outside: to show a page, a
+task with a node of its own captures it in its container (`eriphe-capture`, worker/base) and posts
+the image to its device (`ERIPHE_MEDIA_URL`, the task's secret, for a task with `eriphe-nodes`
+only), which relays it here with its own secret and the task's id:
+`POST /v1/device/tasks/{id}/media?node=<id>`, the image as body.
+
+- **Its own node only.** The node must be the task's (`task_nodes`): another, or a task with no
+  node, gets 403; an unknown or finished task 404.
+- **What is kept.** A PNG or a JPEG, sniffed from its bytes (anything else 415), 5 MiB at most
+  (413), 20 a node at most: in `files/<id>/med_<32 hex>.<png|jpg>` of the graph's repository, one
+  commit by the task's author (`nodestore.PutFile`). It is not a version of the node; it stays
+  with it when it is archived. The answer is `{"src": "media:<name>", "type", "size"}`: the task
+  writes `src` as an `Image`'s `url` in a block of its node. The bytes never go through a model.
+- **Shown.** `blockView` signs `media:<node>/<name>` for the node the block is in (whoever wrote
+  the block, external or not: the file is the node's own and the address carries nothing out), and
+  `GET /espace/media` reads it from that node's files only, with the session: a block of another
+  node naming the same file gets 404.
 
 ### Proposals in the blocks they concern (`card_moves.go`)
 
@@ -3510,8 +3528,8 @@ caller**, never a field:
   never in a skill's `tools`), checked by `checkGrant`, listed by `list_tools` under `provided`, put
   in the task's spec by `specServers` and relayed by its device at
   `/v1/device/tasks/<id>/mcp/eriphe-workspace` like the others (`taskMCPHandler` serves the tools
-  its grant covers; a task not lent it gets 403). The name is reserved. A task's image upload
-  (`/v1/device/tasks/{id}/media`) is refused: no surface takes it.
+  its grant covers; a task not lent it gets 403). The name is reserved. A task's captured pages go
+  to its own node, not through it ([Captured pages](#captured-pages-web_mediago)).
 - **Taint.** Calling `eriphe-workspace` does not taint a task by itself, as eriphe-core's own tools
   do not (`eventsTaint`).
 ### Signing in

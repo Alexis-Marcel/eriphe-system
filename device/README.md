@@ -361,7 +361,7 @@ The only ports the device listens on are for its task containers, each with its 
 listener (`-listen`, 8790), where a Claude Code task calls its permission endpoint `/perm/{id}/mcp`,
 its catalog servers at `/mcp/{server}`, a model behind a device at `/model/v1/{path}`, its
 credentials at `/v1/task/credential`, its toolchains at `/v1/task/toolchains` and, lent
-`eriphe-workspace`, its images for a surface at `/v1/task/media` (`media.go`, named by
+with a node of its own (`eriphe-nodes`), its images for it at `/v1/task/media?node=<id>` (`media.go`, named by
 `ERIPHE_MEDIA_URL`: 8 MiB at most, relayed to eriphe-core's `/v1/device/tasks/{id}/media` with the
 device's secret, see core/README.md, Captured pages), and the egress relay (`-egress-listen`, 8791, see
 Egress). It binds only the device's address on the task network: its interface there when
