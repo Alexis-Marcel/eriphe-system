@@ -105,7 +105,7 @@ const MARK: Record<string, string> = {
   Button: "button.a2-button", Choice: "fieldset.a2-choice", TextField: ".a2-field input[type=text]",
   DateField: ".a2-field input[type=datetime-local]", Metric: ".a2-metric", Progress: ".a2-progress", Chart: ".a2-chart", Table: "table.a2-table",
   Timeline: "ol.a2-timeline", Item: ".a2-item", Message: "article.a2-message", Day: ".a2-day", Proposal: ".a2-proposal-pending",
-  Alert: ".a2-alert", Placeholder: ".a2-placeholder",
+  Alert: ".a2-alert", Placeholder: ".a2-placeholder", Mark: ".a2-marks",
 };
 
 // The accessible name of an element, as far as these components give one.
@@ -225,15 +225,6 @@ describe("the catalog's components", () => {
     await click($$("button.a2-button").find((b) => b.textContent?.includes("itinéraire"))!);
     expect(actions.at(-1)?.action).toMatchObject({ name: "ask", sourceComponentId: "ask", surfaceId: "gallery-trip" });
     expect(actions.at(-1)?.action.context).toEqual({ text: "Trouve-moi un itinéraire pour le voyage" });
-  });
-
-  it("send a thread's « C'est fait » with the thread and the step code wrote", async () => {
-    await mount("fr", one([
-      { id: "root", component: "Button", label: "C'est fait", action: { event: { name: "stepDone", context: { thread: 4, step: "deploy" } } } },
-    ]));
-    await click($("button.a2-button")!);
-    expect(actions.at(-1)?.action).toMatchObject({ name: "stepDone", sourceComponentId: "root", surfaceId: "t" });
-    expect(actions.at(-1)?.action.context).toEqual({ thread: 4, step: "deploy" });
   });
 
   it("let a choice take several values when asked", async () => {
@@ -495,18 +486,12 @@ describe("the catalog's components", () => {
     await act(async () => {});
     expect(text(".a2-proposal-text")).toBe("Ranger les mails ?");
     expect($(".a2-proposal-actions")).toBeNull();
-    expect(text(".a2-proposal-inchat")).toBe("Cette surface montre un contenu extérieur : réponds-y dans la conversation.");
+    expect(text(".a2-proposal-inchat")).toBe("Ce bloc montre un contenu extérieur : réponds-y dans la conversation.");
     expect(sent).toEqual([]);
     // Code's own surface (the attention queue's): Oui and Non, as the card.
     await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "t" } }]));
     const core = { extensions: { eriphe: { ...metadata.extensions.eriphe, author: "core" } } };
     await act(async () => adapter.applyMessages([{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata: core } }]));
-    await act(async () => {});
-    expect($(".a2-proposal-actions")).not.toBeNull();
-    // A thread's surface whose own thread is clean (answers): Oui and Non too, whatever a step read.
-    await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "t" } }]));
-    const thread = { extensions: { eriphe: { ...metadata.extensions.eriphe, author: "thread:4", answers: true } } };
-    await act(async () => adapter.applyMessages([{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata: thread } }]));
     await act(async () => {});
     expect($(".a2-proposal-actions")).not.toBeNull();
   });

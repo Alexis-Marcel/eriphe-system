@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as PtrEvent } from "react";
 import { AnimatePresence, motion, useSpring } from "motion/react";
-import type { GraphNode } from "../data/api";
-import { closePage, depthOf, openPage, step, store, subtree, talkTo, useGraph } from "../data/store";
+import { place, type GraphNode } from "../data/api";
+import { closePage, depthOf, openPage, placeAt, step, store, subtree, talkTo, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Page } from "../page/Page";
 import { boxAt, frameAll, framePages, type Box, type Cam } from "./camera";
@@ -12,7 +12,9 @@ import { codeOf, labelBox, radiusOf, titleOf, waits, weight } from "./model";
 // their links; an open node is its page, drawn right where its bubble was,
 // the others making room around it (layout.ts). Any number of pages open
 // (a ⌘- or shift-click opens one more); the console talks to one of them.
-// The user drags a bubble, or a page by its head: it stays where dropped.
+// The user drags a bubble, or a page by its head: it stays where dropped,
+// and eriphe-core keeps the place (a subject's spot, a bubble's offset
+// from its parent) for every screen.
 // The camera frames the open pages, else the whole graph; a drag or the
 // wheel moves it by hand, a double click gives it back.
 
@@ -55,7 +57,15 @@ export function Graph({ live }: { live: boolean }) {
   // what is open changes, and live while a node is dragged.
   const homes = useRef<Pos>({});
   const prev = useRef<Pos>({});
-  const [pins, setPins] = useState<Record<string, Pin>>({});
+  const places = useGraph((s) => s.places);
+  const pins = useMemo(() => {
+    const out: Record<string, Pin> = {};
+    for (const [id, p] of Object.entries(places)) {
+      const x = nodes[id];
+      if (x) out[id] = parentOf(x) ? { rel: [p.x, p.y] } : { abs: [p.x, p.y] };
+    }
+    return out;
+  }, [places, nodes]); // eslint-disable-line react-hooks/exhaustive-deps
   const [held, setHeld] = useState<{ id: string; at: Pt } | null>(null);
   const layoutKey =
     list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.state}`).join(",") +
@@ -253,7 +263,9 @@ export function Graph({ live }: { live: boolean }) {
     const p = keepNear(g.id, g.raw, true);
     const par = parentAt(g.id);
     prev.current[g.id] = p;
-    setPins((x) => ({ ...x, [g.id]: par ? { rel: [p[0] - par[0], p[1] - par[1]] } : { abs: p } }));
+    const kept = par ? { x: p[0] - par[0], y: p[1] - par[1] } : { x: p[0], y: p[1] };
+    step(store, placeAt, g.id, kept);
+    if (live) void place(g.id, kept).catch(() => undefined);
     setHeld(null);
     dragged.current = true;
     setTimeout(() => (dragged.current = false), 0);

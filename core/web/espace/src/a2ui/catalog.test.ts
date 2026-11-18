@@ -40,7 +40,7 @@ describe("catalog", () => {
 
   it("implements every component core declares, and no other", () => {
     expect(components.map((c) => c.name).sort()).toEqual(Object.keys(declared).sort());
-    expect(components).toHaveLength(31);
+    expect(components).toHaveLength(30);
   });
 
   for (const c of components) {

@@ -13,6 +13,7 @@ import (
 	ossignal "os/signal"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -49,6 +50,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /e2e/mail", sc.handleMail)
 	mux.HandleFunc("POST /e2e/finish/{key}", sc.handleFinish)
+	mux.HandleFunc("GET /e2e/tools", sc.handleTools)
 	mux.Handle("/", sc.web.w.routes())
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -515,9 +517,13 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		body, hash := b.read(node)
 		short := strings.Replace(body, "1. Pourquoi ce métier\n", "", 1)
 		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": short})
+		// The plan was the article's goal: the work is done.
+		if a := n("article"); a != "" {
+			b.self("node_set", map[string]any{"id": a, "done": true})
+		}
 		return "Plus court, le titre 2 gardé."
 	case strings.Contains(said, "archiver"):
-		return "C'est toi qui archives : la croix de sa page, ou sur sa bulle."
+		return "C'est toi qui archives : « Archiver », en haut de sa page."
 	}
 	return "D'accord."
 }
@@ -580,6 +586,15 @@ func (sc *scenario) waitFinish(key string) {
 	case <-ch:
 	case <-sc.ctx.Done():
 	}
+}
+
+// handleTools is GET /e2e/tools: what the faked tools did, the lights lit
+// and the mails sent.
+func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
+	f := sc.tools
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent)})
 }
 
 // handleFinish is POST /e2e/finish/{key}: the worker so named finishes.

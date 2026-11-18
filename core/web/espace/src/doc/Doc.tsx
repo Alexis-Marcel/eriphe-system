@@ -2,17 +2,20 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createAdapter, type Adapter } from "../a2ui/adapter";
 import { Markdown } from "../a2ui/markdown";
 import { SurfaceView } from "../a2ui/Surfaces";
-import type { NodePage } from "../data/api";
+import { ask, mark, type NodePage } from "../data/api";
 import { sourceKey, store } from "../data/store";
 import { useWords } from "../i18n";
-import { messages, pieces, sourceMessage, type Piece } from "./blocks";
+import { blockOf, messages, pieces, sourceMessage, toGesture, type Piece } from "./blocks";
 
 // Doc draws a node's page: its text as Markdown, by the page's own
 // renderer, which makes no HTML of it; its blocks through the A2UI
 // renderer, a surface each, in an adapter of the page's own. While the
 // last version shows, a source's new value goes straight into its block
-// (the stream's "source"); an older version shows as it was.
-export function Doc({ page, latest }: { page: NodePage; latest: boolean }) {
+// (the stream's "source"); an older version shows as it was. A block's
+// gestures (a button's ask, a Mark) go to eriphe-core, which reads them
+// again in the block it keeps (web_gestures.go); on an older version, or
+// from a block someone else's words may have written, nothing is sent.
+export function Doc({ page, latest, live }: { page: NodePage; latest: boolean; live: boolean }) {
   const { t, lang } = useWords();
   const [adapter] = useState<Adapter>(() => createAdapter(lang));
   useEffect(() => () => adapter.dispose(), [adapter]);
@@ -38,6 +41,16 @@ export function Doc({ page, latest }: { page: NodePage; latest: boolean }) {
       }
     });
   }, [adapter, latest, page, ps]);
+
+  useEffect(() => {
+    if (!latest || !live) return;
+    const id = page.node.id;
+    return adapter.onAction((m) => {
+      const g = toGesture(m.action, id, (name) => blockOf(page, name));
+      if (g?.kind === "ask") void ask(id, g.block, g.component).catch(() => undefined);
+      if (g?.kind === "mark") void mark(id, g.block, g.list, g.item, g.mark).catch(() => undefined);
+    });
+  }, [adapter, latest, live, page]);
 
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   if (ps.length === 0) return <p className="pg-empty">{t("espace.page.empty")}</p>;

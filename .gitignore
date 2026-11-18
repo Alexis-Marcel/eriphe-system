@@ -22,3 +22,5 @@ __pycache__/
 # Local worktrees of coding assistants
 /.claude/worktrees/
 /core/web/espace/node_modules/
+/core/web/espace/e2e-results/
+/core/web/espace/e2e-report/

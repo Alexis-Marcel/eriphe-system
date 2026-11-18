@@ -8,7 +8,8 @@ import { Console } from "./console/Console";
 import { tab, type Boot } from "./data/api";
 import { startPresence } from "./data/presence";
 import { sample } from "./data/sample";
-import { applyNodes, applyNotes, openPage, step, store, useGraph } from "./data/store";
+import { applyTheme, keep } from "./data/keep";
+import { applyNodes, applyNotes, openPage, restore, step, store, useGraph } from "./data/store";
 import { connect } from "./data/stream";
 import { Graph } from "./graph/Graph";
 import { Hud } from "./hud/Hud";
@@ -39,10 +40,13 @@ export function App({ boot }: { boot: Boot }) {
       store.setState({ exchange: sampleExchange(lang) });
       return;
     }
+    step(store, restore, boot.view, boot.places);
     const stop = connect(store);
+    const kept = keep(store);
     const quiet = startPresence({ tab, csrf: () => boot.csrf, onNotes: (ns) => step(store, applyNotes, ns) });
     return () => {
       stop();
+      kept();
       quiet();
     };
   }, [boot, gallery, lang]);
@@ -59,6 +63,9 @@ export function App({ boot }: { boot: Boot }) {
     });
     return off;
   }, []);
+
+  const theme = useGraph((s) => s.theme);
+  useEffect(() => applyTheme(theme), [theme]);
 
   if (gallery) return <Gallery />;
   return (

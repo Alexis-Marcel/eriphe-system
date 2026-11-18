@@ -1,4 +1,4 @@
-import type { Message } from "../a2ui/adapter";
+import type { Action, Message } from "../a2ui/adapter";
 import { CATALOG } from "../a2ui/catalog";
 import type { NodePage, PageBlock } from "../data/api";
 
@@ -47,4 +47,35 @@ export function messages(page: NodePage): Message[] {
 // sourceMessage puts a source's new value where the block reads it.
 export function sourceMessage(node: string, block: string, name: string, value: unknown): Message {
   return { version: "1.0", updateDataModel: { surfaceId: surfaceOf(node, block), path: `/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`, value } };
+}
+
+// blockOf is a block of the page, by its name.
+export function blockOf(page: NodePage, name: string): PageBlock | undefined {
+  return page.parts.find((p) => p.block?.name === name)?.block;
+}
+
+// A gesture on a block, as eriphe-core takes it: a button's ask (the
+// button only: eriphe-core reads its words in the block), or the user's
+// mark on an item. Local names (expand, tab) stay in the page.
+export type Gesture =
+  | { kind: "ask"; block: string; component: string }
+  | { kind: "mark"; block: string; list: string; item: string; mark: string };
+
+// toGesture reads an action of one of the node's blocks: none from
+// another surface, from a block that is not there, or from an external
+// one (someone else's words may have written it).
+export function toGesture(a: Action, node: string, block: (name: string) => PageBlock | undefined): Gesture | null {
+  const prefix = surfaceOf(node, "");
+  if (!a.surfaceId.startsWith(prefix)) return null;
+  const name = a.surfaceId.slice(prefix.length);
+  const b = block(name);
+  if (!b || b.external) return null;
+  if (a.name === "ask") return { kind: "ask", block: name, component: a.sourceComponentId };
+  if (a.name === "mark") {
+    const c = a.context ?? {};
+    const [list, item, m] = [c.list, c.item, c.mark];
+    if (typeof list !== "string" || typeof item !== "string" || typeof m !== "string") return null;
+    return { kind: "mark", block: name, list, item, mark: m };
+  }
+  return null;
 }

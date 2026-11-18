@@ -35,9 +35,13 @@ A page shows:
 - **Content**: what Eriphe wrote there, text and live blocks (a list, a table, a chart…) whose
   values keep up to date by themselves;
 - **Trace**: what was done for it, when and by whom (you, Eriphe, a task, Eriphe's code, outside);
-- **.md**: the page's file as it is stored, a plain text file versioned by git;
+- **.md**: the page's text as it is stored, a plain text file versioned by git, which you can edit
+  there and **Save** (⌘S or Ctrl-S). If a newer version came while you were writing (Eriphe or a
+  task wrote meanwhile), nothing is saved: the page shows that version, and you take it or keep
+  your text to save it over;
 - its **versions** (v1, v2…): an older one shows as it was;
-- at its foot, the cards waiting for your answer.
+- at its foot, the cards waiting for your answer;
+- **Archive**: see below.
 
 The console talks to the page you opened or clicked last: « Write to Eriphe about Plan of the first
 article ». With no page open it talks to the home. Close every page, or click Eriphe's name, to go
@@ -54,6 +58,21 @@ wheel to zoom; a double click gives the view back to Eriphe. Drag a bubble, or a
 and drop it: it stays there. A subject stays within reach of the others and a bubble near its subject:
 dragged too far it lags behind, and dropped there it comes back to the edge. Bring a bubble to the
 edge of the screen and the view follows.
+
+Your Eriphe keeps where you dropped things, the pages you left open and your light or dark choice
+(the sun or moon at the top; until you choose, the workspace follows your system): they come back
+the next time, on any of your screens.
+
+## Archive and reopen
+
+Only you archive. **Archive**, at the top of a page, asks once more and says how many bubbles go with
+it: a bubble leaves the graph with everything under it, and what was running there stops. Eriphe
+never archives by itself; ask it to and it tells you where the button is. **Archives** at the top
+lists what you archived, latest first, each with **Reopen**: the bubble comes back with what was
+archived with it.
+
+In a block, a button Eriphe wrote sends its words to Eriphe about that page, and a mark (keep, drop,
+done) is kept by Eriphe's code; neither works on an older version, nor in a block marked « outside ».
 
 ## Ask for something
 

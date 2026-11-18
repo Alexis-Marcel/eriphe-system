@@ -1,12 +1,14 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { Exchange, GraphNode, Moved, Note } from "./api";
+import type { Exchange, GraphNode, Moved, Note, Place, Theme, View } from "./api";
 
 // The workspace's state: the graph as eriphe-core streams it (stream.ts),
 // and what the user has open. The graph is core's: the page never changes a
 // node by itself, it shows what the stream says. What is open is the
 // page's: the pages open in the graph, and the one the console talks to
-// (talk), the home when none.
+// (talk), the home when none; where the user dropped bubbles (places) and
+// the theme. eriphe-core keeps those too (web_gestures.go): the boot gives
+// them back (restore), on any of the user's screens.
 //
 // Each event of the stream is a pure step (applyX), tested on its own;
 // the store only holds the result.
@@ -30,6 +32,8 @@ export type State = {
   notes: Note[];
   moved: Moved & { n: number }; // the proposals that moved last, n growing each time
   live: boolean; // the stream is open
+  places: Record<string, Place>; // where the user dropped a bubble: a root's spot, a child's offset from its parent
+  theme: Theme; // "" follows the system
 };
 
 export const empty = (): State => ({
@@ -45,7 +49,33 @@ export const empty = (): State => ({
   notes: [],
   moved: { n: 0, refs: [] },
   live: false,
+  places: {},
+  theme: "",
 });
+
+// restore is the workspace as the user left it: its pages open (kept when
+// their nodes come), the one the console talked to, the places, the theme.
+export function restore(s: State, v: View | undefined, places: Record<string, Place> | undefined): State {
+  const open = Array.isArray(v?.open) ? v.open.filter((id) => typeof id === "string") : [];
+  const talk = v?.talk && open.includes(v.talk) ? v.talk : (open.at(-1) ?? null);
+  const theme: Theme = v?.theme === "light" || v?.theme === "dark" ? v.theme : "";
+  return { ...s, open, talk, theme, places: places && typeof places === "object" ? { ...places } : {} };
+}
+
+// viewOf is what eriphe-core keeps of what is open.
+export const viewOf = (s: State): View => ({ open: s.open, talk: s.talk ?? undefined, theme: s.theme });
+
+// placeAt keeps where the user dropped a bubble; null forgets it.
+export function placeAt(s: State, id: string, p: Place | null): State {
+  const places = { ...s.places };
+  if (p) places[id] = p;
+  else delete places[id];
+  return { ...s, places };
+}
+
+export function setTheme(s: State, theme: Theme): State {
+  return theme === s.theme ? s : { ...s, theme };
+}
 
 export const sourceKey = (node: string, block: string, name: string) => `${node}\u0000${block}\u0000${name}`;
 

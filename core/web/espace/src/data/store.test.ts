@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GraphNode } from "./api";
 import {
   applyDoc, applyExchange, applyMoved, applyNodes, applyNotes, applyProgress, applyShow, applySource, closePage, empty, home, NOTES_KEPT,
-  openPage, pathOf, SHOW_FRESH, sourceKey, subtree, talkTo, type State,
+  openPage, pathOf, placeAt, restore, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
 } from "./store";
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
@@ -96,5 +96,26 @@ describe("the store", () => {
     const s = withGraph();
     expect(pathOf(s.nodes, "a2")).toEqual(["a", "a2"]);
     expect(subtree(s.nodes, "a").sort()).toEqual(["a", "a1", "a2"]);
+  });
+
+  it("comes back as the user left it: its pages once their nodes come, the places, the theme", () => {
+    let s = restore(empty(), { open: ["a1", "gone", "b"], talk: "a1", theme: "dark" }, { a: { x: 10, y: -4 } });
+    expect(s).toMatchObject({ open: ["a1", "gone", "b"], talk: "a1", theme: "dark", places: { a: { x: 10, y: -4 } } });
+    s = applyNodes(s, { reset: true, nodes: [node("a"), node("a1", { parent: "a" }), node("b")] });
+    expect(s.open).toEqual(["a1", "b"]);
+    expect(s.talk).toBe("a1");
+    expect(viewOf(s)).toEqual({ open: ["a1", "b"], talk: "a1", theme: "dark" });
+    // What eriphe-core kept that is not a view reads as nothing.
+    expect(restore(empty(), { open: [3 as unknown as string], talk: "x", theme: "pink" as never }, undefined)).toMatchObject({ open: [], talk: null, theme: "", places: {} });
+  });
+
+  it("keeps where a bubble was dropped, forgets it, and the theme chosen", () => {
+    let s = placeAt(empty(), "a", { x: 1, y: 2 });
+    expect(s.places).toEqual({ a: { x: 1, y: 2 } });
+    s = placeAt(s, "a", null);
+    expect(s.places).toEqual({});
+    const t = setTheme(s, "light");
+    expect(t.theme).toBe("light");
+    expect(setTheme(t, "light")).toBe(t);
   });
 });
