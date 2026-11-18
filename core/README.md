@@ -3146,6 +3146,26 @@ cd core/web/espace
 npm run build && npx playwright install chromium && npx playwright test
 ```
 
+**The scenario on a real model** (`nodes_bench_live_test.go`, #634). The same world, the brain a
+real model: eriphe-core starts it as on an install (the built-in prompt, its tools and free reads),
+and the bench runs it with the local Claude Code CLI (`claude` signed in on the machine) in
+stream-json as a device does, its MCP servers the test core's device API, its permissions asked
+through a test-only `approve` tool. The CLI runs in a temporary folder, without the machine's
+settings, `CLAUDE.md`, memory or MCP servers, and without the web. The workers are faked: any task
+writes a short result in its node and reports done, the first step held until the scenario lets it
+finish. It plays the user's turns of the 13 steps, says yes on the cards, and scores what the core
+holds: lost replies (an answer code's safety net had to file, a turn left unanswered, a question's
+answer written in no node), duplicate nodes (a node opened for a thing that already has one, two
+live nodes of one title), stuck steps, and views only shown (a standing node opened outside
+`propose_view`, a reply not proposed on a card). It fails on a lost reply or a duplicate node; the
+rest is logged.
+
+```sh
+ERIPHE_LIVE_NODES=1 ERIPHE_LIVE_NODES_RUNS=3 go test -run TestNodesBenchLive -timeout 0 -v .
+```
+
+`ERIPHE_LIVE_NODES_MODEL` picks the model (`sonnet` by default), `ERIPHE_LIVE_NODES_CLI` the command.
+
 **A full home** (#455). The workspace does what the conversation's page does to say the user is
 there (`data/presence.ts`, as `static/app.js`): it tells eriphe-core when it comes in front or leaves
 (`POST /presence`, visible and focused, `tab`, `front`, `sub` its push subscription's id, the CSRF

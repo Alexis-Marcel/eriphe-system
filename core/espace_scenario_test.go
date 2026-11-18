@@ -79,9 +79,20 @@ type scenario struct {
 	inbox  map[string]int    // each task's last inbox item handled
 	tasks  map[string]string // each worker task's role: style, plan, research, check
 	finish map[string]chan struct{}
+
+	// live, for the nodes' bench (nodes_bench_live_test.go): the brain is
+	// a real model, started by eriphe-core as on an install, and the
+	// workers do the same for any work. Nil: the scripted brain.
+	live *liveBrain
 }
 
 func newScenario(t *testing.T, ctx context.Context) *scenario {
+	return newScenarioWith(t, ctx, nil)
+}
+
+// newScenarioWith is the scenario's world, its brain the scripted one, or
+// live's.
+func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenario {
 	t.Helper()
 	dir := t.TempDir()
 	store, err := openStore(filepath.Join(dir, "core.db"))
@@ -90,7 +101,11 @@ func newScenario(t *testing.T, ctx context.Context) *scenario {
 	}
 	secret := filepath.Join(dir, "claude")
 	os.WriteFile(secret, []byte("tok"), 0o600)
-	cfg := &Config{User: "Sam", Listen: "127.0.0.1:8800", DB: filepath.Join(dir, "core.db"), DefaultAgent: "small",
+	user := "Sam"
+	if live != nil {
+		user = "Lou" // not Sam, who writes the urgent mail: a real model reads both
+	}
+	cfg := &Config{User: user, Listen: "127.0.0.1:8800", DB: filepath.Join(dir, "core.db"), DefaultAgent: "small",
 		Providers: map[string]Provider{"p": {Kind: "claude-subscription", Secret: secret}},
 		Agents:    map[string]Agent{"small": {Runtime: "claude-code", Provider: "p", Use: "everything"}},
 		Brain:     &BrainConfig{Agent: "small", Tools: []string{"maison", "agenda", "mail", "prod"}},
@@ -128,8 +143,12 @@ func newScenario(t *testing.T, ctx context.Context) *scenario {
 
 	store.registerDevice("pc", hashSecret("device-secret"))
 	store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
-	store.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Device: "pc", Agent: "small", Runtime: "claude-code", State: stateIdle, Prompt: "brain"})
-	setBrainTask(c, "t-brain")
+	if live == nil {
+		// The scripted brain needs no spec: its turns are canned. A live
+		// one is started by eriphe-core, its spec the install's.
+		store.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Device: "pc", Agent: "small", Runtime: "claude-code", State: stateIdle, Prompt: "brain"})
+		setBrainTask(c, "t-brain")
+	}
 
 	tw := newTestWebFor(t, c)
 	tw.setup()
@@ -143,7 +162,10 @@ func newScenario(t *testing.T, ctx context.Context) *scenario {
 
 	sc := &scenario{t: t, ctx: ctx, c: c, web: tw, tools: tools, dev: dev.URL,
 		nodes: map[string]string{}, seqs: map[string]int{}, inbox: map[string]int{}, tasks: map[string]string{},
-		finish: map[string]chan struct{}{}}
+		finish: map[string]chan struct{}{}, live: live}
+	if live != nil {
+		live.serve(sc)
+	}
 	sc.seed()
 	go c.runAssistants(ctx, "tok")
 	go c.runNodes(ctx)
@@ -262,6 +284,10 @@ func (sc *scenario) play(a deviceAssignment) {
 		sc.report(a.ID, deviceReport{State: stateStopped})
 		return
 	}
+	if t.Kind == "brain" && sc.live != nil {
+		sc.live.assign(a)
+		return
+	}
 	if t.Kind == "brain" {
 		for _, it := range a.Inbox {
 			if it.Kind != "message" {
@@ -288,7 +314,11 @@ func (sc *scenario) play(a deviceAssignment) {
 	sc.mu.Unlock()
 	if !known {
 		sc.report(a.ID, deviceReport{State: stateRunning})
-		go sc.work(a.ID, workerRole(t))
+		if sc.live != nil {
+			go sc.liveWork(a.ID, t)
+		} else {
+			go sc.work(a.ID, workerRole(t))
+		}
 	}
 }
 
@@ -622,16 +652,26 @@ func (sc *scenario) handleFinish(rw http.ResponseWriter, r *http.Request) {
 // from Sam about the production app, and its skill opens a node for it,
 // sorted, with a draft, waiting for the user.
 func (sc *scenario) handleMail(rw http.ResponseWriter, r *http.Request) {
-	c := sc.c
-	d, err := c.nodes.Create(nodestore.New{Title: "Urgent : la prod renvoie des 500", Parent: sc.nodes["mails"], External: true, Author: "skill:mails",
-		Body: "**Tri** : urgent. Sam écrit que l'app de production renvoie des erreurs 500 depuis 10 h.\n\n**Brouillon** : À écrire.\n"})
+	id, err := sc.mail()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// mail is what the mails' skill does with the urgent mail: a node, under
+// the mails, sorted, with a draft, waiting for the user.
+func (sc *scenario) mail() (string, error) {
+	c := sc.c
+	d, err := c.nodes.Create(nodestore.New{Title: "Urgent : la prod renvoie des 500", Parent: sc.nodes["mails"], External: true, Author: "skill:mails",
+		Body: "**Tri** : urgent. Sam (sam@example.org) écrit que l'app de production renvoie des erreurs 500 depuis 10 h.\n\n**Brouillon** : À écrire.\n"})
+	if err != nil {
+		return "", err
 	}
 	sc.mu.Lock()
 	sc.nodes["mail"] = d.Node.Meta.ID
 	sc.mu.Unlock()
 	c.nodes.SetState(d.Node.Meta.ID, nodestore.Waiting)
-	writeJSON(rw, http.StatusOK, map[string]string{"id": d.Node.Meta.ID})
+	return d.Node.Meta.ID, nil
 }
