@@ -39,13 +39,15 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
   await expect(said).toContainText("Bonjour. Rien ne t'attend ce matin.");
   await expect(page.locator("article.pg")).toHaveCount(0);
 
-  // 2. One call, no node opened; it is kept in « Ma journée ».
+  // 2. One call, no node opened; it is logged in « Ma journée »'s trace.
   await say("Allume la lumière du bureau.");
   await expect(said).toContainText("C'est allumé.");
   await expect(page.locator("article.pg")).toHaveCount(0);
   expect((await (await request.get("/e2e/tools")).json()).lit).toEqual(["bureau"]);
   await bubble("Ma journée").click();
-  await expect(pageOf("Ma journée")).toContainText("Lumière du bureau allumée.");
+  await pageOf("Ma journée").getByRole("tab", { name: "Trace" }).click();
+  await expect(pageOf("Ma journée").locator(".pg-trace")).toContainText("Appel : maison/allumer.");
+  await pageOf("Ma journée").getByRole("tab", { name: "Contenu" }).click();
   await pageOf("Ma journée").getByRole("button", { name: "Fermer cette page" }).click();
 
   // 3. The user opens the standing subject « Substack ».
@@ -62,9 +64,11 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
 
   // 5. The answer goes into « Ma journée », not into a new node.
   const before = await page.locator(".gr-node").count();
-  // Eriphe shows the page: the console then talks to it.
+  // Eriphe shows the page beside; the console still talks to Substack, its
+  // short answer under the question.
   await say("Qu'est-ce que j'ai de prévu aujourd'hui ?");
-  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Ma journée");
+  await expect(said).toContainText("Deux rendez-vous");
+  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Substack");
   await expect(pageOf("Ma journée")).toContainText("Point produit");
   await expect(pageOf("Ma journée")).toContainText("Dentiste");
   await expect(page.locator(".gr-node")).toHaveCount(before);
@@ -85,7 +89,8 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
   // 8. A draft with its « Envoyer ? » card, the production view beside it,
   // a research child running.
   await say("Réponds que je regarde dans l'heure, ouvre-moi la prod, et lance en arrière-plan une recherche sur l'erreur.");
-  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Production");
+  await expect(said).toContainText("Le brouillon est prêt");
+  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", `Écris à Eriphe, sur ${external}`);
   await expect(mailPage).toContainText("Je regarde dans l'heure.");
   await expect(pageOf("Production")).toBeVisible();
   await expect(pageOf("Production")).toContainText("42");
@@ -95,28 +100,29 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
 
   // 9. The user approves the send; Style finishes, and code starts Plan
   // with no turn of the brain.
-  // The camera frames the page the console talks to: the mail's, from the
-  // ticker, comes in front.
-  await tick.click();
   await card.getByRole("button", { name: "Oui" }).click();
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).sent).toEqual(["sam@example.org: Je regarde dans l'heure."]);
   await request.post("/e2e/finish/style");
   await expect(page.locator(".gr-node.done .gr-core[aria-label^='Style des articles']")).toBeVisible();
-  await expect(page.locator(".gr-node.done .gr-core[aria-label^='Plan du premier article']")).toBeVisible({ timeout: 30_000 });
+  // Plan's result is the user's: it waits for them, the work around it done.
+  await expect(page.locator(".gr-node.waiting .gr-core[aria-label^='Plan du premier article']")).toBeVisible({ timeout: 30_000 });
 
   // 10. Back on Substack: what happened while away.
   await page.locator(".hud-brand").click();
   await bubble("Substack").click();
   await expect(pageOf("Substack")).toBeVisible();
-  await expect(bubble("Premier article")).toBeVisible();
+  await expect(page.locator(".gr-node.done .gr-core[aria-label^='Premier article']")).toBeVisible();
 
   // 11. The plan waits for the user.
   await bubble("Plan du premier article").click({ modifiers: ["Meta"] });
   const plan = pageOf("Plan du premier article");
   await expect(plan).toContainText("Pourquoi ce métier");
   await expect(plan).toContainText("Ce qui a changé en dix ans");
+  // One version as the user counts them (no list of versions yet): the
+  // step's empty creation is not one.
   const v = plan.locator(".pg-versions button");
-  const planVersions = await v.count();
+  await expect(v).toHaveCount(0);
+  await expect(page.locator(".tick.yours", { hasText: "Plan du premier" })).toBeVisible();
 
   // 12. Said to the open plan page: a new version, the older one still
   // readable.
@@ -125,8 +131,8 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
   await expect(said).toContainText("Plus court, le titre 2 gardé.");
   await expect(plan).not.toContainText("Pourquoi ce métier");
   await expect(plan).toContainText("Ce qui a changé en dix ans");
-  await expect(v).toHaveCount(planVersions + 1);
-  await v.nth(1).click(); // the one before the last
+  await expect(v).toHaveText(["v2", "v1"]);
+  await v.nth(1).click();
   await expect(plan).toContainText("Pourquoi ce métier");
   await expect(plan.locator(".pg-old")).toBeVisible();
   await plan.locator(".pg-old button").click();
@@ -143,6 +149,11 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
   await expect(plan.locator(".pg-md-state")).toContainText("Enregistré");
   await plan.getByRole("tab", { name: "Contenu" }).click();
   await expect(plan).toContainText("Et après");
+  // The user says the plan suits them: Eriphe, on their word, marks it done.
+  await plan.locator(".pg-head").click({ position: { x: 10, y: 10 } });
+  await say("Ce plan me va.");
+  await expect(said).toContainText("C'est noté, le plan est fait.");
+  await expect(page.locator(".gr-node.done .gr-core[aria-label^='Plan du premier article']")).toBeVisible();
 
   // 13. Eriphe leaves the archive to the user, who does it: the mail and
   // its child leave the graph, and stay in the archives.
@@ -253,3 +264,37 @@ async function settled(node: Locator): Promise<[number, number]> {
   }
   return last;
 }
+
+// On a phone: the graph as a list, a tap opens one page over it.
+test("the workspace on a small screen", async ({ page }) => {
+  const problems: string[] = [];
+  page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
+  page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/login");
+  await page.locator('input[name="password"]').fill(password);
+  await page.locator('button[type="submit"]').click();
+  await page.waitForURL((u) => u.pathname !== "/login");
+  await page.goto("/espace");
+
+  await page.locator(".hud-brand").click();
+  await expect(page.locator(".gr-node")).toHaveCount(0);
+  const rows = page.locator(".ls-row");
+  await expect(rows.filter({ hasText: "Substack" })).toBeVisible();
+  // a subject, then its bubbles under it
+  const titles = await rows.locator("b").allTextContents();
+  expect(titles.indexOf("Premier article")).toBeGreaterThan(titles.indexOf("Substack"));
+  expect(titles.indexOf("Plan du premier article")).toBeGreaterThan(titles.indexOf("Premier article"));
+  // the archived mail is not there; its title never was
+  await expect(page.getByText("Urgent : la prod renvoie des 500")).toHaveCount(0);
+
+  await rows.filter({ hasText: "Production" }).locator("button").click();
+  const prod = page.locator('article.pg[aria-label="Production"]');
+  await expect(prod).toBeVisible();
+  await expect(prod).toContainText("42");
+  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Production");
+  await prod.getByRole("button", { name: "Fermer cette page" }).click();
+  await expect(page.locator("article.pg")).toHaveCount(0);
+  await expect(rows.first()).toBeVisible();
+  expect(problems).toEqual([]);
+});

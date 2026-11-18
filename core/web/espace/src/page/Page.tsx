@@ -3,7 +3,7 @@ import { createAdapter } from "../a2ui/adapter";
 import { CATALOG } from "../a2ui/catalog";
 import { wall, when } from "../a2ui/format";
 import { SurfaceView } from "../a2ui/Surfaces";
-import { archive, type ProposalView, type TraceEntry } from "../data/api";
+import { archive, label, type ProposalView, type TraceEntry } from "../data/api";
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
@@ -48,6 +48,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
   const kicker = path.length > 1 ? titleOf(nodes[path[0]], external) : null;
   const running = node?.state === "running";
   const at = wall(node?.updated);
+  const shift = page?.shift ?? 0;
   const gone = (n: number) => (n === 0 ? "" : n === 1 ? t("espace.page.archive.one") : t("espace.page.archive.many", n));
 
   return (
@@ -91,7 +92,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
             <span className="pg-versions" role="group" aria-label={t("espace.page.versions")}>
               {[...page!.versions].reverse().map((v) => (
                 <button key={v.n} type="button" className={shown === v.n ? "on" : ""} aria-pressed={shown === v.n} onClick={() => setVersion(v.n === last ? 0 : v.n)}>
-                  v{v.n}
+                  v{label(v.n, shift)}
                 </button>
               ))}
             </span>
@@ -107,9 +108,9 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
         </div>
         {!latest && (
           <p className="pg-old">
-            {t("espace.page.old", shown)}{" "}
+            {t("espace.page.old", label(shown, shift))}{" "}
             <button type="button" className="linkish" onClick={() => setVersion(0)}>
-              {t("espace.page.latest", last)}
+              {t("espace.page.latest", label(last, shift))}
             </button>
           </p>
         )}
@@ -124,7 +125,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
       <div className="pg-body">
         {tab === "doc" && (page ? <Doc page={page} latest={latest} live={live} /> : failed ? <p className="pg-empty">{t("espace.page.gone")}</p> : <Skeleton />)}
         {tab === "trace" && (trace ? <Trace entries={trace} /> : <Skeleton />)}
-        {tab === "md" && (file ? <MdTab key={`${id}@${version}`} id={id} file={file} latest={latest} live={live} /> : <Skeleton />)}
+        {tab === "md" && (file ? <MdTab key={`${id}@${version}`} id={id} file={file} latest={latest} live={live} shift={shift} /> : <Skeleton />)}
       </div>
       {asking && node && (
         <footer className="pg-foot pg-ask" role="alertdialog" aria-label={t("espace.page.archive.ask", titleOf(node, external))}>

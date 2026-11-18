@@ -678,3 +678,44 @@ func TestBrainWaitsForTheCatalogAtStart(t *testing.T) {
 		t.Fatal("still settling after a minute")
 	}
 }
+
+// A call the brain makes with the user's permission is on record in the
+// trace of the node its turn is about; a free read is not.
+func TestBrainCallTraced(t *testing.T) {
+	c := newCatalogCore(t)
+	setBrain(c, &BrainConfig{})
+	editBrain(c, func(a *Assistant) { a.Tools = []string{"github"} })
+	c.store.insertTask(&TaskRow{ID: "b-1", Device: "pc", Kind: "brain", Runtime: "claude-code", State: stateRunning})
+	setBrainTask(c, "b-1")
+	openGraph(t, c)
+	id := workNode(t, c, "La journée.")
+	c.turn.start(1, 1, 0)
+	ctx := context.Background()
+	cs := connectTo(t, c.taskServer("b-1", c.brainGrant(), "github"))
+	if out, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "get_issue", Arguments: map[string]any{"number": 3}}); out.IsError {
+		t.Fatalf("free read = %s", resultText(out))
+	}
+	c.turnNode(id)
+	args := map[string]any{"title": "x"}
+	c.store.recordDecision("b-1", "p1", "mcp__github__create_issue", args, decideAllow, byUser, "")
+	if out, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "create_issue", Arguments: args}); out.IsError {
+		t.Fatalf("allowed call = %s", resultText(out))
+	}
+	raw, _ := c.nodes.Trace(id)
+	if n := strings.Count(string(raw), "Appel : "); n != 1 || !strings.Contains(string(raw), "Appel : github/create_issue.") {
+		t.Fatalf("trace:\n%s", raw)
+	}
+	// Said from a page, the call is that page's, whatever the turn named.
+	page := workNode(t, c, "Le projet.")
+	c.turn.answersIn(page)
+	c.store.recordDecision("b-1", "p2", "mcp__github__create_issue", args, decideAllow, byUser, "")
+	if out, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "create_issue", Arguments: args}); out.IsError {
+		t.Fatalf("allowed call = %s", resultText(out))
+	}
+	if raw, _ := c.nodes.Trace(page); !strings.Contains(string(raw), "Appel : github/create_issue.") {
+		t.Fatalf("the page's trace:\n%s", raw)
+	}
+	if raw, _ := c.nodes.Trace(id); strings.Count(string(raw), "Appel : ") != 1 {
+		t.Fatalf("the node named got it too:\n%s", raw)
+	}
+}

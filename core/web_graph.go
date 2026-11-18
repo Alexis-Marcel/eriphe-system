@@ -145,13 +145,16 @@ type nodePage struct {
 	Version  int            `json:"version"` // the version shown
 	Archived *time.Time     `json:"archived,omitempty"`
 	Versions []pageVersion  `json:"versions"`
+	Shift    int            `json:"shift,omitempty"` // 1 when its creation was empty: the user's v1 is its version 2
 	Parts    []pagePart     `json:"parts"`
 	Cards    []proposalView `json:"cards"`
 }
 
 // pageVersion is a version of a node: its number, who made it, when.
 // Code's own versions (a source's new values) are not listed, but the
-// last one.
+// last one; nor a creation with nothing in it (a step opened for its task
+// to write): the user numbers the versions from the first with something
+// in it (shift).
 type pageVersion struct {
 	N      int       `json:"n"`
 	Author string    `json:"author"`
@@ -198,8 +201,16 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		p.Archived = &a
 	}
 	if vs, err := c.nodes.Versions(id); err == nil {
+		if len(vs) > 1 && vs[0].N == 1 && d.Version.N != 1 {
+			if first, err := c.nodes.Read(id, 1); err == nil && strings.TrimSpace(nodeBody(first.Raw)) == "" {
+				p.Shift = 1
+			}
+		}
 		for i, v := range vs {
 			if v.Author == nodeByCode && i < len(vs)-1 && v.N != d.Version.N {
+				continue
+			}
+			if v.N <= p.Shift {
 				continue
 			}
 			p.Versions = append(p.Versions, pageVersion{N: v.N, Author: v.Author, At: v.At})

@@ -987,7 +987,12 @@ store](#node-store-nodestore-nodesgo)).
   facts and people.
 - **Showing a node** (`node_show.go`): `node_show` keeps the request (kv `node_show`: `node`, `by`,
   `at`, `seq`, growing at each) and wakes who watches (`watchShown`); the graph page (#633) opens
-  the page. It writes nothing in the node.
+  the page beside the others, the console still talking where it talked (only the user's gesture
+  moves it). It writes nothing in the node.
+- **A call in the trace** (`proxy.go`, `traceBrainCall`): a call the brain made with the user's
+  permission (a ticket, not a free read) is a line of the trace of the node it talks to (the page
+  the user spoke from), else, from the home, of the node the turn is about (the last it named):
+  `Appel : <server>/<tool>.`. A turn of the home that named no node logs it in the decisions only.
 
 ## Node files (`nodefile/`)
 
@@ -1127,8 +1132,8 @@ The **engine** is code, without a model:
   step's node (`runRequest.inNode`), given the work's goal and the results of the steps it comes
   after (2000 characters each); what those may carry of someone else's words taints it.
 - It **accepts a proven step on its own** (`proven`): its receipt says done, no check of its
-  contract failed, nothing it claims is denied by what the device saw. The step's node is done,
-  its result kept, the decision a line of the work's trace, and the next steps start. No brain turn.
+  contract failed, nothing it claims is denied by what the device saw. The step's node is done
+  (but the work's result, below), its result kept, the decision a line of the work's trace, and the next steps start. No brain turn.
 - The brain is **woken only for an exception**, once, by an event `[nœud <id> « title »] …`
   (`wakeForWork`): a failed proof (`failed`), a blocked step (its task could not start, failed,
   stopped or was lost), the budget spent (the work is `held`: nothing new starts, the running steps
@@ -1143,7 +1148,11 @@ The **engine** is code, without a model:
 - Once every step is accepted or dropped, a **final check**: a fresh agent in a child node of the
   work (« Contrôle de l'objectif »), lent read-only what the steps wrote, given the goal and each
   step's result. Its receipt done with no failed check makes the work done; its verdict goes into
-  the work's trace.
+  the work's trace. A work done puts its **result before the user** (`workForUser`): the accepted
+  steps no other accepted step comes after wait for the user (one already done or archived stays
+  so), the work around them done, until the user,
+  or the brain on their word (`node_set` done), says it is done, or they archive it. A work with no
+  such step waits itself.
 - **Restart**: what the engine knows is in core.db (`node_steps`: node, parent, after, spec,
   status, task, tries, output, opener, taint, skill, clean, times; `node_works`: state, held,
   budget, time spent, final check), never read back from a node's file. The tick
@@ -3008,7 +3017,8 @@ conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/
 
 - `GET /api/nodes/{id}[?version=n]`: a node's page (`nodePage`): its row (below), the version
   shown, its versions (`n`, `author`, `at`; code's own versions, a source's new values, are not
-  listed but the last), its body as parts in order (`parts`: Markdown `text`, or a `block`), and
+  listed but the last; nor an empty creation, a step opened for its task to write: `shift` 1, the
+  page numbering the versions from the first with something in it), its body as parts in order (`parts`: Markdown `text`, or a `block`), and
   the cards it waits on (`cards`, as the [proposals](#proposals-in-the-blocks-they-concern-card_movesgo)
   show them). A block (`pageBlock`) is ready to draw: its `name`, its A2UI `components`, its
   `data` with each source's last value at `/<name>` (the version's snapshot, then the latest read
@@ -3073,7 +3083,8 @@ token in `X-CSRF-Token`:
   node the console talks to) and the store (`store.ts`, Zustand): the graph as streamed, what is
   open, the places and the theme, each event a pure step tested on its own. `keep.ts` sends what
   is open and the theme back to eriphe-core a moment after they change. `presence.ts` says the
-  user is there.
+  user is there. A page Eriphe shows (`applyShow`) opens beside the others and leaves the console
+  where it was: only the user's click or ⌘-click moves it.
 - `graph/`: the layout (`layout.ts`, a small force simulation): roots held to their home (where
   they first found room, `homesFor`: a new subject never moves the others), children pulled to
   their parent, links as weak springs, every bubble and its label a box that pushes the others
@@ -3089,7 +3100,9 @@ token in `X-CSRF-Token`:
   else the page the console talks to, the others open in place; with no page open, the whole
   graph. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
   gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
-  bigger, what waits for the user brighter, what runs a little, what is done or old quieter.
+  bigger, what waits for the user brighter, what runs a little, what is done or old quieter. Under
+  760 px wide the graph is a list (`graph/List.tsx`, `listOrder`): each subject, then its bubbles
+  under it, depth first, in the order they were made; a tap opens its page alone over the list.
 - `page/`: a page in the graph, any number open: a click opens one alone, ⌘, Ctrl or shift with
   the click one more. Dragged by its head; its head says what it belongs to, its title, its date
   or « En cours » on the title line, its versions, « Archiver », the cross that closes this page

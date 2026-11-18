@@ -58,7 +58,7 @@ export const empty = (): State => ({
 // (one the user saw is not shown again), the places, the theme.
 export function restore(s: State, v: View | undefined, places: Record<string, Place> | undefined): State {
   const open = Array.isArray(v?.open) ? v.open.filter((id) => typeof id === "string") : [];
-  const talk = v?.talk && open.includes(v.talk) ? v.talk : (open.at(-1) ?? null);
+  const talk = v?.talk && open.includes(v.talk) ? v.talk : null;
   const theme: Theme = v?.theme === "light" || v?.theme === "dark" ? v.theme : "";
   const shown = typeof v?.shown === "number" && v.shown > 0 ? v.shown : s.shown;
   return { ...s, open, talk, theme, shown, places: places && typeof places === "object" ? { ...places } : {} };
@@ -91,7 +91,8 @@ export function applyNodes(s: State, ev: NodeEvent): State {
   for (const n of ev.nodes ?? []) if (n && typeof n.id === "string") nodes[n.id] = n;
   for (const id of ev.gone ?? []) delete nodes[id];
   const open = s.open.filter((id) => nodes[id]);
-  const talk = s.talk && nodes[s.talk] && open.includes(s.talk) ? s.talk : (open.at(-1) ?? null);
+  // The page the console talked to left: it talks to the last one open.
+  const talk = s.talk === null || open.includes(s.talk) ? s.talk : (open.at(-1) ?? null);
   return { ...s, nodes, open, talk };
 }
 
@@ -124,14 +125,16 @@ export function applySource(s: State, ev: SourceEvent): State {
 export const SHOW_FRESH = 60_000;
 
 // The "show" event: Eriphe opens a node's page for the user, beside what is
-// open, and the console talks to it. Each show once.
+// open. The console still talks to whom it talked to: only the user's own
+// gesture (a click on a page or a bubble) moves it, so Eriphe's answer stays
+// where it was asked. Each show once.
 export function applyShow(s: State, ev: Shown, now = Date.now()): State {
   if (!ev || typeof ev.node !== "string" || !(ev.seq > s.shown)) return s;
   const first = s.shown === 0;
   const seen = { ...s, shown: ev.seq };
   if (first && ev.at && now - Date.parse(ev.at) > SHOW_FRESH) return seen;
-  if (!s.nodes[ev.node]) return seen;
-  return openPage(seen, ev.node, true);
+  if (!s.nodes[ev.node] || s.open.includes(ev.node)) return seen;
+  return { ...seen, open: [...s.open, ev.node] };
 }
 
 // The "exchange" event: the exchange of the node the console talks to; one
@@ -170,10 +173,11 @@ export function openPage(s: State, id: string, beside = false): State {
 }
 
 // closePage closes one page; the console talks to the one it talked to if
-// it is still open, else to the last one open, else to the home.
+// it is still open (the home too), else to the last one open, else to the
+// home.
 export function closePage(s: State, id: string): State {
   const open = s.open.filter((x) => x !== id);
-  const talk = s.talk && s.talk !== id && open.includes(s.talk) ? s.talk : (open.at(-1) ?? null);
+  const talk = s.talk === null || (s.talk !== id && open.includes(s.talk)) ? s.talk : (open.at(-1) ?? null);
   return { ...s, open, talk, exchange: talk === s.talk ? s.exchange : null };
 }
 

@@ -131,12 +131,14 @@ export type GraphNode = {
 };
 
 // A node's page (nodePage, web_graph.go): the version shown, its text and
-// its blocks in order, its versions, the cards it waits on.
+// its blocks in order, its versions, the cards it waits on. shift: 1 when
+// its creation was empty, the user's v1 being its version 2 (label).
 export type NodePage = {
   node: GraphNode;
   version: number;
   archived?: string;
   versions: PageVersion[];
+  shift?: number;
   parts: PagePart[];
   cards: ProposalView[];
 };
@@ -191,6 +193,9 @@ export async function ask(id: string, block: string, component: string): Promise
 export async function archive(id: string): Promise<boolean> {
   return (await sendJSON("POST", `${nodePath(id)}/archive`)).status === 204;
 }
+
+// label is a version as the user numbers it.
+export const label = (n: number, shift = 0) => Math.max(1, n - shift);
 
 export async function reopen(id: string): Promise<boolean> {
   return (await sendJSON("POST", `${nodePath(id)}/reopen`)).status === 204;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { saveFile, type NodeFile } from "../data/api";
+import { label, saveFile, type NodeFile } from "../data/api";
 import { useWords } from "../i18n";
 import Editor from "./Editor";
 import { dirty, fromFile, keepMine, read, saved, saving, takeNewer, typed, type Edit } from "./edit";
@@ -9,7 +9,7 @@ import { dirty, fromFile, keepMine, read, saved, saving, takeNewer, typed, type 
 // code's fields, in an editor; saved on the version it was read at (edit.ts).
 // An older version shows as it was, not to be written; so does the dev
 // server's sample.
-export function MdTab({ id, file, latest, live }: { id: string; file: NodeFile; latest: boolean; live: boolean }) {
+export function MdTab({ id, file, latest, live, shift = 0 }: { id: string; file: NodeFile; latest: boolean; live: boolean; shift?: number }) {
   const { t } = useWords();
   const [e, setE] = useState<Edit>(() => fromFile(file));
   useEffect(() => setE((x) => (latest ? read(x, file) : fromFile(file))), [file, latest]);
@@ -31,7 +31,7 @@ export function MdTab({ id, file, latest, live }: { id: string; file: NodeFile; 
       {writable && (
         <div className="pg-md-bar">
           <span className="pg-md-state" role="status">
-            {e.status === "saving" ? t("espace.md.saving") : e.status === "saved" && !dirty(e) ? t("espace.md.saved", e.base.version) : e.status === "failed" ? t("espace.md.failed") : ""}
+            {e.status === "saving" ? t("espace.md.saving") : e.status === "saved" && !dirty(e) ? t("espace.md.saved", label(e.base.version, shift)) : e.status === "failed" ? t("espace.md.failed") : ""}
           </span>
           <button type="button" className="btn" disabled={!dirty(e) || e.status === "saving" || e.status === "conflict"} onClick={save}>
             {t("espace.md.save")}
@@ -40,11 +40,11 @@ export function MdTab({ id, file, latest, live }: { id: string; file: NodeFile; 
       )}
       {e.status === "conflict" && e.newer && (
         <div className="pg-md-conflict" role="alert">
-          <p>{t("espace.md.conflict", e.newer.version)}</p>
+          <p>{t("espace.md.conflict", label(e.newer.version, shift))}</p>
           <pre className="pg-md-text">{e.newer.body}</pre>
           <p className="pg-md-choice">
             <button type="button" className="btn" onClick={() => setE(takeNewer)}>
-              {t("espace.md.take", e.newer.version)}
+              {t("espace.md.take", label(e.newer.version, shift))}
             </button>
             <button type="button" className="btn" onClick={() => setE(keepMine)}>
               {t("espace.md.keep")}
