@@ -44,7 +44,7 @@ type activitySignal struct {
 type activitySource func(c *core, since time.Time) ([]activitySignal, error)
 
 // activitySources feed the suggestion; a new signal is one more here.
-var activitySources = []activitySource{messageActivity, presenceActivity, feedbackActivity, gestureActivity}
+var activitySources = []activitySource{messageActivity, presenceActivity, feedbackActivity}
 
 // messageActivity: the user's messages, but not their home's automations.
 func messageActivity(c *core, since time.Time) ([]activitySignal, error) {
@@ -104,26 +104,6 @@ func feedbackActivity(c *core, since time.Time) ([]activitySignal, error) {
 		if fb == "later" {
 			out = append(out, activitySignal{At: time.Unix(created, 0), Unwelcome: true})
 		}
-	}
-	return out, rows.Err()
-}
-
-// gestureActivity: what the user did on the workspace's surfaces
-// (workspace_log): opened, closed, moved, resized, wrote about. Not
-// ignored: a tile left unopened is the layout's doing as often as theirs.
-func gestureActivity(c *core, since time.Time) ([]activitySignal, error) {
-	rows, err := c.store.db.Query(`SELECT time FROM workspace_log WHERE time >= ? AND what != ?`, since.Unix(), gestureIgnored)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []activitySignal
-	for rows.Next() {
-		var at int64
-		if err := rows.Scan(&at); err != nil {
-			return nil, err
-		}
-		out = append(out, activitySignal{At: time.Unix(at, 0)})
 	}
 	return out, rows.Err()
 }

@@ -68,7 +68,7 @@ func TestLastExchange(t *testing.T) {
 }
 
 // The lines before the last exchange come a few at a time, oldest first,
-// with the same filter: GET /api/espace/earlier?before=<seq>.
+// with the same filter: GET /api/earlier?before=<seq>.
 func TestEarlierLines(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -85,7 +85,7 @@ func TestEarlierLines(t *testing.T) {
 	last, _ := st.addMessage(roleUser, "la dernière", true)
 	read := func(before int) earlierView {
 		t.Helper()
-		code, body, _ := tw.do("GET", fmt.Sprintf("/api/espace/earlier?before=%d", before), nil, nil)
+		code, body, _ := tw.do("GET", fmt.Sprintf("/api/earlier?before=%d", before), nil, nil)
 		var v earlierView
 		if code != http.StatusOK || json.Unmarshal([]byte(body), &v) != nil {
 			t.Fatalf("GET earlier: %d %s", code, body)
@@ -102,7 +102,7 @@ func TestEarlierLines(t *testing.T) {
 		t.Fatalf("last page %+v", v)
 	}
 	for _, bad := range []string{"", "x", "0"} {
-		if code, _, _ := tw.do("GET", "/api/espace/earlier?before="+bad, nil, nil); code != http.StatusBadRequest {
+		if code, _, _ := tw.do("GET", "/api/earlier?before="+bad, nil, nil); code != http.StatusBadRequest {
 			t.Errorf("before=%q: %d", bad, code)
 		}
 	}

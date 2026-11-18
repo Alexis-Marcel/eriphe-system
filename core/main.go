@@ -87,7 +87,7 @@ func main() {
 	if nodes, err := openNodes(cfg); err != nil {
 		log.Printf("nodes: %v", err)
 	} else {
-		c.nodes = nodes
+		c.useNodes(nodes)
 	}
 	if err := c.reconcileServices(); err != nil {
 		log.Fatalf("services: %v", err)
@@ -137,7 +137,7 @@ func main() {
 	mux.Handle("POST /v1/device/tasks/{id}/ssh", c.taskSSHHandler())              // lent_ssh.go
 	mux.Handle("GET /v1/device/tasks/{id}/ssh/connect", c.taskSSHTunnelHandler()) // lent_ssh.go
 	mux.HandleFunc("GET /v1/device/tasks/{id}/skills/{sha}", c.handleTaskSkill)   // skills_tasks.go
-	mux.HandleFunc("POST /v1/device/tasks/{id}/media", c.handleTaskMedia)         // surfaces_capture.go
+	mux.HandleFunc("POST /v1/device/tasks/{id}/media", c.handleTaskMedia)         // web_media.go
 	mux.HandleFunc("POST /v1/device/services/{name}/report", c.handleServiceReport)
 	mux.HandleFunc("POST /v1/device/certificate", c.handleDeviceCertificate)
 	mux.HandleFunc("GET /v1/device/sync/{peer}", c.handleDeviceSync) // sync_relay.go
@@ -152,12 +152,9 @@ func main() {
 	go c.runMemory(context.Background())
 	go c.runNodes(context.Background())
 	go c.runNodeSources(context.Background())
-	go c.runEvents(context.Background())    // event_sources.go
-	go c.runSkills(context.Background())    // skill_runs.go
-	go c.runMonitors(context.Background())  // monitors.go
-	c.dropFreeSurfaces()                    // surface_authors.go
-	go c.runSurfaces(context.Background())  // surfaces.go
-	go c.runWorkspace(context.Background()) // workspace_queue.go
+	go c.runEvents(context.Background())   // event_sources.go
+	go c.runSkills(context.Background())   // skill_runs.go
+	go c.runMonitors(context.Background()) // monitors.go
 	go c.updates.run(context.Background())
 	if cfg.Web != nil {
 		go func() { log.Fatalf("web: %v", c.serveWeb(cfg)) }()

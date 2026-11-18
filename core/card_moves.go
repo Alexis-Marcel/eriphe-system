@@ -10,12 +10,12 @@ import (
 	"time"
 )
 
-// Proposals in the surfaces they concern (#428).
+// Proposals in the blocks they concern (#428).
 //
 //   - Embedded: an author places a Proposal component whose proposalId is
-//     a pending proposal's own ref (kind:id, which workspace_read lists),
-//     written or bound to the data. Its Oui and Non answer that proposal
-//     and no other (answerOf, surface_actions.go).
+//     a pending proposal's own ref (kind:id), written or bound to the
+//     block's data. Its Oui and Non go to that proposal's card
+//     (POST /cards/{id}/yes|no), as everywhere.
 //   - Dated: a pending proposal that has a time shows as a ghost in the
 //     Day components of its day, with what it overlaps (GET
 //     /api/proposals?day=). Its time comes from what the proposal is, never
@@ -24,7 +24,7 @@ import (
 //     keeps several calls: each dated one is a ghost of its own, all
 //     answering the one card.
 //   - Moved: when a card is made, decided (anywhere: its buttons, a
-//     channel, a plain "oui", a surface, a page) or found decided, its ref
+//     channel, a plain "oui", a page) or found decided, its ref
 //     is noted here; the workspace's event stream sends it ("proposals"),
 //     and the page reads again what shows it.
 

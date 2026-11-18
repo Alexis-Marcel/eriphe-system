@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-// A proposal shown in a surface of the workspace (the catalog's Proposal
-// component): the page names it by its own ref, kind:id, and reads here
+// A proposal shown in a node's page (its cards) or in a block (the
+// catalog's Proposal component): the page names it by its own ref, kind:id, and reads here
 // what its card says and which card answers it; Oui and Non then go to the
 // card, POST /cards/{id}/yes|no, as in the conversation. A Day component
 // reads here the dated proposals of its day, which it shows as ghosts
-// (surface_proposals.go).
+// (card_moves.go).
 
 // proposalView is a proposal as the workspace's Proposal component shows it.
 type proposalView struct {

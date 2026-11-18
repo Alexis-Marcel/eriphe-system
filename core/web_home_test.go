@@ -219,7 +219,7 @@ func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 		}
 		return b.String()
 	}
-	if got := events("?a2ui=1", `"text":"le dernier"`); strings.Contains(got, "un message passé") || !strings.Contains(got, "event: a2ui") ||
+	if got := events("?a2ui=1", `"text":"le dernier"`); strings.Contains(got, "un message passé") || !strings.Contains(got, "event: node") ||
 		strings.Contains(got, "event: message") || !strings.Contains(got, `"text":"le dernier"`) {
 		t.Errorf("the workspace's stream:\n%s", got)
 	}

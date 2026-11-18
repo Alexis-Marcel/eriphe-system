@@ -255,7 +255,7 @@ func (w *web) pending(perms []permView) pendingData {
 }
 
 // convoPath is the conversation's address. The home page, /, is the
-// workspace (web_espace.go); the conversation stays here, for what it
+// graph workspace (web_graph.go); the conversation stays here, for what it
 // shows best (the whole exchange, the tasks, the permissions) and as the
 // fallback when the workspace cannot load.
 const convoPath = "/conversation"
@@ -371,15 +371,11 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 		return
 	}
 	// Said to a node, it belongs to it (node_turn.go).
-	about := strings.TrimSpace(r.PostFormValue("about"))
 	seq, err := w.c.store.addUserMessage(text, atts, w.c.nodeSaid(r.PostFormValue("node")))
 	if err != nil {
 		w.c.store.removeAttachments(atts)
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
-	}
-	if about != "" {
-		w.c.noteAbout(seq, about) // written with a surface open on the workspace (workspace.go)
 	}
 	if r.PostFormValue("from") != viaSuggestion { // a click never decides a card (brain_suggest.go)
 		w.c.resolveByText(r.Context(), int(seq)) // a plain yes or no to the card just above (convo_cards.go)

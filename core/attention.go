@@ -39,8 +39,7 @@ import (
 // on the graph.
 //
 // Nothing waits on a held item: the brain reads the open items in its turn
-// (attentionBlock), the held ones marked so, and answers as usual. The
-// workspace shows the queue as surfaces (workspace_queue.go).
+// (attentionBlock), the held ones marked so, and answers as usual.
 
 const attentionSchema = `CREATE TABLE IF NOT EXISTS attention (
 	ref       TEXT PRIMARY KEY,
@@ -136,7 +135,6 @@ func (c *core) attendHeld(it attentionItem) {
 			due = CASE WHEN due = 0 THEN excluded.due WHEN excluded.due = 0 THEN due ELSE MIN(due, excluded.due) END`,
 		it.Ref, it.Weight, truncate(oneLine(it.Why), attentionWhyMax), truncate(oneLine(it.Say), attentionWhyMax), it.Source, it.Time.Unix(),
 		boolInt(it.tainted), delivered, due, it.About)
-	c.kickWorkspace() // its surface (workspace_queue.go)
 }
 
 // attentionCap is the longest an item of this weight is held; 0 for no
@@ -151,7 +149,6 @@ func attentionCap(weight int) time.Duration {
 // attentionDone takes an item out: the user answered it, or it is gone.
 func (c *core) attentionDone(ref string) {
 	c.store.db.Exec(`DELETE FROM attention WHERE ref = ?`, ref)
-	c.kickWorkspace()
 }
 
 func cardItemRef(id int64) string { return "card:" + strconv.FormatInt(id, 10) }
@@ -415,4 +412,37 @@ func (c *core) attentionBlock() string {
 	return fmt.Sprintf("[en attente de %s. Ce qui est montré est déjà sous ses yeux (cartes de la conversation) : ne le recopie pas, réfère-t'y s'il en parle. "+
 		"Ce qui est retenu lui sera montré à la prochaine pause, sans toi ; tu peux en parler s'il le demande :\n%s]",
 		c.conf().User, strings.Join(lines, "\n"))
+}
+
+// A proposal waiting without a card in front of the user (the memory's
+// extraction, a turn that said nothing of it) enters the attention queue
+// at its card's weight (cardWeight), unless it is there already: the
+// queue delivers it like anything else.
+
+const cardsAttendedEachMax = 50
+
+// attendQueuedCards puts the queued cards in the attention queue, an item
+// each, delivered together.
+func (c *core) attendQueuedCards() {
+	c.syncCards()
+	queued, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind != ? ORDER BY id LIMIT ?`, cardPending, cardDigest, cardsAttendedEachMax)
+	if err != nil {
+		return
+	}
+	n := 0
+	for _, x := range queued {
+		var in int
+		if c.store.db.QueryRow(`SELECT COUNT(*) FROM attention WHERE ref = ?`, cardItemRef(x.ID)).Scan(&in); in > 0 {
+			continue // there already
+		}
+		x, p := c.liveCard(x)
+		if x.State != cardPending {
+			continue
+		}
+		c.attendCardHeld(x, p, "", "")
+		n++
+	}
+	if n > 0 {
+		c.attentionNow()
+	}
 }

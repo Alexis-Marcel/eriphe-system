@@ -11,11 +11,11 @@ import (
 
 // A server may tell when one of its resources changed
 // (notifications/resources/updated), to a client that subscribed to it
-// (resources/subscribe). eriphe-core follows the resources its surfaces
-// read (surfaces.go): the pool keeps, per server, the URIs it is asked to
-// follow, subscribes to them on each new session, and hands each update
-// to resourceUpdated. A server that cannot subscribe is read at the
-// surface's interval instead.
+// (resources/subscribe). eriphe-core follows the resources its live
+// blocks read (followNodeResources, node_live.go): the pool keeps, per
+// server, the URIs it is asked to follow, subscribes to them on each new
+// session, and hands each update to resourceUpdated. A server that cannot
+// subscribe is read at the block's interval instead.
 
 // subscribes tells whether the server's session offers resources/subscribe.
 func (u *upstream) subscribes() bool {

@@ -17,7 +17,7 @@ import (
 // (/events?a2ui=1, web_sse.go) sends it as JSON, its "exchange" event, when
 // it connects and whenever it changes: a reconnecting page gets it whole.
 // The lines before it come on request, a few at a time
-// (GET /api/espace/earlier); the conversation (convoPath) has them all.
+// (GET /api/earlier); the conversation (convoPath) has them all.
 //
 // The conversation per node (#632): the exchange is the one of the node
 // the console talks to (its lines belong to it, node_turn.go), named in
@@ -101,9 +101,7 @@ func (s *Store) exchangeOf(m Message) exchangeLine {
 	switch m.Role {
 	case roleUser:
 		l.Text = truncate(m.Text, exchangeTextMax)
-		if m.Via != viaWorkspaceAsk {
-			l.Via = m.Via
-		}
+		l.Via = m.Via
 	case roleBrain:
 		l.Text = truncate(m.Text, exchangeTextMax)
 		l.External = strings.HasPrefix(s.get(taintKey(m.Seq)), "brain:")
@@ -166,13 +164,13 @@ func (s *Store) earlierLines(before int, node string) ([]exchangeLine, bool, err
 	return out, more, nil
 }
 
-// earlierView is the answer of GET /api/espace/earlier.
+// earlierView is the answer of GET /api/earlier.
 type earlierView struct {
 	Lines []exchangeLine `json:"lines"` // oldest first
 	More  bool           `json:"more"`  // lines come before them
 }
 
-// handleEarlier is GET /api/espace/earlier?before=<seq>&node=<id>: the
+// handleEarlier is GET /api/earlier?before=<seq>&node=<id>: the
 // lines of a node's exchange (none: the home's) before that one, for the
 // user who scrolls up the console.
 func (w *web) handleEarlier(rw http.ResponseWriter, r *http.Request, _ *session) {

@@ -52,6 +52,9 @@ func TestLink(t *testing.T) {
 	if len(d.Node.Meta.Links) != 1 || d.Node.Meta.Links[0] != "n2" {
 		t.Fatalf("links: %v", d.Node.Meta.Links)
 	}
+	if g, err := s.Graph(); err != nil || len(g) != 2 || g[0].ID != "n1" || len(g[0].Links) != 1 || g[0].Links[0] != "n2" {
+		t.Fatalf("graph: %+v %v", g, err)
+	}
 }
 
 func TestInStatesAndRecent(t *testing.T) {

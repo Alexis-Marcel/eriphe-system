@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -296,27 +297,32 @@ func TestFoldersToolNever(t *testing.T) {
 	}
 }
 
-// A surface bound to a file: its text in the data, read again at once
-// after a change through the tools.
-func TestFoldersSurfaceSource(t *testing.T) {
+// A node's block bound to a file: its text in the block's data, read
+// again at once after a change through the tools.
+func TestFoldersNodeSource(t *testing.T) {
 	c, _ := folderFilesCore(t)
-	src := map[string]surfaceSource{"/note": {Tool: foldersServer + "/read_file", Args: map[string]any{"folder": "Clients", "path": "Projets/site.md"}}}
-	comps := json.RawMessage(`[{"id":"root","component":"Text","text":{"@path":"/note/text"}}]`)
-	s, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "Site", Components: comps, Sources: src})
-	if err != nil || len(errs) > 0 {
-		t.Fatal(err, errs)
+	openGraph(t, c)
+	block := "```eriphe:block note\n" + `{"components": [{"id": "root", "component": "Text", "text": {"@path": "/note/text"}}],
+ "sources": {"note": {"tool": "` + foldersServer + `/read_file", "args": {"folder": "Clients", "path": "Projets/site.md"}}}}` + "\n```\n"
+	d, err := c.nodes.Create(nodestore.New{Title: "Site", Body: block, Author: byBrain})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(string(s.Data), "vendredi") || s.Tainted != "" {
-		t.Fatalf("surface %s tainted %q", s.Data, s.Tainted)
+	id := d.Node.Meta.ID
+	read := func() string {
+		r, _ := c.nodeValue(id, "note")
+		raw, _ := json.Marshal(r.Value)
+		return string(raw)
+	}
+	c.readNode(context.Background(), id, nil, time.Now())
+	if !strings.Contains(read(), "vendredi") {
+		t.Fatalf("read %s", read())
 	}
 	res := callFolders(t, c, "update_file", map[string]any{"folder": "Clients", "path": "Projets/site.md", "content": "# Site\nÉchéance : lundi\n"})
 	if res.IsError || !strings.Contains(resultText(res), `- Échéance : vendredi`) {
 		t.Fatalf("update_file: %s", resultText(res))
 	}
-	waitFor(t, func() bool {
-		got, err := c.surface(s.ID)
-		return err == nil && strings.Contains(string(got.Data), "lundi")
-	})
+	waitFor(t, func() bool { return strings.Contains(read(), "lundi") })
 }
 
 // No folder shared: nothing lent.

@@ -11,17 +11,18 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-// The images and videos of the surfaces never reach the page from outside
-// (A2UI #4045: an address the page loads can carry what a model read out
-// to whoever answers it, and it tells the sender the user looked). The
-// CSP already forbids it (img-src 'self'); eriphe-core rewrites each media
-// address of a surface's data (surfaceView) to its own endpoint,
+// The images and videos of a node's blocks never reach the page from
+// outside (A2UI #4045: an address the page loads can carry what a model
+// read out to whoever answers it, and it tells the sender the user
+// looked). The CSP already forbids it (img-src 'self'); eriphe-core
+// rewrites each media address of a block (blockView, web_graph.go) to its
+// own endpoint,
 //
 //	GET /espace/media?u=<address>&s=<signature>
 //
@@ -30,9 +31,11 @@ import (
 // (the same dialer as an access: never its own network, the cloud's
 // metadata or the LAN), 3 redirects at most, no cookie nor credential,
 // 8 MiB at most, an image (not SVG, which carries scripts) or a video, kept
-// 10 minutes by the browser. An image a task gave for a surface
-// (media:<id>, surfaces_capture.go) is read from eriphe-core's own data,
-// served the same way.
+// 10 minutes by the browser.
+//
+// A task's own images (a device's capture) are not taken: the upload is
+// refused (handleTaskMedia) until a node keeps its media (files/<id>/ of
+// the graph's repository).
 
 const (
 	mediaMax       = 8 << 20
@@ -63,16 +66,16 @@ var mediaClient = &http.Client{
 	},
 }
 
-func (c *core) mediaKey() []byte {
-	c.surf.keyOnce.Do(func() {
-		c.surf.key = make([]byte, 32)
-		rand.Read(c.surf.key)
-	})
-	return c.surf.key
-}
+// mediaKey signs the media addresses: made once a run, so an address
+// lasts as long as eriphe-core.
+var mediaKey = sync.OnceValue(func() []byte {
+	k := make([]byte, 32)
+	rand.Read(k)
+	return k
+})
 
 func (c *core) mediaSign(u string) string {
-	m := hmac.New(sha256.New, c.mediaKey())
+	m := hmac.New(sha256.New, mediaKey())
 	m.Write([]byte(u))
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil)[:18])
 }
@@ -88,41 +91,16 @@ func (c *core) mediaOrDrop(raw string, allowed bool) string {
 	return mediaPath + "?" + url.Values{"u": {raw}, "s": {c.mediaSign(raw)}}.Encode()
 }
 
-// viewMedia is a media address of the surface id as the page gets it. An
-// image a task gave for this surface (media:<id>, surfaces_capture.go) is
-// eriphe-core's own: it carries nothing out, so it is kept even when the
-// author is tainted, but only on the surface it was given for. Any other
-// goes through mediaOrDrop.
-func (c *core) viewMedia(surfaceID, raw string, allowed bool) string {
-	if strings.HasPrefix(strings.TrimSpace(raw), surfaceMediaScheme) {
-		id := surfaceMediaRef(raw)
-		if m, err := c.surfaceMediaGet(id); err != nil || m.Surface != surfaceID {
-			return ""
-		}
-		ref := surfaceMediaScheme + id
-		return mediaPath + "?" + url.Values{"u": {ref}, "s": {c.mediaSign(ref)}}.Encode()
-	}
-	return c.mediaOrDrop(raw, allowed)
-}
-
-// handleMedia is GET /espace/media: a surface's image or video, fetched by
+// handleMedia is GET /espace/media: a block's image or video, fetched by
 // eriphe-core. 403 for an address it did not sign, 502 for one that is not
-// a media it serves. An image a task gave (media:<id>) is read from
-// eriphe-core's data folder, never fetched.
+// a media it serves.
 func (w *web) handleMedia(rw http.ResponseWriter, r *http.Request, _ *session) {
 	raw, sig := r.URL.Query().Get("u"), r.URL.Query().Get("s")
 	if raw == "" || !hmac.Equal([]byte(sig), []byte(w.c.mediaSign(raw))) {
-		http.Error(rw, "not an address of a surface", http.StatusForbidden)
+		http.Error(rw, "not an address of a block", http.StatusForbidden)
 		return
 	}
-	var body []byte
-	var kind string
-	var err error
-	if id := surfaceMediaRef(raw); id != "" {
-		body, kind, err = w.c.readSurfaceMedia(id)
-	} else {
-		body, kind, err = fetchMedia(r, raw)
-	}
+	body, kind, err := fetchMedia(r, raw)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusBadGateway)
 		return
@@ -174,15 +152,19 @@ func fetchMedia(r *http.Request, raw string) ([]byte, string, error) {
 	return body, kind, nil
 }
 
-// readSurfaceMedia reads an image a task gave for a surface.
-func (c *core) readSurfaceMedia(id string) ([]byte, string, error) {
-	m, err := c.surfaceMediaGet(id)
-	if err != nil {
-		return nil, "", err
+// handleTaskMedia is POST /v1/device/tasks/{id}/media, for devices: an
+// image a task captured. No node keeps one yet: it is refused, once the
+// device and its task are known.
+func (c *core) handleTaskMedia(w http.ResponseWriter, r *http.Request) {
+	device, ok := c.deviceFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
-	body, err := os.ReadFile(c.store.surfaceMediaPath(m.ID))
-	if err != nil {
-		return nil, "", errors.New("the image is gone")
+	t, err := c.store.task(r.PathValue("id"))
+	if err != nil || t.Device != device || finished(t.State) {
+		http.Error(w, "no such task on this device", http.StatusNotFound)
+		return
 	}
-	return body, m.Type, nil
+	http.Error(w, "a task's images are not kept", http.StatusGone)
 }

@@ -282,7 +282,7 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 		return nil, errMemoryOff
 	}
 	// How the user wants the workspace is a preference the watchers read
-	// when they note items, whatever its words (workspace.go).
+	// when they note items, whatever its words (workspace_prefs.go).
 	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation && !isWorkspaceEntity(in.About) {
 		return nil, errors.New("not remembered: " + h)
 	}

@@ -1,6 +1,6 @@
 package main
 
-// The words of the composed workspace, /espace (web_espace.go): the app
+// The words of the graph workspace, /espace (web_graph.go): the app
 // (web/espace) reads the espace.* keys from /espace/boot, in the
 // request's language, with the assistant's name in them. Keys with %s or
 // %d take arguments, filled in by the app in their order.

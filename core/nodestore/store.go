@@ -87,6 +87,19 @@ type Options struct {
 	NewID func() string
 }
 
+// What changed of a node, as Watch tells it.
+const (
+	ChangedDoc   = "doc"   // a new version of its file
+	ChangedTrace = "trace" // its trace grew
+	ChangedState = "state" // its state, or its items' notes, in the index only
+)
+
+// Change is a node that changed, and what of it.
+type Change struct {
+	ID   string
+	What string // ChangedDoc, ChangedTrace or ChangedState
+}
+
 // Store is the graph's nodes.
 type Store struct {
 	dir  string // the repository
@@ -97,6 +110,26 @@ type Store struct {
 	// One write at a time: the repository's worktree is not shared. A
 	// read of the repository waits for a write (gc moves its objects).
 	mu sync.RWMutex
+
+	watch func(Change) // Watch's
+}
+
+// Watch calls fn after each change of a node, the store's lock held: fn
+// must not call the store. One watcher; nil stops it.
+func (s *Store) Watch(fn func(Change)) {
+	s.mu.Lock()
+	s.watch = fn
+	s.mu.Unlock()
+}
+
+// changed tells the watcher, the lock held.
+func (s *Store) changed(what string, ids ...string) {
+	if s.watch == nil {
+		return
+	}
+	for _, id := range ids {
+		s.watch(Change{ID: id, What: what})
+	}
 }
 
 // Report is what a start found.
@@ -140,6 +173,7 @@ type Summary struct {
 	Archived time.Time
 	External bool
 	Version  int
+	Links    []string // the nodes it links to
 }
 
 // Open opens the store: the repository in dir, the index at index (kept
@@ -465,6 +499,7 @@ func (s *Store) save(n *nodefile.Node, file string, prev *Doc, author, op string
 	if err := s.indexVersions(now, []indexed{{n, file, raw, v}}); err != nil {
 		return nil, err
 	}
+	s.changed(ChangedDoc, n.Meta.ID)
 	state := Idle
 	if prev != nil {
 		state = prev.State
@@ -625,7 +660,11 @@ func (s *Store) AppendTrace(id, author, text string) error {
 	if _, err := s.db.Exec(`UPDATE nodes SET updated = ? WHERE id = ?`, now.Unix(), id); err != nil {
 		return err
 	}
-	return setIndexed(s.db, hash)
+	if err := setIndexed(s.db, hash); err != nil {
+		return err
+	}
+	s.changed(ChangedTrace, id)
+	return nil
 }
 
 // Trace is a node's trace; empty while it has none.
@@ -648,13 +687,19 @@ func (s *Store) SetState(id, state string) error {
 	if !slices.Contains([]string{Running, Waiting, Idle, Done}, state) {
 		return fmt.Errorf("a node's state is %s, %s, %s or %s, not %q", Running, Waiting, Idle, Done, state)
 	}
-	res, err := s.db.Exec(`UPDATE nodes SET state = ? WHERE id = ?`, state, id)
-	if err != nil {
-		return err
-	}
-	if k, _ := res.RowsAffected(); k == 0 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var was string
+	if err := s.db.QueryRow(`SELECT state FROM nodes WHERE id = ?`, id).Scan(&was); err != nil {
 		return fmt.Errorf("%s: %w", id, ErrNotFound)
 	}
+	if was == state {
+		return nil
+	}
+	if _, err := s.db.Exec(`UPDATE nodes SET state = ? WHERE id = ?`, state, id); err != nil {
+		return err
+	}
+	s.changed(ChangedState, id)
 	return nil
 }
 
@@ -701,7 +746,13 @@ func (s *Store) Archive(id, author string) error {
 	for i := range xs {
 		xs[i].v.Hash = hash
 	}
-	return s.indexVersions(now, xs)
+	if err := s.indexVersions(now, xs); err != nil {
+		return err
+	}
+	for _, x := range xs {
+		s.changed(ChangedDoc, x.node.Meta.ID)
+	}
+	return nil
 }
 
 // Children are a node's children, archived ones included, the oldest
@@ -745,7 +796,8 @@ func (s *Store) summary(id string) (Summary, error) {
 
 func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.lifetime, n.state, n.created, n.updated,
-		n.done, n.archived, n.external, n.version FROM nodes n `+where, args...)
+		n.done, n.archived, n.external, n.version,
+		(SELECT group_concat(l.target, ' ') FROM node_links l WHERE l.id = n.id) FROM nodes n `+where, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -754,10 +806,12 @@ func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 	for rows.Next() {
 		var x Summary
 		var created, updated, done, archived int64
+		var links sql.NullString
 		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Parent, &x.Lifetime, &x.State, &created, &updated,
-			&done, &archived, &x.External, &x.Version); err != nil {
+			&done, &archived, &x.External, &x.Version, &links); err != nil {
 			return nil, err
 		}
+		x.Links = strings.Fields(links.String)
 		x.Created, x.Updated, x.Done, x.Archived = time.Unix(created, 0), time.Unix(updated, 0), timeOr0(done), timeOr0(archived)
 		out = append(out, x)
 	}

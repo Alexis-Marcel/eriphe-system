@@ -35,7 +35,7 @@ func (c *core) runEvents(ctx context.Context) {
 		now := c.notifyTime()
 		c.tickReturned(now)
 		c.attentionBreak(breakCap, now)
-		c.attendQueuedCards() // proposals waiting without a card in front of the user (surface_authors.go)
+		c.attendQueuedCards() // proposals waiting without a card in front of the user (attention.go)
 		if now.Sub(purged) >= eventsPurgeEvery {
 			c.purgeEvents(now)
 			purged = now

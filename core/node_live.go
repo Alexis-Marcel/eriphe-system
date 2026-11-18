@@ -102,9 +102,9 @@ func sourceSpec(src nodefile.Source) string {
 	return string(raw)
 }
 
-// surfaceOf is a tool's or a resource's source as a read takes it.
-func surfaceOf(src nodefile.Source) surfaceSource {
-	return surfaceSource{Tool: src.Tool, Args: src.Args, Resource: src.Resource, URI: src.URI}
+// callOf is a tool's or a resource's source as a read takes it.
+func callOf(src nodefile.Source) sourceCall {
+	return sourceCall{Tool: src.Tool, Args: src.Args, Resource: src.Resource, URI: src.URI}
 }
 
 // sourceServer is the server a source reads.
@@ -191,6 +191,7 @@ func (c *core) nodeSourcesDue(ctx context.Context, now time.Time) {
 		}
 	}
 	c.forgetReads(live)
+	c.followNodeResources()
 	for _, id := range ids {
 		due := false
 		for _, r := range c.nodeReads(id) {
@@ -261,7 +262,7 @@ func (c *core) readNode(ctx context.Context, node string, only []string, now tim
 
 func (c *core) readNodeOnce(ctx context.Context, node string, only []string, force bool, now time.Time) {
 	reads := c.nodeReads(node)
-	srcs := map[string]surfaceSource{}
+	srcs := map[string]sourceCall{}
 	for _, r := range reads {
 		key := r.Block + "/" + r.Name
 		switch {
@@ -272,9 +273,15 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 		case !force && r.spec != "" && r.Read > 0 && r.NextAt > now.Unix():
 			continue
 		}
-		srcs[key] = surfaceOf(r.Source)
+		srcs[key] = callOf(r.Source)
 	}
 	got := c.readSources(ctx, srcs, nil)
+	was := make([]string, len(reads))
+	for i, r := range reads {
+		if r.Value != nil {
+			was[i] = valueHash(r.Value)
+		}
+	}
 	for i, r := range reads {
 		if r.Source.Monitor != "" {
 			reads[i] = c.monitorRead(r, now)
@@ -284,7 +291,7 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 		if !ok {
 			continue
 		}
-		r.NextAt = now.Add(time.Duration(cmp.Or(r.Source.Every, surfaceEveryDef)) * time.Minute).Unix()
+		r.NextAt = now.Add(time.Duration(cmp.Or(r.Source.Every, sourceEveryDef)) * time.Minute).Unix()
 		r.Error, r.Waiting = res.err, res.why
 		if res.err == "" && res.why == "" {
 			r.Value, r.Read = res.value, now.Unix()
@@ -301,6 +308,12 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 			ON CONFLICT (node, block, name) DO UPDATE SET spec = excluded.spec, value = excluded.value, read = excluded.read,
 			  error = excluded.error, waiting = excluded.waiting, next_at = excluded.next_at, filed = excluded.filed`,
 			node, r.Block, r.Name, r.spec, value, r.Read, r.Error, r.Waiting, r.NextAt, r.Filed)
+	}
+	// The pages that show it get the new values at once (graph_feed.go).
+	for i, r := range reads {
+		if r.Value != nil && valueHash(r.Value) != was[i] {
+			c.graphSaid(graphEvent{Kind: graphEvSource, Node: node, Block: r.Block, Name: r.Name})
+		}
 	}
 	c.fileSnapshots(node, reads, now)
 }
@@ -489,6 +502,26 @@ func (c *core) nodeResourceUpdated(server, uri string) {
 	}
 	for _, id := range slices.Sorted(maps.Keys(byNode)) {
 		c.readNodeLater(context.Background(), id, byNode[id])
+	}
+}
+
+// followNodeResources asks each server for the updates of the resources
+// the nodes read, and of those only.
+func (c *core) followNodeResources() {
+	if c.pool == nil {
+		return
+	}
+	want := map[string][]string{}
+	for name := range c.conf().Servers {
+		want[name] = nil
+	}
+	for server, uris := range c.nodeResources() {
+		want[server] = append(want[server], uris...)
+	}
+	for name, uris := range want {
+		if u := c.pool.get(name); u != nil {
+			u.follow(uris)
+		}
 	}
 }
 

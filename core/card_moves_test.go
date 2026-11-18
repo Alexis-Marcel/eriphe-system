@@ -142,10 +142,9 @@ func TestDayProposals(t *testing.T) {
 	}
 }
 
-// Every way a proposal is decided says so to the workspace: an answer from
-// a surface, a card's button, one found decided elsewhere; and a new card.
+// Every way a proposal is decided says so to the workspace: a card's button, one found decided elsewhere; and a new card.
 func TestProposalMoves(t *testing.T) {
-	tw, csrf := newMemoryWeb(t)
+	tw, _ := newMemoryWeb(t)
 	c := tw.c
 	_, seq, ch := c.watchProposals(0)
 	r := proposedRule(t, c, "facture", "")
@@ -165,12 +164,6 @@ func TestProposalMoves(t *testing.T) {
 		}
 	}
 	moved("a new card")
-
-	proposalSurface(t, c, "prop", ref, false, false)
-	if code, body := postJSON(tw, "/api/espace/action", actionOn("answer", "prop", "prop", `{"proposal":"`+ref+`","answer":"yes"}`), csrf); code != http.StatusNoContent {
-		t.Fatalf("answer: %d %s", code, body)
-	}
-	moved("answered from a surface")
 
 	// Decided where no card is told (its own page): found when read.
 	r2 := proposedRule(t, c, "banque", "")
@@ -220,7 +213,7 @@ func TestProposalsEvent(t *testing.T) {
 			line := sc.Text()
 			if v, ok := strings.CutPrefix(line, "event: "); ok {
 				event = v
-				if event == "a2ui" {
+				if event == "node" {
 					snapshot.Do(func() { close(ready) })
 				}
 			}

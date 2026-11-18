@@ -9,25 +9,37 @@ import (
 	"time"
 )
 
-// handleEvents streams what changes to an open workspace, as Server-Sent
+// handleEvents streams what changes to an open page, as Server-Sent
 // Events of ready-made HTML: "message" (new messages, to append), "draft"
 // (the brain's message being written, empty once it has landed), "tasks"
 // (the side panel), "pending" (the requests at the end of the
 // conversation) and "cards" (cards that changed), each sent only when it
-// differs from the last one. Asked with a2ui=1 (the workspace, the home
-// page), it sends none of that HTML but JSON: "exchange", the
-// conversation's last exchange (exchangeEvent, web_espace_exchange.go), at
-// once and whenever it changes; "a2ui": the surfaces' A2UI messages in
-// order (JSON, a2uiEvent in surfaces_stream.go), a snapshot that resets
-// the page first; "layout": where each surface is on the grid (JSON,
-// workspaceLayout in workspace_layout.go), sent after the "a2ui" event of
-// the surfaces it names and whenever it changes; and "proposals": the refs
-// of the proposals whose card was made or decided since, all of them first
-// (JSON, proposalsEvent in surface_proposals.go), for the surfaces that
-// show them to read them again. Every event carries the last message's seq as its id, so a reconnecting
-// browser picks up where it left; its surfaces start again from a
-// snapshot. Both send "notice": the notifications routed to their tab (its
-// id in the tab query, as the tab tells its presence, web_push.go), JSON.
+// differs from the last one.
+//
+// Asked with a2ui=1 (the graph workspace, the home page), it sends none of
+// that HTML but JSON:
+//   - "node": the graph's rows (graphEvNode, web_graph.go), all of them at
+//     once (reset) and when the stream fell behind, then those that
+//     changed, and the ids of those that left the graph (gone: archived);
+//   - "doc": a node's new version ({id, version}), or its trace that grew
+//     ({id, trace: true}): a page shown reads it again;
+//   - "progress": a task's line of where its node's work is
+//     ({node, text, at});
+//   - "source": a live block's new value ({node, block, name, value}), at
+//     /<name> of the block's data, as the page draws it;
+//   - "show": the brain asks to open a node's page ({node, by, at, seq}),
+//     the last request at once, then each new one;
+//   - "exchange": the conversation's last exchange of the node the console
+//     talks to (its id in the node query; exchangeEvent, web_console.go),
+//     at once and whenever it changes;
+//   - "proposals": the refs of the proposals whose card was made or
+//     decided since, all of them first (proposalsEvent, card_moves.go),
+//     for what shows them to read them again.
+//
+// Every event carries the last message's seq as its id, so a reconnecting
+// browser picks up where it left. Both send "notice": the notifications
+// routed to their tab (its id in the tab query, as the tab tells its
+// presence, web_push.go), JSON.
 func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) {
 	flusher, ok := rw.(http.Flusher)
 	if !ok {
@@ -51,26 +63,6 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 	fmt.Fprint(rw, "retry: 3000\n\n")
 	flusher.Flush()
 
-	// The surfaces, for the workspace: a snapshot, then their changes.
-	var feed *surfaceFeed
-	var surfaces <-chan surfaceChange // nil when not asked: never ready
-	sendSurfaces := func(ev a2uiEvent) {
-		if raw, err := json.Marshal(ev); err == nil {
-			writeEvent(rw, "a2ui", after, string(raw))
-		}
-		surfaces = feed.changes // a new subscription after a reset
-	}
-	// The layout of the surfaces, after them: sent when it changed.
-	var layoutChanged <-chan struct{} // nil when not asked: never ready
-	lastLayout := ""
-	sendLayout := func() {
-		l, ch := w.c.watchLayout()
-		layoutChanged = ch
-		if raw, err := json.Marshal(l); err == nil && string(raw) != lastLayout {
-			writeEvent(rw, "layout", after, string(raw))
-			lastLayout = string(raw)
-		}
-	}
 	// The proposals that moved, for what shows them: their refs. The first
 	// one of a connection says all: what the page shows may have been
 	// decided while it was away.
@@ -88,6 +80,9 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		}
 		proposalsSeq, proposalsMoved = seq, ch
 	}
+	// The graph, for the workspace: its rows, then what changes.
+	var graphSeq int64
+	var graphNext <-chan struct{} // nil when not asked: never ready
 	workspace := r.URL.Query().Get("a2ui") == "1"
 	talked := w.c.nodeSaid(r.URL.Query().Get("node")) // the node the console talks to: its exchange
 	if workspace {
@@ -97,11 +92,12 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		if after == 0 {
 			after = int(w.c.store.lastMessageSeq())
 		}
-		var first a2uiEvent
-		feed, first = w.c.feedSurfaces()
-		defer feed.close()
-		sendSurfaces(first)
-		sendLayout()
+		graphSeq, graphNext = w.sendGraph(rw, after)
+		if x, ok := w.c.lastShown(); ok {
+			if raw, err := json.Marshal(x); err == nil {
+				writeEvent(rw, "show", after, string(raw))
+			}
+		}
 		sendProposals()
 		flusher.Flush()
 	}
@@ -222,14 +218,8 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		case <-w.waker():
 			woken = true // the next round refreshes the panels
 		case <-drafted:
-		case ch, ok := <-surfaces:
-			sendSurfaces(feed.next(ch, ok))
-			sendLayout()
-			flusher.Flush()
-			quiet = time.Now()
-		case <-layoutChanged:
-			exchangeStale = true // the layout moved: its exchange again
-			sendLayout()
+		case <-graphNext:
+			graphSeq, graphNext = w.sendGraphChanges(rw, after, graphSeq)
 			flusher.Flush()
 			quiet = time.Now()
 		case <-proposalsMoved:
@@ -246,4 +236,92 @@ func writeEvent(rw http.ResponseWriter, event string, id int, data string) {
 		fmt.Fprintf(rw, "data: %s\n", line)
 	}
 	fmt.Fprint(rw, "\n")
+}
+
+// sendGraph sends the graph's rows, all of them ("node", reset): the seq
+// of the graph's changes they hold, and a channel closed at the next one.
+func (w *web) sendGraph(rw http.ResponseWriter, after int) (int64, <-chan struct{}) {
+	seq, next := w.c.graphHead() // before the rows: a change meanwhile is sent again
+	rows, err := w.c.graphRows()
+	if err != nil {
+		rows = []graphNode{}
+	}
+	raw, _ := json.Marshal(map[string]any{"reset": true, "nodes": rows})
+	writeEvent(rw, "node", after, string(raw))
+	return seq, next
+}
+
+// sendGraphChanges sends what changed on the graph since seq: the rows
+// that changed, then the docs, the progress lines, the sources' values and
+// the show requests, each once.
+func (w *web) sendGraphChanges(rw http.ResponseWriter, after int, seq int64) (int64, <-chan struct{}) {
+	evs, last, behind, next := w.c.graphAfter(seq)
+	if behind {
+		return w.sendGraph(rw, after)
+	}
+	var rows []graphNode
+	gone := []string{}
+	seen := map[string]bool{}
+	for _, ev := range evs {
+		if ev.Kind != graphEvNode && ev.Kind != graphEvProgress || seen[ev.Node] {
+			continue
+		}
+		seen[ev.Node] = true
+		sum, err := w.c.nodes.Get(ev.Node)
+		if err != nil || !sum.Archived.IsZero() {
+			gone = append(gone, ev.Node)
+			continue
+		}
+		rows = append(rows, w.c.graphRow(sum))
+	}
+	if len(rows) > 0 || len(gone) > 0 {
+		if rows == nil {
+			rows = []graphNode{}
+		}
+		raw, _ := json.Marshal(map[string]any{"nodes": rows, "gone": gone})
+		writeEvent(rw, "node", after, string(raw))
+	}
+	said := map[string]bool{}
+	for _, ev := range evs {
+		var data any
+		key := ev.Kind + " " + ev.Node + " " + ev.Block + " " + ev.Name
+		switch ev.Kind {
+		case graphEvDoc:
+			sum, err := w.c.nodes.Get(ev.Node)
+			if err != nil {
+				continue
+			}
+			data = map[string]any{"id": ev.Node, "version": sum.Version}
+		case graphEvTrace:
+			data = map[string]any{"id": ev.Node, "trace": true}
+		case graphEvProgress:
+			key += " " + strconv.FormatInt(ev.Seq, 10) // each line counts
+			data = map[string]any{"node": ev.Node, "text": ev.Text, "at": ev.At}
+		case graphEvSource:
+			v, ok := w.c.sourceValue(ev.Node, ev.Block, ev.Name)
+			if !ok {
+				continue
+			}
+			data = map[string]any{"node": ev.Node, "block": ev.Block, "name": ev.Name, "value": v}
+		case graphEvShow:
+			x, ok := w.c.lastShown()
+			if !ok {
+				continue
+			}
+			data = x
+		default:
+			continue
+		}
+		if said[key] {
+			continue
+		}
+		said[key] = true
+		event := ev.Kind
+		if event == graphEvTrace {
+			event = graphEvDoc
+		}
+		raw, _ := json.Marshal(data)
+		writeEvent(rw, event, after, string(raw))
+	}
+	return last, next
 }
