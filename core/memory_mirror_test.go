@@ -108,7 +108,16 @@ func TestMirrorFollowsChanges(t *testing.T) {
 	if p := mirrorFiles(t, dir)["faits/project-site.md"]; !strings.Contains(p, "example.net") || strings.Contains(p, "example.org") {
 		t.Errorf("after the change:\n%s", p)
 	}
-	// Forgotten: gone at once, its file with it.
+	// Forgotten: its line gone at once, the others of its file kept; then
+	// the last one, and the file with it.
+	other := mustAdd(t, m, &Memory{Kind: kindFact, About: "project:site", Text: "Le site a un blog."})
+	if err := m.forget(other.ID, "test", "oublie ça"); err != nil {
+		t.Fatal(err)
+	}
+	if p := mirrorFiles(t, dir)["faits/project-site.md"]; strings.Contains(p, "blog") || strings.Contains(p, "^m"+strconv.FormatInt(other.ID, 10)) ||
+		!strings.Contains(p, "example.net. ^m"+strconv.FormatInt(tea.ID, 10)) {
+		t.Fatalf("after forgetting one line:\n%s", p)
+	}
 	if err := m.forget(tea.ID, "test", "oublie ça"); err != nil {
 		t.Fatal(err)
 	}
@@ -300,5 +309,23 @@ func TestKnownView(t *testing.T) {
 	}
 	if code, _, _ := tw.do("POST", "/api/known", nil, nil); code == http.StatusOK || code == http.StatusNoContent {
 		t.Errorf("a write to the view: %d", code)
+	}
+}
+
+// A learned change undone leaves the mirror as well: the memory it added
+// is forgotten, its line gone.
+func TestMirrorFollowsUnlearn(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	dir := filepath.Join(t.TempDir(), "memoire")
+	c.mem.mirror = &memMirror{dir: dir}
+	mustAdd(t, c.mem, &Memory{Kind: kindLesson, Text: "Toujours citer la source."})
+	if !strings.Contains(mirrorFiles(t, dir)["profil.md"], "citer la source") {
+		t.Fatal("the lesson not in the mirror")
+	}
+	if _, err := c.unlearn(learnedAll(t, c.mem)[0].ID, "owner", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if files := mirrorFiles(t, dir); len(files) != 0 {
+		t.Fatalf("after the undo: %v", files)
 	}
 }

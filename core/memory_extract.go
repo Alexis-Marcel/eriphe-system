@@ -919,21 +919,11 @@ func (m *memStore) backup(dir string, keep int) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	// The readable mirror, as written from this copy.
+	// The readable mirror, as written from this copy; without it, the
+	// copies are still kept and pruned.
 	if m.mirror != nil {
-		if err := m.mirror.sync(m); err != nil {
-			return fmt.Errorf("mirror: %w", err)
-		}
-		f, err := os.OpenFile(filepath.Join(dir, "memoire-"+day+".tar.gz"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-		if err != nil {
-			return err
-		}
-		if err := m.mirror.archive(f); err != nil {
-			f.Close()
-			return err
-		}
-		if err := f.Close(); err != nil {
-			return err
+		if err := m.backupMirror(filepath.Join(dir, "memoire-"+day+".tar.gz")); err != nil {
+			log.Printf("memory: backup of the mirror: %v", err)
 		}
 	}
 	for _, pattern := range []string{"memory-*.db", "memory-*.jsonl", "memoire-*.tar.gz"} {
@@ -945,6 +935,22 @@ func (m *memStore) backup(dir string, keep int) error {
 		}
 	}
 	return nil
+}
+
+// backupMirror writes the mirror, synced first, as a tar.gz at path.
+func (m *memStore) backupMirror(path string) error {
+	if err := m.mirror.sync(m); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := m.mirror.archive(f); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // exportJSONL writes every memory not forgotten, one JSON object per line.
