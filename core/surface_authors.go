@@ -8,7 +8,7 @@ package main
 //     their own.
 //   - What waits for the user that no thread shows is the attention
 //     queue's (workspace_queue.go), code's too.
-//   - A skill acts on its thread (task_threads.go). A recurring request is
+//   - A skill's run writes in its node (task_nodes.go). A recurring request is
 //     a skill; a one-off one shown is a day thread. No model judges a
 //     surface stale or the workspace short of one: live data is read again
 //     by code, and code orders the workspace (workspace_layout.go).

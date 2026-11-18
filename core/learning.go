@@ -594,7 +594,6 @@ func (c *core) approveSkill(name, sha, who string) error {
 		return err
 	}
 	c.learnSkill(name, sha, prev, who, "approved")
-	c.openSkillThreads(name, true) // its thread shows from now (task_threads.go)
 	return nil
 }
 

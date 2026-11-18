@@ -23,8 +23,7 @@ import (
 //	every: 15m                               batch: at most one task per period, with every event since
 //	model: haiku                             the agent its tasks run with (Settings → Agents)
 //	tools: [mail, calendar]                  the catalog servers its tasks are lent
-//	                                         (eriphe-threads: it acts on threads, task_threads.go;
-//	                                         never eriphe-workspace: a skill writes on threads)
+//	                                         (never eriphe-workspace: a run writes in its node)
 //	thread: topic:mails                      its thread's alias (kind:slug): what its runs are about;
 //	                                         without it, the events' key, or topic:<monitor>
 //
@@ -167,7 +166,7 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 		case !serverName.MatchString(t):
 			return nil, skillErr("skills.err.tools", t)
 		case t == workspaceServer:
-			return nil, skillErr("skills.err.workspace", t) // it writes on its thread (task_threads.go)
+			return nil, skillErr("skills.err.workspace", t) // a run writes in its node (task_nodes.go)
 		}
 	}
 	if u := strings.TrimSpace(m.Urgent); u != "" {
@@ -269,7 +268,7 @@ func (st *skillTrigger) Text(lang string) string {
 	if len(st.Tools) > 0 {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.tools"), strings.Join(st.Tools, ", ")))
 	}
-	if containsStr(st.Tools, threadsServer) && st.Thread != "" {
+	if st.Thread != "" {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.thread"), st.Thread))
 	}
 	if st.Urgent != "" {

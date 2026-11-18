@@ -56,7 +56,7 @@ const (
 var (
 	// providedServers are the servers Eriphe provides itself, lent as the
 	// catalog's are, by name or name.tool.
-	providedServers = []string{workspaceServer, threadsServer, foldersServer}
+	providedServers = []string{workspaceServer, foldersServer}
 	// workspaceTools are its tools, in order.
 	workspaceTools = []string{"surface_write", "surface_remove", "workspace_read", "catalog_read", "sources_read"}
 	// surfaceReadCap is how long a surface_write waits for its sources.
@@ -193,7 +193,7 @@ func providedInfo() []map[string]any {
 	for _, name := range workspaceTools {
 		tools = append(tools, map[string]any{"name": name, "value": gridFree})
 	}
-	return []map[string]any{{"name": workspaceServer, "use": "the user's workspace: a task step of a thread reads it (workspace_read, catalog_read) and gives a web page it captured (eriphe-capture <url> thread-<id>) to its thread's surface; it writes no tile. Free. Lend it as {kind: tool, ref: " + workspaceServer + "}; never to a skill, which acts on its thread (" + threadsServer + ").",
+	return []map[string]any{{"name": workspaceServer, "use": "the user's workspace: a task step of a thread reads it (workspace_read, catalog_read) and gives a web page it captured (eriphe-capture <url> thread-<id>) to its thread's surface; it writes no tile. Free. Lend it as {kind: tool, ref: " + workspaceServer + "}.",
 		"tools": tools}}
 }
 

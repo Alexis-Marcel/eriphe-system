@@ -16,7 +16,7 @@ import (
 // seconds where it stands and what is the user's, without rereading it.
 // Composed by code (thread_blocks.go):
 //
-//   - The state line: its headline (set_thread), else what its items
+//   - The state line: its headline (open_thread), else what its items
 //     count, else its state; when its items were sorted; « extérieur »
 //     beside its headline when that may carry someone else's words
 //     (threadStateText).
@@ -28,9 +28,7 @@ import (
 //   - /thread/since: facts made by code from the thread's own data (its
 //     steps' starts and ends, its summary written again, its end) since
 //     the user's visit before the last one, oldest first, the last
-//     threadFactsMax; none before a first visit. What was settled for its
-//     tasks is one: kept as a kind and its parameters
-//     (task_answer_log.go), worded here. Never the log's lines: they are
+//     threadFactsMax; none before a first visit. Never the log's lines: they are
 //     French only, and may quote a lead.
 //   - /thread/summary: the thread's summary, as remember (kind progress),
 //     the extraction or its close wrote it; no model call.
@@ -112,15 +110,6 @@ func threadFacts(s Thread, steps []threadSurfaceStep, since int64, lang string) 
 			}
 			out = append(out, threadFact{st.Started, fmt.Sprintf(tr(lang, word), st.Label)})
 		}
-		for _, a := range st.Answers {
-			if after(a.At) {
-				text := fmt.Sprintf(tr(lang, "thread.fact.answer"), st.Label, a.text(lang))
-				if a.Tainted != "" {
-					text += threadExternalSep + tr(lang, "thread.surface.external")
-				}
-				out = append(out, threadFact{a.At, text})
-			}
-		}
 	}
 	if s.summarized > since && s.summarized > 0 {
 		out = append(out, threadFact{time.Unix(s.summarized, 0), tr(lang, "thread.fact.summary")})
@@ -198,8 +187,7 @@ func (c *core) threadSinceData(s Thread, steps []threadSurfaceStep, now time.Tim
 	return lines
 }
 
-// A thread's headline (open_thread or set_thread headline): what the brain,
-// a skill or a task tending it says of it to the user, one line, shown at the top of its surface in
+// A thread's headline (open_thread): what the brain says of it to the user, one line, shown at the top of its surface in
 // place of what code counts, and as its chip's line. Its author and taint
 // are code's: written after reading external content, the surface is
 // tainted for the models that read the workspace (codeTaint headline), and

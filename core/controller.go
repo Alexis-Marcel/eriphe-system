@@ -293,6 +293,7 @@ type runRequest struct {
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
 	Device    string        `json:"device,omitempty" jsonschema:"device name; empty lets the scheduler choose"`
 	About     string        `json:"about,omitempty" jsonschema:"what it is about: thread:<id>, or an entity's key (person:<slug>); leave it out for what this turn is about (its thread)"`
+	Node      string        `json:"node,omitempty" jsonschema:"the node this work belongs to, by its id: the task works in a node of its own, opened as a child of it; leave it out for a node at the top"`
 	// Contract: what must be true at the end, for a task that changes
 	// something (contract.go); none for a search or a read.
 	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
@@ -357,6 +358,12 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	about, err := c.aboutIs(r.About)
 	if err != nil {
 		return nil, fmt.Errorf("about: %w", err)
+	}
+	if r.Node != "" && kind != "worker" {
+		return nil, errors.New("only a worker task works in a node")
+	}
+	if err := c.nodeParent(r.Node); err != nil { // task_node.go
+		return nil, err
 	}
 	agentName, agent, err := c.conf().agent(r.Agent)
 	if err != nil {
@@ -435,8 +442,17 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	if len(needs) > 0 {
 		t.Desired, t.PendingReason = desiredHeld, "waits for "+c.conf().User+"'s approval to start, asked on a card in the conversation"
 	}
+	if kind == "worker" {
+		if err := c.openTaskNode(t, r, len(needs) > 0); err != nil { // task_node.go
+			return nil, err
+		}
+	}
 	if err := c.store.insertTask(t); err != nil {
 		return nil, err
+	}
+	if len(r.taint) > 0 && c.store.get(taskTaintKey(t.ID)) == "" {
+		// Started on what someone else wrote: tainted from its start (task_taint.go).
+		c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(r.taint, ", "))
 	}
 	if r.Contract != nil {
 		if err := c.store.setContract(t.ID, r.Contract); err != nil {
@@ -459,6 +475,9 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	spec.Folders = nil                                                                 // the same
 	if kind == "worker" {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + c.taskNowText()) // situations.go
+		if c.taskNode(t.ID) != "" {
+			spec.AppendSystemPrompt += "\n\n" + nodesInstruction // task_nodes.go
+		}
 	}
 	if len(folders) > 0 {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders))

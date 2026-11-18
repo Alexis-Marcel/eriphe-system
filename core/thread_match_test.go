@@ -88,41 +88,6 @@ func TestNearThreadsRefuse(t *testing.T) {
 	}
 }
 
-// A skill's run has no model to answer a refusal: its thread is its
-// alias's, found or opened, whatever is near.
-func TestSkillThreadIsExact(t *testing.T) {
-	c := stepsCore(t)
-	if _, err := c.openThread(threadIn{Title: "Alertes de la prod", Goal: "x", Alias: "topic:alertes"}, nil, byBrain); err != nil {
-		t.Fatal(err)
-	}
-	s, err := c.skillThread(triggeredSkill{Name: "veille-alertes-prod", Manifest: skillManifest{Description: "Trie les alertes de la prod."}}, "topic:alertes-prod", nil)
-	if err != nil || s.Alias != "topic:alertes-prod" {
-		t.Fatalf("the skill's thread: %+v %v", s, err)
-	}
-}
-
-// A task offered threads near a matter reads their words: one opened on
-// someone else's taints it.
-func TestNearThreadsTaintTask(t *testing.T) {
-	c, _, now := alertsWatcher(t)
-	c.emit(journalEvent{Kind: evMonitorNew, Key: "alertes", Source: "monitor:alertes", At: *now, Payload: map[string]any{"id": "a"}})
-	c.tickSkills(t.Context(), *now)
-	r := runsOfSkill(t, c, "veille-alertes")[0]
-	if c.taskResultTaint(r.Task) != "" {
-		t.Fatal("tainted already")
-	}
-	if _, err := c.openThread(threadIn{Title: "Facture", Goal: "Payée.", Alias: "topic:facture"}, []string{"mail"}, byBrain); err != nil {
-		t.Fatal(err)
-	}
-	out, isErr := callTaskThreads(t, c, r.Task, "open_thread", map[string]any{"title": "Facture d'électricité", "goal": "Payée.", "alias": "topic:facture-electricite"})
-	if !isErr || !strings.Contains(out["error"].(string), "take") {
-		t.Fatalf("opened beside a near thread: %v", out)
-	}
-	if c.taskResultTaint(r.Task) == "" {
-		t.Error("the task read a tainted thread's title and is not tainted")
-	}
-}
-
 // openThreadOnce is the only path that opens a thread: no other code
 // calls openThread, so none goes around the matcher.
 func TestOneOpeningPath(t *testing.T) {

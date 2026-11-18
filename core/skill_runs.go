@@ -29,10 +29,8 @@ import (
 //   - Its task is lent the skill's tools, with no start card (the user
 //     approved the skill and what it says); an external event taints it from
 //     its start, so its writes then ask a card.
-//   - Lent eriphe-threads, it acts on its thread (task_threads.go): it
-//     notes items, says the thread waits for the user, sets a deadline,
-//     raises it, adds what the user does or decides. That is where the
-//     user sees what it found, ordered by code, without a model speaking.
+//   - Its task works in a node of its own, as any worker's (task_node.go):
+//     it writes there what it found and notes the items of its sources.
 //   - Its last message is optional: kept in its note, and a notification,
 //     why "Skill « name »", only when its receipt's attention list weighs
 //     it (tellRun); no entry tells nothing. Then its task stops.
@@ -48,7 +46,7 @@ CREATE TABLE IF NOT EXISTS skill_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT, skill TEXT NOT NULL, sha TEXT NOT NULL, key TEXT NOT NULL DEFAULT '',
   events TEXT NOT NULL DEFAULT '[]', task TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
   external INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, ended INTEGER,
-  thread INTEGER NOT NULL DEFAULT 0); -- the thread of its alias, lent eriphe-threads (task_threads.go)
+  thread INTEGER NOT NULL DEFAULT 0); -- the thread its item cards go to (item_cards.go)
 CREATE INDEX IF NOT EXISTS skill_runs_skill ON skill_runs (skill, id);
 CREATE INDEX IF NOT EXISTS skill_runs_task ON skill_runs (task);`
 
@@ -134,7 +132,6 @@ func (c *core) skillManifestOf(sha string) (skillManifest, bool) {
 func (c *core) runSkills(ctx context.Context) {
 	c.skillRuns.kick = make(chan struct{}, 1)
 	c.subscribeEvents(c.queueSkillEvent)
-	c.openSkillThreads("", false) // a skill on whose alias has no thread yet gets it (task_threads.go)
 	tick := time.NewTicker(skillsTickEvery)
 	defer tick.Stop()
 	for {
@@ -275,8 +272,7 @@ func scanSkillRun(row interface{ Scan(...any) error }) (*skillRun, error) {
 	return &r, nil
 }
 
-// openRun is a run of the skill and key whose task is still open. Its
-// thread stays: the next run finds it again (skillThread).
+// openRun is a run of the skill and key whose task is still open.
 func (c *core) openRun(skill, key string) *skillRun {
 	r, err := scanSkillRun(c.store.db.QueryRow(`SELECT `+skillRunCols+` FROM skill_runs WHERE skill = ? AND key = ? AND state = ? ORDER BY id DESC LIMIT 1`,
 		skill, key, skillRunOpen))
@@ -357,23 +353,8 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 		return
 	}
 	alias := skillRunAlias(sk.Trigger, key, events)
-	var th *Thread
-	var sources []string
-	if containsStr(sk.Trigger.Tools, threadsServer) && alias != "" {
-		// Lent eriphe-threads, it acts on the thread of its alias: code
-		// finds it, or opens it (task_threads.go).
-		if s, err := c.skillThread(sk, alias, events); err != nil {
-			log.Printf("skill %s: run %d: its thread: %v", sk.Name, runID, err)
-		} else {
-			th, sources = &s, c.itemSourceNames(s.ID)
-			c.store.db.Exec(`UPDATE skill_runs SET thread = ? WHERE id = ?`, s.ID, runID)
-		}
-	}
-	var prefs []string
-	if th != nil && len(sources) > 0 {
-		prefs = c.seePreferences() // it notes items: as the user wants to see them
-	}
-	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now, th, sources, prefs), Agent: sk.Trigger.Model, About: alias,
+	// It notes items in its node (item_note): as the user wants to see them.
+	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, events, now, c.seePreferences()), Agent: sk.Trigger.Model, About: alias,
 		askStart: false, approvedInAdvance: true, cleanStart: !external}
 	for _, t := range sk.Trigger.Tools {
 		r.Resources = append(r.Resources, ResourceRef{Kind: "tool", Ref: t})
@@ -381,7 +362,7 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 	if external {
 		r.taint = []string{"skill events: " + strings.Join(kinds, ", ")}
 	}
-	t, err := c.startTask(ctx, "worker", r, deviceTaskSpec{AppendSystemPrompt: skillVoice(c.userLang(), containsStr(sk.Trigger.Tools, threadsServer))})
+	t, err := c.startTask(ctx, "worker", r, deviceTaskSpec{AppendSystemPrompt: skillVoice(c.userLang())})
 	if err != nil {
 		c.endRun(runID, skillRunRefused, err.Error())
 		log.Printf("skill %s: run %d: %v", sk.Name, runID, err)
@@ -421,19 +402,12 @@ func (c *core) journalEvent(id int64) (journalEvent, bool) {
 }
 
 // skillVoice is a triggered task's standing instruction, with the user's
-// language (user_lang.go): lent the threads, it acts on them; its final
-// message is optional, and its receipt's attention list is read by code
-// (tellRun).
-func skillVoice(lang string, threads bool) string {
-	acts := ""
-	if threads {
-		acts = "With the threads' tools (" + threadsServer + "), act on the thread you are given, or the one of the matter: note each item you looked at (note_item), " +
-			"say it waits for the user or give it a deadline (set_thread), raise it when it matters (set_thread raise, 1 to 5), give it a headline when one line says where it stands better than the counts (set_thread headline), add what the user must do or decide (add_step). " +
-			"That is what the user sees; you never close a thread nor decide for the user. " + threadsUserReads + "\n"
-	}
+// language (user_lang.go): its final message is optional, and its
+// receipt's attention list is read by code (tellRun).
+func skillVoice(lang string) string {
 	return "You run in the background, started by one of the user's skills: nobody reads this conversation. " +
 		"Follow the skill's instructions on the events below. What you would do that changes something is asked to the user on a card " +
-		"by eriphe-core: do it, and the user answers there; never ask the user a question in your message.\n" + acts +
+		"by eriphe-core: do it, and the user answers there; never ask the user a question in your message.\n" +
 		"Your final message is optional: one or two sentences for the run's report, " + userLangEN(lang) + ", plain text, no link. " +
 		"Write all the user reads (notes, steps, attention) " + userLangEN(lang) + " too, whatever the language of the skill. " +
 		"Your receipt's attention list says whether the user is told, whatever the skill's instructions say of prefixes: no entry, and nothing is told; " +
@@ -442,12 +416,12 @@ func skillVoice(lang string, threads bool) string {
 }
 
 // skillRunPrompt is a run's prompt: the skill, then its events.
-// prefs are the user's preferences about what they see, for a run that
-// notes a thread's items (seePreferences).
-func skillRunPrompt(sk triggeredSkill, events []journalEvent, now time.Time, th *Thread, sources, prefs []string) string {
+// prefs are the user's preferences about what they see, for the items it
+// notes (seePreferences).
+func skillRunPrompt(sk triggeredSkill, events []journalEvent, now time.Time, prefs []string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Skill « %s » : %s\n\n%s\n\n", sk.Name, sk.Manifest.Description, sk.Manifest.Body)
-	if s := skillCanText(sk.Trigger, th, sources); s != "" {
+	if s := skillCanText(sk.Trigger); s != "" {
 		b.WriteString(strings.TrimSpace(s) + "\n\n")
 	}
 	if len(prefs) > 0 {

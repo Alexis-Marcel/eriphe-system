@@ -247,13 +247,6 @@ func stepItem(st threadSurfaceStep, lang string, loc *time.Location) []any {
 		item["detail"] = truncate(strings.Join(parts, threadExternalSep), threadDetailMax)
 	}
 	out := []any{item}
-	for _, a := range st.Answers {
-		answer := map[string]any{"label": a.text(lang), "state": "done", "date": a.At.In(loc).Format(time.RFC3339)}
-		if a.Tainted != "" {
-			answer["detail"] = tr(lang, "thread.surface.external")
-		}
-		out = append(out, answer)
-	}
 	return out
 }
 

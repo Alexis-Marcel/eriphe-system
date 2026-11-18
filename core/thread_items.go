@@ -11,8 +11,8 @@ import (
 	"unicode/utf8"
 )
 
-// Notes on a thread's items (#571): what the brain, a thread's lead or a
-// task lent eriphe-threads (a skill's run, task_threads.go) writes about one item a source of the thread lists (a mail, an event, a
+// Notes on a thread's items (#571): what the brain or a thread's lead
+// writes about one item a source of the thread lists (a mail, an event, a
 // pull request), by the source's name and the item's id: a short note, a
 // state, a due date (note_item).
 //

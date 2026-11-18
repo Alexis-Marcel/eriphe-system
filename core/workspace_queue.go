@@ -39,8 +39,7 @@ import (
 // today (proposalSpans). The ids stay the same while a group lives, so the
 // brain keeps naming them.
 //
-// An item about a thread (thread:<id>: a skill's set_thread raise, a
-// signal) is shown by its thread's surface, whatever its weight: the tile
+// An item about a thread (thread:<id>: a signal) is shown by its thread's surface, whatever its weight: the tile
 // takes the item's weight (threadSurfaceIn), nothing goes to q-notes. It
 // is seen once the user opened that surface and left it (queueItemsOf).
 //
