@@ -26,7 +26,8 @@ the container's network, Docker's userland proxy relays IPv6 clients, and eriphe
 with the bridge's gateway address.
 
 At first start it makes what it lacks in the data directory, and reuses it after: the API token
-(`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`) and the
+(`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`), the graph's
+nodes (`nodes/`, `nodes.db`) and the
 workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). The API listens on
 `0.0.0.0:8800`, the workspace on `https://0.0.0.0:8443` (`ERIPHE_API_LISTEN` and `ERIPHE_WEB_LISTEN`,
 e.g. `0.0.0.0:9443`, move them, as `install.sh --api-port`, `--web-port` does on a Mac), and the
@@ -1409,6 +1410,47 @@ body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
 
 The checks that need the core (actions, offers, a Proposal after external content, a bound Link's
 value, taint) are the tools' that write nodes.
+
+## Node store (`nodestore/`, `nodes.go`)
+
+The package `nodestore` keeps the nodes: the files are the truth, the index is for speed.
+
+- **Repository:** `nodes/` next to `core.db`, a git repository written with go-git (no git
+  binary). Files are flat: `<slug>-<id>.md`, its trace `<slug>-<id>.trace.md`, its media in
+  `files/<id>/` (written by a later step). The slug (lowercase ASCII from the title, 40 characters at most) is frozen at
+  creation: a new title changes the front matter, never the file's name.
+- **Index:** `nodes.db` next to it, outside the repository (SQLite, its schema version in `meta`, a
+  file at another version is refused). Tables: `nodes` (file, title, parent, lifetime, state,
+  times, external, last version, the file's git hash), `node_links`, `node_versions` (n → commit
+  hash, author, time), `node_sources` (each block's live sources), `node_items` (notes on the items
+  a source lists), `node_layout` (a node's place on the graph) and `node_fts` (FTS5 over the title,
+  the goal, the text and the words the blocks show). History is never asked of git by path: a
+  version's commit is in `node_versions`.
+- **Writes:** each is one commit by its author (`brain`, `task:<id>`, `user`…), whose message names
+  the versions it makes (`Node: <id> <n>`). `Create` makes version 1; `Write(id, body, expect,
+  author)` replaces the body through nodefile's author API (code's fields kept, a change to them
+  refused) and is refused with `ErrConflict` when `expect` is not the last version's commit hash; a
+  body alike makes no version. An archived node is not written (`ErrArchived`). A node is 512 KiB
+  and 32 blocks at most. Secrets are refused by the memory's filter (`scanSecrets` in
+  `memory_trust.go`: credentials, long random strings, links with a password or a token); its
+  injection rules are not applied, as a node may quote someone else's words.
+- **Reads:** `Read(id, n)` gives version `n` (0: the last), `Versions`, `Children` (archived ones
+  included), `Find(query, archived, limit)` (all the words, prefixes from three letters; archived
+  nodes only when asked), `Get`.
+- **Trace:** `AppendTrace(id, author, text)` adds a dated entry, never cut (256 KiB an entry), in a
+  commit of its own; a trace is not a version of its node.
+- **State:** `SetState` (`running`, `waiting`, `idle`, `done`) is code's, in the index only.
+- **Archive:** `Archive(id, author)` archives the node and every node below it in one commit, each
+  a new version. Only the user archives (the tools of a later step).
+- **At start:** the files are compared to the index and the last commit. A file changed, added or
+  removed outside Eriphe is committed as a version of its own (author `outside`), reindexed and
+  logged; a file that does not read as a node is logged and left alone. When `nodes.db` is missing,
+  it is made again from the files, and the versions from one walk of the log. The state, the
+  layout and the item notes are not in the files: a rebuilt index starts them over.
+- **Nightly**, at the memory's hour (`memory.extract_at`), into its backup folder
+  (`memory.backup_dir`, `memory.backup_keep` days): the repository is packed (`gc`), then
+  `nodes-<day>.bundle` (a git bundle: `git clone` reads it) and `nodes-<day>.db` (a copy of the
+  index). Writes wait meanwhile.
 
 ## Permission policy
 

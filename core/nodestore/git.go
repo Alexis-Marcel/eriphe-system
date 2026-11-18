@@ -217,7 +217,8 @@ func (s *Store) logVersions() ([]loggedVersion, error) {
 }
 
 // bundle writes the repository as a git bundle (v2): its branch, and a
-// pack of every object it reaches. `git clone <file>` reads it back.
+// pack of every object it reaches. `git clone <file>` reads it back. Just
+// after gc, the repository's one pack is that pack: it is copied as it is.
 func (s *Store) bundle(w io.Writer) error {
 	head, err := s.repo.Head()
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
@@ -226,11 +227,22 @@ func (s *Store) bundle(w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	objs, err := revlist.Objects(s.repo.Storer, []plumbing.Hash{head.Hash()}, nil)
-	if err != nil {
+	if _, err := fmt.Fprintf(w, "# v2 git bundle\n%s %s\n\n", head.Hash(), plumbing.NewBranchReferenceName(branch)); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "# v2 git bundle\n%s %s\n\n", head.Hash(), plumbing.NewBranchReferenceName(branch)); err != nil {
+	packs, _ := filepath.Glob(filepath.Join(s.dir, ".git", "objects", "pack", "pack-*.pack"))
+	loose, _ := filepath.Glob(filepath.Join(s.dir, ".git", "objects", "??", "*"))
+	if len(packs) == 1 && len(loose) == 0 {
+		f, err := os.Open(packs[0])
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		_, err = io.Copy(w, f)
+		return err
+	}
+	objs, err := revlist.Objects(s.repo.Storer, []plumbing.Hash{head.Hash()}, nil)
+	if err != nil {
 		return err
 	}
 	_, err = packfile.NewEncoder(w, s.repo.Storer, false).Encode(objs, 10)

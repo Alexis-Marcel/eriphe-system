@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // core ties the modules together: the store, the devices, the scheduler, and
@@ -39,6 +41,8 @@ type core struct {
 
 	mem  *memStore // Eriphe's memory (memory.go); nil if it could not open
 	turn brainTurn // what the brain's current turn read (memory_trust.go)
+
+	nodes *nodestore.Store // the graph's nodes (nodes.go); nil if they could not open
 
 	relayMu sync.Mutex // one copy of the brain's output at a time (relayBrainOutput)
 	// brainSeqOfTurn is the brain's last message of its current turn, for

@@ -93,7 +93,9 @@ type Store struct {
 	repo *git.Repository
 	opts Options
 
-	mu sync.Mutex // one write at a time: the repository's worktree is not shared
+	// One write at a time: the repository's worktree is not shared. A
+	// read of the repository waits for a write (gc moves its objects).
+	mu sync.RWMutex
 }
 
 // Report is what a start found.
@@ -394,6 +396,8 @@ func (s *Store) refuse(parts ...string) error {
 
 // Read reads a node at a version: n, 0 for the last one.
 func (s *Store) Read(id string, version int) (*Doc, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.read(id, version)
 }
 
@@ -489,6 +493,8 @@ func (s *Store) AppendTrace(id, author, text string) error {
 
 // Trace is a node's trace; empty while it has none.
 func (s *Store) Trace(id string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	sum, err := s.summary(id)
 	if err != nil {
 		return nil, err

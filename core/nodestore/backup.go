@@ -2,14 +2,15 @@ package nodestore
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 )
 
-// Backup is the nightly copy: a git bundle of the repository and a copy
-// of the index into dir, nodes-<day>.bundle and nodes-<day>.db, the last
-// keep days kept; then the repository is packed (gc).
+// Backup is the nightly copy: the repository is packed (gc), then a git
+// bundle of it and a copy of the index go into dir, nodes-<day>.bundle and
+// nodes-<day>.db, the last keep days kept. Writes wait meanwhile.
 func (s *Store) Backup(dir string, keep int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -17,6 +18,9 @@ func (s *Store) Backup(dir string, keep int) error {
 		return err
 	}
 	keep = max(keep, 1)
+	if err := s.gc(); err != nil {
+		return fmt.Errorf("gc: %w", err)
+	}
 	day := s.opts.Now().Format("2006-01-02")
 	bundle := filepath.Join(dir, "nodes-"+day+".bundle")
 	f, err := os.OpenFile(bundle+".tmp", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
@@ -51,5 +55,5 @@ func (s *Store) Backup(dir string, keep int) error {
 			files = files[1:]
 		}
 	}
-	return s.gc()
+	return nil
 }
