@@ -101,7 +101,7 @@ func foldersInfo() map[string]any {
 	for _, name := range folderChangeTools {
 		tools = append(tools, map[string]any{"name": name, "category": catChange, "value": "the folder's change"})
 	}
-	return map[string]any{"name": foldersServer, "use": "the user's folders shared on their machines (list_folders): list, search and read their files, write, replace, move or delete one, each call held to its folder's rights (read for the reads, change for the writes: free, approval or never). Its reads are free sources of a surface when the folder's read is free. Yours already; lend it as {kind: tool, ref: " + foldersServer + "}, or in a skill's tools.",
+	return map[string]any{"name": foldersServer, "use": "the user's folders shared on their machines (list_folders): list, search and read their files, write, replace, move or delete one, each call held to its folder's rights (read for the reads, change for the writes: free, approval or never). Its reads are free sources of a block when the folder's read is free. Yours already; lend it as {kind: tool, ref: " + foldersServer + "}, or in a skill's tools.",
 		"tools": tools}
 }
 
