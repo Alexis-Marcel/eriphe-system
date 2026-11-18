@@ -130,7 +130,7 @@ func scanSecrets(text string) string {
 			return "it looks like a credential: secrets belong in the vault"
 		}
 	}
-	for _, m := range longTokenRe.FindAllString(text, -1) {
+	for _, m := range longTokenRe.FindAllString(withoutLinkPaths(text), -1) {
 		if looksRandom(m) {
 			return "it holds a long random string, which looks like a credential"
 		}
@@ -143,13 +143,32 @@ func scanSecrets(text string) string {
 		if u.User != nil {
 			return "a link carries a user name or password"
 		}
-		for k := range u.Query() {
-			if secretKeys.MatchString(k) {
-				return "a link carries a token (" + k + "=…): keep the link without it"
+		frag, _ := url.ParseQuery(u.Fragment) // an access token comes back in a fragment too
+		for _, q := range []url.Values{u.Query(), frag} {
+			for k := range q {
+				if secretKeys.MatchString(k) {
+					return "a link carries a token (" + k + "=…): keep the link without it"
+				}
 			}
 		}
 	}
 	return ""
+}
+
+// withoutLinkPaths is text with each link's address and path left out,
+// its query and fragment kept: a path names things (a repository, a pull
+// request, a document's id), and its segments joined by / or a document's
+// id would read as a long random string. What a link carries as a token
+// is still seen: a credential's known shape anywhere (secretRes), a
+// query's or fragment's key or long random value, a user name or password.
+func withoutLinkPaths(text string) string {
+	return urlRe2.ReplaceAllStringFunc(text, func(raw string) string {
+		u, err := url.Parse(strings.TrimRight(raw, ".,;:!?)"))
+		if err != nil || u.Opaque != "" {
+			return raw
+		}
+		return " " + u.RawQuery + " " + u.Fragment + " "
+	})
 }
 
 // looksRandom tells a credential-like string from a word or a path: digits,
