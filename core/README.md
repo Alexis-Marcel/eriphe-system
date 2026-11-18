@@ -3064,33 +3064,18 @@ way for the same pool:
 5. what relates to it, m at most; with nothing related, the rest:
 6. in the **tile order** (`tileOrder`): by state, then the heaviest, the latest changed, the id.
 
-**A standing thread is a tile only when it has something for the user** (`foldsQuiet`): its
-surface says it folds (`look.folds`, set by code from the thread, `threadSurfaceIn`), and while
-its state is `quiet` or `running` it is left out of step 6: it is a chip, after those folded for
-room. `yours`, `urgent` or `new`, it is a tile again in the tile order. Opened (from its chip, as
-any), placed by the user, on stage before the one opened, or related to it, it is a tile all the
-same. Work and day threads, and every other surface, are unchanged. A thread surface written
-before it said whether it folds is written again by the 15 s tick (`keepThreadSurfaces`).
-
-**The workspace lays out top threads only.** A child thread's surface says the surface it opens
-inside (`look.inside`, its parent's; `extensions.eriphe.inside` for the page): while that one is
-in the pool, it is neither a tile nor a chip (`laidInside`). Opened (from its parent's row, a link
-`/espace?open=thread-<child>`, `workspace_focus`), its parent is on stage with it inside
-(`onStage`): the layout's `focus` is the parent and its `inside` the child, which the page draws
-in the parent's tile, under the child's title; what relates to the parent is around. Its crumb
-opens the parent again. A child whose parent's surface is gone is laid out as any surface.
+**Threads draw no tile any more** (#631): a thread has no surface, so the folding of a quiet
+standing thread and a child laid inside its parent apply to no surface until the workspace moves
+to the graph (#633). The layout below lays out the queue's surfaces.
 
 **A tile's state** is code's (`tileStateOf`), never a model's: `yours` (something waits for the
 user: a card on it, a step of theirs), `urgent` (weight 80 and up; a thread with a note due within
 two hours, `dueSoon`), `new` (something changed since the user last opened it), `running` (a step
-runs), `quiet`, `done` (its thread ended), ranked in that order. A thread's surface carries the
-state its thread gives it (`threadTileState`, [thread_blocks.go](#threads)); a queue's surface that
+runs), `quiet`, `done` (its thread ended), ranked in that order. A queue's surface that
 holds a card is `yours`; any other surface is `urgent` or `quiet` by its weight. The state and the
 count of what is new (`new`: the facts and notes after the user's last visit, `visited`) go in the
 surface's metadata (`extensions.eriphe.state`, `.new`): the page colours the tile's edge by it and
-shows a badge, « À toi », « Urgent », « Nouveau · 3 », outside the focus too. A note's due time
-coming within two hours is caught on the 15 s tick (`keepThreadSurfaces`), which writes the thread
-again, urgent.
+shows a badge, « À toi », « Urgent », « Nouveau · 3 », outside the focus too.
 
 Each tile goes at the first place where it fits, top left first; one that fits nowhere shrinks a
 size, then is folded; with room left, a surface of weight 40 or more grows a size (never into xl)
