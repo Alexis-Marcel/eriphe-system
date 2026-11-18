@@ -49,7 +49,17 @@ home. The camera frames every open page when they fit readably, otherwise the on
 to; the others stay open where they are.
 
 A link may open a page directly: `/espace?open=node-<id>`. When Eriphe wants to show you something,
-it opens its page beside yours.
+it opens its page beside yours; the console stays where you were, its answer under your question:
+only your own click moves it.
+
+When a work Eriphe ran ends, what it made for you (its last step, « Plan of the first article »)
+waits for you, the work around it done. It stops waiting when you say it suits you (« Ce plan me
+va »: Eriphe marks it done) or when you archive it. A page counts its versions from the first with
+something in it: a step opened empty for its task to write starts at v1 with the task's text.
+
+On a phone the graph gives way to a list: each subject, its bubbles under it, in the order they were
+made, what waits for you or runs said on its line. A tap opens its page over the list; closing it
+brings the list back. The console is the same.
 
 ## Move things
 

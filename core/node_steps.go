@@ -945,6 +945,34 @@ func (c *core) holdForBudget(w work) {
 // minutes at least.
 func budgetMore(w work) int { return max(30, w.Budget/2) }
 
+// workForUser puts a done work before the user: its result, the
+// accepted steps no other step comes after, waits for them until they, or
+// the brain on their word (node_set done), say it is done; the work around
+// it is done. A work with no such step waits itself.
+func (c *core) workForUser(parent string) {
+	steps, _ := c.workSteps(parent)
+	after := map[string]bool{}
+	for _, st := range steps {
+		for _, a := range st.After {
+			after[a] = true
+		}
+	}
+	var results []string
+	for _, st := range steps {
+		if st.Status == stepAccepted && !after[st.Node] {
+			results = append(results, st.Node)
+		}
+	}
+	if len(results) == 0 {
+		c.nodes.SetState(parent, nodestore.Waiting)
+		return
+	}
+	for _, id := range results {
+		c.nodes.SetState(id, nodestore.Waiting)
+	}
+	c.nodes.SetState(parent, nodestore.Done)
+}
+
 // The final check.
 
 // finishWork ends a work whose steps are all accepted or dropped: a fresh
@@ -957,7 +985,7 @@ func (c *core) finishWork(ctx context.Context, w work, steps []Step) {
 	if goal == "" {
 		c.setWork(w.Parent, map[string]any{"state": workDone, "spent": int64(w.elapsed(time.Now()) / time.Second), "since": 0})
 		c.traceWork(w.Parent, "Toutes les étapes sont acceptées.", "")
-		c.nodes.SetState(w.Parent, nodestore.Waiting) // for the user to read
+		c.workForUser(w.Parent)
 		return
 	}
 	if err := c.startFinal(ctx, w, goal, steps); err != nil {
@@ -1039,7 +1067,7 @@ func (c *core) finalChanged(w work, id, state string, outcome turnOutcome) {
 	if proven(r) {
 		c.setWork(w.Parent, map[string]any{"state": workDone, "spent": int64(w.elapsed(time.Now()) / time.Second), "since": 0})
 		c.traceWork(w.Parent, "Objectif vérifié par un agent neuf : "+r.verdict(), strings.Join(taint, ", "))
-		c.nodes.SetState(w.Parent, nodestore.Waiting) // for the user to read
+		c.workForUser(w.Parent)
 		return
 	}
 	why := state
@@ -1197,7 +1225,7 @@ func (c *core) settleWork(ctx context.Context, w work, outcome, note string) (st
 	case outcome == settleAccept && w.State == workFailed:
 		c.setWork(w.Parent, map[string]any{"state": workDone})
 		c.traceWork(w.Parent, "Travail tenu pour fait par Eriphe."+withNote(note), "")
-		c.nodes.SetState(w.Parent, nodestore.Waiting)
+		c.workForUser(w.Parent)
 		return "The work is done.", nil
 	case outcome == settleRetry && w.State == workFailed:
 		if w.Checks >= finalChecks {

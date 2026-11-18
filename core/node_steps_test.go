@@ -105,8 +105,9 @@ func startCards(t *testing.T, c *core) int {
 // Three steps, two in parallel then one after both, run to the end with
 // no turn of the brain: each child node is opened with what it comes
 // after, each task starts as the ones before it are accepted on their
-// proof, is given what they produced, and the parent waits for the user
-// once all are accepted.
+// proof, is given what they produced; once all are accepted the work is
+// done and its result, the last step, waits for the user until they, or
+// Eriphe on their word, say it is done.
 func TestStepsRunWithoutTheBrain(t *testing.T) {
 	c := graphCore(t)
 	ctx := context.Background()
@@ -162,12 +163,16 @@ func TestStepsRunWithoutTheBrain(t *testing.T) {
 	if w, _ := c.work(parent); w.State != workDone {
 		t.Fatalf("work %s", w.State)
 	}
-	if sum, _ := c.nodes.Get(parent); sum.State != nodestore.Waiting {
+	if sum, _ := c.nodes.Get(parent); sum.State != nodestore.Done {
 		t.Errorf("the parent is %s", sum.State)
 	}
-	if sum, _ := c.nodes.Get(check); sum.State != nodestore.Done {
+	if sum, _ := c.nodes.Get(names); sum.State != nodestore.Done {
 		t.Errorf("an accepted step's node is %s", sum.State)
 	}
+	if sum, _ := c.nodes.Get(check); sum.State != nodestore.Waiting {
+		t.Errorf("the work's result is %s", sum.State)
+	}
+
 	if w := wakes(c); len(w) != 0 {
 		t.Fatalf("the brain was woken: %q", w)
 	}

@@ -276,12 +276,14 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	}
 	claude := claudeToolName(u.name, tool)
 	f := c.pool.facts(claude, input)
+	acting := false // allowed by a ticket, not read freely
 	switch {
 	case f.noAccount:
 		return toolError("the accounts of this tool do not have the same access in Eriphe: give account, the account this call is for")
 	case f.value == gridNever:
 		return toolError("this tool is not allowed in Eriphe, for this account or at all")
 	case c.store.useTicket(taskID, claude, input):
+		acting = true
 	case c.readsFreely(taskID) && c.freeAhead(claude, input):
 		// The brain reads freely: no permission round trip, a decision on record all the same.
 		c.store.logDecision(taskID, "", claude, input, decideAllow, byPolicy, "lecture libre du cerveau")
@@ -295,7 +297,30 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	if err != nil {
 		return toolError(err.Error())
 	}
+	if acting && !res.IsError && taskID == c.brainTaskID() {
+		c.traceBrainCall(u.name, tool)
+	}
 	return res
+}
+
+// traceBrainCall writes a call the brain made with the user's permission
+// in the trace of the node its turn is about, else of the node it talks
+// to: what it did there stays on record, though no version is written. A
+// turn of the home that named no node logs it nowhere but the decisions.
+func (c *core) traceBrainCall(server, tool string) {
+	if c.nodes == nil {
+		return
+	}
+	id := c.turn.aboutNode()
+	if id == "" {
+		id = c.turn.talkNode()
+	}
+	if id == "" {
+		return
+	}
+	if err := c.nodes.AppendTrace(id, "eriphe", "Appel : "+server+"/"+tool+"."); err != nil {
+		log.Printf("brain call %s/%s: trace of %s: %v", server, tool, id, err)
+	}
 }
 
 func toolError(msg string) *mcp.CallToolResult {

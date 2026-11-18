@@ -12,11 +12,13 @@ import { applyTheme, keep } from "./data/keep";
 import { applyNodes, applyNotes, openPage, restore, step, store, useGraph } from "./data/store";
 import { connect } from "./data/stream";
 import { Graph } from "./graph/Graph";
+import { List, useNarrow } from "./graph/List";
 import { Hud } from "./hud/Hud";
 import { useWords } from "./i18n";
 
 // The workspace, Eriphe's home page (#633): the graph of nodes, the pages
-// open in it, the head-up display over it and the one console under it.
+// open in it, the head-up display over it and the one console under it; on
+// a small screen, the graph as a list (graph/List.tsx).
 // Nothing here is a screen planned in code: what shows is the graph
 // eriphe-core streams, and what the user opens. With no eriphe-core
 // behind (the dev server) it shows a made-up graph, and says so; ?gallery
@@ -65,6 +67,7 @@ export function App({ boot }: { boot: Boot }) {
   }, []);
 
   const theme = useGraph((s) => s.theme);
+  const narrow = useNarrow();
   useEffect(() => applyTheme(theme), [theme]);
 
   if (gallery) return <Gallery />;
@@ -72,7 +75,7 @@ export function App({ boot }: { boot: Boot }) {
     <ProposalsContext.Provider value={proposals}>
       <MotionConfig reducedMotion="user">
         <div className="espace">
-          <Graph live={boot.live} />
+          {narrow ? <List live={boot.live} /> : <Graph live={boot.live} />}
           <Hud name={boot.name} live={boot.live} />
           <Console boot={boot} />
           <Sample live={boot.live} />

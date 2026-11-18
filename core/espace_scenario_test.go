@@ -474,9 +474,9 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 	day := n("day")
 	switch {
 	case strings.Contains(said, "lumière"):
+		// The day is what the turn is about: the call goes into its trace.
+		b.read(day)
 		b.catalog("maison", "allumer", map[string]any{"piece": "bureau"}, false)
-		_, hash := b.read(day)
-		b.self("node_edit", map[string]any{"id": day, "expect": hash, "old": "Ce qui se passe aujourd'hui.", "new": "Ce qui se passe aujourd'hui.\n\n- Lumière du bureau allumée."})
 		return "C'est allumé."
 	case strings.Contains(said, "style des articles"):
 		out := b.self("node_open", map[string]any{"title": "Premier article", "parent": n("substack"),
@@ -520,11 +520,11 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		body, hash := b.read(node)
 		short := strings.Replace(body, "1. Pourquoi ce métier\n", "", 1)
 		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": short})
-		// The plan was the article's goal: the work is done.
-		if a := n("article"); a != "" {
-			b.self("node_set", map[string]any{"id": a, "done": true})
-		}
 		return "Plus court, le titre 2 gardé."
+	case strings.Contains(said, "plan me va"):
+		// On the user's word, the plan waits for them no more.
+		b.self("node_set", map[string]any{"id": node, "done": true})
+		return "C'est noté, le plan est fait."
 	case strings.Contains(said, "archiver"):
 		return "C'est toi qui archives : « Archiver », en haut de sa page."
 	}

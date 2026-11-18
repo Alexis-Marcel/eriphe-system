@@ -356,3 +356,23 @@ func TestNodePageGolden(t *testing.T) {
 		t.Errorf("%s is not the page eriphe-core sends (%v): run ERIPHE_UPDATE_ESPACE=1 go test -run TestNodePageGolden", file, err)
 	}
 }
+
+// A node opened empty for its task to write: the user's v1 is its first
+// content, its creation not listed.
+func TestNodePageNumbersFromContent(t *testing.T) {
+	tw, _ := graphWeb(t)
+	c := tw.c
+	id := mustNode(t, c, nodestore.New{Title: "Plan"})
+	d, _ := c.nodes.Read(id, 0)
+	if _, err := c.nodes.Write(id, "1. Un titre\n", d.Version.Hash, byBrain); err != nil {
+		t.Fatal(err)
+	}
+	p, err := tw.w.nodePageOf(id, 0, "fr")
+	if err != nil || p.Shift != 1 || len(p.Versions) != 1 || p.Versions[0].N != 2 {
+		t.Fatalf("page: shift %d, versions %+v, %v", p.Shift, p.Versions, err)
+	}
+	full := mustNode(t, c, nodestore.New{Title: "Notes", Body: "Déjà là."})
+	if p, _ := tw.w.nodePageOf(full, 0, "fr"); p.Shift != 0 || len(p.Versions) != 1 {
+		t.Fatalf("a creation with content: shift %d, %+v", p.Shift, p.Versions)
+	}
+}

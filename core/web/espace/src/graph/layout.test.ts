@@ -100,6 +100,52 @@ describe("the layout", () => {
     expect(leash([400 + 350 + STEP - 10, 0], [{ at: [400, 0], box: [700, 400] }], undefined, true)[0]).toBeCloseTo(400 + 350 + STEP - 10);
   });
 
+  it("lets a subject be dropped right of the rightmost subject, and keeps it exactly there", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const roots = nodes.filter((n) => !n.parent);
+    const right = roots.reduce((a, b) => (pos[b.id][0] > pos[a.id][0] ? b : a));
+    const others = roots.filter((n) => n.id !== "a").map((n) => ({ at: pos[n.id] }));
+    const want: Pt = [pos[right.id][0] + STEP - 40, pos[right.id][1]];
+    // the drag lets it go there (if a is the rightmost, the next one counts)
+    const spot = leash(want, others, undefined, true);
+    expect(spot[0]).toBeGreaterThan(Math.max(...others.map((o) => o.at[0])));
+    let at = simulate(nodes, pos, homes, { a: { abs: spot } });
+    expect(at.a).toEqual(spot);
+    // and nothing that comes after moves it: the graph laid out again, a new bubble
+    at = simulate([...nodes, bubble("b9", "b")], at, homes, { a: { abs: spot } });
+    expect(at.a).toEqual(spot);
+  });
+
+  it("keeps a dropped bubble exactly at its offset, wherever its subject goes", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const rel: Pt = [-120, 90];
+    const spot: Pt = [pos.b[0] + 200, pos.b[1] + 100];
+    const at = simulate(nodes, pos, homes, { b: { abs: spot }, b1: { rel } });
+    expect(at.b1).toEqual([spot[0] + rel[0], spot[1] + rel[1]]);
+  });
+
+  it("makes room for several pages open at once (⌘-click), and moves nothing far from them", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const box: Pt = [620, 520];
+    const opened = nodes.map((n) => (n.id === "a" || n.id === "b" ? { ...n, box } : n));
+    const open = simulate(opened, pos, homes);
+    const pages = opened.filter((n) => n.box);
+    // the two pages part only as far as they must: each by less than half its width
+    for (const pg of pages) expect(dist(open[pg.id], pos[pg.id]), pg.id).toBeLessThan(box[0] / 2);
+    // side by side, never one on the other
+    const [pa, pb] = [open[pages[0].id], open[pages[1].id]];
+    expect(Math.abs(pa[0] - pb[0]) >= box[0] || Math.abs(pa[1] - pb[1]) >= box[1]).toBe(true);
+    for (const n of nodes) {
+      if (n.id === "a" || n.id === "b") continue;
+      for (const pg of pages) expect(overlap(pg, open[pg.id], n, open[n.id]), `${n.id} on ${pg.id}`).toBeLessThan(6);
+      const far = pages.every((pg) => dist(pos[n.id], pos[pg.id]) > 900);
+      if (far) expect(dist(open[n.id], pos[n.id]), n.id).toBeLessThan(40);
+    }
+  });
+
   it("tethers a bubble to its parent", () => {
     expect(tether([100, 0], [0, 0], [TETHER, TETHER], true)).toEqual([100, 0]);
     expect(tether([500, 0], [0, 0], [TETHER, TETHER], true)[0]).toBeCloseTo(TETHER);

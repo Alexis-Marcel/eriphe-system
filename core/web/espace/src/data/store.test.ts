@@ -52,7 +52,7 @@ describe("the store", () => {
     expect(s.talk).toBe("a1");
   });
 
-  it("opens the page Eriphe shows, once, beside what is open; an old one is not news", () => {
+  it("opens the page Eriphe shows, once, beside what is open, the console where it was; an old one is not news", () => {
     const now = Date.parse("2026-11-18T12:00:00Z");
     let s = openPage(withGraph(), "a");
     const old = applyShow(s, { node: "b", seq: 4, at: new Date(now - SHOW_FRESH - 1000).toISOString() }, now);
@@ -60,7 +60,14 @@ describe("the store", () => {
     expect(old.shown).toBe(4);
     s = applyShow(s, { node: "b", seq: 4, at: new Date(now - 1000).toISOString() }, now);
     expect(s.open).toEqual(["a", "b"]);
-    expect(s.talk).toBe("b");
+    expect(s.talk).toBe("a");
+    // from the home, the console stays the home's, whatever comes or goes
+    let h = applyShow(withGraph(), { node: "b", seq: 5, at: new Date(now).toISOString() }, now);
+    expect(h).toMatchObject({ open: ["b"], talk: null });
+    h = applyNodes(h, { nodes: [node("c")] });
+    expect(h.talk).toBeNull();
+    h = applyShow(h, { node: "a", seq: 6, at: new Date(now).toISOString() }, now);
+    expect(closePage(h, "b")).toMatchObject({ open: ["a"], talk: null });
     s = closePage(s, "b");
     // the same show again (the stream connected again): nothing
     expect(applyShow(s, { node: "b", seq: 4, at: new Date(now).toISOString() }, now)).toBe(s);
@@ -109,6 +116,7 @@ describe("the store", () => {
     expect(applyShow(s, { node: "a", seq: 4, at: new Date().toISOString() }).open).toEqual(["a1", "b"]);
     // What eriphe-core kept that is not a view reads as nothing.
     expect(restore(empty(), { open: [3 as unknown as string], talk: "x", theme: "pink" as never }, undefined)).toMatchObject({ open: [], talk: null, theme: "", places: {} });
+    expect(restore(empty(), { open: ["a"] }, undefined).talk).toBeNull();
   });
 
   it("keeps where a bubble was dropped, forgets it, and the theme chosen", () => {

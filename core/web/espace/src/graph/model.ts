@@ -39,3 +39,23 @@ export function labelBox(x: GraphNode, title: string, d: number, r: number) {
   const long = Math.max(title.length, x.line && x.state === "running" ? x.line.length * 0.9 : 0);
   return { r, lw: Math.min(300, long * (d === 0 ? 8.4 : 7.4) + 8), lh: d === 0 ? 44 : x.line ? 34 : 18 };
 }
+
+// listOrder is the graph as the list reads it: each root, then the nodes
+// under it, depth first, each group in the order it was made.
+export function listOrder(nodes: Record<string, GraphNode>): GraphNode[] {
+  const made = (a: GraphNode, b: GraphNode) => a.created.localeCompare(b.created) || a.id.localeCompare(b.id);
+  const kids = new Map<string, GraphNode[]>();
+  const roots: GraphNode[] = [];
+  for (const x of Object.values(nodes)) {
+    if (x.parent && nodes[x.parent]) kids.set(x.parent, [...(kids.get(x.parent) ?? []), x]);
+    else roots.push(x);
+  }
+  const out: GraphNode[] = [];
+  const walk = (x: GraphNode) => {
+    if (out.includes(x)) return;
+    out.push(x);
+    for (const k of (kids.get(x.id) ?? []).sort(made)) walk(k);
+  };
+  roots.sort(made).forEach(walk);
+  return out;
+}
