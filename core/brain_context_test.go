@@ -296,7 +296,7 @@ func TestContextPackOnlyFresh(t *testing.T) {
 func TestContextPackAfterDeviceFallback(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
-	say(t, c, roleUser, "Ancien fil", true)
+	say(t, c, roleUser, "Ancien message", true)
 	deliver := func(session, text string) string {
 		t.Helper()
 		c.store.updateTask("t-brain", map[string]any{"state": stateIdle, "session_id": session})
@@ -313,12 +313,12 @@ func TestContextPackAfterDeviceFallback(t *testing.T) {
 		return got
 	}
 	setBrainStatus(c, func(st *AssistantStatus) { st.Resume = "s-1" })
-	if got := deliver("s-1", "Bonjour"); strings.Contains(got, "Ancien fil") {
+	if got := deliver("s-1", "Bonjour"); strings.Contains(got, "Ancien message") {
 		t.Fatalf("resumed session got the pack: %q", got)
 	}
 	setBrainStatus(c, func(st *AssistantStatus) { st.Resume = "s-1" })
 	got := deliver("s-2", "Tu es là ?")
-	if !strings.Contains(got, "session neuve") || !strings.Contains(got, "Ancien fil") || !strings.Contains(got, "] Tu es là ?") {
+	if !strings.Contains(got, "session neuve") || !strings.Contains(got, "Ancien message") || !strings.Contains(got, "] Tu es là ?") {
 		t.Fatalf("new session without the pack: %q", got)
 	}
 	if strings.Count(got, "Tu es là ?") != 1 {
