@@ -226,4 +226,3 @@ func TestThreadSurfaceBrainPart(t *testing.T) {
 		t.Fatal("removing the part removed the surface")
 	}
 }
-

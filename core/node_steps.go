@@ -696,7 +696,7 @@ func (c *core) advanceLocked(ctx context.Context, parent string) {
 	var writing []string
 	for _, st := range steps {
 		status[st.Node] = st.Status
-		if st.Status == stepRunning {
+		if st.Status == stepRunning || st.Status == stepFailed { // a failed step's task waits for its retry
 			writing = append(writing, st.scopes()...)
 		}
 	}
@@ -887,6 +887,7 @@ func (c *core) stepTaskChanged(id, state string, outcome turnOutcome) bool {
 		c.traceWork(st.Parent, fmt.Sprintf("L'étape « %s » s'est arrêtée (%s).", st.Spec.Title, state), "")
 		c.wakeForWork(st.Parent, fmt.Sprintf("L'étape « %s » (nœud %s, tâche %s) s'est arrêtée : %s.\nDécide avec node_settle : retry (%d essai(s) restant(s)), drop ou replan.",
 			st.Spec.Title, st.Node, id, note, max(0, stepRetries-st.Tries)), taint)
+		c.advanceLocked(ctx, st.Parent) // what waited for its turn to write
 	}
 	return true
 }
@@ -1219,8 +1220,9 @@ func (c *core) dropStep(ctx context.Context, st Step) []string {
 }
 
 // stepsTick is the engine's pass, every 15 seconds: the steps whose task
-// ended without the engine being told (eriphe-core restarted), the final
-// checks likewise, then what may start.
+// ended, or ended its turn with a receipt, without the engine being told
+// (eriphe-core restarted), the final checks likewise, then what may
+// start.
 func (c *core) stepsTick() {
 	rows, err := c.store.db.Query(`SELECT parent, state, final FROM node_works WHERE state IN (?, ?)`, workRunning, workChecking)
 	if err != nil {
@@ -1238,20 +1240,34 @@ func (c *core) stepsTick() {
 	ctx := context.Background()
 	for _, l := range ws {
 		if l.state == workChecking {
-			if t, err := c.store.task(l.final); err == nil && finished(t.State) {
-				c.stepTaskChanged(t.ID, t.State, turnOutcome{})
-			}
+			c.missedEnd(l.final)
 			continue
 		}
 		steps, _ := c.workSteps(l.parent)
 		for _, st := range steps {
-			if st.Status != stepRunning || st.Task == "" {
-				continue
-			}
-			if t, err := c.store.task(st.Task); err == nil && finished(t.State) {
-				c.stepTaskChanged(t.ID, t.State, turnOutcome{})
+			if st.Status == stepRunning {
+				c.missedEnd(st.Task)
 			}
 		}
 		c.advanceWork(ctx, l.parent)
 	}
+}
+
+// missedEnd tells the engine of a task's end it may have missed: ended,
+// or idle with its turn's receipt (one still asked for is waited for).
+func (c *core) missedEnd(task string) {
+	t, err := c.store.task(task)
+	if err != nil {
+		return
+	}
+	switch {
+	case finished(t.State):
+	case t.State == stateIdle:
+		if st, err := c.status(task, 0); err != nil || st.Receipt.missing() {
+			return
+		}
+	default:
+		return
+	}
+	c.stepTaskChanged(t.ID, t.State, turnOutcome{})
 }
