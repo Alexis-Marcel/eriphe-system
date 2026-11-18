@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"os"
-	"slices"
 	"testing"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
@@ -42,18 +41,17 @@ func TestEspaceGalleryIsValid(t *testing.T) {
 		}
 		json.Unmarshal(msgs, &created)
 		for _, s := range created {
-			for _, e := range a2ui.CheckActions(s.CreateSurface.ID, 0, s.CreateSurface.Components) {
+			for _, e := range a2ui.CheckActions(s.CreateSurface.ID, s.CreateSurface.Components) {
 				t.Errorf("%s: %+v", lang, e)
 			}
 			for _, e := range a2ui.CheckLinks(s.CreateSurface.ID, s.CreateSurface.Components) {
 				t.Errorf("%s: %+v", lang, e)
 			}
 		}
-		// Every component of the catalog is in it, but those a node's
-		// blocks place only (a2ui.ThreadOnly; #633 draws them).
+		// Every component of the catalog is in it.
 		used := componentsUsed(t, msgs)
 		for name := range cat.Components {
-			if !slices.Contains(a2ui.ThreadOnly, name) && !used[name] {
+			if !used[name] {
 				t.Errorf("%s gallery lacks %s", lang, name)
 			}
 		}

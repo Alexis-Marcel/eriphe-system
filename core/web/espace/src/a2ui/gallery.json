@@ -986,6 +986,14 @@
      },
      {
       "id": "row",
+      "component": "Row",
+      "children": [
+       "rowitem",
+       "rowmark"
+      ]
+     },
+     {
+      "id": "rowitem",
       "component": "Item",
       "title": {
        "@path": "title"
@@ -1005,6 +1013,18 @@
       "level": {
        "@path": "level"
       }
+     },
+     {
+      "id": "rowmark",
+      "component": "Mark",
+      "list": "invitations",
+      "item": {
+       "@path": "id"
+      },
+      "marks": [
+       "keep",
+       "drop"
+      ]
      },
      {
       "id": "info",
@@ -1048,7 +1068,8 @@
        "note": "Il faut dire oui ou non avant jeudi.",
        "due": "2026-11-19",
        "mark": "",
-       "level": "high"
+       "level": "high",
+       "id": "inv1"
       },
       {
        "title": "Anniversaire de Lina",
@@ -1056,7 +1077,8 @@
        "note": "Samedi 14 h, au parc.",
        "due": "",
        "mark": "extérieur",
-       "level": "normal"
+       "level": "normal",
+       "id": "inv2"
       }
      ],
      "info": [
@@ -1068,7 +1090,12 @@
        "mark": "",
        "level": "low"
       }
-     ]
+     ],
+     "marks": {
+      "invitations": {
+       "inv1": "keep"
+      }
+     }
     }
    }
   },
@@ -2193,6 +2220,14 @@
      },
      {
       "id": "row",
+      "component": "Row",
+      "children": [
+       "rowitem",
+       "rowmark"
+      ]
+     },
+     {
+      "id": "rowitem",
       "component": "Item",
       "title": {
        "@path": "title"
@@ -2212,6 +2247,18 @@
       "level": {
        "@path": "level"
       }
+     },
+     {
+      "id": "rowmark",
+      "component": "Mark",
+      "list": "invitations",
+      "item": {
+       "@path": "id"
+      },
+      "marks": [
+       "keep",
+       "drop"
+      ]
      },
      {
       "id": "info",
@@ -2255,7 +2302,8 @@
        "note": "Say yes or no before Thursday.",
        "due": "2026-11-19",
        "mark": "",
-       "level": "high"
+       "level": "high",
+       "id": "inv1"
       },
       {
        "title": "Lina's birthday",
@@ -2263,7 +2311,8 @@
        "note": "Saturday 2 pm, at the park.",
        "due": "",
        "mark": "external",
-       "level": "normal"
+       "level": "normal",
+       "id": "inv2"
       }
      ],
      "info": [
@@ -2275,7 +2324,12 @@
        "mark": "",
        "level": "low"
       }
-     ]
+     ],
+     "marks": {
+      "invitations": {
+       "inv1": "keep"
+      }
+     }
     }
    }
   },

@@ -34,7 +34,7 @@ import (
 //     its node is marked so, and the blocks it writes;
 //   - a block keeps to the actions' grammar; written tainted, it asks
 //     nothing (no ask button, no Proposal); a Link never opens a
-//     source's value; Offers are code's;
+//     source's value;
 //   - a block's source reads one of the task's lent tools or servers, or
 //     a monitor the user approved; one of a server that is not trusted
 //     marks the block external.
@@ -397,7 +397,7 @@ func (c *core) externalSources(d *nodestore.Doc, author string) error {
 }
 
 // nodeGuard checks the blocks an author wrote (names) in a node: the
-// actions' grammar, nothing asked when tainted, no Offers, no Link to a
+// actions' grammar, nothing asked when tainted, no Link to a
 // source's value, sources the author may give (sourceOK: those a task is
 // lent, lentTo). It tells the blocks that read a source of a server not
 // trusted.
@@ -410,14 +410,12 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 			continue
 		}
 		sid := "block:" + name
-		errs := a2ui.CheckActions(sid, -1, b.Components) // a node's block may show a Mark: thread -1, no thread's
+		errs := a2ui.CheckActions(sid, b.Components)
 		var list []map[string]any
 		json.Unmarshal(b.Components, &list)
 		for i, comp := range list {
 			at := "/components/" + strconv.Itoa(i)
 			switch comp["component"] {
-			case "Offers":
-				errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: at, Message: "no Offers in a node: note the item (item_note), and an action on it is its tool's call, kept for the user's yes"})
 			case "Proposal":
 				if tainted {
 					errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: at, Message: "a Proposal written after reading external content could be answered as something else: leave it out"})

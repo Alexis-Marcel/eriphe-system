@@ -5,12 +5,12 @@ shell shows a word, then, if it never does (no JavaScript, a script that
 does not load, a boot that fails), the way to the conversation: by CSS
 after a while (.espace-fallback), at once when the app gives up (.failed). */}}
 {{define "espace"}}<!doctype html>
-<html lang="{{.Lang}}">
+<html lang="{{.Lang}}"{{with .Data}} data-theme="{{.}}"{{end}}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{name}}</title>
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="{{with .Data}}{{.}}{{else}}light dark{{end}}">
 <meta name="theme-color" content="#f7f7f8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0f0f11" media="(prefers-color-scheme: dark)">
 <meta name="csrf-token" content="{{.CSRF}}">

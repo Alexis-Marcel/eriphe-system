@@ -42,5 +42,5 @@ export const sample = {
     { at: at(50), author: "brain", text: "Task lancée." },
     { at: at(20), author: "task:t1", text: "Trois articles lus." },
   ],
-  file: (id: string): NodeFile => ({ md: `---\nid: ${id}\n---\n\nUn exemple.\n`, version: 1, hash: "0", last: 1 }),
+  file: (id: string): NodeFile => ({ md: `---\nid: ${id}\n---\n\nUn exemple.\n`, body: "Un exemple.\n", version: 1, hash: "0", last: 1 }),
 };

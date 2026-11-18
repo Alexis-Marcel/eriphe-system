@@ -910,13 +910,11 @@ export function ghostsOf(ps: ProposalView[]): Ghost[] {
 // onlyAsks tells whether a surface shows external content (createSurface's
 // metadata, extensions.eriphe.tainted) and was written by a model: it can
 // only ask. Code's own (author "core", the attention queue's) shows a
-// proposal as its card does, with the proposal's own taint; so does a
-// thread's surface (answers: code bound its Proposals to the thread's
-// cards, whatever the thread read).
-type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string; answers?: boolean } } } };
+// proposal as its card does, with the proposal's own taint.
+type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string } } } };
 const onlyAsks = (s: unknown) => {
   const m = (s as Meta | undefined)?.metadata?.extensions?.eriphe;
-  return Boolean(m?.tainted) && m?.author !== "core" && !m?.answers;
+  return Boolean(m?.tainted) && m?.author !== "core";
 };
 // external tells whether a surface shows external content, whoever wrote it.
 const external = (s: unknown) => Boolean((s as Meta | undefined)?.metadata?.extensions?.eriphe?.tainted);
@@ -1063,38 +1061,6 @@ const Proposal = createComponentImplementation(
   },
 );
 
-// Offers shows the actions eriphe-core offers on a row of a thread, or on
-// a group of rows: its data, bound under /thread/items, one button each,
-// with code's words. A click sends "offer" with that offer's ids as code
-// wrote them, never its words; eriphe-core checks it against this Offers
-// and the store, and makes a card: nothing runs.
-const OFFER_KEYS = ["thread", "source", "item", "state", "offer"] as const;
-type Offer = { label: string } & Partial<Record<(typeof OFFER_KEYS)[number], unknown>>;
-
-const Offers = createComponentImplementation(
-  // A list the engine resolves; eriphe-core takes a binding only.
-  { name: "Offers", schema: z.object({ offers: listOr(z.record(z.string(), z.unknown())) }) },
-  ({ props, context }) => {
-    const offers = (Array.isArray(props.offers) ? props.offers : []).filter(
-      (o): o is Offer => !!o && typeof o === "object" && typeof o.label === "string" && typeof o.offer === "string",
-    );
-    if (!offers.length) return null;
-    const send = (o: Offer) => {
-      const ids = Object.fromEntries(OFFER_KEYS.filter((k) => k in o).map((k) => [k, o[k]]));
-      void context.dispatchAction({ event: { name: "offer", context: ids } });
-    };
-    return (
-      <span className="a2-offers">
-        {offers.map((o, i) => (
-          <button key={i} type="button" className="btn a2-button a2-button-default" onClick={() => send(o)}>
-            {o.label}
-          </button>
-        ))}
-      </span>
-    );
-  },
-);
-
 const ALERT_ICON = { info: "info", success: "check", warning: "warning", error: "error" } as const;
 
 const Alert = createComponentImplementation(
@@ -1169,7 +1135,6 @@ export const components: ReactComponentImplementation[] = [
   Message,
   Day,
   Proposal,
-  Offers,
   Alert,
   Placeholder,
 ];

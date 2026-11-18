@@ -11,15 +11,36 @@ import strings from "../strings.json";
 //   the last exchange, a few at a time (web_console.go);
 // - GET /api/proposals/{ref}, ?day=: a proposal a block shows, those of a
 //   day (web_proposals.go);
+// - GET /api/archives: what the user archived;
 // and writes
 // - POST /messages: what the user says, to the node the console talks to;
 // - POST /cards/{id}/yes|no: a card's answer, as in the conversation;
+// - the user's gestures (web_gestures.go): PUT /api/nodes/{id}/md (an edit,
+//   made on the version it was read at), POST .../mark and .../ask (a
+//   block's Mark and button), .../archive and .../reopen, PUT and DELETE
+//   .../place (where a bubble was dropped), PUT /api/espace/view (the pages
+//   open, the display settings);
 // - POST /presence: whether this tab is in front of the user (presence.ts).
 // No control of the page keeps a rule or a preference: the user says it to
 // Eriphe, who remembers it. A request without a session gets 401: the page
 // goes to the sign-in.
 
-export type Boot = { lang: Lang; name: string; csrf: string; strings: Record<string, string>; live: boolean };
+// The workspace as the user left it (espaceView, web_gestures.go): the
+// pages open, the one the console talked to, the last of Eriphe's shows
+// taken, the theme ("" follows the system).
+export type Theme = "" | "light" | "dark";
+export type View = { open: string[]; talk?: string; shown?: number; theme?: Theme };
+export type Place = { x: number; y: number };
+
+export type Boot = {
+  lang: Lang;
+  name: string;
+  csrf: string;
+  strings: Record<string, string>;
+  live: boolean;
+  view?: View;
+  places?: Record<string, Place>;
+};
 
 const json = { Accept: "application/json" };
 
@@ -72,6 +93,23 @@ async function post(path: string, body?: URLSearchParams): Promise<boolean> {
   return r.ok;
 }
 
+// sendJSON sends a gesture's JSON: its status and what came back.
+async function sendJSON<T>(method: string, path: string, body?: unknown, keepalive = false): Promise<{ status: number; data: T | null }> {
+  const r = signedOut(
+    await fetch(path, {
+      method,
+      keepalive,
+      credentials: "same-origin",
+      headers: { "X-CSRF-Token": csrf, "Content-Type": "application/json", ...json },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+  );
+  const data = r.status === 204 ? null : ((await r.json().catch(() => null)) as T | null);
+  return { status: r.status, data };
+}
+
+const nodePath = (id: string) => `/api/nodes/${encodeURIComponent(id)}`;
+
 // A node as the graph shows it (graphNode, web_graph.go). title is empty
 // when it may be someone else's words (an external node's): the page names
 // it by what it is, never by them. line: while it runs, its task's last
@@ -109,18 +147,71 @@ export type PagePart = { text?: string; block?: PageBlock };
 export type PageBlock = { name: string; external?: boolean; components: unknown[] | null; data: Record<string, unknown> | null; error?: string };
 
 export type TraceEntry = { at: string; author: string; text: string };
-export type NodeFile = { md: string; version: number; hash: string; last: number };
+// A node's file as it is (md), its body as the user edits it (body), the
+// version and its hash, and the last version.
+export type NodeFile = { md: string; body: string; version: number; hash: string; last: number };
 
 export function nodePage(id: string, version = 0): Promise<NodePage | null> {
-  return getJSON<NodePage>(`/api/nodes/${encodeURIComponent(id)}${version ? `?version=${version}` : ""}`);
+  return getJSON<NodePage>(`${nodePath(id)}${version ? `?version=${version}` : ""}`);
 }
 
 export async function nodeTrace(id: string): Promise<TraceEntry[]> {
-  return (await getJSON<{ entries: TraceEntry[] }>(`/api/nodes/${encodeURIComponent(id)}/trace`))?.entries ?? [];
+  return (await getJSON<{ entries: TraceEntry[] }>(`${nodePath(id)}/trace`))?.entries ?? [];
 }
 
 export function nodeFile(id: string, version = 0): Promise<NodeFile | null> {
-  return getJSON<NodeFile>(`/api/nodes/${encodeURIComponent(id)}/md${version ? `?version=${version}` : ""}`);
+  return getJSON<NodeFile>(`${nodePath(id)}/md${version ? `?version=${version}` : ""}`);
+}
+
+// What a save of the .md tab came to: saved (its version and hash), a
+// conflict (a newer version came: its body and hash, nothing written),
+// archived, or refused (why: a block that does not read, a secret).
+export type Saved =
+  | { ok: true; version: number; hash: string }
+  | { ok: false; conflict: { version: number; hash: string; body: string } }
+  | { ok: false; why: string };
+
+export async function saveFile(id: string, body: string, expect: string): Promise<Saved> {
+  const { status, data } = await sendJSON<{ version: number; hash: string; body: string; error: string }>("PUT", `${nodePath(id)}/md`, { body, expect });
+  if (status === 200 && data) return { ok: true, version: data.version, hash: data.hash };
+  if (status === 409 && data) return { ok: false, conflict: { version: data.version, hash: data.hash, body: data.body } };
+  return { ok: false, why: data?.error ?? String(status) };
+}
+
+// mark sets the user's mark on an item a block shows ("" takes it away).
+export async function mark(id: string, block: string, list: string, item: string, m: string): Promise<boolean> {
+  return (await sendJSON("POST", `${nodePath(id)}/mark`, { block, list, item, mark: m })).status === 204;
+}
+
+// ask sends a block's button: eriphe-core reads its words in the block.
+export async function ask(id: string, block: string, component: string): Promise<boolean> {
+  return (await sendJSON("POST", `${nodePath(id)}/ask`, { block, component })).status === 204;
+}
+
+export async function archive(id: string): Promise<boolean> {
+  return (await sendJSON("POST", `${nodePath(id)}/archive`)).status === 204;
+}
+
+export async function reopen(id: string): Promise<boolean> {
+  return (await sendJSON("POST", `${nodePath(id)}/reopen`)).status === 204;
+}
+
+// An archived node, the top of what one archive took (archivedNode).
+export type ArchivedNode = GraphNode & { archived: string; with: number };
+
+export async function archives(): Promise<ArchivedNode[]> {
+  return (await getJSON<{ archives: ArchivedNode[] }>("/api/archives"))?.archives ?? [];
+}
+
+// place keeps where a bubble was dropped (null: the layout places it).
+export async function place(id: string, p: Place | null): Promise<boolean> {
+  const r = await sendJSON(p ? "PUT" : "DELETE", `${nodePath(id)}/place`, p ?? undefined);
+  return r.status === 204;
+}
+
+// putView keeps what is open; keepalive, as the page leaves.
+export async function putView(v: View, keepalive = false): Promise<boolean> {
+  return (await sendJSON("PUT", "/api/espace/view", v, keepalive)).status === 204;
 }
 
 // A line of the conversation (exchangeLine, web_console.go): the user's

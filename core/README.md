@@ -1096,7 +1096,7 @@ permission), `idle` (its turn ended), `done` (it ended).
   external; its item notes carry the taint. Reading an external node taints the task.
 - **Guards** nodefile does not hold, on every block a write adds or changes (a block, or a fence
   written in its text): the actions' grammar (`a2ui.CheckActions`); written tainted, a
-  block asks nothing (no `ask` button, no `Proposal`); no `Offers` (code's); a `Link` never opens a
+  block asks nothing (no `ask` button, no `Proposal`); a `Link` never opens a
   source's value; a block's source reads a tool or server the task is lent, or a monitor the user
   approved, and one of a server not trusted marks the block external.
 - **Its report**: at the end of each turn, the task's last message (its receipt left out) is filed
@@ -3018,8 +3018,12 @@ conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/
   addresses a Link may open. The node's goal is never sent (it is in its file).
 - `GET /api/nodes/{id}/trace`: the trace's entries, oldest first (`at`, `author`: brain, user,
   `task:<id>`, eriphe, outside; `text`).
-- `GET /api/nodes/{id}/md[?version=n]`: the file as it is (`md`), its `version`, its `hash` and the
-  last version (`last`).
+- `GET /api/nodes/{id}/md[?version=n]`: the file as it is (`md`), its body as the user edits it
+  (`body`: its text and blocks, without code's fields), its `version`, its `hash` and the last
+  version (`last`).
+- `GET /api/archives`: what the user archived, the latest first (`nodestore.Archives`): each node
+  archived with no parent archived with it, a row as below with `archived` (when) and `with` (how
+  many nodes below it went with it).
 - A node's row (`graphNode`), in the page and the stream: `id`, `title` (empty when the node is
   external: a title that may be someone else's words is never shown), `parent`, `links`,
   `lifetime`, `state`, `created`, `updated`, `done`, `external`, `version`, `waits` (one of its
@@ -3039,11 +3043,37 @@ conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/
   new one; the page opens it beside what is open, once (an old one, over a minute, is not news);
 - `exchange` (below), `proposals` and `notice`.
 
+**The user's gestures** (`web_gestures.go`), kept by eriphe-core, each with the session's CSRF
+token in `X-CSRF-Token`:
+
+- `PUT /api/nodes/{id}/md` `{body, expect}`: an edit of the .md tab, the user's version
+  (`authorWrite` as `user`, the node's guard and the secrets filter as for any author), made on
+  the version whose hash is `expect`. A newer version gives `409` with its `version`, `hash` and
+  `body`, and writes nothing; an archived node `410`; a body that does not read `400`.
+- `POST /api/nodes/{id}/mark` `{block, list, item, mark}`: the user's mark (`keep`, `drop`, `done`,
+  `""` to take it away) on an item a block shows; the block must hold a Mark. Code writes it
+  (`nodefile.SetMark`), a version of its own: no turn.
+- `POST /api/nodes/{id}/ask` `{block, component}`: a block's button. Its words are read again in
+  the stored block (`a2ui.AskText`), never taken from the page, and become the user's message to
+  that node; a block written after reading external content asks nothing (`403`).
+- `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
+  below it stops, and the cascade leaves the graph; `reopenNode`: back with what was archived with
+  it and the archived parents it needs, in one commit).
+- `PUT /api/nodes/{id}/place` `{x, y}` and `DELETE`: where the user dropped a bubble, a subject's
+  spot or a child's offset from its parent, in `node_layout` (no version).
+- `PUT /api/espace/view` `{open, talk, shown, theme}`: the pages open, the one the console talks
+  to, the last of Eriphe's shows the page took (a page the user closed does not open again on the
+  next visit), and the theme (`""` follows the system, `light`, `dark`), in the kv `espace_view`. The boot gives
+  them back (`view`, `places`), on any of the user's screens, and the shell carries the theme
+  (`data-theme`) before the app draws.
+
 **The app** (`web/espace/src`):
 
 - `data/`: the requests (`api.ts`), the stream (`stream.ts`: one per page, opened again with the
-  node the console talks to) and the store (`store.ts`, Zustand): the graph as streamed, and what is
-  open, each event a pure step tested on its own. `presence.ts` says the user is there.
+  node the console talks to) and the store (`store.ts`, Zustand): the graph as streamed, what is
+  open, the places and the theme, each event a pure step tested on its own. `keep.ts` sends what
+  is open and the theme back to eriphe-core a moment after they change. `presence.ts` says the
+  user is there.
 - `graph/`: the layout (`layout.ts`, a small force simulation): roots held to their home (where
   they first found room, `homesFor`: a new subject never moves the others), children pulled to
   their parent, links as weak springs, every bubble and its label a box that pushes the others
@@ -3053,7 +3083,7 @@ conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/
   edge of an open page, a bubble within 300 px of its parent; past it the bubble lags behind by a
   rubber band (0.3), and dropped there it comes back to the edge. A dropped bubble stays exactly
   where dropped (a subject as a spot, a bubble as an offset from its parent), unless an open page
-  needs the room. Near the screen's edge the camera scrolls, driven by the dragged bubble's place
+  needs the room, and eriphe-core keeps the place. Near the screen's edge the camera scrolls, driven by the dragged bubble's place
   on screen, not the pointer: a 110 px zone, after 200 ms, speeding up over 700 ms to 16 px a
   frame. The camera (`camera.ts`) frames every open page if they fit at a scale of 0.8 or more,
   else the page the console talks to, the others open in place; with no page open, the whole
@@ -3062,22 +3092,46 @@ conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/
   bigger, what waits for the user brighter, what runs a little, what is done or old quieter.
 - `page/`: a page in the graph, any number open: a click opens one alone, ⌘, Ctrl or shift with
   the click one more. Dragged by its head; its head says what it belongs to, its title, its date
-  or « En cours » on the title line, its versions, the cross that closes this page only; the tabs
-  Contenu, Trace and .md; at its foot the cards it waits on, answered by their card's Oui or Non
-  (`POST /cards/{id}/yes|no`). An older version shows as it was.
+  or « En cours » on the title line, its versions, « Archiver », the cross that closes this page
+  only; the tabs Contenu, Trace and .md; at its foot the cards it waits on, answered by their
+  card's Oui or Non (`POST /cards/{id}/yes|no`), read again when a proposal moves, and the question before archiving (how many
+  bubbles go with it). An older version shows as it was. The .md tab edits the node's body in
+  CodeMirror (`page/Editor.tsx`, in a shadow root: CodeMirror styles a document with a `<style>`
+  element, which the CSP refuses, and a shadow root with a constructed stylesheet; its look is
+  the page's variables). It saves on the version it was read at (`page/edit.ts`): a newer version
+  that came meanwhile shows with its text, nothing written, and the user takes it or keeps theirs.
 - `doc/`: the page's parts: text as Markdown by the page's own renderer, which makes no HTML of it;
   each block an A2UI surface (`<node>--<block>`) of the page's own adapter, a source's new value put
   at its place in the block's data. A block marked external is a tainted surface: there a
-  Proposal only asks.
+  Proposal only asks. A button's `ask` and a Mark go to eriphe-core (`.../ask`, `.../mark`) from the
+  last version of a block that is not external; anything else stays in the page.
 - `console/`: the one input. It talks to the page the console talks to (the last one opened or
   clicked), else to the home (`POST /messages` with `node`); Eriphe's newest line shows by the orb,
   the replies it suggests under it; the conversation of that node opens over it.
 - `hud/`: the way home and the path of the page the console talks to; the ticker of what waits for
-  the user and what runs, each a way to its page; the settings; the notices and a word when the
-  stream is down.
+  the user and what runs, each a way to its page; « Archives · N », what the user archived, each
+  to reopen; the light or dark theme; the settings; the notices and a word when the stream is
+  down.
 
 A link may open a page: `/espace?open=node-<id>`. The theme follows the system, light or dark,
-on the tokens of `espace.css`.
+on the tokens of `espace.css`, until the user chooses one (`data-theme`).
+
+**The scenario in a browser** (`web/espace/e2e`, `espace_scenario_test.go`). Playwright plays the
+epic's 13 steps against a whole eriphe-core on 127.0.0.1, signed in with the tests' password: faked
+tools (`maison`, `agenda`, `mail`, `prod`, in memory) and a scripted brain. Nothing is faked inside
+the core: the brain and the workers are tasks on a fake device `pc`, which takes its assignments
+and reports as a device does, and plays canned calls through its MCP proxy (the brain's own tools,
+the catalog's after the permission round trip, a worker's `eriphe-nodes`); the engine, the cards,
+the filing and the stream are the real ones. `TestEspaceScenario` serves only when
+`ERIPHE_E2E_ADDR` is set; the world outside the user is asked of it at `/e2e/mail` (a monitor's
+mail), `/e2e/finish/{key}` (a worker finishes) and `/e2e/tools` (what the tools did), routes of
+the test only. The test fails on any console error and any CSP violation. CI runs it
+(`espace-e2e`) on the committed build:
+
+```sh
+cd core/web/espace
+npm run build && npx playwright install chromium && npx playwright test
+```
 
 **A full home** (#455). The workspace does what the conversation's page does to say the user is
 there (`data/presence.ts`, as `static/app.js`): it tells eriphe-core when it comes in front or leaves
@@ -3219,8 +3273,10 @@ through `a2ui.Validate`).
   scrolls sideways).
 - *Input*: Button (with its icon), Choice, TextField, DateField; the fields write what the
   user enters to the bound data path, as A2UI does. A Button's action keeps to the
-  actions' grammar (`a2ui/actions.go`: an ask carries its author's words only, never the
-  fields); in a node's page its actions are not sent yet (#633, the gestures come next).
+  actions' grammar (`a2ui/actions.go`: a Button sends `ask`, its author's words only, never the
+  fields, or a local name, `expand` or `tab`; a Proposal sends `answer`, a Mark `mark`, and no
+  author writes those two on a Button); in a node's page eriphe-core reads the ask again in the
+  stored block (`POST /api/nodes/{id}/ask`).
 - *Data*: Metric (value, unit, signed delta coloured by `better`), Chart (lines or bars in
   SVG, `chart.tsx`: one axis, a palette checked for colour blindness, a legend from two
   series, a tooltip on each mark, the numbers in a table for screen readers), Table (columns
@@ -3300,8 +3356,7 @@ template) or computed by a function (`{"@call": "formatDate", "args": {…}}`). 
   as many to a row as fit), Card, Tabs, Fold, Divider, Button, Mark (the user's keep, drop or
   done, in a node's block), Choice, TextField, DateField, Metric, Progress, Chart (`line`,
   `bar`, or `stack`: one bar per x, the series its parts, an allocation now against its
-  target), Table, Timeline, Item, Message, Day, Proposal, Offers (code's offers on a thread's
-  rows), Alert, Placeholder. Steps, notes, options, checklists and drafts are compositions of
+  target), Table, Timeline, Item, Message, Day, Proposal, Alert, Placeholder. Steps, notes, options, checklists and drafts are compositions of
   these (a `Timeline`, a `Markdown`, a `List` of `Item` and `Mark`, `Mark` with `done`, `Text`
   sections), never components of their own; and the functions
   formatString, formatNumber, formatDate, formatRelative. A property that carries data takes a

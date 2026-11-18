@@ -3,18 +3,20 @@ import { createAdapter } from "../a2ui/adapter";
 import { CATALOG } from "../a2ui/catalog";
 import { wall, when } from "../a2ui/format";
 import { SurfaceView } from "../a2ui/Surfaces";
-import type { ProposalView, TraceEntry } from "../data/api";
-import { pathOf, useGraph } from "../data/store";
+import { archive, type ProposalView, type TraceEntry } from "../data/api";
+import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
 import { useWords } from "../i18n";
+import { MdTab } from "./MdTab";
 import { useFile, usePage, useTrace } from "./usePage";
 
 // A node's page, drawn in the graph where its bubble was (#633): its head
 // (what it belongs to, its title, its date or what is happening, its
-// versions, the button that closes it), the tabs Content, Trace and .md,
-// and at its foot the cards it waits on. In the graph it is moved by its
-// head, like a bubble.
+// versions, the way to archive it, the button that closes it), the tabs
+// Content, Trace and .md, and at its foot the cards it waits on. In the
+// graph it is moved by its head, like a bubble. Archiving is the user's
+// alone, asked once more at the foot, with how many bubbles go with it.
 
 type Tab = "doc" | "trace" | "md";
 
@@ -34,6 +36,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
   const node = nodes[id];
   const [version, setVersion] = useState(0); // 0: the last
   const [tab, setTab] = useState<Tab>("doc");
+  const [asking, setAsking] = useState(false); // whether to archive
   const { page, failed } = usePage(id, version, live);
   const trace = useTrace(id, tab === "trace", live);
   const file = useFile(id, version, tab === "md", live);
@@ -45,6 +48,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
   const kicker = path.length > 1 ? titleOf(nodes[path[0]], external) : null;
   const running = node?.state === "running";
   const at = wall(node?.updated);
+  const gone = (n: number) => (n === 0 ? "" : n === 1 ? t("espace.page.archive.one") : t("espace.page.archive.many", n));
 
   return (
     <article className={`pg${talking ? " talking" : ""}`} onPointerDown={onTalk} aria-label={titleOf(node, external)}>
@@ -92,6 +96,11 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               ))}
             </span>
           )}
+          {live && !page?.archived && (
+            <button type="button" className="pg-archive" onClick={() => setAsking(true)}>
+              {t("espace.page.archive")}
+            </button>
+          )}
           <button type="button" className="pg-x" onClick={onClose} aria-label={t("espace.page.close")}>
             ✕
           </button>
@@ -113,10 +122,28 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
         </nav>
       </header>
       <div className="pg-body">
-        {tab === "doc" && (page ? <Doc page={page} latest={latest} /> : failed ? <p className="pg-empty">{t("espace.page.gone")}</p> : <Skeleton />)}
+        {tab === "doc" && (page ? <Doc page={page} latest={latest} live={live} /> : failed ? <p className="pg-empty">{t("espace.page.gone")}</p> : <Skeleton />)}
         {tab === "trace" && (trace ? <Trace entries={trace} /> : <Skeleton />)}
-        {tab === "md" && (file ? <pre className="pg-md">{file.md}</pre> : <Skeleton />)}
+        {tab === "md" && (file ? <MdTab key={`${id}@${version}`} id={id} file={file} latest={latest} live={live} /> : <Skeleton />)}
       </div>
+      {asking && node && (
+        <footer className="pg-foot pg-ask" role="alertdialog" aria-label={t("espace.page.archive.ask", titleOf(node, external))}>
+          <p>
+            <b>{t("espace.page.archive.ask", titleOf(node, external))}</b>
+            <small>
+              {gone(subtree(nodes, id).length - 1)} {t("espace.page.archive.back")}
+            </small>
+          </p>
+          <span className="pg-ask-btns">
+            <button type="button" className="btn" onClick={() => setAsking(false)}>
+              {t("espace.page.archive.no")}
+            </button>
+            <button type="button" className="btn primary" onClick={() => void archive(id).finally(() => setAsking(false))}>
+              {t("espace.page.archive")}
+            </button>
+          </span>
+        </footer>
+      )}
       {page && page.cards.length > 0 && latest && (
         <footer className="pg-foot">
           <Cards id={id} cards={page.cards} />

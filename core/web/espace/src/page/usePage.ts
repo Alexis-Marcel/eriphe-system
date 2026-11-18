@@ -4,10 +4,12 @@ import { useGraph } from "../data/store";
 import { sample } from "../data/sample";
 
 // usePage reads a node's page at a version (0: the last), and again at each
-// new version eriphe-core says it has (the stream's "doc"); the sample's on
-// the dev server.
+// new version eriphe-core says it has (the stream's "doc") and each time a
+// proposal moves (its cards: "proposals"); the sample's on the dev server.
 export function usePage(id: string, version: number, live: boolean): { page: api.NodePage | null; failed: boolean } {
-  const bump = useGraph((s) => s.docs[id] ?? 0);
+  const doc = useGraph((s) => s.docs[id] ?? 0);
+  const moved = useGraph((s) => s.moved.n);
+  const bump = `${doc}:${moved}`;
   const [got, setGot] = useState<{ key: string; page: api.NodePage | null; failed: boolean }>({ key: "", page: null, failed: false });
   const key = `${id}@${version}`;
   useEffect(() => {
