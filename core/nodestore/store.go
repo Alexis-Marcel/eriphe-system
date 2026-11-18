@@ -223,6 +223,7 @@ type New struct {
 	Title    string
 	Parent   string
 	Links    []string
+	After    []string          // a step's: its sibling steps it waits for
 	Lifetime nodefile.Lifetime // work by default
 	Goal     string
 	Body     string // the author's: text and blocks, short forms accepted
@@ -250,13 +251,22 @@ func (s *Store) Create(nw New) (*Doc, error) {
 			return nil, fmt.Errorf("link %s: %w", l, err)
 		}
 	}
+	for _, a := range nw.After {
+		sum, err := s.summary(a)
+		if err != nil {
+			return nil, fmt.Errorf("after %s: %w", a, err)
+		}
+		if sum.Parent != nw.Parent || nw.Parent == "" {
+			return nil, fmt.Errorf("after %s: a step waits only for steps of its own parent", a)
+		}
+	}
 	id := s.opts.NewID()
 	if _, err := s.summary(id); err == nil {
 		return nil, fmt.Errorf("id %s is taken", id)
 	}
 	now := s.opts.Now().Truncate(time.Second)
 	n, err := nodefile.New(nodefile.Meta{
-		ID: id, Title: strings.TrimSpace(nw.Title), Parent: nw.Parent, Links: nw.Links,
+		ID: id, Title: strings.TrimSpace(nw.Title), Parent: nw.Parent, Links: nw.Links, After: nw.After,
 		Lifetime: nw.Lifetime, Goal: nw.Goal, Created: now, External: nw.External,
 	}, "")
 	if err != nil {
@@ -317,8 +327,8 @@ func (s *Store) change(id, expect, author, op string, fn func(*nodefile.Node) er
 
 // Change is code's write of a node: fn changes its last version, which
 // expect names, as code does what no author may (a block's or the
-// node's external, its title or goal). The node's id, parent, creation,
-// done and archived are never changed this way. The store's filter runs
+// node's external, its title or goal). The node's id, parent, the steps
+// it waits for, creation, done and archived are never changed this way. The store's filter runs
 // over the node written.
 func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error) (*Doc, error) {
 	s.mu.Lock()
@@ -329,8 +339,8 @@ func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error)
 			return err
 		}
 		m := n.Meta
-		if m.ID != was.ID || m.Parent != was.Parent || !m.Created.Equal(was.Created) || !m.Done.Equal(was.Done) || !m.Archived.Equal(was.Archived) {
-			return errors.New("a node's id, parent, creation, done and archived are not changed by a write")
+		if m.ID != was.ID || m.Parent != was.Parent || !slices.Equal(m.After, was.After) || !m.Created.Equal(was.Created) || !m.Done.Equal(was.Done) || !m.Archived.Equal(was.Archived) {
+			return errors.New("a node's id, parent, after, creation, done and archived are not changed by a write")
 		}
 		raw, err := n.Bytes()
 		if err != nil {

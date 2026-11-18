@@ -88,3 +88,29 @@ func TestNoteItem(t *testing.T) {
 		t.Fatalf("not taken away: %+v", items)
 	}
 }
+
+func TestCreateAfterSiblings(t *testing.T) {
+	s, _ := newEnv(t).open(t)
+	parent := mustCreate(t, s, New{Title: "Substack", Author: "brain"})
+	style := mustCreate(t, s, New{Title: "Style", Parent: parent.Node.Meta.ID, Author: "brain"})
+	plan := mustCreate(t, s, New{Title: "Plan", Parent: parent.Node.Meta.ID, After: []string{style.Node.Meta.ID}, Author: "brain"})
+	if got := plan.Node.Meta.After; len(got) != 1 || got[0] != style.Node.Meta.ID {
+		t.Fatalf("after %v", got)
+	}
+	other := mustCreate(t, s, New{Title: "Other", Author: "brain"})
+	for _, nw := range []New{
+		{Title: "Loose", Parent: parent.Node.Meta.ID, After: []string{other.Node.Meta.ID}, Author: "brain"},
+		{Title: "Top", After: []string{style.Node.Meta.ID}, Author: "brain"},
+		{Title: "Missing", Parent: parent.Node.Meta.ID, After: []string{"zz9"}, Author: "brain"},
+	} {
+		if _, err := s.Create(nw); err == nil {
+			t.Errorf("%s: created", nw.Title)
+		}
+	}
+	if _, err := s.Change(plan.Node.Meta.ID, plan.Version.Hash, "brain", func(n *nodefile.Node) error {
+		n.Meta.After = nil
+		return nil
+	}); err == nil {
+		t.Error("after changed by a write")
+	}
+}

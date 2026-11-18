@@ -174,7 +174,7 @@ func TestAwkwardScalars(t *testing.T) {
 }
 
 func TestWriterOutputParsesToSameBytes(t *testing.T) {
-	m := Meta{ID: "abc", Title: "Plan", Parent: "k3v9q2m7", Links: []string{"p8d2x4c1"}, Lifetime: Work, Goal: "A plan.",
+	m := Meta{ID: "abc", Title: "Plan", Parent: "k3v9q2m7", Links: []string{"p8d2x4c1"}, After: []string{"s1", "s2"}, Lifetime: Work, Goal: "A plan.",
 		Created: time.Date(2026, 11, 17, 9, 0, 0, 0, time.FixedZone("", 3600))}
 	n, err := New(m, "# Plan\n")
 	if err != nil {
@@ -188,7 +188,7 @@ func TestWriterOutputParsesToSameBytes(t *testing.T) {
 	}
 	n.Meta.External = true
 	out := mustBytes(t, n)
-	want := "---\nid: abc\ntitle: Plan\nparent: k3v9q2m7\nlinks: [p8d2x4c1]\nlifetime: work\ngoal: A plan.\ncreated: 2026-11-17T09:00:00+01:00\nexternal: true\n---\n# Plan\n\n" +
+	want := "---\nid: abc\ntitle: Plan\nparent: k3v9q2m7\nlinks: [p8d2x4c1]\nafter: [s1, s2]\nlifetime: work\ngoal: A plan.\ncreated: 2026-11-17T09:00:00+01:00\nexternal: true\n---\n# Plan\n\n" +
 		"```eriphe:block steps\n{\"components\": [\n  {\"component\":\"Text\",\"id\":\"root\",\"text\":{\"@path\":\"/t\"}}\n],\n \"data\": {\"t\":\"One\"},\n \"marks\": {\"lines\":{\"one\":\"done\"}}}\n```\n"
 	if string(out) != want {
 		t.Fatalf("written:\n%s\nwant:\n%s", out, want)
@@ -245,6 +245,9 @@ func TestErrors(t *testing.T) {
 		{"own parent", strings.Replace(head(""), "lifetime", "parent: abc123\nlifetime", 1), "its own parent", ""},
 		{"links twice", strings.Replace(head(""), "lifetime", "links: [abc, abc]\nlifetime", 1), "there twice", ""},
 		{"links itself", strings.Replace(head(""), "lifetime", "links: [abc123]\nlifetime", 1), "link to itself", ""},
+		{"after twice", strings.Replace(head(""), "lifetime", "after: [abc, abc]\nlifetime", 1), "there twice", ""},
+		{"after itself", strings.Replace(head(""), "lifetime", "after: [abc123]\nlifetime", 1), "wait for itself", ""},
+		{"after bad id", strings.Replace(head(""), "lifetime", "after: [Not-An-Id]\nlifetime", 1), "not a node's id", ""},
 		{"bad block json", block("plan", `{"components": [`), "not a block's JSON", "plan"},
 		{"two objects", block("plan", text+text), "one JSON object only", "plan"},
 		{"unknown block key", block("plan", `{"components": [], "layout": 1}`), "unknown field", "plan"},
@@ -532,5 +535,26 @@ func TestDocExamples(t *testing.T) {
 	got, err := c.Block("status").canonical()
 	if err != nil || !bytes.Equal(got, canon) {
 		t.Errorf("canonical form:\n%s\nwant:\n%s", got, canon)
+	}
+}
+
+func TestAuthorKeepsAfter(t *testing.T) {
+	prev, err := Parse([]byte(strings.Replace(head("Text.\n"), "lifetime", "after: [s1]\nlifetime", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(prev.Meta.After, []string{"s1"}) {
+		t.Fatalf("after %v", prev.Meta.After)
+	}
+	if _, err := ParseAuthor([]byte(strings.Replace(head("Other text.\n"), "lifetime", "after: [s1]\nlifetime", 1)), prev); err != nil {
+		t.Errorf("after kept: %v", err)
+	}
+	for _, raw := range []string{head("Other text.\n"), strings.Replace(head("Other text.\n"), "lifetime", "after: [s2]\nlifetime", 1)} {
+		if _, err := ParseAuthor([]byte(raw), prev); !errors.Is(err, ErrCodeField) {
+			t.Errorf("after changed by an author: %v", err)
+		}
+	}
+	if _, err := ParseAuthor([]byte(strings.Replace(head("New.\n"), "lifetime", "after: [s1]\nlifetime", 1)), nil); !errors.Is(err, ErrCodeField) {
+		t.Errorf("a new node's after from an author: %v", err)
 	}
 }
