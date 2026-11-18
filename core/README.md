@@ -27,7 +27,7 @@ with the bridge's gateway address.
 
 At first start it makes what it lacks in the data directory, and reuses it after: the API token
 (`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`), the graph's
-nodes (`nodes/`, `nodes.db`) and the
+nodes (`nodes/`, `nodes.db`), the memory's readable mirror (`memoire/`) and the
 workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). The API listens on
 `0.0.0.0:8800`, the workspace on `https://0.0.0.0:8443` (`ERIPHE_API_LISTEN` and `ERIPHE_WEB_LISTEN`,
 e.g. `0.0.0.0:9443`, move them, as `install.sh --api-port`, `--web-port` does on a Mac), and the
@@ -3034,6 +3034,13 @@ conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/
 - `GET /api/archives`: what the user archived, the latest first (`nodestore.Archives`): each node
   archived with no parent archived with it, a row as below with `archived` (when) and `with` (how
   many nodes below it went with it).
+- `GET /api/known`: « Ce que je sais », what Eriphe knows, read only (`web_known.go`): the files
+  of the [memory's mirror](#the-readable-mirror-memoire) in order, each `path`, `section`
+  (`profile`, `people`, `facts`, `decisions`, `journal`), `title` in the request's language and
+  `lines` (`id`, `group` in the profile, `when`, `text`, `external`). Drawn from `memory.db` with
+  recall's rules, it counts no use and taints no turn: it is the user's reading, never the brain's.
+  The head-up display opens it; there is no write route (to correct or forget, the user tells
+  Eriphe, or uses Settings → Mémoire).
 - A node's row (`graphNode`), in the page and the stream: `id`, `title` (empty when the node is
   external: a title that may be someone else's words is never shown), `parent`, `links`,
   `lifetime`, `state`, `created`, `updated`, `done`, `external`, `version`, `waits` (one of its
@@ -4343,7 +4350,8 @@ work:
 
 What is owed is an intention (INTEND), as above. Each segment carries its date, against which the
 agent resolves "demain" or "vendredi". One run per day and window; a failure is retried the next night. The same night
-run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable from the page).
+run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable from the page, and
+the [readable mirror](#the-readable-mirror-memoire)).
 
 ```json
 "memory": {
@@ -4361,6 +4369,37 @@ run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable fr
 All keys are optional: `db` defaults to `memory.db` next to `db`, `agent` to the catalog's `haiku`
 if there is one, else the default agent. Trusted tools (whose results do not taint a turn) are
 marked in Settings → Tools (see the [one taint rule](#tool-catalog)).
+
+### The readable mirror (`memoire/`)
+
+`memory_mirror.go` keeps a readable copy of what Eriphe knows in `memoire/`, next to `core.db`
+(`/data/memoire/` on an install), so that it can be read, or copied into another program, outside
+Eriphe. `memory.db` stays the truth: the mirror is written by code only, again after every change
+committed (a memory added, changed, approved, superseded, forgotten, restored, purged, a learned
+change undone), each minute for what time changes (a `valid_to` that passed), and at start, from
+the database (a file changed by hand is written over, a file of its own removed). A file whose
+text did not change is not written; a file no memory is in any more is removed, and its folder
+when empty. Files are mode 0600, the folder 0700, in the user's language:
+
+- `profil.md`: the profile, the preferences, what is about the user (about `owner`), the
+  lessons, and the situations with their end;
+- `personnes/<name>.md`: one file per person (kind `person`, or about `person:<name>`);
+- `faits/<subject>.md`: the facts, by their about (`general.md` without one);
+- `decisions/<YYYY-MM>.md`: the decisions, by month;
+- `journal/<YYYY-MM-DD>.md`: the episodes, one journal a day.
+
+What is in it is what `recall` gives by default: the active memories true now, never a proposal
+nor a forgotten one. A line is one memory, its text on one line whatever it holds, ending with its
+id (`^m12`, Obsidian's block id); one read in someone else's content (trust `external`) is marked
+`(extérieur)`.
+
+It is **outside git**, so that « oublie ça » stays true: a forgotten memory leaves its file at
+once, and stays only in the nightly backups, which carry the mirror (`memoire-<day>.tar.gz`, with
+`memory-<day>.db`) for `backup_keep` days (14), as the database's copies already keep it. It is
+**not a node**: it is not in the graph's repository nor its index, and neither the brain's
+`node_read` and `node_find` nor a task's node tools reach it. The brain reads memory through
+`recall` only, which keeps the trust rules (an external memory read taints the turn). The
+workspace's « Ce que je sais » (`GET /api/known`) shows the same files, read only.
 
 ### What Eriphe learned
 

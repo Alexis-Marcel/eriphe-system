@@ -12,6 +12,8 @@ import strings from "../strings.json";
 // - GET /api/proposals/{ref}, ?day=: a proposal a block shows, those of a
 //   day (web_proposals.go);
 // - GET /api/archives: what the user archived;
+// - GET /api/known: what Eriphe knows, read only, as its memory's mirror
+//   has it (web_known.go);
 // and writes
 // - POST /messages: what the user says, to the node the console talks to;
 // - POST /cards/{id}/yes|no: a card's answer, as in the conversation;
@@ -206,6 +208,27 @@ export type ArchivedNode = GraphNode & { archived: string; with: number };
 
 export async function archives(): Promise<ArchivedNode[]> {
   return (await getJSON<{ archives: ArchivedNode[] }>("/api/archives"))?.archives ?? [];
+}
+
+// What Eriphe knows (knownView, web_known.go): the files of its memory's
+// mirror, in order, each memory a line with its id; external: read in
+// someone else's content. Read only: the user corrects it by telling Eriphe.
+export type KnownLine = { id: number; group?: string; when?: string; text: string; external?: boolean };
+export type KnownFile = { path: string; section: string; title: string; lines: KnownLine[] };
+
+export async function known(): Promise<KnownFile[]> {
+  return (await getJSON<{ files: KnownFile[] }>("/api/known"))?.files ?? [];
+}
+
+// knownSections groups the files by their section, in the order they came.
+export function knownSections(files: KnownFile[]): { section: string; files: KnownFile[] }[] {
+  const out: { section: string; files: KnownFile[] }[] = [];
+  for (const f of files) {
+    const last = out[out.length - 1];
+    if (last && last.section === f.section) last.files.push(f);
+    else out.push({ section: f.section, files: [f] });
+  }
+  return out;
 }
 
 // place keeps where a bubble was dropped (null: the layout places it).

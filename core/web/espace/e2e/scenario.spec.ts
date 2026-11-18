@@ -174,6 +174,16 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
   await expect(archived).toContainText("avec une bulle");
   await page.locator(".hud-archives .hud-btn").click();
 
+  // What Eriphe knows, read only: what it knew before, the one read in a
+  // mail marked, and the plan done left a decision.
+  await page.locator(".hud-known .hud-btn").click();
+  const knows = page.locator(".hud-panel.known");
+  await expect(knows.locator(".known-file", { hasText: "sam" })).toContainText("Sam s'occupe de l'app de production.");
+  await expect(knows.locator("li", { hasText: "La prod a été migrée" }).locator(".a2-badge-external")).toHaveText("extérieur");
+  await expect(knows.locator("section", { hasText: "Décisions" })).toBeVisible();
+  await expect(knows.locator("button, input, textarea")).toHaveCount(0);
+  await page.locator(".hud-known .hud-btn").click();
+
   // End: home again, nothing waiting.
   await page.locator(".hud-brand").click();
   await expect(page.locator("article.pg")).toHaveCount(0);

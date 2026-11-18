@@ -121,7 +121,14 @@ func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenar
 	}
 	c := newCore(cfg, store)
 	m, _ := testMemory(t)
+	m.mirror = &memMirror{dir: cfg.memoirePath()}
 	c.useMemory(m)
+	if live == nil {
+		// What Eriphe knew before the morning, one memory read in a mail.
+		mustAdd(t, m, &Memory{Kind: kindPerson, About: "person:sam", Text: "Sam s'occupe de l'app de production."})
+		mustAdd(t, m, &Memory{Kind: kindFact, About: "project:prod", Text: "La prod a été migrée le mois dernier.",
+			SourceKind: srcTask, SourceRef: "task:t-mail", Trust: trustExternal})
+	}
 	openGraph(t, c)
 	c.useNodes(c.nodes)
 	for _, s := range []string{"maison", "agenda", "prod"} {
