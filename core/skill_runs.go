@@ -359,13 +359,26 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 	}
 	alias := skillRunAlias(key, events)
 	standing := ""
-	if sk.Trigger.Node != "" {
-		title, err := c.standingNode(sk.Trigger.Node)
+	if node := sk.Trigger.Node; node != "" {
+		title, outside, err := c.standingNode(node)
 		if err != nil {
 			c.endRun(runID, skillRunRefused, err.Error())
 			return
 		}
 		standing = title
+		if outside && !external { // its title may be someone else's words: the run starts external
+			external, kinds = true, append(kinds, nodeRef(node))
+			c.store.db.Exec(`UPDATE skill_runs SET external = 1 WHERE id = ?`, runID)
+		}
+		// Its sources read now: a call on an item that just came finds it
+		// listed (callItem).
+		var names []string
+		for _, r := range c.nodeReads(node) {
+			names = append(names, r.Name)
+		}
+		if len(names) > 0 {
+			c.readNode(ctx, node, names, time.Now())
+		}
 	}
 	// It notes items in its node (item_note): as the user wants to see them.
 	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, standing, events, now, c.seePreferences()), Agent: sk.Trigger.Model, About: alias,
@@ -430,21 +443,22 @@ func skillVoice(lang string) string {
 }
 
 // standingNode is the title of the standing node a skill's runs work
-// in; an error when it is gone, archived, or not standing.
-func (c *core) standingNode(id string) (string, error) {
+// in, and whether it may hold someone else's words; an error when it is
+// gone, archived, or not standing.
+func (c *core) standingNode(id string) (title string, external bool, err error) {
 	if c.nodes == nil {
-		return "", errors.New("the graph is not open on this eriphe-core")
+		return "", false, errors.New("the graph is not open on this eriphe-core")
 	}
 	sum, err := c.nodes.Get(id)
 	switch {
 	case err != nil:
-		return "", fmt.Errorf("its node %s: %w", id, err)
+		return "", false, fmt.Errorf("its node %s: %w", id, err)
 	case !sum.Archived.IsZero():
-		return "", fmt.Errorf("its node %s is archived", id)
+		return "", false, fmt.Errorf("its node %s is archived", id)
 	case sum.Lifetime != nodefile.Standing:
-		return "", fmt.Errorf("its node %s is not a standing node", id)
+		return "", false, fmt.Errorf("its node %s is not a standing node", id)
 	}
-	return sum.Title, nil
+	return sum.Title, sum.External, nil
 }
 
 // skillRunPrompt is a run's prompt: the skill, the standing node it works

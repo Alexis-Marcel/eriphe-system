@@ -24,7 +24,7 @@ var threadMu sync.Mutex
 type threadIn struct {
 	Title  string `json:"title" jsonschema:"what the user reads for the thread, in a few words in their language: Refonte du service photos"`
 	Goal   string `json:"goal" jsonschema:"its real outcome, in one or two sentences: what must have happened for it to be done (merged and deployed, not only reviewed); for you and the agents, never shown to the user"`
-	Alias  string `json:"alias,omitempty" jsonschema:"the key of the matter it follows, kind:slug, to find it again: project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, topic:<words>; a key is one thread's (a mail or an event is an item, note_item, not a key)"`
+	Alias  string `json:"alias,omitempty" jsonschema:"the key of the matter it follows, kind:slug, to find it again: project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, topic:<words>; a key is one thread's (a mail or an event is an item of a node's source, not a key)"`
 	Ends   string `json:"ends,omitempty" jsonschema:"how it ends: goal (the default: closed once its goal is reached) or standing (what the user manages continuously, their mail, their agenda, a supervision: never closed)"`
 	Take   int64  `json:"take,omitempty" jsonschema:"after a refusal that lists threads near this matter: the one that is it, given back (reopened if it ended) and given this alias"`
 	NewBy  string `json:"new_because,omitempty" jsonschema:"after a refusal that lists threads near this matter: why this is another matter, in a few words; logged on the new thread"`

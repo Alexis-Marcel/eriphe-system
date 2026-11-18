@@ -250,6 +250,39 @@ type New struct {
 func (s *Store) Create(nw New) (*Doc, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	n, err := s.prepare(nw)
+	if err != nil {
+		return nil, err
+	}
+	file := slug(n.Meta.Title) + "-" + n.Meta.ID + ".md"
+	return s.save(n, file, nil, nw.Author, "create")
+}
+
+// Check tells whether Create would make the node, and makes nothing: a
+// card that shows a node before it exists is never one that cannot be
+// answered yes.
+func (s *Store) Check(nw New) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n, err := s.prepare(nw)
+	if err != nil {
+		return err
+	}
+	if len(n.Blocks()) > MaxBlocks {
+		return fmt.Errorf("a node holds %d blocks at most, this one would hold %d", MaxBlocks, len(n.Blocks()))
+	}
+	raw, err := n.Bytes()
+	if err != nil {
+		return err
+	}
+	if len(raw) > MaxBytes {
+		return fmt.Errorf("a node is %d KiB at most, this one would be %d KiB", MaxBytes>>10, len(raw)>>10)
+	}
+	return nil
+}
+
+// prepare checks a node to create and builds it.
+func (s *Store) prepare(nw New) (*nodefile.Node, error) {
 	if nw.Lifetime == "" {
 		nw.Lifetime = nodefile.Work
 	}
@@ -300,8 +333,7 @@ func (s *Store) Create(nw New) (*Doc, error) {
 			n.SetBlockExternal(b.Name, true)
 		}
 	}
-	file := slug(n.Meta.Title) + "-" + id + ".md"
-	return s.save(n, file, nil, nw.Author, "create")
+	return n, nil
 }
 
 // Write replaces a node's body (its text and blocks) with an author's,

@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,27 +10,13 @@ import (
 	"time"
 )
 
-// Images a task hands to its thread's surface (#470). Most sites forbid
-// being framed, and a surface never loads anything from outside
-// (surfaces_media.go): to show a page, a task step of a thread, lent
-// eriphe-workspace, captures it in its container (eriphe-capture,
-// worker/base) and posts the image to its device, which relays it here with
-// the device's secret and the task's id:
-//
-//	POST /v1/device/tasks/{id}/media?surface=thread-<id>   (device secret, the image as body)
-//
-// eriphe-core keeps it in its data folder under a random id, for the
-// surface of the thread the task is a step of only, and answers its
-// address, media:<id>, which the thread's holder writes as an Image's url
-// in its part. The bytes never go through a model. surfaceView signs
-// that address for the page like any other (GET /espace/media), and only
-// on the surface it was given for. A PNG or a JPEG only, sniffed from its
-// bytes, 5 MiB at most, a few per surface; it goes with its surface
-// (surfaceRemove), and an image its surface no longer shows goes after an
-// hour (tickSurfaces).
+// Images a task handed to a thread's surface (#470). A thread has no
+// surface any more (#631): an upload is refused (handleTaskMedia), and
+// what was kept goes as its surface goes (surfaceRemove) or after an hour
+// unshown (tickSurfaces). The media a node shows come with the workspace
+// (#633).
 
 const (
-	surfaceMediaMax        = 5 << 20
 	surfaceMediaPerSurface = 10
 	surfaceMediaUnused     = time.Hour
 	surfaceMediaScheme     = "media:"
@@ -92,21 +76,6 @@ func surfaceMediaType(data []byte) (string, bool) {
 		return t, true
 	}
 	return "", false
-}
-
-// errMediaRefused is an image refused for what it is or where it goes.
-type errMediaRefused struct {
-	status int
-	msg    string
-}
-
-func (e errMediaRefused) Error() string { return e.msg }
-
-// surfaceMediaPut refuses an image a task gives for a surface: a
-// thread has no surface any more (#631), and a node's media is not kept
-// yet (#633).
-func (c *core) surfaceMediaPut(taskID, surfaceID string, data []byte) (*surfaceMedia, error) {
-	return nil, errMediaRefused{http.StatusGone, "no surface takes a task's image any more: a thread has no surface"}
 }
 
 // surfaceMediaDrop removes images: their files, then their rows.
@@ -170,8 +139,9 @@ func (c *core) sweepSurfaceMedia(all []surface, now time.Time) {
 	c.surfaceMediaDrop(gone)
 }
 
-// handleTaskMedia is POST /v1/device/tasks/{id}/media, for devices: an image a
-// task lent the workspace gives for its thread's surface.
+// handleTaskMedia is POST /v1/device/tasks/{id}/media, for devices: an
+// image a task captured. No surface takes one any more (#631: a thread
+// has no surface): it is refused, once the device and its task are known.
 func (c *core) handleTaskMedia(w http.ResponseWriter, r *http.Request) {
 	device, ok := c.deviceFromRequest(r)
 	if !ok {
@@ -183,27 +153,5 @@ func (c *core) handleTaskMedia(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no such task on this device", http.StatusNotFound)
 		return
 	}
-	if !grantAllows(c.taskGrant(t), workspaceServer, "surface_write") {
-		http.Error(w, "this task has no access to "+workspaceServer, http.StatusForbidden)
-		return
-	}
-	data, err := io.ReadAll(io.LimitReader(r.Body, surfaceMediaMax+1))
-	if err != nil {
-		http.Error(w, "the image could not be read", http.StatusBadRequest)
-		return
-	}
-	m, err := c.surfaceMediaPut(t.ID, strings.TrimSpace(r.URL.Query().Get("surface")), data)
-	if err != nil {
-		status := http.StatusInternalServerError
-		if e, ok := err.(errMediaRefused); ok {
-			status = e.status
-		}
-		http.Error(w, err.Error(), status)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"src": surfaceMediaScheme + m.ID, "type": m.Type, "size": m.Size,
-		"note": "Give src to whoever holds the thread: it writes it as an Image's url in a block of its part of " + m.Surface + " (only there), with a Link to the page's address beside it.",
-	})
+	http.Error(w, "no surface takes a task's image any more", http.StatusGone)
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"slices"
 	"strings"
@@ -110,9 +111,6 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 		if err != nil {
 			return nil, fmt.Errorf("the monitor: %w", err)
 		}
-		if _, err := c.monitorNamed(name); err == nil {
-			return nil, fmt.Errorf("the monitor: %q is taken: pick another name", name)
-		}
 		v.Monitor, v.Spec = name, &spec
 	}
 	if in.Skill != nil {
@@ -125,10 +123,14 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 		if m.Trigger == nil {
 			return nil, errors.New("the skill: a view's skill runs by itself: give it when")
 		}
-		if k, err := c.store.skill(m.Name); err == nil && k != nil {
-			return nil, fmt.Errorf("the skill: %q is taken: pick another name", m.Name)
-		}
 		v.Skill, v.MD = m.Name, md
+	}
+	if err := c.viewFree(v.Monitor, v.Skill); err != nil {
+		return nil, err
+	}
+	v.Tainted = strings.Join(tainted, ", ")
+	if err := c.nodes.Check(c.viewNew(v)); err != nil {
+		return nil, fmt.Errorf("the node: %w", err)
 	}
 	var spec string
 	if v.Spec != nil {
@@ -136,7 +138,7 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 		spec = string(raw)
 	}
 	res, err := c.store.db.Exec(`INSERT INTO view_proposals (node, title, goal, body, monitor, spec, skill, md, tainted, state, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		v.Node, v.Title, v.Goal, v.Body, v.Monitor, spec, v.Skill, v.MD, strings.Join(tainted, ", "), viewProposed, time.Now().Unix())
+		v.Node, v.Title, v.Goal, v.Body, v.Monitor, spec, v.Skill, v.MD, v.Tainted, viewProposed, time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -303,9 +305,11 @@ func (c *core) proposedViews() []int64 {
 	return out
 }
 
-// decideView answers a view's card: yes makes the node, then the monitor,
-// then the skill, all approved by this one answer; one that fails takes
-// back those before, and the card waits still. No makes none.
+// decideView answers a view's card: yes makes the monitor, then the
+// skill, then the node, all approved by this one answer. Everything that
+// could refuse is checked first; a step that still fails takes back those
+// before (the monitor deleted, the skill dropped: the node, made last, is
+// never taken back), and the card waits still. No makes none.
 func (c *core) decideView(id int64, approve bool) error {
 	v, err := c.viewOf(id)
 	if err != nil || v.State != viewProposed {
@@ -315,26 +319,11 @@ func (c *core) decideView(id int64, approve bool) error {
 		_, err := c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ?`, viewRejected, id)
 		return err
 	}
-	// What was free at the proposal may be taken since: refused before
-	// anything is made.
-	if v.Monitor != "" {
-		if _, err := c.monitorNamed(v.Monitor); err == nil {
-			return fmt.Errorf("the monitor: %q is taken since", v.Monitor)
-		}
+	nw := c.viewNew(v)
+	if err := c.viewFree(v.Monitor, v.Skill); err != nil {
+		return err
 	}
-	if v.Skill != "" {
-		if k, err := c.store.skill(v.Skill); err == nil && k != nil {
-			return fmt.Errorf("the skill: %q is taken since", v.Skill)
-		}
-	}
-	d, err := c.nodes.Create(nodestore.New{ID: v.Node, Title: v.Title, Goal: v.Goal, Body: v.Body, Lifetime: nodefile.Standing,
-		External: v.Tainted != "", Author: "user"})
-	if err != nil {
-		return fmt.Errorf("the node: %w", err)
-	}
-	undoNode := func() { c.nodes.Archive(v.Node, nodeByCode) }
-	if err := c.externalSources(d, nodeByCode); err != nil {
-		undoNode()
+	if err := c.nodes.Check(nw); err != nil {
 		return fmt.Errorf("the node: %w", err)
 	}
 	var monitorID int64
@@ -344,7 +333,6 @@ func (c *core) decideView(id int64, approve bool) error {
 		res, err := c.store.db.Exec(`INSERT INTO monitors (name, state, spec, tainted, created, updated) VALUES (?, ?, ?, '', ?, ?)`,
 			v.Monitor, monitorOn, string(raw), now, now)
 		if err != nil {
-			undoNode()
 			return fmt.Errorf("the monitor: %w", err)
 		}
 		monitorID, _ = res.LastInsertId()
@@ -354,22 +342,59 @@ func (c *core) decideView(id int64, approve bool) error {
 			c.store.db.Exec(`DELETE FROM monitors WHERE id = ?`, monitorID)
 		}
 	}
+	undoSkill := func() {}
 	if v.MD != "" {
 		k, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte(v.MD)}}, skillFromEriphe)
 		if err == nil {
+			undoSkill = func() { c.store.deleteSkill(k.Name) }
 			err = c.store.approveSkill(k.Name, k.Pending)
 		}
 		if err != nil {
-			if k != nil {
-				c.store.rejectSkill(k.Name)
-			}
+			undoSkill()
 			undoMonitor()
-			undoNode()
 			return fmt.Errorf("the skill: %w", skillErrText(err))
 		}
 		c.store.set(skillFiredKey+k.Name, "")
 	}
+	d, err := c.nodes.Create(nw)
+	if err != nil {
+		undoSkill()
+		undoMonitor()
+		return fmt.Errorf("the node: %w", err)
+	}
+	// Its blocks that read a server not trusted are external at once; the
+	// first read marks them too (fileSnapshots).
+	if err := c.externalSources(d, nodeByCode); err != nil {
+		log.Printf("view %d: node %s: %v", id, v.Node, err)
+	}
 	_, err = c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ?`, viewApproved, id)
 	c.readNodeLater(context.Background(), v.Node, nil) // its blocks read at once (node_live.go)
 	return err
+}
+
+// viewNew is the node a view makes.
+func (c *core) viewNew(v viewProposal) nodestore.New {
+	return nodestore.New{ID: v.Node, Title: v.Title, Goal: v.Goal, Body: v.Body, Lifetime: nodefile.Standing,
+		External: v.Tainted != "", Author: "user"}
+}
+
+// viewFree refuses a view whose monitor or skill name is taken, or whose
+// monitor is one too many.
+func (c *core) viewFree(monitorName, skill string) error {
+	if monitorName != "" {
+		if _, err := c.monitorNamed(monitorName); err == nil {
+			return fmt.Errorf("the monitor: %q is taken: pick another name", monitorName)
+		}
+		var n int
+		c.store.db.QueryRow(`SELECT COUNT(*) FROM monitors`).Scan(&n)
+		if n >= monitorsMax {
+			return fmt.Errorf("the monitor: %d monitors at most", monitorsMax)
+		}
+	}
+	if skill != "" {
+		if k, err := c.store.skill(skill); err == nil && k != nil {
+			return fmt.Errorf("the skill: %q is taken: pick another name", skill)
+		}
+	}
+	return nil
 }

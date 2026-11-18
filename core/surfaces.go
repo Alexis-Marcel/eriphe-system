@@ -21,9 +21,7 @@ import (
 )
 
 // Surfaces (#417): the tiles of the workspace, in A2UI v1.0 (core/a2ui).
-// A surface is written by an author (the brain, a skill, a task; or code
-// itself: the attention queue's, a thread's,
-// thread_surface.go) and kept by code: a title, components from the catalog, data,
+// A surface is written by code (the attention queue's) and kept by code: a title, components from the catalog, data,
 // sources, a refresh, a lifetime, a weight and a why.
 //
 // A source is a read the author declares, at a JSON pointer of the data
@@ -157,8 +155,8 @@ type surfaceIn struct {
 	// background, and its bindings checked when it comes
 	// (workspace_tools.go: an author's turn is never held long).
 	wait time.Duration
-	// What code writes of a surface it keeps (a thread's,
-	// thread_surface.go): composed by code from parts each checked alone
+	// What code writes of a surface it keeps: composed by code from parts
+	// each checked alone
 	// (its actions are not checked again as an author's); why its own
 	// parts may come from outside; whether its Proposals answer in place
 	// despite them; its one-line summary. A surface code writes (a
@@ -167,7 +165,7 @@ type surfaceIn struct {
 	// thread's, that it folds into a chip while it has nothing for the
 	// user (foldsQuiet); a child thread's, the surface it opens inside,
 	// and the block of its holder's part each component is of, by its
-	// place in the list (thread_part.go).
+	// place in the list.
 	blockAt   map[int]string
 	composed  bool
 	codeTaint []string
@@ -209,7 +207,7 @@ type surfaceLook struct {
 	// action on it, the last error for its author to fix.
 	Action    *surfaceActed     `json:"action,omitempty"`
 	LastError *surfaceLastError `json:"last_error,omitempty"`
-	// What code keeps of a surface it writes (thread_surface.go): why its
+	// What code keeps of a surface it writes: why its
 	// own parts may come from outside, whether its Proposals answer in
 	// place all the same, and its one-line summary for a small tile.
 	CodeTaint []string `json:"code_taint,omitempty"`
@@ -1261,7 +1259,7 @@ type surfaceMeta struct {
 	Weight  int       `json:"weight"`
 	Why     string    `json:"why,omitempty"`
 	Tainted bool      `json:"tainted,omitempty"`
-	Answers bool      `json:"answers,omitempty"` // tainted, its Proposals answer in place all the same: code placed them (a thread's, thread_surface.go)
+	Answers bool      `json:"answers,omitempty"` // tainted, its Proposals answer in place all the same: code placed them
 	Summary string    `json:"summary,omitempty"` // one line, for a small tile or a chip
 	State   string    `json:"state"`             // yours, urgent, new, running, quiet, done: its colour and badge (tileStateOf)
 	New     int       `json:"new,omitempty"`     // what changed since the user last opened it: a badge

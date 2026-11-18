@@ -465,8 +465,9 @@ func (c *core) monitorRaise(m *monitor, kind string, p map[string]any) {
 	}
 	for _, id := range c.nodesFollowing(m.Name) {
 		lang := c.userLang()
-		c.attend(attentionItem{Ref: nodeRef(id), Weight: weightBlocksATask, Why: fmt.Sprintf(tr(lang, key), m.Name, c.nodeTitle(id)),
-			Source: "monitor:" + m.Name, tainted: !c.trustsServer(m.Spec.Server)})
+		title := c.cleanNodeTitle(id) // "" when the node may hold someone else's words: its id then
+		c.attend(attentionItem{Ref: nodeRef(id), Weight: weightBlocksATask, Why: fmt.Sprintf(tr(lang, key), m.Name, cmp.Or(title, id)),
+			Source: "monitor:" + m.Name, tainted: !c.trustsServer(m.Spec.Server) || title == ""})
 	}
 }
 

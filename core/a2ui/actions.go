@@ -35,8 +35,8 @@ import (
 //     on a group of them, {"thread": <id>, "source": "<name>", "item":
 //     "<id>" or "state": "<state>", "offer": "<key>"}: a card is made for
 //     it, nothing runs. Only the Offers component sends it, one button per
-//     offer code put in the thread's data (/thread/items): an author never
-//     writes one, and places an Offers on a thread's own surface only.
+//     offer code put in the data: an author never writes one, nor an
+//     Offers in a node's block (nodeGuard).
 //   - mark: the user keeps, drops or marks done something a thread shows,
 //     {"list": "<id>", "item": "<id>", "mark": "keep"|"drop"|"done"|""}
 //     ("" clears it): ids only, never text; the surface names the thread.
@@ -110,15 +110,15 @@ func ActionKind(name string) string {
 	return ""
 }
 
-// ThreadOnly are the components that send an action of a thread's: on a
-// thread's own surface only.
+// ThreadOnly are the components that send an action code checks against
+// where they are: in a node's block only (thread -1 in CheckActions).
 var ThreadOnly = []string{"Mark", "Offers"}
 
 // CheckActions checks the actions of a surface's components against the
 // grammar, as an author writes them: an event, ask with a literal text
 // only, a local name with no context; never answer, mark or offer (their
-// components send them), never a function call. A Mark or an Offers is on
-// a thread's surface only (thread; 0 for a surface that is no thread's).
+// components send them), never a function call. A Mark or an Offers is in
+// a node's block only (thread -1; 0 for a surface).
 // Each error's path points at the action in the components list
 // ("/components/2/action/event"), or at the component.
 func CheckActions(surfaceID string, thread int64, components json.RawMessage) []ValidationError {
@@ -132,7 +132,7 @@ func CheckActions(surfaceID string, thread int64, components json.RawMessage) []
 			errs = append(errs, ValidationError{Code: CodeValidationFailed, SurfaceID: surfaceID, Path: path, Message: msg})
 		}
 		if name, _ := comp["component"].(string); slices.Contains(ThreadOnly, name) && thread == 0 {
-			fail("/components/"+strconv.Itoa(i), name+" is placed on a thread's surface only")
+			fail("/components/"+strconv.Itoa(i), name+" is placed in a node's block only")
 		}
 		a, ok := comp["action"].(map[string]any)
 		if !ok {
