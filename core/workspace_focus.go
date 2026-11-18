@@ -263,8 +263,7 @@ func (c *core) focusRelations(id string, pool []surface) []focusRelation {
 		return nil
 	}
 	return surfaceRelations(pool[i], pool, func(task string) int64 {
-		n, _ := c.threadOfTask(task) // web_threads.go
-		return n
+		return c.refThread("task:" + task) // thread_progress.go
 	})
 }
 

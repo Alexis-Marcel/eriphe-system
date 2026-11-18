@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -18,9 +17,8 @@ import (
 // is not reopened behind the user's back: the brain reopens it
 // (reopen_thread) when the matter comes back.
 //
-// What the code links on its own: an open intention about the thread
-// becomes its deadline step (followIntentions), a card born in a turn
-// about the thread shows in its timeline (cardProposed). Closing a thread
+// What the code links on its own: a card born in a turn about the thread
+// shows in its timeline (cardProposed). Closing a thread
 // on its goal writes a dated decision memory from its summary
 // (closeDecision). link_thread is left for the exceptions: what belongs to
 // another thread.
@@ -161,13 +159,15 @@ func (c *core) applyProgress(op extractionOp, trust, ref string) (why, result st
 	return "", "added"
 }
 
-// refThread is the thread of the first task step a source ref names
-// (task:<id>, comma separated); 0 if none.
+// refThread is the thread the first task a source ref names
+// (task:<id>, comma separated) is about; 0 if none.
 func (c *core) refThread(ref string) int64 {
 	for _, p := range strings.Split(ref, ",") {
 		if id, ok := strings.CutPrefix(strings.TrimSpace(p), "task:"); ok {
-			if st, ok := c.stepOfTask(id); ok {
-				return st.Thread
+			if t, err := c.store.task(id); err == nil {
+				if n, ok := threadOfAbout(t.About); ok {
+					return n
+				}
 			}
 		}
 	}
@@ -197,27 +197,15 @@ func (c *core) extractionThreads() string {
 }
 
 // summaryUnquoted tells whether a thread's summary is never quoted
-// (threadExternal): its steps read external content already, so a wake it
-// tainted may still say where it stands.
+// (threadExternal), so a wake it tainted may still say where it stands.
 func (c *core) summaryUnquoted(id int64) bool {
 	s, err := c.thread(id)
 	return err == nil && c.threadExternal(s)
 }
 
 // threadExternal tells whether what a thread says may carry what someone
-// else wrote: its plan, or what its steps read.
-func (c *core) threadExternal(s Thread) bool {
-	if s.Tainted != "" {
-		return true
-	}
-	steps, _ := c.steps(s.ID)
-	for _, st := range steps {
-		if st.Tainted != "" || (st.Task != "" && c.taskResultTaint(st.Task) != "") {
-			return true
-		}
-	}
-	return false
-}
+// else wrote: it was opened on a turn that read some.
+func (c *core) threadExternal(s Thread) bool { return s.Tainted != "" }
 
 // srcThread is a memory a thread wrote: the decision of its close.
 const srcThread = "thread"
@@ -251,64 +239,4 @@ func (c *core) closeDecision(id int64) {
 	if err := c.mem.add(x, "thread"); err != nil {
 		log.Printf("thread %d: its decision: %v", id, err)
 	}
-}
-
-// intentionStepKey is the key of the deadline step an intention becomes.
-func intentionStepKey(id int64) string { return fmt.Sprintf("intention-%d", id) }
-
-// linkIntentionLocked makes an intention a deadline step of a thread, due
-// when it is; threadMu is held.
-func (c *core) linkIntentionLocked(ctx context.Context, id int64, it *Intention, by string) (stepSpec, error) {
-	sp := stepSpec{Key: intentionStepKey(it.ID), Title: truncate(oneLine(it.Text), taskTitleMax), Kind: stepDeadline, Intention: it.ID}
-	have, _ := c.steps(id)
-	specs := []stepSpec{sp}
-	if err := checkPlan(have, specs); err != nil {
-		return sp, err
-	}
-	if err := c.insertSteps(id, specs, false); err != nil {
-		return sp, err
-	}
-	if it.Trust == trustExternal {
-		c.setStep(id, sp.Key, map[string]any{"tainted": taintIntention}) // its words are someone else's
-	}
-	c.logThread(id, by, fmt.Sprintf("Intention %d liée : « %s ».", it.ID, sp.Title))
-	c.advanceLocked(ctx, id)
-	return sp, nil
-}
-
-// followIntentions makes each open intention about a live
-// light thread a deadline step of it, once: a step it was (even dropped)
-// is never added again. It runs with the engine's pass.
-func (c *core) followIntentions(ctx context.Context) {
-	if c.mem == nil {
-		return
-	}
-	xs, err := c.mem.intentions(intentOpen, intentSnoozed)
-	if err != nil {
-		return
-	}
-	for _, x := range xs {
-		key := c.store.resolveAbout(aboutOf(x.About))
-		if key == "" {
-			continue
-		}
-		id, ok := c.liveThreadOf(key)
-		if !ok {
-			continue
-		}
-		c.followIntention(ctx, id, x)
-	}
-}
-
-func (c *core) followIntention(ctx context.Context, id int64, x *Intention) {
-	threadMu.Lock()
-	defer threadMu.Unlock()
-	s, err := c.thread(id)
-	if err != nil || s.led() || !s.active() {
-		return // a led thread's plan is the user's
-	}
-	if _, err := c.step(id, intentionStepKey(x.ID)); err == nil {
-		return
-	}
-	c.linkIntentionLocked(ctx, id, x, "engine") // refused (its limits): tried again at the next pass, quietly
 }

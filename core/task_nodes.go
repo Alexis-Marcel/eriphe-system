@@ -93,9 +93,11 @@ type nodeAppendIn struct {
 }
 
 type nodeOpenIn struct {
-	Title string `json:"title" jsonschema:"its name for the user, a few words in their language, no ids"`
-	Goal  string `json:"goal,omitempty" jsonschema:"what it is for, in one or two sentences; never shown to the user"`
-	Body  string `json:"body,omitempty" jsonschema:"its first body: markdown text and blocks"`
+	Title  string     `json:"title" jsonschema:"its name for the user, a few words in their language, no ids"`
+	Goal   string     `json:"goal,omitempty" jsonschema:"what it is for, in one or two sentences; never shown to the user. With steps, what must be true at the end: a fresh agent checks it once every step is accepted"`
+	Body   string     `json:"body,omitempty" jsonschema:"its first body: markdown text and blocks"`
+	Steps  []stepSpec `json:"steps,omitempty" jsonschema:"to cut its work in steps, each a child of it run by an agent: a key, a title, the keys of the steps it comes after, a self-contained prompt, an agent, resources and a contract. Eriphe starts each step once those it comes after are accepted, in parallel when it can, and accepts a step on its proof: its receipt says done and every check of its contract (a test, a command) passes"`
+	Budget int        `json:"budget_minutes,omitempty" jsonschema:"with steps: the minutes of running time the work may take, 60 by default"`
 }
 
 type itemNoteIn struct {
@@ -227,7 +229,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			})
 			return written(d), err
 		})
-	tool(s, "node_open", "Open a child of your node, for a part of the work: its title, its goal, and its first body. You write only your own node: the child is the user's and Eriphe's to follow.",
+	tool(s, "node_open", "Open a child of your node, for a part of the work: its title, its goal, and its first body; with steps, its work cut in steps, each a child of it that an agent runs, accepted by Eriphe on its proof. You write only your own node: the child is the user's and Eriphe's to follow, and you never start a task yourself.",
 		func(ctx context.Context, in nodeOpenIn) (map[string]any, error) {
 			if err := c.nodeParent(w.node); err != nil {
 				return nil, err
@@ -244,6 +246,11 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if err != nil {
 				return nil, err
 			}
+			if len(in.Steps) > 0 { // checked before the node is made: refused, nothing is
+				if err := c.checkSteps(in.Steps, in.Budget, c.taskTaint(w.task)); err != nil {
+					return nil, err
+				}
+			}
 			d, err := c.nodes.Create(nodestore.New{Title: strings.TrimSpace(in.Title), Goal: in.Goal, Body: in.Body, Parent: w.node,
 				External: tainted != "", Author: w.author})
 			if err != nil {
@@ -252,7 +259,16 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if err := c.externalSources(d, w.author); err != nil {
 				return nil, err
 			}
-			return map[string]any{"id": d.Node.Meta.ID, "title": d.Node.Meta.Title, "parent": w.node}, nil
+			out := map[string]any{"id": d.Node.Meta.ID, "title": d.Node.Meta.Title, "parent": w.node}
+			if len(in.Steps) > 0 {
+				ids, err := c.openSteps(ctx, d.Node.Meta.ID, in.Steps, in.Budget,
+					stepOpener{author: w.author, task: w.task, tainted: c.taskTaint(w.task)})
+				if err != nil {
+					return out, fmt.Errorf("node %s is open, but not its steps: %w", d.Node.Meta.ID, err)
+				}
+				out["steps"] = ids
+			}
+			return out, nil
 		})
 	tool(s, "item_note", "Note one item a source of your node lists (a mail, an event), by the source's name and the item's id: what the user should know of it and a state (act, look, info, none, done). The same item noted again replaces it; no note nor state takes it away. Written after reading external content, it is marked so.",
 		func(ctx context.Context, in itemNoteIn) (map[string]any, error) {

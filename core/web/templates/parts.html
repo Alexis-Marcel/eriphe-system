@@ -366,7 +366,6 @@ ask it, in the conversation, rather than a form. */}}
 {{define "ask"}}<p class="ask">{{template "i-chat"}}<span>{{t .}}</span> <a href="/conversation">{{t "ask.go"}}</a></p>{{end}}
 
 {{/* One mark per step, in the plan's order, coloured by its status. */}}
-{{define "thread-strip"}}<span class="thread-strip" aria-hidden="true">{{range .}}<i class="st-{{.}}"></i>{{end}}</span>{{end}}
 
 {{/* The threads running, on top of the tasks panel (parts.html). */}}
 {{define "side-threads"}}{{if .}}
@@ -376,10 +375,8 @@ ask it, in the conversation, rather than a form. */}}
     <article class="card thread-card{{if .Waits}} needs-you{{end}}">
       <div class="card-top">
         <span class="chip chip-thread-{{.Look}}"><span class="pulse" aria-hidden="true"></span>{{if .Waits}}{{t "threads.waits"}}{{else}}{{t (printf "thread.state.%s" .Look)}}{{end}}</span>
-        {{if .Total}}<span class="muted small">{{tf "threads.progress" .Done .Total}}</span>{{end}}
       </div>
       <h3><a class="stretched" href="/espace?open=thread-{{.ID}}">{{.Title}}</a></h3>
-      {{template "thread-strip" .Progress}}
     </article>
   </li>{{end}}</ul>
 </section>

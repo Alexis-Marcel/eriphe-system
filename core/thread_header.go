@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
 // The head of a thread's surface (#553, #611): opening a thread tells in
@@ -152,16 +150,12 @@ func threadWaitsUser(steps []threadSurfaceStep, asks []int64, linked []string) b
 // threadStateLine is the thread's state under its goal, when it says more
 // than the header: not for a light thread the brain holds that is open.
 func (c *core) threadStateLine(s Thread, lang string) string {
-	if s.active() && !s.led() && s.State == threadOpen {
+	if s.active() && s.State == threadOpen {
 		return ""
 	}
 	state := tr(lang, "thread.state."+s.Look())
 	if s.active() {
-		if s.led() && s.Lead != "" {
-			state += threadExternalSep + tr(lang, "thread.surface.lead")
-		} else {
-			state += threadExternalSep + tr(lang, "thread.surface.brain")
-		}
+		state += threadExternalSep + tr(lang, "thread.surface.brain")
 	}
 	return state
 }
@@ -310,40 +304,7 @@ func (c *core) threadYours(in *surfaceIn, out *threadComps, s Thread, steps []th
 		kind, _, _ := parseProposalRef(ref)
 		in.Weight = max(in.Weight, queueSurfaceWeight(cardWeight(kind)))
 	}
-	for _, id := range asks {
-		out.add(comp{"id": "thread_ask_" + strconv.FormatInt(id, 10), "component": "Proposal", "proposalId": proposalRef(cardThread, id)})
-	}
 	for i, ref := range linked {
 		out.add(comp{"id": "thread_linked_" + strconv.Itoa(i), "component": "Proposal", "proposalId": ref})
-	}
-	for i, st := range steps {
-		n := strconv.Itoa(i)
-		switch {
-		case !st.Waits:
-		case st.Card != "":
-			out.add(comp{"id": "thread_card_" + n, "component": "Proposal", "proposalId": st.Card})
-		case len(st.Options) > 0:
-			// A choice: one button per option, each bound by code to it (chooseOf).
-			kids := []string{"thread_choice_" + n + "_label"}
-			out.inner(comp{"id": kids[0], "component": "Text", "text": st.Label})
-			for j, o := range st.Options {
-				id := "thread_choice_" + n + "_" + strconv.Itoa(j)
-				out.inner(comp{"id": id, "component": "Button", "label": o, "variant": "default",
-					"action": map[string]any{"event": map[string]any{"name": a2ui.ActionChoose,
-						"context": map[string]any{"thread": s.ID, "step": st.Key, "option": o}}}})
-				kids = append(kids, id)
-			}
-			out.add(comp{"id": "thread_choice_" + n, "component": "Row", "align": "center", "children": kids})
-		case !st.Yours:
-			out.add(comp{"id": "thread_wait_" + n, "component": "Text", "text": st.Label})
-		default:
-			out.inner(
-				comp{"id": "thread_user_" + n + "_label", "component": "Text", "text": st.Label},
-				comp{"id": "thread_user_" + n + "_done", "component": "Button", "label": w("thread.surface.done"), "icon": "check", "variant": "primary",
-					"action": map[string]any{"event": map[string]any{"name": a2ui.ActionStepDone,
-						"context": map[string]any{"thread": s.ID, "step": st.Key}}}})
-			out.add(comp{"id": "thread_user_" + n, "component": "Row", "align": "center",
-				"children": []string{"thread_user_" + n + "_label", "thread_user_" + n + "_done"}})
-		}
 	}
 }

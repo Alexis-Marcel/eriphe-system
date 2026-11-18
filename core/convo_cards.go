@@ -249,8 +249,6 @@ func (c *core) proposalOf(kind string, id int64) proposal {
 		return c.taskStartProposal(p) // task_start.go
 	case cardAccess:
 		return c.accessProposal(p) // access_card.go
-	case cardThread:
-		return c.threadProposal(p) // thread_engine.go
 	case cardSkill:
 		return c.skillProposal(p) // skill_write.go
 	case cardRunCalls:
@@ -355,9 +353,6 @@ func (c *core) pendingProposals() []proposal {
 	for _, id := range c.proposedAccess() {
 		add(cardAccess, id)
 	}
-	for _, id := range c.proposedThreadAsks() {
-		add(cardThread, id)
-	}
 	if rows, err := c.store.db.Query(`SELECT rowid FROM skills WHERE pending != '' AND source = ?`, skillFromEriphe); err == nil {
 		var ids []int64
 		for rows.Next() {
@@ -433,8 +428,6 @@ func (c *core) decideProposal(ctx context.Context, kind string, id int64, approv
 		return c.decideTaskStart(id, approve)
 	case cardAccess:
 		return c.decideAccess(ctx, id, approve)
-	case cardThread:
-		return c.decideThreadAsk(ctx, id, approve)
 	case cardSkill:
 		return c.decideSkill(id, approve)
 	case cardRunCalls:
@@ -467,8 +460,6 @@ func (c *core) cardProposed(kind string, id int64) {
 	switch kind {
 	case cardRunCalls:
 		inherit, source = nil, "" // a skill's run: its own (cardAbout)
-	case cardThread:
-		source = "" // a thread's ask: its step shows it
 	}
 	c.cardProposedBy(kind, id, inherit, source)
 }
@@ -478,7 +469,7 @@ func (c *core) cardProposed(kind string, id int64) {
 // thread, or by a task step of one, shows in its timeline by the code.
 func (c *core) cardProposedBy(kind string, id int64, inherit func() string, source string) {
 	if source != "" {
-		c.cardRaisedFor(source, proposalRef(kind, id)) // thread_steps.go
+		c.cardRaisedFor(source, proposalRef(kind, id)) // thread_light.go
 	}
 	p := c.proposalOf(kind, id)
 	if !p.Pending {
@@ -567,7 +558,7 @@ func (c *core) attachTurnCards(seq int) {
 // the task waits on them, so the offer's quiet hours are not for them. One
 // whose task stopped meanwhile stays out of the conversation.
 func (c *core) claimBlockingCards() {
-	xs, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind IN (?, ?, ?)`, cardPending, cardTaskStart, cardAccess, cardThread)
+	xs, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind IN (?, ?)`, cardPending, cardTaskStart, cardAccess)
 	if err != nil {
 		return
 	}

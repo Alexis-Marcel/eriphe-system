@@ -73,6 +73,17 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest, held bool) error {
 	if c.nodes == nil {
 		return nil
 	}
+	state := nodestore.Running
+	if held {
+		state = nodestore.Waiting
+	}
+	if r.inNode != "" { // a step's task works in the step's node (node_steps.go)
+		if _, err := c.store.db.Exec(`INSERT INTO task_nodes (task, node) VALUES (?, ?)`, t.ID, r.inNode); err != nil {
+			return err
+		}
+		c.nodes.SetState(r.inNode, state)
+		return nil
+	}
 	neutral := fmt.Sprintf(tr(c.userLang(), "tasknode.title"), t.ID)
 	title := t.Title
 	if title == "" {
@@ -106,10 +117,6 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest, held bool) error {
 	if _, err := c.store.db.Exec(`INSERT INTO task_nodes (task, node) VALUES (?, ?)`, t.ID, id); err != nil {
 		return err
 	}
-	state := nodestore.Running
-	if held {
-		state = nodestore.Waiting
-	}
 	c.nodes.SetState(id, state)
 	return nil
 }
@@ -128,6 +135,9 @@ func (c *core) taskNodeState(task, state string) {
 	id := c.taskNode(task)
 	if id == "" || c.nodes == nil {
 		return
+	}
+	if st, ok := c.nodeStep(id); ok && (st.Task != task || state != stateWaitingPermission && state != stateRunning && state != statePending) {
+		return // a step's node: its engine says where it stands (node_steps.go)
 	}
 	var to string
 	switch state {

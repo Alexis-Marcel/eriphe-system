@@ -333,9 +333,6 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	ctx, cancel := context.WithTimeout(context.Background(), approvedCallTimeout)
 	defer cancel()
 	name, _, _ := strings.Cut(a.Call, " ")
-	if c.runCallStep(ctx, a, name) {
-		return // a thread's step: its thread hears of it (thread_steps.go)
-	}
 	if a.Run != 0 {
 		text, _ := c.trackedCall(ctx, a, name)
 		c.runCallDone(a, text) // a run's: the brain is not told (skill_cards.go)
@@ -483,7 +480,7 @@ func (c *core) accessProposal(p proposal) proposal {
 		p.Outcome = cardRejected
 	case startProposed:
 		if a.Call != "" {
-			p.Pending = !c.callStepGone(p.ID) // it waits by itself, the brain may have restarted; a step's while its step waits
+			p.Pending = true // it waits by itself, the brain may have restarted
 			break
 		}
 		fallthrough
@@ -650,9 +647,6 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 		}
 		name, _, _ := strings.Cut(a.Call, " ")
 		c.store.logDecision(a.TaskID, a.Permission, name, nil, decideDeny, byUser, "refusé sur la carte")
-		if c.callStepRefused(a) {
-			return nil // a thread's step: its thread hears of it (thread_steps.go)
-		}
 		if a.Run != 0 {
 			c.runCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name))
 			return nil
@@ -785,7 +779,6 @@ func (c *core) accessDecidedTold(id int64, approve bool) {
 	if approve {
 		word = "accepté"
 	}
-	thread, _ := c.threadOfTask(a.TaskID) // its step's thread's (thread_talk.go)
-	c.store.addThreadMessage(roleEvent, fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), "", thread, false)
+	c.store.addThreadMessage(roleEvent, fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), "", 0, false)
 	c.ping()
 }

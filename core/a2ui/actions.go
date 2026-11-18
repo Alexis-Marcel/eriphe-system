@@ -27,17 +27,10 @@ import (
 //     surface: its child's row, a child's crumb back to its parent. The
 //     page opens that surface as it opens a tile; nothing reaches the
 //     brain.
-//   - stepDone: the user did a step of a thread that is theirs ("C'est
-//     fait"), {"thread": <id>, "step": "<key>"}. Only code places it, on
-//     the thread's own surface: an author never writes one.
 //   - tidy: « Ranger », the user puts an ended thread away, {"thread":
 //     <id>}. Only code places it, on the thread's own surface.
-//   - choose: the user picks an option of a thread's choice step,
-//     {"thread": <id>, "step": "<key>", "option": "<option>"}. Only code
-//     places it, one button per option, on the thread's own surface.
-//   - control: the user pauses, resumes or stops a thread that runs,
-//     {"thread": <id>, "do": "pause"|"resume"|"stop"}. Only code places
-//     it, on the thread's own surface.
+//   - control: the user stops a thread, {"thread": <id>, "do": "stop"}.
+//     Only code places it, on the thread's own surface.
 //   - offer: the user takes an action offered on an item of a thread, or
 //     on a group of them, {"thread": <id>, "source": "<name>", "item":
 //     "<id>" or "state": "<state>", "offer": "<key>"}: a card is made for
@@ -56,25 +49,21 @@ import (
 // Any other name, and any action that is not an event (a function call),
 // is refused. No action calls a tool that writes.
 const (
-	ActionAsk      = "ask"
-	ActionAnswer   = "answer"
-	ActionStepDone = "stepDone"
-	ActionTidy     = "tidy"
-	ActionChoose   = "choose"
-	ActionControl  = "control"
-	ActionOffer    = "offer"
-	ActionMark     = "mark"
-	ActionOpen     = "open"
-	ActionBack     = "back"
-	ActionExpand   = "expand"
-	ActionTab      = "tab"
+	ActionAsk     = "ask"
+	ActionAnswer  = "answer"
+	ActionTidy    = "tidy"
+	ActionControl = "control"
+	ActionOffer   = "offer"
+	ActionMark    = "mark"
+	ActionOpen    = "open"
+	ActionBack    = "back"
+	ActionExpand  = "expand"
+	ActionTab     = "tab"
 
 	// The kinds of action.
 	KindAsk     = "ask"
 	KindAnswer  = "answer"
-	KindStep    = "step"
 	KindTidy    = "tidy"
-	KindChoose  = "choose"
 	KindControl = "control"
 	KindOffer   = "offer"
 	KindMark    = "mark"
@@ -99,7 +88,7 @@ func MarkIDOK(s string) bool { return markIDRe.MatchString(s) }
 // LocalActions are the names done in the page.
 var LocalActions = []string{ActionOpen, ActionBack, ActionExpand, ActionTab}
 
-// ActionKind is the kind of an action name: KindAsk, KindAnswer, KindStep, KindTidy,
+// ActionKind is the kind of an action name: KindAsk, KindAnswer, KindTidy,
 // KindLocal, or "" for a name outside the grammar.
 func ActionKind(name string) string {
 	switch name {
@@ -107,12 +96,8 @@ func ActionKind(name string) string {
 		return KindAsk
 	case ActionAnswer:
 		return KindAnswer
-	case ActionStepDone:
-		return KindStep
 	case ActionTidy:
 		return KindTidy
-	case ActionChoose:
-		return KindChoose
 	case ActionControl:
 		return KindControl
 	case ActionOffer:
@@ -187,11 +172,9 @@ func CheckActions(surfaceID string, thread int64, components json.RawMessage) []
 			fail(at+"/name", "offer is sent by an Offers component only, bound to the offers code puts in a thread's data: write an Offers")
 		case KindAnswer:
 			fail(at+"/name", "answer is sent by a Proposal component only, for the proposal it shows: write a Proposal")
-		case KindStep:
-			fail(at+"/name", "stepDone is placed by code only, on a thread's own surface, for a step the user does")
 		case KindTidy:
 			fail(at+"/name", "tidy is placed by code only, on an ended thread's own surface")
-		case KindChoose, KindControl:
+		case KindControl:
 			fail(at+"/name", name+" is placed by code only, on a thread's own surface")
 		default:
 			fail(at+"/name", "no action "+strconv.Quote(name)+": a button asks Eriphe (ask) or acts in the page ("+strings.Join(LocalActions, ", ")+")")

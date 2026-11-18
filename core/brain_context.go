@@ -175,7 +175,6 @@ func (p *packBuilder) lines(title string, lines []string) int {
 // The pack's state of things, before the messages.
 const (
 	packThreads       = 20 // open threads, the latest first: their summary is where each matter stands
-	packThreadSteps   = 8  // open steps named per thread
 	packThreadMax     = 1000
 	packStateMemories = 20 // decisions, people and facts: each
 	packDecisionDays  = 14 // decisions recorded since
@@ -296,47 +295,22 @@ func notShown(xs []*Memory, shown map[string]bool) []*Memory {
 	return slices.DeleteFunc(xs, func(x *Memory) bool { return shown[fmt.Sprintf("memory:%d", x.ID)] })
 }
 
-// threadLine is a thread in a line: its mode, state, alias, title,
-// goal, open steps and summary. One whose plan may carry what someone else
-// wrote is named, not quoted; so is the summary of one whose steps read
-// external content.
+// threadLine is a thread in a line: its state, alias, title, goal and
+// summary. One whose words may carry what someone else wrote is named,
+// not quoted.
 func (c *core) threadLine(s Thread) string {
 	if s.Tainted != "" {
-		return fmt.Sprintf("- fil %d [%s, %s] : son plan peut porter ce qu'un autre a écrit (%s) : read_thread le relit",
-			s.ID, s.Mode, s.Look(), packQuote(s.Tainted))
+		return fmt.Sprintf("- fil %d [%s] : il peut porter ce qu'un autre a écrit (%s) : read_thread le relit",
+			s.ID, s.Look(), packQuote(s.Tainted))
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "- fil %d [%s, %s", s.ID, s.Mode, s.Look())
+	fmt.Fprintf(&b, "- fil %d [%s", s.ID, s.Look())
 	if s.Alias != "" {
 		b.WriteString(", " + packQuote(s.Alias))
 	}
 	fmt.Fprintf(&b, ", depuis le %s] « %s » ; but : %s", s.Created.Local().Format("01-02"), packQuote(s.Title), packQuote(s.Goal))
-	if s.DoneWhen != "" {
-		b.WriteString(" ; fini quand : " + packQuote(s.DoneWhen))
-	}
-	steps, _ := c.steps(s.ID)
-	var open []string
-	external := false
-	for _, st := range steps {
-		if st.Tainted != "" || (st.Task != "" && c.taskResultTaint(st.Task) != "") {
-			external = true
-		}
-		if !st.done() {
-			open = append(open, fmt.Sprintf("%s « %s » (%s, %s)", st.Key, packQuote(st.Title), st.Kind, st.Status))
-		}
-	}
-	if len(open) > packThreadSteps {
-		open = append(open[:packThreadSteps], fmt.Sprintf("et %d autres", len(open)-packThreadSteps))
-	}
-	if len(open) > 0 {
-		b.WriteString(" ; étapes ouvertes : " + strings.Join(open, ", "))
-	}
 	if sum := strings.TrimSpace(s.Summary); sum != "" {
-		if external {
-			b.WriteString(" ; résumé non cité : ses étapes ont lu un contenu extérieur (read_thread le relit, ce qui souille le tour)")
-		} else {
-			b.WriteString(" ; résumé : " + packQuote(sum))
-		}
+		b.WriteString(" ; résumé : " + packQuote(sum))
 	}
 	return b.String()
 }

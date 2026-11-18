@@ -918,12 +918,8 @@ func (w *web) handleLang(rw http.ResponseWriter, r *http.Request, s *session) {
 // threadRow is a thread in the tasks panel.
 type threadRow struct {
 	Thread
-	Steps    []Step
-	Waits    bool // something waits for the user
-	Done     int
-	Total    int
-	Updated  time.Time
-	Progress []string // each step's status, in order, for its strip
+	Waits   bool // a card linked to it waits for the user
+	Updated time.Time
 }
 
 func (w *web) threadRows(activeOnly bool, n int) []threadRow {
@@ -933,45 +929,12 @@ func (w *web) threadRows(activeOnly bool, n int) []threadRow {
 	}
 	out := make([]threadRow, 0, len(ss))
 	for _, s := range ss {
-		steps, _ := w.c.steps(s.ID)
-		x := threadRow{Thread: s, Steps: steps, Updated: s.Created}
-		for _, st := range steps {
-			if st.Status == stepDropped {
-				continue
-			}
-			x.Total++
-			x.Progress = append(x.Progress, st.Status)
-			if st.Status == stepAccepted {
-				x.Done++
-			}
-			if (st.Kind == stepChoice || st.Kind == stepUser || st.Card != "") && st.Status == stepRunning {
-				x.Waits = true
-			}
-		}
-		if s.active() && len(w.c.threadAsksOf(s.ID)) > 0 {
-			x.Waits = true
-		}
+		x := threadRow{Thread: s, Updated: s.Created}
+		x.Waits = s.active() && len(w.c.linkedWaiting(s.ID, nil)) > 0
 		if l := w.c.threadLog(s.ID, 1); len(l) > 0 {
 			x.Updated = l[0].At
 		}
 		out = append(out, x)
-	}
-	return out
-}
-
-// threadAsksOf are the asks of a thread that wait.
-func (c *core) threadAsksOf(id int64) []int64 {
-	rows, err := c.store.db.Query(`SELECT id FROM thread_asks WHERE thread = ? AND state = ? ORDER BY id`, id, askPending)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []int64
-	for rows.Next() {
-		var n int64
-		if rows.Scan(&n) == nil {
-			out = append(out, n)
-		}
 	}
 	return out
 }

@@ -153,14 +153,6 @@ func registerBrainSurfaceTools(s *mcp.Server, c *core) {
 	}, nil)
 }
 
-// leadSurfaceTools are a thread's lead's: as lead:<thread>.
-func (c *core) registerLeadSurfaceTools(s *mcp.Server, a Assistant) {
-	author := "lead:" + strconv.FormatInt(leadThread(a), 10)
-	c.registerSurfaceTools(s, func() surfaceCaller {
-		return surfaceCaller{author: author, taint: func() []string { return c.assistantTaint(a) }}
-	}, nil)
-}
-
 // taskWorkspaceServer is eriphe-workspace as a task sees it: the tools its
 // grant covers.
 func (c *core) taskWorkspaceServer(t *TaskRow, grant []string) *mcp.Server {

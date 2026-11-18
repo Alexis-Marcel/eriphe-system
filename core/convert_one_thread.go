@@ -546,8 +546,8 @@ func (c *core) convertOneThreadMem(now time.Time) (n oneThreadMemCounts, err err
 		}
 		title := oneThreadTitle(tx, k)
 		s := matters[k]
-		res, err := tx.Exec(`INSERT INTO threads (title, goal, mode, state, ends, created, started, ended, tidied) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			title, title, modeLight, threadDone, endsGoal, s.first, s.first, s.last, now.Unix())
+		res, err := tx.Exec(`INSERT INTO threads (title, goal, state, ends, created, started, ended, tidied) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			title, title, threadDone, endsGoal, s.first, s.first, s.last, now.Unix())
 		if err != nil {
 			return n, err
 		}

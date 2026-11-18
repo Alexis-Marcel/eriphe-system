@@ -231,8 +231,8 @@ type skillManifest struct {
 	AllowedTools string        // shown, never honoured: Eriphe's permissions decide
 	Body         string        // the instructions, after the front matter
 	// Its trigger, as written (skill_triggers.go): when, every, model,
-	// tools, urgent, thread.
-	When, Every, Model, Tools, Urgent, Thread string
+	// tools, repos, urgent, thread.
+	When, Every, Model, Tools, Repos, Urgent, Thread string
 	Trigger                                   *skillTrigger
 }
 
@@ -295,7 +295,7 @@ func parseSkillMD(raw []byte) (skillManifest, error) {
 	}
 	m.Name, m.Description, m.AllowedTools = keys["name"], keys["description"], keys["allowed-tools"]
 	m.When, m.Every, m.Model, m.Tools, m.Urgent = keys["when"], keys["every"], keys["model"], keys["tools"], keys["urgent"]
-	m.Thread, m.Title = keys["thread"], strings.TrimSpace(keys["title"])
+	m.Thread, m.Title, m.Repos = keys["thread"], strings.TrimSpace(keys["title"]), keys["repos"]
 	switch {
 	case !skillName.MatchString(m.Name):
 		return m, skillErr("skills.err.name", m.Name)

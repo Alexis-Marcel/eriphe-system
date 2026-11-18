@@ -312,6 +312,9 @@ type runRequest struct {
 	// no card for what it is lent.
 	approvedInAdvance bool
 	taint             []string
+	// inNode: a step's task works in the step's node (node_steps.go),
+	// not in a node of its own.
+	inNode string
 	// byBrain: the brain started it in its turn (run_task), so the start's
 	// card goes with its message; any other start shows its card at once
 	// (task_start.go).
