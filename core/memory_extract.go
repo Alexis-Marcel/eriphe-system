@@ -795,6 +795,9 @@ func (c *core) memoryTick(ctx context.Context) {
 		}
 	}
 	c.memoryNight(mc, now)
+	// What is true changes with time too (a valid_to passed): the mirror
+	// follows, rewriting only what changed.
+	c.mem.mirrorSync()
 	c.intentionsTick()
 	if !c.extractionOn() || c.mem.activeRun() != nil {
 		return
@@ -891,8 +894,10 @@ func (c *core) extractBusyDay(ctx context.Context, mc MemoryConfig, now time.Tim
 	}
 }
 
-// backup copies the memory into dir (VACUUM INTO) with a JSONL export,
-// keeping the last keep days.
+// backup copies the memory into dir (VACUUM INTO) with a JSONL export
+// and its readable mirror (memoire-<day>.tar.gz), keeping the last keep
+// days: a forgotten memory stays in them that long, as in the database's
+// copies.
 func (m *memStore) backup(dir string, keep int) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -914,7 +919,24 @@ func (m *memStore) backup(dir string, keep int) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	for _, pattern := range []string{"memory-*.db", "memory-*.jsonl"} {
+	// The readable mirror, as written from this copy.
+	if m.mirror != nil {
+		if err := m.mirror.sync(m); err != nil {
+			return fmt.Errorf("mirror: %w", err)
+		}
+		f, err := os.OpenFile(filepath.Join(dir, "memoire-"+day+".tar.gz"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		if err := m.mirror.archive(f); err != nil {
+			f.Close()
+			return err
+		}
+		if err := f.Close(); err != nil {
+			return err
+		}
+	}
+	for _, pattern := range []string{"memory-*.db", "memory-*.jsonl", "memoire-*.tar.gz"} {
 		files, _ := filepath.Glob(filepath.Join(dir, pattern))
 		sort.Strings(files)
 		for len(files) > keep {

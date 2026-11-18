@@ -82,6 +82,10 @@ func main() {
 	} else {
 		c.useMemory(mem) // its abouts are kept by the names of core.db (names.go)
 		c.mem.owner = func() string { return c.conf().User }
+		// The readable mirror, outside git (memory_mirror.go), made again
+		// from memory.db at start.
+		c.mem.mirror = &memMirror{dir: cfg.memoirePath(), lang: c.userLang}
+		c.mem.mirrorSync()
 	}
 	// The graph's nodes, in their own repository (nodes.go).
 	if nodes, err := openNodes(cfg); err != nil {
