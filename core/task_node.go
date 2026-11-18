@@ -73,9 +73,10 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest, held bool) error {
 	if c.nodes == nil {
 		return nil
 	}
+	neutral := fmt.Sprintf(tr(c.userLang(), "tasknode.title"), t.ID)
 	title := t.Title
 	if title == "" {
-		title = "Tâche " + t.ID
+		title = neutral
 	}
 	goal := ""
 	if r.Contract != nil {
@@ -84,8 +85,20 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest, held bool) error {
 	if goal == "" {
 		goal, _, _ = strings.Cut(strings.TrimSpace(r.Prompt), "\n")
 	}
-	d, err := c.nodes.Create(nodestore.New{Title: truncate(oneLine(title), nodefile.TitleMax-1), Parent: strings.TrimSpace(r.Node),
-		Goal: truncate(oneLine(goal), taskNodeGoalMax), External: len(r.taint) > 0, Author: c.taskAuthor(t.ID)})
+	nw := nodestore.New{Title: truncate(oneLine(title), nodefile.TitleMax-1), Parent: strings.TrimSpace(r.Node),
+		Goal: truncate(oneLine(goal), taskNodeGoalMax), External: len(r.taint) > 0, Author: c.taskAuthor(t.ID)}
+	// A title or a goal the filter refuses (« Renouvelle le token: expiré »)
+	// does not stop the task: its node goes without the goal, then with a
+	// neutral title.
+	d, err := c.nodes.Create(nw)
+	if err != nil {
+		nw.Goal = ""
+		d, err = c.nodes.Create(nw)
+	}
+	if err != nil {
+		nw.Title = neutral
+		d, err = c.nodes.Create(nw)
+	}
 	if err != nil {
 		return fmt.Errorf("its node: %w", err)
 	}
@@ -174,6 +187,9 @@ func (c *core) fileTaskReport(task string, r *checkedReceipt) string {
 			break
 		}
 	}
+	if len(problems) == 0 && c.writeTaint(task) != "" {
+		c.markNodeExternal(id, author) // the report may carry someone else's words
+	}
 	d, err := c.nodes.Read(id, 0)
 	if err != nil {
 		return strings.Join(problems, " ; ")
@@ -252,16 +268,15 @@ func firstLine(text string) string {
 
 // checksLine says, in a task's trace, that Eriphe fixed its contract's
 // checks, and what it replied.
-func checksLine(checks []taskCheck, reply string) string {
+func checksLine(lang string, checks []taskCheck, reply string) string {
 	names := make([]string, 0, len(checks))
 	for _, k := range checks {
 		names = append(names, k.Name)
 	}
-	line := "Eriphe a corrigé les contrôles (" + strings.Join(names, ", ") + ")"
 	if reply = strings.TrimSpace(reply); reply != "" {
-		return line + " et a répondu : " + reply
+		return fmt.Sprintf(tr(lang, "tasknode.checksreply"), strings.Join(names, ", "), reply)
 	}
-	return line + "."
+	return fmt.Sprintf(tr(lang, "tasknode.checks"), strings.Join(names, ", "))
 }
 
 // answerTaint is why what the brain answers a task may carry what someone

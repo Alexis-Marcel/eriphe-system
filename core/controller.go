@@ -450,6 +450,10 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 	if err := c.store.insertTask(t); err != nil {
 		return nil, err
 	}
+	if len(r.taint) > 0 && c.store.get(taskTaintKey(t.ID)) == "" {
+		// Started on what someone else wrote: tainted from its start (task_taint.go).
+		c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(r.taint, ", "))
+	}
 	if r.Contract != nil {
 		if err := c.store.setContract(t.ID, r.Contract); err != nil {
 			return nil, err

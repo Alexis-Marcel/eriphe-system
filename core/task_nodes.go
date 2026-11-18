@@ -183,21 +183,21 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			var err error
 			switch {
 			case in.Block != "" && in.Old == "":
-				d, err = c.writeTaskNode(w.task, in.Expect, w.grant, func(n *nodefile.Node) ([]string, error) {
+				d, err = c.writeTaskNode(w.task, in.Expect, w.grant, func(n *nodefile.Node) error {
 					raw, err := json.Marshal(in.Value)
 					if err != nil {
-						return nil, err
+						return err
 					}
-					return []string{in.Block}, n.PutAuthorBlock(in.Block, raw, in.Before)
+					return n.PutAuthorBlock(in.Block, raw, in.Before)
 				})
 			case in.Old != "" && in.Block == "":
-				d, err = c.writeTaskNode(w.task, in.Expect, w.grant, func(n *nodefile.Node) ([]string, error) {
+				d, err = c.writeTaskNode(w.task, in.Expect, w.grant, func(n *nodefile.Node) error {
 					raw, _ := n.Bytes()
 					body := nodeBody(raw)
 					if strings.Count(body, in.Old) != 1 || strings.Count(n.Text(), in.Old) != 1 {
-						return nil, errors.New("old is not found once in the node's text: give a longer piece, or write a block with block")
+						return errors.New("old is not found once in the node's text: give a longer piece, or write a block with block")
 					}
-					return nil, n.AuthorBody(strings.Replace(body, in.Old, in.New, 1))
+					return n.AuthorBody(strings.Replace(body, in.Old, in.New, 1))
 				})
 			default:
 				err = errors.New("block and value, or old and new")
@@ -217,13 +217,13 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if err != nil {
 				return nil, err
 			}
-			d, err := c.writeTaskNode(w.task, cur.Version.Hash, w.grant, func(n *nodefile.Node) ([]string, error) {
+			d, err := c.writeTaskNode(w.task, cur.Version.Hash, w.grant, func(n *nodefile.Node) error {
 				raw, _ := n.Bytes()
 				body := strings.TrimRight(nodeBody(raw), "\n")
 				if body != "" {
 					body += "\n\n"
 				}
-				return nil, n.AuthorBody(body + text + "\n")
+				return n.AuthorBody(body + text + "\n")
 			})
 			return written(d), err
 		})
@@ -288,28 +288,33 @@ func written(d *nodestore.Doc) map[string]any {
 
 // writeTaskBody replaces a task's node's body.
 func (c *core) writeTaskBody(task, body, expect string, grant []string) (*nodestore.Doc, error) {
-	return c.writeTaskNode(task, expect, grant, func(n *nodefile.Node) ([]string, error) {
-		if err := n.AuthorBody(body); err != nil {
-			return nil, err
-		}
-		return blockNames(n), nil
-	})
+	return c.writeTaskNode(task, expect, grant, func(n *nodefile.Node) error { return n.AuthorBody(body) })
 }
 
 // writeTaskNode writes a task's node: fn changes it as the task's author
-// write, and names the blocks it wrote; they are checked (nodeGuard),
-// and marked external, with the node, when the task is tainted now, or
-// for a source of a server not trusted.
-func (c *core) writeTaskNode(task, expect string, grant []string, fn func(*nodefile.Node) ([]string, error)) (*nodestore.Doc, error) {
+// write. The blocks it wrote, new or changed, however it wrote them (a
+// block, or a fence in its text), are checked (nodeGuard), and marked
+// external, with the node, when the task is tainted now, or for a source
+// of a server not trusted.
+func (c *core) writeTaskNode(task, expect string, grant []string, fn func(*nodefile.Node) error) (*nodestore.Doc, error) {
 	id := c.taskNode(task)
 	if id == "" || c.nodes == nil {
 		return nil, errors.New("this task has no node")
 	}
 	tainted := c.writeTaint(task) != ""
 	return c.nodes.Change(id, strings.TrimSpace(expect), c.taskAuthor(task), func(n *nodefile.Node) error {
-		names, err := fn(n)
-		if err != nil {
+		was := map[string]string{}
+		for _, b := range n.Blocks() {
+			was[b.Name] = blockSig(b)
+		}
+		if err := fn(n); err != nil {
 			return err
+		}
+		var names []string
+		for _, b := range n.Blocks() {
+			if sig, ok := was[b.Name]; !ok || sig != blockSig(b) {
+				names = append(names, b.Name)
+			}
 		}
 		outside, err := c.nodeGuard(n, names, tainted, grant)
 		if err != nil {
@@ -452,6 +457,16 @@ func (c *core) untrustedSources(b *nodefile.Block) bool {
 // or one of its blocks.
 func nodeExternal(n *nodefile.Node) bool {
 	return n.Meta.External || slices.ContainsFunc(n.Blocks(), func(b *nodefile.Block) bool { return b.External })
+}
+
+// blockSig is what an author writes of a block, in one form: its
+// components, data and sources.
+func blockSig(b *nodefile.Block) string {
+	var comps, data any
+	json.Unmarshal(b.Components, &comps)
+	json.Unmarshal(b.Data, &data)
+	raw, _ := json.Marshal([]any{comps, data, b.Sources})
+	return string(raw)
 }
 
 // blockNames are a node's blocks, by name.

@@ -87,6 +87,7 @@ func turnsOf(events []EventRow) int {
 type turnOutcome struct {
 	receipt *checkedReceipt
 	hold    bool   // the task goes on (a retry, its receipt asked) or stops: nothing to tell yet
+	repair  bool   // held for its receipt only: its turn's work is done
 	note    string // for the brain: what eriphe-core did or will not do, in French
 }
 
@@ -123,5 +124,5 @@ func (c *core) settleTurn(t *TaskRow) turnOutcome {
 	c.store.setHarness(t.ID, map[string]any{"repairs": h.Repairs + 1, "repair_turn": turns})
 	c.store.updateTask(t.ID, map[string]any{"state": stateRunning})
 	c.bump()
-	return turnOutcome{receipt: cr, hold: true}
+	return turnOutcome{receipt: cr, hold: true, repair: true}
 }

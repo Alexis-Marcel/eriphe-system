@@ -33,6 +33,9 @@ func (c *core) notifyBrain(id, state string) {
 	if state == stateIdle {
 		if t, err := c.store.task(id); err == nil && t.Kind == "worker" {
 			if outcome = c.settleTurn(t); outcome.hold {
+				if outcome.repair {
+					c.fileTaskReport(id, nil) // its work is done: its report, before its receipt (task_node.go)
+				}
 				return // a retry, its receipt, or its stop first (task_harness.go)
 			}
 		}

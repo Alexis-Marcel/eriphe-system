@@ -1479,17 +1479,22 @@ permission), `idle` (its turn ended), `done` (it ended).
   hash of the version it was made on (`expect`; `node_append` writes over nothing). `node_open`
   opens a child of its node (title, goal, body), which it does not write. `item_note` notes an item
   a source of its node lists. `progress` adds one line to its trace. It never starts a task.
-- **Who writes** is code's: `skill:<name>` for a skill's run, `task:<id>` for another.
+- **Who writes** is code's: `skill:<name>` for a skill's run, `task:<id>` for another. Its calls
+  to `eriphe-nodes` never taint it: what it reads there taints by its own record. A node whose
+  title or goal the secret filter refuses is opened without the goal, then with a neutral title
+  (« Tâche <id> »): the task still starts.
 - **Taint**: a task tainted at start or by what it read (`taskTaint`, read at each call) writes
   external: code marks its node and the blocks it writes, in the same version; a child it opens is
   external; its item notes carry the taint. Reading an external node taints the task.
-- **Guards** nodefile does not hold: the actions' grammar (`a2ui.CheckActions`); written tainted, a
+- **Guards** nodefile does not hold, on every block a write adds or changes (a block, or a fence
+  written in its text): the actions' grammar (`a2ui.CheckActions`); written tainted, a
   block asks nothing (no `ask` button, no `Proposal`); no `Offers` (code's); a `Link` never opens a
   source's value; a block's source reads a tool or server the task is lent, or a monitor the user
   approved, and one of a server not trusted marks the block external.
 - **Its report**: at the end of each turn, the task's last message (its receipt left out) is filed
   by code, whole: in its node's trace (in several entries past 256 KiB), and as its doc when the
-  task wrote none. The same report is filed once. A report refused (a secret) or that cannot be the
+  task wrote none. A turn held only for its receipt files its report then. The same report is
+  filed once; a tainted task's report marks its node external. A report refused (a secret) or that cannot be the
   doc is said to the brain, which reads it whole with `task_status`.
 - **The brain is woken short**: the task's title, its receipt's verdict (status, checks passed or
   failed, what waits for approval), the report's first line, and its node. A thread's step tells

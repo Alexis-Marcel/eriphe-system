@@ -141,20 +141,20 @@ func newMCPServer(c *core) *mcp.Server {
 				if in.Checks != nil {
 					res, err := c.fixChecks(ctx, in.TaskID, in.Checks, in.Reply)
 					if err == nil {
-						c.traceTask(in.TaskID, byBrain, checksLine(in.Checks, in.Reply), c.answerTaint(in.TaskID))
+						c.traceTask(in.TaskID, byBrain, checksLine(c.userLang(), in.Checks, in.Reply), c.answerTaint(in.TaskID))
 					}
 					return res, err
 				}
 				res, err := c.answer(ctx, in.TaskID, "", in.Reply, nil, byBrain)
 				if err == nil {
-					c.traceTask(in.TaskID, byBrain, "Eriphe a répondu : "+strings.TrimSpace(in.Reply), c.answerTaint(in.TaskID))
+					c.traceTask(in.TaskID, byBrain, fmt.Sprintf(tr(c.userLang(), "tasknode.reply"), strings.TrimSpace(in.Reply)), c.answerTaint(in.TaskID))
 				}
 				return res, err
 			}
 			if len(in.Release) > 0 {
 				res, err := c.releaseTools(in.TaskID, in.Release)
 				if err == nil {
-					c.traceTask(in.TaskID, byBrain, fmt.Sprintf("Eriphe a demandé à %s, sur une carte, de débloquer %s : rien n'est débloqué avant sa réponse.", c.conf().User, strings.Join(in.Release, ", ")), "")
+					c.traceTask(in.TaskID, byBrain, fmt.Sprintf(tr(c.userLang(), "tasknode.release"), strings.Join(in.Release, ", ")), "")
 				}
 				if err != nil || in.Reply == "" && in.Checks == nil {
 					return map[string]string{"result": res}, err

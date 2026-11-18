@@ -524,6 +524,7 @@ func TestScanSecretsLinks(t *testing.T) {
 		"https://sam:hunter2@example.org/",
 		"key aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9 here",
 		"key aB3dE5gH7jK9mN1/pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9+ here",
+		"x://aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9",
 	} {
 		if why := scanSecrets(secret); why == "" {
 			t.Errorf("a secret passed: %q", secret)

@@ -345,3 +345,70 @@ func TestTraceParts(t *testing.T) {
 		}
 	}
 }
+
+// A block written as a fence in text (node_append, node_edit old/new) is
+// guarded and marked as one written with node_edit block.
+func TestTaskBlockInTextGuarded(t *testing.T) {
+	c := nodeCore(t)
+	task, id := startInNode(t, c, runRequest{Title: "Mail", Prompt: "x", taint: []string{"mail"}})
+	ask := "```eriphe:block send\n" + mustJSON(map[string]any{"components": map[string]any{"component": "Button", "label": "Envoyer",
+		"action": map[string]any{"event": map[string]any{"name": "ask", "context": map[string]any{"text": "Envoie."}}}}}) + "\n```"
+	if _, err := callNodes(t, c.core, task.ID, "node_append", map[string]any{"text": ask}); !strings.Contains(err, "external content") {
+		t.Fatalf("an ask appended tainted: %q", err)
+	}
+	read := mustNodes(t, c.core, task.ID, "node_append", map[string]any{"text": "Brouillon : RAS."})
+	if _, err := callNodes(t, c.core, task.ID, "node_edit", map[string]any{"expect": read["hash"], "old": "RAS.", "new": "RAS.\n\n" + ask}); !strings.Contains(err, "external content") {
+		t.Fatalf("an ask written tainted in text: %q", err)
+	}
+	note := "```eriphe:block note\n" + mustJSON(map[string]any{"components": map[string]any{"component": "Text", "text": "Sam attend."}}) + "\n```"
+	mustNodes(t, c.core, task.ID, "node_append", map[string]any{"text": note})
+	if d, _ := c.nodes.Read(id, 0); d.Node.Block("note") == nil || !d.Node.Block("note").External {
+		t.Fatalf("a block appended tainted is not external:\n%s", d.Raw)
+	}
+}
+
+// A task that forgets its receipt: its report is filed when its turn
+// ends, before the receipt asked; the receipt alone files nothing more.
+func TestTaskReportBeforeItsReceipt(t *testing.T) {
+	c := nodeCore(t)
+	task, id := startInNode(t, c, runRequest{Title: "Recherche", Prompt: "Cherche."})
+	report := "Trouvé : le cache.\n\n" + strings.Repeat("Détail. ", 2000)
+	idleTask(t, c.core, task.ID, ev(1, "text", map[string]any{"text": report}), ev(2, "turn_end", map[string]any{"subtype": "success"}))
+	if items, _ := c.store.inbox(task.ID); len(items) != 1 || items[0].Data["text"] != receiptRepair {
+		t.Fatalf("no receipt asked: %+v", items)
+	}
+	d, _ := c.nodes.Read(id, 0)
+	if strings.TrimSpace(d.Node.Text()) != strings.TrimSpace(report) {
+		t.Fatalf("the report is not its doc: %q", truncate(d.Node.Text(), 80))
+	}
+	before, _ := c.nodes.Trace(id)
+	idleTask(t, c.core, task.ID, ev(3, "text", map[string]any{"text": "```json\n" + `{"receipt": {"status": "done", "summary": "Trouvé"}}` + "\n```"}), ev(4, "turn_end", map[string]any{"subtype": "success"}))
+	if after, _ := c.nodes.Trace(id); string(after) != string(before) {
+		t.Fatalf("the receipt filed again:\n%s", after[len(before):])
+	}
+}
+
+// A task's calls to its node never taint it: what it reads there taints
+// by its own record.
+func TestNodeCallsDoNotTaint(t *testing.T) {
+	c := nodeCore(t)
+	task, _ := startInNode(t, c, runRequest{Title: "Propre", Prompt: "x"})
+	c.store.addEvents(task.ID, []EventRow{ev(1, "tool_use", map[string]any{"name": "mcp__eriphe-nodes__node_write", "input": map[string]any{"body": "x"}})})
+	if why := c.taskTaint(task.ID); len(why) != 0 {
+		t.Fatalf("tainted by its node: %v", why)
+	}
+}
+
+// A title or a goal the filter refuses does not stop the task: its node
+// goes without them.
+func TestTaskNodeRefusedGoal(t *testing.T) {
+	c := nodeCore(t)
+	_, id := startInNode(t, c, runRequest{Title: "Le jeton", Prompt: "Renouvelle le token: expiré-depuis-hier, puis dis-le."})
+	if d, _ := c.nodes.Read(id, 0); d.Node.Meta.Goal != "" || d.Node.Meta.Title != "Le jeton" {
+		t.Fatalf("node %+v", d.Node.Meta)
+	}
+	task, id := startInNode(t, c, runRequest{Title: "password: hunter2hunter2", Prompt: "x"})
+	if d, _ := c.nodes.Read(id, 0); d.Node.Meta.Title != "Tâche "+task.ID {
+		t.Fatalf("node %+v", d.Node.Meta)
+	}
+}

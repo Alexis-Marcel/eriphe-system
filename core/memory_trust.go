@@ -167,7 +167,7 @@ func withoutLinkPaths(text string) string {
 		if err != nil || u.Opaque != "" {
 			return raw
 		}
-		return " " + u.RawQuery + " " + u.Fragment + " "
+		return " " + u.Host + " " + u.RawQuery + " " + u.Fragment + " "
 	})
 }
 
@@ -394,6 +394,9 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 		}
 		switch {
 		case strings.HasPrefix(name, "mcp__eriphe-core__"):
+		case strings.HasPrefix(name, "mcp__"+nodesServer+"__"):
+			// The task's own node: what it reads there taints by its own
+			// record (task_nodes.go).
 		case slices.ContainsFunc(providedServers, func(s string) bool { return strings.HasPrefix(name, "mcp__"+s+"__") }):
 			// Eriphe's own (the workspace), as eriphe-core's: what it tells
 			// of a source's result or error taints by its own record
