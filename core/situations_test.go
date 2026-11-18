@@ -27,13 +27,13 @@ func TestSituationNow(t *testing.T) {
 	if h := c.turnHead(now); !strings.Contains(h, "[en ce moment]\n- Sam est en vacances à Lyon (jusqu'au 2026-11-01 23:59)") {
 		t.Fatalf("turn head %q", h)
 	}
-	task, err := c.startTask(context.Background(), "worker", runRequest{Prompt: "Trouve un restaurant pour ce soir"}, nodeTaskSpec{})
+	task, err := c.startTask(context.Background(), "worker", runRequest{Prompt: "Trouve un restaurant pour ce soir"}, deviceTaskSpec{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var raw string
 	c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, task.ID).Scan(&raw)
-	var spec nodeTaskSpec
+	var spec deviceTaskSpec
 	json.Unmarshal([]byte(raw), &spec)
 	if !strings.Contains(spec.AppendSystemPrompt, "vacances à Lyon") || !strings.Contains(spec.AppendSystemPrompt, "recall") {
 		t.Fatalf("task instructions %q", spec.AppendSystemPrompt)

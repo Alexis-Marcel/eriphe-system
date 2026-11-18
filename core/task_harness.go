@@ -87,6 +87,7 @@ func turnsOf(events []EventRow) int {
 type turnOutcome struct {
 	receipt *checkedReceipt
 	hold    bool   // the task goes on (a retry, its receipt asked) or stops: nothing to tell yet
+	repair  bool   // held for its receipt only: its turn's work is done
 	note    string // for the brain: what eriphe-core did or will not do, in French
 }
 
@@ -116,12 +117,12 @@ func (c *core) settleTurn(t *TaskRow) turnOutcome {
 	if h.Repairs >= maxReceiptRepairs || h.RepairTurn != 0 && turns == h.RepairTurn+1 {
 		return turnOutcome{receipt: cr} // asked already, or the answer to the last ask
 	}
-	// skip_checks: the node runs no check after this turn, which changes nothing.
+	// skip_checks: the device runs no check after this turn, which changes nothing.
 	if err := c.store.addInbox(t.ID, "message", map[string]any{"text": receiptRepair, "skip_checks": true}); err != nil {
 		return turnOutcome{receipt: cr}
 	}
 	c.store.setHarness(t.ID, map[string]any{"repairs": h.Repairs + 1, "repair_turn": turns})
 	c.store.updateTask(t.ID, map[string]any{"state": stateRunning})
 	c.bump()
-	return turnOutcome{receipt: cr, hold: true}
+	return turnOutcome{receipt: cr, hold: true, repair: true}
 }

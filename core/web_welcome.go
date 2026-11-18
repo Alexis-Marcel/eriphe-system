@@ -52,8 +52,8 @@ func (w *web) welcomeData(r *http.Request) welcomeView {
 		a := m.Agents[v.Agent]
 		v.Model = modelLabel(m.Providers[a.Provider].Kind, a.Runtime, a.Model)
 	}
-	if nodes, err := w.c.store.nodes(); err == nil {
-		for _, n := range nodes {
+	if devices, err := w.c.store.devices(); err == nil {
+		for _, n := range devices {
 			v.Devices++
 			if n.Online {
 				v.Machines++

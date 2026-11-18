@@ -47,8 +47,8 @@ func TestContractCertainlyWrong(t *testing.T) {
 	}
 	// run_task refuses it.
 	c := newCatalogCore(t)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	bad := &taskContract{Objective: "x", Checks: []taskCheck{{Name: "build", Run: "go build", Dir: "/work/repo"}}}
 	if _, err := c.runTask(context.Background(), runRequest{Prompt: "x", Contract: bad}); err == nil || !strings.Contains(err.Error(), "no repository is lent") {
 		t.Errorf("run_task: %v", err)
@@ -70,12 +70,12 @@ func configTurn(seq int) []EventRow {
 // A check that could not run is the contract's fault: twice the same way,
 // the task is not stopped, the agent is not blamed, and the brain is told
 // the exact reason and how to fix it. Once fixed, the checks go to the
-// node with the next turn.
+// device with the next turn.
 func TestConfigFailureGoesToBrain(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.setContract("t-1", &taskContract{Objective: "x", Verify: "auto", Checks: []taskCheck{{Name: "build", Run: "go build ./...", Dir: "repo", Timeout: 300}}})
-	c.store.setSpec("t-1", nodeTaskSpec{Runtime: "claude-code", Repo: "owner/repo", Checks: []taskCheck{{Name: "build", Run: "go build ./...", Dir: "repo"}}})
+	c.store.setSpec("t-1", deviceTaskSpec{Runtime: "claude-code", Repo: "owner/repo", Checks: []taskCheck{{Name: "build", Run: "go build ./...", Dir: "repo"}}})
 	idleTask(t, c, "t-1", configTurn(1)...)
 	for round := range 2 {
 		h := c.store.harness("t-1")
@@ -149,21 +149,21 @@ func TestRealCheckFailureTwiceStops(t *testing.T) {
 }
 
 // The brain hears what became of a stopped task's unpushed commits:
-// pushed to its branch, or kept on the node; even when it stopped the task
+// pushed to its branch, or kept on the device; even when it stopped the task
 // itself, if they were kept.
 func TestStoppedWorkNote(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped, Kind: "worker"})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped, Kind: "worker"})
 	c.store.addEvents("t-1", []EventRow{ev(1, "work", map[string]any{"commits": 2, "branch": "eriphe/fix", "pushed": true})})
 	c.notifyBrain("t-1", stateStopped)
 	if msg := lastEvent(t, c); !strings.Contains(msg, "poussés sur la branche eriphe/fix") {
 		t.Errorf("brain event %q", msg)
 	}
-	c.store.insertTask(&TaskRow{ID: "t-2", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped, Kind: "worker"})
+	c.store.insertTask(&TaskRow{ID: "t-2", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped, Kind: "worker"})
 	c.store.set("brain_stopped:t-2", "1")
 	c.store.addEvents("t-2", []EventRow{ev(1, "work", map[string]any{"commits": 1, "branch": "eriphe/fix", "kept": "kept/t-2", "reason": "the push was not possible: denied"})})
 	c.notifyBrain("t-2", stateStopped)
-	if msg := lastEvent(t, c); !strings.Contains(msg, "t-2") || !strings.Contains(msg, "gardé sur le nœud, dans kept/t-2") || !strings.Contains(msg, "denied") {
+	if msg := lastEvent(t, c); !strings.Contains(msg, "t-2") || !strings.Contains(msg, "gardé sur l'appareil, dans kept/t-2") || !strings.Contains(msg, "denied") {
 		t.Errorf("brain event %q", msg)
 	}
 }

@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// serveFiles is the fake node's files of its shared folders: it holds
-// each call to the folder as the node does (no path out, nothing hidden),
+// serveFiles is the fake device's files of its shared folders: it holds
+// each call to the folder as the device does (no path out, nothing hidden),
 // in words of its own.
 func (f *fakeShares) serveFiles(w http.ResponseWriter, r *http.Request) {
 	var req folderFilesReq
@@ -78,7 +79,7 @@ func (f *fakeShares) serveFiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// writes are the changes the fake node was asked.
+// writes are the changes the fake device was asked.
 func (f *fakeShares) writes() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -107,12 +108,12 @@ func folderFilesCore(t *testing.T) (*core, *fakeShares) {
 	c.pool.run(ctx)
 	waitStatus(t, c.pool.get(foldersServer), statusReady)
 	setBrain(c, &BrainConfig{})
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "pc", Runtime: "claude-code", State: stateWaitingPermission})
 	setBrainTask(c, "b-1")
 	return c, shares
 }
 
-// callFolders calls one of its tools as code does (a surface, a card's yes).
+// callFolders calls one of its tools as code does (a block's source, a card's yes).
 func callFolders(t *testing.T, c *core, tool string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
 	raw, _ := json.Marshal(args)
@@ -157,7 +158,7 @@ func TestFoldersToolReads(t *testing.T) {
 		t.Fatalf("list_folders: %s", s)
 	}
 	// The user's own folder taints neither a task nor the brain's turn.
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "pc", State: stateRunning})
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "pc", State: stateRunning})
 	c.calledCatalog("t-1", foldersServer, "read_file")
 	c.calledCatalog("b-1", foldersServer, "read_file")
 	if why := c.store.get(taskTaintKey("t-1")); why != "" {
@@ -179,7 +180,7 @@ func TestFoldersToolReads(t *testing.T) {
 	}
 }
 
-// What the node refuses comes back in its words, never as a path: a path
+// What the device refuses comes back in its words, never as a path: a path
 // out of the folder, a hidden file.
 func TestFoldersToolStaysInTheFolder(t *testing.T) {
 	c, shares := folderFilesCore(t)
@@ -193,7 +194,7 @@ func TestFoldersToolStaysInTheFolder(t *testing.T) {
 			t.Errorf("write %s: %s", p, resultText(res))
 		}
 	}
-	if w := shares.writes(); len(w) != 4 { // asked, and refused by the node
+	if w := shares.writes(); len(w) != 4 { // asked, and refused by the device
 		t.Errorf("writes %v", w)
 	}
 }
@@ -282,7 +283,7 @@ func TestFoldersToolNever(t *testing.T) {
 	// Free on a turn that read external content asks.
 	c.setFolderCase("Clients", catChange, gridFree)
 	// A skill's run (not started by the user) asks a free write too.
-	run := &TaskRow{ID: "t-run", Kind: "worker", Node: "pc", State: stateRunning, Tools: foldersServer}
+	run := &TaskRow{ID: "t-run", Kind: "worker", Device: "pc", State: stateRunning, Tools: foldersServer}
 	c.store.insertTask(run)
 	if d, _ := c.decideTask(run, "mcp__eriphe-folders__write_file", map[string]any{"folder": "Clients", "path": "n.md", "content": "x"}); d != decideAsk {
 		t.Errorf("a free write of a run: %s", d)
@@ -296,27 +297,32 @@ func TestFoldersToolNever(t *testing.T) {
 	}
 }
 
-// A surface bound to a file: its text in the data, read again at once
-// after a change through the tools.
-func TestFoldersSurfaceSource(t *testing.T) {
+// A node's block bound to a file: its text in the block's data, read
+// again at once after a change through the tools.
+func TestFoldersNodeSource(t *testing.T) {
 	c, _ := folderFilesCore(t)
-	src := map[string]surfaceSource{"/note": {Tool: foldersServer + "/read_file", Args: map[string]any{"folder": "Clients", "path": "Projets/site.md"}}}
-	comps := json.RawMessage(`[{"id":"root","component":"Text","text":{"@path":"/note/text"}}]`)
-	s, errs, err := c.fixtureSurface("brain", surfaceIn{Title: "Site", Components: comps, Sources: src})
-	if err != nil || len(errs) > 0 {
-		t.Fatal(err, errs)
+	openGraph(t, c)
+	block := "```eriphe:block note\n" + `{"components": [{"id": "root", "component": "Text", "text": {"@path": "/note/text"}}],
+ "sources": {"note": {"tool": "` + foldersServer + `/read_file", "args": {"folder": "Clients", "path": "Projets/site.md"}}}}` + "\n```\n"
+	d, err := c.nodes.Create(nodestore.New{Title: "Site", Body: block, Author: byBrain})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(string(s.Data), "vendredi") || s.Tainted != "" {
-		t.Fatalf("surface %s tainted %q", s.Data, s.Tainted)
+	id := d.Node.Meta.ID
+	read := func() string {
+		r, _ := c.nodeValue(id, "note")
+		raw, _ := json.Marshal(r.Value)
+		return string(raw)
+	}
+	c.readNode(context.Background(), id, nil, time.Now())
+	if !strings.Contains(read(), "vendredi") {
+		t.Fatalf("read %s", read())
 	}
 	res := callFolders(t, c, "update_file", map[string]any{"folder": "Clients", "path": "Projets/site.md", "content": "# Site\nÉchéance : lundi\n"})
 	if res.IsError || !strings.Contains(resultText(res), `- Échéance : vendredi`) {
 		t.Fatalf("update_file: %s", resultText(res))
 	}
-	waitFor(t, func() bool {
-		got, err := c.surface(s.ID)
-		return err == nil && strings.Contains(string(got.Data), "lundi")
-	})
+	waitFor(t, func() bool { return strings.Contains(read(), "lundi") })
 }
 
 // No folder shared: nothing lent.

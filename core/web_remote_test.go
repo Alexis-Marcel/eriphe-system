@@ -83,11 +83,11 @@ func TestWebRemotePages(t *testing.T) {
 	f := h.fake()
 	f.set(func(f *fakeTailnet) {
 		f.st = running(false, h.clock.now().Add(180*24*time.Hour))
-		f.httpsURL = "https://login.tailscale.com/f/serve?node=abc"
+		f.httpsURL = "https://login.tailscale.com/f/serve?device=abc"
 	})
 	h.wait("consent", func(v remoteView) bool { return v.HTTPSURL != "" })
 	_, body, _ = tw.do("GET", "/settings/access/web", nil, nil)
-	if !strings.Contains(body, `href="https://login.tailscale.com/f/serve?node=abc"`) || !strings.Contains(body, "journaux publics des certificats") {
+	if !strings.Contains(body, `href="https://login.tailscale.com/f/serve?device=abc"`) || !strings.Contains(body, "journaux publics des certificats") {
 		t.Fatalf("https page:\n%s", body)
 	}
 

@@ -23,7 +23,7 @@ Eriphe is two programs:
 
 - **eriphe-core**, the brain and the workspace (`https://<address>:8443`), on one machine that
   stays on: a NAS, a server, a desktop that does not sleep.
-- **eriphe-node**, on every machine Eriphe's agents work on, eriphe-core's own included. A node
+- **eriphe-device**, on every machine Eriphe's agents work on, eriphe-core's own included. A device
   dials eriphe-core and needs no open port.
 
 ## Contents
@@ -55,15 +55,15 @@ Eriphe is two programs:
   amd64 or arm64, with `curl` and root (through `sudo`). Docker is installed if missing.
 - **macOS** 13.5 or later, Apple silicon or Intel. No Docker Desktop, no Homebrew. On Apple silicon
   with macOS 26 or later, Eriphe runs on the Mac itself with Apple's `container` (installed if
-  missing) and macOS asks for your password (for that package, and for the LaunchDaemon a node
+  missing) and macOS asks for your password (for that package, and for the LaunchDaemon a device
   joining another machine gets); elsewhere in a Lima VM (see [What it installs](#what-it-installs)).
 - **Windows** 10 21H2 or later, or 11, Home or Pro, with virtualization on in the firmware, and an
   administrator PowerShell. WSL is installed if missing.
 - A few GB of disk for the images and what tasks install, and an account with an AI provider: a
   Claude subscription is the simplest (or ChatGPT, or an API key).
 
-**What each machine downloads.** The installer pulls eriphe-node (and eriphe-core in core mode)
-and the base image tasks start from, `eriphe-base` (114 MB). Then each node downloads, in the
+**What each machine downloads.** The installer pulls eriphe-device (and eriphe-core in core mode)
+and the base image tasks start from, `eriphe-base` (114 MB). Then each device downloads, in the
 background, the agents eriphe-core has configured, and only those: Claude Code 127 MB, Codex 112
 MB, OpenCode 77 MB (amd64; about the same on arm64). With Claude Code alone, 241 MB for the tasks
 instead of 633 MB with the former `eriphe-worker`. What a task installs (apt packages, Python and
@@ -71,7 +71,7 @@ npm packages) is kept in the machine's cache for the next one ([worker/README.md
 
 ## 1. The first machine
 
-The first machine runs eriphe-core, with a node of its own (core mode).
+The first machine runs eriphe-core, with a device of its own (core mode).
 
 Linux or macOS:
 
@@ -110,7 +110,7 @@ Good to know: to connect your other computers, open Réglages ›
 Appareils › Connecter un appareil (Settings › Devices › Connect a
 device) in your browser.
 
-Logs: docker logs eriphe-core, docker logs eriphe-node
+Logs: docker logs eriphe-core, docker logs eriphe-device
 ```
 
 The workspace speaks the browser's language (French, or English for any other), so the installers
@@ -145,7 +145,7 @@ The installers show only that: a title, short steps, the outcome, what is good t
 the logs are. A password (`sudo`, macOS's) is asked once, after a sentence saying why. Everything
 else, the output of each command included, goes to the install's log: `~/.eriphe/install.log` on a
 Mac, `/var/log/eriphe-install.log` on Linux (`~/.eriphe-install.log` without root),
-`C:\ProgramData\eriphe-node\install.log` on Windows (readable by administrators and SYSTEM
+`C:\ProgramData\eriphe-device\install.log` on Windows (readable by administrators and SYSTEM
 only). When something fails, the installer says what in a sentence, what to do, and points at that
 log; the exit code is 1. On Windows in core mode, the installer waits up to three minutes for the
 PC's own device to start after eriphe-core; on a slow PC it may still be starting then, and the
@@ -174,9 +174,9 @@ on Synology for instance `/volume1/docker/eriphe`). On Unraid, the template `unr
 
 This container is the **launcher** (`install/eriphe-launcher`). It makes and keeps running the same
 containers as `install.sh` on a Linux host, with `install.sh`'s own functions: `eriphe-core` (no
-Docker access), `eriphe-node` (no Docker access either: it asks the engine), `eriphe-engine`, and
+Docker access), `eriphe-device` (no Docker access either: it asks the engine), `eriphe-engine`, and
 the networks `eriphe-system`, `eriphe-tasks`, `eriphe-docker` (see [What it
-installs](#what-it-installs)). Core and node stay separate containers. The launcher itself listens on
+installs](#what-it-installs)). Core and device stay separate containers. The launcher itself listens on
 no port, is on no network of Eriphe's (tasks cannot reach it), and runs nothing else: it starts
 them, then waits for update requests. It does not even need a network of its own (`--network
 none` works).
@@ -189,21 +189,21 @@ none` works).
   an update has no capability at all, no network, a read-only root. Without these flags it works
   the same, with more than it needs.
 - **Data.** Everything lives in the folder mounted at `/data`: `core/` (eriphe-core's data, owned
-  by UID 1993), `node/` (the node's root, `node.json` its identity), `launcher/` (the compose
+  by UID 1993), `device/` (the device's root, `device.json` its identity), `launcher/` (the compose
   project, `install.conf`, the updater, `folders`: the folders shared), `update/` (the updater's
   log and the previous versions).
   The other containers need the folder's path on the host for their bind mounts: the launcher reads
   it from its own container, through the socket (`docker inspect`, the source of `/data`). A named
   volume works too.
-- **First start.** It pulls the images, starts eriphe-core, joins its node to it (with the join
+- **First start.** It pulls the images, starts eriphe-core, joins its device to it (with the join
   token and the CA's hash eriphe-core gives), and its log (`docker logs eriphe`) ends as
   `install.sh`'s: the workspace's address and the setup code, then the `/welcome` wizard ([Open
   the workspace](#2-open-the-workspace)). Later starts pull only what is missing: a restart
   never updates anything.
 - **Updates.** The machine shows as self-updating in Settings → Devices ("Linux (Eriphe
-  container)"): its **Update** works as on Linux. eriphe-core and the node drop their request in
+  container)"): its **Update** works as on Linux. eriphe-core and the device drop their request in
   their data folders; the launcher's loop (every 5 s) runs `install.sh`'s updater on it (pull,
-  eriphe-core first and checked, then the node, the previous images back if a check fails, a node
+  eriphe-core first and checked, then the device, the previous images back if a check fails, a device
   never newer than eriphe-core), then updates **itself, last**: it pulls `eriphe` of the build the
   machine now runs (`0.9.0`, or `sha-<commit>` on edge), tags it under its own reference, and a
   short-lived container of the new image (`eriphe-launcher-swap`, no network) replaces the
@@ -213,30 +213,30 @@ none` works).
 - **Folders.** Nothing of the host is given to Eriphe until you share a folder, on the host:
   `docker exec eriphe eriphe share add /mnt/user/Documents` (the options of [Folders](#folders):
   `--read`, `--write`, `--copyable`, `--name`; also `list`, `remove`, `snapshots`, `restore`).
-  The launcher keeps the list (`launcher/folders`) and writes a copy of it for eriphe-node engine
-  (`proxy/binds`, a folder of the data the node never sees, mounted read-only into the engine
+  The launcher keeps the list (`launcher/folders`) and writes a copy of it for eriphe-device engine
+  (`proxy/binds`, a folder of the data the device never sees, mounted read-only into the engine
   only), which reads it again at each request and mounts folders from that list only
-  (`:ro` ones read-only only). eriphe-node mounts **no** shared folder: a task gets the folders it
+  (`:ro` ones read-only only). eriphe-device mounts **no** shared folder: a task gets the folders it
   is given from the Docker daemon when its container is made, each alone at its path, and what
-  the node does inside a folder (its checks before each lend, a snapshot before a task that may
+  the device does inside a folder (its checks before each lend, a snapshot before a task that may
   change it, a restore, handing back what a task wrote, its access checks) runs in a short-lived
   container of its own image given only that folder (and the snapshot's place in its data), with
-  no network, a read-only root and a task's three capabilities (node/README.md, Folder helpers).
+  no network, a read-only root and a task's three capabilities (device/README.md, Folder helpers).
   Syncthing sees only the folders that may be copied (`--copyable`), each at its path. Nothing
-  else of the host is mounted into them, not `/mnt/user`, nor Eriphe's own data: a node taken
+  else of the host is mounted into them, not `/mnt/user`, nor Eriphe's own data: a device taken
   over could not reach eriphe-core's memory, accounts or keys. Before anything sees a
   folder, the launcher refuses a hidden one, `appdata`, a system folder, Unraid's `system` and
   `domains`, Eriphe's data or a folder holding it or the Docker socket, and a path with a quote, a
-  `$`, a comma or a colon; then a short-lived container of the node's image (no network, no
-  capability but reading, the host's `/` read-only) runs the node's own checks on the host: no
-  symlink on the way, nothing sensitive or private in it or above it (node/README.md, Shared
-  folders). `share add` and `share remove` take effect at once and restart neither the node nor
+  `$`, a comma or a colon; then a short-lived container of the device's image (no network, no
+  capability but reading, the host's `/` read-only) runs the device's own checks on the host: no
+  symlink on the way, nothing sensitive or private in it or above it (device/README.md, Shared
+  folders). `share add` and `share remove` take effect at once and restart neither the device nor
   the engine, nor any task: the next task gets the folder, or no longer does. A task already at
-  work with a folder that is then unshared keeps it until it ends (eriphe-node lends it to no new
+  work with a folder that is then unshared keeps it until it ends (eriphe-device lends it to no new
   task). Only Syncthing is made again, when the folders that may be copied change: copies to
   your other machines pause a few seconds (the command says so). A folder stopped from the
   workspace leaves the lists within seconds; one not on the host now (a disk away) is not copied
-  until it is back. `docker exec eriphe-node eriphe-node share add` now prints
+  until it is back. `docker exec eriphe-device eriphe-device share add` now prints
   the launcher's command instead.
 - **Uninstall.** `docker exec eriphe eriphe-launcher uninstall` removes the containers it made, the
   task and service containers, the networks, the `eriphe-cache` and `eriphe-cache-untrusted` volumes and Eriphe's images; the
@@ -245,22 +245,22 @@ none` works).
   Unraid, Docker → eriphe → Remove), and its image.
 
 Its settings are environment variables, read at each start (not kept from the start before, but
-for the node's name once joined):
+for the device's name once joined):
 
 | Variable | Default | What |
 |---|---|---|
-| `ERIPHE_MODE` | `core` | `core`: eriphe-core here, with a node of its own; `node`: join another eriphe-core |
+| `ERIPHE_MODE` | `core` | `core`: eriphe-core here, with a device of its own; `device`: join another eriphe-core |
 | `ERIPHE_WEB_PORT` | `8443` | the workspace's port on the host |
 | `ERIPHE_API_PORT` | `8800` | eriphe-core's port on the host, for the other devices (the join commands give it) |
 | `ERIPHE_BIND` | every IPv4 address | the host's IPv4 address the two ports listen on, as `--bind` (`127.0.0.1`: only through Tailscale or a reverse proxy on the host) |
 | `ERIPHE_VERSION` | the image's tag | `latest` (the releases), `edge` (main), or a release `0.8.0` / `0.8`, as `--version`; `ghcr.io/alexis-marcel/eriphe:edge` follows main by itself |
-| `ERIPHE_NODE_NAME` | the Docker host's name | the node's name |
-| `ERIPHE_NODE_LABELS` | none | as `--labels` |
+| `ERIPHE_DEVICE_NAME` | the Docker host's name | the device's name |
+| `ERIPHE_DEVICE_LABELS` | none | as `--labels` |
 | `ERIPHE_MODEL_SERVER` | none | as `--model-server`: `http://eriphe-ollama:11434` for an Ollama container on `eriphe-system` ([A model behind this machine](#a-model-behind-this-machine)) |
-| `ERIPHE_CORE`, `ERIPHE_JOIN_TOKEN`, `ERIPHE_CA_HASH` | | node mode: from "Connect a device" (the token only matters at the first start) |
+| `ERIPHE_CORE`, `ERIPHE_JOIN_TOKEN`, `ERIPHE_CA_HASH` | | device mode: from "Connect a device" (the token only matters at the first start) |
 | `ERIPHE_WAKE_MAC`, `ERIPHE_WAKE_BROADCAST` | found | the network card to wake this machine by ([Connect a device](#4-connect-a-device), Waking a device): its MAC address (several, comma-separated) and its network's broadcast address, when the host's network is not the machine's (under WSL its card is virtual); otherwise the launcher finds them on the host's network |
-| `ERIPHE_SESSION_DIR` | none | a folder of the host where a helper in the user's session writes `session.json` (on Windows, `eriphe-session.exe`): given read-only to the node only, which tells eriphe-core whether the user is at the machine |
-| `ERIPHE_SHARE_COMMAND` | `docker exec eriphe eriphe share` | the command a folder is shared with on this machine, as the launcher's log and the node say it (for a machine with its own, such as Windows' Explorer menu) |
+| `ERIPHE_SESSION_DIR` | none | a folder of the host where a helper in the user's session writes `session.json` (on Windows, `eriphe-session.exe`): given read-only to the device only, which tells eriphe-core whether the user is at the machine |
+| `ERIPHE_SHARE_COMMAND` | `docker exec eriphe eriphe share` | the command a folder is shared with on this machine, as the launcher's log and the device say it (for a machine with its own, such as Windows' Explorer menu) |
 | `ERIPHE_ADDRESS` | found | the host's address, for the log only |
 | `TZ` | | eriphe-core's time zone (Unraid gives the server's; without it, Europe/Paris) |
 
@@ -310,7 +310,7 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
 ```
 
 ```powershell
-$env:ERIPHE_CORE='https://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
+$env:ERIPHE_CORE='https://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_DEVICE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
 Once you have named your assistant, the command also gives its name (`--assistant-name 'Jarvis'`,
@@ -318,7 +318,7 @@ Once you have named your assistant, the command also gives its name (`--assistan
 with an apostrophe is left out, and the installer says Eriphe.
 
 The device then shows on Settings → Devices, with what Eriphe sees and can do there, and its
-eriphe-node version. Its page (the "⋯" menu, "Details and log") keeps its access log: the folders
+eriphe-device version. Its page (the "⋯" menu, "Details and log") keeps its access log: the folders
 listed, opened or lent to a task (with the right), the tasks run there, for 90 days. "Cut access" in the same menu stops at once what Eriphe does there:
 its tasks stop, no work goes to it, its folders are neither listed nor lent, and its connection is
 refused until "Restore access". Nothing is uninstalled. Open the workspace with
@@ -338,8 +338,8 @@ sleep, not from a full shutdown. The signal is sent by the machine that stays on
 the host's network. A device installed before this option reports its card after running its
 install command again.
 
-Under "Advanced options" the workspace also gives the same settings for a node in an existing
-Docker Compose project (`ERIPHE_*` variables, as in `deploy/nas/compose.yaml`), for the eriphe-node
+Under "Advanced options" the workspace also gives the same settings for a device in an existing
+Docker Compose project (`ERIPHE_*` variables, as in `deploy/nas/compose.yaml`), for the eriphe-device
 program alone, and for a downloaded `install.ps1`.
 
 Without the workspace, on eriphe-core's machine:
@@ -414,20 +414,20 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
 irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
 ```
 
-It pulls the images again and recreates what changed; the data and the node's identity
-(`node.json`) stay, and the join token is not needed any more (it was single use, and is never
+It pulls the images again and recreates what changed; the data and the device's identity
+(`device.json`) stay, and the join token is not needed any more (it was single use, and is never
 written to disk). What is not given again is kept (address, name, labels, mode); given again,
 `--labels`, `--core` (e.g. to add a second address) and `--ca-hash` replace the saved ones, and a
-joined node keeps its name. Changing between node and core mode needs an uninstall first.
+joined device keeps its name. Changing between device and core mode needs an uninstall first.
 
 The images follow the releases ([RELEASING.md](../RELEASING.md)): `latest` is the latest one (also
 under `0.2.0` and `0.2`), and `edge` is the latest build of `main` (also under `sha-<commit>`). The
 scripts at `releases/latest/download/` are the ones of the latest release too: a change to
 `install/` on `main` reaches them only with a release. eriphe-core shows its version in Settings → My workspace (`0.2.0`), and each
-machine its eriphe-node version on its card. A few times a day it reads which version `latest` is on
+machine its eriphe-device version on its card. A few times a day it reads which version `latest` is on
 the registry: when a newer release is out, the
 workspace says "New version available" there, with the command that updates that machine (the
-installers tell eriphe-core and the node how they installed them, in `ERIPHE_INSTALL`; a node
+installers tell eriphe-core and the device how they installed them, in `ERIPHE_INSTALL`; a device
 without it guesses: Windows in WSL, Linux on a Linux host, a compose project in a container; a compose
 project of your own gets `docker compose pull && docker compose up -d`). If an
 image cannot be pulled (offline) and a copy of it is already there, the script says so and goes on
@@ -442,24 +442,24 @@ automatically at night** (off by default): between 3:00 and 5:00 (your time zone
 A machine without an updater (a compose project of your own) shows the one command to run on it
 instead. To go back to the previous version or stay on one, run the install command again with
 `--rollback` or `--version <version>` (below). The order is
-Kubernetes': eriphe-core's machine first; a node only once eriphe-core runs the latest version (a
-node is never newer than eriphe-core: a node's **Update** while eriphe-core is behind updates
-eriphe-core first, then that node), and only once none of its tasks is at work (an idle one,
-the brain between two turns included, resumes after the restart). While a node has a request, no
+Kubernetes': eriphe-core's machine first; a device only once eriphe-core runs the latest version (a
+device is never newer than eriphe-core: a device's **Update** while eriphe-core is behind updates
+eriphe-core first, then that device), and only once none of its tasks is at work (an idle one,
+the brain between two turns included, resumes after the restart). While a device has a request, no
 new task starts on it: the tasks wait for it.
 
 eriphe-core never names an image nor a command: it can only ask "update" (to the latest version,
 or the pinned one) or "rollback". The images are the ones the installer wrote down
-(`ghcr.io/alexis-marcel/eriphe-core`, `eriphe-node`, `eriphe-base`; the node downloads the agents
-of its own version itself, see node/README.md, Agents). Neither eriphe-core nor the
-node gets any new right (eriphe-node engine runs the node's verbs only, see
-deploy/README.md; it updates with the node, first, being its image): each only writes a short file in its own data folder. An **updater**, which the
+(`ghcr.io/alexis-marcel/eriphe-core`, `eriphe-device`, `eriphe-base`; the device downloads the agents
+of its own version itself, see device/README.md, Agents). Neither eriphe-core nor the
+device gets any new right (eriphe-device engine runs the device's verbs only, see
+deploy/README.md; it updates with the device, first, being its image): each only writes a short file in its own data folder. An **updater**, which the
 installer puts on the host side, does the rest, as root there:
 
 | | the updater | runs |
 |---|---|---|
 | Linux | `/opt/eriphe/update.sh`, run by `eriphe-update.service` (systemd) | when a request is dropped (`eriphe-update.path`), and every 10 minutes (`eriphe-update.timer`) |
-| macOS with Apple's container | `~/.eriphe/update.sh`, run by the LaunchAgent `org.eriphe.update`: the new `eriphe-node` (and `eriphe-core`) taken from their images, restarted and checked, the previous ones kept in `~/.eriphe/update/previous.*` | when a request is dropped (`WatchPaths`), and every 10 minutes |
+| macOS with Apple's container | `~/.eriphe/update.sh`, run by the LaunchAgent `org.eriphe.update`: the new `eriphe-device` (and `eriphe-core`) taken from their images, restarted and checked, the previous ones kept in `~/.eriphe/update/previous.*` | when a request is dropped (`WatchPaths`), and every 10 minutes |
 | macOS in Lima's VM | the same as Linux, in the VM (Ubuntu, systemd): nothing more on the Mac | the same |
 | Windows | the launcher's, in the distribution: as One container below | when a request is dropped (it looks every 5 s) |
 | One container | `install.sh`'s updater, in `/data/launcher/update.sh`, run by the launcher, which then updates itself ([One container](#one-container-nas-any-linux-with-docker)) | when a request is dropped (it looks every 5 s) |
@@ -467,19 +467,19 @@ installer puts on the host side, does the rest, as root there:
 How a request goes:
 
 1. eriphe-core writes it: for its own machine, `update-requested` in its data folder
-   (`/var/lib/eriphe/core`); for a node, in the node's assignments. The node writes it in its root
-   (`/var/lib/eriphe/node/update-requested`) once no task is at work. A request is `id`, `action`
+   (`/var/lib/eriphe/core`); for a device, in the device's assignments. The device writes it in its root
+   (`/var/lib/eriphe/device/update-requested`) once no task is at work. A request is `id`, `action`
    (`update` or `rollback`), `core` (eriphe-core's version) and `auto` (from the night); the
    updater reads these four values, checks them, and never runs the file.
-2. The updater pulls the images: eriphe-core at `latest`, `edge` or the pinned release; the node
+2. The updater pulls the images: eriphe-core at `latest`, `edge` or the pinned release; the device
    and base image of that same build (the tag of eriphe-core's version: `0.2.0`, or `sha-<commit>`
    for a build of `main`), not their own `latest`, which may be half published (a tag not there
-   yet fails the update, and a later one takes it). A node alone takes eriphe-core's build the
+   yet fails the update, and a later one takes it). A device alone takes eriphe-core's build the
    same way, unless it is pinned to a release; a pinned release newer than eriphe-core's is
-   refused ("refused": a node is never newer than eriphe-core). Nothing new, or the same build
+   refused ("refused": a device is never newer than eriphe-core). Nothing new, or the same build
    under another image (a release built again): "current", and nothing is recreated.
 3. It recreates the containers, eriphe-core first, and checks them: eriphe-core answers on
-   `/health`, eriphe-node says `connected to` again, within 3 minutes.
+   `/health`, eriphe-device says `connected to` again, within 3 minutes.
 4. If a check fails, it puts the previous images back, recreates and checks again:
    "rolled_back", or "rollback_failed" if even that does not come back. That version is noted as
    failed: the night skips it, "Update now" does not.
@@ -490,21 +490,21 @@ How a request goes:
    it takes the new binaries while the old ones run, asks for the password (the relay) before it
    stops anything, or keeps the relay's older binary when no password can be asked (no
    terminal); on any error, the binaries, settings and LaunchAgents of before come back and the
-   node runs again.
-6. It writes the outcome next to the request (`update-status`), which the node reports and
+   device runs again.
+6. It writes the outcome next to the request (`update-status`), which the device reports and
    eriphe-core shows on the machine's line, with the versions before and after. Its log is
    `/var/lib/eriphe/update/update.log` (one container, Windows included: the launcher's log,
    `docker logs eriphe`).
 
-The previous images stay, tagged `eriphe-previous-core` or `eriphe-previous-node`: "Go back to the
+The previous images stay, tagged `eriphe-previous-core` or `eriphe-previous-device`: "Go back to the
 previous version", or `--rollback` (`-Rollback`) on the machine, puts them back, checks the same
 way, and keeps the replaced ones to go forward again. A rollback keeps the layout (below).
 
 **What an update brings besides the images.** A release may change what an install puts on a
-machine besides eriphe-node and eriphe-core: a service of the compose project, a LaunchAgent, a
+machine besides eriphe-device and eriphe-core: a service of the compose project, a LaunchAgent, a
 component (Syncthing came so). That is the install's **layout**, a number in the installers
 (`LAYOUT` in install.sh, `$layout` in install.ps1), raised by such a release, and written down at
-each install (`update.conf`, the `updater` file). The eriphe-node image carries the installers of
+each install (`update.conf`, the `updater` file). The eriphe-device image carries the installers of
 its build (`/usr/local/share/eriphe/install.sh` and `install.ps1`), so the updater takes them from
 the image it has just pulled and checked, as it takes the binaries: no other download. When their
 layout is newer than the machine's, the updater brings the machine to it by itself, after the new
@@ -524,8 +524,8 @@ it asks nothing and runs only on an installed machine.
 
 A step that needs more than the updater has is left as it was, and everything else is done: on a
 Mac, the relay's LaunchDaemon or a newer Apple container (the password); in Lima's VM, the
-whole layout (the Mac's install writes it). The updater then writes `update-needs` in the node's
-folder (`why=password` or `layout`), the node reports it, and the device's card in Réglages ›
+whole layout (the Mac's install writes it). The updater then writes `update-needs` in the device's
+folder (`why=password` or `layout`), the device reports it, and the device's card in Réglages ›
 Appareils (Settings › Devices) says « Cette mise à jour a besoin de toi » ("This update needs
 you"), with the install command of that machine to copy in the Mac's Terminal. Running it does
 the rest and clears it.
@@ -537,7 +537,7 @@ the rest and clears it.
   fixes (`0.2.1`, …) when it updates.
 - `--version edge` follows `main`, for testers: each update takes its latest build. A build of
   `main` is never told "New version available" (it is ahead, or someone is testing it): update it
-  with "Update now", or by running the command again. A node joined to it follows its build.
+  with "Update now", or by running the command again. A device joined to it follows its build.
 - `--version latest` follows the releases again.
 
 The rollback works the same on all of them. The releases are on
@@ -569,7 +569,7 @@ $env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/re
   containers that keep it, and the mark that Eriphe installed it stays too
   (`/opt/eriphe.docker-installed`), so that `--uninstall` removes Docker once they are gone (and a
   new install takes it back).
-- macOS with Apple's container: the LaunchAgents `org.eriphe.node`, `org.eriphe.core` and
+- macOS with Apple's container: the LaunchAgents `org.eriphe.device`, `org.eriphe.core` and
   `org.eriphe.update`, the LaunchDaemon `org.eriphe.relay` with its binary, socket folder and log
   (with `sudo`), the task, service and explorer containers and their networks, Eriphe's images,
   the Finder's Quick Action "Share with Eriphe..." and the former two (`~/Library/Services`), and `~/.eriphe`. Apple's `container` too if the script installed it (it notes so in
@@ -581,24 +581,24 @@ $env:ERIPHE_UNINSTALL='1'; irm https://github.com/Alexis-Marcel/eriphe-system/re
 - Windows: the distribution and its disk, its scheduled tasks, the Explorer's "Share with Eriphe"
   (`HKCU\Software\Classes\Directory\shell\EripheShare*`, `eriphe-share.ps1`), and in core mode
   the port forwarding and firewall rule; with the last distribution, the session helper (its task "Eriphe session",
-  `%ProgramData%\eriphe-node\bin` and `session`).
+  `%ProgramData%\eriphe-device\bin` and `session`).
 
 In core mode this deletes eriphe-core's data (`/var/lib/eriphe/core`; `~/.eriphe/core` on a Mac
 with Apple's container, in the VM with Lima, in the distribution on Windows): copy it out first to
 keep it.
 
-The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nodes/{name}`.
+The device stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/devices/{name}`.
 
 ## Options
 
 | `install.sh` | `install.ps1` | What |
 |---|---|---|
-| `--core URL[,URL2]` | `-Core '<url>[,<url2>]'` | the eriphe-core to join; several addresses, preferred first (see node/README.md, Join) |
+| `--core URL[,URL2]` | `-Core '<url>[,<url2>]'` | the eriphe-core to join; several addresses, preferred first (see device/README.md, Join) |
 | `--join-token TOKEN` | `-JoinToken <token>` | from "Connect a device", or `eriphe-core join-token -name NAME`; first install only |
-| `--name NAME` | `-Name <name>` | the node's name (default: the host name, lowercased) |
-| `--labels gpu,fast` | `-Labels 'gpu,fast'` | what agents can require of this node |
-| `--ca-hash sha256:<hex>` | `-CaHash sha256:<hex>` | eriphe-core's CA, to check its certificate (`ERIPHE_CA_HASH` of the node) |
-| `--core-mode` | `-CoreMode` | run eriphe-core here, and a local node joined to it |
+| `--name NAME` | `-Name <name>` | the device's name (default: the host name, lowercased) |
+| `--labels gpu,fast` | `-Labels 'gpu,fast'` | what agents can require of this device |
+| `--ca-hash sha256:<hex>` | `-CaHash sha256:<hex>` | eriphe-core's CA, to check its certificate (`ERIPHE_CA_HASH` of the device) |
+| `--core-mode` | `-CoreMode` | run eriphe-core here, and a local device joined to it |
 | `--web-port 9443` | `-WebPort 9443` | core mode: the workspace's port (default 8443; env `ERIPHE_WEB_PORT`), kept for the next runs |
 | `--api-port 9800` | `-ApiPort 9800` | core mode: the port other devices join on (default 8800; env `ERIPHE_API_PORT`), kept; "Connect a device" gives it |
 | `--bind 127.0.0.1` | | core mode on Linux: the IPv4 address of the machine both ports listen on (default every IPv4 address, `0.0.0.0`; env `ERIPHE_BIND`), kept; `--bind 0.0.0.0` goes back to every address ([Eriphe on a VPS](#eriphe-on-a-vps)) |
@@ -607,17 +607,17 @@ The node stays known to eriphe-core: "Forget" it on its card, or `DELETE /v1/nod
 | `--rollback` | `-Rollback` | go back to the version before the last update |
 | `--share NAME=/PATH[:ro]` | | a place of this machine whose folders may be given to Eriphe, repeatable (see [Folders](#folders)); Linux, and a Mac with Apple's container (which shares its home, iCloud Drive and its cloud folders by itself) |
 | `--no-share` | | share no place any more |
-| `--model-server URL` | `-ModelServer <url>` | a model server this node lends to Eriphe through its tunnel, as the node reaches it, kept for the next runs (see [A model behind this machine](#a-model-behind-this-machine)); env `ERIPHE_MODEL_SERVER` |
+| `--model-server URL` | `-ModelServer <url>` | a model server this device lends to Eriphe through its tunnel, as the device reaches it, kept for the next runs (see [A model behind this machine](#a-model-behind-this-machine)); env `ERIPHE_MODEL_SERVER` |
 | `--no-model-server` | `-ModelServer none` | lend no model server any more |
 | `--uninstall` | `-Uninstall` | remove everything the script installed |
-| | `-Rejoin` | with a rejoin token: drop the node's identity and join again under `-Name` |
+| | `-Rejoin` | with a rejoin token: drop the device's identity and join again under `-Name` |
 | | `-Distro <name>` | another distribution than `eriphe` (its task and rules get their own names) |
 
 In PowerShell a comma makes a list: quote `-Core` and `-Labels` when they hold one.
 
-`ERIPHE_CORE_IMAGE`, `ERIPHE_NODE_IMAGE`, `ERIPHE_WORKER_IMAGE` (the base image tasks start from,
+`ERIPHE_CORE_IMAGE`, `ERIPHE_DEVICE_IMAGE`, `ERIPHE_WORKER_IMAGE` (the base image tasks start from,
 `eriphe-base`) replace the images (`ghcr.io/alexis-marcel/eriphe-*:latest`; `install.ps1` reads the
-first two); `ERIPHE_AGENT_IMAGE` the agents' (node/README.md, Agents); `ERIPHE_VM_CPUS` (4),
+first two); `ERIPHE_AGENT_IMAGE` the agents' (device/README.md, Agents); `ERIPHE_VM_CPUS` (4),
 `ERIPHE_VM_MEMORY` (`4GiB`) and `ERIPHE_VM_DISK` (`60GiB`) size the macOS VM when it is created.
 On Linux the script runs as root (through `sudo` when needed); on macOS as yourself, not root.
 
@@ -627,44 +627,44 @@ The same compose project on every Linux machine, written to `/opt/eriphe` (`comp
 `install.conf` with the options), data in `/var/lib/eriphe`, as `deploy/nas/compose.yaml` does on
 a NAS:
 
-- `eriphe-engine`: the only container with the Docker socket, the node's own image run as
-  `eriphe-node engine` (node/README.md, The engine). The node has no Docker access: it asks the
+- `eriphe-engine`: the only container with the Docker socket, the device's own image run as
+  `eriphe-device engine` (device/README.md, The engine). The device has no Docker access: it asks the
   engine (`ERIPHE_ENGINE_URL`) for its verbs (a task, a check in a task, a service, a helper, a
   wake), and the engine makes each container itself, with its hardening (nothing privileged, no
   added capability but a task's three, no device, no host namespace, its own networks), with bind
-  mounts from `/var/lib/eriphe/node` and the shared places (`--share`) only, their symlinks
+  mounts from `/var/lib/eriphe/device` and the shared places (`--share`) only, their symlinks
   resolved (see deploy/README.md for what it checks and what it does not stop). It runs as root
-  with every capability dropped but `DAC_READ_SEARCH`, the node's root and the shared places
+  with every capability dropped but `DAC_READ_SEARCH`, the device's root and the shared places
   mounted read-only (with eriphe-launcher, the host's `/`, as mounted when the engine starts: a
   disk mounted later is seen once the engine is made again, at the next update or `docker restart
   eriphe-engine`).
-- `eriphe-node`: read-only root, every capability dropped but those that hand the task folders to
-  the tasks' user, its root at `/var/lib/eriphe/node` (`node.json`: its identity), and each shared
-  place at the same path (read-only for a `:ro` one), told to it in `ERIPHE_NODE_SHARES`.
+- `eriphe-device`: read-only root, every capability dropped but those that hand the task folders to
+  the tasks' user, its root at `/var/lib/eriphe/device` (`device.json`: its identity), and each shared
+  place at the same path (read-only for a `:ro` one), told to it in `ERIPHE_DEVICE_SHARES`.
 - `eriphe-core` in core mode: read-only, no capability, its data in `/var/lib/eriphe/core` (owned
-  by its UID, 1993), ports 8800 (API, nodes) and 8443 (workspace, HTTPS). It starts with no
-  configuration file; the script gets the local node's join token and eriphe-core's CA hash
+  by its UID, 1993), ports 8800 (API, devices) and 8443 (workspace, HTTPS). It starts with no
+  configuration file; the script gets the local device's join token and eriphe-core's CA hash
   from `eriphe-core join-token -name <name>` (a new eriphe-core accepts machines over TLS only,
-  from the start: the node joins with `ERIPHE_CA_HASH`, kept in `.env`), and reads the setup
+  from the start: the device joins with `ERIPHE_CA_HASH`, kept in `.env`), and reads the setup
   code from its log.
 - `eriphe-syncthing`: Syncthing, for the copies of shared folders on your other machines
-  (node/README.md, Copies), the official image `syncthing/syncthing:2.1.7`, pinned by digest, in
-  the node's network namespace: its API (`127.0.0.1:18384`) and its listening address
+  (device/README.md, Copies), the official image `syncthing/syncthing:2.1.7`, pinned by digest, in
+  the device's network namespace: its API (`127.0.0.1:18384`) and its listening address
   (`127.0.0.1:22100`) are on the loopback only, no port is published, and it reaches the other
-  machines through eriphe-core only. Read-only root, root with the node's three capabilities (to
+  machines through eriphe-core only. Read-only root, root with the device's three capabilities (to
   keep the owners of what it writes), its home in `/var/lib/eriphe/syncthing` (its keys, and the
   `config.xml` the script writes once: the API key, discovery, relays, NAT traversal, usage
-  reports and upgrades off), the shared places and the node's copies (`/var/lib/eriphe/node/sync`)
-  at their paths. The updater recreates it with the node.
+  reports and upgrades off), the shared places and the device's copies (`/var/lib/eriphe/device/sync`)
+  at their paths. The updater recreates it with the device.
 - the networks: `eriphe-tasks` (internal, isolated gateway with Docker 28 or later), the model of
   each task's own network `eriphe-task-<id>`, which the engine makes and removes with the task, on a
-  /28 of 10.213.0.0/16 (the task reaches only the node), `eriphe-system` (eriphe-core and the services), `eriphe-docker` (the engine, reached by the node only).
+  /28 of 10.213.0.0/16 (the task reaches only the device), `eriphe-system` (eriphe-core and the services), `eriphe-docker` (the engine, reached by the device only).
 - the updater, outside the compose project: `/opt/eriphe/update.sh` and `update.conf` (the images
   it works on), the systemd units `eriphe-update.service`, `.path` and `.timer`, its state in
-  `/var/lib/eriphe/update`, and a file `updater` in the node's and eriphe-core's folders that tells
+  `/var/lib/eriphe/update`, and a file `updater` in the device's and eriphe-core's folders that tells
   them it is there (see [the machines update themselves](#the-machines-update-themselves)).
 - with systemd and `systemd-inhibit`, `eriphe-awake.path` and `.service`: no sleep while a task is
-  at work (node/README.md, Sleep).
+  at work (device/README.md, Sleep).
 
 Every container restarts with Docker (`restart: unless-stopped`), and Docker starts at boot.
 
@@ -675,34 +675,34 @@ ship too old (the isolated gateway needs Docker 28). On Alpine, Arch and openSUS
 does not cover, it uses the distribution's packages. An existing Docker is kept as it is (rootless
 Docker is not supported: the engine needs `/var/run/docker.sock`).
 
-**macOS on Apple silicon, macOS 26 or later**: no VM of Eriphe's. eriphe-node runs on the Mac as
-you, and each task is a micro-VM of Apple's container (node/README.md, The container engine).
+**macOS on Apple silicon, macOS 26 or later**: no VM of Eriphe's. eriphe-device runs on the Mac as
+you, and each task is a micro-VM of Apple's container (device/README.md, The container engine).
 
 - [Apple's container](https://github.com/apple/container) 1.6.1, its official package, checked
   against the SHA-256 written in the script and Apple's Developer ID signature, installed with
   `sudo installer` (macOS asks for your password once) if it is missing or older; then
   `container system start --enable-kernel-install` (its Linux kernel, without a question).
-- `~/.eriphe/bin/eriphe-node`, and in core mode `~/.eriphe/bin/eriphe-core`: the Mac builds that the
-  public images `ghcr.io/alexis-marcel/eriphe-node` and `eriphe-core` carry in
+- `~/.eriphe/bin/eriphe-device`, and in core mode `~/.eriphe/bin/eriphe-core`: the Mac builds that the
+  public images `ghcr.io/alexis-marcel/eriphe-device` and `eriphe-core` carry in
   `/usr/local/share/eriphe/darwin-arm64/`, copied out by a short-lived container: no token, no
-  other download, the image's version. `~/.eriphe/node` is the node's root (`node.json`: its
+  other download, the image's version. `~/.eriphe/device` is the device's root (`device.json`: its
   identity), `~/.eriphe/core` eriphe-core's data.
-- the LaunchAgents `org.eriphe.node` (`~/.eriphe/start-node.sh`: container's services, then the node
-  with `~/.eriphe/node.env`), `org.eriphe.core` in core mode (eriphe-core on the Mac, ports 8800 and
-  8443 on every address), `org.eriphe.update` (the updater). Logs: `~/.eriphe/node.log`, `core.log`,
+- the LaunchAgents `org.eriphe.device` (`~/.eriphe/start-device.sh`: container's services, then the device
+  with `~/.eriphe/device.env`), `org.eriphe.core` in core mode (eriphe-core on the Mac, ports 8800 and
+  8443 on every address), `org.eriphe.update` (the updater). Logs: `~/.eriphe/device.log`, `core.log`,
   `update/update.log`.
-- when the node joins another machine's eriphe-core, the root LaunchDaemon `org.eriphe.relay`
-  (`/Library/LaunchDaemons`, `/usr/local/libexec/eriphe-relay`, written with `sudo`), the node's
+- when the device joins another machine's eriphe-core, the root LaunchDaemon `org.eriphe.relay`
+  (`/Library/LaunchDaemons`, `/usr/local/libexec/eriphe-relay`, written with `sudo`), the device's
   way to eriphe-core on the LAN (see Troubleshooting, What macOS asks).
-- Syncthing, for the copies of shared folders on your other machines (node/README.md, Copies): its
+- Syncthing, for the copies of shared folders on your other machines (device/README.md, Copies): its
   official build 2.1.7 (`syncthing-macos-universal`), checked against the SHA-256 of the release's
   `sha256sum.txt.asc` written in the script and the code signature of its developer (Developer
   ID of Kastelo AB, Team ID `LQE5SYM783`, `codesign`), in `~/.eriphe/syncthing`, run by its own
-  LaunchAgent `org.eriphe.syncthing` (log: `~/.eriphe/syncthing.log`). It is not the node's child,
+  LaunchAgent `org.eriphe.syncthing` (log: `~/.eriphe/syncthing.log`). It is not the device's child,
   so that macOS asks once, for Syncthing, whether it may open Documents or iCloud Drive, and keeps
   the answer across updates. Its `config.xml` (`~/.eriphe/syncthing/home`, written once) keeps its
   API and its listening address on the loopback, with discovery, relays, NAT traversal, usage
-  reports and upgrades off. If it cannot be downloaded or checked, the node is installed without
+  reports and upgrades off. If it cannot be downloaded or checked, the device is installed without
   copies, and the script says so.
 - the places shared with Eriphe, by themselves: the home folder (`home`), iCloud Drive (`icloud`),
   and each cloud folder of `~/Library/CloudStorage` (`googledrive`, `onedrive`, `dropbox`…), plus
@@ -720,7 +720,7 @@ to Apple's container (in core mode, copy eriphe-core's data out of the VM first)
 - a VM `eriphe`: Ubuntu 24.04 on Apple's Virtualization framework (`vz`), 4 CPUs, 4 GiB, a 60 GiB
   sparse disk, with Docker Engine and the compose project above inside. Its traffic goes out
   through Apple's NAT (`vzNAT`), not through `limactl`: macOS's local network privacy keeps a
-  program that launchd starts off the LAN, so through Lima's own network the node would reach the
+  program that launchd starts off the LAN, so through Lima's own network the device would reach the
   Internet but not an eriphe-core on the LAN.
 - a LaunchAgent, `~/Library/LaunchAgents/org.eriphe.vm.plist`, that starts the VM at login (log:
   `~/.eriphe/vm.log`).
@@ -746,7 +746,7 @@ sudo eriphe-share remove Factures                          # the tasks using it 
 ```
 
 Two levels: by default (`--write`) Eriphe may read the folder and create, change, rename and
-delete anywhere in it, the node taking a snapshot of the folder before each task that may change
+delete anywhere in it, the device taking a snapshot of the folder before each task that may change
 it (kept 7 days, restored with `eriphe-share restore`); with `--read`, for a sensitive folder, it
 only reads it. The level chosen here is the most it gets: what a task may do there, Lire and
 Modifier, each free, on approval or never, is set in the workspace (Settings → Folders: a default
@@ -758,7 +758,7 @@ Finder, Quick Actions, "Share with Eriphe..." (named in French on a Mac in Frenc
 the level and the copies, or use `~/.eriphe/bin/eriphe-share`. On Windows, right-click a folder of
 your user folder in File Explorer, "Show more options", "Share with Eriphe...", which asks the same. With the
 one-container install (eriphe-launcher), `docker exec eriphe eriphe share add /mnt/user/…`, which
-mounts that folder alone into the node ([One container](#one-container-nas-any-linux-with-docker)). Folders given from the workspace
+mounts that folder alone into the device ([One container](#one-container-nas-any-linux-with-docker)). Folders given from the workspace
 before this version are no longer lent: share them again this way (Settings → Folders lists
 them).
 
@@ -773,27 +773,27 @@ curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/downlo
   to: its folders can only be read.
 - Saved with the other options: running the script again keeps them; any `--share` replaces the
   whole list; `--no-share` empties it.
-- The node sees each place at the same path, and eriphe-node engine mounts folders from it.
-  What the node refuses whatever the place (node/README.md, Shares): hidden folders, keys,
+- The device sees each place at the same path, and eriphe-device engine mounts folders from it.
+  What the device refuses whatever the place (device/README.md, Shares): hidden folders, keys,
   credentials and settings (`.ssh`, `.gnupg`, `.config`, `appdata`…), a folder that holds one,
-  symlinks out of the place, and the node's own data.
+  symlinks out of the place, and the device's own data.
 - A task runs with the folder's group added: it reads what that group (or anyone) may read. What
   it writes in a folder lent to write is handed back to the folder's owner, group-writable.
 - **macOS with Apple's container**: the home, iCloud Drive and the cloud folders are shared by
   themselves (see What it installs), `~/Library` excepted (mail, messages, the apps' settings):
-  iCloud Drive and the cloud folders inside it are places of their own. eriphe-node never opens
+  iCloud Drive and the cloud folders inside it are places of their own. eriphe-device never opens
   them itself: a short-lived container lists them (about 0.7 s a folder), and a task's container
   mounts its folders, so macOS asks once, for Apple's `container-runtime-linux`, and the answer
-  outlives Eriphe's updates (node/README.md, The container engine). What a task writes in
+  outlives Eriphe's updates (device/README.md, The container engine). What a task writes in
   a folder is yours, as any file you make. Files kept only in iCloud Drive or a cloud folder are
   downloaded on the Mac before the task starts, up to 2 GB per task (`-download-limit`); a bigger
   folder fails the task with what to do: "Keep Downloaded" on it, in the Finder.
 - **macOS in Lima's VM**: `--share` is ignored (the VM sees no Mac folder). **Windows**: not yet.
 - **Copies on your other machines**: share the folder with `--copyable` (or tick "may be copied"),
-  then on Settings → Folders, "Copies", tick the machines that keep it up to date (node/README.md,
+  then on Settings → Folders, "Copies", tick the machines that keep it up to date (device/README.md,
   Copies). Syncthing, installed with Eriphe on every machine, copies it through eriphe-core,
   never directly nor through anyone else. A copy lives in that machine's Eriphe data
-  (`/var/lib/eriphe/node/sync/copies` on Linux, `~/.eriphe/node/sync/copies` on a Mac), and is
+  (`/var/lib/eriphe/device/sync/copies` on Linux, `~/.eriphe/device/sync/copies` on a Mac), and is
   deleted when you untick it, turn copies off or stop sharing the folder. On a Mac, a folder of
   iCloud Drive is copied only for the files kept on the Mac: right-click it in the Finder, "Keep
   Downloaded".
@@ -812,9 +812,9 @@ ghcr.io/example/tool              # any tag of this one
 ghcr.io/example/other@sha256:…    # this exact image only
 ```
 
-eriphe-core and a node never choose this list: a taken-over core or node cannot make the machine
+eriphe-core and a device never choose this list: a taken-over core or device cannot make the machine
 pull and run an image of its own. With Apple's container on a Mac there is no engine between the
-node and the runtime, and no such list.
+device and the runtime, and no such list.
 
 ## A model behind this machine
 
@@ -826,9 +826,9 @@ tunnel, the one it already has with eriphe-core, and your tasks and the assistan
 they run. Then, in the workspace: Settings → Agents → Add an AI account → Modèle auto-hébergé →
 "Sur un de mes appareils", pick the device, and tick the models it lists.
 
-The address is the one eriphe-node reaches:
+The address is the one eriphe-device reaches:
 
-- **Linux** (and a NAS, the one-container install): eriphe-node is a container, so the machine's
+- **Linux** (and a NAS, the one-container install): eriphe-device is a container, so the machine's
   `127.0.0.1` is not its own. Run Ollama as a container next to it, on Eriphe's network
   `eriphe-system` (made by the install), **without publishing any port**, and give its name:
 
@@ -842,14 +842,14 @@ The address is the one eriphe-node reaches:
   ```
 
   (on the one-container install, set `ERIPHE_MODEL_SERVER=http://eriphe-ollama:11434`). Only
-  eriphe-core and the node are on that network; tasks are not. The script refuses a loopback
+  eriphe-core and the device are on that network; tasks are not. The script refuses a loopback
   address here, saying so. `--uninstall` leaves this container: `docker rm -f eriphe-ollama`
   first.
-- **A Mac with Apple's container**: eriphe-node runs on the Mac itself: Ollama for macOS listens on
+- **A Mac with Apple's container**: eriphe-device runs on the Mac itself: Ollama for macOS listens on
   `127.0.0.1:11434` by default, give `--model-server http://127.0.0.1:11434`. (A Mac in Lima's VM:
   the address the VM reaches, as on Linux.)
-- **Windows**: eriphe-node runs in a container in the `eriphe` WSL distribution, as on Linux:
-  `127.0.0.1` is the container, not Windows, and the node does not reach Windows' own loopback
+- **Windows**: eriphe-device runs in a container in the `eriphe` WSL distribution, as on Linux:
+  `127.0.0.1` is the container, not Windows, and the device does not reach Windows' own loopback
   even with WSL's mirrored networking. Run Ollama as a container in the distribution, on
   Eriphe's network, as for Linux above (`wsl -d eriphe -- docker run ...`), and give
   `-ModelServer http://eriphe-ollama:11434`. **Ollama for Windows can no longer be lent**: a
@@ -857,7 +857,7 @@ The address is the one eriphe-node reaches:
   distribution sees no GPU by itself (it would need NVIDIA's container toolkit there, which the
   installer does not set up): it runs on the processor.
 
-At the end, the Linux installer says whether the model server answers eriphe-node: "Lends the
+At the end, the Linux installer says whether the model server answers eriphe-device: "Lends the
 model server at … (answers: yes)". With "no", start the server or check the address.
 
 ### Ollama's settings
@@ -887,17 +887,17 @@ adresse"), but then it listens on the network.
 ## What the VM can and cannot see
 
 Eriphe's tasks run in containers, each on a network of its own (`eriphe-task-<id>`) that reaches
-only the node, and their egress relay never dials a private address (see node/README.md, Egress). What the
+only the device, and their egress relay never dials a private address (see device/README.md, Egress). What the
 machine around them shows depends on the OS:
 
-- **Linux**: no VM. The containers see the folders the node is given (`/var/lib/eriphe/node`, and
-  the folders of the shared places a task is lent), not the rest of the host. eriphe-node engine
+- **Linux**: no VM. The containers see the folders the device is given (`/var/lib/eriphe/device`, and
+  the folders of the shared places a task is lent), not the rest of the host. eriphe-device engine
   mounts nothing else.
 - **macOS with Apple's container**: each task is a micro-VM of its own, with its own kernel, that
   sees only its folders (its task folder, the cache, the folders lent to it), on a network of its
-  own with no route out: not the LAN, not the Internet but through the node's relay, not the other
+  own with no route out: not the LAN, not the Internet but through the device's relay, not the other
   tasks. It does reach the Mac's own services that listen on all of its addresses (eriphe-core's
-  8800 and 8443 in core mode, a file share, a development server): see node/README.md, The
+  8800 and 8443 in core mode, a file share, a development server): see device/README.md, The
   container engine.
 - **macOS in Lima's VM**: the VM is the boundary between Eriphe and the Mac.
   - **No Mac folder** is mounted: not your home, not `/Users`, not `/Volumes`. Lima's default home
@@ -922,9 +922,9 @@ machine around them shows depends on the OS:
 Desktop, and a scheduled task that starts it with Windows, logged in or not. The distribution is a
 Linux machine with Docker like any other: it runs Eriphe's launcher
 ([One container](#one-container-nas-any-linux-with-docker)), which makes and keeps running
-eriphe-node engine, eriphe-node, Syncthing and, in core mode, eriphe-core, with its data in
-`/var/lib/eriphe` there. eriphe-node runs in a container, with neither the Docker socket nor
-anything of Windows but what the launcher gives it; eriphe-node engine, the only one with the
+eriphe-device engine, eriphe-device, Syncthing and, in core mode, eriphe-core, with its data in
+`/var/lib/eriphe` there. eriphe-device runs in a container, with neither the Docker socket nor
+anything of Windows but what the launcher gives it; eriphe-device engine, the only one with the
 socket, gives a task only the folders shared. What only Windows can do stays in `install.ps1`: the
 scheduled tasks, the session helper, the Explorer's menu, the network card to wake (Windows'
 own, which the launcher in WSL cannot see: `ERIPHE_WAKE_MAC`), and the ports of core mode.
@@ -939,13 +939,13 @@ shared this way: the menu runs the launcher's `eriphe share add` (`wsl -d eriphe
 installed Eriphe (the distribution is theirs). Folders elsewhere (another drive, Documents moved
 off the user folder) cannot be shared yet.
 
-For the copies of shared folders on your other machines (node/README.md, Copies), the launcher
-runs Syncthing in its container, as on Linux: it sees the folders it may copy and the node's
+For the copies of shared folders on your other machines (device/README.md, Copies), the launcher
+runs Syncthing in its container, as on Linux: it sees the folders it may copy and the device's
 copies, nothing else.
 
 `irm <url> | iex` takes no parameters: they go in `ERIPHE_*` variables, as in the commands above.
 Each parameter has its own: `-Core` `ERIPHE_CORE`, `-JoinToken` `ERIPHE_JOIN_TOKEN`, `-Name`
-`ERIPHE_NODE_NAME`, `-Labels` `ERIPHE_NODE_LABELS`, `-CaHash` `ERIPHE_CA_HASH`, `-Version`
+`ERIPHE_DEVICE_NAME`, `-Labels` `ERIPHE_DEVICE_LABELS`, `-CaHash` `ERIPHE_CA_HASH`, `-Version`
 `ERIPHE_VERSION`, `-Distro` `ERIPHE_DISTRO`, `-AssistantName` `ERIPHE_ASSISTANT_NAME`, `-WebPort` `ERIPHE_WEB_PORT`, `-ApiPort` `ERIPHE_API_PORT`, and `-CoreMode`, `-Rejoin`, `-Rollback`,
 `-Uninstall` `ERIPHE_CORE_MODE`, `ERIPHE_REJOIN`, `ERIPHE_ROLLBACK`, `ERIPHE_UNINSTALL` set to `1`.
 The script clears them once read, so that a later run in the same window does not take them again.
@@ -980,69 +980,69 @@ there and [open an issue](https://github.com/Alexis-Marcel/eriphe-system/issues)
 it shows (a false positive is reported to Microsoft from there).
 
 **Core mode** (`-CoreMode`): eriphe-core runs as a container in the distribution, with its data in
-`/var/lib/eriphe/core` there and no configuration file, and this machine's node joins it by itself.
+`/var/lib/eriphe/core` there and no configuration file, and this machine's device joins it by itself.
 
 **WSL missing.** The script installs it (`wsl --install --no-distribution`, or on a Windows whose
 `wsl.exe` refuses it, the Windows features and then `wsl --update` after the restart). On a PC set
 up recently this is the long part: Windows finishes its own updates first, and the whole install
 can take an hour on a modest mini-PC. When Windows needs a
-reboot for it, the script saves itself and its parameters in `%ProgramData%\eriphe-node\resume`
+reboot for it, the script saves itself and its parameters in `%ProgramData%\eriphe-device\resume`
 (administrators only) and registers a task, "Eriphe install (eriphe)", that runs it again at the
 next logon of the same user, in a window (`powershell -File`, the parameters after it); that run
 removes the task and the copy. Under `irm | iex` there is no script text to save: the copy is
 downloaded again from the latest release.
 
 **The images**: dockerd pulls `ghcr.io/alexis-marcel/eriphe` (the launcher) and
-`ghcr.io/alexis-marcel/eriphe-node` (for the session helper it carries, below) in the
+`ghcr.io/alexis-marcel/eriphe-device` (for the session helper it carries, below) in the
 distribution; the launcher pulls the others. Eriphe is stopped only once they are there, so a
 failed pull changes nothing.
 
-**Running it again** writes the settings again (`/etc/eriphe-node.env` in the distribution), makes
-the launcher's container again with them (`eriphe-node-run` does, from that file), and keeps the
-node's identity; the launcher brings the rest to its version.
+**Running it again** writes the settings again (`/etc/eriphe-device.env` in the distribution), makes
+the launcher's container again with them (`eriphe-device-run` does, from that file), and keeps the
+device's identity; the launcher brings the rest to its version.
 
 **From the LAN to eriphe-core (core mode).** WSL 2 puts the distribution behind a NAT of its own
-that only Windows' localhost reaches. Windows forwards ports 8800 (API, nodes) and 8443 (or `-ApiPort`, `-WebPort`)
+that only Windows' localhost reaches. Windows forwards ports 8800 (API, devices) and 8443 (or `-ApiPort`, `-WebPort`)
 (workspace) to the distribution's address with `netsh interface portproxy`, and a firewall rule,
 "Eriphe core (eriphe)", lets them in from private and domain networks. The distribution's address
 changes when WSL restarts, so the scheduled task sets the forwarding again before each start of
-the distribution: it runs `%ProgramData%\eriphe-node\boot\eriphe.ps1` (administrators only),
-which forwards the ports and then starts the node. Mirrored networking (`networkingMode=mirrored` in `.wslconfig`) would avoid the
+the distribution: it runs `%ProgramData%\eriphe-device\boot\eriphe.ps1` (administrators only),
+which forwards the ports and then starts the device. Mirrored networking (`networkingMode=mirrored` in `.wslconfig`) would avoid the
 forwarding but it is a setting for all of the user's distributions, it needs Windows 11 22H2 or
 later, and it applies only after `wsl --shutdown`, so the script does not turn it on. When it is
 already on, the script adds no forwarding (the Hyper-V firewall may then need a rule:
 `New-NetFirewallHyperVRule`).
 
-**The scheduled task** ("Eriphe node", or "Eriphe node (<distribution>)") starts at boot as the
+**The scheduled task** ("Eriphe device", or "Eriphe device (<distribution>)") starts at boot as the
 installing user without a session (S4U). It runs `wsl.exe -d eriphe -u root --exec
-/usr/local/bin/eriphe-node-run` (in core mode without mirrored networking, the forwarding script
+/usr/local/bin/eriphe-device-run` (in core mode without mirrored networking, the forwarding script
 above), at boot and every minute: a run that is still going is left alone, so the distribution
 starts again within a minute after it stops (a `wsl --shutdown` included). Stop it with
-`Disable-ScheduledTask`, then `Stop-ScheduledTask`. `eriphe-node-run` mounts Windows' two folders
-(below), starts dockerd and the launcher's container (made again from `/etc/eriphe-node.env` when
-there is none), then stays to copy eriphe-node's log to `/var/log/eriphe-node.log`; stopped, it
+`Disable-ScheduledTask`, then `Stop-ScheduledTask`. `eriphe-device-run` mounts Windows' two folders
+(below), starts dockerd and the launcher's container (made again from `/etc/eriphe-device.env` when
+there is none), then stays to copy eriphe-device's log to `/var/log/eriphe-device.log`; stopped, it
 stops Eriphe's containers. The launcher applies the updates ([One container](#one-container-nas-any-linux-with-docker)),
 and updates itself after.
 
 **Sleep.** A second scheduled task, "Eriphe awake" (or "Eriphe awake (<distribution>)"), runs
-`%ProgramData%\eriphe-node\boot\<distribution>-awake.ps1` with the same triggers: every 30 s it
-asks the distribution whether eriphe-node has a task at work (`/var/lib/eriphe-node/awake`, a link
-to the node's data in `/var/lib/eriphe/node`) and,
+`%ProgramData%\eriphe-device\boot\<distribution>-awake.ps1` with the same triggers: every 30 s it
+asks the distribution whether eriphe-device has a task at work (`/var/lib/eriphe-device/awake`, a link
+to the device's data in `/var/lib/eriphe/device`) and,
 while it has, keeps Windows out of sleep (`SetThreadExecutionState`); after, Windows sleeps as it
-is set to (node/README.md, Sleep).
+is set to (device/README.md, Sleep).
 
 **Session.** Neither task sees the user's session (WSL, and session 0 for S4U tasks), so
-eriphe-node could not tell whether someone is at the PC. A third task, "Eriphe session" (one per
-PC), runs `%ProgramData%\eriphe-node\bin\eriphe-session.exe` at logon of the user signed in at
+eriphe-device could not tell whether someone is at the PC. A third task, "Eriphe session" (one per
+PC), runs `%ProgramData%\eriphe-device\bin\eriphe-session.exe` at logon of the user signed in at
 the PC when the script ran, in their session, as them, hidden and without elevation (a scheduled
 task rather than a `Run` key: it is restarted if it stops, starts at once on install, and goes
-cleanly with the uninstall). Every 5 s it writes, in `%ProgramData%\eriphe-node\session`,
+cleanly with the uninstall). Every 5 s it writes, in `%ProgramData%\eriphe-device\session`,
 whether they are idle or locked and not to be disturbed (a game or an app in fullscreen), and the
-category of the app in front, never its name ([node/README.md](../node/README.md), The user's
+category of the app in front, never its name ([device/README.md](../device/README.md), The user's
 session). That folder is the user's to write, the installing account's to read, nobody else's;
 the distribution mounts it alone, read-only, at `/mnt/eriphe-session` (`ERIPHE_SESSION_DIR` in
-`/etc/eriphe-node.env`), and the launcher gives it to the node only, read-only (its
-`ERIPHE_SESSION_DIR`). The program comes from eriphe-node's image and is updated by running the
+`/etc/eriphe-device.env`), and the launcher gives it to the device only, read-only (its
+`ERIPHE_SESSION_DIR`). The program comes from eriphe-device's image and is updated by running the
 install command again (the updater in the distribution cannot reach Windows). Without it, Eriphe
 works as before: the session is unknown.
 
@@ -1109,30 +1109,30 @@ installer notices a public address and says so at the end ("Good to know"). Befo
 
 **Logs.**
 
-| | eriphe-node | eriphe-core (core mode) |
+| | eriphe-device | eriphe-core (core mode) |
 |---|---|---|
-| Linux | `docker logs eriphe-node` | `docker logs eriphe-core` |
-| macOS, Apple's container | `~/.eriphe/node.log` | `~/.eriphe/core.log` |
-| macOS, Lima | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker logs eriphe-node` | the same, `eriphe-core` |
-| Windows | `wsl -d eriphe -- tail /var/log/eriphe-node.log` | `wsl -d eriphe -- docker logs eriphe-core` |
+| Linux | `docker logs eriphe-device` | `docker logs eriphe-core` |
+| macOS, Apple's container | `~/.eriphe/device.log` | `~/.eriphe/core.log` |
+| macOS, Lima | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker logs eriphe-device` | the same, `eriphe-core` |
+| Windows | `wsl -d eriphe -- tail /var/log/eriphe-device.log` | `wsl -d eriphe -- docker logs eriphe-core` |
 
 The install itself, every command's output included, is in `~/.eriphe/install.log` (macOS),
 `/var/log/eriphe-install.log` (Linux; `~/.eriphe-install.log` when run without root), or
-`C:\ProgramData\eriphe-node\install.log` (Windows); an uninstall on a Mac writes
+`C:\ProgramData\eriphe-device\install.log` (Windows); an uninstall on a Mac writes
 `$TMPDIR/eriphe-uninstall.log`, as `~/.eriphe` goes.
 
 **What macOS asks, on a Mac with Apple's container.** When you share a folder in Documents, the
 Desktop, Downloads, iCloud Drive, a cloud folder or a removable volume (`eriphe-share add`, or the
 Finder's "Share with Eriphe…"), which says first that macOS may ask:
 
-- "« eriphe-node » would like to access files in your Documents folder" (or the others).
+- "« eriphe-device » would like to access files in your Documents folder" (or the others).
 - "« syncthing » would like to access files in your Documents folder", for a folder that may be
   copied (`--copyable`): Syncthing keeps its copies.
 
 Allow both. Refused, the command names the program and opens System Settings → Privacy & Security
 → Files and Folders, where you turn it on; the workspace shows the folder as blocked, with
 "Autoriser" ("Allow"), which opens that pane on the Mac, until you do. Syncthing's answer holds
-across updates (its signature is its developer's); eriphe-node is not signed with a Developer ID,
+across updates (its signature is its developer's); eriphe-device is not signed with a Developer ID,
 so macOS may ask again for it after an update, and the workspace then shows the folder blocked.
 
 Then each once, for Apple's program, never for Eriphe's (so not again after an update):
@@ -1150,14 +1150,14 @@ Then each once, for Apple's program, never for Eriphe's (so not again after an u
   again after an update.
 
 macOS also keeps a LaunchAgent off the LAN (Apple TN3179, local network privacy), and a daemon
-run as the user too; only root programs are allowed without asking, and eriphe-node cannot be one
-(Apple's container needs your session). So a node that joins an eriphe-core on the LAN gets a root
+run as the user too; only root programs are allowed without asking, and eriphe-device cannot be one
+(Apple's container needs your session). So a device that joins an eriphe-core on the LAN gets a root
 LaunchDaemon, `/Library/LaunchDaemons/org.eriphe.relay.plist` (written with `sudo`: macOS asks for
-the password), that connects to eriphe-core for it and does nothing else: a copy of eriphe-node
+the password), that connects to eriphe-core for it and does nothing else: a copy of eriphe-device
 that only root can change (`/usr/local/libexec/eriphe-relay core-relay`), on a socket only you can
-open (`/var/run/eriphe/relay.sock`), to eriphe-core's addresses only, as your node's files say,
-read without following a symlink; TLS stays end to end between the node and eriphe-core
-(node/README.md, The container engine). No question from macOS, and none after updates. Running
+open (`/var/run/eriphe/relay.sock`), to eriphe-core's addresses only, as your device's files say,
+read without following a symlink; TLS stays end to end between the device and eriphe-core
+(device/README.md, The container engine). No question from macOS, and none after updates. Running
 the install command again updates it (`sudo`). Its log is `/var/log/eriphe-relay.log`. In core
 mode there is none: eriphe-core is on the Mac.
 

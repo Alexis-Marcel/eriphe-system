@@ -12,24 +12,23 @@ func aboutOfRow(c *core, table, where string, args ...any) string {
 	return s
 }
 
-// What the brain makes in a turn about a thread is about the thread: a
-// task (a step of it), a notification, a memory, an intention, the
-// thread's surface it adds its part to. An about given wins.
-func TestTurnThreadIsTheAbout(t *testing.T) {
-	c := startCore(t)
+// What the brain makes in a turn about a node is about the node: a task,
+// a notification, a memory, an intention. An about given wins.
+func TestTurnNodeIsTheAbout(t *testing.T) {
+	c := graphCore(t)
 	m, _ := testMemory(t)
 	c.useMemory(m)
-	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque Velora", "goal": "Sam sait si le nom est libre.", "alias": "brand:velora"})
+	out, isErr := callBrainTool(t, c, "node_open", map[string]any{"title": "Marque Velora", "goal": "Sam sait si le nom est libre."})
 	if isErr {
 		t.Fatalf("open: %v", out)
 	}
-	key := threadRef(openedThread(t, out).ID)
-	step, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Cherche qui détient la marque Velora."})
+	key := nodeRef(out["id"].(string))
+	step, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Cherche qui détient la marque Velora.", "title": "Velora"})
 	if isErr {
 		t.Fatalf("run_task: %v", step)
 	}
 	if got := aboutOfRow(c, "tasks", "id = ?", step["task"]); got != key {
-		t.Errorf("step task under %q", got)
+		t.Errorf("task under %q", got)
 	}
 	if out, _ := callBrainTool(t, c, "notify", map[string]any{"text": "Velora est prise.", "weight": 2, "why": "La recherche a fini."}); out["about"] != key {
 		t.Errorf("notify: %v", out)
@@ -54,30 +53,19 @@ func TestTurnThreadIsTheAbout(t *testing.T) {
 	if intent != key {
 		t.Errorf("intention under %q", intent)
 	}
-	sid := threadSurfaceID(openedThread(t, out).ID)
-	if out, isErr := callBrainTool(t, c, "surface_write", map[string]any{"id": sid, "block": "prise",
-		"components": []any{map[string]any{"id": "root", "component": "Text", "text": "Prise."}}}); isErr {
-		t.Fatalf("surface_write: %v", out)
-	}
-	if got := aboutOfRow(c, "surfaces", "id = ?", sid); got != key {
-		t.Errorf("surface under %q", got)
-	}
 }
 
-// Without a thread, the one thread or entity my message names is the
-// turn's; two named give none.
+// Without a node, the one entity my message names is the turn's; two
+// named give none.
 func TestNamedIsTheTurns(t *testing.T) {
 	c, _ := notifyCore(t, at(t, "2026-11-04", "10:00"))
-	th, err := c.openThread(threadIn{Title: "Site", Goal: "En ligne.", Alias: "project:site"}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.store.noteAbout("project:site")
 	ownerSays(c, "Préviens-moi quand le site est en ligne")
 	c.turn.name(c.named("Préviens-moi quand le site est en ligne"))
-	if out, _ := c.brainNotify(notifyIn{Text: "En ligne.", Weight: 2, Why: "Déployé."}); out["about"] != threadRef(th.ID) {
+	if out, _ := c.brainNotify(notifyIn{Text: "En ligne.", Weight: 2, Why: "Déployé."}); out["about"] != "project:site" {
 		t.Errorf("one named: %v", out)
 	}
-	c.turn.name([]string{threadRef(th.ID), "person:sam"})
+	c.turn.name([]string{"project:site", "person:sam"})
 	if out, _ := c.brainNotify(notifyIn{Text: "Encore.", Weight: 2, Why: "Encore."}); out["about"] != nil {
 		t.Errorf("two named: %v", out)
 	}
@@ -87,9 +75,8 @@ func TestNamedIsTheTurns(t *testing.T) {
 	}
 }
 
-// A rule on a key matches a notification about it, or about the thread
-// it is an alias of; a rule on a record (skill:<name>, thread:<id>) still
-// matches its ref.
+// A rule on a key matches a notification about it; a rule on a record
+// (skill:<name>) still matches its ref.
 func TestRuleMatchesAboutOrRef(t *testing.T) {
 	rules := []notifyRule{
 		{ID: 1, Kind: ruleTopic, Match: "project:site", Ceiling: 0, State: ruleActive},
@@ -102,8 +89,6 @@ func TestRuleMatchesAboutOrRef(t *testing.T) {
 		{notifyItem{About: "project:site:prod", Ref: "skill:veille"}, 1},
 		{notifyItem{About: "topic:autre", Ref: "skill:veille"}, 2},
 		{notifyItem{Ref: "intention:3"}, 0},
-		{notifyItem{About: "thread:4", Aliases: []string{"project:site"}}, 1},
-		{notifyItem{About: "thread:4", Aliases: []string{"le site"}}, 0},
 	} {
 		var got int64
 		if r := itemRule(rules, tc.it); r != nil {
@@ -118,8 +103,10 @@ func TestRuleMatchesAboutOrRef(t *testing.T) {
 // A card takes its proposal's about, else its maker's; an attention item
 // its card's, or its source's.
 func TestCardAndItemAbouts(t *testing.T) {
-	c := stepsCore(t)
-	th := lightThread(t, c) // pr:example/infra#12
+	c := graphCore(t)
+	m, _ := testMemory(t)
+	c.useMemory(m)
+	th := workNode(t, c, "")
 	x := &Memory{Kind: kindFact, About: "person:sam", Text: "Sam relit les PR le matin.", SourceKind: srcBrain, Trust: trustExternal,
 		Status: memProposed}
 	if err := c.mem.add(x, "brain"); err != nil {
@@ -129,25 +116,25 @@ func TestCardAndItemAbouts(t *testing.T) {
 	if got := aboutOfRow(c, "convo_cards", "ref = ?", proposalRef(cardMemory, x.ID)); got != "person:sam" {
 		t.Errorf("memory card under %q", got)
 	}
-	c.attend(attentionItem{Ref: "alert:1", Weight: 2, Why: "a reply", Source: threadRef(th.ID)})
-	if got := aboutOfRow(c, "attention", "ref = 'alert:1'"); got != threadRef(th.ID) {
-		t.Errorf("item from a thread under %q", got)
+	c.attend(attentionItem{Ref: "alert:1", Weight: 2, Why: "a reply", Source: nodeRef(th)})
+	if got := aboutOfRow(c, "attention", "ref = 'alert:1'"); got != nodeRef(th) {
+		t.Errorf("item from a node under %q", got)
 	}
 	c.attend(attentionItem{Ref: "alert:2", Weight: 2, Why: "a bill", Source: "skill:mail", About: "topic:facture"})
 	if items := c.attentionWhere(`ref = 'alert:2'`); len(items) != 1 || items[0].About != "topic:facture" {
 		t.Errorf("item %+v", items)
 	}
-	// A card of a proposal about nothing: the turn's thread.
-	c.turn.about(th.ID)
+	// A card of a proposal about nothing: the turn's node.
+	c.turn.about(th)
 	out, err := c.brainRule(ruleIn{Kind: ruleQuiet, From: "22:00", To: "07:00", Why: "Proposé."})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := aboutOfRow(c, "convo_cards", "kind = ?", cardRule); got != threadRef(th.ID) {
+	if got := aboutOfRow(c, "convo_cards", "kind = ?", cardRule); got != nodeRef(th) {
 		t.Errorf("rule card under %q (%v)", got, out)
 	}
 	// Raised by a task: the task's.
-	c.turn.about(0)
+	c.turn.about("")
 	c.store.insertTask(&TaskRow{ID: "t-9", Runtime: "claude-code", State: "running", Prompt: "x", About: "project:site"})
 	y := &Memory{Kind: kindFact, Text: "Le site a un certificat neuf.", SourceKind: srcTask, SourceRef: "task:t-9", Trust: trustExternal, Status: memProposed}
 	if err := c.mem.add(y, "task"); err != nil {
@@ -164,68 +151,33 @@ func TestCardAndItemAbouts(t *testing.T) {
 	}
 }
 
-// A surface keeps its about when written again without one; one given
-// changes it.
-func TestSurfaceKeepsItsAbout(t *testing.T) {
-	c := stepsCore(t)
-	th := lightThread(t, c)
-	write := func(about string) {
-		t.Helper()
-		in := surfaceIn{ID: "pr", Title: "PR", Components: []byte(`[{"id":"root","component":"Text","text":"x"}]`), About: about}
-		if about == "" {
-			in.inherit = c.turnAbout()
-		}
-		if _, errs, err := c.fixtureSurface(surfaceAuthorBrain, in); err != nil || len(errs) > 0 {
-			t.Fatal(err, errs)
-		}
-	}
-	c.turn.about(th.ID)
-	write("")
-	if got := aboutOfRow(c, "surfaces", "id = 'pr'"); got != threadRef(th.ID) {
-		t.Fatalf("new surface under %q", got)
-	}
-	c.store.noteAbout("project:site")
-	c.turn.name([]string{"project:site"})
-	c.turn.about(0)
-	write("")
-	if got := aboutOfRow(c, "surfaces", "id = 'pr'"); got != threadRef(th.ID) {
-		t.Errorf("rewritten under %q", got)
-	}
-	write("project:site")
-	if got := aboutOfRow(c, "surfaces", "id = 'pr'"); got != "project:site" {
-		t.Errorf("given, under %q", got)
-	}
-}
-
-// A skill's run is about the thread alias it declares, else its events' key
-// when it names a thing; a bad subject refuses the skill.
+// A skill's run is about its events' key when it names a thing; a node
+// that is not a node's id refuses the skill.
 func TestSkillRunSubject(t *testing.T) {
-	st, err := parseSkillTrigger(skillManifest{When: "monitor.failed key=sauvegarde", Thread: "Alerte: sauvegarde"})
-	if err != nil || st.Thread != "alert:sauvegarde" {
+	st, err := parseSkillTrigger(skillManifest{When: "monitor.failed key=sauvegarde", Node: "k3x9m2p7qa"})
+	if err != nil || st.Node != "k3x9m2p7qa" {
 		t.Fatalf("declared: %+v %v", st, err)
 	}
 	monitor := []journalEvent{{Kind: "monitor.failed", Key: "sauvegarde"}}
 	for _, tc := range []struct {
-		st     *skillTrigger
 		key    string
 		events []journalEvent
 		want   string
 	}{
-		{st, "autre", nil, "alert:sauvegarde"},
-		{&skillTrigger{}, "sauvegarde", monitor, "topic:sauvegarde"},
-		{&skillTrigger{}, "pr:example/infra#12", nil, "pr:example/infra#12"},
-		{&skillTrigger{}, "t-20261114-1", []journalEvent{{Kind: "task.ended"}}, ""},
-		{&skillTrigger{}, "", monitor, ""},
+		{"sauvegarde", monitor, "topic:sauvegarde"},
+		{"pr:example/infra#12", nil, "pr:example/infra#12"},
+		{"t-20261114-1", []journalEvent{{Kind: "task.ended"}}, ""},
+		{"", monitor, ""},
 	} {
-		if got := skillRunAlias(tc.st, tc.key, tc.events); got != tc.want {
+		if got := skillRunAlias(tc.key, tc.events); got != tc.want {
 			t.Errorf("%q %v: %q, want %q", tc.key, tc.events, got, tc.want)
 		}
 	}
-	if _, err := parseSkillTrigger(skillManifest{When: "monitor.new", Thread: "task:t-1"}); err == nil {
-		t.Error("a record as a skill's subject")
+	if _, err := parseSkillTrigger(skillManifest{When: "monitor.new", Node: "Mes mails"}); err == nil {
+		t.Error("a node that is no id")
 	}
-	if _, err := parseSkillTrigger(skillManifest{Thread: "project:site"}); err == nil {
-		t.Error("a subject without when")
+	if _, err := parseSkillTrigger(skillManifest{Node: "k3x9m2p7qa"}); err == nil {
+		t.Error("a node without when")
 	}
 	c, now := skillCore(t)
 	sk := triggeredSkill{Name: "veille", Trigger: &skillTrigger{When: "monitor.failed", Kind: "monitor.failed", Kinds: []string{"monitor.failed"}}}

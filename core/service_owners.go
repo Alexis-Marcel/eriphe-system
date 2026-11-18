@@ -23,7 +23,7 @@ type serviceOwner struct {
 	Owns func(name string) bool
 	// Specs are the services it wants now, by name.
 	Specs func(c *core) (map[string]RunSpec, error)
-	// Running is told that one of its services runs, its node said so;
+	// Running is told that one of its services runs, its device said so;
 	// nil: nothing to do.
 	Running func(c *core, name string)
 }

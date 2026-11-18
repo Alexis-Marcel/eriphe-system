@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -25,28 +23,20 @@ const (
 )
 
 type writeSkillIn struct {
-	Name         string             `json:"name" jsonschema:"lowercase letters, digits and hyphens: mails-rdv"`
-	Description  string             `json:"description" jsonschema:"when it applies, in a sentence"`
-	Instructions string             `json:"instructions" jsonschema:"what to do, in French, in markdown: the task that follows it sees only this and the events"`
-	When         string             `json:"when,omitempty" jsonschema:"what runs it by itself: an event kind (monitor.changed, monitor.new, monitor.crossed, monitor.failed: a monitor that polls a tool or a resource (write_monitor; the mail received: monitor.new key=<its name>); monitor.received: an incoming address the user made; keyed by the monitor's name; task.ended, thread.ended, user.returned), with filters key=…, field=value or a payload number field>=n, field<=n (monitor.received key=getout status=firing; user.returned away_minutes>=180); several kinds by commas share the filters, for one way of reacting (monitor.failed, monitor.recovered key=getout-prod: lost and back): a skill per way of reacting (its urgent text, every), as many kinds as that reaction needs; or time with a schedule (time weekdays 08:00, time every 2h 08:00-20:00); or both, the schedule then ; and the events (time daily 06:00; user.returned away_minutes>=180); empty for a skill only followed when asked"`
-	Every        string             `json:"every,omitempty" jsonschema:"with when on an event: batch them, at most one run per period (15m, 1h, 1d): the run gets every event of the period"`
-	Model        string             `json:"model,omitempty" jsonschema:"an agent of list_agents for its runs: a small one to sort mail; the default one if empty"`
-	Tools        []string           `json:"tools,omitempty" jsonschema:"the catalog servers its runs are lent (list_tools): mail, calendar…; each call is still decided by the user's grid. eriphe-threads to act on threads: its thread (thread), and any other it finds or opens; never eriphe-workspace: what a skill finds goes on its thread"`
-	Urgent       string             `json:"urgent,omitempty" jsonschema:"with when: a fixed message (160 characters, no link) sent at any hour when a run weighs something 5 in its attention list: « Prod GetOut en panne, regarde Eriphe »"`
-	Thread       string             `json:"thread,omitempty" jsonschema:"with when: its thread's alias, kind:slug (topic:mails, project:getout); left out, a monitor's name (topic:<name>) or an event key written kind:slug. Lent eriphe-threads, its runs act on that thread: the first opens it, standing, titled by the skill; the next ones find it again. Its runs' notifications and cards carry it"`
-	Title        string             `json:"title,omitempty" jsonschema:"with when: its thread's name for the user, in their language, a few words (« Mes mails »); left out, its name made a title"`
-	Actions      []writeSkillAction `json:"actions,omitempty" jsonschema:"the actions its runs may recommend on an item of its thread (note_item), with the words their button says, approved by the user with the skill: a run's own label is never shown. At most one per item is offered, only when useful; never a menu"`
-}
-
-// writeSkillAction is an action a skill declares (actions: in SKILL.md).
-type writeSkillAction struct {
-	Label string            `json:"label" jsonschema:"what its button says, a verb in the user's language: « Archiver »"`
-	Tool  string            `json:"tool" jsonschema:"server/tool, one of its tools: mail/move_message"`
-	Args  map[string]string `json:"args,omitempty" jsonschema:"the arguments the action must have to be this one, as text with no space: {\"folder\": \"Archive\"}; the item's own argument is not one"`
+	Name         string   `json:"name" jsonschema:"lowercase letters, digits and hyphens: mails-rdv"`
+	Description  string   `json:"description" jsonschema:"when it applies, in a sentence"`
+	Instructions string   `json:"instructions" jsonschema:"what to do, in French, in markdown: the task that follows it sees only this and the events"`
+	When         string   `json:"when,omitempty" jsonschema:"what runs it by itself: an event kind (monitor.changed, monitor.new, monitor.crossed, monitor.failed: a monitor that polls a tool or a resource (write_monitor; the mail received: monitor.new key=<its name>); monitor.received: an incoming address the user made; keyed by the monitor's name; task.ended, node.done, user.returned), with filters key=…, field=value or a payload number field>=n, field<=n (monitor.received key=getout status=firing; user.returned away_minutes>=180); several kinds by commas share the filters, for one way of reacting (monitor.failed, monitor.recovered key=getout-prod: lost and back): a skill per way of reacting (its urgent text, every), as many kinds as that reaction needs; or time with a schedule (time weekdays 08:00, time every 2h 08:00-20:00); or both, the schedule then ; and the events (time daily 06:00; user.returned away_minutes>=180); empty for a skill only followed when asked"`
+	Every        string   `json:"every,omitempty" jsonschema:"with when on an event: batch them, at most one run per period (15m, 1h, 1d): the run gets every event of the period"`
+	Model        string   `json:"model,omitempty" jsonschema:"an agent of list_agents for its runs: a small one to sort mail; the default one if empty"`
+	Tools        []string `json:"tools,omitempty" jsonschema:"the catalog servers its runs are lent (list_tools): mail, calendar…; each call is still decided by the user's grid. Never eriphe-workspace: each run writes what it finds in a node of its own"`
+	Urgent       string   `json:"urgent,omitempty" jsonschema:"with when: a fixed message (160 characters, no link) sent at any hour when a run weighs something 5 in its attention list: « Prod GetOut en panne, regarde Eriphe »"`
+	Repos        []string `json:"repos,omitempty" jsonschema:"with when: the repositories (owner/name, list_repos) the steps its runs open may borrow, approved here with it"`
+	Node         string   `json:"node,omitempty" jsonschema:"with when: the id of a standing node its runs work in (the mails, a production app), reading and writing it and opening its children; left out, each run works in a node of its own"`
 }
 
 func registerSkillWriteTool(s *mcp.Server, c *core) {
-	tool(s, "write_skill", "Write one of the user's skills, or a new version of one, when the user asks for a behaviour of Eriphe's: a skill is know-how (instructions), and with when it runs by itself, as a task in the background, on events or at times. Use it for « quand je reçois un mail avec un rendez-vous, propose-moi… », « surveille la prod et propose un correctif ». A source the user wants followed continuously (« surveille mes mails », « montre-moi les PR à relire ») gets a watcher: a skill on the event of a new item, lent eriphe-threads with its thread alias, that keeps its standing thread (notes each item, raises what matters). Nothing runs before the user approves it on its card. Its runs never talk in this conversation: each one's last message is a notification when its receipt weighs it (attention, 1 to 5; none tells nothing), and its actions are asked on cards. Write no [rien], [brief] or [urgent] in its instructions: the weight says it.",
+	tool(s, "write_skill", "Write one of the user's skills, or a new version of one, when the user asks for a behaviour of Eriphe's: a skill is know-how (instructions), and with when it runs by itself, as a task in the background, on events or at times. Use it for « quand je reçois un mail avec un rendez-vous, propose-moi… », « surveille la prod et propose un correctif ». A source the user wants followed continuously (« surveille mes mails », « montre-moi les PR à relire ») is a view: propose_view proposes its standing node, its monitor and its skill on one card. A skill with node works in that standing node (notes each item, opens a child for what needs work, keeps its actions for the user's yes); without, each run works in a node of its own. Nothing runs before the user approves it on its card. Its runs never talk in this conversation: each one's last message is a notification when its receipt weighs it (attention, 1 to 5; none tells nothing), and its actions are asked on cards. Write no [rien], [brief] or [urgent] in its instructions: the weight says it.",
 		func(ctx context.Context, in writeSkillIn) (map[string]any, error) {
 			return c.writeSkill(in, c.turnTaint())
 		})
@@ -73,22 +63,11 @@ func writtenSkillMD(in writeSkillIn) string {
 	if u := oneLine(in.Urgent); u != "" {
 		fmt.Fprintf(&b, "urgent: %s\n", u)
 	}
-	if s := oneLine(in.Thread); s != "" {
-		fmt.Fprintf(&b, "thread: %s\n", s)
+	if len(in.Repos) > 0 {
+		fmt.Fprintf(&b, "repos: [%s]\n", strings.Join(in.Repos, ", "))
 	}
-	if s := oneLine(in.Title); s != "" {
-		fmt.Fprintf(&b, "title: %s\n", s)
-	}
-	if len(in.Actions) > 0 {
-		b.WriteString("actions:\n")
-		for _, a := range in.Actions {
-			line := strings.NewReplacer(`"`, "", "\n", " ").Replace(oneLine(a.Label)) + ": " + strings.TrimSpace(a.Tool)
-			keys := slices.Sorted(maps.Keys(a.Args))
-			for _, k := range keys {
-				line += " " + k + "=" + a.Args[k]
-			}
-			fmt.Fprintf(&b, "  - \"%s\"\n", line)
-		}
+	if s := oneLine(in.Node); s != "" {
+		fmt.Fprintf(&b, "node: %s\n", s)
 	}
 	b.WriteString("---\n\n")
 	b.WriteString(strings.TrimSpace(in.Instructions))
@@ -96,29 +75,48 @@ func writtenSkillMD(in writeSkillIn) string {
 	return b.String()
 }
 
-func (c *core) writeSkill(in writeSkillIn, tainted []string) (map[string]any, error) {
+// checkSkill checks a skill the brain writes, and gives its SKILL.md.
+func (c *core) checkSkill(in writeSkillIn) (string, skillManifest, error) {
 	if strings.TrimSpace(in.Instructions) == "" {
-		return nil, fmt.Errorf("instructions are needed")
+		return "", skillManifest{}, fmt.Errorf("instructions are needed")
 	}
 	if len(in.Instructions) > skillBodyMax {
-		return nil, fmt.Errorf("instructions of %d bytes: %d at most", len(in.Instructions), skillBodyMax)
+		return "", skillManifest{}, fmt.Errorf("instructions of %d bytes: %d at most", len(in.Instructions), skillBodyMax)
 	}
 	if m := strings.TrimSpace(in.Model); m != "" {
 		if _, _, err := c.conf().agent(m); err != nil {
-			return nil, fmt.Errorf("model %q: %w", m, err)
+			return "", skillManifest{}, fmt.Errorf("model %q: %w", m, err)
 		}
 	}
 	for _, t := range in.Tools {
 		if _, ok := c.conf().Servers[t]; !ok && !providedServer(t) {
-			return nil, fmt.Errorf("tool %q is not a catalog server (list_tools)", t)
+			return "", skillManifest{}, fmt.Errorf("tool %q is not a catalog server (list_tools)", t)
 		}
 	}
-	k, changed, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte(writtenSkillMD(in))}}, skillFromEriphe)
+	md := writtenSkillMD(in)
+	m, err := parseSkillMD([]byte(md))
 	if err != nil {
-		if se, ok := err.(*skillError); ok {
-			return nil, fmt.Errorf("%s", fmt.Sprintf(tr("en", se.Key), se.Arg))
-		}
+		return "", skillManifest{}, skillErrText(err)
+	}
+	return md, m, nil
+}
+
+// skillErrText is a skill's error in the brain's words.
+func skillErrText(err error) error {
+	if se, ok := err.(*skillError); ok {
+		return fmt.Errorf("%s", fmt.Sprintf(tr("en", se.Key), se.Arg))
+	}
+	return err
+}
+
+func (c *core) writeSkill(in writeSkillIn, tainted []string) (map[string]any, error) {
+	md, _, err := c.checkSkill(in)
+	if err != nil {
 		return nil, err
+	}
+	k, changed, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte(md)}}, skillFromEriphe)
+	if err != nil {
+		return nil, skillErrText(err)
 	}
 	if !changed {
 		return map[string]any{"result": "the same as the version already approved: nothing to approve"}, nil
@@ -167,27 +165,34 @@ func (c *core) skillProposal(p proposal) proposal {
 		}
 		return fmt.Sprintf(tr(lang, "card.skill.new"), name)
 	}
-	p.fields = func(lang string) []cardField {
-		fs := []cardField{}
-		if m.Trigger != nil {
-			fs = append(fs, cardField{Name: tr(lang, "card.skill.when"), Value: m.Trigger.Text(lang)})
-		}
-		if m.Title != "" {
-			fs = append(fs, cardField{Name: tr(lang, "card.skill.title"), Value: m.Title})
-		}
-		// The words its runs' buttons will say: approved here, never a
-		// run's (item_offers.go).
-		if len(m.Actions) > 0 {
-			var lines []string
-			for _, a := range m.Actions {
-				lines = append(lines, "« "+a.Label+" » : "+callVerb(a.Tool+" {}", lang))
-			}
-			fs = append(fs, cardField{Name: tr(lang, "card.skill.actions"), Value: strings.Join(lines, "\n")})
-		}
-		return append(fs, cardField{Name: tr(lang, "card.skill.instructions"), Value: truncate(m.Body, cardValueMax)})
-	}
+	p.fields = func(lang string) []cardField { return c.skillFields(m, lang) }
 	p.Fields = p.fields("fr")
 	return p
+}
+
+// skillFields are what a skill's card shows of it: when it runs, the
+// repositories its steps may borrow, the node its runs work in, its
+// instructions.
+func (c *core) skillFields(m skillManifest, lang string) []cardField {
+	var fs []cardField
+	if st := m.Trigger; st != nil {
+		fs = append(fs, cardField{Name: tr(lang, "card.skill.when"), Value: st.Text(lang)})
+		if len(st.Repos) > 0 {
+			// Its steps borrow them with no card of their own (node_steps.go):
+			// the user approves them here.
+			fs = append(fs, cardField{Name: tr(lang, "card.skill.repos"), Value: strings.Join(st.Repos, ", ")})
+		}
+		if st.Node != "" {
+			title := st.Node
+			if c.nodes != nil {
+				if sum, err := c.nodes.Get(st.Node); err == nil {
+					title = sum.Title
+				}
+			}
+			fs = append(fs, cardField{Name: tr(lang, "card.skill.node"), Value: title})
+		}
+	}
+	return append(fs, cardField{Name: tr(lang, "card.skill.instructions"), Value: truncate(m.Body, cardValueMax)})
 }
 
 // decideSkill approves or rejects the version the card showed.
@@ -203,6 +208,5 @@ func (c *core) decideSkill(id int64, approve bool) error {
 		return err
 	}
 	c.store.set(skillFiredKey+name, "") // a time trigger starts from its next time
-	c.openSkillThreads(name, true)      // its thread shows from now (task_threads.go)
 	return nil
 }

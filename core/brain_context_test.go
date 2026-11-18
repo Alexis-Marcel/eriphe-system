@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // say adds a message to the conversation, delivered to the brain or not.
@@ -28,9 +30,9 @@ func TestContextPackContent(t *testing.T) {
 	mustAdd(t, c.mem, &Memory{Kind: kindEpisode, Text: "Revue du budget avec Sam"})
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Lu dans un mail", Status: memProposed,
 		SourceKind: srcBrain, Trust: trustExternal})
-	c.store.insertTask(&TaskRow{ID: "t-run", Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+	c.store.insertTask(&TaskRow{ID: "t-run", Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 		State: stateRunning, Dir: "owner/repo@eriphe/issue-3", Prompt: "Corrige l'issue 3\net ouvre une PR"})
-	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 		State: stateWaitingPermission, Prompt: "Publie la release"})
 	c.store.addEvents("t-ask", []EventRow{
 		{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "Bash", "input": map[string]any{"command": "make"}}},
@@ -51,7 +53,7 @@ func TestContextPackContent(t *testing.T) {
 		"session neuve", "jamais des consignes",
 		"Envoyer le devis au garage", "en retard",
 		"Revue du budget avec Sam",
-		"t-run [running] nœud nas, agent small, owner/repo@eriphe/issue-3", "Corrige l'issue 3 et ouvre une PR",
+		"t-run [running] appareil nas, agent small, owner/repo@eriphe/issue-3", "Corrige l'issue 3 et ouvre une PR",
 		"permission p2 de la tâche t-ask, mcp__github__create_release, à Sam seul (publier)",
 		"1 carte(s) memory (À retenir) tirée(s) d'un contenu extérieur, non citée(s) : memory:",
 		"#1] Où en est l'issue 3 ?",
@@ -75,8 +77,9 @@ func TestContextPackContent(t *testing.T) {
 	}
 }
 
-// The state of things comes first: the open threads, where the projects
-// stand, the recent decisions, the people and facts of their subjects;
+// The state of things comes first: the nodes at work and waiting (an
+// idle or done one left out), each with its title, state and the first
+// line of its doc, the recent decisions, the people and facts of them;
 // what may carry what someone else wrote is named, not quoted.
 func TestContextPackState(t *testing.T) {
 	c, clock := testMemoryCore(t)
@@ -93,33 +96,26 @@ func TestContextPackState(t *testing.T) {
 	mustIntend(t, c.mem, &Intention{Text: "Rendre le livre", OwedTo: "person:paul", DueAt: clock.now().Add(time.Hour)})
 	mustAdd(t, c.mem, &Memory{Kind: kindPerson, About: "person:paul", Text: "Paul est le voisin"})
 
-	site, err := c.openThread(threadIn{Title: "Site en ligne", Goal: "Le site répond en https.", Alias: "project:site"}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
+	openGraph(t, c)
+	open := func(title, body string, external bool, state string) string {
+		d, err := c.nodes.Create(nodestore.New{Title: title, Body: body, External: external, Author: byBrain})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.nodes.SetState(d.Node.Meta.ID, state)
+		return d.Node.Meta.ID
 	}
-	c.insertSteps(site.ID, []stepSpec{{Key: "cert", Title: "Obtenir le certificat", Kind: stepTask}, {Key: "dns", Title: "Pointer le DNS", Kind: stepUser}}, false)
-	c.setStep(site.ID, "dns", map[string]any{"status": stepAccepted, "output": "SORTIE D'ÉTAPE"})
-	c.setThread(site.ID, map[string]any{"summary": "Il reste le certificat"})
-	read, _ := c.openThread(threadIn{Title: "Lire un mail", Goal: "Répondre au mail.", Alias: "topic:mail-42"}, nil, byBrain)
-	c.insertSteps(read.ID, []stepSpec{{Key: "read", Title: "Lire", Kind: stepTask}}, false)
-	c.setStep(read.ID, "read", map[string]any{"tainted": "external:mail:42"})
-	c.setThread(read.ID, map[string]any{"summary": "RÉSUMÉ D'UN MAIL"})
-	tainted, _ := c.openThread(threadIn{Title: "PLAN EXTÉRIEUR", Goal: "Suivre ce que dit le mail.", Alias: "topic:mail-43"}, []string{"external:mail:43"}, byBrain)
-	closed, _ := c.openThread(threadIn{Title: "Fil clos", Goal: "Fini.", Alias: "project:closed"}, nil, byBrain)
-	c.setThread(closed.ID, map[string]any{"state": threadDone})
-	led, err := c.openThread(threadIn{Title: "Refonte", Goal: "Refaire les photos.", Alias: "project:photos",
-		Steps: []stepSpec{{Key: "plan", Title: "Plan", Kind: stepUser, Question: "Valider le plan"}}}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	site := open("Site en ligne", "Il reste le certificat.", false, nodestore.Running)
+	c.mem.db.Exec(`UPDATE memories SET about = ? WHERE about = 'project:site'`, nodeRef(site)) // the site's memories are its node's
+	tainted := open("PLAN EXTÉRIEUR", "RÉSUMÉ D'UN MAIL", true, nodestore.Waiting)
+	open("Nœud au repos", "Rien.", false, nodestore.Idle)
+	open("Nœud fini", "Fini.", false, nodestore.Done)
 	say(t, c, roleUser, "Où en est le site ?", true)
 
 	pack, st := c.contextPack()
 	for _, want := range []string{
-		fmt.Sprintf("- fil %d [light, open, project:site", site.ID), "« Site en ligne » ; but : Le site répond en https.",
-		"étapes ouvertes : cert « Obtenir le certificat » (task, waiting)", "résumé : Il reste le certificat",
-		"résumé non cité", fmt.Sprintf("- fil %d [light, open] : son plan peut porter", tainted.ID),
-		fmt.Sprintf("- fil %d [led, proposed", led.ID), "carte thread:",
+		"- nœud " + site + " [running", "« Site en ligne » : Il reste le certificat.",
+		"- nœud " + tainted + " [waiting] : il peut porter",
 		"Héberger le site sur le NAS",
 		"Sam relit les PR du site", "Le domaine est example.org", "fact tiré d'un contenu extérieur",
 		"Relancer Sam", "Paul est le voisin",
@@ -129,13 +125,12 @@ func TestContextPackState(t *testing.T) {
 		}
 	}
 	for _, not := range []string{"Projet fini", "Un fait sans rapport", "Lu dans une page web",
-		"SORTIE D'ÉTAPE", "RÉSUMÉ D'UN MAIL", "PLAN EXTÉRIEUR", "Suivre ce que dit", "Fil clos", "« Pointer le DNS »"} {
+		"RÉSUMÉ D'UN MAIL", "PLAN EXTÉRIEUR", "Nœud au repos", "Nœud fini"} {
 		if strings.Contains(pack, not) {
 			t.Errorf("pack has %q", not)
 		}
 	}
-	if strings.Index(pack, "Fils ouverts") > strings.Index(pack, "Où en est le site ?") ||
-		strings.Index(pack, "Héberger le site") > strings.Index(pack, "Où en est le site ?") {
+	if strings.Index(pack, "Nœuds en cours") > strings.Index(pack, "Où en est le site ?") {
 		t.Error("the state of things is not first")
 	}
 	if n := strings.Count(pack, "```"); n%2 != 0 {
@@ -145,22 +140,16 @@ func TestContextPackState(t *testing.T) {
 	for _, x := range st.Sections {
 		got[x.Name] = x
 	}
-	// Each open thread follows a subject: its card, the site's holding its
-	// decisions and facts, which are not said again.
-	if x := got["cards"]; x.Lines != 4 || x.Shown != 4 || x.Chars == 0 || len(st.Cards) != 4 {
+	// Each active node has its card, the site's holding its decisions and
+	// facts, which are not said again.
+	if x := got["cards"]; x.Lines != 2 || x.Shown != 2 || x.Chars == 0 || len(st.Cards) != 2 {
 		t.Errorf("cards: %+v", x)
-	}
-	if got["threads"].Lines != 0 || got["decisions"].Shown != 0 || got["progress"].Lines != 0 || got["related"].Shown != 2 || got["messages"].Shown != 1 {
-		t.Errorf("sections: %+v", st.Sections)
 	}
 	if strings.Count(pack, "Héberger le site sur le NAS") != 1 || strings.Count(pack, "Le domaine est example.org") != 1 {
 		t.Error("a card's line said again")
 	}
 	if st.State+got["messages"].Chars != st.Chars {
 		t.Errorf("state %d and messages %d do not make the pack's %d chars", st.State, got["messages"].Chars, st.Chars)
-	}
-	if s := st.String(); !strings.Contains(s, "cards 4/4") || !strings.Contains(s, "decisions 0/0") {
-		t.Errorf("log line: %s", s)
 	}
 	// A clean turn: the pack quotes nothing that someone else wrote.
 	if _, _, _, tainted := c.turn.snapshot(); len(tainted) != 0 {
@@ -171,26 +160,25 @@ func TestContextPackState(t *testing.T) {
 // A heavy state takes at most half the budget: the messages keep the rest.
 func TestContextPackStateBudget(t *testing.T) {
 	c, _ := testMemoryCore(t)
+	openGraph(t, c)
 	for i := range 40 {
-		th, err := c.openThread(threadIn{Title: fmt.Sprintf("Fil %02d", i), Goal: strings.Repeat("un long but ", 40),
-			Alias: fmt.Sprintf("project:p%d", i)}, nil, byBrain)
+		d, err := c.nodes.Create(nodestore.New{Title: fmt.Sprintf("Nœud %02d", i), Goal: strings.Repeat("un long but ", 40),
+			Body: strings.Repeat("un état ", 30), Author: byBrain})
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.setThread(th.ID, map[string]any{"summary": strings.Repeat("un état ", 30)})
-		mustAdd(t, c.mem, &Memory{Kind: kindDecision, About: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("une décision ", 20)})
-		mustAdd(t, c.mem, &Memory{Kind: kindFact, About: fmt.Sprintf("project:p%d", i), Text: strings.Repeat("un fait ", 30)})
-	}
-	if _, err := c.openThread(threadIn{Title: "Fil sans sujet", Goal: "Un but."}, nil, byBrain); err != nil {
-		t.Fatal(err)
+		id := d.Node.Meta.ID
+		c.nodes.SetState(id, nodestore.Running)
+		mustAdd(t, c.mem, &Memory{Kind: kindDecision, About: nodeRef(id), Text: strings.Repeat("une décision ", 20)})
+		mustAdd(t, c.mem, &Memory{Kind: kindFact, About: nodeRef(id), Text: strings.Repeat("un fait ", 30)})
 	}
 	for i := range 30 {
-		c.store.insertTask(&TaskRow{ID: fmt.Sprintf("t-%02d", i), Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+		c.store.insertTask(&TaskRow{ID: fmt.Sprintf("t-%02d", i), Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 			State: stateRunning, Prompt: strings.Repeat("une longue consigne ", 20)})
 		mustIntend(t, c.mem, &Intention{Text: strings.Repeat("une intention ", 20), DueAt: time.Now().Add(time.Hour)})
 		mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: strings.Repeat("un fait proposé ", 20), Status: memProposed})
 	}
-	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 		State: stateWaitingPermission, Prompt: "Publie la release"})
 	c.store.addEvents("t-ask", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "Bash"}}})
 	c.store.markUserOnly("t-ask", "p1", "publier")
@@ -216,7 +204,7 @@ func TestContextPackStateBudget(t *testing.T) {
 	if st.Chars-st.State < contextPackChars*4/10 || !strings.Contains(pack, "message 0999") {
 		t.Errorf("messages of %d chars", st.Chars-st.State)
 	}
-	if !strings.Contains(pack, "Fil 39") || !strings.Contains(pack, "une décision") || !strings.Contains(pack, "un état") {
+	if !strings.Contains(pack, "« Nœud ") || !strings.Contains(pack, "une décision") || !strings.Contains(pack, "un état") {
 		t.Error("a section of the state is missing")
 	}
 	if n := strings.Count(pack, "```"); n%2 != 0 {
@@ -278,7 +266,7 @@ func startedBrain(t *testing.T, c *core, resume bool) *TaskRow {
 }
 
 // Only a fresh session gets the pack, in its first turn, not in its
-// system prompt; a resumed one has the thread already.
+// system prompt; a resumed one has the conversation already.
 func TestContextPackOnlyFresh(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	say(t, c, roleUser, "Rappelle-moi le devis", true)
@@ -303,12 +291,12 @@ func TestContextPackOnlyFresh(t *testing.T) {
 	}
 }
 
-// A resume that falls through on the node (a new session reported) gets
+// A resume that falls through on the device (a new session reported) gets
 // the pack with its next delivery, once; a resumed one never does.
-func TestContextPackAfterNodeFallback(t *testing.T) {
+func TestContextPackAfterDeviceFallback(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
-	say(t, c, roleUser, "Ancien fil", true)
+	say(t, c, roleUser, "Ancien message", true)
 	deliver := func(session, text string) string {
 		t.Helper()
 		c.store.updateTask("t-brain", map[string]any{"state": stateIdle, "session_id": session})
@@ -325,12 +313,12 @@ func TestContextPackAfterNodeFallback(t *testing.T) {
 		return got
 	}
 	setBrainStatus(c, func(st *AssistantStatus) { st.Resume = "s-1" })
-	if got := deliver("s-1", "Bonjour"); strings.Contains(got, "Ancien fil") {
+	if got := deliver("s-1", "Bonjour"); strings.Contains(got, "Ancien message") {
 		t.Fatalf("resumed session got the pack: %q", got)
 	}
 	setBrainStatus(c, func(st *AssistantStatus) { st.Resume = "s-1" })
 	got := deliver("s-2", "Tu es là ?")
-	if !strings.Contains(got, "session neuve") || !strings.Contains(got, "Ancien fil") || !strings.Contains(got, "] Tu es là ?") {
+	if !strings.Contains(got, "session neuve") || !strings.Contains(got, "Ancien message") || !strings.Contains(got, "] Tu es là ?") {
 		t.Fatalf("new session without the pack: %q", got)
 	}
 	if strings.Count(got, "Tu es là ?") != 1 {

@@ -6,7 +6,7 @@ import { makeT, WordsContext, type Lang } from "../i18n";
 import strings from "../strings.json";
 import { createAdapter, type ActionMessage, type Adapter, type ErrorMessage, type Message } from "./adapter";
 import { CATALOG } from "./catalog";
-import { galleryFixtures, sampleProposals, threadFixtures } from "./fixtures";
+import { galleryFixtures, sampleProposals } from "./fixtures";
 import { safeHref } from "./markdown";
 import { ProposalsContext, type Answer, type Moved, type Proposals } from "./proposals";
 import { Surfaces } from "./Surfaces";
@@ -105,7 +105,7 @@ const MARK: Record<string, string> = {
   Button: "button.a2-button", Choice: "fieldset.a2-choice", TextField: ".a2-field input[type=text]",
   DateField: ".a2-field input[type=datetime-local]", Metric: ".a2-metric", Progress: ".a2-progress", Chart: ".a2-chart", Table: "table.a2-table",
   Timeline: "ol.a2-timeline", Item: ".a2-item", Message: "article.a2-message", Day: ".a2-day", Proposal: ".a2-proposal-pending",
-  Alert: ".a2-alert", Placeholder: ".a2-placeholder",
+  Alert: ".a2-alert", Placeholder: ".a2-placeholder", Mark: ".a2-marks",
 };
 
 // The accessible name of an element, as far as these components give one.
@@ -227,15 +227,6 @@ describe("the catalog's components", () => {
     expect(actions.at(-1)?.action.context).toEqual({ text: "Trouve-moi un itinéraire pour le voyage" });
   });
 
-  it("send a thread's « C'est fait » with the thread and the step code wrote", async () => {
-    await mount("fr", one([
-      { id: "root", component: "Button", label: "C'est fait", action: { event: { name: "stepDone", context: { thread: 4, step: "deploy" } } } },
-    ]));
-    await click($("button.a2-button")!);
-    expect(actions.at(-1)?.action).toMatchObject({ name: "stepDone", sourceComponentId: "root", surfaceId: "t" });
-    expect(actions.at(-1)?.action.context).toEqual({ thread: 4, step: "deploy" });
-  });
-
   it("let a choice take several values when asked", async () => {
     await mount("en", one([
       { id: "root", component: "Choice", multiple: true, options: [{ label: "A", value: "a" }, { label: "B", value: "b" }], value: { "@path": "/v" } },
@@ -324,17 +315,6 @@ describe("the catalog's components", () => {
       adapter.applyMessages([{ version: "1.0", updateDataModel: { surfaceId: "gallery-figures", path: "/temps", value: [{ name: "One", points: [{ x: 1, y: 2 }, { x: 2, y: 3 }] }] } }]),
     );
     expect($$(".a2-chart")[1].querySelectorAll("polyline")).toHaveLength(1);
-  });
-
-  it("attach a mark to what follows it, as words a screen reader reads first", async () => {
-    await mount("fr", threadFixtures("fr"));
-    const marks = $$(".a2-text-mark");
-    expect(marks.length).toBeGreaterThan(0);
-    for (const m of marks) {
-      expect(m.tagName).toBe("SPAN");
-      expect(m.textContent).toBe("extérieur");
-      expect(m.nextElementSibling).not.toBeNull(); // the block it marks
-    }
   });
 
   it("show a step's state and its date", async () => {
@@ -506,18 +486,12 @@ describe("the catalog's components", () => {
     await act(async () => {});
     expect(text(".a2-proposal-text")).toBe("Ranger les mails ?");
     expect($(".a2-proposal-actions")).toBeNull();
-    expect(text(".a2-proposal-inchat")).toBe("Cette surface montre un contenu extérieur : réponds-y dans la conversation.");
+    expect(text(".a2-proposal-inchat")).toBe("Ce bloc montre un contenu extérieur : réponds-y dans la conversation.");
     expect(sent).toEqual([]);
     // Code's own surface (the attention queue's): Oui and Non, as the card.
     await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "t" } }]));
     const core = { extensions: { eriphe: { ...metadata.extensions.eriphe, author: "core" } } };
     await act(async () => adapter.applyMessages([{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata: core } }]));
-    await act(async () => {});
-    expect($(".a2-proposal-actions")).not.toBeNull();
-    // A thread's surface whose own thread is clean (answers): Oui and Non too, whatever a step read.
-    await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "t" } }]));
-    const thread = { extensions: { eriphe: { ...metadata.extensions.eriphe, author: "thread:4", answers: true } } };
-    await act(async () => adapter.applyMessages([{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata: thread } }]));
     await act(async () => {});
     expect($(".a2-proposal-actions")).not.toBeNull();
   });
@@ -586,19 +560,19 @@ describe("the catalog's components", () => {
     expect($(".a2-proposal-taint")).toBeNull();
   });
 
-  it("say where a proposal comes from, linked to its thread, and what its Oui does while it waits", async () => {
+  it("say where a proposal comes from, linked to its node, and what its Oui does while it waits", async () => {
     const view = {
       ref: "access:4", card: 4, kind: "access", state: "pending", text: "Autoriser la tâche « Chercher » à modifier dans github ?",
-      thread: 3, from: "Fil « PR alerting »", yes: "Sur Oui, la tâche peut modifier dans github jusqu'à sa fin.",
+      node: "k3m9", from: "Bulle « PR alerting »", yes: "Sur Oui, la tâche peut modifier dans github jusqu'à sa fin.",
     };
     await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "access:4" }]), { read: async () => view, answer: async () => true });
     await act(async () => {});
-    expect($(".a2-proposal-from a").getAttribute("href")).toBe("/espace?open=thread-3");
-    expect(text(".a2-proposal-from")).toBe("Fil « PR alerting »");
+    expect($(".a2-proposal-from a").getAttribute("href")).toBe("/espace?open=node-k3m9");
+    expect(text(".a2-proposal-from")).toBe("Bulle « PR alerting »");
     expect(text(".a2-proposal-yes")).toBe("Sur Oui, la tâche peut modifier dans github jusqu'à sa fin.");
   });
 
-  it("show a proposal of no thread without a line of where it comes from", async () => {
+  it("show a proposal of no node without a line of where it comes from", async () => {
     const view = { ref: "access:5", card: 5, kind: "access", state: "pending", text: "Autoriser ?", yes: "Sur Oui, cet appel part une seule fois, tel qu'il est montré." };
     await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "access:5" }]), { read: async () => view, answer: async () => true });
     await act(async () => {});
@@ -772,158 +746,6 @@ describe("the catalog's components", () => {
     expect($$("button svg.a2-icon path").length).toBeGreaterThan(0);
   });
 
-  it("draw a thread as code composes it: its state, a bar of its steps, those done folded, a decided card one line", async () => {
-    await mount("fr", threadFixtures("fr"));
-    await act(async () => {});
-    expect(errors).toEqual([]);
-    const work = (sel: string) => $$(`[data-surface=thread-101] ${sel}`);
-    expect(work(".a2-progress")[0].className).toContain("a2-tone-attention");
-    expect(work(".a2-pill")[0].textContent).toBe("À toi");
-    expect(work(".a2-bar > span")).toHaveLength(5);
-    expect(work(".a2-seg-done")).toHaveLength(2);
-    expect(work(".a2-seg-now")).toHaveLength(2);
-    expect(work(".a2-bar")[0].getAttribute("aria-label")).toBe("2 sur 5 faites, 2 en cours");
-    // What waits for the user, whole, once: not again among the steps.
-    expect(work(".a2-proposal-pending")).toHaveLength(1);
-    expect(work(".a2-step-label").map((n) => n.textContent)).toEqual(["Redimensionner les photos", "Contrôle de l'objectif"]);
-    // The steps done, one line, closed; a decided card, one line.
-    const fold = work(".a2-fold-head")[0];
-    expect(fold.textContent).toContain("2 étapes faites");
-    expect(fold.getAttribute("aria-expanded")).toBe("false");
-    const line = work(".a2-proposal-line")[0];
-    expect(line.textContent).toContain("Fusionner la branche dans main");
-    expect(work(".a2-proposal-decided")).toHaveLength(0);
-    await click(line);
-    expect(work(".a2-proposal-decided")).toHaveLength(1);
-    expect(document.querySelectorAll("[style]")).toHaveLength(0);
-  });
-
-  it("draw a thread's items grouped by their notes, counted on their lines and in its state line, a due date aside, no button in the item itself", async () => {
-    await mount("fr", threadFixtures("fr"));
-    const items = (sel: string) => $$(`[data-surface=thread-102] ${sel}`);
-    expect(items(".a2-metric")).toHaveLength(0);
-    expect(items(".a2-fold-head").map((h) => h.textContent?.replace(/[▸▾]/, ""))).toEqual(["À faire · 1", "À regarder · 1", "Pas encore trié · 1", "Rien à faire · 1"]);
-    expect(items(".a2-fold").map((f) => f.classList.contains("a2-fold-open"))).toEqual([true, true, true, false]);
-    const high = items(".a2-item-high")[0];
-    expect(high.querySelector(".a2-item-title")?.textContent).toBe("Courant");
-    expect(high.querySelector(".a2-item-note")?.textContent).toBe("Solde bas avant le loyer.");
-    expect(high.querySelector(".a2-due")?.textContent).toMatch(/^pour /);
-    // « extérieur » on each row of a source not trusted, never in the state line.
-    expect(items(".a2-item .a2-badge-external").map((n) => n.textContent)).toEqual(["extérieur", "extérieur", "extérieur"]); // the folded group's row is not drawn
-    expect(items(".a2-text-caption")[0].textContent).toBe("1 à faire · 1 à regarder · 1 pas encore trié · 1 rien à faire · trié à 9 h 12");
-    expect(items(".a2-item button")).toHaveLength(0);
-  });
-
-  it("show « extérieur » only beside what may carry someone else's words, never alone", async () => {
-    await mount("fr", threadFixtures("fr"));
-    await act(async () => {});
-    let seen = 0;
-    for (const surface of document.querySelectorAll<HTMLElement>("[data-surface^=thread-]")) {
-      const root = surface.querySelector(".a2-column");
-      const marks = [...surface.querySelectorAll<HTMLElement>("*")].filter((n) => n.children.length === 0 && n.textContent?.trim() === "extérieur");
-      for (const n of marks) {
-        // On a row or a card, or with the one block it marks: never a line of the thread on its own.
-        const parent = n.parentElement;
-        const attached = n.closest(".a2-item, .a2-proposal") || (parent !== root && parent?.children.length === 2);
-        expect(attached, parent?.outerHTML).toBeTruthy();
-        seen++;
-      }
-    }
-    expect(seen).toBeGreaterThan(0);
-    // A composed thread: its blocks in place of the default, the outside one marked beside it, the other not.
-    const held = (sel: string) => $$(`[data-surface=thread-106] ${sel}`);
-    expect(held(".a2-metric")).toHaveLength(1);
-    for (const sel of [".a2-fold", ".a2-timeline", ".a2-item"]) expect(held(sel)).toHaveLength(0);
-    const hotel = held(".a2-text").find((n) => n.textContent === "L'hôtel confirme la chambre pour le 12.")!;
-    expect(hotel.parentElement?.textContent).toContain("extérieur");
-    expect(held(".a2-metric")[0].parentElement).toBe(held(".a2-column")[0]); // the other, unmarked, right under the thread
-  });
-
-  it("draw a watcher's standing thread as the user reads it: a state line, rows titled by their own words, what has nothing to do folded with its action on its line", async () => {
-    await mount("fr", threadFixtures("fr"));
-    await act(async () => {});
-    const mails = (sel: string) => $$(`[data-surface=thread-104] ${sel}`);
-    // No goal, no « À jour » pill, no source line, no counts in boxes, no history.
-    expect(mails(".a2-progress")).toHaveLength(0);
-    expect(mails(".a2-metric")).toHaveLength(0);
-    expect(mails(".a2-text").map((n) => n.textContent)).toEqual(["1 pour info · 2 rien à faire · trié à 9 h 12"]);
-    expect(mails(".a2-item .a2-badge-external").map((n) => n.textContent)).toEqual(["extérieur"]); // its row, from a server not trusted
-    expect(mails(".a2-item-title").map((n) => n.textContent)).toEqual(["Le devis de la cuisine"]);
-    expect(mails(".a2-item-detail")[0].textContent).toBe("Sam");
-    expect(mails(".a2-fold-head").map((h) => h.textContent?.replace(/[▸▾]/, ""))).toEqual(["Pour info · 1", "Rien à faire · 2"]);
-    // A group whose rows offer nothing: nothing aside, its line as wide as any fold's.
-    expect(mails(".a2-fold")[0].querySelector(".a2-fold-aside")?.childElementCount ?? 0).toBe(0);
-    const none = mails(".a2-fold")[1];
-    expect(none.classList.contains("a2-fold-open")).toBe(false);
-    expect([...none.querySelectorAll(".a2-fold-line .a2-fold-aside button")].map((b) => b.textContent)).toEqual(["Archiver · 2"]); // the label its skill declares, approved with it
-    // Unfolded: its rows offer nothing, the group's action is enough.
-    await click(none.querySelector(".a2-fold-head") as HTMLElement);
-    expect(none.classList.contains("a2-fold-open")).toBe(true);
-    expect(none.querySelectorAll(".a2-item-title")).toHaveLength(2);
-    expect([...none.querySelectorAll("button.a2-button")].filter((b) => !b.closest(".a2-fold-aside"))).toHaveLength(0);
-    expect(mails("button.a2-button").map((b) => b.textContent)).toEqual(["Archiver · 2"]);
-    expect(document.body.textContent).not.toMatch(/bTEf/);
-  });
-
-  it("offer a note's actions on its row, code's words for an outside one, and answer the card it made with what is the user's", async () => {
-    await mount("fr", threadFixtures("fr"));
-    await act(async () => {});
-    const items = (sel: string) => $$(`[data-surface=thread-102] ${sel}`);
-    const offers = items("button.a2-button").filter((b) => !b.closest(".a2-proposal"));
-    expect(offers.map((b) => b.textContent)).toEqual(["Virer depuis l'épargne", "utiliser « move funds »"]);
-    await click(offers[0]);
-    const sent = actions.map((a) => [a.action.name, a.action.sourceComponentId, a.action.context]);
-    expect(sent).toHaveLength(1);
-    expect(sent[0][0]).toBe("offer");
-    expect(sent[0][1]).toBe("thread_items_0_row_offers");
-    // Its ids as code wrote them, never its words.
-    expect(sent[0][2]).toEqual({ thread: expect.any(Number), source: "ledger", item: "Courant", offer: expect.stringMatching(/^[0-9a-f]{12}$/) });
-    // Its card waits in « À toi », once, never on its row.
-    expect(items(".a2-proposal-pending .a2-proposal-text").map((n) => n.textContent)).toEqual(["utiliser « move funds »"]);
-    expect(items(".a2-list .a2-proposal-pending")).toHaveLength(0);
-    await click(items(".a2-proposal-pending .a2-proposal-actions button")[0]);
-    expect(answers).toEqual([{ surfaceId: "thread-102", componentId: "thread_linked_0", ref: "calls:1", yes: true }]);
-  });
-
-  it("offer code's actions in a block its holder composed, from its Offers", async () => {
-    await mount("fr", threadFixtures("fr"));
-    const held = (sel: string) => $$(`[data-surface=thread-107] ${sel}`);
-    const offers = held(".a2-offers button");
-    expect(offers.map((b) => b.textContent)).toEqual(["Virer depuis l'épargne", "utiliser « move funds »"]);
-    await click(offers[1]);
-    expect(actions.map((a) => [a.action.name, a.action.sourceComponentId, a.action.context])).toEqual([
-      ["offer", "account_offers", { thread: expect.any(Number), source: "ledger", item: "Joint", offer: expect.stringMatching(/^[0-9a-f]{12}$/) }],
-    ]);
-  });
-
-  it("show the user's marks where eriphe-core keeps them, and send a mark, or take it away, with ids only", async () => {
-    await mount("fr", threadFixtures("fr"));
-    const held = (sel: string) => $$(`[data-surface=thread-106] ${sel}`);
-    const pressed = () => held(".a2-cells .a2-mark[aria-pressed=true]").map((b) => b.closest(".a2-card")?.querySelector(".a2-card-title")?.textContent + " " + b.textContent);
-    expect(pressed()).toEqual(["Casa Alfama Garder"]); // /thread/marks/hotels/alfama
-    expect(held(".a2-cells > li")[0].querySelector(".a2-marked-keep")).not.toBeNull();
-    // Drop another, take the kept one away.
-    const card = (i: number) => held(".a2-cells > li")[i];
-    await click([...card(1).querySelectorAll<HTMLElement>(".a2-mark")].find((b) => b.textContent === "Écarter")!);
-    await click([...card(0).querySelectorAll<HTMLElement>(".a2-mark")].find((b) => b.textContent === "Garder")!);
-    expect(actions.map((a) => [a.action.name, a.action.surfaceId, a.action.sourceComponentId, a.action.context])).toEqual([
-      ["mark", "thread-106", "hotel_mark", { list: "hotels", item: "chiado", mark: "drop" }],
-      ["mark", "thread-106", "hotel_mark", { list: "hotels", item: "alfama", mark: "" }],
-    ]);
-    // Shown as eriphe-core keeps it, once it writes the data again.
-    expect(pressed()).toEqual(["Casa Alfama Garder"]);
-    // As eriphe-core sends a thread's surface written again: its whole data.
-    const created = threadFixtures("fr").find((m) => "createSurface" in m && m.createSurface.surfaceId === "thread-106")!;
-    const data = structuredClone((created as { createSurface: { dataModel: { thread: Record<string, unknown> } } }).createSurface.dataModel);
-    data.thread.marks = { hotels: { belem: "keep" }, todo: { passports: "done" } };
-    await act(async () => adapter.applyMessages([{ version: "1.0", updateDataModel: { surfaceId: "thread-106", path: "/", value: data } }]));
-    expect(pressed()).toEqual(["Belém Garden Garder"]);
-    // done alone is a box to check, its word for screen readers.
-    const boxes = held(".a2-mark-box");
-    expect(boxes.map((b) => [b.getAttribute("aria-pressed"), b.textContent])).toEqual([["true", "Fait"], ["false", "Fait"]]);
-    expect(boxes[0].closest("li")?.querySelector(".a2-text")?.textContent).toBe("Vérifier les passeports");
-  });
-
   it("lay a gallery of cards out in a grid, and stack an allocation now against its target", async () => {
     await mount("fr");
     const cards = $$("[data-surface=gallery-cards] ul.a2-cells.a2-cells-small > li .a2-card-title");
@@ -937,65 +759,5 @@ describe("the catalog's components", () => {
     expect(bars.slice(0, 3).map((b) => [b.getAttribute("x"), b.getAttribute("width")])).toEqual([["0", "191"], ["192", "95"], ["288", "31"]]);
     expect(bars[0].querySelector("title")?.textContent).toBe("Actions, Aujourd'hui\u202f: 60 %");
     expect([...stack.querySelectorAll(".a2-legend-item")].map((n) => n.textContent)).toEqual(["Actions 60 % → 50 %", "Obligations 30 % → 40 %", "Liquidités 10 % → 10 %"]);
-  });
-
-  it("draw the bench's matters as their reference answers compose them, from the catalog's bricks alone", async () => {
-    await mount("fr", threadFixtures("fr"));
-    await act(async () => {});
-    expect(errors).toEqual([]);
-    const on = (id: number) => (sel: string) => $$(`[data-surface=thread-${id}] ${sel}`);
-    // A child thread choosing a subject: its crumb back to its parent, the note written before the options, one kept.
-    const subject = on(32);
-    expect(subject(".a2-markdown")).toHaveLength(1);
-    expect(subject(".a2-markdown")[0].compareDocumentPosition(subject(".a2-item")[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(subject(".a2-item-title").map((n) => n.textContent)).toEqual(["Le tournoi d'hiver", "Le nouveau terrain", "Merci aux bénévoles"]);
-    expect(subject(".a2-mark[aria-pressed=true]").map((b) => b.closest("li")?.querySelector(".a2-item-title")?.textContent + " " + b.textContent)).toEqual([
-      "Le tournoi d'hiver Garder",
-    ]);
-    expect(on(31)(".a2-item-title").map((n) => n.textContent)).toContain("Le sujet de la lettre"); // the parent lists its child
-    // A checklist: what is left in figures, each task a box to check, one checked.
-    const move = on(41);
-    expect(move(".a2-metric")).toHaveLength(2);
-    expect(move(".a2-mark-box").map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false"]);
-    // Mails from a server not trusted: « extérieur » beside the block, code's offers on the rows that have one.
-    const mails = on(51);
-    expect(mails(".a2-item-title")).toHaveLength(3);
-    // Noted after reading outside: code's words on the offers, a row's and a group's, never the note's.
-    expect(mails(".a2-offers button").map((b) => b.textContent)).toEqual(["utiliser « archive »", "utiliser « archive » · 1"]);
-    expect(mails("*").some((n) => n.children.length === 0 && n.textContent === "extérieur")).toBe(true);
-    // An allocation now against its target, and a button that asks in Eriphe's words.
-    const savings = on(61);
-    expect(savings(".a2-chart-stack .a2-stack-label").map((n) => n.textContent)).toEqual(["Aujourd'hui", "Cible"]);
-    await click(savings("button.a2-button").find((b) => b.textContent === "Propose un rééquilibrage")!);
-    expect(actions.map((a) => [a.action.name, a.action.context])).toEqual([["ask", { text: "Propose-moi un rééquilibrage pour revenir à ma cible" }]]);
-    expect(document.querySelectorAll("[style]")).toHaveLength(0);
-  });
-
-  it("lay a trip's hotels out as a gallery of cards, kept or dropped, in English", async () => {
-    await mount("en", threadFixtures("en"));
-    await act(async () => {});
-    expect(errors).toEqual([]);
-    const trip = (sel: string) => $$(`[data-surface=thread-71] ${sel}`);
-    expect(trip("ul.a2-cells > li .a2-card-title").map((n) => n.textContent)).toEqual(["Casa Ribeira", "Bolhão Rooms", "Foz Garden"]);
-    expect(trip(".a2-mark[aria-pressed=true]").map((b) => b.closest("li")?.querySelector(".a2-card-title")?.textContent)).toEqual(["Casa Ribeira"]);
-    // Written after reading outside: no button of the holder's, only the marks and code's head.
-    expect(trip("button").filter((b) => !b.classList.contains("a2-mark")).map((b) => b.textContent)).toEqual(["Stop"]);
-  });
-
-  it("stop a thread from its head, by code's button", async () => {
-    await mount("fr", threadFixtures("fr"));
-    const stop = $$("[data-surface=thread-101] button.a2-button").find((b) => b.textContent === "Arrêter")!;
-    await click(stop);
-    expect(actions.map((a) => [a.action.name, a.action.sourceComponentId, a.action.context])).toEqual([["control", "thread_control_stop", { thread: 101, do: "stop" }]]);
-  });
-
-  it("say how an ended thread ended, and put it away with « Ranger »", async () => {
-    await mount("fr", threadFixtures("fr"));
-    const done = (sel: string) => $$(`[data-surface=thread-103] ${sel}`);
-    expect(done(".a2-alert-success .a2-alert-text")[0].textContent).toBe("Le devis est signé et les travaux commencent lundi.");
-    expect(done(".a2-pill")[0].textContent).toBe("Terminé");
-    const tidy = done("button.a2-button").find((b) => b.textContent === "Ranger")!;
-    await click(tidy);
-    expect(actions.map((a) => [a.action.name, a.action.surfaceId, a.action.sourceComponentId, a.action.context])).toEqual([["tidy", "thread-103", "thread_tidy", { thread: 103 }]]);
   });
 });

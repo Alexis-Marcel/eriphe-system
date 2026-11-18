@@ -2,7 +2,7 @@
 # Installs Eriphe on Linux or macOS, bringing its own container runtime:
 # nothing to install first, not even Docker.
 #
-#   # The first machine: eriphe-core here, with a node of its own:
+#   # The first machine: eriphe-core here, with a device of its own:
 #   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core-mode
 #   # Another machine, joining it (the workspace's "Add a machine" gives the
 #   # whole command, token included):
@@ -17,11 +17,11 @@
 #   curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --rollback
 #
 # Linux: Docker Engine if it is missing, then a compose project in /opt/eriphe
-# (data in /var/lib/eriphe): eriphe-node engine, the only one with the Docker
-# socket, which runs the node's verbs only, the node, and eriphe-core in core
+# (data in /var/lib/eriphe): eriphe-device engine, the only one with the Docker
+# socket, which runs the device's verbs only, the device, and eriphe-core in core
 # mode, restarted with Docker at boot.
 # macOS on Apple silicon with macOS 26: Apple's container (installed if it is
-# missing), eriphe-node on the Mac itself, which runs each task in a micro-VM
+# missing), eriphe-device on the Mac itself, which runs each task in a micro-VM
 # of its own, eriphe-core next to it in core mode, all in ~/.eriphe and
 # started at login by LaunchAgents. Older or Intel Macs: Lima in ~/.eriphe, a
 # Linux VM "eriphe" (Apple Virtualization) that sees no Mac folder, the same
@@ -40,7 +40,7 @@ LIMA_VERSION=2.2.1
 LIMA_SHA256_arm64=9e9eacce88f37e185c346bad73aa6136f738d8cdf8c3bb23cd42b071824bc66e
 LIMA_SHA256_x86_64=6b776e4bc41f358e6ee01fefcc78e2eb26f11635a0fcff632234af77a566c6c4
 
-# Syncthing, for the copies of shared folders (node/README.md, Copies):
+# Syncthing, for the copies of shared folders (device/README.md, Copies):
 # pinned here, never upgraded by itself. On Linux its official image, by
 # digest; on a Mac its official signed build, its zip checked against the
 # release's sha256sum.txt.asc and its binary against the Developer ID of
@@ -50,21 +50,21 @@ SYNCTHING_IMAGE=syncthing/syncthing:2.1.7@sha256:2b71da7c0d0a91a6ae5285ad079226f
 SYNCTHING_SHA256_MACOS=a98fb709c79412e5586c81a1586bfb256b6e5a97b067ddf7447155bcdf6aac3f # syncthing-macos-universal-v2.1.7.zip
 SYNCTHING_TEAM=LQE5SYM783
 # Its API and its listening address, on the loopback only (its peers reach
-# it through eriphe-core, node/syncpeer.go).
+# it through eriphe-core, device/syncpeer.go).
 SYNCTHING_API=127.0.0.1:18384
 SYNCTHING_LISTEN=127.0.0.1:22100
-# Where eriphe-launcher's node sees the session folder (ERIPHE_SESSION_DIR).
+# Where eriphe-launcher's device sees the session folder (ERIPHE_SESSION_DIR).
 SESSION_MOUNT=/run/eriphe-session
 
 # The install's layout: what an install puts on a machine besides the images
 # (the compose project and its services, the units, the LaunchAgents, the
 # components such as Syncthing). Raise it with a release that changes it:
-# the node's image carries this script (/usr/local/share/eriphe/install.sh),
+# the device's image carries this script (/usr/local/share/eriphe/install.sh),
 # and an updater that updates to an image whose LAYOUT is newer than the
 # machine's runs that script with --layout, which brings the machine to it
-# (install/README.md, The machines update themselves). node/update.go's
+# (install/README.md, The machines update themselves). device/update.go's
 # installLayout is the same number. Layout 4 brought Syncthing, the updaters
-# that apply a layout, eriphe-node engine with the Docker socket, and
+# that apply a layout, eriphe-device engine with the Docker socket, and
 # eriphe-launcher on a NAS and on Windows; layout 5, the share menus with
 # Lecture and Modifier (eriphe-share, the Quick Action).
 LAYOUT=5
@@ -77,7 +77,7 @@ REGISTRY=ghcr.io/alexis-marcel
 images() {
 	tag=${PIN:-latest}
 	CORE_IMAGE=${ERIPHE_CORE_IMAGE:-$REGISTRY/eriphe-core:$tag}
-	NODE_IMAGE=${ERIPHE_NODE_IMAGE:-$REGISTRY/eriphe-node:$tag}
+	DEVICE_IMAGE=${ERIPHE_DEVICE_IMAGE:-$REGISTRY/eriphe-device:$tag}
 	WORKER_IMAGE=${ERIPHE_WORKER_IMAGE:-$REGISTRY/eriphe-base:$tag}
 }
 
@@ -253,8 +253,8 @@ Usage: curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest
 
   --core URL[,URL2]   eriphe-core to join, several addresses preferred first
   --join-token TOKEN  from `eriphe-core join-token -name NAME` (first install only)
-  --name NAME         this node's name (default: the host name)
-  --labels L1,L2      what agents can require of this node, e.g. gpu
+  --name NAME         this device's name (default: the host name)
+  --labels L1,L2      what agents can require of this device, e.g. gpu
   --ca-hash sha256:H  eriphe-core's CA, to check its certificate
   --share NAME=/PATH  a place of this machine whose folders may be given to
                       Eriphe (repeatable; NAME=/PATH:ro: never written to).
@@ -263,15 +263,15 @@ Usage: curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest
                       its cloud folders by itself; not in Lima's VM
   --no-share          share no place any more
   --model-server URL  a model server (Ollama, llama.cpp, vLLM, LM Studio) this
-                      node lends to Eriphe through its tunnel, as the node
+                      device lends to Eriphe through its tunnel, as the device
                       reaches it: no port is opened. On a Mac with Apple's
-                      container, http://127.0.0.1:11434; on Linux the node
+                      container, http://127.0.0.1:11434; on Linux the device
                       is a container: http://eriphe-ollama:11434 for Ollama
                       run next to it (install/README.md). Kept for the next
                       runs; env ERIPHE_MODEL_SERVER
   --no-model-server   lend no model server any more
   --assistant-name N  the assistant's name, for what this script prints
-  --core-mode         run eriphe-core here, with a node of its own
+  --core-mode         run eriphe-core here, with a device of its own
   --web-port N        core mode: the workspace's port (default 8443, kept
                       for the next runs; env ERIPHE_WEB_PORT)
   --api-port N        core mode: the port other devices join on (default
@@ -288,7 +288,7 @@ Usage: curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest
   -h, --help          this help
 
 Run again (with or without the options) to update: new images, same data and
-same node identity. Afterwards the machine updates itself when eriphe-core
+same device identity. Afterwards the machine updates itself when eriphe-core
 asks (Settings, Devices, Updates). "Connect a device" in the workspace gives the whole command.
 Guide: https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md
 EOF
@@ -321,9 +321,9 @@ prelude() {
 	cat <<EOF
 set -eu
 CONF=$(q "$CONF") DATA=$(q "$DATA") CORE_UID=$CORE_UID
-MODE=$(q "${MODE:-}") NODE_NAME=$(q "${NAME:-}") ASSISTANT=$(q "$ASSISTANT")
-IMAGES=$(q "${NODE_IMAGE:-} ${WORKER_IMAGE:-} $SYNCTHING_IMAGE$([ "${MODE:-}" = core ] && printf ' %s' "${CORE_IMAGE:-}")")
-ALL_REPOS=$(q "syncthing/syncthing $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
+MODE=$(q "${MODE:-}") DEVICE_NAME=$(q "${NAME:-}") ASSISTANT=$(q "$ASSISTANT")
+IMAGES=$(q "${DEVICE_IMAGE:-} ${WORKER_IMAGE:-} $SYNCTHING_IMAGE$([ "${MODE:-}" = core ] && printf ' %s' "${CORE_IMAGE:-}")")
+ALL_REPOS=$(q "syncthing/syncthing $REGISTRY/eriphe-device $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core")
 EOF
 	cat <<'EOF'
 die() { printf 'eriphe: %s\n' "$*" >&2; exit 1; }
@@ -335,8 +335,8 @@ parse_args() {
 	MODE='' UNINSTALL='' LABELS_SET='' PIN='' PIN_SET='' ROLLBACK='' SHARES='' SHARES_SET='' NO_SHARE='' LAYOUT_RUN='' NEEDS=''
 	CORE_URL=${ERIPHE_CORE:-}
 	JOIN_TOKEN=${ERIPHE_JOIN_TOKEN:-}
-	NAME=${ERIPHE_NODE_NAME:-}
-	LABELS=${ERIPHE_NODE_LABELS:-}
+	NAME=${ERIPHE_DEVICE_NAME:-}
+	LABELS=${ERIPHE_DEVICE_LABELS:-}
 	CA_HASH=${ERIPHE_CA_HASH:-}
 	assistant=${ERIPHE_ASSISTANT_NAME:-}
 	WEB_PORT=${ERIPHE_WEB_PORT:-} API_PORT=${ERIPHE_API_PORT:-} PORT_OPT=''
@@ -411,7 +411,7 @@ parse_args() {
 		esac
 	done
 	if [ -z "$MODE" ] && [ -n "$CORE_URL" ]; then
-		MODE=node
+		MODE=device
 	fi
 	# Printed only: no control character.
 	assistant=$(printf '%s' "$assistant" | tr -d '[:cntrl:]')
@@ -447,10 +447,10 @@ parse_args() {
 			die "a port is 1 to 65535, not $p"
 		fi
 	done
-	if [ "$MODE" = node ]; then
-		[ -z "$PORT_OPT" ] || die "--web-port and --api-port are for --core-mode: a node opens no port"
+	if [ "$MODE" = device ]; then
+		[ -z "$PORT_OPT" ] || die "--web-port and --api-port are for --core-mode: a device opens no port"
 		WEB_PORT='' API_PORT='' PORTS_SET=''
-		[ -z "$BIND_OPT" ] || die "--bind is for --core-mode: a node opens no port"
+		[ -z "$BIND_OPT" ] || die "--bind is for --core-mode: a device opens no port"
 		BIND='' BIND_SET=''
 	fi
 	if [ -n "$BIND" ]; then
@@ -617,8 +617,8 @@ default_name() {
 saved() { printf '%s\n' "$INFO" | sed -n "s/^saved_$1=//p" | tail -n 1; }
 info() { printf '%s\n' "$INFO" | sed -n "s/^$1=//p" | tail -n 1; }
 
-# check_model_server: --model-server is an http(s) address, and one the node
-# can reach. On Linux, and in Lima's VM, the node is a container: its
+# check_model_server: --model-server is an http(s) address, and one the device
+# can reach. On Linux, and in Lima's VM, the device is a container: its
 # loopback is its own, not the machine's.
 check_model_server() {
 	[ -n "$MODEL_SERVER" ] || return 0
@@ -627,12 +627,12 @@ check_model_server() {
 	[ -z "$NATIVE" ] || return 0
 	case $MODEL_SERVER in
 	*://localhost[:/]* | *://localhost | *://127.* | *://0.0.0.0* | *://\[::1\]* | *://\[::\]*)
-		die "--model-server $MODEL_SERVER: here eriphe-node runs in a container, where $MODEL_SERVER is the container itself. Run Ollama next to it, on Eriphe's network (install/README.md, A model behind this machine), and give --model-server http://eriphe-ollama:11434"
+		die "--model-server $MODEL_SERVER: here eriphe-device runs in a container, where $MODEL_SERVER is the container itself. Run Ollama next to it, on Eriphe's network (install/README.md, A model behind this machine), and give --model-server http://eriphe-ollama:11434"
 		;;
 	esac
 }
 
-# models_url: the model server's list of models (its /v1 path, as eriphe-node
+# models_url: the model server's list of models (its /v1 path, as eriphe-device
 # makes it), or nothing without --model-server.
 models_url() {
 	[ -n "$MODEL_SERVER" ] || return 0
@@ -654,7 +654,7 @@ model_server_line() {
 	say ""
 	say "Lends the model server at $MODEL_SERVER (answers: ${answers:-no})."
 	[ "$answers" = yes ] ||
-		notice "the model server does not answer eriphe-node here: start it, or check the address (install/README.md, A model behind this machine), then run this again."
+		notice "the model server does not answer eriphe-device here: start it, or check the address (install/README.md, A model behind this machine), then run this again."
 }
 
 # settle: merges the options with an earlier install's, once the host has
@@ -705,11 +705,11 @@ settle() {
 			fi
 		fi
 		CORE_URL=http://eriphe-core:8800
-		# eriphe-core on the Mac itself, next to the node.
+		# eriphe-core on the Mac itself, next to the device.
 		[ -z "$NATIVE" ] || CORE_URL=http://127.0.0.1:$API_PORT
 	fi
 	printf '%s' "$NAME" | grep -Eq '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$' ||
-		die "the node's name is lowercase letters, digits and dashes: --name pc"
+		die "the device's name is lowercase letters, digits and dashes: --name pc"
 	joined=$(info joined)
 	joined_as=$(info joined_as)
 	if [ -n "$joined" ]; then
@@ -717,9 +717,9 @@ settle() {
 			notice "this machine joined as $joined_as and keeps that name."
 			NAME=$joined_as
 		fi
-	elif [ "$MODE" = node ]; then
+	elif [ "$MODE" = device ]; then
 		[ -n "$CORE_URL" ] || die "give --core (eriphe-core's address)"
-		[ -n "$JOIN_TOKEN" ] || die "a new node needs --join-token (from: eriphe-core join-token -name $NAME)"
+		[ -n "$JOIN_TOKEN" ] || die "a new device needs --join-token (from: eriphe-core join-token -name $NAME)"
 	fi
 }
 
@@ -777,12 +777,12 @@ docker compose version >/dev/null 2>&1 || die "Docker Compose is missing (the do
 [ -S /var/run/docker.sock ] || die "no /var/run/docker.sock (rootless Docker is not supported)"
 echo "docker_gid=$(stat -c %g /var/run/docker.sock)"
 echo "docker_version=$(docker version --format '{{.Server.Version}}')"
-if [ -f "$DATA/node/node.json" ]; then
+if [ -f "$DATA/device/device.json" ]; then
   echo joined=1
-  echo "joined_as=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$DATA/node/node.json" | head -n 1)"
+  echo "joined_as=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$DATA/device/device.json" | head -n 1)"
 fi
 # The version running, to say what an update changes.
-c=eriphe-node
+c=eriphe-device
 [ "$(sed -n 's/^mode=//p' "$CONF/install.conf" 2>/dev/null)" = core ] && c=eriphe-core
 echo "running_version=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$c" 2>/dev/null | sed 's/<no value>//')"
 [ -f "$CONF/install.conf" ] && sed 's/^/saved_/' "$CONF/install.conf"
@@ -794,14 +794,14 @@ EOF
 # syncthing_key: a new key for Syncthing's API, which stays on this machine.
 syncthing_key() { od -An -N16 -tx1 /dev/urandom | tr -d ' \n'; }
 
-# syncthing_config KEY: Syncthing's first config.xml (node/testdata/
+# syncthing_config KEY: Syncthing's first config.xml (device/testdata/
 # syncthing-config.xml): its API and its listening address on the loopback,
 # KEY for the API, and from its very first start no discovery, relay, NAT
-# traversal, usage or crash report, nor upgrade. Written once; the node
-# sets the same options again at every start (node/syncthing.go).
+# traversal, usage or crash report, nor upgrade. Written once; the device
+# sets the same options again at every start (device/syncthing.go).
 syncthing_config() {
 	cat <<EOF
-<!-- Written by Eriphe's installer: Syncthing for the copies of shared folders (node/README.md, Copies). -->
+<!-- Written by Eriphe's installer: Syncthing for the copies of shared folders (device/README.md, Copies). -->
 <configuration version="52">
     <gui enabled="true" tls="false">
         <address>$SYNCTHING_API</address>
@@ -832,10 +832,10 @@ compose_yaml() {
 	data=${HOST_DATA:-$DATA}
 	cat <<EOF
 # Written by install.sh: run it again rather than editing this file.
-# The node has no Docker access: it asks eriphe-node engine, which holds the
+# The device has no Docker access: it asks eriphe-device engine, which holds the
 # socket and makes the containers itself (nothing privileged), with bind
 # mounts from its root and the shared places only (--share). Tasks run on
-# eriphe-tasks, an internal network: they reach the node (its task listener
+# eriphe-tasks, an internal network: they reach the device (its task listener
 # and its egress relay, their one way out, which never dials the LAN), not
 # eriphe-core, the services nor this machine.
 name: eriphe
@@ -869,14 +869,14 @@ EOF
 	fi
 	cat <<EOF
   engine:
-    # eriphe-node engine (node/engine_server.go): the node's verbs (a task,
+    # eriphe-device engine (device/engine_server.go): the device's verbs (a task,
     # a check, a service, a helper, a wake), each container made here with
     # its hardening, nothing privileged.
-    image: $NODE_IMAGE
+    image: $DEVICE_IMAGE
     container_name: eriphe-engine
     restart: unless-stopped
     # Root without a capability but DAC_READ_SEARCH: it resolves the bind
-    # mounts' symlinks in the node's root and the shares, seen read-only.
+    # mounts' symlinks in the device's root and the shares, seen read-only.
     user: "0:$gid"
     read_only: true
     cap_drop: [ALL]
@@ -887,7 +887,7 @@ EOF
 EOF
 	if [ -n "${FOLDER_HELPER:-}" ]; then
 		# eriphe-launcher: the folders shared are in a file of its own,
-		# read again at each request (no restart to share one), the node's
+		# read again at each request (no restart to share one), the device's
 		# data and theirs resolved in the host's /, seen read-only. With
 		# the mounts there are when it starts (a bind is recursive), not
 		# those made after: rslave needs / to be a shared mount, which it
@@ -899,30 +899,30 @@ EOF
         read_only: true
       - $data/proxy:/etc/eriphe-engine:ro
     networks: [eriphe-docker]
-    command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",
-              "-bind-from", "$data/node", "-bind-file", "/etc/eriphe-engine/binds", "-host-root", "/host",
+    command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-device",
+              "-bind-from", "$data/device", "-bind-file", "/etc/eriphe-engine/binds", "-host-root", "/host",
               "-images", $(yaml_str "$REGISTRY/,$WORKER_IMAGE"), "-image-file", "/etc/eriphe-engine/images",
-              "-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "$NODE_IMAGE"]
+              "-network", "eriphe-system", "-task-network", "eriphe-tasks", "-device-image", "$DEVICE_IMAGE"]
 EOF
 	else
-		printf '      - %s:%s:ro\n' "$data/node" "$data/node"
+		printf '      - %s:%s:ro\n' "$data/device" "$data/device"
 		share_paths | sed 's/:ro$//' | while IFS= read -r p; do
 			[ -z "$p" ] || printf '      - %s\n' "$(yaml_str "$p:$p:ro")"
 		done
 		cat <<EOF
       - $data/proxy:/etc/eriphe-engine:ro
     networks: [eriphe-docker]
-    command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-node",
-              "-bind-from", $(yaml_str "$data/node$(share_paths | tr '\n' ',' | sed 's/,$//; s/^./,&/')"),
+    command: ["engine", "-listen", ":8792", "-allow-from", "eriphe-device",
+              "-bind-from", $(yaml_str "$data/device$(share_paths | tr '\n' ',' | sed 's/,$//; s/^./,&/')"),
               "-images", $(yaml_str "$REGISTRY/,$WORKER_IMAGE"), "-image-file", "/etc/eriphe-engine/images",
-              "-network", "eriphe-system", "-task-network", "eriphe-tasks", "-node-image", "$NODE_IMAGE"]
+              "-network", "eriphe-system", "-task-network", "eriphe-tasks", "-device-image", "$DEVICE_IMAGE"]
 EOF
 	fi
 	cat <<EOF
 
-  node:
-    image: $NODE_IMAGE
-    container_name: eriphe-node
+  device:
+    image: $DEVICE_IMAGE
+    container_name: eriphe-device
     restart: unless-stopped
     depends_on: [engine$([ "$MODE" = core ] && printf ', core')]
     read_only: true
@@ -933,10 +933,10 @@ EOF
     security_opt: [no-new-privileges:true]
     environment:
       ERIPHE_CORE: \${ERIPHE_CORE}
-      ERIPHE_NODE_NAME: \${ERIPHE_NODE_NAME}
-      ERIPHE_NODE_LABELS: \${ERIPHE_NODE_LABELS:-}
+      ERIPHE_DEVICE_NAME: \${ERIPHE_DEVICE_NAME}
+      ERIPHE_DEVICE_LABELS: \${ERIPHE_DEVICE_LABELS:-}
       # The places whose folders may be given to Eriphe (--share).
-      ERIPHE_NODE_SHARES: \${ERIPHE_NODE_SHARES:-}
+      ERIPHE_DEVICE_SHARES: \${ERIPHE_DEVICE_SHARES:-}
       # The model server it lends through its tunnel (--model-server).
       ERIPHE_MODEL_SERVER: \${ERIPHE_MODEL_SERVER:-}
       ERIPHE_CA_HASH: \${ERIPHE_CA_HASH:-}
@@ -946,30 +946,30 @@ EOF
       # Only for the first start, from install.sh, never kept in .env.
       ERIPHE_JOIN_TOKEN: \${ERIPHE_JOIN_TOKEN:-}
       ERIPHE_INSTALL: $INSTALL
-      # Its data, for eriphe-node share in its container (eriphe-share).
-      ERIPHE_ROOT: $data/node
+      # Its data, for eriphe-device share in its container (eriphe-share).
+      ERIPHE_ROOT: $data/device
 EOF
-	# eriphe-launcher keeps the list of the folders shared: the node's own
-	# eriphe-node share add points to its command. The node mounts none of
-	# them: helpers of its image work in them (node/helper.go).
+	# eriphe-launcher keeps the list of the folders shared: the device's own
+	# eriphe-device share add points to its command. The device mounts none of
+	# them: helpers of its image work in them (device/helper.go).
 	# ($ doubled: Compose would read it as one of its variables.)
 	[ -z "${SHARE_COMMAND:-}" ] || printf '      ERIPHE_SHARE_COMMAND: %s\n' "$(yaml_str "$(printf '%s' "$SHARE_COMMAND" | sed 's/\$/$$/g')")"
-	[ -z "${FOLDER_HELPER:-}" ] || printf '      ERIPHE_FOLDER_HELPER: %s\n' "$NODE_IMAGE"
+	[ -z "${FOLDER_HELPER:-}" ] || printf '      ERIPHE_FOLDER_HELPER: %s\n' "$DEVICE_IMAGE"
 	# eriphe-launcher: what a helper in the user's session writes (on
-	# Windows, eriphe-session.exe), its folder given read-only (node/context.go).
+	# Windows, eriphe-session.exe), its folder given read-only (device/context.go).
 	[ -z "${SESSION_DIR:-}" ] || printf '      ERIPHE_SESSION_FILE: %s/session.json\n' "$SESSION_MOUNT"
 	cat <<EOF
-      # Syncthing's home, read-only: its API's address and key (node/syncthing.go).
+      # Syncthing's home, read-only: its API's address and key (device/syncthing.go).
       ERIPHE_SYNCTHING_HOME: $data/syncthing
-      # Docker only through eriphe-node engine: neither the socket nor a proxy.
+      # Docker only through eriphe-device engine: neither the socket nor a proxy.
       ERIPHE_ENGINE_URL: http://eriphe-engine:8792
-    command: ["-root", "$data/node",
+    command: ["-root", "$data/device",
               "-network", "eriphe-system", "-task-network", "eriphe-tasks",
-              "-callback-url", "http://eriphe-node:8790",
+              "-callback-url", "http://eriphe-device:8790",
               "-image", "$WORKER_IMAGE"$([ "$MODE" = core ] && printf ', "-always-on"')]
     volumes:
       # Same path inside and outside: the Docker daemon understands it as is.
-      - $data/node:$data/node
+      - $data/device:$data/device
       - $data/syncthing:$data/syncthing:ro
 EOF
 	[ -z "${SESSION_DIR:-}" ] || printf '      - %s\n' "$(yaml_str "$SESSION_DIR:$SESSION_MOUNT:ro")"
@@ -978,19 +978,19 @@ EOF
     networks: [eriphe-system, eriphe-tasks, eriphe-docker]
 
   syncthing:
-    # The copies of shared folders (node/README.md, Copies): the official
-    # image, pinned by digest, in the node's network namespace, where its API
+    # The copies of shared folders (device/README.md, Copies): the official
+    # image, pinned by digest, in the device's network namespace, where its API
     # and its listening address are on the loopback only; it reaches its
-    # peers through the node and eriphe-core, nothing else (no discovery,
+    # peers through the device and eriphe-core, nothing else (no discovery,
     # relay nor NAT traversal, from its config.xml, written once by
-    # install.sh). Root with no capability but the node's, to keep the
+    # install.sh). Root with no capability but the device's, to keep the
     # owners of what it writes (copyOwnershipFromParent). It sees the shared
-    # places at their paths, and the copies under the node's data.
+    # places at their paths, and the copies under the device's data.
     image: $SYNCTHING_IMAGE
     container_name: eriphe-syncthing
     restart: unless-stopped
-    depends_on: [node]
-    network_mode: "service:node"
+    depends_on: [device]
+    network_mode: "service:device"
     user: "0:0"
     entrypoint: ["/bin/syncthing"]
     command: ["serve", "--no-browser"]
@@ -1011,7 +1011,7 @@ EOF
       timeout: 10s
     volumes:
       - $data/syncthing:$data/syncthing
-      - $data/node/sync:$data/node/sync
+      - $data/device/sync:$data/device/sync
 EOF
 	# eriphe-launcher: the folders that may be copied only (COPIED, one a line).
 	if [ -n "${FOLDER_HELPER:-}" ]; then
@@ -1024,7 +1024,7 @@ EOF
 networks:
   eriphe-system:
     name: eriphe-system
-  # Internal: no route out, tasks go through the node's egress relay.
+  # Internal: no route out, tasks go through the device's egress relay.
   eriphe-tasks:
     name: eriphe-tasks
     internal: true
@@ -1083,7 +1083,7 @@ card_to() {
 }
 
 # wake_card: this machine's card towards eriphe-core, so that eriphe-core
-# can wake it (Wake-on-LAN, node/wake.go): the card of the route to
+# can wake it (Wake-on-LAN, device/wake.go): the card of the route to
 # eriphe-core's address when it is an IPv4 address, else (a name, the
 # loopback, a VPN) of the default route. eriphe-launcher has its own, from
 # the host's network.
@@ -1111,10 +1111,10 @@ env_file() {
 	wake_settings
 	cat <<EOF
 ERIPHE_CORE='$CORE_URL'
-ERIPHE_NODE_NAME='$NAME'
-ERIPHE_NODE_LABELS='$LABELS'
+ERIPHE_DEVICE_NAME='$NAME'
+ERIPHE_DEVICE_LABELS='$LABELS'
 ERIPHE_CA_HASH='$CA_HASH'
-ERIPHE_NODE_SHARES='$SHARES'
+ERIPHE_DEVICE_SHARES='$SHARES'
 ERIPHE_MODEL_SERVER='$MODEL_SERVER'
 ERIPHE_WAKE_MAC='$WAKE_MAC'
 ERIPHE_WAKE_BROADCAST='$WAKE_BROADCAST'
@@ -1142,10 +1142,10 @@ b64() { base64 | tr -d '\n'; }
 
 # ---- The updater, on the Linux host ---------------------------------------
 #
-# eriphe-core and the node have no right to pull an image or recreate a
-# container (the node reaches Docker only through eriphe-node engine). The
+# eriphe-core and the device have no right to pull an image or recreate a
+# container (the device reaches Docker only through eriphe-device engine). The
 # updater does it for them, on the host, as root: a systemd unit that starts
-# when eriphe-core (core mode) or the node drops a request in its data
+# when eriphe-core (core mode) or the device drops a request in its data
 # folder (update-requested), and writes how it went next to it
 # (update-status). A request says only "update" (to the latest version, or
 # the pinned one) or "rollback": the images are the ones written here.
@@ -1155,7 +1155,7 @@ updater_conf() {
 	cat <<EOF
 # Written by install.sh: run it again rather than editing this file.
 CONF=$(q "$CONF") DATA=$(q "$DATA") CORE_UID=$CORE_UID MODE=$(q "$MODE") PIN=$(q "$PIN")
-CORE_IMAGE=$(q "$CORE_IMAGE") NODE_IMAGE=$(q "$NODE_IMAGE") WORKER_IMAGE=$(q "$WORKER_IMAGE")
+CORE_IMAGE=$(q "$CORE_IMAGE") DEVICE_IMAGE=$(q "$DEVICE_IMAGE") WORKER_IMAGE=$(q "$WORKER_IMAGE")
 LAYOUT=$LAYOUT BY=$(q "${UPDATE_BY:-systemd}") INSTALL=$(q "${INSTALL:-}")
 EOF
 }
@@ -1167,12 +1167,12 @@ updater_sh() {
 	cat <<'EOF'
 #!/bin/sh
 # Written by install.sh: applies the update requests of eriphe-core and
-# eriphe-node (install/README.md, Updates). Run by eriphe-update.service.
+# eriphe-device (install/README.md, Updates). Run by eriphe-update.service.
 set -u
 # shellcheck disable=SC1091
 . "$(dirname "$0")/update.conf"
 STATE=$DATA/update
-HEALTH=${ERIPHE_UPDATE_HEALTH:-180} # seconds a recreated eriphe-node has to connect again
+HEALTH=${ERIPHE_UPDATE_HEALTH:-180} # seconds a recreated eriphe-device has to connect again
 mkdir -p "$STATE"
 chmod 700 "$STATE"
 dc() { docker compose -p eriphe --project-directory "$CONF" -f "$CONF/compose.yaml" --env-file "$CONF/.env" "$@"; }
@@ -1188,7 +1188,7 @@ if command -v flock >/dev/null 2>&1; then
 fi
 
 # status TARGET ID ACTION OUTCOME MESSAGE FROM TO: how a request went, for
-# eriphe-core (core) or the node (node) to read.
+# eriphe-core (core) or the device (device) to read.
 status() {
   f=$DATA/$1/update-status
   msg=$(printf '%s' "$5" | tr '\n\r' '  ' | cut -c 1-300)
@@ -1203,7 +1203,7 @@ status() {
 # before its end (killed, the machine restarted): this one holds the lock,
 # no other runs. Its outcome says so, rather than "running" for ever.
 interrupted() {
-  for t in core node; do
+  for t in core device; do
     f=$DATA/$t/update-status
     [ "$(sed -n 's/^outcome=//p' "$f" 2>/dev/null)" = running ] || continue
     status "$t" "$(sed -n 's/^id=//p' "$f")" "$(sed -n 's/^action=//p' "$f")" interrupted \
@@ -1213,10 +1213,10 @@ interrupted() {
 [ -z "$LOCKED" ] || interrupted
 
 # The images of a target, as "service ref" lines (service - when no
-# container runs it: the worker image, which the node starts tasks from).
+# container runs it: the worker image, which the device starts tasks from).
 items() {
   if [ "$1" = core ]; then echo "core $CORE_IMAGE"; fi
-  echo "node $NODE_IMAGE"
+  echo "device $DEVICE_IMAGE"
   echo "- $WORKER_IMAGE"
 }
 image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null; }
@@ -1267,8 +1267,8 @@ put() {
   done
 }
 
-# healthy SERVICE SINCE: eriphe-core answers (core), or eriphe-node is
-# connected again since SINCE (node), within HEALTH seconds.
+# healthy SERVICE SINCE: eriphe-core answers (core), or eriphe-device is
+# connected again since SINCE (device), within HEALTH seconds.
 healthy() {
   i=0
   if [ "$1" = core ]; then
@@ -1278,13 +1278,13 @@ healthy() {
     done
     return 0
   fi
-  until docker logs --since "$2" eriphe-node 2>&1 | grep -q 'connected to '; do
-    state=$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' eriphe-node 2>/dev/null || echo missing)
+  until docker logs --since "$2" eriphe-device 2>&1 | grep -q 'connected to '; do
+    state=$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' eriphe-device 2>/dev/null || echo missing)
     case $state in
       "running 0") ;;
-      *) [ $i -lt 6 ] || { why="eriphe-node does not start ($state)"; return 1; } ;;
+      *) [ $i -lt 6 ] || { why="eriphe-device does not start ($state)"; return 1; } ;;
     esac
-    i=$((i + 2)); [ $i -lt "$HEALTH" ] || { why="eriphe-node is not connected after $HEALTH s"; return 1; }
+    i=$((i + 2)); [ $i -lt "$HEALTH" ] || { why="eriphe-device is not connected after $HEALTH s"; return 1; }
     sleep 2
   done
 }
@@ -1309,22 +1309,22 @@ recreate() {
     start core "$CORE_IMAGE" || return 1
     healthy core "$since" || return 1
   fi
-  # The engine is the node's image (eriphe-node engine): the node and the
-  # engine speak the same version of its API, so it takes the node's
+  # The engine is the device's image (eriphe-device engine): the device and the
+  # engine speak the same version of its API, so it takes the device's
   # version, first.
-  if [ "$(docker inspect -f '{{.Config.Image}}' eriphe-engine 2>/dev/null)" = "$NODE_IMAGE" ]; then
-    start engine "$NODE_IMAGE" || return 1
+  if [ "$(docker inspect -f '{{.Config.Image}}' eriphe-engine 2>/dev/null)" = "$DEVICE_IMAGE" ]; then
+    start engine "$DEVICE_IMAGE" || return 1
   fi
-  start node "$NODE_IMAGE"
+  start device "$DEVICE_IMAGE"
   ok=$?
   syncthing_again
   [ "$ok" = 0 ] || return 1
-  healthy node "$since"
+  healthy device "$since"
 }
 
-# syncthing_again: Syncthing runs in the node's network namespace, which a
-# new node container replaces: its container again too. It does not hold
-# up an update: the node runs without it, and says so.
+# syncthing_again: Syncthing runs in the device's network namespace, which a
+# new device container replaces: its container again too. It does not hold
+# up an update: the device runs without it, and says so.
 syncthing_again() {
   grep -q '^  syncthing:' "$CONF/compose.yaml" 2>/dev/null || return 0
   if ! out=$(dc up -d --pull never --no-deps --force-recreate syncthing 2>&1); then
@@ -1334,18 +1334,18 @@ syncthing_again() {
 
 main_id() { printf '%s\n' "$1" | awk -v s="$2" '$1 == s { print $3 }'; }
 
-# installer: the install.sh of the node image now under its reference, as
+# installer: the install.sh of the device image now under its reference, as
 # $STATE/install.sh, when its layout (LAYOUT) is newer than this machine's.
 # It is that image's (/usr/local/share/eriphe/install.sh), from the build
 # pulled and checked here: no other download. None from an image from
 # before it, nor under eriphe-launcher, which brings its own layout as it
 # updates itself (BY=loop). In a Mac's VM (Lima), the install is the Mac's
 # (its settings, its network card): its user runs it there, told so in the
-# node's update-needs.
+# device's update-needs.
 installer() {
   rm -f "$STATE/install.sh"
   [ "${BY:-}" != loop ] || return 1
-  c=$(docker create "$NODE_IMAGE" 2>/dev/null) || return 1
+  c=$(docker create "$DEVICE_IMAGE" 2>/dev/null) || return 1
   docker cp "$c:/usr/local/share/eriphe/install.sh" "$STATE/install.sh" >/dev/null 2>&1
   docker rm "$c" >/dev/null 2>&1
   n=$(sed -n 's/^LAYOUT=\([0-9][0-9]*\)$/\1/p' "$STATE/install.sh" 2>/dev/null | head -n 1)
@@ -1356,7 +1356,7 @@ installer() {
   if [ "${INSTALL:-}" = macos ]; then
     rm -f "$STATE/install.sh"
     log "the install's layout $n is the Mac's to apply: its install command, run there"
-    printf 'why=layout\nlayout=%s\n' "$n" >"$DATA/node/update-needs"
+    printf 'why=layout\nlayout=%s\n' "$n" >"$DATA/device/update-needs"
     return 1
   fi
   log "the install's layout goes from ${LAYOUT:-1} to $n"
@@ -1366,7 +1366,7 @@ installer() {
 # the tests' own place for the machine's paths).
 R=${ERIPHE_UPDATE_ROOT:-}
 LAYOUT_FILES="$CONF/compose.yaml $CONF/.env $CONF/install.conf $CONF/update.conf $CONF/update.sh
-  $DATA/node/updater $DATA/core/updater $R/usr/local/bin/eriphe-share
+  $DATA/device/updater $DATA/core/updater $R/usr/local/bin/eriphe-share
   $R/etc/systemd/system/eriphe-update.service $R/etc/systemd/system/eriphe-update.path
   $R/etc/systemd/system/eriphe-update.timer $R/etc/systemd/system/eriphe-awake.service
   $R/etc/systemd/system/eriphe-awake.path"
@@ -1374,7 +1374,7 @@ LAYOUT_FILES="$CONF/compose.yaml $CONF/.env $CONF/install.conf $CONF/update.conf
 # layout: the new layout, by the new install.sh (installer) run with
 # --layout, as root here: the compose project, its settings, the units, the
 # components the layout brings (their images pulled if missing), with the
-# images now under their references; the services up, the node connected.
+# images now under their references; the services up, the device connected.
 # If it fails, what it rewrote is put back and the services it added go.
 layout() {
   b=$STATE/layout-before
@@ -1382,7 +1382,7 @@ layout() {
   for f in $LAYOUT_FILES; do
     [ ! -f "$f" ] || { mkdir -p "$b$(dirname "$f")" && cp -p "$f" "$b$f"; }
   done
-  if ERIPHE_CORE_IMAGE=$CORE_IMAGE ERIPHE_NODE_IMAGE=$NODE_IMAGE ERIPHE_WORKER_IMAGE=$WORKER_IMAGE \
+  if ERIPHE_CORE_IMAGE=$CORE_IMAGE ERIPHE_DEVICE_IMAGE=$DEVICE_IMAGE ERIPHE_WORKER_IMAGE=$WORKER_IMAGE \
       sh "$STATE/install.sh" --layout </dev/null >"$STATE/layout.log" 2>&1; then
     rm -rf "$b" "$STATE/install.sh"
     return 0
@@ -1421,20 +1421,20 @@ update() {
   target=$1 id=$2 auto=$3 core=$4
   before=$(current "$target")
   main=core
-  [ "$target" = core ] || main=node
+  [ "$target" = core ] || main=device
   from=$(version "$(main_id "$before" "$main")")
   status "$target" "$id" update running "" "$from" ""
   # eriphe-core's machine takes eriphe-core's build (latest, edge or the
-  # pinned one), and the node and worker of that same build (the tag of its
+  # pinned one), and the device and worker of that same build (the tag of its
   # version), not their own latest: latest may be half published, and the
-  # node is never newer than eriphe-core. A node alone takes eriphe-core's
+  # device is never newer than eriphe-core. A device alone takes eriphe-core's
   # build too, unless it is pinned to a release.
   match=
-  if [ "$target" = node ] && ! pinned; then match=$(tag_of "$core"); fi
+  if [ "$target" = device ] && ! pinned; then match=$(tag_of "$core"); fi
   for ref in $(printf '%s\n' "$before" | awk '{ print $2 }'); do
     src=$ref
     case $match:$ref in
-      ?*:*/eriphe-node:* | ?*:*/eriphe-base:* | ?*:*/eriphe-worker:*) src=$(repo "$ref"):$match ;;
+      ?*:*/eriphe-device:* | ?*:*/eriphe-base:* | ?*:*/eriphe-worker:*) src=$(repo "$ref"):$match ;;
     esac
     if ! out=$(docker pull -q "$src" 2>&1); then
       put "$before"
@@ -1483,8 +1483,8 @@ update() {
     fi
     return
   fi
-  # A node is never newer than eriphe-core (a release pinned here may be).
-  if [ "$target" = node ] && release "$core" && release "$to" && newer "$to" "$core"; then
+  # A device is never newer than eriphe-core (a release pinned here may be).
+  if [ "$target" = device ] && release "$core" && release "$to" && newer "$to" "$core"; then
     put "$before"
     status "$target" "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
     return
@@ -1517,7 +1517,7 @@ update() {
 rollback() {
   target=$1 id=$2
   main=core
-  [ "$target" = core ] || main=node
+  [ "$target" = core ] || main=device
   before=$(current "$target")
   from=$(version "$(main_id "$before" "$main")")
   if [ ! -s "$STATE/previous.$target" ]; then
@@ -1553,15 +1553,15 @@ rollback() {
 field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
 
 if [ "${1:-}" = rollback ]; then
-  target=node
+  target=device
   [ "$MODE" = core ] && target=core
   rollback "$target" "local-$(date +%s)"
   exit 0
 fi
-for target in core node; do
+for target in core device; do
   f=$DATA/$target/update-requested
   [ -f "$f" ] || continue
-  [ "$target" = node ] || [ "$MODE" = core ] || { rm -f "$f"; continue; }
+  [ "$target" = device ] || [ "$MODE" = core ] || { rm -f "$f"; continue; }
   id=$(field "$f" id) action=$(field "$f" action) core=$(field "$f" core) auto=$(field "$f" auto)
   rm -f "$f"
   printf '%s' "$id" | grep -Eq '^[a-z0-9-]{1,40}$' || { log "$target: a request without a valid id"; continue; }
@@ -1583,22 +1583,22 @@ updater_units() {
 UNIT_SERVICE=$(printf '%s\n' "[Unit]" "Description=Eriphe updater: applies eriphe-core's update requests" \
 		"After=docker.service" "Requires=docker.service" "" "[Service]" "Type=oneshot" \
 		"ExecStart=/bin/sh $CONF/update.sh" "TimeoutStartSec=30min" | b64)
-UNIT_PATH=$(printf '%s\n' "[Unit]" "Description=Eriphe updater: a request from eriphe-core or eriphe-node" "" "[Path]" \
-		"PathExists=$DATA/node/update-requested" \
+UNIT_PATH=$(printf '%s\n' "[Unit]" "Description=Eriphe updater: a request from eriphe-core or eriphe-device" "" "[Path]" \
+		"PathExists=$DATA/device/update-requested" \
 		"$([ "$MODE" = core ] && printf 'PathExists=%s/core/update-requested' "$DATA")" \
 		"Unit=eriphe-update.service" "" "[Install]" "WantedBy=multi-user.target" | b64)
 UNIT_TIMER=$(printf '%s\n' "[Unit]" "Description=Eriphe updater: a request missed" "" "[Timer]" \
 		"OnBootSec=2min" "OnUnitInactiveSec=10min" "Unit=eriphe-update.service" "" "[Install]" "WantedBy=timers.target" | b64)
 UNIT_AWAKE_SERVICE=$(printf '%s\n' "[Unit]" "Description=Eriphe: no sleep while a task is at work" "" "[Service]" "Type=simple" \
-		"ExecStart=/usr/bin/systemd-inhibit --what=sleep:idle --who=Eriphe \"--why=A task is at work\" --mode=block /bin/sh -c 'while [ -e \"$DATA/node/awake\" ]; do sleep 10; done'" | b64)
-UNIT_AWAKE_PATH=$(printf '%s\n' "[Unit]" "Description=Eriphe: a task at work keeps the machine awake (eriphe-node writes awake)" "" "[Path]" \
-		"PathExists=$DATA/node/awake" "Unit=eriphe-awake.service" "" "[Install]" "WantedBy=multi-user.target" | b64)
+		"ExecStart=/usr/bin/systemd-inhibit --what=sleep:idle --who=Eriphe \"--why=A task is at work\" --mode=block /bin/sh -c 'while [ -e \"$DATA/device/awake\" ]; do sleep 10; done'" | b64)
+UNIT_AWAKE_PATH=$(printf '%s\n' "[Unit]" "Description=Eriphe: a task at work keeps the machine awake (eriphe-device writes awake)" "" "[Path]" \
+		"PathExists=$DATA/device/awake" "Unit=eriphe-awake.service" "" "[Install]" "WantedBy=multi-user.target" | b64)
 EOF
 }
 
 # share_cmd: /usr/local/bin/eriphe-share, the way to share a folder of this
-# machine with Eriphe, here and only here (node/README.md, Shared folders):
-# eriphe-node share in the node's container, which sees the shared places
+# machine with Eriphe, here and only here (device/README.md, Shared folders):
+# eriphe-device share in the device's container, which sees the shared places
 # at their paths on this machine. A relative folder is made absolute here.
 share_cmd() {
 	cat <<EOF
@@ -1609,7 +1609,7 @@ share_cmd() {
 #   eriphe-share remove NAME|FOLDER...
 #   eriphe-share snapshots NAME
 #   eriphe-share restore NAME SNAPSHOT|latest
-ROOT=$(q "$DATA/node")
+ROOT=$(q "$DATA/device")
 EOF
 	cat <<'EOF'
 set -eu
@@ -1626,12 +1626,12 @@ while [ "$i" -lt "$n" ]; do
 	set -- "$@" "$a"
 	prev=$a
 done
-exec docker exec -i eriphe-node eriphe-node share -root "$ROOT" "$@"
+exec docker exec -i eriphe-device eriphe-device share -root "$ROOT" "$@"
 EOF
 }
 
 # host_up writes the project, pulls the images and starts it, joining the
-# node if it has not joined yet. In core mode it prints the setup code.
+# device if it has not joined yet. In core mode it prints the setup code.
 host_up() {
 	{
 		prelude
@@ -1645,7 +1645,7 @@ host_up() {
 		printf 'INSTALL_CONF=%s\n' "$(install_conf | b64)"
 		printf 'UPDATE_CONF=%s\n' "$(updater_conf | b64)"
 		printf 'UPDATE_SH=%s\n' "$(updater_sh | b64)"
-		# Not in eriphe-launcher's container: there, docker exec eriphe-node does it.
+		# Not in eriphe-launcher's container: there, docker exec eriphe-device does it.
 		printf 'SHARE_SH=%s\n' "$([ -n "${HOST_DATA:-}" ] || share_cmd | b64)"
 		printf 'PIN=%s\n' "$(q "$PIN")"
 		printf 'MODELS_URL=%s\n' "$(q "$(models_url)")"
@@ -1660,8 +1660,8 @@ host_up() {
 # Progress on stderr; stdout carries only key=value lines.
 exec 3>&1 >&2
 umask 077
-mkdir -p "$CONF" "$DATA/node"
-chmod 700 "$DATA/node"
+mkdir -p "$CONF" "$DATA/device"
+chmod 700 "$DATA/device"
 if [ "$MODE" = core ]; then
   mkdir -p "$DATA/core"
   chown "$CORE_UID:$CORE_UID" "$DATA/core"
@@ -1686,9 +1686,9 @@ put "$CONF/compose.yaml" "$COMPOSE"
 put "$CONF/.env" "$ENVF"
 put "$CONF/install.conf" "$INSTALL_CONF"
 # Syncthing's home (its keys, its configuration with its API key) and the
-# node's copies, root's only.
-mkdir -p "$DATA/syncthing" "$DATA/node/sync"
-chmod 700 "$DATA/syncthing" "$DATA/node/sync"
+# device's copies, root's only.
+mkdir -p "$DATA/syncthing" "$DATA/device/sync"
+chmod 700 "$DATA/syncthing" "$DATA/device/sync"
 [ -s "$DATA/syncthing/config.xml" ] || put "$DATA/syncthing/config.xml" "$SYNCTHING_CONF"
 
 for img in $IMAGES; do
@@ -1707,13 +1707,13 @@ done
 echo "eriphe-step: Downloaded"
 
 up() { dc up -d --pull never --remove-orphans "$@"; }
-if [ ! -f "$DATA/node/node.json" ] && [ "$MODE" = core ]; then
+if [ ! -f "$DATA/device/device.json" ] && [ "$MODE" = core ]; then
   up core engine
   echo "Waiting for eriphe-core..."
   i=0
-  # It prints the command that joins a node, with the token and eriphe-core's
+  # It prints the command that joins a device, with the token and eriphe-core's
   # CA (-ca-hash); it fails until eriphe-core answers.
-  until joining=$(docker exec eriphe-core eriphe-core join-token -data /data -name "$NODE_NAME" 2>/dev/null) &&
+  until joining=$(docker exec eriphe-core eriphe-core join-token -data /data -name "$DEVICE_NAME" 2>/dev/null) &&
       JOIN_TOKEN=$(printf '%s\n' "$joining" | sed -n 's/.* -join-token \([^ ]*\).*/\1/p' | tail -n 1) &&
       [ -n "$JOIN_TOKEN" ]; do
     i=$((i + 1))
@@ -1724,7 +1724,7 @@ if [ ! -f "$DATA/node/node.json" ] && [ "$MODE" = core ]; then
     sleep 2
   done
   # A new eriphe-core accepts machines over TLS only, from the start: the
-  # node joins with its CA's hash, kept for the next runs.
+  # device joins with its CA's hash, kept for the next runs.
   ca=$(printf '%s\n' "$joining" | sed -n 's/.* -ca-hash \(sha256:[0-9a-f]*\).*/\1/p' | tail -n 1)
   if [ -n "$ca" ]; then
     sed "s/^ERIPHE_CA_HASH=.*/ERIPHE_CA_HASH='$ca'/" "$CONF/.env" >"$CONF/.env.new" && mv "$CONF/.env.new" "$CONF/.env"
@@ -1732,24 +1732,24 @@ if [ ! -f "$DATA/node/node.json" ] && [ "$MODE" = core ]; then
   fi
 fi
 connected() {
-  echo "Waiting for eriphe-node..."
+  echo "Waiting for eriphe-device..."
   i=0
-  until docker logs eriphe-node 2>&1 | grep -q 'connected to '; do
+  until docker logs eriphe-device 2>&1 | grep -q 'connected to '; do
     i=$((i + 1))
-    state=$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' eriphe-node 2>/dev/null || echo missing)
+    state=$(docker inspect -f '{{.State.Status}} {{.RestartCount}}' eriphe-device 2>/dev/null || echo missing)
     case $state in
       "running 0") ;;
-      *) [ $i -lt 3 ] || { docker logs --tail 20 eriphe-node; die "Eriphe did not start (eriphe-node: $state): run the command again"; } ;;
+      *) [ $i -lt 3 ] || { docker logs --tail 20 eriphe-device; die "Eriphe did not start (eriphe-device: $state): run the command again"; } ;;
     esac
     if [ $i -gt 90 ]; then
-      docker logs --tail 20 eriphe-node
+      docker logs --tail 20 eriphe-device
       [ "$MODE" = core ] && die "Eriphe did not start in 3 minutes: run the command again"
       die "this computer could not connect to $ASSISTANT in 3 minutes: check that the computer Eriphe runs on is on, then run the command again"
     fi
     sleep 2
   done
 }
-if [ -f "$DATA/node/node.json" ]; then
+if [ -f "$DATA/device/device.json" ]; then
   up
   echo "eriphe-step: Installed"
   connected
@@ -1757,17 +1757,17 @@ else
   ERIPHE_JOIN_TOKEN=$JOIN_TOKEN up
   echo "eriphe-step: Installed"
   connected
-  # Joined: the node has its own secret. Recreated without the join token,
+  # Joined: the device has its own secret. Recreated without the join token,
   # which stays nowhere, not even in the container's configuration.
-  [ -f "$DATA/node/node.json" ] || die "eriphe-node is connected but has no node.json"
+  [ -f "$DATA/device/device.json" ] || die "eriphe-device is connected but has no device.json"
   up
   connected
 fi
-docker logs eriphe-node 2>&1 | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-node: /'
-# The model server it lends, asked from eriphe-node's container, as the node
+docker logs eriphe-device 2>&1 | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-device: /'
+# The model server it lends, asked from eriphe-device's container, as the device
 # reaches it: any HTTP answer will do (a server with a key answers 401).
 if [ -n "${MODELS_URL:-}" ]; then
-  if docker exec eriphe-node wget -S -T 5 -O /dev/null "$MODELS_URL" 2>&1 | grep -q 'HTTP/'; then
+  if docker exec eriphe-device wget -S -T 5 -O /dev/null "$MODELS_URL" 2>&1 | grep -q 'HTTP/'; then
     echo model_server_answers=yes >&3
   else
     echo model_server_answers=no >&3
@@ -1784,11 +1784,11 @@ if [ "$MODE" = core ]; then
   c=eriphe-core
 else
   echo "eriphe-step: Connected"
-  c=eriphe-node
+  c=eriphe-device
 fi
 echo "version=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$c" 2>/dev/null | sed 's/<no value>//')" >&3
 
-# The updater, and the word to eriphe-core and the node that it is there.
+# The updater, and the word to eriphe-core and the device that it is there.
 put "$CONF/update.conf" "$UPDATE_CONF"
 put "$CONF/update.sh" "$UPDATE_SH"
 chmod 700 "$CONF/update.sh"
@@ -1797,7 +1797,7 @@ if [ -n "$SHARE_SH" ]; then
   put /usr/local/bin/eriphe-share "$SHARE_SH"
   chmod 755 /usr/local/bin/eriphe-share
 fi
-marks="$DATA/node"
+marks="$DATA/device"
 [ "$MODE" = core ] && marks="$marks $DATA/core"
 # pin: the release it stays on; channel: edge when it follows main.
 pin=$PIN channel=
@@ -1813,8 +1813,8 @@ elif command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
   chmod 644 /etc/systemd/system/eriphe-update.service /etc/systemd/system/eriphe-update.path /etc/systemd/system/eriphe-update.timer
   systemctl daemon-reload
   systemctl enable --now eriphe-update.path eriphe-update.timer >/dev/null 2>&1 || die "systemctl enable eriphe-update failed"
-  # No sleep while a task is at work: the node, in its container, writes
-  # $DATA/node/awake meanwhile (node/README.md, Sleep).
+  # No sleep while a task is at work: the device, in its container, writes
+  # $DATA/device/awake meanwhile (device/README.md, Sleep).
   if [ -x /usr/bin/systemd-inhibit ]; then
     put /etc/systemd/system/eriphe-awake.service "$UNIT_AWAKE_SERVICE"
     put /etc/systemd/system/eriphe-awake.path "$UNIT_AWAKE_PATH"
@@ -1831,8 +1831,8 @@ for d in $marks; do
   fi
 done
 # This machine is at its layout: nothing waits for its user (update-needs,
-# node/update.go).
-rm -f "$DATA/node/update-needs"
+# device/update.go).
+rm -f "$DATA/device/update-needs"
 [ $updater = 0 ] || [ "$MODE" != core ] || chown "$CORE_UID:$CORE_UID" "$DATA/core/updater"
 echo "updater=$updater" >&3
 EOF
@@ -1931,7 +1931,7 @@ fi
 sh "$CONF/update.sh" rollback >&2
 # shellcheck disable=SC1091
 MODE=$(. "$CONF/update.conf"; echo "$MODE")
-target=node
+target=device
 [ "$MODE" = core ] && target=core
 cat "$DATA/$target/update-status"
 EOF
@@ -1963,7 +1963,7 @@ disk: ${ERIPHE_VM_DISK:-60GiB}
 mounts: []
 # Apple's NAT, next to Lima's own network: the VM's traffic goes out through
 # the system, not through limactl, which macOS's local network privacy keeps
-# off the LAN when launchd starts it (the node would reach the Internet only).
+# off the LAN when launchd starts it (the device would reach the Internet only).
 networks:
 - vzNAT: true
 containerd:
@@ -2110,16 +2110,16 @@ mac_uninstall() {
 
 # ---- macOS with Apple's container -----------------------------------------
 #
-# On Apple silicon with macOS 26, eriphe-node runs on the Mac itself, as the
-# user, and starts each task as a micro-VM of Apple's container (node/README.md,
+# On Apple silicon with macOS 26, eriphe-device runs on the Mac itself, as the
+# user, and starts each task as a micro-VM of Apple's container (device/README.md,
 # The container engine): a task sees only its own folders, mounted when it
 # starts, and macOS asks once, for "container-runtime-linux" (Apple's), when a
 # folder of Documents, the Desktop or iCloud Drive is first given to one.
-# Everything is in ~/.eriphe: bin/ (eriphe-node, eriphe-core in core mode,
-# taken from their public images), node/ (the node's root), core/ (eriphe-core's
+# Everything is in ~/.eriphe: bin/ (eriphe-device, eriphe-core in core mode,
+# taken from their public images), device/ (the device's root), core/ (eriphe-core's
 # data), and LaunchAgents start them at login.
 
-NODE_LABEL=org.eriphe.node
+DEVICE_LABEL=org.eriphe.device
 CORE_LABEL=org.eriphe.core
 UPDATE_LABEL=org.eriphe.update
 SYNCTHING_LABEL=org.eriphe.syncthing
@@ -2183,9 +2183,9 @@ native_container() {
 
 # native_info is what an earlier install left, as host_docker reports it.
 native_info() {
-	if [ -f "$ERIPHE_HOME/node/node.json" ]; then
+	if [ -f "$ERIPHE_HOME/device/device.json" ]; then
 		echo joined=1
-		echo "joined_as=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$ERIPHE_HOME/node/node.json" | head -n 1)"
+		echo "joined_as=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' "$ERIPHE_HOME/device/device.json" | head -n 1)"
 	fi
 	[ -f "$ERIPHE_HOME/install.conf" ] && sed 's/^/saved_/' "$ERIPHE_HOME/install.conf"
 	true
@@ -2228,14 +2228,14 @@ native_env() {
 	wake_settings
 	cat <<EOF
 # Written by install.sh: run it again rather than editing this file.
-ERIPHE_ROOT=$(q "$ERIPHE_HOME/node")
+ERIPHE_ROOT=$(q "$ERIPHE_HOME/device")
 ERIPHE_ENGINE=container
 ERIPHE_INSTALL=macos
 ERIPHE_CORE=$(q "$CORE_URL")
-ERIPHE_NODE_NAME=$(q "$NAME")
-ERIPHE_NODE_LABELS=$(q "$LABELS")
+ERIPHE_DEVICE_NAME=$(q "$NAME")
+ERIPHE_DEVICE_LABELS=$(q "$LABELS")
 ERIPHE_CA_HASH=$(q "$CA_HASH")
-ERIPHE_NODE_SHARES=$(q "$(mac_shares)")
+ERIPHE_DEVICE_SHARES=$(q "$(mac_shares)")
 ERIPHE_MODEL_SERVER=$(q "$MODEL_SERVER")
 ERIPHE_ALWAYS_ON=$([ "$MODE" = core ] && echo 1)
 ERIPHE_WORKER_IMAGE=$(q "$WORKER_IMAGE")
@@ -2249,10 +2249,10 @@ EOF
 # The core relay: macOS keeps a LaunchAgent off the LAN, and a daemon run as
 # the user too (Apple TN3179: only root programs and daemons are allowed,
 # without asking, and a daemon run as the user was asked about and held back
-# on this Mac); eriphe-node itself must be an agent, in the user's session,
+# on this Mac); eriphe-device itself must be an agent, in the user's session,
 # where Apple's container has its services. So a root LaunchDaemon connects
-# to eriphe-core for the node, and does nothing else (node/README.md, The
-# container engine): eriphe-node's binary as `core-relay`, from a copy only
+# to eriphe-core for the device, and does nothing else (device/README.md, The
+# container engine): eriphe-device's binary as `core-relay`, from a copy only
 # root can change, on a socket in a folder of root's that only the user can
 # open, to eriphe-core's addresses only. Not in core mode: eriphe-core is on
 # this Mac, the loopback is never held back.
@@ -2277,19 +2277,19 @@ RELAY_WHY="it lets Eriphe reach your other devices on your home network"
 
 # native_relay installs or updates the relay (sudo: macOS asks for the
 # password), unless it is there already as it should be: the same plist,
-# loaded, and the same binary as the node's.
+# loaded, and the same binary as the device's.
 native_relay() {
 	new=$(relay_plist)
-	if relay_loaded && cmp -s "$RELAY_BIN" "$ERIPHE_HOME/bin/eriphe-node"; then
+	if relay_loaded && cmp -s "$RELAY_BIN" "$ERIPHE_HOME/bin/eriphe-device"; then
 		return
 	fi
-	note "Installing the node's way to eriphe-core on the LAN (the LaunchDaemon $RELAY_LABEL)..."
+	note "Installing the device's way to eriphe-core on the LAN (the LaunchDaemon $RELAY_LABEL)..."
 	need_root "$RELAY_WHY"
 	tmp=$(mktemp)
 	printf '%s\n' "$new" >"$tmp"
 	sudo launchctl bootout "system/$RELAY_LABEL" >/dev/null 2>&1 || true
 	if ! { sudo install -d -m 755 -o root -g wheel /usr/local/libexec &&
-		sudo install -m 755 -o root -g wheel "$ERIPHE_HOME/bin/eriphe-node" "$RELAY_BIN" &&
+		sudo install -m 755 -o root -g wheel "$ERIPHE_HOME/bin/eriphe-device" "$RELAY_BIN" &&
 		sudo install -m 644 -o root -g wheel "$tmp" "$RELAY_PLIST"; }; then
 		# The relay of before, if it is still there, rather than none.
 		[ ! -f "$RELAY_PLIST" ] || sudo -n launchctl bootstrap system "$RELAY_PLIST" >/dev/null 2>&1 || true
@@ -2308,8 +2308,8 @@ root_ready() {
 # relay_plan NEWBIN: what the relay needs, decided before anything stops
 # (RELAY): "install" when it is missing, not loaded or its settings changed,
 # which needs root, asked for now (without it the installation stops here,
-# the node untouched); "binary" when only its binary differs from NEWBIN,
-# done only if root can be had: an older relay still connects the node, and
+# the device untouched); "binary" when only its binary differs from NEWBIN,
+# done only if root can be had: an older relay still connects the device, and
 # running this again on a terminal updates it; nothing when it is as it
 # should be.
 relay_plan() {
@@ -2341,13 +2341,13 @@ native_relay_uninstall() {
 
 # ---- Syncthing on a Mac --------------------------------------------------
 #
-# The copies of shared folders (node/README.md, Copies). Syncthing's
+# The copies of shared folders (device/README.md, Copies). Syncthing's
 # official build, signed with the Developer ID of Kastelo AB and notarized,
 # in ~/.eriphe/syncthing, run by a LaunchAgent of its own: macOS asks once
 # whether it may open Documents, iCloud Drive or a cloud's folder, and ties
 # the answer to that signature, so that it holds across Syncthing's
-# versions and Eriphe's updates. It is never the node's child: macOS would
-# then hold the node, which is not signed, responsible. The version is the
+# versions and Eriphe's updates. It is never the device's child: macOS would
+# then hold the device, which is not signed, responsible. The version is the
 # one pinned here; Syncthing never upgrades itself (autoUpgradeIntervalH 0,
 # STNOUPGRADE).
 
@@ -2404,7 +2404,7 @@ syncthing_current() {
 
 # mac_syncthing_fetch: the pinned build, if it is not in place yet, as
 # ~/.eriphe/update/syncthing-new/syncthing (SYNCTHING_NEW), before anything
-# stops. Without it (no download, a bad checksum or signature) the node is
+# stops. Without it (no download, a bad checksum or signature) the device is
 # installed all the same, without copies.
 mac_syncthing_fetch() {
 	SYNCTHING_NEW='' SYNCTHING_MISSING=''
@@ -2447,8 +2447,8 @@ native_conf() {
 }
 
 # mac_share_sh: ~/.eriphe/bin/eriphe-share, the way to share a folder of
-# this Mac with Eriphe (node/README.md, Shared folders): eriphe-node share,
-# with the node's settings. --ask (the Finder's Quick Action) asks for the
+# this Mac with Eriphe (device/README.md, Shared folders): eriphe-device share,
+# with the device's settings. --ask (the Finder's Quick Action) asks for the
 # level and the copies with macOS's own dialogs, then says how it went.
 mac_share_sh() {
 	cat <<EOF
@@ -2476,7 +2476,7 @@ EOF
 	cat <<'EOF'
 set -a
 # shellcheck disable=SC1091
-. "$E/node.env"
+. "$E/device.env"
 set +a
 # ask LINES... -- ARGS...: an AppleScript run by Apple's osascript, its
 # lines given with -e, the texts as its arguments.
@@ -2495,11 +2495,11 @@ if [ "${1:-}" = --ask ]; then
 	copy=$(ask -e 'button returned of (display dialog (item 1 of argv) buttons {item 2 of argv, item 3 of argv} default button 1 with title "Eriphe")' -e 'end run' \
 		"$T_COPY" "$T_NO" "$T_YES") || exit 0
 	if [ "$copy" = "$T_YES" ]; then copy=--copyable; else copy=--copyable=false; fi
-	if out=$("$E/bin/eriphe-node" share -docker "$CONTAINER" add "$flag" "$copy" "$@" 2>&1); then title=Eriphe; else title=$T_FAILED; fi
+	if out=$("$E/bin/eriphe-device" share -docker "$CONTAINER" add "$flag" "$copy" "$@" 2>&1); then title=Eriphe; else title=$T_FAILED; fi
 	ask -e 'display notification (item 1 of argv) with title (item 2 of argv)' -e 'end run' "$out" "$title" >/dev/null || true
 	exit 0
 fi
-exec "$E/bin/eriphe-node" share -docker "$CONTAINER" "$@"
+exec "$E/bin/eriphe-device" share -docker "$CONTAINER" "$@"
 EOF
 }
 
@@ -2735,30 +2735,30 @@ mac_quick_actions_uninstall() {
 	done
 }
 
-# start_node_sh: what the node's LaunchAgent runs: container's services
+# start_device_sh: what the device's LaunchAgent runs: container's services
 # (started again after a restart of the Mac), the join token for the first
-# start only, then eriphe-node.
-start_node_sh() {
+# start only, then eriphe-device.
+start_device_sh() {
 	cat <<EOF
 #!/bin/sh
-# Written by install.sh: starts eriphe-node on this Mac, with Apple's
-# container (LaunchAgent $NODE_LABEL).
+# Written by install.sh: starts eriphe-device on this Mac, with Apple's
+# container (LaunchAgent $DEVICE_LABEL).
 E=$(q "$ERIPHE_HOME")
 CONTAINER=$(q "$CONTAINER")
 EOF
 	cat <<'EOF'
 set -a
 # shellcheck disable=SC1091
-. "$E/node.env"
+. "$E/device.env"
 set +a
 "$CONTAINER" system start --enable-kernel-install </dev/null >/dev/null 2>&1 || echo "eriphe: Apple's container does not start" >&2
-if [ ! -f "$ERIPHE_ROOT/node.json" ] && [ -f "$E/join-token" ]; then
+if [ ! -f "$ERIPHE_ROOT/device.json" ] && [ -f "$E/join-token" ]; then
 	ERIPHE_JOIN_TOKEN=$(cat "$E/join-token")
 	export ERIPHE_JOIN_TOKEN
 fi
-# The node's programs for tasks (eriphe-cred), Linux builds for the tasks'
+# The device's programs for tasks (eriphe-cred), Linux builds for the tasks'
 # VMs, taken from its image with it.
-exec "$E/bin/eriphe-node" -docker "$CONTAINER" -image "$ERIPHE_WORKER_IMAGE" -task-bin "$E/bin/task-bin"
+exec "$E/bin/eriphe-device" -docker "$CONTAINER" -image "$ERIPHE_WORKER_IMAGE" -task-bin "$E/bin/task-bin"
 EOF
 }
 
@@ -2778,7 +2778,7 @@ plist() {
 	keep) printf '%s\n' '  <key>KeepAlive</key><true/>' '  <key>ThrottleInterval</key><integer>10</integer>' ;;
 	update)
 		printf '%s\n' '  <key>WatchPaths</key>' '  <array>' \
-			"    <string>$ERIPHE_HOME/node/update-requested</string>" \
+			"    <string>$ERIPHE_HOME/device/update-requested</string>" \
 			"    <string>$ERIPHE_HOME/core/update-requested</string>" '  </array>' \
 			'  <key>StartInterval</key><integer>600</integer>'
 		;;
@@ -2825,13 +2825,13 @@ mac_updater_conf() {
 	cat <<EOF
 # Written by install.sh: run it again rather than editing this file.
 E=$(q "$ERIPHE_HOME") CONTAINER=$(q "$CONTAINER") MODE=$(q "$MODE") PIN=$(q "$PIN") API_PORT=$(q "$API_PORT")
-CORE_IMAGE=$(q "$CORE_IMAGE") NODE_IMAGE=$(q "$NODE_IMAGE") WORKER_IMAGE=$(q "$WORKER_IMAGE")
+CORE_IMAGE=$(q "$CORE_IMAGE") DEVICE_IMAGE=$(q "$DEVICE_IMAGE") WORKER_IMAGE=$(q "$WORKER_IMAGE")
 LAYOUT=${LAYOUT_DONE:-$LAYOUT}
 EOF
 }
 
 # mac_updater_sh: the updater of a Mac with Apple's container, ~/.eriphe/update.sh,
-# the Linux one's counterpart (updater_sh) for binaries: eriphe-node and
+# the Linux one's counterpart (updater_sh) for binaries: eriphe-device and
 # eriphe-core are taken from their images (/usr/local/share/eriphe/darwin-arm64),
 # the previous ones kept to go back to. With no argument it applies the
 # requests waiting; "install" puts the images' binaries in place (install.sh);
@@ -2840,13 +2840,13 @@ mac_updater_sh() {
 	cat <<'EOF'
 #!/bin/sh
 # Written by install.sh: applies the update requests of eriphe-core and
-# eriphe-node on this Mac (install/README.md, Updates). Run by the
+# eriphe-device on this Mac (install/README.md, Updates). Run by the
 # LaunchAgent org.eriphe.update.
 set -u
 # shellcheck disable=SC1091
 . "$(dirname "$0")/update.conf"
 STATE=$E/update
-HEALTH=${ERIPHE_UPDATE_HEALTH:-180} # seconds a restarted eriphe-node has to connect again
+HEALTH=${ERIPHE_UPDATE_HEALTH:-180} # seconds a restarted eriphe-device has to connect again
 mkdir -p "$STATE/previous"
 chmod 700 "$STATE"
 log() {
@@ -2889,7 +2889,7 @@ status() {
 # interrupted: as the Linux updater's, a request still "running" (this one
 # holds the lock), and what the stopped one left half fetched.
 interrupted() {
-  for t in core node; do
+  for t in core device; do
     f=$E/$t/update-status
     [ "$(sed -n 's/^outcome=//p' "$f" 2>/dev/null)" = running ] || continue
     status "$t" "$(sed -n 's/^id=//p' "$f")" "$(sed -n 's/^action=//p' "$f")" interrupted \
@@ -2902,7 +2902,7 @@ interrupted() {
 # The programs of a target, as "name image" lines, eriphe-core first.
 items() {
   if [ "$1" = core ]; then echo "core $CORE_IMAGE"; fi
-  echo "node $NODE_IMAGE"
+  echo "device $DEVICE_IMAGE"
 }
 repo() { printf '%s' "${1%:*}"; }
 label() {
@@ -2930,11 +2930,11 @@ pinned() { [ -n "$PIN" ] && [ "$PIN" != edge ]; }
 # fetch NAME IMAGE DIR: the image's Mac binary of NAME into DIR, with its version.
 fetch() {
   over=
-  [ "$1" = node ] && over=${ERIPHE_NODE_BINARY:-}
+  [ "$1" = device ] && over=${ERIPHE_DEVICE_BINARY:-}
   [ "$1" = core ] && over=${ERIPHE_CORE_BINARY:-}
   if [ -n "$over" ]; then
     cp "$over" "$3/eriphe-$1" && echo dev >"$3/eriphe-$1.version" || return 1
-    [ "$1" != node ] || [ -z "${ERIPHE_NODE_INSTALLER:-}" ] || cp "$ERIPHE_NODE_INSTALLER" "$3/install.sh"
+    [ "$1" != device ] || [ -z "${ERIPHE_DEVICE_INSTALLER:-}" ] || cp "$ERIPHE_DEVICE_INSTALLER" "$3/install.sh"
     return
   fi
   if ! out=$("$CONTAINER" image pull --progress none "$2" 2>&1); then
@@ -2951,8 +2951,8 @@ fetch() {
   chmod 755 "$t/eriphe-$1"
   mv "$t/eriphe-$1" "$3/eriphe-$1"
   rm -rf "$t"
-  # The node's programs for tasks, built for Linux: the tasks are Linux VMs.
-  if [ "$1" = node ]; then
+  # The device's programs for tasks, built for Linux: the tasks are Linux VMs.
+  if [ "$1" = device ]; then
     t=$(mktemp -d "$STATE/fetch.XXXXXX")
     if ! "$CONTAINER" run --rm --progress none --entrypoint cp --mount "type=bind,source=$t,target=/out" \
         "$2" -R /usr/local/share/eriphe/task-bin/linux-arm64 /out/ >/dev/null 2>&1 || [ ! -d "$t/linux-arm64" ]; then
@@ -2995,7 +2995,7 @@ restart() {
     launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/org.eriphe.$1.plist" >/dev/null 2>&1
 }
 
-# healthy NAME SINCE: eriphe-core answers, or eriphe-node is connected again
+# healthy NAME SINCE: eriphe-core answers, or eriphe-device is connected again
 # (in its log after byte SINCE), within HEALTH seconds.
 healthy() {
   i=0
@@ -3006,8 +3006,8 @@ healthy() {
     done
     return 0
   fi
-  until tail -c +"$(($2 + 1))" "$E/node.log" 2>/dev/null | grep -q 'connected to '; do
-    i=$((i + 2)); [ $i -lt "$HEALTH" ] || { why="eriphe-node is not connected after $HEALTH s"; return 1; }
+  until tail -c +"$(($2 + 1))" "$E/device.log" 2>/dev/null | grep -q 'connected to '; do
+    i=$((i + 2)); [ $i -lt "$HEALTH" ] || { why="eriphe-device is not connected after $HEALTH s"; return 1; }
     sleep 2
   done
 }
@@ -3021,8 +3021,8 @@ swap() {
     cp -p "$E/bin/eriphe-$n" "$E/bin/eriphe-$n.version" "$STATE/swap/" 2>/dev/null
     cp -p "$2/eriphe-$n" "$E/bin/eriphe-$n.new" && mv "$E/bin/eriphe-$n.new" "$E/bin/eriphe-$n"
     cp -p "$2/eriphe-$n.version" "$E/bin/"
-    # The node's programs for tasks go with it.
-    if [ "$n" = node ] && [ -d "$2/task-bin" ]; then
+    # The device's programs for tasks go with it.
+    if [ "$n" = device ] && [ -d "$2/task-bin" ]; then
       [ ! -d "$E/bin/task-bin" ] || cp -Rp "$E/bin/task-bin" "$STATE/swap/"
       rm -rf "$E/bin/task-bin.new"
       cp -Rp "$2/task-bin" "$E/bin/task-bin.new" && rm -rf "$E/bin/task-bin" && mv "$E/bin/task-bin.new" "$E/bin/task-bin"
@@ -3032,12 +3032,12 @@ swap() {
     restart core
     healthy core 0 || return 1
   fi
-  # Only what the new eriphe-node logs: the old one reconnects to a
+  # Only what the new eriphe-device logs: the old one reconnects to a
   # restarted eriphe-core meanwhile.
-  since=$({ wc -c <"$E/node.log"; } 2>/dev/null | tr -d " ")
+  since=$({ wc -c <"$E/device.log"; } 2>/dev/null | tr -d " ")
   since=${since:-0}
-  restart node
-  healthy node "$since"
+  restart device
+  healthy device "$since"
 }
 
 # newer_layout DIR: DIR's install.sh (fetch) has a newer layout than this
@@ -3050,12 +3050,12 @@ newer_layout() {
 # layout DIR: the new layout, by DIR's install.sh run with --layout, as
 # this user: the settings, the LaunchAgents, the components the layout
 # brings (Syncthing, checked as the installer checks it), with the binaries
-# now in place; the node restarted and connected. A step that needs the
+# now in place; the device restarted and connected. A step that needs the
 # password is left for the user (update-needs). If it fails, install.sh
 # puts back what ran before it (native_restore).
 layout() {
   log "the install's layout goes from ${LAYOUT:-1} to $(sed -n 's/^LAYOUT=\([0-9][0-9]*\)$/\1/p' "$1/install.sh" | head -n 1)"
-  if ERIPHE_CORE_IMAGE=$CORE_IMAGE ERIPHE_NODE_IMAGE=$NODE_IMAGE ERIPHE_WORKER_IMAGE=$WORKER_IMAGE \
+  if ERIPHE_CORE_IMAGE=$CORE_IMAGE ERIPHE_DEVICE_IMAGE=$DEVICE_IMAGE ERIPHE_WORKER_IMAGE=$WORKER_IMAGE \
       sh "$1/install.sh" --layout </dev/null >"$STATE/layout.log" 2>&1; then
     return 0
   fi
@@ -3082,15 +3082,15 @@ update() {
   status "$target" "$id" update running "" "$from" ""
   new=$STATE/new
   rm -rf "$new"; mkdir -p "$new"
-  # The node (and worker) of eriphe-core's build: on eriphe-core's machine,
-  # the one just fetched; on a node alone, the one eriphe-core runs, unless
+  # The device (and worker) of eriphe-core's build: on eriphe-core's machine,
+  # the one just fetched; on a device alone, the one eriphe-core runs, unless
   # it is pinned to a release.
   match=
-  if [ "$target" = node ] && ! pinned; then match=$(tag_of "$core"); fi
+  if [ "$target" = device ] && ! pinned; then match=$(tag_of "$core"); fi
   for line in $(items "$target" | tr ' ' '='); do
     n=${line%%=*} ref=${line#*=}
     src=$ref
-    [ -z "$match" ] || [ "$n" != node ] || src=$(repo "$ref"):$match
+    [ -z "$match" ] || [ "$n" != device ] || src=$(repo "$ref"):$match
     fetch "$n" "$src" "$new" || { status "$target" "$id" update failed "$why" "$from" ""; return; }
     if [ "$n" = core ]; then
       match=$(tag_of "$(cat "$new/eriphe-core.version")")
@@ -3120,8 +3120,8 @@ update() {
     fi
     return
   fi
-  # A node is never newer than eriphe-core (a release pinned here may be).
-  if [ "$target" = node ] && release "$core" && release "$to" && newer "$to" "$core"; then
+  # A device is never newer than eriphe-core (a release pinned here may be).
+  if [ "$target" = device ] && release "$core" && release "$to" && newer "$to" "$core"; then
     status "$target" "$id" update refused "eriphe-core runs $core: $to would be newer" "$from" "$to"
     return
   fi
@@ -3174,7 +3174,7 @@ rollback() {
 
 field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
 
-target=node
+target=device
 [ "$MODE" = core ] && target=core
 case ${1:-} in
   install)
@@ -3192,10 +3192,10 @@ case ${1:-} in
     rollback "$target" "local-$(date +%s)"
     exit 0 ;;
 esac
-for target in core node; do
+for target in core device; do
   f=$E/$target/update-requested
   [ -f "$f" ] || continue
-  [ "$target" = node ] || [ "$MODE" = core ] || { rm -f "$f"; continue; }
+  [ "$target" = device ] || [ "$MODE" = core ] || { rm -f "$f"; continue; }
   id=$(field "$f" id) action=$(field "$f" action) core=$(field "$f" core) auto=$(field "$f" auto)
   rm -f "$f"
   printf '%s' "$id" | grep -Eq '^[a-z0-9-]{1,40}$' || { log "$target: a request without a valid id"; continue; }
@@ -3238,7 +3238,7 @@ native_lock() {
 native_unlock() { [ -n "${LOCK_HELD:-}" ] || rm -rf "$E/update/lock"; }
 
 # The files an update rewrites, kept to put back (native_restore).
-NATIVE_FILES="node.env install.conf update.conf update.sh start-node.sh"
+NATIVE_FILES="device.env install.conf update.conf update.sh start-device.sh"
 
 # native_backup keeps what runs now: binaries, settings, LaunchAgents.
 native_backup() {
@@ -3248,14 +3248,14 @@ native_backup() {
 		[ ! -f "$E/$f" ] || cp -p "$E/$f" "$BACKUP/"
 	done
 	cp -Rp "$E/bin" "$BACKUP/bin"
-	for l in "$CORE_LABEL" "$NODE_LABEL" "$UPDATE_LABEL" "$SYNCTHING_LABEL"; do
+	for l in "$CORE_LABEL" "$DEVICE_LABEL" "$UPDATE_LABEL" "$SYNCTHING_LABEL"; do
 		[ ! -f "$HOME/Library/LaunchAgents/$l.plist" ] || cp -p "$HOME/Library/LaunchAgents/$l.plist" "$BACKUP/"
 	done
 }
 
 # native_restore, when native_up stops on an error: what ran before back in
 # place, and its LaunchAgents running again (stopped by native_up, or not
-# loaded at all), so an update never leaves this Mac without its node.
+# loaded at all), so an update never leaves this Mac without its device.
 # Then the lock goes.
 native_restore() {
 	[ $? != 0 ] || return 0
@@ -3270,7 +3270,7 @@ native_restore() {
 		native_unlock
 		# A Syncthing this run brought goes with it.
 		[ -f "$BACKUP/$SYNCTHING_LABEL.plist" ] || unload "$SYNCTHING_LABEL"
-		for l in "$CORE_LABEL" "$NODE_LABEL" "$UPDATE_LABEL" "$SYNCTHING_LABEL"; do
+		for l in "$CORE_LABEL" "$DEVICE_LABEL" "$UPDATE_LABEL" "$SYNCTHING_LABEL"; do
 			[ -f "$BACKUP/$l.plist" ] || continue
 			f=$HOME/Library/LaunchAgents/$l.plist
 			cp -p "$BACKUP/$l.plist" "$f"
@@ -3299,31 +3299,31 @@ native_place() {
 
 # native_up installs or updates everything: the binaries (from the images,
 # by the updater's own install), the LaunchAgents, the join; in core mode it
-# prints the setup code as host_up does. An update never leaves the node
+# prints the setup code as host_up does. An update never leaves the device
 # stopped: the new binaries are taken while the old ones run, root is asked
 # for (or done without) before anything stops, and on any error what ran
 # before comes back (native_restore).
 native_up() {
 	E=$ERIPHE_HOME
 	umask 077
-	mkdir -p "$E/bin" "$E/node" "$E/update"
+	mkdir -p "$E/bin" "$E/device" "$E/update"
 	[ "$MODE" != core ] || mkdir -p "$E/core"
 	native_lock
 	BACKUP='' STOPPED=''
-	if [ -s "$E/bin/eriphe-node" ]; then
+	if [ -s "$E/bin/eriphe-device" ]; then
 		BACKUP=$E/update/install-backup
 		native_backup
 	fi
 	trap native_restore EXIT
 	touch "$E/native"
-	native_env >"$E/node.env"
+	native_env >"$E/device.env"
 	native_conf >"$E/install.conf"
 	mac_updater_conf >"$E/update.conf"
 	# Through a new file: from the updater (--layout), it runs this one.
 	mac_updater_sh >"$E/update.sh.new" && mv "$E/update.sh.new" "$E/update.sh"
-	start_node_sh >"$E/start-node.sh"
+	start_device_sh >"$E/start-device.sh"
 	mac_share_sh >"$E/bin/eriphe-share"
-	chmod 700 "$E/update.sh" "$E/start-node.sh" "$E/bin/eriphe-share"
+	chmod 700 "$E/update.sh" "$E/start-device.sh" "$E/bin/eriphe-share"
 	mac_quick_actions
 	# The new binaries, while the ones in place still run; from the updater
 	# (--layout), the ones it has just put in place stay.
@@ -3344,12 +3344,12 @@ native_up() {
 		mac_updater_conf >"$E/update.conf"
 	}
 	RELAY=
-	relay_bin=$new/eriphe-node
-	[ -s "$relay_bin" ] || relay_bin=$E/bin/eriphe-node
+	relay_bin=$new/eriphe-device
+	[ -s "$relay_bin" ] || relay_bin=$E/bin/eriphe-device
 	[ "$MODE" = core ] || relay_plan "$relay_bin"
 	# Stopped while their binaries change.
 	STOPPED=1
-	launchctl bootout "gui/$(id -u)/$NODE_LABEL" >/dev/null 2>&1 || true
+	launchctl bootout "gui/$(id -u)/$DEVICE_LABEL" >/dev/null 2>&1 || true
 	[ "$MODE" != core ] || launchctl bootout "gui/$(id -u)/$CORE_LABEL" >/dev/null 2>&1 || true
 	native_place "$new"
 
@@ -3361,7 +3361,7 @@ native_up() {
 			load "$CORE_LABEL" "$(plist "$CORE_LABEL" keep "$E/core.log" /usr/bin/env "ERIPHE_API_LISTEN=0.0.0.0:$API_PORT" \
 				"ERIPHE_WEB_LISTEN=0.0.0.0:$WEB_PORT" "$E/bin/eriphe-core" -data "$E/core")"
 		fi
-		if [ ! -f "$E/node/node.json" ]; then
+		if [ ! -f "$E/device/device.json" ]; then
 			note "Waiting for eriphe-core..."
 			i=0
 			until JOIN_TOKEN=$("$E/bin/eriphe-core" join-token -data "$E/core" -name "$NAME" -quiet 2>/dev/null | tr -d '[:space:]') &&
@@ -3376,51 +3376,51 @@ native_up() {
 		fi
 	fi
 	[ -z "$RELAY" ] || native_relay
-	if [ ! -f "$E/node/node.json" ]; then
+	if [ ! -f "$E/device/device.json" ]; then
 		(
 			umask 077
 			printf '%s\n' "$JOIN_TOKEN" >"$E/join-token"
 		)
 	fi
 	mac_syncthing
-	since=$({ wc -c <"$E/node.log"; } 2>/dev/null | tr -d " ")
+	since=$({ wc -c <"$E/device.log"; } 2>/dev/null | tr -d " ")
 	since=${since:-0}
-	load "$NODE_LABEL" "$(plist "$NODE_LABEL" keep "$E/node.log" /bin/sh "$E/start-node.sh")"
+	load "$DEVICE_LABEL" "$(plist "$DEVICE_LABEL" keep "$E/device.log" /bin/sh "$E/start-device.sh")"
 	step Installed
-	note "Waiting for eriphe-node..."
+	note "Waiting for eriphe-device..."
 	i=0
-	until tail -c +"$((since + 1))" "$E/node.log" 2>/dev/null | grep -q 'connected to '; do
+	until tail -c +"$((since + 1))" "$E/device.log" 2>/dev/null | grep -q 'connected to '; do
 		i=$((i + 1))
 		[ $i -le 90 ] || {
 			rm -f "$E/join-token"
-			tail -n 20 "$E/node.log" >&2
+			tail -n 20 "$E/device.log" >&2
 			[ "$MODE" != core ] || die "Eriphe did not start in 3 minutes: run the command again"
 			die "this Mac could not connect to $ASSISTANT in 3 minutes: check that the computer Eriphe runs on is on, then run the command again"
 		}
 		sleep 2
 	done
 	if [ "$MODE" = core ]; then step Started; else step Connected; fi
-	# Joined: the node has its own secret, the token is used. It runs: what
+	# Joined: the device has its own secret, the token is used. It runs: what
 	# ran before is no longer needed.
 	trap - EXIT
 	rm -rf "$BACKUP"
 	rm -f "$E/join-token"
-	tail -c +"$((since + 1))" "$E/node.log" | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-node: /' >&2
+	tail -c +"$((since + 1))" "$E/device.log" | grep 'connected to ' | tail -n 1 | sed 's/^[0-9/]* [0-9:]* /eriphe-device: /' >&2
 	# pin: the release it stays on; channel: edge when it follows main.
 	pin=$PIN channel=
 	[ "$PIN" != edge ] || pin='' channel=edge
-	for d in node core; do
+	for d in device core; do
 		[ -d "$E/$d" ] || continue
-		[ "$d" = node ] || [ "$MODE" = core ] || continue
+		[ "$d" = device ] || [ "$MODE" = core ] || continue
 		printf 'version=1\npin=%s\nchannel=%s\nlayout=%s\n' "$pin" "$channel" "${LAYOUT_DONE:-$LAYOUT}" >"$E/$d/updater"
 	done
-	# What waits for this Mac's user (node/update.go): a step that needs the
+	# What waits for this Mac's user (device/update.go): a step that needs the
 	# password, left as it was by the updater (--layout).
 	if [ -n "${NEEDS:-}" ]; then
-		printf 'why=%s\nlayout=%s\n' "${NEEDS:-}" "$LAYOUT" >"$E/node/update-needs"
+		printf 'why=%s\nlayout=%s\n' "${NEEDS:-}" "$LAYOUT" >"$E/device/update-needs"
 		echo "needs=$NEEDS"
 	else
-		rm -f "$E/node/update-needs"
+		rm -f "$E/device/update-needs"
 	fi
 	if [ -n "${LAYOUT_RUN:-}" ]; then
 		# From the updater, which runs under it: its LaunchAgent is written,
@@ -3445,7 +3445,7 @@ native_up() {
 		echo "remote=$("$E/bin/eriphe-core" remote-address -data "$E/core" 2>/dev/null)"
 		echo "version=$(cat "$E/bin/eriphe-core.version" 2>/dev/null)"
 	else
-		echo "version=$(cat "$E/bin/eriphe-node.version" 2>/dev/null)"
+		echo "version=$(cat "$E/bin/eriphe-device.version" 2>/dev/null)"
 	fi
 }
 
@@ -3454,7 +3454,7 @@ native_up() {
 # Apple's container if Eriphe installed it.
 native_uninstall() {
 	E=$ERIPHE_HOME
-	for l in "$UPDATE_LABEL" "$NODE_LABEL" "$CORE_LABEL" "$SYNCTHING_LABEL"; do unload "$l"; done
+	for l in "$UPDATE_LABEL" "$DEVICE_LABEL" "$CORE_LABEL" "$SYNCTHING_LABEL"; do unload "$l"; done
 	mac_quick_actions_uninstall
 	native_relay_uninstall
 	if [ -x "$CONTAINER" ] && "$CONTAINER" system status >/dev/null 2>&1; then
@@ -3572,7 +3572,7 @@ do_rollback() {
 	if [ -n "$NATIVE" ]; then
 		[ -f "$ERIPHE_HOME/update.sh" ] || die "Eriphe is not installed on this Mac"
 		sh "$ERIPHE_HOME/update.sh" rollback
-		target=node
+		target=device
 		[ -d "$ERIPHE_HOME/core" ] && target=core
 		OUT=$(cat "$ERIPHE_HOME/$target/update-status")
 		logs=$ERIPHE_HOME/update/update.log
@@ -3604,7 +3604,7 @@ do_install() {
 			ports_free eriphe-co
 			before=$(cat "$ERIPHE_HOME/bin/eriphe-core.version" 2>/dev/null || true)
 		else
-			before=$(cat "$ERIPHE_HOME/bin/eriphe-node.version" 2>/dev/null || true)
+			before=$(cat "$ERIPHE_HOME/bin/eriphe-device.version" 2>/dev/null || true)
 		fi
 	else
 		if [ "$OS" = Darwin ]; then
@@ -3663,7 +3663,7 @@ do_install() {
 		native_container
 		out=$(native_up)
 		if printf '%s\n' "$out" | grep -qx relay_kept=1; then
-			notice "the node's relay ($RELAY_LABEL) keeps its older version, as no password could be asked: run the install command again in Terminal to update it."
+			notice "the device's relay ($RELAY_LABEL) keeps its older version, as no password could be asked: run the install command again in Terminal to update it."
 		fi
 		if printf '%s\n' "$out" | grep -qx syncthing_missing=1; then
 			notice "Syncthing could not be installed (see the log): this Mac keeps no copy of your folders for now; run the install command again later."
@@ -3704,12 +3704,12 @@ do_install() {
 }
 
 # layout_run (--layout): what an updater runs, from the install.sh of the
-# node image it updates to, when that image's LAYOUT is newer than the
+# device image it updates to, when that image's LAYOUT is newer than the
 # machine's (install/README.md, The machines update themselves): this
 # install brought to this script's layout, its saved settings and the images
 # in place (the updater's, already pulled: only a component's missing image
 # is), on its own, nothing asked. On a Mac, a step that needs the password
-# is left as it is, and said in the node's update-needs, for its user;
+# is left as it is, and said in the device's update-needs, for its user;
 # everything else is done. It prints what it did; the updater holds the
 # updates' lock (LOCK_HELD) and writes the outcome.
 layout_run() {
@@ -3816,12 +3816,12 @@ outcome() {
 	good_to_know
 	say ""
 	if [ -n "$NATIVE" ]; then
-		logs=$(tilde "$ERIPHE_HOME/node.log")
+		logs=$(tilde "$ERIPHE_HOME/device.log")
 		[ "$MODE" != core ] || logs="$(tilde "$ERIPHE_HOME/core.log"), $logs"
 	elif [ "$OS" = Darwin ]; then
-		logs="LIMA_HOME=$(tilde "$LIMA_HOME") $(tilde "$LIMACTL") shell $VM sudo docker logs eriphe-node"
+		logs="LIMA_HOME=$(tilde "$LIMA_HOME") $(tilde "$LIMACTL") shell $VM sudo docker logs eriphe-device"
 	else
-		logs="docker logs eriphe-node"
+		logs="docker logs eriphe-device"
 		[ "$MODE" != core ] || logs="docker logs eriphe-core, $logs"
 	fi
 	say "Logs: $logs"
@@ -3833,7 +3833,7 @@ main() {
 	Linux | Darwin) ;;
 	*) die "this installs on Linux and macOS (Windows: install/install.ps1)" ;;
 	esac
-	# Told to eriphe-core and the node: the workspace shows how to update.
+	# Told to eriphe-core and the device: the workspace shows how to update.
 	INSTALL=linux
 	[ "$OS" = Darwin ] && INSTALL=macos
 	parse_args "$@"

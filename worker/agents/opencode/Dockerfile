@@ -1,7 +1,7 @@
 # eriphe-agent-opencode: OpenCode's native binary (glibc), from its GitHub
 # release, and nothing else. One build per architecture: on amd64 the
 # "baseline" one, which runs on any x86-64 CPU (the other needs AVX2).
-# eriphe-node injects /opt/eriphe of this image into a task container
+# eriphe-device injects /opt/eriphe of this image into a task container
 # (worker/README.md).
 FROM alpine:3.22 AS fetch
 ARG OPENCODE_VERSION=1.19.4

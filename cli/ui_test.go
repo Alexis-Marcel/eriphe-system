@@ -26,8 +26,8 @@ func testModel(t *testing.T, w, h int) model {
 		{Seq: 3, Time: testNow, Role: "event", Text: "Task t-1 waits for a permission"},
 	}})
 	return step(m, tasksMsg{tasks: []Task{
-		{ID: "t-1", Node: "pc", Agent: "sonnet", Dir: "owner/repo@work", State: stateWaitingPermission},
-		{ID: "t-2", Node: "nas", Agent: "haiku", State: stateIdle},
+		{ID: "t-1", Device: "pc", Agent: "sonnet", Dir: "owner/repo@work", State: stateWaitingPermission},
+		{ID: "t-2", Device: "nas", Agent: "haiku", State: stateIdle},
 	}})
 }
 
@@ -97,7 +97,7 @@ func TestTaskView(t *testing.T) {
 		t.Fatalf("task view not open: %+v", m.task)
 	}
 	st := &TaskStatus{
-		Task:              Task{ID: "t-1", Node: "pc", Agent: "sonnet", State: stateWaitingPermission, Prompt: "Fix it", Created: testNow},
+		Task:              Task{ID: "t-1", Device: "pc", Agent: "sonnet", State: stateWaitingPermission, Prompt: "Fix it", Created: testNow},
 		PendingPermission: map[string]any{"id": "p1", "tool_name": "Bash", "input": map[string]any{"command": "go test ./..."}},
 		Recent: []Event{
 			{Seq: 1, Time: testNow, Type: "text", Data: map[string]any{"text": "Looking"}},
@@ -215,7 +215,7 @@ func TestRenderMessage(t *testing.T) {
 }
 
 func TestRenderTaskRow(t *testing.T) {
-	row := renderTaskRow(Task{ID: "t-1", Node: "pc", Agent: "opus", Dir: "owner/repo", State: stateRunning}, true, true, 40)
+	row := renderTaskRow(Task{ID: "t-1", Device: "pc", Agent: "opus", Dir: "owner/repo", State: stateRunning}, true, true, 40)
 	first, second := ansi.Strip(row[0]), ansi.Strip(row[1])
 	if !strings.HasPrefix(first, "▸ t-1") || !strings.HasSuffix(strings.TrimRight(first, " "), "● running") {
 		t.Fatalf("first line %q", first)

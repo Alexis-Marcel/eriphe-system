@@ -20,16 +20,16 @@ import (
 // only says when, and never names an image nor a command. Its requests are
 // "update" (to the latest official version, or the one the machine is
 // pinned to) and "rollback" (to the version before). The order is the
-// Kubernetes one: eriphe-core's machine first, the nodes once eriphe-core
-// runs the latest version, as a node is never to be newer than eriphe-core;
-// and a node only once none of its tasks is at work. A node asked by hand
+// Kubernetes one: eriphe-core's machine first, the devices once eriphe-core
+// runs the latest version, as a device is never to be newer than eriphe-core;
+// and a device only once none of its tasks is at work. A device asked by hand
 // while eriphe-core is behind waits for it: eriphe-core is asked first, and
-// the node follows once it runs the latest version (followUpdates).
+// the device follows once it runs the latest version (followUpdates).
 //
 // eriphe-core's own machine reads the request from eriphe-core's data folder
 // (update-requested), and writes how it went next to it (update-status); a
-// node gets its request in its assignments and hands it to its updater the
-// same way, in its own root (node/update.go). In both places, the file
+// device gets its request in its assignments and hands it to its updater the
+// same way, in its own root (device/update.go). In both places, the file
 // "updater" says there is one, and the version it is pinned to.
 //
 // An update also brings a machine to the install's layout of its new
@@ -37,7 +37,7 @@ import (
 // LaunchAgents, Syncthing): the updater runs that version's installer by
 // itself. What it cannot do alone (a step that needs the Mac's password or
 // an administrator's PowerShell, or any step under an updater from before
-// the layouts) the node reports as its needs, and the machine's card says
+// the layouts) the device reports as its needs, and the machine's card says
 // « Cette mise à jour a besoin de toi », with the command to run; the brain
 // is told once (tellNeeds).
 //
@@ -50,13 +50,13 @@ import (
 const (
 	updateNightKey = "update_night" // "1": the machines update at night
 	// updateAllKey holds when "Update all" was asked while eriphe-core was
-	// behind: the nodes follow once it runs the latest version.
+	// behind: the devices follow once it runs the latest version.
 	updateAllKey = "update_all"
-	// afterCoreKey+machine holds when a node was asked by hand while
+	// afterCoreKey+machine holds when a device was asked by hand while
 	// eriphe-core was behind: it follows once eriphe-core runs the latest.
 	afterCoreKey = "update_after_core:"
 
-	coreMachine = "core" // eriphe-core's machine; a node is "node:<name>"
+	coreMachine = "core" // eriphe-core's machine; a device is "device:<name>"
 
 	nightStart = 3 // automatic updates run from 3:00 to 5:00, the user's time
 	nightEnd   = 5
@@ -65,7 +65,7 @@ const (
 	// A request with the updater (handed to it, or under way) that has not
 	// ended by then stopped: its updater died or was stopped (a reinstall
 	// restarts it). It is dropped, and the machine's line says so, rather
-	// than keeping a node unschedulable for a day.
+	// than keeping a device unschedulable for a day.
 	stalledAfter = 30 * time.Minute
 	// stalledKey+machine is the request dropped as stalled, for its line.
 	stalledKey = "update_stalled:"
@@ -84,8 +84,8 @@ var (
 	errPinned    = errors.New("update.pinnedno")
 )
 
-// updaterInfo is what a machine's updater says, through the node's info
-// (node/update.go) or eriphe-core's data folder.
+// updaterInfo is what a machine's updater says, through the device's info
+// (device/update.go) or eriphe-core's data folder.
 type updaterInfo struct {
 	Updater   bool          `json:"updater"`
 	Pin       string        `json:"pin,omitempty"`       // the release it is pinned to
@@ -93,15 +93,15 @@ type updaterInfo struct {
 	Waiting   string        `json:"waiting,omitempty"`   // a request waits for the tasks to end
 	Requested string        `json:"requested,omitempty"` // a request is with the updater
 	Status    *updateStatus `json:"status,omitempty"`    // how the last one went
-	Layout    int           `json:"layout,omitempty"`    // the install's layout (node/update.go)
+	Layout    int           `json:"layout,omitempty"`    // the install's layout (device/update.go)
 	Needs     *updateNeeds  `json:"needs,omitempty"`     // what the install waits for from its user
 }
 
 // updateNeeds is what a machine's install waits for from its user: its
 // install command run once more (layout), in the Mac's Terminal for a step
 // that needs its password (password), or in an administrator's PowerShell
-// (admin). The node says only which: the command is eriphe-core's, for how
-// the machine was installed (manualUpdate), never one a node names.
+// (admin). The device says only which: the command is eriphe-core's, for how
+// the machine was installed (manualUpdate), never one a device names.
 type updateNeeds struct {
 	Why string `json:"why"`
 }
@@ -125,10 +125,10 @@ var needsBrain = map[string]string{
 // tellNeeds tells the brain, once, what a machine's update needs of the
 // user, once it has been so for needsQuiet with no request under way; it
 // forgets once the machine needs nothing (the user ran the command).
-func (c *core) tellNeeds(nodes []NodeRow) {
+func (c *core) tellNeeds(devices []DeviceRow) {
 	now := time.Now()
-	for _, n := range nodes {
-		m := "node:" + n.Name
+	for _, n := range devices {
+		m := "device:" + n.Name
 		why := ""
 		if nd := parseInfo(n).Update.Needs; nd != nil {
 			why = nd.Reason()
@@ -185,11 +185,11 @@ type machineUpdate struct {
 	At     time.Time `json:"at"`
 }
 
-// nodeUpdate is the request as a node reads it in its assignments.
-type nodeUpdate struct {
+// deviceUpdate is the request as a device reads it in its assignments.
+type deviceUpdate struct {
 	ID     string `json:"id"`
 	Action string `json:"action"`
-	Core   string `json:"core"` // eriphe-core's version: the most the node may get
+	Core   string `json:"core"` // eriphe-core's version: the most the device may get
 	Auto   bool   `json:"auto,omitempty"`
 }
 
@@ -212,7 +212,7 @@ func manualUpdate(install string) updateCommand {
 }
 
 // updateAll asks every machine that is behind to update, eriphe-core's
-// first: while it is behind, only it is asked, and the nodes follow once it
+// first: while it is behind, only it is asked, and the devices follow once it
 // runs the latest version (followUpdates). It says how many were asked.
 func (c *core) updateAll() (int, error) {
 	if c.updates.behind("eriphe-core", version) {
@@ -223,22 +223,22 @@ func (c *core) updateAll() (int, error) {
 		}
 		return 1, c.store.set(updateAllKey, time.Now().UTC().Format(time.RFC3339))
 	}
-	return c.updateNodes(), nil
+	return c.updateDevices(), nil
 }
 
-// updateNodes asks the nodes that run another version than eriphe-core's,
-// and have an updater, to update. A node at work waits for its tasks.
-func (c *core) updateNodes() int {
-	nodes, err := c.store.nodes()
+// updateDevices asks the devices that run another version than eriphe-core's,
+// and have an updater, to update. A device at work waits for its tasks.
+func (c *core) updateDevices() int {
+	devices, err := c.store.devices()
 	if err != nil {
 		return 0
 	}
 	n := 0
-	for _, row := range nodes {
+	for _, row := range devices {
 		info := parseInfo(row)
-		m := "node:" + row.Name
+		m := "device:" + row.Name
 		if !info.Update.Updater || c.pendingUpdate(m) != nil ||
-			!c.updates.behind("eriphe-node", info.Version) && !nodeBehindCore(info.Version, version) {
+			!c.updates.behind("eriphe-device", info.Version) && !deviceBehindCore(info.Version, version) {
 			continue
 		}
 		if _, err := c.requestUpdate(m, "update", false); err != nil {
@@ -250,10 +250,10 @@ func (c *core) updateNodes() int {
 	return n
 }
 
-// updateNow asks a machine to update, by hand. A node while eriphe-core is
+// updateNow asks a machine to update, by hand. A device while eriphe-core is
 // behind waits for it: eriphe-core is asked first (unless it already is),
-// and the node follows once it runs the latest version (followUpdates).
-// afterCore tells so; a node whose eriphe-core has no updater gets
+// and the device follows once it runs the latest version (followUpdates).
+// afterCore tells so; a device whose eriphe-core has no updater gets
 // errCoreFirst, as nothing here can update eriphe-core.
 func (c *core) updateNow(machine string) (afterCore bool, err error) {
 	if machine == coreMachine || !c.updates.behind("eriphe-core", version) {
@@ -280,7 +280,7 @@ func (c *core) afterCore(machine string) bool {
 	return c.store.get(afterCoreKey+machine) != ""
 }
 
-// followUpdates asks the nodes waiting for eriphe-core ("Update all", or
+// followUpdates asks the devices waiting for eriphe-core ("Update all", or
 // one asked by hand) once eriphe-core runs the latest version. Once
 // eriphe-core's update is over without reaching it (failed, rolled back,
 // pinned), they are not asked: they would take eriphe-core's build, the one
@@ -315,8 +315,8 @@ func (c *core) followUpdates() {
 			}
 			log.Printf("update: %s not asked: eriphe-core did not reach the latest version (%s)", k, outcome)
 		case k == updateAllKey:
-			log.Printf("update: eriphe-core is up to date, the nodes follow")
-			c.updateNodes()
+			log.Printf("update: eriphe-core is up to date, the devices follow")
+			c.updateDevices()
 		case c.pendingUpdate(machine) == nil:
 			log.Printf("update: eriphe-core is up to date, %s follows", machine)
 			if _, err := c.requestUpdate(machine, "update", false); err != nil {
@@ -373,9 +373,9 @@ func (c *core) machineUpdater(machine string) updaterInfo {
 	if machine == coreMachine {
 		return c.coreUpdater()
 	}
-	nodes, _ := c.store.nodes()
-	for _, n := range nodes {
-		if "node:"+n.Name == machine {
+	devices, _ := c.store.devices()
+	for _, n := range devices {
+		if "device:"+n.Name == machine {
 			return parseInfo(n).Update
 		}
 	}
@@ -400,22 +400,22 @@ func newUpdateID() string {
 	return "u-" + hex.EncodeToString(b)
 }
 
-// sameVersion tells whether a node runs eriphe-core's own build. Only
+// sameVersion tells whether a device runs eriphe-core's own build. Only
 // published builds compare (a release or a build of main): a local one
 // (dev) never asks for an update.
-func sameVersion(node, core string) bool {
-	return node == core || !publishedVersion(node) || !publishedVersion(core)
+func sameVersion(device, core string) bool {
+	return device == core || !publishedVersion(device) || !publishedVersion(core)
 }
 
-// nodeBehindCore tells whether a node runs an older build than
-// eriphe-core's, which it then goes to: never a newer one (a node updated
+// deviceBehindCore tells whether a device runs an older build than
+// eriphe-core's, which it then goes to: never a newer one (a device updated
 // before eriphe-core), which would be a downgrade. Two builds of main of the
-// same version cannot be ordered: the node follows eriphe-core's.
-func nodeBehindCore(node, core string) bool {
-	if sameVersion(node, core) {
+// same version cannot be ordered: the device follows eriphe-core's.
+func deviceBehindCore(device, core string) bool {
+	if sameVersion(device, core) {
 		return false
 	}
-	n, ok := parseVersion(node)
+	n, ok := parseVersion(device)
 	c, ok2 := parseVersion(core)
 	if !ok || !ok2 {
 		return false
@@ -424,7 +424,7 @@ func nodeBehindCore(node, core string) bool {
 }
 
 // requestUpdate asks a machine's updater to update (to the latest version,
-// or its pinned one) or to roll back. A node is updated only once
+// or its pinned one) or to roll back. A device is updated only once
 // eriphe-core runs the latest version.
 func (c *core) requestUpdate(machine, action string, auto bool) (*machineUpdate, error) {
 	if action != "update" && action != "rollback" {
@@ -439,7 +439,7 @@ func (c *core) requestUpdate(machine, action string, auto bool) (*machineUpdate,
 	case action == "update" && machine != coreMachine && c.updates.behind("eriphe-core", version):
 		return nil, errCoreFirst
 	}
-	if machine != coreMachine && !strings.HasPrefix(machine, "node:") {
+	if machine != coreMachine && !strings.HasPrefix(machine, "device:") {
 		return nil, fmt.Errorf("unknown machine %q", machine)
 	}
 	r := &machineUpdate{ID: newUpdateID(), Action: action, Auto: auto, At: time.Now()}
@@ -464,35 +464,35 @@ func (c *core) requestUpdate(machine, action string, auto bool) (*machineUpdate,
 	c.store.db.Exec(`DELETE FROM kv WHERE key = ?`, stalledKey+machine)
 	log.Printf("update: %s asked of %s (%s)", action, machine, map[bool]string{true: "automatic", false: "by hand"}[auto])
 	if machine != coreMachine {
-		c.bump() // the node reads it in its assignments
+		c.bump() // the device reads it in its assignments
 	}
 	return r, nil
 }
 
-// nodeUpdateRequest is the request a node finds in its assignments.
-func (c *core) nodeUpdateRequest(name string) *nodeUpdate {
-	r := c.pendingUpdate("node:" + name)
+// deviceUpdateRequest is the request a device finds in its assignments.
+func (c *core) deviceUpdateRequest(name string) *deviceUpdate {
+	r := c.pendingUpdate("device:" + name)
 	if r == nil {
 		return nil
 	}
 	if r.Action == "update" {
-		nodes, _ := c.store.nodes()
-		for _, n := range nodes {
+		devices, _ := c.store.devices()
+		for _, n := range devices {
 			if n.Name == name && c.atCoreVersion(parseInfo(n)) {
 				return nil // reinstalled meanwhile: resolveUpdates drops it
 			}
 		}
 	}
-	u := &nodeUpdate{ID: r.ID, Action: r.Action, Core: version, Auto: r.Auto}
+	u := &deviceUpdate{ID: r.ID, Action: r.Action, Core: version, Auto: r.Auto}
 	return u
 }
 
-// atCoreVersion tells whether a node already runs eriphe-core's own
+// atCoreVersion tells whether a device already runs eriphe-core's own
 // release, the most an update can give it (its install command was run
 // again, say), and no updater is at work on it: an update request has
 // nothing left to do there.
-func (c *core) atCoreVersion(info nodeInfo) bool {
-	if info.Version != version || !publishedVersion(version) || c.updates.behind("eriphe-node", info.Version) {
+func (c *core) atCoreVersion(info deviceInfo) bool {
+	if info.Version != version || !publishedVersion(version) || c.updates.behind("eriphe-device", info.Version) {
 		return false
 	}
 	return info.Update.Status == nil || info.Update.Status.Outcome != "running"
@@ -534,15 +534,15 @@ func (c *core) stalledStatus(machine string, st *updateStatus) *updateStatus {
 }
 
 // resolveUpdates drops the requests that are done (the updater wrote their
-// outcome), stalled, too old, or left with nothing to do (the node runs
-// eriphe-core's version already). It runs with the nodes' check, every 15
+// outcome), stalled, too old, or left with nothing to do (the device runs
+// eriphe-core's version already). It runs with the devices' check, every 15
 // seconds.
-func (c *core) resolveUpdates(nodes []NodeRow) {
+func (c *core) resolveUpdates(devices []DeviceRow) {
 	machines := []string{coreMachine}
 	infos := map[string]updaterInfo{coreMachine: c.coreUpdater()}
 	atCore := map[string]bool{}
-	for _, n := range nodes {
-		m := "node:" + n.Name
+	for _, n := range devices {
+		m := "device:" + n.Name
 		machines = append(machines, m)
 		info := parseInfo(n)
 		infos[m] = info.Update
@@ -590,23 +590,23 @@ func (c *core) resolveUpdates(nodes []NodeRow) {
 			c.bump()
 		}
 	}
-	c.tellNeeds(nodes)
+	c.tellNeeds(devices)
 }
 
-// updating tells whether a node has a request not done yet: no new task
-// goes there meanwhile, like a cordoned Kubernetes node.
+// updating tells whether a device has a request not done yet: no new task
+// goes there meanwhile, like a cordoned Kubernetes device.
 func (c *core) updating(name string) bool {
-	return c.pendingUpdate("node:"+name) != nil
+	return c.pendingUpdate("device:"+name) != nil
 }
 
-// schedulable marks the nodes being updated as offline for the scheduler:
-// a task then waits for them rather than starting there. A node whose
+// schedulable marks the devices being updated as offline for the scheduler:
+// a task then waits for them rather than starting there. A device whose
 // access is cut is left out.
-func (c *core) schedulable(nodes []NodeRow) []NodeRow {
-	var out []NodeRow
-	for _, n := range nodes {
+func (c *core) schedulable(devices []DeviceRow) []DeviceRow {
+	var out []DeviceRow
+	for _, n := range devices {
 		if n.Suspended {
-			continue // its access is cut: no work goes there (node_access.go)
+			continue // its access is cut: no work goes there (device_access.go)
 		}
 		if n.Online && c.updating(n.Name) {
 			n.Online = false
@@ -617,8 +617,8 @@ func (c *core) schedulable(nodes []NodeRow) []NodeRow {
 }
 
 // autoUpdates runs at night once the machines update automatically:
-// eriphe-core's machine first; a node once eriphe-core runs the latest
-// version and the node runs another, and none of its tasks is at work.
+// eriphe-core's machine first; a device once eriphe-core runs the latest
+// version and the device runs another, and none of its tasks is at work.
 // Each machine is tried once a night.
 func (c *core) autoUpdates(now time.Time) {
 	if !c.nightUpdates() {
@@ -646,20 +646,20 @@ func (c *core) autoUpdates(now time.Time) {
 		if up := c.coreUpdater(); up.Updater && up.Pin == "" {
 			try(coreMachine)
 		}
-		return // the nodes wait for eriphe-core
+		return // the devices wait for eriphe-core
 	}
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		return
 	}
-	for _, n := range nodes {
+	for _, n := range devices {
 		info := parseInfo(n)
-		if !n.Online || !info.Update.Updater || info.Update.Pin != "" || !nodeBehindCore(info.Version, version) {
+		if !n.Online || !info.Update.Updater || info.Update.Pin != "" || !deviceBehindCore(info.Version, version) {
 			continue
 		}
 		if active, err := c.store.activeCount(n.Name); err != nil || active > 0 {
 			continue
 		}
-		try("node:" + n.Name)
+		try("device:" + n.Name)
 	}
 }

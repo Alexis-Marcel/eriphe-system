@@ -1,7 +1,7 @@
 # eriphe-base: what every task container starts from. The agent is not in
-# it: eriphe-node injects it at /opt/eriphe/bin (worker/agents/), and the
+# it: eriphe-device injects it at /opt/eriphe/bin (worker/agents/), and the
 # agent installs what else it needs (apt, uv, npm), as root in its
-# disposable container, through the node's egress relay.
+# disposable container, through the device's egress relay.
 FROM ghcr.io/astral-sh/uv:0.13.6 AS uv
 
 # Debian trixie with Node.js 24 and npm.
@@ -9,14 +9,14 @@ FROM node:24-trixie-slim
 
 # Python 3 (the system's, for scripts and apt's own tools); uv brings any
 # other version. No git, gh or compilers: the agent installs them when a task
-# needs them, and the node's cache keeps the packages.
+# needs them, and the device's cache keeps the packages.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl python3 \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/*.bin \
     && npm uninstall -g corepack && rm -rf /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=uv /uv /uvx /usr/local/bin/
 
-# eriphe-capture: a web page as an image for a surface of the workspace.
+# eriphe-capture: a web page as an image for a task's own node.
 # The script only: the headless browser it drives (Debian's
 # chromium-headless-shell, about 290 MB unpacked) is installed on first use,
 # through apt and /cache, for the tasks that capture a page.
@@ -29,12 +29,12 @@ COPY apt.conf /etc/apt/apt.conf.d/90eriphe
 RUN rm -f /etc/apt/apt.conf.d/docker-clean
 
 # The node image's UID 1000 user, renamed: a non-root user for whoever wants
-# one (tasks run as root, see node/README.md).
+# one (tasks run as root, see device/README.md).
 RUN usermod -l eriphe -d /home/eriphe -m node && groupmod -n eriphe node \
     && mkdir -p /work /cache
 
-# The agent eriphe-node injects, and its helpers, come first in PATH.
-# Package caches go to /cache, a volume the node keeps between tasks.
+# The agent eriphe-device injects, and its helpers, come first in PATH.
+# Package caches go to /cache, a volume the device keeps between tasks.
 ENV PATH=/opt/eriphe/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     LANG=C.UTF-8 \
     DEBIAN_FRONTEND=noninteractive \
@@ -49,7 +49,7 @@ ENV PATH=/opt/eriphe/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin
     GOCACHE=/cache/go/build \
     XDG_CACHE_HOME=/cache/xdg
 
-# The agents eriphe-node can inject in this image (node/inject.go); acp is
+# The agents eriphe-device can inject in this image (device/inject.go); acp is
 # any other ACP agent, by its command.
 LABEL eriphe.runtimes="claude-code,opencode,codex,vibe,acp"
 

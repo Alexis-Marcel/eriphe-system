@@ -1,11 +1,11 @@
-// eriphe-core is Eriphe's control plane: it keeps the state of nodes and
-// tasks, schedules tasks on nodes, follows them, lends accesses, and gives
+// eriphe-core is Eriphe's control plane: it keeps the state of devices and
+// tasks, schedules tasks on devices, follows them, lends accesses, and gives
 // the brain its tools over MCP.
 //
 //	eriphe-core -data /data                                      # no file: defaults, files in /data
 //	eriphe-core -config core.json
-//	eriphe-core join-token -config core.json -name pc            # prints how to join a new node
-//	eriphe-core join-token -config core.json -name pc -rejoin    # lets node pc join again
+//	eriphe-core join-token -config core.json -name pc            # prints how to join a new device
+//	eriphe-core join-token -config core.json -name pc -rejoin    # lets device pc join again
 //	eriphe-core join-token -data /data -name pc -quiet           # prints the token alone
 //	eriphe-core auth reset                                       # the workspace's sign-in back to the password
 //	eriphe-core auth show                                        # how one signs in, without secrets
@@ -82,6 +82,16 @@ func main() {
 	} else {
 		c.useMemory(mem) // its abouts are kept by the names of core.db (names.go)
 		c.mem.owner = func() string { return c.conf().User }
+		// The readable mirror, outside git (memory_mirror.go), made again
+		// from memory.db at start.
+		c.mem.mirror = &memMirror{dir: cfg.memoirePath(), lang: c.userLang}
+		c.mem.mirrorSync()
+	}
+	// The graph's nodes, in their own repository (nodes.go).
+	if nodes, err := openNodes(cfg); err != nil {
+		log.Printf("nodes: %v", err)
+	} else {
+		c.useNodes(nodes)
 	}
 	if err := c.reconcileServices(); err != nil {
 		log.Fatalf("services: %v", err)
@@ -112,29 +122,29 @@ func main() {
 	c.catalogRoutes(mux, token)
 	c.assistantRoutes(mux, token) // assistants.go
 	c.vaultRoutes(mux, token)
-	c.folderRoutes(mux, token)     // folders.go
-	c.nodeAccessRoutes(mux, token) // node_access.go
+	c.folderRoutes(mux, token)       // folders.go
+	c.deviceAccessRoutes(mux, token) // device_access.go
 	mux.Handle("POST /v1/join-tokens", bearer(token, http.HandlerFunc(c.handleJoinToken)))
-	mux.Handle("GET /v1/nodes", bearer(token, http.HandlerFunc(c.handleNodes)))
+	mux.Handle("GET /v1/devices", bearer(token, http.HandlerFunc(c.handleDevices)))
 	mux.Handle("GET /v1/version", bearer(token, http.HandlerFunc(c.handleVersion)))
-	mux.Handle("DELETE /v1/nodes/{name}", bearer(token, http.HandlerFunc(c.handleDeleteNode)))
-	mux.Handle("GET /v1/nodes/tls", bearer(token, http.HandlerFunc(c.handleNodesTLS)))
-	mux.Handle("PUT /v1/nodes/tls", bearer(token, http.HandlerFunc(c.handleNodesTLS)))
-	// Nodes authenticate with their join token, then with their own secret.
-	mux.HandleFunc("POST /v1/nodes/join", c.handleJoin)
-	mux.HandleFunc("GET /v1/nodes/connect", c.handleConnect)
-	mux.HandleFunc("GET /v1/node/assignments", c.handleAssignments)
-	mux.HandleFunc("POST /v1/node/tasks/{id}/report", c.handleReport)
-	mux.Handle("/v1/node/tasks/{id}/mcp/{server}", c.taskMCPHandler())
-	mux.Handle("/v1/node/tasks/{id}/model/{path...}", c.taskModelHandler())     // model_relay.go
-	mux.Handle("/v1/node/tasks/{id}/access", c.taskAccessHandler())             // lent_access.go
-	mux.Handle("POST /v1/node/tasks/{id}/ssh", c.taskSSHHandler())              // lent_ssh.go
-	mux.Handle("GET /v1/node/tasks/{id}/ssh/connect", c.taskSSHTunnelHandler()) // lent_ssh.go
-	mux.HandleFunc("GET /v1/node/tasks/{id}/skills/{sha}", c.handleTaskSkill)   // skills_tasks.go
-	mux.HandleFunc("POST /v1/node/tasks/{id}/media", c.handleTaskMedia)         // surfaces_capture.go
-	mux.HandleFunc("POST /v1/node/services/{name}/report", c.handleServiceReport)
-	mux.HandleFunc("POST /v1/node/certificate", c.handleNodeCertificate)
-	mux.HandleFunc("GET /v1/node/sync/{peer}", c.handleNodeSync) // sync_relay.go
+	mux.Handle("DELETE /v1/devices/{name}", bearer(token, http.HandlerFunc(c.handleDeleteDevice)))
+	mux.Handle("GET /v1/devices/tls", bearer(token, http.HandlerFunc(c.handleDevicesTLS)))
+	mux.Handle("PUT /v1/devices/tls", bearer(token, http.HandlerFunc(c.handleDevicesTLS)))
+	// Devices authenticate with their join token, then with their own secret.
+	mux.HandleFunc("POST /v1/devices/join", c.handleJoin)
+	mux.HandleFunc("GET /v1/devices/connect", c.handleConnect)
+	mux.HandleFunc("GET /v1/device/assignments", c.handleAssignments)
+	mux.HandleFunc("POST /v1/device/tasks/{id}/report", c.handleReport)
+	mux.Handle("/v1/device/tasks/{id}/mcp/{server}", c.taskMCPHandler())
+	mux.Handle("/v1/device/tasks/{id}/model/{path...}", c.taskModelHandler())     // model_relay.go
+	mux.Handle("/v1/device/tasks/{id}/access", c.taskAccessHandler())             // lent_access.go
+	mux.Handle("POST /v1/device/tasks/{id}/ssh", c.taskSSHHandler())              // lent_ssh.go
+	mux.Handle("GET /v1/device/tasks/{id}/ssh/connect", c.taskSSHTunnelHandler()) // lent_ssh.go
+	mux.HandleFunc("GET /v1/device/tasks/{id}/skills/{sha}", c.handleTaskSkill)   // skills_tasks.go
+	mux.HandleFunc("POST /v1/device/tasks/{id}/media", c.handleTaskMedia)         // web_media.go
+	mux.HandleFunc("POST /v1/device/services/{name}/report", c.handleServiceReport)
+	mux.HandleFunc("POST /v1/device/certificate", c.handleDeviceCertificate)
+	mux.HandleFunc("GET /v1/device/sync/{peer}", c.handleDeviceSync) // sync_relay.go
 	mux.Handle("GET /v1/services", bearer(token, http.HandlerFunc(c.handleServices)))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "ok\n") })
 	// Remote access over the tailnet (remote.go): the same API, and the workspace.
@@ -144,12 +154,11 @@ func main() {
 	}
 	go c.runAssistants(context.Background(), token)
 	go c.runMemory(context.Background())
-	go c.runEvents(context.Background())    // event_sources.go
-	go c.runSkills(context.Background())    // skill_runs.go
-	go c.runMonitors(context.Background())  // monitors.go
-	c.dropFreeSurfaces()                    // surface_authors.go
-	go c.runSurfaces(context.Background())  // surfaces.go
-	go c.runWorkspace(context.Background()) // workspace_queue.go
+	go c.runNodes(context.Background())
+	go c.runNodeSources(context.Background())
+	go c.runEvents(context.Background())   // event_sources.go
+	go c.runSkills(context.Background())   // skill_runs.go
+	go c.runMonitors(context.Background()) // monitors.go
 	go c.updates.run(context.Background())
 	if cfg.Web != nil {
 		go func() { log.Fatalf("web: %v", c.serveWeb(cfg)) }()
@@ -165,18 +174,18 @@ func main() {
 }
 
 // joinTokenCommand asks the running eriphe-core for a join token and prints
-// the command that joins a node with it.
+// the command that joins a device with it.
 func joinTokenCommand(args []string) {
 	fs := flag.NewFlagSet("join-token", flag.ExitOnError)
 	path := fs.String("config", "", "configuration file (without one, defaults in -data)")
 	data := fs.String("data", envOr("ERIPHE_DATA", defaultData), "eriphe-core's data directory, without a configuration file (env ERIPHE_DATA)")
 	ttl := fs.Duration("ttl", 24*time.Hour, "how long the token is valid")
-	name := fs.String("name", "", "name of the node the token is for (required)")
-	rejoin := fs.Bool("rejoin", false, "let the node already registered under -name join again, with a new secret")
+	name := fs.String("name", "", "name of the device the token is for (required)")
+	rejoin := fs.Bool("rejoin", false, "let the device already registered under -name join again, with a new secret")
 	quiet := fs.Bool("quiet", false, "print the token alone, for a script")
 	fs.Parse(args)
-	if !nodeName.MatchString(*name) {
-		log.Fatal("give the node's name: join-token -name pc (lowercase letters, digits, dashes)")
+	if !deviceName.MatchString(*name) {
+		log.Fatal("give the device's name: join-token -name pc (lowercase letters, digits, dashes)")
 	}
 	cfg, err := loadOrDefault(*path, *data)
 	if err != nil {
@@ -226,18 +235,18 @@ func joinTokenCommand(args []string) {
 	if url == "" {
 		url = "http://<this machine>:" + port
 		if out.CAHash != "" {
-			url = "https://<this machine>:" + port // the node checks the CA from its join on
+			url = "https://<this machine>:" + port // the device checks the CA from its join on
 		}
 	}
 	where := "On the new machine:"
 	if *rejoin {
-		where = "On the machine, after deleting node.json in the node's root:"
+		where = "On the machine, after deleting device.json in the device's root:"
 	}
 	pin := ""
 	if out.CAHash != "" {
 		pin = " -ca-hash " + out.CAHash
 	}
-	fmt.Printf("Join token for %s, single use, valid until %s:\n\n  %s\n\n%s\n\n  eriphe-node -core %s -join-token %s -name %s%s\n",
+	fmt.Printf("Join token for %s, single use, valid until %s:\n\n  %s\n\n%s\n\n  eriphe-device -core %s -join-token %s -name %s%s\n",
 		*name, out.Expires.Local().Format("2006-01-02 15:04"), out.Token, where, url, out.Token, *name, pin)
 }
 

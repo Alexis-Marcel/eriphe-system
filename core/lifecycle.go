@@ -11,17 +11,17 @@ import (
 )
 
 // The lifecycle is declarative, like a kubelet's: eriphe-core writes what
-// each task should be (its spec, run or stop, its inbox), and the node
+// each task should be (its spec, run or stop, its inbox), and the device
 // watches its assignments, makes the containers match, and reports their
-// state and events. Nothing is lost while a node or eriphe-core is away: the
-// node catches up when it comes back.
+// state and events. Nothing is lost while a device or eriphe-core is away: the
+// device catches up when it comes back.
 //
-//	GET  /v1/node/assignments?rev=R&wait=S   the node's tasks, as soon as they change
-//	POST /v1/node/tasks/{id}/report           state, session, events, inbox delivered
+//	GET  /v1/device/assignments?rev=R&wait=S   the device's tasks, as soon as they change
+//	POST /v1/device/tasks/{id}/report           state, session, events, inbox delivered
 //
 // Services (local MCP servers) come in the same assignments; see services.go.
 
-// bump wakes the nodes watching their assignments.
+// bump wakes the devices watching their assignments.
 func (c *core) bump() {
 	c.mu.Lock()
 	c.rev++
@@ -31,7 +31,7 @@ func (c *core) bump() {
 }
 
 // lend reads the credentials of a task's agent: its provider's. They are
-// read when a node fetches the task and never stored.
+// read when a device fetches the task and never stored.
 func (c *core) lend(agentName string) (map[string]string, error) {
 	_, agent, err := c.conf().agent(agentName)
 	if err != nil {
@@ -40,23 +40,23 @@ func (c *core) lend(agentName string) (map[string]string, error) {
 	return c.conf().lendAgent(agent)
 }
 
-// nodeFromRequest authenticates a node by its name and secret, and by its
-// certificate (authNode, machine_tls.go).
-func (c *core) nodeFromRequest(r *http.Request) (string, bool) {
-	name, _, err := c.authNode(r)
+// deviceFromRequest authenticates a device by its name and secret, and by its
+// certificate (authDevice, machine_tls.go).
+func (c *core) deviceFromRequest(r *http.Request) (string, bool) {
+	name, _, err := c.authDevice(r)
 	return name, err == nil
 }
 
-// nodeAssignment is one task as a node receives it, with its credentials.
-type nodeAssignment struct {
-	ID      string       `json:"id"`
-	Desired string       `json:"desired"`
-	Spec    nodeTaskSpec `json:"spec"`
-	Inbox   []InboxItem  `json:"inbox"`
+// deviceAssignment is one task as a device receives it, with its credentials.
+type deviceAssignment struct {
+	ID      string         `json:"id"`
+	Desired string         `json:"desired"`
+	Spec    deviceTaskSpec `json:"spec"`
+	Inbox   []InboxItem    `json:"inbox"`
 }
 
 func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
-	name, ok := c.nodeFromRequest(r)
+	name, ok := c.deviceFromRequest(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -84,7 +84,7 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	out := []nodeAssignment{}
+	out := []deviceAssignment{}
 	for _, a := range rows {
 		spec := a.Spec
 		if a.Desired == desiredRunning {
@@ -111,7 +111,7 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 			}
 			c.conf().modelEndpoint(a.Agent, env, &spec)
 			// Its catalog servers, as the configuration has them now: the
-			// node points the task at itself for each, never at the server.
+			// device points the task at itself for each, never at the server.
 			spec.Servers = c.specServers(&TaskRow{Kind: a.Kind, Tools: a.Tools})
 			spec.AlwaysLoad = nil
 			for _, s := range spec.Servers {
@@ -120,18 +120,19 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 				}
 				switch s {
 				case workspaceServer:
-					// Lent, its tools ask nothing: a task writes its own
-					// surfaces only (workspace_tools.go).
+					// Lent, its tools ask nothing: they only read the
+					// catalog (node_catalog.go).
 					spec.AlwaysLoad = append(spec.AlwaysLoad, s)
 					spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskWorkspaceTools(splitGrant(a.Tools))...)
-				case threadsServer:
-					// Lent, its tools ask nothing: writing on a thread is not
-					// an external write; a call step asks its card (task_threads.go).
-					spec.AlwaysLoad = append(spec.AlwaysLoad, s)
-					spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskThreadsTools(splitGrant(a.Tools))...)
 				}
 			}
-			// Its memory, read through its node (situations.go).
+			// Its own node, written through its device (task_nodes.go).
+			if a.Kind == "worker" && c.nodes != nil && c.taskNode(a.ID) != "" {
+				spec.Servers = append(spec.Servers, nodesServer)
+				spec.AlwaysLoad = append(spec.AlwaysLoad, nodesServer)
+				spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskNodesTools()...)
+			}
+			// Its memory, read through its device (situations.go).
 			if !isRoleKind(a.Kind) && c.mem != nil {
 				spec.Servers = append(spec.Servers, taskMemServer)
 				spec.AlwaysLoad = append(spec.AlwaysLoad, taskMemServer)
@@ -150,31 +151,31 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		out = append(out, nodeAssignment{ID: a.ID, Desired: a.Desired, Spec: spec, Inbox: inbox})
+		out = append(out, deviceAssignment{ID: a.ID, Desired: a.Desired, Spec: spec, Inbox: inbox})
 	}
-	// Nodes from before services ignore them.
+	// Devices from before services ignore them.
 	services, err := c.serviceAssignments(name)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	resp := map[string]any{"rev": current, "tasks": out, "services": services, "prepare": c.nodePrepare(name)}
-	// Nodes from before updates ignore it (machine_updates.go).
-	if u := c.nodeUpdateRequest(name); u != nil {
+	resp := map[string]any{"rev": current, "tasks": out, "services": services, "prepare": c.devicePrepare(name)}
+	// Devices from before updates ignore it (machine_updates.go).
+	if u := c.deviceUpdateRequest(name); u != nil {
 		resp["update"] = u
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// nodePrepare is what a node gets ready before any task asks for it: the
+// devicePrepare is what a device gets ready before any task asks for it: the
 // runtimes of the configured agents it could run (it carries their needed
-// labels) and the images they name. The node unpacks those agents and pulls
+// labels) and the images they name. The device unpacks those agents and pulls
 // those images, with its default image, in the background; an agent no one
 // configured is never downloaded.
-func (c *core) nodePrepare(name string) map[string][]string {
+func (c *core) devicePrepare(name string) map[string][]string {
 	var labels []string
-	if nodes, err := c.store.nodes(); err == nil {
-		for _, n := range nodes {
+	if devices, err := c.store.devices(); err == nil {
+		for _, n := range devices {
 			if n.Name == name {
 				labels = parseInfo(n).Labels
 			}
@@ -197,8 +198,8 @@ func (c *core) nodePrepare(name string) map[string][]string {
 	return map[string][]string{"runtimes": runtimes, "images": images}
 }
 
-// nodeReport is what a node says about one of its tasks.
-type nodeReport struct {
+// deviceReport is what a device says about one of its tasks.
+type deviceReport struct {
 	State     string     `json:"state"`
 	SessionID string     `json:"session_id,omitempty"`
 	Events    []EventRow `json:"events"`
@@ -207,18 +208,18 @@ type nodeReport struct {
 }
 
 func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
-	name, ok := c.nodeFromRequest(r)
+	name, ok := c.deviceFromRequest(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	id := r.PathValue("id")
 	t, err := c.store.task(id)
-	if err != nil || t.Node != name {
-		http.Error(w, "no such task on this node", http.StatusNotFound)
+	if err != nil || t.Device != name {
+		http.Error(w, "no such task on this device", http.StatusNotFound)
 		return
 	}
-	var in nodeReport
+	var in deviceReport
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		http.Error(w, "bad report", http.StatusBadRequest)
 		return
@@ -228,7 +229,7 @@ func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		c.logResults(t, in.Events)      // its access log (node_access.go)
+		c.logResults(t, in.Events)      // its access log (device_access.go)
 		c.noteAgentHealth(t, in.Events) // its account's real state (provider_health.go)
 	}
 	isAssistant := c.isAssistantTask(id)
@@ -254,8 +255,8 @@ func (c *core) handleReport(w http.ResponseWriter, r *http.Request) {
 
 // reportedFields are what a report changes of its task: its session, and
 // its state unless it has ended. A task answered by eriphe-core stays
-// running until the node has the answer.
-func (c *core) reportedFields(t *TaskRow, in nodeReport) map[string]any {
+// running until the device has the answer.
+func (c *core) reportedFields(t *TaskRow, in deviceReport) map[string]any {
 	fields := map[string]any{}
 	if in.SessionID != "" && in.SessionID != t.SessionID {
 		fields["session_id"] = in.SessionID
@@ -270,12 +271,12 @@ func (c *core) reportedFields(t *TaskRow, in nodeReport) map[string]any {
 	return fields
 }
 
-// announceReport tells who needs it of a report: the node, the assistants,
+// announceReport tells who needs it of a report: the device, the assistants,
 // and the brain.
 func (c *core) announceReport(id string, fields map[string]any, events, isAssistant, forBrain bool) {
 	if s, ok := fields["state"].(string); ok {
 		if finished(s) {
-			c.bump() // the task leaves its node's assignments
+			c.bump() // the task leaves its device's assignments
 			if !isAssistant {
 				c.taskEnded(id, s)
 			}
@@ -292,7 +293,7 @@ func (c *core) announceReport(id string, fields map[string]any, events, isAssist
 		c.notifyBrain(id, stateWaitingPermission)
 	}
 	if events {
-		c.bump() // the policy may have answered: wake the node
+		c.bump() // the policy may have answered: wake the device
 	}
 }
 

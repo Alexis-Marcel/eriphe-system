@@ -18,7 +18,7 @@ func statsFixture(t *testing.T, c *core) {
 			"usage": map[string]any{"input_tokens": tokens, "output_tokens": 0, "cache_read_tokens": 100000}})
 	}
 	for _, id := range []string{"t-a", "t-b", "t-c", "t-d"} {
-		s.insertTask(&TaskRow{ID: id, Node: "pc", Agent: "small", Runtime: "claude-code", Model: "opus", Prompt: "Fix " + id, State: stateStopped})
+		s.insertTask(&TaskRow{ID: id, Device: "pc", Agent: "small", Runtime: "claude-code", Model: "opus", Prompt: "Fix " + id, State: stateStopped})
 	}
 	s.addEvents("t-a", []EventRow{turn(1, 1000, 50.10), ev(2, "check", map[string]any{"name": "tests", "ok": true})})
 	s.setHarness("t-a", map[string]any{"receipt": &checkedReceipt{Status: "done", Verified: []string{"tests"},
@@ -84,9 +84,9 @@ func TestSpend(t *testing.T) {
 	}
 	now := time.Now()
 	yesterday := now.AddDate(0, 0, -1)
-	s.insertTask(&TaskRow{ID: "w", Node: "pc", Runtime: "claude-code", Model: "sonnet", Kind: "worker", State: stateStopped})
-	s.insertTask(&TaskRow{ID: "b", Node: "pc", Runtime: "claude-code", Model: "opus", Kind: "brain", State: stateIdle})
-	s.insertTask(&TaskRow{ID: "x", Node: "pc", Runtime: "opencode", Model: "mistral/large", Kind: "worker", State: stateStopped})
+	s.insertTask(&TaskRow{ID: "w", Device: "pc", Runtime: "claude-code", Model: "sonnet", Kind: "worker", State: stateStopped})
+	s.insertTask(&TaskRow{ID: "b", Device: "pc", Runtime: "claude-code", Model: "opus", Kind: "brain", State: stateIdle})
+	s.insertTask(&TaskRow{ID: "x", Device: "pc", Runtime: "opencode", Model: "mistral/large", Kind: "worker", State: stateStopped})
 	s.addEvents("w", []EventRow{turn(1, now, 1_000_000, 0), turn(2, yesterday, 0, 100_000)})
 	s.addEvents("b", []EventRow{turn(1, now, 500_000, 50_000), turn(2, now.AddDate(0, 0, -30), 1_000_000, 0)})
 	s.addEvents("x", []EventRow{turn(1, now, 1_000_000, 1_000_000)})
@@ -138,7 +138,7 @@ func TestStatsOnPanel(t *testing.T) {
 	}
 	_, body, _ := tw.do("GET", convoPath, nil, nil)
 	for _, want := range []string{"Fiabilité des tâches · 30 jours", "Acceptées", "50 %", "2/4", "Du premier coup", "1/4",
-		`<dt>Fiches de fil utilisées</dt><dd><strong>50 %</strong> <span class="muted small">1/2</span>`,
+		`<dt>Fiches de nœud utilisées</dt><dd><strong>50 %</strong> <span class="muted small">1/2</span>`,
 		"Affirmations non étayées", "1 sans contrôle", "0,04 $", "2 k jetons", "contrôle 2", "compte 1", "passagers 1",
 		"Coût par rôle · 7 jours", ">worker</th>", "0,10 $"} {
 		if !strings.Contains(body, want) {

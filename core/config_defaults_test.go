@@ -156,7 +156,7 @@ func TestOldConfigUnchanged(t *testing.T) {
 		"providers": {"anthropic": {"kind": "claude-subscription", "secret": "`+secret+`"}},
 		"agents": {"opus": {"runtime": "claude-code", "provider": "anthropic", "model": "opus"}},
 		"default_agent": "opus",
-		"brain": {"node": "nas", "agent": "opus", "prompt_file": "`+prompt+`", "self_url": "http://eriphe-core:8800/mcp",
+		"brain": {"device": "nas", "agent": "opus", "prompt_file": "`+prompt+`", "self_url": "http://eriphe-core:8800/mcp",
 			"tools": ["docs"]}}`), 0o600)
 	c, err := loadOrDefault(path, filepath.Join(dir, "data"))
 	if err != nil {
@@ -167,7 +167,7 @@ func TestOldConfigUnchanged(t *testing.T) {
 		c.TokenFile != "/secrets/core-token" || c.DB != "/data/core.db" || c.User != "Sam" || c.DefaultAgent != "opus" {
 		t.Fatalf("config = %+v", c)
 	}
-	if b.Node != "nas" || b.Agent != "opus" || b.SelfURL != "http://eriphe-core:8800/mcp" ||
+	if b.Device != "nas" || b.Agent != "opus" || b.SelfURL != "http://eriphe-core:8800/mcp" ||
 		strings.Join(b.Tools, ",") != "docs" {
 		t.Fatalf("brain = %+v", b)
 	}

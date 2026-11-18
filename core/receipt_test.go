@@ -51,7 +51,7 @@ func TestParseReceipt(t *testing.T) {
 // a receipt without one has none.
 func TestReceiptAttention(t *testing.T) {
 	text := "Une facture.\n```json\n" + `{"receipt": {"status": "done", "attention": [` +
-		`{"refs": ["mail:42", "thread:12", "agenda:2026-11-12", "mail:"], "weight": 4, "why": "` + strings.Repeat("é", 100) + `", "say": "Ta facture est due."},` +
+		`{"refs": ["mail:42", "node:k3x9m2p7qa", "agenda:2026-11-12", "mail:"], "weight": 4, "why": "` + strings.Repeat("é", 100) + `", "say": "Ta facture est due."},` +
 		`{"refs": "alert:7", "weight": 2, "why": "a glance"},` +
 		`{"refs": ["task:t-1"], "weight": 6, "why": "too heavy"},` +
 		`{"refs": ["card:3"], "weight": 2.5, "why": "half"},` +
@@ -65,14 +65,14 @@ func TestReceiptAttention(t *testing.T) {
 		t.Fatalf("attention %+v", r.Attention)
 	}
 	a, b := r.Attention[0], r.Attention[1]
-	if !slices.Equal(a.Refs, []string{"thread:12"}) || a.Weight != 4 || a.Say != "Ta facture est due." ||
+	if !slices.Equal(a.Refs, []string{"node:k3x9m2p7qa"}) || a.Weight != 4 || a.Say != "Ta facture est due." ||
 		len([]rune(a.Why)) != signalWhyMax+1 { // cut, with its ellipsis
 		t.Errorf("first %+v", a)
 	}
 	if !slices.Equal(b.Refs, []string{"alert:7"}) || b.Weight != 2 {
 		t.Errorf("one ref as a string %+v", b)
 	}
-	if len(r.dropped) != 7 { // mail:42 (an item, raised through its thread), agenda:… (no kind of a tool), mail:, weight 6, weight 2.5, nothing:1, not an object
+	if len(r.dropped) != 7 { // mail:42 (an item, raised through its node), agenda:… (no kind of a tool), mail:, weight 6, weight 2.5, nothing:1, not an object
 		t.Errorf("dropped %q", r.dropped)
 	}
 	if s := stripReceipt(text); s != "Une facture." {
@@ -126,11 +126,11 @@ func TestStripReceipt(t *testing.T) {
 	}
 }
 
-// A receipt right after a block tagged otherwise (go, thread) is read and
+// A receipt right after a block tagged otherwise (go, eriphe:block) is read and
 // taken out: the tagged block's closing fence is not the receipt's opening
 // one (#522).
 func TestReceiptAfterTaggedBlock(t *testing.T) {
-	for _, tag := range []string{"go", "thread", "sh"} {
+	for _, tag := range []string{"go", "eriphe:block plan", "sh"} {
 		text := "Done.\n```" + tag + "\nfmt.Println(\"x\")\n```\n```json\n{\"receipt\": {\"status\": \"done\"}}\n```"
 		if r, ok := parseReceipt(text); !ok || r.Status != "done" {
 			t.Errorf("%s: receipt not read", tag)
@@ -157,7 +157,7 @@ func ev(seq int, typ string, data map[string]any) EventRow {
 }
 
 // What the agent says is verified, eriphe-core reads against the checks
-// the node ran and the diff it saw: nothing that failed comes out verified.
+// the device ran and the diff it saw: nothing that failed comes out verified.
 func TestCrossCheck(t *testing.T) {
 	events := []EventRow{
 		ev(1, "text", map[string]any{"text": "working"}),
@@ -247,7 +247,7 @@ func lastEvent(t *testing.T, c *core) string {
 // brain then hears of the turn, with the receipt or the last message.
 func TestReceiptRepair(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": "All done!"}), ev(2, "turn_end", map[string]any{"subtype": "success"})})
 	c.notifyBrain("t-1", stateIdle)
 	if msg := lastEvent(t, c); msg != "" {
@@ -275,11 +275,11 @@ func TestReceiptRepair(t *testing.T) {
 // With a receipt, the brain reads it instead of the agent's message.
 func TestReceiptToBrain(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"})})
 	c.notifyBrain("t-1", stateIdle)
 	msg := lastEvent(t, c)
-	if !strings.Contains(msg, "Reçu (recoupé par eriphe-core) : statut done") || strings.Contains(msg, "```") {
+	if !strings.Contains(msg, "statut done") || !strings.Contains(msg, "Fixed the form.") || strings.Contains(msg, "```") {
 		t.Errorf("brain event %q", msg)
 	}
 	if h := c.store.harness("t-1"); h.Receipt == nil || h.Receipt.Status != "done" {
@@ -294,7 +294,7 @@ func TestReceiptToBrain(t *testing.T) {
 // A failed turn is not asked for its receipt.
 func TestNoRepairAfterFailure(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.addEvents("t-1", []EventRow{ev(1, "turn_end", map[string]any{"subtype": "success", "is_error": true, "result": "API Error: 500"})})
 	c.notifyBrain("t-1", stateIdle)
 	if items, _ := c.store.inbox("t-1"); len(items) != 0 {
@@ -305,7 +305,7 @@ func TestNoRepairAfterFailure(t *testing.T) {
 // The night's extraction reads a task's receipt rather than its last message.
 func TestTranscriptReadsReceipt(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped})
 	c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"})})
 	segs, err := c.transcript(time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
 	if err != nil || len(segs) != 1 {
@@ -324,7 +324,7 @@ func TestTranscriptReadsReceipt(t *testing.T) {
 func TestReceiptOnCard(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	tw.c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	tw.c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	tw.c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"}),
 		ev(3, "check", map[string]any{"name": "tests", "ok": false, "exit_code": 2, "output": "FAIL here"})})
 	_, body, _ := tw.do("GET", "/tasks/t-1", nil, map[string]string{"HX-Request": "true"})

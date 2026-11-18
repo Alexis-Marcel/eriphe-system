@@ -17,11 +17,11 @@ import (
 )
 
 // The per-task proxy. A task's MCP configuration names, for every catalog
-// server it was granted, its own node (callback-url/mcp/<server>, with the
-// task's secret); the node relays to eriphe-core with its own secret and the
+// server it was granted, its own device (callback-url/mcp/<server>, with the
+// task's secret); the device relays to eriphe-core with its own secret and the
 // task's id:
 //
-//	/v1/node/tasks/{id}/mcp/{server}   (node secret)
+//	/v1/device/tasks/{id}/mcp/{server}   (device secret)
 //
 // eriphe-core serves there an MCP server made of the upstream's cached
 // tools that the task's grant covers, and forwards each call upstream with
@@ -31,21 +31,21 @@ import (
 
 type proxyServerKey struct{}
 
-// taskMCPHandler serves the per-task MCP endpoints, for nodes.
+// taskMCPHandler serves the per-task MCP endpoints, for devices.
 func (c *core) taskMCPHandler() http.Handler {
 	h := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		s, _ := r.Context().Value(proxyServerKey{}).(*mcp.Server)
 		return s
 	}, &mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		node, ok := c.nodeFromRequest(r)
+		device, ok := c.deviceFromRequest(r)
 		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		t, err := c.store.task(r.PathValue("id"))
-		if err != nil || t.Node != node || finished(t.State) {
-			http.Error(w, "no such task on this node", http.StatusNotFound)
+		if err != nil || t.Device != device || finished(t.State) {
+			http.Error(w, "no such task on this device", http.StatusNotFound)
 			return
 		}
 		server := r.PathValue("server")
@@ -60,8 +60,6 @@ func (c *core) taskMCPHandler() http.Handler {
 				if a.SelfURL == "" {
 					s = c.self
 				}
-			case hasOwnTools(a):
-				s = c.assistantServer(a, t) // the lead's (assistant_own_tools.go)
 			}
 			if s == nil {
 				http.Error(w, "this task has no access to "+server, http.StatusForbidden)
@@ -74,14 +72,14 @@ func (c *core) taskMCPHandler() http.Handler {
 			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskMemoryServer(t)))) // situations.go
 			return
 		}
+		if server == nodesServer && t.Kind == "worker" && c.nodes != nil && c.taskNode(t.ID) != "" {
+			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskNodesServer(t)))) // task_nodes.go
+			return
+		}
 		grant := c.taskGrant(t)
 		if server == workspaceServer && slices.Contains(grantServers(grant), server) {
 			// A server Eriphe provides, lent like any (workspace_tools.go).
 			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskWorkspaceServer(t, grant))))
-			return
-		}
-		if server == threadsServer && slices.Contains(grantServers(grant), server) {
-			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskThreadsServer(t, grant)))) // task_threads.go
 			return
 		}
 		if !slices.Contains(grantServers(grant), server) || c.pool.get(server) == nil {
@@ -152,7 +150,7 @@ func (c *core) freeCall(claudeName string, input map[string]any) bool {
 
 // freeAhead tells whether a free call may skip the policy, allowed in
 // advance to the brain or made by eriphe-core itself (a monitor, a
-// surface's source): not a read of the open web, which must see the
+// block's source): not a read of the open web, which must see the
 // turn's taint as WebFetch does. A write always goes through the policy.
 func (c *core) freeAhead(claudeName string, input map[string]any) bool {
 	f := c.pool.facts(claudeName, input)
@@ -169,7 +167,7 @@ func (c *core) readsFreely(taskID string) bool {
 	return ok && assistantRoles[a.Role].FreeReads
 }
 
-// brainFreeReads are the Claude Code names of the free reads: the node of
+// brainFreeReads are the Claude Code names of the free reads: the device of
 // an assistant that reads freely allows them in advance, so they never
 // wait for a permission.
 func (c *core) brainFreeReads() []string {
@@ -222,7 +220,7 @@ func (c *core) actingGrant(grant []string) []string {
 	return out
 }
 
-// specServers are the catalog servers a task's node must relay for it.
+// specServers are the catalog servers a task's device must relay for it.
 func (c *core) specServers(t *TaskRow) []string {
 	var out []string
 	for _, s := range grantServers(c.taskGrant(t)) {
@@ -278,12 +276,14 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	}
 	claude := claudeToolName(u.name, tool)
 	f := c.pool.facts(claude, input)
+	acting := false // allowed by a ticket, not read freely
 	switch {
 	case f.noAccount:
 		return toolError("the accounts of this tool do not have the same access in Eriphe: give account, the account this call is for")
 	case f.value == gridNever:
 		return toolError("this tool is not allowed in Eriphe, for this account or at all")
 	case c.store.useTicket(taskID, claude, input):
+		acting = true
 	case c.readsFreely(taskID) && c.freeAhead(claude, input):
 		// The brain reads freely: no permission round trip, a decision on record all the same.
 		c.store.logDecision(taskID, "", claude, input, decideAllow, byPolicy, "lecture libre du cerveau")
@@ -297,7 +297,31 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	if err != nil {
 		return toolError(err.Error())
 	}
+	if acting && !res.IsError && taskID == c.brainTaskID() {
+		c.traceBrainCall(u.name, tool)
+	}
 	return res
+}
+
+// traceBrainCall writes a call the brain made with the user's permission
+// in the trace of the node it talks to (the page the user spoke from),
+// else, from the home, of the node its turn is about (the last it named):
+// what it did there stays on record, though no version is written. A turn
+// of the home that named no node logs it nowhere but the decisions.
+func (c *core) traceBrainCall(server, tool string) {
+	if c.nodes == nil {
+		return
+	}
+	id := c.turn.talkNode()
+	if id == "" {
+		id = c.turn.aboutNode()
+	}
+	if id == "" {
+		return
+	}
+	if err := c.nodes.AppendTrace(id, "eriphe", "Appel : "+server+"/"+tool+"."); err != nil {
+		log.Printf("brain call %s/%s: trace of %s: %v", server, tool, id, err)
+	}
 }
 
 func toolError(msg string) *mcp.CallToolResult {

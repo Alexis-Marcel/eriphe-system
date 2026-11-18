@@ -101,10 +101,10 @@ func postedTicks(r *http.Request) []string {
 // selfHostedTarget is the model server a form names: on a device or at an
 // address, with its key. On an edit (name), what the form leaves empty is
 // the stored one's.
-func (w *web) selfHostedTarget(r *http.Request, name string) (where, base, node, key string, err error) {
+func (w *web) selfHostedTarget(r *http.Request, name string) (where, base, device, key string, err error) {
 	where = r.PostFormValue("where")
 	base = strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
-	node, key = r.PostFormValue("node"), r.PostFormValue("key")
+	device, key = r.PostFormValue("device"), r.PostFormValue("key")
 	if name != "" {
 		p, ok := w.c.conf().Providers[name]
 		if !ok || p.Kind != selfHostedKind {
@@ -113,29 +113,29 @@ func (w *web) selfHostedTarget(r *http.Request, name string) (where, base, node,
 		if base == "" {
 			base = p.BaseURL
 		}
-		if node == "" {
-			node = p.Node
+		if device == "" {
+			device = p.Device
 		}
 		if strings.TrimSpace(key) == "" && p.Secret != "" {
 			if key, _ = readSecret(p.Secret); key == "" {
 				return "", "", "", "", errors.New("ptest.nosecret")
 			}
 		}
-		if where == "" && p.Node != "" {
-			where = whereNode
+		if where == "" && p.Device != "" {
+			where = whereOnDevice
 		}
 	}
-	if where != whereNode {
+	if where != whereOnDevice {
 		where = whereAddress
 	}
-	return where, base, node, key, nil
+	return where, base, device, key, nil
 }
 
 // askModels asks the form's model server for its models; nil when there
 // is nothing to ask yet (no address typed).
 func (w *web) askModels(r *http.Request, s *session, name string) *testView {
 	lang := w.lang(r)
-	where, base, node, key, err := w.selfHostedTarget(r, name)
+	where, base, device, key, err := w.selfHostedTarget(r, name)
 	switch {
 	case err != nil:
 		return &testView{State: "err", Text: tr(lang, err.Error())}
@@ -144,7 +144,7 @@ func (w *web) askModels(r *http.Request, s *session, name string) *testView {
 	case !w.testLimit.allow(s.ID, w.now()):
 		return &testView{State: "err", Text: tr(lang, "test.ratelimit")}
 	}
-	v := w.checkSelfHostedForm(r, lang, where, base, node, key)
+	v := w.checkSelfHostedForm(r, lang, where, base, device, key)
 	log.Printf("web: self-hosted models asked (%s): %s, %d", where, v.State, len(v.Models)) // never the key
 	return &v
 }

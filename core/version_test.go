@@ -85,12 +85,12 @@ func TestVersionBehind(t *testing.T) {
 	}
 }
 
-// A node asks for an update when it runs another published build than
+// A device asks for an update when it runs another published build than
 // eriphe-core; a local build never does.
 func TestSameVersion(t *testing.T) {
 	for _, c := range []struct {
-		node, core string
-		same       bool
+		device, core string
+		same         bool
 	}{
 		{"0.1.0", "0.1.0", true},
 		{"0.1.0", "0.2.0", false},
@@ -101,8 +101,8 @@ func TestSameVersion(t *testing.T) {
 		{"0.1.0", "dev", true},
 		{"", "0.1.0", true},
 	} {
-		if got := sameVersion(c.node, c.core); got != c.same {
-			t.Errorf("sameVersion(%q, %q) = %t", c.node, c.core, got)
+		if got := sameVersion(c.device, c.core); got != c.same {
+			t.Errorf("sameVersion(%q, %q) = %t", c.device, c.core, got)
 		}
 	}
 }
@@ -126,7 +126,7 @@ func TestDisplayVersion(t *testing.T) {
 // a machine on a build of main is never told to update, one on an older
 // release is.
 func TestUpdatesReleases(t *testing.T) {
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.2.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-device": "0.2.0"})
 	u := newUpdates(f.srv.URL)
 	u.check(context.Background())
 	if u.version("eriphe-core") != "0.2.0" {
@@ -140,10 +140,10 @@ func TestUpdatesReleases(t *testing.T) {
 	}
 }
 
-func TestNodeBehindCore(t *testing.T) {
+func TestDeviceBehindCore(t *testing.T) {
 	for _, c := range []struct {
-		node, core string
-		behind     bool
+		device, core string
+		behind       bool
 	}{
 		{"0.1.0", "0.1.0", false},
 		{"0.1.0", "0.2.0", true},
@@ -156,8 +156,8 @@ func TestNodeBehindCore(t *testing.T) {
 		{"dev", "0.1.0", false},
 		{"0.1.0", "dev", false},
 	} {
-		if got := nodeBehindCore(c.node, c.core); got != c.behind {
-			t.Errorf("nodeBehindCore(%q, %q) = %t", c.node, c.core, got)
+		if got := deviceBehindCore(c.device, c.core); got != c.behind {
+			t.Errorf("deviceBehindCore(%q, %q) = %t", c.device, c.core, got)
 		}
 	}
 }

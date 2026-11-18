@@ -37,7 +37,7 @@
 {{end}}{{else if eq .Role "error"}}{{template "brain-error" .}}
 {{else if .Hidden}}
 {{else if eq .Role "user"}}
-<div class="msg msg-user" id="m{{.Seq}}">{{if .Attachments}}<div class="msg-body">{{template "attachments" .Attachments}}{{if .Text}}<div class="bubble">{{md .Text}}</div>{{end}}</div>{{else}}<div class="bubble">{{md .Text}}</div>{{end}}<time datetime="{{iso .Time}}">{{if .FromWorkspace}}<span class="via">{{t "chat.via.workspace"}} · </span>{{else if .Via}}<span class="via" title="{{t "chat.via"}}">{{.Via}} · </span>{{end}}{{clock .Time}}</time></div>
+<div class="msg msg-user" id="m{{.Seq}}">{{if .Attachments}}<div class="msg-body">{{template "attachments" .Attachments}}{{if .Text}}<div class="bubble">{{md .Text}}</div>{{end}}</div>{{else}}<div class="bubble">{{md .Text}}</div>{{end}}<time datetime="{{iso .Time}}">{{if .Via}}<span class="via" title="{{t "chat.via"}}">{{.Via}} · </span>{{end}}{{clock .Time}}</time></div>
 {{else}}
 <div class="msg msg-brain" id="m{{.Seq}}"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="msg-body"><span class="sr-only">{{t "chat.eriphe"}} :</span><div class="bubble">{{md .Text}}</div>{{template "msg-why" .Why}}{{template "cards" .Cards}}<time datetime="{{iso .Time}}">{{clock .Time}}</time></div></div>
 {{end}}{{end}}
@@ -81,7 +81,7 @@
     <span class="perm-icon" aria-hidden="true">{{template "i-shield"}}</span>
     <div>
       <h3 id="{{$id}}-t">{{if .UserOnly}}{{t "perm.yours"}}{{else}}{{t "perm.title"}}{{end}}</h3>
-      <p class="perm-who">{{.Task.Agent}}{{if .Task.Node}} · {{.Task.Node}}{{end}} {{t "perm.wants"}} <strong>{{.Tool}}</strong>{{if .UserOnly}} — {{.UserOnly}}{{end}}</p>
+      <p class="perm-who">{{.Task.Agent}}{{if .Task.Device}} · {{.Task.Device}}{{end}} {{t "perm.wants"}} <strong>{{.Tool}}</strong>{{if .UserOnly}} — {{.UserOnly}}{{end}}</p>
     </div>
   </header>
   {{if not .Where}}<p class="perm-task"><a href="/tasks/{{.Task.ID}}" hx-get="/tasks/{{.Task.ID}}" hx-target="#drawer" hx-swap="innerHTML">{{.Task.Title}}</a></p>{{end}}
@@ -106,7 +106,7 @@
 {{end}}
 
 {{define "tasks"}}
-{{template "side-threads" .Threads}}
+{{template "side-nodes" .Nodes}}
 <div class="side-head"><h2>{{t "tasks.title"}}</h2>{{if .Active}}<span class="count" data-count="{{len .Active}}">{{len .Active}}</span>{{end}}</div>
 {{if .Active}}<ul class="cards">{{range .Active}}<li>{{template "taskcard" .}}</li>{{end}}</ul>
 {{else}}<div class="empty-side"><span class="empty-art" aria-hidden="true">{{template "i-tasks"}}</span><p>{{t "tasks.none"}}</p></div>{{end}}
@@ -142,7 +142,7 @@
   <h3><a href="/tasks/{{.ID}}" hx-get="/tasks/{{.ID}}" hx-target="#drawer" hx-swap="innerHTML" class="stretched">{{.Title}}</a></h3>
   <dl class="meta">
     {{if .Repo}}<div><dt class="sr-only">{{t "task.repo"}}</dt><dd class="mono">{{.Repo}}{{if .Branch}}<span class="branch">{{template "i-branch"}}{{.Branch}}</span>{{end}}</dd></div>{{end}}
-    <div><dt class="sr-only">{{t "task.node"}}</dt><dd>{{template "i-server"}}{{if .Node}}{{.Node}}{{else}}{{t "tasks.waitnode"}}{{end}}</dd></div>
+    <div><dt class="sr-only">{{t "task.device"}}</dt><dd>{{template "i-server"}}{{if .Device}}{{.Device}}{{else}}{{t "tasks.waitdevice"}}{{end}}</dd></div>
     {{if .Agent}}<div><dt class="sr-only">{{t "task.agent"}}</dt><dd>{{template "i-bot"}}{{.Agent}}</dd></div>{{end}}
   </dl>
   {{with .Receipt}}{{template "receipt-line" .}}{{end}}
@@ -214,7 +214,7 @@
 
 {{define "drawer-body"}}{{with .Data}}
 <dl class="facts">
-  <div><dt>{{t "task.node"}}</dt><dd>{{if .Card.Node}}{{.Card.Node}}{{else}}{{t "tasks.waitnode"}}{{end}}</dd></div>
+  <div><dt>{{t "task.device"}}</dt><dd>{{if .Card.Device}}{{.Card.Device}}{{else}}{{t "tasks.waitdevice"}}{{end}}</dd></div>
   <div><dt>{{t "task.agent"}}</dt><dd>{{.Card.Agent}}</dd></div>
   {{if .Card.Repo}}<div><dt>{{t "task.repo"}}</dt><dd class="mono">{{.Card.Repo}}</dd></div>{{end}}
   {{if .Card.Branch}}<div><dt>{{t "task.branch"}}</dt><dd class="mono">{{.Card.Branch}}</dd></div>{{end}}
@@ -338,7 +338,7 @@ The ways back follow the pages, never the browser's history. */}}
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-devices">
     <h2 class="nav-group-title" id="sg-devices">{{t "settings.g.devices"}}</h2>
-    <a href="/settings/devices" {{if eq .Tab "devices"}}aria-current="page"{{end}}>{{template "i-device"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Nodes}}{{template "new-dot"}}{{end}}{{template "chev"}}</a>
+    <a href="/settings/devices" {{if eq .Tab "devices"}}aria-current="page"{{end}}>{{template "i-device"}}<span>{{t "settings.machines"}}</span>{{if or .Updates.Core .Updates.Devices}}{{template "new-dot"}}{{end}}{{template "chev"}}</a>
     <a href="/settings/access" {{if eq .Tab "access"}}aria-current="page"{{end}}>{{template "i-globe"}}<span>{{t "settings.access"}}</span>{{template "chev"}}</a>
     <a href="/settings/notifications" {{if eq .Tab "notifications"}}aria-current="page"{{end}}>{{template "i-bell"}}<span>{{t "settings.notifications"}}</span>{{template "chev"}}</a>
   </div>
@@ -366,20 +366,17 @@ ask it, in the conversation, rather than a form. */}}
 {{define "ask"}}<p class="ask">{{template "i-chat"}}<span>{{t .}}</span> <a href="/conversation">{{t "ask.go"}}</a></p>{{end}}
 
 {{/* One mark per step, in the plan's order, coloured by its status. */}}
-{{define "thread-strip"}}<span class="thread-strip" aria-hidden="true">{{range .}}<i class="st-{{.}}"></i>{{end}}</span>{{end}}
 
-{{/* The threads running, on top of the tasks panel (parts.html). */}}
-{{define "side-threads"}}{{if .}}
-<section class="side-thread" aria-labelledby="side-thread-t">
-  <div class="side-sub"><h3 id="side-thread-t">{{t "threads.title"}}</h3></div>
+{{/* The nodes at work or waiting for the user, on top of the tasks panel (parts.html). */}}
+{{define "side-nodes"}}{{if .}}
+<section class="side-node" aria-labelledby="side-node-t">
+  <div class="side-sub"><h3 id="side-node-t">{{t "nodes.title"}}</h3></div>
   <ul class="cards">{{range .}}<li>
-    <article class="card thread-card{{if .Waits}} needs-you{{end}}">
+    <article class="card node-card{{if eq .State "waiting"}} needs-you{{end}}">
       <div class="card-top">
-        <span class="chip chip-thread-{{.Look}}"><span class="pulse" aria-hidden="true"></span>{{if .Waits}}{{t "threads.waits"}}{{else}}{{t (printf "thread.state.%s" .Look)}}{{end}}</span>
-        {{if .Total}}<span class="muted small">{{tf "threads.progress" .Done .Total}}</span>{{end}}
+        <span class="chip chip-node-{{.State}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "node.state.%s" .State)}}</span>
       </div>
-      <h3><a class="stretched" href="/espace?open=thread-{{.ID}}">{{.Title}}</a></h3>
-      {{template "thread-strip" .Progress}}
+      <h3><a class="stretched" href="/espace?open=node-{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{t "node.untitled"}}{{end}}</a></h3>
     </article>
   </li>{{end}}</ul>
 </section>

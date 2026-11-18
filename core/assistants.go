@@ -19,7 +19,7 @@ import (
 
 // Assistants are Eriphe's long-lived agents: each owns one task, as a
 // Deployment owns its Pod. Its spec says what it is (a role), what it runs
-// on (an agent, a node), what it is told (instructions), what it may use
+// on (an agent, a device), what it is told (instructions), what it may use
 // (tools, resources) and what wakes it (triggers); its status is what one
 // controller (assistant_controller.go) keeps of the task it runs.
 //
@@ -47,7 +47,7 @@ type Assistant struct {
 	DisplayName string `json:"display_name,omitempty"`
 	Disabled    bool   `json:"disabled,omitempty"` // its task is stopped, and none started
 	Agent       string `json:"agent,omitempty"`    // empty: the first agent that can run it
-	Node        string `json:"node,omitempty"`     // its preferred node; empty lets the scheduler choose
+	Device      string `json:"device,omitempty"`   // its preferred device; empty lets the scheduler choose
 	// Its standing instructions: the role's built-in ones unless replaced,
 	// by text or, in the configuration file only, by a file. {{user}} is
 	// replaced by the user's name, {{name}} by its own.
@@ -72,7 +72,7 @@ type Assistant struct {
 	ReportsTo string `json:"reports_to,omitempty"`
 
 	// The configuration file's only: eriphe-core's MCP URL as seen from its
-	// node (without it, its node relays eriphe-core's tools).
+	// device (without it, its device relays eriphe-core's tools).
 	SelfURL string `json:"self_url,omitempty"`
 }
 
@@ -202,7 +202,7 @@ func (a Assistant) standingPrompt() (string, error) {
 
 // assistant is the built-in assistant the file's brain section describes.
 func (b *BrainConfig) assistant() Assistant {
-	return Assistant{Name: brainAssistant, Role: assistantRoleBrain, DisplayName: b.DisplayName, Agent: b.Agent, Node: b.Node,
+	return Assistant{Name: brainAssistant, Role: assistantRoleBrain, DisplayName: b.DisplayName, Agent: b.Agent, Device: b.Device,
 		InstructionsFile: b.PromptFile, SelfURL: b.SelfURL, Tools: b.Tools}
 }
 
@@ -232,8 +232,8 @@ func overlay(file, ws Assistant) Assistant {
 	if a.Agent == "" {
 		a.Agent = ws.Agent
 	}
-	if a.Node == "" {
-		a.Node = ws.Node
+	if a.Device == "" {
+		a.Device = ws.Device
 	}
 	if a.Instructions == "" && a.InstructionsFile == "" {
 		a.Instructions = ws.Instructions
@@ -269,8 +269,8 @@ func readOnlyField(file, ws Assistant) string {
 		return "display_name"
 	case ws.Agent != "" && file.Agent != "" && ws.Agent != file.Agent:
 		return "agent"
-	case ws.Node != "" && file.Node != "" && ws.Node != file.Node:
-		return "node"
+	case ws.Device != "" && file.Device != "" && ws.Device != file.Device:
+		return "device"
 	case ws.Instructions != "" && (file.Instructions != "" || file.InstructionsFile != "") && ws.Instructions != file.Instructions:
 		return "instructions"
 	case len(ws.Tools) > 0 && len(file.Tools) > 0 && !slices.Equal(ws.Tools, file.Tools):
@@ -577,7 +577,7 @@ func (c *core) fileSets(name string) map[string]bool {
 	if !ok {
 		return map[string]bool{}
 	}
-	return map[string]bool{"agent": file.Agent != "", "tools": len(file.Tools) > 0, "node": file.Node != "", "display_name": file.DisplayName != "",
+	return map[string]bool{"agent": file.Agent != "", "tools": len(file.Tools) > 0, "device": file.Device != "", "display_name": file.DisplayName != "",
 		"instructions": file.Instructions != "" || file.InstructionsFile != ""}
 }
 
@@ -619,7 +619,7 @@ type AssistantStatus struct {
 	Profile string `json:"profile,omitempty"`
 	PackDue bool   `json:"pack_due,omitempty"`
 	// Cards are the cards its session holds, each by its hash
-	// (thread_card.go): one is given again only when it changed.
+	// (about_card.go): one is given again only when it changed.
 	Cards map[string]string `json:"cards,omitempty"`
 }
 

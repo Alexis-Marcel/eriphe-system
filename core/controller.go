@@ -15,17 +15,19 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
-// core ties the modules together: the store, the nodes, the scheduler, and
-// the lifecycle: eriphe-core writes what each task should be, and its node
+// core ties the modules together: the store, the devices, the scheduler, and
+// the lifecycle: eriphe-core writes what each task should be, and its device
 // makes it so and reports back (see lifecycle.go).
 type core struct {
 	base  *Config                // the configuration file, as loaded
 	snap  atomic.Pointer[Config] // the file merged with the workspace's catalog (catalog.go)
 	store *Store
 	token string      // eriphe-core's own API token; the brain gets one derived from it, at self_url (assistantToken)
-	self  *mcp.Server // eriphe-core's own MCP server, also relayed to the brain by its node
+	self  *mcp.Server // eriphe-core's own MCP server, also relayed to the brain by its device
 	pool  *pool       // the catalog's upstream sessions
 	cimd  cimdCache   // which servers take Eriphe's published client only (cimd.go)
 
@@ -40,18 +42,20 @@ type core struct {
 	mem  *memStore // Eriphe's memory (memory.go); nil if it could not open
 	turn brainTurn // what the brain's current turn read (memory_trust.go)
 
+	nodes *nodestore.Store // the graph's nodes (nodes.go); nil if they could not open
+
 	relayMu sync.Mutex // one copy of the brain's output at a time (relayBrainOutput)
 	// brainSeqOfTurn is the brain's last message of its current turn, for
 	// the cards it proposes after it (convo_cards.go); held by relayMu.
 	brainSeqOfTurn int
 	draft          brainDraft // the brain's message being written (brain_draft.go)
 
-	placing  sync.Mutex // one pass at a time over the tasks waiting for a node
-	failedOn sync.Map   // service name → the node it kept failing on, avoided while another can take it
+	placing  sync.Mutex // one pass at a time over the tasks waiting for a device
+	failedOn sync.Map   // service name → the device it kept failing on, avoided while another can take it
 
 	syncLinks syncLinks // the Syncthing connections joined between machines (sync_relay.go)
 	// syncMu: one pass at a time over the copies' plans; syncPushed, the
-	// plan each node last took, by name (folder_copies.go).
+	// plan each device last took, by name (folder_copies.go).
 	syncMu     sync.Mutex
 	syncPushed sync.Map
 
@@ -67,11 +71,9 @@ type core struct {
 	skillRuns   skillRunner            // the triggered skills (skill_runs.go)
 	out         channelOut             // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
-	surf        surfaceHub             // the surfaces' changes and their subscribers (surfaces.go)
-	layout      layoutState            // where the surfaces are on the workspace (workspace_layout.go)
-	front       frontTurn              // whether the brain's turn answers the user in the workspace (workspace_front.go)
-	props       proposalFeed           // the proposals that moved, for the workspace (surface_proposals.go)
-	threadReads sync.Map               // thread id → *threadReadAgain: its sources being read (thread_sources.go)
+	props       proposalFeed           // the proposals that moved, for the workspace (card_moves.go)
+	live        nodeLive               // the live blocks being read (node_live.go)
+	graph       graphFeed              // what changes on the graph, for the workspace (graph_feed.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)
 	// minters are the providers whose connections core mints tokens for,
@@ -84,15 +86,15 @@ type core struct {
 	skipped   map[string]string // workspace entries left out at start, and why
 
 	mu      sync.Mutex
-	nodes   map[string]*nodeClient // by name, created when first needed
-	rev     int64                  // bumped whenever an assignment or an inbox changes
-	changed chan struct{}          // closed and replaced on every bump
-	inbox   chan struct{}          // pinged when an assistant has something to read
-	asst    assistantStatuses      // what the assistant controller keeps (assistants.go)
+	devices map[string]*deviceClient // by name, created when first needed
+	rev     int64                    // bumped whenever an assignment or an inbox changes
+	changed chan struct{}            // closed and replaced on every bump
+	inbox   chan struct{}            // pinged when an assistant has something to read
+	asst    assistantStatuses        // what the assistant controller keeps (assistants.go)
 }
 
 func newCore(cfg *Config, store *Store) *core {
-	c := &core{base: cfg, store: store, nodes: map[string]*nodeClient{}, started: time.Now(),
+	c := &core{base: cfg, store: store, devices: map[string]*deviceClient{}, started: time.Now(),
 		rev: time.Now().UnixNano(), changed: make(chan struct{}), inbox: make(chan struct{}, 1),
 		updates: newUpdates(registryURL)}
 	c.dyn, c.skipped = loadCatalog(cfg, store)
@@ -120,31 +122,31 @@ func newCore(cfg *Config, store *Store) *core {
 	c.pool.connToken = c.connectionToken // a tool on a connection that mints its tokens
 	c.pool.connRefused = c.connectionRefused
 	c.pool.authHold = c.connectionHold // an account to connect again (connections.go)
-	c.pool.resourceUpdated = c.surfaceResourceUpdated
+	c.pool.resourceUpdated = c.nodeResourceUpdated
 	c.pool.toolsHeld = c.toolsHeld
 	c.pool.trusted = c.trustsServer
 	c.provideFolders() // the user's folders, a tool like any other (folder_tools.go)
-	// Local servers are services, reached on their node.
+	// Local servers are services, reached on their device.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {
 		return c.dialService(ctx, name)
 	}
 	return c
 }
 
-func (c *core) node(name string) *nodeClient {
+func (c *core) device(name string) *deviceClient {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	n := c.nodes[name]
+	n := c.devices[name]
 	if n == nil {
-		n = newNodeClient(name)
-		c.nodes[name] = n
+		n = newDeviceClient(name)
+		c.devices[name] = n
 	}
 	return n
 }
 
-// run starts the node status controller.
+// run starts the device status controller.
 func (c *core) run(ctx context.Context) {
-	c.checkNodes(ctx)
+	c.checkDevices(ctx)
 	go func() {
 		t := time.NewTicker(15 * time.Second)
 		defer t.Stop()
@@ -153,49 +155,49 @@ func (c *core) run(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				c.checkNodes(ctx)
+				c.checkDevices(ctx)
 			}
 		}
 	}()
 }
 
-func (c *core) checkNodes(ctx context.Context) {
-	nodes, err := c.store.nodes()
+func (c *core) checkDevices(ctx context.Context) {
+	devices, err := c.store.devices()
 	if err != nil {
 		log.Printf("store: %v", err)
 		return
 	}
-	for _, row := range nodes {
-		c.refreshNode(ctx, c.node(row.Name))
+	for _, row := range devices {
+		c.refreshDevice(ctx, c.device(row.Name))
 	}
 	c.syncAll(ctx) // the copies' plans (folder_copies.go)
-	if nodes, err = c.store.nodes(); err == nil {
-		c.resolveUpdates(nodes) // machine_updates.go
-		c.autoTLSOnly(nodes)    // machine_tls.go
+	if devices, err = c.store.devices(); err == nil {
+		c.resolveUpdates(devices) // machine_updates.go
+		c.autoTLSOnly(devices)    // machine_tls.go
 	}
 	c.followUpdates()
 	c.autoUpdates(time.Now())
 	c.replaceStranded()               // placement.go
 	c.harnessTick(time.Now())         // retries due, time budgets (task_retry.go)
-	c.threadsTick(time.Now())         // the threads' engine (thread_engine.go)
+	c.stepsTick()                     // the steps of the graph's works (node_steps.go)
 	c.judgeCardPushes(time.Now())     // how the cards pushed were used (card_use.go)
-	c.placeServices()                 // also when no node answers: a node gone too long loses its services
+	c.placeServices()                 // also when no device answers: a device gone too long loses its services
 	c.connectionTick(ctx, time.Now()) // the connections' tokens, now and then (connections.go)
 }
 
-// refreshNode records whether a node answers, and what it offers. A node
-// that answers may be the one a waiting task needs. It runs when a node
+// refreshDevice records whether a device answers, and what it offers. A device
+// that answers may be the one a waiting task needs. It runs when a device
 // connects and every 15 seconds.
-func (c *core) refreshNode(ctx context.Context, n *nodeClient) {
+func (c *core) refreshDevice(ctx context.Context, n *deviceClient) {
 	var info json.RawMessage
 	err := errOffline
 	if n.connected() {
-		info, err = n.info(ctx, nodeContextLevel) // locked, idle, do not disturb (route_signals.go)
+		info, err = n.info(ctx, deviceContextLevel) // locked, idle, do not disturb (route_signals.go)
 	}
 	if err == nil {
 		// The folders shared or unshared there, and those eriphe-core took
 		// off or lowered, told again (folders.go).
-		var after nodeInfo
+		var after deviceInfo
 		before := c.store.lastInfo(n.name)
 		json.Unmarshal(info, &after)
 		c.noteShared(n.name, before, after)
@@ -205,9 +207,9 @@ func (c *core) refreshNode(ctx context.Context, n *nodeClient) {
 	if err == nil {
 		info = c.takeIdle(n.name, info, time.Now()) // in memory only (route_signals.go)
 	} else {
-		c.obs.forget(n.name) // a node gone says nothing more
+		c.obs.forget(n.name) // a device gone says nothing more
 	}
-	if err := c.store.setNodeStatus(n.name, err == nil, info); err != nil {
+	if err := c.store.setDeviceStatus(n.name, err == nil, info); err != nil {
 		log.Printf("store: %v", err)
 		return
 	}
@@ -217,8 +219,8 @@ func (c *core) refreshNode(ctx context.Context, n *nodeClient) {
 	}
 }
 
-// placePending schedules again the tasks waiting for a node, and wakes the
-// nodes that get one.
+// placePending schedules again the tasks waiting for a device, and wakes the
+// devices that get one.
 func (c *core) placePending() {
 	c.placing.Lock()
 	defer c.placing.Unlock()
@@ -226,7 +228,7 @@ func (c *core) placePending() {
 	if err != nil || len(tasks) == 0 {
 		return
 	}
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		log.Printf("store: %v", err)
 		return
@@ -236,7 +238,7 @@ func (c *core) placePending() {
 		p, err := c.placementOf(t) // placement.go
 		if err == nil {
 			var name string
-			ready := c.schedulable(nodes)
+			ready := c.schedulable(devices)
 			name, err = schedule(ready, "", p, c.store.activeCount)
 			if err == nil {
 				if ok, _ := c.store.assign(t.ID, name); ok {
@@ -256,7 +258,7 @@ func (c *core) placePending() {
 			}
 			continue
 		}
-		// No node could ever run it now (forgotten, or the agent changed).
+		// No device could ever run it now (forgotten, or the agent changed).
 		log.Printf("task %s fails: %v", t.ID, err)
 		c.store.updateTask(t.ID, map[string]any{"state": stateFailed, "pending_reason": err.Error()})
 		c.notifyBrain(t.ID, stateFailed)
@@ -287,8 +289,9 @@ type runRequest struct {
 	Prompt    string        `json:"prompt" jsonschema:"what the agent must do, self-contained: it does not see this conversation"`
 	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository the user gave to Eriphe cloned into /work/repo (repo, with branch, base, dir; see list_repos), the user's folders and the places of their tools (folder, place; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
-	Node      string        `json:"node,omitempty" jsonschema:"node name; empty lets the scheduler choose"`
-	About     string        `json:"about,omitempty" jsonschema:"what it is about: thread:<id>, or an entity's key (person:<slug>); leave it out for what this turn is about (its thread)"`
+	Device    string        `json:"device,omitempty" jsonschema:"device name; empty lets the scheduler choose"`
+	About     string        `json:"about,omitempty" jsonschema:"what it is about: node:<id>, or an entity's key (person:<slug>); leave it out for what this turn is about (its node)"`
+	Node      string        `json:"node,omitempty" jsonschema:"the node this work belongs to, by its id: the task works in a node of its own, opened as a child of it; leave it out for a node at the top"`
 	// Contract: what must be true at the end, for a task that changes
 	// something (contract.go); none for a search or a read.
 	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
@@ -307,6 +310,10 @@ type runRequest struct {
 	// no card for what it is lent.
 	approvedInAdvance bool
 	taint             []string
+	// inNode: a step's task works in the step's node (node_steps.go), a
+	// skill's run in its standing node (skill_runs.go), not in a node of
+	// its own.
+	inNode string
 	// byBrain: the brain started it in its turn (run_task), so the start's
 	// card goes with its message; any other start shows its card at once
 	// (task_start.go).
@@ -322,7 +329,7 @@ func workerVoice(name, lang string) string {
 }
 
 // taskUntrusted: a task started on what came from outside, which may leave
-// something in its node's cache for the next tasks to run: the brain and the
+// something in its device's cache for the next tasks to run: the brain and the
 // assistants (they read the mail, the web…), memory extraction (it reads
 // their conversations), and a worker started on a tainted turn. Those get a
 // cache of their own; workers the user or an untainted turn started share
@@ -331,14 +338,14 @@ func taskUntrusted(kind string, taint []string) bool {
 	return kind != "worker" || len(taint) > 0
 }
 
-// runTask schedules a worker task, sends it to its node and starts following it.
+// runTask schedules a worker task, sends it to its device and starts following it.
 func (c *core) runTask(ctx context.Context, r runRequest) (*TaskRow, error) {
-	return c.startTask(ctx, "worker", r, nodeTaskSpec{AppendSystemPrompt: workerVoice(c.conf().assistantName(), c.userLang())})
+	return c.startTask(ctx, "worker", r, deviceTaskSpec{AppendSystemPrompt: workerVoice(c.conf().assistantName(), c.userLang())})
 }
 
 // startTask is runTask for any kind of task; extra carries the fields only
 // the brain uses (MCP servers, system prompt, allowed tools, resume).
-func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra nodeTaskSpec) (*TaskRow, error) {
+func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra deviceTaskSpec) (*TaskRow, error) {
 	if r.Prompt == "" {
 		return nil, errors.New("prompt is required")
 	}
@@ -354,11 +361,17 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if err != nil {
 		return nil, fmt.Errorf("about: %w", err)
 	}
+	if r.Node != "" && kind != "worker" {
+		return nil, errors.New("only a worker task works in a node")
+	}
+	if err := c.nodeParent(r.Node); err != nil { // task_node.go
+		return nil, err
+	}
 	agentName, agent, err := c.conf().agent(r.Agent)
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		return nil, err
 	}
@@ -373,19 +386,19 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 			return nil, err
 		}
 	}
-	if r.Node != "" && c.store.nodeSuspended(r.Node) {
-		return nil, suspendedError(r.Node) // node_access.go
+	if r.Device != "" && c.store.deviceSuspended(r.Device) {
+		return nil, suspendedError(r.Device) // device_access.go
 	}
-	if len(folders) > 0 && r.Node != "" && !slices.Contains(c.folderHolders(folders), r.Node) {
-		return nil, fmt.Errorf("the folders %s are not on %s, nor copied there: leave node empty", strings.Join(folderNames(folders), ", "), r.Node)
+	if len(folders) > 0 && r.Device != "" && !slices.Contains(c.folderHolders(folders), r.Device) {
+		return nil, fmt.Errorf("the folders %s are not on %s, nor copied there: leave device empty", strings.Join(folderNames(folders), ", "), r.Device)
 	}
-	// No online node may fit yet: the task then waits, without a node, for
+	// No online device may fit yet: the task then waits, without a device, for
 	// one that would (see placePending). An assistant someone waits on
-	// lives on an always-on node (placement.go).
+	// lives on an always-on device (placement.go).
 	p := c.taskPlacement(agent, folders)
 	p.Resident = residentKind(kind)
-	ready := c.schedulable(nodes)
-	name, err := schedule(ready, r.Node, p, c.store.activeCount)
+	ready := c.schedulable(devices)
+	name, err := schedule(ready, r.Device, p, c.store.activeCount)
 	var waiting *waitingError
 	if errors.As(err, &waiting) {
 		name, err = "", nil
@@ -397,7 +410,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if len(grant) > 0 && !harnessOf(agent.Runtime).MCP {
 		return nil, fmt.Errorf("agent %s runs %s: catalog tools need a runtime that takes MCP servers", agentName, agent.Runtime)
 	}
-	// The credentials are checked now, but only read again when the node fetches the task.
+	// The credentials are checked now, but only read again when the device fetches the task.
 	agentEnv, err := c.lend(agentName)
 	if err != nil {
 		return nil, err
@@ -405,7 +418,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	if err := c.checkAgentEnv(lent.List, agentEnv); err != nil {
 		return nil, err
 	}
-	// The node still gets the spec fields of before, derived from the resources.
+	// The device still gets the spec fields of before, derived from the resources.
 	var dir, repo, base, branch string
 	if lent.Repo != nil {
 		dir, repo, base, branch = lent.Repo.Dir, lent.Repo.Ref, lent.Repo.Base, lent.Repo.Branch
@@ -422,17 +435,26 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		needs = append(c.startNeeds(lent.List, r.cleanStart), c.accessStartNeeds(lent.List, r.cleanStart)...) // task_start.go
 		needs = append(needs, c.folderNeeds(lent.List, r.cleanStart)...)                                      // folder_values.go
 	}
-	t := &TaskRow{ID: newTaskID(), Node: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model, About: about,
+	t := &TaskRow{ID: newTaskID(), Device: name, Agent: agentName, Runtime: agent.Runtime, Model: agent.Model, About: about,
 		Dir: where, Title: r.title(), Prompt: r.Prompt, State: statePending,
-		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List, Pinned: r.Node != ""}
+		Kind: kind, Tools: strings.Join(grant, ","), Folders: lent.folderNames(), Resources: lent.List, Pinned: r.Device != ""}
 	if waiting != nil {
 		t.PendingReason = waiting.reason
 	}
 	if len(needs) > 0 {
 		t.Desired, t.PendingReason = desiredHeld, "waits for "+c.conf().User+"'s approval to start, asked on a card in the conversation"
 	}
+	if kind == "worker" {
+		if err := c.openTaskNode(t, r, len(needs) > 0); err != nil { // task_node.go
+			return nil, err
+		}
+	}
 	if err := c.store.insertTask(t); err != nil {
 		return nil, err
+	}
+	if len(r.taint) > 0 && c.store.get(taskTaintKey(t.ID)) == "" {
+		// Started on what someone else wrote: tainted from its start (task_taint.go).
+		c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(r.taint, ", "))
 	}
 	if r.Contract != nil {
 		if err := c.store.setContract(t.ID, r.Contract); err != nil {
@@ -440,8 +462,8 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 		}
 	}
 	if name != "" {
-		c.logPlaced(t, name) // its access log (node_access.go)
-		if r.Node == "" {
+		c.logPlaced(t, name) // its access log (device_access.go)
+		if r.Device == "" {
 			noteFallback(t.ID, kind, name, ready, p)
 		}
 	}
@@ -451,10 +473,13 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	spec.Command = agent.Command
 	spec.RepoSkills = c.repoSkills(ctx, lent.Repo)
 	spec.Untrusted = taskUntrusted(kind, r.taint)
-	spec.AgentEnv, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the node fetches the task
+	spec.AgentEnv, spec.MCPServers, spec.Servers, spec.AlwaysLoad = nil, nil, nil, nil // added when the device fetches the task
 	spec.Folders = nil                                                                 // the same
 	if kind == "worker" {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + c.taskNowText()) // situations.go
+		if c.taskNode(t.ID) != "" {
+			spec.AppendSystemPrompt += "\n\n" + nodesInstruction // task_nodes.go
+		}
 	}
 	if len(folders) > 0 {
 		spec.AppendSystemPrompt = strings.TrimSpace(spec.AppendSystemPrompt + "\n\n" + folderInstructions(folders))
@@ -468,7 +493,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra n
 	}
 	if kind == "worker" {
 		c.lendSkills(&spec) // skills_tasks.go
-		// What is known of its thread, after what it is asked (thread_card.go).
+		// What is known of what it is about, after what it is asked (about_card.go).
 		if card := c.startCard(about, placeTask, t.ID); card != "" {
 			spec.Prompt += "\n\n" + card
 		}
@@ -540,7 +565,7 @@ func (c *core) status(id string, n int) (*taskStatus, error) {
 			}
 		}
 	}
-	// An older node reported a task running again once one of its
+	// An older device reported a task running again once one of its
 	// requests made at once was answered: the others of its turn are still
 	// pending.
 	if t.State == stateWaitingPermission || t.State == stateRunning {
@@ -567,7 +592,7 @@ func (c *core) status(id string, n int) (*taskStatus, error) {
 
 // answer replies to what a task waits for: a pending permission (allow or
 // deny, with an optional message) or the agent's question (a new turn). The
-// answer goes to the task's inbox, which its node delivers. permission names
+// answer goes to the task's inbox, which its device delivers. permission names
 // the request answered; it may be empty when only one is pending. by says
 // who answers: the policy or the user, never the brain, which only replies.
 func (c *core) answer(ctx context.Context, id, permission, reply string, allow *bool, by string) (string, error) {
@@ -630,14 +655,14 @@ func (c *core) answer(ctx context.Context, id, permission, reply string, allow *
 	if err := c.store.addInbox(id, "message", map[string]any{"text": reply}); err != nil {
 		return "", err
 	}
-	// Running until the node says otherwise, so the same turn is not answered twice.
+	// Running until the device says otherwise, so the same turn is not answered twice.
 	c.store.updateTask(id, map[string]any{"state": stateRunning})
 	c.bump()
 	return "message sent", nil
 }
 
-// stop asks for a task to stop; a task its node never picked up, or that
-// still waits for a node, stops at once.
+// stop asks for a task to stop; a task its device never picked up, or that
+// still waits for a device, stops at once.
 func (c *core) stop(ctx context.Context, id string) error {
 	t, err := c.store.task(id)
 	if err != nil {

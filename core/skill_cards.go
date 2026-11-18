@@ -17,8 +17,6 @@ import (
 //     card (kind runcalls), with its message: each action and its
 //     parameters; the yes runs them all as kept, the no none. The brain is
 //     not told of their results: the run's note keeps them.
-//   - Lent eriphe-threads, it acts on threads with tools (task_threads.go),
-//     never with its message.
 //   - With urgent: <fixed text>, a run that weighs something 5 in its
 //     attention list sends that fixed text over the quiet hours and the
 //     daily cap, once per run, as an urgent rule does: nothing the run read
@@ -36,12 +34,13 @@ func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[s
 		return
 	}
 	raw, _ := json.Marshal(input)
-	var thread int64
-	c.store.db.QueryRow(`SELECT thread FROM skill_runs WHERE id = ?`, r.ID).Scan(&thread)
-	source, item, onItem := c.callItem(thread, tool, input)
+	// Its node: the item's when it acts on one of its node's items, else
+	// its run's node (item_cards.go).
+	node := c.taskNode(t.ID)
+	source, item, onItem := c.callItem(node, tool, input)
 	var id int64
 	switch {
-	case onItem && c.itemAskWaiting(thread, source, item, tool, string(raw)) != 0:
+	case onItem && c.itemAskWaiting(node, source, item, tool, string(raw)) != 0:
 		// The same call on the same item waits already: its card.
 	case !onItem && c.store.db.QueryRow(`SELECT id FROM access_asks WHERE run = ? AND batch = 0 AND call LIKE ? AND input = ? AND state = ?`,
 		r.ID, tool+" %", string(raw), startProposed).Scan(&id) == nil:
@@ -50,15 +49,12 @@ func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[s
 		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		cancel()
 		n := c.callNeed(tool, input, c.pool.facts(tool, input))
-		if !onItem {
-			thread = 0
-		}
-		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, thread, source, item)
+		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, node, source, item)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, pid, n.Server, n.Category, n.Account, tool+" "+string(fields), string(raw),
-			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID, thread, source, item)
+			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID, node, source, item)
 		if id, _ := rowsID(res, err); onItem && id > 0 {
 			// One card per item: the one its other calls on it are on.
-			batch := c.runItemBatch(r.ID, thread, source, item)
+			batch := c.runItemBatch(r.ID, node, source, item)
 			if batch == 0 {
 				batch = id
 			}
@@ -194,24 +190,9 @@ func (c *core) runUrgent(r *skillRun, tr *skillTrigger) {
 	}
 }
 
-// skillCanText is what a run is told of what its skill allows, and of
-// its thread, if it has one (skillThread).
-func skillCanText(tr *skillTrigger, th *Thread, sources []string) string {
+// skillCanText is what a run is told of what its skill allows.
+func skillCanText(tr *skillTrigger) string {
 	var b strings.Builder
-	if containsStr(tr.Tools, threadsServer) {
-		if th != nil {
-			fmt.Fprintf(&b, "\n\nTon fil : le thread %d « %s » (%s). Tu agis dessus avec les outils de %s, sans redonner son id : "+
-				"note chaque élément de ses sources (note_item), dis s'il attend l'utilisateur ou fixe une échéance (set_thread), fais-le remonter s'il le faut (set_thread raise), "+
-				"ajoute ce que l'utilisateur doit faire ou décider (add_step : user, deadline, ou call : une action qu'il approuve sur sa carte). Tu ne le clos jamais.",
-				th.ID, th.Title, th.Alias, threadsServer)
-			if len(sources) > 0 {
-				fmt.Fprintf(&b, " Ses sources qui listent des éléments : %s ; un élément s'y note par son id, celui que donnent ses événements. "+
-					"Une action que tu proposes sur un élément (un appel d'un de tes outils qui le nomme par son id) devient une carte sur sa ligne : l'utilisateur y répond, elle ne fait que cet appel. Pour lui laisser le choix, propose-la plutôt dans la note (note_item actions, \"$item\" là où va son id) : sa ligne l'offre en bouton, un clic en fait la carte.", strings.Join(sources, ", "))
-			}
-		} else {
-			b.WriteString("\n\nTu agis sur les fils avec les outils de " + threadsServer + " : trouve celui d'une chose (find_thread) avant d'en ouvrir un (open_thread).")
-		}
-	}
 	if tr.Urgent != "" {
 		b.WriteString("\n\nSi c'est grave et que l'utilisateur doit le savoir tout de suite, même la nuit, donne-lui le poids 5 dans ta liste attention : " +
 			"eriphe-core lui enverra son message d'urgence, fixé à l'avance.")

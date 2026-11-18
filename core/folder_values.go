@@ -21,14 +21,14 @@ var folderCases = []string{catRead, catChange}
 
 // deviceGridKey is where a machine's default is kept; folderGridKey a
 // folder's own cases, by its machine and id, which outlive its name.
-func deviceGridKey(node string) string { return "folder_grid:" + node }
+func deviceGridKey(device string) string { return "folder_grid:" + device }
 
-func folderGridKey(f *Folder) string { return "folder_case:" + f.Node + ":" + f.ID }
+func folderGridKey(f *Folder) string { return "folder_case:" + f.Device + ":" + f.ID }
 
 // deviceGrid is a machine's default for its folders: Free unless set.
-func (c *core) deviceGrid(node string) accessGrid {
+func (c *core) deviceGrid(device string) accessGrid {
 	var g accessGrid
-	json.Unmarshal([]byte(c.store.get(deviceGridKey(node))), &g)
+	json.Unmarshal([]byte(c.store.get(deviceGridKey(device))), &g)
 	g.Read, g.Change = cmpOr(g.Read, gridFree), cmpOr(g.Change, gridFree)
 	return g
 }
@@ -46,7 +46,7 @@ func (c *core) folderCase(f *Folder, category string) string {
 	if category == catChange && f.Access != accessWrite {
 		return gridNever
 	}
-	return c.deviceGrid(f.Node).over(c.folderOwn(f)).value(category)
+	return c.deviceGrid(f.Device).over(c.folderOwn(f)).value(category)
 }
 
 // folderRights are a folder's cases as they hold.
@@ -80,12 +80,12 @@ func checkFolderCase(category, value string, follow bool) error {
 }
 
 // setDeviceCase sets one case of a machine's default.
-func (c *core) setDeviceCase(node, category, value string) error {
+func (c *core) setDeviceCase(device, category, value string) error {
 	if err := checkFolderCase(category, value, false); err != nil {
 		return err
 	}
-	raw, _ := json.Marshal(c.deviceGrid(node).with(category, value))
-	return c.store.set(deviceGridKey(node), string(raw))
+	raw, _ := json.Marshal(c.deviceGrid(device).with(category, value))
+	return c.store.set(deviceGridKey(device), string(raw))
 }
 
 // setFolderCase gives one case of a folder its own value; "" has it follow

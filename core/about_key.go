@@ -4,20 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
-// What a record is about (#573): a thread, thread:<id>, or a key,
-// kind:slug, made by one function (aliasKey). A key is a thread's alias
-// (pr:owner/repo#12, project:site, alert:backup, topic:<monitor>), or an
+// What a record is about (#573): a node, node:<id>, or a key, kind:slug,
+// made by one function (aliasKey). A key names a matter remembered
+// (pr:owner/repo#12, project:site, alert:backup, topic:<monitor>) or an
 // entity of the memory: a person (person:lina), the user (owner), the
-// home, a tool (tool:x), Eriphe's own topics. A key no thread has yet is
-// kept as it is; once a thread takes it as its alias, what is about it is
-// about the thread (names.go). A ref names one record (card:12, task:t-…,
-// intention:5): a ref is never what a record is about, but thread:<id>.
-// A mail or an event is an item of a thread's source, never an about.
+// home, a tool (tool:x), Eriphe's own topics; it is kept as it is (names.go
+// indexes it). A ref names one record (card:12, task:t-…, intention:5): a
+// ref is never what a record is about, but node:<id>. A mail or an event
+// is an item of a node's source, never an about.
 //
 //   - The kind is one of aliasKinds; a French or plural name is its
 //     alias (projet → project), and an unknown kind, or a bare word, is a
@@ -45,7 +45,7 @@ const (
 // aliasKinds are the kinds of keys, in the order the tools list them.
 var aliasKinds = []string{aliasProject, aliasPerson, aliasClient, aliasPR, aliasAlert, aliasHome, aliasOwner, aliasTool, aliasTopic}
 
-// itemKinds are a source's items, never an about: a thread notes them.
+// itemKinds are a source's items, never an about: a node notes them.
 var itemKinds = map[string]bool{"mail": true, "mails": true, "courriel": true, "email": true, "event": true, "evenement": true, "events": true, "rdv": true}
 
 // aliasKindNames are the other names of a kind.
@@ -60,9 +60,9 @@ var aliasKindNames = map[string]string{
 	"topics": aliasTopic, "theme": aliasTopic,
 }
 
-// recordKinds name one record: a ref, never an about but thread:<id>.
+// recordKinds name one record: a ref, never an about but node:<id>.
 var recordKinds = map[string]bool{"task": true, "intention": true, "notification": true, "msg": true, "skill": true,
-	"thread": true, "card": true, "surface": true, "agenda": true, "memory": true, "run": true}
+	"node": true, "card": true, "agenda": true, "memory": true, "run": true}
 
 // aboutMax is the longest about kept.
 const aboutMax = 200
@@ -89,15 +89,15 @@ func recordRef(s string) (string, bool) {
 	return s, true
 }
 
-// aboutKey is what a record is about, as given: thread:<id>, or a key
+// aboutKey is what a record is about, as given: node:<id>, or a key
 // (aliasKey); "" is none.
 func aboutKey(s string) (string, error) {
 	t := strings.TrimSpace(s)
-	if id, ok := strings.CutPrefix(t, refThread+":"); ok {
-		if n, err := strconv.ParseInt(strings.TrimSpace(id), 10, 64); err == nil && n > 0 {
-			return threadRef(n), nil
+	if id, ok := strings.CutPrefix(t, refNode+":"); ok {
+		if id = strings.TrimSpace(id); nodefile.IDOK(id) {
+			return nodeRef(id), nil
 		}
-		return "", fmt.Errorf("%s: a thread is thread:<id>", t)
+		return "", fmt.Errorf("%s: a node is node:<id>", t)
 	}
 	return aliasKey(t)
 }
@@ -125,7 +125,7 @@ func aliasKey(s string) (string, error) {
 	case recordKinds[kind]:
 		return "", fmt.Errorf("%s is a record, not a key: a key is kind:slug, kind %s", s, strings.Join(aliasKinds, ", "))
 	case hasColon && itemKinds[strings.ToLower(strings.TrimSpace(rawKind))]:
-		return "", fmt.Errorf("%s: a mail or an event is an item of a thread's source (note_item), not a key: give its thread, or the matter's key", s)
+		return "", fmt.Errorf("%s: a mail or an event is an item of a node's source (item_note), not a key: give the matter's key", s)
 	case kind == "":
 		kind, rest = aliasTopic, s
 	case !isAliasKind(kind):
@@ -218,7 +218,7 @@ func singular(seg string) string {
 	return seg
 }
 
-// aboutFilter reads an about to search by: thread:<id>, a key, or every
+// aboutFilter reads an about to search by: node:<id>, a key, or every
 // key of a kind (person:, person:*), or of a key's sub-parts
 // (project:site*).
 func aboutFilter(s string) (key string, prefix bool, err error) {

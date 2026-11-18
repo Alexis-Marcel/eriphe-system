@@ -19,37 +19,37 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Services: MCP servers run as long-lived containers on a node, like a
+// Services: MCP servers run as long-lived containers on a device, like a
 // Kubernetes Deployment of one replica behind a Service: eriphe-core keeps
-// what each should be (its spec, its node), the node keeps its container
+// what each should be (its spec, its device), the device keeps its container
 // running and serves it as a streamable HTTP MCP endpoint through the
 // tunnel, and eriphe-core reaches it there (dialService). Who wants them is
 // not this module's business: its owners say (service_owners.go), the
 // catalog for its local servers (catalog_services.go), a channel for its
 // own.
 //
-//	GET  /v1/node/assignments              the node's tasks, and its services
-//	POST /v1/node/services/{name}/report   state, restarts, last error
-//	node: /v1/services/{name}/mcp          the service's MCP endpoint
+//	GET  /v1/device/assignments              the device's tasks, and its services
+//	POST /v1/device/services/{name}/report   state, restarts, last error
+//	device: /v1/services/{name}/mcp          the service's MCP endpoint
 
 // RunSpec is how a service runs (a catalog server's `run`, a channel's
-// own). Its secrets stay in files, read when its node fetches it.
+// own). Its secrets stay in files, read when its device fetches it.
 type RunSpec struct {
 	Image     string `json:"image"`
-	Transport string `json:"transport"`      // stdio (the node holds its stdin and stdout) or http
+	Transport string `json:"transport"`      // stdio (the device holds its stdin and stdout) or http
 	Port      int    `json:"port,omitempty"` // http: the port it listens on in its container
 	Path      string `json:"path,omitempty"` // http: its MCP path, /mcp by default
 	// Command line arguments, after the image's entrypoint.
 	Args []string            `json:"args,omitempty"`
 	Env  map[string]EnvValue `json:"env,omitempty"`
 
-	Node  string   `json:"node,omitempty"`  // pin it to a node; empty lets the scheduler choose
-	Needs []string `json:"needs,omitempty"` // node labels required
+	Device string   `json:"device,omitempty"` // pin it to a device; empty lets the scheduler choose
+	Needs  []string `json:"needs,omitempty"`  // device labels required
 	// Arch: its image runs on this architecture only (amd64); none: any.
 	Arch    string   `json:"arch,omitempty"`
-	Prefers []string `json:"prefers,omitempty"` // cpu, memory or a node label
+	Prefers []string `json:"prefers,omitempty"` // cpu, memory or a device label
 
-	Volume   bool   `json:"volume,omitempty"`   // a persistent /data, kept on its node
+	Volume   bool   `json:"volume,omitempty"`   // a persistent /data, kept on its device
 	User     string `json:"user,omitempty"`     // uid:gid, 1000:1000 by default; never root
 	Writable bool   `json:"writable,omitempty"` // a writable root filesystem (read-only by default)
 	Egress   *bool  `json:"egress,omitempty"`   // reach the network; true by default
@@ -131,8 +131,8 @@ func (s RunSpec) normalize() (RunSpec, error) {
 			return s, fmt.Errorf("env %s: the file must be an absolute path or vault:<name>", name)
 		}
 	}
-	if s.Node != "" && !nodeName.MatchString(s.Node) {
-		return s, fmt.Errorf("bad node %q", s.Node)
+	if s.Device != "" && !deviceName.MatchString(s.Device) {
+		return s, fmt.Errorf("bad device %q", s.Device)
 	}
 	if s.Arch != "" && s.Arch != "amd64" && s.Arch != "arm64" {
 		return s, fmt.Errorf("arch is amd64 or arm64, not %q", s.Arch)
@@ -181,9 +181,9 @@ func checkServices(specs map[string]RunSpec) (map[string]RunSpec, error) {
 // Eriphe's own images (RunSpec.Own: the mail's, the calendar's, a
 // channel's) read what eriphe-core writes them, which changes with it:
 // they run the image of eriphe-core's version, not whatever image a
-// machine pulled once (a node pulls an image it does not have, never a
+// machine pulled once (a device pulls an image it does not have, never a
 // newer one). A new version of eriphe-core changes their specs, so their
-// nodes run the new image. The images are published under the same tags
+// devices run the new image. The images are published under the same tags
 // as eriphe-core's (.github/workflows/ci.yml): 0.79.0 for a release,
 // sha-<commit> for a build of main. A development build ("dev") and an
 // image named with its tag or digest are left as they are.
@@ -211,7 +211,7 @@ func (s RunSpec) placement() placement {
 }
 
 // lendService reads a service's environment, secrets included, for its
-// node. The values are never stored or logged.
+// device. The values are never stored or logged.
 func lendService(s RunSpec) (map[string]string, error) {
 	env := map[string]string{}
 	for name, v := range s.Env {
@@ -228,18 +228,18 @@ func lendService(s RunSpec) (map[string]string, error) {
 	return env, nil
 }
 
-// A node gone for longer than this loses its services to another node,
+// A device gone for longer than this loses its services to another device,
 // unless they are pinned to it or keep data on it.
-const serviceNodeGrace = 5 * time.Minute
+const serviceDeviceGrace = 5 * time.Minute
 
-// serviceMoveAfter is how many failed starts on a node make a tool try
+// serviceMoveAfter is how many failed starts on a device make a tool try
 // another one.
 const serviceMoveAfter = 3
 
 // registerServices makes specs the desired services: new ones are placed,
-// changed ones restart (on another node if theirs no longer fits), and
-// those left out are removed, their containers stopped by their node. A
-// service's volume stays on its node. specs are every service, every
+// changed ones restart (on another device if theirs no longer fits), and
+// those left out are removed, their containers stopped by their device. A
+// service's volume stays on its device. specs are every service, every
 // owner's: reconcileServices gathers them.
 func (c *core) registerServices(specs map[string]RunSpec) error {
 	specs, err := checkServices(specs)
@@ -264,10 +264,10 @@ func (c *core) registerServices(specs map[string]RunSpec) error {
 			return err
 		}
 		c.failedOn.Delete(name) // a new spec gets a new chance everywhere
-		if old != nil && old.Node != "" {
-			// A new pin, or new needs: the node may not fit any more.
-			nodes, _ := c.store.nodes()
-			if spec.Node != "" && spec.Node != old.Node || !nodeFits(nodes, old.Node, spec.placement()) {
+		if old != nil && old.Device != "" {
+			// A new pin, or new needs: the device may not fit any more.
+			devices, _ := c.store.devices()
+			if spec.Device != "" && spec.Device != old.Device || !deviceFits(devices, old.Device, spec.placement()) {
 				c.store.unassignService(name, "")
 			}
 		}
@@ -283,8 +283,8 @@ func (c *core) registerServices(specs map[string]RunSpec) error {
 	return nil
 }
 
-func nodeFits(nodes []NodeRow, name string, p placement) bool {
-	for _, n := range nodes {
+func deviceFits(devices []DeviceRow, name string, p placement) bool {
+	for _, n := range devices {
 		if n.Name == name {
 			return p.fits(n)
 		}
@@ -293,16 +293,16 @@ func nodeFits(nodes []NodeRow, name string, p placement) bool {
 }
 
 // movable says whether the scheduler may move a service: one pinned to a
-// node, or keeping a /data there, stays.
-func movable(s RunSpec) bool { return s.Node == "" && !s.Volume }
+// device, or keeping a /data there, stays.
+func movable(s RunSpec) bool { return s.Device == "" && !s.Volume }
 
-// serviceNodes narrows the nodes a tool may go to. A tool must answer at
-// 8 am and at midnight: the always-on nodes first, the others only when
-// none of those can run it. The node it kept failing on is left out while
+// serviceDevices narrows the devices a tool may go to. A tool must answer at
+// 8 am and at midnight: the always-on devices first, the others only when
+// none of those can run it. The device it kept failing on is left out while
 // another can take it.
-func serviceNodes(nodes []NodeRow, p placement, avoid string) []NodeRow {
-	var steady, rest []NodeRow
-	for _, n := range nodes {
+func serviceDevices(devices []DeviceRow, p placement, avoid string) []DeviceRow {
+	var steady, rest []DeviceRow
+	for _, n := range devices {
 		if n.Name == avoid || !p.fits(n) {
 			continue
 		}
@@ -318,24 +318,24 @@ func serviceNodes(nodes []NodeRow, p placement, avoid string) []NodeRow {
 	case len(rest) > 0:
 		return rest
 	}
-	return nodes // none other: the scheduler says why
+	return devices // none other: the scheduler says why
 }
 
-// steadyOnline reports whether an online always-on node, other than the
+// steadyOnline reports whether an online always-on device, other than the
 // one to avoid, can run p.
-func steadyOnline(nodes []NodeRow, p placement, avoid string) bool {
-	return slices.ContainsFunc(steadyNodes(nodes, p), func(n NodeRow) bool { return n.Name != avoid })
+func steadyOnline(devices []DeviceRow, p placement, avoid string) bool {
+	return slices.ContainsFunc(steadyDevices(devices, p), func(n DeviceRow) bool { return n.Name != avoid })
 }
 
-// avoided is the node a service kept failing on, if any.
+// avoided is the device a service kept failing on, if any.
 func (c *core) avoided(name string) string {
 	v, _ := c.failedOn.Load(name)
 	s, _ := v.(string)
 	return s
 }
 
-// placeServices gives a node to the services without one, and takes theirs
-// from the services whose node has been gone too long. It runs when a node
+// placeServices gives a device to the services without one, and takes theirs
+// from the services whose device has been gone too long. It runs when a device
 // answers, and every 15 seconds.
 func (c *core) placeServices() {
 	c.placing.Lock()
@@ -345,13 +345,13 @@ func (c *core) placeServices() {
 		log.Printf("store: %v", err)
 		return
 	}
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		log.Printf("store: %v", err)
 		return
 	}
-	byName := map[string]NodeRow{}
-	for _, n := range nodes {
+	byName := map[string]DeviceRow{}
+	for _, n := range devices {
 		byName[n.Name] = n
 	}
 	changed := false
@@ -360,32 +360,32 @@ func (c *core) placeServices() {
 			continue
 		}
 		avoid := c.avoided(r.Name)
-		if r.Node != "" {
-			n, known := byName[r.Node]
+		if r.Device != "" {
+			n, known := byName[r.Device]
 			switch {
-			case n.Online && (parseInfo(n).AlwaysOn || !movable(r.Spec) || !steadyOnline(nodes, r.Spec.placement(), avoid)):
+			case n.Online && (parseInfo(n).AlwaysOn || !movable(r.Spec) || !steadyOnline(devices, r.Spec.placement(), avoid)):
 				continue
 			case n.Online:
 				// A tool on a machine that sleeps, now that one that does not can take it.
 			case !known:
-				// The node was forgotten: its services, volumes or not, go elsewhere.
-			case n.Suspended && r.Spec.Node == "" && !r.Spec.Volume:
-				// Its access is cut (node_access.go): what can move goes now.
-			case r.Spec.Node != "" || r.Spec.Volume:
-				continue // it waits for its node
-			case time.Since(n.LastSeen) < serviceNodeGrace:
+				// The device was forgotten: its services, volumes or not, go elsewhere.
+			case n.Suspended && r.Spec.Device == "" && !r.Spec.Volume:
+				// Its access is cut (device_access.go): what can move goes now.
+			case r.Spec.Device != "" || r.Spec.Volume:
+				continue // it waits for its device
+			case time.Since(n.LastSeen) < serviceDeviceGrace:
 				continue
 			}
-			log.Printf("service %s leaves node %s", r.Name, r.Node)
-			c.store.unassignService(r.Name, fmt.Sprintf("node %s is gone", r.Node))
-			r.Node = ""
+			log.Printf("service %s leaves device %s", r.Name, r.Device)
+			c.store.unassignService(r.Name, fmt.Sprintf("device %s is gone", r.Device))
+			r.Device = ""
 			changed = true
 		}
-		candidates := nodes
+		candidates := devices
 		if movable(r.Spec) {
-			candidates = serviceNodes(nodes, r.Spec.placement(), avoid)
+			candidates = serviceDevices(devices, r.Spec.placement(), avoid)
 		}
-		name, err := schedule(candidates, r.Spec.Node, r.Spec.placement(), c.serviceLoad)
+		name, err := schedule(candidates, r.Spec.Device, r.Spec.placement(), c.serviceLoad)
 		if err != nil {
 			if err.Error() != r.PendingReason {
 				c.store.updateService(r.Name, map[string]any{"pending_reason": err.Error()})
@@ -402,23 +402,23 @@ func (c *core) placeServices() {
 	}
 }
 
-// serviceLoad is what a node already runs, for the scheduler's score.
-func (c *core) serviceLoad(node string) (int, error) {
-	tasks, err := c.store.activeCount(node)
+// serviceLoad is what a device already runs, for the scheduler's score.
+func (c *core) serviceLoad(device string) (int, error) {
+	tasks, err := c.store.activeCount(device)
 	if err != nil {
 		return 0, err
 	}
-	return tasks + c.store.serviceCount(node), nil
+	return tasks + c.store.serviceCount(device), nil
 }
 
-// nodeService is one service as its node receives it, with its secrets.
-type nodeService struct {
-	Name string          `json:"name"`
-	Hash string          `json:"hash"`
-	Spec nodeServiceSpec `json:"spec"`
+// deviceService is one service as its device receives it, with its secrets.
+type deviceService struct {
+	Name string            `json:"name"`
+	Hash string            `json:"hash"`
+	Spec deviceServiceSpec `json:"spec"`
 }
 
-type nodeServiceSpec struct {
+type deviceServiceSpec struct {
 	Image     string            `json:"image"`
 	Transport string            `json:"transport"`
 	Port      int               `json:"port,omitempty"`
@@ -431,16 +431,16 @@ type nodeServiceSpec struct {
 	Egress    bool              `json:"egress"`
 }
 
-// serviceAssignments are the services a node must run, their secrets read
+// serviceAssignments are the services a device must run, their secrets read
 // now. One whose secret cannot be read fails, and is left out.
-func (c *core) serviceAssignments(node string) ([]nodeService, error) {
+func (c *core) serviceAssignments(device string) ([]deviceService, error) {
 	rows, err := c.store.services()
 	if err != nil {
 		return nil, err
 	}
-	out := []nodeService{}
+	out := []deviceService{}
 	for _, r := range rows {
-		if r.Node != node || r.Desired != desiredRunning {
+		if r.Device != device || r.Desired != desiredRunning {
 			continue
 		}
 		env, err := lendService(r.Spec)
@@ -456,14 +456,14 @@ func (c *core) serviceAssignments(node string) ([]nodeService, error) {
 			env["TZ"] = c.conf().TimeZone // its dates in the user's zone, like the tasks'
 		}
 		s := r.Spec
-		out = append(out, nodeService{Name: r.Name, Hash: r.Hash, Spec: nodeServiceSpec{
+		out = append(out, deviceService{Name: r.Name, Hash: r.Hash, Spec: deviceServiceSpec{
 			Image: s.Image, Transport: s.Transport, Port: s.Port, Path: s.Path, Args: s.Args, Env: env,
 			User: s.User, Writable: s.Writable, Volume: s.Volume, Egress: s.Egress == nil || *s.Egress}})
 	}
 	return out, nil
 }
 
-// serviceReport is what a node says about one of its services.
+// serviceReport is what a device says about one of its services.
 type serviceReport struct {
 	State    string `json:"state"` // starting, running, failed (restarting), stopped
 	Restarts int    `json:"restarts"`
@@ -471,14 +471,14 @@ type serviceReport struct {
 }
 
 func (c *core) handleServiceReport(w http.ResponseWriter, r *http.Request) {
-	node, ok := c.nodeFromRequest(r)
+	device, ok := c.deviceFromRequest(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	s, err := c.store.service(r.PathValue("name"))
-	if err != nil || s.Node != node {
-		http.Error(w, "no such service on this node", http.StatusNotFound)
+	if err != nil || s.Device != device {
+		http.Error(w, "no such service on this device", http.StatusNotFound)
 		return
 	}
 	var in serviceReport
@@ -498,19 +498,19 @@ func (c *core) handleServiceReport(w http.ResponseWriter, r *http.Request) {
 		c.serviceRunning(s.Name)
 	}
 	if in.State == stateFailed && in.Restarts >= serviceMoveAfter && movable(s.Spec) {
-		go c.moveFailed(s.Name, node, in.Restarts)
+		go c.moveFailed(s.Name, device, in.Restarts)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// moveFailed takes a service that keeps failing on a node (an image the
-// machine cannot pull, say) to another one. The node stays avoided until
+// moveFailed takes a service that keeps failing on a device (an image the
+// machine cannot pull, say) to another one. The device stays avoided until
 // the service's spec changes or eriphe-core restarts, so that it does not
 // come back to fail again.
-func (c *core) moveFailed(name, node string, restarts int) {
-	log.Printf("service %s failed %d times on %s, trying another node", name, restarts, node)
-	c.failedOn.Store(name, node)
-	c.store.unassignService(name, fmt.Sprintf("failed on node %s", node))
+func (c *core) moveFailed(name, device string, restarts int) {
+	log.Printf("service %s failed %d times on %s, trying another device", name, restarts, device)
+	c.failedOn.Store(name, device)
+	c.store.unassignService(name, fmt.Sprintf("failed on device %s", device))
 	c.placeServices()
 	c.bump()
 }
@@ -536,7 +536,7 @@ func (c *core) handleServices(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, rows)
 }
 
-// serviceEndpoint is how eriphe-core reaches a running service: its node's
+// serviceEndpoint is how eriphe-core reaches a running service: its device's
 // MCP endpoint, through the tunnel. The client has no timeout: an MCP
 // session keeps a stream open.
 func (c *core) serviceEndpoint(name string) (*http.Client, string, error) {
@@ -545,24 +545,24 @@ func (c *core) serviceEndpoint(name string) (*http.Client, string, error) {
 		return nil, "", err
 	}
 	switch {
-	case s.Node == "":
+	case s.Device == "":
 		reason := s.PendingReason
 		if reason == "" {
 			reason = "not placed yet"
 		}
-		return nil, "", fmt.Errorf("service %s has no node: %s", name, reason)
+		return nil, "", fmt.Errorf("service %s has no device: %s", name, reason)
 	case s.State != stateRunning:
-		msg := fmt.Sprintf("service %s is %s on %s", name, s.State, s.Node)
+		msg := fmt.Sprintf("service %s is %s on %s", name, s.State, s.Device)
 		if s.Error != "" {
 			msg += ": " + s.Error
 		}
 		return nil, "", errors.New(msg)
 	}
-	n := c.node(s.Node)
+	n := c.device(s.Device)
 	if !n.connected() {
-		return nil, "", fmt.Errorf("service %s: node %s is not connected", name, s.Node)
+		return nil, "", fmt.Errorf("service %s: device %s is not connected", name, s.Device)
 	}
-	return n.stream, "http://node/v1/services/" + name + "/mcp", nil
+	return n.stream, "http://device/v1/services/" + name + "/mcp", nil
 }
 
 // dialService opens an MCP transport to a running service: for the

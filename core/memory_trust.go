@@ -98,33 +98,15 @@ func scanMemoryText(parts ...string) scanResult {
 			return res
 		}
 	}
-	for _, re := range secretRes {
-		if re.MatchString(text) {
-			res.Reject = "it looks like a credential: secrets belong in the vault, never in the memory"
-			return res
-		}
-	}
-	for _, m := range longTokenRe.FindAllString(text, -1) {
-		if looksRandom(m) {
-			res.Reject = "it holds a long random string, which looks like a credential"
-			return res
-		}
+	if why := scanSecrets(text); why != "" {
+		res.Reject = why
+		return res
 	}
 	for _, raw := range urlRe2.FindAllString(text, -1) {
 		u, err := url.Parse(strings.TrimRight(raw, ".,;:!?)"))
 		if err != nil {
 			res.Flags = append(res.Flags, "url")
 			continue
-		}
-		if u.User != nil {
-			res.Reject = "a link carries a user name or password"
-			return res
-		}
-		for k := range u.Query() {
-			if secretKeys.MatchString(k) {
-				res.Reject = "a link carries a token (" + k + "=…): keep the link without it"
-				return res
-			}
 		}
 		if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "obsidian" {
 			res.Flags = append(res.Flags, "url-scheme")
@@ -137,6 +119,56 @@ func scanMemoryText(parts ...string) scanResult {
 		}
 	}
 	return res
+}
+
+// scanSecrets tells why a text holds a secret: a credential, a long
+// random string, a link with a password or a token; "" when it holds
+// none. The memory and the graph's nodes (nodes.go) refuse such a text.
+func scanSecrets(text string) string {
+	for _, re := range secretRes {
+		if re.MatchString(text) {
+			return "it looks like a credential: secrets belong in the vault"
+		}
+	}
+	for _, m := range longTokenRe.FindAllString(withoutLinkPaths(text), -1) {
+		if looksRandom(m) {
+			return "it holds a long random string, which looks like a credential"
+		}
+	}
+	for _, raw := range urlRe2.FindAllString(text, -1) {
+		u, err := url.Parse(strings.TrimRight(raw, ".,;:!?)"))
+		if err != nil {
+			continue
+		}
+		if u.User != nil {
+			return "a link carries a user name or password"
+		}
+		frag, _ := url.ParseQuery(u.Fragment) // an access token comes back in a fragment too
+		for _, q := range []url.Values{u.Query(), frag} {
+			for k := range q {
+				if secretKeys.MatchString(k) {
+					return "a link carries a token (" + k + "=…): keep the link without it"
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// withoutLinkPaths is text with each link's address and path left out,
+// its query and fragment kept: a path names things (a repository, a pull
+// request, a document's id), and its segments joined by / or a document's
+// id would read as a long random string. What a link carries as a token
+// is still seen: a credential's known shape anywhere (secretRes), a
+// query's or fragment's key or long random value, a user name or password.
+func withoutLinkPaths(text string) string {
+	return urlRe2.ReplaceAllStringFunc(text, func(raw string) string {
+		u, err := url.Parse(strings.TrimRight(raw, ".,;:!?)"))
+		if err != nil || u.Opaque != "" {
+			return raw
+		}
+		return " " + u.Host + " " + u.RawQuery + " " + u.Fragment + " "
+	})
 }
 
 // looksRandom tells a credential-like string from a word or a path: digits,
@@ -168,9 +200,10 @@ type brainTurn struct {
 	from, to  int // the seqs of the messages delivered in this turn
 	eventSeq  int // the brain task's last event when the turn started
 	tainted   []string
-	thread    int64                // the thread the turn is about: the last one it named (thread_turn.go)
-	talk      int64                // the thread its answer belongs to, 0 for the home (thread_talk.go)
-	namedRefs []string             // the threads and entities my messages of the turn name (names.go)
+	node      string               // the node the turn is about: the last one it named (node_turn.go)
+	talk      string               // the node its answer belongs to, "" for the home (node_turn.go)
+	filed     bool                 // the brain wrote a node in this turn: its answer needs no filing (node_net.go)
+	namedRefs []string             // the entities my messages of the turn name (names.go)
 	keep      func(brainTurnState) // stores it, so a restart of eriphe-core does not forget it
 }
 
@@ -180,8 +213,9 @@ type brainTurnState struct {
 	To       int      `json:"to"`
 	EventSeq int      `json:"event_seq"`
 	Tainted  []string `json:"tainted,omitempty"`
-	Thread   int64    `json:"thread,omitempty"`
-	Talk     int64    `json:"talk,omitempty"`
+	Node     string   `json:"node,omitempty"`
+	Talk     string   `json:"talk,omitempty"`
+	Filed    bool     `json:"filed,omitempty"`
 	Named    []string `json:"named,omitempty"`
 }
 
@@ -209,20 +243,20 @@ func (t *brainTurn) load(raw string, brainRuns bool) {
 		}
 		return
 	}
-	t.from, t.to, t.eventSeq, t.tainted, t.thread, t.talk, t.namedRefs = st.From, st.To, st.EventSeq, st.Tainted, st.Thread, st.Talk, st.Named
+	t.from, t.to, t.eventSeq, t.tainted, t.node, t.talk, t.filed, t.namedRefs = st.From, st.To, st.EventSeq, st.Tainted, st.Node, st.Talk, st.Filed, st.Named
 }
 
 // save is called with t.mu held.
 func (t *brainTurn) save() {
 	if t.keep != nil {
-		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...), t.thread, t.talk, append([]string(nil), t.namedRefs...)})
+		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...), t.node, t.talk, t.filed, append([]string(nil), t.namedRefs...)})
 	}
 }
 
 func (t *brainTurn) start(from, to, eventSeq int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.from, t.to, t.eventSeq, t.tainted, t.thread, t.talk, t.namedRefs = from, to, eventSeq, nil, 0, 0, nil
+	t.from, t.to, t.eventSeq, t.tainted, t.node, t.talk, t.filed, t.namedRefs = from, to, eventSeq, nil, "", "", false, nil
 	t.save()
 }
 
@@ -237,6 +271,7 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 		t.from = from
 	}
 	t.to, t.eventSeq = max(t.to, to), eventSeq
+	t.filed = false // a new answer: the net looks at it alone (node_net.go)
 	for _, why := range carried {
 		if !containsStr(t.tainted, why) {
 			t.tainted = append(t.tainted, why)
@@ -362,6 +397,9 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 		}
 		switch {
 		case strings.HasPrefix(name, "mcp__eriphe-core__"):
+		case strings.HasPrefix(name, "mcp__"+nodesServer+"__"):
+			// The task's own node: what it reads there taints by its own
+			// record (task_nodes.go).
 		case slices.ContainsFunc(providedServers, func(s string) bool { return strings.HasPrefix(name, "mcp__"+s+"__") }):
 			// Eriphe's own (the workspace), as eriphe-core's: what it tells
 			// of a source's result or error taints by its own record

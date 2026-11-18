@@ -59,14 +59,14 @@ func TestWebJoinWait(t *testing.T) {
 	}
 
 	// Joined with its token, but not connected yet: still waiting.
-	if _, err := tw.c.store.joinNode(hashSecret(token), "desk", hashSecret("s")); err != nil {
+	if _, err := tw.c.store.joinDevice(hashSecret(token), "desk", hashSecret("s")); err != nil {
 		t.Fatal(err)
 	}
 	if body := waiting("fr"); !strings.Contains(body, "En attente de desk…") {
 		t.Fatalf("joined but offline:\n%s", body)
 	}
 
-	tw.c.store.setNodeStatus("desk", true, []byte(`{}`))
+	tw.c.store.setDeviceStatus("desk", true, []byte(`{}`))
 	for lang, want := range map[string][]string{"fr": {"desk est connecté", "Terminer"}, "en": {"desk is connected", "Done"}} {
 		body := waiting(lang)
 		for _, w := range append(want, `hx-select="#devices-grid"`, `method="dialog"`, "join-done") {
@@ -86,7 +86,7 @@ func TestWebJoinWait(t *testing.T) {
 	if body := waiting("fr"); !strings.Contains(body, "En attente de desk…") {
 		t.Fatalf("rejoin, before the device joins again:\n%s", body)
 	}
-	if _, err := tw.c.store.joinNode(hashSecret(token), "desk", hashSecret("s2")); err != nil {
+	if _, err := tw.c.store.joinDevice(hashSecret(token), "desk", hashSecret("s2")); err != nil {
 		t.Fatal(err)
 	}
 	if body := waiting("fr"); !strings.Contains(body, "desk est connecté") {

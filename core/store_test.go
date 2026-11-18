@@ -42,21 +42,21 @@ func TestStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.registerNode("pc", hashSecret("secret")); err != nil {
+	if err := s.registerDevice("pc", hashSecret("secret")); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.setNodeStatus("pc", true, []byte(`{"cpus":20}`)); err != nil {
+	if err := s.setDeviceStatus("pc", true, []byte(`{"cpus":20}`)); err != nil {
 		t.Fatal(err)
 	}
-	if !s.checkNode("pc", hashSecret("secret")) || s.checkNode("pc", hashSecret("other")) {
-		t.Fatal("checkNode")
+	if !s.checkDevice("pc", hashSecret("secret")) || s.checkDevice("pc", hashSecret("other")) {
+		t.Fatal("checkDevice")
 	}
-	nodes, _ := s.nodes()
-	if len(nodes) != 1 || !nodes[0].Online || string(nodes[0].Info) != `{"cpus":20}` {
-		t.Fatalf("nodes = %+v", nodes)
+	devices, _ := s.devices()
+	if len(devices) != 1 || !devices[0].Online || string(devices[0].Info) != `{"cpus":20}` {
+		t.Fatalf("devices = %+v", devices)
 	}
 
-	task := &TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", Dir: "/w", Prompt: "do", State: stateRunning}
+	task := &TaskRow{ID: "t-1", Device: "pc", Runtime: "claude-code", Dir: "/w", Prompt: "do", State: stateRunning}
 	if err := s.insertTask(task); err != nil {
 		t.Fatal(err)
 	}

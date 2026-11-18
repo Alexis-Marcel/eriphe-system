@@ -18,8 +18,7 @@ func TestAssistantRolePowers(t *testing.T) {
 	}
 	brain := assistantRoles[assistantRoleBrain]
 	for _, p := range assistantPowers {
-		// It reports to nobody; its web is its own path (brain_web.go).
-		if !brain.can(p) && p != powerReports {
+		if !brain.can(p) {
 			t.Errorf("the brain cannot %s", p)
 		}
 	}
@@ -189,7 +188,7 @@ func TestWebCheckUpdatesNow(t *testing.T) {
 	tw.c.updates.mu.Lock()
 	tw.c.updates.asked = time.Now().Add(-checkNowEvery)
 	tw.c.updates.mu.Unlock()
-	tw.c.updates.base = newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.2.0"}).srv.URL
+	tw.c.updates.base = newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-device": "0.2.0"}).srv.URL
 	if _, _, hdr := tw.do("POST", "/settings/updates/check", nil, h); hdr.Get("HX-Refresh") != "true" || tw.c.updates.version("eriphe-core") != "0.2.0" {
 		t.Fatalf("a new release: %v", hdr)
 	}

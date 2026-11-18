@@ -15,7 +15,7 @@ import (
 // The brain speaks on its own (notify), and the code decides when. The
 // model writes the words and weighs them, 1 to 5 (the attention scale:
 // attention.go); what happens is decideNotify's: the user's rules (a floor
-// and a ceiling of weight per thread, key or kind, notify_rules.go), then the
+// and a ceiling of weight per node, key or kind, notify_rules.go), then the
 // quiet hours and the daily cap. Then it enters the attention queue
 // (attention.go), the one path to the user, at its decided weight: from
 // weightSent it is delivered at once (outcome now), lighter it is held
@@ -53,7 +53,7 @@ const notifySchema = `CREATE TABLE IF NOT EXISTS notifications (
   asked INTEGER NOT NULL DEFAULT 0, tainted TEXT NOT NULL DEFAULT '', msg INTEGER,
   held INTEGER NOT NULL DEFAULT 0, feedback TEXT NOT NULL DEFAULT '', feedback_at INTEGER,
   token TEXT NOT NULL,
-  about TEXT NOT NULL DEFAULT ''); -- what it is about: thread:<id> or an entity's key (about.go)
+  about TEXT NOT NULL DEFAULT ''); -- what it is about: node:<id> or an entity's key (about.go)
 CREATE INDEX IF NOT EXISTS notifications_created ON notifications (created);`
 
 func init() { extraSchema = append(extraSchema, notifySchema) }
@@ -108,7 +108,7 @@ type notification struct {
 	Text       string    `json:"text"`
 	Why        string    `json:"why"`
 	Ref        string    `json:"ref,omitempty"`   // the record it is about: intention:12, skill:<name>
-	About      string    `json:"about,omitempty"` // what it is about: thread:<id> or a key (about_key.go)
+	About      string    `json:"about,omitempty"` // what it is about: node:<id> or a key (about_key.go)
 	Source     string    `json:"source"`
 	Weight     int       `json:"weight"`  // as decided: the asked weight, through the rules
 	Outcome    string    `json:"outcome"` // what the code decided: now, brief or never
@@ -125,13 +125,12 @@ type notification struct {
 
 // notifyItem is what decideNotify judges.
 type notifyItem struct {
-	Weight  int      // 1 to 5, as asked
-	About   string   // what it is about: thread:<id>, person:lina…
-	Aliases []string // its thread's keys (project:getout…): a rule on one matches it
-	Ref     string   // the record it is about: intention:12, skill:<name>…
-	Asked   bool     // the user asked for it in their own words: not counted in the cap
-	Tainted bool     // drawn from external content
-	Where   string   // the line the writer would try first (where_now.go); "" for the router's order
+	Weight  int    // 1 to 5, as asked
+	About   string // what it is about: node:<id>, person:lina…
+	Ref     string // the record it is about: intention:12, skill:<name>…
+	Asked   bool   // the user asked for it in their own words: not counted in the cap
+	Tainted bool   // drawn from external content
+	Where   string // the line the writer would try first (where_now.go); "" for the router's order
 	// Spoken: the caller writes it in the conversation itself when it is
 	// delivered now (the brain's own words): its item enters delivered.
 	Spoken bool
@@ -246,12 +245,8 @@ func (c *core) notifyContext() (notifyContext, error) {
 // notify decides on n, keeps it, puts it in the attention queue (not when
 // never), and pushes it when it is delivered now at weight 5.
 func (c *core) notify(n *notification, it notifyItem) (*notification, error) {
-	// A thread's alias is kept as its thread (names.go).
 	n.About = c.store.noteAbout(n.About)
 	it.About, it.Ref = n.About, n.Ref
-	if id, ok := threadOfAbout(n.About); ok {
-		it.Aliases = c.threadNames(id)
-	}
 	cx, err := c.notifyContext()
 	if err != nil {
 		return nil, err

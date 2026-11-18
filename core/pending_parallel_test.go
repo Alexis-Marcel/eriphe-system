@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// An older node reports a task running again once the first of two requests
+// An older device reports a task running again once the first of two requests
 // made at once is answered: the second stays pending, and the brain can
 // answer it; a turn's end leaves none waiting.
 func TestPendingWhileRunning(t *testing.T) {

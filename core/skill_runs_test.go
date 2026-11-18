@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +15,7 @@ func TestSkillTriggerParse(t *testing.T) {
 	}
 	for _, ok := range []string{
 		"", "when: monitor.new\n", "when: monitor.received key=getout\nevery: 15m\n",
-		"when: time weekdays 08:00\nmodel: small\n", "when: monitor.new\ntools: [mail, calendar, eriphe-threads]\nthread: topic:mails\n",
+		"when: time weekdays 08:00\nmodel: small\n", "when: monitor.new\ntools: [mail, calendar]\nnode: k3x9m2p7qa\n",
 		"when: monitor.received key=maison status=couche\nevery: 1d\n",
 		"when: monitor.failed, monitor.recovered key=getout-prod\n", "when: monitor.failed,monitor.recovered\n",
 	} {
@@ -24,22 +25,31 @@ func TestSkillTriggerParse(t *testing.T) {
 	}
 	for _, bad := range []string{
 		"every: 15m\n", "when: Mail\n", "when: monitor.new key\n", "when: time\n", "when: time weekdays 08:00\nevery: 1h\n",
-		"when: monitor.new\nevery: 2m\n", "when: monitor.new\nevery: 3d\n", "when: monitor.new\nthread: task:t-1\n",
+		"when: monitor.new\nevery: 2m\n", "when: monitor.new\nevery: 3d\n", "when: monitor.new\nnode: task:t-1\n",
 		"when: monitor.new\ntools: [Bad Name]\n",
+		"when: monitor.new\nrepos: [not-a-repo]\n", "repos: [owner/repo]\n",
 		"when: monitor.new, time\n", "when: monitor.new, Mail\n", "when: a.b, c.d, e.f, g.h, i.j, k.l\n", "when: , key=x\n",
 	} {
 		if _, err := parseSkillMD(front(bad)); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
 	}
-	m, _ := parseSkillMD(front("when: monitor.received key=getout\nevery: 15m\ntools: [monitor, eriphe-threads]\nthread: project:getout\n"))
+	m, _ := parseSkillMD(front("when: monitor.received key=getout\nevery: 15m\ntools: [monitor]\nnode: k3x9m2p7qa\n"))
 	tr := m.Trigger
 	if !tr.matches(journalEvent{Kind: evMonitorReceived, Key: "GetOut"}) || tr.matches(journalEvent{Kind: evMonitorReceived, Key: "other"}) ||
 		tr.matches(journalEvent{Kind: "monitor.new", Key: "getout"}) {
 		t.Fatal("matches")
 	}
-	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "project:getout") {
+	if s := tr.Text("fr"); !strings.Contains(s, "monitor.received") || !strings.Contains(s, "15 min") || !strings.Contains(s, "k3x9m2p7qa") {
 		t.Fatalf("text %q", s)
+	}
+	// The repositories its runs' steps may borrow, each once, said.
+	m, err := parseSkillMD(front("when: monitor.new\nrepos: [owner/repo, Owner/Repo, https://github.com/acme/app]\n"))
+	if err != nil || !slices.Equal(m.Trigger.Repos, []string{"owner/repo", "acme/app"}) {
+		t.Fatalf("repos %v %v", m.Trigger, err)
+	}
+	if s := m.Trigger.Text("en"); !strings.Contains(s, "owner/repo, acme/app") {
+		t.Errorf("text %q", s)
 	}
 	// Several kinds share the filters; the run says each event's kind.
 	m, _ = parseSkillMD(front("when: monitor.failed, monitor.recovered key=getout-prod\n"))
@@ -72,8 +82,8 @@ func addTriggered(t *testing.T, c *core, md string) {
 
 func skillCore(t *testing.T) (*core, *time.Time) {
 	c, _, now := pollCore(t)
-	c.store.registerNode("pc", hashSecret("pc-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.registerDevice("pc", hashSecret("pc-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	c.subscribeEvents(c.queueSkillEvent)
 	return c, now
 }
@@ -382,15 +392,15 @@ func TestWriteSkill(t *testing.T) {
 	if _, err := c.writeSkill(writeSkillIn{Name: "x", Description: "y", Instructions: "z", When: "Mail"}, nil); err == nil {
 		t.Fatal("a bad trigger accepted")
 	}
-	// Its thread's name and its buttons' words: on its card, approved
-	// with it.
+	// The repositories its steps borrow and the node it works in: on its
+	// card, approved with it.
 	if _, err := c.writeSkill(writeSkillIn{Name: "tri", Description: "y", Instructions: "z", When: "monitor.new", Tools: []string{"monitor"},
-		Title: "Mes alertes", Actions: []writeSkillAction{{Label: `Faire "taire"`, Tool: "monitor/silence", Args: map[string]string{"for": "1h"}}}}, nil); err != nil {
+		Repos: []string{"example/infra"}, Node: "k3x9m2p7qa"}, nil); err != nil {
 		t.Fatal(err)
 	}
 	k, _ := c.store.skill("tri")
 	v, _ := c.store.skillVersion(k.Pending)
-	if a := v.Manifest.Actions; v.Manifest.Title != "Mes alertes" || len(a) != 1 || a[0].Label != "Faire taire" || a[0].Tool != "mcp__monitor__silence" || a[0].Args["for"] != "1h" {
+	if st := v.Manifest.Trigger; st == nil || st.Node != "k3x9m2p7qa" || len(st.Repos) != 1 || st.Repos[0] != "example/infra" {
 		t.Fatalf("manifest %+v", v.Manifest)
 	}
 	var fields []cardField
@@ -399,11 +409,7 @@ func TestWriteSkill(t *testing.T) {
 			fields = x.Fields
 		}
 	}
-	if len(fields) != 4 || fields[1].Value != "Mes alertes" || !strings.HasPrefix(fields[2].Value, "« Faire taire » : ") {
+	if len(fields) != 4 || fields[1].Value != "example/infra" || fields[2].Value != "k3x9m2p7qa" {
 		t.Fatalf("card fields %+v", fields)
-	}
-	if _, err := c.writeSkill(writeSkillIn{Name: "tri", Description: "y", Instructions: "z", When: "monitor.new",
-		Actions: []writeSkillAction{{Label: "Faire taire", Tool: "monitor/silence", Args: map[string]string{"for": "1 h"}}}}, nil); err == nil {
-		t.Fatal("an argument with a space accepted")
 	}
 }

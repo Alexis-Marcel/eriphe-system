@@ -90,13 +90,13 @@ func credCore(t *testing.T, tools string) (*core, *TaskRow) {
 		Servers: map[string]Server{"github": {URL: "https://api.githubcopilot.com/mcp/",
 			Auth: &ServerAuth{BearerFile: "vault:server.github.token"}, Use: "GitHub"}}}
 	c := newCore(cfg, store)
-	task := &TaskRow{ID: "t-1", Node: "pc", Agent: "sonnet", Runtime: "claude-code", Kind: "worker", Tools: tools,
+	task := &TaskRow{ID: "t-1", Device: "pc", Agent: "sonnet", Runtime: "claude-code", Kind: "worker", Tools: tools,
 		Dir: "owner/repo", Prompt: "fix it", State: stateRunning,
 		Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo", Access: accessRead}}}
 	if err := store.insertTask(task); err != nil {
 		t.Fatal(err)
 	}
-	store.setSpec(task.ID, nodeTaskSpec{Runtime: "claude-code", Repo: "owner/repo", Branch: "eriphe/fix"})
+	store.setSpec(task.ID, deviceTaskSpec{Runtime: "claude-code", Repo: "owner/repo", Branch: "eriphe/fix"})
 	return c, task
 }
 

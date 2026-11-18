@@ -12,7 +12,7 @@ import (
 
 // The attention queue: the one path of what goes to the user, kept by
 // code, one item per object (its ref: card:<id>, notification:<id>,
-// thread:<id>, mail:<id>…). An item has a weight, 1 to 5 (5 interrupts, 4
+// node:<id>, mail:<id>…). An item has a weight, 1 to 5 (5 interrupts, 4
 // needs the user now, 3 matters today, 2 is a glance, 1 is background), a
 // short why, an optional say (what Eriphe would say of it), its source (who
 // raised it) and its time. Items about the same ref merge: the highest
@@ -25,22 +25,21 @@ import (
 // as the brain's, the cards under it (attentionBreak):
 //
 //   - weight 4 and 5 at once (attentionNow): 5 interrupts, 4 is what a
-//     running task or thread waits on, never delayed;
+//     running task or node waits on, never delayed;
 //   - weight 3 at the next breakpoint, where an interruption costs the user
 //     least (Iqbal & Bailey, OASIS): the end of the brain's answer to a
-//     user message, the end of a thread while the user is there, the
+//     user message, the end of a node's work while the user is there, the
 //     user's return after an absence (user.returned); two hours at most
 //     (its cap), never in the quiet hours;
 //   - weight 1 and 2 only at the user's return, together: the brief, a few
 //     cards at a time (attentionCardsPerBreak), the rest waiting.
 //
 // The queue never pushes to a device: only a notification decided at weight
-// 5 does (notify.go). An item about a thread (thread:<id>) raises that
-// thread's tile (workspace_queue.go).
+// 5 does (notify.go). An item about a node (node:<id>) raises that node
+// on the graph.
 //
 // Nothing waits on a held item: the brain reads the open items in its turn
-// (attentionBlock), the held ones marked so, and answers as usual. The
-// workspace shows the queue as surfaces (workspace_queue.go).
+// (attentionBlock), the held ones marked so, and answers as usual.
 
 const attentionSchema = `CREATE TABLE IF NOT EXISTS attention (
 	ref       TEXT PRIMARY KEY,
@@ -52,7 +51,7 @@ const attentionSchema = `CREATE TABLE IF NOT EXISTS attention (
 	tainted   INTEGER NOT NULL DEFAULT 0,
 	delivered INTEGER NOT NULL DEFAULT 0, -- unix; 0 while held
 	due       INTEGER NOT NULL DEFAULT 0, -- unix: a held item goes then all the same; 0 for no time
-	about   TEXT NOT NULL DEFAULT ''    -- what it is about: thread:<id> or an entity's key (about.go)
+	about   TEXT NOT NULL DEFAULT ''    -- what it is about: node:<id> or an entity's key (about.go)
 );`
 
 func init() { extraSchema = append(extraSchema, attentionSchema) }
@@ -61,7 +60,7 @@ const (
 	attentionWhyMax   = 300
 	attentionInBrain  = 10 // the open items a brain's turn lists, the heaviest first
 	weightInterrupts  = 5  // what interrupts
-	weightBlocksATask = 4  // a card a task or a thread waits on
+	weightBlocksATask = 4  // a card a task or a node waits on
 	weightProposal    = 3  // what goes at the next breakpoint
 	weightBrief       = 2  // from this weight down, the user's return only: the brief
 
@@ -72,7 +71,7 @@ const (
 	breakNow    = "now"    // what weighs 4 or 5, as it enters
 	breakAnswer = "answer" // the brain's answer to a user message is done
 	breakReturn = "return" // the user is back after an absence: the brief
-	breakThread = "thread" // a thread ended, the user there
+	breakNode   = "node"   // a node done, the user there
 	breakCap    = "cap"    // held items reached their cap
 
 	attentionAnsweredKey = "attention_answered" // the last user message whose answer was a breakpoint
@@ -88,7 +87,7 @@ type attentionItem struct {
 	Why    string `json:"why"`
 	Say    string `json:"say,omitempty"`
 	Source string `json:"source"`
-	// About is what it is about; left empty, its source's (a thread's,
+	// About is what it is about; left empty, its source's (a node's,
 	// a task's: sourceAbout).
 	About string    `json:"about,omitempty"`
 	Time  time.Time `json:"time"`
@@ -112,7 +111,7 @@ func (c *core) attend(it attentionItem) {
 // attendHeld puts an item in the queue, delivered when the caller
 // delivered it, else held: one who enters several delivers them together
 // (attentionNow). A delivered item stays delivered; a held one keeps its
-// earliest cap. An item about a surface lends it its weight.
+// earliest cap.
 func (c *core) attendHeld(it attentionItem) {
 	it.Weight = min(max(it.Weight, 1), 5)
 	if it.Time.IsZero() {
@@ -136,10 +135,6 @@ func (c *core) attendHeld(it attentionItem) {
 			due = CASE WHEN due = 0 THEN excluded.due WHEN excluded.due = 0 THEN due ELSE MIN(due, excluded.due) END`,
 		it.Ref, it.Weight, truncate(oneLine(it.Why), attentionWhyMax), truncate(oneLine(it.Say), attentionWhyMax), it.Source, it.Time.Unix(),
 		boolInt(it.tainted), delivered, due, it.About)
-	if id, ok := raisedThread(it.Ref); ok {
-		c.keepThreadSurface(id) // its tile takes the weight
-	}
-	c.kickWorkspace() // its surface (workspace_queue.go)
 }
 
 // attentionCap is the longest an item of this weight is held; 0 for no
@@ -154,10 +149,6 @@ func attentionCap(weight int) time.Duration {
 // attentionDone takes an item out: the user answered it, or it is gone.
 func (c *core) attentionDone(ref string) {
 	c.store.db.Exec(`DELETE FROM attention WHERE ref = ?`, ref)
-	if id, ok := raisedThread(ref); ok {
-		c.keepThreadSurface(id) // its tile gives the weight back
-	}
-	c.kickWorkspace()
 }
 
 func cardItemRef(id int64) string { return "card:" + strconv.FormatInt(id, 10) }
@@ -166,7 +157,7 @@ func cardItemRef(id int64) string { return "card:" + strconv.FormatInt(id, 10) }
 // name one: parseRef): the one a skill's message becomes too (runSignal).
 func noteItemRef(id int64) string { return "notification:" + strconv.FormatInt(id, 10) }
 
-// cardWeight is a card's weight by its kind: what a task or a thread waits
+// cardWeight is a card's weight by its kind: what a task or a node waits
 // on, at once; what the user asked to be done (a skill, a monitor, a run's
 // calls), at the next breakpoint; a reminder to keep, and the small things
 // (a memory, a rule, a setting), at the return.
@@ -303,7 +294,7 @@ func (c *core) attentionBreak(at string, now time.Time) int {
 			return 0
 		}
 		where, args = where+` AND due > 0 AND due <= ?`, []any{now.Unix()}
-	case breakAnswer, breakThread:
+	case breakAnswer, breakNode:
 		where += ` AND weight >= ` + strconv.Itoa(weightProposal)
 	}
 	items := c.attentionWhere(where+` ORDER BY weight DESC, time ASC`, args...)
@@ -383,18 +374,15 @@ func (c *core) attentionAnswered(now time.Time) {
 }
 
 // attentionOnEvent listens to the journal for the other breakpoints: the
-// user's return (the brief), and a thread's end while the user is there
+// user's return (the brief), and a node done while the user is there
 // (away, what is held waits for their return).
 func (c *core) attentionOnEvent(e journalEvent) {
 	switch e.Kind {
 	case evUserReturned:
 		c.attentionBreak(breakReturn, c.notifyTime())
-	case evThreadEnded:
-		if e.Payload["ends"] == endsDay {
-			return // its day is over at midnight: nothing the user finished
-		}
+	case evNodeDone:
 		if s, err := c.userState(); err == nil && !s.Away {
-			c.attentionBreak(breakThread, s.Now)
+			c.attentionBreak(breakNode, s.Now)
 		}
 	}
 }
@@ -424,4 +412,37 @@ func (c *core) attentionBlock() string {
 	return fmt.Sprintf("[en attente de %s. Ce qui est montré est déjà sous ses yeux (cartes de la conversation) : ne le recopie pas, réfère-t'y s'il en parle. "+
 		"Ce qui est retenu lui sera montré à la prochaine pause, sans toi ; tu peux en parler s'il le demande :\n%s]",
 		c.conf().User, strings.Join(lines, "\n"))
+}
+
+// A proposal waiting without a card in front of the user (the memory's
+// extraction, a turn that said nothing of it) enters the attention queue
+// at its card's weight (cardWeight), unless it is there already: the
+// queue delivers it like anything else.
+
+const cardsAttendedEachMax = 50
+
+// attendQueuedCards puts the queued cards in the attention queue, an item
+// each, delivered together.
+func (c *core) attendQueuedCards() {
+	c.syncCards()
+	queued, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind != ? ORDER BY id LIMIT ?`, cardPending, cardDigest, cardsAttendedEachMax)
+	if err != nil {
+		return
+	}
+	n := 0
+	for _, x := range queued {
+		var in int
+		if c.store.db.QueryRow(`SELECT COUNT(*) FROM attention WHERE ref = ?`, cardItemRef(x.ID)).Scan(&in); in > 0 {
+			continue // there already
+		}
+		x, p := c.liveCard(x)
+		if x.State != cardPending {
+			continue
+		}
+		c.attendCardHeld(x, p, "", "")
+		n++
+	}
+	if n > 0 {
+		c.attentionNow()
+	}
 }

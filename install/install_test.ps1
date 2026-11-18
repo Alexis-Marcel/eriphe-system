@@ -41,7 +41,7 @@ foreach ($ok in "http://127.0.0.1:11434", "http://[::1]:11434", "https://models.
 foreach ($bad in "127.0.0.1:11434", "ftp://192.0.2.1", "http://[::1", "http://user@192.0.2.1", "http://192.0.2.1:11434/?q") {
   Assert-That (-not (Test-ModelServerAddress $bad)) "-ModelServer $bad accepted"
 }
-# This PC's loopback, which the node, in its container, does not reach.
+# This PC's loopback, which the device, in its container, does not reach.
 foreach ($lo in "http://127.0.0.1:11434", "http://localhost:11434", "http://[::1]:11434", "https://127.0.0.2/v1", "http://0.0.0.0:11434") {
   Assert-That (Test-LoopbackAddress $lo) "$lo is not the loopback"
 }
@@ -49,8 +49,8 @@ foreach ($not in "http://eriphe-ollama:11434", "http://192.0.2.5:11434", "http:/
   Assert-That (-not (Test-LoopbackAddress $not)) "$not is the loopback"
 }
 # The session helper's folder, as the distribution's sh reads it.
-$se = Get-SessionEnv 'C:\ProgramData\eriphe-node\session'
-Assert-That ($se -ceq "ERIPHE_SESSION_DIR='C:\ProgramData\eriphe-node\session'") "session env: $se"
+$se = Get-SessionEnv 'C:\ProgramData\eriphe-device\session'
+Assert-That ($se -ceq "ERIPHE_SESSION_DIR='C:\ProgramData\eriphe-device\session'") "session env: $se"
 Assert-That ((Get-SessionEnv "C:\Sam's data\session") -eq "") "a quote in the session folder"
 Assert-That ((Get-SessionEnv "C:\data`nERIPHE_CORE=http://192.0.2.1") -eq "") "a new line in the session folder"
 Assert-That ((Get-SessionEnv "") -eq "") "no session folder"

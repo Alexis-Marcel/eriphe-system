@@ -7,14 +7,14 @@ import (
 
 // The declarative side of a task: its spec (without secrets) and what it
 // should do, written by eriphe-core; and its inbox, the messages and
-// permission answers waiting for its node.
+// permission answers waiting for its device.
 
 const (
 	desiredRunning = "running"
 	desiredStopped = "stopped"
 )
 
-// assignment is a task as its node must see it.
+// assignment is a task as its device must see it.
 type assignment struct {
 	ID      string
 	Kind    string // worker or brain
@@ -25,19 +25,19 @@ type assignment struct {
 	Resources []ResourceRef
 	Desired   string
 	State     string
-	Spec      nodeTaskSpec
+	Spec      deviceTaskSpec
 }
 
-func (s *Store) setSpec(id string, spec nodeTaskSpec) error {
+func (s *Store) setSpec(id string, spec deviceTaskSpec) error {
 	raw, _ := json.Marshal(spec)
 	return s.updateTask(id, map[string]any{"spec": string(raw)})
 }
 
-// assignments returns a node's tasks that are not over yet; a task whose
+// assignments returns a device's tasks that are not over yet; a task whose
 // start waits for the user (desired held, task_start.go) is not one yet.
-func (s *Store) assignments(node string) ([]assignment, error) {
+func (s *Store) assignments(device string) ([]assignment, error) {
 	rows, err := s.db.Query(`SELECT id, kind, agent, tools, folders, resources, desired, state, spec FROM tasks
-		WHERE node = ? AND node != '' AND state NOT IN ('stopped', 'failed', 'lost') AND desired != 'held' ORDER BY created`, node)
+		WHERE device = ? AND device != '' AND state NOT IN ('stopped', 'failed', 'lost') AND desired != 'held' ORDER BY created`, device)
 	if err != nil {
 		return nil, err
 	}
@@ -56,10 +56,10 @@ func (s *Store) assignments(node string) ([]assignment, error) {
 	return out, rows.Err()
 }
 
-// unassigned returns the tasks waiting for a node, the oldest first.
+// unassigned returns the tasks waiting for a device, the oldest first.
 func (s *Store) unassigned() ([]*TaskRow, error) {
 	rows, err := s.db.Query(`SELECT ` + taskColumns + ` FROM tasks
-		WHERE node = '' AND state = 'pending' AND desired = 'running' ORDER BY created`)
+		WHERE device = '' AND state = 'pending' AND desired = 'running' ORDER BY created`)
 	if err != nil {
 		return nil, err
 	}
@@ -75,11 +75,11 @@ func (s *Store) unassigned() ([]*TaskRow, error) {
 	return out, rows.Err()
 }
 
-// assign gives a waiting task its node, unless it moved meanwhile (stopped,
+// assign gives a waiting task its device, unless it moved meanwhile (stopped,
 // or assigned by another pass): true if it did.
-func (s *Store) assign(id, node string) (bool, error) {
-	res, err := s.db.Exec(`UPDATE tasks SET node = ?, pending_reason = '', updated = ?
-		WHERE id = ? AND node = '' AND state = 'pending' AND desired = 'running'`, node, time.Now().Unix(), id)
+func (s *Store) assign(id, device string) (bool, error) {
+	res, err := s.db.Exec(`UPDATE tasks SET device = ?, pending_reason = '', updated = ?
+		WHERE id = ? AND device = '' AND state = 'pending' AND desired = 'running'`, device, time.Now().Unix(), id)
 	if err != nil {
 		return false, err
 	}
@@ -87,11 +87,11 @@ func (s *Store) assign(id, node string) (bool, error) {
 	return n == 1, err
 }
 
-// stranded returns the tasks given a node that has not started them, and
+// stranded returns the tasks given a device that has not started them, and
 // not pinned to it: they may be placed again (placement.go).
 func (s *Store) stranded() ([]*TaskRow, error) {
 	rows, err := s.db.Query(`SELECT ` + taskColumns + ` FROM tasks
-		WHERE node != '' AND state = 'pending' AND desired = 'running' AND pinned = 0 ORDER BY created`)
+		WHERE device != '' AND state = 'pending' AND desired = 'running' AND pinned = 0 ORDER BY created`)
 	if err != nil {
 		return nil, err
 	}
@@ -107,11 +107,11 @@ func (s *Store) stranded() ([]*TaskRow, error) {
 	return out, rows.Err()
 }
 
-// unassign takes a task not started yet from its node, to be placed
+// unassign takes a task not started yet from its device, to be placed
 // again, unless it moved meanwhile: true if it did.
-func (s *Store) unassign(id, node, reason string) (bool, error) {
-	res, err := s.db.Exec(`UPDATE tasks SET node = '', pending_reason = ?, updated = ?
-		WHERE id = ? AND node = ? AND state = 'pending' AND desired = 'running'`, reason, time.Now().Unix(), id, node)
+func (s *Store) unassign(id, device, reason string) (bool, error) {
+	res, err := s.db.Exec(`UPDATE tasks SET device = '', pending_reason = ?, updated = ?
+		WHERE id = ? AND device = ? AND state = 'pending' AND desired = 'running'`, reason, time.Now().Unix(), id, device)
 	if err != nil {
 		return false, err
 	}
@@ -119,7 +119,7 @@ func (s *Store) unassign(id, node, reason string) (bool, error) {
 	return n == 1, err
 }
 
-// InboxItem is something a task's node must deliver to its agent.
+// InboxItem is something a task's device must deliver to its agent.
 type InboxItem struct {
 	Seq  int            `json:"seq"`
 	Kind string         `json:"kind"` // message or permission

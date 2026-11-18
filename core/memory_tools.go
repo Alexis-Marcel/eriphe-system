@@ -93,7 +93,7 @@ func parseEnd(s string) (time.Time, error) {
 
 type rememberIn struct {
 	Text       string   `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact (not as an instruction)"`
-	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, lesson, decision (a choice and its reason), progress (where a matter stands: done, under way, blocked, left; not a memory: it becomes the summary of its thread, which must exist: open_thread first) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
+	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, lesson, decision (a choice and its reason) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
 	About      string   `json:"about,omitempty" jsonschema:"kind:slug, kind project, person, client, pr, mail, event, alert, home, tool or topic; owner alone for the user: owner, person:<slug>, project:<name>, topic:workspace (how the user wants the composed workspace: a preference), topic:<word>"`
 	Links      []string `json:"links,omitempty" jsonschema:"where the details are: vault wikilinks or paths, URLs without tokens; never copy the vault"`
 	ValidFrom  string   `json:"valid_from,omitempty" jsonschema:"when it became true, YYYY-MM-DD; now by default"`
@@ -102,7 +102,6 @@ type rememberIn struct {
 	Supersedes int64    `json:"supersedes,omitempty" jsonschema:"id of the memory this one replaces: it is kept, dated, never overwritten"`
 	SourceRef  string   `json:"source_ref,omitempty" jsonschema:"the message it comes from: msg:N for the user's message #N. Required for profile, preference and lesson"`
 	Keywords   string   `json:"keywords,omitempty" jsonschema:"a few other words someone could use to look for it (synonyms, variants: 'voiture auto bagnole'), indexed with the text"`
-	State      string   `json:"state,omitempty" jsonschema:"for a progress: active, blocked, done or paused"`
 	Importance int      `json:"importance,omitempty" jsonschema:"1 (trivial) to 5 (essential to know the user), 3 by default"`
 	// The escape of rememberRedirect: a preference about the conversation
 	// itself that only sounds like one about notifications.
@@ -112,7 +111,7 @@ type rememberIn struct {
 type recallIn struct {
 	Query       string   `json:"query,omitempty" jsonschema:"words to look for, or the question itself: word families are found (anniversaire, anniversaires), synonyms are not, so add them ('voiture auto'); a time in it (hier, en septembre, la semaine dernière) ranks what is dated then first"`
 	Kinds       []string `json:"kinds,omitempty" jsonschema:"only these kinds"`
-	About       string   `json:"about,omitempty" jsonschema:"only what is about this: thread:<id> or a key (kind:slug); 'person:' for every person"`
+	About       string   `json:"about,omitempty" jsonschema:"only what is about this: node:<id> or a key (kind:slug); 'person:' for every person"`
 	Since       string   `json:"since,omitempty" jsonschema:"only from this date (an episode's date, a fact's valid_from)"`
 	Until       string   `json:"until,omitempty" jsonschema:"only up to this date"`
 	AsOf        string   `json:"as_of,omitempty" jsonschema:"what was true at this date"`
@@ -140,7 +139,7 @@ type forgetIn struct {
 }
 
 func registerMemoryTools(s *mcp.Server, c *core) {
-	tool(s, "remember", "Keep what you must know about the user in Eriphe's memory: one fact, preference, person, episode, lesson or decision per call; where a matter stands (kind progress) is written as its thread's summary. What the code enforces is never a memory: what is owed or to do once is intend, what comes back on a schedule is watch, how or when the user is told is rule or setting. To record a change, supersede the old memory (it is kept, dated). What a turn that read external content remembers is only proposed to the user.",
+	tool(s, "remember", "Keep what you must know about the user in Eriphe's memory: one fact, preference, person, episode, lesson or decision per call; where a matter stands is never a memory: it is its node's doc (node_write). What the code enforces is never a memory: what is owed or to do once is intend, what comes back on a schedule is watch, how or when the user is told is rule or setting. To record a change, supersede the old memory (it is kept, dated). What a turn that read external content remembers is only proposed to the user.",
 		func(ctx context.Context, in rememberIn) (map[string]any, error) {
 			return c.brainRemember(in)
 		})
@@ -283,17 +282,14 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 		return nil, errMemoryOff
 	}
 	// How the user wants the workspace is a preference the watchers read
-	// when they note items, whatever its words (workspace.go).
-	if strings.TrimSpace(in.Kind) == kindProgress {
-		return c.brainProgress(in) // its thread's summary (thread_progress.go)
-	}
+	// when they note items, whatever its words (workspace_prefs.go).
 	if h := rememberRedirect(strings.TrimSpace(in.Kind), in.Text); h != "" && !in.AboutConversation && !isWorkspaceEntity(in.About) {
 		return nil, errors.New("not remembered: " + h)
 	}
 	x := &Memory{Kind: strings.TrimSpace(in.Kind), About: in.About, Text: in.Text, Links: in.Links, Supersedes: in.Supersedes,
-		Keywords: in.Keywords, Importance: in.Importance, State: in.State}
+		Keywords: in.Keywords, Importance: in.Importance}
 	if x.About == "" && x.Supersedes == 0 && inheritsAbout(x.Kind) { // a replacement keeps the one it replaces
-		x.About = c.turnAbout() // the turn's thread, or what my message named (about.go)
+		x.About = c.turnAbout() // the turn's node, or what my message named (about.go)
 	}
 	var err error
 	if x.ValidFrom, err = parseWhen(in.ValidFrom); err != nil {

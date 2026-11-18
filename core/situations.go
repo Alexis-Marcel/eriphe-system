@@ -17,7 +17,7 @@ import (
 // wrote is only proposed (memory_trust.go) and shows once approved.
 //
 // Tasks read the memory too, through their own MCP server (taskMemServer,
-// relayed by their node): recall, current facts only. A triggered skill's
+// relayed by their device): recall, current facts only. A triggered skill's
 // task may also remember, trusted as the task is: a tainted one only
 // proposes.
 
@@ -75,14 +75,13 @@ func (c *core) taskNowText() string {
 // taskRememberIn is a task's remember: no owner kinds.
 type taskRememberIn struct {
 	Text     string `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact"`
-	Kind     string `json:"kind" jsonschema:"fact, person, decision, progress (where a matter stands: it becomes the summary of its thread) or situation (where the user is or what they do for a while, with valid_to); never what the run itself did: its log keeps that"`
-	State    string `json:"state,omitempty" jsonschema:"for a progress: active, blocked, done or paused"`
+	Kind     string `json:"kind" jsonschema:"fact, person, decision or situation (where the user is or what they do for a while, with valid_to); never what the run itself did, nor where the work stands: its node keeps that"`
 	About    string `json:"about,omitempty" jsonschema:"kind:slug: owner, person:<slug>, project:<name>, home, topic:<word>"`
 	ValidTo  string `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD or YYYY-MM-DDTHH:MM; required for a situation"`
 	Keywords string `json:"keywords,omitempty" jsonschema:"other words to find it by"`
 }
 
-var taskRememberKinds = []string{kindFact, kindPerson, kindDecision, kindProgress, kindSituation}
+var taskRememberKinds = []string{kindFact, kindPerson, kindDecision, kindSituation}
 
 // taskMemoryServer is the memory a task sees: recall, and remember for a
 // triggered skill's run.
@@ -97,7 +96,7 @@ func (c *core) taskMemoryServer(t *TaskRow) *mcp.Server {
 			func(ctx context.Context, in sinceIn) (map[string]any, error) {
 				return c.runSince(r, in)
 			})
-		tool(s, "remember", "Keep in Eriphe's memory what will be useful later: one fact, person, decision, progress (where a matter stands, kept as its thread's summary) or situation per call (a situation needs valid_to: « en déplacement à Lyon jusqu'au 14 »); not what this run did, which its log keeps. What a task that read someone else's content remembers is only proposed to the user.",
+		tool(s, "remember", "Keep in Eriphe's memory what will be useful later: one fact, person, decision or situation per call (a situation needs valid_to: « en déplacement à Lyon jusqu'au 14 »); not what this run did, which its log keeps. What a task that read someone else's content remembers is only proposed to the user.",
 			func(ctx context.Context, in taskRememberIn) (map[string]any, error) {
 				return c.taskRemember(t.ID, in)
 			})
@@ -124,20 +123,6 @@ func (c *core) taskRemember(id string, in taskRememberIn) (map[string]any, error
 	}
 	if !containsStr(taskRememberKinds, strings.TrimSpace(in.Kind)) {
 		return nil, fmt.Errorf("kind must be one of %s", strings.Join(taskRememberKinds, ", "))
-	}
-	if strings.TrimSpace(in.Kind) == kindProgress { // its thread's summary (thread_progress.go)
-		th, err := c.progressThread(in.About, c.refThread("task:"+id))
-		if err != nil {
-			return nil, err
-		}
-		if c.taskResultTaint(id) != "" && !c.summaryUnquoted(th) {
-			return nil, errProgressTainted
-		}
-		note, err := c.noteProgress(th, in.Text, in.State, "task")
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"thread": th, "note": note}, nil
 	}
 	x := &Memory{Kind: strings.TrimSpace(in.Kind), About: in.About, Text: in.Text, Keywords: in.Keywords}
 	var err error

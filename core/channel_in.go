@@ -14,7 +14,7 @@ import (
 // What comes in through a channel the user added (channels_added.go): text,
 // from any app holding the channel's token. It joins the conversation like
 // any of mine, marked with the channel and, if the app says it, the place
-// it was written or said in; the brain answers it in the same thread, with
+// it was written or said in; the brain answers it in the same conversation, with
 // the same memory and tools, and the answer streams back.
 //
 //	POST /v1/channel  {"text", "language"?, "place"?, "wait"?}

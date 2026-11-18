@@ -13,16 +13,16 @@ import (
 
 // The tool catalog: MCP servers eriphe-core reaches on behalf of tasks. A
 // task never sees a vendor credential: its MCP configuration points at its
-// node, which relays to eriphe-core, which calls the server with the real
+// device, which relays to eriphe-core, which calls the server with the real
 // credential (see pool.go and proxy.go). Like agents, servers are what the
 // brain picks from: "use" tells it what each one is for.
 
 // Server is one entry of the catalog: either remote (url and auth) or local
-// (run: a container a node runs as a service, see services).
+// (run: a container a device runs as a service, see services).
 type Server struct {
 	URL  string      `json:"url,omitempty"`
 	Auth *ServerAuth `json:"auth,omitempty"`
-	// Run is the container spec of a local server, run by a node. It is
+	// Run is the container spec of a local server, run by a device. It is
 	// read by the services module; the catalog only reaches it through
 	// pool.dialLocal.
 	Run json.RawMessage `json:"run,omitempty"`
@@ -115,7 +115,7 @@ func (s Server) authKind() string {
 var serverName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 
 // reserved are the names of the MCP servers a task already has.
-var reserved = []string{"eriphe-core", "eriphe-node", taskMemServer, workspaceServer, threadsServer, foldersServer}
+var reserved = []string{"eriphe-core", "eriphe-device", taskMemServer, nodesServer, workspaceServer, foldersServer}
 
 func (c *Config) checkServers() error {
 	for name, s := range c.Servers {

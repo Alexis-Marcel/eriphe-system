@@ -13,7 +13,7 @@ import (
 // is foreseen with the same decision as the push itself (decideRepo), for
 // the case its lend names (its branch, or the default branch),
 // and asked once, when the task starts. The task waits meanwhile: it is kept,
-// pending, with desired "held", which no node sees and no placement moves.
+// pending, with desired "held", which no device sees and no placement moves.
 // The user gets one card in the conversation (convo_cards.go, kind
 // taskstart): Oui records the grants (repo_grants, access_grants), and
 // lets the task go; Non stops it and tells the brain. As every card, the
@@ -87,7 +87,7 @@ func (c *core) startNeeds(list []ResourceRef, clean bool) []startNeed {
 
 // holdTask keeps the start of a task for the user's answer. Started by the
 // brain, its card goes with the brain's next message of this turn; started
-// by anyone else (a thread's step), no turn will carry it: it is shown at
+// by anyone else (a node's step), no turn will carry it: it is shown at
 // once, with a message of its own (cardNow).
 func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string, byBrain bool) error {
 	raw, _ := json.Marshal(needs)
@@ -98,7 +98,7 @@ func (c *core) holdTask(t *TaskRow, needs []startNeed, tainted []string, byBrain
 	}
 	id, _ := res.LastInsertId()
 	if byBrain {
-		c.cardProposed(cardTaskStart, id) // in a turn about a thread, in its timeline
+		c.cardProposed(cardTaskStart, id) // in the turn, with the brain's next message
 	} else {
 		c.cardNow(cardTaskStart, id, fmt.Sprintf(tr(c.userLang(), "taskstart.held.message"), t.label()), "task:"+t.ID)
 	}
@@ -217,11 +217,9 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 	if n, _ := res.RowsAffected(); n != 1 || !c.heldTask(s.TaskID) {
 		return errCardDecided
 	}
-	if st, ok := c.stepOfTask(s.TaskID); ok {
-		defer c.keepThreadSurface(st.Thread) // its card leaves the thread's surface (thread_surface.go)
-	}
 	if !approve {
 		c.store.updateTask(s.TaskID, map[string]any{"desired": desiredStopped, "state": stateStopped, "pending_reason": "its start was declined"})
+		c.taskNodeState(s.TaskID, stateStopped) // task_node.go
 		log.Printf("task %s: start declined by the user", s.TaskID)
 		c.bump()
 		return nil
@@ -239,8 +237,9 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 	}
 	c.store.db.Exec(`UPDATE tasks SET desired = ?, pending_reason = '', updated = ? WHERE id = ? AND desired = ?`,
 		desiredRunning, time.Now().Unix(), s.TaskID, desiredHeld)
+	c.taskNodeState(s.TaskID, statePending) // task_node.go: it runs
 	log.Printf("task %s: start approved by the user", s.TaskID)
-	if t, err := c.store.task(s.TaskID); err == nil && t.Node == "" {
+	if t, err := c.store.task(s.TaskID); err == nil && t.Device == "" {
 		c.placePending()
 	}
 	c.bump()
@@ -254,15 +253,14 @@ func (c *core) taskStartDeclined(id int64) {
 	if err != nil {
 		return
 	}
-	thread, _ := c.threadOfTask(s.TaskID) // its step's thread's (thread_talk.go)
-	c.store.addThreadMessage(roleEvent, fmt.Sprintf("%s a refusé le lancement de la tâche %s : elle ne démarre pas. Ne la relance pas telle quelle ; "+
-		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), "", thread, false)
+	c.store.addNodeMessage(roleEvent, fmt.Sprintf("%s a refusé le lancement de la tâche %s : elle ne démarre pas. Ne la relance pas telle quelle ; "+
+		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), "", c.taskEventNode(s.TaskID), false)
 	c.ping()
 }
 
 // startState says, for the brain, what a task's start waits for, as it is
 // when run_task returns: started now, held for the user's card (its ref
-// and what it asks), or pending with no node. The brain says that and
+// and what it asks), or pending with no device. The brain says that and
 // never guesses a card.
 func (c *core) startState(t *TaskRow) map[string]any {
 	if t == nil {
@@ -280,9 +278,9 @@ func (c *core) startState(t *TaskRow) map[string]any {
 		return map[string]any{"start": "waits_for_card", "card": proposalRef(cardTaskStart, id), "asks": asks,
 			"note": "It starts only after the user's yes on its card, shown with your message: say what it asks, nothing more."}
 	}
-	if t.Node == "" {
-		return map[string]any{"start": "waits_for_node", "pending_reason": t.PendingReason,
-			"note": "No node can run it now: it starts by itself when one comes online. No card is asked."}
+	if t.Device == "" {
+		return map[string]any{"start": "waits_for_device", "pending_reason": t.PendingReason,
+			"note": "No device can run it now: it starts by itself when one comes online. No card is asked."}
 	}
 	return map[string]any{"start": "started", "note": "Started now: no card was asked for its start."}
 }

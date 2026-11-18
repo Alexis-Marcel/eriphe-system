@@ -5,7 +5,7 @@ import { number, shortDate, time, wall } from "./format";
 // one bar per x (stack: an allocation, now and its target), drawn in SVG
 // here (no chart library, nothing that injects styles). Geometry is SVG
 // attributes; colours are classes (.a2-s0 … .a2-s3, a palette checked for
-// colour blindness on the tile's paper). One axis, recessive grid, a
+// colour blindness on the page's paper). One axis, recessive grid, a
 // legend from two series (always for a stack: its parts), a native
 // tooltip on every mark and the numbers in a table for screen readers.
 

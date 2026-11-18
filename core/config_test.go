@@ -48,7 +48,7 @@ func TestBrainAgentFromWorkspace(t *testing.T) {
 	os.WriteFile(path, []byte(`{"token_file": "token", "default_agent": "opus",
 		"providers": {"anthropic": {"kind": "claude-subscription", "secret": "`+secret+`"}},
 		"agents": {"opus": {"runtime": "claude-code", "provider": "anthropic"}},
-		"brain": {"node": "nas", "agent": "free", "prompt_file": "p.md"}}`), 0o600)
+		"brain": {"device": "nas", "agent": "free", "prompt_file": "p.md"}}`), 0o600)
 	c, err := loadConfig(path)
 	if err != nil {
 		t.Fatalf("a workspace agent refused by the file check: %v", err)
@@ -77,7 +77,7 @@ func TestBrainOnWorkspaceAgentAtStart(t *testing.T) {
 	store.putCatalog(kindAgent, "free", Agent{Runtime: "opencode", Provider: "openrouter", Model: "openrouter/example/model:free"})
 	secret := filepath.Join(dir, "claude")
 	os.WriteFile(secret, []byte("tok"), 0o600)
-	cfg := &Config{DefaultAgent: "opus", Brain: &BrainConfig{Node: "nas", Agent: "free"},
+	cfg := &Config{DefaultAgent: "opus", Brain: &BrainConfig{Device: "nas", Agent: "free"},
 		Providers: map[string]Provider{"anthropic": {Kind: "claude-subscription", Secret: secret}},
 		Agents:    map[string]Agent{"opus": {Runtime: "claude-code", Provider: "anthropic"}}}
 	c := newCore(cfg, store)

@@ -53,13 +53,13 @@ func TestAttentionMergeByRef(t *testing.T) {
 	at := time.Now().Add(-time.Minute)
 	c.attend(attentionItem{Ref: "mail:1", Weight: 4, Why: "a bill due today", Say: "Ta facture est due.", Source: "skill:mail", Time: at})
 	c.attend(attentionItem{Ref: "mail:1", Weight: 2, Why: "the bill, paid?", Source: "skill:mail"})
-	c.attend(attentionItem{Ref: "thread:3", Weight: 9, Why: "the plan waits", Source: "thread:3"})
+	c.attend(attentionItem{Ref: "node:n3", Weight: 9, Why: "the plan waits", Source: "node:n3"})
 	c.attend(attentionItem{Ref: "agenda:2026-11-12", Weight: 1, Why: "a quiet day", Source: "skill:brief"})
 	items := c.attentionOpen()
 	if len(items) != 3 {
 		t.Fatalf("items %+v", items)
 	}
-	if items[0].Ref != "thread:3" || items[0].Weight != 5 {
+	if items[0].Ref != "node:n3" || items[0].Weight != 5 {
 		t.Errorf("a weight is 1 to 5, the heaviest first: %+v", items[0])
 	}
 	m := attentionOf(c, "mail:1")
@@ -73,10 +73,10 @@ func TestAttentionMergeByRef(t *testing.T) {
 }
 
 // A card enters the queue with a weight by its kind: one a task or a
-// thread waits on, 4; what the user asked to be done, 3; a reminder, 2;
+// node waits on, 4; what the user asked to be done, 3; a reminder, 2;
 // the small things, 1. Decided, it leaves.
 func TestAttentionWeightByKind(t *testing.T) {
-	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardThread: 4, cardSkill: 3, cardMonitor: 3, cardRunCalls: 3,
+	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardSkill: 3, cardMonitor: 3, cardRunCalls: 3,
 		cardIntention: 2, cardRule: 1, cardMemory: 1, cardSetting: 1, cardUnlearn: 1} {
 		if got := cardWeight(kind); got != want {
 			t.Errorf("%s: weight %d, want %d", kind, got, want)
@@ -120,9 +120,9 @@ func TestAttentionHeldUntilBreakpoint(t *testing.T) {
 	c.attend(attentionItem{Ref: "mail:1", Weight: 1, Why: "a newsletter", Say: "Une lettre d'information.", Source: "skill:mail", Time: *now})
 	c.attend(attentionItem{Ref: "mail:2", Weight: 3, Why: "a bill due today", Say: "Ta facture est due aujourd'hui.", Source: "skill:mail", Time: *now})
 	c.attend(attentionItem{Ref: "agenda:2026-11-04", Weight: 2, Why: "a quiet day", Say: "Journée calme.", Source: "skill:agenda", Time: *now})
-	c.attend(attentionItem{Ref: "thread:3", Weight: 4, Why: "the plan waits", Source: "thread:3", Time: *now})
+	c.attend(attentionItem{Ref: "node:n3", Weight: 4, Why: "the plan waits", Source: "node:n3", Time: *now})
 	c.attend(attentionItem{Ref: "site:down", Weight: 5, Why: "the site is down", Source: "skill:prod", Time: *now})
-	for ref, held := range map[string]bool{"mail:1": true, "mail:2": true, "agenda:2026-11-04": true, "thread:3": false, "site:down": false} {
+	for ref, held := range map[string]bool{"mail:1": true, "mail:2": true, "agenda:2026-11-04": true, "node:n3": false, "site:down": false} {
 		if it := attentionOf(c, ref); it == nil || it.Held != held {
 			t.Errorf("%s: %+v, want held %v", ref, it, held)
 		}
@@ -220,7 +220,7 @@ func TestAttentionReturnTellsTheBrief(t *testing.T) {
 	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || !it.Held || it.Weight != weightBrief || it.Source != "skill:prod" {
 		t.Fatalf("item %+v", it)
 	}
-	if c.attentionBreak(breakAnswer, *now) != 0 || c.attentionBreak(breakThread, *now) != 0 {
+	if c.attentionBreak(breakAnswer, *now) != 0 || c.attentionBreak(breakNode, *now) != 0 {
 		t.Fatal("the brief was told before the return")
 	}
 	say := func(when time.Time) {
@@ -274,30 +274,30 @@ func TestAttentionQuietMessageToldAtTheBrief(t *testing.T) {
 	}
 }
 
-// A thread's end is a breakpoint while the user is there; away, what is
+// A node done is a breakpoint while the user is there; away, what is
 // held waits for their return.
-func TestAttentionThreadEndBreakpoint(t *testing.T) {
+func TestAttentionNodeDoneBreakpoint(t *testing.T) {
 	c, _, now := pollCore(t)
 	c.subscribeEvents(c.attentionOnEvent)
-	seq := ownerSays(c, "Lance le thread")
+	seq := ownerSays(c, "Lance le travail")
 	c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, now.Add(-3*time.Hour).Unix(), seq)
 	c.attend(attentionItem{Ref: "mail:1", Weight: 3, Why: "a bill", Say: "Une facture.", Source: "skill:mail", Time: *now})
-	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: "thread:1", Source: "thread"})
+	c.emitLogged(journalEvent{Kind: evNodeDone, Key: "k3x9m2p7qa", Source: "node"})
 	if !attentionOf(c, "mail:1").Held {
 		t.Fatal("released while the user is away")
 	}
 	seq = ownerSays(c, "Me revoilà")
 	c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, now.Add(-time.Minute).Unix(), seq)
-	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: "thread:2", Source: "thread"})
+	c.emitLogged(journalEvent{Kind: evNodeDone, Key: "k3x9m2p7qb", Source: "node"})
 	if attentionOf(c, "mail:1").Held {
-		t.Fatal("not released at the thread's end")
+		t.Fatal("not released when the node was done")
 	}
 }
 
 // A ref is a known kind, a colon and an id of that kind's form.
 func TestParseRef(t *testing.T) {
 	for _, tc := range []struct{ in, kind, id string }{
-		{"thread:3", refThread, "3"},
+		{"node:k3x9m2p7qa", refNode, "k3x9m2p7qa"},
 		{"card:12", refCard, "12"},
 		{"task:t-abc", refTask, "t-abc"},
 		{"project:portfolio", "project", "portfolio"},
@@ -311,7 +311,7 @@ func TestParseRef(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"", "mail", "mail:", "mail:INBOX/42", "event:ev-1@example.org", "note:1", "agenda:2026-11-12", "agenda:12/11/2026",
-		"thread:x", "thread:0", "card:-1", "surface:agenda", "task:" + strings.Repeat("x", 1001)} {
+		"node:X Y", "node:", "card:-1", "surface:agenda", "task:" + strings.Repeat("x", 1001)} {
 		var e errBadRef
 		if _, err := parseRef(bad); !errors.As(err, &e) {
 			t.Errorf("%q parsed: %v", bad, err)

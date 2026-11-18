@@ -3,42 +3,42 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
-// What the thread cards are worth (#512, step 8). Each card pushed to a
+// What the about cards are worth (#512, step 8). Each card pushed to a
 // model is counted, by place, and judged once its window is over: used or
 // not. The judgment is a proxy, kept simple and said as it is:
 //
 //   - wrote: in the window after the push, the model it was pushed to
-//     wrote or changed a record about the card's thread or entity. For the
-//     brain (a turn's card, a pack's), a memory, an intention or a line in
-//     the thread written by "brain"; for a worker task, a memory its
-//     remember wrote (source task:<id>), or the thread's summary noted by
-//     a task; for a lead, a line written by a lead in the thread (nearly
-//     always: a lead works on its thread, so its count says little).
+//     wrote or changed a record about the card's node or entity. For the
+//     brain (a turn's card, a pack's), a memory, an intention or a version
+//     of the node written by "brain"; for a worker task, a memory its
+//     remember wrote (source task:<id>), or a version of the node written
+//     by a task or a skill's run.
 //   - answered: the card of what a brain turn is about (the turn's, or the
 //     one of a pack delivered with the turn's messages; a pack's other
 //     cards are no turn's) when the turn's answer, the first message after
 //     it, is the brain's, and the brain did not ask again for it in the
-//     turn (recall about it or naming it, read_thread of it): the card was
+//     turn (recall about it or naming it, node_read of it): the card was
 //     enough, or it did not matter to the answer; it does not tell which,
 //     so it is counted apart from wrote.
 //   - no: neither.
 //
-// The window is cardUseWindow for the brain, cardUseLongWindow for a task
-// or a lead, which work longer. Counts are shown in
+// The window is cardUseWindow for the brain, cardUseLongWindow for a task,
+// which works longer. Counts are shown in
 // the tasks' reliability panel; each push is logged too.
 
 const cardPushesSchema = `CREATE TABLE IF NOT EXISTS card_pushes (
 	id      INTEGER PRIMARY KEY AUTOINCREMENT,
 	at      INTEGER NOT NULL,
 	about   TEXT NOT NULL DEFAULT '',
-	place   TEXT NOT NULL,               -- turn, pack, task, lead
+	place   TEXT NOT NULL,               -- turn, pack, task
 	chars   INTEGER NOT NULL,
 	turn    INTEGER NOT NULL DEFAULT 0,  -- the brain's turn it went in (its last message's seq); 0 for none
-	who     TEXT NOT NULL DEFAULT '',    -- the task's id, the lead's thread
-	looked  INTEGER NOT NULL DEFAULT 0,  -- recall or read_thread asked for it in that turn
+	who     TEXT NOT NULL DEFAULT '',    -- the task's id
+	looked  INTEGER NOT NULL DEFAULT 0,  -- recall or node_read asked for it in that turn
 	used    TEXT NOT NULL DEFAULT ''     -- '' until judged; wrote, answered, no
 );
 CREATE INDEX IF NOT EXISTS card_pushes_used ON card_pushes (used, at);`
@@ -50,10 +50,7 @@ const (
 	placeTurn = "turn" // the brain's turn, its card
 	placePack = "pack" // a fresh session's context pack
 	placeTask = "task" // a worker task's first prompt
-	placeLead = "lead" // a thread lead's first turn
 )
-
-var cardPlaces = []string{placeTurn, placePack, placeTask, placeLead}
 
 // How a card pushed was judged.
 const (
@@ -69,14 +66,14 @@ const (
 )
 
 func cardWindow(place string) time.Duration {
-	if place == placeTask || place == placeLead {
+	if place == placeTask {
 		return cardUseLongWindow
 	}
 	return cardUseWindow
 }
 
 // cardPushed logs a card given to a model and counts it: where (place),
-// in which brain turn (0 for none), to which task or lead.
+// in which brain turn (0 for none), to which task.
 func (c *core) cardPushed(x pushedCard, place string, turn int, who string) {
 	where := place
 	if who != "" {
@@ -96,7 +93,7 @@ func (c *core) turnSeq() int {
 }
 
 // cardLookedUp notes that the brain asked again, in its turn, for these
-// threads or entities: their cards of the turn were not enough.
+// nodes or entities: their cards of the turn were not enough.
 func (c *core) cardLookedUp(keys ...string) {
 	turn := c.turnSeq()
 	if turn == 0 {
@@ -110,8 +107,8 @@ func (c *core) cardLookedUp(keys ...string) {
 	}
 }
 
-// recallLookedUp notes what a recall asks for: its about, and the threads
-// and entities its words name.
+// recallLookedUp notes what a recall asks for: its about, and the
+// entities its words name.
 func (c *core) recallLookedUp(in recallIn) {
 	keys := c.named(in.Query)
 	if in.About != "" {
@@ -162,18 +159,27 @@ func (c *core) judgeCardPushes(now time.Time) {
 func (c *core) judgeCard(x cardPush) string {
 	from, to := x.At.Unix(), x.At.Add(cardWindow(x.Place)).Unix()
 	var n int
-	threadBy := func(who string) int {
-		var k int
-		id, ok := threadOfAbout(x.About)
-		if !ok {
+	nodeBy := func(task bool) int {
+		id, ok := strings.CutPrefix(x.About, refNode+":")
+		if !ok || c.nodes == nil {
 			return 0
 		}
-		c.store.db.QueryRow(`SELECT COUNT(*) FROM thread_log WHERE thread = ? AND at BETWEEN ? AND ? AND who = ?`, id, from, to, who).Scan(&k)
+		vs, _ := c.nodes.Versions(id)
+		k := 0
+		for _, v := range vs {
+			by := v.Author == byBrain
+			if task {
+				by = strings.HasPrefix(v.Author, "task:") || strings.HasPrefix(v.Author, "skill:")
+			}
+			if by && v.At.Unix() >= from && v.At.Unix() <= to {
+				k++
+			}
+		}
 		return k
 	}
 	switch x.Place {
 	case placeTurn, placePack:
-		n = threadBy(byBrain)
+		n = nodeBy(false)
 		if c.mem != nil {
 			var m, i int
 			c.mem.db.QueryRow(`SELECT COUNT(*) FROM memory_log l JOIN memories m ON m.id = l.memory_id
@@ -183,15 +189,13 @@ func (c *core) judgeCard(x cardPush) string {
 			n += m + i
 		}
 	case placeTask:
-		n = threadBy("task")
+		n = nodeBy(true)
 		if c.mem != nil {
 			var m int
 			c.mem.db.QueryRow(`SELECT COUNT(*) FROM memory_log l JOIN memories m ON m.id = l.memory_id
 				WHERE m.about = ? AND l.time BETWEEN ? AND ? AND l.who = 'task' AND m.source_ref = ?`, x.About, from, to, "task:"+x.Who).Scan(&m)
 			n += m
 		}
-	case placeLead:
-		n = threadBy("lead")
 	}
 	if n > 0 {
 		return cardWrote
@@ -263,7 +267,7 @@ func (s *Store) cardUses(since time.Time, about string) []cardUse {
 		}
 	}
 	var out []cardUse
-	for _, p := range cardPlaces {
+	for _, p := range []string{placeTurn, placePack, placeTask} {
 		if u := byPlace[p]; u != nil {
 			out = append(out, *u)
 		}

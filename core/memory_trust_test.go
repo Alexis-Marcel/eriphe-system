@@ -14,7 +14,7 @@ import (
 
 // testMemoryCore is a core with a store, a memory, a brain task and an
 // agent whose credential exists, so that tasks can be started (they wait
-// for a node).
+// for a device).
 func testMemoryCore(t *testing.T) (*core, *fakeClock) {
 	t.Helper()
 	dir := t.TempDir()
@@ -31,10 +31,10 @@ func testMemoryCore(t *testing.T) (*core, *fakeClock) {
 		Memory: &MemoryConfig{}, Brain: &BrainConfig{}}
 	c := newCore(cfg, s)
 	c.setServerTrust("vault", true, trustByUser)
-	// A node that has gone offline: tasks wait for it.
-	s.registerNode("nas", hashSecret("a"))
-	s.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code"]}`))
-	s.setNodeStatus("nas", false, nil)
+	// A device that has gone offline: tasks wait for it.
+	s.registerDevice("nas", hashSecret("a"))
+	s.setDeviceStatus("nas", true, []byte(`{"runtimes":["claude-code"]}`))
+	s.setDeviceStatus("nas", false, nil)
 	m, clock := testMemory(t)
 	c.useMemory(m)
 	s.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateIdle, Prompt: "brain"})
@@ -494,5 +494,45 @@ func TestBrainStartReplyQuiet(t *testing.T) {
 	c.relayBrainOutput(theBrain(c), t1)
 	if got := brainSaid(); strings.Join(got, "|") != "Bonjour Sam" {
 		t.Fatalf("brain said %v", got)
+	}
+}
+
+// A link's path is no secret: a pull request's files, a document's id,
+// an issue in a long owner/repo path pass, in the memory and in nodes. A
+// token still does: by its known shape anywhere (a path included), as a
+// query's or fragment's key or long random value, as a user's password,
+// and as a long random string outside a link.
+func TestScanSecretsLinks(t *testing.T) {
+	for _, ok := range []string{
+		"See https://github.com/Some-Owner/some-repository-name/pull/640/files for the diff.",
+		"Le plan : https://docs.google.com/document/d/1aBcD3fGhIjKlMn0pQrStUvWxYz4AbCdEfGhIjKlMn5o/edit?usp=sharing",
+		"https://docs.google.com/spreadsheets/d/1Zx9YwVuTsRqPoNmLkJiHgFeDcBa8765aBcDeFgHiJkL/edit#gid=0",
+		"(https://example.org/a/VeryLongPathSegmentWithCaps123/AndAnotherOneWithDigits456/x).",
+	} {
+		if why := scanSecrets(ok); why != "" {
+			t.Errorf("refused %q: %s", ok, why)
+		}
+		if res := scanMemoryText(ok); res.Reject != "" {
+			t.Errorf("memory refused %q: %s", ok, res.Reject)
+		}
+	}
+	for _, secret := range []string{
+		"https://example.org/hook?x=aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9",
+		"https://example.org/cb#access_token=abc",
+		"https://example.org/p?token=abc",
+		"https://example.org/api/ghp_0123456789abcdefghijABCDEFGHIJ/x",
+		"https://sam:hunter2@example.org/",
+		"key aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9 here",
+		"key aB3dE5gH7jK9mN1/pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9+ here",
+		"x://aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9",
+	} {
+		if why := scanSecrets(secret); why == "" {
+			t.Errorf("a secret passed: %q", secret)
+		}
+	}
+	// The limit, written down: a random token as a link's path segment, in
+	// no known shape, passes (a webhook's own secret path).
+	if why := scanSecrets("https://example.org/hooks/aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1dF3hJ5kL7nP9"); why != "" {
+		t.Errorf("a path segment refused: %s", why)
 	}
 }

@@ -184,32 +184,32 @@ func checkSelfHosted(ctx context.Context, lang, base, key string) testView {
 	return selfHostedModels(lang, key, resp)
 }
 
-// checkNodeModel tries the model server a node lends (its -model-server)
-// as the tasks will reach it, through the node's tunnel: GET /v1/models,
+// checkDeviceModel tries the model server a device lends (its -model-server)
+// as the tasks will reach it, through the device's tunnel: GET /v1/models,
 // with the server's key if it has one.
-func (c *core) checkNodeModel(ctx context.Context, lang, node, key string) testView {
+func (c *core) checkDeviceModel(ctx context.Context, lang, device, key string) testView {
 	key = strings.TrimSpace(key)
-	if !nodeName.MatchString(node) {
-		return testView{State: "err", Text: tr(lang, "providers.nonode"), Cause: causeNetwork}
+	if !deviceName.MatchString(device) {
+		return testView{State: "err", Text: tr(lang, "providers.nodevice"), Cause: causeNetwork}
 	}
 	if !selfHostedKey(key) {
 		return testView{State: "err", Text: tr(lang, "providers.badkey"), Cause: causeAuth}
 	}
 	ctx, cancel := context.WithTimeout(ctx, testConnTimeout)
 	defer cancel()
-	resp, err := c.nodeModels(ctx, node, key)
+	resp, err := c.deviceModels(ctx, device, key)
 	switch {
 	case errors.Is(err, errOffline):
-		return testView{State: "err", Text: trf(lang, "ptest.nodeoffline", node), Cause: causeNetwork}
+		return testView{State: "err", Text: trf(lang, "ptest.deviceoffline", device), Cause: causeNetwork}
 	case err != nil:
-		v := testView{State: "err", Text: trf(lang, "ptest.nodeoffline", node), Cause: causeNetwork, Detail: truncate(err.Error(), 200)}
+		v := testView{State: "err", Text: trf(lang, "ptest.deviceoffline", device), Cause: causeNetwork, Detail: truncate(err.Error(), 200)}
 		if ctx.Err() != nil {
 			v.Text = tr(lang, "test.timeout")
 		}
 		return v
 	case resp.StatusCode == http.StatusBadGateway:
 		resp.Body.Close()
-		return testView{State: "err", Text: trf(lang, "ptest.nodemodeldown", node), Cause: causeServer}
+		return testView{State: "err", Text: trf(lang, "ptest.devicemodeldown", device), Cause: causeServer}
 	}
 	return selfHostedModels(lang, key, resp)
 }

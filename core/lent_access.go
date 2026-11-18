@@ -29,12 +29,12 @@ import (
 // property of it.
 //
 // The agent never holds the secret. Its container gets a placeholder in the
-// access's variable; the node's relay decrypts the access's hosts only, with
+// access's variable; the device's relay decrypts the access's hosts only, with
 // the task's own certificate authority, and hands each request here:
 //
-//	program → the node's relay (node/egress_access.go) → eriphe-core → the service
+//	program → the device's relay (device/egress_access.go) → eriphe-core → the service
 //
-//	/v1/node/tasks/{id}/access   (node secret)
+//	/v1/device/tasks/{id}/access   (device secret)
 //
 // eriphe-core puts the secret in the access's one header, in place of the
 // placeholder, and goes on to the host the relay was asked for, never the
@@ -53,8 +53,8 @@ const (
 
 	accessDefaultHeader = "Authorization"
 
-	// What the node's relay adds to a request: the host the task connected
-	// to, the request's own target, and its Authorization (the node's
+	// What the device's relay adds to a request: the host the task connected
+	// to, the request's own target, and its Authorization (the device's
 	// secret takes that header on the way here).
 	accessHostHeader   = "Eriphe-Access-Host"
 	accessTargetHeader = "Eriphe-Access-Target"
@@ -289,7 +289,7 @@ func swapPlaceholder(value, placeholder, secret string) (string, bool) {
 }
 
 // accessBlocked are the non-public ranges netip has no predicate for, as in
-// the node's relay (node/egress.go): some embed a private IPv4.
+// the device's relay (device/egress.go): some embed a private IPv4.
 var accessBlocked = []netip.Prefix{
 	netip.MustParsePrefix("0.0.0.0/8"),
 	netip.MustParsePrefix("192.0.0.0/24"),
@@ -307,7 +307,7 @@ var accessBlocked = []netip.Prefix{
 
 // accessAddr is an address eriphe-core goes to for an access: a public one.
 // A declared name must not lead it to its own network, the cloud's metadata
-// or the node's LAN (a private target leaves from the node: not yet).
+// or the device's LAN (a private target leaves from the device: not yet).
 func accessAddr(a netip.Addr) bool {
 	a = a.Unmap()
 	if !a.IsValid() || !a.IsGlobalUnicast() || localAddr(a) {
@@ -370,17 +370,17 @@ func (c *core) accessUsable(t *TaskRow, name string) error {
 	return fmt.Errorf("the access %s needs the user's approval, which this task did not get", name)
 }
 
-// taskAccessHandler serves /v1/node/tasks/{id}/access, for nodes.
+// taskAccessHandler serves /v1/device/tasks/{id}/access, for devices.
 func (c *core) taskAccessHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		node, ok := c.nodeFromRequest(r)
+		device, ok := c.deviceFromRequest(r)
 		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		t, err := c.store.task(r.PathValue("id"))
-		if err != nil || t.Node != node || finished(t.State) {
-			http.Error(w, "no such task on this node", http.StatusNotFound)
+		if err != nil || t.Device != device || finished(t.State) {
+			http.Error(w, "no such task on this device", http.StatusNotFound)
 			return
 		}
 		target, err := accessTarget(r.Header.Get(accessHostHeader))
@@ -399,7 +399,7 @@ func (c *core) taskAccessHandler() http.Handler {
 			http.Error(w, "no access of this task reaches "+target, http.StatusForbidden)
 			return
 		}
-		// What the service gets: the task's request, nothing of the node's.
+		// What the service gets: the task's request, nothing of the device's.
 		auth := r.Header.Get(accessAuthHeader)
 		for k := range r.Header {
 			if strings.HasPrefix(k, "Eriphe-") {
@@ -504,9 +504,9 @@ func (c *core) injectAccess(t *TaskRow, names []string, target string, r *http.R
 	return strings.NewReplacer(pairs...), nil
 }
 
-// lentAccesses are a task's accesses as its node gets them: no secret.
-func (c *core) lentAccesses(taskID string, list []ResourceRef) []nodeAccess {
-	var out []nodeAccess
+// lentAccesses are a task's accesses as its device gets them: no secret.
+func (c *core) lentAccesses(taskID string, list []ResourceRef) []deviceAccess {
+	var out []deviceAccess
 	conf := c.conf()
 	for _, e := range list {
 		a, ok := conf.Accesses[e.Ref]
@@ -518,9 +518,9 @@ func (c *core) lentAccesses(taskID string, list []ResourceRef) []nodeAccess {
 				log.Printf("access: %s: %v", e.Ref, err)
 				continue
 			}
-			out = append(out, nodeAccess{Name: e.Ref, SSH: &nodeSSH{Target: a.sshTarget(), User: a.User, HostKey: a.HostKey, PublicKey: public}})
+			out = append(out, deviceAccess{Name: e.Ref, SSH: &deviceSSH{Target: a.sshTarget(), User: a.User, HostKey: a.HostKey, PublicKey: public}})
 		default:
-			out = append(out, nodeAccess{Name: e.Ref, Hosts: a.targets(), Env: a.Env, Placeholder: accessPlaceholder(taskID, e.Ref)})
+			out = append(out, deviceAccess{Name: e.Ref, Hosts: a.targets(), Env: a.Env, Placeholder: accessPlaceholder(taskID, e.Ref)})
 		}
 	}
 	return out

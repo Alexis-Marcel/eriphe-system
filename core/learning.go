@@ -515,7 +515,7 @@ func (m *memStore) undoMemory(e *learnEntry, who, reason string, evidence []stri
 	if _, err := tx.Exec(`UPDATE learning_log SET status = 'reverted', undo = '' WHERE id = ?`, e.ID); err != nil {
 		return nil, err
 	}
-	return r, tx.Commit()
+	return r, m.commit(tx)
 }
 
 // unretire makes the memory a change replaced current again, as it was.
@@ -594,7 +594,6 @@ func (c *core) approveSkill(name, sha, who string) error {
 		return err
 	}
 	c.learnSkill(name, sha, prev, who, "approved")
-	c.openSkillThreads(name, true) // its thread shows from now (task_threads.go)
 	return nil
 }
 

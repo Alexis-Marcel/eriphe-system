@@ -101,16 +101,16 @@ func TestWebWelcomeFlow(t *testing.T) {
 		!strings.Contains(body, `hx-get="/welcome/status"`) || strings.Contains(body, `name="key"`) {
 		t.Fatalf("waiting for a machine: %s", body)
 	}
-	c.store.registerNode("pc", hashSecret("s"))
+	c.store.registerDevice("pc", hashSecret("s"))
 	if _, body, _ = tw.do("GET", "/welcome/status", nil, nil); !strings.Contains(body, "Jarvis démarre sur cette machine") ||
 		strings.Contains(body, "/settings/devices") {
 		t.Fatalf("registered, not online yet: %s", body)
 	}
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	if _, body, _ = tw.do("GET", "/welcome/status", nil, nil); !strings.Contains(body, "Jarvis démarre sur cette machine") {
 		t.Fatalf("starting: %s", body)
 	}
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "pc", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
 	setBrainTask(c.core, "b-1")
 	_, body, _ = tw.do("GET", "/welcome/status", nil, nil)
 	if !strings.Contains(body, "Jarvis est prêt") || !strings.Contains(body, `href="/conversation"`) || strings.Contains(body, "hx-trigger") {

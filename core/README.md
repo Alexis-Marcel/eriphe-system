@@ -1,7 +1,7 @@
 # eriphe-core
 
-Eriphe's control plane (v0): it keeps the state of nodes and tasks in SQLite, schedules tasks on
-nodes, follows them, lends credentials, and gives the brain its tools over MCP. One binary, with
+Eriphe's control plane (v0): it keeps the state of devices and tasks in SQLite, schedules tasks on
+devices, follows them, lends credentials, and gives the brain its tools over MCP. One binary, with
 k8s-like modules: `store`, `api`/`mcp`, `scheduler`, controllers.
 
 ```sh
@@ -26,7 +26,8 @@ the container's network, Docker's userland proxy relays IPv6 clients, and eriphe
 with the bridge's gateway address.
 
 At first start it makes what it lacks in the data directory, and reuses it after: the API token
-(`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`) and the
+(`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`), the graph's
+nodes (`nodes/`, `nodes.db`), the memory's readable mirror (`memoire/`) and the
 workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). The API listens on
 `0.0.0.0:8800`, the workspace on `https://0.0.0.0:8443` (`ERIPHE_API_LISTEN` and `ERIPHE_WEB_LISTEN`,
 e.g. `0.0.0.0:9443`, move them, as `install.sh --api-port`, `--web-port` does on a Mac), and the
@@ -42,7 +43,7 @@ usual agents). The brain starts as soon as a machine has joined.
 Nothing else is on by default: no tool, no policy rule, no access; the catalog's tools (Home
 Assistant, GitHub, mail…) are added from Settings → Tools.
 
-An installer gets a join token for the machine's own node without the workspace:
+An installer gets a join token for the machine's own device without the workspace:
 
 ```sh
 docker exec eriphe-core eriphe-core join-token -name pc -quiet   # prints the token alone
@@ -112,15 +113,15 @@ to reach them; its kind says which runtimes can use it and in which variable its
 | `openai-compatible` | `opencode` | `SELFHOSTED_API_KEY`, optional (see [Self-hosted model server](#self-hosted-model-server)) |
 | `custom-api` | `acp` | the provider's own `env` (for example `DASHSCOPE_API_KEY`); not a system variable |
 
-The `opencode` runtime (OpenCode driven over ACP, see `node/README.md`) reaches any of these with
+The `opencode` runtime (OpenCode driven over ACP, see `device/README.md`) reaches any of these with
 an API key; its `model` is OpenCode's `provider/model`, and the provider must be the agent's
 (`openai/…` for `openai-api`, `google/…`, `mistral/…`, `openrouter/…`, `anthropic/…`), which the
 configuration checks. `vibe` is Mistral Vibe, Mistral's own program, driven over ACP too; its
 `model` is one of Vibe's aliases (`mistral-medium-3.5`), or none for Vibe's default. `acp` is any other ACP agent (Goose, Qwen Code…): the agent gives its `command`, one argument per item (`["goose", "acp"]`), run as is in the worker
 image or the agent's `image`, never through a shell; it takes no `model`. An
 **agent** is what the brain picks for a task: a runtime, a provider, a model, an optional image, the
-node labels it needs (`needs`, for example `gpu`), what it would rather have (`prefers`: `cpu`, `memory`,
-or any node label), and `use`, which tells the brain when to pick it.
+device labels it needs (`needs`, for example `gpu`), what it would rather have (`prefers`: `cpu`, `memory`,
+or any device label), and `use`, which tells the brain when to pick it.
 The brain is an agent too (`brain.agent`, or Settings → Agents when the file names none): changing
 it restarts the brain once its turn is over, on its session if the harness is the same, or on a
 fresh one with the context pack. Its runtime must take MCP servers and a system prompt. The provider's credential is lent to each task.
@@ -142,9 +143,9 @@ into Eriphe (Settings → Access).
 | `header` | the one header the secret goes in; `Authorization` by default, Bearer and Basic alike |
 | `rules` | if any, the only requests the secret goes on: `GET /v1/*`, `* /exact`. A path that may climb on the service, or is still encoded, is refused, and a method override header dropped: a limit against mistakes, the real one being the token's rights |
 
-The task never holds the secret. Its variable holds a placeholder; the node's relay decrypts the
-access's hosts only ([node/README](../node/README.md#accesses)) and hands each request to
-`/v1/node/tasks/{id}/access`, where eriphe-core puts the secret in that header and goes on to the
+The task never holds the secret. Its variable holds a placeholder; the device's relay decrypts the
+access's hosts only ([device/README](../device/README.md#accesses)) and hands each request to
+`/v1/device/tasks/{id}/access`, where eriphe-core puts the secret in that header and goes on to the
 host the task connected to, whatever its request says. A placeholder sent anywhere else, or in
 another header, stays a placeholder; a request that carries none goes as it is. An access has no
 grid, since Eriphe sees the use of the secret and not what the program does with it. `approval` is
@@ -158,7 +159,7 @@ What this does not do:
 - A service that reflects its headers hands the secret back. Response headers are scrubbed, as a
   raw value or as Basic; bodies, trailers and 1xx answers are not: inject into the one header, and
   prefer short-lived tokens. The page says so.
-- The node sees an access's requests, though not its secret. A client that pins its certificates
+- The device sees an access's requests, though not its secret. A client that pins its certificates
   fails on that access, and so does gRPC (HTTP/1.1 only), and a presigned URL cannot be made from a
   placeholder.
 - Each use is one row of `access_log`, written before the request goes, and the table is not
@@ -177,16 +178,16 @@ the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (p
   `authorized_keys`. One key per access: removing that line, or the access, ends it. Saving the
   access again keeps the key.
 - **The host key.** The page's test connects once from eriphe-core, which confirms the key is in
-  place, and records the machine's host key. A machine only a node reaches cannot be tested: its
+  place, and records the machine's host key. A machine only a device reaches cannot be tested: its
   key can be pasted (`ssh-keyscan`). An access with no host key cannot be lent. A key that changed
   fails the test; emptying the field and testing again records the new one.
-- **The path.** `eriphe-cred` is the task's SSH agent, and asks `/v1/node/tasks/{id}/ssh`
-  (`{op: keys | sign | connect}`) through its node. eriphe-core signs a login only (RFC 4252's
+- **The path.** `eriphe-cred` is the task's SSH agent, and asks `/v1/device/tasks/{id}/ssh`
+  (`{op: keys | sign | connect}`) through its device. eriphe-core signs a login only (RFC 4252's
   `publickey` request, or OpenSSH's host-bound one, whose host key must be the pinned one, for that
   key and the access's `user`): the key signs no commit or file and logs in to no other account. The session leaves from eriphe-core, as an HTTP access's requests
-  do: the relay upgrades `GET /v1/node/tasks/{id}/ssh/connect?target=host:port` (`eriphe-ssh`), and
-  eriphe-core decides and dials that exact address, carrying SSH's encrypted bytes. So a node need
-  not reach the machine. A machine eriphe-core cannot reach answers 502, and the node dials it
+  do: the relay upgrades `GET /v1/device/tasks/{id}/ssh/connect?target=host:port` (`eriphe-ssh`), and
+  eriphe-core decides and dials that exact address, carrying SSH's encrypted bytes. So a device need
+  not reach the machine. A machine eriphe-core cannot reach answers 502, and the device dials it
   itself. Each connection, login
   and refusal goes in `access_log` (tool `access`). A task lent an SSH access no longer gets the
   built-in ask on `ssh`, `scp`, `sftp` and `rsync`: the access was decided, and reaches that machine only.
@@ -195,7 +196,7 @@ the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (p
   pinned in the task's own `ssh` configuration, which a task can change: it protects a task from
   another machine, not a machine from the task.
 
-**Harness cards.** What each runtime can do, as the node drives it, is one entry of `harnesses`
+**Harness cards.** What each runtime can do, as the device drives it, is one entry of `harnesses`
 (`harnesses.go`): MCP servers, how it takes a system prompt (a flag, developer instructions, an
 instructions file, or prepended to the prompt), streaming, a PDF or an image in a tool result, its
 own web search and fetch, resume, and whether it picks a model when none is named. The core asks
@@ -235,10 +236,10 @@ brain, through OpenCode:
 - `models` are the server's model names, one word each (`qwen3:8b`, `org/model`): the agent form
   offers them, and the workspace creates one agent per model when the account is added (the first
   the default when there is none). An agent's `model` is `selfhosted/<model>`.
-- When a node fetches a task of such an agent, eriphe-core adds `model_endpoint` (`base_url`, and
+- When a device fetches a task of such an agent, eriphe-core adds `model_endpoint` (`base_url`, and
   `key_env` with a key) to its spec and that one `host:port` to a copy of its egress rule
-  (`endpoints`): the node's relay lets the task reach that server, even on the LAN or another
-  port, and nothing else of the LAN (`node/README.md`, Egress).
+  (`endpoints`): the device's relay lets the task reach that server, even on the LAN or another
+  port, and nothing else of the LAN (`device/README.md`, Egress).
 - Nothing is assumed of the models but tool calling. Pick one made for it (Qwen 3, Llama 3.1+,
   Mistral…), and give it enough context: Ollama's default is small, and its documentation
   recommends 16k to 32k tokens for tool calling (`OLLAMA_CONTEXT_LENGTH=32768`, or `num_ctx` in a
@@ -259,48 +260,48 @@ model added; a save with none ticked lists them instead. A name can be typed by 
 server cannot be asked. On an edit, the models the server serves that the account does not use yet
 are offered as new.
 
-#### A model behind a node
+#### A model behind a device
 
 The server can also stay on its machine, listening on that machine only, a home PC or a rented
-server, with no port opened and no account elsewhere: eriphe-node runs there with
+server, with no port opened and no account elsewhere: eriphe-device runs there with
 `-model-server http://127.0.0.1:11434` (the installers' `--model-server`, `-ModelServer` on
-Windows), and the provider names that node in place of an address:
+Windows), and the provider names that device in place of an address:
 
 ```json
-"providers": {"gpu": {"kind": "openai-compatible", "node": "gpu-box", "models": ["qwen3:8b"]}}
+"providers": {"gpu": {"kind": "openai-compatible", "device": "gpu-box", "models": ["qwen3:8b"]}}
 ```
 
 In the workspace: Add an AI account → Modèle auto-hébergé → "Sur un de mes appareils", then the
-device (the ones whose node reports `model_server`; Settings → Devices tags them "Prête un
-modèle"). `node` and `base_url` exclude each other.
+device (the ones whose device reports `model_server`; Settings → Devices tags them "Prête un
+modèle"). `device` and `base_url` exclude each other.
 
-The address is the one the node reaches (`install/README.md`, A model behind this machine): on
-Linux the node is a container, so the server is a container next to it on `eriphe-system`
-(`http://eriphe-ollama:11434`); on a Mac with Apple's container, `127.0.0.1`; on Windows, the node
+The address is the one the device reaches (`install/README.md`, A model behind this machine): on
+Linux the device is a container, so the server is a container next to it on `eriphe-system`
+(`http://eriphe-ollama:11434`); on a Mac with Apple's container, `127.0.0.1`; on Windows, the device
 runs in WSL, which reaches Windows' `127.0.0.1` only with mirrored networking (`networkingMode=mirrored`
 in the `[wsl2]` section of `%USERPROFILE%\.wslconfig`, Windows 11 22H2 or later, then
 `wsl --shutdown`, which applies to every distribution, and the install again). Ollama for Windows
-runs only in its user's session, while the node runs without anyone logged in: put it in the
+runs only in its user's session, while the device runs without anyone logged in: put it in the
 startup programs (Win+R, `shell:startup`). The installers check at the end that the server answers
-the node.
+the device.
 
 The path (`model_relay.go`):
 
 ```
-task (any node, the brain too) → its node:   <callback>/model/v1/{path}   (the task's secret)
-its node → eriphe-core:                      /v1/node/tasks/{id}/model/{path}  (node secret, mTLS)
-eriphe-core → the lending node:              /v1/model/{path}   (that node's tunnel)
-the lending node → the server:               <model-server>/v1/{path}
+task (any device, the brain too) → its device:   <callback>/model/v1/{path}   (the task's secret)
+its device → eriphe-core:                      /v1/device/tasks/{id}/model/{path}  (device secret, mTLS)
+eriphe-core → the lending device:              /v1/model/{path}   (that device's tunnel)
+the lending device → the server:               <model-server>/v1/{path}
 ```
 
-- eriphe-core relays only for a task that runs on the calling node, is not finished, and whose
-  agent (OpenCode) uses a provider with `node`; only `GET` and `POST`, only paths under `/v1`
-  (`..`, even escaped, is refused here and again by the lending node, so Ollama's own `/api`,
-  with pull and delete, stays out of reach); bodies up to 64 MiB. The task's and the node's
+- eriphe-core relays only for a task that runs on the calling device, is not finished, and whose
+  agent (OpenCode) uses a provider with `device`; only `GET` and `POST`, only paths under `/v1`
+  (`..`, even escaped, is refused here and again by the lending device, so Ollama's own `/api`,
+  with pull and delete, stays out of reach); bodies up to 64 MiB. The task's and the device's
   secrets stop here: the server gets the provider's key (`secret`), if any, which is never lent
   to a task.
 - The task's spec carries `model_endpoint: {"relay": true}`, no address and no key; its egress
-  rule is unchanged (its node is reached directly, as for its catalog servers).
+  rule is unchanged (its device is reached directly, as for its catalog servers).
 - Answers stream through as they come (`FlushInterval: -1` at every hop): a chat completion's
   server-sent events arrive token by token.
 - The lending machine must be connected: otherwise the task's request fails with `502` ("the
@@ -323,15 +324,15 @@ holders refreshing it would sign each other out):
   is a week old; the new refresh token is written to the vault before the new access token is
   used. A refusal (the sign-in was revoked) fails the lend with "sign in again"; a passing failure
   lends the current token while it is still valid.
-- **Lent to each task.** When a node fetches a task, eriphe-core lends an `auth.json` with the
+- **Lent to each task.** When a device fetches a task, eriphe-core lends an `auth.json` with the
   access token, the ID token and the account, **no refresh token**, and `last_refresh` set to
-  now, so Codex does not refresh it (see `node/README.md` for where the node puts it). A task
+  now, so Codex does not refresh it (see `device/README.md` for where the device puts it). A task
   that outlives its access token stops with an authentication error; a restart lends a fresh one.
 - Tokens are never logged (the log names a sign-in by the first characters of its random id), never
   stored in a task's spec, never shown: the page shows the account's e-mail and plan only.
   `ERIPHE_CHATGPT_ISSUER` points the sign-in at a fake OpenAI, for tests.
 
-Secrets stay in files (or the vault). A provider's key is read when a task starts, sent to its node,
+Secrets stay in files (or the vault). A provider's key is read when a task starts, sent to its device,
 and never stored or logged; an access's never leaves eriphe-core.
 
 ## Dynamic catalog (workspace)
@@ -357,7 +358,7 @@ in eriphe-core's database (`catalog` table) and merged with the configuration at
 - **Live.** The merged configuration is an immutable snapshot, swapped whole on each change (the
   many goroutines that read it never see half a change). Then the upstream pool connects new
   servers, closes removed ones and starts changed ones over; local servers are registered again as
-  services; tasks waiting for a node are placed again; `list_tools` and `list_agents` show the new
+  services; tasks waiting for a device are placed again; `list_tools` and `list_agents` show the new
   state; and, with a brain, an event message in the conversation tells it what changed. A running
   brain's own MCP servers are set when it starts: a tool added to `brain.tools` reaches it at its
   next start.
@@ -394,7 +395,7 @@ holds their credentials and is the only one to reach them: **a task never sees a
 |---|---|
 | `url` | a remote server (streamable HTTP) |
 | `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"connection": "<id>"}` (a connection whose provider mints the tokens, refreshed before they end: Eriphe's GitHub App on one account's or organization's installation, see [GitHub in a task](#the-github-app)), `{"none": true}` |
-| `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
+| `run` | instead of `url` and `auth`: a local server, a container a device runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
 | `use` | what it is for, for the brain: one sentence, 300 characters at most, shown under the heading of its page and edited there in place (its pencil, `POST /settings/tools/{name}/use`) |
 | `title` | the user's own name for it, shown on its card and as its page's heading (edited there in place: the pencil beside it, Enter saves, Escape cancels; `POST /settings/tools/{name}/title`); the key stays its technical name, in its tools' names, and a new title restarts nothing |
 | `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `ask` |
@@ -415,12 +416,12 @@ the task. The brain's is `brain.tools` plus, without configuration, every read-o
 servers trusted for their annotations (see the brain). Catalog tools need an agent whose runtime
 takes MCP servers.
 
-**The path of a call.** When a node fetches a task, its assignment names the catalog servers of
-its grant (`spec.servers`), nothing else. The node gives the agent, for each, an MCP server at
+**The path of a call.** When a device fetches a task, its assignment names the catalog servers of
+its grant (`spec.servers`), nothing else. The device gives the agent, for each, an MCP server at
 `<callback-url>/mcp/<server>` with the task's own secret, and relays its requests to eriphe-core
-at `/v1/node/tasks/{id}/mcp/{server}` with the node's secret (and certificate), over the same
-connection as its assignments and reports (so it works wherever they do: the NAS node on the Docker
-network, the PC node under WSL). eriphe-core serves there an MCP server built from the cached tools the grant
+at `/v1/device/tasks/{id}/mcp/{server}` with the device's secret (and certificate), over the same
+connection as its assignments and reports (so it works wherever they do: the NAS device on the Docker
+network, the PC device under WSL). eriphe-core serves there an MCP server built from the cached tools the grant
 covers (their own input schemas; `tools/list` shows only them, any other call is refused), and
 forwards each call upstream with the real credential. Tools only for now (no resources or
 prompts); a long call streams, within the server's `timeout`.
@@ -452,7 +453,7 @@ a task are tainted once they read what comes neither from the user nor from Erip
   started on a tainted turn, when it called a tool not trusted (seen by the proxy, which every
   catalog call crosses, and in its events), when it read the web, or when its events cannot be
   read. The event of its turn's end then says so and taints the turn that reads it
-  (`task:<id>`), as `task_status` and a thread's report of it do; a task that read only the
+  (`task:<id>`), as `task_status` and its node's trace do; a task that read only the
   user's own and trusted tools does not. A closed value (a choice, a number, a date, a count of
   rows) never taints, whoever wrote it (assistant state).
 - **The limit: a task's shell traffic is not read.** What a program fetches with `curl`, a package
@@ -530,10 +531,10 @@ new access token is used. The database file is as sensitive as `/secrets`.
 - Vendor credentials live in `/secrets` (bearer tokens, OAuth clients) and in eriphe-core's
   database (OAuth tokens). A remote server's go from eriphe-core to that server only. A local
   service of Eriphe's own (the mail, the calendar, the files) reads its account's token in its
-  environment, lent by eriphe-core to the node that runs it, which passes it to that service's
+  environment, lent by eriphe-core to the device that runs it, which passes it to that service's
   container only ([connections](#connections)): a token is never in a task, a task's spec or a
-  service's spec, and never in a node's other containers.
-- A task reaches only its node, with its own secret, and only the servers of its grant; the node
+  service's spec, and never in a device's other containers.
+- A task reaches only its device, with its own secret, and only the servers of its grant; the device
   reaches eriphe-core with its secret, and only for its own running tasks.
 - Every call is a permission request first, under the policy below; the proxy enforces it with
   tickets.
@@ -544,32 +545,32 @@ new access token is used. The database file is as sensitive as `/secrets`.
 - What servers say (descriptions, results, errors) is data for the agents, never instructions:
   the brain's prompt says so, and the policy, not the brain, decides what reaches a third party.
 
-## Nodes
+## Devices
 
-Nodes are not configured: they join. `eriphe-core join-token -name pc` creates a single-use token
-for the node `pc` (valid 24 h, `-ttl` to change) and prints the command to run on the new machine;
+Devices are not configured: they join. `eriphe-core join-token -name pc` creates a single-use token
+for the device `pc` (valid 24 h, `-ttl` to change) and prints the command to run on the new machine;
 the workspace's "Connecter un appareil" does the same. It reads the same `-config` or `-data` as
 eriphe-core and asks the running one; `-quiet` prints the token alone, for a script. The address
 in the command is `public_url` or, without it, the workspace's own host on eriphe-core's port
 (a workspace opened at `localhost` says that address only works on that computer); the CLI then
 prints a placeholder. A token is `id.secret` and joins only under
-the name it was made for, and never under the name of a registered node: a stolen or mistyped token
-cannot take over another node's tasks and lent credentials. A reinstalled machine joins again with a
+the name it was made for, and never under the name of a registered device: a stolen or mistyped token
+cannot take over another device's tasks and lent credentials. A reinstalled machine joins again with a
 rejoin token for its own name (`join-token -name pc -rejoin`, or "Réinscrire cet appareil" on its
-card), which replaces its secret. Tokens made before names existed join a new name only. The node gets its own
-secret (only its hash is stored), then keeps a tunnel open to `GET /v1/nodes/connect`; eriphe-core
-speaks the node's API through it. A node is online while its tunnel is up and answers.
+card), which replaces its secret. Tokens made before names existed join a new name only. The device gets its own
+secret (only its hash is stored), then keeps a tunnel open to `GET /v1/devices/connect`; eriphe-core
+speaks the device's API through it. A device is online while its tunnel is up and answers.
 
 | Call | What |
 |---|---|
-| `POST /v1/join-tokens?name=pc&ttl=24h` | new join token for `pc`, with `ca_hash`; `&rejoin=1` for a registered node (bearer token) |
-| `GET /v1/nodes` | registered nodes, with `cert_expires` once a node has its certificate, and `version`, `latest`, `update_available`, `update_commands` (bearer token) |
-| `GET /v1/version` | `{core: {version, latest, update_available, update_commands}, node: {latest}}`: the latest versions on the registry, empty while unknown (bearer token) |
-| `DELETE /v1/nodes/{name}` | forget a node; its tasks become `lost`, its certificate is revoked (bearer token) |
-| `GET /v1/nodes/tls`, `PUT /v1/nodes/tls` | the CA's hash, whether nodes must use TLS, which have no certificate yet; advanced: `{"tls_only": false}` keeps the plain path open, `{"tls_only": true}` closes it (bearer token) |
-| `POST /v1/nodes/join` | `{name, token}` → `{secret}` (join token for that name) |
-| `POST /v1/node/certificate` | `{csr}` (PEM) → `{ca, certificate, expires}` (node secret, and its certificate once it has one) |
-| `GET /v1/nodes/connect` | the tunnel (node secret, `Eriphe-Node: name`, and its certificate) |
+| `POST /v1/join-tokens?name=pc&ttl=24h` | new join token for `pc`, with `ca_hash`; `&rejoin=1` for a registered device (bearer token) |
+| `GET /v1/devices` | registered devices, with `cert_expires` once a device has its certificate, and `version`, `latest`, `update_available`, `update_commands` (bearer token) |
+| `GET /v1/version` | `{core: {version, latest, update_available, update_commands}, device: {latest}}`: the latest versions on the registry, empty while unknown (bearer token) |
+| `DELETE /v1/devices/{name}` | forget a device; its tasks become `lost`, its certificate is revoked (bearer token) |
+| `GET /v1/devices/tls`, `PUT /v1/devices/tls` | the CA's hash, whether devices must use TLS, which have no certificate yet; advanced: `{"tls_only": false}` keeps the plain path open, `{"tls_only": true}` closes it (bearer token) |
+| `POST /v1/devices/join` | `{name, token}` → `{secret}` (join token for that name) |
+| `POST /v1/device/certificate` | `{csr}` (PEM) → `{ca, certificate, expires}` (device secret, and its certificate once it has one) |
+| `GET /v1/devices/connect` | the tunnel (device secret, `Eriphe-Device: name`, and its certificate) |
 
 **Versions.** Releases are Git tags `vX.Y.Z`, which CI creates from the Conventional Commits merged
 to `main` ([RELEASING.md](../RELEASING.md)). All the images of one CI build share its version
@@ -590,7 +591,7 @@ answer older than 15 minutes, asks again in the background; "Vérifier maintenan
 Devices → Updates asks at once (once a minute at most) and says when it last did. A machine is behind when it runs a release older than that one
 (semver order, `version.go`); a build of
 `main` or a local one never says so, as someone is testing it. The images publish their `latest`
-tag each on its own, as their build ends: while a release is half published (eriphe-node's
+tag each on its own, as their build ends: while a release is half published (eriphe-device's
 `latest` out, eriphe-core's or eriphe-base's not yet), the latest release is the older one, which
 every image has, and the check runs again five minutes later. The workspace shows `0.2.0`, and a
 build of `main` as `0.2.0-dev` with its commit in small.
@@ -601,7 +602,7 @@ Each machine updates itself, with the updater its installer put on the host side
 (install/README.md, The machines update themselves); eriphe-core says when (`machine_updates.go`).
 The workspace always says when a machine is behind (a dot, "Mise à jour disponible"), with one
 "Mettre à jour" button on each machine that has an updater, "Tout mettre à jour" when several are
-behind (eriphe-core first; the nodes follow once it runs the latest version), and one switch for
+behind (eriphe-core first; the devices follow once it runs the latest version), and one switch for
 all machines, "Mettre à jour automatiquement la nuit" (off by default; 3:00 to 5:00 in `timezone`,
 once a night). A machine without an updater shows the one command that updates it, for how it was
 installed (`ERIPHE_INSTALL`: `linux`, `macos`, `windows`, or `docker` for the one-container
@@ -614,31 +615,31 @@ choices of before, for all machines and for each one, are dropped at start; "at 
 turns the switch on.
 
 The order is Kubernetes': eriphe-core's machine first (its request goes to `update-requested` in
-the data folder, for the updater; the outcome comes back in `update-status`); a node only once
+the data folder, for the updater; the outcome comes back in `update-status`); a device only once
 eriphe-core runs the latest version, in its assignments (`update`, with eriphe-core's version, the
-most the node may get), and the node waits for its tasks to end. A node is offered eriphe-core's
-build, never a newer one: while eriphe-core is behind, a node's "Mettre à jour" asks eriphe-core
+most the device may get), and the device waits for its tasks to end. A device is offered eriphe-core's
+build, never a newer one: while eriphe-core is behind, a device's "Mettre à jour" asks eriphe-core
 first ("Eriphe se met d'abord à jour, puis cet appareil"), and the card says it waits for
-eriphe-core until eriphe-core runs the latest version; the node is asked then (`followUpdates`,
+eriphe-core until eriphe-core runs the latest version; the device is asked then (`followUpdates`,
 as for "Tout mettre à jour"), and not at all if eriphe-core's update ends elsewhere (failed,
 rolled back, pinned). Without an updater on eriphe-core's machine, the button waits for its
 command. An update that ends "ok" or "current" on another version than the one offered says it
-did not reach it, never "À jour". While a node has a request, the
+did not reach it, never "À jour". While a device has a request, the
 scheduler treats it as offline: new tasks wait for it. A request not done within a day is dropped;
 one with the updater (handed to it, or "running") that has not ended within 30 minutes stopped (its
 updater died, or a reinstall restarted it): it is dropped, and the machine's line says "La mise à
-jour s'est arrêtée sans résultat". A node that runs eriphe-core's version already (its install
+jour s'est arrêtée sans résultat". A device that runs eriphe-core's version already (its install
 command was run again) is not sent its update request, which is dropped.
 A machine without updater (installed before, or by hand, as `deploy/nas/compose.yaml`) says so and
 gets no request.
 
 An update also brings a machine to the install's layout of its version (what an install puts there
 besides the images: services, LaunchAgents, Syncthing; install/README.md, The machines update
-themselves). What its updater cannot do alone, the node reports in `update.needs` (`why`:
+themselves). What its updater cannot do alone, the device reports in `update.needs` (`why`:
 `password`, a step that needs the Mac's password; `admin`, one that needs an administrator's
 PowerShell; `layout`, any other, such as an updater from before the layouts), and the device's card
 says « Cette mise à jour a besoin de toi : … » with the command that updates that machine in a code
-block to copy (`manualUpdate`, from how it was installed: never a command a node names), while no
+block to copy (`manualUpdate`, from how it was installed: never a command a device names), while no
 request is under way. The brain is told once, after 10 minutes with no request under way
 (`tellNeeds`), to mention it to the user; it is forgotten once the machine needs nothing.
 
@@ -652,115 +653,129 @@ database; after 10 minutes without an answer it stops and says to reload the pag
 
 ### TLS between machines
 
-Nodes reach eriphe-core over TLS, with a certificate authority for machines that eriphe-core makes
+Devices reach eriphe-core over TLS, with a certificate authority for machines that eriphe-core makes
 at its first start, as kubeadm does for a cluster. It is not the workspace's certificate: it signs
-only eriphe-core's certificate for the nodes (for the name `eriphe-core`, which a node checks
-whatever address it dials) and one client certificate per node.
+only eriphe-core's certificate for the devices (for the name `eriphe-core`, which a device checks
+whatever address it dials) and one client certificate per device.
 
 - **Where.** `machine-ca.pem` and `machine-ca-key.pem` (0600) in the data folder, next to the
   database. The key is a secret like the vault key. The CA lasts ten years and is never replaced
-  by itself: a CA file that does not load stops TLS for nodes (logged at start) rather than making
-  a new one, since every node pins it.
+  by itself: a CA file that does not load stops TLS for devices (logged at start) rather than making
+  a new one, since every device pins it.
 - **One port.** The API port serves TLS and plain HTTP side by side: eriphe-core tells them apart by
   the first byte a client sends (a TLS handshake starts with `0x16`). On the local network, the CLI,
   Home Assistant, the brain's MCP and every other API caller may keep their plain `http://…:8800`;
-  a node reaches the same address as `https://…:8800`, and the join commands say `https://` when
+  a device reaches the same address as `https://…:8800`, and the join commands say `https://` when
   they carry `-ca-hash`. On the tailnet, `:8800` keeps its Tailscale certificate (publicly trusted:
-  the address to give the CLI or Home Assistant away from home) and asks for a node's certificate
+  the address to give the CLI or Home Assistant away from home) and asks for a device's certificate
   too.
 - **No token in clear over the internet.** A call with the API's token (or a channel's token) over plain HTTP from a public address is refused (403): the token already crossed the
   internet in clear, and a setup like that should fail at once rather than leak it at every call.
   Plain HTTP stays open to private, loopback, link-local and Tailscale addresses (and to the
-  Docker gateway, which may be the host itself); TLS works from anywhere. Node requests (join,
-  tunnel, reports) are not affected: they are TLS once the node knows the CA.
+  Docker gateway, which may be the host itself); TLS works from anywhere. Device requests (join,
+  tunnel, reports) are not affected: they are TLS once the device knows the CA.
 - **Joining.** The join command carries `-ca-hash sha256:<hex>`, the SHA-256 of the CA's public key
-  (like kubeadm's `--discovery-token-ca-cert-hash`): the node finds that CA in eriphe-core's TLS
+  (like kubeadm's `--discovery-token-ca-cert-hash`): the device finds that CA in eriphe-core's TLS
   handshake, pins it, and only then sends its join token. `eriphe-core join-token` and "Ajouter une
   machine" print it, and Settings → Appareils → Avancé shows it, for a machine set up by hand.
-- **Client certificates (mTLS).** A node asks for its certificate with its secret
-  (`POST /v1/node/certificate`, with a certificate request: the key never leaves the node), valid
+- **Client certificates (mTLS).** A device asks for its certificate with its secret
+  (`POST /v1/device/certificate`, with a certificate request: the key never leaves the device), valid
   one year, and for a new one with its current one when a third of its life is left. A request
-  that presents a certificate needs the node's secret and its current certificate (or the one
-  before, while it moves to the new one): forgetting a node or letting it join again revokes it at
+  that presents a certificate needs the device's secret and its current certificate (or the one
+  before, while it moves to the new one): forgetting a device or letting it join again revokes it at
   once, and drops its tunnel.
-- **Nodes that joined over plain HTTP.** An existing node (its secret only, in `node.json`) asks for
+- **Devices that joined over plain HTTP.** An existing device (its secret only, in `device.json`) asks for
   its certificate with its secret on its next connection, at the address it knows, pins the CA that
   comes with it, and connects over TLS from then on: nothing to do on it but update it. That first
-  request trusts the network it crosses, as the plain join did; given `-ca-hash`, the node checks
+  request trusts the network it crosses, as the plain join did; given `-ca-hash`, the device checks
   the CA instead.
-- **Closing the plain path.** eriphe-core accepts nodes over TLS only, with their certificate: from
-  the start on a new installation, and on an older one by itself as soon as every node has its
-  certificate (logged; Settings → Appareils marks those still without one, `GET /v1/nodes/tls`
-  lists them). It then refuses nodes over plain HTTP and nodes without their certificate, and drops
-  the tunnels of those connected so. Joins then need TLS too. API callers other than nodes are not
-  affected. `PUT /v1/nodes/tls {"tls_only": false}` is the advanced way out, to keep the plain path
+- **Closing the plain path.** eriphe-core accepts devices over TLS only, with their certificate: from
+  the start on a new installation, and on an older one by itself as soon as every device has its
+  certificate (logged; Settings → Appareils marks those still without one, `GET /v1/devices/tls`
+  lists them). It then refuses devices over plain HTTP and devices without their certificate, and drops
+  the tunnels of those connected so. Joins then need TLS too. API callers other than devices are not
+  affected. `PUT /v1/devices/tls {"tls_only": false}` is the advanced way out, to keep the plain path
   open for a machine that cannot have its certificate yet; eriphe-core then leaves it so.
 
 ## MCP tools (`/mcp`, bearer token)
 
 | Tool | What |
 |---|---|
-| `list_agents` | agents, when to use each, and whether a node can run them now |
+| `list_agents` | agents, when to use each, and whether a device can run them now |
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
-| `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
-| `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
+| `list_devices` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
+| `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), device (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
 | `list_repos` | the GitHub repositories the app's connections reach: `repo`, its `cases` (`read`, `change`, `delete`, `send`: `free`, `approval` or `never`) and `own_rules` when it has cases of its own (listed first); a task is lent only one of these |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read` or `write`, as shared on its machine), `rights` (`read`, `change`: free, approval or never), `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
 | `task_status` | state, the agent's last message (without its receipt), its checked [receipt](#receipts-receiptgo), the pending permission; `wait` blocks until the task needs you |
 | `list_tasks` | recent tasks |
-| `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card) and on the thread's surface, under the step and in its header's facts, so the user can see and contradict it; display only |
+| `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task with a node, the reply goes to its node's trace (« Eriphe a répondu : … »), so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
-| `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write or remove a block of its part of a thread's surface, as `brain`, and read the threads on screen ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
+| `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
+| `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)) |
+| `catalog_read`, `sources_read` | read the catalog of a node's blocks and what a block may read |
+| `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)); written in a tainted turn, the node is external ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; an external node's title is not quoted |
+| `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
+| `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields) |
+| `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
+| `node_link` | link a node to another (its front matter's `links`), once; never to itself |
+| `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
+| `item_note` | note an item of a node's source: what the user should know and a state (`act`, `look`, `info`, `none`, `done`) |
 
-The scheduler takes the requested node if it is online and fits. Otherwise it works in two passes,
-like Kubernetes': it **filters** the online nodes that offer the agent's runtime and carry all its
+The brain has no archive tool: only the user archives a node (`archiveNode`, by `user` alone), which
+archives every node under it, stops their tasks and their steps' work, and unlinks their cards;
+`node_find` with `archived` finds them again.
+
+The scheduler takes the requested device if it is online and fits. Otherwise it works in two passes,
+like Kubernetes': it **filters** the online devices that offer the agent's runtime and carry all its
 `needs` labels, then **scores** them: +1 per CPU if the agent prefers `cpu`, +1 per GiB of RAM if it
-prefers `memory`, +8 per preferred label the node carries, +2 if the agent's image (or the node's
-default image) is already pulled, +2 if the node has the agent's runtime unpacked (`agents_ready`),
+prefers `memory`, +8 per preferred label the device carries, +2 if the agent's image (or the device's
+default image) is already pulled, +2 if the device has the agent's runtime unpacked (`agents_ready`),
 -4 per active task. The highest score wins, ties by name.
 
 **Placement classes** (`placement.go`), like Kubernetes' hard rules and preferences; none is a
 setting:
 
 - **Resident**: an assistant that talks to the user or is woken by events (the brain first). Hard
-  rule: an online node started with `-always-on` (the machine eriphe-core runs on) that fits, the
-  best other node only when none does (the log says why). If its node has been offline for 30
-  seconds and another online node can take it, it moves; if it runs on a node that may sleep and an
+  rule: an online device started with `-always-on` (the machine eriphe-core runs on) that fits, the
+  best other device only when none does (the log says why). If its device has been offline for 30
+  seconds and another online device can take it, it moves; if it runs on a device that may sleep and an
   always-on one can take it, it moves there between two turns. Moving starts a fresh session with
-  the context pack: the thread is eriphe-core's, and a message its old node never received is
+  the context pack: the conversation is eriphe-core's, and a message its old device never received is
   delivered again.
-- **Bound**: a task with the user's folders goes to a node that holds each of them up to date,
+- **Bound**: a task with the user's folders goes to a device that holds each of them up to date,
   the folder's machine or one keeping a copy in sync ([Tasks on a copy](#copies-of-a-folder)),
-  the best of them by the scores above, and waits for one. A task its node has not started yet
-  is placed again, like the others, when another such node is online.
-- **The others**: the scores above. A task its node has not started yet is placed again after that
-  node has been offline for 5 minutes; a running task keeps its node.
+  the best of them by the scores above, and waits for one. A task its device has not started yet
+  is placed again, like the others, when another such device is online.
+- **The others**: the scores above. A task its device has not started yet is placed again after that
+  device has been offline for 5 minutes; a running task keeps its device.
 
-A node given by hand (`node` of `run_task`, or an assistant's) always wins: such a task never moves.
+A device given by hand (`device` of `run_task`, or an assistant's) always wins: such a task never moves.
 
-**Asleep or offline** (`node_sleep.go`). A machine that sleeps disconnects and comes back by itself:
+**Asleep or offline** (`device_sleep.go`). A machine that sleeps disconnects and comes back by itself:
 a Mac in maintenance sleep wakes for a minute every quarter of an hour. eriphe-core counts the
-times a node came back after an absence of 2 minutes or more; one that did twice in the last 24
-hours is *asleep* while it is away (Settings → Devices says "En veille", `list_nodes` says
-`asleep`), any other node away is *offline*. The always-on machine is never asleep. A task its node
-has not started yet is placed again after 30 seconds when that node is asleep, instead of 5 minutes.
-The node itself keeps its machine awake while a task is at work (node/README.md, Sleep).
+times a device came back after an absence of 2 minutes or more; one that did twice in the last 24
+hours is *asleep* while it is away (Settings → Devices says "En veille", `list_devices` says
+`asleep`), any other device away is *offline*. The always-on machine is never asleep. A task its device
+has not started yet is placed again after 30 seconds when that device is asleep, instead of 5 minutes.
+The device itself keeps its machine awake while a task is at work (device/README.md, Sleep).
 
-**Ready in advance.** Each node's assignments carry `prepare`: `{runtimes, images}`, the runtimes
-of the configured agents the node could run (it carries their `needs`) and the images they name.
-The node unpacks those agents and pulls those images (and its default one) in the background, at
-its first assignments and whenever the list changes: a change of the catalog wakes every node
-(node/README.md, Agents). An agent no one configured is never downloaded anywhere.
+**Ready in advance.** Each device's assignments carry `prepare`: `{runtimes, images}`, the runtimes
+of the configured agents the device could run (it carries their `needs`) and the images they name.
+The device unpacks those agents and pulls those images (and its default one) in the background, at
+its first assignments and whenever the list changes: a change of the catalog wakes every device
+(device/README.md, Agents). An agent no one configured is never downloaded anywhere.
 
-If no online node fits but a registered one would by what it last reported (a desktop that is off,
-say), the task is created `pending` with no `node` and a `pending_reason` ("waiting for a node that
+If no online device fits but a registered one would by what it last reported (a desktop that is off,
+say), the task is created `pending` with no `device` and a `pending_reason` ("waiting for a device that
 can run claude-code with gpu (offline: pc)"), so the brain sees it waits. Such tasks are scheduled
-again whenever a node comes online and every 15 seconds; stopping one stops it at once. If no
-registered node could ever run it, `run_task` fails. Nodes are checked every 15 seconds. Tasks that were active when eriphe-core stopped are
-followed again at start, and a disconnected node's tasks are followed again when it reconnects; a
-node that forgot a task marks it `lost`.
+again whenever a device comes online and every 15 seconds; stopping one stops it at once. If no
+registered device could ever run it, `run_task` fails. Devices are checked every 15 seconds. Tasks that were active when eriphe-core stopped are
+followed again at start, and a disconnected device's tasks are followed again when it reconnects; a
+device that forgot a task marks it `lost`.
 
 ### Contracts (`contract.go`)
 
@@ -795,16 +810,16 @@ brain can act on, what is certainly wrong in a check: an empty `run`, a `dir` gi
 a `dir` or `exists` outside `/work` or with a `..` element, a path on several lines, a path under
 `/work/repo` without a repository lent, or under `/work/folders/<name>` for a folder not lent.
 `dir` is relative to the task's working directory (`/work/repo` with a repository: `"core"`, not
-`"repo/core"`); whether it exists is only known once the repository is cloned, so the node says it
+`"repo/core"`); whether it exists is only known once the repository is cloned, so the device says it
 then (a *config* failure, below).
 
 **A misconfigured check.** A check that could not run at all (its `dir` is not there, its command
-is not found, it could not be started: the node's `config`) is the contract's fault, neither the
+is not found, it could not be started: the device's `config`) is the contract's fault, neither the
 code's nor the agent's: it is not sent back to the agent, does not count toward "the same failure
 twice", is no unsupported claim of the receipt, and does not stop the task. The task stays idle and
-the brain hears that the contract is misconfigured, with the node's exact reason. It fixes it with
+the brain hears that the contract is misconfigured, with the device's exact reason. It fixes it with
 `answer_task` and `checks` (all of them, checked like at the start; `reply` optional): the
-contract and the task's spec are updated, and the new checks go to the node with the next turn,
+contract and the task's spec are updated, and the new checks go to the device with the next turn,
 after which they run. The drawer shows such a check as "could not run".
 
 ### Retries and budgets (`task_retry.go`)
@@ -818,23 +833,23 @@ causes of `problems.go`), before the brain hears of it:
 | account | key refused, quota or credit spent, model missing | no retry: the brain is told to warn the user |
 | invalid | a request refused (400), a turn cut by its limits | no blind retry: the brain changes the instructions or warns the user |
 | permission | the policy refused an action | never retried: the brain hears it as before |
-| check | a check of the contract failed | sent back to the agent by its node (see eriphe-node's README) |
+| check | a check of the contract failed | sent back to the agent by its device (see eriphe-device's README) |
 | config | a check of the contract could not run (its folder missing, its command not found) | never sent back, never counted, never stopped: the brain is told to fix the contract (above) |
-| same failure twice | the same class and words (numbers aside) twice in a row, or a check the node stopped sending back | **stops** the task, even with attempts left |
+| same failure twice | the same class and words (numbers aside) twice in a row, or a check the device stopped sending back | **stops** the task, even with attempts left |
 
 The budget of a contract is kept by eriphe-core: `minutes` (checked every 15 seconds), `turns`
 and `tokens` (input, output and cache writes from the turns' `usage`, where the harness reports
 it) at the end of a turn; a turn whose receipt says `done` is not stopped (the brain closes the
 task), and `answer_task` refuses a new turn once the turns are spent. A task eriphe-core stops
-keeps why (`stop_reason`): the brain hears it with the last receipt when the node reports it
+keeps why (`stop_reason`): the brain hears it with the last receipt when the device reports it
 stopped, and the drawer says so; a retry on its way shows its time. A task whose agent or container
 failed is told to the brain with its class: worth starting again once, or not. Each failure's class
 is kept in `task_harness` for the measures. The brain's prompt no longer counts retries itself.
 
 **No work lost on stop.** Before a task's container is removed (stopped by the brain, a budget or
-"the same failure twice"), its node pushes the commits no remote has on the branch the task was
+"the same failure twice"), its device pushes the commits no remote has on the branch the task was
 lent, with the task's own git (the same decision applies), or keeps
-the repository on the node (see eriphe-node's README). Its `work` event says which: the brain hears
+the repository on the device (see eriphe-device's README). Its `work` event says which: the brain hears
 it with the stop, even a stop of its own when the work was kept.
 
 ### Usage and measures (`task_stats.go`)
@@ -868,13 +883,13 @@ every harness (Claude Code, Codex, OpenCode, any ACP agent) hands back its final
 would have to be allowed in each one's permission model. eriphe-core reads the last block that
 parses (a `<receipt>` tag and a message that is only the JSON work too) and never trusts it:
 
-- **verified** is only what a check run by the node saw pass (`check` events); what the agent says
+- **verified** is only what a check run by the device saw pass (`check` events); what the agent says
   it verified without a check stays *claimed, not checked*; a failed check is *not verified*;
-- a file said `changed` is compared with the repository's diff, which the node reports when the
+- a file said `changed` is compared with the repository's diff, which the device reports when the
   turn ends (`diff` event); files of the diff left out are counted;
 - `done` with a failed check, or a change the diff does not have, is an **unsupported claim**.
 
-A turn with no readable receipt is asked once for it (`skip_checks`: the node runs no check after
+A turn with no readable receipt is asked once for it (`skip_checks`: the device runs no check after
 that turn), at most twice per task and never twice in a row, without the brain; a turn that failed
 is not asked. The brain then gets the checked receipt (in French, like its other events) instead of
 the agent's last message; without one, the last message, truncated, as before. `task_status`
@@ -886,509 +901,310 @@ from outside; a task that did is left out of it).
 
 ### Attention signals (`attention_signal.go`)
 
-An assistant (a skill's run, a thread's lead) says what deserves the user's attention with an
-**attention signal**, a structured block rather than a prefix in its prose: in a skill's receipt
-(`attentionInstruction`, after `receiptInstruction` in `skillVoice`) or in a lead's `report`:
+A skill's run says what deserves the user's attention with an **attention signal**, a
+structured block rather than a prefix in its prose, in its receipt (`attentionInstruction`, after
+`receiptInstruction` in `skillVoice`):
 
 ```json
-"attention": [{"refs": ["thread:12"], "weight": 4, "why": "une facture due aujourd'hui", "say": "Ta facture est due."}]
+"attention": [{"refs": ["node:k3x9m2p7qa"], "weight": 4, "why": "une facture due aujourd'hui", "say": "Ta facture est due."}]
 ```
 
-`refs` name the objects it is about, `<kind>:<id>` with a kind among `thread`, `card`, `task`,
-`surface` (a surface of the workspace, by its id) and the keys' kinds (`project`, `alert`…);
-no kind is a tool's (no `mail:`, `agenda:`, `event:`): an item of a thread's source is raised
-through its thread. Only the form is checked, by `parseRef`. An item about a
-surface is shown by that surface (no `q-` surface of its own) and leaves the queue with it. An
-item about a thread (`thread:<id>`, a skill's `set_thread` raise or a receipt's entry) raises
-that thread's tile whatever its weight (`threadSurfaceIn` takes `queueSurfaceWeight` of it),
-puts nothing in a `q-` surface, and ends once the user opened that thread's surface and left it;
-the tile then goes back to its own weight.
+`refs` name the objects it is about, `<kind>:<id>` with a kind among `node`, `card`, `task` and
+the keys' kinds (`project`, `alert`…); no kind is a tool's (no `mail:`, `agenda:`, `event:`): an
+item of a node's source is raised through its node. Only the form is checked, by `parseRef`. An
+entry whose refs are all nodes raises them on the graph and is not told in the run's message.
 `weight` is 5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1 background; `why` is
 cut to 80 characters, `say` is optional. One block alone, or refs given as one string, are read as
 a list. A ref of another form, a weight outside 1 to 5 (or not whole), an entry that is not an
 object are dropped and logged, never fatal; the rest of the receipt stands. Each ref of a kept
 signal enters the [attention queue](#workspace-web) (`c.attend`) with its source (`skill:<name>`,
-`assistant:<name>`), marked as drawn from external content when the run or the thread read some:
+`assistant:<name>`), marked as drawn from external content when the run read some:
 the brain reads it as data.
 
 In a skill's receipt the block is also what tells: no entry tells the user nothing (the run's
 message stays in its note), and an entry may leave `refs` out to be about the run's own message,
 which then enters the queue as the notification it became (`notification:<id>`), at its weight
-(`tellRun`, [Triggered skills](#triggered-skills)). A lead's
-`report` needs its refs, and only a report with a kept item wakes the brain: without one it is
-kept in the conversation as read and costs no turn. A worker's receipt carries no signal.
+(`tellRun`, [Triggered skills](#triggered-skills)). A worker's receipt carries no signal.
 
-### Threads (`threads.go`, `thread_engine.go`)
+### The brain on nodes (`node_tools.go`, `node_turn.go`, `node_net.go`)
 
-A **thread** is one matter followed to its real goal: a pull request until it is merged and
-deployed, an appointment, a brand name to find, a service to rebuild. An assistant has no end; a
-thread has one (its goal); a task is one step. It replaced the work session (#464): one object for
-every matter.
+The node of the graph is the one object the user sees (#625, #632): one per matter (a pull request
+until deployed, an appointment, a research), its doc saying where the matter stands, its trace
+what happened in it ([Node store](#node-store-nodestore-nodesgo)).
 
-A thread has a title, a goal (its real outcome: the brain's and the agents' target, never shown to
-the user), a **headline** (the one line the user reads at its top and on its chip, written for
-them: `open_thread` or `set_thread`), an **alias** (a key in the names, see [About and
-names](#about-and-names): `project:site`, `pr:owner/repo#12`, `alert:<id>`) and the names the user
-gives it, a **state** (`open`, `waiting`, `done`,
-`dropped`), a summary, and its times. Its **mode** is one of two:
+- **Tools.** The brain finds a node before it opens another (`node_find`), opens one at once, with
+  no card (`node_open`; `work` by default, `standing` for what the user follows continuously, never
+  done), reads it (`node_read`: its version's `hash`), writes it on the version it read
+  (`node_write`, `node_edit`, refused when stale: `ErrConflict`), sets its title, goal or `done`
+  (`node_set`), links it (`node_link`) and opens its page on the user's screen (`node_show`). Each
+  checks the node exists (`no node <id>: node_find finds it`) and refuses an archived one
+  (`ErrArchived`); a body carrying a block's marks, snapshot or external is refused
+  (`nodefile`'s author API: those are code's). There is **no archive tool**: archiving is the
+  user's gesture (`archiveNode`, `by` `user` alone): it archives the node and every node under it
+  (`nodestore.Below`), stops their tasks and their steps' work, and unlinks their cards
+  (`node_cards`); `node_find` `archived` finds them again.
+- **Done.** `node_set` `done` (`setNodeDone`) marks the front matter's `done` and the state
+  `done` (`nodestore.SetDone`, a version of its own that never conflicts with an author's write),
+  once: done again changes nothing. A node done now leaves one dated **decision memory** about it
+  (`About` and `source_ref` `node:<id>`, `source_kind` `node`, from its title and its doc's first
+  line; external when the node is; one of an earlier done superseded) and the journal's event
+  `node.done` (key: its id), a breakpoint of the attention queue while the user is there. A
+  standing node is never done.
+- **Taint.** Reading a node marked external, or an item note written in a tainted turn, taints
+  the turn (`c.turn.taint`); a node written or opened in a tainted turn is marked external, so is
+  a title or goal it sets; `node_find`, the context pack, the about cards and events name an
+  external node by its id, never quoting its title.
+- **The conversation per node.** Each message belongs to a node or to the home: the `messages.node`
+  column (`""`: the home). The user's message belongs to the node the console talks to: the page
+  sends it with the message (`node`, checked by `nodeSaid`: one of the graph's, not archived);
+  the brain reads it as `[Sam HH:MM #N · nœud <id>]`. The brain's answer belongs to the node of
+  what it answers (`talkOf`: the last user message's, else the last event of a node), an event of
+  a node to it (a task's end: `taskEventNode`; a call kept on a card linked to a node:
+  `callToBrain`, `[nœud <id> « title »] …`). The turn is **about** the last node it named (a node
+  tool on it, a delivered message of it): what it raises meanwhile (an access card, a task's start,
+  a proposal) is linked to it (`node_cards`), and the node waits for the user while one waits
+  (`cardRaisedFor`, `linkedCardMoved`). `run_task` in a turn about a node is about it (its
+  `about`); its own node is a child of `node` when given.
+- **Code's safety net** (`node_net.go`, contract 5): at the turn's end, the turn's answer (its
+  texts joined), past `netMinRunes` (600), when the brain wrote no node in the turn (`node_open`,
+  `node_write`, `node_edit`), is filed by code: in the node the turn answers in (whole in its
+  trace, and as its doc when it has none, never a standing node's), else in a new work node at
+  the top titled from the user's request (its first line; a neutral « Réponse du … » when there is
+  none, or when it may not be the user's words or holds a secret), the answer its doc. The answer's
+  messages say where (`messages.filed`, `filed` in the exchange's lines). Written in a tainted
+  turn, the node is external. A refusal never loses the answer: it stays in the conversation.
+  Code opens no other node.
+- **The context pack and the cards.** A fresh session's pack lists the nodes running and waiting
+  (`activeNodes`, the last changed first, at most 20), each with its card (`about_card.go`: the
+  node's line, its state, title and its doc's first line, then its decisions, facts, people,
+  intentions, cards and preferences); a turn about a node gets its card when the session does not
+  hold it as it is. `since` lists the nodes changed (kind `node`: where each stands now, its title and its doc's first line, an external one's not quoted), and `where_now` the nodes that wait for the user (`nodes_waiting`). The tasks panel lists the nodes
+  running and waiting above the tasks (`/espace?open=node-<id>`).
+- **Memory.** Where a matter stands is its node's doc, never a memory: the `progress` kind is
+  gone. The nightly extraction reads the day's node traces (`nodeSegments`: what each node's trace
+  says that day, a segment `node:<id>`; an external node gives nothing) and keeps their decisions,
+  facts and people.
+- **Showing a node** (`node_show.go`): `node_show` keeps the request (kv `node_show`: `node`, `by`,
+  `at`, `seq`, growing at each) and wakes who watches (`watchShown`); the graph page (#633) opens
+  the page beside the others, the console still talking where it talked (only the user's gesture
+  moves it). It writes nothing in the node.
+- **A call in the trace** (`proxy.go`, `traceBrainCall`): a call the brain made with the user's
+  permission (a ticket, not a free read) is a line of the trace of the node it talks to (the page
+  the user spoke from), else, from the home, of the node the turn is about (the last it named):
+  `Appel : <server>/<tool>.`. A turn of the home that named no node logs it in the decisions only.
 
-- **Light** (the default, without steps): held by the brain. `open_thread` opens it at once, with no
-  card and no budget, and needs its alias. **One thread an alias** (`openThreadOnce`): an alias
-  that has a thread already gives that thread back instead of a second one, reopened light (why
-  « même chose ») if it ended, and the result says so; a led open on the alias of a thread is
-  refused, naming it. **Threads near a matter** (`nearThreads`, the one candidate matcher): with
-  no thread on the alias, a thread one of whose names is in the new alias's words or title, or
-  whose names or title hold all the alias's words, ended and tidied ones included, refuses the open
-  (`nearMatch`, listing them, at most 5) until the opener takes one (`take`: given back, reopened
-  light if it ended, and given the alias, unless the turn or the task read external content) or
-  says why this is another matter (`new_because`, logged on the new thread). A task offered a
-  tainted thread this way reads its words (`taskRead`). A skill's run has no model to answer: its
-  thread is its alias's alone. `openThreadOnce` is the only path that opens a thread (a test holds
-  it). `find_thread` finds threads by words of their title, goal, names or summary,
-  or by an alias or a name, the ended ones included; `close_thread` closes it
-  only on its goal, with how it was reached as its summary (`done`); `stop_thread` drops it;
-  `reopen_thread` opens it again, light, when its matter comes back, its steps and log kept.
-- **Led** (with steps): long autonomous work of several steps toward the goal, not only code: an
-  approved plan, a lead, a budget. Its engine's **phase** (`proposed`, `running`, `paused`, `done`,
-  `stopped`, `declined`) moves its state (`stateOf`: running is open, proposed and paused are
-  waiting, stopped and declined are dropped). A led thread that ended reopens light: its lead went
-  with its end.
+## Node files (`nodefile/`)
 
-**How it ends** (`threads.ends`, #571), whatever it holds; the family is never shown to the user,
-it only changes the thread's life:
+The graph workspace (epic #625) keeps each node as a markdown file: YAML front matter, a markdown
+body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
+[docs/node-format.md](../docs/node-format.md); the package `nodefile` parses, checks and writes it:
 
-- `goal` (the default): it ends on its goal (`close_thread`) or is dropped (`stop_thread`). Ended,
-  its surface stays until the user's midnight (an hour at least), or until the user puts it away
-  with **« Ranger »**, a button code places on its surface (the action `tidy`): `tidied` is set,
-  the surface leaves at once, the thread is never deleted and is still found (`find_thread`, its
-  alias) and reopened when its matter comes back. Reopening clears `tidied`.
-- `standing`: what the user manages continuously (their mail, their agenda, a supervision). Light
-  only; `close_thread` and `stop_thread` refuse it (`errStanding`, from the engine, so the page and
-  a lead are refused too): it is never ended, so never hidden.
-- `day`: a view for the day (an answer shown, « j'ai quoi demain ? »). Light only; the engine's
-  tick ends it (`done`) once the user's midnight passed since it started (`endDays`) and its
-  surface leaves at once. Reopened, its day is the reopening's. Its `thread.ended` (payload `ends`
-  `day`) is no breakpoint of the attention queue: nothing held is told at midnight.
+- **Lossless:** a file parsed then written gives the same bytes; what changes through the API is
+  written again in its canonical form, the rest keeps its bytes.
+- **Each block checked alone**: the catalog (`a2ui`), its links, and its
+  bindings against its own data, its sources (`/<name>`) and the user's marks (`/marks/<list>/<item>`).
+  A bad block is a `BlockError` that names it.
+- **Code's fields** (a block's `snapshot`, `marks` and `external`, the node's `after` and `external`) are set by
+  code (`SetMark`, `SetSnapshot`, `SetBlockExternal`, `Meta.External`). An author's write goes
+  through `ParseAuthor`, `AuthorBody` or `PutAuthorBlock`: left out, they are kept from the version
+  written over; written otherwise, the write is refused (`ErrCodeField`). Authors may give a block
+  in its short form (one component, no root); it is completed.
 
-`open_thread` with `ends` on an alias whose thread exists gives that thread back ending as asked
-now (`endsAgain`): a light one only, a led one ends on its goal and the open is refused.
+The checks that need the core (actions, offers, a Proposal after external content, a bound Link's
+value, taint) are the tools' that write nodes.
 
-**Child threads** (`thread_children.go`, `threads.parent`, #609): a step of a thread that becomes a
-matter of its own is a thread of its own, its child (`open_thread` `parent`). Nothing else tells a
-child from a top thread: it is light or led, ends on its goal or stands, as any other.
+## Node store (`nodestore/`, `nodes.go`)
 
-- **Depth 2** (`parentFor`): a parent is an active top thread; a child has no children, and a
-  thread with children is never made a child. A standing thread, what the user manages
-  continuously, is a top thread: never opened, moved or turned (`ends`) into a child.
-  `open_thread` `parent` on an alias that has a thread already moves that thread under the parent,
-  once nothing else refuses the open (logged on it, the result says so); the parent itself is never
-  one of the threads near the child's matter. `name_thread` `merge` gives the merged
-  thread's children to the other, a top thread only.
-- **No active child under an ended parent**: `close_thread` on a parent with active children is
-  refused (light or led), naming them (`activeChildrenError`); a parent that ends any other way
-  (`stop_thread`, its plan declined, its day over) stops them with it (`endChildren`, logged « Arrêté
-  avec son thread parent »); a child of an ended parent does not reopen before its parent.
-  An ended child's surface leaves with its parent's (put away, its day over, its time on the
-  workspace past), and a child's surface that leaves takes its row from its parent's
-  (`keepThreadKin`, also after the tick removes a surface whose lifetime ended); a link that shows
-  an ended child again shows its parent again too.
-- `find_thread` lists each thread with its `parent` and its `children` (id, title, state);
-  `read_thread` gives its `parent`, `parent_title` and `children`: the brain finds the child that
-  exists before it opens another.
-- On the workspace, a child is never a tile nor a chip: it opens inside its parent (below, and
-  [the layout](#the-layout-workspace_layoutgo)). Its parent shows it among its children; what waits
-  for the user in a child raises its parent.
+The package `nodestore` keeps the nodes: the files are the truth, the index is for speed.
 
-| Who | Does |
-|---|---|
-| Brain | opens the thread with the user (`open_thread`: title, goal, headline, alias; led: `done_when`, budget, steps), the only voice |
-| Lead | a led thread's temporary assistant (role `lead`, `thread_lead.go`): judges each step on its evidence (`settle_step`: accept, retry, reject), amends the plan (`amend_thread`), closes it (`close_thread`), reports to the brain. The brain when no agent can run one |
-| Engine (code, no model) | starts each step once those it comes `after` are accepted, in parallel, passes them their outputs, asks the cards, holds the limits |
-| User | approves the plan, answers the choices and approvals, gives more time |
+- **Repository:** `nodes/` next to `core.db`, a git repository written with go-git (no git
+  binary). Files are flat: `<slug>-<id>.md`, its trace `<slug>-<id>.trace.md`, its media in
+  `files/<id>/` (written by a later step). The slug (lowercase ASCII from the title, 40 characters at most) is frozen at
+  creation: a new title changes the front matter, never the file's name.
+- **Index:** `nodes.db` next to it, outside the repository (SQLite, its schema version in `meta`, a
+  file at another version is refused). Tables: `nodes` (file, title, parent, lifetime, state,
+  times, external, last version, the file's git hash), `node_links`, `node_versions` (n → commit
+  hash, author, time), `node_sources` (each block's live sources), `node_items` (notes on the items
+  a source lists), `node_layout` (a node's place on the graph) and `node_fts` (FTS5 over the title,
+  the goal, the text and the words the blocks show). History is never asked of git by path: a
+  version's commit is in `node_versions`.
+- **Writes:** each is one commit by its author (`brain`, `task:<id>`, `user`…), whose message names
+  the versions it makes (`Node: <id> <n>`). `Create` makes version 1; `Write(id, body, expect,
+  author)` replaces the body through nodefile's author API (code's fields kept, a change to them
+  refused) and is refused with `ErrConflict` when `expect` is not the last version's commit hash; a
+  body alike makes no version. An archived node is not written (`ErrArchived`). A node is 512 KiB
+  and 32 blocks at most. Secrets are refused by the memory's filter (`scanSecrets` in
+  `memory_trust.go`: credentials, long random strings, links with a password or a token); its
+  injection rules are not applied, as a node may quote someone else's words. A link's path is not
+  read as a random string (a pull request's `owner/repo/pull/640/files`, a document's id): a
+  token's known shape anywhere, a query's or fragment's token key or long random value, and a
+  link's password still are. A random secret as a bare path segment, in no known shape, passes.
+- **Code's writes:** `Change(id, expect, author, fn)` lets code change what no author may (a
+  block's or the node's `external`, a block's `snapshot`, the title, the goal); the id, parent,
+  creation, done and archived never change this way, and the filter runs over the node written.
+  `Create` with `External` marks the node and each of its blocks; with `ID`, the node takes an id
+  given beforehand (`NewID` gives a free one: a card shows the node before it exists).
+- **An author's write over code's:** `Write` and `Change` made on an older version are not stale
+  when every version since changed code's fields only (`onlyCodeSince`: the snapshot a live block
+  wrote, a block marked external): the write applies over them, code's fields kept.
+- **Live sources:** `Sources(id)` lists the sources of every block of the nodes not archived (or of
+  one node), from `node_sources`: what the live engine reads (`node_live.go`).
+- **Item notes:** `NoteItem(id, item)` keeps a note and a state (`act`, `look`, `info`, `none`,
+  `done`) on an item one of the node's blocks' sources lists, in `node_items`, with its author
+  and taint; no note nor state takes it away. `Items(id)` reads them. A note is not a version.
+- **Reads:** `Read(id, n)` gives version `n` (0: the last), `Versions`, `Children` (archived ones
+  included), `Find(query, archived, limit)` (all the words, prefixes from three letters; archived
+  nodes only when asked), `Get`.
+- **Trace:** `AppendTrace(id, author, text)` adds a dated entry, never cut (256 KiB an entry), in a
+  commit of its own; a trace is not a version of its node.
+- **State:** `SetState` (`running`, `waiting`, `idle`, `done`) is code's, in the index only.
+- **Archive:** `Archive(id, author)` archives the node and every node below it in one commit, each
+  a new version. Only the user archives (the tools of a later step).
+- **At start:** the files are compared to the index and the last commit. A file changed, added or
+  removed outside Eriphe is committed as a version of its own (author `outside`), reindexed and
+  logged; a file that does not read as a node is logged and left alone (a node's row is kept, its
+  last good version readable). When `nodes.db` is missing, it is made again from the files, and
+  the versions from one walk of the log; when it is behind the repository (`meta.head` is not the
+  last commit: a copy put back, a stop between a commit and its indexing), the versions are read
+  again from the log. The state, the layout and the item notes are not in the files: a rebuilt
+  index starts them over.
+- **Nightly**, at the memory's hour (`memory.extract_at`), into its backup folder
+  (`memory.backup_dir`, `memory.backup_keep` days): the repository is packed (`gc`), then
+  `nodes-<day>.bundle` (a git bundle: `git clone` reads it) and `nodes-<day>.db` (a copy of the
+  index). Writes wait meanwhile; a start after the hour finds the night's copy and does not make
+  another.
 
-A step is a `task` (prompt, agent, resources, contract, as `run_task`'s), a `choice` (a question
-and 2 to 6 options, recorded with `choose_step` in the turn of the user's answer) or an `approval`
-(a yes or no card). Its statuses: `waiting`, `running`, `reported` (its agent says it is done: a
-claim), `verified` (its checks passed), `accepted`, `rejected`, `blocked` (its task failed or
-stopped), `dropped`. A step whose checks failed, or whose receipt claims what they deny, cannot be
-accepted.
+## A task's node (`task_node.go`, `task_nodes.go`)
 
-**Steps of every kind** (`thread_steps.go`): besides `task`, `choice` and `approval`, a step may be:
+Every worker task works in a node of its own (#629). `run_task` takes `node`: the task's node is
+opened as a child of it, else at the top (an unknown or archived node refuses the start). The node
+is titled as the task, its goal its contract's objective or its prompt's first line, `external`
+when the task starts on a tainted turn. Code keeps which task works in which node (`task_nodes`)
+and follows its state on the node: `running`, `waiting` (held for its start card, or for a
+permission), `idle` (its turn ended), `done` (it ended).
 
-- `call`: one of the brain's catalog tools with its input (`tool`, `input`). It passes the same
-  gate as the brain's own call (`callGate`: a catalog tool lent to the brain, the policy with the
-  thread's taint). A read the policy leaves free runs at once, without a card; anything else that
-  may run asks its **access card**, which is the step's yes (`thread_steps.card`, source
-  `thread:<id>`). On the yes the call runs (`runCallStep`, the card's proposal showing it running,
-  then done or failed, as `setCallState`) and the step settles: `accepted`, or `blocked` with why;
-  on a no it is `rejected`. The brain hears it from its thread, not as the card's usual event.
-- `user`: what only the user does (`question`). The user answers « C'est fait »
-  on the thread's surface (`stepDone`, their session and CSRF token; `userStepDone`), or the
-  holder settles it from evidence (`settle_step` accept, with what shows it in `note`).
-- `check`: a task (`prompt`, read-only resources) or a read call (`tool`, and `expect`: words its
-  result must contain). Its outcome settles it: a task's receipt `done` with no failed check, or the
-  call run and its result as expected; otherwise `rejected`. The holder gives no verdict.
-- `deadline`: a date (`due`) or a linked intention (`intention`). The engine's pass (and the
-  intentions' minute, when one becomes due) settles it when the date comes or the intention is due
-  or done (`accepted`), or cancelled (`rejected`); the steps after it then start.
+- **`eriphe-nodes`**, an MCP server Eriphe provides, relayed by the device like `eriphe-memory`
+  (the name is reserved in the catalog): every worker with a node has it, its tools allowed in
+  advance; it is not lent. `node_read` (a version, its hash, its body, its item notes), `node_write`
+  (the whole body), `node_edit` (one block, or a piece of text found once) and `node_append` work
+  on **its own node only**: another id is refused, naming the task's node. Each write names the
+  hash of the version it was made on (`expect`; `node_append` writes over nothing). `node_open`
+  opens a child of its node (title, goal, body), which it does not write; with `steps`, its work cut in steps ([below](#work-in-steps-node_stepsgo)). `item_note` notes an item
+  a source of its node lists. `progress` adds one line to its trace. It never starts a task.
+- **Who writes** is code's: `skill:<name>` for a skill's run, `task:<id>` for another. Its calls
+  to `eriphe-nodes` never taint it: what it reads there taints by its own record. A node whose
+  title or goal the secret filter refuses is opened without the goal, then with a neutral title
+  (« Tâche <id> »): the task still starts.
+- **Taint**: a task tainted at start or by what it read (`taskTaint`, read at each call) writes
+  external: code marks its node and the blocks it writes, in the same version; a child it opens is
+  external; its item notes carry the taint. Reading an external node taints the task.
+- **Guards** nodefile does not hold, on every block a write adds or changes (a block, or a fence
+  written in its text): the actions' grammar (`a2ui.CheckActions`); written tainted, a
+  block asks nothing (no `ask` button, no `Proposal`); a `Link` never opens a
+  source's value; a block's source reads a tool or server the task is lent, or a monitor the user
+  approved, and one of a server not trusted marks the block external.
+- **Its report**: at the end of each turn, the task's last message (its receipt left out) is filed
+  by code, whole: in its node's trace (in several entries past 256 KiB), and as its doc when the
+  task wrote none. A turn held only for its receipt files its report then. The same report is
+  filed once; a tainted task's report marks its node external. A report refused (a secret) or that cannot be the
+  doc is said to the brain, which reads it whole with `task_status`.
+- **The brain is woken short**: the task's title, its receipt's verdict (status, checks passed or
+  failed, what waits for approval), the report's first line, and its node. A step's task does not
+  wake it: the engine judges it ([below](#work-in-steps-node_stepsgo)). What Eriphe or the user
+  settles for a task (`answer_task`, a release's card) is a line of its node's trace.
 
-A **light** thread takes its steps from the brain (`add_step`), each born as the matter goes and
-started once the steps it comes `after` are accepted; a task step asks its own start card when it is
-lent what needs a yes. The brain settles them (`settle_step`). **The thread holds where its
-matter stands** (`thread_progress.go`): its summary is the only record of it, written
-by `remember` kind `progress` (and a task's `remember`, and the nightly extraction), never from a
-turn or a source that read external content (unless the thread's own steps read some already: its
-summary is then never quoted; the extraction's never); its log says who wrote it (`brain`, `task`,
-`extraction`). The code never opens a thread for it: a progress about no thread is
-refused (« open_thread first »; the extraction drops it), one whose thread ended is refused until
-the brain reopens it; without an about, it is the turn's thread's (a task's: its step's thread). The code links the rest: an open intention
-about a live light thread becomes its deadline step (`intention-<id>`, once, at the engine's
-pass), a card born in a turn about the thread, or raised with the source `thread:<id>` or by the
-task of one of its steps, shows in its timeline (`thread_cards`). Closing a thread on its goal
-(`close_thread`, a led thread's engine done) writes a dated decision memory about it from its
-summary (`source_kind` `thread`, `source_ref` `thread:<id>`; one from an earlier close is
-superseded; external when the thread's words may be someone else's). `link_thread` is left for the
-exceptions: an intention about another thread, a card raised elsewhere. **A step's change wakes its holder**,
-when someone else made it (the user, a card, the clock, a task): the lead through `thread_inbox`,
-or the brain by an event `[thread N « title »] étape « … » (key, kind) → status`, which does not
-block it. What a tool said, or an intention drawn from external content, taints the step
-(`thread_steps.tainted`), the event that carries it, and `read_thread`. A thread that ends drops
-what still waits or runs in it: its tasks stop, its step cards are withdrawn (`callStepGone`).
+## Work in steps (`node_steps.go`)
 
-**The brain's turn about a thread** (`thread_turn.go`): a turn that names a thread (a thread tool
-called on it, or a delivered message that belongs to it: an event of one of its steps, a message of
-the user's written in it, by the messages' `thread` column) is about it until it
-names another. The cards it raises meanwhile (one of its own calls' access cards, a task's start)
-are that thread's and show in its timeline; while one waits, the thread's surface shows it under
-« À toi », answered in place (and not again in the attention queue's surfaces), and a decision
-moves the thread (`linkedCardMoved`). How a call kept on a linked card went (run on a yes, or
-refused) comes back as that thread's event (`callToBrain`: `[thread N « title »] …`, belonging
-to it), so the turn that reads it is about the thread. A new delivery
-(or a heartbeat) starts about no thread, unless it carries a message that belongs to a thread (an
-event of it, or a message of the user's written with it open); a thread tool on an id that
-is no thread changes nothing. The user writing over a thread's surface about something else
-(« j'ai quoi de prévu aujourd'hui ? »): the brain opens or finds that other matter's thread
-(`open_thread`, a `day` one for what is only today's) before its first card or task, and the turn is
-about that one from then on.
-`run_task` in a turn about a light, active thread (`taskOfThread`) is a `task` step of that thread
-(the same prompt, title, agent, resources and contract; key `task`, `task-2`…), so the thread's
-surface follows it and its end comes back as the thread's event; its result gives the thread, the
-step and its task. What `run_task` refuses of the task itself (no prompt, an agent or a resource
-that is none) is refused before any step is born; a task that still cannot start leaves its step
-blocked and the call refused. A `surface` to fill and a `node` named go with the step. In a turn
-about no thread, the task is a step of the live light thread the user's message named
-(`taskThread`); with none, `run_task` is refused (« open_thread first »): a task is never left
-loose, and the code never opens a thread for it. A turn about a led thread is refused too (its plan
-changes with `amend_thread`), and so is one about an ended thread (reopen it first), or a thread
-that cannot take one more step. The prompt
-(`brain-prompt.md`, « Les fils »: « fil » is the word the user reads) says that the thread is the
-one object the user sees, how it ends (`goal`, `standing`, `day`, for the brain alone), when the
-brain opens or resumes one (a question about a matter, a request of more than one step, a research,
-an alert worth following, anything shown: `open_thread` with its alias, `take` or `new_because`
-when the matcher lists near ones; a one-line answer stays text), that a standing thread comes
-from a watcher (a skill lent `eriphe-threads` with its `thread:` alias), how its steps grow from
-what is found, how notes and offered actions propose on it, when its surface `thread-<id>` takes the stage
-(« where does it stand », from the workspace: `workspace_focus`) and when it opens on the side
-(« launch », « while I… »), and that a wake turn updates the thread without asking the user.
+A piece of work cut in steps is a node whose children are the steps (#630). A task opens them
+with `node_open` and `steps` (each a `key`, a `title`, the `after` keys it needs, a `prompt`, and,
+as `run_task`'s, an `agent`, `resources`, a `contract`, a `device`), with the work's
+`budget_minutes` (60 by default, a day at most). The plan is checked before any node is made:
+keys unique, what each comes `after` a step of the plan or of the work, no cycle, 20 unfinished
+steps at once and 200 over the work's life, and each step's task as `run_task` would refuse it.
+Each step is a child node of the work's node, its `after` written by code in its front matter
+([docs/node-format.md](../docs/node-format.md)), never changed by an author.
 
-For the thread's surface: `threadMoved(id)` fires on every change (a step, the thread, its log, a
-linked card); it writes the thread's surface again and makes the attention queue's surfaces again.
+The **engine** is code, without a model:
 
-- **The plan card** (card kind `thread`) is the user's approval of the steps as planned: they start
-  without asking again, their resources granted as on a clean start. A step added
-  later asks its own start card.
-- **One writer per scope**: two steps writing the same repository branch or folder never run at
-  once; the second waits.
-- **Handoff**: a task step's prompt gets the thread's goal, `done_when` and the outputs of the
-  steps it comes after (the agent's last message, or what the lead gave on accepting). An output
-  that may carry what someone else wrote (a tainted step, a task that read external content) taints
-  the task it is handed to, approved plan or not: it starts tainted, never as a clean start.
-- **Limits held by the code**: 20 unfinished steps at once (a light thread grows as the matter goes
-  and comes back: what it went through does not count), 200 over a thread's life; 2 retries per step (a retry answers the idle task with what to fix,
-  or starts a new one), 2 plan changes without asking (then a card), a budget of running time (60
-  minutes by default; past it the thread pauses, the running steps finish, and a card offers more
-  time). The brain never gives itself more time.
-- Each step's end reaches the lead as an event `[thread N « title »]`, instead of the task's own;
-  a thread complete or stuck is told once. `find_thread` and `read_thread` read them;
-  `stop_thread` stops the tasks and withdraws the cards. The engine's pass runs every 15 seconds
-  with the nodes' check, over the active threads: deadlines, a led thread's budget, and steps
-  whose task ended while eriphe-core was down.
-- The end of any thread is the journal's `thread.ended` (key `thread:<id>`, its state).
-- Tables: `threads`, `thread_steps`, `thread_asks` (what a thread asks, one card each),
-  `thread_log`, `thread_cards` (the cards linked to a thread).
+- It starts every step whose predecessors are accepted, in parallel when they may: never two that
+  write the same repository branch or folder (the second waits). Each step's task works in the
+  step's node (`runRequest.inNode`), given the work's goal and the results of the steps it comes
+  after (2000 characters each); what those may carry of someone else's words taints it.
+- It **accepts a proven step on its own** (`proven`): its receipt says done, no check of its
+  contract failed, nothing it claims is denied by what the device saw. The step's node is done
+  (but the work's result, below), its result kept, the decision a line of the work's trace, and the next steps start. No brain turn.
+- The brain is **woken only for an exception**, once, by an event `[nœud <id> « title »] …`
+  (`wakeForWork`): a failed proof (`failed`), a blocked step (its task could not start, failed,
+  stopped or was lost), the budget spent (the work is `held`: nothing new starts, the running steps
+  finish), the final check not holding. It decides with **`node_settle`** `{id, step?, outcome,
+  note}`: on a step, `accept` (a failed proof whose work holds; never failed checks), `retry`
+  with what to fix (2 at most: it answers the idle task, or starts a new one), `drop` (with the
+  steps that come after it), `replan` with `steps` (drop them and open those in their place, by
+  the brain, tainted by its turn; a plan refused changes nothing); on the work, no step, `accept`
+  gives it half its budget more (30 minutes at least) or holds it done after a final check that
+  fails, `retry` runs the final check again (2 at most), `replan` with `steps` adds them, `drop`
+  stops it.
+- Once every step is accepted or dropped, a **final check**: a fresh agent in a child node of the
+  work (« Contrôle de l'objectif »), lent read-only what the steps wrote, given the goal and each
+  step's result. Its receipt done with no failed check makes the work done; its verdict goes into
+  the work's trace. A work done puts its **result before the user** (`workForUser`): the accepted
+  steps no other accepted step comes after wait for the user (one already done or archived stays
+  so), the work around them done, until the user,
+  or the brain on their word (`node_set` done), says it is done, or they archive it. A work with no
+  such step waits itself.
+- **Restart**: what the engine knows is in core.db (`node_steps`: node, parent, after, spec,
+  status, task, tries, output, opener, taint, skill, clean, times; `node_works`: state, held,
+  budget, time spent, final check), never read back from a node's file. The tick
+  (`stepsTick`, every 15 seconds with the devices' check) picks up a task that ended, or turned idle
+  with its receipt, while eriphe-core was down, then starts what may start.
 
-**The thread's lead** is born when the user approves the plan (`lead-<id>`, « Chef du thread N »)
-and goes when the thread ends. Its trigger `thread:<id>` wakes it with what happened to its steps
-(`thread_inbox`), one turn at a time; its own tools are `thread`, `settle_step`,
-`amend_thread`, `close_thread`, `report` and the [workspace's tools](#the-assistants-workspace-tools-workspace_toolsgo).
-It does not write **its thread's surface**: code does ([below](#a-threads-surface-thread_surfacego));
-it may add its part to it (`lead-prompt.md`: a state block, points to see, a diff, a link), and
-writes no other surface. It never talks to the user nor starts a task. The
-brain no longer judges a thread that has a lead: it passes the user's words with `tell_lead`, and
-hears the lead's reports, the choices to ask, the budget's card and the end. A report may carry an
-[attention signal](#attention-signals-attention_signalgo) (`attention`, the same block as a skill's
-receipt): its items enter the attention queue with the source `assistant:lead-<id>`, and the tool's
-result lists what was `dropped`. A report with no item kept does not wake the brain: it is kept in the conversation as read, and the result says so.
+**Start cards** follow the rights unchanged: a step starts as a task the brain starts, its cards
+asked at launch, tainted by its opener's taint and by what the steps before it handed it. One
+bounded addition: a step opened by a **skill's run** (or by a step of one) borrows only what the
+skill declares: its trigger's `tools` and its `repos:` (front matter, approved with the skill). It
+starts **clean**, its Free writes holding without a card (`cleanStart`, lent by the user), only
+when the run was clean (no external event, no external content read), its opener was not tainted,
+it borrows nothing the skill does not declare, and nothing external was handed to it. Anything
+else (an external event, external content read, an undeclared repository) asks its start card as
+any task's.
 
-**The final objective check**: `close_thread` on a led thread with a `done_when` adds a last step,
-`final-check`, a fresh agent lent read-only what the steps wrote (their repository branches and
-folders) and given the goal and what each step produced; only its receipt with status `done` and no
-failed check closes the thread. Otherwise the lead hears what is missing; after 2 checks that fail,
-the decision goes back to the user through the brain.
+## Views (`node_live.go`, `view_card.go`)
 
-**One drawing** (#574): a thread is shown by its surface on the workspace only, and acted on there
-([a thread's surface](#a-threads-surface-thread_surfacego)): its cards, « C'est fait », a
-choice's options, Pause, Resume and Stop, all code's buttons. A link to a thread (a card's origin,
-the tasks panel, a skill's run) opens its surface: `/espace?open=thread-<id>`, which the page opens once
-the surface is there. An ended thread whose surface has left is shown again first
-(`showThreadAgain`), for as long as one that just ended; not one put away, nor a `day` thread. The user's word to a lead is a message written with the thread open: the
-brain passes it on (`tell_lead`). The tasks panel of the conversation shows the threads open first.
+A view (#631) is what the user follows continuously (their mails, the prod's alerts, the pull
+requests to review): a standing node whose blocks code keeps fresh, the monitor that detects what
+comes, and the skill that works in the node when it does. Nothing here knows a view: the brain
+composes each one from the catalog.
 
-#### A thread's surface (`thread_surface.go`)
-
-Every thread, light or led, has its live surface on the workspace, `thread-<id>`, written and kept
-by code from the thread's data (#468): it never depends on a model remembering to write it.
-
-- **Its author is `thread:<id>`**, code's for that thread (not `core`, the attention queue's):
-  nobody else writes or removes it as a whole (`mayChange`), and no other author may take its id
-  (`codeSurfaceOf`).
-- **Code's frame: thin** (#574, #611, `thread_blocks.go`), the same code for every thread, in one
-  fixed order; a block shows only when the thread has what it shows, never by the kind of thread
-  (work, standing or day: the family is never shown, and a thread with its `ends` changed is drawn
-  the same while active, but for one thing read from `ends`: a standing thread shows no Stop, as it
-  never ends). No thread shows its goal, written by the brain for itself and the agents: what a
-  thread shows the user is only words written for the user (its title, headline, notes, summary).
-  Code keeps only:
-  1. **the head**: a child's **crumb** first, a Button with its parent's title (`/thread/parent`)
-     that opens the parent's surface; a `Progress` (the state word in a pill, « À toi », « Urgent
-     », « En cours », « Terminé », coloured by its tone, and with steps a bar of them, done,
-     running, to come, « 2/5 »; none for a calm thread with no steps); the **state line**
-     (`threadStateText`): its headline (below), with « extérieur » beside it when it may carry
-     someone else's words, else what its items count (« 1 pour info · 2 rien à faire »), else its
-     state and who holds it when that says more (« En cours · mené par son chef »); then when its
-     items were last sorted (« trié à 9 h 12 », the last note's time); the controls (Pause or
-     Resume for a thread that runs steps, Stop); once it ended, an `Alert` saying how and when,
-     with where it stood (« Fait ✓ · 14 h 02 » and the summary, else its headline; never its
-     goal), and **« Ranger »** beside it for a thread that ends on its goal, the only block that
-     reads `ends`. The same words as the state line, but the time, are its chip's line (the page's
-     `summary`), else its steps' one line. A thread with nothing yet to show says « Rien pour
-     l'instant. ». Its surface has no `why`;
-  2. **À toi** (active threads, only when something waits): every card, ask, choice and approval
-     that commits the user, each once: the thread's own cards (its plan, a change of it, more
-     time), the cards linked to it (a card raised for it, the card an action offered on one of its
-     items made, `item_cards.go`), each step's (an approval's card, a task step's held start, a
-     call's) as `Proposal` components bound to their refs, a choice to make (one Button per
-     option), and for a step the user does (kind `user`) a « C'est fait » button. What waits there
-     is in no other place of the surface: a step that waits is not in `/thread/steps`, a card that
-     waits on no row;
-  3. **children** (`blockChildren`, a thread that has some): « Sous-fils », then one row each, an
-     `Item` with its title, its status word (« À toi », « Urgent », « En cours », « À jour », or how
-     it ended) and its one line, read from the child's own surface as code wrote it (an active
-     child always, an ended one while its surface is on the workspace), « extérieur » on the row of
-     a child whose surface is tainted (and the parent tainted with it, `thread:<child>`, its state
-     line untouched), and an « Ouvrir » Button: a local `open` that names the child's surface
-     (`{"surface": "thread-<id>"}`), opened inside its parent. The rows are at `/thread/children`
-     (`thread`, `surface`, `title`, `status`, `line`, `level`, `mark`; an empty list for a thread
-     with none). **A child raises its parent**: one that waits for the user makes its parent wait
-     for the user (« À toi », its tile `yours`), and an active parent takes the highest weight of
-     its own and its children's. A child's change writes its parent's surface again, the child's
-     first (`keepThreadSurface`);
-  4. then **what is composed**: the holder's blocks in their order (below), or, while the holder
-     has written none, the **default composition** (`thread_default.go`), the same for every
-     thread, drawn from the thread's data by the paths a block binds alike: its steps when it has
-     some (those done folded in one line, a `Fold` saying « 2 étapes faites · accord : Fusion »,
-     the last call whose card was approved, opened to see them as a `Timeline`; the others as a
-     `Timeline`; the cards decided on them, each a compact `Proposal`, one line opened by a
-     click), then each source's data, in the order the thread added them (below). The first
-     block written takes its place; the last block removed brings it back.
-
-  **The thread's data**, code's, under `/thread`, there with or without blocks for the default
-  and the holder's blocks to bind (a block is checked against code's data as its surface shows
-  it, `threadCodeData`):
-  - `/thread/steps`: `done` and `open`, `Timeline` items (a step's state, its time, its kind, its
-    checks and the last word on it; while the thread is active, a step that waits for the user is
-    not there: it is in « À toi »), `summary` (the line of the steps done, `""` with none),
-    `cards` (`{ref}`, the cards decided on its steps: a call's, with how its run went). Under a
-    task step, what was settled for its task (#564): Eriphe's reply to its question (« Question
-    de l'assistant → Eriphe a répondu : … »), its checks fixed, a release Eriphe asked on a card
-    and the user's answer on it. Kept as facts in `thread_answers` (a kind, its refs, Eriphe's
-    reply, the brain turn's taint) by `task_answer_log.go`, worded by code in the user's language,
-    never the task's question; a reply written on a tainted turn says « extérieur » in its detail
-    and taints the surface (`answer:<id>`);
-  - `/thread/items/<source>`: each source's data (below); once the thread ended, no longer read, the
-    same keys empty (`endedItems`), so a block bound to them still holds;
-  - `/thread/children`, `/thread/parent`, `/thread/marks` (below);
-  - `/thread/since`: facts made by code from the thread's data (a step started, done, failed or
-    handing in its work, what was settled for its task, the summary written again, the thread's
-    end), each a line with its time, since the user's visit before the last one, oldest first,
-    the last 5 (« … et 2 plus tôt » before them); none before a first visit (all of the thread is
-    new then). Never the log's lines (French only, and they may quote a lead). A visit is the
-    page's `open` action on the surface: `seen` takes the last visit, `visited` is now, so the
-    visit that opens it still shows what was new; opened again within 5 minutes, the same visit.
-    Times are absolute (« 14 h 32 », « 13 nov. 9 h 05 »): the surface is written again only when
-    it changes. What changed since the last visit counts on its tile (`threadNew`);
-  - `/thread/summary`: the summary as remember (kind progress), the extraction or its close wrote
-    it; no model call.
-
-  Code's component ids start with `thread_`.
-- **A thread's sources** (#571, `thread_sources.go`, table `thread_sources`): live data the thread
-  carries, read by code without a model, under a surface source's rules (`sourceWhy`: a free read
-  of the brain's, or a resource the server lists; `checkSources` when added). A source has a name
-  and one kind: a `tool` (server/tool with fixed `args`), a `resource` (a server and its `uri`), or
-  a `monitor` the user approved (below). The brain adds one with `link_thread` `source` (the same
-  name replaces it; a name alone takes it away); a block of the holder's part brings its own with
-  `surface_write` `sources` (each at `/<name>`, `refresh.every` its interval): they become the
-  thread's (`by` `part`), replaced when the block is written again, gone with the last block
-  that gives them; two blocks may give the same source alike (same tool, arguments and
-  refresh), never otherwise; a block may not give again a source the thread has already (it
-  binds `/<name>`). They are stored with their first read before the block is, so the block is
-  never written bound to a value not there yet; while one has never given anything, a part that
-  binds it is held quietly (no error for its author). At most 8 a thread, 3 of them monitors.
-  - A tool or a resource is read at once when added (in the background), every `every` minutes (5
-    by default) at the engine's tick (`threadSourcesDue`), when its server says the resource
-    changed (`threadResourceUpdated`; the pool follows the resources of active threads), and when
-    the user opens the thread's surface (`threadOpened`, not within 30 s of the last read); only
-    while the thread is active, one read of a thread at a time. Its last good read is kept on the
-    source (`value`); a read that fails or is refused keeps it, and says why (« en attente »). A
-    read never runs under the engine's lock nor inside a surface write: the surface is written
-    from the last reads, so a change of the thread never waits for a tool.
-  - On the surface: its last read at `/<name>`, the thread ended too (where the part binds it; code's composed data may
-    then be larger than an author's); and, while the thread is active, its data at
-    `/thread/items/<name>`. A server not trusted taints the surface for the models
-    (`source:<name>`; its Proposals still answer) and each of its rows says « extérieur » (`mark`),
-    as does a block that gives it or binds it (`partBlock.external`). Its `caption` says nothing of
-    a source that reads well: words only when it cannot be read (« mails · n'arrive plus à lire »,
-    « en attente »), and its name when the thread lists the items of several. With `items` (`path`
-    to the list, `id` in each item, a monitor's path syntax; `title` and `detail`, paths in the
-    item, what its row says), each item, by its id, is a row (`source`, `id`, `n` its place in the
-    list, `title`, `detail`, its note's `note`, `state`, `due`, `by`, `level`, `mark`, the cards
-    decided on it within a day as `cards`, the action its note offers as `offers`), at most 200,
-    drawn as an `Item` by the default composition: what the thread lists is shown with no model. Without `title`, code takes the item's first `subject`, `title`, `name`,
-    `summary`, `label`, `snippet`, `text` or `description`, else its first short text that is not
-    an id; without `detail`, its `from`, `sender`, `author`, `organizer`, `owner`, `creator`,
-    `user` or `assignee`; a person (« Sam <sam@example.org> », or an object with a `name`,
-    `displayName`, `login` or `email`) by their name. Its id shows only when it has no words at
-    all: a monitor's source (`monitorThreadSource`) needs no paths. The rows are grouped by their
-    notes' state at `/thread/items/<name>/groups` (« À faire », « À regarder », « Pas encore trié
-    », « Pour info », « Rien à faire », « Traité », each `label` with its count, `open`, `items`,
-    and the action its rows share as `offers`; the default draws each a `Fold`, that action as its
-    `aside`, on its line, open or not, the last two folded); the cards decided on several of its
-    items at `/thread/items/<name>/cards`. The offers are code's data: an `Offers` component shows
-    them, in the default composition and in a holder's block alike (`offerOf`). All bound by
-    paths: a read again changes the data, not the components.
-- **Notes on items** (#571, `thread_items.go`, table `thread_items`): the brain (`note_item`, with
-  the thread, its turn's by default) and a thread's lead (`note_item`, its own) note one item a source lists, by the
-  source's name and the item's id: a short note (300 characters), a state (`act`, `look`, `info`,
-  `none`, `done`) and a due date; the same item noted again replaces it, nothing at all takes it
-  away; 500 a thread. Its `author` (`brain`, `lead:<id>`) and `tainted` (the brain turn's taint,
-  the lead session's) are code's, never given. Code joins it to its item's row (`note`, `state`,
-  `due`, `by`, `level`: `high` for `act`, `low` for `info`, `none`, `done`; `mark` « extérieur »
-  for a tainted one, on its row only, which taints the surface for the models,
-  `note:<source>/<item>`). A tainted note is shown, never quoted into a summary: it is in no
-  summary, fact, one-line summary or message code writes, and reading it (`read_thread`'s
-  `notes`, the lead's `thread`) taints the reader, so `remember` kind `progress` is then refused
-  (`errProgressTainted`). No item row carries an action, so a tainted note's never asks. A note
-  stays while its item is listed; once a good read no longer lists it (never a failed or refused
-  one; every item the source lists counts, beyond the 200 shown), or its source is taken away,
-  it is kept 7 days (`gone`, back if the item is listed again; noting it again keeps that date),
-  then the engine's tick takes it away (`pruneItemNotes`). A note on an item not listed yet waits
-  for it the same way.
-- **A live thread** (#555, `thread_live.go`): one kind of source: who holds the thread may make it
-  follow up to 3 monitors the user approved (`link_thread` with `source` `monitor`, its name; a
-  proposed one is refused).
-  Its data at `/thread/items/<name>` (`monitorData`): its latest number (`value`) and its last 24
-  (`series`, kept in its look, `monitorLook.Points`), with « Surveillance <name> · lu à 14 h 32 ·
-  lu par le code, sans modèle » (`caption`); each look writes the surface again (after its state
-  is saved). Its events (`thread_watch`: kind, number, limit, holds, taint) are `Timeline` items
-  (`events`), the last 5, worded from the kind and numbers only (« cpu : 95, au-dessus du seuil
-  de 90 »), never a changed value, a new item or an error's text. The default composition draws
-  them as a `Metric`, a `Chart` and a `Timeline`. While a cross monitor is past its limit, or its
-  looks fail, the thread's weight rises to 65; back under, it comes down. A monitor of a server
-  not trusted says « extérieur » on its caption and makes the surface tainted for the models
-  (`monitor:<name>`), its Proposals still answer in place. Nothing wakes the brain: a skill reacts
-  to the monitor's events as before.
-- **Rewritten at each change** of the thread: the store's `setThread`, `setStep`, `insertSteps`,
-  a card asked, decided or withdrawn call `keepThreadSurface`, which writes only when what the
-  surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active
-  thread that has none its surface (a surface another author wrote at its id goes). Steps are
-  shown through a generic list (`threadSurfaceStep`: key, label, kind, state, time, card ref,
-  checks, note, external, waits, yours: while its card, choice or doing waits it is in « À toi »;
-  a call's card stays after in `/thread/steps/cards` with how its run went; a card gone is not
-  shown), so
-  a new kind of step plugs in by its mapping (`threadSurfaceSteps`).
-- **The holder's part** (#610, `thread_part.go`): who holds the thread (the brain, or its lead)
-  composes it by **named blocks**: a state, points to see, a diff (`Code`), a `Link`, each its
-  block. `surface_write` with `block` adds that block, or replaces it alone where it stands;
-  `surface_remove` with `block` takes it away; without a block nothing is written or removed:
-  there is no whole part. Blocks keep the order they were first written in; `before` (another
-  block's name) places the block written before that one, new or not. 16 blocks at most, 24 KiB
-  of components and of data all together. They are kept apart, in order (`thread_part:<id>`,
-  `{"blocks": [...]}`), each checked alone (A2UI, actions, links, bindings against its own data
-  and sources, the thread's own sources and code's `/thread`; no `thread_` id, no `/thread` data,
-  no component id nor data key another block holds, the error naming it; its sources, each at
-  `/<name>`, become the thread's, see above, so a change of the thread still rewrites the surface
-  at once, never waiting for a tool), and shown under code's frame in place of the default
-  composition, each root renamed `thread_part_<block>`; a block that may carry someone else's
-  words (written after reading external content, or giving or binding a source not trusted) is
-  shown in a `Column` (`thread_external_<block>`) with « extérieur », a Text of variant `mark`, above it
-  (`thread_mark_<block>`), the others as they are. The call answers the blocks in order, as
-  `workspace_read` (`blocks`, on a thread one holds) and `read_thread` do; the surface stays;
-  code keeps the rest. A block that does not hold with the rest when code writes the surface (a
-  source not read yet, or failing) is left out alone, the others shown, and named in the
-  surface's error (quietly while a source has never been read); the part as a whole only when
-  that still fails. A part written whole by an older eriphe-core is dropped at start, with the
-  sources it gave: its holder writes it again, by blocks.
-- **The user's marks** (#610, `thread_marks.go`, table `thread_marks`): keep, drop or done on
-  something a thread shows (an option, a lead, a line of a checklist), recorded by code in the
-  thread's data, never in the composed part: a holder's block places a `Mark` (its `list` and
-  `item`, ids written or bound to a row's id, and the `marks` it offers: `keep` and `drop`, or
-  `done` alone, a box to check), which sends the closed action `mark` (`{"list", "item",
-  "mark"}`, [the actions of a surface](#the-actions-of-a-surface)) and reads its state where code
-  keeps it; code keeps it per thread, list and item (`""` takes it away) and serves it at
-  `/thread/marks/<list>/<item>` (`/thread/marks` always there, a binding under it never refused
-  for a mark not set yet), so a rewrite of the part never loses one. A mark starts no turn: it is
-  a gesture (`kept`, `dropped`, `done`, `unmarked`, its list and item in `workspace_log.detail`),
-  which the brain reads at its next turn in the workspace's block (« ses marques », the session's
-  last 40, apart from the other gestures) and `workspace_read` lists; `read_thread` returns them
-  all. The page cannot say one as a gesture (`/api/espace/gesture` refuses those names). A mark
-  set on a tainted surface is **external** (`thread_marks.external`): no charset tells an id from
-  someone else's words, so it is kept and served, but its gesture does not quote its list and item
-  (« élément extérieur, non cité »), and `read_thread` (the lead's `thread`, a task's) taints its
-  reader (`mark:<list>/<item>`), as a tainted note does.
-- **Taint, per part**: « extérieur » shows only beside what may carry someone else's words, never
-  alone: a step whose task read external content in its detail, a row on its `Item`, a monitor on
-  its caption, a child on its row, the headline in the state line, a block beside it (a block
-  written after reading external content may not hold a `Proposal`, its media dropped as for any
-  tainted author). For the models that read the workspace the surface
-  is tainted as soon as one part is (`look.code_taint`, `look.author_taint`). Its Proposals still
-  answer in place (`look.answers`, the page's `extensions.eriphe.answers`), as the attention
-  queue's do: code bound each to one of the thread's own cards, unless the thread itself is
-  tainted, which the surface then says, and its cards are answered in the conversation.
-- **Small**: a one-line summary (`look.summary`, the page's `extensions.eriphe.summary`): the last
-  step done, then what waits (« Fusion ✓ · Déploiement à toi »), the state when nothing moves,
-  « Fait ✓ » once done. A small tile (`s`) shows that line rather than a slice of the surface, a
-  chip shows it beside its title.
-- **Lifetime**: `while: thread:<id>`; once done or dropped, rewritten with `until` the end of its
-  day in the user's zone (an hour at least), then it leaves and never comes back unless the thread
-  is reopened. Weight 50, 70 while something waits for the user (80 while one of its cards does:
-  they leave the attention queue for it), 30 once ended.
-- **« C'est fait »** sends `stepDone` with `{"thread": <id>, "step": "<key>"}`
-  ([the actions of a surface](#the-actions-of-a-surface)); code checks it against the button it
-  wrote, then `settleUserStep` settles the step through `userStepDone` (`thread_steps.go`); 409
-  for a step that no longer waits.
-- **A choice** that waits shows one button per option, each sending `choose` with
-  `{"thread": <id>, "step": "<key>", "option": "<option>"}`; code checks it against the button it
-  wrote (`chooseOf`: the step still waits, the option is one of its own), then `chooseStep`.
-- **Pause, Resume, Stop** (`thread_controls`), in the head of an active thread: `control` with
-  `{"thread": <id>, "do": "pause"|"resume"|"stop"}`, checked against the button (`controlOf`),
-  then `pauseThread`, `resumeThread` (by the user: more time when its budget held it, « Donner plus
-  de temps ») or `stopThread`. Stop is on every thread `stopThread` takes (a light one is dropped);
-  Pause and Resume only on a thread that runs steps (led). A standing thread has none: it never
-  ends.
-- **« Ranger »** (`thread_tidy`), on an ended `goal` thread's surface only, sends `tidy` with
-  `{"thread": <id>}`; code checks it against the button it wrote (`tidyOf`), then `tidyThread`
-  puts the thread away: its surface leaves at once (a day thread's leaves at its end, a standing
-  one's never). 409 once put away.
+- **Live blocks** (`node_live.go`, table `node_reads` in `core.db`): a block's `sources` are read by
+  code, without a model, as the brain's free reads are (`sourceWhy`): a tool with fixed arguments,
+  a server's resource, or a monitor the user approved. A source new or changed is read at once,
+  then every `every` minutes (5 by default), at a resource's update, and a monitor's at each of its
+  looks (`monitorLooked`). A read that fails or waits keeps the last good value, with why. The
+  values are written back into the block's `snapshot`, with `at` (code's, a reserved source name),
+  in one version of code's (`eriphe`) when a value changed, once a quarter of an hour at most per
+  block; a snapshot the store refuses (a secret, too big) is not tried again until its value
+  changes. A block that reads a server not trusted is marked `external`, checked at each read:
+  code marks it, never unmarks it. A monitor's value is its latest number, its last points, whether
+  it is past its limit or failing, and its last events (kind and time, numbers only).
+- **A monitor raises its nodes**: crossed and holding, or failing, it puts each node whose blocks
+  read it in the attention queue (`node:<id>`, in code's words), tainted when its server is not
+  trusted.
+- **Item notes** (`node_items.go`): a listing source's `items` (`path`, `id`, `title`, `detail`)
+  give its items; a task notes one (`item_note`) in `node_items`.
+- **Calls on an item** (`item_cards.go`): a skill run's call kept for the user that names exactly
+  one item of a source of the run's node, on the call's own server, is kept on that item
+  (`access_asks.node`, `source`, `item`): one card per item (kind `calls`), answered alone. A call
+  on no item stays on the run's card. The card names its node, unless the node is external.
+- **One card** (`view_card.go`, kind `view`, table `view_proposals`): `propose_view` checks the
+  node (its body as a task's blocks are: the actions' grammar, no ask after external content, no
+  Link to a source's value; each source a catalog server's, an approved monitor, or the view's
+  own), the monitor (`write_monitor`'s checks, its name free) and the skill (`write_skill`'s, its
+  name free, with `when`; code writes its `node:`, the id given beforehand). The card shows the
+  node's title and blocks with what each reads, what the monitor does, and when the skill runs,
+  with the repositories its steps may borrow. One yes makes the node (standing, by `user`), the
+  monitor (on) and the skill (approved), in that order; one that fails takes back those before,
+  and the card waits still. No makes none. Written on a tainted turn, the card says so and the
+  node is external.
 
 ## Permission policy
 
@@ -1412,7 +1228,7 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    with a secret is what it was lent, decided at launch, and Free asks nothing;
 6. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
    `Write`, `Edit`, `WebFetch`…) is allowed (`inContainer`). The container
-   is the boundary: what leaves it goes through the node's mounts (a folder's level), its egress
+   is the boundary: what leaves it goes through the device's mounts (a folder's level), its egress
    filter and the credentials eriphe-core lends, which the shell rules above cannot replace (they
    read a command line, and only stop mistakes);
 8. what is left is the brain's to judge. A request the brain was told of and left at the end of
@@ -1521,13 +1337,13 @@ adds its title and the start of its description, read with the tool itself when 
 
 An access card and a start's card read alone (`card_origin.go`): wherever they are shown (the
 conversation, a `Proposal`, a channel) they say where they come from and what their Oui does,
-facts of eriphe-core's only, never words of the model's next to Oui and Non. The thread is the one
-of the step the card is, or of the step whose task asks (never a link the brain made with
-`link_thread`), linked to its page; its title shows only when no outside content reached the thread
-(`threads.tainted` empty), else it is named by its number. The task that asks is named when the
+facts of eriphe-core's only, never words of the model's next to Oui and Non. The node is the one
+a calls card's calls belong to (the node whose item it acts on, else the node of the run that kept
+them, never one a model names), linked to its page (`/espace?open=node-<id>`); its title shows only
+when no outside content reached the node (not external), else it is said without. The task that asks is named when the
 card's text does not (a call of a task, a start), and only if it was not started on a tainted turn.
 What Oui does follows the answer's code: a grant lets the task act until it ends, a release gives
-it its held tools, a call runs once as shown (a step's, then its thread goes on), a page or a search
+it its held tools, a call runs once as shown (a step's, then its node's work goes on), a page or a search
 is allowed once, a start starts the task. A task's card is shown:
 
 1. **at launch**, on its start's card, for what it is lent outright: it waits (`held`) for the answer;
@@ -1535,8 +1351,8 @@ is allowed once, a start starts the task. A task's card is shown:
 3. **at the first call** of a category not granted yet; the calls that wait on it are answered with it.
 
 A card at the first call or on release has a message of its own, the question, which notifies as
-any question does; so has a start's card when the brain did not launch the task (a thread's step).
-These cards, a start's and a led thread's go to
+any question does; so has a start's card when the brain did not launch the task (a step of a work, a skill's run).
+These cards and a start's go to
 the channels the user writes from as well (Telegram), whatever the messages around them did,
 answered from the linked account only ("Alerts only" sends none): that account is the user, a
 trusted channel, so its buttons answer as the workspace's. A task's raw permission (a rule's `ask`,
@@ -1622,19 +1438,19 @@ rename and delete in it).
 The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
 against what the user opened: an unknown folder or server is refused, and so is a `write` on a
 folder shared read-only, or a case the folder's rights set to Never. The list is kept with the task
-(`tasks.resources`, JSON), and the node gets its spec fields (`repo`, `folders`…), derived from it.
+(`tasks.resources`, JSON), and the device gets its spec fields (`repo`, `folders`…), derived from it.
 
 **A repository's skills** (`.claude/skills`, `.agents/skills`, `.opencode/skills`: instructions
 and scripts its agents load by themselves) load only from the user's own repositories
 (`repo_skills.go`): with the GitHub App, one it is installed on; without it, one the GitHub tool's
 token may push to. Anything else (another host, someone else's repository, GitHub not reachable)
-keeps them off, unless the entry says `"trust_skills": true`. The node gets the answer as the
-spec's `repo_skills` and turns them off per agent (node/README.md, Agent skills); whatever loads,
+keeps them off, unless the entry says `"trust_skills": true`. The device gets the answer as the
+spec's `repo_skills` and turns them off per agent (device/README.md, Agent skills); whatever loads,
 a skill never approves a tool by itself.
 
 **Held back** (`"hold": true`, a `tool` entry only): for work the user validates before it acts
 (analyse, report, then act on what they approved). The task sees the tool from the start (its
-agent lists its tools once, and the node its servers when it fetches the task), but none of its
+agent lists its tools once, and the device its servers when it fetches the task), but none of its
 calls is authorized, whatever the grid or a grant says (`lend.go`). The brain asks with `answer_task`
 `release` (the entries' `ref`, `mail.move`), for an entry lent held only: the user gets a
 [card](#the-approval-card), and only their yes releases it. The release is kept in the task's
@@ -1662,7 +1478,7 @@ Skills** (`web_skills.go`):
 - **Approving**: nothing reaches a task or the brain before the user has read the skill on its page
   and approved it. The page shows its `SKILL.md` and its files, with the scripts marked (in
   `scripts/`, executable, a script's extension, or not text). A skill's `allowed-tools` is shown
-  as ignored: Eriphe's permissions stay the only judge (node/README.md, Agent skills).
+  as ignored: Eriphe's permissions stay the only judge (device/README.md, Agent skills).
 - **A new version** (the same name, uploaded again) waits for approval with its diff against the
   approved one, file by file. Tasks keep the approved version until the user approves the new one
   (the hash they read is checked) or keeps the old one.
@@ -1671,8 +1487,8 @@ Skills** (`web_skills.go`):
   reads (its front matter refused) is shown still, with the reason. Bundles no skill points at any more are deleted, but for the last five versions a skill replaced or had when deleted (`skill_kept`), which the [learning journal](#what-eriphe-learned) needs to undo a change; they are never given to a task.
 
 **In tasks.** Every worker task gets the skills that are approved and on when it starts, as its
-spec's `skills` (name and sha256 of each, `skills_tasks.go`). Its node fetches each bundle with its
-own secret (`GET /v1/node/tasks/{id}/skills/{sha256}`: only that task's, only on its node), checks
+spec's `skills` (name and sha256 of each, `skills_tasks.go`). Its device fetches each bundle with its
+own secret (`GET /v1/device/tasks/{id}/skills/{sha256}`: only that task's, only on its device), checks
 the hash, and mounts them read-only at `/run/eriphe/skills/.claude/skills/<name>`. It points
 Claude Code, OpenCode and Codex at them. Scripts run in the task's container, under its permissions,
 like any other command. When the agent does not load them itself, eriphe-core lists them (name,
@@ -1688,8 +1504,8 @@ reading one does not taint the turn.
 
 A task lent a GitHub repository uses the real `git` and the real `gh`, which the agent installs with
 apt. It holds a placeholder in `GH_TOKEN`: gh reads it, and git gets it from a fixed credential
-helper in the task's environment. Each request crosses the node's relay, as for any
-[access](../node/README.md#accesses), and eriphe-core decides and puts the token in.
+helper in the task's environment. Each request crosses the device's relay, as for any
+[access](../device/README.md#accesses), and eriphe-core decides and puts the token in.
 
 **The decision** (`decideRepo`, deny by default; first that applies):
 
@@ -1714,7 +1530,7 @@ ref: a deletion is Supprimer, the default branch (asked of GitHub, kept ten minu
 Envoyer, any other branch Modifier. One ref refused refuses the push, before GitHub sees it. gh's
 writes are Modifier.
 
-What is decided is the lend, at launch, as for an [access](../node/README.md#accesses): what the task reads afterwards
+What is decided is the lend, at launch, as for an [access](../device/README.md#accesses): what the task reads afterwards
 changes nothing, and nothing waits in a command. The same rules hold with the GitHub App or without.
 
 gh's token writes pull requests and issues, never contents: GitHub itself refuses it a merge, a
@@ -1729,7 +1545,7 @@ goes without one. git and gh need the GitHub App: no other token is ever lent, a
 are not classified:
 
 ```
-git → the node's relay → eriphe-core (decides, mints) → GitHub
+git → the device's relay → eriphe-core (decides, mints) → GitHub
 ```
 
 - **Each request is decided**, from what it is: a push is `git-receive-pack`, and a placeholder
@@ -1747,7 +1563,7 @@ git → the node's relay → eriphe-core (decides, mints) → GitHub
 with the same decision (`startNeeds`, `task_start.go`): for each GitHub repository lent for `write`,
 the case its lend names: Modifier for its `branch`, Envoyer without one (it pushes the default
 branch). Supprimer is not asked ahead: a deletion goes only where it is Free, on a clean start. When that takes the user's yes, the task does not start: it is kept `pending` with
-`desired` `held` (no node is given it, no placement moves it, its `pending_reason` says why) and the
+`desired` `held` (no device is given it, no placement moves it, its `pending_reason` says why) and the
 user gets one card in the conversation (kind `taskstart`, [conversation cards](#workspace-web)),
 « Pour pousser `eriphe/x` sur owner/repo, il me faut ton accord. ». Oui keeps the approval
 (`repo_grants`, logged "approved at launch": that case of that repository, by git or gh, for the
@@ -1850,11 +1666,10 @@ turn is not tainted. Its front matter:
 | `when` | an event kind of the [journal](#events) (`monitor.new key=mails`, `monitor.changed key=getout-prod`), with filters on its key or payload (`monitor.received key=getout status=firing`), or a payload number compared (`user.returned away_minutes>=180`, `<=` too); or up to 5 kinds, by commas, that share the filters (`monitor.failed, monitor.recovered key=getout-prod`: one skill for one way of reacting, its run says each event's kind); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules); or both, the schedule then `;` and the events (`time daily 06:00; user.returned away_minutes>=180`): it runs at its times and on its events |
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
-| `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid; `eriphe-threads` to act on threads |
-| `thread` | its thread's alias, `kind:slug` (`topic:mails`); without it, its events' key when it names a thing (`topic:<monitor>`) |
-| `title` | its thread's name for the user, 60 characters at most (`title: Mes mails`); without it, its name made a title (`mails-pro` → « Mails pro »). A new version's title renames its thread, the one already open too |
+| `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
+| `repos` | the repositories its runs' steps may borrow, `owner/name`, by commas or a list (10 at most): a clean run's step on them starts without a card ([Work in steps](#work-in-steps-node_stepsgo)); a run itself is not lent them |
+| `node` | with `when`: the id of a standing node its runs work in (a view's, [Views](#views-node_livego-view_cardgo)): each run's task is that node's, reads and writes it, notes its items and opens its children; the node is never done nor given a run's report. A node that is gone refuses the run. Without it, each run works in a node of its own |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
-| `actions` | the actions its runs may offer on an item, with their words: a list, one a line, `Label: server/tool key=value …` (`- "Archiver: mail/move_message folder=Archive"`), 8 at most, a label of 40 characters at most. An action a run notes (`note_item`) that has this tool and these arguments says this label on its button, its note tainted or not: the user approved these words with the version, the run only chose the item. Any other action of a run says the tool's own words |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
 the rest of the skill, as one version: Settings → Skills shows it in words, and a change is a new
@@ -1865,16 +1680,16 @@ version, read with its diff.
   no start card: the user approved the skill. An external event taints it from its start
   (`task_taint:<id>`), so its writes ask a card as a tainted task's do; a time trigger or own
   events start it clean.
-- **It acts on its thread** when lent `eriphe-threads` (`skillVoice`): it notes the items it
-  looked at, says the thread waits for the user or gives it a deadline, raises it, adds what the
-  user must do or decide, gives it a headline. That is what the user sees, as is: it is told to
-  write in the user's language, short and concrete, with no ids nor jargon (`threadsUserReads`,
-  also the server's instructions). It is ordered by code; a skill writes no surface
-  (`eriphe-workspace` is refused in its `tools`). The run's note says how many notes it wrote.
+- **It works in a node of its own**, as any worker task
+  ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)): it writes there what it found and
+  notes the items of its sources (`item_note`), with the user's preferences about what they see
+  in its prompt (`seePreferences`). A skill is not lent `eriphe-workspace` (refused in its
+  `tools`): its node is its own. A view's skill works in the view's standing node
+  ([views](#views-node_livego-view_cardgo)).
 - **Its last message** is optional, the run's report, weighed by its receipt's
   [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
-  as everywhere; a skill's instructions write no prefix. Entries whose refs are all threads
-  raise their tiles and never tell the message. No entry (or no receipt) tells nothing:
+  as everywhere; a skill's instructions write no prefix. Entries whose refs are all nodes
+  raise them on the graph and never tell the message. No entry (or no receipt) tells nothing:
   the run is `silent`, its message kept in its note. Otherwise its message is a notification, why
   « Skill « name » », ref `skill:<name>`, its link-free rules when the task is tainted, weighed as
   its heaviest entry (delivered at once from 4, pushed at 5). One entry without refs (or whose refs
@@ -1895,95 +1710,17 @@ version, read with its diff.
   even without an attention entry; « the skill proposes N actions » when it wrote none, or when
   its message is held or not sent, held by the attention queue for its breakpoint): each action with its parameters. The yes runs
   them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
-- **Its calls on an item are that item's card** (#575, `item_cards.go`): a kept call whose input
-  names exactly one item a source of its thread lists, of the call's own server (a value of its
+- **Its calls on an item are that item's card** (#575, #631, `item_cards.go`): a kept call whose
+  input names exactly one item a source of its node lists, of the call's own server (a value of its
   input equal to the item's id; code matches it, the run never says it), carries the item
-  (`access_asks.thread`, `source`, `item`) and is on that item's card (kind `calls`, `batch` = its
-  first call's id), not on the run's: when the run ends, each item gets its card, raised for the
-  thread (`cardNow`), with its taint. The same call on the same item still waiting, from any run,
-  is the card already there. While it waits, the thread's surface shows it once, with what waits
-  for the user (« À toi », a `Proposal` bound to its ref); it takes the thread's weight and state
-  (yours), and leaves the attention queue while the thread is active. Decided, it stays a day in
-  the item's data, on its row (`/thread/items/<source>/groups/<g>/items/<i>/cards`), or under the
-  source for one on several items (`/thread/items/<source>/cards`), a compact `Proposal` in the
-  default composition. Its words are code's: the action by its tool, its origin the thread and
-  the item by its source and id, Oui running each call once as kept. A `Proposal` bound inside a
-  list sends where it is (`at`, its place in the data); `answerOf` checks the place is one its
-  binding takes and the data there shows that card. Its results go to the run's note (a run's) or the thread's
-  log, never to the brain; a calls card is answered by its buttons only, never by a plain « oui ».
-- **Actions offered on an item** (#575, `item_offers.go`): `note_item` takes `actions`, one at
-  most (the one its author recommends, only when useful: never a menu), a label, a tool
-  (`server/tool`) and its exact input with `"$item"` where the item's id goes (code fills it in;
-  kept in `thread_items.actions`). Checked when noted: the tool is in the
-  catalog and not Eriphe's own, the author may use it (a task: lent it), its input names the item
-  and fits the tool's required properties, and the access policy does not refuse it (`never`);
-  checked again when shown and when clicked, so a `never` tool is never offered. The row offers
-  each in its data, `offers` (`{label, thread, source, item, offer, tool}`, the offer being the
-  action's key); a state group offers an action two of its rows or more share
-  (« Archiver · 24 », `{label, thread, source, state, offer}`). A folded group (`none`, `done`) is
-  no list of buttons: its rows offer nothing, the group the action they share, even one row's.
-  An `Offers` component shows them, a button each with code's words: the default composition
-  places one on each row and on each group's line, and a holder's block that shows a source's
-  rows may place one too, bound to a row's or a group's `offers` under `/thread/items` and to
-  nothing else (`offersGuard` when written, `offersBound` when clicked: no author writes
-  `/thread`, so the words and the ids are always code's). An author can never write `offer`
-  (`CheckActions`). The page sends the offer's ids as code wrote them, never its words
-  (`{thread, source, item or state, offer}`); code checks them against the clicked `Offers` of
-  the thread's own surface, one of the offers its binding takes in the stored data
-  (`sentOffer`). A click runs nothing: code reads the note again from the store (the item
-  still listed and shown, the action on its note) and makes one calls card with the exact call,
-  bound to the item, linked to the thread, with no message; a group's click one card with a call
-  per item shown in the group. A call already waiting on its item is not asked twice. A button's
-  words are never a run's: a skill's run's says the label its skill's approved version declares
-  for that action (`actions:`, tool and arguments matched), tainted note or not; any other action
-  of a task says the tool's own words (`toolWords`: its title from its server, else `callVerb`).
-  The brain's and a lead's say their label, but for a tainted note: the tool's words. Its card
-  keeps the note's taint.
-- **Its thread** (`task_threads.go`): its runs are about its alias, `thread: kind:slug`; without
-  it, their events' key when it names a thing (a monitor's, `topic:<name>`, or `kind:slug`;
-  about.go). Their tasks, notifications, cards and signals carry it. Lent `eriphe-threads`, a
-  run acts on the thread of that alias: code finds it when the run starts, reopens it if it
-  ended, or opens it **standing**, titled by its `title:` (else `mails-pro` → « Mails pro ») with its
-  description as goal: words the user approved, never the run's. A run of a poll monitor's new
-  items gives that thread the monitor's read as a source with items (thread_sources.go), each
-  item by the id its `monitor.new` carries: the run notes them there. The run is told its thread
-  and its sources; the next run finds the same thread. Nothing creates a thread because a tool
-  is connected: it is born when a watcher acts on its alias, for any source.
-  **It exists as soon as the skill is on** (`openSkillThreads`): when its version is approved
-  (on its card or in Réglages), when it is turned on, and at core start for every skill on whose
-  alias has no thread yet (an active one gets its monitor's source there should it lack it; an
-  ended one stays ended), code opens it the same way (`openSkillThread`, held by one lock so a
-  run and an approval never open two), without a model run. Its alias is the one its trigger
-  gives before any event (`skillOwnThread`): its `thread:`, else on `monitor.*` events with
-  `key=<name>`, `topic:<name>`. A watcher of a poll monitor's new items (`monitor.new
-  key=<name>`) gets that monitor's read as its source with items at once, so its list shows,
-  read by code; a skill on time with `thread:` gets its thread with no source; a skill off, not
-  lent `eriphe-threads`, or whose alias is only known from its events gets none until its run.
-- **eriphe-threads**, a server Eriphe provides, lent like any tool (`tools: [eriphe-threads]`,
-  `{kind: tool, ref: eriphe-threads}` in `run_task`; `eriphe-threads.note_item` lends one tool).
-  Its tools ask nothing (writing on a thread is not an external write) and act as
-  `skill:<name>` (`task:<id>` for another task), with the task's taint read at each call:
-  - `find_thread`, `read_thread` (what others wrote taints the task);
-  - `open_thread` on an alias: the thread it has, reopened if it ended, else a new one, light or
-    standing (never `day`, and it never changes how a thread found ends), with an optional
-    `headline` stored as `set_thread`'s; with steps, a led thread
-    whose plan waits for the user's card: nothing starts before the yes;
-  - `note_item` on an item of a source (tainted from a tainted run: shown « extérieur », never
-    quoted into a summary);
-  - `set_thread`: `waiting` (it waits for the user) or `open`, a deadline (its `deadline` step,
-    made or moved), a raise (an attention item `thread:<id>`, held to 3 from a tainted run), a
-    `headline` (120 characters, `""` takes it away): the line the user reads at the top of the
-    thread and on its chip, in place of its items' counts; kept apart (`thread_headline:<id>`)
-    with its author and the run's taint, code's: from a tainted run it taints the surface
-    (`headline`) and the state line says « extérieur » beside it;
-  - `add_step` of kind `user`, `deadline` or `call`: a call is one of the task's own tools, and
-    always a card, a free read included (`step_ask:<thread>:<key>`); what it adds taints the thread
-    from a tainted run;
-  - `link_thread` with a source: a read of one of its tools or servers, or an approved monitor; a
-    name alone takes away one it gave.
-
-  It never offers `settle_step`, `close_thread`, `stop_thread`, `reopen_thread` nor any approval:
-  skills propose, the user decides. A plan is never approved by code.
+  (`access_asks.node`, `source`, `item`) and is on that item's card (kind `calls`, `batch` = its
+  first call's id), not on the run's: when the run ends, each item gets its card, with its taint.
+  The same call on the same item still waiting, from any run, is the card already there. Its words
+  are code's: the action by its tool, its origin the node (unless it is external), Oui running each
+  call once as kept; its results go to the run's note and to the node's trace, never to the brain.
+- **Its about**: its runs are about their events' key when it names a thing (a monitor's,
+  `topic:<name>`, or `kind:slug`; about.go). Their tasks, notifications, cards and signals carry
+  it. A run works in its node.
 - **Urgent**: with `urgent: <text>`, a run whose attention list weighs something 5 sends that
   fixed text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the
   run read enters it: a tainted run cannot write what wakes the user. Its own message goes as any
@@ -1997,7 +1734,7 @@ version, read with its diff.
 A triggered skill's page lists its runs over 30 days, the latest first:
 - when it ran, and its state (running, done, nothing to say, failed, not started);
 - its events (kind, key, a few words of their subject);
-- its task and its thread;
+- its task and its node;
 - its last message;
 - the actions it proposed, each answered there on its own (`POST
   /settings/skills/<name>/calls/<ask>/approve|reject`: a yes runs it as kept);
@@ -2010,9 +1747,9 @@ brain reads the same with **`skill_runs`** (`name`, `limit`; free). It gets the 
 keys and the runs' outcomes, but not their text: what a run read stays on its page.
 
 **Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
-`every`, `model`, `tools`, `thread`, `urgent`, `title`, `actions`) writes a `SKILL.md` and adds it as a version waiting for
+`every`, `model`, `tools`, `urgent`, `repos`, `node`) writes a `SKILL.md` and adds it as a version waiting for
 approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog
-servers). Its card (kind `skill`) says the trigger in words, its thread's name, its buttons' words and the instructions; the yes approves
+servers). Its card (kind `skill`) says the trigger in words, the repositories its steps may borrow, the node it works in and the instructions; the yes approves
 exactly that version, the no drops it. Written on a tainted turn, the card says so. A triggered
 task has no such tool.
 
@@ -2048,7 +1785,7 @@ the rest dropped.
 |---|---|---|---|
 | `monitor.changed`, `monitor.new`, `monitor.crossed`, `monitor.failed`, `monitor.recovered`, `monitor.received` | a [monitor](#monitors) (`monitor.received`: an incoming address was called, `status` from the body's top-level `status` when it is a short word: `firing`, `resolved`) | the monitor's name | unless its server is trusted |
 | `task.ended` | a worker task's end | the task | no |
-| `thread.ended` | a thread's end | `thread:<id>` | no |
+| `node.done` | a node set done (`node_set` `done`) | the node's id | no |
 | `user.returned` | the user's first activity after an absence of an hour or more; payload `left`, `back`, `away_minutes` | | no |
 
 ### Monitors
@@ -2125,16 +1862,16 @@ item, so a skill follows the mail with `when: monitor.new key=mails`. The calend
   looks saw, its next look).
 
 The test case: `getout-prod` calls Grafana's alert rules every 2 minutes with `path`
-`data.rules[state=firing].name`; a skill `when: monitor.changed key=getout-prod` investigates and
-opens a led thread. Nothing runs a model while nothing fires, and nothing reaches Eriphe from
+`data.rules[state=firing].name`; a skill `when: monitor.changed key=getout-prod` investigates in its node,
+cutting its work in steps when it needs several. Nothing runs a model while nothing fires, and nothing reaches Eriphe from
 outside: the call goes out from eriphe-core to the tool.
 
 ## Assistants
 
 An assistant is a long-lived agent that owns one task, as a Kubernetes Deployment owns its Pod.
-Two are built in, and there are no others: **the brain** (`eriphe`, role `brain`: the only voice
-and the only orchestrator, see [The brain](#the-brain)) and each led thread's **lead** (role
-`lead`, see the threads). What used to be a specialist assistant (role `assistant`, with a typed
+One is built in, and there are no others: **the brain** (`eriphe`, role `brain`: the only voice
+and the only orchestrator, see [The brain](#the-brain)). Work of several steps has no assistant
+of its own: code runs its steps ([Work in steps](#work-in-steps-node_stepsgo)). What used to be a specialist assistant (role `assistant`, with a typed
 state, views, lent facts and a team page) is a [triggered skill](#triggered-skills) now: a task in
 the background, started by an event or a time, that tells the user with its last message.
 
@@ -2143,18 +1880,16 @@ their task:
 
 | Spec | |
 |---|---|
-| `role` | `brain` or `lead`, with the powers it allows |
+| `role` | `brain`, with the powers it allows |
 | `display_name` | what the user calls the brain, as a person (see [its name](#the-assistants-name)); Eriphe by default |
-| `agent`, `node` | what it runs on; without an agent, the default one or the first that can run it |
+| `agent`, `device` | what it runs on; without an agent, the default one or the first that can run it |
 | `instructions` | its standing instructions (`{{user}}` and `{{name}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
 | `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
-| `powers` | what it may do, within its role's: `talksToUser`, `receivesConversation`, `launchesTasks`, `lendsResources` (the brain's), `reports` (the lead's) |
+| `powers` | what it may do, within its role's: `talksToUser`, `receivesConversation`, `launchesTasks`, `lendsResources`, `notifies` (the brain's) |
 | `triggers` | the brain's: `conversation` (the user's messages and the tasks' events) and `clock` (an intention that comes due: the wake packet, see [Memory](#memory)) |
 | `disabled` | its task is stopped, and none started |
 | `self_url` | the file only (see the brain) |
 
-The lead's own tools (`report`, and its role's) are an MCP server of its own, under
-eriphe-core's name, relayed by its node (`assistant_own_tools.go`): it holds no token.
 
 ### The assistant's name
 
@@ -2172,21 +1907,21 @@ workspace's words (`{{name}}` in the texts of `web_text*.go`, French elision inc
 de {{name}} » reads « Tâches d'Eriphe »), the pages' title suffix and the brand next to the logo,
 the login page, the installed app (`/manifest.webmanifest` is served with its `name` and
 `short_name`), and an added channel's app (`GET /v1/channel`, Home Assistant's conversation agent). The software keeps its name: the logo glyph, the
-images and binaries, the install scripts, eriphe-core and eriphe-node, the GitHub and Google apps
+images and binaries, the install scripts, eriphe-core and eriphe-device, the GitHub and Google apps
 and the OAuth client, the certificate authority, the app passwords and tokens named Eriphe, the
 Home Assistant integration's domain, and the system texts that name the software.
 
 ## The brain
 
 With a `brain` section in the config, eriphe-core keeps a permanent orchestrator alive: a long-lived
-task on a node (stable `profile`, so its session survives restarts), with only MCP tools
+task on a device (stable `profile`, so its session survives restarts), with only MCP tools
 (eriphe-core's own plus its grant from the catalog, `brain.tools`) and its standing instructions:
 `brain-prompt.md`, built into the binary, or the file `prompt_file` names instead.
 
-**How it reaches eriphe-core.** Without `self_url`, the brain's node relays eriphe-core's own MCP
+**How it reaches eriphe-core.** Without `self_url`, the brain's device relays eriphe-core's own MCP
 server to it as it relays a catalog server (`<callback-url>/mcp/eriphe-core`, with the task's
-secret; the node calls `/v1/node/tasks/{id}/mcp/eriphe-core` with its own): it works wherever the
-node reaches eriphe-core (the same machine, the LAN, the tailnet), with no address to configure,
+secret; the device calls `/v1/device/tasks/{id}/mcp/eriphe-core` with its own): it works wherever the
+device reaches eriphe-core (the same machine, the LAN, the tailnet), with no address to configure,
 and the brain's container never holds eriphe-core's API token. Only the brain's task gets it.
 `self_url` (e.g. `http://eriphe-core:8800/mcp` when the brain shares a Docker network with
 eriphe-core) still makes the brain call that address directly, with a token of its own derived
@@ -2210,7 +1945,7 @@ on a clean turn and asked on a [card](#the-approval-card) on a tainted one, and 
 of the open web; On approval is a card
 per call. A read named by a
 policy rule of the configuration is not free: it goes through the policy with its input. The list
-is computed when its node fetches the task, so a tool or server added later reaches the brain at
+is computed when its device fetches the task, so a tool or server added later reaches the brain at
 its next start (the proxy itself follows the catalog at once); in eriphe-core's first minute, the
 brain waits for the trusted servers that are still connecting before it starts.
 
@@ -2221,7 +1956,7 @@ task shows in `GET /v1/tasks` (and the CLI) until the user allows or denies it. 
 permission requests are denied, but for the web.
 
 **The web.** The brain searches with its harness's own search: Claude Code's `WebSearch` is in its
-`allowed_tools`; Codex is held to `web_search = "cached"` by the node; OpenCode's `websearch` is
+`allowed_tools`; Codex is held to `web_search = "cached"` by the device; OpenCode's `websearch` is
 denied (a harness without a search is told so in its standing instructions). Its page reader
 (`WebFetch`, OpenCode's `webfetch`) and its search are not allowed in advance: the web is a row of
 Settings → Tools, Free, On approval or Never, for the brain only (a task's web is its container's).
@@ -2238,26 +1973,27 @@ It gets one turn per event: my messages (`POST /v1/messages {text}`) and what ha
 `GET /v1/messages?after=N&wait=S` returns the conversation. Restarts back off from 5 s to 5 min, and a
 resume that keeps failing is dropped for a fresh session.
 
-eriphe-core, not the harness, holds the thread: the harness session (`--resume`) is only a cache.
+eriphe-core, not the harness, holds the conversation: the harness session (`--resume`) is only a cache.
 Each resumed call reads the whole history, and a cache left for over an hour is written again in
 full: a new brain task resumes its session only while its last turn's context was under 150,000
 tokens per call and, above 60,000 tokens, that turn ended less than 55 minutes ago
 (`brainResumeTokens`, `brainResumeIdle`, `brainResumeIdleFloor`; the role card's `ResumeTokens`,
 `ResumeIdle` and `ResumeIdleFloor`): a smaller session costs little to write again and holds more
 than the pack. The measure is the session's
-last `turn_end`, whichever task ran it: its `usage.context_tokens` (the node's, Claude Code's last
+last `turn_end`, whichever task ran it: its `usage.context_tokens` (the device's, Claude Code's last
 call), or else the turn's input, cache reads and writes. Past either bound, the task starts a fresh
 session. A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
-node could not do, another harness) gets a context pack in its first turn, never in its system prompt,
+device could not do, another harness) gets a context pack in its first turn, never in its system prompt,
 within about 16,000 tokens (`brain_context.go`). The state of things comes first, in at most half of
-it: the card of each open thread, up to 20 threads (`thread_card.go`: its summary says where
-its matter stands), the tasks under way, the decisions of the last 14 days, the people and facts
-of these threads, the open intentions (the due ones first), what waits for the user (permissions,
-cards), the last day's episodes. A card that does not fit leaves its thread in a line; a record a
+it: the card of each node running or waiting, up to 20 (`about_card.go`: its line says its
+state, title and the first line of its doc), the tasks under way, the decisions of the last 14
+days, the people and facts of these nodes, the open intentions (the due ones first), what waits
+for the user (permissions, cards), the last day's episodes. A card that does not fit leaves its
+node in a line; a record a
 card shows (its refs) is not said again in the sections after it; then the last messages between
 the user and the brain in what is left, the newest kept.
-It is quoted data; what may carry what someone else wrote (an external memory, episode or card, a
-tainted thread, the summary of a thread whose steps read external content) is named, not quoted,
+It is quoted data; what may carry what someone else wrote (an external memory, episode, card or
+node) is named, not quoted,
 and events are left out, since they carry what tasks said. eriphe-core logs its composition: each
 section's lines written out of those it had and its size, the state's and the messages' chars.
 
@@ -2287,7 +2023,7 @@ GET  /v1/channel/out?wait=50&places=Salon,Bureau  → {"messages": [{"id", "text
 
 The text joins the conversation like any of mine, marked with the channel and its place
 (`[Sam 12:00 #N · Home Assistant, Bureau]`, `· canal sans confiance` when not trusted), and the
-brain answers it in the same thread; with a place, short and without markdown, as it is most often
+brain answers it in the same conversation; with a place, short and without markdown, as it is most often
 read aloud. The answer streams back from the brain's draft as it writes; only what it says after
 reading the text counts. Without a word within `wait` seconds (10 by default, at most 80 for an
 automation that sends the answer on), it answers « Je m'en occupe, je te préviens » and the answer
@@ -2337,7 +2073,7 @@ and secret and where to refresh it (`token_url`), is kept **once per account**: 
 (`TOOL_TOKEN_<hash>`, [the servers' contract](../servers/README.md)), refreshing its access token itself: the token never enters a task or
 a spec. Which servers belong to an account is read from their specs (that vault reference). A
 service Google did not grant (its box unticked on Google's page) is said back. Connecting again
-writes the new token for every service of the account, and the nodes restart them with it.
+writes the new token for every service of the account, and the devices restart them with it.
 
 **Several accounts.** Every account's mailbox is an account of the one `mail`, its calendar an
 account of the one `agenda`, its Drive an account of the one `fichiers` with its own grid, each
@@ -2346,7 +2082,7 @@ accounts, each with its services, their tools and states, "Ajouter" for a servic
 "Reconnecter" and "Retirer ce compte" (its servers and Drive folders go, its token leaves the vault
 and is revoked at Google, `oauth2.googleapis.com/revoke`).
 
-**To reconnect.** Every 30 minutes (`connectionTick`, with the nodes' check) eriphe-core asks
+**To reconnect.** Every 30 minutes (`connectionTick`, with the devices' check) eriphe-core asks
 Google for an access token with each account's refresh token ([connections](#connections)). `invalid_grant` (revoked, or the 7 days of
 an app in Testing) or a refused client marks the account "À reconnecter": its servers are held in
 `needs_auth` (the pool's `authHold`; a server with another working account is not), a call says
@@ -2460,7 +2196,7 @@ configured with and what is inside them (it walks each id's parents up through t
 refuses everything else, never touches the folder itself, and keeps an account core marks
 `read_only` to reading. eriphe-core runs the
 authorization, keeps the refresh token in the vault, and lends it to the service's environment on
-its node; it never enters a task or a task's spec.
+its device; it never enters a task or a task's spec.
 
 Settings → Tools → Add → Google Drive (the logic in `cloud.go`, the sign-in in `oauth_client.go`):
 
@@ -2576,9 +2312,9 @@ long as that app's client exists.
 
 ## Services (local MCP servers)
 
-A service is an MCP server run as a long-lived container on a node, like a Kubernetes Deployment of
-one replica behind a Service: eriphe-core keeps what it should be and where, the node keeps its
-container running, and eriphe-core reaches it as a streamable HTTP MCP endpoint through the node's
+A service is an MCP server run as a long-lived container on a device, like a Kubernetes Deployment of
+one replica behind a Service: eriphe-core keeps what it should be and where, the device keeps its
+container running, and eriphe-core reaches it as a streamable HTTP MCP endpoint through the device's
 tunnel. The services are a module of their own (`services.go`, `service_owners.go`,
 `service_client.go`), which knows nothing of tools or channels: its **owners** say which services
 they want.
@@ -2594,7 +2330,7 @@ they want.
 desired services. No owner can drop another's, and none has to be asked first: at start, a
 channel's service is not dropped because the catalog was read before the channel. A name is one
 owner's (its `Owns`): a name an owner does not own is left out, and the log says so. An owner
-that cannot say what it wants keeps what it has. When a node reports a service `running`, its owner
+that cannot say what it wants keeps what it has. When a device reports a service `running`, its owner
 is told (`Running`): the pool wakes the server's upstream, and a channel its own listening.
 
 A catalog server with `run`:
@@ -2602,7 +2338,7 @@ A catalog server with `run`:
 ```json
 "servers": {
   "thinking": {"use": "think step by step", "run": {"image": "mcp/sequentialthinking", "transport": "stdio", "egress": false}},
-  "notes": {"use": "my notes", "run": {"image": "<your image>", "transport": "http", "port": 8080, "node": "nas", "volume": true,
+  "notes": {"use": "my notes", "run": {"image": "<your image>", "transport": "http", "port": 8080, "device": "nas", "volume": true,
             "env": {"LOG_LEVEL": "info", "API_KEY": {"file": "/secrets/notes-key"}}}}
 }
 ```
@@ -2614,40 +2350,40 @@ with the defaults. Not every image does: `mcp/time` keeps its Python interpreter
 | Field | What |
 |---|---|
 | `image` | the server's image |
-| `transport` | `stdio` (the node holds its stdin and stdout) or `http` (it listens on `port`, MCP at `path`, `/mcp` by default) |
+| `transport` | `stdio` (the device holds its stdin and stdout) or `http` (it listens on `port`, MCP at `path`, `/mcp` by default) |
 | `args` | arguments after the image's entrypoint |
-| `env` | `"NAME": "literal"` or `"NAME": {"file": "/secrets/x"}` (or `{"file": "vault:<name>"}`): the secret is read when the node fetches the service, sent to it, never stored or logged |
-| `node`, `needs`, `prefers` | as for agents: pin a node, require labels, prefer `cpu`, `memory` or a label |
-| `arch` | `amd64` or `arm64`: an image built for one architecture only runs on a node of it (the node's `arch` in `GET /v1/node`) |
-| `volume` | a persistent `/data`, kept on its node in `<root>/services/<name>` |
+| `env` | `"NAME": "literal"` or `"NAME": {"file": "/secrets/x"}` (or `{"file": "vault:<name>"}`): the secret is read when the device fetches the service, sent to it, never stored or logged |
+| `device`, `needs`, `prefers` | as for agents: pin a device, require labels, prefer `cpu`, `memory` or a label |
+| `arch` | `amd64` or `arm64`: an image built for one architecture only runs on a device of it (the device's `arch` in `GET /v1/device`) |
+| `volume` | a persistent `/data`, kept on its device in `<root>/services/<name>` |
 | `user` | `uid:gid` in numbers, `1000:1000` by default; never root |
 | `writable` | a writable root filesystem (read-only by default) |
 | `egress` | reach the network (default `true`); without it a stdio server gets `--network none` |
 
-The `services` table keeps each one's spec (without secrets), its hash, its node, desired state,
+The `services` table keeps each one's spec (without secrets), its hash, its device, desired state,
 state (`pending`, `starting`, `running`, `failed`, `stopped`), restarts and last error;
 `GET /v1/services` (bearer token) lists them. The scheduler places a service like a task, on
-online nodes that run services (new nodes say so in `GET /v1/node`), with `needs` and `prefers`,
-counting the node's services and tasks as its load. A node gone for 5 minutes loses its services
-to another node, unless they are pinned to it or keep a volume there: their data stays where it
-is, so they wait for their node. A forgotten node (`DELETE /v1/nodes/{name}`) loses them all.
-A changed spec starts the service over on its node, or elsewhere if the node no longer fits; a
-server left out of the configuration is removed, and its node stops it (the volume stays).
+online devices that run services (new devices say so in `GET /v1/device`), with `needs` and `prefers`,
+counting the device's services and tasks as its load. A device gone for 5 minutes loses its services
+to another device, unless they are pinned to it or keep a volume there: their data stays where it
+is, so they wait for their device. A forgotten device (`DELETE /v1/devices/{name}`) loses them all.
+A changed spec starts the service over on its device, or elsewhere if the device no longer fits; a
+server left out of the configuration is removed, and its device stops it (the volume stays).
 
-Nodes receive their services in their assignments, as a `services` list next to `tasks` (old nodes
-ignore it), and report each one on `POST /v1/node/services/{name}/report`
+Devices receive their services in their assignments, as a `services` list next to `tasks` (old devices
+ignore it), and report each one on `POST /v1/device/services/{name}/report`
 (`{state, restarts, error}`). A service whose secret cannot be read fails and is not sent.
 
-Credentials are lent, never stored: they are read at every fetch of the assignments, and the node
+Credentials are lent, never stored: they are read at every fetch of the assignments, and the device
 restarts a service whose environment changed, its `/data` untouched. Rotating a file-backed
 password restarts the server with the new one at the next fetch; a token source lent by
 eriphe-core (an OAuth access token for XOAUTH2, refreshed by eriphe-core) fits the same place,
 as another kind of `env` value resolved in `lendService`.
 
 `c.dialService(ctx, name)` returns an `mcp.Transport` (a `StreamableClientTransport` to
-`http://node/v1/services/{name}/mcp` over the node's tunnel, with no timeout): the pool's
+`http://device/v1/services/{name}/mcp` over the device's tunnel, with no timeout): the pool's
 `dialLocal`, and a `serviceClient`'s. It fails, with the reason, if the service is not placed, not
-`running`, or its node not connected; `serviceEndpoint` gives the `*http.Client` and URL instead.
+`running`, or its device not connected; `serviceEndpoint` gives the `*http.Client` and URL instead.
 A `serviceClient` (`c.newServiceClient(name)`) is a session to one service for an owner that calls
 it itself. The session opens at the first call and is kept, and a new one opens after a call
 whose session failed. Its `call` decodes a tool's structured answer and turns a tool's error into
@@ -2675,9 +2411,9 @@ per account, with its own form, access page and removal; the server goes with it
 These servers read the configuration eriphe-core writes them, which changes with it: they run the
 image of eriphe-core's version (`services.go`, `pinnedImage`), as eriphe-files does. A release
 0.79.0 runs `eriphe-mail:0.79.0`, a build of `main` `eriphe-mail:sha-<commit>`, the tags CI
-publishes them under; a development build ("dev") runs the untagged image. A node pulls an image
+publishes them under; a development build ("dev") runs the untagged image. A device pulls an image
 it does not have, never a newer one of one it has: without this, a machine kept the image it pulled
-first. A new version of eriphe-core changes their specs, and their node runs them again with the
+first. A new version of eriphe-core changes their specs, and their device runs them again with the
 new image.
 A tool of another version still says so: its version (its MCP `serverInfo`) is in `list_tools`
 (`version`, and `want_version` when it is not eriphe-core's), its row in Settings → Tools says it
@@ -2696,13 +2432,13 @@ The user's own folders, given to Eriphe ("Dossiers"). A folder is a name ("Clien
 machine and a path inside one of the places that machine shares, declared when it was installed:
 `--share NAME=/PATH`, see install/README.md; eriphe-core never sees a host path, only the place's
 name and a path relative to it) and a level, chosen there: `write` (Modifier, the default), read,
-create, change, rename and delete anywhere in it, its node taking a snapshot of the
-folder before each such task (node/README.md, Shares), or `read` (Lecture seule), for a sensitive
-folder.folder before each such task (node/README.md, Shares). A folder is shared on the machine that holds
+create, change, rename and delete anywhere in it, its device taking a snapshot of the
+folder before each such task (device/README.md, Shares), or `read` (Lecture seule), for a sensitive
+folder.folder before each such task (device/README.md, Shares). A folder is shared on the machine that holds
 it, by the user there (`eriphe-share add`, or a right click in the Finder or the Explorer): its
-node keeps the list and reports each folder's `name`, `access` (its level, `read` or `write`; an
-older node's `drop` reads as `read`, its `manage` as `write`), `copyable` (the user allows copies on their other machines, for the
-synchronisation to come) and `id` (`folders` in `GET /v1/node`), never its path. eriphe-core reads
+device keeps the list and reports each folder's `name`, `access` (its level, `read` or `write`; an
+older device's `drop` reads as `read`, its `manage` as `write`), `copyable` (the user allows copies on their other machines, for the
+synchronisation to come) and `id` (`folders` in `GET /v1/device`), never its path. eriphe-core reads
 that list, and may only restrict it: take a folder off, turn its copies off, and set what Eriphe
 may do there (its rights, below). It cannot add a folder, share one to write, nor look into a machine
 outside the folders shared (a shared folder's files are read through its tool, below). A name shared by two machines is told
@@ -2712,7 +2448,7 @@ apart as `Name (machine)`.
 folder, see [Places](#places)). Settings → Dossiers, `GET /v1/folders` and `list_folders` show
 both, each with its `source` (`machine`, or `place` with its `tool` and `place_id`) and `lend`, how
 a task gets it. Each source keeps its own store and its own enforcement: a machine's folder is in
-its node's list and mounted by its node; a place stays in its tool's configuration, which its
+its device's list and mounted by its device; a place stays in its tool's configuration, which its
 server reads and enforces itself, and is lent as `{kind: place}` (its tool whole), not through
 `folders`, which refuses it with that hint. A tool's places are set on its account's page
 (Settings → Tools → an account), to which their tile in Settings → Dossiers links; "Ne plus
@@ -2743,11 +2479,11 @@ in-memory session), so every path a catalog call takes applies to it unchanged:
   when every folder's Lire is free. The folder is the call's account (`callAccount`): a task's yes
   for one folder is not another's, and lending the tool to a task asks at its start for the
   folders On approval (`folderToolNeeds`).
-- **The card shows the change.** A change's card reads the file on its node when it is made: the
+- **The card shows the change.** A change's card reads the file on its device when it is made: the
   file, and for `update_file` its diff instead of the new content (`folderCardContext`); for a
   delete its size and time. Nothing runs before the yes; the yes runs exactly that call.
-- **Where it runs.** Every call goes to the node holding the folder (`POST /v1/shares/{id}/files`,
-  node/README.md), which holds it to the folder: relative paths only, nothing hidden, sensitive or
+- **Where it runs.** Every call goes to the device holding the folder (`POST /v1/shares/{id}/files`,
+  device/README.md), which holds it to the folder: relative paths only, nothing hidden, sensitive or
   made private on the way, no symlink, never a host path in what it answers; a snapshot of the
   folder before a write (one an hour for these writes) and the previous version of a file changed
   or deleted kept in its data. A read goes to a machine keeping a copy up to date when the
@@ -2761,11 +2497,11 @@ in-memory session), so every path a catalog call takes applies to it unchanged:
 - **Who has it.** The brain, by default, once a folder is shared (`assistantGrant` lends it every
   lent tool); a skill through its `tools`; a task as
   `{kind: tool, ref: eriphe-folders}`. Lending the folder itself to a task stays for heavy work.
-- **Surfaces.** Its reads are read-only by their annotations: `sources_read` lists them and a
-  surface may read a file live (`{tool: eriphe-folders/read_file, args: {folder, path}}`, bound
-  to `/…/text`). The nodes reach a folder through short-lived helpers too, which cannot watch it:
-  such a surface is read again on its own schedule, and at once after a write through these
-  tools (`refreshFolderSurfaces`).
+- **Blocks.** Its reads are read-only by their annotations: `sources_read` lists them and a
+  node's block may read a file live (`{tool: eriphe-folders/read_file, args: {folder, path}}`, bound
+  to `/…/text`). The devices reach a folder through short-lived helpers too, which cannot watch it:
+  such a block is read again on its own schedule, and at once after a write through these
+  tools (`refreshFolderNodes`).
 
 ### Places
 
@@ -2802,10 +2538,10 @@ reason.
 
 **Its rights.** What Eriphe may do in a machine's folder is two cases, Lire and Modifier, each Free,
 On approval or Never, as in a tool's grid (`folder_values.go`): a default per machine (Free and Free
-until set; `POST /settings/folders/case` with `node=` and `case-<category>=`, kept as
-`folder_grid:<node>`), and a folder may set a case of its own, above or below it, in its
+until set; `POST /settings/folders/case` with `device=` and `case-<category>=`, kept as
+`folder_grid:<device>`), and a folder may set a case of its own, above or below it, in its
 [grid](#a-places-grid) (`GET /settings/folders/grid?name=`; "Comme l'appareil", `name=`, empty to
-follow; kept by machine and id, `folder_case:<node>:<id>`). A folder shared read-only greys Modifier: Never,
+follow; kept by machine and id, `folder_case:<device>:<id>`). A folder shared read-only greys Modifier: Never,
 with the reason. On approval is asked on the task's [start card](#the-approval-card), once per
 task, before it starts; so is a Free Modifier of a task that did not start cleanly (a tainted turn,
 or a turn that is not the user's). Never is refused when the task is lent, and a Modifier set Never
@@ -2824,19 +2560,19 @@ here (`folders_unshared`: it is never lent again), and on the machine now, or as
 back (`DELETE /v1/shares/{id}` through its tunnel), which stops the tasks that hold it. A folder
 shared or unshared on the machine shows in its access log at the next refresh (every 15 s).
 
-**A folder its machine cannot use** is never silent (`folder_access.go`, node/README.md, Folders it
-cannot use): its node reports a `problem` for the folder (`denied`, `read_only`, `missing`; the
+**A folder its machine cannot use** is never silent (`folder_access.go`, device/README.md, Folders it
+cannot use): its device reports a `problem` for the folder (`denied`, `read_only`, `missing`; the
 folder's `problem` in `GET /v1/folders`), and for a copy (its `problem` among `copies`), with the
-`program` refused, `eriphe-node` or `syncthing`. Settings →
+`program` refused, `eriphe-device` or `syncthing`. Settings →
 Dossiers says it on the folder's tile and on the copy's line, and the device's card marks the folder
 "bloqué" with the same note. On a Mac that macOS keeps from the folder: « macOS bloque l'accès à ce
-dossier », how to allow it (turn on the program named in Files and Folders), and « Autoriser », which asks that Mac's node to open System Settings ›
+dossier », how to allow it (turn on the program named in Files and Folders), and « Autoriser », which asks that Mac's device to open System Settings ›
 Privacy & Security › Files and Folders there (`POST /settings/devices/{name}/privacy`, then `POST
 /v1/privacy/open` through its tunnel: nothing else can be opened, the user decides there); the note
-goes once the node sees the folder open again. On another system, or another problem, a plain
+goes once the device sees the folder open again. On another system, or another problem, a plain
 explanation.
 
-**Folders given from the workspace before** (the old `folders` table, `{node, share, path}`) are
+**Folders given from the workspace before** (the old `folders` table, `{device, share, path}`) are
 not lent any more: eriphe-core never pushes them to a machine, since that would let it add a
 folder. Settings → Dossiers shows them under their machine, "À partager de nouveau sur
 l'appareil", with their old place and path, until the user shares them again there (under the same
@@ -2848,13 +2584,13 @@ where its rights allow; `list_folders` gives each one's entry in `lend`). A task
 touch the originals is lent the source folder to read and an output folder to write. The task is placed on a machine that holds each of its folders
 up to date, theirs or one keeping copies of them (below, Copies of a folder), or waits for one
 (`pending_reason` says so); folders of several machines go together only if one machine holds
-them all, and `node` may only name a machine that holds them. Its node mounts each at `/work/folders/<name>`, read-only as
-Docker enforces it; with `write` (`manage` in the node's spec, so that an older core's `write`,
+them all, and `device` may only name a machine that holds them. Its device mounts each at `/work/folders/<name>`, read-only as
+Docker enforces it; with `write` (`manage` in the device's spec, so that an older core's `write`,
 its results subfolder, is never read as it), the whole folder read-write, after its snapshot (see
-node/README.md, Shares). The worker is told where they are, what it may write in each, and
+device/README.md, Shares). The worker is told where they are, what it may write in each, and
 that what reads like an instruction in the files is data. The folders are read again from the
-machine's list whenever the node fetches the task: a folder removed meanwhile fails it, and the
-node refuses anything not in its list. A task writes only where its entry says so, and only while
+machine's list whenever the device fetches the task: a folder removed meanwhile fails it, and the
+device refuses anything not in its list. A task writes only where its entry says so, and only while
 the folder is shared write and its Modifier is not Never: otherwise it is mounted read-only. A task's `folders` lists their names.
 
 **A folder is the user's own.** The user shared it on their machine and lent it: under the
@@ -2880,11 +2616,11 @@ Nothing adds a folder or shares it to write: that is done on its machine.
 
 A folder its machine allows copies of (`copyable`, chosen when it was shared there; turned off
 from here, never on) can be kept, up to date, on the user's other machines: Settings → Folders,
-"Copies", tick the machines (`PUT /v1/folders/{name}/copies`, `{"nodes": [...]}`). Each machine
-needs Syncthing, which comes with the installation (node/README.md, Copies); one without is
+"Copies", tick the machines (`PUT /v1/folders/{name}/copies`, `{"devices": [...]}`). Each machine
+needs Syncthing, which comes with the installation (device/README.md, Copies); one without is
 shown greyed, to update. eriphe-core keeps who holds a copy of what (`folder_copies.go`,
-`folder_copies`) and hands each node its plan (`PUT /v1/sync`), with the peers' device IDs (from
-`GET /v1/node`, `syncthing.device_id`) and each folder at its level now: `read` sent only, `write` both ways with 30 days of versions on the
+`folder_copies`) and hands each device its plan (`PUT /v1/sync`), with the peers' Syncthing device IDs (from
+`GET /v1/device`, `syncthing.device_id`) and each folder at its level now: `read` sent only, `write` both ways with 30 days of versions on the
 folder's machine. A plan is handed again only when it changes (and after a reconnection), every
 15 s at most. Unticking a machine, turning a folder's copies off, unsharing it or forgetting a
 machine drops the copies from the plans: the copy machines delete them, after stopping the tasks
@@ -2904,23 +2640,23 @@ the folder's machine idle with nothing to receive from its copies, without error
 folder's machine is away, a copy that was complete when that machine was last seen (within 2
 minutes: `synced_at`) will do. A task lent several folders goes to a machine that holds them all
 so. Its spec lends the copy (`copy` in its folders), at the level the task asked for, never above
-the folder's on its machine; with `write`, the node running the task takes the snapshot of the
+the folder's on its machine; with `write`, the device running the task takes the snapshot of the
 copy first, and writes on the copy, and Syncthing brings that back to the
 folder's machine, at once or when it returns (a conflict keeps both files). With no machine up to
 date online, the task waits: for the folder's machine, or for a copy to catch up.
 
 | Call (bearer token) | What |
 |---|---|
-| `PUT /v1/folders/{name}/copies` | the machines that keep a copy: `{"nodes": ["nas"]}` (`[]`: none, the copies are deleted); 409 if the folder is not copyable or a machine has no Syncthing |
+| `PUT /v1/folders/{name}/copies` | the machines that keep a copy: `{"devices": ["nas"]}` (`[]`: none, the copies are deleted); 409 if the folder is not copyable or a machine has no Syncthing |
 
 ### Copies: the way between machines
 
 The copies of a shared folder on the user's other machines are kept by Syncthing, one next to each
-node (node/README.md, Copies). The machines never reach one another directly: a node carries its
-Syncthing's connection to a peer as `GET /v1/node/sync/{peer}` with `Upgrade: eriphe-sync` and its
+device (device/README.md, Copies). The machines never reach one another directly: a device carries its
+Syncthing's connection to a peer as `GET /v1/device/sync/{peer}` with `Upgrade: eriphe-sync` and its
 secret (`sync_relay.go`), and eriphe-core goes on through the peer's tunnel (`GET /v1/sync/connect`),
 then copies bytes both ways. It does so only if it set up a copy between the two machines, either
-way (`folder_copies`: `{node, folder, copy}`): any other pair is refused (403), as is a suspended
+way (`folder_copies`: `{device, folder, copy}`): any other pair is refused (403), as is a suspended
 machine, and a pair holds at most 4 connections at once (429). When the last copy between two
 machines goes, their connections are cut. Syncthing's TLS runs end to end with pinned device IDs:
 eriphe-core sees only ciphertext.
@@ -2928,13 +2664,13 @@ eriphe-core sees only ciphertext.
 ## Devices: what Eriphe sees and does there
 
 Connecting a device gives Eriphe access to it, so it can help with what is there; letting agents
-work on it is an extra (a node that reports runtimes). Settings → Appareils shows, for each device,
+work on it is an extra (a device that reports runtimes). Settings → Appareils shows, for each device,
 first what Eriphe sees there (its Folders, with their right, or "Rien d'ouvert" and a link to share
 one), then what it can do there ("Faire travailler des agents", oui or non, its system, its CPUs,
 memory, runtimes and labels), then its status and update, as before (`web_pages.go`,
 `web_devices.go`).
 
-**Access log.** eriphe-core records what it did on each device (`node_access.go`, `node_log`
+**Access log.** eriphe-core records what it did on each device (`device_access.go`, `device_log`
 table): a folder listed (`list`, with `share:/path`), a folder opened or closed (`share`,
 `unshare`), a task run there (`task`, with its agent; the brain itself is not logged), a folder
 lent to a task (`lend`, with its right), a file a task wrote in a folder lent to write (`result`,
@@ -2947,40 +2683,40 @@ the last ones, 50 at a time.
 suspends the device at once, without uninstalling anything: its active tasks are stopped (they
 cannot report any more), no new task is placed there (by name, by the scheduler, or for its
 folders), its folders are neither listed, opened nor lent, its movable services go to another
-device, its tunnel is dropped, and the node is refused (403 on `connect`, and on every node call)
+device, its tunnel is dropped, and the device is refused (403 on `connect`, and on every device call)
 until "Rétablir l'accès". Its registration, secret, certificate and folders stay; it reconnects by
 itself once access is restored.
 
 | Call (bearer token) | What |
 |---|---|
-| `GET /v1/nodes/{name}/log?limit=N&before=ID` | `{node, suspended, log: [{id, time, kind, task, folder, access, detail}]}`, newest first (100, up to 500) |
-| `POST /v1/nodes/{name}/suspend` | cut access |
-| `POST /v1/nodes/{name}/resume` | restore access |
+| `GET /v1/devices/{name}/log?limit=N&before=ID` | `{device, suspended, log: [{id, time, kind, task, folder, access, detail}]}`, newest first (100, up to 500) |
+| `POST /v1/devices/{name}/suspend` | cut access |
+| `POST /v1/devices/{name}/resume` | restore access |
 
 **Waking a device (Wake-on-LAN).** "Eriphe peut réveiller cet appareil" (the device's page; not on
-the machine that stays on) is off by default, a choice per device kept in the `node_wake` table,
+the machine that stays on) is off by default, a choice per device kept in the `device_wake` table,
 and forgotten with the device. Once on, the page shows "Réveiller maintenant" while the device is
-off, the card's MAC address it reported (node/README.md, Waking the machine), and how to get it
+off, the card's MAC address it reported (device/README.md, Waking the machine), and how to get it
 ready: Wake-on-LAN in the BIOS/UEFI and on the network adapter (Windows: Device Manager → the
 adapter → Power Management, and "Wake on Magic Packet" under Advanced; Fast Startup off to wake
 from a full shutdown), a cable rather than Wi-Fi; on a Mac, "Wake for network access", from sleep
 only. After "Wake now" the page asks every 5 s whether the device connected again since, and says
 so, or that it did not within 2 minutes.
 
-`wake(node)` (`wake.go`) sends the magic packets, for each MAC address, to `255.255.255.255` and to
+`wake(device)` (`wake.go`) sends the magic packets, for each MAC address, to `255.255.255.255` and to
 the device's subnet broadcast, on ports 9 and 7, two ways at once: from eriphe-core's own network,
-and through every online machine that stays on (`POST /v1/wake` on its node), which sends them from
+and through every online machine that stays on (`POST /v1/wake` on its device), which sends them from
 the host's network. Only the second reaches the home network when eriphe-core runs in a container
 on a Docker bridge network, as every installer runs it (`eriphe-system`, published ports): a
 broadcast from a bridge stays on the bridge, and Linux does not forward a directed broadcast either
 (`bc_forwarding` is off). The first one counts where eriphe-core is on the host's network. It is
 refused for a device that is on, whose access is cut, that has not reported a MAC address (an
-older eriphe-node), or that the user did not allow. Nothing crosses the Internet: the device must
+older eriphe-device), or that the user did not allow. Nothing crosses the Internet: the device must
 be on the same network as the machine that stays on. On a Windows or Mac home, where the machine
-that stays on runs its node in WSL behind NAT, or as a macOS LaunchAgent held off the LAN, the
+that stays on runs its device in WSL behind NAT, or as a macOS LaunchAgent held off the LAN, the
 packets may not leave it (not checked).
 
-The scheduler wakes a device by itself: when a task waits for a node (`placePending`) and the
+The scheduler wakes a device by itself: when a task waits for a device (`placePending`) and the
 device its folders are on is off, may be woken and reported its card, eriphe-core wakes it, in the
 background, at most once per 15 minutes per device (`last_auto`), and logs it ("task t-… waits for
 pc, which is off: waking it").
@@ -2999,20 +2735,20 @@ handlers are thin layers over the methods behind the MCP tools.
 | `POST /v1/tasks/{id}/answer` | `{reply, allow}`: allow or deny the pending permission (`allow` set), or reply to an idle task |
 | `POST /v1/tasks/{id}/stop` | stop the task's agent |
 
-An unknown task answers 404; a call the task's state does not allow (or that its node refuses)
+An unknown task answers 404; a call the task's state does not allow (or that its device refuses)
 answers 409 with the reason.
 
 ## Workspace (`web`)
 
 Eriphe's own interface, served by eriphe-core on its own HTTPS listener. Its home page is the
-[composed workspace](#the-composed-workspace-the-home-page-) (`/`); the conversation, at
+[graph workspace](#the-graph-workspace-the-home-page-) (`/`); the conversation, at
 `/conversation`, has Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
 state, the pull request or document the agent mentioned), the permissions waiting for an answer
 inline in the conversation (Yes / No, with an optional reason for the agent), and the settings. The assistant manages: what the brain can set itself
 (a notification rule, a memory, an intention) is asked of it in the conversation, and its pages show
 the state, say why, and undo, with a line saying how to ask rather than a form.
-The conversation's header has three buttons, Espace composé (the
-[composed workspace](#the-composed-workspace-the-home-page-), also behind Eriphe's name), Tâches (a badge counts the
+The conversation's header has three buttons, Espace (the
+[graph workspace](#the-graph-workspace-the-home-page-), also behind Eriphe's name), Tâches (a badge counts the
 running tasks, and turns urgent when one waits for the user) and Réglages. On a wide screen Tâches
 hides or shows the side panel; on a phone it opens the tasks as a sheet over the conversation
 (closed by its button, Escape or the browser's back), and from any other page it comes back to
@@ -3028,34 +2764,32 @@ prefilled, and the brain proposes again). The event stream keeps cards up to dat
 approved, declined, no longer current). The memory's extraction makes no card: what it is not
 sure of waits in À valider and expires (see [Memory](#memory)). Other proposals (a skill's run, a
 turn that said nothing) are queued and enter the attention queue at their card's weight
-(`cardWeight`: one a task or a thread waits on 4; a skill, a monitor or a run's calls 3; a
+(`cardWeight`: one a task or a node waits on 4; a skill, a monitor or a run's calls 3; a
 reminder 2; a memory, a rule, a setting or an undo 1; `attendQueuedCards` each minute on the
 journal's timer); the queue delivers them like anything else that goes to the user. A card made
-outside a brain turn (the start of a task the brain did not launch, such as a thread's step; what
-a thread asks: its plan when a skill opened it, an approval step, a change of plan or more time;
+outside a brain turn (the start of a task the brain did not launch, such as a step of a work;
 a skill run's calls when its message is held or not sent; an access asked at a task's call)
 enters the queue with the message eriphe-core will write for it (`cardNow`); the brain is not
 woken for it, and nothing it does waits on it.
 
 **Attention queue** (`attention.go`). It is the one path of what goes to the user, kept by code,
-one item per object: a ref (`card:<id>`, `notification:<id>`, `thread:<id>`, `mail:<id>`…), a
+one item per object: a ref (`card:<id>`, `notification:<id>`, `node:<id>`, `mail:<id>`…), a
 weight from 1 to 5 (5 interrupts, 4 needs the user now, 3 matters today, 2 is a glance, 1 is
-background), a short why, an optional say, its source (`brain`, `task:<id>`, `thread:<id>`,
+background), a short why, an optional say, its source (`brain`, `task:<id>`, `node:<id>`,
 `skill:<name>`) and its time. Items about the same ref merge (the highest weight, the latest why).
 Every notification (`notification:<id>`, a record's ref no signal can name, apart from the `alert`
 key kind), every card (weighted by its kind, above) and every assistant's
 [attention signal](#attention-signals-attention_signalgo) enters it; what is in front of the user
 already enters delivered (the brain's own message, a card under it). An item leaves once decided
-or gone. Each open item is a surface of the workspace, written by code while it is open
-([the queue as surfaces](#the-layout-workspace_layoutgo));
+or gone. An item about a node raises it on the graph (its card at the foot of its page);
 an item drawn from external content stays marked so, and the brain reads it as data. What the
 user wants shown more, less or never is not applied to the queue: it is a
-[preference in memory](#preferences-gestures-and-the-brains-tools-workspacego) whoever notes
+[preference in memory](#preferences-workspace_prefsgo) whoever notes
 items follows. The rest is delivered by code, in a message of its own written by eriphe-core as the
 brain's, the heaviest first, its cards under it (`attentionBreak`): **weight 4 and 5 at once**
-(nothing a running task or thread waits on is ever delayed; one message for what enters
+(nothing a running task or node waits on is ever delayed; one message for what enters
 together); **weight 3 at the next breakpoint**, where an interruption costs the user least
-(Iqbal & Bailey, OASIS): the end of the brain's answer to a user message, the end of a thread
+(Iqbal & Bailey, OASIS): the end of the brain's answer to a user message, a node set done
 while the user is there (away, it waits), or its cap, two hours after it entered (checked every
 minute, never in the quiet hours); **weight 1 and 2 only at the user's return** after an absence
 (`user.returned`), together: the brief (« Pendant ton absence : … »), three light cards at most
@@ -3200,12 +2934,12 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 (`userLang`, `core/user_lang.go`, kv `user_lang`): the language of the last signed-in page that set
 it, that is the workspace opening (`/espace/boot`), the language switch in Settings, the channel
 settings or a channel's link code; before any, `web.lang`, else French. The fixed texts use it (the
-workspace queue's surfaces, the bot channels' messages), and so do the models' lines: a skill run's
+workspace's words, the bot channels' messages), and so do the models' lines: a skill run's
 and a task's final message (`skillVoice`, `workerVoice` name it), and a `[langue de l'utilisateur : …]` line at the head of each turn of
-the brain, the assistants and a thread's lead, for their notifications, cards, surfaces and
+the brain and the assistants, for their notifications, cards, nodes and
 summaries (the brain answers a message in the language it is written in). The fields of the tools
 the user reads (`notify`'s text and why, a rule's or a setting's why, an intention, attention's why
-and say, a thread's summary) ask for "the user's language". What only the models read (their
+and say, a node's text) ask for "the user's language". What only the models read (their
 prompts, packets, receipts, reports) stays in French, and so does the memory, whose index stems
 French.
 | `session_days` | how long a login lasts, 30 by default (a week without use ends it sooner) |
@@ -3248,262 +2982,208 @@ published on `[::]` with that address) may stand for anyone: they share one coun
 with 20 failures, and never count as the local network (below). The installers publish the ports
 on IPv4 only, so that clients keep their own address. At most two
 argon2 hashes are computed at once. Changing the password ends the other sessions.
-The bearer-token API is unchanged for the CLI and the nodes.
+The bearer-token API is unchanged for the CLI and the devices.
 
-### The layout (`workspace_layout.go`)
-
-The workspace is one dynamic page of [surfaces](#surfaces-and-their-sources-surfacesgo). Where each
-is shown is **eriphe-core's**: a fixed grid of 12 × 8 cells that never scrolls, each surface a
-tile of one of four sizes (s 3 × 1, m 3 × 2, l 4 × 3, xl 6 × 5; one xl at most) or a chip in the
-strip above the grid when it is folded.
-
-**Code orders, no model** (#574). Code lays the pool out (`layoutStage`, pure) at once and again
-whenever it changes (`relayout`, called by every write and removal of a surface), always the same
-way for the same pool:
-
-1. what the user placed (or the brain at their request: `workspace_arrange`), at its place and
-   size;
-2. with a surface open, what is urgent (weight 80 and up) before it;
-3. the surface open, xl unless placed;
-4. the one on stage just before it, m at most;
-5. what relates to it, m at most; with nothing related, the rest:
-6. in the **tile order** (`tileOrder`): by state, then the heaviest, the latest changed, the id.
-
-**A standing thread is a tile only when it has something for the user** (`foldsQuiet`): its
-surface says it folds (`look.folds`, set by code from the thread, `threadSurfaceIn`), and while
-its state is `quiet` or `running` it is left out of step 6: it is a chip, after those folded for
-room. `yours`, `urgent` or `new`, it is a tile again in the tile order. Opened (from its chip, as
-any), placed by the user, on stage before the one opened, or related to it, it is a tile all the
-same. Work and day threads, and every other surface, are unchanged. A thread surface written
-before it said whether it folds is written again by the 15 s tick (`keepThreadSurfaces`).
-
-**The workspace lays out top threads only.** A child thread's surface says the surface it opens
-inside (`look.inside`, its parent's; `extensions.eriphe.inside` for the page): while that one is
-in the pool, it is neither a tile nor a chip (`laidInside`). Opened (from its parent's row, a link
-`/espace?open=thread-<child>`, `workspace_focus`), its parent is on stage with it inside
-(`onStage`): the layout's `focus` is the parent and its `inside` the child, which the page draws
-in the parent's tile, under the child's title; what relates to the parent is around. Its crumb
-opens the parent again. A child whose parent's surface is gone is laid out as any surface.
-
-**A tile's state** is code's (`tileStateOf`), never a model's: `yours` (something waits for the
-user: a card on it, a step of theirs), `urgent` (weight 80 and up; a thread with a note due within
-two hours, `dueSoon`), `new` (something changed since the user last opened it), `running` (a step
-runs), `quiet`, `done` (its thread ended), ranked in that order. A thread's surface carries the
-state its thread gives it (`threadTileState`, [thread_blocks.go](#threads)); a queue's surface that
-holds a card is `yours`; any other surface is `urgent` or `quiet` by its weight. The state and the
-count of what is new (`new`: the facts and notes after the user's last visit, `visited`) go in the
-surface's metadata (`extensions.eriphe.state`, `.new`): the page colours the tile's edge by it and
-shows a badge, « À toi », « Urgent », « Nouveau · 3 », outside the focus too. A note's due time
-coming within two hours is caught on the 15 s tick (`keepThreadSurfaces`), which writes the thread
-again, urgent.
-
-Each tile goes at the first place where it fits, top left first; one that fits nowhere shrinks a
-size, then is folded; with room left, a surface of weight 40 or more grows a size (never into xl)
-if nothing else shrinks for it; tiles stretch over the empty columns on their rows. Nothing in the
-pool goes unseen while the strip has room (12 chips). A new urgent surface is in front within
-milliseconds.
-
-**The layout** is sent to the workspace as the event stream's `layout` event (with `a2ui=1`),
-after the `a2ui` event of the surfaces it names and whenever it changes, and kept in kv
-(`workspace_layout`):
-
-```json
-{"focus": "week",
- "items": [{"id": "q-card-12", "title": "Accès à un outil", "size": "xl",
-            "col": 0, "row": 0, "w": 6, "h": 5, "why": "Attend ton accord"}],
- "chips": [{"id": "news", "title": "Nouvelles", "why": "Rien de pressé"}]}
-```
-
-`col` and `row` count from 0, `w` and `h` in cells. With a surface open, a tile related to it has
-`"related": true`; `focusBy` is `brain` when Eriphe put it on stage (below), and `previous` names
-the surface that was on stage just before it. A tile of weight 80 or more has `"urgent": true`:
-laying a surface the user opens out at once, the page keeps it in front. A tile placed has
-`"pinned": true`.
-
-**Focus** (`workspace_focus.go`): one workspace, and opening a surface does what a separate
-dashboard would. The open action places it first at once: xl, what relates to it around at m at
-most, the rest folded.
-What relates is found by code from what every surface declares, never from a tool's name
-(`surfaceRelations`, 6 at most, the closest first): the same source (a tool with the same
-arguments, or the same resource), the same ref it lives with (its `while`, or what its author
-stands for: a lead its thread, a task itself and the thread it is a step of, a skill itself),
-a day (a `Day` component on a date the open surface carries, or the reverse), then the same
-server. Back, closing it, its removal or its 15 minutes passing lay the workspace out again in
-its order. The tiles a focus folds or gives back are not gestures `ignored` on the page.
-
-**The stage** (`workspace_front.go`, #458): the workspace is one dashboard with a stage, the
-surface open in the center, large, and around it smaller tiles. Opening another tile puts it on
-stage; the one that was there stays next to it, reduced (m at most, never grown), live, never
-folded for the others (`layoutStage`; the layout's `previous`, the brain's « au centre juste
-avant »): nothing goes back, the user clicks it to
-swap again. Back (or Escape) ends the stage and lays the base out, as above, with no previous.
-
-Opening a surface sends nothing to the brain (#550): opening one, or going back and forth between
-them, is no turn of the conversation; only the workspace is laid out again around it. What the surface
-shows (a thread's header, for a thread) says where things stand.
-
-**An answer on stage.** When the user asks from the workspace about a thing (« où en est la PR
-… ? »), the brain finds or opens the thing's thread, adds its part to the thread's surface when it
-helps (its state, the points to see, what is next), and puts it on stage with `workspace_focus`, then replies in one line. The tool is the brain's
-only, allowed in the turn that answers a message of the user's sent from the workspace (typed in
-its input, `· depuis l'espace`, or a button's ask), never on events alone, once per turn; it is
-display-only (it writes nothing, sends nothing, the next click takes the stage back), so a tainted
-turn may use it too: the surface keeps its taint and its Proposal the rules below. The layout
-says `focusBy: brain`, the brain's next turn « au centre, mise par toi ». A surface whose Proposal shows a proposal relates to the queue's tile showing the
-same proposal (alone or in its group) (`proposal:<ref>`, « même proposition »), so a tainted answer, whose Proposal can only
-say « answer it in the conversation », gets the answerable tile next to it.
-
-**The attention queue as surfaces** (`workspace_queue.go`). The open items of the
-[attention queue](#workspace-web) are shown by surfaces written by code (author `core`), grouped
-by what they ask, with no code per kind of item (#457):
-
-| Surface | Items | Title |
-|---|---|---|
-| `q-decide` | the cards whose proposal does something once accepted (a rule, an access, a run's calls, a task start, a skill, a setting, a monitor…) | « À décider » |
-| `q-reminders` | the intention cards: yes keeps the reminder, it runs nothing | « Rappels à garder » |
-| `q-memories` | the memory cards: yes keeps the extracted memory | « Souvenirs à garder » |
-| `q-notes` | anything else (a skill's message, a notification held, an alert, a card whose proposal the `Proposal` cannot show), an `Alert` each with what Eriphe would say of it, else its why | « À voir » |
-
-A group of cards is a `List` whose template is a `Proposal` bound to each item's ref in the
-surface's data (`{"items": [{"ref": "memory:12"}, …]}`, read and answered through
-`GET /api/proposals/{ref}`; `answerOf` checks the clicked `Proposal` shows the ref). It lists the
-heaviest then the newest first, 20 at most, and its title counts them all (« Souvenirs à garder · 12 »);
-with one item, its title is that item's subject, short, from the card's text (its kind when the
-card may carry external content). An **urgent** item has a surface of its own, `q-<kind>-<id>`
-(a hash of the ref when its id cannot be a surface's): weight 4 or 5 (a card a task waits on, an
-alert), or a proposal that takes place today (its time, `proposalSpans`, never a tool's name); a
-card alone is a `Proposal` titled by its subject, an `Alert` by its weight (« Urgent »,
-« Attend ta réponse »). A card an active thread's surface shows (a step's, one linked to it, the
-thread's own: `threadShownCards`) is answered there and in no surface of the queue, whatever its
-weight: the thread's surface takes its weight (× 20, at least 70) and the state `yours`, first of
-the workspace. The queue's tiles are for the cards no thread shows. A tainted thread's surface
-does not answer its cards in place: they stay in the queue. Once the thread ended, a card still
-waiting comes back to the queue (`threadMoved` kicks it). The group ids stay the same while they
-live, so the brain's workspace block keeps naming them. A surface's weight is its first item's × 20 (`queueSurfaceWeight`), its taint any of
-its items'; its words are in the user's language (`userLang`, see below). It lives while it has
-an item: `syncQueueSurfaces` makes the queue's surfaces again whenever the queue changes (`attend`
-and `attentionDone` kick `runWorkspace`, never inline) and every 2 s, writing only what changed
-(components, data, title, why, weight, taint) and removing what left. No assistant writes or
-removes them, the brain neither. The user closing a queue's surface on the page hides it for the session and
-ends its items other than cards: a card waits for its answer (it may not be in the conversation
-yet), its surface back the next session. An item other than a card also ends on its own once the
-user has seen it: a day after it was delivered (or raised again), or once they opened its surface
-and left it (went back, opened another, or the 15 minutes of the focus passed; `queueSweep`, on
-`runWorkspace`'s tick), only the items it showed when opened. A card stays until it is decided; an
-item still held (for a breakpoint or the brief) has not been delivered.
-
-### Preferences, gestures and the brain's tools (`workspace.go`)
+### Preferences (`workspace_prefs.go`)
 
 The workspace keeps no rule and has no fixed control but a card's Oui / Non (the user's answer
 under the access policy). How the user wants it is memory; what the brain can do with it are
 tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspace.md).
+Preferences are [memories](#memory) of kind `preference` about `topic:workspace`, written as facts
+about the user. The brain remembers one from the user's words (`remember`; a workspace preference
+is never sent to `rule`, whatever its words); the nightly extraction never writes one. A
+preference about content is read by whoever notes items: a triggered skill that tends a node with
+sources gets the active, current ones in its run (`seePreferences`, 12 at most, the latest first),
+and leaves out what the user no longer wants to see. A proposed preference is not read. The brain
+does not see the workspace's layout: it works on nodes ([The brain on
+nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)); `node_show` asks the page to open one.
 
-- **Preferences are memory.** « plus de lettres de news.example.org », « montre-m'en moins » are
-  [memories](#memory) of kind `preference` about `topic:workspace`, written as facts about the
-  user. The brain remembers one from the user's words (`remember`; a workspace preference is never
-  sent to `rule`, whatever its words); the nightly extraction never writes one, from the
-  conversation or from gestures. A preference about **content** is read by whoever notes items:
-  a triggered skill that tends a thread with sources gets the active, current ones in its run
-  (`seePreferences`, 12 at most, the latest first: « ce que l'utilisateur veut voir »), and leaves
-  out what the user no longer wants to see. A preference about **layout** (« l'agenda toujours en
-  grand ») is a placement: the brain keeps it with `workspace_arrange`. Code orders the rest. A
-  proposed preference is not read.
-- **Gestures** (`workspace.go`, `workspace_gestures.go`). The page tells eriphe-core what the user
-  does to a surface (`surface:<id>`): `opened` (a tile or a chip opened: the page's own action
-  `open`), `ignored` (a tile in front while the page was visible that left the grid, folded or
-  gone, without being opened), `closed`, `moved` and `resized` (a tile's three small buttons), and
-  `about` (a message written with a surface open). `POST /api/espace/gesture` with `{what, ref}`,
-  and for `moved` and `resized` the tile's new `size`, `col` and `row` (204; 400 for another
-  gesture, a ref that is not a surface's, or a place off the grid; 404 for a surface there is not;
-  the workspace's session, CSRF in `X-CSRF-Token`). Kept in `workspace_log`: `opened`, `ignored`
-  and `about` once per surface in
-  10 minutes, every close, and every move or resize but one that goes on the one just before
-  (the same tile, within a minute: the arrow keys); 30 days at most. A surface's title is core's, never
-  the page's, and only when its author wrote it in a clean turn. The brain reads them
-  (`workspace_read`). No counter, no score in code.
-- **Placement** (`workspace_gestures.go`). What the user moved or resized is pinned there, at
-  that size, kept past the session until placed again, reset or its surface gone: laid out first
-  (the latest wins a place two want), never grown or widened; the others are laid out around it.
-  What the user closed is not shown again in the **session**: folded last in the chip strip,
-  marked `closed`; opening its chip shows it again. A session lasts while the user is active
-  (their messages, a tab in front, their answers to notifications, their gestures on the
-  workspace) with no gap of more than an hour, within one activity day (from 05:00: a night's work
-  after midnight is the same day; `sessionStartIn`). Kept in kv (`workspace_placement`): a restart
-  keeps both.
-- **The brain sees the workspace.** Each of its turns carries the workspace as the page shows it
-  (`workspaceBlock`, French, a few lines; nothing when the workspace is empty):
+### The graph workspace, the home page (`/`)
 
-  ```
-  [l'espace de Sam, tel que sa page le montre (grille de 12 × 8, colonne et ligne depuis 0 ; …) :
-  - agenda « Agenda du jour » · xl en 0,0 · ouverte
-  - q-card-12 · l en 6,0
-  - notes « Notes » · m en 9,6 · placée par lui
-  replié : news « Nouvelles », veille
-  fermé par lui pour la session (ne le remets pas devant sans qu'il le demande) : meteo
-  ses gestes : 10:02 ouvert agenda ; 10:03 fermé meteo ; 10:05 déplacé notes ; 10:06 écrit à propos de agenda
-  ses marques (liste/élément ; read_thread les donne toutes) : 10:07 gardé thread-4 options/b ; 10:07 écarté thread-4 options/c]
-  ```
-
-  A title is quoted only when its author wrote it in a clean turn; a gesture only by its surface's
-  id, a mark by its surface's id, list and item (ids). The session's last 10 gestures, and apart
-  its last 40 marks, so that none is lost among the moves between two turns. `workspace_read` has the detail, the page included
-  (`screen`: each tile's id, size, col, row and `pinned`; `open`, `folded`, `closed`).
-- **`workspace_arrange`** (`items`: 8 at most, each `{id, size, col, row}`, size s, m, l or xl,
-  one xl at most, col and row both or neither; `reset`): the brain arranges the workspace as the
-  user asks (« mets l'agenda en grand »), as the user's own placement, kept: a
-  surface with a place goes there, one without in the order given, top left first. An id that
-  is no surface's, a size or a place off the grid is refused by name; a surface the user closed
-  and the brain places is shown again. `reset` drops the placements first (closed
-  surfaces stay closed). It answers where each went (`{id, size, col, row}`, or `folded`).
-- **`workspace_focus`** (`id`): puts a surface on stage, as if the user had opened it
-  ([an answer on stage](#workspace-web)). Refused outside the turn that answers a message the user
-  sent from the workspace, for a second surface in the same turn, and for an id that is no
-  surface's; it answers `in front` (with `previous` when another was on stage) or `already in front`.
-- **A message from the workspace.** A message typed in the workspace's input is marked
-  (`POST /messages` with `from` `workspace`, kept as `from_workspace:<seq>`), even with no surface
-  open: the brain reads it as `[Sam 10:02 #12 · depuis l'espace]`, its cue to answer a question
-  about a thing on stage.
-- **A message about what is open.** A message written on `/espace` while a surface is open
-  carries it (`POST /messages` with `about` `surface:<id>`; kept as `about_msg:<seq>` when it names
-  a surface): the brain reads it as `[Sam 10:02 #12 · depuis l'espace · à propos de surface:…]`. « Montre-m'en moins », « lance une
-  recherche là-dessus » are said in words. With a thread open, the message belongs to it (see
-  **The conversation leads**, below): the brain reads `· fil 7` instead.
-
-### The composed workspace, the home page (`/`)
-
-Eriphe's home page: where what Eriphe composes is laid out (`web_espace.go`, the app in
-`web/espace`). On a wide screen it never scrolls: a fixed grid of 12 × 8 cells. On a phone the page
-scrolls (see below).
+Eriphe's home page is the graph of nodes (#633, `web_graph.go`, `graph_feed.go`, the app in
+`web/espace`): every node a bubble (« bulle », a subject when it is a root), its bubbles around
+it, its links; an open node is its page, drawn right where its bubble was. Nothing on it is a
+screen planned in code: what shows is the graph eriphe-core streams and what the user opens. On
+screen, in French, a node is « bulle » or « sujet », never « nœud ».
 
 **The routes** (`web_pages.go`). `GET /` opens the workspace, the wizard before it while the brain
 has no agent (`needsWelcome`). It opens the conversation instead (`homeConvoNow`) while no AI
-composes the workspace (no brain, or its wizard left for later: the conversation says so, with the
-way to set one up), and for a browser that chose it: `POST /settings/home` with `home`
-`conversation` or `espace` (Réglages → Mon espace → Page d'accueil, htmx, which reloads the page;
-or the workspace's fallback, a plain form, which goes back to `/`) keeps the choice in an
-`HttpOnly` cookie (`home`) for 400 days. The conversation stays at `GET /conversation` (`convoPath`)
-whatever the home page; `GET /espace` always opens the workspace. What points into the
-conversation names it: a message (`/conversation#m12`, `convoAt`), a permission
-(`/conversation#perm-…`), a task's drawer (`/conversation?task=…`, a task's address opened as a
-page), in push notes, channels' links, the journal and the evidence; what means home (the brand,
-closing the settings, the wizard's end, the sign-in) stays `/`. The workspace's stream
-(`/events?a2ui=1`) starts after the conversation's last message: it does not carry them, nor any
-of the conversation's HTML events, but its last exchange as JSON (below).
+works for it, and for a browser that chose it: `POST /settings/home` with `home` `conversation`
+or `espace` keeps the choice in an `HttpOnly` cookie (`home`) for 400 days. The conversation stays
+at `GET /conversation` (`convoPath`); `GET /espace` always opens the workspace. What points into the
+conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/`.
+
+**What the page reads** (`web_graph.go`), with a session:
+
+- `GET /api/nodes/{id}[?version=n]`: a node's page (`nodePage`): its row (below), the version
+  shown, its versions (`n`, `author`, `at`; code's own versions, a source's new values, are not
+  listed but the last; nor an empty creation, a step opened for its task to write: `shift` 1, the
+  page numbering the versions from the first with something in it), its body as parts in order (`parts`: Markdown `text`, or a `block`), and
+  the cards it waits on (`cards`, as the [proposals](#proposals-in-the-blocks-they-concern-card_movesgo)
+  show them). A block (`pageBlock`) is ready to draw: its `name`, its A2UI `components`, its
+  `data` with each source's last value at `/<name>` (the version's snapshot, then the latest read
+  while the last version shows) and the user's marks at `/marks/<list>/<item>`; or its `error`
+  when it does not read as a block. Its media go through eriphe-core (`/espace/media`, signed),
+  those an external block's author wrote dropped unless a source gave them; a Link keeps to the
+  addresses a Link may open. The node's goal is never sent (it is in its file).
+- `GET /api/nodes/{id}/trace`: the trace's entries, oldest first (`at`, `author`: brain, user,
+  `task:<id>`, eriphe, outside; `text`).
+- `GET /api/nodes/{id}/md[?version=n]`: the file as it is (`md`), its body as the user edits it
+  (`body`: its text and blocks, without code's fields), its `version`, its `hash` and the last
+  version (`last`).
+- `GET /api/archives`: what the user archived, the latest first (`nodestore.Archives`): each node
+  archived with no parent archived with it, a row as below with `archived` (when) and `with` (how
+  many nodes below it went with it).
+- `GET /api/known`: « Ce que je sais », what Eriphe knows, read only (`web_known.go`): the files
+  of the [memory's mirror](#the-readable-mirror-memoire) in order, each `path`, `section`
+  (`profile`, `people`, `facts`, `decisions`, `journal`), `title` in the request's language and
+  `lines` (`id`, `group` in the profile, `when`, `text`, `external`). Drawn from `memory.db` with
+  recall's rules, it counts no use and taints no turn: it is the user's reading, never the brain's.
+  The head-up display opens it; there is no write route (to correct or forget, the user tells
+  Eriphe, or uses Settings → Mémoire).
+- A node's row (`graphNode`), in the page and the stream: `id`, `title` (empty when the node is
+  external: a title that may be someone else's words is never shown), `parent`, `links`,
+  `lifetime`, `state`, `created`, `updated`, `done`, `external`, `version`, `waits` (one of its
+  cards waits for the user) and, while it runs, `line`: its task's last word of where it is.
+
+**The stream** (`/events?a2ui=1&tab=<tab>&node=<id>`, `web_sse.go`). JSON events, the graph's from
+`graph_feed.go`, which the node store tells of each change (`nodestore.Watch`):
+
+- `node`: all the rows at once (`reset`) and when the stream fell behind the feed's last 512
+  changes, then those that changed, and the ids of those that left (`gone`: archived);
+- `doc`: a new version (`{id, version}`) or a trace that grew (`{id, trace: true}`): a page shown
+  reads it again;
+- `progress`: a task's line (`{node, text, at}`), from its `progress` tool, only when the task read
+  nothing external (a tainted line stays in the trace, never under the bubble);
+- `source`: a live block's new value (`{node, block, name, value}`), sent when its read changed;
+- `show`: Eriphe asks to open a node's page (`{node, by, at, seq}`), the last one at once, then each
+  new one; the page opens it beside what is open, once (an old one, over a minute, is not news);
+- `exchange` (below), `proposals` and `notice`.
+
+**The user's gestures** (`web_gestures.go`), kept by eriphe-core, each with the session's CSRF
+token in `X-CSRF-Token`:
+
+- `PUT /api/nodes/{id}/md` `{body, expect}`: an edit of the .md tab, the user's version
+  (`authorWrite` as `user`, the node's guard and the secrets filter as for any author), made on
+  the version whose hash is `expect`. A newer version gives `409` with its `version`, `hash` and
+  `body`, and writes nothing; an archived node `410`; a body that does not read `400`.
+- `POST /api/nodes/{id}/mark` `{block, list, item, mark}`: the user's mark (`keep`, `drop`, `done`,
+  `""` to take it away) on an item a block shows; the block must hold a Mark. Code writes it
+  (`nodefile.SetMark`), a version of its own: no turn.
+- `POST /api/nodes/{id}/ask` `{block, component}`: a block's button. Its words are read again in
+  the stored block (`a2ui.AskText`), never taken from the page, and become the user's message to
+  that node; a block written after reading external content asks nothing (`403`).
+- `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
+  below it stops, and the cascade leaves the graph; `reopenNode`: back with what was archived with
+  it and the archived parents it needs, in one commit).
+- `PUT /api/nodes/{id}/place` `{x, y}` and `DELETE`: where the user dropped a bubble, a subject's
+  spot or a child's offset from its parent, in `node_layout` (no version).
+- `PUT /api/espace/view` `{open, talk, shown, theme}`: the pages open, the one the console talks
+  to, the last of Eriphe's shows the page took (a page the user closed does not open again on the
+  next visit), and the theme (`""` follows the system, `light`, `dark`), in the kv `espace_view`. The boot gives
+  them back (`view`, `places`), on any of the user's screens, and the shell carries the theme
+  (`data-theme`) before the app draws.
+
+**The app** (`web/espace/src`):
+
+- `data/`: the requests (`api.ts`), the stream (`stream.ts`: one per page, opened again with the
+  node the console talks to) and the store (`store.ts`, Zustand): the graph as streamed, what is
+  open, the places and the theme, each event a pure step tested on its own. `keep.ts` sends what
+  is open and the theme back to eriphe-core a moment after they change. `presence.ts` says the
+  user is there. A page Eriphe shows (`applyShow`) opens beside the others and leaves the console
+  where it was: only the user's click or ⌘-click moves it.
+- `graph/`: the layout (`layout.ts`, a small force simulation): roots held to their home (where
+  they first found room, `homesFor`: a new subject never moves the others), children pulled to
+  their parent, links as weak springs, every bubble and its label a box that pushes the others
+  away. An open page is a box node of its measured size: the others make room around it and
+  nothing else moves; closed, the subjects go back home. The user drags a bubble anywhere it
+  stays reachable: a subject within a step (380 px) of the nearest other subject, measured from the
+  edge of an open page, a bubble within 300 px of its parent; past it the bubble lags behind by a
+  rubber band (0.3), and dropped there it comes back to the edge. A dropped bubble stays exactly
+  where dropped (a subject as a spot, a bubble as an offset from its parent), unless an open page
+  needs the room, and eriphe-core keeps the place. Near the screen's edge the camera scrolls, driven by the dragged bubble's place
+  on screen, not the pointer: a 110 px zone, after 200 ms, speeding up over 700 ms to 16 px a
+  frame. The camera (`camera.ts`) frames every open page if they fit at a scale of 0.8 or more,
+  else the page the console talks to, the others open in place; with no page open, the whole
+  graph. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
+  gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
+  bigger, what waits for the user brighter, what runs a little, what is done or old quieter. Under
+  760 px wide the graph is a list (`graph/List.tsx`, `listOrder`): each subject, then its bubbles
+  under it, depth first, in the order they were made; a tap opens its page alone over the list.
+- `page/`: a page in the graph, any number open: a click opens one alone, ⌘, Ctrl or shift with
+  the click one more. Dragged by its head; its head says what it belongs to, its title, its date
+  or « En cours » on the title line, its versions, « Archiver », the cross that closes this page
+  only; the tabs Contenu, Trace and .md; at its foot the cards it waits on, answered by their
+  card's Oui or Non (`POST /cards/{id}/yes|no`), read again when a proposal moves, and the question before archiving (how many
+  bubbles go with it). An older version shows as it was. The .md tab edits the node's body in
+  CodeMirror (`page/Editor.tsx`, in a shadow root: CodeMirror styles a document with a `<style>`
+  element, which the CSP refuses, and a shadow root with a constructed stylesheet; its look is
+  the page's variables). It saves on the version it was read at (`page/edit.ts`): a newer version
+  that came meanwhile shows with its text, nothing written, and the user takes it or keeps theirs.
+- `doc/`: the page's parts: text as Markdown by the page's own renderer, which makes no HTML of it;
+  each block an A2UI surface (`<node>--<block>`) of the page's own adapter, a source's new value put
+  at its place in the block's data. A block marked external is a tainted surface: there a
+  Proposal only asks. A button's `ask` and a Mark go to eriphe-core (`.../ask`, `.../mark`) from the
+  last version of a block that is not external; anything else stays in the page.
+- `console/`: the one input. It talks to the page the console talks to (the last one opened or
+  clicked), else to the home (`POST /messages` with `node`); Eriphe's newest line shows by the orb,
+  the replies it suggests under it; the conversation of that node opens over it.
+- `hud/`: the way home and the path of the page the console talks to; the ticker of what waits for
+  the user and what runs, each a way to its page; « Archives · N », what the user archived, each
+  to reopen; the light or dark theme; the settings; the notices and a word when the stream is
+  down.
+
+A link may open a page: `/espace?open=node-<id>`. The theme follows the system, light or dark,
+on the tokens of `espace.css`, until the user chooses one (`data-theme`).
+
+**The scenario in a browser** (`web/espace/e2e`, `espace_scenario_test.go`). Playwright plays the
+epic's 13 steps against a whole eriphe-core on 127.0.0.1, signed in with the tests' password: faked
+tools (`maison`, `agenda`, `mail`, `prod`, in memory) and a scripted brain. Nothing is faked inside
+the core: the brain and the workers are tasks on a fake device `pc`, which takes its assignments
+and reports as a device does, and plays canned calls through its MCP proxy (the brain's own tools,
+the catalog's after the permission round trip, a worker's `eriphe-nodes`); the engine, the cards,
+the filing and the stream are the real ones. `TestEspaceScenario` serves only when
+`ERIPHE_E2E_ADDR` is set; the world outside the user is asked of it at `/e2e/mail` (a monitor's
+mail), `/e2e/finish/{key}` (a worker finishes) and `/e2e/tools` (what the tools did), routes of
+the test only. The test fails on any console error and any CSP violation. CI runs it
+(`espace-e2e`) on the committed build:
+
+```sh
+cd core/web/espace
+npm run build && npx playwright install chromium && npx playwright test
+```
+
+**The scenario on a real model** (`nodes_bench_live_test.go`, #634). The same world, the brain a
+real model: eriphe-core starts it as on an install (the built-in prompt, its tools and free reads),
+and the bench runs it with the local Claude Code CLI (`claude` signed in on the machine) in
+stream-json as a device does, its MCP servers the test core's device API, its permissions asked
+through a test-only `approve` tool. The CLI runs in a temporary folder, without the machine's
+settings, `CLAUDE.md`, memory or MCP servers, and without the web. The workers are faked: any task
+writes a short result in its node and reports done, the first step held until the scenario lets it
+finish. It plays the user's turns of the 13 steps, says yes on the cards, and scores what the core
+holds: lost replies (an answer code's safety net had to file, a turn left unanswered, a question's
+answer written in no node), duplicate nodes (a node opened for a thing that already has one, two
+live nodes of one title), stuck steps, and views only shown (a standing node opened outside
+`propose_view`, a reply not proposed on a card). It fails on a lost reply or a duplicate node; the
+rest is logged.
+
+```sh
+ERIPHE_LIVE_NODES=1 ERIPHE_LIVE_NODES_RUNS=3 go test -run TestNodesBenchLive -timeout 0 -v .
+```
+
+`ERIPHE_LIVE_NODES_MODEL` picks the model (`sonnet` by default), `ERIPHE_LIVE_NODES_CLI` the command.
 
 **A full home** (#455). The workspace does what the conversation's page does to say the user is
-there (`presence.ts`, as `static/app.js`): it tells eriphe-core when it comes in front or leaves
+there (`data/presence.ts`, as `static/app.js`): it tells eriphe-core when it comes in front or leaves
 (`POST /presence`, visible and focused, `tab`, `front`, `sub` its push subscription's id, the CSRF
 token in the form and the header; every 20 s while in front; a beacon as it closes) and registers
 the service worker (`/sw.js`). Its tab id is also in its stream's query (`tab`), so a notification
 routed to it comes as an in-app notice, by the stream's `notice` or the presence answer: a small
-card at the bottom right for 15 s, its text a link when its URL is a path of the site (`Notices`,
-`Exchange.tsx`). A workspace left open is activity, and so are the gestures on it
-([`gestureActivity`](#preferences-gestures-and-the-brains-tools-workspacego)): a return that only
-opens tiles is a return (`user.returned`).
+card at the top right for 15 s, its text a link when its URL is a path of the site (`hud/Hud.tsx`).
+A workspace left open in front is activity.
 
-**The last exchange** (`web_espace_exchange.go`, `Exchange.tsx`). Not a second chat: what the
-user says updates a thread or a surface at the centre, so the left column keeps to the last
-exchange: the user's last message and Eriphe's lines after it (`lastExchange`: the last 12,
+**The last exchange** (`web_console.go`, `console/`). Not a second chat: what the user says
+updates a node's page, so the console keeps to the last exchange of the node it talks to: the user's last message and Eriphe's lines after it (`lastExchange`: the last 12,
 however many events came between; with no message of the user's, Eriphe's last line; an error as a
 line that says it, never its raw text; an event's line and the first run's messages never), the
 message Eriphe is writing (the draft, by the same rule as the conversation's) and whether it is at
@@ -3516,41 +3196,38 @@ small bubbles; a link to the whole conversation by Eriphe's name. All of it is t
 `exchange` event (JSON, `exchangeEvent`, each text cut at 4000 characters, `earlier` when lines
 come before it), sent when the stream opens and whenever it changes; Eriphe's text drawn by the
 app's Markdown renderer, never as HTML, a line written in a tainted turn (`markBrainMessage`)
-marked as such. Scrolling up the column (a wheel, a touch, a scroll or an upward key) shows
-**Messages d'avant**, which brings the lines before, 10 at a time
-(`GET /api/espace/earlier?before=<seq>`, `{lines, more}`, the same filter); they stay, the view
+marked as such. In the conversation the console opens, **Messages d'avant** brings the lines before, 10 at a time
+(`GET /api/earlier?before=<seq>`, `{lines, more}`, the same filter); they stay, the view
 kept where it was, until the next exchange. The brain's memory and the stored messages are
-untouched: only what the column shows. The thread's card shows no exchange. The
-cards the user must answer are not repeated there: they are the queue's surfaces (`q-card-*`).
+untouched: only what the console shows. The cards the user must answer are not repeated there:
+they are at the foot of their node's page, and the attention queue delivers the others.
 
-**The conversation leads** (#613, `thread_talk.go`, `brain_suggest.go`). One brain, one queue: every message of the
-conversation belongs to a thread or to the home, in its `thread` column (`0`: the home; messages
-from before it belong to the home).
+**The conversation per node** (#613, #632, `node_turn.go`, `brain_suggest.go`). One brain, one
+queue: every message of the conversation belongs to a node or to the home, in its `node` column
+(`""`: the home).
 
-- **A message written with a thread open belongs to it.** `handleSend` resolves the `about` the
-  page sends (`surfaceThread`): a thread's own surface (`thread-<id>`, a child's opened inside its
-  parent included) or a surface about a live thread. A button's `ask` on such a surface too. The
-  message is a turn like any other, the thread named: the brain reads
-  `[Sam 10:02 #12 · depuis l'espace · fil 7]` (its id only: a title may carry someone else's words,
-  and the thread's card gives the rest), and the turn is about it (`threadsDelivered`). A channel's, the CLI's and the API's messages belong to the home.
-- **The brain's answer belongs to the thread of what it answers**, fixed at delivery (`talkOf`, kept
+- **A message said to a node belongs to it.** `handleSend` takes the node the console talks to
+  (`node`, checked by `nodeSaid`: one of the graph's, not archived; anything else is the home).
+  The message is a turn like any other, the node named: the brain reads
+  `[Sam 10:02 #12 · nœud <id>]` (its id only: a title may carry someone else's words, and the
+  node's card gives the rest), and the turn is about it (`nodesDelivered`). A channel's, the CLI's,
+  the API's messages and a button's `ask` belong to the home.
+- **The brain's answer belongs to the node of what it answers**, fixed at delivery (`talkOf`, kept
   in the turn as `talk`): the last message of the user's in the delivery, else the last event of a
-  thread; the home for anything else. The thread the turn names later (a tool on another thread)
-  is for its cards only. A failure of the turn (the error line) and the note that asks it again for
-  a tool call written as text belong there too; a heartbeat's answer and a failure to start, to the
-  home. An event of a thread (a step moved, a card linked to it decided, its lead's report, a task
-  step's start declined or access decided) belongs to it; the catalog's, a machine's and the
-  brain's own notes and notifications to the home.
-- **The exchange goes with what Eriphe puts on stage.** When the brain answers with
-  `workspace_focus` on a thread, the turn's messages (the user's it answers, what it said since)
-  move to that thread (`talkMoves`): the question was about it, and the column shows it there.
-- **The column.** The stream's `exchange` event is the exchange of the thread open in the last
-  layout (`threadOpen`: `inside`, else `focus`), with `thread` and `title`; the page says
-  « Sur « titre » » / "On “title”" above it. With none open, the home's. The stream sends it again
-  when the layout changes. `GET /api/espace/earlier` takes `thread=<id>`. Eriphe's draft shows in
+  node; the home for anything else. The node the turn names later (a tool on another node) is for
+  its cards only. A failure of the turn (the error line) and the note that asks it again for a
+  tool call written as text belong there too; a heartbeat's answer and a failure to start, to the
+  home. An event of a node (a card linked to it decided, a task of it that ended its turn or
+  stopped, a task's start declined or access decided) belongs to it; the catalog's, a machine's and
+  the brain's own notes and notifications to the home. A long answer code filed says where
+  (`filed`, [the safety net](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)).
+- **The column.** The stream (`GET /events?a2ui=1&node=<id>`) sends the `exchange` event of
+  the node the console talks to, with `node` and its `title` (none when the node is external);
+  without `node`, the home's. Each line (`seq`, `role`, `time`, `text`, `external`) says `filed`:
+  the node code filed it in. `GET /api/earlier` takes `node=<id>`. Eriphe's draft shows in
   the exchange its turn answers in only, and its work (`thinking`) there or under a message of the
-  user's still waiting. A message being sent shows only where it was written. A plain "oui" decides
-  the card just above in its own thread only (`resolveByText`).
+  user's still waiting. A message being sent shows only where it was written. A plain "oui"
+  decides the card just above in its own node only (`resolveByText`).
 - **Suggested replies.** The brain may close an answer with up to 3 replies in its own words, one
   per line, in a block: `<suggestions>` … `</suggestions>`. Code cuts it where the text is stored
   (`copyBrainOutput`) and where the draft is kept (`brainWrote`, prefix-safe: a marker being
@@ -3563,8 +3240,8 @@ from before it belong to the home).
   make it a working note, and one before would suggest replies to an answer not written yet. The
   `exchange` event carries them (`suggestions`) only for its last line, the brain's, clean, with no
   draft; the page shows them as chips under it, hidden while a message is on its way or Eriphe
-  writes. A chip sends its sentence as the user's message, in the thread open (`POST /messages`
-  with `from` `suggestion`): typed in the workspace for the brain, but it never decides a card (no
+  writes. A chip sends its sentence as the user's message, to the node the console talks to (`POST /messages`
+  with `from` `suggestion` and `node`), but it never decides a card (no
   click does). It is no A2UI action: the click grammar is unchanged.
 
 **The fallback.** The conversation is where the user lands when the workspace cannot open. The
@@ -3578,97 +3255,21 @@ than 20 s (`streamDown`, `STREAM_GRACE`; the browser opens it again by itself, t
 it closed for good, after checking the session) shows a line with the link to the conversation;
 the workspace stays as it was.
 
-**On a phone** (`.narrow`, the width of `NARROW` in `Grid.tsx`, 900 px, `useNarrow`): one
-column and the page scrolls: Eriphe's column first, then the surfaces one under the other in the
-code's order (the layout's `items`, never their place on the grid), then the chips
-(`stacked`). A tile keeps only its cross: no move nor size on a column. A surface open takes the
-whole screen (`.focused`, `.canvas.full`), alone, under a bar with Retour and the line to write to
-Eriphe about it.
+**The look** (`espace.css`, `fonts.css`): neutral greys, light or dark as the system says
+(`prefers-color-scheme`; the shell's `color-scheme` and `theme-color` follow it), pages as flat
+cards on a quiet ground, hairlines rather than shadows. Colour says a state, never a tool or a
+subject: the accent for what waits for the user, hot for what is urgent or failed, warn for a
+warning or someone else's words, ok for what is done; each has a fill and a text tone that reads
+at WCAG AA on the card and on its own soft fill. Code's « extérieur » beside a block that may
+carry someone else's words is a small tag attached to the block under it. One typeface, Geist
+(Vercel, `geist` 1.9.2, unchanged): the sans as one variable font, the mono in its one weight,
+under the SIL Open Font License (`web/espace/src/fonts/OFL.txt`), served by eriphe-core with the
+app (`font-src 'self'`, nothing fetched elsewhere). With no node at all, a line says so
+(`espace.empty`). There is no menu and no button that keeps a rule: what the user wants is said
+to Eriphe.
 
-**The surfaces, where core says** (`web/espace/src/Grid.tsx`). The page draws each surface where
-the event stream's `layout` puts it ([the layout](#the-layout-workspace_layoutgo)):
-a tile at its cells, by class (`.at-cN .at-rN .w-N .h-N .size-*`), its title over it and its why
-under it, Motion moving a tile that changed place and CSS fading a new one in (by `scale`, fill `backwards`,
-so the animation never holds a transform Motion sets); the folded
-surfaces as chips in the strip above, and a surface the layout does not name yet (it comes right
-after) there too. A chip never shows a raw id: the layout's title, else the surface's own
-(`extensions.eriphe.title`), else « Sans titre »; chips with the same title are one, with their
-count (« Souvenirs à garder · 12 », the first opened by a click; `chips.ts`). Eriphe's line is the layout's. A click on a tile or a chip sends the page's own
-action `open` (`POST /api/espace/action`): core places the surface first and keeps the gesture
-(`surface:<id>`); Retour or Escape sends `back`. A message written while a surface is open
-carries `surface:<id>` as its `about`. Each tile has three small buttons in its corner
-(real buttons, reachable by keyboard): the grip moves it (dragged to a cell, a dashed ghost placed
-by class showing where, or with the arrow keys), the size button changes its size (a click goes
-up, from xl back to s; + or − and the arrow keys), the cross closes it for the session. The page
-shows the change at once and sends the gesture; core's next layout places the others around it.
-A tile that leaves the grid unopened while the page is visible is sent as `ignored`.
-
-**A surface open re-lays the workspace out** (`Grid.tsx`, focus mode, on a wide screen). The
-surface open is large in the centre, a working area that scrolls, with the way back (←) and its
-cross; everything else is in a column at the side (`sideOf`), the strip's chips included:
-folded, whatever its state (a state chip, the title, one line: the surface's
-`extensions.eriphe.summary`, else its why; never the surface itself), live, and a click on one
-opens it instead. Nothing is dimmed nor blurred. What needs the user (urgent: `urgent` in the
-layout, or a weight of 80 and up in `extensions.eriphe.weight`) comes first, marked « À toi »,
-and opened to answer; « Lié » marks what relates to the surface open, « Fermé » what was closed. What arrives
-or is written again while the focus lasts (its `extensions.eriphe.updated` changed: a new item in a
-group of the queue, a thread's line) says « nouveau », and pulses a few times when it needs the
-user; it never takes the centre. Each surface keeps its Motion `layoutId` from the grid or the
-strip to the centre or the column and back, so the re-layout is animated. Core's places on the
-grid around the focus are not used on a wide screen, nor fitted. Escape, Retour or ← gives the
-grid again.
-
-**A tile fits its content** (`place.ts`, `fitted`; `Grid.tsx`, `measureTiles`). A tile on the grid
-never scrolls and never cuts a sentence: after each drawing, and when a tile's content or the
-canvas changes size (a `ResizeObserver`), the page measures each tile's content at its natural
-height (`.mod-fit`), at its width, and counts the rows it needs. Over core's layout, in core's
-order, a tile that needs more grows: as tall as it needs under itself when the rows are free, else
-at the first place where it fits as tall, else a row less, and so on down to core's height; one
-with no place left is folded, first of the chips. The identity when every tile holds its content.
-The surface open and a tile the user placed keep their cells, taken first. A tile that still has too
-little room shows its first blocks whole, hides the last ones (`foldOut`: list items, rows, a
-column's children, a proposal's why…, never the first) and says the rest is there once opened
-(`espace.tile.more`); one block alone too tall (a day, a chart) fades out at its foot. Only the
-surface open scrolls: it is the workspace within the workspace. Fitting is the page's, per
-screen (core keeps one layout for every tab and the phone, and rows depend on the window's
-height): core's layout, and what the brain reads of it (`workspaceBlock`), keep core's cells and
-sizes before fitting. Not on a phone, where a tile is as tall as its content.
-
-**A click answers at once.** Opening a tile or a chip lays it out at once, before core's layout
-comes (`focusedIn`), by core's own stage rule (`layoutStage`): what the user placed at its place,
-what is urgent (`urgent`), then the surface opened, l at least, then the one that was on stage
-before it, m at most, still live, then the rest packed after, the last folded. Retour gives back
-the layout from before the opening at once (`unfocused`). The page keeps what the user asked over
-each layout core sends until core's agrees, or for 6 s (`shownLayout`, `INTENT_FOR`), so a layout
-already on its way does not undo the click; core's then comes in with Motion's move. An `open` or
-`back` that core refused or never got is undone, with a toast. A proposal's Oui or Non says at
-once that the answer is on its way (the pressed button spins, both are disabled). Closing a tile was already shown at once.
-
-**The look** (`espace.css`, `fonts.css`, prototype `?moderne` and `?travail`): neutral greys,
-light or dark as the system says (`prefers-color-scheme`; the shell's `color-scheme` and
-`theme-color` follow it), flat cards on a quiet ground, hairlines rather than shadows. Colour says a
-state, never a tool or a subject: the accent for what waits for the user, hot for what is urgent
-or failed, warn for a warning or someone else's words, ok for what is done; each has a fill and a
-text tone that reads at WCAG AA on the card and on its own soft fill. The conversation is a tile
-like the others, in the same frame. A tile's title heads it, its state a small pill beside it;
-its three buttons stay out of sight until the tile is hovered or holds the keyboard's focus (on a
-touch screen they sit in the head's line). What a tile is shows by the component at its root
-(`:has`), never by its tool: a proposal waiting edges it in the accent, a warning or an error
-tints it, their own box giving way to the tile's. Code's « extérieur » beside a block that may
-carry someone else's words is a Text of variant `mark`: a small tag attached to the block under
-it, which it edges. One typeface, Geist (Vercel, `geist` 1.9.2, unchanged): the sans as one
-variable font, the mono in its one weight, under the SIL Open Font License
-(`web/espace/src/fonts/OFL.txt`), served by eriphe-core with the app (`font-src 'self'`, nothing
-fetched elsewhere). With no
-surface at all, Eriphe says so in the column (`espace.empty`): never an empty grid without a word.
-The chat is a narrow column, the whole height; its right edge can be dragged to set its width
-(240-640 px, kept in the browser, double-click resets), with a link to the conversation
-at its foot and a quiet gear by Eriphe's name that opens the settings (`/settings`), and a message
-written there goes to the conversation; there is no menu and no button that keeps a rule: what the user wants of a surface
-is said to Eriphe.
-
-A 401 sends the page to the sign-in. `web/espace/src/data.ts` is the one place that talks to
-eriphe-core; a surface's proposal is read from `GET /api/proposals/{ref}`.
+A 401 sends the page to the sign-in. `web/espace/src/data/` is the one place that talks to
+eriphe-core.
 
 **A2UI surfaces** (`web/espace/src/a2ui/`, epic #415). The page renders [A2UI v1.0](https://github.com/a2ui-project/a2ui) surfaces with the workspace catalog's
 components, ours, written in React. The engine is the official one: `@a2ui/web_core` keeps each
@@ -3683,17 +3284,16 @@ the messages core sends (`createSurface`, `updateComponents`, `updateDataModel`,
 `catalog.tsx` names the catalog once (`CATALOG`: its id and where core serves it, `/espace/catalog/v1.json`)
 and implements all 23 of its components, each with exactly the catalog's properties;
 `catalog.test.ts` checks both ways against `a2ui/catalog_v1.json` (every component, its
-properties and their allowed values, the icon names, the four functions). eriphe-core streams
-the surfaces (`data.stream`: the event stream's `a2ui` events, applied through the adapter; the
-adapter's actions and errors posted back, see "The page and the surfaces" below). With no core
-behind, the dev server shows a made-up one (`a2ui/fixtures.ts`), or with
+properties and their allowed values, the icon names, the four functions). A node's page
+makes a surface of each block (`doc/`, above). With no core behind, the dev server shows a
+made-up graph (`data/sample.ts`), or with
 `?gallery` the gallery (`a2ui/gallery.json`: surfaces using every component, in French and
 English, which the component tests render and a Go test, `TestEspaceGalleryIsValid`, runs
 through `a2ui.Validate`).
 
 **The components** are shapes any tool's data can fill, never tied to one:
 
-- *Layout*: Row, Column, List (a template over a list, `emptyText`), Card (the tile's own
+- *Layout*: Row, Column, List (a template over a list, `emptyText`), Card (the block's own
   frame at the root, a quiet box inside), Tabs (the WAI-ARIA pattern: one tab stop, arrows,
   Home, End; hidden panels stay bound), Divider.
 - *Content*: Text (a `title` is a heading), Markdown (a small reader in `markdown.tsx` that
@@ -3708,29 +3308,30 @@ through `a2ui.Validate`).
   [links](#surfaces-in-a2ui-a2ui)), Code (`code.tsx`: text as it is in a
   fixed-width font, an optional language label; `mode: "diff"` reads a unified diff, its
   files' headers, hunks, added, removed and kept lines each a class, a hunk's counts telling a
-  removed `-- x` line from a header. One block per line: a tile wraps long lines, draws 60 at
-  most with how many more, and hides its last lines whole; open, every line, and the block
-  scrolls sideways).
+  removed `-- x` line from a header. One block per line, every line shown, long lines
+  wrapped).
 - *Input*: Button (with its icon), Choice, TextField, DateField; the fields write what the
   user enters to the bound data path, as A2UI does. A Button's action keeps to the
-  [actions' grammar](#the-actions-of-a-surface) (an ask carries its author's words only, never
-  the fields).
+  actions' grammar (`a2ui/actions.go`: a Button sends `ask`, its author's words only, never the
+  fields, or a local name, `expand` or `tab`; a Proposal sends `answer`, a Mark `mark`, and no
+  author writes those two on a Button); in a node's page eriphe-core reads the ask again in the
+  stored block (`POST /api/nodes/{id}/ask`).
 - *Data*: Metric (value, unit, signed delta coloured by `better`), Chart (lines or bars in
   SVG, `chart.tsx`: one axis, a palette checked for colour blindness, a legend from two
   series, a tooltip on each mark, the numbers in a table for screen readers), Table (columns
   `text`, `number`, `date`), Timeline (`done`, `current`, `pending`, `failed`), Message
   (short: the excerpt; full: the body, opened in place), Day (`day.tsx`: events on a grid of
   half-hour rows, overlaps side by side and marked, all-day ones above, and the day's
-  [dated proposals as ghosts](#proposals-in-the-surfaces-they-concern-surface_proposalsgo)),
+  [dated proposals as ghosts](#proposals-in-the-blocks-they-concern-card_movesgo)),
   Alert (four levels), Placeholder (« En préparation », a slow shimmer).
 - *Proposal* shows one proposal of Eriphe's by its own ref (`kind:id`, the `proposal` of a
-  card): `GET /api/proposals/{ref}` (`web_espace_proposal.go`) gives its kind, text, why, fields
-  and state in the user's language, where it comes from (`thread`, `from`) and what its Oui does
+  card): `GET /api/proposals/{ref}` (`web_proposals.go`) gives its kind, text, why, fields
+  and state in the user's language, where it comes from (`node`, `from`) and what its Oui does
   (`yes`) when it is an [access or a start's card](#the-approval-card), and the card that answers it (404 when no card carries
   it). Its header and buttons say what the card asks, by its kind: a memory « Garder en mémoire ? »
   and an intention « Garder ce rappel ? », Garder / Oublier (kept or forgotten once answered: yes runs
-  nothing); any other kind « Proposition », Oui / Non, its text saying what will be done. Its buttons send an `answer` action on the surface (`POST /api/espace/action`, see
-  [the actions](#the-actions-of-a-surface)), never the card endpoint, then the proposal is read
+  nothing); any other kind « Proposition », Oui / Non, its text saying what will be done. Its buttons answer the proposal's card (`POST /cards/{id}/yes|no`, the proposal read first: one no card
+  carries, or no longer waiting, is not answered), then the proposal is read
   again, as it is whenever the stream says it moved (answered anywhere). On a surface showing external content (its createSurface's `extensions.eriphe.tainted`)
   that code did not write (`author` other than `core`) it shows no Oui or Non: such a surface can only ask, the proposal is answered in the
   conversation. Once approved, a held call's proposal shows what it is doing (`exec`: `running`,
@@ -3761,9 +3362,9 @@ console for violations.
 ```sh
 cd core/web/espace
 npm ci
-npm test            # the grid's, the data layer's and the A2UI surfaces' tests (vitest)
+npm test            # the layout's, the store's, the pages' and the A2UI components' tests (vitest)
 npm run build       # type checks, then writes ../static/espace/espace.js and espace.css
-npm run dev         # http://localhost:5300, on a made-up surface, no eriphe-core needed
+npm run dev         # http://localhost:5300, on a made-up graph, no eriphe-core needed
 ```
 
 CI rebuilds and fails when the committed files differ from the build. The words are in
@@ -3773,14 +3374,14 @@ CI rebuilds and fails when the committed files differ from the build. The words 
 
 **CSP.** The page keeps the workspace's policy, with no `'unsafe-inline'`: the shell
 (`templates/espace.html`) loads one script and one stylesheet; the app's words come from JSON.
-A tile's place on the grid is a class (`.at-c3 .at-r0 .w-6 .h-5`), never a `style` attribute,
-which the policy refuses (`style-src-attr`). Motion animates by setting the element's style
-object from script (CSSOM), which a CSP does not govern; `AnimatePresence`'s `popLayout` mode is
+No markup carries a `style` attribute, which the policy refuses (`style-src-attr`): Motion and the
+layout place things by setting the element's style object from script (CSSOM), which a CSP does
+not govern; `AnimatePresence`'s `popLayout` mode is
 not used, since it injects a `<style>` element.
 
 ### Surfaces in A2UI (`a2ui/`)
 
-A surface, one tile of the workspace, is written by a model in
+A block of a node's page is written by a model in
 [A2UI v1.0](https://github.com/a2ui-project/a2ui): a flat list of components, each with an `id`
 and a `component` type, one of them the `root`; children named by id (`child`, `children`),
 or a list template `{"path": "/mails", "componentId": "row"}` repeated for each item; values
@@ -3792,10 +3393,9 @@ template) or computed by a function (`{"@call": "formatDate", "args": {…}}`). 
   2020-12 document by A2UI's catalog rules. Shapes only, never tools, none named after a
   subject: Text, Markdown, Image, Icon, Link, Code, Row, Column, List, Grid (a gallery of cards,
   as many to a row as fit), Card, Tabs, Fold, Divider, Button, Mark (the user's keep, drop or
-  done, on a thread's surface), Choice, TextField, DateField, Metric, Progress, Chart (`line`,
+  done, in a node's block), Choice, TextField, DateField, Metric, Progress, Chart (`line`,
   `bar`, or `stack`: one bar per x, the series its parts, an allocation now against its
-  target), Table, Timeline, Item, Message, Day, Proposal, Offers (code's offers on a thread's
-  rows), Alert, Placeholder. Steps, notes, options, checklists and drafts are compositions of
+  target), Table, Timeline, Item, Message, Day, Proposal, Alert, Placeholder. Steps, notes, options, checklists and drafts are compositions of
   these (a `Timeline`, a `Markdown`, a `List` of `Item` and `Mark`, `Mark` with `done`, `Text`
   sections), never components of their own; and the functions
   formatString, formatNumber, formatDate, formatRelative. A property that carries data takes a
@@ -3835,59 +3435,10 @@ tests (`a2ui/testdata/conformance`, with their notice), as their runner runs the
 To move to a newer A2UI release, copy its `specification/v1_0/json` and test cases over these
 and update the commit in the two `NOTICE` files.
 
-### Surfaces and their sources (`surfaces.go`)
+### What a block may show (`web_graph.go`, `a2ui/`)
 
-A surface is one tile of the workspace, and code writes every one (#574): its **author** is
-`thread:<id>` for [a thread's](#a-threads-surface-thread_surfacego) (`thread-<id>`) or `core` for
-[the attention queue's](#the-layout-workspace_layoutgo) (`q-…`); `writeSurface` refuses any other
-author or id (`codeSurfaceOf`), and at start code removes any surface another author wrote
-before (`dropFreeSurfaces`). No assistant, lead, task or skill writes a tile of its own: who
-holds a thread adds [its part](#a-threads-surface-thread_surfacego) to the thread's surface. A
-surface has a title, A2UI components, data, **sources**, a refresh, a **lifetime**, a weight (1
-to 100) and a why; code keeps its data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
-author declares, so a tool linked tomorrow is a source with no code (`TestNoToolInSurfaces` holds
-the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider or host name;
-`TestSurfaceFromAnyTool` serves a live surface from a fake server nobody wrote for).
+A block is drawn as its author wrote it, its data kept fresh by its [live sources](#views-node_livego-view_cardgo); what it shows goes through code first:
 
-- **Sources**: a JSON pointer of the data model (not the root, none inside another) →
-  `{"tool": "server/tool", "args": {…}}` or `{"resource": "server", "uri": "…"}`. Code runs it as
-  a monitor runs its look (`sourceWhy`, `readSource` in `monitors.go`): a tool must be one of the
-  brain's, read-only by its own annotation and a free read in the user's grid (with its
-  arguments), not of the open web unless the user trusts its server (its `openWorldHint` false:
-  code never reads the web by itself, with arguments a tainted turn may have chosen); a resource must be listed by its server. Checked when written and before every
-  read (refused, it waits with why, nothing called). 20 s per read (8 s for a refresh on schedule), 256 KiB per result, 8 sources.
-  The result is put at the pointer as it came (structured content, else text read as JSON),
-  never understood. A server not trusted taints the surface (`tainted`: its sources, and the
-  author's turn taint it is written with).
-- **Live binding check**: each path the components bind (`a2ui.Catalog.BoundPaths`: absolute,
-  `*` for each item of a template's list) must exist: under a source, in its first result or in
-  its tool's `outputSchema`; elsewhere, in the composed data. A source that could not be read and
-  has no schema, or an empty list, cannot tell: not checked. Otherwise the author gets an A2UI
-  validation error at the binding (`/components/1/value/@path`), with the fields that are there.
-- **Two ways to fill it**: live (sources, read again by code) or composed once (`data`, the values
-  the author wrote, dated by `data_at`); both at once is allowed.
-- **Refresh, never by a model**: on a resource's update (the pool subscribes to the resources
-  surfaces read, `resources/subscribe`, again after each reconnection; `pool_follow.go`), every
-  `refresh.every` minutes (1 to 1440; 5 by default with sources) on the surfaces' own loop
-  (`runSurfaces` → `tickSurfaces`, every 15 s, apart from the monitors' so that a slow source
-  never delays a look), and when the user opens it (`surfaceOpened`, not within 30 s
-  of the last read). One refresh of a surface at a time; one asked meanwhile runs right after, and
-  a read whose source was replaced meanwhile is dropped. The tick never waits for a read: it hands
-  each due surface (once, until its refresh is over) to a worker that reads 4 surfaces at once at
-  most, each pass within 8 s (`refreshLater`, `surfaceReaders`, `surfaceRefreshCap`). Only a
-  source whose value changed goes out, as `updateDataModel` at its pointer; a taint that appears or goes sends the surface again.
-- **Lifetime**, exactly one, always given by code: `until` a date (90 days at most: an ended
-  thread's surface), `while` a thread is active (`thread:<id>` not ended), or `kept` (the queue's,
-  which code removes when its items leave). Code removes an ended one on the surfaces' loop.
-- **Who writes**: only its author writes it again or removes it, and code when its lifetime
-  ended. Components and data of 64 KiB each.
-- **Actions** (`actionGuard`, `a2ui.CheckActions`): a button's action keeps to
-  [the grammar](#the-actions-of-a-surface): an `ask` (a request to the brain) carries its
-  author's own words only, `{"text": "…"}` (a value bound to the data, `@path` or `@call`, is
-  refused, and so is any ask written in a turn that read external content, which may have
-  written it); a local name (`open`, `expand`, `tab`) carries no context; `answer`, `mark`,
-  `offer` (their components send them), another name or a function call is refused. A `Mark` or
-  an `Offers` is placed on a thread's surface only (`a2ui.ThreadOnly`).
 - **Links** (`a2ui/links.go`): a Link's address is never built, so that it cannot carry out
   what its author read (A2UI #4045): `url` is a literal or a binding (`@path`), never a function
   call (the schema has no such form: no `formatString`). A literal must be http(s) with a host,
@@ -3895,108 +3446,46 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   (`a2ui.CheckLinks`, `a2ui.LinkURLOK`); a binding must hold such an address as a whole, in a
   source (a page's address a tool gives) or in the author's data (checked like a literal, in
   `checkBindings`); and every bound value goes to the page as it is or as `""`, no link
-  (`surfaceView`: a source may later give anything). A tainted surface may show links: unlike
+  (`blockView`: a source may later give anything). An external block may show links: unlike
   an image, nothing leaves without the user's click, and the page then shows the whole address,
   not only its host. Markdown links can still be built with `formatString`: not covered here.
 - **Media**: the page never loads an address from outside (A2UI #4045; the CSP forbids it
   anyway). Each media address (an `Image`'s `url`, `a2ui.IsMedia`) is rewritten to
-  `GET /espace/media?u=<address>&s=<signature>` (`surfaces_media.go`, with a session): one a
-  source gave, and one the author wrote unless its turn was tainted (a model that read something
+  `GET /espace/media?u=<address>&s=<signature>` (`web_media.go`, with a session): one a
+  source gave, and one the author wrote unless the block is external (a model that read something
   from outside could carry it out in an address: dropped); anything but http(s) is dropped. The
   endpoint serves only an address eriphe-core signed (a key per process), fetches it on a public
   address only (the accesses' dialer: never its own network, the LAN or the cloud's metadata),
   without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
   `nosniff`, a sandbox CSP and 10 minutes of private cache.
-- **Captured pages** (`surfaces_capture.go`, #470): most sites refuse being framed, so a task
-  step of a thread, lent `eriphe-workspace`, shows a page as an image.
-  `eriphe-capture <url> thread-<id>` (worker/base) captures it in the task's container and posts
-  the PNG to its node (`ERIPHE_MEDIA_URL`, task secret), which relays it to
-  `POST /v1/node/tasks/{id}/media?surface=thread-<id>` (node secret). eriphe-core checks the task
-  (on that node, running, its grant covering `surface_write`) and the surface (the surface of the
-  thread the task is a step of, no other), sniffs a PNG or a JPEG only, 5 MiB at most, 10 per
-  surface, keeps it under `surface-media/<random id>` (table `surface_media`) and answers
-  `{src: "media:med_…"}`; the bytes never go through a model. Whoever holds the thread writes
-  `src` as an `Image`'s `url` in its part, with the page's address as a `Link`; `surfaceView` signs it like any media address, even on a tainted surface (it
-  carries nothing out), but only on the surface it was given for, and `/espace/media` reads it
-  from disk with the same headers. The page's CSP is unchanged. It goes with its surface
-  (`surfaceRemove`), and one its surface no longer shows goes after an hour (`tickSurfaces`).
-- Table `surfaces` (id, title, author, components, sources, data, data_at, refresh, lifetime,
-  weight, why, tainted, look: its sources' last reads, the user's last action and the last error for its author, next_at, created, updated).
 
-**Go API** (for the workspace's stream and the assistants' tools, #421):
+### Captured pages (`web_media.go`)
 
-| Call | Does |
-|---|---|
-| `c.writeSurface(author, surfaceIn) (surface, []a2ui.ValidationError, error)` | code writes a surface: `thread:<id>` its `thread-<id>`, `core` its `q-…` (`codeSurfaceOf`; any other author or id refused); validation errors for the A2UI and the bindings, an error for the rest (a refused source, a field) |
-| `c.surfaceRemove(id, by) error` | by its author, or `surfaceByLifetime` |
-| `c.surfaces() ([]surface, error)`, `c.surface(id) (surface, error)` | all (heaviest, then latest first), one (`errNoSurface`) |
-| `c.surfaceOpened(ctx, id) error` | the user opened it: its sources read again |
-| `c.surfaceSubscribe() (snapshot []surfaceChange, changes <-chan surfaceChange, cancel func())` | the surfaces now (one `createSurface` each), then every change, nothing missed between |
-| `c.feedSurfaces() (*surfaceFeed, a2uiEvent)` | a subscription for one event stream: the snapshot to send first, then `feed.next(change, ok)` batches what waits, or gives a new snapshot when the hub dropped it |
-| `c.surfaceAction(ctx, id, a2ui.Action) error` | an action of the user's, of [the grammar](#the-actions-of-a-surface): checked against the stored surface, recorded (`look.action`), done (an ask a message to the brain, an answer its proposal decided; `open` places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back); a refused one is `*errActionRefused`, told to the author first |
-| `c.surfaceError(id, a2ui.Error) error` | an error about a surface for its author to fix (one the page met rendering it, or one code met): kept as `look.last_error` (code, path, message, at; read with `c.surface(id)`), logged, nothing sent to the page; the author writing it again clears it |
+Most sites refuse being framed, and a block never loads an address from outside: to show a page, a
+task with a node of its own captures it in its container (`eriphe-capture`, worker/base) and posts
+the image to its device (`ERIPHE_MEDIA_URL`, the task's secret, for a task with `eriphe-nodes`
+only), which relays it here with its own secret and the task's id:
+`POST /v1/device/tasks/{id}/media?node=<id>`, the image as body.
 
-A change is `{seq, message}`: one A2UI message (`createSurface`, `updateComponents`,
-`updateDataModel`, `deleteSurface`), `seq` growing by one in the order they are sent (from 0 at
-each start of eriphe-core: a page that reconnects starts from a snapshot). A subscriber 256
-changes behind has its channel closed: it subscribes again. A surface written again sends its
-components and its whole data, or, when a component went away or its title, weight, why or taint
-changed, `deleteSurface` then `createSurface`. `createSurface` carries the catalog's id and, in
-`metadata.extensions.eriphe`, `title`, `author`, `weight`, `why`, `tainted` (true when external)
-and `updated`.
+- **Its own node only.** The node must be the task's (`task_nodes`): another, or a task with no
+  node, gets 403; an unknown or finished task 404.
+- **What is kept.** A PNG or a JPEG, sniffed from its bytes (anything else 415), 5 MiB at most
+  (413), 20 a node at most: in `files/<id>/med_<32 hex>.<png|jpg>` of the graph's repository, one
+  commit by the task's author (`nodestore.PutFile`). It is not a version of the node; it stays
+  with it when it is archived. The answer is `{"src": "media:<name>", "type", "size"}`: the task
+  writes `src` as an `Image`'s `url` in a block of its node. The bytes never go through a model.
+- **Shown.** `blockView` signs `media:<node>/<name>` for the node the block is in (whoever wrote
+  the block, external or not: the file is the node's own and the address carries nothing out), and
+  `GET /espace/media` reads it from that node's files only, with the session: a block of another
+  node naming the same file gets 404.
 
-**The page and the surfaces** (`surfaces_stream.go`). `GET /events?a2ui=1` (the workspace asks
-for it; the conversation does not) adds `a2ui` events to the event stream, whose data is
-`{"seq": N, "reset": true, "messages": [<A2UI v1.0 message>, …]}`: the messages in order, `seq`
-the last one's. The first event of a connection is a snapshot (`reset`, one `createSurface` per
-surface, possibly none): the page drops the surfaces it has and applies it. So is one after the
-stream fell 256 changes behind, transparently. A `layout` event follows the first `a2ui` event
-and each later one, and is sent at once whenever the layout changes (`watchLayout`), only when it
-differs from the last sent: where each surface is
-([the layout](#the-layout-workspace_layoutgo)). A
-`proposals` event (`{"refs": [...]}`) says which proposals were made or decided since
-([proposals in surfaces](#proposals-in-the-surfaces-they-concern-surface_proposalsgo)). The SSE `id` stays the conversation's. Back from
-the page, with the session's cookie and CSRF token (401 without a session):
-
-| Endpoint | Takes | Answers |
-|---|---|---|
-| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`), of [the grammar](#the-actions-of-a-surface) | 204; 400 not a valid action, or one refused (told to the surface's author); 404 no such surface, or an answer to a proposal no card carries; 409 a proposal, or a user step, that no longer waits |
-| `POST /api/espace/error` | an A2UI v1.0 `error` naming its surface | 204, kept for the author (`surfaceError`); 400, 404 |
-
-#### The actions of a surface
-
-A click does only what is safe (`surface_actions.go`, `a2ui/actions.go`). The action names are a
-closed grammar, checked by code twice: when an author writes a surface (`a2ui.CheckActions`, in
-`surface_write`; each error points at the action) and when the page sends one, against the
-surface as it is stored, never against what the page says of it. No action calls a tool that
-writes.
-
-| Kind | Written as | Done |
-|---|---|---|
-| `ask` | a Button's `{"event": {"name": "ask", "context": {"text": "…"}}}`: literal words, nothing else, never bound data; none at all from an author whose turn read external content | the text written on the clicked Button becomes a message of the user's to the brain, as if typed (`Via` `workspace:ask`, shown as « bouton de l'espace » / "workspace button"; `about` = `surface:<id>`, which the brain reads as `[Sam 10:02 #12 · bouton de l'espace · à propos de surface:…]`); a plain "oui" so sent decides no card. The brain is woken, never waited for. On a tainted surface the message taints the brain's turn (`surface:<id>`) and its line adds « surface au contenu extérieur »: what it shows is data |
-| `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does; a thread's, unless the thread itself is tainted or the Proposal is in a part written after reading external content), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
-| `mark` | never by an author: only the Mark component sends it, `{"list": "<id>", "item": "<id>", "mark": "keep"\|"drop"\|"done"\|""}` (the thread is the surface's), a mark it offers, or `""` when the user takes theirs away; the holder of a thread places a Mark in a block of its part, `list` and `item` literal ids or bound to the data (a row's id); allowed after reading external content (ids only) | checked against the clicked Mark of the thread's own surface (`markOf`): a mark it offers or `""`, `list` and `item` the literals or values its binding takes in the surface's data, each an id (`a2ui.MarkIDOK`: letters, digits, `_.:@=+-`, 128 at most, no `/`), the thread active; then recorded (`setMark`), a gesture for the brain's next turn, no turn of its own |
-| `offer` | never by an author: only the Offers component sends it, one of the offers code put in the thread's data (`/thread/items`), `{"thread": <id>, "source": "<name>", "item": "<id>"\|"state": "<state>", "offer": "<key>"}`, never its words | checked against the clicked Offers of the thread's own surface (`offerOf`): bound under `/thread/items`, the offer one its binding takes in the stored data; then the note is read again from the store (`offerCalls`) and a calls card is made: nothing runs |
-| `stepDone` | never by an author: code places it on a thread's surface, the « C'est fait » of a step the user does, `{"thread": <id>, "step": "<key>"}` | checked against the Button code wrote there (its thread and step), for a step of kind `user` that waits; then `settleUserStep`, the engine's `userStepDone` (409 once it no longer waits) |
-| `tidy` | never by an author: code places it on an ended thread's surface, its « Ranger », `{"thread": <id>}` | checked against the Button code wrote there (its thread); then `tidyThread`: the surface leaves, the thread is kept (409 once put away) |
-| `choose` | never by an author: code places it on a thread's surface, one Button per option of a choice step that waits, `{"thread": <id>, "step": "<key>", "option": "<option>"}` | checked against the Button code wrote there (its whole context), for a choice step that still waits and one of its own options; then `chooseStep` |
-| `control` | never by an author: code places it in the head of an active thread (Stop; Pause and Resume on one that runs steps), `{"thread": <id>, "do": "pause"\|"resume"\|"stop"}` | checked against the Button code wrote there (its whole context); then `pauseThread`, `resumeThread` (by the user) or `stopThread` |
-| local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs. Code alone places an `open` that names another surface, `{"surface": "<id>"}`, on a thread's surface (a child's row, a child's crumb to its parent) | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer. An `open` that names another surface is not sent as is: the page opens that surface, as it opens a tile (`opensSurface`, `place("open", <id>)`), the one it came from as where it opens when it is not laid out |
-
-Anything else (another name, a function call, a component that carries no such action, an answer
-to a proposal the surface does not show, or on a tainted surface) is refused with 400 and told
-to the surface's author (`surfaceError`, code `ACTION_REFUSED`), which reads it with
-`workspace_read` and its next `surface_write`. A tainted surface can only ask: a proposal shown
-there is answered in the conversation.
-
-#### Proposals in the surfaces they concern (`surface_proposals.go`)
+### Proposals in the blocks they concern (`card_moves.go`)
 
 A proposal shows where it matters (#428), with no code for any tool:
 
-- **Embedded.** `workspace_read` lists the proposals that wait, newest first (`proposals`:
-  `ref`, the text unless it was drawn from external content, `when`); an author places a `Proposal` whose
-  `proposalId` is one of those refs (`kind:id`), written or bound to the data. Its Oui and Non
-  answer that proposal and no other ([`answer`](#the-actions-of-a-surface)). One drawn from
+- **Embedded.** An author places a `Proposal` whose `proposalId` is the ref of a proposal that
+  waits (`kind:id`), written or bound to the data. Its Oui and Non
+  answer that proposal and no other (its card, `POST /cards/{id}/yes\|no`). One drawn from
   external content carries a small badge (« extérieur »), its whole sentence on hover and for a
   screen reader.
 - **Dated.** A proposal that has a time shows as a ghost in every `Day` of its day (unless the
@@ -4012,114 +3501,37 @@ A proposal shows where it matters (#428), with no code for any tool:
   (`{"day", "proposals": [<proposal view with when>]}`, the times with the user's offset; 400
   without a day); `GET /api/proposals/{ref}` gives `when` too.
 - **Moved.** A card made (`cardProposed`, `cardNow`, `syncCards`), decided (`decideCard`, from
-  its buttons, a channel, a plain "oui" or a surface; `proposalDecided`, from a page) or found
+  its buttons, a channel, a plain "oui" or a page; `proposalDecided`, from a page) or found
   decided when read (`liveCard`) notes its ref (`proposalMoved`, the last 64 kept). The
   workspace's stream sends them as a `proposals` event, `{"refs": [...]}` (`{"all": true}` for
   a stream further behind), at once (`watchProposals`); the page reads again each `Proposal` of
-  those refs, and every Day's ghosts. The first `proposals` event of a connection, after the
+  those refs, and the cards at a page's foot, and every Day's ghosts. The first `proposals` event of a connection, after the
   snapshot, is `{"all": true}`: what the page shows may have been decided while it was away.
   The limits of a time read from values: an unrelated date argument (a recurrence's end, say)
   stretches the span, and a call with a start and a duration but no end shows a half-hour
   ghost.
 
-### The assistants' workspace tools (`workspace_tools.go`)
+### The catalog tools (`node_catalog.go`)
 
-The workspace shows threads only (#574): an assistant writes **its part of a thread's surface**,
-never a tile of its own. Five tools; the **author is the caller**, never a field:
+Two tools, to compose a node's blocks (what is followed continuously is a
+[view](#views-node_livego-view_cardgo)); the **author is the
+caller**, never a field:
 
 | Tool | Does |
 |---|---|
-| `surface_write` | write one block of the caller's part of a thread's surface: `id` is `thread-<id>` of a thread it holds, `block` (its name: a new one adds a block, one there is replaced alone), `before` (another block's name, to place it before), `components`, `data`, `sources`, `refresh {every}` ([a thread's part](#a-threads-surface-thread_surfacego)). Any other id is refused, the refusal saying the way: find or open the thing's thread first (`open_thread`; `ends: day` for what is shown for today). Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong block comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `block`, `blocks` (in order) |
-| `surface_remove` | take one block of the caller's part away from a thread's surface, by `block`; the other blocks and the surface stay. Answers `removed`, `blocks` |
-| `workspace_read` | the threads on screen (`threads`: surface id, thread, title, state, new, `yours` when the caller holds it, the thread's sources, last update, `waiting`, the user's last action on it; for one it holds, its part's `blocks` in order, `failed` and the last `error`), the queue's surfaces (`queue`: id, title, state), the user's gestures of the last hour (what, ref, `marked` for a mark: list/item, time), the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
-| `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand |
-| `sources_read` | what code may read for a part (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: code reads them under the access policy (`sourceWhy`). Without a shape, the author binds what it expects and `surface_write`'s error names the fields the result has. With nothing linked, it says so |
+| `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand, to compose a node's blocks |
+| `sources_read` | what code may read for a block (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: code reads them under the access policy (`sourceWhy`) |
 
-- **A one-off request is a day thread.** « J'ai quoi demain ? » is a thread opened with
-  `ends: day` and its alias, the brain's part on its surface; asked again, `open_thread` on the
-  same alias gives the same thread back. At the user's midnight code ends it and takes its part
-  away (`endDays`, `dropThreadPart`): reopened the next day, the brain writes it again. A
-  recurring request is a skill, which acts on its thread (`eriphe-threads`) and writes no surface.
-- **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint; it
-  holds every light thread. A thread's lead, on its own tools (`registerLeadTools`), as
-  `lead:<thread>`, for its thread. A task through **`eriphe-workspace`, a server Eriphe
-  provides**: lent like any catalog server (`{kind: tool, ref: eriphe-workspace}` or
-  `eriphe-workspace.<tool>` in `run_task`'s resources, never in a skill's `tools`), checked by
-  `checkGrant`, listed by `list_tools` under `provided`, put in the task's spec by `specServers`
-  and relayed by its node at `/v1/node/tasks/<id>/mcp/eriphe-workspace` like the others
-  (`taskMCPHandler` serves the tools its grant covers; a task not lent it gets 403). The name is
-  reserved. A task holds no thread: it reads the workspace and gives captured images
-  (below); what it found goes back to the brain, which writes its part.
-- **No approval.** Writing a part is not an external write: the lent tools are allowed in
-  advance (the spec's `allowedTools`), and each caller writes on the threads it holds only.
+- **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A task
+  through **`eriphe-workspace`, a server Eriphe provides**: lent like any catalog server
+  (`{kind: tool, ref: eriphe-workspace}` or `eriphe-workspace.<tool>` in `run_task`'s resources,
+  never in a skill's `tools`), checked by `checkGrant`, listed by `list_tools` under `provided`, put
+  in the task's spec by `specServers` and relayed by its device at
+  `/v1/device/tasks/<id>/mcp/eriphe-workspace` like the others (`taskMCPHandler` serves the tools
+  its grant covers; a task not lent it gets 403). The name is reserved. A task's captured pages go
+  to its own node, not through it ([Captured pages](#captured-pages-web_mediago)).
 - **Taint.** Calling `eriphe-workspace` does not taint a task by itself, as eriphe-core's own tools
-  do not (`eventsTaint`): `workspace_read` quotes nothing written after external content, and
-  `sources_read`'s descriptions are the catalog's, which the brain reads untainted in its own
-  tool list (a tool's description is never counted as read content), and the proposals it lists
-  leave out the text of one drawn from external content. What tells a caller what a source gave
-  does: a binding's error naming a result's fields, a source's failure, the last error
-  of its part (`workspaceSourceRead` in its reads).
-- **Never held long.** `surface_write` waits 3 s at most (`surfaceReadCap`) for its sources'
-  first read. A source still reading then is accepted waiting, the part written and the bindings
-  under it checked against the tool's `outputSchema` only; the read goes on as the thread's
-  source, and fills the surface when it ends.
-- **Gone with it**: Settings → Surfaces, a skill's or a task's own tile, `run_task`'s `surface`
-  (a task filling a placeholder), the cap of 100 surfaces, an author's surface weight and the
-  measure of use that page showed.
-
-**The threads' bench** (`testdata/threads/`, `threads_bench_test.go`, #471). Invented requests of
-Sam about a matter to follow, each with the tools linked for it (invented servers: what each does,
-its schema, what a read gave or a change answers, trusted or not), what the brain knows of Sam,
-maybe a thread already on stage, and a reference answer: the calls the brain makes in its turn, in
-order, and its reply (`{"calls": [{"tool", "args"}…], "reply"}`). An answer is scored by playing
-its calls through the brain's own MCP server on a core linked to the case's fake servers, in a
-turn as production makes it (from the workspace; for a wake, the step's real event delivered), then
-reading what the core holds, never exact words: a status question finds the thread before opening
-it, opens it light with an alias, writes the brain's part on `thread-<id>` (no other surface)
-and puts it on stage; a PR not merged gets a `call` step on the change, whose card is the yes;
-one already merged, only a `check`; the wake after the change ran (the bench says yes on the card,
-the fake change runs) adds a `user` step after it (Sam deploys himself) and a `check` after that,
-never closing the thread; « pendant que je relis la PR, cherche… » while a thread is on stage
-opens a second one with a task step, no `workspace_focus`, the stage and its thread untouched.
-Always: no call refused, no change called outside a step, a reply in one line (`[rien]` for a
-wake, the replies it suggests left out), no server or tool name in the reply, the thread, its
-steps or the part. A turn announces the id the next thread gets (`threadBenchSeed`, or the case's
-`seed`: each case has ids of its own). The matters differ (a PR, a research, a child thread
-choosing a subject under the publication on stage, a checklist, mails from a server not trusted,
-an allocation, a trip's hotels), each part composed from the catalog's bricks only (options with a
-`Mark`, a `Grid` of cards, a `Chart` `stack`, a source's rows and groups with their `Offers`);
-a case may give Sam's `marks` after the turn. `ERIPHE_UPDATE_THREADS=1 go test -run
-TestThreadSurfacesFixture` writes the surfaces these reference answers leave (and the stage's) into
-the page's fixture (`web/espace/src/a2ui/threads.json`), so the espace's tests and its dev server
-(`npm run dev`, `?open=thread-<id>`) render what the brain's own tools composed. In CI with no model, every case is valid, its
-reference answers score clean, and each fault is caught on a spoilt copy. `threads_live_test.go`
-runs the turns on a real model: « Les fils », the paragraphs
-on the brain's part of a thread and on the workspace's messages, the brain's tools for threads and the workspace as
-an MCP client lists them and the catalog appended to the system prompt; a wake is played after
-the case's reference first turn, so each turn is judged on its own:
-
-```sh
-cd core
-ERIPHE_LIVE_THREADS=1 go test -run TestThreadsLive -v .
-# ERIPHE_LIVE_THREADS_RUNS=1 (default), ERIPHE_LIVE_THREADS_MODEL=sonnet (default),
-# ERIPHE_LIVE_THREADS_CLI=claude (default), ERIPHE_LIVE_THREADS_CASES=<id>,<id> (all by default)
-```
-
-It reports per turn and in all: the faults, agreement, latency and cost (about 11 cents for the
-first turn, its system prompt written to the cache, then 2 cents a turn with Sonnet). It fails
-only when the CLI does.
-
-**Who keeps which surface** (`surface_authors.go`, #423). Nothing is recurring by default.
-
-- **A thread's surface is code's** ([a thread's surface](#a-threads-surface-thread_surfacego)):
-  who holds the thread (the brain, or its lead) adds its part to it.
-- **A skill writes no surface**: lent `eriphe-threads`, it acts on its thread, whose surface is
-  code's ([Triggered skills](#triggered-skills)).
-- **The brain** writes what the user asks; asked for something that comes back (« chaque matin »),
-  it writes a skill with `tools: [eriphe-threads]` that tends its thread.
-- **No model judges the workspace**: nothing tells a surface stale or something missing; what a
-  thread shows is kept up to date by code from its sources and by whoever tends it.
-
+  do not (`eventsTaint`).
 ### Signing in
 
 The workspace has one owner; how they sign in is set in Settings → Access → Web workspace → Connexion, or in
@@ -4334,8 +3746,8 @@ outcomes `brief` were rewritten `held` at start.
   The time zone is the configuration's, or the one set in Settings.
 - **A daily cap** of pushes (weight 5; 4 by default, 0 to 20 in Settings), besides reminders the
   user asked for in their own words; over it, the next breakpoint (weight 3).
-- **Topic rules** bound the weight of what is about a thread or a key (`project:getout`, which also
-  matches `project:getout:prod` and the thread it is the alias of) or a kind of key or record alone with its colon (`project:`, `skill:`; a word without one is a
+- **Topic rules** bound the weight of what is about a node or a key (`project:getout`, which also
+  matches `project:getout:prod`) or a kind of key or record alone with its colon (`project:`, `skill:`; a word without one is a
   topic, `mail` is `topic:mail`; the longest match
   wins): a floor raises it, a ceiling lowers it, a ceiling of 0 is never. A turn that read external
   content may be lowered, never raised: what it notifies never interrupts, waits for the next
@@ -4356,7 +3768,7 @@ outcomes `brief` were rewritten `held` at start.
   `deliver` or `quiet`), read by `notifyRules` only, never fired by the rule tick.
 - **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
   user's messages, a tab in front (the conversation's or the workspace's), in 10-minute buckets
-  kept 30 days, reactions to notifications, gestures on the workspace's surfaces but `ignored`,
+  kept 30 days, reactions to notifications, gestures on the workspace's nodes but `ignored`,
   `gestureActivity`) and of unwelcome moments (« pas maintenant »), and suggests a window per kind of
   night from the last 14 days: the median last activity of the evening plus a margin, the median
   first of the morning, widened over repeated « pas maintenant » just outside it; too few days, no
@@ -4367,11 +3779,11 @@ outcomes `brief` were rewritten `held` at start.
   feedback: what a brief or a point made on the user's return summarises.
 
 - **One topic vocabulary** (`topics.go`). A rule matches what a notification is about (set by
-  the code, or given to `notify`: its thread, or one of the thread's keys), else its record's ref,
+  the code, or given to `notify`: its node or key), else its record's ref,
   so labels must not drift: an about is kept by `aboutKey` ([About and names](#about-and-names)),
   on both sides of the match; a record's ref (`skill:<name>`, `intention:<id>`) as written. The
-  known topics (rules, notifications of the last 90 days, the live threads, the memory's
-  `thread:`, `project:`, `person:` and `client:` abouts) are listed in
+  known topics (rules, notifications of the last 90 days, the nodes running or waiting, the memory's
+  `node:`, `project:`, `person:` and `client:` abouts) are listed in
   `notifications`; a new label of a known word family is kept under the known topic, and a new one
   is flagged to the brain with the known ones.
 - **Settings through the brain** (`settings_brain.go`, tool `setting`): the device order, the lines
@@ -4500,9 +3912,9 @@ number of its own (a landline works: Signal verifies it by a voice call).
 (`botSpec.Service`, [Services](#services-local-mcp-servers)), named `channel-signal`, and runs
 while Signal is on, outside the catalog: in no list of tools, under no access level, reached by the
 channel alone through its `serviceClient`. The service is one of Eriphe's own images, which runs
-eriphe-core's version, on an amd64 node only (its signal-cli is x86_64 only), with a volume for the
+eriphe-core's version, on an amd64 device only (its signal-cli is x86_64 only), with a volume for the
 account's keys. It is wanted while `signal_service` is on. That is read from the store, so a
-reconciliation before the channel starts keeps it. When its node reports it running, the channel
+reconciliation before the channel starts keeps it. When its device reports it running, the channel
 listens again at once.
 
 There is no token: the number registered stands for it (`botSpec.Account`). Until then, the page's
@@ -4526,7 +3938,7 @@ position (`👍 Oui · 👎 Non`, `⏳` third). A reaction with that emoji to th
 
 Removing the channel unregisters the number, deletes its data in the service, then turns the
 service off. Messages are end-to-end encrypted up to the service, which keeps them and the
-account's keys on the node, and Settings says so. Untested against a real account: the tests fake
+account's keys on the device, and Settings says so. Untested against a real account: the tests fake
 the service.
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
@@ -4536,7 +3948,7 @@ eriphe-core already has, never from the model nor the notification's text:
 1. Eriphe open and in front on a device (its tab tells its push subscription with `POST
    /presence`) → a banner in that page (the event stream's `notice`, or the presence answer), no
    system push;
-2. a computer in use (its node reports the machine's idle time under 2 minutes, not locked, not
+2. a computer in use (its device reports the machine's idle time under 2 minutes, not locked, not
    to be disturbed: a game or a meeting in front, the context below) → a push to that computer's
    subscription only;
 3. the voice in the room: a channel the user added that says a sentence, listening and reaching
@@ -4547,7 +3959,7 @@ eriphe-core already has, never from the model nor the notification's text:
 4. otherwise the phone (subscriptions whose label, the user's choice or the browser says phone;
    the installed app first), then each adapter's own line (Telegram), in the order registered.
 
-A tab left in front on a machine its node says is idle, locked or not to be disturbed is not the
+A tab left in front on a machine its device says is idle, locked or not to be disturbed is not the
 user. A "now" not seen
 (opened, answered, or shown in a page) within the delay (10 minutes, Settings; 3 for an
 "even at night" topic) is routed again without the devices tried, two steps at most, never in the
@@ -4556,10 +3968,10 @@ to one device and not moved on; a test goes to its device. A topic rule keeps ch
 (`channels`), adds lines to the first step (`also`: "Getout: the phone too") or forbids some
 (`never`); a note from a tainted turn never gets a line added nor moves on. Settings →
 Notifications (Où te prévenir) orders the lines (each shown once what it needs is connected, one switch each), sets the
-delay, says which subscription is a phone or a computer and which node is on which computer
+delay, says which subscription is a phone or a computer and which device is on which computer
 (suggested by system), and lists the last decisions (`route_log`, planned next to sent). It starts
 in **observe** mode: everything goes as before (every channel, nothing while a tab is in front)
-and the log shows what the router would have done; one switch turns routing on. What a node tells
+and the log shows what the router would have done; one switch turns routing on. What a device tells
 of its machine is kept as context signals, in memory for two minutes, never stored. The `notifications` tool gives the brain the order
 and, by device, what was seen fast, late or moved on, from which it proposes rules. The bench
 (`route_eval_test.go`, `testdata/routeeval`) checks every case, no duplicate, every injection
@@ -4576,12 +3988,12 @@ none yet: reading a connected calendar on every turn would cost a call each time
 turn; a source that keeps free/busy times only (never titles) joins there.
 
 **What Eriphe observes of the machines** (`observe.go`). No context subsystem: with its status
-(`GET /v1/node?context=1`), a node tells `idle` (seconds, locked) and `context` (`{known, dnd,
-reason}`, worked out on the machine: `node/context.go`; eriphe-core never asks level 2, so the
+(`GET /v1/device?context=1`), a device tells `idle` (seconds, locked) and `context` (`{known, dnd,
+reason}`, worked out on the machine: `device/context.go`; eriphe-core never asks level 2, so the
 app in front is never computed). Kept **in memory only**, for two minutes, never stored with the
-node's info; a reason off its list (`game`, `meeting`, `fullscreen`, `mic`, `focus`) is dropped.
+device's info; a reason off its list (`game`, `meeting`, `fullscreen`, `mic`, `focus`) is dropped.
 Settings → Devices shows it on each machine (in use, idle, locked, do not disturb). The router
-reads it for the node tied to a subscription: a device locked, idle or not to be disturbed is
+reads it for the device tied to a subscription: a device locked, idle or not to be disturbed is
 skipped by every line; a machine not to be disturbed also holds the cards for a better moment. It
 only ever makes Eriphe quieter. The user's situation ("in Lyon until Sunday") is dated memory
 (`situation`); anything else (who is home, the next meeting) Eriphe reads from a tool when it
@@ -4656,7 +4068,7 @@ Tailscale starts again with eriphe-core. On the tailnet, eriphe-core serves:
 | Port | What |
 |---|---|
 | `443` | the workspace, with HSTS, only for its tailnet name (another `Host` is redirected or refused) |
-| `8800` | the API (nodes, CLI, MCP), HTTP/1.1, with the same certificate; a node presents its own (see TLS between machines) |
+| `8800` | the API (devices, CLI, MCP), HTTP/1.1, with the same certificate; a device presents its own (see TLS between machines) |
 
 The local listeners do not change: remote access adds the tailnet, it closes nothing. So when the
 page is opened at a public address, or from one (not through a declared proxy), it says so in a
@@ -4707,8 +4119,8 @@ shown in the workspace only).
   "grants": [{"src": ["autogroup:member"], "dst": ["tag:eriphe"], "ip": ["443", "8800"]}]
   ```
 
-- A node away from home uses the operating system's Tailscale app and the tailnet address of the
-  API (see the node's README, several addresses).
+- A device away from home uses the operating system's Tailscale app and the tailnet address of the
+  API (see the device's README, several addresses).
 - The embedded Tailscale only **receives**: eriphe-core's own outgoing calls, and its tasks', do
   not go through it. A model server at a tailnet address (`100.x`, `….ts.net`) is reachable only
   when the host itself runs Tailscale; otherwise the provider's test says so. Lend it from a device
@@ -4745,117 +4157,77 @@ are never shown back nor logged.
 
 ## About and names
 
-One matter is one thread (#573). What a record is about, its **about**, is a thread
-(`thread:<id>`) or an entity of the memory: a person (`person:lina`), the user (`owner`), the home,
-a tool (`tool:x`), Eriphe's own topics (`topic:workspace`, `topic:journal`, `topic:heartbeat`).
-Entities are the memory's only: they never have a thread, and nothing shows them as such.
-Notifications, attention items, cards, tasks, surfaces and card pushes (core.db), memories and
-intentions (memory.db) carry an `about` column next to their ref (which record: `intention:12`,
-`skill:<name>`).
+What a record is about, its **about**, is a node (`node:<id>`) or a key: an entity of the memory
+(a person, `person:lina`; the user, `owner`; the home; a tool, `tool:x`; Eriphe's own topics,
+`topic:workspace`, `topic:journal`, `topic:heartbeat`) or a matter remembered (`project:site`,
+`pr:owner/repo#12`, `alert:backup`). Notifications, attention items, cards, tasks and
+card pushes (core.db), memories and intentions (memory.db) carry an `about` column next to their
+ref (which record: `intention:12`, `skill:<name>`).
 
 - **Keys** (`about_key.go`): a key is `kind:slug`, made by one function (`aliasKey`) for every
-  store that keeps one; `aboutKey` takes `thread:<id>` too. A test forbids any other normaliser.
-  Kinds: `project`, `person`, `client`, `pr`, `alert`, `home`, `owner`, `tool`, `topic`. A French
-  or plural name is an alias (`projet:` → `project:`, `alerte:` → `alert:`); an unknown kind or a
-  bare word is a topic (`brand:velora` → `topic:brand-velora`, `factures` → `topic:facture`).
-  `owner` and `home` stand alone. A name's slug is lower case, accents folded, spaces as hyphens,
-  its sub-parts kept (`project:site:prod`); a topic's single word is singular; a pull request is
-  `pr:owner/repo#12`, lower case; an alert's id is kept as written. **A mail or an event is an
-  item** of a thread's source (`note_item`), never a key: `mail:` and `event:` are refused. A ref
-  (`card:12`, `task:t-…`, `intention:5`, `skill:<name>`) names one record, never a key.
-- **The names index** (`names.go`, core.db `names(name, target, seen)`): a key names one target
-  (a unique index on keys): the thread it is the **alias** of (`thread:<id>`), or itself while no
-  thread has it. A name the user gives a thread (`Velora`, `le site`) names it too, and a thread
-  merged into another names that one (`thread:7` → `thread:9`). `resolveAbout` follows it;
-  `noteAbout` notes a key written. A record written about a key is kept about its target: what is
-  written about `project:site` once a thread has that alias is about the thread.
-- **One thread an alias**, whoever opens it (the brain, a skill, a task lent `eriphe-threads`):
-  `openThread` refuses a key another thread has, ended or not; `openThreadOnce` gives that thread
-  back (reopened light, « même chose », if it ended) and refuses a led open on it. A key that
-  names a person, the user, the home or Eriphe's own topics is no alias.
-- **Giving an alias rekeys**: when a thread takes a key (at its opening, or with `name_thread`),
-  every record about the key moves to the thread: core.db's tables, the names, the topic rules
-  (`rematchTopicRules`), then memory.db's memories (their stems too) and intentions (about, owner,
-  `owed_to`) (`rekeyAbout`).
-- **`name_thread`** gives a thread names and keys, and with `merge` merges into it a thread that
-  ended and is the same matter: everything about the merged one is rekeyed, its names follow, and
-  `thread:<from>` names the other. A live thread is not merged. Refused in a turn that read
-  external content: a name taken from someone else's words would bind their matter to a thread.
-- **Named in a message** (`named`): a message of the user's names a thread by one of its names or
-  the words of its keys, an entity by its key's words (project, person, client, tool, topic),
-  compared by their stems, three letters at least; never `owner`, `home`, an id or Eriphe's own
-  topics. A name inside a longer one named too gives way to it (`site` to `site web`), five at
-  most. What is named goes to the brain under the message (`[nommés] Ce message nomme :
-  thread:12, person:lina.`, refs only: a title may be someone else's words), and the turn is about
-  it (`brainTurn.namedRefs`, kept with the turn). A person's intention cue is matched the same way.
-- **A thread's card** (`thread_card.go`): `aboutCard(about, budget)` compiles, with no model, in
-  about 1000 characters, what eriphe-core knows of a thread (or an entity): the thread itself
-  (goal, state, open steps, and its summary: where it stands), its last 3 decisions, its facts and
-  people (with the people its intentions name), its open intentions, the cards that wait for the
-  user about it (`convo_cards.about`, or what a card proposes), its preferences. The budget is
-  shared in rounds (each part's first line, then each part's second…), and what does not fit is
-  said. Only its ref heads it, and a line that may carry someone else's words (an external memory,
-  a tainted thread, card or intention) is named, not quoted: a card never taints a turn.
-  `read_thread` gives it with the thread, and its names.
+  store that keeps one; `aboutKey` takes `node:<id>` too (its id checked, `nodefile.IDOK`). A test
+  forbids any other normaliser. Kinds: `project`, `person`, `client`, `pr`, `alert`, `home`,
+  `owner`, `tool`, `topic`. A French or plural name is an alias (`projet:` → `project:`, `alerte:`
+  → `alert:`); an unknown kind or a bare word is a topic (`brand:velora` → `topic:brand-velora`,
+  `factures` → `topic:facture`). `owner` and `home` stand alone. A name's slug is lower case,
+  accents folded, spaces as hyphens, its sub-parts kept (`project:site:prod`); a topic's single
+  word is singular; a pull request is `pr:owner/repo#12`, lower case; an alert's id is kept as
+  written. **A mail or an event is an item** of a node's source (`item_note`), never a key:
+  `mail:` and `event:` are refused. A ref (`card:12`, `task:t-…`, `intention:5`, `skill:<name>`)
+  names one record, never a key.
+- **The names index** (`names.go`, core.db `names(name, target, seen)`): each key written is
+  noted (`noteAbout`), naming itself; a key is no node's alias (#632: nodes have no aliases).
+- **Named in a message** (`named`): a message of the user's names an entity by its key's words
+  (project, person, client, tool, topic), compared by their stems, three letters at least; never
+  `owner`, `home`, an id or Eriphe's own topics. A name inside a longer one named too gives way to
+  it (`site` to `site web`), five at most. What is named goes to the brain under the message
+  (`[nommés] Ce message nomme : project:site, person:lina.`, keys only), and the turn is about it
+  (`brainTurn.namedRefs`, kept with the turn) when it names one alone and the turn is about no
+  node. A person's intention cue is matched the same way.
+- **An about card** (`about_card.go`): `aboutCard(about, budget)` compiles, with no model, in
+  about 1000 characters, what eriphe-core knows of a node (or an entity): the node's line (its
+  state, title and its doc's first line), its last 3 decisions, its facts and people (with the
+  people its intentions name), its open intentions, the cards that wait for the user about it
+  (`convo_cards.about`, or what a card proposes), its preferences. The budget is shared in rounds
+  (each part's first line, then each part's second…), and what does not fit is said. Only its ref
+  heads it, and a line that may carry someone else's words (an external memory or node, a tainted
+  card or intention) is named, not quoted: a card never taints a turn.
 - **Cards pushed**: the code gives a card without being asked. To the brain's turn, after the
   named block, when what the turn is about (`turnAbout`) has a card its session does not hold as
   it is now: the session's cards are kept by hash (`AssistantStatus.Cards`, like the profile), set
   to the pack's on a fresh session and to the cards given since. To a fresh session's context
-  pack, one per open thread. To a worker task's first prompt, after what it is asked (its shown
-  prompt unchanged), and a thread lead's first turn. A brain on a self-hosted model gets
-  600-character cards. Each card pushed is logged: `card <about> → <place> [<task id or thread>]:
+  pack, one per node running or waiting. To a worker task's first prompt, after what it is asked (its shown
+  prompt unchanged). A brain on a self-hosted model gets
+  600-character cards. Each card pushed is logged: `card <about> → <place> [<task id>]:
   <chars>, <lines>, <left out>`.
 - **Cards measured** (`card_use.go`): each card pushed is counted in `card_pushes` (about, place:
-  `turn`, `pack`, `task`, `lead`; size; the brain's turn; the task or the lead's thread) and
-  judged once its window is over (30 minutes for the brain, 2 hours for a task or a lead), with a
+  `turn`, `pack`, `task`; size; the brain's turn; the task) and
+  judged once its window is over (30 minutes for the brain, 2 hours for a task), with a
   proxy said as it is: **wrote** when the model it went to wrote or changed a record about it in
-  the window (the brain: a memory, an intention or a line of the thread written by `brain`; a
-  task: a memory its `remember` wrote, `task:<id>`, or the thread's summary noted by a task; a
-  lead: a line a lead wrote in the thread, nearly always so); else **answered** when it was the
+  the window (the brain: a memory, an intention or a version of the node written by `brain`; a
+  task: a memory its `remember` wrote, `task:<id>`, or a version of the node written by a task or a run); else **answered** when it was the
   card of what the turn is about (the turn's, or that one of a pack delivered with the turn) and
   the turn's answer, the first message after it, is the brain's, without asking for it again in
-  the turn (`recall` about it or naming it, `read_thread` of it); else **no**. A pack's other
+  the turn (`recall` about it or naming it, `node_read` of it); else **no**. A pack's other
   cards, and a fresh session's first pack, are no turn's: only wrote counts for them. The tasks'
   reliability panel shows the share of the tasks' cards used. Pushes are kept 90 days.
 - **A record's about, set by the code**, and one given explicitly wins:
-  - **the brain's turn** (`turnAbout`): its thread (`brainTurn.thread`), else the one thread or
-    entity the user's messages name; two named give none, and a clock wake none. What the brain
-    makes in the turn takes it: `notify`, `remember` (a fact, a decision, a progress, never a
-    replacement, which keeps the one it replaces; never a profile, a preference, a person, a lesson
-    or a situation), `intend`, `run_task`, a new surface (`surface_write`: one written again keeps
-    its about unless one is given), a card it proposes;
-  - **a maker** (`sourceAbout`): a thread or a lead (`thread:`, `lead:`) gives its thread, a task
-    (`task:`) its about: a thread's step task and its lead's task, notifications and signals take
-    the thread, a card raised by a task or a thread its maker's, an attention item its source's (an
-    offered card's, its card's), a surface its author's;
-  - **a card** takes its proposal's first (a memory's, an intention's, a thread's, a skill run's);
-  - **a skill's run** takes the thread of the alias its SKILL.md declares (`thread:`), else of its
-    events' key where it names a thing: a monitor's (`monitor.*`: `topic:<name>`) or a key written
-    `kind:slug`; a task's, a thread's or a surface's id gives none. Its notifications, signals,
-    cards and surfaces follow its task;
-  - **the extraction** reuses a task's about (shown on its segment): a decision or a progress added
-    from a task is the task's whatever was guessed, anything else takes it when none was given; a
-    replacement keeps its own, the day's journal `topic:journal`.
-  Notification rules match what a notification is about (its thread, or one of the thread's keys:
-  a rule on `project:` matches a thread aliased `project:site`), else its record's ref
-  (`itemRule`).
-- **Schemas**: a core.db made before says `subject` where it now says `about`: the column is
-  renamed at store open, and the threads' `subject` indexes dropped (the column itself is left for
-  step 8 of #578 to convert, then drop). memory.db goes from schema 7 to 8 (`migrateAbout`): the
-  columns renamed, the full-text index rebuilt on `about`. Values are kept as they are: converting
-  them (keys to `thread:<id>`, the old `subjects` table to names) is step 8's.
-- **The one-shot conversion** (`convert_one_thread.go`, step 8 of #578; deleted once the single
-  install has run it): once per database, behind the kv flag `one_thread_converted`. At core.db's
-  open, the subjects become names (a thread's subject its alias, the latest thread of a key wins;
-  a merged subject names what it went into; titles and aliases name their target), the about
-  columns and topic rules are kept under their target (a `mail:` or `event:` about is dropped),
-  `threads.subject`, `subjects`, `thread_monitors` and their kv go, the default skill `arrivee` is
-  deleted, and a skill whose approved version no longer reads or uses `can`/`subject` is turned
-  off (`skills.off.old`). When the memory attaches, a matter that memories are about and no thread
-  follows (not an entity: person, tool, owner, home, Eriphe's topics; not a key a stored skill or a
-  monitor keeps, whose watcher opens its standing thread) becomes an ended thread, tidied away
-  (Q7); then the memories' and intentions' abouts, owners and owed_to are rekeyed, the stems and
-  the full-text index rebuilt. Counts are logged.
+  - **the brain's turn** (`turnAbout`): its node (`brainTurn.node`), else the one entity the
+    user's messages name; two named give none, and a clock wake none. What the brain makes in the
+    turn takes it: `notify`, `remember` (a fact, a decision, never a replacement, which keeps the
+    one it replaces; never a profile, a preference, a person, a lesson or a situation), `intend`,
+    `run_task`, a card it proposes;
+  - **a maker** (`sourceAbout`): a node (`node:`) gives itself, a task (`task:`) its about;
+    notifications and signals of a task take its about, a card raised by a task or a node its
+    maker's, an attention item its source's (an offered card's, its card's);
+  - **a card** takes its proposal's first (a memory's, an intention's, a skill run's);
+  - **a skill's run** takes its events' key where it names a thing: a monitor's (`monitor.*`:
+    `topic:<name>`) or a key written `kind:slug`; a task's or a node's id gives none.
+    Its notifications, signals and cards follow its task;
+  - **the extraction** reuses a task's about (shown on its segment) and a node's trace's
+    (`node:<id>`): a decision added from a task is the task's whatever was guessed, anything else
+    takes it when none was given; a replacement keeps its own, the day's journal `topic:journal`.
+  Notification rules match what a notification is about, else its record's ref (`itemRule`).
 
 ## Memory
 
@@ -4863,23 +4235,22 @@ Eriphe's own memory, separate from the vault, in `memory.db` next to the databas
 text search with FTS5, accents ignored). It points at the vault (`links`) rather than copying it.
 A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `lesson`,
 `decision`, `situation`; what is owed is an intention, never a memory; where a matter stands is
-its thread's summary, never a memory), an about (see [About and names](#about-and-names): a thread
-`thread:<id>`, or an entity `owner`, `person:<slug>`, `client:<slug>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
+its node's doc, never a memory), an about (see [About and names](#about-and-names): a node
+`node:<id>`, or an entity `owner`, `person:<slug>`, `client:<slug>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
 what is temporary; `occurred_at` for an episode), where it
-comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`, `thread:<id>`), a trust level (`owner`,
+comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`, `node:<id>`), a trust level (`owner`,
 `first_party`, `external`), and for what the extraction derived a `basis`: `stated` (said in so
 many words), `inferred` (deduced) or `ambiguous`. A change over time supersedes the old memory,
 which stays, dated; every change is in `memory_log`. Forgotten memories are purged after 30 days.
 An episode is the day's journal (or a wake of the brain's, `topic:heartbeat`), never a task's: what
-a task did is its log and its thread's timeline. memory.db says its schema in `meta`
-(`schema_version`, 7): a new file is made at it, a file at another is refused, never changed.
+a task did is its log and its node's. memory.db says its schema in `meta`
+(`schema_version`, 8): a new file is made at it, one at 7 is brought to it (`migrateAbout`), a file at another is refused, never changed.
 
 **Durable state.** Raw history is kept for audit (the conversation, `memory_log`, the journal
 episodes); what the brain needs to act is compiled from it in facts, lessons, **decisions** (a
-choice and its reason, superseded when reversed; closing a thread writes one). Where a project,
-client job or goal stands is not a memory: `remember` kind `progress` (a `state` `active`,
-`blocked`, `done` or `paused`, and a text saying what is done, under way, blocked and left)
-writes the summary of its thread (see [Threads](#threads-threadsgo-thread_enginego)).
+choice and its reason, superseded when reversed; a node set done writes one). Where a project,
+client job or goal stands is not a memory: it is its node's doc (see [The brain on
+nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)).
 
 **En ce moment** (`situations.go`). A `situation` is where the user is or what they do for a
 while (« en vacances à Lyon jusqu'à dimanche »): about `owner` by default, and a `valid_to`,
@@ -4891,10 +4262,9 @@ says it, a triggered skill when it reads it (a calendar, a home). When its end p
 gone.
 
 **Tasks read it.** Every worker task has a memory server of its own, `eriphe-memory`, relayed by
-its node (`/v1/tasks/<id>/mcp/eriphe-memory`; the name is reserved in the catalog): `recall`,
+its device (`/v1/tasks/<id>/mcp/eriphe-memory`; the name is reserved in the catalog): `recall`,
 current facts only, allowed without a card. A triggered skill's run also has `remember` (fact,
-person, decision, situation, and progress: its thread's summary, refused when the task read
-someone else's content; never an episode, the user's profile, preferences or
+person, decision, situation; never where the work stands, which its node keeps, never an episode, the user's profile, preferences or
 lessons): `source_kind` `task`, `source_ref` `task:<id>`, first party when the task is clean,
 `external` and only proposed when it read someone else's content.
 
@@ -4975,9 +4345,10 @@ messages whenever it changed. Claude Code's own auto-memory is turned off for th
 (`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`): one memory.
 
 **Extraction and journal.** Every night at `extract_at` (and once a busy day's conversation has
-been quiet `idle_minutes`), eriphe-core writes out the day's transcript (messages and finished
-tasks, each labelled with its trust; a task that read someone else's content is left out, its log
-and its thread's timeline keep what it found, and a clean one is first party) and starts a `memory` task (not listed, never the brain's)
+been quiet `idle_minutes`), eriphe-core writes out the day's transcript (messages, finished
+tasks and what the day wrote in each node's trace, each labelled with its trust; a task that read
+someone else's content is left out, its log and its node keep what it found, and a clean one is
+first party; so is a node that may hold someone else's words) and starts a `memory` task (not listed, never the brain's)
 with a cheap agent and the memories it may touch. Its JSON answer (ADD, SUPERSEDE, NOOP, each
 citing a `source_ref` of the transcript, with `keywords`, an `importance` 1–5, a `basis` and,
 for what is temporary, a `valid_to`) is checked and applied. Its regime, kept for what serves the
@@ -4995,7 +4366,8 @@ work:
 
 What is owed is an intention (INTEND), as above. Each segment carries its date, against which the
 agent resolves "demain" or "vendredi". One run per day and window; a failure is retried the next night. The same night
-run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable from the page).
+run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable from the page, and
+the [readable mirror](#the-readable-mirror-memoire)).
 
 ```json
 "memory": {
@@ -5013,6 +4385,37 @@ run purges and backs up (`VACUUM INTO` plus a JSONL export, also downloadable fr
 All keys are optional: `db` defaults to `memory.db` next to `db`, `agent` to the catalog's `haiku`
 if there is one, else the default agent. Trusted tools (whose results do not taint a turn) are
 marked in Settings → Tools (see the [one taint rule](#tool-catalog)).
+
+### The readable mirror (`memoire/`)
+
+`memory_mirror.go` keeps a readable copy of what Eriphe knows in `memoire/`, next to `core.db`
+(`/data/memoire/` on an install), so that it can be read, or copied into another program, outside
+Eriphe. `memory.db` stays the truth: the mirror is written by code only, again after every change
+committed (a memory added, changed, approved, superseded, forgotten, restored, purged, a learned
+change undone), each minute for what time changes (a `valid_to` that passed), and at start, from
+the database (a file changed by hand is written over, a file of its own removed). A file whose
+text did not change is not written; a file no memory is in any more is removed, and its folder
+when empty. Files are mode 0600, the folder 0700, in the user's language:
+
+- `profil.md`: the profile, the preferences, what is about the user (about `owner`), the
+  lessons, and the situations with their end;
+- `personnes/<name>.md`: one file per person (kind `person`, or about `person:<name>`);
+- `faits/<subject>.md`: the facts, by their about (`general.md` without one);
+- `decisions/<YYYY-MM>.md`: the decisions, by month;
+- `journal/<YYYY-MM-DD>.md`: the episodes, one journal a day.
+
+What is in it is what `recall` gives by default: the active memories true now, never a proposal
+nor a forgotten one. A line is one memory, its text on one line whatever it holds, ending with its
+id (`^m12`, Obsidian's block id); one read in someone else's content (trust `external`) is marked
+`(extérieur)`.
+
+It is **outside git**, so that « oublie ça » stays true: a forgotten memory leaves its file at
+once, and stays only in the nightly backups, which carry the mirror (`memoire-<day>.tar.gz`, with
+`memory-<day>.db`) for `backup_keep` days (14), as the database's copies already keep it. It is
+**not a node**: it is not in the graph's repository nor its index, and neither the brain's
+`node_read` and `node_find` nor a task's node tools reach it. The brain reads memory through
+`recall` only, which keeps the trust rules (an external memory read taints the turn). The
+workspace's « Ce que je sais » (`GET /api/known`) shows the same files, read only.
 
 ### What Eriphe learned
 

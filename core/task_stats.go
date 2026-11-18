@@ -43,7 +43,7 @@ func (s *Store) usageOf(id string) taskUsage {
 }
 
 // lastSessionTurn is when a harness session's last turn ended and its
-// context then, per call: the node's context_tokens (Claude Code's last
+// context then, per call: the device's context_tokens (Claude Code's last
 // call), or else the turn's input, cache reads and writes, a sum over its
 // calls that only errs high.
 func (s *Store) lastSessionTurn(session string) (at time.Time, tokens int64, ok bool) {
@@ -78,7 +78,7 @@ type taskStats struct {
 	Minutes     float64
 	Failures    []classCount // by class, the most first
 	FailedTasks int          // tasks with at least one failure
-	// The thread cards the tasks started with, and how they were used
+	// The start cards the tasks started with, and how they were used
 	// (card_use.go).
 	Cards cardUse
 	// What all the tasks cost over the last spendDays, by day and role.

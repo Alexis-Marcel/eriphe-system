@@ -103,21 +103,21 @@ func (w *web) handleFolders(rw http.ResponseWriter, r *http.Request, s *session)
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	nodes, err := w.c.store.nodes()
+	devices, err := w.c.store.devices()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	var d foldersData
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.Suspended {
-			continue // its access is cut (node_access.go)
+			continue // its access is cut (device_access.go)
 		}
 		info := parseInfo(n)
 		m := folderMachine{Name: n.Name, Online: n.Online, Default: w.deviceCaseGrid(n.Name)}
-		m.System, m.NAS, m.Lima = shareSystem(nodeInstall(n, info), n.OS)
+		m.System, m.NAS, m.Lima = shareSystem(deviceInstall(n, info), n.OS)
 		for _, v := range views {
-			if v.Source == sourceMachine && v.Node == n.Name {
+			if v.Source == sourceMachine && v.Device == n.Name {
 				m.Folders = append(m.Folders, folderTile{v, w.folderGrid(v.Folder)})
 			}
 		}
@@ -153,7 +153,7 @@ func (w *web) handleFolderCopies(rw http.ResponseWriter, r *http.Request, s *ses
 		return
 	}
 	name := r.PostFormValue("name")
-	if err := w.c.setCopies(r.Context(), name, r.PostForm["node"]); err != nil {
+	if err := w.c.setCopies(r.Context(), name, r.PostForm["device"]); err != nil {
 		var fe *folderError
 		switch {
 		case errors.Is(err, errNoFolder):
@@ -167,7 +167,7 @@ func (w *web) handleFolderCopies(rw http.ResponseWriter, r *http.Request, s *ses
 		}
 		return
 	}
-	log.Printf("web: copies of folder %s on %v", name, r.PostForm["node"])
+	log.Printf("web: copies of folder %s on %v", name, r.PostForm["device"])
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
 }
@@ -191,10 +191,10 @@ func (w *web) handleNoCopies(rw http.ResponseWriter, r *http.Request, s *session
 
 // deviceCaseGrid is a machine's default for its folders, inline on the
 // page: no "as …" column.
-func (w *web) deviceCaseGrid(node string) caseGrid {
-	g := caseGrid{Key: caseKey("device:" + node), Post: "/settings/folders/case", Hidden: map[string]string{"node": node},
+func (w *web) deviceCaseGrid(device string) caseGrid {
+	g := caseGrid{Key: caseKey("device:" + device), Post: "/settings/folders/case", Hidden: map[string]string{"device": device},
 		Hint: "folders.cat.%s.hint"}
-	dev := w.c.deviceGrid(node)
+	dev := w.c.deviceGrid(device)
 	for _, cat := range folderCases {
 		g.Rows = append(g.Rows, caseRow{Category: cat, Follows: dev.value(cat)})
 	}
@@ -204,9 +204,9 @@ func (w *web) deviceCaseGrid(node string) caseGrid {
 // folderGrid is a folder's grid: its machine's default, and its own cases;
 // Modifier is greyed on a folder shared read-only.
 func (w *web) folderGrid(f *Folder) caseGrid {
-	g := caseGrid{Key: caseKey("folder:" + f.Name), Title: f.Name, Sub: f.Node, Post: "/settings/folders/case",
+	g := caseGrid{Key: caseKey("folder:" + f.Name), Title: f.Name, Sub: f.Device, Post: "/settings/folders/case",
 		Hidden: map[string]string{"name": f.Name}, Follow: "folders.followcol", Hint: "folders.cat.%s.hint", Greyed: "folders.readonly"}
-	dev, own := w.c.deviceGrid(f.Node), w.c.folderOwn(f)
+	dev, own := w.c.deviceGrid(f.Device), w.c.folderOwn(f)
 	for _, cat := range folderCases {
 		g.Rows = append(g.Rows, caseRow{Category: cat, Own: own.raw(cat), Follows: dev.value(cat),
 			Greyed: cat == catChange && f.Access != accessWrite})
@@ -224,16 +224,16 @@ func (w *web) handleFolderGrid(rw http.ResponseWriter, r *http.Request, s *sessi
 }
 
 // handleFolderCase sets the cases a grid changed: a machine's default
-// (node), or a folder's own (name, "" to follow its machine).
+// (device), or a folder's own (name, "" to follow its machine).
 func (w *web) handleFolderCase(rw http.ResponseWriter, r *http.Request, s *session) {
-	node, name := r.PostFormValue("node"), r.PostFormValue("name")
+	device, name := r.PostFormValue("device"), r.PostFormValue("name")
 	var err error
-	if node != "" {
-		for _, c := range postedCases(r, folderCases, w.c.deviceGrid(node).value) {
-			if err = w.c.setDeviceCase(node, c[0], c[1]); err != nil {
+	if device != "" {
+		for _, c := range postedCases(r, folderCases, w.c.deviceGrid(device).value) {
+			if err = w.c.setDeviceCase(device, c[0], c[1]); err != nil {
 				break
 			}
-			log.Printf("web: folders %s: %s %s", node, c[0], c[1])
+			log.Printf("web: folders %s: %s %s", device, c[0], c[1])
 		}
 	} else {
 		var f *Folder
@@ -254,7 +254,7 @@ func (w *web) handleFolderCase(rw http.ResponseWriter, r *http.Request, s *sessi
 		}
 		return
 	}
-	if node != "" {
+	if device != "" {
 		rw.Header().Set("HX-Refresh", "true") // its folders' "as the machine" follow
 		rw.WriteHeader(http.StatusOK)
 		return

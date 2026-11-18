@@ -153,6 +153,6 @@ answer:
   `--core http://192.0.2.10:8800,http://100.64.0.2:8800`.
 
 Every installer takes the list (`install.sh --core`, `install.ps1 -Core` and `ERIPHE_CORE`, the
-container's and compose's `ERIPHE_CORE`, `eriphe-node -core`). A device already connected takes the
+container's and compose's `ERIPHE_CORE`, `eriphe-device -core`). A device already connected takes the
 new list when its install command runs again with `--core` and no token (`-Core` on Windows,
 `ERIPHE_CORE` for the container); it keeps its identity.

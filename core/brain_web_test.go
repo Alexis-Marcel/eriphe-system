@@ -167,10 +167,10 @@ func TestBrainWebSearch(t *testing.T) {
 // a harness without a search of its own is told.
 func TestBrainWebSpec(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	spec := func() nodeTaskSpec {
+	spec := func() deviceTaskSpec {
 		var raw string
 		c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, brainStatus(c).Task).Scan(&raw)
-		var s nodeTaskSpec
+		var s deviceTaskSpec
 		json.Unmarshal([]byte(raw), &s)
 		return s
 	}
@@ -183,8 +183,8 @@ func TestBrainWebSpec(t *testing.T) {
 		t.Fatal("Claude Code searches: told it cannot")
 	}
 	c.conf().Agents["small"] = Agent{Runtime: "opencode", Provider: "p", Model: "anthropic/x"}
-	c.store.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
-	c.store.setNodeStatus("nas", false, nil)
+	c.store.setDeviceStatus("nas", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
+	c.store.setDeviceStatus("nas", false, nil)
 	startedBrain(t, c, false)
 	if s := spec(); !strings.Contains(s.AppendSystemPrompt, noWebSearchLine) {
 		t.Fatalf("OpenCode not told it cannot search: %q", s.AppendSystemPrompt)

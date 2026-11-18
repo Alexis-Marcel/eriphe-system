@@ -70,9 +70,9 @@ const (
 	kindPerson     = "person"
 	kindEpisode    = "episode"
 	kindLesson     = "lesson"
-	// A choice and its reason, compiled from the raw history. Where a
-	// matter stands is its thread's summary, never a memory
-	// (thread_progress.go).
+	// A choice and its reason, compiled from the raw history; a node set
+	// done leaves one (node_tools.go). Where a matter stands is its node's
+	// doc, never a memory.
 	kindDecision = "decision"
 	// Where the user is or what they do for a while, with its end: shown
 	// to the brain and every task while it holds (situations.go).
@@ -172,8 +172,11 @@ type memStore struct {
 	// The user's name: in nearly every memory, so not a word to look for.
 	owner func() string
 	// The names (names.go): an about written is noted there, and kept
-	// under its thread when it is a thread's alias. nil: as given.
+	// under the target it names. nil: as given.
 	names aboutBook
+	// The readable mirror (memory_mirror.go), written after every change;
+	// nil: none.
+	mirror *memMirror
 }
 
 // memorySchemaVersion is the schema memory.db is at; meta.schema_version
@@ -225,11 +228,11 @@ const memorySchema = `CREATE TABLE memories (
 	CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
 
 // memoryStems is a memory's stems column: its text, the name in its
-// about's name (person:paul: paul; a thread's none) and its keywords.
+// about's name (person:paul: paul; a node's none) and its keywords.
 func memoryStems(text, about, keywords string) string {
 	if kind, name, ok := strings.Cut(about, ":"); ok {
 		about = name
-		if kind == refThread {
+		if kind == refNode {
 			about = ""
 		}
 	}
@@ -646,7 +649,16 @@ func (m *memStore) add(x *Memory, who string) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return m.commit(tx)
+}
+
+// commit commits a change of the memory, then writes the mirror again.
+func (m *memStore) commit(tx *sql.Tx) error {
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	m.mirrorSync()
+	return nil
 }
 
 // retire ends an old memory where a new one starts: it stays, dated.
@@ -692,7 +704,7 @@ func (m *memStore) update(id int64, p memoryPatch, who, reason string) (*Memory,
 	if err != nil {
 		return nil, err
 	}
-	return x, tx.Commit()
+	return x, m.commit(tx)
 }
 
 func (m *memStore) updateTx(tx *sql.Tx, id int64, p memoryPatch, who, reason string) (*Memory, error) {
@@ -821,7 +833,7 @@ func (m *memStore) approve(id int64, who string) (*Memory, error) {
 	if err := m.learnWrite(tx, x, old, who, "approved"); err != nil {
 		return nil, err
 	}
-	return x, tx.Commit()
+	return x, m.commit(tx)
 }
 
 // forget hides a memory at once and purges it after memoryPurgeAfter.
@@ -839,7 +851,7 @@ func (m *memStore) forgetRef(id int64, who, reason, ref string) error {
 	if err := m.forgetTx(tx, id, who, reason, ref); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return m.commit(tx)
 }
 
 func (m *memStore) forgetTx(tx *sql.Tx, id int64, who, reason, ref string) error {
@@ -879,7 +891,7 @@ func (m *memStore) restore(id int64, who string) error {
 	if err := m.restoreTx(tx, x, who); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return m.commit(tx)
 }
 
 func (m *memStore) restoreTx(tx *sql.Tx, x *Memory, who string) error {
@@ -921,7 +933,7 @@ func (m *memStore) purge() (int, error) {
 		tx.Exec(`INSERT INTO memory_log (memory_id, time, who, op, reason) VALUES (?, ?, 'eriphe-core', 'purge', 'forgotten 30 days ago')`,
 			id, m.now().Unix())
 	}
-	return len(ids), tx.Commit()
+	return len(ids), m.commit(tx)
 }
 
 // recallQuery is what recall looks for.

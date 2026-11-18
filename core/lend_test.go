@@ -62,7 +62,7 @@ func ask(t *testing.T, c *core, id, tools string, names ...string) map[string]st
 	if !strings.HasPrefix(id, "t-alone") {
 		c.store.set(lentByUserKey(id), "1") // started in the turn of my message
 	}
-	c.store.insertTask(&TaskRow{ID: id, Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "Trie les mails",
+	c.store.insertTask(&TaskRow{ID: id, Kind: "worker", Device: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "Trie les mails",
 		State: stateWaitingPermission, Tools: tools})
 	var events []EventRow
 	for i, n := range names {
@@ -110,7 +110,7 @@ func TestGridDecidesWhatIsLent(t *testing.T) {
 func TestShownPermissions(t *testing.T) {
 	tw := newTestWeb(t)
 	c := tw.c
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
 		State: stateWaitingPermission})
 	c.store.addEvents("t-1", []EventRow{
 		{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-any", "tool_name": "mcp__mail__move"}},

@@ -57,7 +57,7 @@ func (c *core) saveMonitor(name string, s monitorSpec) error {
 	}
 	_, err = c.store.db.Exec(`UPDATE monitors SET state = ?, spec = ?, pending = '', look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 		state, string(raw), now, m.ID)
-	c.monitorLooked(name) // a new baseline: the threads that follow it (thread_live.go)
+	c.monitorLooked(name) // a new baseline: the blocks that read it (node_live.go)
 	return err
 }
 
@@ -76,7 +76,7 @@ func (c *core) pauseMonitor(name string, pause bool) error {
 		state = monitorPaused
 	}
 	_, err = c.store.db.Exec(`UPDATE monitors SET state = ?, look = '{}', next_at = 0, updated = ? WHERE id = ?`, state, time.Now().Unix(), m.ID)
-	c.monitorLooked(name) // paused, it no longer raises a thread (thread_live.go)
+	c.monitorLooked(name) // paused, the blocks that read it wait (node_live.go)
 	return err
 }
 
@@ -88,7 +88,7 @@ func (c *core) deleteMonitor(name string) error {
 		}
 	}
 	_, err := c.store.db.Exec(`DELETE FROM monitors WHERE name = ?`, name)
-	c.monitorGone(name) // thread_live.go
+	c.monitorLooked(name) // the blocks that read it wait (node_live.go)
 	return err
 }
 

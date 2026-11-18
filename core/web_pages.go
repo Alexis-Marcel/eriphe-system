@@ -17,7 +17,7 @@ import (
 )
 
 // The workspace's pages and actions. They call the same methods as the API
-// and the brain's tools: the workspace is one more surface, not a new path.
+// and the brain's tools: the workspace is one more way in, not a new path.
 
 const shownMessages = 150
 
@@ -49,16 +49,16 @@ type permView struct {
 }
 
 type tasksData struct {
-	Threads []threadRow // the threads open, above the tasks (threadRows)
-	Active  []taskCard
-	Done    []taskCard
-	Stats   *taskStats // how reliable they were lately; nil before any ended
+	Nodes  []nodeRow // the nodes at work or waiting, above the tasks (nodeRows)
+	Active []taskCard
+	Done   []taskCard
+	Stats  *taskStats // how reliable they were lately; nil before any ended
 }
 
 // taskCard is a task as the side panel shows it.
 type taskCard struct {
 	ID, Title, Prompt    string
-	Node, Agent          string
+	Device, Agent        string
 	Repo, Branch         string
 	State, PendingReason string
 	Link, LinkLabel      string
@@ -123,7 +123,7 @@ func (w *web) card(st *taskStatus) taskCard {
 	if h.RetryAt > 0 {
 		retryAt = time.Unix(h.RetryAt, 0)
 	}
-	return taskCard{StopReason: h.StopReason, RetryAt: retryAt, ID: t.ID, Title: t.label(), Prompt: t.Prompt, Node: t.Node, Agent: t.Agent,
+	return taskCard{StopReason: h.StopReason, RetryAt: retryAt, ID: t.ID, Title: t.label(), Prompt: t.Prompt, Device: t.Device, Agent: t.Agent,
 		Repo: repo, Branch: branch, State: t.State, PendingReason: t.PendingReason, Link: link, LinkLabel: label,
 		Updated: t.Updated, Created: t.Created, Finished: finished(t.State), LastText: st.LastText,
 		NeedsYou: w.needsUser(st), Receipt: st.Receipt, Contract: st.Contract, Usage: w.c.store.usageOf(t.ID)}
@@ -162,7 +162,7 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 	}
 	// What needs me first, then what works, then what waits.
 	sort.SliceStable(out.Active, func(i, j int) bool { return cardRank(out.Active[i]) < cardRank(out.Active[j]) })
-	out.Threads = w.threadRows(true, 6)
+	out.Nodes = w.nodeRows(6)
 	if st := w.c.store.stats(time.Now().AddDate(0, 0, -statsDays)); st.Finished > 0 || len(st.Spend) > 0 {
 		out.Stats = &st // task_stats.go
 	}
@@ -217,7 +217,7 @@ func hasPending(st *taskStatus, pid string) bool {
 }
 
 // pendingPermission is the permission a task waits for, unless an answer
-// is already on its way to the node.
+// is already on its way to the device.
 func (w *web) pendingPermission(st *taskStatus) map[string]any {
 	p := st.PendingPermission
 	if p == nil || w.c.store.answered(st.Task.ID, fmt.Sprint(p["id"])) {
@@ -255,7 +255,7 @@ func (w *web) pending(perms []permView) pendingData {
 }
 
 // convoPath is the conversation's address. The home page, /, is the
-// workspace (web_espace.go); the conversation stays here, for what it
+// graph workspace (web_graph.go); the conversation stays here, for what it
 // shows best (the whole exchange, the tasks, the permissions) and as the
 // fallback when the workspace cannot load.
 const convoPath = "/conversation"
@@ -370,22 +370,14 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 		w.sendError(rw, r, err)
 		return
 	}
-	// Written with a thread open, it belongs to it (thread_talk.go).
-	about := strings.TrimSpace(r.PostFormValue("about"))
-	seq, err := w.c.store.addUserMessage(text, atts, w.c.openThreadOf(about))
+	// Said to a node, it belongs to it (node_turn.go).
+	seq, err := w.c.store.addUserMessage(text, atts, w.c.nodeSaid(r.PostFormValue("node")))
 	if err != nil {
 		w.c.store.removeAttachments(atts)
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if about != "" {
-		w.c.noteAbout(seq, about) // written with a surface open on the workspace (workspace.go)
-	}
-	from := r.PostFormValue("from")
-	if from == viaWorkspace || from == viaSuggestion {
-		w.c.noteFromWorkspace(seq) // typed in the workspace's input, or a reply it suggested chosen (workspace_front.go)
-	}
-	if from != viaSuggestion { // a click never decides a card (brain_suggest.go)
+	if r.PostFormValue("from") != viaSuggestion { // a click never decides a card (brain_suggest.go)
 		w.c.resolveByText(r.Context(), int(seq)) // a plain yes or no to the card just above (convo_cards.go)
 	}
 	w.c.ping()
@@ -538,7 +530,7 @@ func (w *web) toast(rw http.ResponseWriter, msg string, ok bool) {
 // Settings.
 
 type machineView struct {
-	NodeRow
+	DeviceRow
 	CPUs     int
 	Memory   int64
 	Runtimes []string
@@ -546,7 +538,7 @@ type machineView struct {
 	Active   int
 	AlwaysOn bool   // the tools run here
 	Model    bool   // it lends a model server (model_relay.go)
-	Version  string // its eriphe-node's
+	Version  string // its eriphe-device's
 	System   string // its system in words, a key of web_text.go (system.*)
 	Arch     string
 	Update   updateRow // where its update stands (web_updates.go)
@@ -557,40 +549,40 @@ type machineView struct {
 	// denied first, which the user can fix from here on a Mac.
 	Problem string
 	Program string // the program refused it, to allow on a Mac
-	// What it can do there: put agents to work, if the node runs tasks.
+	// What it can do there: put agents to work, if the device runs tasks.
 	Workers bool
 	// Whether Eriphe may wake it (web_wake.go).
 	Wake wakeView
-	// What its node says of the user's session now (observe.go): active,
+	// What its device says of the user's session now (observe.go): active,
 	// idle or locked, and not to be disturbed; "" when it cannot tell.
 	Presence string
 	IdleMin  int
 	DND      bool
 }
 
-// deviceViews are the devices' cards, in the order of nodes, with the
+// deviceViews are the devices' cards, in the order of devices, with the
 // updates' rows they come from.
-func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, error) {
+func (w *web) deviceViews(devices []DeviceRow, updates updatesData) ([]machineView, error) {
 	folders, err := w.c.store.folders()
 	if err != nil {
 		return nil, err
 	}
 	tls := w.c.caHash() != ""
 	var out []machineView
-	for i, n := range nodes {
+	for i, n := range devices {
 		info := parseInfo(n)
 		n.Asleep = w.c.asleep(n)
 		active, _ := w.c.store.activeCount(n.Name)
-		m := machineView{NodeRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
+		m := machineView{DeviceRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
 			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Model: info.ModelServer, Version: info.Version,
-			System: systemKey(nodeInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1],
+			System: systemKey(deviceInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1],
 			Workers: len(info.Runtimes) > 0, NoTLS: tls && n.CertExpires.IsZero()}
 		m.Wake = w.wakeView(n, info)
 		if o, ok := w.c.obs.machine(n.Name, time.Now()); ok {
 			m.Presence, m.IdleMin, m.DND = o.presence(), int(o.Idle/time.Minute), o.DND
 		}
 		for _, f := range folders {
-			if f.Node == n.Name {
+			if f.Device == n.Name {
 				m.Folders = append(m.Folders, f)
 				if f.Problem != "" && (m.Problem == "" || f.Problem == "denied") {
 					m.Problem, m.Program = f.Problem, f.Program
@@ -603,20 +595,20 @@ func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, 
 }
 
 func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session) {
-	nodes, err := w.c.store.nodes()
+	devices, err := w.c.store.devices()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	updates := w.updatesData(nodes)
-	out, err := w.deviceViews(nodes, updates)
+	updates := w.updatesData(devices)
+	out, err := w.deviceViews(devices, updates)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.c.updates.refreshStale(context.Background())
 	var plain []string
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.CertExpires.IsZero() {
 			plain = append(plain, n.Name)
 		}
@@ -628,12 +620,12 @@ func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session
 		remote = strings.Join(away, ", ")
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.machines", Nav: "settings", Tab: "devices",
-		Data: machinesData{Nodes: out, Remote: remote, CAHash: w.c.caHash(), TLSOnly: w.c.nodesTLSOnly(),
+		Data: machinesData{Devices: out, Remote: remote, CAHash: w.c.caHash(), TLSOnly: w.c.devicesTLSOnly(),
 			Plain: strings.Join(plain, ", "), Updates: updates}})
 }
 
 // systemKey names a machine's system in words, from how it was installed
-// and the system its eriphe-node runs on: on a Mac, the node runs on macOS
+// and the system its eriphe-device runs on: on a Mac, the device runs on macOS
 // itself with Apple's container, or in Lima's Linux VM; on Windows, in WSL;
 // installed by hand on Linux, it is a compose project of one's own (a NAS).
 // Empty while unknown (a machine that never reported it).
@@ -660,8 +652,8 @@ func systemKey(install, goos string) string {
 }
 
 type machinesData struct {
-	Nodes  []machineView
-	Remote string // eriphe-core's addresses away from home: the second one, the tailnet's
+	Devices []machineView
+	Remote  string // eriphe-core's addresses away from home: the second one, the tailnet's
 	// TLS for machines (machine_tls.go): the CA's hash, whether the plain
 	// path is closed, and the machines still without their certificate.
 	CAHash  string
@@ -752,7 +744,7 @@ func (w *web) handleJoinCommand(rw http.ResponseWriter, r *http.Request, s *sess
 	name := strings.TrimSpace(strings.ToLower(r.PostFormValue("name")))
 	labels := strings.ReplaceAll(strings.ToLower(r.PostFormValue("labels")), " ", "")
 	v := joinView{Name: name, Labels: labels}
-	if !nodeName.MatchString(name) || (labels != "" && !labelsRe.MatchString(labels)) {
+	if !deviceName.MatchString(name) || (labels != "" && !labelsRe.MatchString(labels)) {
 		v.Error = "machines.badname"
 		w.render(rw, r, s, "settings", "join-result", page{Data: v})
 		return
@@ -769,12 +761,12 @@ func (w *web) handleRejoinCommand(rw http.ResponseWriter, r *http.Request, s *se
 func (w *web) joinResult(rw http.ResponseWriter, r *http.Request, s *session, v joinView) {
 	token, expires, err := w.c.newJoinToken(v.Name, v.Rejoin, 24*time.Hour)
 	switch {
-	case errors.Is(err, errBadNodeName):
+	case errors.Is(err, errBadDeviceName):
 		v.Error = "machines.badname"
-	case errors.Is(err, errNodeExists):
+	case errors.Is(err, errDeviceExists):
 		v.Error = "machines.exists"
-	case errors.Is(err, errNoNode):
-		v.Error = "machines.nonode"
+	case errors.Is(err, errNoDevice):
+		v.Error = "machines.nodevice"
 	case err != nil:
 		v.Error = "err.internal"
 	}
@@ -796,12 +788,12 @@ func (w *web) joinResult(rw http.ResponseWriter, r *http.Request, s *session, v 
 
 func (w *web) handleForget(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	if err := w.c.store.deleteNode(name); err != nil {
+	if err := w.c.store.deleteDevice(name); err != nil {
 		w.toast(rw, err.Error(), false)
 		return
 	}
 	w.c.disconnect(name)
-	log.Printf("web: node %s forgotten", name)
+	log.Printf("web: device %s forgotten", name)
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
 }
@@ -912,66 +904,24 @@ func (w *web) handleLang(rw http.ResponseWriter, r *http.Request, s *session) {
 	rw.WriteHeader(http.StatusOK)
 }
 
-// The tasks panel: the threads running, above the tasks; each opens its
-// surface on the workspace (/espace?open=thread-<id>).
+// The tasks panel: the nodes at work or waiting for the user, above the
+// tasks; each opens its page on the graph (/espace?open=node-<id>).
 
-// threadRow is a thread in the tasks panel.
-type threadRow struct {
-	Thread
-	Steps    []Step
-	Waits    bool // something waits for the user
-	Done     int
-	Total    int
-	Updated  time.Time
-	Progress []string // each step's status, in order, for its strip
+// nodeRow is a node in the tasks panel: its title unless it may be
+// someone else's words.
+type nodeRow struct {
+	ID, Title, State string
 }
 
-func (w *web) threadRows(activeOnly bool, n int) []threadRow {
-	ss, err := w.c.threads(activeOnly, n)
-	if err != nil {
-		return nil
-	}
-	out := make([]threadRow, 0, len(ss))
-	for _, s := range ss {
-		steps, _ := w.c.steps(s.ID)
-		x := threadRow{Thread: s, Steps: steps, Updated: s.Created}
-		for _, st := range steps {
-			if st.Status == stepDropped {
-				continue
-			}
-			x.Total++
-			x.Progress = append(x.Progress, st.Status)
-			if st.Status == stepAccepted {
-				x.Done++
-			}
-			if (st.Kind == stepChoice || st.Kind == stepUser || st.Card != "") && st.Status == stepRunning {
-				x.Waits = true
-			}
+func (w *web) nodeRows(n int) []nodeRow {
+	xs := w.c.activeNodes(n)
+	out := make([]nodeRow, 0, len(xs))
+	for _, x := range xs {
+		r := nodeRow{ID: x.ID, State: x.State}
+		if !x.External {
+			r.Title = x.Title
 		}
-		if s.active() && len(w.c.threadAsksOf(s.ID)) > 0 {
-			x.Waits = true
-		}
-		if l := w.c.threadLog(s.ID, 1); len(l) > 0 {
-			x.Updated = l[0].At
-		}
-		out = append(out, x)
-	}
-	return out
-}
-
-// threadAsksOf are the asks of a thread that wait.
-func (c *core) threadAsksOf(id int64) []int64 {
-	rows, err := c.store.db.Query(`SELECT id FROM thread_asks WHERE thread = ? AND state = ? ORDER BY id`, id, askPending)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []int64
-	for rows.Next() {
-		var n int64
-		if rows.Scan(&n) == nil {
-			out = append(out, n)
-		}
+		out = append(out, r)
 	}
 	return out
 }

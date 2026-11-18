@@ -124,7 +124,7 @@ func (c *core) handleStop(w http.ResponseWriter, r *http.Request) {
 }
 
 // taskError answers 404 for an unknown task, 409 otherwise: the task is not
-// in a state that allows the call, or its node refused it.
+// in a state that allows the call, or its device refused it.
 func taskError(w http.ResponseWriter, err error) {
 	status := http.StatusConflict
 	if errors.Is(err, errNoTask) {

@@ -3,12 +3,14 @@ package main
 import (
 	"testing"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // pushCard pushes a card as the code does, at a place.
 func pushCard(t *testing.T, c *core, key, place string, turn int, who string) {
 	t.Helper()
-	x, ok := c.compileCard(key, threadCardChars)
+	x, ok := c.compileCard(key, aboutCardChars)
 	if !ok {
 		t.Fatalf("no card for %s", key)
 	}
@@ -29,14 +31,15 @@ func usesOf(c *core, about string) map[string]cardUse {
 func TestCardUses(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	c.mem.now = time.Now
-	site := siteThread(t, c)
+	site := siteNode(t, c)
+	siteKey := nodeRef(site)
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "project:blog", Text: "Le blog tourne sur le NAS"})
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "project:shop", Text: "La boutique vend des tasses"})
 
 	// A turn's card, then the brain writes a decision of the subject: wrote.
 	turn := ownerSays(c, "On garde Astro pour le site")
-	pushCard(t, c, "project:site", placeTurn, c.turnSeq(), "")
-	if _, err := c.brainRemember(rememberIn{Kind: "decision", About: "project:site", Text: "Astro plutôt que WordPress", SourceRef: ref(turn)}); err != nil {
+	pushCard(t, c, siteKey, placeTurn, c.turnSeq(), "")
+	if _, err := c.brainRemember(rememberIn{Kind: "decision", About: siteKey, Text: "Astro plutôt que WordPress", SourceRef: ref(turn)}); err != nil {
 		t.Fatal(err)
 	}
 	// A turn's card the brain answers with, asking nothing: answered.
@@ -52,7 +55,7 @@ func TestCardUses(t *testing.T) {
 	c.store.addMessage(roleBrain, "Elle vend des tasses.", true)
 	// A task's card, and its remember of the subject: wrote; another
 	// task's that writes nothing: no.
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "nas", Runtime: "claude-code", State: stateRunning, About: "project:blog"})
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "nas", Runtime: "claude-code", State: stateRunning, About: "project:blog"})
 	pushCard(t, c, "project:blog", placeTask, 0, "t-1")
 	if _, err := c.taskRemember("t-1", taskRememberIn{Kind: "fact", About: "project:blog", Text: "Le blog a un flux RSS"}); err != nil {
 		t.Fatal(err)
@@ -77,29 +80,29 @@ func TestCardUses(t *testing.T) {
 	if u := usesOf(c, "")[placeTask]; u.Wrote != 1 || u.Unused != 1 {
 		t.Errorf("task: %s", u)
 	}
-	if u := usesOf(c, threadRef(site.ID))[placeTurn]; u.Pushed != 1 || u.Wrote != 1 {
+	if u := usesOf(c, siteKey)[placeTurn]; u.Pushed != 1 || u.Wrote != 1 {
 		t.Errorf("the site's: %s", u)
 	}
 	// The tasks' panel says how their cards were used.
 	if st := c.store.stats(time.Now().Add(-time.Hour)); st.Cards.Pushed != 2 || st.Cards.Used() != 1 || st.Cards.Judged() != 2 {
 		t.Errorf("stats: %+v", st.Cards)
 	}
-	// read_thread is asking again too.
-	photos, err := c.openThread(threadIn{Title: "Photos", Goal: "Rangées."}, nil, byBrain)
+	// node_read is asking again too.
+	d, err := c.nodes.Create(nodestore.New{Title: "Photos", Author: byUser}) // its opening is no use of the card
 	if err != nil {
 		t.Fatal(err)
 	}
-	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: threadRef(photos.ID), Text: "Les photos sont sur le NAS"})
+	photos := d.Node.Meta.ID
+	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: nodeRef(photos), Text: "Les photos sont sur le NAS"})
 	ownerSays(c, "Les photos ?")
-	c.store.db.Exec(`UPDATE thread_log SET at = at - 3600 WHERE thread = ?`, photos.ID) // its opening is no use of the card
-	pushCard(t, c, threadRef(photos.ID), placeTurn, c.turnSeq(), "")
-	if _, isErr := callBrainTool(t, c, "read_thread", map[string]any{"thread_id": photos.ID}); isErr {
-		t.Fatal("read_thread")
+	pushCard(t, c, nodeRef(photos), placeTurn, c.turnSeq(), "")
+	if _, isErr := callBrainTool(t, c, "node_read", map[string]any{"id": photos}); isErr {
+		t.Fatal("node_read")
 	}
 	c.store.addMessage(roleBrain, "Sur le NAS.", true)
 	c.judgeCardPushes(time.Now().Add(cardUseWindow + time.Minute))
-	if u := usesOf(c, threadRef(photos.ID))[placeTurn]; u.Pushed != 1 || u.Unused != 1 {
-		t.Errorf("read_thread: %s", u)
+	if u := usesOf(c, nodeRef(photos))[placeTurn]; u.Pushed != 1 || u.Unused != 1 {
+		t.Errorf("node_read: %s", u)
 	}
 }
 
@@ -107,12 +110,12 @@ func TestCardUses(t *testing.T) {
 // is the turn's; one answer counts for it alone.
 func TestPackCardsOfTurn(t *testing.T) {
 	c, _ := testMemoryCore(t)
-	th := siteThread(t, c)
+	th := nodeRef(siteNode(t, c))
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, About: "project:blog", Text: "Le blog tourne sur le NAS"})
-	site, _ := c.compileCard("project:site", threadCardChars) // its alias: the thread's card
-	blog, _ := c.compileCard("project:blog", threadCardChars)
-	c.packedCards([]pushedCard{site, blog}, 7, threadRef(th.ID))
-	if rows, want := pushRows(t, c), threadRef(th.ID)+" pack 7 \nproject:blog pack 0 "; rows != want {
+	site, _ := c.compileCard(th, aboutCardChars)
+	blog, _ := c.compileCard("project:blog", aboutCardChars)
+	c.packedCards([]pushedCard{site, blog}, 7, th)
+	if rows, want := pushRows(t, c), th+" pack 7 \nproject:blog pack 0 "; rows != want {
 		t.Fatalf("counted: %q, want %q", rows, want)
 	}
 }

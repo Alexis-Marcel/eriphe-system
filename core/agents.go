@@ -30,25 +30,25 @@ type Provider struct {
 	// the models it serves. Neither is secret; its key, if any, is.
 	BaseURL string   `json:"base_url,omitempty"`
 	Models  []string `json:"models,omitempty"`
-	// Or the node that lends it (its -model-server), in place of BaseURL:
-	// the tasks reach it through eriphe-core and that node's tunnel, and
+	// Or the device that lends it (its -model-server), in place of BaseURL:
+	// the tasks reach it through eriphe-core and that device's tunnel, and
 	// its key, if any, never leaves eriphe-core (model_relay.go).
-	Node string `json:"node,omitempty"`
+	Device string `json:"device,omitempty"`
 }
 
 // Agent is one choice the brain has for a task.
 type Agent struct {
-	Runtime  string `json:"runtime"`         // agent program the node injects into the task: claude-code, opencode, codex, or acp (the image's own)
+	Runtime  string `json:"runtime"`         // agent program the device injects into the task: claude-code, opencode, codex, or acp (the image's own)
 	Provider string `json:"provider"`        // key of providers
 	Model    string `json:"model,omitempty"` // model name for the runtime (opencode: provider/model); empty for its default
-	Image    string `json:"image,omitempty"` // worker image; the node's default if empty
+	Image    string `json:"image,omitempty"` // worker image; the device's default if empty
 	// Command is an ACP agent's command line (runtime acp), one argument
 	// per item, run as is in the container: never through a shell.
 	Command []string `json:"command,omitempty"`
 	Use     string   `json:"use"`             // when to pick this agent, for the brain
-	Needs   []string `json:"needs,omitempty"` // node labels required, e.g. gpu
+	Needs   []string `json:"needs,omitempty"` // device labels required, e.g. gpu
 	// Soft preferences of the scheduler: cpu (more CPUs), memory (more RAM),
-	// or any other word, a node label to prefer.
+	// or any other word, a device label to prefer.
 	Prefers []string `json:"prefers,omitempty"`
 }
 
@@ -88,8 +88,8 @@ func checkProviderEntry(name string, p Provider) error {
 		}
 	} else if p.Secret == "" {
 		return fmt.Errorf("provider %s: secret is required", name)
-	} else if p.BaseURL != "" || len(p.Models) > 0 || p.Node != "" {
-		return fmt.Errorf("provider %s: only a self-hosted model server (%s) takes base_url, node and models", name, selfHostedKind)
+	} else if p.BaseURL != "" || len(p.Models) > 0 || p.Device != "" {
+		return fmt.Errorf("provider %s: only a self-hosted model server (%s) takes base_url, device and models", name, selfHostedKind)
 	}
 	if k.CustomEnv {
 		if err := checkCredentialEnv(p.Env); err != nil {
@@ -109,11 +109,11 @@ func checkProviderEntry(name string, p Provider) error {
 // its models. Its key is optional: a model server on the LAN often has none.
 func checkSelfHostedProvider(p Provider) error {
 	switch {
-	case p.Node != "" && p.BaseURL != "":
-		return errors.New("base_url or node, not both")
-	case p.Node != "":
-		if !nodeName.MatchString(p.Node) {
-			return fmt.Errorf("bad node %q", p.Node)
+	case p.Device != "" && p.BaseURL != "":
+		return errors.New("base_url or device, not both")
+	case p.Device != "":
+		if !deviceName.MatchString(p.Device) {
+			return fmt.Errorf("bad device %q", p.Device)
 		}
 	default:
 		if err := checkBaseURL(p.BaseURL); err != nil {
@@ -150,7 +150,7 @@ func (c *Config) checkAgentEntry(name string, a Agent) error {
 	for _, pref := range a.Prefers {
 		// Labels are free text, but a preference is one word.
 		if pref == "" || strings.ContainsAny(pref, " ,") {
-			return fmt.Errorf("agent %s: bad preference %q (cpu, memory or a node label)", name, pref)
+			return fmt.Errorf("agent %s: bad preference %q (cpu, memory or a device label)", name, pref)
 		}
 	}
 	return nil
@@ -179,8 +179,8 @@ func (c *Config) lendAgent(a Agent) (map[string]string, error) {
 		}
 		return env, nil
 	}
-	if p.Secret == "" || p.Kind == selfHostedKind && p.Node != "" {
-		// A self-hosted model server without a key, or one behind a node,
+	if p.Secret == "" || p.Kind == selfHostedKind && p.Device != "" {
+		// A self-hosted model server without a key, or one behind a device,
 		// whose key eriphe-core adds on the way (model_relay.go).
 		return map[string]string{}, nil
 	}
@@ -198,7 +198,7 @@ func (c *Config) lendAgent(a Agent) (map[string]string, error) {
 // at it: its address and key variable for OpenCode, and that one host:port
 // added to its egress rule, which its relay lets through even on the LAN.
 // A task without egress gets none. env is what lendAgent lent.
-func (c *Config) modelEndpoint(agentName string, env map[string]string, spec *nodeTaskSpec) {
+func (c *Config) modelEndpoint(agentName string, env map[string]string, spec *deviceTaskSpec) {
 	_, a, err := c.agent(agentName)
 	if err != nil {
 		return
@@ -207,14 +207,14 @@ func (c *Config) modelEndpoint(agentName string, env map[string]string, spec *no
 	if p.Kind != selfHostedKind || !harnessOf(a.Runtime).ModelServer {
 		return
 	}
-	if p.Node != "" {
-		// Behind a node: through the task's own node and eriphe-core, never
+	if p.Device != "" {
+		// Behind a device: through the task's own device and eriphe-core, never
 		// the network; its egress rule stays as it is.
-		spec.ModelEndpoint = &nodeModelEndpoint{Relay: true}
+		spec.ModelEndpoint = &deviceModelEndpoint{Relay: true}
 		return
 	}
 	k, _ := kindOf(selfHostedKind)
-	ep := &nodeModelEndpoint{BaseURL: p.BaseURL}
+	ep := &deviceModelEndpoint{BaseURL: p.BaseURL}
 	if _, ok := env[k.Env]; ok {
 		ep.KeyEnv = k.Env
 	}
@@ -321,7 +321,7 @@ func configSafe(r rune) bool {
 var credentialEnv = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
 
 // reservedEnv are variables a credential must not take: the container's
-// own, the node's and eriphe's, and those that change how a program runs.
+// own, the device's and eriphe's, and those that change how a program runs.
 var reservedEnv = append([]string{"PATH", "HOME", "USER", "SHELL", "PWD", "TERM", "LANG", "TZ", "TMPDIR",
 	"NODE_OPTIONS", "NODE_PATH", "NODE_EXTRA_CA_CERTS", "NODE_TLS_REJECT_UNAUTHORIZED",
 	"SSL_CERT_FILE", "SSL_CERT_DIR", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "PYTHONPATH", "PYTHONSTARTUP",
@@ -378,18 +378,18 @@ type agentInfo struct {
 	Needs     []string `json:"needs,omitempty"`
 	Prefers   []string `json:"prefers,omitempty"`
 	Default   bool     `json:"default,omitempty"`
-	Available bool     `json:"available"` // an online node can run it now
+	Available bool     `json:"available"` // an online device can run it now
 }
 
 func (c *core) listAgents() ([]agentInfo, error) {
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		return nil, err
 	}
 	out := []agentInfo{}
 	for name, a := range c.conf().Agents {
 		available := false
-		for _, n := range nodes {
+		for _, n := range devices {
 			if n.Online && fits(n, a.Runtime, a.Needs) {
 				available = true
 			}
@@ -401,14 +401,14 @@ func (c *core) listAgents() ([]agentInfo, error) {
 	return out, nil
 }
 
-// fits tells whether a node offers a runtime and carries every label needed.
-func fits(n NodeRow, runtime string, needs []string) bool {
+// fits tells whether a device offers a runtime and carries every label needed.
+func fits(n DeviceRow, runtime string, needs []string) bool {
 	return placement{Runtime: runtime, Needs: needs}.fits(n)
 }
 
-// fits tells whether a node can take what p asks: its runtime (or, for a
+// fits tells whether a device can take what p asks: its runtime (or, for a
 // service, that it runs services) and every label needed.
-func (p placement) fits(n NodeRow) bool {
+func (p placement) fits(n DeviceRow) bool {
 	info := parseInfo(n)
 	if p.Service && !info.Services || !p.Service && !slices.Contains(info.Runtimes, p.Runtime) {
 		return false

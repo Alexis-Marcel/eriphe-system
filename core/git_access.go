@@ -14,11 +14,11 @@ import (
 
 // git and gh on the path of an access. A task lent a GitHub repository holds
 // no token: GH_TOKEN holds a placeholder, which gh reads and git's credential
-// helper hands over. The node's relay decrypts github.com and api.github.com
+// helper hands over. The device's relay decrypts github.com and api.github.com
 // for that task and hands each request here, as for any access
 // (lent_access.go), where the real token goes in:
 //
-//	git, gh → the node's relay → eriphe-core (decides, mints) → GitHub
+//	git, gh → the device's relay → eriphe-core (decides, mints) → GitHub
 //
 // The decision is made on each request, from what the request is: a push is
 // git-receive-pack, and a placeholder is no proof.
@@ -44,7 +44,7 @@ const (
 	gitHost   = "github.com"
 	gitTarget = "github.com:443"
 	ghTarget  = "api.github.com:443"
-	// gitAccessName and gitAccessEnv are how the node gets GitHub, as an
+	// gitAccessName and gitAccessEnv are how the device gets GitHub, as an
 	// access of the task's.
 	gitAccessName = "github"
 	gitAccessEnv  = "GH_TOKEN"
@@ -61,13 +61,13 @@ func gitPlaceholder(taskID string) string { return "eriphe-git-" + taskID }
 
 func isRepoRef(e ResourceRef) bool { return e.Kind == resRepo && repoOf(e.Ref) != "" }
 
-// lentGit is GitHub as the node gets it, for a task lent a repository there.
+// lentGit is GitHub as the device gets it, for a task lent a repository there.
 // Reads go this way too: one path for all of a repository.
-func lentGit(taskID string, list []ResourceRef) []nodeAccess {
+func lentGit(taskID string, list []ResourceRef) []deviceAccess {
 	if !slices.ContainsFunc(list, isRepoRef) {
 		return nil
 	}
-	return []nodeAccess{{Name: gitAccessName, Hosts: []string{gitTarget, ghTarget}, Env: gitAccessEnv, Placeholder: gitPlaceholder(taskID)}}
+	return []deviceAccess{{Name: gitAccessName, Hosts: []string{gitTarget, ghTarget}, Env: gitAccessEnv, Placeholder: gitPlaceholder(taskID)}}
 }
 
 // gitCall is what a request to github.com is, for git.

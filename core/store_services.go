@@ -8,12 +8,12 @@ import (
 )
 
 // The services table: what each local MCP server should be (its spec,
-// without secrets), where it runs, and what its node last said.
+// without secrets), where it runs, and what its device last said.
 
 func init() {
 	extraSchema = append(extraSchema, `
 CREATE TABLE IF NOT EXISTS services (
-  name TEXT PRIMARY KEY, spec TEXT NOT NULL, hash TEXT NOT NULL, node TEXT NOT NULL DEFAULT '',
+  name TEXT PRIMARY KEY, spec TEXT NOT NULL, hash TEXT NOT NULL, device TEXT NOT NULL DEFAULT '',
   desired TEXT NOT NULL DEFAULT 'running', state TEXT NOT NULL DEFAULT 'pending',
   restarts INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '',
   pending_reason TEXT NOT NULL DEFAULT '', updated INTEGER NOT NULL);`)
@@ -23,7 +23,7 @@ type ServiceRow struct {
 	Name          string    `json:"name"`
 	Spec          RunSpec   `json:"spec"`
 	Hash          string    `json:"hash"`
-	Node          string    `json:"node"` // empty while it waits for one
+	Device        string    `json:"device"` // empty while it waits for one
 	Desired       string    `json:"desired"`
 	State         string    `json:"state"` // pending, starting, running, failed, stopped
 	Restarts      int       `json:"restarts"`
@@ -32,13 +32,13 @@ type ServiceRow struct {
 	Updated       time.Time `json:"updated"`
 }
 
-const serviceColumns = `name, spec, hash, node, desired, state, restarts, error, pending_reason, updated`
+const serviceColumns = `name, spec, hash, device, desired, state, restarts, error, pending_reason, updated`
 
 func scanService(sc interface{ Scan(...any) error }) (*ServiceRow, error) {
 	var r ServiceRow
 	var spec string
 	var updated int64
-	if err := sc.Scan(&r.Name, &spec, &r.Hash, &r.Node, &r.Desired, &r.State, &r.Restarts, &r.Error,
+	if err := sc.Scan(&r.Name, &spec, &r.Hash, &r.Device, &r.Desired, &r.State, &r.Restarts, &r.Error,
 		&r.PendingReason, &updated); err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (s *Store) service(name string) (*ServiceRow, error) {
 }
 
 // putService writes a service's spec; a new or changed one starts over
-// (pending until its node runs it), on the same node.
+// (pending until its device runs it), on the same device.
 func (s *Store) putService(name string, spec RunSpec) error {
 	raw, _ := json.Marshal(spec)
 	_, err := s.db.Exec(`INSERT INTO services (name, spec, hash, updated) VALUES (?, ?, ?, ?)
@@ -100,10 +100,10 @@ func (s *Store) updateService(name string, fields map[string]any) error {
 	return err
 }
 
-// assignService gives a waiting service its node: true if it did.
-func (s *Store) assignService(name, node string) (bool, error) {
-	res, err := s.db.Exec(`UPDATE services SET node = ?, state = 'pending', restarts = 0, error = '',
-		pending_reason = '', updated = ? WHERE name = ? AND node = ''`, node, time.Now().Unix(), name)
+// assignService gives a waiting service its device: true if it did.
+func (s *Store) assignService(name, device string) (bool, error) {
+	res, err := s.db.Exec(`UPDATE services SET device = ?, state = 'pending', restarts = 0, error = '',
+		pending_reason = '', updated = ? WHERE name = ? AND device = ''`, device, time.Now().Unix(), name)
 	if err != nil {
 		return false, err
 	}
@@ -111,14 +111,14 @@ func (s *Store) assignService(name, node string) (bool, error) {
 	return n == 1, err
 }
 
-// unassignService takes a service from its node, to be placed again.
+// unassignService takes a service from its device, to be placed again.
 func (s *Store) unassignService(name, reason string) error {
-	return s.updateService(name, map[string]any{"node": "", "state": statePending, "restarts": 0,
+	return s.updateService(name, map[string]any{"device": "", "state": statePending, "restarts": 0,
 		"error": "", "pending_reason": reason})
 }
 
-func (s *Store) serviceCount(node string) int {
+func (s *Store) serviceCount(device string) int {
 	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM services WHERE node = ? AND desired = 'running'`, node).Scan(&n)
+	s.db.QueryRow(`SELECT COUNT(*) FROM services WHERE device = ? AND desired = 'running'`, device).Scan(&n)
 	return n
 }

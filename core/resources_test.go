@@ -157,7 +157,7 @@ func TestResolveTools(t *testing.T) {
 }
 
 // The normalized list is kept with the task, and the old columns and the
-// node's spec fields still follow from it.
+// device's spec fields still follow from it.
 func TestTaskKeepsResources(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
@@ -193,7 +193,7 @@ func TestTaskKeepsResources(t *testing.T) {
 	if raw != "[]" {
 		t.Fatalf("empty list stored as %q", raw)
 	}
-	store.insertTask(&TaskRow{ID: "t-old", Node: "nas", Runtime: "claude-code", Prompt: "x", State: stateRunning, Folders: "Clients"})
+	store.insertTask(&TaskRow{ID: "t-old", Device: "nas", Runtime: "claude-code", Prompt: "x", State: stateRunning, Folders: "Clients"})
 	if old, _ := store.task("t-old"); old.Resources != nil {
 		t.Fatalf("old task %+v", old.Resources)
 	}

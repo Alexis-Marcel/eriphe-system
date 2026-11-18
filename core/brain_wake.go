@@ -44,9 +44,6 @@ func (c *core) intentionsTick() {
 	for _, x := range became {
 		log.Printf("memory: intention %d is due", x.ID)
 	}
-	if len(became) > 0 {
-		c.threadDeadlines(time.Now()) // a thread that follows one wakes (thread_steps.go)
-	}
 	if xs, err := c.mem.toSurface(); err == nil && len(xs) > 0 {
 		c.ping()
 	}
@@ -77,10 +74,9 @@ func (c *core) deliverIntentions(ctx context.Context, a Assistant, t *TaskRow) (
 	p.Due = due
 	text := c.turnHead(time.Now()) + "\n\n" + p.render(c.conf().User) + "\n" + fmt.Sprintf(wakeInstructions, c.conf().User)
 	c.turn.goOn(0, 0, t.LastSeq, c.turnTaint())
-	c.turn.about(0)      // about no thread until it names one (thread_turn.go)
-	c.turn.answersIn(0)  // its answer is the home's (thread_talk.go)
+	c.turn.about("")     // about no node until it names one (node_turn.go)
+	c.turn.answersIn("") // its answer is the home's (node_turn.go)
 	c.turn.name(nil)     // nor about what my last message named (names.go)
-	c.front.begin(false) // a heartbeat answers no one in the workspace (workspace_front.go)
 	var ids []string
 	for _, x := range due {
 		ids = append(ids, fmt.Sprintf("%d", x.ID))

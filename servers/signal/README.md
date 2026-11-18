@@ -51,7 +51,7 @@ The image is `gcr.io/distroless/cc-debian12:nonroot` with:
 
 - signal-cli's native build (GraalVM, no Java);
 - zlib, which that build needs;
-- libgcc, which libsignal's library needs. signal-cli unpacks that library in `/tmp`, the node's
+- libgcc, which libsignal's library needs. signal-cli unpacks that library in `/tmp`, the device's
   tmpfs.
 
 It runs read-only, non-root, with every capability dropped. Only `/data` is written.

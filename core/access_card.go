@@ -43,8 +43,8 @@ CREATE TABLE IF NOT EXISTS access_asks (
 	created       INTEGER NOT NULL,
 	decided       INTEGER NOT NULL DEFAULT 0,
 	run           INTEGER NOT NULL DEFAULT 0, -- a triggered skill's run (skill_cards.go)
-	thread        INTEGER NOT NULL DEFAULT 0, -- with item: the thread whose item it acts on (item_cards.go)
-	source        TEXT NOT NULL DEFAULT '',   -- the thread's source that lists the item
+	node          TEXT NOT NULL DEFAULT '',   -- the node it belongs to: its item's, else its run's (item_cards.go)
+	source        TEXT NOT NULL DEFAULT '',   -- with item: the node's source that lists it
 	item          TEXT NOT NULL DEFAULT '',   -- the item's id in that source
 	batch         INTEGER NOT NULL DEFAULT 0); -- the card it is on, kind calls: its first call's id`
 
@@ -52,7 +52,7 @@ func init() {
 	extraSchema = append(extraSchema, accessCardSchema)
 	// A table made before the item cards lacks their columns.
 	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
-		for _, col := range []struct{ name, def string }{{"thread", "INTEGER NOT NULL DEFAULT 0"}, {"source", "TEXT NOT NULL DEFAULT ''"},
+		for _, col := range []struct{ name, def string }{{"node", "TEXT NOT NULL DEFAULT ''"}, {"source", "TEXT NOT NULL DEFAULT ''"},
 			{"item", "TEXT NOT NULL DEFAULT ''"}, {"batch", "INTEGER NOT NULL DEFAULT 0"}} {
 			if err := addColumn(db, "access_asks", col.name, col.def); err != nil {
 				return err
@@ -234,19 +234,19 @@ type accessQuestion struct {
 	Tainted    string
 	State      string
 	Run        int64  // a triggered skill's run: its card is the run's (skill_cards.go)
-	Thread     int64  // with Item: the thread whose item it acts on (item_cards.go)
-	Source     string // the thread's source that lists the item
+	Node       string // the node it belongs to: its item's, else its run's (item_cards.go)
+	Source     string // with Item: the node's source that lists it
 	Item       string // the item's id in that source
 	Batch      int64  // the calls card it is on, 0 when none
-	source     string // who raised it, when not its task: thread:<id>
+	source     string // who raised it, when not its task: node:<id>
 }
 
 func (c *core) accessAskOf(id int64) (accessQuestion, error) {
 	var a accessQuestion
 	var refs string
-	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state, run, thread, source, item, batch FROM access_asks WHERE id = ?`, id).
+	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state, run, node, source, item, batch FROM access_asks WHERE id = ?`, id).
 		Scan(&a.ID, &a.TaskID, &a.Permission, &a.Need.Server, &a.Need.Category, &a.Need.Account, &a.Call, &a.Input, &refs, &a.Tainted, &a.State, &a.Run,
-			&a.Thread, &a.Source, &a.Item, &a.Batch)
+			&a.Node, &a.Source, &a.Item, &a.Batch)
 	json.Unmarshal([]byte(refs), &a.Refs)
 	return a, err
 }
@@ -308,7 +308,7 @@ const brainPageWaits = "Pas fait pour l'instant : une carte le demande à %s. Ne
 func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string, input map[string]any, pending map[string]int) error {
 	raw, _ := json.Marshal(input)
 	var id int64
-	source := c.turnSource() // in a turn about a thread, the card is the thread's (thread_turn.go)
+	source := c.turnSource() // in a turn about a node, the card is the node's (node_turn.go)
 	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE call LIKE ? AND input = ? AND state = ? AND batch = 0`, tool+" %", string(raw), startProposed).Scan(&id) != nil {
 		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: c.callNeed(tool, input, c.pool.facts(tool, input)),
@@ -333,9 +333,6 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	ctx, cancel := context.WithTimeout(context.Background(), approvedCallTimeout)
 	defer cancel()
 	name, _, _ := strings.Cut(a.Call, " ")
-	if c.runCallStep(ctx, a, name) {
-		return // a thread's step: its thread hears of it (thread_steps.go)
-	}
 	if a.Run != 0 {
 		text, _ := c.trackedCall(ctx, a, name)
 		c.runCallDone(a, text) // a run's: the brain is not told (skill_cards.go)
@@ -343,7 +340,7 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	}
 	if a.Batch != 0 {
 		text, _ := c.trackedCall(ctx, a, name)
-		c.itemCallDone(a, text) // an item's: its thread's log (item_cards.go)
+		c.itemCallDone(a, text) // an item's (item_cards.go)
 		return
 	}
 	if name == webFetchTool || name == webSearchTool {
@@ -483,7 +480,7 @@ func (c *core) accessProposal(p proposal) proposal {
 		p.Outcome = cardRejected
 	case startProposed:
 		if a.Call != "" {
-			p.Pending = !c.callStepGone(p.ID) // it waits by itself, the brain may have restarted; a step's while its step waits
+			p.Pending = true // it waits by itself, the brain may have restarted
 			break
 		}
 		fallthrough
@@ -636,12 +633,12 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 			if err := c.releaseApproved(a); err != nil {
 				return err
 			}
-			c.logReleaseDecided(a.TaskID, a.Refs, true) // task_answer_log.go
+			c.traceTask(a.TaskID, byUser, fmt.Sprintf(tr(c.userLang(), "tasknode.released"), strings.Join(a.Refs, ", ")), "") // task_node.go
 			c.settleWaiting(ctx, a, true)
 			return nil
 		}
 		c.store.logDecision(a.TaskID, "", "release "+strings.Join(a.Refs, ", "), nil, decideDeny, byUser, "refusé sur la carte")
-		c.logReleaseDecided(a.TaskID, a.Refs, false)
+		c.traceTask(a.TaskID, byUser, fmt.Sprintf(tr(c.userLang(), "tasknode.kept"), strings.Join(a.Refs, ", ")), "")
 		return nil
 	case a.Call != "":
 		if approve {
@@ -650,9 +647,6 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 		}
 		name, _, _ := strings.Cut(a.Call, " ")
 		c.store.logDecision(a.TaskID, a.Permission, name, nil, decideDeny, byUser, "refusé sur la carte")
-		if c.callStepRefused(a) {
-			return nil // a thread's step: its thread hears of it (thread_steps.go)
-		}
 		if a.Run != 0 {
 			c.runCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name))
 			return nil
@@ -785,7 +779,6 @@ func (c *core) accessDecidedTold(id int64, approve bool) {
 	if approve {
 		word = "accepté"
 	}
-	thread, _ := c.threadOfTask(a.TaskID) // its step's thread's (thread_talk.go)
-	c.store.addThreadMessage(roleEvent, fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), "", thread, false)
+	c.store.addNodeMessage(roleEvent, fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), "", c.taskEventNode(a.TaskID), false)
 	c.ping()
 }

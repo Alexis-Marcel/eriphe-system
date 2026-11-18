@@ -41,8 +41,8 @@ func TestContractNormalize(t *testing.T) {
 // instruction, and returned by task_status; no other kind of task takes one.
 func TestRunTaskContract(t *testing.T) {
 	c := newCatalogCore(t)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
 	k := &taskContract{Objective: "The contact form sends mail", Constraints: []string{"keep the public API"},
 		Checks:   []taskCheck{{Name: "tests", Run: "go test ./...", Dir: "core"}, {Name: "report", Exists: "out/report.pdf"}},
 		Evidence: []string{"the PR link"}, Budget: &taskBudget{Minutes: 60, Turns: 30}}
@@ -52,7 +52,7 @@ func TestRunTaskContract(t *testing.T) {
 	}
 	var raw string
 	c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, task.ID).Scan(&raw)
-	var spec nodeTaskSpec
+	var spec deviceTaskSpec
 	json.Unmarshal([]byte(raw), &spec)
 	if !strings.HasPrefix(spec.AppendSystemPrompt, workerVoice(defaultDisplayName, "fr")+"\n\n## Task contract\nObjective: The contact form sends mail") {
 		t.Errorf("system prompt %q", spec.AppendSystemPrompt)
@@ -63,7 +63,7 @@ func TestRunTaskContract(t *testing.T) {
 			t.Errorf("system prompt lacks %q", want)
 		}
 	}
-	// Its node runs the checks, and sends a failure back twice at most.
+	// Its device runs the checks, and sends a failure back twice at most.
 	if len(spec.Checks) != 2 || spec.Checks[0].Timeout != checkTimeout || spec.Checks[1].Exists != "out/report.pdf" || spec.CheckRounds != defaultAttempts {
 		t.Errorf("spec checks %+v, rounds %d", spec.Checks, spec.CheckRounds)
 	}
@@ -74,7 +74,7 @@ func TestRunTaskContract(t *testing.T) {
 	if _, err := c.runTask(context.Background(), runRequest{Prompt: "x", Contract: &taskContract{}}); err == nil {
 		t.Error("a contract without objective was accepted")
 	}
-	if _, err := c.startTask(context.Background(), "memory", runRequest{Prompt: "x", Contract: k}, nodeTaskSpec{}); err == nil {
+	if _, err := c.startTask(context.Background(), "memory", runRequest{Prompt: "x", Contract: k}, deviceTaskSpec{}); err == nil {
 		t.Error("a non-worker took a contract")
 	}
 	// Without a contract, nothing changes.
@@ -114,7 +114,7 @@ func TestRunTaskContractSchema(t *testing.T) {
 func TestContractOnDrawer(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	tw.c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateRunning})
+	tw.c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateRunning})
 	tw.c.store.setContract("t-1", &taskContract{Objective: "The form sends mail", Checks: []taskCheck{{Name: "tests", Run: "go test ./..."}},
 		Evidence: []string{"the PR link"}, Budget: &taskBudget{Minutes: 45}})
 	_, body, _ := tw.do("GET", "/tasks/t-1", nil, map[string]string{"HX-Request": "true"})

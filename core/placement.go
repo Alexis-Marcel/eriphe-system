@@ -12,33 +12,33 @@ import (
 // here is a user setting: the class comes from what the task is.
 //
 //   - resident: an assistant that talks to the user or is woken by events
-//     (the brain first). Hard rule: an online always-on node that fits; the
-//     best other node only when none does, and it comes back as soon as it
+//     (the brain first). Hard rule: an online always-on device that fits; the
+//     best other device only when none does, and it comes back as soon as it
 //     can. Someone waits for its answer: a machine that sleeps is no home.
 //   - bound: a task lent the user's folders (placement.Bound). It goes to
 //     a machine holding them up to date (its folders' or one with copies,
 //     folder_copies.go), the best by the scores, and waits for one.
 //   - the others: the scores of scheduler.go, preferences only.
 //
-// A node chosen by hand (the task's or the assistant's node) always wins.
+// A device chosen by hand (the task's or the assistant's device) always wins.
 
 const (
-	// residentNodeGrace is how long a resident task waits for its node to
+	// residentDeviceGrace is how long a resident task waits for its device to
 	// come back before it moves: short, someone may be waiting.
-	residentNodeGrace = 30 * time.Second
+	residentDeviceGrace = 30 * time.Second
 	// alwaysOnGrace is how long a resident assistant waits for an
-	// always-on node that left before it starts or moves elsewhere: after
-	// eriphe-core restarts, the node of its own machine connects a few
-	// seconds later, and a blip passes. Started on a node that may sleep,
+	// always-on device that left before it starts or moves elsewhere: after
+	// eriphe-core restarts, the device of its own machine connects a few
+	// seconds later, and a blip passes. Started on a device that may sleep,
 	// it would move back at its first idle and lose its session.
 	alwaysOnGrace = time.Minute
-	// pendingNodeGrace is how long a task not started yet waits for its
-	// node before it is placed again, like a pod on an unreachable node.
-	pendingNodeGrace = 5 * time.Minute
+	// pendingDeviceGrace is how long a task not started yet waits for its
+	// device before it is placed again, like a pod on an unreachable device.
+	pendingDeviceGrace = 5 * time.Minute
 )
 
 // resident tells whether an assistant of this role lives on an always-on
-// node: one that talks to the user, hears the conversation, or is woken
+// device: one that talks to the user, hears the conversation, or is woken
 // by triggers.
 func (r assistantRole) resident() bool {
 	return r.can(powerTalksToUser) || r.can(powerReceivesConversation) || len(r.Triggers) > 0 || len(r.Wakes) > 0
@@ -50,10 +50,10 @@ func residentKind(kind string) bool {
 	return ok && r.resident()
 }
 
-// steadyNodes are the online always-on nodes that can run p.
-func steadyNodes(nodes []NodeRow, p placement) []NodeRow {
-	var out []NodeRow
-	for _, n := range nodes {
+// steadyDevices are the online always-on devices that can run p.
+func steadyDevices(devices []DeviceRow, p placement) []DeviceRow {
+	var out []DeviceRow
+	for _, n := range devices {
 		if n.Online && p.fits(n) && parseInfo(n).AlwaysOn {
 			out = append(out, n)
 		}
@@ -61,13 +61,13 @@ func steadyNodes(nodes []NodeRow, p placement) []NodeRow {
 	return out
 }
 
-// awaitedAlwaysOn is the always-on node that can run p and left less than
+// awaitedAlwaysOn is the always-on device that can run p and left less than
 // alwaysOnGrace ago, counted from eriphe-core's start at the earliest,
-// when no always-on node that can is online: a resident task waits for
-// it rather than start on a node that may sleep. "" if there is none.
+// when no always-on device that can is online: a resident task waits for
+// it rather than start on a device that may sleep. "" if there is none.
 func (c *core) awaitedAlwaysOn(p placement) string {
-	all, err := c.store.nodes()
-	if err != nil || len(steadyNodes(c.schedulable(all), p)) > 0 {
+	all, err := c.store.devices()
+	if err != nil || len(steadyDevices(c.schedulable(all), p)) > 0 {
 		return ""
 	}
 	for _, n := range all {
@@ -78,7 +78,7 @@ func (c *core) awaitedAlwaysOn(p placement) string {
 	return ""
 }
 
-// placementOf is what a task asks of its node, from its agent and folders now.
+// placementOf is what a task asks of its device, from its agent and folders now.
 func (c *core) placementOf(t *TaskRow) (placement, error) {
 	_, agent, err := c.conf().agent(t.Agent)
 	if err != nil {
@@ -93,13 +93,13 @@ func (c *core) placementOf(t *TaskRow) (placement, error) {
 	return p, nil
 }
 
-// noteFallback logs why a resident task went to a node that may sleep.
-func noteFallback(id, kind, name string, nodes []NodeRow, p placement) {
+// noteFallback logs why a resident task went to a device that may sleep.
+func noteFallback(id, kind, name string, devices []DeviceRow, p placement) {
 	if !p.Resident || name == "" {
 		return
 	}
 	var why []string
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.Name == name && parseInfo(n).AlwaysOn {
 			return
 		}
@@ -114,14 +114,14 @@ func noteFallback(id, kind, name string, nodes []NodeRow, p placement) {
 		}
 	}
 	if len(why) == 0 {
-		why = []string{"no node is always on"}
+		why = []string{"no device is always on"}
 	}
 	log.Printf("task %s (%s) placed on %s for now: %s", id, kind, name, strings.Join(why, ", "))
 }
 
-// since is when a node was last there, eriphe-core's start at the
-// earliest: after a restart, nodes need a moment to connect again.
-func (c *core) since(n NodeRow) time.Time {
+// since is when a device was last there, eriphe-core's start at the
+// earliest: after a restart, devices need a moment to connect again.
+func (c *core) since(n DeviceRow) time.Time {
 	if n.LastSeen.Before(c.started) {
 		return c.started
 	}
@@ -129,53 +129,53 @@ func (c *core) since(n NodeRow) time.Time {
 }
 
 // moveResident moves an assistant's task that should live elsewhere: its
-// node has been offline past residentNodeGrace (alwaysOnGrace for an
-// always-on one) and another can take it, or it runs on a node that may
+// device has been offline past residentDeviceGrace (alwaysOnGrace for an
+// always-on one) and another can take it, or it runs on a device that may
 // sleep while an always-on one can take it now (only at idle, between two turns). It stops the task; the
 // controller starts the next one, which the scheduler places, without
-// resuming: the session is on the old node, and the thread is eriphe-core's.
+// resuming: the session is on the old device, and the conversation is eriphe-core's.
 // It reports whether it moved it.
 func (c *core) moveResident(a Assistant, r assistantRole, t *TaskRow) bool {
-	if a.Node != "" || t.Node == "" || !r.resident() {
+	if a.Device != "" || t.Device == "" || !r.resident() {
 		return false
 	}
 	p, err := c.placementOf(t)
 	if err != nil || p.Bound {
 		return false // bound to its folders: it waits for its machine
 	}
-	all, err := c.store.nodes()
+	all, err := c.store.devices()
 	if err != nil {
 		return false
 	}
-	nodes := c.schedulable(all)
-	i := slices.IndexFunc(all, func(n NodeRow) bool { return n.Name == t.Node })
+	devices := c.schedulable(all)
+	i := slices.IndexFunc(all, func(n DeviceRow) bool { return n.Name == t.Device })
 	var why string
 	switch {
 	case i < 0:
 		return false // forgotten: its tasks are lost with it, and the controller starts another
 	case !all[i].Online:
-		grace := residentNodeGrace
+		grace := residentDeviceGrace
 		if parseInfo(all[i]).AlwaysOn {
 			grace = alwaysOnGrace // it comes back: eriphe-core's own machine, or a blip
 		}
 		if time.Since(c.since(all[i])) < grace {
 			return false
 		}
-		if !slices.ContainsFunc(nodes, func(n NodeRow) bool { return n.Online && n.Name != t.Node && p.fits(n) }) {
-			return false // nowhere else to go: it waits for its node
+		if !slices.ContainsFunc(devices, func(n DeviceRow) bool { return n.Online && n.Name != t.Device && p.fits(n) }) {
+			return false // nowhere else to go: it waits for its device
 		}
-		why = fmt.Sprintf("node %s has been offline since %s", t.Node, c.since(all[i]).Format(time.TimeOnly))
+		why = fmt.Sprintf("device %s has been offline since %s", t.Device, c.since(all[i]).Format(time.TimeOnly))
 	case !parseInfo(all[i]).AlwaysOn && t.State == stateIdle && !c.hasUndelivered(t.ID):
-		steady := steadyNodes(nodes, p)
+		steady := steadyDevices(devices, p)
 		if len(steady) == 0 {
 			return false
 		}
-		why = fmt.Sprintf("node %s may sleep and the always-on %s can take it", t.Node, steady[0].Name)
+		why = fmt.Sprintf("device %s may sleep and the always-on %s can take it", t.Device, steady[0].Name)
 	default:
 		return false
 	}
-	log.Printf("%s: moving task %s off %s: %s", c.assistantLog(a), t.ID, t.Node, why)
-	// What it was given but its node never received goes to the next task.
+	log.Printf("%s: moving task %s off %s: %s", c.assistantLog(a), t.ID, t.Device, why)
+	// What it was given but its device never received goes to the next task.
 	if a.has(triggerConversation) && c.hasUndelivered(t.ID) {
 		if from, to := c.turn.span(); from > 0 {
 			c.store.undeliver(from, to)
@@ -191,16 +191,16 @@ func (c *core) moveResident(a Assistant, r assistantRole, t *TaskRow) bool {
 	return true
 }
 
-// replaceStranded places again the tasks not started yet whose node has
-// been offline past pendingNodeGrace (asleepNodeGrace if it is asleep), unless they are bound to it (by
-// hand or by their folders). Running tasks keep their node: their work
+// replaceStranded places again the tasks not started yet whose device has
+// been offline past pendingDeviceGrace (asleepDeviceGrace if it is asleep), unless they are bound to it (by
+// hand or by their folders). Running tasks keep their device: their work
 // is there. Assistants' tasks are moveResident's.
 func (c *core) replaceStranded() {
 	rows, err := c.store.stranded()
 	if err != nil || len(rows) == 0 {
 		return
 	}
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		return
 	}
@@ -209,25 +209,25 @@ func (c *core) replaceStranded() {
 		if isRoleKind(t.Kind) {
 			continue
 		}
-		i := slices.IndexFunc(nodes, func(n NodeRow) bool { return n.Name == t.Node })
-		asleep := i >= 0 && c.asleep(nodes[i]) // node_sleep.go
-		grace := pendingNodeGrace
+		i := slices.IndexFunc(devices, func(n DeviceRow) bool { return n.Name == t.Device })
+		asleep := i >= 0 && c.asleep(devices[i]) // device_sleep.go
+		grace := pendingDeviceGrace
 		if asleep {
-			grace = asleepNodeGrace // it may not wake for a while
+			grace = asleepDeviceGrace // it may not wake for a while
 		}
-		if i >= 0 && (nodes[i].Online || time.Since(c.since(nodes[i])) < grace) {
+		if i >= 0 && (devices[i].Online || time.Since(c.since(devices[i])) < grace) {
 			continue
 		}
 		if p, err := c.placementOf(t); err != nil ||
-			p.Bound && !slices.ContainsFunc(c.schedulable(nodes), func(n NodeRow) bool { return n.Online && n.Name != t.Node && p.fits(n) }) {
+			p.Bound && !slices.ContainsFunc(c.schedulable(devices), func(n DeviceRow) bool { return n.Online && n.Name != t.Device && p.fits(n) }) {
 			continue // bound to its folders, and no other machine holds them up to date now
 		}
-		reason := fmt.Sprintf("node %s is offline", t.Node)
+		reason := fmt.Sprintf("device %s is offline", t.Device)
 		if asleep {
-			reason = fmt.Sprintf("node %s is asleep", t.Node)
+			reason = fmt.Sprintf("device %s is asleep", t.Device)
 		}
-		if ok, _ := c.store.unassign(t.ID, t.Node, reason); ok {
-			log.Printf("task %s leaves node %s: %s, it has not started", t.ID, t.Node, reason)
+		if ok, _ := c.store.unassign(t.ID, t.Device, reason); ok {
+			log.Printf("task %s leaves device %s: %s, it has not started", t.ID, t.Device, reason)
 			moved = true
 		}
 	}

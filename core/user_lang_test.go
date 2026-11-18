@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-// taskSpec is a task's spec as eriphe-core sends it to its node.
-func taskSpec(t *testing.T, c *core, id string) nodeTaskSpec {
+// taskSpec is a task's spec as eriphe-core sends it to its device.
+func taskSpec(t *testing.T, c *core, id string) deviceTaskSpec {
 	t.Helper()
 	var raw string
 	c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, id).Scan(&raw)
-	var spec nodeTaskSpec
+	var spec deviceTaskSpec
 	if err := json.Unmarshal([]byte(raw), &spec); err != nil {
 		t.Fatal(err)
 	}
@@ -45,12 +45,9 @@ func TestUserLang(t *testing.T) {
 		t.Fatalf("after de %q", c.userLang())
 	}
 
-	// The brain's (and the assistants') turn, and a session lead's first.
+	// The brain's (and the assistants') turn.
 	if h := c.turnHead(time.Now()); !strings.Contains(h, "[langue de l'utilisateur : écris en anglais") {
 		t.Fatalf("turn head:\n%s", h)
-	}
-	if p := assistantRoles[assistantRoleLead].firstPrompt(c, Assistant{}, false); !strings.Contains(p, "en anglais") {
-		t.Fatalf("lead's first turn:\n%s", p)
 	}
 	c.noteUserLang("fr")
 	if h := c.turnHead(time.Now()); !strings.Contains(h, "en français, sa langue, en le tutoyant") {
@@ -61,12 +58,12 @@ func TestUserLang(t *testing.T) {
 // A task's and a skill run's voice: the user's language, the code's rules
 // kept whatever it is.
 func TestVoicesInUserLang(t *testing.T) {
-	en, fr := skillVoice("en", true), skillVoice("fr", false)
+	en, fr := skillVoice("en"), skillVoice("fr")
 	if !strings.Contains(en, "in the user's language, English") || strings.Contains(en, "French") ||
-		!strings.Contains(en, "no entry, and nothing is told") || strings.Contains(en, "[brief]") || !strings.Contains(en, "note_item") {
+		!strings.Contains(en, "no entry, and nothing is told") || strings.Contains(en, "[brief]") {
 		t.Fatalf("en:\n%s", en)
 	}
-	if !strings.Contains(fr, "French, with tutoiement") || strings.Contains(fr, "note_item") {
+	if !strings.Contains(fr, "French, with tutoiement") {
 		t.Fatalf("fr:\n%s", fr)
 	}
 	if w := workerVoice("Iris", "en"); !strings.Contains(w, "in the user's language, English") || strings.Contains(w, "French") {
@@ -80,8 +77,8 @@ func TestVoicesInUserLang(t *testing.T) {
 // The prompts sent with a task and a skill run carry the user's language.
 func TestTaskPromptsInUserLang(t *testing.T) {
 	c := newCatalogCore(t)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
 	c.noteUserLang("en")
 	task, err := c.runTask(context.Background(), runRequest{Prompt: "count the lines"})
 	if err != nil {

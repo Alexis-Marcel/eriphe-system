@@ -12,8 +12,8 @@ import (
 // .opencode/skills): instructions, and often scripts, that the agents load
 // by themselves from the clone. They are loaded only from the user's own
 // repositories, or from one the user said they trust (a repo resource's
-// trust_skills); the node turns them off otherwise (node/skills.go). The
-// spec tells the node with repo_skills.
+// trust_skills); the device turns them off otherwise (device/skills.go). The
+// spec tells the device with repo_skills.
 //
 // The user's own repository is one the user reached GitHub through:
 //

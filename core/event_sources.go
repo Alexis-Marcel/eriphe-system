@@ -7,7 +7,7 @@ import (
 )
 
 // The event journal's sources (event_journal.go), besides those that call
-// emit where they are (a task's or a thread's end):
+// emit where they are (a task's end):
 //
 //   - a monitor (monitors.go): it polls a tool or reads a resource of a
 //     catalog server, or listens on an incoming address
@@ -35,7 +35,7 @@ func (c *core) runEvents(ctx context.Context) {
 		now := c.notifyTime()
 		c.tickReturned(now)
 		c.attentionBreak(breakCap, now)
-		c.attendQueuedCards() // proposals waiting without a card in front of the user (surface_authors.go)
+		c.attendQueuedCards() // proposals waiting without a card in front of the user (attention.go)
 		if now.Sub(purged) >= eventsPurgeEvery {
 			c.purgeEvents(now)
 			purged = now

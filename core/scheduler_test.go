@@ -13,7 +13,7 @@ func TestScheduleFilter(t *testing.T) {
 	claude := json.RawMessage(`{"runtimes":["claude-code"]}`)
 	gpu := json.RawMessage(`{"runtimes":["claude-code"],"labels":["gpu"]}`)
 	none := json.RawMessage(`{"runtimes":[]}`)
-	nodes := []NodeRow{
+	devices := []DeviceRow{
 		{Name: "nas", Online: true, Info: claude},
 		{Name: "pc", Online: true, Info: gpu},
 		{Name: "mac", Online: false, Info: claude},
@@ -28,7 +28,7 @@ func TestScheduleFilter(t *testing.T) {
 		needs              []string
 		fails, waits       bool
 	}{
-		{"", "claude-code", "nas", nil, false, false},            // least loaded online node
+		{"", "claude-code", "nas", nil, false, false},            // least loaded online device
 		{"", "claude-code", "pc", []string{"gpu"}, false, false}, // the only one with a GPU
 		{"nas", "claude-code", "nas", nil, false, false},
 		{"mac", "claude-code", "", nil, true, false},             // offline
@@ -36,11 +36,11 @@ func TestScheduleFilter(t *testing.T) {
 		{"box", "claude-code", "", nil, true, false},             // unknown
 		{"", "opencode", "", nil, true, false},                   // nobody offers it
 		{"nas", "claude-code", "", []string{"gpu"}, true, false}, // lacks the label
-		{"", "claude-code", "", []string{"tpu"}, true, true},     // only an offline node has it
+		{"", "claude-code", "", []string{"tpu"}, true, true},     // only an offline device has it
 		{"", "claude-code", "", []string{"gpu", "tpu"}, true, false},
 	}
 	for _, c := range cases {
-		got, err := schedule(nodes, c.want, placement{Runtime: c.runtime, Needs: c.needs}, active)
+		got, err := schedule(devices, c.want, placement{Runtime: c.runtime, Needs: c.needs}, active)
 		var waiting *waitingError
 		if (err != nil) != c.fails || got != c.got || errors.As(err, &waiting) != c.waits {
 			t.Errorf("schedule(%q, %q, %v) = %q, %v", c.want, c.runtime, c.needs, got, err)
@@ -50,7 +50,7 @@ func TestScheduleFilter(t *testing.T) {
 
 func TestScheduleScore(t *testing.T) {
 	info := func(s string) json.RawMessage { return json.RawMessage(s) }
-	nodes := []NodeRow{
+	devices := []DeviceRow{
 		{Name: "nas", Online: true, Info: info(`{"runtimes":["claude-code"],"cpus":4,"memory_bytes":8589934592,
 			"image":"worker:1","images":["worker:1"]}`)},
 		{Name: "pc", Online: true, Info: info(`{"runtimes":["claude-code"],"cpus":20,"memory_bytes":34359738368,
@@ -70,30 +70,30 @@ func TestScheduleScore(t *testing.T) {
 	}
 	for _, c := range cases {
 		c.p.Runtime = "claude-code"
-		if got, err := schedule(nodes, "", c.p, active); err != nil || got != c.want {
+		if got, err := schedule(devices, "", c.p, active); err != nil || got != c.want {
 			t.Errorf("schedule(%+v) = %q, %v; want %q", c.p, got, err, c.want)
 		}
 	}
 
-	// Equal nodes: the image breaks the tie, then the name does.
+	// Equal devices: the image breaks the tie, then the name does.
 	load = map[string]int{}
-	nodes[1].Info = info(`{"runtimes":["claude-code"],"cpus":4,"images":["ghcr.io/x/worker:latest"]}`)
-	nodes[0].Info = info(`{"runtimes":["claude-code"],"cpus":4}`)
-	if got, _ := schedule(nodes, "", placement{Runtime: "claude-code", Image: "ghcr.io/x/worker"}, active); got != "pc" {
+	devices[1].Info = info(`{"runtimes":["claude-code"],"cpus":4,"images":["ghcr.io/x/worker:latest"]}`)
+	devices[0].Info = info(`{"runtimes":["claude-code"],"cpus":4}`)
+	if got, _ := schedule(devices, "", placement{Runtime: "claude-code", Image: "ghcr.io/x/worker"}, active); got != "pc" {
 		t.Errorf("image tie-break = %q", got)
 	}
-	if got, _ := schedule(nodes, "", placement{Runtime: "claude-code"}, active); got != "nas" {
+	if got, _ := schedule(devices, "", placement{Runtime: "claude-code"}, active); got != "nas" {
 		t.Errorf("name tie-break = %q", got)
 	}
-	// A requested node is taken as is, even if another scores better.
-	if got, _ := schedule(nodes, "nas", placement{Runtime: "claude-code", Image: "ghcr.io/x/worker"}, active); got != "nas" {
-		t.Errorf("requested node = %q", got)
+	// A requested device is taken as is, even if another scores better.
+	if got, _ := schedule(devices, "nas", placement{Runtime: "claude-code", Image: "ghcr.io/x/worker"}, active); got != "nas" {
+		t.Errorf("requested device = %q", got)
 	}
 }
 
-// A task no online node can run waits without a node, out of every node's
-// assignments, and is placed when a fitting node comes online.
-func TestPendingTaskWaitsForNode(t *testing.T) {
+// A task no online device can run waits without a device, out of every device's
+// assignments, and is placed when a fitting device comes online.
+func TestPendingTaskWaitsForDevice(t *testing.T) {
 	dir := t.TempDir()
 	secret := filepath.Join(dir, "claude")
 	os.WriteFile(secret, []byte("tok"), 0o600)
@@ -111,18 +111,18 @@ func TestPendingTaskWaitsForNode(t *testing.T) {
 	}
 	c := newCore(cfg, store)
 	gpu := []byte(`{"runtimes":["claude-code"],"labels":["gpu"]}`)
-	store.registerNode("nas", hashSecret("a"))
-	store.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code"]}`))
-	store.registerNode("pc", hashSecret("b"))
-	store.setNodeStatus("pc", true, gpu) // known from an earlier visit...
-	store.setNodeStatus("pc", false, nil)
+	store.registerDevice("nas", hashSecret("a"))
+	store.setDeviceStatus("nas", true, []byte(`{"runtimes":["claude-code"]}`))
+	store.registerDevice("pc", hashSecret("b"))
+	store.setDeviceStatus("pc", true, gpu) // known from an earlier visit...
+	store.setDeviceStatus("pc", false, nil)
 
 	ctx := context.Background()
 	task, err := c.runTask(ctx, runRequest{Prompt: "train"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Node != "" || task.State != statePending || task.PendingReason == "" {
+	if task.Device != "" || task.State != statePending || task.PendingReason == "" {
 		t.Fatalf("task = %+v", task)
 	}
 	stopped, _ := c.runTask(ctx, runRequest{Prompt: "never mind"})
@@ -133,7 +133,7 @@ func TestPendingTaskWaitsForNode(t *testing.T) {
 		t.Fatalf("stopped task = %+v", got)
 	}
 	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Agent: "tpu"}); err == nil {
-		t.Fatal("no node could ever run it: want an error")
+		t.Fatal("no device could ever run it: want an error")
 	}
 	for _, n := range []string{"nas", "pc", ""} {
 		if a, _ := store.assignments(n); len(a) != 0 {
@@ -142,40 +142,40 @@ func TestPendingTaskWaitsForNode(t *testing.T) {
 	}
 
 	c.placePending() // nothing changed: still waiting
-	if got, _ := store.task(task.ID); got.Node != "" {
+	if got, _ := store.task(task.ID); got.Device != "" {
 		t.Fatalf("placed too early: %+v", got)
 	}
 	rev := c.rev
-	store.setNodeStatus("pc", true, gpu) // ...and back
+	store.setDeviceStatus("pc", true, gpu) // ...and back
 	c.placePending()
 	got, _ := store.task(task.ID)
-	if got.Node != "pc" || got.PendingReason != "" || got.State != statePending {
+	if got.Device != "pc" || got.PendingReason != "" || got.State != statePending {
 		t.Fatalf("task = %+v", got)
 	}
 	if c.rev == rev {
-		t.Fatal("the node's watch was not woken")
+		t.Fatal("the device's watch was not woken")
 	}
 	a, _ := store.assignments("pc")
 	if len(a) != 1 || a[0].ID != task.ID {
 		t.Fatalf("assignments = %+v", a)
 	}
-	if got, _ := store.task(stopped.ID); got.Node != "" {
+	if got, _ := store.task(stopped.ID); got.Device != "" {
 		t.Fatalf("a stopped task was placed: %+v", got)
 	}
 }
 
-// A service whose image runs on one architecture goes to a node of it.
+// A service whose image runs on one architecture goes to a device of it.
 func TestScheduleArch(t *testing.T) {
-	nodes := []NodeRow{
+	devices := []DeviceRow{
 		{Name: "mac", Online: true, Info: json.RawMessage(`{"services":true,"arch":"arm64"}`)},
 		{Name: "nas", Online: true, Info: json.RawMessage(`{"services":true,"arch":"amd64"}`)},
 	}
 	active := func(string) (int, error) { return 0, nil }
-	if got, err := schedule(nodes, "", placement{Service: true, Arch: "amd64"}, active); err != nil || got != "nas" {
+	if got, err := schedule(devices, "", placement{Service: true, Arch: "amd64"}, active); err != nil || got != "nas" {
 		t.Fatalf("amd64: %q %v", got, err)
 	}
-	if got, err := schedule(nodes, "mac", placement{Service: true, Arch: "amd64"}, active); err == nil {
-		t.Fatalf("pinned to an arm64 node: %q", got)
+	if got, err := schedule(devices, "mac", placement{Service: true, Arch: "amd64"}, active); err == nil {
+		t.Fatalf("pinned to an arm64 device: %q", got)
 	}
 	if _, err := (RunSpec{Image: "x", Transport: transportStdio, Arch: "riscv"}).normalize(); err == nil {
 		t.Fatal("an unknown arch")

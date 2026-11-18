@@ -63,8 +63,8 @@ func TestParseSkillMD(t *testing.T) {
 		"skills.err.frontmatter": "# no header",
 		"skills.err.name":        "---\nname: Bad_Name\ndescription: x\n---\n",
 		"skills.err.description": "---\nname: ok\n---\n",
-		"skills.err.title":       "---\nname: ok\ndescription: x\ntitle: " + strings.Repeat("a", skillTitleMax+1) + "\nwhen: every 1h\n---\n",
-		"skills.err.nowhen":      "---\nname: ok\ndescription: x\ntitle: Mes mails\n---\n",
+		"skills.err.node":        "---\nname: ok\ndescription: x\nnode: Mes mails\nwhen: monitor.new\n---\n",
+		"skills.err.nowhen":      "---\nname: ok\ndescription: x\nnode: k3x9m2p7qa\n---\n",
 	} {
 		var se *skillError
 		if _, err := parseSkillMD([]byte(md)); !errors.As(err, &se) || se.Key != key {
@@ -217,26 +217,26 @@ func approvedSkill(t *testing.T, s *Store, files ...skillFile) *Skill {
 // itself is told where they are.
 func TestLendSkills(t *testing.T) {
 	c := newCore(&Config{}, testSkillStore(t))
-	spec := nodeTaskSpec{Runtime: "claude-code"}
+	spec := deviceTaskSpec{Runtime: "claude-code"}
 	c.lendSkills(&spec)
 	if spec.Skills != nil || spec.AppendSystemPrompt != "" {
 		t.Fatalf("no skills: %+v", spec)
 	}
 	k := approvedSkill(t, c.store, skillFiles(skillMD)...)
 	for _, tc := range []struct {
-		spec  nodeTaskSpec
+		spec  deviceTaskSpec
 		index bool
 	}{
-		{nodeTaskSpec{Runtime: "claude-code"}, false},
-		{nodeTaskSpec{Runtime: "claude-code", Repo: "owner/repo", RepoSkills: true}, false},
-		{nodeTaskSpec{Runtime: "claude-code", Repo: "someone/tool"}, true},
-		{nodeTaskSpec{Runtime: "codex", Repo: "someone/tool"}, true},
-		{nodeTaskSpec{Runtime: "opencode", Repo: "someone/tool"}, false},
-		{nodeTaskSpec{Runtime: "acp"}, true},
+		{deviceTaskSpec{Runtime: "claude-code"}, false},
+		{deviceTaskSpec{Runtime: "claude-code", Repo: "owner/repo", RepoSkills: true}, false},
+		{deviceTaskSpec{Runtime: "claude-code", Repo: "someone/tool"}, true},
+		{deviceTaskSpec{Runtime: "codex", Repo: "someone/tool"}, true},
+		{deviceTaskSpec{Runtime: "opencode", Repo: "someone/tool"}, false},
+		{deviceTaskSpec{Runtime: "acp"}, true},
 	} {
 		spec := tc.spec
 		c.lendSkills(&spec)
-		if len(spec.Skills) != 1 || spec.Skills[0] != (nodeSkill{Name: "release-notes", SHA256: k.Approved}) {
+		if len(spec.Skills) != 1 || spec.Skills[0] != (deviceSkill{Name: "release-notes", SHA256: k.Approved}) {
 			t.Errorf("%+v: skills %+v", tc.spec, spec.Skills)
 		}
 		listed := strings.Contains(spec.AppendSystemPrompt, skillsDir+"/release-notes/SKILL.md") &&
@@ -246,34 +246,34 @@ func TestLendSkills(t *testing.T) {
 		}
 	}
 	c.store.enableSkill(k.Name, false)
-	spec = nodeTaskSpec{Runtime: "acp"}
+	spec = deviceTaskSpec{Runtime: "acp"}
 	if c.lendSkills(&spec); spec.Skills != nil {
 		t.Error("a skill turned off is lent")
 	}
 }
 
-// A node gets a skill of its own task only, as the bundle the hash names.
+// A device gets a skill of its own task only, as the bundle the hash names.
 func TestTaskSkillEndpoint(t *testing.T) {
 	c, task := credCore(t, "")
 	k := approvedSkill(t, c.store, skillFiles(skillMD)...)
-	c.store.setSpec(task.ID, nodeTaskSpec{Runtime: "claude-code", Skills: []nodeSkill{{Name: k.Name, SHA256: k.Approved}}})
-	secret := "node-secret"
-	if err := c.store.registerNode("pc", hashSecret(secret)); err != nil {
+	c.store.setSpec(task.ID, deviceTaskSpec{Runtime: "claude-code", Skills: []deviceSkill{{Name: k.Name, SHA256: k.Approved}}})
+	secret := "device-secret"
+	if err := c.store.registerDevice("pc", hashSecret(secret)); err != nil {
 		t.Fatal(err)
 	}
-	get := func(node, sec, id, sha string) (int, []byte) {
+	get := func(device, sec, id, sha string) (int, []byte) {
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/v1/node/tasks/"+id+"/skills/"+sha, nil)
+		req := httptest.NewRequest("GET", "/v1/device/tasks/"+id+"/skills/"+sha, nil)
 		req.SetPathValue("id", id)
 		req.SetPathValue("sha", sha)
 		req.Header.Set("Authorization", "Bearer "+sec)
-		req.Header.Set("Eriphe-Node", node)
+		req.Header.Set("Eriphe-Device", device)
 		c.handleTaskSkill(rec, req)
 		return rec.Code, rec.Body.Bytes()
 	}
 	code, body := get("pc", secret, task.ID, k.Approved)
 	if code != 200 {
-		t.Fatalf("the task's node: %d %s", code, body)
+		t.Fatalf("the task's device: %d %s", code, body)
 	}
 	sum := sha256.Sum256(body)
 	if hex.EncodeToString(sum[:]) != k.Approved {

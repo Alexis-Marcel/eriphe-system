@@ -292,14 +292,14 @@ func TestWebSecurityHeaders(t *testing.T) {
 func fixtures(t *testing.T, c *core) {
 	t.Helper()
 	s := c.store
-	s.registerNode("box", "h")
-	s.setNodeStatus("box", true, []byte(`{"cpus":8,"memory_bytes":17179869184,"runtimes":["claude-code"],"labels":["gpu"],"version":"0.1.0-dev+7654321"}`))
-	s.registerNode("old", "h2")
+	s.registerDevice("box", "h")
+	s.setDeviceStatus("box", true, []byte(`{"cpus":8,"memory_bytes":17179869184,"runtimes":["claude-code"],"labels":["gpu"],"version":"0.1.0-dev+7654321"}`))
+	s.registerDevice("old", "h2")
 	for _, task := range []*TaskRow{
-		{ID: "t-run", Node: "box", Agent: "small", Runtime: "claude-code", Dir: "acme/site@fix-form", Prompt: "Fix the form", State: stateRunning},
-		{ID: "t-perm", Node: "box", Agent: "small", Runtime: "claude-code", Dir: "acme/pkg", Prompt: "Publish the package", State: stateWaitingPermission},
-		{ID: "t-idle", Node: "box", Agent: "small", Runtime: "claude-code", Dir: "acme/notes", Prompt: "Write the summary", State: stateIdle},
-		{ID: "t-done", Node: "box", Agent: "small", Runtime: "claude-code", Dir: "acme/site", Prompt: "Old work", State: stateStopped},
+		{ID: "t-run", Device: "box", Agent: "small", Runtime: "claude-code", Dir: "acme/site@fix-form", Prompt: "Fix the form", State: stateRunning},
+		{ID: "t-perm", Device: "box", Agent: "small", Runtime: "claude-code", Dir: "acme/pkg", Prompt: "Publish the package", State: stateWaitingPermission},
+		{ID: "t-idle", Device: "box", Agent: "small", Runtime: "claude-code", Dir: "acme/notes", Prompt: "Write the summary", State: stateIdle},
+		{ID: "t-done", Device: "box", Agent: "small", Runtime: "claude-code", Dir: "acme/site", Prompt: "Old work", State: stateStopped},
 	} {
 		if err := s.insertTask(task); err != nil {
 			t.Fatal(err)
@@ -337,7 +337,7 @@ func TestWebPagesRender(t *testing.T) {
 		"/tasks/t-run":      {"go test ./...", "Arrêter la tâche", "PR #7"},
 		"/tasks/t-idle":     {"Répondre à l&#39;agent", "Shall I send it?"},
 		"/tasks/t-perm":     {"d-perm-t-perm-p-1"},
-		"/settings/devices": {"box", "En ligne", "Hors ligne", "16 Go", "gpu", `eriphe-node 0.1.0-dev <small class="mono">7654321</small>`},
+		"/settings/devices": {"box", "En ligne", "Hors ligne", "16 Go", "gpu", `eriphe-device 0.1.0-dev <small class="mono">7654321</small>`},
 		"/settings/agents":  {"small", "quick things", "Par défaut", "Prêt"},
 		"/settings/tools":   {"github", "Home Assistant", "/settings/tools/new?preset=mail"},
 		"/settings/tools/new?preset=home-assistant": {"/api/mcp", `name="token"`, `value="bearer" checked`},
@@ -395,7 +395,7 @@ func TestJoinCommandPublishedPort(t *testing.T) {
 	}
 }
 
-// With the machines' CA, the join commands say https://: the node checks
+// With the machines' CA, the join commands say https://: the device checks
 // the CA (-ca-hash) from its first request, the join token never crosses in
 // clear.
 func TestJoinCommandHTTPSWithCA(t *testing.T) {
@@ -456,10 +456,10 @@ func TestWebAddMachine(t *testing.T) {
 		"curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core http://",
 		" --join-token " + m[1] + " --name desk --labels gpu</pre>",
 		"<pre id=\"cmd-ps\">$env:ERIPHE_CORE='http://",
-		"; $env:ERIPHE_JOIN_TOKEN='" + m[1] + "'; $env:ERIPHE_NODE_NAME='desk'; $env:ERIPHE_NODE_LABELS='gpu';",
+		"; $env:ERIPHE_JOIN_TOKEN='" + m[1] + "'; $env:ERIPHE_DEVICE_NAME='desk'; $env:ERIPHE_DEVICE_LABELS='gpu';",
 		" irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex</pre>",
 		"<summary>Options avancées</summary>",
-		"eriphe-node -core http://", "install.ps1 -Core 'http://", "ERIPHE_JOIN_TOKEN: " + m[1],
+		"eriphe-device -core http://", "install.ps1 -Core 'http://", "ERIPHE_JOIN_TOKEN: " + m[1],
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("join commands lack %q", want)
@@ -471,10 +471,10 @@ func TestWebAddMachine(t *testing.T) {
 	if strings.Contains(body, "-Rejoin") {
 		t.Error("a new machine's command asks to rejoin")
 	}
-	if _, err := tw.c.store.joinNode(hashSecret(m[1]), "other", hashSecret("s")); !errors.Is(err, errJoinName) {
+	if _, err := tw.c.store.joinDevice(hashSecret(m[1]), "other", hashSecret("s")); !errors.Is(err, errJoinName) {
 		t.Fatalf("the token joins another name: %v", err)
 	}
-	if _, err := tw.c.store.joinNode(hashSecret(m[1]), "desk", hashSecret("s")); err != nil {
+	if _, err := tw.c.store.joinDevice(hashSecret(m[1]), "desk", hashSecret("s")); err != nil {
 		t.Fatalf("the token shown does not join: %v", err)
 	}
 	if _, body, _ := tw.post("/settings/devices/join", url.Values{"name": {"Bad Name"}}, csrf); strings.Contains(body, "-join-token") {
@@ -489,11 +489,11 @@ func TestWebAddMachine(t *testing.T) {
 	if m == nil || !strings.Contains(body, "-Rejoin") {
 		t.Fatalf("rejoin command: %s", body)
 	}
-	if rejoined, err := tw.c.store.joinNode(hashSecret(m[1]), "desk", hashSecret("s2")); err != nil || !rejoined {
+	if rejoined, err := tw.c.store.joinDevice(hashSecret(m[1]), "desk", hashSecret("s2")); err != nil || !rejoined {
 		t.Fatalf("the rejoin token does not rejoin: %v %v", rejoined, err)
 	}
-	if !tw.c.store.checkNode("desk", hashSecret("s2")) {
-		t.Fatal("the new secret is not the node's")
+	if !tw.c.store.checkDevice("desk", hashSecret("s2")) {
+		t.Fatal("the new secret is not the device's")
 	}
 	if _, body, _ := tw.post("/settings/devices/ghost/rejoin", url.Values{}, csrf); strings.Contains(body, "-join-token") {
 		t.Fatal("an unknown machine got a rejoin token")

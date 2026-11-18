@@ -11,13 +11,13 @@ import (
 // drift ("factures", "facture", "Facturation"), a rule silently stops
 // matching. So the code keeps the labels comparable and small:
 //
-//   - a label is an about: a thread (thread:<id>) or a key, kept by
+//   - a label is an about: a node (node:<id>) or a key, kept by
 //     aboutKey (about_key.go); a ref that names one record (task:t-1,
 //     skill:x) is kept as written.
 //   - knownTopics are the abouts in use: the rules', the notifications' of
-//     the last 90 days, the live threads and the memory's entities
+//     the last 90 days, the live nodes and the memory's entities
 //     (person:, client:…), so a notification about a matter uses its
-//     thread, as its memories do.
+//     node, as its memories do.
 //   - reuseTopic maps a new label onto a known one of the same word family
 //     (topic:facturation → topic:facture), and the tools list the known
 //     topics to the brain when it invents one.
@@ -79,18 +79,12 @@ func (c *core) knownTopics() []topicView {
 		}
 		rows.Close()
 	}
-	if rows, err := c.store.db.Query(`SELECT id FROM threads WHERE ` + activeThreads); err == nil {
-		for rows.Next() {
-			var id int64
-			if rows.Scan(&id) == nil {
-				add(threadRef(id))
-			}
-		}
-		rows.Close()
+	for _, x := range c.activeNodes(packNodes) {
+		add(nodeRef(x.ID))
 	}
 	if c.mem != nil {
 		if rows, err := c.mem.db.Query(`SELECT DISTINCT about FROM memories WHERE status = 'active' AND
-			(about LIKE 'thread:%' OR about LIKE 'project:%' OR about LIKE 'person:%' OR about LIKE 'client:%')`); err == nil {
+			(about LIKE 'node:%' OR about LIKE 'project:%' OR about LIKE 'person:%' OR about LIKE 'client:%')`); err == nil {
 			for rows.Next() {
 				var s string
 				if rows.Scan(&s) == nil {

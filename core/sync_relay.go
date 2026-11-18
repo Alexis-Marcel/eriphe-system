@@ -14,22 +14,22 @@ import (
 )
 
 // Copies of a shared folder on the user's other machines are kept by
-// Syncthing, one on each machine, next to its node (node/syncthing.go). The
+// Syncthing, one on each machine, next to its device (device/syncthing.go). The
 // machines never reach one another directly: Syncthing listens on the
 // loopback only, without discovery nor relays, and its connections go
-// through eriphe-core, on the tunnels the nodes already keep open.
+// through eriphe-core, on the tunnels the devices already keep open.
 //
-//	Syncthing A → node A:      tcp://127.0.0.1:<port of B>   (a loopback port per peer)
-//	node A → eriphe-core:      GET /v1/node/sync/{B}, Upgrade: eriphe-sync   (node secret, TLS)
-//	eriphe-core → node B:      GET /v1/sync/connect, Upgrade: eriphe-sync    (B's tunnel)
-//	node B → Syncthing B:      its listening address, on the loopback
+//	Syncthing A → device A:      tcp://127.0.0.1:<port of B>   (a loopback port per peer)
+//	device A → eriphe-core:      GET /v1/device/sync/{B}, Upgrade: eriphe-sync   (device secret, TLS)
+//	eriphe-core → device B:      GET /v1/sync/connect, Upgrade: eriphe-sync    (B's tunnel)
+//	device B → Syncthing B:      its listening address, on the loopback
 //
 // eriphe-core joins the two only if it set up a copy between them (a row
 // of folder_copies, whichever way): any other pair is refused, and the
 // streams of a pair are cut when its last copy goes. It copies bytes and
 // sees nothing else: Syncthing's TLS runs end to end, each side pinning
-// the other's device ID, which the nodes reported and eriphe-core handed
-// over (public keys, not secrets). A node that is not sure of eriphe-core
+// the other's Syncthing device ID, which the devices reported and eriphe-core handed
+// over (public keys, not secrets). A device that is not sure of eriphe-core
 // still talks only to the device IDs it was given, and refuses data for
 // folders it did not set up.
 
@@ -42,33 +42,33 @@ const syncStreamsMax = 4
 func init() {
 	extraSchema = append(extraSchema, `
 CREATE TABLE IF NOT EXISTS folder_copies (
-  node TEXT NOT NULL, folder TEXT NOT NULL, copy TEXT NOT NULL, created INTEGER NOT NULL,
-  PRIMARY KEY (node, folder, copy));`)
+  device TEXT NOT NULL, folder TEXT NOT NULL, copy TEXT NOT NULL, created INTEGER NOT NULL,
+  PRIMARY KEY (device, folder, copy));`)
 }
 
-// folderCopy is a copy of a folder shared on node, by its id there, kept on
+// folderCopy is a copy of a folder shared on device, by its id there, kept on
 // the machine copy.
 type folderCopy struct {
-	Node    string    `json:"node"`
+	Device  string    `json:"device"`
 	Folder  string    `json:"folder"`
 	Copy    string    `json:"copy"`
 	Created time.Time `json:"created"`
 }
 
-func (s *Store) addCopy(node, folder, copy string) error {
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO folder_copies (node, folder, copy, created) VALUES (?, ?, ?, ?)`,
-		node, folder, copy, time.Now().Unix())
+func (s *Store) addCopy(device, folder, copy string) error {
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO folder_copies (device, folder, copy, created) VALUES (?, ?, ?, ?)`,
+		device, folder, copy, time.Now().Unix())
 	return err
 }
 
-func (s *Store) removeCopy(node, folder, copy string) error {
-	_, err := s.db.Exec(`DELETE FROM folder_copies WHERE node = ? AND folder = ? AND copy = ?`, node, folder, copy)
+func (s *Store) removeCopy(device, folder, copy string) error {
+	_, err := s.db.Exec(`DELETE FROM folder_copies WHERE device = ? AND folder = ? AND copy = ?`, device, folder, copy)
 	return err
 }
 
 // copies are all the copies, by folder then machine.
 func (s *Store) copies() ([]folderCopy, error) {
-	rows, err := s.db.Query(`SELECT node, folder, copy, created FROM folder_copies ORDER BY node, folder, copy`)
+	rows, err := s.db.Query(`SELECT device, folder, copy, created FROM folder_copies ORDER BY device, folder, copy`)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (s *Store) copies() ([]folderCopy, error) {
 	for rows.Next() {
 		var fc folderCopy
 		var created int64
-		if err := rows.Scan(&fc.Node, &fc.Folder, &fc.Copy, &created); err != nil {
+		if err := rows.Scan(&fc.Device, &fc.Folder, &fc.Copy, &created); err != nil {
 			return nil, err
 		}
 		fc.Created = time.Unix(created, 0)
@@ -86,10 +86,10 @@ func (s *Store) copies() ([]folderCopy, error) {
 	return out, rows.Err()
 }
 
-// hasCopy tells whether the machine copy keeps a copy of node's folder.
-func (s *Store) hasCopy(node, folder, copy string) bool {
+// hasCopy tells whether the machine copy keeps a copy of device's folder.
+func (s *Store) hasCopy(device, folder, copy string) bool {
 	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM folder_copies WHERE node = ? AND folder = ? AND copy = ?`, node, folder, copy).Scan(&n)
+	s.db.QueryRow(`SELECT COUNT(*) FROM folder_copies WHERE device = ? AND folder = ? AND copy = ?`, device, folder, copy).Scan(&n)
 	return n > 0
 }
 
@@ -99,7 +99,7 @@ func (s *Store) syncPaired(a, b string) bool {
 		return false
 	}
 	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM folder_copies WHERE (node = ? AND copy = ?) OR (node = ? AND copy = ?)`,
+	s.db.QueryRow(`SELECT COUNT(*) FROM folder_copies WHERE (device = ? AND copy = ?) OR (device = ? AND copy = ?)`,
 		a, b, b, a).Scan(&n)
 	return n > 0
 }
@@ -175,10 +175,10 @@ func (c *core) cutUnpaired() {
 
 var errSyncRefused = errors.New("these machines keep no copy for each other")
 
-// handleNodeSync joins a node's Syncthing to a peer's, through the peer's
-// tunnel: GET /v1/node/sync/{peer} with an upgrade to eriphe-sync.
-func (c *core) handleNodeSync(w http.ResponseWriter, r *http.Request) {
-	from, status, err := c.authNode(r)
+// handleDeviceSync joins a device's Syncthing to a peer's, through the peer's
+// tunnel: GET /v1/device/sync/{peer} with an upgrade to eriphe-sync.
+func (c *core) handleDeviceSync(w http.ResponseWriter, r *http.Request) {
+	from, status, err := c.authDevice(r)
 	if err != nil {
 		http.Error(w, err.Error(), status)
 		return
@@ -188,12 +188,12 @@ func (c *core) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "upgrade to "+syncProto+" required", http.StatusUpgradeRequired)
 		return
 	}
-	if !nodeName.MatchString(peer) || !c.store.syncPaired(from, peer) || c.store.nodeSuspended(peer) {
+	if !deviceName.MatchString(peer) || !c.store.syncPaired(from, peer) || c.store.deviceSuspended(peer) {
 		log.Printf("sync: refused %s → %s: no copy between them", from, peer)
 		http.Error(w, errSyncRefused.Error(), http.StatusForbidden)
 		return
 	}
-	n := c.node(peer)
+	n := c.device(peer)
 	if !n.connected() {
 		http.Error(w, "the machine "+peer+" is not connected", http.StatusBadGateway)
 		return
@@ -232,7 +232,7 @@ func (c *core) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 type syncLink struct {
 	mu     sync.Mutex
 	up     net.Conn // the stream to the peer
-	down   net.Conn // the requesting node's connection
+	down   net.Conn // the requesting device's connection
 	closed bool
 }
 
@@ -259,10 +259,10 @@ func (l *syncLink) Close() error {
 	return nil
 }
 
-// openSync opens a stream to node n, asks it for its Syncthing on behalf
+// openSync opens a stream to device n, asks it for its Syncthing on behalf
 // of from, and returns the stream once n agreed, with what it may already
 // have sent after its answer.
-func openSync(n *nodeClient, from string) (net.Conn, *bufio.Reader, error) {
+func openSync(n *deviceClient, from string) (net.Conn, *bufio.Reader, error) {
 	n.mu.Lock()
 	s := n.session
 	n.mu.Unlock()
@@ -274,7 +274,7 @@ func openSync(n *nodeClient, from string) (net.Conn, *bufio.Reader, error) {
 		return nil, nil, err
 	}
 	st.SetDeadline(time.Now().Add(15 * time.Second))
-	fmt.Fprintf(st, "GET /v1/sync/connect HTTP/1.1\r\nHost: node\r\nConnection: Upgrade\r\nUpgrade: %s\r\nEriphe-Sync-Peer: %s\r\n\r\n", syncProto, from)
+	fmt.Fprintf(st, "GET /v1/sync/connect HTTP/1.1\r\nHost: device\r\nConnection: Upgrade\r\nUpgrade: %s\r\nEriphe-Sync-Peer: %s\r\n\r\n", syncProto, from)
 	br := bufio.NewReader(st)
 	resp, err := http.ReadResponse(br, nil)
 	if err != nil {

@@ -17,11 +17,11 @@ import (
 
 // Folders ("Dossiers"): the user's own folders given to Eriphe. A folder
 // is shared on the machine that holds it, never from here: the user runs
-// `eriphe-node share add` there (through eriphe-share, or `eriphe share
+// `eriphe-device share add` there (through eriphe-share, or `eriphe share
 // add` in the one-container install's launcher, which mounts that folder
-// alone into the node), or right-clicks it in the Finder or the Explorer,
-// and that machine's node keeps the list (node/shared.go). The
-// node reports each folder's name, level, whether it may be copied to the
+// alone into the device), or right-clicks it in the Finder or the Explorer,
+// and that machine's device keeps the list (device/shared.go). The
+// device reports each folder's name, level, whether it may be copied to the
 // user's other machines, and an opaque id, never its path; eriphe-core can
 // lend a task one of them, take one off the list or turn its copies off
 // (restricting is always allowed), but it can neither look into a machine,
@@ -31,11 +31,11 @@ import (
 // and Modifier (folder_values.go): each free, on approval or never, a
 // default per machine and an exception per folder; a read-only share greys
 // Modifier. Modifier creates, changes, renames and deletes anywhere in it,
-// the node taking a snapshot of it before each such task.
+// the device taking a snapshot of it before each such task.
 // The brain lends folders to a task by name, like catalog tools: the task
 // runs on the folder's machine (or waits for it) and gets it mounted at
 // /work/folders/<name>, writable only as far as it is lent, as Docker
-// enforces it (node/shares.go). A folder is the user's own: reading it does
+// enforces it (device/shares.go). A folder is the user's own: reading it does
 // not taint the task (task_taint.go), though what it says of it is data,
 // never instructions; and a turn that read external content may not lend a
 // folder's write without a card.
@@ -44,7 +44,7 @@ import (
 // accessWrite, read, create, change, rename and delete anywhere in it.
 
 // folderLevel is a level a machine reports: what is not write is read. An
-// older node said drop (now read: nothing is widened) and manage (write).
+// older device said drop (now read: nothing is widened) and manage (write).
 func folderLevel(s string) string {
 	if s == accessWrite || s == "manage" {
 		return accessWrite
@@ -55,24 +55,24 @@ func folderLevel(s string) string {
 // Folder is one folder given to Eriphe, as its machine reported it.
 type Folder struct {
 	Name     string `json:"name"`               // unique here: "Name (machine)" when two machines share one name
-	Node     string `json:"node"`               // the machine it is on
+	Device   string `json:"device"`             // the machine it is on
 	ID       string `json:"id"`                 // its id on that machine
 	Access   string `json:"access"`             // its level, chosen on its machine: read or write
 	Copyable bool   `json:"copyable,omitempty"` // may be copied to the user's other machines
 	Missing  bool   `json:"missing,omitempty"`  // not there now on its machine (an unplugged disk)
-	// Problem: why its machine cannot use it now (node/access.go): denied
+	// Problem: why its machine cannot use it now (device/access.go): denied
 	// (macOS's privacy, permissions), read_only, missing.
 	Problem string `json:"problem,omitempty"`
-	// Program: what is refused it, eriphe-node or syncthing (the one to
-	// allow in macOS's Files and Folders); empty from an older node.
+	// Program: what is refused it, eriphe-device or syncthing (the one to
+	// allow in macOS's Files and Folders); empty from an older device.
 	Program string `json:"program,omitempty"`
 }
 
 // mountPath is where a task lent the folder finds it.
 func (f Folder) mountPath() string { return "/work/folders/" + f.Name }
 
-// sharedFolder is a folder shared on a machine, in what its node reports
-// (node/shared.go sharedInfo).
+// sharedFolder is a folder shared on a machine, in what its device reports
+// (device/shared.go sharedInfo).
 type sharedFolder struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -86,10 +86,10 @@ type sharedFolder struct {
 func init() {
 	extraSchema = append(extraSchema, `
 CREATE TABLE IF NOT EXISTS folders_unshared (
-  node TEXT NOT NULL, id TEXT NOT NULL, PRIMARY KEY (node, id));
+  device TEXT NOT NULL, id TEXT NOT NULL, PRIMARY KEY (device, id));
 CREATE TABLE IF NOT EXISTS folders_lowered (
-  node TEXT NOT NULL, id TEXT NOT NULL, access TEXT NOT NULL DEFAULT '', nocopy INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (node, id));`)
+  device TEXT NOT NULL, id TEXT NOT NULL, access TEXT NOT NULL DEFAULT '', nocopy INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (device, id));`)
 }
 
 var errNoFolder = errors.New("no such folder")
@@ -99,7 +99,7 @@ var errNoFolder = errors.New("no such folder")
 // and with copies off as eriphe-core turned them off, even before their
 // machine knows.
 func (s *Store) folders() ([]*Folder, error) {
-	nodes, err := s.nodes()
+	devices, err := s.devices()
 	if err != nil {
 		return nil, err
 	}
@@ -113,19 +113,19 @@ func (s *Store) folders() ([]*Folder, error) {
 	}
 	out := []*Folder{}
 	count := map[string]int{}
-	for _, n := range nodes {
+	for _, n := range devices {
 		for _, sf := range parseInfo(n).Folders {
 			if unshared[n.Name+"/"+sf.ID] || sf.ID == "" || !validFolderName(sf.Name) {
 				continue
 			}
 			copyable := sf.Copyable && !nocopy[n.Name+"/"+sf.ID]
-			out = append(out, &Folder{Name: sf.Name, Node: n.Name, ID: sf.ID, Access: folderLevel(sf.Access), Copyable: copyable, Missing: sf.Missing, Problem: sf.Problem, Program: sf.Program})
+			out = append(out, &Folder{Name: sf.Name, Device: n.Name, ID: sf.ID, Access: folderLevel(sf.Access), Copyable: copyable, Missing: sf.Missing, Problem: sf.Problem, Program: sf.Program})
 			count[strings.ToLower(sf.Name)]++
 		}
 	}
 	for _, f := range out {
 		if count[strings.ToLower(f.Name)] > 1 {
-			f.Name += " (" + f.Node + ")"
+			f.Name += " (" + f.Device + ")"
 		}
 	}
 	slices.SortStableFunc(out, func(a, b *Folder) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
@@ -145,49 +145,49 @@ func (s *Store) folder(name string) (*Folder, error) {
 	return nil, errNoFolder
 }
 
-// unsharedFolders are the folders eriphe-core took off, by node/id, until
+// unsharedFolders are the folders eriphe-core took off, by device/id, until
 // their machine no longer lists them.
 func (s *Store) unsharedFolders() (map[string]bool, error) {
-	rows, err := s.db.Query(`SELECT node, id FROM folders_unshared`)
+	rows, err := s.db.Query(`SELECT device, id FROM folders_unshared`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := map[string]bool{}
 	for rows.Next() {
-		var node, id string
-		if err := rows.Scan(&node, &id); err != nil {
+		var device, id string
+		if err := rows.Scan(&device, &id); err != nil {
 			return nil, err
 		}
-		out[node+"/"+id] = true
+		out[device+"/"+id] = true
 	}
 	return out, rows.Err()
 }
 
 // noCopyFolders are the folders whose copies eriphe-core turned off, by
-// node/id, until their machine says it turned them off too.
+// device/id, until their machine says it turned them off too.
 func (s *Store) noCopyFolders() (map[string]bool, error) {
-	rows, err := s.db.Query(`SELECT node, id FROM folders_lowered WHERE nocopy`)
+	rows, err := s.db.Query(`SELECT device, id FROM folders_lowered WHERE nocopy`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := map[string]bool{}
 	for rows.Next() {
-		var node, id string
-		if err := rows.Scan(&node, &id); err != nil {
+		var device, id string
+		if err := rows.Scan(&device, &id); err != nil {
 			return nil, err
 		}
-		out[node+"/"+id] = true
+		out[device+"/"+id] = true
 	}
 	return out, rows.Err()
 }
 
-// lastInfo is what a node last said, if anything.
-func (s *Store) lastInfo(node string) nodeInfo {
+// lastInfo is what a device last said, if anything.
+func (s *Store) lastInfo(device string) deviceInfo {
 	var raw string
-	var info nodeInfo
-	if s.db.QueryRow(`SELECT COALESCE(info, '') FROM nodes WHERE name = ?`, node).Scan(&raw) == nil {
+	var info deviceInfo
+	if s.db.QueryRow(`SELECT COALESCE(info, '') FROM devices WHERE name = ?`, device).Scan(&raw) == nil {
 		json.Unmarshal([]byte(raw), &info)
 	}
 	return info
@@ -220,12 +220,12 @@ func (c *core) removeFolder(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := c.store.db.Exec(`INSERT OR IGNORE INTO folders_unshared (node, id) VALUES (?, ?)`, f.Node, f.ID); err != nil {
+	if _, err := c.store.db.Exec(`INSERT OR IGNORE INTO folders_unshared (device, id) VALUES (?, ?)`, f.Device, f.ID); err != nil {
 		return err
 	}
-	c.logNode(f.Node, NodeLogEntry{Kind: logUnshare, Folder: f.Name, Access: f.Access})
-	if n := c.node(f.Node); n.connected() {
-		c.refreshNode(ctx, n) // which tells the machine (unshareOn)
+	c.logDevice(f.Device, DeviceLogEntry{Kind: logUnshare, Folder: f.Name, Access: f.Access})
+	if n := c.device(f.Device); n.connected() {
+		c.refreshDevice(ctx, n) // which tells the machine (unshareOn)
 	}
 	c.syncAll(ctx) // its copies are deleted (folder_copies.go)
 	return nil
@@ -242,13 +242,13 @@ func (c *core) noCopies(ctx context.Context, name string) error {
 	if !f.Copyable {
 		return nil
 	}
-	if _, err := c.store.db.Exec(`INSERT INTO folders_lowered (node, id, nocopy) VALUES (?, ?, 1)
-		ON CONFLICT (node, id) DO UPDATE SET nocopy = 1`, f.Node, f.ID); err != nil {
+	if _, err := c.store.db.Exec(`INSERT INTO folders_lowered (device, id, nocopy) VALUES (?, ?, 1)
+		ON CONFLICT (device, id) DO UPDATE SET nocopy = 1`, f.Device, f.ID); err != nil {
 		return err
 	}
-	c.logNode(f.Node, NodeLogEntry{Kind: logLower, Folder: f.Name, Access: f.Access, Detail: "no copies"})
-	if n := c.node(f.Node); n.connected() {
-		c.refreshNode(ctx, n) // which tells the machine (lowerOn)
+	c.logDevice(f.Device, DeviceLogEntry{Kind: logLower, Folder: f.Name, Access: f.Access, Detail: "no copies"})
+	if n := c.device(f.Device); n.connected() {
+		c.refreshDevice(ctx, n) // which tells the machine (lowerOn)
 	}
 	c.syncAll(ctx) // its copies are deleted (folder_copies.go)
 	return nil
@@ -256,26 +256,26 @@ func (c *core) noCopies(ctx context.Context, name string) error {
 
 // lowerOn tells a machine the folders whose copies eriphe-core turned off,
 // and forgets those it reports so (or no longer lists).
-func (c *core) lowerOn(ctx context.Context, n *nodeClient, info nodeInfo) {
+func (c *core) lowerOn(ctx context.Context, n *deviceClient, info deviceInfo) {
 	nocopy, err := c.store.noCopyFolders()
 	if err != nil {
 		return
 	}
 	for key := range nocopy {
-		node, id, _ := strings.Cut(key, "/")
-		if node != n.name {
+		device, id, _ := strings.Cut(key, "/")
+		if device != n.name {
 			continue
 		}
 		i := slices.IndexFunc(info.Folders, func(sf sharedFolder) bool { return sf.ID == id })
 		if i < 0 || !info.Folders[i].Copyable {
-			c.store.db.Exec(`DELETE FROM folders_lowered WHERE node = ? AND id = ?`, node, id)
+			c.store.db.Exec(`DELETE FROM folders_lowered WHERE device = ? AND id = ?`, device, id)
 			continue
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		err := n.call(cctx, http.MethodPatch, "/v1/shares/"+url.PathEscape(id), map[string]any{"copyable": false}, nil)
 		cancel()
 		if err != nil {
-			// An older node, or one that refused: eriphe-core keeps them off itself.
+			// An older device, or one that refused: eriphe-core keeps them off itself.
 			log.Printf("folders: %s keeps the copies of folder %s for now: %v", n.name, id, err)
 		}
 	}
@@ -283,24 +283,24 @@ func (c *core) lowerOn(ctx context.Context, n *nodeClient, info nodeInfo) {
 
 // unshareOn tells a machine the folders eriphe-core took off, and forgets
 // those it no longer lists.
-func (c *core) unshareOn(ctx context.Context, n *nodeClient, info nodeInfo) {
+func (c *core) unshareOn(ctx context.Context, n *deviceClient, info deviceInfo) {
 	unshared, err := c.store.unsharedFolders()
 	if err != nil {
 		return
 	}
 	for key := range unshared {
-		node, id, _ := strings.Cut(key, "/")
-		if node != n.name {
+		device, id, _ := strings.Cut(key, "/")
+		if device != n.name {
 			continue
 		}
 		if !slices.ContainsFunc(info.Folders, func(sf sharedFolder) bool { return sf.ID == id }) {
-			c.store.db.Exec(`DELETE FROM folders_unshared WHERE node = ? AND id = ?`, node, id)
+			c.store.db.Exec(`DELETE FROM folders_unshared WHERE device = ? AND id = ?`, device, id)
 			continue
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		err := n.call(cctx, http.MethodDelete, "/v1/shares/"+url.PathEscape(id), nil, nil)
 		cancel()
-		var ne *nodeError
+		var ne *deviceError
 		if errors.As(err, &ne) && ne.status == http.StatusNotFound {
 			err = nil
 		}
@@ -312,7 +312,7 @@ func (c *core) unshareOn(ctx context.Context, n *nodeClient, info nodeInfo) {
 
 // noteShared records in a machine's access log the folders shared or
 // unshared there since it last said.
-func (c *core) noteShared(node string, before, after nodeInfo) {
+func (c *core) noteShared(device string, before, after deviceInfo) {
 	had := map[string]sharedFolder{}
 	for _, f := range before.Folders {
 		had[f.ID] = f
@@ -322,10 +322,10 @@ func (c *core) noteShared(node string, before, after nodeInfo) {
 			delete(had, f.ID)
 			continue
 		}
-		c.logNode(node, NodeLogEntry{Kind: logShare, Folder: f.Name, Access: f.Access})
+		c.logDevice(device, DeviceLogEntry{Kind: logShare, Folder: f.Name, Access: f.Access})
 	}
 	for _, f := range had {
-		c.logNode(node, NodeLogEntry{Kind: logUnshare, Folder: f.Name, Access: f.Access})
+		c.logDevice(device, DeviceLogEntry{Kind: logUnshare, Folder: f.Name, Access: f.Access})
 	}
 }
 
@@ -342,7 +342,7 @@ func orStr(s, def string) string {
 // (folderHolders).
 func (c *core) folderGrant(names []string) ([]*Folder, string, error) {
 	var out []*Folder
-	node := ""
+	device := ""
 	for _, name := range names {
 		f, err := c.store.folder(strings.TrimSpace(name))
 		if err != nil {
@@ -354,28 +354,28 @@ func (c *core) folderGrant(names []string) ([]*Folder, string, error) {
 		if slices.ContainsFunc(out, func(g *Folder) bool { return strings.EqualFold(g.Name, f.Name) }) {
 			continue
 		}
-		if c.store.nodeSuspended(f.Node) {
-			return nil, "", fmt.Errorf("folder %q is not lent: %w", f.Name, suspendedError(f.Node)) // node_access.go
+		if c.store.deviceSuspended(f.Device) {
+			return nil, "", fmt.Errorf("folder %q is not lent: %w", f.Name, suspendedError(f.Device)) // device_access.go
 		}
 		if len(out) == 0 {
-			node = f.Node
-		} else if f.Node != node {
-			node = ""
+			device = f.Device
+		} else if f.Device != device {
+			device = ""
 		}
 		out = append(out, f)
 	}
-	if len(out) > 1 && node == "" && len(c.folderHolders(out)) == 0 {
+	if len(out) > 1 && device == "" && len(c.folderHolders(out)) == 0 {
 		var where []string
 		for _, f := range out {
-			where = append(where, f.Name+" ("+f.Node+")")
+			where = append(where, f.Name+" ("+f.Device+")")
 		}
 		return nil, "", fmt.Errorf("folders %s are on different machines and no machine holds them all: keep copies of them on one machine (Settings → Folders), or lend them to separate tasks",
 			strings.Join(where, ", "))
 	}
-	return out, node, nil
+	return out, device, nil
 }
 
-// taskPlacement is what a task asks of its node: its agent's needs, and
+// taskPlacement is what a task asks of its device: its agent's needs, and
 // with folders, the machines holding them up to date now, and those
 // holding them at all, to wait for (folder_copies.go).
 func (c *core) taskPlacement(a Agent, fs []*Folder) placement {
@@ -401,18 +401,18 @@ func folderNames(fs []*Folder) []string {
 	return names
 }
 
-// specFolders are a task's folders as its node mounts them, read again
-// from the store when the node fetches the task: a folder removed meanwhile
+// specFolders are a task's folders as its device mounts them, read again
+// from the store when the device fetches the task: a folder removed meanwhile
 // fails the task, and one shared read-only since is mounted so. A task
 // writes only where its entry says write, and its Modifier is not never.
-func (c *core) specFolders(names string, resources []ResourceRef) ([]nodeFolder, error) {
+func (c *core) specFolders(names string, resources []ResourceRef) ([]deviceFolder, error) {
 	return c.specFoldersOn("", names, resources)
 }
 
-// specFoldersOn are a task's folders as node mounts them: from its copy of
+// specFoldersOn are a task's folders as device mounts them: from its copy of
 // each folder whose machine it is not (folder_copies.go); "" for each
 // folder's own machine.
-func (c *core) specFoldersOn(node, names string, resources []ResourceRef) ([]nodeFolder, error) {
+func (c *core) specFoldersOn(device, names string, resources []ResourceRef) ([]deviceFolder, error) {
 	if names == "" {
 		return nil, nil
 	}
@@ -420,25 +420,25 @@ func (c *core) specFoldersOn(node, names string, resources []ResourceRef) ([]nod
 	if err != nil {
 		return nil, err
 	}
-	out := make([]nodeFolder, len(fs))
+	out := make([]deviceFolder, len(fs))
 	for i, f := range fs {
 		write := false
 		if j := slices.IndexFunc(resources, func(e ResourceRef) bool { return e.Kind == resFolder && strings.EqualFold(e.Ref, f.Name) }); j >= 0 {
 			write = resources[j].Access == accessWrite && c.folderCase(f, catChange) != gridNever
 		}
-		out[i] = nodeFolder{Name: f.Name, ID: f.ID, Write: write}
-		if node != "" && node != f.Node {
-			if !c.store.hasCopy(f.Node, f.ID, node) {
-				return nil, fmt.Errorf("folder %q is on %s, and %s keeps no copy of it", f.Name, f.Node, node)
+		out[i] = deviceFolder{Name: f.Name, ID: f.ID, Write: write}
+		if device != "" && device != f.Device {
+			if !c.store.hasCopy(f.Device, f.ID, device) {
+				return nil, fmt.Errorf("folder %q is on %s, and %s keeps no copy of it", f.Name, f.Device, device)
 			}
-			out[i].Copy = syncFolderID(f.Node, f.ID)
+			out[i].Copy = syncFolderID(f.Device, f.ID)
 		}
 	}
 	return out, nil
 }
 
-// nodeFolder is a folder in a task's spec (node/shares.go TaskFolder).
-type nodeFolder struct {
+// deviceFolder is a folder in a task's spec (device/shares.go TaskFolder).
+type deviceFolder struct {
 	Name string `json:"name"`
 	ID   string `json:"id"` // in its machine's list of shared folders
 	// Write: the whole folder writable, after a snapshot of it. Its name
@@ -481,7 +481,7 @@ func taintKey(seq int) string { return fmt.Sprintf("taint_msg:%d", seq) }
 // Sources of a folder: a machine (this file), or a tool's place
 // (places.go). Both are Folders with a name and an access, listed
 // together; each keeps its own store and enforcement: a machine's folder
-// is in the folders table and mounted by its node, a place is in its
+// is in the folders table and mounted by its device, a place is in its
 // tool's configuration, which its server enforces itself, and reached
 // through that catalog tool.
 const (
@@ -523,12 +523,12 @@ func (c *core) folderViews() ([]folderView, error) {
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		return nil, err
 	}
 	online := map[string]bool{}
-	for _, n := range nodes {
+	for _, n := range devices {
 		online[n.Name] = n.Online
 	}
 	sv, err := c.syncView()
@@ -541,7 +541,7 @@ func (c *core) folderViews() ([]folderView, error) {
 		if c.folderCase(f, catChange) != gridNever {
 			most = accessWrite
 		}
-		fv := folderView{Folder: f, Source: sourceMachine, Mount: f.mountPath(), Online: online[f.Node],
+		fv := folderView{Folder: f, Source: sourceMachine, Mount: f.mountPath(), Online: online[f.Device],
 			Lend: lendHint(resFolder, f.Name, most)}
 		fv.Rights, fv.Own = c.folderRights(f), c.folderOwn(f).cases(folderCases)
 		fv.Copies, fv.CopyTo = sv.copiesOf(f)

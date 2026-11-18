@@ -12,7 +12,7 @@ import (
 // block (receiptInstruction): every harness (Claude Code, Codex, OpenCode,
 // any ACP agent) hands back its final text, while a tool call would need an
 // extra tool allowed in each one's permission model. eriphe-core reads the
-// block, never trusts it: what is "verified" is what a check run by the node
+// block, never trusts it: what is "verified" is what a check run by the device
 // saw pass, a file said changed is compared with the repository's diff, and
 // a claim that nothing confirms stays "not verified". Code says what is
 // verified, the model says what it did, the card shows the difference.
@@ -56,7 +56,7 @@ const (
 var receiptRe = regexp.MustCompile(`(?s)<receipt>\s*(.*?)\s*</receipt>`)
 
 // fence is a fenced block of a message: where it starts and ends, its
-// body, and its opening tag (json, go, thread…; "" for none).
+// body, and its opening tag (json, go, eriphe:block…; "" for none).
 type fence struct {
 	start, end int
 	body, tag  string
@@ -88,7 +88,7 @@ func fenceLines(text string) []fenceLine {
 
 // fencedBlocks reads the fenced blocks of text: fences open and close at
 // the start of a line, each opening paired with the next one, so a block
-// tagged go or thread is one block, never half of another. When a fence
+// tagged go or eriphe:block is one block, never half of another. When a fence
 // is left unclosed (an odd count), the last two still make a block: a
 // receipt at the end is read after a stray fence.
 func fencedBlocks(text string) []fence {
@@ -210,7 +210,7 @@ func stripReceipt(text string) string {
 	return strings.TrimSpace(out)
 }
 
-// checkResult is a check the node ran in the task's container when a turn
+// checkResult is a check the device ran in the task's container when a turn
 // ended (its "check" event).
 type checkResult struct {
 	Name     string `json:"name"`
@@ -232,7 +232,7 @@ type checkedReceipt struct {
 	Status  string   `json:"status"`
 	Summary string   `json:"summary,omitempty"`
 	Changed []string `json:"changed,omitempty"`
-	// Verified is what a check run by the node saw pass.
+	// Verified is what a check run by the device saw pass.
 	Verified []string `json:"verified,omitempty"`
 	// Unchecked is what the agent says it verified and no check covered.
 	Unchecked []string `json:"unchecked,omitempty"`
@@ -243,7 +243,7 @@ type checkedReceipt struct {
 	NeedsApproval []string      `json:"needs_approval,omitempty"`
 	Lessons       []string      `json:"lessons,omitempty"`
 	Checks        []checkResult `json:"checks,omitempty"`
-	// Diff is the files the repository's diff shows, when the node gave it.
+	// Diff is the files the repository's diff shows, when the device gave it.
 	Diff []string `json:"diff,omitempty"`
 	// Mismatches are where the receipt and what eriphe-core saw differ.
 	Mismatches []mismatch `json:"mismatches,omitempty"`
@@ -553,6 +553,41 @@ func (r *checkedReceipt) brainText() string {
 	line("leçons proposées", r.Lessons)
 	line("écarts", mismatchTexts(r.Mismatches, "fr"))
 	return b.String()
+}
+
+// verdict is the receipt in a few words, for the brain's wake: its
+// status, the checks that passed and those that did not, and how many
+// things it left open; its whole is in task_status.
+func (r *checkedReceipt) verdict() string {
+	if r == nil {
+		return "sans reçu lisible"
+	}
+	parts := []string{"statut " + r.Status}
+	if r.missing() {
+		parts[0] = "sans reçu lisible"
+	}
+	var ok, failed []string
+	for _, ch := range r.Checks {
+		switch {
+		case ch.OK:
+			ok = append(ok, ch.Name)
+		case ch.Config != "":
+			failed = append(failed, "contrôle "+ch.Name+" mal configuré")
+		default:
+			failed = append(failed, "contrôle "+ch.Name+" échoué")
+		}
+	}
+	if len(ok) > 0 {
+		parts = append(parts, "contrôles passés : "+strings.Join(ok, ", "))
+	}
+	parts = append(parts, failed...)
+	if n := len(r.NeedsApproval); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d point(s) attendent l'accord", n))
+	}
+	if n := len(r.Mismatches); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d écart(s) relevé(s) par eriphe-core", n))
+	}
+	return strings.Join(parts, " ; ")
 }
 
 // memoryText is the receipt as the night's extraction reads it

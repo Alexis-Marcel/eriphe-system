@@ -13,7 +13,7 @@ pull request's title: `type(scope)!: description`, the scope and the `!` optiona
 
 | Commit | Release |
 |---|---|
-| `feat: let a node rejoin under its own name` | minor: `0.1.1` → `0.2.0`, `1.4.2` → `1.5.0` |
+| `feat: let a device rejoin under its own name` | minor: `0.1.1` → `0.2.0`, `1.4.2` → `1.5.0` |
 | `fix(core): keep the session on a reload`, `perf: cache the token` | patch: `0.1.0` → `0.1.1` |
 | `feat!: drop the v1 API`, or any type with a `BREAKING CHANGE: ...` footer in the body | major: `1.4.2` → `2.0.0`; before `1.0.0`, minor: `0.1.1` → `0.2.0` |
 | `docs:`, `chore:`, `ci:`, `test:`, `refactor:`, `style:`, `build:`, or a subject that does not follow the convention | nothing by itself; it ships with the next release |
@@ -90,10 +90,10 @@ GitHub release the same way; the next releases count from it.
   `https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh` (and
   `install.ps1`) serves those of the latest release, and `releases/download/vX.Y.Z/install.sh`
   those of one release. Changes to `install/` on `main` reach users only with a release.
-  (`eriphe.com/install.sh` only redirects there.) The eriphe-node image carries the same two
+  (`eriphe.com/install.sh` only redirects there.) The eriphe-device image carries the same two
   scripts: a release that changes what an install puts on a machine besides the images (a
   service, a LaunchAgent, a component) raises `LAYOUT` in install.sh and `$layout` in install.ps1
-  (and node/update.go's `installLayout`, which a test checks), so that the updaters apply it by
+  (and device/update.go's `installLayout`, which a test checks), so that the updaters apply it by
   themselves (install/README.md, The machines update themselves).
 - **Pins.** `--version 0.2.0` stays there; `--version 0.2` takes `0.2.x` fixes.
 

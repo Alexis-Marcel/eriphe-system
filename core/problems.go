@@ -8,12 +8,12 @@ import (
 // One way to show an error, wherever it comes from (the brain, a task, a
 // tool, an AI account): a sentence in the user's language that says the
 // likely cause, what to do, and the raw text kept for "Details". The raw
-// errors are a provider's, a harness's or a node's, in English: they are
+// errors are a provider's, a harness's or a device's, in English: they are
 // never the first thing shown. The sentences are in web_text_problems.go.
 
 // problem is an error as the workspace shows it.
 type problem struct {
-	Cause  string // auth, quota, model, network, server, pending, offline, nonode or unknown
+	Cause  string // auth, quota, model, network, server, pending, offline, nodevice or unknown
 	Text   string // the sentence
 	Action string // what to do, a link's label (Href)
 	Href   string
@@ -31,15 +31,15 @@ const (
 
 // The causes an error is read as.
 const (
-	causeAuth    = "auth"
-	causeQuota   = "quota"
-	causeModel   = "model"
-	causeNetwork = "network"
-	causeServer  = "server"
-	causePending = "pending"
-	causeOffline = "offline"
-	causeNoNode  = "nonode"
-	causeUnknown = "unknown"
+	causeAuth     = "auth"
+	causeQuota    = "quota"
+	causeModel    = "model"
+	causeNetwork  = "network"
+	causeServer   = "server"
+	causePending  = "pending"
+	causeOffline  = "offline"
+	causeNoDevice = "nodevice"
+	causeUnknown  = "unknown"
 )
 
 // accountCause tells whether a cause is the AI account's: its key, its
@@ -55,8 +55,8 @@ var causeRules = []struct {
 	re    *regexp.Regexp
 }{
 	{causePending, regexp.MustCompile(`(?i)\bis (pending|starting) on\b|not placed yet`)},
-	{causeNoNode, regexp.MustCompile(`(?i)has no node`)},
-	{causeOffline, regexp.MustCompile(`(?i)node \S+ is not connected`)},
+	{causeNoDevice, regexp.MustCompile(`(?i)has no device`)},
+	{causeOffline, regexp.MustCompile(`(?i)device \S+ is not connected`)},
 	{causeModel, regexp.MustCompile(`(?i)the agent runs model|model[^.]{0,80}(not[ _]found|does not exist|not available|unknown|invalid|not supported)|(unknown|invalid|no such) model|no endpoints found`)},
 	{causeAuth, regexp.MustCompile(`(?i)unauthori[sz]ed|\b401\b|\b403\b|forbidden|failed to authenticate|authentication|invalid[ _-]?(api[ _-]?)?key|invalid x-api-key|please run /login|oauth token|token (has )?expired|invalid_grant|permission_error`)},
 	{causeQuota, regexp.MustCompile(`(?i)\b429\b|\b402\b|rate[ _-]?limit|quota|credit balance|insufficient|billing|usage limit|limit reached|too many requests`)},

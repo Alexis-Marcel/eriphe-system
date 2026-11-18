@@ -66,7 +66,7 @@ func TestClockAndTruncate(t *testing.T) {
 	if n := waitingCount([]Task{{State: stateWaitingPermission}, {State: stateIdle}, {State: stateWaitingPermission}}); n != 2 {
 		t.Errorf("waiting = %d", n)
 	}
-	if got := taskWhere(Task{Node: "pc", Agent: "opus", Dir: "o/r"}, 10); got != "pc · opus · o/r" {
+	if got := taskWhere(Task{Device: "pc", Agent: "opus", Dir: "o/r"}, 10); got != "pc · opus · o/r" {
 		t.Errorf("where: %q", got)
 	}
 }

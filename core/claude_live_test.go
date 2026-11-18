@@ -11,7 +11,7 @@ import (
 )
 
 // What the live benches share: one turn through the local Claude Code CLI
-// (`claude` signed in on this machine), no node.
+// (`claude` signed in on this machine), no device.
 
 type claudeResult struct {
 	Result  string  `json:"result"`

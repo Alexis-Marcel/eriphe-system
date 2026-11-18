@@ -59,7 +59,7 @@ const Text = createComponentImplementation(
   ({ props }) => {
     const v = props.variant ?? "body";
     const cls = `a2-text a2-text-${v}`;
-    // A title is a heading, under the tile's: assistive technology can
+    // A title is a heading, under the page's: assistive technology can
     // jump between them.
     if (v === "title") return <h3 className={cls}>{props.text}</h3>;
     if (v === "subtitle") return <h4 className={cls}>{props.text}</h4>;
@@ -392,9 +392,9 @@ function useDataAt(context: ComponentContext, path: string | null): unknown {
   return v;
 }
 
-// Mark is the user's mark on something a thread shows: a toggle for each
-// mark it offers, pressed when it is theirs, read where eriphe-core keeps
-// it (/thread/marks/<list>/<item>). A click sends "mark" with ids only,
+// Mark is the user's mark on something a node's block shows: a toggle for
+// each mark it offers, pressed when it is theirs, read where eriphe-core
+// keeps it (/marks/<list>/<item> of the block's data). A click sends "mark" with ids only,
 // the mark or "" to take it away; eriphe-core checks it against this Mark
 // and writes the data again. done alone is a box to check.
 const MARK_ID = /^[A-Za-z0-9_][A-Za-z0-9_.:@=+-]{0,127}$/;
@@ -412,7 +412,7 @@ const Mark = createComponentImplementation(
     const ok = MARK_ID.test(list) && MARK_ID.test(item);
     // Shown as eriphe-core keeps it, never ahead of it: it writes the
     // data again once it took the mark.
-    const shown = str(useDataAt(context, ok ? `/thread/marks/${list}/${item}` : null));
+    const shown = str(useDataAt(context, ok ? `/marks/${list}/${item}` : null));
     const set = (m: string) => void context.dispatchAction({ event: { name: "mark", context: { list, item, mark: shown === m ? "" : m } } });
     const marks = props.marks ?? [];
     return (
@@ -910,13 +910,11 @@ export function ghostsOf(ps: ProposalView[]): Ghost[] {
 // onlyAsks tells whether a surface shows external content (createSurface's
 // metadata, extensions.eriphe.tainted) and was written by a model: it can
 // only ask. Code's own (author "core", the attention queue's) shows a
-// proposal as its card does, with the proposal's own taint; so does a
-// thread's surface (answers: code bound its Proposals to the thread's
-// cards, whatever the thread read).
-type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string; answers?: boolean } } } };
+// proposal as its card does, with the proposal's own taint.
+type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string } } } };
 const onlyAsks = (s: unknown) => {
   const m = (s as Meta | undefined)?.metadata?.extensions?.eriphe;
-  return Boolean(m?.tainted) && m?.author !== "core" && !m?.answers;
+  return Boolean(m?.tainted) && m?.author !== "core";
 };
 // external tells whether a surface shows external content, whoever wrote it.
 const external = (s: unknown) => Boolean((s as Meta | undefined)?.metadata?.extensions?.eriphe?.tainted);
@@ -1044,7 +1042,7 @@ const Proposal = createComponentImplementation(
             ))}
           </dl>
         )}
-        {p.from && <p className="a2-proposal-from">{p.thread ? <a href={`/espace?open=thread-${p.thread}`}>{p.from}</a> : p.from}</p>}
+        {p.from && <p className="a2-proposal-from">{p.node ? <a href={`/espace?open=node-${p.node}`}>{p.from}</a> : p.from}</p>}
         {pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
         {pending && elsewhere && <p className="a2-proposal-why a2-proposal-inchat">{t("espace.a2.proposal.inchat")}</p>}
         {pending && !elsewhere && (
@@ -1059,38 +1057,6 @@ const Proposal = createComponentImplementation(
         )}
         {failed && <p className="a2-proposal-failed" role="alert">{t("espace.a2.proposal.failed")}</p>}
       </section>
-    );
-  },
-);
-
-// Offers shows the actions eriphe-core offers on a row of a thread, or on
-// a group of rows: its data, bound under /thread/items, one button each,
-// with code's words. A click sends "offer" with that offer's ids as code
-// wrote them, never its words; eriphe-core checks it against this Offers
-// and the store, and makes a card: nothing runs.
-const OFFER_KEYS = ["thread", "source", "item", "state", "offer"] as const;
-type Offer = { label: string } & Partial<Record<(typeof OFFER_KEYS)[number], unknown>>;
-
-const Offers = createComponentImplementation(
-  // A list the engine resolves; eriphe-core takes a binding only.
-  { name: "Offers", schema: z.object({ offers: listOr(z.record(z.string(), z.unknown())) }) },
-  ({ props, context }) => {
-    const offers = (Array.isArray(props.offers) ? props.offers : []).filter(
-      (o): o is Offer => !!o && typeof o === "object" && typeof o.label === "string" && typeof o.offer === "string",
-    );
-    if (!offers.length) return null;
-    const send = (o: Offer) => {
-      const ids = Object.fromEntries(OFFER_KEYS.filter((k) => k in o).map((k) => [k, o[k]]));
-      void context.dispatchAction({ event: { name: "offer", context: ids } });
-    };
-    return (
-      <span className="a2-offers">
-        {offers.map((o, i) => (
-          <button key={i} type="button" className="btn a2-button a2-button-default" onClick={() => send(o)}>
-            {o.label}
-          </button>
-        ))}
-      </span>
     );
   },
 );
@@ -1169,7 +1135,6 @@ export const components: ReactComponentImplementation[] = [
   Message,
   Day,
   Proposal,
-  Offers,
   Alert,
   Placeholder,
 ];
