@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { boot } from "./data";
-import { Espace } from "./Espace";
+import { App } from "./App";
+import { boot } from "./data/api";
 import { FailSafe } from "./Fallback";
 import { WordsContext, makeT } from "./i18n";
 import "./fonts.css";
@@ -20,7 +20,7 @@ boot(root.dataset.boot).then(
       <StrictMode>
         <WordsContext.Provider value={{ t: makeT(b.strings), lang: b.lang }}>
           <FailSafe csrf={b.csrf}>
-            <Espace boot={b} />
+            <App boot={b} />
           </FailSafe>
         </WordsContext.Provider>
       </StrictMode>,

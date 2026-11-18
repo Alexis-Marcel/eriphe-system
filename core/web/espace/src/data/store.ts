@@ -1,0 +1,208 @@
+import { createStore, type StoreApi } from "zustand/vanilla";
+import { useStore } from "zustand";
+import type { Exchange, GraphNode, Moved, Note } from "./api";
+
+// The workspace's state: the graph as eriphe-core streams it (stream.ts),
+// and what the user has open. The graph is core's: the page never changes a
+// node by itself, it shows what the stream says. What is open is the
+// page's: the pages open in the graph, and the one the console talks to
+// (talk), the home when none.
+//
+// Each event of the stream is a pure step (applyX), tested on its own;
+// the store only holds the result.
+
+export type Progress = { text: string; at: string };
+export type Shown = { node: string; by?: string; at?: string; seq: number };
+
+export type State = {
+  nodes: Record<string, GraphNode>;
+  // bumped at each new version (docs) or each trace that grew (traces): a
+  // page shown reads its node again
+  docs: Record<string, number>;
+  traces: Record<string, number>;
+  progress: Record<string, Progress>;
+  // the sources' last values, by node, block and name
+  sources: Record<string, unknown>;
+  open: string[];
+  talk: string | null;
+  shown: number; // the last show applied
+  exchange: Exchange | null;
+  notes: Note[];
+  moved: Moved & { n: number }; // the proposals that moved last, n growing each time
+  live: boolean; // the stream is open
+};
+
+export const empty = (): State => ({
+  nodes: {},
+  docs: {},
+  traces: {},
+  progress: {},
+  sources: {},
+  open: [],
+  talk: null,
+  shown: 0,
+  exchange: null,
+  notes: [],
+  moved: { n: 0, refs: [] },
+  live: false,
+});
+
+export const sourceKey = (node: string, block: string, name: string) => `${node}\u0000${block}\u0000${name}`;
+
+// The "node" event: all the rows (reset), or those that changed and the
+// ids of those that left (gone: archived). A page open on a node that left
+// closes.
+export type NodeEvent = { reset?: boolean; nodes?: GraphNode[]; gone?: string[] };
+
+export function applyNodes(s: State, ev: NodeEvent): State {
+  const nodes = ev.reset ? {} : { ...s.nodes };
+  for (const n of ev.nodes ?? []) if (n && typeof n.id === "string") nodes[n.id] = n;
+  for (const id of ev.gone ?? []) delete nodes[id];
+  const open = s.open.filter((id) => nodes[id]);
+  const talk = s.talk && nodes[s.talk] && open.includes(s.talk) ? s.talk : (open.at(-1) ?? null);
+  return { ...s, nodes, open, talk };
+}
+
+// The "doc" event: a new version ({id, version}) or a trace that grew
+// ({id, trace}).
+export type DocEvent = { id: string; version?: number; trace?: boolean };
+
+export function applyDoc(s: State, ev: DocEvent): State {
+  if (!ev || typeof ev.id !== "string") return s;
+  if (ev.trace) return { ...s, traces: { ...s.traces, [ev.id]: (s.traces[ev.id] ?? 0) + 1 } };
+  return { ...s, docs: { ...s.docs, [ev.id]: (s.docs[ev.id] ?? 0) + 1 } };
+}
+
+export type ProgressEvent = { node: string; text: string; at: string };
+
+export function applyProgress(s: State, ev: ProgressEvent): State {
+  if (!ev || typeof ev.node !== "string" || typeof ev.text !== "string") return s;
+  return { ...s, progress: { ...s.progress, [ev.node]: { text: ev.text, at: ev.at } } };
+}
+
+export type SourceEvent = { node: string; block: string; name: string; value: unknown };
+
+export function applySource(s: State, ev: SourceEvent): State {
+  if (!ev || typeof ev.node !== "string" || typeof ev.block !== "string" || typeof ev.name !== "string") return s;
+  return { ...s, sources: { ...s.sources, [sourceKey(ev.node, ev.block, ev.name)]: ev.value } };
+}
+
+// SHOW_FRESH is how old a show may be and still open a page when the stream
+// (re)connects: the last one comes at once, and an old one is not news.
+export const SHOW_FRESH = 60_000;
+
+// The "show" event: Eriphe opens a node's page for the user, beside what is
+// open, and the console talks to it. Each show once.
+export function applyShow(s: State, ev: Shown, now = Date.now()): State {
+  if (!ev || typeof ev.node !== "string" || !(ev.seq > s.shown)) return s;
+  const first = s.shown === 0;
+  const seen = { ...s, shown: ev.seq };
+  if (first && ev.at && now - Date.parse(ev.at) > SHOW_FRESH) return seen;
+  if (!s.nodes[ev.node]) return seen;
+  return openPage(seen, ev.node, true);
+}
+
+// The "exchange" event: the exchange of the node the console talks to; one
+// of another (the stream not yet moved) is not shown.
+export function applyExchange(s: State, x: Exchange): State {
+  if (!x || !Array.isArray(x.lines)) return s;
+  if ((x.node ?? null) !== s.talk) return s;
+  const suggestions = Array.isArray(x.suggestions) ? x.suggestions.filter((t) => typeof t === "string") : undefined;
+  return { ...s, exchange: { ...x, suggestions } };
+}
+
+// NOTES_KEPT is how many notices show at once.
+export const NOTES_KEPT = 4;
+
+export function applyNotes(s: State, ns: Note[]): State {
+  if (!Array.isArray(ns) || ns.length === 0) return s;
+  const fresh = ns.filter((n) => !s.notes.some((o) => o.id === n.id));
+  return { ...s, notes: [...s.notes, ...fresh].slice(-NOTES_KEPT) };
+}
+
+export function dropNote(s: State, id: number): State {
+  return { ...s, notes: s.notes.filter((n) => n.id !== id) };
+}
+
+export function applyMoved(s: State, m: Moved): State {
+  if (!m || !(m.all || m.refs?.length)) return s;
+  return { ...s, moved: { n: s.moved.n + 1, refs: Array.isArray(m.refs) ? m.refs : [], all: Boolean(m.all) } };
+}
+
+// openPage opens a node's page: alone, or beside those open (a ⌘-click,
+// Eriphe's show). The console then talks to it.
+export function openPage(s: State, id: string, beside = false): State {
+  if (!s.nodes[id]) return s;
+  const open = beside ? (s.open.includes(id) ? s.open : [...s.open, id]) : [id];
+  return { ...s, open, talk: id, exchange: s.talk === id ? s.exchange : null };
+}
+
+// closePage closes one page; the console talks to the one it talked to if
+// it is still open, else to the last one open, else to the home.
+export function closePage(s: State, id: string): State {
+  const open = s.open.filter((x) => x !== id);
+  const talk = s.talk && s.talk !== id && open.includes(s.talk) ? s.talk : (open.at(-1) ?? null);
+  return { ...s, open, talk, exchange: talk === s.talk ? s.exchange : null };
+}
+
+// talkTo makes an open page the one the console talks to.
+export function talkTo(s: State, id: string | null): State {
+  if (id === s.talk || (id !== null && !s.open.includes(id))) return s;
+  return { ...s, talk: id, exchange: null };
+}
+
+// home closes every page: the console talks to the home.
+export function home(s: State): State {
+  return s.open.length || s.talk ? { ...s, open: [], talk: null, exchange: s.talk ? null : s.exchange } : s;
+}
+
+export type Store = StoreApi<State>;
+
+export function makeStore(init: Partial<State> = {}): Store {
+  return createStore<State>(() => ({ ...empty(), ...init }));
+}
+
+// step applies a pure step to the store.
+export function step<A extends unknown[]>(store: Store, f: (s: State, ...a: A) => State, ...a: A) {
+  const before = store.getState();
+  const after = f(before, ...a);
+  if (after !== before) store.setState(after, true);
+}
+
+// The page's own store.
+export const store = makeStore();
+
+export function useGraph<T>(select: (s: State) => T): T {
+  return useStore(store, select);
+}
+
+// childrenOf, rootOf and pathOf read the graph's parents.
+export function rootOf(nodes: Record<string, GraphNode>, id: string): string {
+  let c = id;
+  for (let i = 0; i < 64 && nodes[c]?.parent && nodes[nodes[c].parent!]; i++) c = nodes[c].parent!;
+  return c;
+}
+
+export function pathOf(nodes: Record<string, GraphNode>, id: string): string[] {
+  const out: string[] = [];
+  for (let c: string | undefined = id; c && nodes[c] && out.length < 64; c = nodes[c].parent) out.unshift(c);
+  return out;
+}
+
+export function depthOf(nodes: Record<string, GraphNode>, id: string): number {
+  return pathOf(nodes, id).length - 1;
+}
+
+// subtree is a node and every node under it.
+export function subtree(nodes: Record<string, GraphNode>, id: string): string[] {
+  const kids = new Map<string, string[]>();
+  for (const n of Object.values(nodes)) if (n.parent) kids.set(n.parent, [...(kids.get(n.parent) ?? []), n.id]);
+  const out: string[] = [];
+  const walk = (x: string) => {
+    if (out.includes(x)) return;
+    out.push(x);
+    for (const k of kids.get(x) ?? []) walk(k);
+  };
+  walk(id);
+  return out;
+}

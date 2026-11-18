@@ -1,4 +1,4 @@
-import type { Note } from "./data";
+import type { Note } from "./api";
 
 // Whether the user is looking, as the conversation's page tells it
 // (static/app.js): the tab tells eriphe-core when it comes in front or

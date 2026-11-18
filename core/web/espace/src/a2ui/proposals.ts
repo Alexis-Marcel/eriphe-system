@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { answerProposal, dayProposals, followProposals, proposal, type Answer, type Moved, type ProposalView } from "../data";
+import { answerProposal, dayProposals, proposal, type Answer, type Moved, type ProposalView } from "../data/api";
+import { store } from "../data/store";
 
 // Where the Proposal and Day components read proposals, send an answer and
 // learn that one moved (made or decided anywhere: its card, a channel, a
-// plain "oui", another surface): eriphe-core by default (data.ts: an
-// "answer" action on the surface, the stream's "proposals" events); the
-// sample and the tests give their own.
+// plain "oui", another page): eriphe-core by default (data/api.ts: the
+// proposal's card answered, the stream's "proposals" events in the store);
+// the sample and the tests give their own.
 export type Proposals = {
   read(ref: string): Promise<ProposalView | null>;
   answer(a: Answer): Promise<boolean>;
@@ -14,6 +15,12 @@ export type Proposals = {
   // follow calls back when proposals moved; it gives a function to stop.
   follow(on: (m: Moved) => void): () => void;
 };
+
+export function followProposals(on: (m: Moved) => void): () => void {
+  return store.subscribe((s, before) => {
+    if (s.moved.n !== before.moved.n) on(s.moved);
+  });
+}
 
 export const coreProposals: Proposals = { read: proposal, answer: answerProposal, day: dayProposals, follow: followProposals };
 
