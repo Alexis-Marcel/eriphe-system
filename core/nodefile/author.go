@@ -100,6 +100,9 @@ func (n *Node) PutAuthorBlock(name string, raw []byte, before string) error {
 		return nil
 	}
 	// Last, after a blank line.
+	if k := len(n.segs) - 1; k >= 0 && n.segs[k].block == nil && inFence(n.segs[k].text) {
+		return blockErr(name, "the node's text ends inside an open code fence: close it first, or the block would read as text")
+	}
 	if k := len(n.segs) - 1; k >= 0 && n.segs[k].block == nil && !strings.HasSuffix(n.segs[k].text, "\n\n") {
 		if !strings.HasSuffix(n.segs[k].text, "\n") {
 			n.segs[k].text += "\n"

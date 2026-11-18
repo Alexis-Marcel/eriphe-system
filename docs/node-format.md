@@ -72,14 +72,13 @@ The titles proposed for the first article:
 | `archived` | timestamp | When the user archived it; absent while not archived. |
 | `external` | `true` | Written by code only: the node holds someone else's words. Absent otherwise. |
 
-Any other field is kept as it is, in its place, and written back unchanged. A field given twice, or
-YAML that does not parse, is an error.
+Any other field is kept with its value. While the front matter does not change, it keeps its bytes,
+comments included. When code writes it again (a new title, say), the known fields come first in the
+order of the table, the empty ones left out, then the other fields in their order; YAML comments are
+not kept. A field given twice, or YAML that does not parse, is an error.
 
 The node's state (`running`, `waiting`, `idle`, `done`) is not in the file: it is code's, in the
 graph's index.
-
-When code writes the front matter again, the fields come in the order of the table, the empty ones
-left out, then the other fields in their order.
 
 ## Body and blocks
 
@@ -108,7 +107,7 @@ A key that is not one of these is an error. The empty ones may be left out.
 Each block is checked alone, like a surface of its own:
 
 - against the catalog: component types, properties, ids, a `root`, children that exist;
-- links: a literal `Link` url is an `http(s)` address;
+- links: a `Link` url, literal or bound to the block's data, is an `http(s)` address;
 - bindings (`{"@path": "/…"}`, and a template's `path`): each one reads the block's own `data`, one
   of its `sources` (`/<name>/…`, checked when code reads it), or the user's marks
   (`/marks/<list>/<item>`). A binding to anything else is an error that names the block.

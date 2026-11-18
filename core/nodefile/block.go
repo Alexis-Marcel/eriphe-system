@@ -154,12 +154,15 @@ func isEmpty(raw json.RawMessage) bool {
 func completeShort(raw json.RawMessage) json.RawMessage {
 	var one map[string]any
 	if json.Unmarshal(raw, &one) == nil {
+		if one == nil {
+			return raw
+		}
 		one["id"] = "root"
 		out, _ := marshal([]any{one})
 		return out
 	}
 	var list []map[string]any
-	if json.Unmarshal(raw, &list) != nil || len(list) != 1 || list[0]["id"] == "root" {
+	if json.Unmarshal(raw, &list) != nil || len(list) != 1 || list[0] == nil || list[0]["id"] == "root" {
 		return raw
 	}
 	list[0]["id"] = "root"
@@ -427,6 +430,10 @@ func (b *Block) Validate() error {
 		}
 		if ok, hint := lookup(data, at, bound.List); !ok {
 			fail("/components%s: nothing at %s in the block's data%s: write it in data, or read it from a source", bound.At, bound.Path, hint)
+			continue
+		}
+		if bound.Link && !linksOK(valuesAt(data, at)) {
+			fail("/components%s: a Link opens a field that is already an http(s) address as a whole, and %s holds something else", bound.At, bound.Path)
 		}
 	}
 	if len(problems) > 0 {
@@ -536,6 +543,62 @@ func lookup(v any, toks []string, list bool) (bool, string) {
 		return lookup(x[i], rest, list)
 	}
 	return false, ""
+}
+
+// valuesAt are the values a path leads to in v, "*" standing for each
+// item of a list.
+func valuesAt(v any, toks []string) []any {
+	if len(toks) == 0 {
+		return []any{v}
+	}
+	t, rest := toks[0], toks[1:]
+	switch x := v.(type) {
+	case map[string]any:
+		if next, ok := x[t]; ok {
+			return valuesAt(next, rest)
+		}
+	case []any:
+		if t == "*" {
+			var out []any
+			for _, it := range x {
+				out = append(out, valuesAt(it, rest)...)
+			}
+			return out
+		}
+		if i, err := strconv.Atoi(t); err == nil && i >= 0 && i < len(x) {
+			return valuesAt(x[i], rest)
+		}
+	}
+	return nil
+}
+
+// linksOK tells whether the values bound to a Link's url are addresses it
+// may open (a2ui.LinkURLOK), or empty: no link.
+func linksOK(vs []any) bool {
+	for _, v := range vs {
+		if u, ok := v.(string); (!ok && v != nil) || (ok && u != "" && !a2ui.LinkURLOK(u)) {
+			return false
+		}
+	}
+	return true
+}
+
+// inFence tells whether a text ends inside an open fenced code block: a
+// block written after it would read as text.
+func inFence(text string) bool {
+	fence := ""
+	for line := range strings.Lines(text) {
+		t := trimEOL([]byte(line))
+		switch {
+		case fence != "":
+			if closesFence(t, fence) {
+				fence = ""
+			}
+		default:
+			fence = opensFence(t)
+		}
+	}
+	return fence != ""
 }
 
 // Code's API: what only code writes.

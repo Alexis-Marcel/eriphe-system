@@ -252,6 +252,7 @@ func TestErrors(t *testing.T) {
 		{"no root", block("plan", `{"components": [{"id": "x", "component": "Text", "text": "Hi"}]}`), "", "plan"},
 		{"missing source", block("chart", `{"components": [{"id": "root", "component": "Chart", "kind": "line", "series": {"@path": "/errors/series"}}]}`), "nothing at /errors/series", "chart"},
 		{"missing data", block("chart", `{"components": [{"id": "root", "component": "Text", "text": {"@path": "/t"}}], "data": {"u": "x"}}`), "(there: u)", "chart"},
+		{"bad bound link", block("link", `{"components": [{"id": "root", "component": "Link", "label": "Go", "url": {"@path": "/u"}}], "data": {"u": "javascript:alert(1)"}}`), "an http(s) address as a whole", "link"},
 		{"bad link", block("link", `{"components": [{"id": "root", "component": "Link", "label": "Go", "url": "javascript:alert(1)"}]}`), "http(s) address", "link"},
 		{"data marks", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "data": {"marks": 1}}`), "data /marks is code's", "plan"},
 		{"data is source", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "data": {"s": 1}, "sources": {"s": {"tool": "a/b"}}}`), "place of the source s", "plan"},
@@ -404,6 +405,33 @@ func TestAuthorCodeFields(t *testing.T) {
 	}
 	if err := prev.AuthorBody("```eriphe:block draft\n" + draft(`, "external": false`) + "\n```\n"); !errors.Is(err, ErrCodeField) {
 		t.Errorf("body: not refused: %v", err)
+	}
+}
+
+// Broken author input is an error, never a panic.
+func TestAuthorBadComponents(t *testing.T) {
+	for _, comps := range []string{`null`, `[null]`, `{}`, `[]`, `"x"`, `[1]`} {
+		raw := `{"components": ` + comps + `}`
+		n, _ := Parse([]byte(head("Text.\n")))
+		if err := n.PutAuthorBlock("b", []byte(raw), ""); err == nil {
+			t.Errorf("%s: put", comps)
+		}
+		if err := n.AuthorBody("```eriphe:block b\n" + raw + "\n```\n"); err == nil {
+			t.Errorf("%s: body", comps)
+		}
+		if _, err := ParseAuthor([]byte(head("```eriphe:block b\n"+raw+"\n```\n")), nil); err == nil {
+			t.Errorf("%s: parse", comps)
+		}
+	}
+}
+
+func TestPutAuthorBlockAfterOpenFence(t *testing.T) {
+	n, err := Parse([]byte(head("Text.\n\n```go\nfunc main() {}\n")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := n.PutAuthorBlock("b", []byte(`{"components": {"component": "Text", "text": "Hi"}}`), ""); err == nil {
+		t.Errorf("written after an open fence:\n%s", mustBytes(t, n))
 	}
 }
 
