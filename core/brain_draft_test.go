@@ -123,7 +123,7 @@ func TestBrainDraftReport(t *testing.T) {
 // call and the answer in the next.
 func TestBrainWorkingNoteNotShown(t *testing.T) {
 	c, report, brainMessages := brainReports(t)
-	c.store.addMessage(roleEvent, "[thread 1 « Garage »] A step reported its work.", true)
+	c.store.addMessage(roleEvent, "[node n1 « Garage »] A step reported its work.", true)
 
 	report("t-brain", deviceReport{State: stateRunning, Events: []EventRow{
 		{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Need the whole report."}}}})

@@ -10,8 +10,10 @@ To install Eriphe for someone, follow the runbook for AI assistants first; it ho
 - [Get started](https://github.com/Alexis-Marcel/eriphe-system/blob/main/README.md#get-started): which machine to install on, and the steps after
 - [Installing Eriphe](https://github.com/Alexis-Marcel/eriphe-system/blob/main/install/README.md): the full install guide, options, updates, uninstall, troubleshooting
 - [Eriphe on Unraid](https://github.com/Alexis-Marcel/eriphe-system/blob/main/unraid/README.md): the Unraid template
-- [Connect Google Drive](https://github.com/Alexis-Marcel/eriphe-system/blob/main/docs/google-drive.md): creating your own Google app
+- [Connect Google](https://github.com/Alexis-Marcel/eriphe-system/blob/main/docs/google.md): creating your own Google app
 - [Behind your reverse proxy](https://github.com/Alexis-Marcel/eriphe-system/blob/main/docs/reverse-proxy.md): a workspace at your own domain
+- [Your workspace: the graph](https://github.com/Alexis-Marcel/eriphe-system/blob/main/docs/workspace.md): nodes, pages, views, devices, where it is kept and the memory's readable copy
+- [The node file format](https://github.com/Alexis-Marcel/eriphe-system/blob/main/docs/node-format.md): a node's markdown file and its blocks
 
 ## Develop
 

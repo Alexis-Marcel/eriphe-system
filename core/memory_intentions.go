@@ -521,7 +521,7 @@ func (m *memStore) surfaced(xs []*Intention, how string) {
 // cueIntentions makes due the open intentions whose person cue my message
 // names ("la prochaine fois que je parle à Hélène").
 func (m *memStore) cueIntentions(text string) ([]*Intention, error) {
-	words := textStems(text) // matched as a thread's names are (names.go)
+	words := textStems(text) // matched as an entity's names are (names.go)
 	if len(words) == 0 {
 		return nil, nil
 	}

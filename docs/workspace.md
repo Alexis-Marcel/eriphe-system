@@ -102,6 +102,19 @@ Eriphe writes it on a page, the subject's or a new bubble. What it writes there 
 A live block only reads what you let Eriphe read freely: a tool whose reading needs your approval
 each time, or that you blocked, cannot feed it. Eriphe tells you.
 
+## Follow something: views
+
+What you want to follow all the time ("keep an eye on my mail", "follow the production alerts",
+"show me the pull requests to review") is a **view**: a standing bubble whose blocks Eriphe's core
+keeps up to date. It can come with a monitor that sees what arrives and a skill that works in the
+view when it does: the skill reads each new item, notes what you should know of it, and prepares
+what it asks of you (a draft and its card). Eriphe proposes the whole view on **one card**: its
+page, the monitor and the skill together, and nothing exists before your yes.
+
+What you want to see once ("open the production for me") is not a view: Eriphe opens a bubble
+under the one you are talking about, with a live block, and shows it beside your page. If you want
+to follow it, it proposes the view.
+
 ## Make it come back
 
 Say it with a time or an event:
@@ -145,6 +158,32 @@ small notice in the page rather than on your phone. If the workspace cannot open
 old browser, a script blocked, Eriphe out of reach for a while), the page offers the conversation
 instead, and **Always open the conversation here** (Settings → My workspace → Home page gives the
 workspace its place back).
+
+## Where the work runs: devices
+
+Long or heavy work (a research, code to change, a page to capture) runs as a **task** on one of your
+**devices**: the machines you joined to your Eriphe (the NAS, a Mac, a PC), each running
+eriphe-device, listed in Settings → Devices. A task works in a bubble of its own under the page you
+asked from: it writes there as it goes, says where it is under the bubble's name, and keeps its full
+report in the page's **Trace**. A task that captures a web page (most sites cannot be shown inside
+another page) keeps the image in its bubble.
+
+## Where it is kept
+
+On the machine that runs eriphe-core, in its data folder (`/data` in the container):
+
+- `nodes/`: every bubble as a markdown file, versioned in git; `nodes.db` is its index, rebuilt from
+  the files if it is lost. Edit a page inside Eriphe only (its **.md** tab): a file changed by hand
+  is taken as a new version from « outside » at the next start.
+- `memoire/`: a **readable copy of what Eriphe knows about you** (your profile, the people, the
+  facts, the decisions, the journal), plain markdown files written by Eriphe's code after every
+  change. It is not a page of the graph and not in git, so when you ask Eriphe to forget something,
+  it leaves this folder at once. You can read it, or open it in a notes app; changes made there are
+  written over, since the memory itself stays the truth.
+- Every night, the backup folder (`memory-backups/` next to the memory, or `memory.backup_dir` in
+  `core.json`) gets `nodes-<day>.bundle` (the graph's history, which `git clone` reads),
+  `nodes-<day>.db`, `memory-<day>.db` and `memoire-<day>.tar.gz` (the readable copy), kept 14 days
+  by default.
 
 ## Privacy and safety
 

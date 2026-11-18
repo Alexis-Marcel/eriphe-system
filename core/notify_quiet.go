@@ -9,7 +9,7 @@ import (
 // The quiet hours adapt, but never by themselves. eriphe-core keeps cheap
 // signals of when the user is active (their messages, a tab of theirs in
 // front of them, their reactions to notifications, their gestures on the
-// workspace's surfaces) and of when they did not
+// workspace's nodes) and of when they did not
 // want to be told (« pas maintenant »), and suggests a window from the last
 // two weeks, without a model: the typical last activity of the evening
 // and first of the morning, with a margin. The brain sees the suggestion

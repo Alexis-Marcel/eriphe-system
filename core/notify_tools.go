@@ -49,7 +49,7 @@ type ruleIn struct {
 }
 
 func registerNotifyTools(s *mcp.Server, c *core) {
-	tool(s, "notify", "Tell the user something on your own, with its weight (1 to 5) and why. eriphe-core decides what happens: from weight 4 it is delivered at once (5 is pushed to a device), 3 waits for the next pause, 1 and 2 for the user's return (the brief); the user's rules raise or lower the weight of a thread or a topic, quiet hours and a daily cap of pushes may hold a 4 or a 5, and a turn that read external content never interrupts. The result says what happened: never say a notification was sent if it was not.",
+	tool(s, "notify", "Tell the user something on your own, with its weight (1 to 5) and why. eriphe-core decides what happens: from weight 4 it is delivered at once (5 is pushed to a device), 3 waits for the next pause, 1 and 2 for the user's return (the brief); the user's rules raise or lower the weight of a node or a topic, quiet hours and a daily cap of pushes may hold a 4 or a 5, and a turn that read external content never interrupts. The result says what happened: never say a notification was sent if it was not.",
 		func(ctx context.Context, in notifyIn) (map[string]any, error) {
 			return c.brainNotify(in)
 		})
@@ -57,7 +57,7 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in notificationsIn) (map[string]any, error) {
 			return c.brainNotifications(in)
 		})
-	tool(s, "rule", "Write a notification rule of the user's: the weight of notifications about a node, a key or a kind of key (a floor, a ceiling, 0 for never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, a channel's detail) are setting. A topic's match is a known topic (notifications lists them): a new one matches only notifications about that same thread or key. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
+	tool(s, "rule", "Write a notification rule of the user's: the weight of notifications about a node, a key or a kind of key (a floor, a ceiling, 0 for never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, a channel's detail) are setting. A topic's match is a known topic (notifications lists them): a new one matches only notifications about that same node or key. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})

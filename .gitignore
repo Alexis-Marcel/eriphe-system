@@ -19,6 +19,7 @@
 __pycache__/
 .pytest_cache/
 /servers/files/files
+/servers/signal/signal
 # Local worktrees of coding assistants
 /.claude/worktrees/
 /core/web/espace/node_modules/

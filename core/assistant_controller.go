@@ -59,7 +59,7 @@ type assistantRole struct {
 	// ResumeTokens and ResumeIdle bound the session a new task resumes:
 	// past either (its last turn's context per call, the time since that
 	// turn ended) the task starts a fresh session instead, its role's
-	// first turn carrying the thread over. Each resumed call reads the
+	// first turn carrying the conversation over. Each resumed call reads the
 	// whole history, and a cache older than an hour is written again in
 	// full. Zero: no bound.
 	// ResumeIdleFloor: a session under it is resumed even after the pause,
@@ -465,7 +465,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	// Its MCP servers carry tokens: they are added when its device fetches the task.
 	extra := deviceTaskSpec{AppendSystemPrompt: prompt, AllowedTools: allowed, Profile: profile, NoAgentMemory: true}
 	// Another harness cannot resume this one's session: the context pack
-	// carries the thread over instead (brain_context.go).
+	// carries the conversation over instead (brain_context.go).
 	_, agent, _ := c.conf().agent(a.Agent)
 	st := c.assistantStatus(a.Name)
 	if resume && !r.Fresh && st.Session != "" && st.SessionRuntime == agent.Runtime {

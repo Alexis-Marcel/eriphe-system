@@ -619,7 +619,7 @@ type AssistantStatus struct {
 	Profile string `json:"profile,omitempty"`
 	PackDue bool   `json:"pack_due,omitempty"`
 	// Cards are the cards its session holds, each by its hash
-	// (thread_card.go): one is given again only when it changed.
+	// (about_card.go): one is given again only when it changed.
 	Cards map[string]string `json:"cards,omitempty"`
 }
 

@@ -53,13 +53,13 @@ func TestAttentionMergeByRef(t *testing.T) {
 	at := time.Now().Add(-time.Minute)
 	c.attend(attentionItem{Ref: "mail:1", Weight: 4, Why: "a bill due today", Say: "Ta facture est due.", Source: "skill:mail", Time: at})
 	c.attend(attentionItem{Ref: "mail:1", Weight: 2, Why: "the bill, paid?", Source: "skill:mail"})
-	c.attend(attentionItem{Ref: "thread:3", Weight: 9, Why: "the plan waits", Source: "thread:3"})
+	c.attend(attentionItem{Ref: "node:n3", Weight: 9, Why: "the plan waits", Source: "node:n3"})
 	c.attend(attentionItem{Ref: "agenda:2026-11-12", Weight: 1, Why: "a quiet day", Source: "skill:brief"})
 	items := c.attentionOpen()
 	if len(items) != 3 {
 		t.Fatalf("items %+v", items)
 	}
-	if items[0].Ref != "thread:3" || items[0].Weight != 5 {
+	if items[0].Ref != "node:n3" || items[0].Weight != 5 {
 		t.Errorf("a weight is 1 to 5, the heaviest first: %+v", items[0])
 	}
 	m := attentionOf(c, "mail:1")
@@ -73,7 +73,7 @@ func TestAttentionMergeByRef(t *testing.T) {
 }
 
 // A card enters the queue with a weight by its kind: one a task or a
-// thread waits on, 4; what the user asked to be done, 3; a reminder, 2;
+// node waits on, 4; what the user asked to be done, 3; a reminder, 2;
 // the small things, 1. Decided, it leaves.
 func TestAttentionWeightByKind(t *testing.T) {
 	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardSkill: 3, cardMonitor: 3, cardRunCalls: 3,
@@ -120,9 +120,9 @@ func TestAttentionHeldUntilBreakpoint(t *testing.T) {
 	c.attend(attentionItem{Ref: "mail:1", Weight: 1, Why: "a newsletter", Say: "Une lettre d'information.", Source: "skill:mail", Time: *now})
 	c.attend(attentionItem{Ref: "mail:2", Weight: 3, Why: "a bill due today", Say: "Ta facture est due aujourd'hui.", Source: "skill:mail", Time: *now})
 	c.attend(attentionItem{Ref: "agenda:2026-11-04", Weight: 2, Why: "a quiet day", Say: "Journée calme.", Source: "skill:agenda", Time: *now})
-	c.attend(attentionItem{Ref: "thread:3", Weight: 4, Why: "the plan waits", Source: "thread:3", Time: *now})
+	c.attend(attentionItem{Ref: "node:n3", Weight: 4, Why: "the plan waits", Source: "node:n3", Time: *now})
 	c.attend(attentionItem{Ref: "site:down", Weight: 5, Why: "the site is down", Source: "skill:prod", Time: *now})
-	for ref, held := range map[string]bool{"mail:1": true, "mail:2": true, "agenda:2026-11-04": true, "thread:3": false, "site:down": false} {
+	for ref, held := range map[string]bool{"mail:1": true, "mail:2": true, "agenda:2026-11-04": true, "node:n3": false, "site:down": false} {
 		if it := attentionOf(c, ref); it == nil || it.Held != held {
 			t.Errorf("%s: %+v, want held %v", ref, it, held)
 		}

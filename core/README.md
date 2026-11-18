@@ -453,7 +453,7 @@ a task are tainted once they read what comes neither from the user nor from Erip
   started on a tainted turn, when it called a tool not trusted (seen by the proxy, which every
   catalog call crosses, and in its events), when it read the web, or when its events cannot be
   read. The event of its turn's end then says so and taints the turn that reads it
-  (`task:<id>`), as `task_status` and a thread's report of it do; a task that read only the
+  (`task:<id>`), as `task_status` and its node's trace do; a task that read only the
   user's own and trusted tools does not. A closed value (a choice, a number, a date, a count of
   rows) never taints, whoever wrote it (assistant state).
 - **The limit: a task's shell traffic is not read.** What a program fetches with `curl`, a package
@@ -711,7 +711,7 @@ whatever address it dials) and one client certificate per device.
 | `read_skill` | a skill's `SKILL.md`, or another of its text files (never a script: scripts run in tasks) |
 | `task_status` | state, the agent's last message (without its receipt), its checked [receipt](#receipts-receiptgo), the pending permission; `wait` blocks until the task needs you |
 | `list_tasks` | recent tasks |
-| `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card) and on the thread's surface, under the step and in its header's facts, so the user can see and contradict it; display only |
+| `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task with a node, the reply goes to its node's trace (« Eriphe a répondu : … »), so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)) |
@@ -744,7 +744,7 @@ setting:
   best other device only when none does (the log says why). If its device has been offline for 30
   seconds and another online device can take it, it moves; if it runs on a device that may sleep and an
   always-on one can take it, it moves there between two turns. Moving starts a fresh session with
-  the context pack: the thread is eriphe-core's, and a message its old device never received is
+  the context pack: the conversation is eriphe-core's, and a message its old device never received is
   delivered again.
 - **Bound**: a task with the user's folders goes to a device that holds each of them up to date,
   the folder's machine or one keeping a copy in sync ([Tasks on a copy](#copies-of-a-folder)),
@@ -930,8 +930,7 @@ which then enters the queue as the notification it became (`notification:<id>`),
 
 The node of the graph is the one object the user sees (#625, #632): one per matter (a pull request
 until deployed, an appointment, a research), its doc saying where the matter stands, its trace
-what happened in it. Threads are gone: what they did is the nodes' ([Node
-store](#node-store-nodestore-nodesgo)).
+what happened in it ([Node store](#node-store-nodestore-nodesgo)).
 
 - **Tools.** The brain finds a node before it opens another (`node_find`), opens one at once, with
   no card (`node_open`; `work` by default, `standing` for what the user follows continuously, never
@@ -1002,7 +1001,7 @@ body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
 
 - **Lossless:** a file parsed then written gives the same bytes; what changes through the API is
   written again in its canonical form, the rest keeps its bytes.
-- **Each block checked alone**, like a thread's part block: the catalog (`a2ui`), its links, and its
+- **Each block checked alone**: the catalog (`a2ui`), its links, and its
   bindings against its own data, its sources (`/<name>`) and the user's marks (`/marks/<list>/<item>`).
   A bad block is a `BlockError` that names it.
 - **Code's fields** (a block's `snapshot`, `marks` and `external`, the node's `after` and `external`) are set by
@@ -1338,13 +1337,13 @@ adds its title and the start of its description, read with the tool itself when 
 
 An access card and a start's card read alone (`card_origin.go`): wherever they are shown (the
 conversation, a `Proposal`, a channel) they say where they come from and what their Oui does,
-facts of eriphe-core's only, never words of the model's next to Oui and Non. The thread is the one
-of the step the card is, or of the step whose task asks (never a link the brain made with
-`link_thread`), linked to its page; its title shows only when no outside content reached the thread
-(`threads.tainted` empty), else it is named by its number. The task that asks is named when the
+facts of eriphe-core's only, never words of the model's next to Oui and Non. The node is the one
+a calls card's calls belong to (the node whose item it acts on, else the node of the run that kept
+them, never one a model names), linked to its page (`/espace?open=node-<id>`); its title shows only
+when no outside content reached the node (not external), else it is said without. The task that asks is named when the
 card's text does not (a call of a task, a start), and only if it was not started on a tainted turn.
 What Oui does follows the answer's code: a grant lets the task act until it ends, a release gives
-it its held tools, a call runs once as shown (a step's, then its thread goes on), a page or a search
+it its held tools, a call runs once as shown (a step's, then its node's work goes on), a page or a search
 is allowed once, a start starts the task. A task's card is shown:
 
 1. **at launch**, on its start's card, for what it is lent outright: it waits (`held`) for the answer;
@@ -1684,8 +1683,9 @@ version, read with its diff.
 - **It works in a node of its own**, as any worker task
   ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)): it writes there what it found and
   notes the items of its sources (`item_note`), with the user's preferences about what they see
-  in its prompt (`seePreferences`). A skill writes no surface (`eriphe-workspace` is refused in its
-  `tools`). Its standing node, with its monitor and its views, comes with #631.
+  in its prompt (`seePreferences`). A skill is not lent `eriphe-workspace` (refused in its
+  `tools`): its node is its own. A view's skill works in the view's standing node
+  ([views](#views-node_livego-view_cardgo)).
 - **Its last message** is optional, the run's report, weighed by its receipt's
   [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
   as everywhere; a skill's instructions write no prefix. Entries whose refs are all nodes
@@ -1720,7 +1720,7 @@ version, read with its diff.
   call once as kept; its results go to the run's note and to the node's trace, never to the brain.
 - **Its about**: its runs are about their events' key when it names a thing (a monitor's,
   `topic:<name>`, or `kind:slug`; about.go). Their tasks, notifications, cards and signals carry
-  it. A run works in its node, never in a thread.
+  it. A run works in its node.
 - **Urgent**: with `urgent: <text>`, a run whose attention list weighs something 5 sends that
   fixed text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the
   run read enters it: a tainted run cannot write what wakes the user. Its own message goes as any
@@ -2023,7 +2023,7 @@ GET  /v1/channel/out?wait=50&places=Salon,Bureau  → {"messages": [{"id", "text
 
 The text joins the conversation like any of mine, marked with the channel and its place
 (`[Sam 12:00 #N · Home Assistant, Bureau]`, `· canal sans confiance` when not trusted), and the
-brain answers it in the same thread; with a place, short and without markdown, as it is most often
+brain answers it in the same conversation; with a place, short and without markdown, as it is most often
 read aloud. The answer streams back from the brain's draft as it writes; only what it says after
 reading the text counts. Without a word within `wait` seconds (10 by default, at most 80 for an
 automation that sends the answer on), it answers « Je m'en occupe, je te préviens » and the answer
@@ -2497,11 +2497,11 @@ in-memory session), so every path a catalog call takes applies to it unchanged:
 - **Who has it.** The brain, by default, once a folder is shared (`assistantGrant` lends it every
   lent tool); a skill through its `tools`; a task as
   `{kind: tool, ref: eriphe-folders}`. Lending the folder itself to a task stays for heavy work.
-- **Surfaces.** Its reads are read-only by their annotations: `sources_read` lists them and a
-  surface may read a file live (`{tool: eriphe-folders/read_file, args: {folder, path}}`, bound
+- **Blocks.** Its reads are read-only by their annotations: `sources_read` lists them and a
+  node's block may read a file live (`{tool: eriphe-folders/read_file, args: {folder, path}}`, bound
   to `/…/text`). The devices reach a folder through short-lived helpers too, which cannot watch it:
-  such a surface is read again on its own schedule, and at once after a write through these
-  tools (`refreshFolderSurfaces`).
+  such a block is read again on its own schedule, and at once after a write through these
+  tools (`refreshFolderNodes`).
 
 ### Places
 
@@ -2936,10 +2936,10 @@ it, that is the workspace opening (`/espace/boot`), the language switch in Setti
 settings or a channel's link code; before any, `web.lang`, else French. The fixed texts use it (the
 workspace's words, the bot channels' messages), and so do the models' lines: a skill run's
 and a task's final message (`skillVoice`, `workerVoice` name it), and a `[langue de l'utilisateur : …]` line at the head of each turn of
-the brain and the assistants, for their notifications, cards, surfaces and
+the brain and the assistants, for their notifications, cards, nodes and
 summaries (the brain answers a message in the language it is written in). The fields of the tools
 the user reads (`notify`'s text and why, a rule's or a setting's why, an intention, attention's why
-and say, a thread's summary) ask for "the user's language". What only the models read (their
+and say, a node's text) ask for "the user's language". What only the models read (their
 prompts, packets, receipts, reports) stays in French, and so does the memory, whose index stems
 French.
 | `session_days` | how long a login lasts, 30 by default (a week without use ends it sooner) |
@@ -3293,7 +3293,7 @@ through `a2ui.Validate`).
 
 **The components** are shapes any tool's data can fill, never tied to one:
 
-- *Layout*: Row, Column, List (a template over a list, `emptyText`), Card (the tile's own
+- *Layout*: Row, Column, List (a template over a list, `emptyText`), Card (the block's own
   frame at the root, a quiet box inside), Tabs (the WAI-ARIA pattern: one tab stop, arrows,
   Home, End; hidden panels stay bound), Divider.
 - *Content*: Text (a `title` is a heading), Markdown (a small reader in `markdown.tsx` that
@@ -3308,9 +3308,8 @@ through `a2ui.Validate`).
   [links](#surfaces-in-a2ui-a2ui)), Code (`code.tsx`: text as it is in a
   fixed-width font, an optional language label; `mode: "diff"` reads a unified diff, its
   files' headers, hunks, added, removed and kept lines each a class, a hunk's counts telling a
-  removed `-- x` line from a header. One block per line: a tile wraps long lines, draws 60 at
-  most with how many more, and hides its last lines whole; open, every line, and the block
-  scrolls sideways).
+  removed `-- x` line from a header. One block per line, every line shown, long lines
+  wrapped).
 - *Input*: Button (with its icon), Choice, TextField, DateField; the fields write what the
   user enters to the bound data path, as A2UI does. A Button's action keeps to the
   actions' grammar (`a2ui/actions.go`: a Button sends `ask`, its author's words only, never the
@@ -3514,8 +3513,8 @@ A proposal shows where it matters (#428), with no code for any tool:
 
 ### The catalog tools (`node_catalog.go`)
 
-No assistant writes a tile (#631: what is followed continuously is a
-[view](#views-node_livego-view_cardgo)). Two tools, to compose a node's blocks; the **author is the
+Two tools, to compose a node's blocks (what is followed continuously is a
+[view](#views-node_livego-view_cardgo)); the **author is the
 caller**, never a field:
 
 | Tool | Does |
@@ -3769,7 +3768,7 @@ outcomes `brief` were rewritten `held` at start.
   `deliver` or `quiet`), read by `notifyRules` only, never fired by the rule tick.
 - **Adaptive quiet hours, never applied alone.** eriphe-core records cheap signals of activity (the
   user's messages, a tab in front (the conversation's or the workspace's), in 10-minute buckets
-  kept 30 days, reactions to notifications, gestures on the workspace's surfaces but `ignored`,
+  kept 30 days, reactions to notifications, gestures on the workspace's nodes but `ignored`,
   `gestureActivity`) and of unwelcome moments (« pas maintenant »), and suggests a window per kind of
   night from the last 14 days: the median last activity of the evening plus a margin, the median
   first of the morning, widened over repeated « pas maintenant » just outside it; too few days, no
@@ -4161,7 +4160,7 @@ are never shown back nor logged.
 What a record is about, its **about**, is a node (`node:<id>`) or a key: an entity of the memory
 (a person, `person:lina`; the user, `owner`; the home; a tool, `tool:x`; Eriphe's own topics,
 `topic:workspace`, `topic:journal`, `topic:heartbeat`) or a matter remembered (`project:site`,
-`pr:owner/repo#12`, `alert:backup`). Notifications, attention items, cards, tasks, surfaces and
+`pr:owner/repo#12`, `alert:backup`). Notifications, attention items, cards, tasks and
 card pushes (core.db), memories and intentions (memory.db) carry an `about` column next to their
 ref (which record: `intention:12`, `skill:<name>`).
 
@@ -4220,12 +4219,11 @@ ref (which record: `intention:12`, `skill:<name>`).
     `run_task`, a card it proposes;
   - **a maker** (`sourceAbout`): a node (`node:`) gives itself, a task (`task:`) its about;
     notifications and signals of a task take its about, a card raised by a task or a node its
-    maker's, an attention item its source's (an offered card's, its card's), a surface its
-    author's;
+    maker's, an attention item its source's (an offered card's, its card's);
   - **a card** takes its proposal's first (a memory's, an intention's, a skill run's);
   - **a skill's run** takes its events' key where it names a thing: a monitor's (`monitor.*`:
-    `topic:<name>`) or a key written `kind:slug`; a task's, a node's or a surface's id gives none.
-    Its notifications, signals, cards and surfaces follow its task;
+    `topic:<name>`) or a key written `kind:slug`; a task's or a node's id gives none.
+    Its notifications, signals and cards follow its task;
   - **the extraction** reuses a task's about (shown on its segment) and a node's trace's
     (`node:<id>`): a decision added from a task is the task's whatever was guessed, anything else
     takes it when none was given; a replacement keeps its own, the day's journal `topic:journal`.
@@ -4246,7 +4244,7 @@ many words), `inferred` (deduced) or `ambiguous`. A change over time supersedes 
 which stays, dated; every change is in `memory_log`. Forgotten memories are purged after 30 days.
 An episode is the day's journal (or a wake of the brain's, `topic:heartbeat`), never a task's: what
 a task did is its log and its node's. memory.db says its schema in `meta`
-(`schema_version`, 7): a new file is made at it, a file at another is refused, never changed.
+(`schema_version`, 8): a new file is made at it, one at 7 is brought to it (`migrateAbout`), a file at another is refused, never changed.
 
 **Durable state.** Raw history is kept for audit (the conversation, `memory_log`, the journal
 episodes); what the brain needs to act is compiled from it in facts, lessons, **decisions** (a

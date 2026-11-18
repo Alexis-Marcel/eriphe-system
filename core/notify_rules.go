@@ -12,7 +12,7 @@ import (
 
 // The user's notification rules, as data the code applies (decideNotify):
 //
-//   - a topic rule: the weight of what is about a thread or a key, or a
+//   - a topic rule: the weight of what is about a node or a key, or a
 //     kind of key (project:getout, or every project), held between a floor and
 //     a ceiling (a ceiling of 0: never), with "even at night", the one way
 //     through the quiet hours and the daily cap;
@@ -100,7 +100,7 @@ const (
 var ruleDays = []string{daysAll, daysWeekdays, daysWeekend}
 
 // ruleMatch is what a topic rule matches: a key (about_key.go), a
-// record's ref as written (thread:<id>, skill:<name>), or a kind alone
+// record's ref as written (node:<id>, skill:<name>), or a kind alone
 // with its colon (project:), which matches every key or record of that
 // kind; "" if none.
 func ruleMatch(s string) string {

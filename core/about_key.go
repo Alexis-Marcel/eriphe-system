@@ -62,7 +62,7 @@ var aliasKindNames = map[string]string{
 
 // recordKinds name one record: a ref, never an about but node:<id>.
 var recordKinds = map[string]bool{"task": true, "intention": true, "notification": true, "msg": true, "skill": true,
-	"node": true, "card": true, "surface": true, "agenda": true, "memory": true, "run": true}
+	"node": true, "card": true, "agenda": true, "memory": true, "run": true}
 
 // aboutMax is the longest about kept.
 const aboutMax = 200

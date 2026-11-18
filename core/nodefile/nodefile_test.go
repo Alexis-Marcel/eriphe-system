@@ -289,7 +289,7 @@ func TestErrors(t *testing.T) {
 }
 
 func TestBlockNamePattern(t *testing.T) {
-	partBlockRe := regexp.MustCompile(`^[a-z0-9][a-z0-9_]{0,31}$`) // core/thread_part.go
+	partBlockRe := regexp.MustCompile(`^[a-z0-9][a-z0-9_]{0,31}$`) // the names blocks had before the graph
 	for _, name := range []string{"a", "errors", "errors_5xx", "0day", "_x", "Errors", "a-b", "a b", "é", strings.Repeat("a", 32), strings.Repeat("a", 33)} {
 		if BlockRe.MatchString(name) != partBlockRe.MatchString(name) {
 			t.Errorf("%q: %v", name, BlockRe.MatchString(name))

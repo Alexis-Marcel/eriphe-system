@@ -65,9 +65,9 @@ func TestAccessCardNamesItsTask(t *testing.T) {
 	}
 }
 
-// A card of no thread still renders: no thread, no line of where it comes
+// A card of no node still renders: no node, no line of where it comes
 // from, its Oui said.
-func TestAccessCardOfNoThread(t *testing.T) {
+func TestAccessCardOfNoNode(t *testing.T) {
 	c := startCore(t)
 	w := originWeb(t, c)
 	waitingTask(c, "t-1")

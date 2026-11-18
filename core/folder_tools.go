@@ -23,7 +23,7 @@ import (
 // server (pool.go provide): the brain has it by default (assistantGrant
 // lends it every lent tool), a skill or a task is lent it like any
 // server ({kind: tool, ref: eriphe-folders}, a skill's tools), and its
-// reads are read-only by their annotations, so they are surface sources
+// reads are read-only by their annotations, so they are blocks' sources
 // (sources_read) and the brain's free reads like any.
 //
 // Each call is decided by the policy like any catalog call (policy.go),
@@ -45,8 +45,8 @@ import (
 // instructions, but reading them does not taint a turn or a task by
 // itself (trustsServer), as a folder lent to a task does not.
 //
-// A surface bound to a file is read again on its own schedule, and at
-// once after a write through these tools (refreshFolderSurfaces): the
+// A block bound to a file is read again on its own schedule, and at
+// once after a write through these tools (refreshFolderNodes): the
 // devices reach a folder through short-lived helpers too, which cannot
 // watch it.
 
@@ -101,7 +101,7 @@ func foldersInfo() map[string]any {
 	for _, name := range folderChangeTools {
 		tools = append(tools, map[string]any{"name": name, "category": catChange, "value": "the folder's change"})
 	}
-	return map[string]any{"name": foldersServer, "use": "the user's folders shared on their machines (list_folders): list, search and read their files, write, replace, move or delete one, each call held to its folder's rights (read for the reads, change for the writes: free, approval or never). Its reads are free sources of a surface when the folder's read is free. Yours already; lend it as {kind: tool, ref: " + foldersServer + "}, or in a skill's tools.",
+	return map[string]any{"name": foldersServer, "use": "the user's folders shared on their machines (list_folders): list, search and read their files, write, replace, move or delete one, each call held to its folder's rights (read for the reads, change for the writes: free, approval or never). Its reads are free sources of a block when the folder's read is free. Yours already; lend it as {kind: tool, ref: " + foldersServer + "}, or in a skill's tools.",
 		"tools": tools}
 }
 
@@ -314,7 +314,7 @@ type folderMoveIn struct {
 	To     string `json:"to" jsonschema:"its new path inside the same folder; nothing there yet"`
 }
 
-// folderRead is read_file's result, which a surface binds: text for a
+// folderRead is read_file's result, which a block binds: text for a
 // text file.
 type folderRead struct {
 	Folder   string `json:"folder"`
@@ -454,7 +454,7 @@ func (c *core) foldersMCP() *mcp.Server {
 }
 
 // folderOp is one operation of a tool, on the folder named; a write then
-// refreshes the surfaces that read that folder.
+// refreshes the blocks that read that folder.
 func (c *core) folderOp(ctx context.Context, name string, req folderFilesReq) (*Folder, *folderFilesResp, error) {
 	f, err := c.folderOf(name)
 	if err != nil {

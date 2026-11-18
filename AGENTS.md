@@ -18,7 +18,7 @@ describes). You do not need to build anything: the installers download released 
 
 | Path | What |
 |---|---|
-| `core/` | eriphe-core (Go): control plane, brain, web workspace (`web*.go`, `web/templates`, `web/static`), API, memory |
+| `core/` | eriphe-core (Go): control plane, brain, the graph's nodes (`nodefile/`, `nodestore/`, `node_*.go`), web workspace (`web*.go`, `web/templates`, `web/static`, the graph's app in `web/espace`), API, memory |
 | `device/` | eriphe-device (Go): runs tasks as containers on a machine; `device/cred/` is a module of its own |
 | `worker/` | the task images: `worker/base` (`eriphe-base`) and one image per agent in `worker/agents/` |
 | `install/` | `install.sh` (Linux, macOS), `install.ps1` (Windows), `eriphe-launcher` (the one-container install) |

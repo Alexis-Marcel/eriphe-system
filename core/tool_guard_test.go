@@ -150,9 +150,9 @@ func identWords(s string) []string {
 	return regexp.MustCompile(`[a-z0-9]+`).FindAllString(strings.ToLower(s), -1)
 }
 
-// The workspace's surfaces name no tool, server or provider, in code or
+// The workspace's code names no tool, server or provider, in code or
 // strings (comments aside): what a source reads is the author's data.
-func TestNoToolInSurfaces(t *testing.T) {
+func TestNoToolInWorkspace(t *testing.T) {
 	words, names := toolWords()
 	if !words["mail"] || !names["github"] || !names["buffer"] || len(words) < 5 {
 		t.Fatalf("words %v, names %v", words, names)

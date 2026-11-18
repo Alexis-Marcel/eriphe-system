@@ -38,17 +38,17 @@ func TestMarkShape(t *testing.T) {
 		}
 	}
 	for name, bad := range map[string]string{
-		"no marks":        `"list":"options","item":"a"`,
-		"no mark":         `"list":"options","item":"a","marks":[]`,
-		"another mark":    `"list":"options","item":"a","marks":["star"]`,
-		"twice":           `"list":"options","item":"a","marks":["keep","keep"]`,
-		"text":            `"list":"options","item":"garde tout","marks":["keep"]`,
-		"a path":          `"list":"a/b","item":"a","marks":["keep"]`,
-		"too long":        `"list":"options","item":"` + strings.Repeat("a", 129) + `","marks":["keep"]`,
-		"a function call": `"list":"options","item":{"@call":"formatString","args":{"value":"x"}},"marks":["keep"]`,
-		"no item":         `"list":"options","marks":["keep"]`,
-		"an action":       `"list":"options","item":"a","marks":["keep"],"action":{"event":{"name":"ask","context":{"text":"x"}}}`,
-		"a thread":        `"thread":12,"list":"options","item":"a","marks":["keep"]`,
+		"no marks":         `"list":"options","item":"a"`,
+		"no mark":          `"list":"options","item":"a","marks":[]`,
+		"another mark":     `"list":"options","item":"a","marks":["star"]`,
+		"twice":            `"list":"options","item":"a","marks":["keep","keep"]`,
+		"text":             `"list":"options","item":"garde tout","marks":["keep"]`,
+		"a path":           `"list":"a/b","item":"a","marks":["keep"]`,
+		"too long":         `"list":"options","item":"` + strings.Repeat("a", 129) + `","marks":["keep"]`,
+		"a function call":  `"list":"options","item":{"@call":"formatString","args":{"value":"x"}},"marks":["keep"]`,
+		"no item":          `"list":"options","marks":["keep"]`,
+		"an action":        `"list":"options","item":"a","marks":["keep"],"action":{"event":{"name":"ask","context":{"text":"x"}}}`,
+		"an unknown field": `"node":12,"list":"options","item":"a","marks":["keep"]`,
 	} {
 		if errs := ValidateSurface(mark(bad)); len(errs) == 0 {
 			t.Errorf("%s: accepted", name)

@@ -34,8 +34,8 @@ var (
 
 func providedServer(name string) bool { return slices.Contains(providedServers, name) }
 
-// surfaceCaller is who calls the catalog's tools.
-type surfaceCaller struct {
+// catalogCaller is who calls the catalog's tools.
+type catalogCaller struct {
 	author string // brain, task:<id>
 	// sawSource marks a task that was told what a source gave (an error,
 	// the fields of a result): that taints it (sources_offer.go).
@@ -43,9 +43,9 @@ type surfaceCaller struct {
 	taint     func() []string // why what it writes may come from outside
 }
 
-// registerSurfaceTools adds the catalog's tools to an MCP server, those
+// registerCatalogTools adds the catalog's tools to an MCP server, those
 // allow lets (nil: all).
-func (c *core) registerSurfaceTools(s *mcp.Server, who func() surfaceCaller, allow func(tool string) bool) {
+func (c *core) registerCatalogTools(s *mcp.Server, who func() catalogCaller, allow func(tool string) bool) {
 	ok := func(name string) bool { return allow == nil || allow(name) }
 	if ok("catalog_read") {
 		tool(s, "catalog_read", "The workspace's catalog in full, in French: each component with its properties, the functions, the rules and examples: what a node's block is made of.",
@@ -59,10 +59,10 @@ func (c *core) registerSurfaceTools(s *mcp.Server, who func() surfaceCaller, all
 	}
 }
 
-// brainSurfaceTools are the brain's: as brain, its turn's taint.
-func registerBrainSurfaceTools(s *mcp.Server, c *core) {
-	c.registerSurfaceTools(s, func() surfaceCaller {
-		return surfaceCaller{author: byBrain, taint: c.turnTaint}
+// registerBrainCatalogTools registers the brain's: as brain, its turn's taint.
+func registerBrainCatalogTools(s *mcp.Server, c *core) {
+	c.registerCatalogTools(s, func() catalogCaller {
+		return catalogCaller{author: byBrain, taint: c.turnTaint}
 	}, nil)
 }
 
@@ -70,14 +70,14 @@ func registerBrainSurfaceTools(s *mcp.Server, c *core) {
 // grant covers.
 func (c *core) taskWorkspaceServer(t *TaskRow, grant []string) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: workspaceServer, Version: version}, &mcp.ServerOptions{Instructions: workspaceNote})
-	c.registerSurfaceTools(s, func() surfaceCaller { return c.taskCaller(t.ID) },
+	c.registerCatalogTools(s, func() catalogCaller { return c.taskCaller(t.ID) },
 		func(name string) bool { return grantAllows(grant, workspaceServer, name) })
 	return s
 }
 
 // taskCaller is who a task reads the workspace as: the task.
-func (c *core) taskCaller(id string) surfaceCaller {
-	return surfaceCaller{author: "task:" + id, taint: func() []string { return c.taskTaint(id) }, sawSource: func() { c.taskRead(id, workspaceSourceRead) }}
+func (c *core) taskCaller(id string) catalogCaller {
+	return catalogCaller{author: "task:" + id, taint: func() []string { return c.taskTaint(id) }, sawSource: func() { c.taskRead(id, workspaceSourceRead) }}
 }
 
 // taskWorkspaceTools are the workspace's tools a grant covers, as the

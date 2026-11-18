@@ -113,7 +113,7 @@ func folderFilesCore(t *testing.T) (*core, *fakeShares) {
 	return c, shares
 }
 
-// callFolders calls one of its tools as code does (a surface, a card's yes).
+// callFolders calls one of its tools as code does (a block's source, a card's yes).
 func callFolders(t *testing.T, c *core, tool string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
 	raw, _ := json.Marshal(args)

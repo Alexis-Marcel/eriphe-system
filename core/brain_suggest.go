@@ -18,7 +18,7 @@ import (
 //	</suggestions>
 //
 // The workspace shows them as chips under its latest answer; a click sends
-// the sentence as the user's message, in the same thread, typed by them
+// the sentence as the user's message, to the same node, typed by them
 // (handleSend). A trailing block parsed by code, rather than a tool: its
 // answer is the text after its last tool call (answerText), so a tool
 // called after the answer would turn it into a working note, and one called

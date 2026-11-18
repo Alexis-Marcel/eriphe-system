@@ -105,7 +105,7 @@ A key that is not one of these is an error. The empty ones may be left out.
 
 ### Components and bindings
 
-Each block is checked alone, like a surface of its own:
+Each block is checked alone, as an A2UI surface of its own:
 
 - against the catalog: component types, properties, ids, a `root`, children that exist;
 - links: a `Link` url, literal or bound to the block's data, is an `http(s)` address;

@@ -6,16 +6,16 @@ import (
 )
 
 // What a record is about. Notifications, attention items, cards, tasks,
-// surfaces, memories and intentions carry an about next to their ref
+// memories and intentions carry an about next to their ref
 // (which record): a node, node:<id>, or an entity's key (person:lina,
 // owner, topic:workspace). The code sets it by inheritance: what the brain
 // makes in a turn takes the turn's (turnAbout: its node), a task its
-// node's or its skill's, a card or a surface its maker's (sourceAbout),
+// node's or its skill's, a card its maker's (sourceAbout),
 // a task's memories its own (the extraction). The model may give one; it
 // no longer has to.
 
 // aboutTables are the core.db tables that carry an about column.
-var aboutTables = []string{"notifications", "attention", "convo_cards", "tasks", "surfaces", "card_pushes"}
+var aboutTables = []string{"notifications", "attention", "convo_cards", "tasks", "card_pushes"}
 
 // A table made before #573 says subject where it now says about: renamed
 // as it is, its values converted by step 8 of #578.
@@ -89,7 +89,7 @@ func (c *core) sourceAbout(source string) string {
 }
 
 // cardAbout sets a card's about once: its proposal's (a memory's, an
-// intention's, a thread's, a skill run's), else what its maker inherits
+// intention's, a node's, a skill run's), else what its maker inherits
 // (nil: none).
 func (c *core) cardAbout(kind string, id int64, inherit func() string) {
 	s := c.proposalAbout(kind, id)
@@ -133,7 +133,7 @@ func (c *core) proposalAbout(kind string, id int64) string {
 
 // skillRunAlias is what a skill's run is about: its events' key where it
 // names a thing: a monitor's (monitor.*: topic:<name>), or a key written
-// kind:slug. Another key (a task's, a node's, a surface's id) gives
+// kind:slug. Another key (a task's or a node's id) gives
 // none.
 func skillRunAlias(key string, events []journalEvent) string {
 	if strings.Contains(key, ":") {

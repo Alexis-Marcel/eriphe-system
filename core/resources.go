@@ -320,7 +320,7 @@ func (c *core) taintedResources(r runRequest) error {
 }
 
 // taintedLent is taintedResources for who read tainted: a brain's turn,
-// or a step of a thread's plan.
+// or a step of a node's work.
 func (c *core) taintedLent(r runRequest, tainted []string) error {
 	if len(tainted) == 0 {
 		return nil

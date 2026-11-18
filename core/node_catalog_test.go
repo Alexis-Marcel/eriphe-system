@@ -51,7 +51,7 @@ func connectServer(t *testing.T, s *mcp.Server) *mcp.ClientSession {
 	return sess
 }
 
-// boundText is a surface whose one Text says what is at path.
+// boundText is a block whose one Text says what is at path.
 func boundText(path string) []map[string]any {
 	return []map[string]any{{"id": "root", "component": "Text", "text": map[string]any{"@path": path}}}
 }

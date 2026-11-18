@@ -56,7 +56,7 @@ const (
 var receiptRe = regexp.MustCompile(`(?s)<receipt>\s*(.*?)\s*</receipt>`)
 
 // fence is a fenced block of a message: where it starts and ends, its
-// body, and its opening tag (json, go, thread…; "" for none).
+// body, and its opening tag (json, go, eriphe:block…; "" for none).
 type fence struct {
 	start, end int
 	body, tag  string
@@ -88,7 +88,7 @@ func fenceLines(text string) []fenceLine {
 
 // fencedBlocks reads the fenced blocks of text: fences open and close at
 // the start of a line, each opening paired with the next one, so a block
-// tagged go or thread is one block, never half of another. When a fence
+// tagged go or eriphe:block is one block, never half of another. When a fence
 // is left unclosed (an odd count), the last two still make a block: a
 // receipt at the end is read after a stray fence.
 func fencedBlocks(text string) []fence {

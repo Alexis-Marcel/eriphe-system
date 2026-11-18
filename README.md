@@ -50,13 +50,16 @@ built-in instructions are in French.
 
 ## What works today
 
-- **Composed workspace**, the home page (`https://<address>:8443`): a screen Eriphe composes from
-  your tools, which you shape by talking to it; one column on a phone
-  ([docs/workspace.md](docs/workspace.md)).
+- **The graph workspace**, the home page (`https://<address>:8443`): everything Eriphe holds for
+  you as a graph of nodes (a subject, a research, a reply to write, a standing view like your
+  mails), each a page with live blocks, a trace and its versions, kept as markdown files in git; you
+  shape it by talking to Eriphe in one console; a list on a phone
+  ([docs/workspace.md](docs/workspace.md), [the node format](docs/node-format.md)).
 - **Conversation** at `/conversation`, one click from the workspace, with attachments, and from the
   terminal (`eriphe`).
 - **Memory**: people, facts, preferences and a nightly journal, kept by eriphe-core in SQLite and
-  recalled by the brain; what it learns from outside content is only proposed until you approve it.
+  recalled by the brain, with a readable copy in markdown (`/data/memoire/`); what it learns from
+  outside content is only proposed until you approve it.
 - **Devices you connect**: connecting a computer gives Eriphe access to it, so it can help with what
   is there: it sees only the folders you open to it, reads them freely, and needs your go-ahead to
   act on what matters. Each device's card says what Eriphe sees and can do there, an access log

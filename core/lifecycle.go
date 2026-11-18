@@ -120,8 +120,8 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 				}
 				switch s {
 				case workspaceServer:
-					// Lent, its tools ask nothing: a task writes its own
-					// surfaces only (workspace_tools.go).
+					// Lent, its tools ask nothing: they only read the
+					// catalog (node_catalog.go).
 					spec.AlwaysLoad = append(spec.AlwaysLoad, s)
 					spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskWorkspaceTools(splitGrant(a.Tools))...)
 				}

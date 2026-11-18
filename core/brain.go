@@ -551,7 +551,7 @@ var brainPrompt string
 // (taskMCPHandler).
 const selfServer = "eriphe-core"
 
-// Conversation API: what the CLI and other surfaces use.
+// Conversation API: what the CLI and other clients use.
 func (c *core) handlePostMessage(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Text string `json:"text"`

@@ -24,7 +24,7 @@ import (
 // One run per day and window; a failure is retried at the next night.
 //
 // Its regime: one journal episode a day, never one per task (a task's
-// record is its log and its thread's timeline); never a lesson nor a
+// record is its log and its node's trace); never a lesson nor a
 // preference (only the user's own words make them, through the brain);
 // nothing from a task that read someone else's content (left out of the
 // transcript). What it is sure of is applied on trial and said in the
@@ -126,7 +126,7 @@ func (c *core) transcript(from, to time.Time) ([]segment, error) {
 	trows.Close()
 	for _, t := range tasks {
 		// A task that read someone else's content gives nothing: what it
-		// found stays in its log and its thread's timeline.
+		// found stays in its log and its node's trace.
 		if len(c.taskTaint(t.ID)) > 0 {
 			continue
 		}
@@ -703,7 +703,7 @@ func (c *core) applyOp(op extractionOp, refs map[string]string, who string) (why
 			x.About = old.About
 		}
 	} else {
-		x.About = c.opAbout(op, ref) // a task's: its thread (about.go)
+		x.About = c.opAbout(op, ref) // a task's: its node (about.go)
 	}
 	// One episode a day, the journal: a task's record is its log.
 	if x.Kind == kindEpisode && aboutOf(x.About) != journalEntity {
