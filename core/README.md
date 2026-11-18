@@ -714,7 +714,8 @@ whatever address it dials) and one client certificate per device.
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card) and on the thread's surface, under the step and in its header's facts, so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
-| `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write or remove a block of its part of a thread's surface, as `brain`, and read the threads on screen ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
+| `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)) |
+| `workspace_read`, `catalog_read`, `sources_read` | read the workspace, the catalog and what a block may read ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
 
 The scheduler takes the requested device if it is online and fits. Otherwise it works in two passes,
 like Kubernetes': it **filters** the online devices that offer the agent's runtime and carry all its
@@ -1045,228 +1046,18 @@ card); it writes the thread's surface again and makes the attention queue's surf
 - Tables: `threads`, `thread_log`, `thread_cards` (the cards linked to a thread).
 
 **One drawing** (#574): a thread is shown by its surface on the workspace only, and acted on there
-([a thread's surface](#a-threads-surface-thread_surfacego)): its cards and Stop, code's buttons. A
+([a thread's surface](#a-thread-has-no-surface-631)): its cards and Stop, code's buttons. A
 link to a thread (a card's origin, the tasks panel, a skill's run) opens its surface:
 `/espace?open=thread-<id>`, which the page opens once the surface is there. An ended thread whose
 surface has left is shown again first (`showThreadAgain`), for as long as one that just ended; not
 one put away, nor a `day` thread. The tasks panel of the conversation shows the threads open first.
 
-#### A thread's surface (`thread_surface.go`)
+#### A thread has no surface (#631)
 
-Every thread has its live surface on the workspace, `thread-<id>`, written and kept
-by code from the thread's data (#468): it never depends on a model remembering to write it.
-
-- **Its author is `thread:<id>`**, code's for that thread (not `core`, the attention queue's):
-  nobody else writes or removes it as a whole (`mayChange`), and no other author may take its id
-  (`codeSurfaceOf`).
-- **Code's frame: thin** (#574, #611, `thread_blocks.go`), the same code for every thread, in one
-  fixed order; a block shows only when the thread has what it shows, never by the kind of thread
-  (work, standing or day: the family is never shown, and a thread with its `ends` changed is drawn
-  the same while active, but for one thing read from `ends`: a standing thread shows no Stop, as it
-  never ends). No thread shows its goal, written by the brain for itself and the agents: what a
-  thread shows the user is only words written for the user (its title, headline, notes, summary).
-  Code keeps only:
-  1. **the head**: a child's **crumb** first, a Button with its parent's title (`/thread/parent`)
-     that opens the parent's surface; a `Progress` (the state word in a pill, « À toi », « Urgent
-     », « En cours », « Terminé », coloured by its tone; none for a calm thread); the **state line**
-     (`threadStateText`): its headline (below), with « extérieur » beside it when it may carry
-     someone else's words, else what its items count (« 1 pour info · 2 rien à faire »), else its
-     state when that says more; then when its
-     items were last sorted (« trié à 9 h 12 », the last note's time); the controls (Stop); once it ended, an `Alert` saying how and when,
-     with where it stood (« Fait ✓ · 14 h 02 » and the summary, else its headline; never its
-     goal), and **« Ranger »** beside it for a thread that ends on its goal, the only block that
-     reads `ends`. The same words as the state line, but the time, are its chip's line (the page's
-     `summary`). A thread with nothing yet to show says « Rien pour
-     l'instant. ». Its surface has no `why`;
-  2. **À toi** (active threads, only when something waits): every card that commits the user, each
-     once: the cards linked to it (a card raised for it, a task's held start, the card an action
-     offered on one of its items made, `item_cards.go`) as `Proposal` components bound to their
-     refs. What waits there is in no other place of the surface: a card that waits on no row;
-  3. **children** (`blockChildren`, a thread that has some): « Sous-fils », then one row each, an
-     `Item` with its title, its status word (« À toi », « Urgent », « En cours », « À jour », or how
-     it ended) and its one line, read from the child's own surface as code wrote it (an active
-     child always, an ended one while its surface is on the workspace), « extérieur » on the row of
-     a child whose surface is tainted (and the parent tainted with it, `thread:<child>`, its state
-     line untouched), and an « Ouvrir » Button: a local `open` that names the child's surface
-     (`{"surface": "thread-<id>"}`), opened inside its parent. The rows are at `/thread/children`
-     (`thread`, `surface`, `title`, `status`, `line`, `level`, `mark`; an empty list for a thread
-     with none). **A child raises its parent**: one that waits for the user makes its parent wait
-     for the user (« À toi », its tile `yours`), and an active parent takes the highest weight of
-     its own and its children's. A child's change writes its parent's surface again, the child's
-     first (`keepThreadSurface`);
-  4. then **what is composed**: the holder's blocks in their order (below), or, while the holder
-     has written none, the **default composition** (`thread_default.go`), the same for every
-     thread, drawn from the thread's data by the paths a block binds alike: each source's data, in
-     the order the thread added them (below). The code that drew steps there (a `Fold` of those
-     done, a `Timeline` of the others) is kept for the views on nodes (#631) and given none: a
-     thread has no steps since #630. The first
-     block written takes its place; the last block removed brings it back.
-
-  **The thread's data**, code's, under `/thread`, there with or without blocks for the default
-  and the holder's blocks to bind (a block is checked against code's data as its surface shows
-  it, `threadCodeData`):
-  - `/thread/steps`: `done`, `open`, `summary` and `cards`, kept for the blocks that bind them and
-    always empty: the work's steps are nodes ([Work in steps](#work-in-steps-node_stepsgo)), shown
-    by the views on nodes (#631);
-  - `/thread/items/<source>`: each source's data (below); once the thread ended, no longer read, the
-    same keys empty (`endedItems`), so a block bound to them still holds;
-  - `/thread/children`, `/thread/parent`, `/thread/marks` (below);
-  - `/thread/since`: facts made by code from the thread's data (it opened, the summary written again,
-    the thread's end), each a line with its time, since the user's visit before the last one, oldest first,
-    the last 5 (« … et 2 plus tôt » before them); none before a first visit (all of the thread is
-    new then). Never the log's lines (French only). A visit is the
-    page's `open` action on the surface: `seen` takes the last visit, `visited` is now, so the
-    visit that opens it still shows what was new; opened again within 5 minutes, the same visit.
-    Times are absolute (« 14 h 32 », « 13 nov. 9 h 05 »): the surface is written again only when
-    it changes. What changed since the last visit counts on its tile (`threadNew`);
-  - `/thread/summary`: the summary as remember (kind progress), the extraction or its close wrote
-    it; no model call.
-
-  Code's component ids start with `thread_`.
-- **A thread's sources** (#571, `thread_sources.go`, table `thread_sources`): live data the thread
-  carries, read by code without a model, under a surface source's rules (`sourceWhy`: a free read
-  of the brain's, or a resource the server lists; `checkSources` when added). A source has a name
-  and one kind: a `tool` (server/tool with fixed `args`), a `resource` (a server and its `uri`), or
-  a `monitor` the user approved (below). The brain adds one with `link_thread` `source` (the same
-  name replaces it; a name alone takes it away); a block of the holder's part brings its own with
-  `surface_write` `sources` (each at `/<name>`, `refresh.every` its interval): they become the
-  thread's (`by` `part`), replaced when the block is written again, gone with the last block
-  that gives them; two blocks may give the same source alike (same tool, arguments and
-  refresh), never otherwise; a block may not give again a source the thread has already (it
-  binds `/<name>`). They are stored with their first read before the block is, so the block is
-  never written bound to a value not there yet; while one has never given anything, a part that
-  binds it is held quietly (no error for its author). At most 8 a thread, 3 of them monitors.
-  - A tool or a resource is read at once when added (in the background), every `every` minutes (5
-    by default) at the engine's tick (`threadSourcesDue`), when its server says the resource
-    changed (`threadResourceUpdated`; the pool follows the resources of active threads), and when
-    the user opens the thread's surface (`threadOpened`, not within 30 s of the last read); only
-    while the thread is active, one read of a thread at a time. Its last good read is kept on the
-    source (`value`); a read that fails or is refused keeps it, and says why (« en attente »). A
-    read never runs under the engine's lock nor inside a surface write: the surface is written
-    from the last reads, so a change of the thread never waits for a tool.
-  - On the surface: its last read at `/<name>`, the thread ended too (where the part binds it; code's composed data may
-    then be larger than an author's); and, while the thread is active, its data at
-    `/thread/items/<name>`. A server not trusted taints the surface for the models
-    (`source:<name>`; its Proposals still answer) and each of its rows says « extérieur » (`mark`),
-    as does a block that gives it or binds it (`partBlock.external`). Its `caption` says nothing of
-    a source that reads well: words only when it cannot be read (« mails · n'arrive plus à lire »,
-    « en attente »), and its name when the thread lists the items of several. With `items` (`path`
-    to the list, `id` in each item, a monitor's path syntax; `title` and `detail`, paths in the
-    item, what its row says), each item, by its id, is a row (`source`, `id`, `n` its place in the
-    list, `title`, `detail`, its note's `note`, `state`, `due`, `by`, `level`, `mark`, the cards
-    decided on it within a day as `cards`, the action its note offers as `offers`), at most 200,
-    drawn as an `Item` by the default composition: what the thread lists is shown with no model. Without `title`, code takes the item's first `subject`, `title`, `name`,
-    `summary`, `label`, `snippet`, `text` or `description`, else its first short text that is not
-    an id; without `detail`, its `from`, `sender`, `author`, `organizer`, `owner`, `creator`,
-    `user` or `assignee`; a person (« Sam <sam@example.org> », or an object with a `name`,
-    `displayName`, `login` or `email`) by their name. Its id shows only when it has no words at
-    all: a monitor's source (`monitorThreadSource`) needs no paths. The rows are grouped by their
-    notes' state at `/thread/items/<name>/groups` (« À faire », « À regarder », « Pas encore trié
-    », « Pour info », « Rien à faire », « Traité », each `label` with its count, `open`, `items`,
-    and the action its rows share as `offers`; the default draws each a `Fold`, that action as its
-    `aside`, on its line, open or not, the last two folded); the cards decided on several of its
-    items at `/thread/items/<name>/cards`. The offers are code's data: an `Offers` component shows
-    them, in the default composition and in a holder's block alike (`offerOf`). All bound by
-    paths: a read again changes the data, not the components.
-- **Notes on items** (#571, `thread_items.go`, table `thread_items`): the brain (`note_item`, with
-  the thread, its turn's by default) notes one item a source lists, by the
-  source's name and the item's id: a short note (300 characters), a state (`act`, `look`, `info`,
-  `none`, `done`) and a due date; the same item noted again replaces it, nothing at all takes it
-  away; 500 a thread. Its `author` (`brain`) and `tainted` (the brain turn's taint) are code's,
-  never given. Code joins it to its item's row (`note`, `state`,
-  `due`, `by`, `level`: `high` for `act`, `low` for `info`, `none`, `done`; `mark` « extérieur »
-  for a tainted one, on its row only, which taints the surface for the models,
-  `note:<source>/<item>`). A tainted note is shown, never quoted into a summary: it is in no
-  summary, fact, one-line summary or message code writes, and reading it (`read_thread`'s
-  `notes`) taints the reader, so `remember` kind `progress` is then refused
-  (`errProgressTainted`). No item row carries an action, so a tainted note's never asks. A note
-  stays while its item is listed; once a good read no longer lists it (never a failed or refused
-  one; every item the source lists counts, beyond the 200 shown), or its source is taken away,
-  it is kept 7 days (`gone`, back if the item is listed again; noting it again keeps that date),
-  then the engine's tick takes it away (`pruneItemNotes`). A note on an item not listed yet waits
-  for it the same way.
-- **A live thread** (#555, `thread_live.go`): one kind of source: who holds the thread may make it
-  follow up to 3 monitors the user approved (`link_thread` with `source` `monitor`, its name; a
-  proposed one is refused).
-  Its data at `/thread/items/<name>` (`monitorData`): its latest number (`value`) and its last 24
-  (`series`, kept in its look, `monitorLook.Points`), with « Surveillance <name> · lu à 14 h 32 ·
-  lu par le code, sans modèle » (`caption`); each look writes the surface again (after its state
-  is saved). Its events (`thread_watch`: kind, number, limit, holds, taint) are `Timeline` items
-  (`events`), the last 5, worded from the kind and numbers only (« cpu : 95, au-dessus du seuil
-  de 90 »), never a changed value, a new item or an error's text. The default composition draws
-  them as a `Metric`, a `Chart` and a `Timeline`. While a cross monitor is past its limit, or its
-  looks fail, the thread's weight rises to 65; back under, it comes down. A monitor of a server
-  not trusted says « extérieur » on its caption and makes the surface tainted for the models
-  (`monitor:<name>`), its Proposals still answer in place. Nothing wakes the brain: a skill reacts
-  to the monitor's events as before.
-- **Rewritten at each change** of the thread: the store's `setThread`, a card asked, decided or
-  withdrawn call `keepThreadSurface`, which writes only when what the
-  surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active
-  thread that has none its surface (a surface another author wrote at its id goes). The generic
-  list of steps (`threadSurfaceStep`) stays, given none (#631).
-- **The holder's part** (#610, `thread_part.go`): who holds the thread (the brain)
-  composes it by **named blocks**: a state, points to see, a diff (`Code`), a `Link`, each its
-  block. `surface_write` with `block` adds that block, or replaces it alone where it stands;
-  `surface_remove` with `block` takes it away; without a block nothing is written or removed:
-  there is no whole part. Blocks keep the order they were first written in; `before` (another
-  block's name) places the block written before that one, new or not. 16 blocks at most, 24 KiB
-  of components and of data all together. They are kept apart, in order (`thread_part:<id>`,
-  `{"blocks": [...]}`), each checked alone (A2UI, actions, links, bindings against its own data
-  and sources, the thread's own sources and code's `/thread`; no `thread_` id, no `/thread` data,
-  no component id nor data key another block holds, the error naming it; its sources, each at
-  `/<name>`, become the thread's, see above, so a change of the thread still rewrites the surface
-  at once, never waiting for a tool), and shown under code's frame in place of the default
-  composition, each root renamed `thread_part_<block>`; a block that may carry someone else's
-  words (written after reading external content, or giving or binding a source not trusted) is
-  shown in a `Column` (`thread_external_<block>`) with « extérieur », a Text of variant `mark`, above it
-  (`thread_mark_<block>`), the others as they are. The call answers the blocks in order, as
-  `workspace_read` (`blocks`, on a thread one holds) and `read_thread` do; the surface stays;
-  code keeps the rest. A block that does not hold with the rest when code writes the surface (a
-  source not read yet, or failing) is left out alone, the others shown, and named in the
-  surface's error (quietly while a source has never been read); the part as a whole only when
-  that still fails. A part written whole by an older eriphe-core is dropped at start, with the
-  sources it gave: its holder writes it again, by blocks.
-- **The user's marks** (#610, `thread_marks.go`, table `thread_marks`): keep, drop or done on
-  something a thread shows (an option, a candidate, a line of a checklist), recorded by code in the
-  thread's data, never in the composed part: a holder's block places a `Mark` (its `list` and
-  `item`, ids written or bound to a row's id, and the `marks` it offers: `keep` and `drop`, or
-  `done` alone, a box to check), which sends the closed action `mark` (`{"list", "item",
-  "mark"}`, [the actions of a surface](#the-actions-of-a-surface)) and reads its state where code
-  keeps it; code keeps it per thread, list and item (`""` takes it away) and serves it at
-  `/thread/marks/<list>/<item>` (`/thread/marks` always there, a binding under it never refused
-  for a mark not set yet), so a rewrite of the part never loses one. A mark starts no turn: it is
-  a gesture (`kept`, `dropped`, `done`, `unmarked`, its list and item in `workspace_log.detail`),
-  which the brain reads at its next turn in the workspace's block (« ses marques », the session's
-  last 40, apart from the other gestures) and `workspace_read` lists; `read_thread` returns them
-  all. The page cannot say one as a gesture (`/api/espace/gesture` refuses those names). A mark
-  set on a tainted surface is **external** (`thread_marks.external`): no charset tells an id from
-  someone else's words, so it is kept and served, but its gesture does not quote its list and item
-  (« élément extérieur, non cité »), and `read_thread` (a task's too) taints its
-  reader (`mark:<list>/<item>`), as a tainted note does.
-- **Taint, per part**: « extérieur » shows only beside what may carry someone else's words, never
-  alone: a row on its `Item`, a monitor on
-  its caption, a child on its row, the headline in the state line, a block beside it (a block
-  written after reading external content may not hold a `Proposal`, its media dropped as for any
-  tainted author). For the models that read the workspace the surface
-  is tainted as soon as one part is (`look.code_taint`, `look.author_taint`). Its Proposals still
-  answer in place (`look.answers`, the page's `extensions.eriphe.answers`), as the attention
-  queue's do: code bound each to one of the thread's own cards, unless the thread itself is
-  tainted, which the surface then says, and its cards are answered in the conversation.
-- **Small**: a one-line summary (`look.summary`, the page's `extensions.eriphe.summary`): what
-  waits, the state when nothing moves,
-  « Fait ✓ » once done. A small tile (`s`) shows that line rather than a slice of the surface, a
-  chip shows it beside its title.
-- **Lifetime**: `while: thread:<id>`; once done or dropped, rewritten with `until` the end of its
-  day in the user's zone (an hour at least), then it leaves and never comes back unless the thread
-  is reopened. Weight 50, 70 while something waits for the user (80 while one of its cards does:
-  they leave the attention queue for it), 30 once ended.
-- **Stop** (`thread_controls`), in the head of an active thread: `control` with
-  `{"thread": <id>, "do": "stop"}`, checked against the button (`controlOf`), then `stopThread`.
-  A standing thread has none: it never ends.
-- **« Ranger »** (`thread_tidy`), on an ended `goal` thread's surface only, sends `tidy` with
-  `{"thread": <id>}`; code checks it against the button it wrote (`tidyOf`), then `tidyThread`
-  puts the thread away: its surface leaves at once (a day thread's leaves at its end, a standing
-  one's never). 409 once put away.
+A thread's tile is drawn from its row and its cards by the page (`/espace`): no code writes a
+`thread-<id>` surface any more, and the brain composes no part of one. What the user follows
+continuously is a [view](#views-node_livego-view_cardgo): a standing node, its live blocks, its
+monitor and its skill. Day threads are gone: `ends` is `goal` or `standing`.
 
 ## Node files (`nodefile/`)
 
@@ -1315,9 +1106,15 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   token's known shape anywhere, a query's or fragment's token key or long random value, and a
   link's password still are. A random secret as a bare path segment, in no known shape, passes.
 - **Code's writes:** `Change(id, expect, author, fn)` lets code change what no author may (a
-  block's or the node's `external`, the title, the goal); the id, parent, creation, done and
-  archived never change this way, and the filter runs over the node written. `Create` with
-  `External` marks the node and each of its blocks.
+  block's or the node's `external`, a block's `snapshot`, the title, the goal); the id, parent,
+  creation, done and archived never change this way, and the filter runs over the node written.
+  `Create` with `External` marks the node and each of its blocks; with `ID`, the node takes an id
+  given beforehand (`NewID` gives a free one: a card shows the node before it exists).
+- **An author's write over code's:** `Write` and `Change` made on an older version are not stale
+  when every version since changed code's fields only (`onlyCodeSince`: the snapshot a live block
+  wrote, a block marked external): the write applies over them, code's fields kept.
+- **Live sources:** `Sources(id)` lists the sources of every block of the nodes not archived (or of
+  one node), from `node_sources`: what the live engine reads (`node_live.go`).
 - **Item notes:** `NoteItem(id, item)` keeps a note and a state (`act`, `look`, `info`, `none`,
   `done`) on an item one of the node's blocks' sources lists, in `node_items`, with its author
   and taint; no note nor state takes it away. `Items(id)` reads them. A note is not a version.
@@ -1432,6 +1229,44 @@ when the run was clean (no external event, no external content read), its opener
 it borrows nothing the skill does not declare, and nothing external was handed to it. Anything
 else (an external event, external content read, an undeclared repository) asks its start card as
 any task's.
+
+## Views (`node_live.go`, `view_card.go`)
+
+A view (#631) is what the user follows continuously (their mails, the prod's alerts, the pull
+requests to review): a standing node whose blocks code keeps fresh, the monitor that detects what
+comes, and the skill that works in the node when it does. Nothing here knows a view: the brain
+composes each one from the catalog.
+
+- **Live blocks** (`node_live.go`, table `node_reads` in `core.db`): a block's `sources` are read by
+  code, without a model, as the brain's free reads are (`sourceWhy`): a tool with fixed arguments,
+  a server's resource, or a monitor the user approved. A source new or changed is read at once,
+  then every `every` minutes (5 by default), at a resource's update, and a monitor's at each of its
+  looks (`monitorLooked`). A read that fails or waits keeps the last good value, with why. The
+  values are written back into the block's `snapshot`, with `at` (code's, a reserved source name),
+  in one version of code's (`eriphe`) when a value changed, once a quarter of an hour at most per
+  block; a snapshot the store refuses (a secret, too big) is not tried again until its value
+  changes. A block that reads a server not trusted is marked `external`, checked at each read:
+  code marks it, never unmarks it. A monitor's value is its latest number, its last points, whether
+  it is past its limit or failing, and its last events (kind and time, numbers only).
+- **A monitor raises its nodes**: crossed and holding, or failing, it puts each node whose blocks
+  read it in the attention queue (`node:<id>`, in code's words), tainted when its server is not
+  trusted.
+- **Item notes** (`node_items.go`): a listing source's `items` (`path`, `id`, `title`, `detail`)
+  give its items; a task notes one (`item_note`) in `node_items`.
+- **Calls on an item** (`item_cards.go`): a skill run's call kept for the user that names exactly
+  one item of a source of the run's node, on the call's own server, is kept on that item
+  (`access_asks.node`, `source`, `item`): one card per item (kind `calls`), answered alone. A call
+  on no item stays on the run's card. The card names its node, unless the node is external.
+- **One card** (`view_card.go`, kind `view`, table `view_proposals`): `propose_view` checks the
+  node (its body as a task's blocks are: the actions' grammar, no ask after external content, no
+  Link to a source's value; each source a catalog server's, an approved monitor, or the view's
+  own), the monitor (`write_monitor`'s checks, its name free) and the skill (`write_skill`'s, its
+  name free, with `when`; code writes its `node:`, the id given beforehand). The card shows the
+  node's title and blocks with what each reads, what the monitor does, and when the skill runs,
+  with the repositories its steps may borrow. One yes makes the node (standing, by `user`), the
+  monitor (on) and the skill (approved), in that order; one that fails takes back those before,
+  and the card waits still. No makes none. Written on a tainted turn, the card says so and the
+  node is external.
 
 ## Permission policy
 
@@ -1895,10 +1730,8 @@ turn is not tainted. Its front matter:
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
 | `repos` | the repositories its runs' steps may borrow, `owner/name`, by commas or a list (10 at most): a clean run's step on them starts without a card ([Work in steps](#work-in-steps-node_stepsgo)); a run itself is not lent them |
-| `thread` | its thread's alias, `kind:slug` (`topic:mails`); without it, its events' key when it names a thing (`topic:<monitor>`) |
-| `title` | its thread's name for the user, 60 characters at most (`title: Mes mails`); without it, its name made a title (`mails-pro` → « Mails pro »). A new version's title renames its thread, the one already open too |
+| `node` | with `when`: the id of a standing node its runs work in (a view's, [Views](#views-node_livego-view_cardgo)): each run's task is that node's, reads and writes it, notes its items and opens its children; the node is never done nor given a run's report. A node that is gone refuses the run. Without it, each run works in a node of its own |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
-| `actions` | the actions its runs may offer on an item, with their words: a list, one a line, `Label: server/tool key=value …` (`- "Archiver: mail/move_message folder=Archive"`), 8 at most, a label of 40 characters at most. An action a run notes (`note_item`) that has this tool and these arguments says this label on its button, its note tainted or not: the user approved these words with the version, the run only chose the item. Any other action of a run says the tool's own words |
 
 The keys are checked when a version is added: a bad trigger refuses it. A trigger is approved with
 the rest of the skill, as one version: Settings → Skills shows it in words, and a change is a new
@@ -1938,50 +1771,14 @@ version, read with its diff.
   even without an attention entry; « the skill proposes N actions » when it wrote none, or when
   its message is held or not sent, held by the attention queue for its breakpoint): each action with its parameters. The yes runs
   them all, exactly as kept, the no none; their results go to the run's note, not to the brain.
-- **Its calls on an item are that item's card** (#575, `item_cards.go`): a kept call whose input
-  names exactly one item a source of its thread lists, of the call's own server (a value of its
+- **Its calls on an item are that item's card** (#575, #631, `item_cards.go`): a kept call whose
+  input names exactly one item a source of its node lists, of the call's own server (a value of its
   input equal to the item's id; code matches it, the run never says it), carries the item
-  (`access_asks.thread`, `source`, `item`) and is on that item's card (kind `calls`, `batch` = its
-  first call's id), not on the run's: when the run ends, each item gets its card, raised for the
-  thread (`cardNow`), with its taint. The same call on the same item still waiting, from any run,
-  is the card already there. While it waits, the thread's surface shows it once, with what waits
-  for the user (« À toi », a `Proposal` bound to its ref); it takes the thread's weight and state
-  (yours), and leaves the attention queue while the thread is active. Decided, it stays a day in
-  the item's data, on its row (`/thread/items/<source>/groups/<g>/items/<i>/cards`), or under the
-  source for one on several items (`/thread/items/<source>/cards`), a compact `Proposal` in the
-  default composition. Its words are code's: the action by its tool, its origin the thread and
-  the item by its source and id, Oui running each call once as kept. A `Proposal` bound inside a
-  list sends where it is (`at`, its place in the data); `answerOf` checks the place is one its
-  binding takes and the data there shows that card. Its results go to the run's note (a run's) or the thread's
-  log, never to the brain; a calls card is answered by its buttons only, never by a plain « oui ».
-- **Actions offered on an item** (#575, `item_offers.go`): `note_item` takes `actions`, one at
-  most (the one its author recommends, only when useful: never a menu), a label, a tool
-  (`server/tool`) and its exact input with `"$item"` where the item's id goes (code fills it in;
-  kept in `thread_items.actions`). Checked when noted: the tool is in the
-  catalog and not Eriphe's own, the author may use it (a task: lent it), its input names the item
-  and fits the tool's required properties, and the access policy does not refuse it (`never`);
-  checked again when shown and when clicked, so a `never` tool is never offered. The row offers
-  each in its data, `offers` (`{label, thread, source, item, offer, tool}`, the offer being the
-  action's key); a state group offers an action two of its rows or more share
-  (« Archiver · 24 », `{label, thread, source, state, offer}`). A folded group (`none`, `done`) is
-  no list of buttons: its rows offer nothing, the group the action they share, even one row's.
-  An `Offers` component shows them, a button each with code's words: the default composition
-  places one on each row and on each group's line, and a holder's block that shows a source's
-  rows may place one too, bound to a row's or a group's `offers` under `/thread/items` and to
-  nothing else (`offersGuard` when written, `offersBound` when clicked: no author writes
-  `/thread`, so the words and the ids are always code's). An author can never write `offer`
-  (`CheckActions`). The page sends the offer's ids as code wrote them, never its words
-  (`{thread, source, item or state, offer}`); code checks them against the clicked `Offers` of
-  the thread's own surface, one of the offers its binding takes in the stored data
-  (`sentOffer`). A click runs nothing: code reads the note again from the store (the item
-  still listed and shown, the action on its note) and makes one calls card with the exact call,
-  bound to the item, linked to the thread, with no message; a group's click one card with a call
-  per item shown in the group. A call already waiting on its item is not asked twice. A button's
-  words are never a run's: a skill's run's says the label its skill's approved version declares
-  for that action (`actions:`, tool and arguments matched), tainted note or not; any other action
-  of a task says the tool's own words (`toolWords`: its title from its server, else `callVerb`).
-  The brain's say their label, but for a tainted note: the tool's words. Its card
-  keeps the note's taint.
+  (`access_asks.node`, `source`, `item`) and is on that item's card (kind `calls`, `batch` = its
+  first call's id), not on the run's: when the run ends, each item gets its card, with its taint.
+  The same call on the same item still waiting, from any run, is the card already there. Its words
+  are code's: the action by its tool, its origin the node (unless it is external), Oui running each
+  call once as kept; its results go to the run's note and to the node's trace, never to the brain.
 - **Its alias**: its runs are about `thread: kind:slug`; without it, their events' key when it
   names a thing (a monitor's, `topic:<name>`, or `kind:slug`; about.go). Their tasks,
   notifications, cards and signals carry it. A run no longer opens nor tends a thread.
@@ -2011,9 +1808,9 @@ brain reads the same with **`skill_runs`** (`name`, `limit`; free). It gets the 
 keys and the runs' outcomes, but not their text: what a run read stays on its page.
 
 **Written by Eriphe.** The brain's `write_skill` (name, description, instructions, `when`,
-`every`, `model`, `tools`, `thread`, `urgent`, `title`, `actions`) writes a `SKILL.md` and adds it as a version waiting for
+`every`, `model`, `tools`, `urgent`, `repos`, `node`) writes a `SKILL.md` and adds it as a version waiting for
 approval (source `eriphe`), checked as an upload is (its model an agent, its tools catalog
-servers). Its card (kind `skill`) says the trigger in words, its thread's name, its buttons' words and the instructions; the yes approves
+servers). Its card (kind `skill`) says the trigger in words, the repositories its steps may borrow, the node it works in and the instructions; the yes approves
 exactly that version, the no drops it. Written on a tainted turn, the card says so. A triggered
 task has no such tool.
 
@@ -3836,15 +3633,14 @@ and update the commit in the two `NOTICE` files.
 ### Surfaces and their sources (`surfaces.go`)
 
 A surface is one tile of the workspace, and code writes every one (#574): its **author** is
-`thread:<id>` for [a thread's](#a-threads-surface-thread_surfacego) (`thread-<id>`) or `core` for
-[the attention queue's](#the-layout-workspace_layoutgo) (`q-…`); `writeSurface` refuses any other
-author or id (`codeSurfaceOf`), and at start code removes any surface another author wrote
-before (`dropFreeSurfaces`). No assistant, task or skill writes a tile of its own: who
-holds a thread adds [its part](#a-threads-surface-thread_surfacego) to the thread's surface. A
+`core`, [the attention queue's](#the-layout-workspace_layoutgo) (`q-…`); `writeSurface` refuses
+any other author or id (`codeSurfaceOf`), and at start code removes any surface another author
+wrote before (`dropFreeSurfaces`), a thread's too ([a thread has no surface](#a-thread-has-no-surface-631)).
+No assistant, task or skill writes a tile of its own. A
 surface has a title, A2UI components, data, **sources**, a refresh, a **lifetime**, a weight (1
 to 100) and a why; code keeps its data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
 author declares, so a tool linked tomorrow is a source with no code (`TestNoToolInSurfaces` holds
-the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider or host name;
+the surfaces' files, the live blocks' and the view card's, `pool_follow.go` and `a2ui/` to no preset, card, provider or host name;
 `TestSurfaceFromAnyTool` serves a live surface from a fake server nobody wrote for).
 
 - **Sources**: a JSON pointer of the data model (not the root, none inside another) →
@@ -3905,21 +3701,6 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   address only (the accesses' dialer: never its own network, the LAN or the cloud's metadata),
   without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
   `nosniff`, a sandbox CSP and 10 minutes of private cache.
-- **Captured pages** (`surfaces_capture.go`, #470): most sites refuse being framed, so a task
-  about a thread, lent `eriphe-workspace`, shows a page as an image.
-  `eriphe-capture <url> thread-<id>` (worker/base) captures it in the task's container and posts
-  the PNG to its device (`ERIPHE_MEDIA_URL`, task secret), which relays it to
-  `POST /v1/device/tasks/{id}/media?surface=thread-<id>` (device secret). eriphe-core checks the task
-  (on that device, running, its grant covering `surface_write`) and the surface (the surface of the
-  thread the task is a step of, no other), sniffs a PNG or a JPEG only, 5 MiB at most, 10 per
-  surface, keeps it under `surface-media/<random id>` (table `surface_media`) and answers
-  `{src: "media:med_…"}`; the bytes never go through a model. Whoever holds the thread writes
-  `src` as an `Image`'s `url` in its part, with the page's address as a `Link`; `surfaceView` signs it like any media address, even on a tainted surface (it
-  carries nothing out), but only on the surface it was given for, and `/espace/media` reads it
-  from disk with the same headers. The page's CSP is unchanged. It goes with its surface
-  (`surfaceRemove`), and one its surface no longer shows goes after an hour (`tickSurfaces`).
-- Table `surfaces` (id, title, author, components, sources, data, data_at, refresh, lifetime,
-  weight, why, tainted, look: its sources' last reads, the user's last action and the last error for its author, next_at, created, updated).
 
 **Go API** (for the workspace's stream and the assistants' tools, #421):
 
@@ -3964,8 +3745,8 @@ the page, with the session's cookie and CSRF token (401 without a session):
 #### The actions of a surface
 
 A click does only what is safe (`surface_actions.go`, `a2ui/actions.go`). The action names are a
-closed grammar, checked by code twice: when an author writes a surface (`a2ui.CheckActions`, in
-`surface_write`; each error points at the action) and when the page sends one, against the
+closed grammar, checked by code twice: when code writes a surface or an author a node's block (`a2ui.CheckActions`, in
+`writeSurface` and `nodeGuard`; each error points at the action) and when the page sends one, against the
 surface as it is stored, never against what the page says of it. No action calls a tool that
 writes.
 
@@ -3973,16 +3754,12 @@ writes.
 |---|---|---|
 | `ask` | a Button's `{"event": {"name": "ask", "context": {"text": "…"}}}`: literal words, nothing else, never bound data; none at all from an author whose turn read external content | the text written on the clicked Button becomes a message of the user's to the brain, as if typed (`Via` `workspace:ask`, shown as « bouton de l'espace » / "workspace button"; `about` = `surface:<id>`, which the brain reads as `[Sam 10:02 #12 · bouton de l'espace · à propos de surface:…]`); a plain "oui" so sent decides no card. The brain is woken, never waited for. On a tainted surface the message taints the brain's turn (`surface:<id>`) and its line adds « surface au contenu extérieur »: what it shows is data |
 | `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does; a thread's, unless the thread itself is tainted or the Proposal is in a part written after reading external content), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
-| `mark` | never by an author: only the Mark component sends it, `{"list": "<id>", "item": "<id>", "mark": "keep"\|"drop"\|"done"\|""}` (the thread is the surface's), a mark it offers, or `""` when the user takes theirs away; the holder of a thread places a Mark in a block of its part, `list` and `item` literal ids or bound to the data (a row's id); allowed after reading external content (ids only) | checked against the clicked Mark of the thread's own surface (`markOf`): a mark it offers or `""`, `list` and `item` the literals or values its binding takes in the surface's data, each an id (`a2ui.MarkIDOK`: letters, digits, `_.:@=+-`, 128 at most, no `/`), the thread active; then recorded (`setMark`), a gesture for the brain's next turn, no turn of its own |
-| `offer` | never by an author: only the Offers component sends it, one of the offers code put in the thread's data (`/thread/items`), `{"thread": <id>, "source": "<name>", "item": "<id>"\|"state": "<state>", "offer": "<key>"}`, never its words | checked against the clicked Offers of the thread's own surface (`offerOf`): bound under `/thread/items`, the offer one its binding takes in the stored data; then the note is read again from the store (`offerCalls`) and a calls card is made: nothing runs |
-| `tidy` | never by an author: code places it on an ended thread's surface, its « Ranger », `{"thread": <id>}` | checked against the Button code wrote there (its thread); then `tidyThread`: the surface leaves, the thread is kept (409 once put away) |
-| `control` | never by an author: code places it in the head of an active thread (Stop), `{"thread": <id>, "do": "stop"}` | checked against the Button code wrote there (its whole context); then `stopThread` |
 | local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs. Code alone places an `open` that names another surface, `{"surface": "<id>"}`, on a thread's surface (a child's row, a child's crumb to its parent) | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer. An `open` that names another surface is not sent as is: the page opens that surface, as it opens a tile (`opensSurface`, `place("open", <id>)`), the one it came from as where it opens when it is not laid out |
 
 Anything else (another name, a function call, a component that carries no such action, an answer
 to a proposal the surface does not show, or on a tainted surface) is refused with 400 and told
 to the surface's author (`surfaceError`, code `ACTION_REFUSED`), which reads it with
-`workspace_read` and its next `surface_write`. A tainted surface can only ask: a proposal shown
+`workspace_read`. A tainted surface can only ask: a proposal shown
 there is answered in the conversation.
 
 #### Proposals in the surfaces they concern (`surface_proposals.go`)
@@ -4020,100 +3797,26 @@ A proposal shows where it matters (#428), with no code for any tool:
 
 ### The assistants' workspace tools (`workspace_tools.go`)
 
-The workspace shows threads only (#574): an assistant writes **its part of a thread's surface**,
-never a tile of its own. Five tools; the **author is the caller**, never a field:
+The workspace shows what waits for the user; no assistant writes a tile, and a thread has no
+surface (#631: what is followed continuously is a [view](#views-node_livego-view_cardgo)). Three
+tools; the **author is the caller**, never a field:
 
 | Tool | Does |
 |---|---|
-| `surface_write` | write one block of the caller's part of a thread's surface: `id` is `thread-<id>` of a thread it holds, `block` (its name: a new one adds a block, one there is replaced alone), `before` (another block's name, to place it before), `components`, `data`, `sources`, `refresh {every}` ([a thread's part](#a-threads-surface-thread_surfacego)). Any other id is refused, the refusal saying the way: find or open the thing's thread first (`open_thread`; `ends: day` for what is shown for today). Its description carries a compact summary of the catalog (its components and functions, from `a2ui.Eriphe()`); a wrong block comes back as A2UI's errors, each with its path, nothing written. Answers `id`, `author`, `block`, `blocks` (in order) |
-| `surface_remove` | take one block of the caller's part away from a thread's surface, by `block`; the other blocks and the surface stay. Answers `removed`, `blocks` |
-| `workspace_read` | the threads on screen (`threads`: surface id, thread, title, state, new, `yours` when the caller holds it, the thread's sources, last update, `waiting`, the user's last action on it; for one it holds, its part's `blocks` in order, `failed` and the last `error`), the queue's surfaces (`queue`: id, title, state), the user's gestures of the last hour (what, ref, `marked` for a mark: list/item, time), the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref` for a Proposal's `proposalId`, text, `when`; at most 20). A title written in a tainted turn, and the text of a proposal drawn from external content, are never quoted |
-| `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand |
-| `sources_read` | what code may read for a part (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: code reads them under the access policy (`sourceWhy`). Without a shape, the author binds what it expects and `surface_write`'s error names the fields the result has. With nothing linked, it says so |
+| `workspace_read` | the queue's surfaces (`queue`: id, title, state), the user's gestures of the last hour (what, ref, time), the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref`, text, `when`; at most 20). A title drawn from external content, and the text of a proposal drawn from it, are never quoted |
+| `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand, to compose a node's blocks |
+| `sources_read` | what code may read for a block (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: code reads them under the access policy (`sourceWhy`) |
 
-- **A one-off request is a day thread.** « J'ai quoi demain ? » is a thread opened with
-  `ends: day` and its alias, the brain's part on its surface; asked again, `open_thread` on the
-  same alias gives the same thread back. At the user's midnight code ends it and takes its part
-  away (`endDays`, `dropThreadPart`): reopened the next day, the brain writes it again. A
-  recurring request is a skill, whose runs write in their nodes and write no surface.
-- **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint; it
-  holds every thread. A task through **`eriphe-workspace`, a server Eriphe
-  provides**: lent like any catalog server (`{kind: tool, ref: eriphe-workspace}` or
-  `eriphe-workspace.<tool>` in `run_task`'s resources, never in a skill's `tools`), checked by
-  `checkGrant`, listed by `list_tools` under `provided`, put in the task's spec by `specServers`
-  and relayed by its device at `/v1/device/tasks/<id>/mcp/eriphe-workspace` like the others
-  (`taskMCPHandler` serves the tools its grant covers; a task not lent it gets 403). The name is
-  reserved. A task holds no thread: it reads the workspace and gives captured images
-  (below); what it found goes back to the brain, which writes its part.
-- **No approval.** Writing a part is not an external write: the lent tools are allowed in
-  advance (the spec's `allowedTools`), and each caller writes on the threads it holds only.
+- **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A task
+  through **`eriphe-workspace`, a server Eriphe provides**: lent like any catalog server
+  (`{kind: tool, ref: eriphe-workspace}` or `eriphe-workspace.<tool>` in `run_task`'s resources,
+  never in a skill's `tools`), checked by `checkGrant`, listed by `list_tools` under `provided`, put
+  in the task's spec by `specServers` and relayed by its device at
+  `/v1/device/tasks/<id>/mcp/eriphe-workspace` like the others (`taskMCPHandler` serves the tools
+  its grant covers; a task not lent it gets 403). The name is reserved. A task's image upload
+  (`/v1/device/tasks/{id}/media`) is refused: no surface takes it.
 - **Taint.** Calling `eriphe-workspace` does not taint a task by itself, as eriphe-core's own tools
-  do not (`eventsTaint`): `workspace_read` quotes nothing written after external content, and
-  `sources_read`'s descriptions are the catalog's, which the brain reads untainted in its own
-  tool list (a tool's description is never counted as read content), and the proposals it lists
-  leave out the text of one drawn from external content. What tells a caller what a source gave
-  does: a binding's error naming a result's fields, a source's failure, the last error
-  of its part (`workspaceSourceRead` in its reads).
-- **Never held long.** `surface_write` waits 3 s at most (`surfaceReadCap`) for its sources'
-  first read. A source still reading then is accepted waiting, the part written and the bindings
-  under it checked against the tool's `outputSchema` only; the read goes on as the thread's
-  source, and fills the surface when it ends.
-- **Gone with it**: Settings → Surfaces, a skill's or a task's own tile, `run_task`'s `surface`
-  (a task filling a placeholder), the cap of 100 surfaces, an author's surface weight and the
-  measure of use that page showed.
-
-**The threads' bench** (`testdata/threads/`, `threads_bench_test.go`, #471). Invented requests of
-Sam about a matter to follow, each with the tools linked for it (invented servers: what each does,
-its schema, what a read gave or a change answers, trusted or not), what the brain knows of Sam,
-maybe a thread already on stage, and a reference answer: the calls the brain makes in its turn, in
-order, and its reply (`{"calls": [{"tool", "args"}…], "reply"}`). An answer is scored by playing
-its calls through the brain's own MCP server on a core linked to the case's fake servers, in a
-turn as production makes it (from the workspace; for a wake, the step's real event delivered), then
-reading what the core holds, never exact words: a status question finds the thread before opening
-it, opens it light with an alias, writes the brain's part on `thread-<id>` (no other surface)
-and puts it on stage; a PR not merged gets a `call` step on the change, whose card is the yes;
-one already merged, only a `check`; the wake after the change ran (the bench says yes on the card,
-the fake change runs) adds a `user` step after it (Sam deploys himself) and a `check` after that,
-never closing the thread; « pendant que je relis la PR, cherche… » while a thread is on stage
-opens a second one with a task step, no `workspace_focus`, the stage and its thread untouched.
-Always: no call refused, no change called outside a step, a reply in one line (`[rien]` for a
-wake, the replies it suggests left out), no server or tool name in the reply, the thread, its
-steps or the part. A turn announces the id the next thread gets (`threadBenchSeed`, or the case's
-`seed`: each case has ids of its own). The matters differ (a PR, a research, a child thread
-choosing a subject under the publication on stage, a checklist, mails from a server not trusted,
-an allocation, a trip's hotels), each part composed from the catalog's bricks only (options with a
-`Mark`, a `Grid` of cards, a `Chart` `stack`, a source's rows and groups with their `Offers`);
-a case may give Sam's `marks` after the turn. `ERIPHE_UPDATE_THREADS=1 go test -run
-TestThreadSurfacesFixture` writes the surfaces these reference answers leave (and the stage's) into
-the page's fixture (`web/espace/src/a2ui/threads.json`), so the espace's tests and its dev server
-(`npm run dev`, `?open=thread-<id>`) render what the brain's own tools composed. In CI with no model, every case is valid, its
-reference answers score clean, and each fault is caught on a spoilt copy. `threads_live_test.go`
-runs the turns on a real model: « Les fils », the paragraphs
-on the brain's part of a thread and on the workspace's messages, the brain's tools for threads and the workspace as
-an MCP client lists them and the catalog appended to the system prompt; a wake is played after
-the case's reference first turn, so each turn is judged on its own:
-
-```sh
-cd core
-ERIPHE_LIVE_THREADS=1 go test -run TestThreadsLive -v .
-# ERIPHE_LIVE_THREADS_RUNS=1 (default), ERIPHE_LIVE_THREADS_MODEL=sonnet (default),
-# ERIPHE_LIVE_THREADS_CLI=claude (default), ERIPHE_LIVE_THREADS_CASES=<id>,<id> (all by default)
-```
-
-It reports per turn and in all: the faults, agreement, latency and cost (about 11 cents for the
-first turn, its system prompt written to the cache, then 2 cents a turn with Sonnet). It fails
-only when the CLI does.
-
-**Who keeps which surface** (`surface_authors.go`, #423). Nothing is recurring by default.
-
-- **A thread's surface is code's** ([a thread's surface](#a-threads-surface-thread_surfacego)):
-  who holds the thread (the brain) adds its part to it.
-- **A skill writes no surface**: each run writes in its node ([Triggered skills](#triggered-skills)).
-- **The brain** writes what the user asks; asked for something that comes back (« chaque matin »),
-  it writes a skill.
-- **No model judges the workspace**: nothing tells a surface stale or something missing; what a
-  thread shows is kept up to date by code from its sources and by whoever tends it.
-
+  do not (`eventsTaint`): `workspace_read` quotes nothing written after external content.
 ### Signing in
 
 The workspace has one owner; how they sign in is set in Settings → Access → Web workspace → Connexion, or in
@@ -4755,7 +4458,7 @@ intentions (memory.db) carry an `about` column next to their ref (which record: 
   `owner` and `home` stand alone. A name's slug is lower case, accents folded, spaces as hyphens,
   its sub-parts kept (`project:site:prod`); a topic's single word is singular; a pull request is
   `pr:owner/repo#12`, lower case; an alert's id is kept as written. **A mail or an event is an
-  item** of a thread's source (`note_item`), never a key: `mail:` and `event:` are refused. A ref
+  item** of a node's source (`item_note`), never a key: `mail:` and `event:` are refused. A ref
   (`card:12`, `task:t-…`, `intention:5`, `skill:<name>`) names one record, never a key.
 - **The names index** (`names.go`, core.db `names(name, target, seen)`): a key names one target
   (a unique index on keys): the thread it is the **alias** of (`thread:<id>`), or itself while no
@@ -4815,8 +4518,7 @@ intentions (memory.db) carry an `about` column next to their ref (which record: 
     entity the user's messages name; two named give none, and a clock wake none. What the brain
     makes in the turn takes it: `notify`, `remember` (a fact, a decision, a progress, never a
     replacement, which keeps the one it replaces; never a profile, a preference, a person, a lesson
-    or a situation), `intend`, `run_task`, a new surface (`surface_write`: one written again keeps
-    its about unless one is given), a card it proposes;
+    or a situation), `intend`, `run_task`, a card it proposes;
   - **a maker** (`sourceAbout`): a thread (`thread:`) gives its thread, a task (`task:`) its
     about: a task about a thread, notifications and signals take
     the thread, a card raised by a task or a thread its maker's, an attention item its source's (an
