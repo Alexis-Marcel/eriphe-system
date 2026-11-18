@@ -54,14 +54,15 @@ under the same tags): the updaters of machines installed before pull it, and a d
   first in `PATH` for the agent and the checks alike ([device/README.md](../device/README.md),
   Toolchains)
 - [`eriphe-capture`](base/eriphe-capture) (`/usr/local/bin`), a web page as an image for the
-  surface of the thread the task is a step of (most sites refuse being framed): `eriphe-capture
-  <url> thread-<id> [out.png]`, or `--file <image> thread-<id>` for a PNG or a JPEG already made. A Node.js script,
+  task's own node (most sites refuse being framed): `eriphe-capture <url> <node-id> [out.png]`,
+  or `--file <image> <node-id>` for a PNG or a JPEG already made, the node's id being the task's
+  own (`node_read` gives it). A Node.js script,
   no npm package: it drives Debian's `chromium-headless-shell` over its DevTools pipe, with a
   1280×800 window, a 45 s limit, a profile of its own thrown away after (no cookie, no sign-in:
   only the egress relay's credentials are given), downloads refused, dialogs dismissed, http(s)
-  only. It posts the PNG to the device (`ERIPHE_MEDIA_URL`, the task's secret; a task lent
-  `eriphe-workspace` only, step of that thread) and prints `{"src": "media:med_…"}`, which whoever
-  holds the thread writes as an `Image`'s `url` in its part ([core/README.md](../core/README.md),
+  only. It posts the PNG to the device (`ERIPHE_MEDIA_URL`, the task's secret; a task with a node
+  of its own, `eriphe-nodes`, only) and prints `{"src": "media:med_….png"}`, which the task writes
+  as an `Image`'s `url` in a block of its node ([core/README.md](../core/README.md),
   Captured pages). The browser is not in the image (about
   290 MB unpacked, 103 packages): the first capture on a machine installs it with
   `fonts-liberation` through apt, and `/cache/apt` keeps the packages for the next task.

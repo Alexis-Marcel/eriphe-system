@@ -9,7 +9,7 @@ import (
 )
 
 // A task's image goes to eriphe-core under the device's identity, with the
-// surface it is for, only for a task lent the workspace, within the limit.
+// node it is for, only for a task with a node, within the limit.
 func TestMediaRelay(t *testing.T) {
 	var got *http.Request
 	var body []byte
@@ -17,12 +17,12 @@ func TestMediaRelay(t *testing.T) {
 		got = r
 		body, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"src":"media:med_x"}`)
+		io.WriteString(w, `{"src":"media:med_x.png"}`)
 	}))
 	defer core.Close()
 
 	n := newDevice(options{callbackURL: "http://eriphe-device:8790"})
-	task := &Task{ID: "t-1", State: stateRunning, secret: "task-secret", Spec: TaskSpec{Servers: []string{workspaceServer}}}
+	task := &Task{ID: "t-1", State: stateRunning, secret: "task-secret", Spec: TaskSpec{Servers: []string{nodesServer}}}
 	other := &Task{ID: "t-2", State: stateRunning, secret: "other-secret", Spec: TaskSpec{Servers: []string{"github"}}}
 	n.tasks[task.ID], n.tasks[other.ID] = task, other
 	mux := http.NewServeMux()
@@ -31,7 +31,7 @@ func TestMediaRelay(t *testing.T) {
 	defer relay.Close()
 
 	post := func(secret string, data []byte) int {
-		req, _ := http.NewRequest("POST", relay.URL+mediaPath+"?surface=s-1&other=x", bytes.NewReader(data))
+		req, _ := http.NewRequest("POST", relay.URL+mediaPath+"?node=n1&other=x", bytes.NewReader(data))
 		req.Header.Set("Authorization", "Bearer "+secret)
 		req.Header.Set("Content-Type", "image/png")
 		resp, err := http.DefaultClient.Do(req)
@@ -45,7 +45,7 @@ func TestMediaRelay(t *testing.T) {
 	if code := post("task-secret", png); code != 200 {
 		t.Fatalf("relayed: %d", code)
 	}
-	if got.URL.Path != "/v1/device/tasks/t-1/media" || got.URL.RawQuery != "surface=s-1" ||
+	if got.URL.Path != "/v1/device/tasks/t-1/media" || got.URL.RawQuery != "node=n1" ||
 		got.Header.Get("Authorization") != "Bearer device-secret" || got.Header.Get("Eriphe-Device") != "pc" || !bytes.Equal(body, png) {
 		t.Fatalf("core got %s?%s %v %q", got.URL.Path, got.URL.RawQuery, got.Header, body)
 	}
@@ -54,7 +54,7 @@ func TestMediaRelay(t *testing.T) {
 		t.Fatalf("wrong secret: %d", code)
 	}
 	if code := post("other-secret", png); code != http.StatusForbidden || got != nil {
-		t.Fatalf("no workspace: %d", code)
+		t.Fatalf("no node: %d", code)
 	}
 	if code := post("task-secret", make([]byte, mediaMax+1)); code != http.StatusRequestEntityTooLarge || got != nil {
 		t.Fatalf("too large: %d", code)
@@ -68,6 +68,6 @@ func TestMediaRelay(t *testing.T) {
 		t.Fatalf("env = %v", env)
 	}
 	if env := n.mediaEnv(other); env != nil {
-		t.Fatalf("env without the workspace = %v", env)
+		t.Fatalf("env without a node = %v", env)
 	}
 }
