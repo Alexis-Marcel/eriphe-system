@@ -51,18 +51,20 @@ func TestBrainPromptThreads(t *testing.T) {
 	}
 	section := prompt[start:end]
 	for _, want := range []string{
-		"**Quand en ouvrir un.**", "`open_thread` avec sa clé", "reste du texte, sans fil", "tout ce qui se **montre** est un fil", "`take`", "`new_because`",
+		"**Quand en ouvrir un.**", "`open_thread` avec sa clé", "reste du texte, sans fil", "`take`", "`new_because`",
 		"propose sa fusion", "seulement la vérification, rien d'autre", "Une tâche parle du fil de son tour",
 		// Work in steps (#630): code runs and accepts them, the brain settles exceptions.
 		"**Un travail en étapes.**", "`node_open` avec `steps`", "`[nœud <id> « titre »] …`", "`node_settle`", "sans te réveiller",
-		"un **veilleur**", "`item_note`", "`note_item`", "`stop_thread`", "une recherche",
+		"`item_note`", "`stop_thread`", "une recherche",
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",
 		"se range seul dans sa chronologie", "Sa réponse sur une de ces cartes",
 		// Working inside a thread (#607): a child for a matter of its own,
-		// the part by named blocks, the bricks, the user's marks.
-		"`open_thread` avec `parent`", "`find_thread`", "`block`", "`before`", "`surface_remove`", "jamais tout",
-		"`Mark`", "`Grid`", "`\"kind\": \"stack\"`", "`Offers`", "n'appelle pas de réponse",
+		// the bricks.
+		"`open_thread` avec `parent`", "`find_thread`", "`Mark`", "`Grid`", "`\"kind\": \"stack\"`",
+		// Views (#631): one card, its live blocks, its skill in its node.
+		"## Les vues", "`propose_view`", "un seul oui les crée", "la dernière bonne valeur reste", "marqué extérieur",
+		"« Répondre à Sam »", "attend son oui sur une carte",
 	} {
 		if !strings.Contains(section, want) {
 			t.Errorf("« Les fils » lacks %q", want)
@@ -75,7 +77,7 @@ func TestBrainPromptThreads(t *testing.T) {
 		}
 	}
 	// What the epic replaced is gone: buttons drawn on a row by default.
-	for _, gone := range []string{"composition par défaut", "en boutons sur sa ligne"} {
+	for _, gone := range []string{"composition par défaut", "en boutons sur sa ligne", "`note_item`", "`surface_write`", "un fil `day`", "eriphe-capture", "/thread/marks"} {
 		if strings.Contains(prompt, gone) {
 			t.Errorf("the prompts still say %q", gone)
 		}
