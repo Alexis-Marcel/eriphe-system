@@ -23,6 +23,7 @@
 package nodestore
 
 import (
+	"bytes"
 	"crypto/rand"
 	"database/sql"
 	"errors"
@@ -188,6 +189,19 @@ func randomID() string {
 	return string(b)
 }
 
+// NewID is an id no node has yet, for a node to create later with it
+// (New.ID): a card shows what its yes creates.
+func (s *Store) NewID() string {
+	id := s.opts.NewID()
+	for range 8 {
+		if _, err := s.summary(id); errors.Is(err, ErrNotFound) {
+			break
+		}
+		id = s.opts.NewID()
+	}
+	return id // Create says so if it is taken
+}
+
 // slug is a file name's part from a title: lowercase ASCII letters and
 // digits, words joined by a dash, 40 characters at most.
 func slug(title string) string {
@@ -220,6 +234,7 @@ func traceFile(file string) string { return strings.TrimSuffix(file, ".md") + ".
 
 // New is a node to create.
 type New struct {
+	ID       string // its id when it was given beforehand (a card that shows it); a new one when empty
 	Title    string
 	Parent   string
 	Links    []string
@@ -260,7 +275,12 @@ func (s *Store) Create(nw New) (*Doc, error) {
 			return nil, fmt.Errorf("after %s: a step waits only for steps of its own parent", a)
 		}
 	}
-	id := s.opts.NewID()
+	id := nw.ID
+	if id == "" {
+		id = s.opts.NewID()
+	} else if !nodefile.IDOK(id) {
+		return nil, fmt.Errorf("id %q: lowercase letters and digits, 32 at most", id)
+	}
 	if _, err := s.summary(id); err == nil {
 		return nil, fmt.Errorf("id %s is taken", id)
 	}
@@ -309,7 +329,7 @@ func (s *Store) change(id, expect, author, op string, fn func(*nodefile.Node) er
 	if expect == "" {
 		return nil, errors.New("expect is needed: the hash of the version this write was made on")
 	}
-	if expect != "" && expect != cur.Version.Hash {
+	if expect != cur.Version.Hash && !s.onlyCodeSince(cur, expect) {
 		return nil, fmt.Errorf("%w: written on %s, the last version is v%d (%s)", ErrConflict, short(expect), cur.Version.N, short(cur.Version.Hash))
 	}
 	n, err := nodefile.Parse(cur.Raw)
@@ -348,6 +368,29 @@ func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error)
 		}
 		return s.refuse(string(raw))
 	})
+}
+
+// onlyCodeSince tells whether a node's versions since the one whose hash
+// is expect changed only code's fields (a source's snapshot, the user's
+// marks, external): a write made on that version then applies on the
+// last one, code's fields kept. A live block's snapshot never makes an
+// author's write stale.
+func (s *Store) onlyCodeSince(cur *Doc, expect string) bool {
+	var n int
+	if s.db.QueryRow(`SELECT n FROM node_versions WHERE id = ? AND hash = ?`, cur.Node.Meta.ID, expect).Scan(&n) != nil || n >= cur.Version.N {
+		return false
+	}
+	raw, err := s.fileAt(expect, cur.File)
+	if err != nil {
+		return false
+	}
+	was, err := nodefile.Parse(raw)
+	if err != nil {
+		return false
+	}
+	a, err1 := was.AuthorBytes()
+	b, err2 := cur.Node.AuthorBytes()
+	return err1 == nil && err2 == nil && bytes.Equal(a, b)
 }
 
 func short(hash string) string {
