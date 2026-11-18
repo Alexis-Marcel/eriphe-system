@@ -1,6 +1,7 @@
 package nodestore
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -156,5 +157,32 @@ func TestCreateWithID(t *testing.T) {
 	}
 	if s.NewID() == id {
 		t.Fatal("NewID gave a taken id")
+	}
+}
+
+// Check says what Create would refuse, and makes nothing: a secret, too
+// many blocks, an id taken.
+func TestCheckMakesNothing(t *testing.T) {
+	s, _ := newEnv(t).open(t)
+	id := s.NewID()
+	if err := s.Check(New{ID: id, Title: "Mails", Lifetime: nodefile.Standing, Author: "user", Body: "Les mails."}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Get(id); err == nil {
+		t.Fatal("Check made the node")
+	}
+	if err := s.Check(New{Title: "Keys", Author: "user", Body: "ghp_0123456789abcdefghij"}); err == nil {
+		t.Fatal("a secret passed")
+	}
+	var many strings.Builder
+	for i := 0; i <= MaxBlocks; i++ {
+		fmt.Fprintf(&many, "```eriphe:block b%d\n{\"components\": {\"component\": \"Text\", \"text\": \"x\"}}\n```\n\n", i)
+	}
+	if err := s.Check(New{Title: "Many", Author: "user", Body: many.String()}); err == nil || !strings.Contains(err.Error(), "blocks at most") {
+		t.Fatalf("too many blocks: %v", err)
+	}
+	mustCreate(t, s, New{ID: id, Title: "Mails", Lifetime: nodefile.Standing})
+	if err := s.Check(New{ID: id, Title: "Again", Author: "user"}); err == nil {
+		t.Fatal("an id taken passed")
 	}
 }

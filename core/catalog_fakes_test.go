@@ -117,10 +117,11 @@ func (m *fakeMonitor) server() *mcp.Server {
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 			ID     string `json:"id"`
 			Answer string `json:"answer"`
+			Start  string `json:"start,omitempty"`
 		}) (*mcp.CallToolResult, map[string]any, error) {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			m.sent = append(m.sent, map[string]any{"tool": "respond", "id": in.ID, "answer": in.Answer})
+			m.sent = append(m.sent, map[string]any{"tool": "respond", "id": in.ID, "answer": in.Answer, "start": in.Start})
 			return nil, map[string]any{"ok": true}, nil
 		})
 	// page reads the open web: no openWorldHint.

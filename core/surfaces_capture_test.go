@@ -25,20 +25,7 @@ func postTaskMedia(c *core, device, secret, taskID, surfaceID string, data []byt
 	return rec.Code, rec.Body.String()
 }
 
-// A task without the workspace gives no image.
-func TestTaskMediaNeedsTheWorkspace(t *testing.T) {
-	c, _ := surfaceCore(t)
-	c.store.registerDevice("pc", hashSecret("device-secret"))
-	task := &TaskRow{ID: "t-plain", Prompt: "x", State: stateRunning, Device: "pc", Tools: "ledger"}
-	if err := c.store.insertTask(task); err != nil {
-		t.Fatal(err)
-	}
-	if code, body := postTaskMedia(c, "pc", "device-secret", task.ID, "thread-1", testPNG); code != http.StatusForbidden {
-		t.Fatalf("%d %s", code, body)
-	}
-}
-
-// A task lent the workspace gives no image either: a thread has no
+// A task gives no image, lent the workspace or not: a thread has no
 // surface to show it any more.
 func TestTaskMediaRefused(t *testing.T) {
 	c, _ := surfaceCore(t)
@@ -47,7 +34,7 @@ func TestTaskMediaRefused(t *testing.T) {
 	if err := c.store.insertTask(task); err != nil {
 		t.Fatal(err)
 	}
-	if code, body := postTaskMedia(c, "pc", "device-secret", task.ID, "thread-1", testPNG); code != http.StatusGone && code != http.StatusForbidden {
+	if code, body := postTaskMedia(c, "pc", "device-secret", task.ID, "thread-1", testPNG); code != http.StatusGone {
 		t.Fatalf("%d %s", code, body)
 	}
 	if len(c.surfaceMediaOf("thread-1")) != 0 {
