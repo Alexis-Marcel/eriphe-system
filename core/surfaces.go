@@ -507,11 +507,11 @@ func (c *core) checkLifetime(l surfaceLifetime, now time.Time) (surfaceLifetime,
 	}
 	switch {
 	case n != 1:
-		return l, errors.New("one lifetime: until a date, while a thread, or kept")
+		return l, errors.New("one lifetime: until a date, while a node, or kept")
 	case !l.Until.IsZero() && (!l.Until.After(now) || l.Until.Sub(now) > surfaceUntilMax):
 		return l, errors.New("until is a date to come, within 90 days")
 	case l.While != "" && !c.whileLive(l.While):
-		return l, fmt.Errorf("while is an active thread, thread:<id>: %s is not", l.While)
+		return l, fmt.Errorf("while is a live node, node:<id>: %s is not", l.While)
 	}
 	return l, nil
 }
@@ -1010,18 +1010,15 @@ func (c *core) surfaceEnded(s surface, now time.Time) bool {
 	return false
 }
 
-// whileLive tells whether a lifetime's thread (thread:<id>) has not ended.
+// whileLive tells whether a lifetime's node (node:<id>) is neither done
+// nor archived.
 func (c *core) whileLive(ref string) bool {
-	id, ok := strings.CutPrefix(ref, "thread:")
-	if !ok {
+	id, ok := strings.CutPrefix(ref, "node:")
+	if !ok || c.nodes == nil {
 		return false
 	}
-	n, err := strconv.ParseInt(id, 10, 64)
-	if err != nil {
-		return false
-	}
-	s, err := c.thread(n)
-	return err == nil && s.Ended.IsZero()
+	s, err := c.nodes.Get(id)
+	return err == nil && s.Done.IsZero() && s.Archived.IsZero()
 }
 
 // surfaceOpened reads a surface's sources again because the user opened

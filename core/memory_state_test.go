@@ -31,39 +31,14 @@ func TestExtractionDurableState(t *testing.T) {
 	if len(d) != 1 || d[0].Importance != 4 || d[0].Basis != basisStated {
 		t.Fatalf("decision: %+v", d)
 	}
-	// A progress is its subject's thread summary, written over; no
-	// memory. A subject no thread follows: dropped, no thread opened.
-	if why, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:portfolio", "text": "Fait : accueil",
-		"state": "active", "source_ref": "msg:1"}`); res != "" || !strings.Contains(why, "open_thread") {
-		t.Fatalf("progress with no thread: %s %s", res, why)
-	}
-	if ts, _ := c.threads(false, 10); len(ts) != 0 {
-		t.Fatalf("a thread opened by code: %+v", ts)
-	}
-	th, err := c.openThread(threadIn{Title: "Portfolio", Goal: "En ligne.", Alias: "project:portfolio"}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	id := th.ID
-	if why, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:portfolio", "text": "Fait : accueil ; reste : contact",
-		"state": "active", "source_ref": "msg:1"}`); res != "added" {
-		t.Fatalf("progress: %s %s", res, why)
-	}
-	if th, _ := c.thread(id); th.Summary != "Fait : accueil ; reste : contact" {
-		t.Fatalf("thread: %+v", th)
-	}
-	if why, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:portfolio", "text": "Fait : accueil ; bloqué : photos", "state": "blocked", "source_ref": "msg:2"}`); res != "added" {
-		t.Fatalf("progress update: %s %s", res, why)
-	}
-	if th, _ := c.thread(id); th.Summary != "Bloqué. Fait : accueil ; bloqué : photos" {
-		t.Fatalf("summary: %q", th.Summary)
+	// Where a matter stands is its node's doc, never a memory: a progress
+	// is no kind the extraction writes.
+	if _, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:portfolio", "text": "Fait : accueil",
+		"state": "active", "source_ref": "msg:1"}`); res != "" {
+		t.Fatalf("progress: %s", res)
 	}
 	if n := c.mem.count(`kind = 'progress'`); n != 0 {
 		t.Fatalf("%d progress memories", n)
-	}
-	// A state it cannot have.
-	if _, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:x", "text": "y", "state": "open", "source_ref": "msg:1"}`); res != "" {
-		t.Fatalf("bad state: %s", res)
 	}
 	// What the extraction deduced is proposed, even from the user's words.
 	if _, res := apply(`{"op": "ADD", "kind": "fact", "about": "owner", "text": "Sam aime le café fort", "basis": "inferred", "source_ref": "msg:1"}`); res != "proposed" {
@@ -94,13 +69,6 @@ func TestExtractionDurableState(t *testing.T) {
 	c.mem.now = time.Now
 	if _, res := apply(`{"op": "ADD", "kind": "fact", "text": "z", "valid_to": "2020-01-01", "source_ref": "msg:1"}`); res != "" {
 		t.Fatalf("an end in the past: %s", res)
-	}
-	// An external progress is not kept: a summary is quoted in every card.
-	if why, res := apply(`{"op": "ADD", "kind": "progress", "about": "project:y", "text": "Fait : tout", "state": "done", "source_ref": "task:t1"}`); res != "" || !strings.Contains(why, "external") {
-		t.Fatalf("external progress: %s %s", res, why)
-	}
-	if _, ok := c.liveThreadOf("project:y"); ok {
-		t.Fatal("an external progress opened a thread")
 	}
 	// Never a lesson nor a preference, from a task or from my words: only
 	// the brain, on my own message, writes one.

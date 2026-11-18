@@ -539,18 +539,16 @@ func TestSurfaceStaleRead(t *testing.T) {
 }
 
 // Code removes a surface when its lifetime ends (a date, or while a ref
-// lives, as a thread's surface); a kept one stays (the queue's, removed by
+// lives, as a node's surface); a kept one stays (the queue's, removed by
 // code); only its author or code removes it, and only its author writes it
 // again.
 func TestSurfaceLifetime(t *testing.T) {
 	c, _ := surfaceCore(t)
 	comps := json.RawMessage(`[{"id":"root","component":"Text","text":"En préparation"}]`)
-	th, err := c.openThread(threadIn{Title: "Revue", Goal: "La revue."}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	openGraph(t, c)
+	th := workNode(t, c, "La revue.")
 	until, _, _ := c.fixtureSurface("brain", surfaceIn{Title: "a", Components: comps, Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)}})
-	while, _, err := c.fixtureSurface("brain", surfaceIn{Title: "b", Components: comps, Lifetime: surfaceLifetime{While: threadRef(th.ID)}})
+	while, _, err := c.fixtureSurface("brain", surfaceIn{Title: "b", Components: comps, Lifetime: surfaceLifetime{While: nodeRef(th)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -571,7 +569,9 @@ func TestSurfaceLifetime(t *testing.T) {
 	if all, _ := c.surfaces(); len(all) != 3 {
 		t.Fatalf("surfaces %v", all)
 	}
-	c.store.db.Exec(`UPDATE threads SET state = ?, ended = ? WHERE id = ?`, threadDone, time.Now().Unix(), th.ID) // ended, its own surface aside
+	if _, err := c.nodes.SetDone(th, true, byBrain); err != nil { // done, its own surface aside
+		t.Fatal(err)
+	}
 	tickSurfacesWait(c, time.Now().Add(2*time.Hour))
 	all, _ := c.surfaces()
 	if len(all) != 1 || all[0].ID != mine.ID {

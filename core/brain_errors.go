@@ -22,11 +22,11 @@ func (c *core) brainFailed(raw, via string) {
 		return
 	}
 	log.Printf("brain: failed (%s): %s", via, truncate(raw, 300))
-	var thread int64
+	node := ""
 	if via == "turn" {
-		thread = c.turn.talkThread() // shown where its answer would be (thread_talk.go)
+		node = c.turn.talkNode() // shown where its answer would be (node_turn.go)
 	}
-	c.store.addThreadMessage(roleError, truncate(raw, 4000), via, thread, true)
+	c.store.addNodeMessage(roleError, truncate(raw, 4000), via, node, true)
 }
 
 // brainErrorOpen is the error card the user has not answered yet, by a

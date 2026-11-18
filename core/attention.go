@@ -12,7 +12,7 @@ import (
 
 // The attention queue: the one path of what goes to the user, kept by
 // code, one item per object (its ref: card:<id>, notification:<id>,
-// thread:<id>, mail:<id>…). An item has a weight, 1 to 5 (5 interrupts, 4
+// node:<id>, mail:<id>…). An item has a weight, 1 to 5 (5 interrupts, 4
 // needs the user now, 3 matters today, 2 is a glance, 1 is background), a
 // short why, an optional say (what Eriphe would say of it), its source (who
 // raised it) and its time. Items about the same ref merge: the highest
@@ -35,8 +35,8 @@ import (
 //     cards at a time (attentionCardsPerBreak), the rest waiting.
 //
 // The queue never pushes to a device: only a notification decided at weight
-// 5 does (notify.go). An item about a thread (thread:<id>) raises that
-// thread's tile (workspace_queue.go).
+// 5 does (notify.go). An item about a node (node:<id>) raises that node
+// on the graph.
 //
 // Nothing waits on a held item: the brain reads the open items in its turn
 // (attentionBlock), the held ones marked so, and answers as usual. The
@@ -52,7 +52,7 @@ const attentionSchema = `CREATE TABLE IF NOT EXISTS attention (
 	tainted   INTEGER NOT NULL DEFAULT 0,
 	delivered INTEGER NOT NULL DEFAULT 0, -- unix; 0 while held
 	due       INTEGER NOT NULL DEFAULT 0, -- unix: a held item goes then all the same; 0 for no time
-	about   TEXT NOT NULL DEFAULT ''    -- what it is about: thread:<id> or an entity's key (about.go)
+	about   TEXT NOT NULL DEFAULT ''    -- what it is about: node:<id> or an entity's key (about.go)
 );`
 
 func init() { extraSchema = append(extraSchema, attentionSchema) }
@@ -61,7 +61,7 @@ const (
 	attentionWhyMax   = 300
 	attentionInBrain  = 10 // the open items a brain's turn lists, the heaviest first
 	weightInterrupts  = 5  // what interrupts
-	weightBlocksATask = 4  // a card a task or a thread waits on
+	weightBlocksATask = 4  // a card a task or a node waits on
 	weightProposal    = 3  // what goes at the next breakpoint
 	weightBrief       = 2  // from this weight down, the user's return only: the brief
 
@@ -72,7 +72,7 @@ const (
 	breakNow    = "now"    // what weighs 4 or 5, as it enters
 	breakAnswer = "answer" // the brain's answer to a user message is done
 	breakReturn = "return" // the user is back after an absence: the brief
-	breakThread = "thread" // a thread ended, the user there
+	breakNode   = "node"   // a node done, the user there
 	breakCap    = "cap"    // held items reached their cap
 
 	attentionAnsweredKey = "attention_answered" // the last user message whose answer was a breakpoint
@@ -297,7 +297,7 @@ func (c *core) attentionBreak(at string, now time.Time) int {
 			return 0
 		}
 		where, args = where+` AND due > 0 AND due <= ?`, []any{now.Unix()}
-	case breakAnswer, breakThread:
+	case breakAnswer, breakNode:
 		where += ` AND weight >= ` + strconv.Itoa(weightProposal)
 	}
 	items := c.attentionWhere(where+` ORDER BY weight DESC, time ASC`, args...)
@@ -377,15 +377,15 @@ func (c *core) attentionAnswered(now time.Time) {
 }
 
 // attentionOnEvent listens to the journal for the other breakpoints: the
-// user's return (the brief), and a thread's end while the user is there
+// user's return (the brief), and a node done while the user is there
 // (away, what is held waits for their return).
 func (c *core) attentionOnEvent(e journalEvent) {
 	switch e.Kind {
 	case evUserReturned:
 		c.attentionBreak(breakReturn, c.notifyTime())
-	case evThreadEnded:
+	case evNodeDone:
 		if s, err := c.userState(); err == nil && !s.Away {
-			c.attentionBreak(breakThread, s.Now)
+			c.attentionBreak(breakNode, s.Now)
 		}
 	}
 }

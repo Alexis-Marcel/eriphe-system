@@ -198,7 +198,7 @@ func (r *notifyRule) check() error {
 	case ruleTopic:
 		r.Match = ruleMatch(r.Match)
 		if r.Match == "" || len(r.Match) > 80 {
-			return errors.New("match is a thread or a key like thread:12, project:getout, person:lina or topic:facture, or a kind alone like project:")
+			return errors.New("match is a node or a key like node:<id>, project:getout, person:lina or topic:facture, or a kind alone like project:")
 		}
 		switch {
 		case r.Floor < 0 || r.Floor > weightInterrupts || r.Ceiling < 0 || r.Ceiling > weightInterrupts:
@@ -296,7 +296,7 @@ func (c *core) addNotifyRule(r notifyRule) (notifyRule, error) {
 		return r, err
 	}
 	if r.Kind == ruleTopic {
-		r.Match = c.store.noteAbout(r.Match) // a thread's alias is kept as its thread (names.go)
+		r.Match = c.store.noteAbout(r.Match)
 	}
 	now := c.notifyTime().Unix()
 	tx, err := c.store.db.Begin()
@@ -385,14 +385,11 @@ func (c *core) deleteNotifyRule(id int64) error {
 // for project:getout:prod).
 // Both sides are compared as keys (about_key.go), so a rule written as
 // factures matches the key topic:facture.
-// itemRule is the rule for a notification: what it is about's (its
-// thread's, else one of the thread's keys), else its record's
-// (skill:<name>).
+// itemRule is the rule for a notification: what it is about's, else its
+// record's (skill:<name>).
 func itemRule(rules []notifyRule, it notifyItem) *notifyRule {
-	for _, about := range append([]string{it.About}, it.Aliases...) {
-		if r := topicRule(rules, about); r != nil {
-			return r
-		}
+	if r := topicRule(rules, it.About); r != nil {
+		return r
 	}
 	return topicRule(rules, it.Ref)
 }

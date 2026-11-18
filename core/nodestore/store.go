@@ -589,7 +589,8 @@ func (s *Store) Versions(id string) ([]Version, error) {
 }
 
 // AppendTrace adds an entry at the end of a node's trace: when, who, and
-// its text, never cut. The trace is not a version of the node.
+// its text, never cut. The trace is not a version of the node; the node
+// is changed now all the same (Summary.Updated).
 func (s *Store) AppendTrace(id, author, text string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -618,6 +619,10 @@ func (s *Store) AppendTrace(id, author, text string) error {
 	}
 	hash, err := s.commit(fmt.Sprintf("trace %s", id), author, now, []change{{path: file, data: append(old, entry...)}}, nil)
 	if err != nil {
+		return err
+	}
+	// The node moved: it is among the last changed (Recent).
+	if _, err := s.db.Exec(`UPDATE nodes SET updated = ? WHERE id = ?`, now.Unix(), id); err != nil {
 		return err
 	}
 	return setIndexed(s.db, hash)

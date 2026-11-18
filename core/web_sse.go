@@ -89,6 +89,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		proposalsSeq, proposalsMoved = seq, ch
 	}
 	workspace := r.URL.Query().Get("a2ui") == "1"
+	talked := w.c.nodeSaid(r.URL.Query().Get("node")) // the node the console talks to: its exchange
 	if workspace {
 		// The workspace, the home page, does not show the conversation's
 		// messages: its stream starts after the last one, not with them all,
@@ -189,8 +190,8 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			}
 		}
 		if workspace && (exchangeStale || draft != exchangeDraft || thinking != exchangeThinking) {
-			// The exchange of the thread open (thread_talk.go).
-			if x, err := w.exchangeFor(w.c.threadOpen(), w.c.turn.talkThread(), draft, thinking); err == nil {
+			// The exchange of the node the console talks to (node_turn.go).
+			if x, err := w.exchangeFor(talked, w.c.turn.talkNode(), draft, thinking); err == nil {
 				exchangeStale, exchangeDraft, exchangeThinking = false, draft, thinking
 				raw, _ := json.Marshal(x)
 				if string(raw) != lastExchange {
@@ -227,7 +228,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			flusher.Flush()
 			quiet = time.Now()
 		case <-layoutChanged:
-			exchangeStale = true // another thread open: its exchange
+			exchangeStale = true // the layout moved: its exchange again
 			sendLayout()
 			flusher.Flush()
 			quiet = time.Now()

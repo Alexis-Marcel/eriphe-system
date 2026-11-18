@@ -323,23 +323,6 @@ func (c *core) queueItemsOf(id string) []attentionItem {
 	return out
 }
 
-// raisedThread is the thread an item is about, thread:<id>.
-func raisedThread(ref string) (int64, bool) {
-	raw, ok := strings.CutPrefix(ref, refThread+":")
-	if !ok {
-		return 0, false
-	}
-	n, err := strconv.ParseInt(raw, 10, 64)
-	return n, err == nil && n > 0
-}
-
-// threadRaised is the weight of the open item about a thread, 0 for none.
-func (c *core) threadRaised(id int64) int {
-	var w int
-	c.store.db.QueryRow(`SELECT COALESCE(MAX(weight), 0) FROM attention WHERE ref = ?`, threadRef(id)).Scan(&w)
-	return w
-}
-
 // syncQueueSurfaces makes the queue's surfaces what the queue is: one per
 // group and per urgent item, written again only when it changed, removed
 // once its items left.

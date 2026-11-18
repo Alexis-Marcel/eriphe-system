@@ -79,18 +79,12 @@ func (c *core) knownTopics() []topicView {
 		}
 		rows.Close()
 	}
-	if rows, err := c.store.db.Query(`SELECT id FROM threads WHERE ` + activeThreads); err == nil {
-		for rows.Next() {
-			var id int64
-			if rows.Scan(&id) == nil {
-				add(threadRef(id))
-			}
-		}
-		rows.Close()
+	for _, x := range c.activeNodes(packNodes) {
+		add(nodeRef(x.ID))
 	}
 	if c.mem != nil {
 		if rows, err := c.mem.db.Query(`SELECT DISTINCT about FROM memories WHERE status = 'active' AND
-			(about LIKE 'thread:%' OR about LIKE 'project:%' OR about LIKE 'person:%' OR about LIKE 'client:%')`); err == nil {
+			(about LIKE 'node:%' OR about LIKE 'project:%' OR about LIKE 'person:%' OR about LIKE 'client:%')`); err == nil {
 			for rows.Next() {
 				var s string
 				if rows.Scan(&s) == nil {

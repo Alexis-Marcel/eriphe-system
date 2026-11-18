@@ -238,7 +238,7 @@ type accessQuestion struct {
 	Source     string // with Item: the node's source that lists it
 	Item       string // the item's id in that source
 	Batch      int64  // the calls card it is on, 0 when none
-	source     string // who raised it, when not its task: thread:<id>
+	source     string // who raised it, when not its task: node:<id>
 }
 
 func (c *core) accessAskOf(id int64) (accessQuestion, error) {
@@ -308,7 +308,7 @@ const brainPageWaits = "Pas fait pour l'instant : une carte le demande à %s. Ne
 func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string, input map[string]any, pending map[string]int) error {
 	raw, _ := json.Marshal(input)
 	var id int64
-	source := c.turnSource() // in a turn about a thread, the card is the thread's (thread_turn.go)
+	source := c.turnSource() // in a turn about a node, the card is the node's (node_turn.go)
 	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE call LIKE ? AND input = ? AND state = ? AND batch = 0`, tool+" %", string(raw), startProposed).Scan(&id) != nil {
 		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: c.callNeed(tool, input, c.pool.facts(tool, input)),
@@ -340,7 +340,7 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	}
 	if a.Batch != 0 {
 		text, _ := c.trackedCall(ctx, a, name)
-		c.itemCallDone(a, text) // an item's: its thread's log (item_cards.go)
+		c.itemCallDone(a, text) // an item's (item_cards.go)
 		return
 	}
 	if name == webFetchTool || name == webSearchTool {
@@ -779,6 +779,6 @@ func (c *core) accessDecidedTold(id int64, approve bool) {
 	if approve {
 		word = "accepté"
 	}
-	c.store.addThreadMessage(roleEvent, fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), "", 0, false)
+	c.store.addNodeMessage(roleEvent, fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), "", c.taskEventNode(a.TaskID), false)
 	c.ping()
 }

@@ -73,9 +73,9 @@ type core struct {
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
 	surf        surfaceHub             // the surfaces' changes and their subscribers (surfaces.go)
 	layout      layoutState            // where the surfaces are on the workspace (workspace_layout.go)
-	front       frontTurn              // whether the brain's turn answers the user in the workspace (workspace_front.go)
 	props       proposalFeed           // the proposals that moved, for the workspace (surface_proposals.go)
 	live        nodeLive               // the live blocks being read (node_live.go)
+	shows       showFeed               // the nodes the brain shows on the user's screen (node_show.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)
 	// minters are the providers whose connections core mints tokens for,
@@ -181,7 +181,7 @@ func (c *core) checkDevices(ctx context.Context) {
 	c.autoUpdates(time.Now())
 	c.replaceStranded()               // placement.go
 	c.harnessTick(time.Now())         // retries due, time budgets (task_retry.go)
-	c.threadsTick(time.Now())         // the threads and the steps (thread_light.go, node_steps.go)
+	c.stepsTick()                     // the steps of the graph's works (node_steps.go)
 	c.judgeCardPushes(time.Now())     // how the cards pushed were used (card_use.go)
 	c.placeServices()                 // also when no device answers: a device gone too long loses its services
 	c.connectionTick(ctx, time.Now()) // the connections' tokens, now and then (connections.go)
@@ -292,7 +292,7 @@ type runRequest struct {
 	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository the user gave to Eriphe cloned into /work/repo (repo, with branch, base, dir; see list_repos), the user's folders and the places of their tools (folder, place; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
 	Device    string        `json:"device,omitempty" jsonschema:"device name; empty lets the scheduler choose"`
-	About     string        `json:"about,omitempty" jsonschema:"what it is about: thread:<id>, or an entity's key (person:<slug>); leave it out for what this turn is about (its thread)"`
+	About     string        `json:"about,omitempty" jsonschema:"what it is about: node:<id>, or an entity's key (person:<slug>); leave it out for what this turn is about (its node)"`
 	Node      string        `json:"node,omitempty" jsonschema:"the node this work belongs to, by its id: the task works in a node of its own, opened as a child of it; leave it out for a node at the top"`
 	// Contract: what must be true at the end, for a task that changes
 	// something (contract.go); none for a search or a read.

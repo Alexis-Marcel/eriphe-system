@@ -274,39 +274,6 @@ func (c *core) userZone() *time.Location {
 	return time.Local
 }
 
-// proposalSeen is a proposal that waits, as workspace_read lists it for
-// an author who wants to show it (a Proposal component, proposalId).
-type proposalSeen struct {
-	Ref     string     `json:"ref"`
-	Text    string     `json:"text,omitempty"`
-	When    []spanView `json:"when,omitempty"`
-	Tainted bool       `json:"tainted,omitempty"`
-}
-
-// proposalsSeenMax is as many as workspace_read lists.
-const proposalsSeenMax = 20
-
-// proposalsSeen are the proposals that wait, newest first, for
-// workspace_read: what one drawn from external content says is not quoted.
-func (c *core) proposalsSeen() []proposalSeen {
-	loc := c.userZone()
-	var out []proposalSeen
-	for _, w := range c.waitingCards() {
-		if len(out) == proposalsSeenMax {
-			break
-		}
-		v := proposalSeen{Ref: w.card.Ref, Tainted: w.p.Tainted != ""}
-		if !v.Tainted {
-			v.Text = truncate(w.p.Text("fr"), 300)
-		}
-		for _, s := range c.proposalSpans(w.p.Kind, w.p.ID, loc) {
-			v.When = append(v.When, s.view())
-		}
-		out = append(out, v)
-	}
-	return out
-}
-
 // The proposals that moved, for the event stream.
 
 // proposalFeedMax is as many moves as the feed keeps: a stream further

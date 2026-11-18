@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -51,10 +50,10 @@ var relationRank = map[string]int{relSource: 0, relRef: 1, relDay: 2, relDayItem
 // surfaceRelations are the surfaces of the pool related to the focused
 // one, the closest first (then the heaviest), relationsMax at most. It
 // reads only what surfaces declare: sources, lifetime, author, components
-// and data. threadOf is the thread a task is a step of, 0 for none.
-func surfaceRelations(focus surface, pool []surface, threadOf func(task string) int64) []focusRelation {
+// and data. nodeOf is the node a task works in, "" for none.
+func surfaceRelations(focus surface, pool []surface, nodeOf func(task string) string) []focusRelation {
 	fsrc, fsrv := sourceKeys(focus)
-	frefs := liveRefs(focus, threadOf)
+	frefs := liveRefs(focus, nodeOf)
 	fdates, fdays := datesOf(focus), daysOf(focus)
 	var out []focusRelation
 	weight := map[string]int{}
@@ -68,8 +67,8 @@ func surfaceRelations(focus surface, pool []surface, threadOf func(task string) 
 		switch {
 		case overlap(fsrc, src) != "":
 			r.Kind = relSource
-		case overlap(frefs, liveRefs(s, threadOf)) != "":
-			r.Kind, r.Ref = relRef, overlap(frefs, liveRefs(s, threadOf))
+		case overlap(frefs, liveRefs(s, nodeOf)) != "":
+			r.Kind, r.Ref = relRef, overlap(frefs, liveRefs(s, nodeOf))
 		case overlap(fdates, daysOf(s)) != "":
 			r.Kind = relDay
 		case overlap(fdays, datesOf(s)) != "":
@@ -123,21 +122,20 @@ func sourceKeys(s surface) (sources, servers map[string]bool) {
 }
 
 // liveRefs are the refs a surface lives with: the one its lifetime waits on
-// and the one its author stands for (a task itself and the thread it is
-// about, a skill itself). The brain and code stand
-// for no one in particular.
-func liveRefs(s surface, threadOf func(task string) int64) map[string]bool {
+// and the one its author stands for (a task itself and the node it works
+// in, a skill itself). The brain and code stand for no one in particular.
+func liveRefs(s surface, nodeOf func(task string) string) map[string]bool {
 	out := map[string]bool{}
 	add := func(ref string) {
 		kind, id, _ := strings.Cut(ref, ":")
 		switch kind {
-		case "thread", "card", "skill":
+		case "node", "card", "skill":
 			out[ref] = true
 		case "task":
 			out[ref] = true
-			if threadOf != nil {
-				if n := threadOf(id); n > 0 {
-					out["thread:"+strconv.FormatInt(n, 10)] = true
+			if nodeOf != nil {
+				if n := nodeOf(id); n != "" {
+					out[nodeRef(n)] = true
 				}
 			}
 		}
@@ -260,15 +258,13 @@ func (c *core) focusRelations(id string, pool []surface) []focusRelation {
 	if i < 0 {
 		return nil
 	}
-	return surfaceRelations(pool[i], pool, func(task string) int64 {
-		return c.refThread("task:" + task) // thread_progress.go
-	})
+	return surfaceRelations(pool[i], pool, func(task string) string { return c.taskNode(task) })
 }
 
 // focusState is what eriphe-core keeps of the focus (in layoutState).
 type focusState struct {
-	by   string // who put the focus there: "" the user, focusByBrain (workspace_front.go)
-	prev string // what was on stage before: a tile reduced next to it (workspace_front.go)
+	by   string // who put the focus there: "" the user
+	prev string // what was on stage before: a tile reduced next to it
 }
 
 func relatedIDs(rs []focusRelation) []string {

@@ -49,10 +49,10 @@ type permView struct {
 }
 
 type tasksData struct {
-	Threads []threadRow // the threads open, above the tasks (threadRows)
-	Active  []taskCard
-	Done    []taskCard
-	Stats   *taskStats // how reliable they were lately; nil before any ended
+	Nodes  []nodeRow // the nodes at work or waiting, above the tasks (nodeRows)
+	Active []taskCard
+	Done   []taskCard
+	Stats  *taskStats // how reliable they were lately; nil before any ended
 }
 
 // taskCard is a task as the side panel shows it.
@@ -162,7 +162,7 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 	}
 	// What needs me first, then what works, then what waits.
 	sort.SliceStable(out.Active, func(i, j int) bool { return cardRank(out.Active[i]) < cardRank(out.Active[j]) })
-	out.Threads = w.threadRows(true, 6)
+	out.Nodes = w.nodeRows(6)
 	if st := w.c.store.stats(time.Now().AddDate(0, 0, -statsDays)); st.Finished > 0 || len(st.Spend) > 0 {
 		out.Stats = &st // task_stats.go
 	}
@@ -370,9 +370,9 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 		w.sendError(rw, r, err)
 		return
 	}
-	// Written with a thread open, it belongs to it (thread_talk.go).
+	// Said to a node, it belongs to it (node_turn.go).
 	about := strings.TrimSpace(r.PostFormValue("about"))
-	seq, err := w.c.store.addUserMessage(text, atts, w.c.openThreadOf(about))
+	seq, err := w.c.store.addUserMessage(text, atts, w.c.nodeSaid(r.PostFormValue("node")))
 	if err != nil {
 		w.c.store.removeAttachments(atts)
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
@@ -381,11 +381,7 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 	if about != "" {
 		w.c.noteAbout(seq, about) // written with a surface open on the workspace (workspace.go)
 	}
-	from := r.PostFormValue("from")
-	if from == viaWorkspace || from == viaSuggestion {
-		w.c.noteFromWorkspace(seq) // typed in the workspace's input, or a reply it suggested chosen (workspace_front.go)
-	}
-	if from != viaSuggestion { // a click never decides a card (brain_suggest.go)
+	if r.PostFormValue("from") != viaSuggestion { // a click never decides a card (brain_suggest.go)
 		w.c.resolveByText(r.Context(), int(seq)) // a plain yes or no to the card just above (convo_cards.go)
 	}
 	w.c.ping()
@@ -912,29 +908,24 @@ func (w *web) handleLang(rw http.ResponseWriter, r *http.Request, s *session) {
 	rw.WriteHeader(http.StatusOK)
 }
 
-// The tasks panel: the threads running, above the tasks; each opens its
-// surface on the workspace (/espace?open=thread-<id>).
+// The tasks panel: the nodes at work or waiting for the user, above the
+// tasks; each opens its page on the graph (/espace?open=node-<id>).
 
-// threadRow is a thread in the tasks panel.
-type threadRow struct {
-	Thread
-	Waits   bool // a card linked to it waits for the user
-	Updated time.Time
+// nodeRow is a node in the tasks panel: its title unless it may be
+// someone else's words.
+type nodeRow struct {
+	ID, Title, State string
 }
 
-func (w *web) threadRows(activeOnly bool, n int) []threadRow {
-	ss, err := w.c.threads(activeOnly, n)
-	if err != nil {
-		return nil
-	}
-	out := make([]threadRow, 0, len(ss))
-	for _, s := range ss {
-		x := threadRow{Thread: s, Updated: s.Created}
-		x.Waits = s.active() && w.c.threadWaits(s.ID)
-		if l := w.c.threadLog(s.ID, 1); len(l) > 0 {
-			x.Updated = l[0].At
+func (w *web) nodeRows(n int) []nodeRow {
+	xs := w.c.activeNodes(n)
+	out := make([]nodeRow, 0, len(xs))
+	for _, x := range xs {
+		r := nodeRow{ID: x.ID, State: x.State}
+		if !x.External {
+			r.Title = x.Title
 		}
-		out = append(out, x)
+		out = append(out, r)
 	}
 	return out
 }

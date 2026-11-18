@@ -1700,8 +1700,6 @@ details.app-install > * + * { margin-top: 10px; }
 .account-card > [aria-live]:empty { display: none; }
 .account-add { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 2px; }
 
-/* The work threads: what the tasks panel shows of them, and what their
-   page shares (threads.css has the rest). */
 /* The status colours of a step, one variable each. */
 .st-waiting { --st: var(--border-strong); --st-soft: var(--surface-2); }
 .st-running { --st: var(--run); --st-soft: var(--run-soft); }
@@ -1711,20 +1709,17 @@ details.app-install > * + * { margin-top: 10px; }
 .st-rejected, .st-blocked { --st: var(--danger); --st-soft: var(--danger-soft); }
 .st-dropped { --st: var(--border); --st-soft: transparent; }
 
-/* A thread's state, as the tasks' chips. */
-.chip-thread-proposed { background: var(--accent-soft); color: var(--accent-text); }
-.chip-thread-running, .chip-thread-open { background: var(--run-soft); color: var(--run); }
-.chip-thread-running .pulse { animation: pulse 1.6s infinite; }
-.chip-thread-paused, .chip-thread-waiting { background: var(--warn-soft); color: var(--warn); }
-.chip-thread-done { background: var(--ok-soft); color: var(--ok); }
-.chip-thread-stopped, .chip-thread-declined, .chip-thread-dropped { background: var(--surface-2); color: var(--faint); }
-.waits .chip, .needs-you .chip[class*="chip-thread"] { background: var(--accent-soft); color: var(--accent-text); }
+/* A node's state, as the tasks' chips. */
+.chip-node-running { background: var(--run-soft); color: var(--run); }
+.chip-node-running .pulse { animation: pulse 1.6s infinite; }
+.chip-node-waiting { background: var(--warn-soft); color: var(--warn); }
+.waits .chip, .needs-you .chip[class*="chip-node"] { background: var(--accent-soft); color: var(--accent-text); }
 
-/* The tasks panel's threads. */
-.side-thread { margin-bottom: 22px; }
+/* The tasks panel's nodes. */
+.side-node { margin-bottom: 22px; }
 .side-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; padding: 0 4px; }
 .side-sub h3 { font-size: .9rem; }
-@media (prefers-reduced-motion: reduce) { .chip-thread-running .pulse { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .chip-node-running .pulse { animation: none; } }
 /* Sujets (subjects.html): a card as the model gets it. */
 .subject-card-box { margin-bottom: 18px; }
 .subject-card-box h3 { font-size: 1rem; margin: 0 0 6px; }

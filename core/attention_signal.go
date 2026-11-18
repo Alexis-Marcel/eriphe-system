@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
 // The attention signal: what a skill's run says deserves the user's
@@ -19,7 +21,7 @@ import (
 // attentionSignal is one block: the objects it is about, how much they
 // matter, why, and what Eriphe could say of them.
 type attentionSignal struct {
-	Refs   []string `json:"refs" jsonschema:"the objects it is about: thread:<id> (its tile rises), card:<id>, task:<id>, or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…)"`
+	Refs   []string `json:"refs" jsonschema:"the objects it is about: node:<id> (it rises on the graph), card:<id>, task:<id>, or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>…)"`
 	Weight int      `json:"weight" jsonschema:"5 interrupts the user, 4 needs the user now, 3 matters today, 2 a glance, 1 background"`
 	Why    string   `json:"why" jsonschema:"why it deserves attention, in the user's language, at most 80 characters"`
 	Say    string   `json:"say,omitempty" jsonschema:"what Eriphe could tell the user of it, in the user's language, one sentence; optional"`
@@ -36,8 +38,8 @@ const (
 // attentionInstruction tells an assistant how to write its signal, after
 // the receipt's own instruction (receiptInstruction).
 const attentionInstruction = "When something deserves the user's attention, add to the receipt an \"attention\" list, one entry per thing: " +
-	`"attention": [{"refs": ["thread:<id>"], "weight": 3, "why": "at most 80 characters, in the user's language", "say": "optional: what Eriphe could tell the user, one sentence in the user's language"}]` + ". " +
-	"refs name the objects it is about, each in one of these forms: thread:<id> (the thread's tile rises on the workspace), card:<id>, task:<id>, or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
+	`"attention": [{"refs": ["node:<id>"], "weight": 3, "why": "at most 80 characters, in the user's language", "say": "optional: what Eriphe could tell the user, one sentence in the user's language"}]` + ". " +
+	"refs name the objects it is about, each in one of these forms: node:<id> (the node rises on the graph), card:<id>, task:<id>, or a key kind:slug (project:<name>, pr:<owner>/<repo>#<n>, alert:<id>, person:<slug>…). " +
 	"weight: 5 interrupts the user, 4 needs the user now, 3 matters today, 2 is a glance, 1 is background. " +
 	"Leave refs out when the entry is about your final message itself. " +
 	"Leave the list out when nothing deserves it: the user is then told nothing."
@@ -47,9 +49,9 @@ const attentionInstruction = "When something deserves the user's attention, add 
 // alert:<id>…, the id as written. No kind is a tool's: an item of a
 // node's source is raised through its node (node_live.go).
 const (
-	refThread = "thread" // thread:<id>: its tile takes the weight (workspace_queue.go)
-	refCard   = "card"   // card:<id>, a card of the conversation
-	refTask   = "task"   // task:<id>
+	refNode = "node" // node:<id>: the node takes the weight
+	refCard = "card" // card:<id>, a card of the conversation
+	refTask = "task" // task:<id>
 )
 
 // itemRef is a ref, parsed.
@@ -66,8 +68,8 @@ type errBadRef struct{ why string }
 func (e errBadRef) Error() string { return "bad ref: " + e.why }
 
 // parseRef reads a ref: a record's or a key's kind (about_key.go), a
-// colon, an id. A thread's and a card's id is a number, a surface's its
-// id; a key's id is kept as written.
+// colon, an id. A card's id is a number, a node's its id; a key's id is
+// kept as written.
 func parseRef(s string) (itemRef, error) {
 	kind, id, ok := strings.Cut(strings.TrimSpace(s), ":")
 	if !ok || id == "" {
@@ -75,9 +77,13 @@ func parseRef(s string) (itemRef, error) {
 	}
 	r := itemRef{Kind: kind, ID: id}
 	switch kind {
-	case refThread, refCard:
+	case refCard:
 		if n, err := strconv.ParseInt(id, 10, 64); err != nil || n <= 0 {
 			return r, errBadRef{"a " + kind + " is a number"}
+		}
+	case refNode:
+		if !nodefile.IDOK(id) {
+			return r, errBadRef{"a node's id is lowercase letters and digits"}
 		}
 	case refTask:
 	default:

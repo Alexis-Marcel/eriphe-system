@@ -125,8 +125,8 @@ func queueSurfaceWeight(w int) int { return min(max(w, 1), 5) * 20 }
 // workspaceLayout is what the page lays out: the event stream's "layout".
 type workspaceLayout struct {
 	Focus    string       `json:"focus,omitempty"`    // the surface the user opened
-	FocusBy  string       `json:"focusBy,omitempty"`  // brain: Eriphe put it on stage, answering the user (workspace_front.go)
-	Previous string       `json:"previous,omitempty"` // what was on stage before it, a tile reduced next to it (workspace_front.go)
+	FocusBy  string       `json:"focusBy,omitempty"`  // who put it on stage: "" the user
+	Previous string       `json:"previous,omitempty"` // what was on stage before it, a tile reduced next to it
 	Inside   string       `json:"inside,omitempty"`   // the surface open inside the one on stage: a child thread's, in its parent's
 	Items    []layoutTile `json:"items"`              // the tiles, each at its place on the grid
 	Chips    []layoutChip `json:"chips"`              // the folded surfaces, in order
@@ -464,7 +464,7 @@ type layoutState struct {
 	focus      string
 	focusAt    time.Time  // when it was last opened: it lasts focusFor from then
 	focusSince time.Time  // when it began: opened again, it is the same focus
-	f          focusState // who put it there, what was on stage before (workspace_front.go)
+	f          focusState // who put it there, what was on stage before
 	last       workspaceLayout
 	raw        string
 	changed    chan struct{} // closed when the layout changes
@@ -480,7 +480,32 @@ type layoutState struct {
 // focusFor or until another is opened, what relates to it around
 // (workspace_focus.go). "" ends the focus: the layout before it
 // comes back.
-func (c *core) focusSurface(id string, now time.Time) { c.setFocus(id, now, "") } // workspace_front.go
+func (c *core) focusSurface(id string, now time.Time) {
+	st := &c.layout
+	st.mu.Lock()
+	was := st.focus
+	if was != "" && now.Sub(st.focusAt) > focusFor {
+		was = ""
+	}
+	if id != was {
+		st.f.prev = was // "" when the stage was empty, or ends
+		if id == "" {
+			st.f.prev = ""
+		}
+	}
+	st.focus, st.focusAt, st.f.by = id, now, ""
+	if id != was {
+		st.focusSince = now
+		if id == "" {
+			st.focusSince = time.Time{}
+		}
+	}
+	st.mu.Unlock()
+	if id != "" {
+		c.openedOnWorkspace(id, now) // no longer closed; a queue item read (workspace_gestures.go)
+	}
+	c.relayout()
+}
 
 // layoutFocused tells whether the last layout has a surface opened.
 func (c *core) layoutFocused() bool {

@@ -39,7 +39,7 @@ func init() { extraSchema = append(extraSchema, eventJournalSchema) }
 // The kinds eriphe-core itself emits, besides the monitors' (monitors.go).
 const (
 	evTaskEnded    = "task.ended"
-	evThreadEnded  = "thread.ended"
+	evNodeDone     = "node.done"
 	evUserReturned = "user.returned"
 )
 

@@ -90,7 +90,7 @@ func TestQueuedProposalsInTheQueue(t *testing.T) {
 		t.Fatalf("the brain's turn does not list them: %q", b)
 	}
 	now := c.notifyTime()
-	for _, at := range []string{breakAnswer, breakThread, breakCap, breakNow} {
+	for _, at := range []string{breakAnswer, breakNode, breakCap, breakNow} {
 		if n := c.attentionBreak(at, now); n != 0 {
 			t.Fatalf("%s delivered %d", at, n)
 		}

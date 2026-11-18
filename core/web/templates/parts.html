@@ -106,7 +106,7 @@
 {{end}}
 
 {{define "tasks"}}
-{{template "side-threads" .Threads}}
+{{template "side-nodes" .Nodes}}
 <div class="side-head"><h2>{{t "tasks.title"}}</h2>{{if .Active}}<span class="count" data-count="{{len .Active}}">{{len .Active}}</span>{{end}}</div>
 {{if .Active}}<ul class="cards">{{range .Active}}<li>{{template "taskcard" .}}</li>{{end}}</ul>
 {{else}}<div class="empty-side"><span class="empty-art" aria-hidden="true">{{template "i-tasks"}}</span><p>{{t "tasks.none"}}</p></div>{{end}}
@@ -367,16 +367,16 @@ ask it, in the conversation, rather than a form. */}}
 
 {{/* One mark per step, in the plan's order, coloured by its status. */}}
 
-{{/* The threads running, on top of the tasks panel (parts.html). */}}
-{{define "side-threads"}}{{if .}}
-<section class="side-thread" aria-labelledby="side-thread-t">
-  <div class="side-sub"><h3 id="side-thread-t">{{t "threads.title"}}</h3></div>
+{{/* The nodes at work or waiting for the user, on top of the tasks panel (parts.html). */}}
+{{define "side-nodes"}}{{if .}}
+<section class="side-node" aria-labelledby="side-node-t">
+  <div class="side-sub"><h3 id="side-node-t">{{t "nodes.title"}}</h3></div>
   <ul class="cards">{{range .}}<li>
-    <article class="card thread-card{{if .Waits}} needs-you{{end}}">
+    <article class="card node-card{{if eq .State "waiting"}} needs-you{{end}}">
       <div class="card-top">
-        <span class="chip chip-thread-{{.Look}}"><span class="pulse" aria-hidden="true"></span>{{if .Waits}}{{t "threads.waits"}}{{else}}{{t (printf "thread.state.%s" .Look)}}{{end}}</span>
+        <span class="chip chip-node-{{.State}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "node.state.%s" .State)}}</span>
       </div>
-      <h3><a class="stretched" href="/espace?open=thread-{{.ID}}">{{.Title}}</a></h3>
+      <h3><a class="stretched" href="/espace?open=node-{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{t "node.untitled"}}{{end}}</a></h3>
     </article>
   </li>{{end}}</ul>
 </section>
