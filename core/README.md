@@ -1390,6 +1390,26 @@ by code from the thread's data (#468): it never depends on a model remembering t
   puts the thread away: its surface leaves at once (a day thread's leaves at its end, a standing
   one's never). 409 once put away.
 
+## Node files (`nodefile/`)
+
+The graph workspace (epic #625) keeps each node as a markdown file: YAML front matter, a markdown
+body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
+[docs/node-format.md](../docs/node-format.md); the package `nodefile` parses, checks and writes it:
+
+- **Lossless:** a file parsed then written gives the same bytes; what changes through the API is
+  written again in its canonical form, the rest keeps its bytes.
+- **Each block checked alone**, like a thread's part block: the catalog (`a2ui`), its links, and its
+  bindings against its own data, its sources (`/<name>`) and the user's marks (`/marks/<list>/<item>`).
+  A bad block is a `BlockError` that names it.
+- **Code's fields** (a block's `snapshot`, `marks` and `external`, the node's `external`) are set by
+  code (`SetMark`, `SetSnapshot`, `SetBlockExternal`, `Meta.External`). An author's write goes
+  through `ParseAuthor`, `AuthorBody` or `PutAuthorBlock`: left out, they are kept from the version
+  written over; written otherwise, the write is refused (`ErrCodeField`). Authors may give a block
+  in its short form (one component, no root); it is completed.
+
+The checks that need the core (actions, offers, a Proposal after external content, a bound Link's
+value, taint) are the tools' that write nodes.
+
 ## Permission policy
 
 Every permission request of a worker goes through a policy written in code before the brain hears
