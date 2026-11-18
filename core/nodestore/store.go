@@ -101,6 +101,7 @@ type Store struct {
 // Report is what a start found.
 type Report struct {
 	Rebuilt bool     // the index was made again from the files
+	Behind  bool     // the index was behind the repository: its versions were read again from the log
 	Changed []string // nodes whose file was changed outside Eriphe
 	Gone    []string // nodes whose file was removed outside Eriphe
 	Broken  []string // files that do not read as a node: "<file>: <why>"
@@ -366,6 +367,9 @@ type indexed struct {
 
 // indexVersions indexes node versions just committed, in one transaction.
 func (s *Store) indexVersions(now time.Time, xs []indexed) error {
+	if len(xs) == 0 {
+		return nil
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -380,7 +384,17 @@ func (s *Store) indexVersions(now time.Time, xs []indexed) error {
 			return err
 		}
 	}
+	if err := setIndexed(tx, xs[len(xs)-1].v.Hash); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+// setIndexed keeps the last commit the index holds (meta.head): a start
+// that finds the repository further replays the log (reconcile).
+func setIndexed(tx execer, hash string) error {
+	_, err := tx.Exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('head', ?)`, hash)
+	return err
 }
 
 // refuse runs the store's filter over what an author writes.
@@ -487,8 +501,11 @@ func (s *Store) AppendTrace(id, author, text string) error {
 	if len(old) == 0 {
 		old = []byte("# " + sum.Title + "\n\n")
 	}
-	_, err = s.commit(fmt.Sprintf("trace %s", id), author, now, []change{{path: file, data: append(old, entry...)}}, nil)
-	return err
+	hash, err := s.commit(fmt.Sprintf("trace %s", id), author, now, []change{{path: file, data: append(old, entry...)}}, nil)
+	if err != nil {
+		return err
+	}
+	return setIndexed(s.db, hash)
 }
 
 // Trace is a node's trace; empty while it has none.

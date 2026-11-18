@@ -67,14 +67,15 @@ func TestNodesRefuseSecretsOnly(t *testing.T) {
 func TestNodesNight(t *testing.T) {
 	backups := filepath.Join(t.TempDir(), "backups")
 	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &MemoryConfig{ExtractAt: "03:00", BackupDir: backups}}
-	s, err := openNodes(cfg)
+	day := time.Date(2026, 11, 17, 2, 59, 0, 0, time.Local)
+	dir, index := cfg.nodesPaths()
+	s, _, err := nodestore.Open(dir, index, nodestore.Options{Now: func() time.Time { return day }})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer s.Close()
 	c := &core{base: cfg, nodes: s}
 	c.snap.Store(cfg)
-	day := time.Date(2026, 11, 17, 2, 59, 0, 0, time.Local)
 	if done := c.nodesNight("", day); done != "" {
 		t.Fatalf("before the hour: %q", done)
 	}
@@ -84,11 +85,13 @@ func TestNodesNight(t *testing.T) {
 	if files, _ := filepath.Glob(filepath.Join(backups, "nodes-*.db")); len(files) != 1 {
 		t.Fatalf("backups: %v", files)
 	}
-	os.RemoveAll(backups)
-	if done := c.nodesNight("2026-11-17", day.Add(time.Hour)); done != "2026-11-17" {
+	// A start after the hour finds the night's copy: no second backup.
+	bundle := filepath.Join(backups, "nodes-2026-11-17.db")
+	os.Chtimes(bundle, day, day)
+	if done := c.nodesNight("", day.Add(time.Hour)); done != "2026-11-17" {
 		t.Fatalf("again: %q", done)
 	}
-	if _, err := os.Stat(backups); err == nil {
+	if fi, _ := os.Stat(bundle); !fi.ModTime().Equal(day) {
 		t.Fatal("backed up twice the same night")
 	}
 }

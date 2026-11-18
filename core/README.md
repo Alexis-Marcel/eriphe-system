@@ -1444,13 +1444,17 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   a new version. Only the user archives (the tools of a later step).
 - **At start:** the files are compared to the index and the last commit. A file changed, added or
   removed outside Eriphe is committed as a version of its own (author `outside`), reindexed and
-  logged; a file that does not read as a node is logged and left alone. When `nodes.db` is missing,
-  it is made again from the files, and the versions from one walk of the log. The state, the
-  layout and the item notes are not in the files: a rebuilt index starts them over.
+  logged; a file that does not read as a node is logged and left alone (a node's row is kept, its
+  last good version readable). When `nodes.db` is missing, it is made again from the files, and
+  the versions from one walk of the log; when it is behind the repository (`meta.head` is not the
+  last commit: a copy put back, a stop between a commit and its indexing), the versions are read
+  again from the log. The state, the layout and the item notes are not in the files: a rebuilt
+  index starts them over.
 - **Nightly**, at the memory's hour (`memory.extract_at`), into its backup folder
   (`memory.backup_dir`, `memory.backup_keep` days): the repository is packed (`gc`), then
   `nodes-<day>.bundle` (a git bundle: `git clone` reads it) and `nodes-<day>.db` (a copy of the
-  index). Writes wait meanwhile.
+  index). Writes wait meanwhile; a start after the hour finds the night's copy and does not make
+  another.
 
 ## Permission policy
 

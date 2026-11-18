@@ -165,6 +165,18 @@ func (s *Store) headFiles() (map[string]plumbing.Hash, error) {
 	return out, nil
 }
 
+// headHash is the last commit's hash; "" before the first one.
+func (s *Store) headHash() (string, error) {
+	head, err := s.repo.Head()
+	if errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return head.Hash().String(), nil
+}
+
 // blobHash is the hash git gives a file's content.
 func blobHash(data []byte) string {
 	return plumbing.ComputeHash(plumbing.BlobObject, data).String()

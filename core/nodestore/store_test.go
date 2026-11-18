@@ -541,3 +541,108 @@ func decodeBundle(t *testing.T, raw []byte) *memory.Storage {
 	}
 	return st
 }
+
+// A copy of the index put back (last night's backup) is behind the
+// repository: the versions made since are read again from the log, and a
+// write made on a version older than the last is still a conflict.
+func TestIndexBehindTheRepository(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	d := mustCreate(t, s, New{Title: "Plan", Body: "One."})
+	backups := filepath.Join(t.TempDir(), "backups")
+	if err := s.Backup(backups, 1); err != nil {
+		t.Fatal(err)
+	}
+	d2, err := s.Write("n1", "Two.", d.Version.Hash, "brain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d3, err := s.Write("n1", "Three.", d2.Version.Hash, "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustCreate(t, s, New{Title: "Born since", Body: "New."})
+	s.Close()
+	copyFile(t, filepath.Join(backups, "nodes-2026-11-17.db"), e.index)
+	os.Remove(e.index + "-wal")
+	os.Remove(e.index + "-shm")
+
+	s2, rep := e.open(t)
+	if !rep.Behind || rep.Rebuilt || len(rep.Changed) != 0 {
+		t.Fatalf("report: %+v", rep)
+	}
+	vs, _ := s2.Versions("n1")
+	if len(vs) != 3 || vs[2].Hash != d3.Version.Hash || vs[2].Author != "user" {
+		t.Fatalf("versions: %+v", vs)
+	}
+	if last := mustRead(t, s2, "n1"); last.Version.N != 3 || last.Version.Hash != d3.Version.Hash {
+		t.Fatalf("last: %+v", last.Version)
+	}
+	if _, err := s2.Write("n1", "On one.", d.Version.Hash, "brain"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a write on v1: %v", err)
+	}
+	if sum, err := s2.Get("n2"); err != nil || sum.Version != 1 {
+		t.Fatalf("the node born since: %+v %v", sum, err)
+	}
+	d4, err := s2.Write("n1", "Four.", d3.Version.Hash, "brain")
+	if err != nil || d4.Version.N != 4 {
+		t.Fatalf("the next write: %v %+v", err, d4)
+	}
+}
+
+// A stop between a commit and its indexing: the next start indexes it.
+func TestStopBetweenCommitAndIndex(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	d := mustCreate(t, s, New{Title: "Plan", Body: "One."})
+	n, _ := nodefile.Parse(d.Raw)
+	n.AuthorBody("Two.")
+	raw, _ := n.Bytes()
+	hash, err := s.commit("write n1: Plan", "brain", time.Now(), []change{{path: d.File, data: raw}}, []stamp{{"n1", 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	s2, rep := e.open(t)
+	if !rep.Behind || len(rep.Changed) != 0 {
+		t.Fatalf("report: %+v", rep)
+	}
+	if last := mustRead(t, s2, "n1"); last.Version.N != 2 || last.Version.Hash != hash || last.Node.Text() != "Two." {
+		t.Fatalf("last: %+v %q", last.Version, last.Node.Text())
+	}
+}
+
+// A node's file broken by hand is reported and keeps its row, to mend.
+func TestNodeFileBrokenByHand(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	d := mustCreate(t, s, New{Title: "Plan", Body: "One."})
+	mustCreate(t, s, New{Title: "Kid", Parent: "n1", Body: "k"})
+	s.SetState("n1", Running)
+	s.Close()
+	os.WriteFile(filepath.Join(e.dir, d.File), []byte("---\nid: n1\n"), 0o600)
+	s2, rep := e.open(t)
+	if len(rep.Broken) != 1 || len(rep.Gone) != 0 {
+		t.Fatalf("report: %+v", rep)
+	}
+	if sum, err := s2.Get("n1"); err != nil || sum.State != Running {
+		t.Fatalf("the broken node's row: %+v %v", sum, err)
+	}
+	if _, err := s2.Read("n1", 0); err == nil {
+		t.Fatal("a broken file reads")
+	}
+	if old, err := s2.Read("n1", 1); err != nil || old.Node.Text() != "One." {
+		t.Fatalf("its last good version: %v", err)
+	}
+}
+
+func copyFile(t *testing.T, from, to string) {
+	t.Helper()
+	b, err := os.ReadFile(from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(to, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}

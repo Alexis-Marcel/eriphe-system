@@ -14,6 +14,8 @@ import (
 // reconcile compares the files to the index at start. fresh: the index
 // was just made, so it is filled from the files and the log.
 //
+//   - An index behind the repository (a copy put back, a stop between a
+//     commit and its indexing) reads the versions again from the log.
 //   - A file that is not the last commit's (changed, added or removed by
 //     hand) is committed, author Outside: each node in it gets a version,
 //     and is reported.
@@ -25,7 +27,16 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 	if err != nil {
 		return rep, fmt.Errorf("repository: %w", err)
 	}
-	if fresh {
+	var indexedHead string
+	s.db.QueryRow(`SELECT value FROM meta WHERE key = 'head'`).Scan(&indexedHead)
+	repoHead, err := s.headHash()
+	if err != nil {
+		return rep, fmt.Errorf("repository: %w", err)
+	}
+	if !fresh && indexedHead != repoHead {
+		rep.Behind = true
+	}
+	if fresh || rep.Behind {
 		logged, err := s.logVersions()
 		if err != nil {
 			return rep, fmt.Errorf("log: %w", err)
@@ -45,16 +56,19 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 			return rep, err
 		}
 	}
-	type row struct{ file, blob string }
+	type row struct {
+		file, blob string
+		version    int
+	}
 	inIndex := map[string]row{}
-	rows, err := s.db.Query(`SELECT id, file, blob FROM nodes`)
+	rows, err := s.db.Query(`SELECT id, file, blob, version FROM nodes`)
 	if err != nil {
 		return rep, err
 	}
 	for rows.Next() {
 		var id string
 		var r row
-		if err := rows.Scan(&id, &r.file, &r.blob); err != nil {
+		if err := rows.Scan(&id, &r.file, &r.blob, &r.version); err != nil {
 			rows.Close()
 			return rep, err
 		}
@@ -71,6 +85,7 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 	var stamps []stamp
 	var outside, known []indexed
 	onDisk := map[string]bool{}
+	broken := map[string]bool{} // files on disk that do not read as a node
 	seen := map[string]string{} // id: its file
 	for _, e := range entries {
 		name := e.Name()
@@ -92,6 +107,7 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		n, err := nodefile.Parse(raw)
 		if err != nil {
 			rep.Broken = append(rep.Broken, name+": "+err.Error())
+			broken[name] = true
 			continue
 		}
 		id := n.Meta.ID
@@ -117,14 +133,14 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 			}
 			continue
 		}
-		if r, ok := inIndex[id]; !ok || r.file != name || r.blob != blobHash(raw) {
+		if r, ok := inIndex[id]; !ok || r.file != name || r.blob != blobHash(raw) || r.version != last {
 			known = append(known, indexed{n, name, raw, Version{N: last, At: lastAt}})
 		}
 	}
 	// Removed by hand: out of the index, and out of the repository.
 	for id, r := range inIndex {
-		if _, ok := seen[id]; ok {
-			continue
+		if _, ok := seen[id]; ok || broken[r.file] {
+			continue // a node whose file broke keeps its row: reported, to mend
 		}
 		if !onDisk[r.file] {
 			rep.Gone = append(rep.Gone, id)
@@ -167,7 +183,10 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 			return rep, err
 		}
 	}
-	return rep, nil
+	if repoHead, err = s.headHash(); err != nil || repoHead == "" {
+		return rep, err
+	}
+	return rep, setIndexed(s.db, repoHead)
 }
 
 // lastVersion is a node's last version in the index: its n (0 if none)
