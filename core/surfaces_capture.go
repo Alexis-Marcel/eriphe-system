@@ -1,17 +1,13 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -106,48 +102,11 @@ type errMediaRefused struct {
 
 func (e errMediaRefused) Error() string { return e.msg }
 
-// surfaceMediaPut keeps an image a task gives for its thread's surface:
-// the task is about that thread (the brain started it in a turn about
-// it), and its holder writes the image in its part.
+// surfaceMediaPut refuses an image a task gives for a surface: a
+// thread has no surface any more (#631), and a node's media is not kept
+// yet (#633).
 func (c *core) surfaceMediaPut(taskID, surfaceID string, data []byte) (*surfaceMedia, error) {
-	if !surfaceIDRe.MatchString(surfaceID) {
-		return nil, errMediaRefused{http.StatusBadRequest, "surface: the id of its thread's surface, thread-<id>"}
-	}
-	thread, ok := threadOfSurface(surfaceID)
-	if t, err := c.store.task(taskID); !ok || err != nil || t.About != c.store.resolveAbout(threadRef(thread)) {
-		return nil, errMediaRefused{http.StatusForbidden, "an image goes to the surface of the thread the task is about, thread-<id>, only"}
-	}
-	if len(data) == 0 {
-		return nil, errMediaRefused{http.StatusBadRequest, "no image"}
-	}
-	if len(data) > surfaceMediaMax {
-		return nil, errMediaRefused{http.StatusRequestEntityTooLarge, "too large: " + humanSize(surfaceMediaMax) + " at most"}
-	}
-	typ, ok := surfaceMediaType(data)
-	if !ok {
-		return nil, errMediaRefused{http.StatusUnsupportedMediaType, "a PNG or a JPEG only"}
-	}
-	var n int
-	c.store.db.QueryRow(`SELECT COUNT(*) FROM surface_media WHERE surface = ?`, surfaceID).Scan(&n)
-	if n >= surfaceMediaPerSurface {
-		return nil, errMediaRefused{http.StatusTooManyRequests, strconv.Itoa(surfaceMediaPerSurface) + " images per surface at most: show fewer"}
-	}
-	if err := os.MkdirAll(c.store.surfaceMediaDir(), 0o700); err != nil {
-		return nil, err
-	}
-	b := make([]byte, 16)
-	rand.Read(b)
-	m := &surfaceMedia{ID: "med_" + hex.EncodeToString(b), Surface: surfaceID, Task: taskID, Type: typ, Size: int64(len(data)), Created: time.Now()}
-	if err := os.WriteFile(c.store.surfaceMediaPath(m.ID), data, 0o600); err != nil {
-		return nil, err
-	}
-	if _, err := c.store.db.Exec(`INSERT INTO surface_media (id, surface, task, type, size, created) VALUES (?, ?, ?, ?, ?, ?)`,
-		m.ID, m.Surface, m.Task, m.Type, m.Size, m.Created.Unix()); err != nil {
-		os.Remove(c.store.surfaceMediaPath(m.ID))
-		return nil, err
-	}
-	log.Printf("surface %s: image %s (%s, %s) from task %s", surfaceID, m.ID, typ, humanSize(m.Size), taskID)
-	return m, nil
+	return nil, errMediaRefused{http.StatusGone, "no surface takes a task's image any more: a thread has no surface"}
 }
 
 // surfaceMediaDrop removes images: their files, then their rows.

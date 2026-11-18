@@ -151,6 +151,7 @@ func main() {
 	go c.runAssistants(context.Background(), token)
 	go c.runMemory(context.Background())
 	go c.runNodes(context.Background())
+	go c.runNodeSources(context.Background())
 	go c.runEvents(context.Background())    // event_sources.go
 	go c.runSkills(context.Background())    // skill_runs.go
 	go c.runMonitors(context.Background())  // monitors.go

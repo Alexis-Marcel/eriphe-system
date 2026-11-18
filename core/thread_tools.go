@@ -1,14 +1,12 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -33,9 +31,7 @@ type reopenIn struct {
 
 type linkThreadIn struct {
 	Thread int64  `json:"thread_id"`
-	Ref    string `json:"ref,omitempty" jsonschema:"what to link: a card's ref (kind:id)"`
-	// Source makes the thread carry live data (thread_sources.go).
-	Source *threadSource `json:"source,omitempty" jsonschema:"instead of ref: live data the thread carries, read by code without a model: a free read of yours (tool, args), a resource (resource, uri) or a monitor the user approved (monitor); with items, each item it lists shows on the thread. The same name replaces it; a name alone takes it away"`
+	Ref    string `json:"ref" jsonschema:"what to link: a card's ref (kind:id)"`
 }
 
 type findThreadIn struct {
@@ -48,16 +44,11 @@ type findThreadIn struct {
 type threadView struct {
 	Thread
 	Log   []ThreadLine `json:"log"`
-	Notes []itemNote   `json:"notes,omitempty"` // on its sources' items (thread_items.go)
 	Names []string     `json:"names,omitempty"` // its keys and names (names.go)
 	Card  string       `json:"card,omitempty"`  // what is known of it (thread_card.go), read_thread's
 	// Its parent's title, and its children (thread_children.go).
 	ParentTitle string      `json:"parent_title,omitempty"`
 	Children    []threadKin `json:"children,omitempty"`
-	// The user's marks on what it shows (thread_marks.go), and the blocks
-	// of its holder's part, in order (thread_part.go).
-	Marks  []threadMark `json:"marks,omitempty"`
-	Blocks []string     `json:"blocks,omitempty"`
 }
 
 func (c *core) threadView(id int64, lines int) (threadView, error) {
@@ -65,8 +56,7 @@ func (c *core) threadView(id int64, lines int) (threadView, error) {
 	if err != nil {
 		return threadView{}, err
 	}
-	v := threadView{Thread: s, Log: c.threadLog(id, lines), Notes: c.itemNotes(id), Names: c.threadNames(id), Children: kinOf(c.children(id)),
-		Marks: c.marksOf(id), Blocks: c.threadPartOf(id).names()}
+	v := threadView{Thread: s, Log: c.threadLog(id, lines), Names: c.threadNames(id), Children: kinOf(c.children(id))}
 	if s.Parent != 0 {
 		if p, err := c.thread(s.Parent); err == nil {
 			v.ParentTitle = p.Title
@@ -84,7 +74,7 @@ func endsChange(old Thread, ends string) (string, error) {
 		return "", nil
 	}
 	if !slices.Contains(threadEnds, ends) {
-		return "", fmt.Errorf("ends %q: goal, standing or day", ends)
+		return "", fmt.Errorf("ends %q: goal or standing", ends)
 	}
 	if ends == endsStanding && old.Parent != 0 {
 		return "", fmt.Errorf("thread %d « %s » is a child of thread %d: a standing thread is a top thread, never a child", old.ID, old.Title, old.Parent)
@@ -99,11 +89,7 @@ func (c *core) endsAgain(old Thread, ends string) error {
 	if err != nil || ends == "" {
 		return err
 	}
-	fields := map[string]any{"ends": ends}
-	if ends == endsDay {
-		fields["started"] = time.Now().Unix() // its day is today's
-	}
-	return c.setThread(old.ID, fields)
+	return c.setThread(old.ID, map[string]any{"ends": ends})
 }
 
 // sameMatter is why a thread opened on the alias of another is that one
@@ -122,17 +108,6 @@ const sameMatter = "même chose"
 // thread is its alias's alone (exact). Only the brain changes how a
 // thread found ends.
 func (c *core) openThreadOnce(in threadIn, taint []string, by string) (s Thread, again string, err error) {
-	// Its headline, the line the user reads at its top, checked before
-	// anything opens; given, it is the thread's, new or given back.
-	headline, err := headlineText(in.Headline)
-	if err != nil {
-		return s, "", err
-	}
-	defer func() {
-		if err == nil && s.ID != 0 && headline != "" {
-			c.setThreadHeadline(s.ID, headline, by, taint)
-		}
-	}()
 	alias, err := aliasKey(in.Alias)
 	if err != nil {
 		return s, "", fmt.Errorf("alias: %w", err)
@@ -265,44 +240,21 @@ func registerThreadTools(s *mcp.Server, c *core) {
 			return map[string]any{"threads": found}, err
 		})
 
-	tool(s, "read_thread", "A thread: its names, state (open, done, dropped) and summary, its parent and children, and its card (what eriphe-core knows of it: last decisions, facts and people, open intentions, cards waiting for the user, preferences; what may carry someone else's words is named, not quoted), its recent log, the user's marks on what it shows (list, item: keep, drop or done) and the blocks of its part, in order.",
+	tool(s, "read_thread", "A thread: its names, state (open, done, dropped) and summary, its parent and children, and its card (what eriphe-core knows of it: last decisions, facts and people, open intentions, cards waiting for the user, preferences; what may carry someone else's words is named, not quoted), and its recent log.",
 		func(ctx context.Context, in threadIDIn) (threadView, error) {
 			v, err := c.threadView(in.Thread, 20)
 			if err == nil {
 				c.cardLookedUp(threadRef(v.ID)) // its turn's card was not enough (card_use.go)
 				v.Card, _ = c.aboutCard(threadRef(v.ID), threadCardChars)
 				c.turnThread(in.Thread)
-				for _, why := range append(readNotesTaint(v.Notes), readMarksTaint(v.Marks)...) {
-					c.turn.taint(why) // a note written after reading outside content, a mark set on it
-				}
 			}
 			return v, err
 		})
 
-	tool(s, "link_thread", "Join to a thread what eriphe-core does not link itself, a card raised outside a turn about the thread (kind:id: in its timeline); or, with source, live data the thread carries, read by code without a model: what it is about (the user's mail, their agenda, pull requests to review: a free read of yours or a resource, with items to show each one it lists) or a monitor the user approved (a latency, an error rate: its latest number and its events, a limit crossed raises the thread; a skill still reacts to its events). Its value is at /<name> in the thread's surface's data, for your part to bind. A card born in a turn about it is linked already; where it stands is remember kind progress.",
+	tool(s, "link_thread", "Join to a thread what eriphe-core does not link itself, a card raised outside a turn about the thread (kind:id: in its timeline). A card born in a turn about it is linked already; where it stands is remember kind progress.",
 		func(ctx context.Context, in linkThreadIn) (map[string]any, error) {
 			c.turnThread(in.Thread)
-			if in.Source != nil {
-				if in.Ref != "" {
-					return nil, errors.New("one of ref or source")
-				}
-				src := *in.Source
-				if src.Tool == "" && src.Resource == "" && src.Monitor == "" {
-					note, err := c.dropThreadSource(in.Thread, strings.TrimSpace(src.Name), "brain")
-					return map[string]any{"note": note}, err
-				}
-				note, err := c.addThreadSource(in.Thread, src, "brain")
-				return map[string]any{"note": note}, err
-			}
 			note, err := c.linkThread(in.Thread, in.Ref, "brain")
-			return map[string]any{"note": note}, err
-		})
-
-	tool(s, "note_item", "Note one item a thread's source lists (a mail, an event, a pull request), by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a due date. Code shows it on the item's row, read by the user as is (in their language, short, no ids); it stays while the source lists the item, and goes some days after it no longer does. A note written after reading external content is marked so and never quoted into a summary. With an action, the one you recommend and only when useful (never a menu), its row offers it (a tool and its input, \"$item\" where the item's id goes): a click makes a card the user approves, never more. The same item noted again replaces it; no note, state, due nor action takes it away.",
-		func(ctx context.Context, in noteItemIn) (map[string]any, error) {
-			c.turnThread(in.Thread)
-			// Without thread_id, the turn's: the one it opened or works on.
-			note, err := c.noteItem(cmp.Or(in.Thread, c.turn.aboutThread()), in, byBrain, c.turnTaint())
 			return map[string]any{"note": note}, err
 		})
 

@@ -131,9 +131,37 @@ type monitorLook struct {
 	Error     string   `json:"error,omitempty"`  // the last look's
 	Waiting   string   `json:"waiting,omitempty"`
 	Checked   int64    `json:"checked,omitempty"`
-	// The numbers its good looks read, the last ones: a thread that
-	// follows it shows them (thread_live.go).
+	// The numbers its good looks read, the last ones: a block that reads
+	// it shows them (node_live.go).
 	Points []monitorPoint `json:"points,omitempty"`
+}
+
+// monitorPointsMax are the numbers a monitor keeps, for a chart.
+const monitorPointsMax = 24
+
+// monitorPoint is a number a monitor read, and when.
+type monitorPoint struct {
+	At int64   `json:"at"`
+	V  float64 `json:"v"`
+}
+
+// notePoint keeps the number a good look read, if it is one; else the
+// last number is no longer true.
+func notePoint(st *monitorLook, got any, now time.Time) {
+	n, ok := number(got)
+	if !ok {
+		st.Points = nil
+		return
+	}
+	p := monitorPoint{now.Unix(), n}
+	if k := len(st.Points); k > 0 && now.Unix()-st.Points[k-1].At < 60 {
+		st.Points[k-1] = p // a confirming look: the same minute, one point
+		return
+	}
+	st.Points = append(st.Points, p)
+	if k := len(st.Points); k > monitorPointsMax {
+		st.Points = st.Points[k-monitorPointsMax:]
+	}
 }
 
 // monitor is one row of monitors.
@@ -333,7 +361,7 @@ func (c *core) lookMonitor(ctx context.Context, m *monitor, now time.Time) {
 		st.Checked = now.Unix()
 		raw, _ := json.Marshal(st)
 		c.store.db.Exec(`UPDATE monitors SET look = ?, next_at = ? WHERE id = ?`, string(raw), next.Unix(), m.ID)
-		c.monitorLooked(m.Name) // the threads that follow it (thread_live.go)
+		c.monitorLooked(m.Name) // the blocks that read it (node_live.go)
 	}()
 	if why := c.sourceWhy(m.Spec); why != "" {
 		st.Waiting = why // its access changed: it waits, nothing is called
@@ -541,7 +569,7 @@ func (c *core) emitMonitor(m *monitor, kind string, p map[string]any) {
 	p["monitor"] = m.Name
 	c.emitLogged(journalEvent{Kind: kind, Key: m.Name, Source: "monitor:" + m.Name, Payload: p,
 		External: !c.trustsServer(m.Spec.Server)})
-	c.monitorToThreads(m, kind, p) // thread_live.go
+	c.monitorRaise(m, kind, p) // the nodes that read it (node_live.go)
 }
 
 // resultValue is a tool's result as data: its structured content, else its
@@ -847,7 +875,7 @@ func (c *core) decideMonitor(id int64, approve bool) error {
 		raw, _ := json.Marshal(m.Pending)
 		_, err = c.store.db.Exec(`UPDATE monitors SET spec = ?, pending = '', look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 			string(raw), now, id)
-		c.monitorLooked(m.Name) // a new baseline: the threads that follow it (thread_live.go)
+		c.monitorLooked(m.Name) // a new baseline: the blocks that read it (node_live.go)
 	default:
 		_, err = c.store.db.Exec(`UPDATE monitors SET state = ?, look = '{}', next_at = 0, tainted = '', updated = ? WHERE id = ?`,
 			monitorOn, now, id)

@@ -261,7 +261,7 @@ func (c *core) messageRef(m Message) string {
 	if m.Role == roleUser && m.Thread > 0 {
 		ref += fmt.Sprintf(" · fil %d", m.Thread) // it belongs to that thread (thread_talk.go); its card says the rest, never its words here
 	}
-	if about := c.messageAbout(m.Seq); m.Role == roleUser && about != "" && about != surfaceRefPrefix+threadSurfaceID(m.Thread) {
+	if about := c.messageAbout(m.Seq); m.Role == roleUser && about != "" {
 		ref += " · à propos de " + about // the surface open on the workspace (workspace.go)
 	}
 	if m.FromWorkspace() && strings.HasPrefix(c.store.get(taintKey(m.Seq)), surfaceTaintPrefix) {

@@ -452,16 +452,10 @@ func (c *core) putSurface(author string, in surfaceIn) (surface, []a2ui.Validati
 	return s, nil, err
 }
 
-// codeSurfaceOf checks that a surface is code's to write: a thread's own
-// (thread:<id> writes thread-<id>), or the attention queue's (core writes
-// q-…). No assistant, task nor skill writes a surface (#574).
+// codeSurfaceOf checks that a surface is code's to write: the attention
+// queue's (core writes q-…). No assistant, task nor skill writes a
+// surface (#574).
 func codeSurfaceOf(author, id string) error {
-	if thread, ok := threadOfAuthor(author); ok {
-		if id != threadSurfaceID(thread) {
-			return fmt.Errorf("%s writes the surface %s only", author, threadSurfaceID(thread))
-		}
-		return nil
-	}
 	if author == surfaceAuthorCore {
 		if !strings.HasPrefix(id, queueSurfacePrefix) {
 			return fmt.Errorf("the queue's surfaces are %s…", queueSurfacePrefix)
@@ -753,9 +747,6 @@ func (c *core) checkBindings(id string, comps json.RawMessage, data map[string]a
 		}
 		ptr, rest := sourceCovering(b.Path, srcs)
 		if ptr == "" {
-			if strings.HasPrefix(b.Path, threadMarksPath+"/") {
-				continue // a mark the user has not set yet reads empty (thread_marks.go)
-			}
 			if ok, hint := lookup(data, tokens(b.Path), b.List); !ok {
 				fail(b, fmt.Sprintf("nothing at %s in the surface's data%s: write it in data, or read it from a source", b.Path, hint))
 			}
@@ -978,9 +969,6 @@ func (c *core) tickSurfaces(ctx context.Context, now time.Time) {
 	for _, s := range all {
 		if c.surfaceEnded(s, now) {
 			c.surfaceRemove(s.ID, surfaceByLifetime)
-			if th, ok := threadOfAuthor(s.Author); ok {
-				c.keepThreadKin(th, false) // its parent's row, its ended children (thread_children.go)
-			}
 			continue
 		}
 		if s.Refresh.Every > 0 && len(s.Sources) > 0 && !s.NextAt.After(now) {
@@ -1046,10 +1034,6 @@ func (c *core) surfaceOpened(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if th, ok := threadOfSurface(id); ok && s.Author == threadAuthor(th) {
-		c.threadOpened(ctx, th) // its thread's sources (thread_sources.go)
-		return nil
-	}
 	if len(s.Sources) == 0 || time.Since(time.Unix(s.Look.Read, 0)) < surfaceOpenFresh {
 		return nil
 	}
@@ -1060,7 +1044,7 @@ func (c *core) surfaceOpened(ctx context.Context, id string) error {
 // surfaceResourceUpdated is the pool's hook: a server said a resource
 // changed; the surfaces that read it read it again.
 func (c *core) surfaceResourceUpdated(server, uri string) {
-	c.threadResourceUpdated(server, uri) // thread_sources.go
+	c.nodeResourceUpdated(server, uri) // node_live.go
 	all, err := c.surfaces()
 	if err != nil {
 		return
@@ -1096,8 +1080,8 @@ func (c *core) followSurfaceResources() {
 			}
 		}
 	}
-	for _, r := range c.threadResources() { // thread_sources.go
-		want[r.server] = append(want[r.server], r.uri)
+	for server, uris := range c.nodeResources() { // node_live.go
+		want[server] = append(want[server], uris...)
 	}
 	for name, uris := range want {
 		if u := c.pool.get(name); u != nil {

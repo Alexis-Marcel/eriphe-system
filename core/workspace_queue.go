@@ -113,7 +113,6 @@ func queueSurfaceID(ref string) string {
 type queueEntry struct {
 	it      attentionItem
 	surface string
-	about   bool // shown by the surface it is about, not one of the queue's
 	shown   bool // a card whose proposal the Proposal shows (p)
 	p       proposal
 }
@@ -126,33 +125,18 @@ func (c *core) queuePlan(now time.Time) []queueEntry {
 	today := time.Date(y, m, d, 0, 0, 0, 0, loc)
 	items := c.attentionOpen()
 	out := make([]queueEntry, 0, len(items))
-	var threads map[string]int64
-	if len(items) > 0 {
-		threads = c.threadShownCards()
-	}
 	for _, it := range items {
-		out = append(out, c.queuePlace(it, today, threads))
+		out = append(out, c.queuePlace(it, today))
 	}
 	return out
 }
 
-// queuePlace is where an item shows: on the surface of the thread that
-// shows it, unless urgent; alone when urgent; in its group otherwise.
-// threads are the cards an active thread's surface shows, by ref.
-func (c *core) queuePlace(it attentionItem, today time.Time, threads map[string]int64) queueEntry {
+// queuePlace is where an item shows: alone when urgent; in its group
+// otherwise.
+func (c *core) queuePlace(it attentionItem, today time.Time) queueEntry {
 	e := queueEntry{it: it}
-	if id, ok := raisedThread(it.Ref); ok {
-		if _, err := c.surface(threadSurfaceID(id)); err == nil {
-			e.surface, e.about = threadSurfaceID(id), true // its tile rises (threadSurfaceIn)
-			return e
-		}
-	}
 	e.p, e.shown = c.queuedProposal(it.Ref)
 	todays := e.shown && c.proposalToday(e.p, today)
-	if thread, ok := threads[e.p.ref()]; ok && e.shown {
-		e.surface, e.about = threadSurfaceID(thread), true // answered there (thread_surface.go)
-		return e
-	}
 	switch {
 	case it.Weight >= weightBlocksATask || todays:
 		e.surface = queueSurfaceID(it.Ref)
@@ -193,9 +177,7 @@ func (c *core) queuedProposal(ref string) (proposal, bool) {
 func (c *core) queueSurfaces(plan []queueEntry, lang string) map[string]surfaceIn {
 	by := map[string][]queueEntry{}
 	for _, e := range plan {
-		if !e.about {
-			by[e.surface] = append(by[e.surface], e)
-		}
+		by[e.surface] = append(by[e.surface], e)
 	}
 	out := map[string]surfaceIn{}
 	for id, es := range by {
@@ -329,15 +311,12 @@ func queueSubject(e queueEntry, lang string) string {
 
 // queueItemsOf are the open items a queue's surface shows.
 func (c *core) queueItemsOf(id string) []attentionItem {
-	thread, isThread := threadOfSurface(id)
-	if !strings.HasPrefix(id, queueSurfacePrefix) && !isThread {
+	if !strings.HasPrefix(id, queueSurfacePrefix) {
 		return nil
 	}
 	var out []attentionItem
 	for _, e := range c.queuePlan(time.Now()) {
-		switch {
-		case e.surface != id:
-		case !e.about, isThread && e.it.Ref == threadRef(thread): // a thread's raise: seen on its surface
+		if e.surface == id {
 			out = append(out, e.it)
 		}
 	}

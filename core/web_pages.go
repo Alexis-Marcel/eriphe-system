@@ -930,7 +930,7 @@ func (w *web) threadRows(activeOnly bool, n int) []threadRow {
 	out := make([]threadRow, 0, len(ss))
 	for _, s := range ss {
 		x := threadRow{Thread: s, Updated: s.Created}
-		x.Waits = s.active() && len(w.c.linkedWaiting(s.ID, nil)) > 0
+		x.Waits = s.active() && w.c.threadWaits(s.ID)
 		if l := w.c.threadLog(s.ID, 1); len(l) > 0 {
 			x.Updated = l[0].At
 		}

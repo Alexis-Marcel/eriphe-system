@@ -71,12 +71,11 @@ func init() {
 // How a thread ends (#571). Its family is never shown to the user: it only
 // changes its life.
 const (
-	endsGoal     = "goal"     // it ends on its goal; ended, it stays until « Ranger » or midnight
+	endsGoal     = "goal"     // it ends on its goal; ended, it stays until « Ranger »
 	endsStanding = "standing" // what the user manages continuously: never closed, stopped nor hidden
-	endsDay      = "day"      // a view for the day: it ends by itself at the user's midnight
 )
 
-var threadEnds = []string{endsGoal, endsStanding, endsDay}
+var threadEnds = []string{endsGoal, endsStanding}
 
 // A thread's states, whatever its mode.
 const (

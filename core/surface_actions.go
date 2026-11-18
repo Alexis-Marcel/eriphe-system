@@ -27,25 +27,9 @@ import (
 //   - answer: yes or no to the one proposal a Proposal component of the
 //     surface shows, decided like its card's Oui or Non; refused on a
 //     tainted surface, unless code wrote it (the attention queue's, whose
-//     Proposal shows the proposal's own taint, as its card does; a
-//     thread's, whose Proposals code bound to its own cards, whatever
-//     the thread read: surfaceLook.Answers). A Proposal bound inside a
-//     list answers only the proposal at the place it says (at): a row's
-//     card from its row (item_cards.go).
-//   - tidy: « Ranger » on an ended thread's surface: the Button code wrote
-//     there, its thread as stored (thread_surface.go, tidyThread).
-//   - control: Stop, the Button code wrote on a thread's surface, its
-//     context as stored (thread_surface.go, controlOf).
-//   - offer: an action offered on an item of a thread's source, or on a
-//     group of them: the Button code wrote on its surface; the note and
-//     its action read again from the store, it makes one card bound to
-//     the item(s) and runs nothing (item_offers.go).
-//   - mark: keep, drop or done on something a thread shows, from a
-//     component of the thread's own surface that carries it (its holder's
-//     block): its thread and mark as stored, its list and item written
-//     there or taken from the data where its binding reads; recorded in
-//     the thread's data, a gesture for the brain's next turn, never a
-//     turn of its own (thread_marks.go).
+//     Proposal shows the proposal's own taint, as its card does:
+//     surfaceLook.Answers). A Proposal bound inside a list answers only
+//     the proposal at the place it says (at).
 //   - local (open, back, expand, tab): recorded; "open" (a tile or a chip)
 //     places the surface first on the layout, keeps the gesture and reads
 //     its sources again, in the background; "back" gives the layout back.
@@ -77,35 +61,17 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 	if err != nil {
 		return err
 	}
-	var text, ref, do, source, item, state, offer, list, mark string
-	var yes, external bool
-	var thread int64
+	var text, ref string
+	var yes bool
 	var refused *errActionRefused
-	var offerCallsOf []offerCall
 	switch a2ui.ActionKind(a.Name) {
 	case a2ui.KindAsk:
 		text, refused = askOf(s, a)
 	case a2ui.KindAnswer:
 		ref, yes, refused = c.answerOf(s, a)
-	case a2ui.KindTidy:
-		thread, refused = tidyOf(s, a) // thread_surface.go
-	case a2ui.KindControl:
-		thread, do, refused = controlOf(s, a)
-	case a2ui.KindOffer:
-		thread, source, item, state, offer, refused = offerOf(s, a) // item_offers.go
-		var calls []offerCall
-		if refused == nil {
-			calls, err = c.offerCalls(thread, source, item, state, offer)
-			if err != nil {
-				refused = &errActionRefused{Message: err.Error()}
-			}
-		}
-		offerCallsOf = calls
-	case a2ui.KindMark:
-		thread, list, item, mark, external, refused = c.markOf(s, a) // thread_marks.go
 	case a2ui.KindLocal:
 	default:
-		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), tidy, control, offer and mark (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
+		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
 	}
 	if refused != nil {
 		refused.Message = "the user's action " + strconv.Quote(truncate(a.Name, 64)) + " on " + truncate(a.SourceComponentID, 64) + " was refused: " + refused.Message
@@ -113,12 +79,6 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		return refused
 	}
 	now := time.Now()
-	if th, ok := threadOfSurface(id); ok && a.Name == a2ui.ActionOpen && s.Author == threadAuthor(th) {
-		// A visit of the thread: its header tells what changed since the
-		// one before (thread_header.go). Before the note, which a rewrite
-		// of the surface would lose.
-		c.threadVisited(th, now)
-	}
 	err = c.noteOnSurface(id, func(l *surfaceLook) {
 		l.Action = &surfaceActed{Name: a.Name, Component: a.SourceComponentID, At: now.Unix()}
 	})
@@ -130,18 +90,6 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		return c.askFromSurface(s, text)
 	case a2ui.KindAnswer:
 		return c.answerFromSurface(ctx, ref, yes)
-	case a2ui.KindTidy:
-		return c.tidyThread(thread, "user")
-	case a2ui.KindControl:
-		return c.controlThread(ctx, thread, do)
-	case a2ui.KindOffer:
-		_, err := c.offer(ctx, thread, offerCallsOf)
-		if errors.Is(err, errOfferAsked) {
-			return nil // its card waits on the row already
-		}
-		return err
-	case a2ui.KindMark:
-		return c.setMark(thread, list, item, mark, external, now) // no turn: a gesture the brain reads at its next
 	}
 	switch a.Name {
 	case a2ui.ActionOpen:
@@ -194,9 +142,6 @@ func (c *core) answerOf(s surface, a a2ui.Action) (string, bool, *errActionRefus
 	if !ok || comp["component"] != "Proposal" {
 		return "", false, &errActionRefused{Path: at, Message: "an answer comes from a Proposal component of the surface"}
 	}
-	if s.Look.Answers && len(s.Look.AuthorTaint) > 0 && !strings.HasPrefix(a.SourceComponentID, threadCompPrefix) {
-		return "", false, &errActionRefused{Path: at, Message: "a part written after reading external content can only ask: its proposal is answered in the conversation"}
-	}
 	var ref, answer, row string
 	json.Unmarshal(a.Context["proposal"], &ref)
 	json.Unmarshal(a.Context["answer"], &answer)
@@ -230,8 +175,7 @@ func (c *core) answerOf(s surface, a a2ui.Action) (string, bool, *errActionRefus
 // proposalsShownAt are the refs a Proposal component shows where the
 // user clicked it: for one bound inside a list, the one at row (its place
 // in the data, as the page gives it), checked to be one of the places its
-// binding takes. A thread's surface names the row: there each row of
-// items has its own cards (item_cards.go). refused says why not.
+// binding takes. refused says why not.
 func (c *core) proposalsShownAt(s surface, id, row string, hasRow bool) ([]string, string) {
 	comp, _, _ := componentOf(s, id)
 	if ref, ok := comp["proposalId"].(string); ok {
@@ -240,17 +184,12 @@ func (c *core) proposalsShownAt(s surface, id, row string, hasRow bool) ([]strin
 	binding, _ := comp["proposalId"].(map[string]any)
 	path, _ := binding["@path"].(string)
 	var places [][]string
-	listed := false
 	for _, b := range a2ui.Eriphe().BoundPaths(s.Components) {
 		if b.Component == id && b.Prop == "proposalId" && !b.List {
 			places = append(places, tokens(b.Path))
-			listed = listed || slices.Contains(tokens(b.Path), "*")
 		}
 	}
-	_, thread := threadOfSurface(s.ID)
 	switch {
-	case !hasRow && listed && thread:
-		return nil, "an answer from a row of a thread's surface says where its Proposal is (at)"
 	case !hasRow:
 		return c.proposalsShown(s, id), ""
 	case path == "":

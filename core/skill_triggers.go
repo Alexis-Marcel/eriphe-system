@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
 // A skill's trigger: what makes it run by itself (skill_runs.go). Its
@@ -23,9 +25,9 @@ import (
 //	every: 15m                               batch: at most one task per period, with every event since
 //	model: haiku                             the agent its tasks run with (Settings → Agents)
 //	tools: [mail, calendar]                  the catalog servers its tasks are lent
-//	                                         (never eriphe-workspace: a run writes in its node)
-//	thread: topic:mails                      its thread's alias (kind:slug): what its runs are about;
-//	                                         without it, the events' key, or topic:<monitor>
+//	repos: [owner/name]                      the repositories its runs' steps may borrow (node_steps.go)
+//	node: k3x9m2p7qa                         a standing node its runs work in (the view's: mails,
+//	                                         a production app); without it, a node of each run's own
 //
 // Each is checked when the skill is added: a version with a bad trigger is
 // refused. The user approves them with the rest of the skill, as one
@@ -53,7 +55,7 @@ type skillTrigger struct {
 	Tools    []string
 	Repos    []string // the repositories its runs' steps may borrow, owner/name (node_steps.go)
 	Urgent   string   // the fixed text of an urgent run (skill_cards.go)
-	Thread   string   // its thread's alias: what its runs are about; else their events' key (skillRunAlias)
+	Node     string   // the standing node its runs work in; "" for a node of each run's own (skill_runs.go)
 }
 
 // filterBound is a filter on a number of the event's payload.
@@ -90,7 +92,7 @@ func splitWhen(when string) (at, events string) {
 // someone follows it.
 func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 	if m.When == "" {
-		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "repos": m.Repos, "urgent": m.Urgent, "thread": m.Thread, "title": m.Title} {
+		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "repos": m.Repos, "urgent": m.Urgent, "node": m.Node} {
 			if v != "" {
 				return nil, skillErr("skills.err.nowhen", k)
 			}
@@ -188,12 +190,11 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 		}
 		st.Urgent = u
 	}
-	if s := strings.TrimSpace(m.Thread); s != "" {
-		k, err := aliasKey(s)
-		if err != nil || k == "" {
-			return nil, skillErr("skills.err.thread", s)
+	if s := strings.TrimSpace(m.Node); s != "" {
+		if !nodefile.IDOK(s) {
+			return nil, skillErr("skills.err.node", s)
 		}
-		st.Thread = k
+		st.Node = s
 	}
 	return st, nil
 }
@@ -284,8 +285,8 @@ func (st *skillTrigger) Text(lang string) string {
 	if len(st.Repos) > 0 {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.repos"), strings.Join(st.Repos, ", ")))
 	}
-	if st.Thread != "" {
-		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.thread"), st.Thread))
+	if st.Node != "" {
+		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.node"), st.Node))
 	}
 	if st.Urgent != "" {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.urgent"), st.Urgent))

@@ -362,26 +362,9 @@ func fitsGrid(size string, col, row int) bool {
 func (c *core) queueSweep(now time.Time) {
 	cutoff := now.Add(-queueItemKeep).Unix()
 	const ended = `ref NOT LIKE 'card:%' AND delivered > 0 AND delivered <= ? AND time <= ?`
-	var raised []int64
-	if rows, err := c.store.db.Query(`SELECT ref FROM attention WHERE ref LIKE 'thread:%' AND `+ended, cutoff, cutoff); err == nil {
-		for rows.Next() {
-			var ref string
-			if rows.Scan(&ref) == nil {
-				if id, ok := raisedThread(ref); ok {
-					raised = append(raised, id)
-				}
-			}
-		}
-		rows.Close()
-	}
 	res, err := c.store.db.Exec(`DELETE FROM attention WHERE `+ended, cutoff, cutoff)
-	if err == nil {
-		if n, _ := res.RowsAffected(); n > 0 {
-			for _, id := range raised {
-				c.keepThreadSurface(id) // its tile gives the weight back
-			}
-			c.kickWorkspace()
-		}
+	if n, _ := rowsOf(res, err); n > 0 {
+		c.kickWorkspace()
 	}
 	st := &c.layout
 	st.mu.Lock()
