@@ -3061,8 +3061,9 @@ token in `X-CSRF-Token`:
   it and the archived parents it needs, in one commit).
 - `PUT /api/nodes/{id}/place` `{x, y}` and `DELETE`: where the user dropped a bubble, a subject's
   spot or a child's offset from its parent, in `node_layout` (no version).
-- `PUT /api/espace/view` `{open, talk, theme}`: the pages open, the one the console talks to, and
-  the theme (`""` follows the system, `light`, `dark`), in the kv `espace_view`. The boot gives
+- `PUT /api/espace/view` `{open, talk, shown, theme}`: the pages open, the one the console talks
+  to, the last of Eriphe's shows the page took (a page the user closed does not open again on the
+  next visit), and the theme (`""` follows the system, `light`, `dark`), in the kv `espace_view`. The boot gives
   them back (`view`, `places`), on any of the user's screens, and the shell carries the theme
   (`data-theme`) before the app draws.
 
@@ -3093,7 +3094,7 @@ token in `X-CSRF-Token`:
   the click one more. Dragged by its head; its head says what it belongs to, its title, its date
   or « En cours » on the title line, its versions, « Archiver », the cross that closes this page
   only; the tabs Contenu, Trace and .md; at its foot the cards it waits on, answered by their
-  card's Oui or Non (`POST /cards/{id}/yes|no`), and the question before archiving (how many
+  card's Oui or Non (`POST /cards/{id}/yes|no`), read again when a proposal moves, and the question before archiving (how many
   bubbles go with it). An older version shows as it was. The .md tab edits the node's body in
   CodeMirror (`page/Editor.tsx`, in a shadow root: CodeMirror styles a document with a `<style>`
   element, which the CSP refuses, and a shadow root with a constructed stylesheet; its look is
