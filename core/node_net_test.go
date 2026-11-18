@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -155,5 +157,35 @@ func TestExtractionReadsNodeTraces(t *testing.T) {
 	}
 	if segs := c.nodeSegments(now.Add(time.Hour), now.Add(2*time.Hour)); len(segs) != 0 {
 		t.Errorf("another day's trace: %+v", segs)
+	}
+}
+
+// A conversation made before the nodes opens with its messages' node and
+// filed added, its messages kept, the home's.
+func TestStoreAddsMessagesNode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "core.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{`CREATE TABLE messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL,
+		role TEXT NOT NULL, text TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, via TEXT NOT NULL DEFAULT '',
+		thread INTEGER NOT NULL DEFAULT 0)`, `INSERT INTO messages (time, role, text, thread) VALUES (1, 'user', 'Bonjour', 3)`} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+	s, err := openStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.db.Close()
+	lines, _, err := s.lastExchange("")
+	if err != nil || len(lines) != 1 || lines[0].Text != "Bonjour" {
+		t.Fatalf("exchange %+v %v", lines, err)
+	}
+	if _, err := s.addNodeMessage(roleBrain, "Salut", "", "k3x9m2p7qa", true); err != nil {
+		t.Fatal(err)
 	}
 }

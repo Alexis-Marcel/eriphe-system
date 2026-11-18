@@ -122,7 +122,6 @@ CREATE TABLE IF NOT EXISTS messages (
   via TEXT NOT NULL DEFAULT '',
   node TEXT NOT NULL DEFAULT '',   -- the node it belongs to, '' for the home (node_turn.go)
   filed TEXT NOT NULL DEFAULT ''); -- the brain's answer: the node code filed it in (node_net.go)
-CREATE INDEX IF NOT EXISTS messages_node ON messages (node, seq);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS inbox (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, kind TEXT NOT NULL,
@@ -143,6 +142,20 @@ var extraSchema []string
 // schemaFixes bring a table made by an older eriphe-core up to date (a
 // column added), after the schema: CREATE TABLE IF NOT EXISTS never does.
 var schemaFixes []func(*sql.DB) error
+
+// A conversation made before the nodes (#632) gets its messages' node and
+// filed; its thread column is left, unread.
+func init() {
+	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
+		for _, col := range []string{"node", "filed"} {
+			if err := addColumn(db, "messages", col, "TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+		_, err := db.Exec(`CREATE INDEX IF NOT EXISTS messages_node ON messages (node, seq)`)
+		return err
+	})
+}
 
 // addColumn adds a column to a table that lacks it; a table that has it
 // is left as it is.

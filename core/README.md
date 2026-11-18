@@ -979,7 +979,7 @@ store](#node-store-nodestore-nodesgo)).
   (`activeNodes`, the last changed first, at most 20), each with its card (`about_card.go`: the
   node's line, its state, title and its doc's first line, then its decisions, facts, people,
   intentions, cards and preferences); a turn about a node gets its card when the session does not
-  hold it as it is. `since` and `where_now` say the same of nodes. The tasks panel lists the nodes
+  hold it as it is. `since` lists the nodes changed (kind `node`: where each stands now, its title and its doc's first line, an external one's not quoted), and `where_now` the nodes that wait for the user (`nodes_waiting`). The tasks panel lists the nodes
   running and waiting above the tasks (`/espace?open=node-<id>`).
 - **Memory.** Where a matter stands is its node's doc, never a memory: the `progress` kind is
   gone. The nightly extraction reads the day's node traces (`nodeSegments`: what each node's trace
@@ -3520,7 +3520,7 @@ and update the commit in the two `NOTICE` files.
 A surface is one tile of the workspace, and code writes every one (#574): its **author** is
 `core`, [the attention queue's](#the-layout-workspace_layoutgo) (`q-…`); `writeSurface` refuses
 any other author or id (`codeSurfaceOf`), and at start code removes any surface another author
-wrote before (`dropFreeSurfaces`), a thread's too ([a thread has no surface](#a-thread-has-no-surface-631)).
+wrote before (`dropFreeSurfaces`).
 No assistant, task or skill writes a tile of its own. A
 surface has a title, A2UI components, data, **sources**, a refresh, a **lifetime**, a weight (1
 to 100) and a why; code keeps its data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the

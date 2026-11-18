@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -42,6 +43,7 @@ const (
 	feedMessage      = "message"
 	feedLearned      = "learned" // the learning journal (learning.go)
 	feedEvent        = "event"   // the event journal (event_journal.go)
+	feedNode         = "node"    // the nodes changed (nodestore)
 
 	feedOwn      = "own"
 	feedExternal = "external"
@@ -55,7 +57,7 @@ const (
 	taintSince     = "since.external"
 )
 
-var feedKinds = []string{feedTask, feedNotification, feedIntention, feedMessage, feedLearned, feedEvent}
+var feedKinds = []string{feedTask, feedNotification, feedIntention, feedMessage, feedLearned, feedEvent, feedNode}
 
 // happening is one item of the feed.
 type happening struct {
@@ -102,6 +104,41 @@ var feedSources = map[string]feedSource{
 	feedMessage:      messageHappenings,
 	feedLearned:      learnedHappenings,
 	feedEvent:        eventHappenings,
+	feedNode:         nodeHappenings,
+}
+
+// nodeHappenings are the nodes changed since from, each once, where it
+// stands now: its state (or archived), its title and its doc's first
+// line; one that may hold someone else's words is external, its title
+// and its doc never quoted.
+func nodeHappenings(c *core, from time.Time, limit int) ([]happening, error) {
+	if c.nodes == nil {
+		return nil, nil
+	}
+	xs, err := c.nodes.Recent(true, limit)
+	if err != nil {
+		return nil, err
+	}
+	var out []happening
+	for _, x := range xs {
+		if x.Updated.Before(from) {
+			break // the last changed first
+		}
+		event := x.State
+		if !x.Archived.IsZero() {
+			event = "archived"
+		}
+		h := happening{At: x.Updated, Kind: feedNode, Event: event, Ref: nodeRef(x.ID), Args: []any{x.ID, trKey("since.node.unquoted")}, Trust: feedOwn}
+		if x.External {
+			h.Trust = feedExternal
+		} else {
+			h.Args[1] = "« " + packQuote(x.Title) + " »"
+			h.Text = feedText(c.nodeFirstLine(x.ID))
+		}
+		out = append(out, h)
+	}
+	slices.Reverse(out) // oldest first
+	return out, nil
 }
 
 // feed is what happened since from, of these kinds (all if none), oldest
