@@ -270,7 +270,9 @@ func TestBrainPromptThreads(t *testing.T) {
 	section := prompt[start:end]
 	for _, want := range []string{
 		"**Quand en ouvrir un.**", "`open_thread` avec sa clé", "reste du texte, sans fil", "tout ce qui se **montre** est un fil", "`take`", "`new_because`",
-		"une étape `call` de fusion", "une étape `user`", "seulement le `check`, rien d'autre", "devient une étape `task` de ce fil", "Une tâche est toujours une étape d'un fil",
+		"propose sa fusion", "seulement la vérification, rien d'autre", "Une tâche parle du fil de son tour",
+		// Work in steps (#630): code runs and accepts them, the brain settles exceptions.
+		"**Un travail en étapes.**", "`node_open` avec `steps`", "`[nœud <id> « titre »] …`", "`node_settle`", "sans te réveiller",
 		"un **veilleur**", "`item_note`", "`note_item`", "`stop_thread`", "une recherche",
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",
