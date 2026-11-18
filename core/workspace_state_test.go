@@ -54,27 +54,6 @@ func TestPlacementKept(t *testing.T) {
 	if ch, ok := chipOf(l, "notes"); ok && ch.Closed {
 		t.Fatal("closed last session, still closed")
 	}
-	// Reset: code lays everything out in its order again.
-	if _, err := c.arrangeWorkspace(workspaceArrangeIn{Reset: true}, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if tl, _ := tileOf(c.relayout(), "agenda"); tl.Pinned {
-		t.Fatal("reset, still pinned")
-	}
-	// The brain places at the user's request; the surface gone, its pin goes.
-	if _, err := c.arrangeWorkspace(workspaceArrangeIn{Items: []arrangeItemIn{{ID: "meteo", Size: sizeXL}}}, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if tl, _ := tileOf(c.relayout(), "meteo"); !tl.Pinned || tl.Size != sizeXL {
-		t.Fatalf("arranged: %s", tilesOf(c.relayout()))
-	}
-	if err := c.surfaceRemove("meteo", surfaceAuthorBrain); err != nil {
-		t.Fatal(err)
-	}
-	c.relayout()
-	if _, ok := c.placementNow(time.Now()).Pins["meteo"]; ok {
-		t.Fatal("the pin of a surface gone stayed")
-	}
 }
 
 // placementNow is the placement at now.

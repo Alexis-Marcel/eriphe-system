@@ -17,6 +17,13 @@ import (
 func graphCore(t *testing.T) *core {
 	t.Helper()
 	c := startCore(t)
+	openGraph(t, c)
+	return c
+}
+
+// openGraph opens an empty graph for c.
+func openGraph(t *testing.T, c *core) {
+	t.Helper()
 	dir := t.TempDir()
 	s, _, err := nodestore.Open(filepath.Join(dir, "nodes"), filepath.Join(dir, "nodes.db"), nodestore.Options{Refuse: refuseSecret})
 	if err != nil {
@@ -24,7 +31,6 @@ func graphCore(t *testing.T) *core {
 	}
 	t.Cleanup(func() { s.Close() })
 	c.nodes = s
-	return c
 }
 
 // workNode is a node to cut in steps, with a goal or none.

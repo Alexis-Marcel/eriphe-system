@@ -142,36 +142,6 @@ func TestDayProposals(t *testing.T) {
 	}
 }
 
-// What an author reads of the proposals that wait, newest first: their
-// refs, to place a Proposal; the text of one drawn from external content
-// is not quoted. A backlog never hides the newest.
-func TestWorkspaceReadProposals(t *testing.T) {
-	tw, _ := newMemoryWeb(t)
-	c := tw.c
-	r := proposedRule(t, c, "facture", "")
-	ext := proposedRule(t, c, "banque", "external:mail:1")
-	brainSays(c, "Deux petites choses ?")
-	read := func() []proposalSeen {
-		got, _ := c.toolWorkspaceRead(surfaceCaller{author: surfaceAuthorBrain})["proposals"].([]proposalSeen)
-		return got
-	}
-	got := read()
-	if len(got) != 2 || got[1].Ref != proposalRef(cardRule, r.ID) || got[1].Text == "" || got[1].Tainted {
-		t.Fatalf("proposals %+v", got)
-	}
-	if got[0].Ref != proposalRef(cardRule, ext.ID) || !got[0].Tainted || got[0].Text != "" {
-		t.Fatalf("tainted %+v", got[0])
-	}
-	for i := range proposalsSeenMax + 2 {
-		proposedRule(t, c, fmt.Sprintf("lettre %d", i), "")
-	}
-	last := proposedRule(t, c, "colis", "")
-	brainSays(c, "Encore une ?")
-	if got := read(); len(got) != proposalsSeenMax || got[0].Ref != proposalRef(cardRule, last.ID) {
-		t.Fatalf("with a backlog: %d, first %+v", len(got), got[0])
-	}
-}
-
 // Every way a proposal is decided says so to the workspace: an answer from
 // a surface, a card's button, one found decided elsewhere; and a new card.
 func TestProposalMoves(t *testing.T) {

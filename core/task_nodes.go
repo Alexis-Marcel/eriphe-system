@@ -181,29 +181,11 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if err := w.own(in.ID); err != nil {
 				return nil, err
 			}
-			var d *nodestore.Doc
-			var err error
-			switch {
-			case in.Block != "" && in.Old == "":
-				d, err = c.writeTaskNode(w.task, in.Expect, w.grant, func(n *nodefile.Node) error {
-					raw, err := json.Marshal(in.Value)
-					if err != nil {
-						return err
-					}
-					return n.PutAuthorBlock(in.Block, raw, in.Before)
-				})
-			case in.Old != "" && in.Block == "":
-				d, err = c.writeTaskNode(w.task, in.Expect, w.grant, func(n *nodefile.Node) error {
-					raw, _ := n.Bytes()
-					body := nodeBody(raw)
-					if strings.Count(body, in.Old) != 1 || strings.Count(n.Text(), in.Old) != 1 {
-						return errors.New("old is not found once in the node's text: give a longer piece, or write a block with block")
-					}
-					return n.AuthorBody(strings.Replace(body, in.Old, in.New, 1))
-				})
-			default:
-				err = errors.New("block and value, or old and new")
+			fn, err := nodeEdit(in)
+			if err != nil {
+				return nil, err
 			}
+			d, err := c.writeTaskNode(w.task, in.Expect, w.grant, fn)
 			return written(d), err
 		})
 	tool(s, "node_append", "Add markdown text at the end of your node: no expect needed, it writes over nothing.",
@@ -219,14 +201,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if err != nil {
 				return nil, err
 			}
-			d, err := c.writeTaskNode(w.task, cur.Version.Hash, w.grant, func(n *nodefile.Node) error {
-				raw, _ := n.Bytes()
-				body := strings.TrimRight(nodeBody(raw), "\n")
-				if body != "" {
-					body += "\n\n"
-				}
-				return n.AuthorBody(body + text + "\n")
-			})
+			d, err := c.writeTaskNode(w.task, cur.Version.Hash, w.grant, nodeAppend(text))
 			return written(d), err
 		})
 	tool(s, "node_open", "Open a child of your node, for a part of the work: its title, its goal, and its first body; with steps, its work cut in steps, each a child of it that an agent runs, accepted by Eriphe on its proof. You write only your own node: the child is the user's and Eriphe's to follow, and you never start a task yourself.",
@@ -317,8 +292,17 @@ func (c *core) writeTaskNode(task, expect string, grant []string, fn func(*nodef
 	if id == "" || c.nodes == nil {
 		return nil, errors.New("this task has no node")
 	}
-	tainted := c.writeTaint(task) != ""
-	return c.nodes.Change(id, strings.TrimSpace(expect), c.taskAuthor(task), func(n *nodefile.Node) error {
+	return c.authorWrite(id, expect, c.taskAuthor(task), c.writeTaint(task) != "", c.lentTo(grant), fn)
+}
+
+// authorWrite writes a node as an author (the brain, a task): fn changes
+// its last version, which expect names. The blocks it wrote, new or
+// changed, however it wrote them (a block, or a fence in its text), are
+// checked (nodeGuard, sourceOK for their sources), and marked external,
+// with the node, when the author is tainted now, or for a source of a
+// server not trusted.
+func (c *core) authorWrite(id, expect, author string, tainted bool, sourceOK func(nodefile.Source) error, fn func(*nodefile.Node) error) (*nodestore.Doc, error) {
+	return c.nodes.Change(id, strings.TrimSpace(expect), author, func(n *nodefile.Node) error {
 		was := map[string]string{}
 		for _, b := range n.Blocks() {
 			was[b.Name] = blockSig(b)
@@ -332,7 +316,7 @@ func (c *core) writeTaskNode(task, expect string, grant []string, fn func(*nodef
 				names = append(names, b.Name)
 			}
 		}
-		outside, err := c.nodeGuard(n, names, tainted, c.lentTo(grant))
+		outside, err := c.nodeGuard(n, names, tainted, sourceOK)
 		if err != nil {
 			return err
 		}
@@ -346,6 +330,43 @@ func (c *core) writeTaskNode(task, expect string, grant []string, fn func(*nodef
 		}
 		return nil
 	})
+}
+
+// nodeEdit is node_edit's change: one block written, or a piece of the
+// text replaced.
+func nodeEdit(in nodeEditIn) (func(*nodefile.Node) error, error) {
+	switch {
+	case in.Block != "" && in.Old == "":
+		return func(n *nodefile.Node) error {
+			raw, err := json.Marshal(in.Value)
+			if err != nil {
+				return err
+			}
+			return n.PutAuthorBlock(in.Block, raw, in.Before)
+		}, nil
+	case in.Old != "" && in.Block == "":
+		return func(n *nodefile.Node) error {
+			raw, _ := n.Bytes()
+			body := nodeBody(raw)
+			if strings.Count(body, in.Old) != 1 || strings.Count(n.Text(), in.Old) != 1 {
+				return errors.New("old is not found once in the node's text: give a longer piece, or write a block with block")
+			}
+			return n.AuthorBody(strings.Replace(body, in.Old, in.New, 1))
+		}, nil
+	}
+	return nil, errors.New("block and value, or old and new")
+}
+
+// nodeAppend is node_append's change: text added at the node's end.
+func nodeAppend(text string) func(*nodefile.Node) error {
+	return func(n *nodefile.Node) error {
+		raw, _ := n.Bytes()
+		body := strings.TrimRight(nodeBody(raw), "\n")
+		if body != "" {
+			body += "\n\n"
+		}
+		return n.AuthorBody(body + text + "\n")
+	}
 }
 
 // externalSources marks the blocks of a node just created that read a

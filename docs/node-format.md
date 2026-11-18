@@ -64,12 +64,12 @@ The titles proposed for the first article:
 | `id` | text | The node's id: lowercase letters and digits, 32 at most, no dash. Required. |
 | `title` | text | Its title for the user: one line, 120 characters at most. Required. |
 | `parent` | id | The node it belongs to; none for a node at the top. |
-| `links` | list of ids | The nodes it links to; no duplicate, never itself. |
+| `links` | list of ids | Written by code (Eriphe's `node_link`, the user's gestures): the nodes it links to; no duplicate, never itself. An author's write keeps them. |
 | `after` | list of ids | Written by code only, at a step's creation: the sibling steps it waits for (no duplicate, never itself). Absent for a node that is no step. |
 | `lifetime` | `work` or `standing` | Work ends when it is done; a standing node (the day, the mails) stays. Required. |
 | `goal` | text | What the node is for. Never shown to the user. |
 | `created` | timestamp | When it was created (RFC 3339). Required. |
-| `done` | timestamp | When it was marked done; absent while not done. |
+| `done` | timestamp | Written by code (Eriphe's `node_set` `done`, the user's gestures): when it was marked done; absent while not done. An author's write keeps it. |
 | `archived` | timestamp | When the user archived it; absent while not archived. |
 | `external` | `true` | Written by code only: the node holds someone else's words. Absent otherwise. |
 

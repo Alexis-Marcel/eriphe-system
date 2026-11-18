@@ -36,13 +36,13 @@ func TestNoRulesLeft(t *testing.T) {
 	for _, tl := range res.Tools {
 		names = append(names, tl.Name)
 	}
-	if slices.Contains(names, "write_rule") || !slices.Contains(names, "workspace_arrange") {
+	if slices.Contains(names, "write_rule") || !slices.Contains(names, "node_show") {
 		t.Fatalf("tools %v", names)
 	}
 }
 
 // What the user wants to see more or less of is read by the skills that
-// note a thread's items, with their run: the preferences about the
+// note a view's items, with their run: the preferences about the
 // workspace, active ones only, the latest first; never a proposed one, nor
 // another kind.
 func TestWatchersReadSeePreferences(t *testing.T) {

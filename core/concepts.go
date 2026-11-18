@@ -20,22 +20,21 @@ type concept struct {
 }
 
 var concepts = []concept{
-	{"memory", "remember, recall", "what you must know about the user: facts, people, decisions, how they want you to talk (where a matter stands is its thread's summary)"},
+	{"memory", "remember, recall", "what you must know about the user: facts, people, decisions, how they want you to talk (where a matter stands is its node's doc)"},
 	{"intention", "intend, intentions, update_intention", "something owed or to do once: at a date and time (remind me at 14:00), or the next time a name comes up"},
 	{"skill", "write_skill, list_skills, read_skill", "what comes back or reacts on its own: a skill with when (an event: a mail, an alert, the user's return, a task's end; or a time) runs as a task in the background, in a node of its own; a source the user wants followed continuously is a view (propose_view); also know-how followed when asked"},
 	{"monitor", "write_monitor, monitors", "know that something changed in a tool that does not tell by itself (Grafana's alerts, a status page): eriphe-core calls it at an interval, without a model, and writes an event a skill reacts to; never a time skill that calls the tool"},
 	{"rule", "rule", "what to do with notifications about a topic (now, brief, never, even at night, which lines), and the quiet hours"},
-	{"workspace", "workspace_arrange, workspace_focus", "the workspace, ordered by code (what waits for the user, then what is urgent, then what is new): arrange its surfaces as the user asks (a size, a place, kept until placed again; a preference about its layout is applied so); put on its stage the surface that answers what they asked from it (workspace_focus); what they want to see more or less of is a preference memory about topic:workspace, which whoever notes a view's items reads"},
-	{"view", "propose_view, workspace_read, catalog_read, sources_read", "what the user wants followed continuously (their mails, the prod's alerts, the pull requests to review): a standing node whose blocks code keeps fresh from their sources (a tool you read freely, a resource, a monitor), the monitor that detects what comes, and the skill that works in the node when it does (notes each item, opens a child for what needs work, its actions kept for the user's yes); all three on one card, made by one yes; components are shapes, never tool names"},
+	{"view", "propose_view, catalog_read, sources_read", "what the user wants followed continuously (their mails, the prod's alerts, the pull requests to review): a standing node whose blocks code keeps fresh from their sources (a tool you read freely, a resource, a monitor), the monitor that detects what comes, and the skill that works in the node when it does (notes each item, opens a child for what needs work, its actions kept for the user's yes); all three on one card, made by one yes; components are shapes, never tool names"},
 	{"setting", "setting", "how the user is told in general: device order, lines off, daily cap, time zone, a channel's detail, an urgent skill said aloud"},
 	{"where", "where_now", "where a notification would reach the user now: lines, devices, the room a voice channel says they are in"},
-	{"notify", "notify, notifications", "say something on your own, now or for the brief, about the turn's thread"},
+	{"notify", "notify, notifications", "say something on your own, now or for the brief, about the turn's node"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
-	{"task", "run_task, node_settle", "long or heavy work, by an agent on a machine, about the thread the turn is about; long work is cut by its agent into steps, child nodes that code runs and accepts on their proof: you settle only their exceptions ([nœud …] wakes)"},
-	{"thread", "open_thread, find_thread, read_thread, name_thread, close_thread, reopen_thread", "the one object the user sees: one per matter (a pull request, an appointment, a research), found again by its alias (open_thread gives back the one it matches: take it, or new_because), closed only on its goal; a one-line answer stays text; a task started in a turn about it is about it, and another matter asked about has its own; long work of several steps runs as the steps of a node (node_settle on its exceptions)"},
+	{"task", "run_task, node_settle", "long or heavy work, by an agent on a machine, in a node of its own, a child of the node it is given; long work is cut by its agent into steps, child nodes that code runs and accepts on their proof: you settle only their exceptions ([nœud …] wakes)"},
+	{"node", "node_open, node_find, node_read, node_write, node_edit, node_set, node_link, node_show, item_note", "the one object the user sees, a node of their graph: one per matter (a pull request, an appointment, a research), found again with node_find (archived ones too) before opening another; its doc says where the matter stands, written on the version read (expect); set done only on its goal (a decision is kept), archived only by the user; a one-line answer stays text, a long one you file in its node (or code files it); a task works in a child node; long work of several steps runs as the steps of a node (node_settle on its exceptions)"},
 }
 
-const conceptMapEN = "memory, intention, skill, monitor, rule, workspace, view, setting, where, notify, since, task, thread"
+const conceptMapEN = "memory, intention, skill, monitor, rule, view, setting, where, notify, since, task, node"
 
 var conceptLinesEN = func() string {
 	var b strings.Builder

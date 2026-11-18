@@ -70,9 +70,9 @@ const (
 	kindPerson     = "person"
 	kindEpisode    = "episode"
 	kindLesson     = "lesson"
-	// A choice and its reason, compiled from the raw history. Where a
-	// matter stands is its thread's summary, never a memory
-	// (thread_progress.go).
+	// A choice and its reason, compiled from the raw history; a node set
+	// done leaves one (node_tools.go). Where a matter stands is its node's
+	// doc, never a memory.
 	kindDecision = "decision"
 	// Where the user is or what they do for a while, with its end: shown
 	// to the brain and every task while it holds (situations.go).
@@ -225,11 +225,11 @@ const memorySchema = `CREATE TABLE memories (
 	CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
 
 // memoryStems is a memory's stems column: its text, the name in its
-// about's name (person:paul: paul; a thread's none) and its keywords.
+// about's name (person:paul: paul; a node's none) and its keywords.
 func memoryStems(text, about, keywords string) string {
 	if kind, name, ok := strings.Cut(about, ":"); ok {
 		about = name
-		if kind == refThread {
+		if kind == refNode {
 			about = ""
 		}
 	}

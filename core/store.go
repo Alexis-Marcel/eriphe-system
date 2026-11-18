@@ -115,12 +115,13 @@ CREATE TABLE IF NOT EXISTS tasks (
   tools TEXT NOT NULL DEFAULT '', folders TEXT NOT NULL DEFAULT '',
   resources TEXT NOT NULL DEFAULT '',        -- all it is lent, as JSON (resources.go)
   pinned INTEGER NOT NULL DEFAULT 0,         -- its device given by hand (placement.go)
-  about TEXT NOT NULL DEFAULT '');         -- what it is about: thread:<id> or an entity's key (about.go)
+  about TEXT NOT NULL DEFAULT '');         -- what it is about: node:<id> or an entity's key (about.go)
 CREATE TABLE IF NOT EXISTS messages (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL,
   role TEXT NOT NULL, text TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0,
   via TEXT NOT NULL DEFAULT '',
-  thread INTEGER NOT NULL DEFAULT 0); -- the thread it belongs to, 0 for the home (thread_talk.go)
+  node TEXT NOT NULL DEFAULT '',   -- the node it belongs to, '' for the home (node_turn.go)
+  filed TEXT NOT NULL DEFAULT ''); -- the brain's answer: the node code filed it in (node_net.go)
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS inbox (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, kind TEXT NOT NULL,
@@ -141,6 +142,20 @@ var extraSchema []string
 // schemaFixes bring a table made by an older eriphe-core up to date (a
 // column added), after the schema: CREATE TABLE IF NOT EXISTS never does.
 var schemaFixes []func(*sql.DB) error
+
+// A conversation made before the nodes (#632) gets its messages' node and
+// filed; its thread column is left, unread.
+func init() {
+	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
+		for _, col := range []string{"node", "filed"} {
+			if err := addColumn(db, "messages", col, "TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+		_, err := db.Exec(`CREATE INDEX IF NOT EXISTS messages_node ON messages (node, seq)`)
+		return err
+	})
+}
 
 // addColumn adds a column to a table that lacks it; a table that has it
 // is left as it is.
@@ -183,7 +198,6 @@ func openStore(path string) (*Store, error) {
 			return nil, err
 		}
 	}
-	convertOneThread(db) // once, an install made before #578 (convert_one_thread.go)
 	return &Store{db: db, dir: filepath.Dir(path)}, nil
 }
 
@@ -506,10 +520,12 @@ type Message struct {
 	// Via is where I said it, when not in the workspace or the CLI: "voix,
 	// Bureau". For an error, where the brain failed: "turn" or "start".
 	Via string `json:"via,omitempty"`
-	// Thread is the thread the message belongs to, 0 for the home: mine
-	// written with it open, the brain's answer to it, its events
-	// (thread_talk.go).
-	Thread int64 `json:"thread,omitempty"`
+	// Node is the node the message belongs to, "" for the home: mine
+	// written to it, the brain's answer to it, its events (node_turn.go).
+	Node string `json:"node,omitempty"`
+	// Filed is, for the brain's answer, the node code filed it in, as
+	// nothing of the turn had (node_net.go): the answer links to it.
+	Filed string `json:"filed,omitempty"`
 	// Attachments are the files of my message (attachments.go).
 	Attachments []Attachment `json:"attachments,omitempty"`
 	// Notice is what the workspace shows of an event: nil for the brain's
@@ -522,20 +538,20 @@ type Message struct {
 }
 
 // messageCols are a message's columns, as queryMessages reads them.
-const messageCols = "seq, time, role, text, via, thread"
+const messageCols = "seq, time, role, text, via, node, filed"
 
 func (s *Store) addMessage(role, text string, delivered bool) (int64, error) {
 	return s.addMessageVia(role, text, "", delivered)
 }
 
 func (s *Store) addMessageVia(role, text, via string, delivered bool) (int64, error) {
-	return s.addThreadMessage(role, text, via, 0, delivered)
+	return s.addNodeMessage(role, text, via, "", delivered)
 }
 
-// addThreadMessage adds a message that belongs to a thread (0: the home).
-func (s *Store) addThreadMessage(role, text, via string, thread int64, delivered bool) (int64, error) {
-	res, err := s.db.Exec(`INSERT INTO messages (time, role, text, delivered, via, thread) VALUES (?, ?, ?, ?, ?, ?)`,
-		time.Now().Unix(), role, text, delivered, via, thread)
+// addNodeMessage adds a message that belongs to a node ("": the home).
+func (s *Store) addNodeMessage(role, text, via, node string, delivered bool) (int64, error) {
+	res, err := s.db.Exec(`INSERT INTO messages (time, role, text, delivered, via, node) VALUES (?, ?, ?, ?, ?, ?)`,
+		time.Now().Unix(), role, text, delivered, via, node)
 	if err != nil {
 		return 0, err
 	}
@@ -590,7 +606,7 @@ func (s *Store) queryMessages(q string, args ...any) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		var t int64
-		if err := rows.Scan(&m.Seq, &t, &m.Role, &m.Text, &m.Via, &m.Thread); err != nil {
+		if err := rows.Scan(&m.Seq, &t, &m.Role, &m.Text, &m.Via, &m.Node, &m.Filed); err != nil {
 			return nil, err
 		}
 		m.Time = time.Unix(t, 0)

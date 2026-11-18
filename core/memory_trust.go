@@ -200,9 +200,10 @@ type brainTurn struct {
 	from, to  int // the seqs of the messages delivered in this turn
 	eventSeq  int // the brain task's last event when the turn started
 	tainted   []string
-	thread    int64                // the thread the turn is about: the last one it named (thread_turn.go)
-	talk      int64                // the thread its answer belongs to, 0 for the home (thread_talk.go)
-	namedRefs []string             // the threads and entities my messages of the turn name (names.go)
+	node      string               // the node the turn is about: the last one it named (node_turn.go)
+	talk      string               // the node its answer belongs to, "" for the home (node_turn.go)
+	filed     bool                 // the brain wrote a node in this turn: its answer needs no filing (node_net.go)
+	namedRefs []string             // the entities my messages of the turn name (names.go)
 	keep      func(brainTurnState) // stores it, so a restart of eriphe-core does not forget it
 }
 
@@ -212,8 +213,9 @@ type brainTurnState struct {
 	To       int      `json:"to"`
 	EventSeq int      `json:"event_seq"`
 	Tainted  []string `json:"tainted,omitempty"`
-	Thread   int64    `json:"thread,omitempty"`
-	Talk     int64    `json:"talk,omitempty"`
+	Node     string   `json:"node,omitempty"`
+	Talk     string   `json:"talk,omitempty"`
+	Filed    bool     `json:"filed,omitempty"`
 	Named    []string `json:"named,omitempty"`
 }
 
@@ -241,20 +243,20 @@ func (t *brainTurn) load(raw string, brainRuns bool) {
 		}
 		return
 	}
-	t.from, t.to, t.eventSeq, t.tainted, t.thread, t.talk, t.namedRefs = st.From, st.To, st.EventSeq, st.Tainted, st.Thread, st.Talk, st.Named
+	t.from, t.to, t.eventSeq, t.tainted, t.node, t.talk, t.filed, t.namedRefs = st.From, st.To, st.EventSeq, st.Tainted, st.Node, st.Talk, st.Filed, st.Named
 }
 
 // save is called with t.mu held.
 func (t *brainTurn) save() {
 	if t.keep != nil {
-		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...), t.thread, t.talk, append([]string(nil), t.namedRefs...)})
+		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...), t.node, t.talk, t.filed, append([]string(nil), t.namedRefs...)})
 	}
 }
 
 func (t *brainTurn) start(from, to, eventSeq int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.from, t.to, t.eventSeq, t.tainted, t.thread, t.talk, t.namedRefs = from, to, eventSeq, nil, 0, 0, nil
+	t.from, t.to, t.eventSeq, t.tainted, t.node, t.talk, t.filed, t.namedRefs = from, to, eventSeq, nil, "", "", false, nil
 	t.save()
 }
 
@@ -269,6 +271,7 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 		t.from = from
 	}
 	t.to, t.eventSeq = max(t.to, to), eventSeq
+	t.filed = false // a new answer: the net looks at it alone (node_net.go)
 	for _, why := range carried {
 		if !containsStr(t.tainted, why) {
 			t.tainted = append(t.tainted, why)

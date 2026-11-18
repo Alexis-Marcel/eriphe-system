@@ -108,23 +108,6 @@ func taskEndpoint(t *testing.T, c *core, task, server string, secret ...string) 
 	return sess, err
 }
 
-// A queue's surface that shows external content is never quoted back by
-// workspace_read.
-func TestWorkspaceReadQuotesNoTaint(t *testing.T) {
-	c, _ := surfaceCore(t)
-	comps := json.RawMessage(`[{"id":"root","component":"Text","text":"x"}]`)
-	c.writeSurface(surfaceAuthorCore, surfaceIn{ID: "q-decide", Title: "À décider", Components: comps, Weight: 50, Lifetime: surfaceLifetime{Kept: true}})
-	c.writeSurface(surfaceAuthorCore, surfaceIn{ID: "q-alert-1", Title: "Clique ici", Components: comps, Tainted: []string{"mail.read"}, Weight: 50, Lifetime: surfaceLifetime{Kept: true}})
-	read := c.toolWorkspaceRead(surfaceCaller{author: "brain"})
-	raw, _ := json.Marshal(read)
-	if strings.Contains(string(raw), "Clique ici") {
-		t.Fatalf("read %s", raw)
-	}
-	if q, _ := json.Marshal(read["queue"]); !strings.Contains(string(q), `"title":"À décider"`) || !strings.Contains(string(q), `"id":"q-alert-1"`) {
-		t.Fatalf("queue %s", q)
-	}
-}
-
 // The workspace reaches a task through its grant only, like any tool: a
 // task not lent it does not reach it; one lent a tool of it sees that one,
 // its device relays it and allows it in advance; skills lend it by name.
@@ -141,7 +124,7 @@ func TestWorkspaceGrantPath(t *testing.T) {
 	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Tools: []string{"nowhere"}}); err == nil {
 		t.Fatal("an unknown server was granted")
 	}
-	task, err := c.runTask(ctx, runRequest{Prompt: "lis l'espace", Resources: []ResourceRef{{Kind: resTool, Ref: workspaceServer + ".workspace_read"}}})
+	task, err := c.runTask(ctx, runRequest{Prompt: "lis l'espace", Resources: []ResourceRef{{Kind: resTool, Ref: workspaceServer + ".catalog_read"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +134,7 @@ func TestWorkspaceGrantPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	res, err := sess.ListTools(ctx, nil)
-	if err != nil || len(res.Tools) != 1 || res.Tools[0].Name != "workspace_read" {
+	if err != nil || len(res.Tools) != 1 || res.Tools[0].Name != "catalog_read" {
 		t.Fatalf("tools %+v %v", res, err)
 	}
 
@@ -168,7 +151,7 @@ func TestWorkspaceGrantPath(t *testing.T) {
 	for _, a := range out.Tasks {
 		if a.ID == task.ID {
 			found = true
-			if !slices.Contains(a.Spec.Servers, workspaceServer) || !slices.Contains(a.Spec.AllowedTools, "mcp__eriphe-workspace__workspace_read") ||
+			if !slices.Contains(a.Spec.Servers, workspaceServer) || !slices.Contains(a.Spec.AllowedTools, "mcp__eriphe-workspace__catalog_read") ||
 				slices.Contains(a.Spec.AllowedTools, "mcp__eriphe-workspace__surface_write") {
 				t.Fatalf("spec %+v", a.Spec)
 			}
@@ -179,7 +162,7 @@ func TestWorkspaceGrantPath(t *testing.T) {
 	}
 
 	listed, _ := callOn(t, connectServer(t, newMCPServer(c)), "list_tools", map[string]any{})
-	if raw, _ := json.Marshal(listed["provided"]); !strings.Contains(string(raw), workspaceServer) || !strings.Contains(string(raw), "workspace_read") {
+	if raw, _ := json.Marshal(listed["provided"]); !strings.Contains(string(raw), workspaceServer) || !strings.Contains(string(raw), "catalog_read") {
 		t.Fatalf("list_tools: %s", raw)
 	}
 }

@@ -220,7 +220,7 @@ func TestAttentionReturnTellsTheBrief(t *testing.T) {
 	if it := attentionOf(c, noteItemRef(n.ID)); it == nil || !it.Held || it.Weight != weightBrief || it.Source != "skill:prod" {
 		t.Fatalf("item %+v", it)
 	}
-	if c.attentionBreak(breakAnswer, *now) != 0 || c.attentionBreak(breakThread, *now) != 0 {
+	if c.attentionBreak(breakAnswer, *now) != 0 || c.attentionBreak(breakNode, *now) != 0 {
 		t.Fatal("the brief was told before the return")
 	}
 	say := func(when time.Time) {
@@ -274,30 +274,30 @@ func TestAttentionQuietMessageToldAtTheBrief(t *testing.T) {
 	}
 }
 
-// A thread's end is a breakpoint while the user is there; away, what is
+// A node done is a breakpoint while the user is there; away, what is
 // held waits for their return.
-func TestAttentionThreadEndBreakpoint(t *testing.T) {
+func TestAttentionNodeDoneBreakpoint(t *testing.T) {
 	c, _, now := pollCore(t)
 	c.subscribeEvents(c.attentionOnEvent)
-	seq := ownerSays(c, "Lance le thread")
+	seq := ownerSays(c, "Lance le travail")
 	c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, now.Add(-3*time.Hour).Unix(), seq)
 	c.attend(attentionItem{Ref: "mail:1", Weight: 3, Why: "a bill", Say: "Une facture.", Source: "skill:mail", Time: *now})
-	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: "thread:1", Source: "thread"})
+	c.emitLogged(journalEvent{Kind: evNodeDone, Key: "k3x9m2p7qa", Source: "node"})
 	if !attentionOf(c, "mail:1").Held {
 		t.Fatal("released while the user is away")
 	}
 	seq = ownerSays(c, "Me revoilà")
 	c.store.db.Exec(`UPDATE messages SET time = ? WHERE seq = ?`, now.Add(-time.Minute).Unix(), seq)
-	c.emitLogged(journalEvent{Kind: evThreadEnded, Key: "thread:2", Source: "thread"})
+	c.emitLogged(journalEvent{Kind: evNodeDone, Key: "k3x9m2p7qb", Source: "node"})
 	if attentionOf(c, "mail:1").Held {
-		t.Fatal("not released at the thread's end")
+		t.Fatal("not released when the node was done")
 	}
 }
 
 // A ref is a known kind, a colon and an id of that kind's form.
 func TestParseRef(t *testing.T) {
 	for _, tc := range []struct{ in, kind, id string }{
-		{"thread:3", refThread, "3"},
+		{"node:k3x9m2p7qa", refNode, "k3x9m2p7qa"},
 		{"card:12", refCard, "12"},
 		{"task:t-abc", refTask, "t-abc"},
 		{"project:portfolio", "project", "portfolio"},
@@ -311,7 +311,7 @@ func TestParseRef(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"", "mail", "mail:", "mail:INBOX/42", "event:ev-1@example.org", "note:1", "agenda:2026-11-12", "agenda:12/11/2026",
-		"thread:x", "thread:0", "card:-1", "surface:agenda", "task:" + strings.Repeat("x", 1001)} {
+		"node:X Y", "node:", "card:-1", "surface:agenda", "task:" + strings.Repeat("x", 1001)} {
 		var e errBadRef
 		if _, err := parseRef(bad); !errors.As(err, &e) {
 			t.Errorf("%q parsed: %v", bad, err)

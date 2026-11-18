@@ -21,7 +21,7 @@ const learnedNote = "Written by eriphe-core from what it recorded: each entry is
 type learnedIn struct {
 	Kinds  []string `json:"kinds,omitempty" jsonschema:"only these: profile, preference, lesson, decision, fact, person, situation, skill"`
 	Status []string `json:"status,omitempty" jsonschema:"only these: trial, confirmed, dormant, reverted"`
-	About  string   `json:"about,omitempty" jsonschema:"only memories about this (owner, thread:<id>, person:<slug>…)"`
+	About  string   `json:"about,omitempty" jsonschema:"only memories about this (owner, node:<id>, person:<slug>…)"`
 	Query  string   `json:"query,omitempty" jsonschema:"a topic: any of its words in the text, what it is about or the skill's name"`
 	Since  string   `json:"since,omitempty" jsonschema:"from this date, YYYY-MM-DD or YYYY-MM-DDTHH:MM"`
 	Until  string   `json:"until,omitempty" jsonschema:"up to this date"`

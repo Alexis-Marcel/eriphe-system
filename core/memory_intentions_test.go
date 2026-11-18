@@ -180,21 +180,19 @@ func TestClockWakesBrain(t *testing.T) {
 	}
 }
 
-// The clock's wake goes on with the brain's turn but is about no thread:
-// a card it raises is no thread's until it names one.
-func TestClockWakeAboutNoThread(t *testing.T) {
+// The clock's wake goes on with the brain's turn but is about no node:
+// a card it raises is no node's until it names one.
+func TestClockWakeAboutNoNode(t *testing.T) {
 	c, clock := testMemoryCore(t)
+	openGraph(t, c)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	ctx := context.Background()
-	s, err := c.openThread(threadIn{Title: "PR de l'alerte", Goal: "Fusionnée.", Alias: "pr:example/infra#12"}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := workNode(t, c, "")
 	if err := tendBrain(ctx, c); err != nil {
 		t.Fatal(err)
 	}
-	c.turn.about(s.ID)                    // the turn named the thread
-	c.turn.answersIn(s.ID)                // answered a message written in it
+	c.turn.about(s)                       // the turn named the node
+	c.turn.answersIn(s)                   // answered a message written in it
 	c.turn.name([]string{"project:site"}) // and my message a subject
 	mustIntend(t, c.mem, &Intention{Kind: intentReminder, Text: "Appeler le garage", RemindAt: clock.t.Add(time.Minute)})
 	clock.add(2 * time.Minute)
@@ -207,11 +205,11 @@ func TestClockWakeAboutNoThread(t *testing.T) {
 	if text, _ := items[len(items)-1].Data["text"].(string); !strings.Contains(text, "Appeler le garage") {
 		t.Fatalf("no wake: %s", text)
 	}
-	if c.turn.aboutThread() != 0 || c.turnSource() != "" {
-		t.Errorf("the wake is about thread %d", c.turn.aboutThread())
+	if c.turn.aboutNode() != "" || c.turnSource() != "" {
+		t.Errorf("the wake is about node %q", c.turn.aboutNode())
 	}
-	if c.turn.talkThread() != 0 {
-		t.Errorf("the wake answers in thread %d, not the home", c.turn.talkThread())
+	if c.turn.talkNode() != "" {
+		t.Errorf("the wake answers in node %q, not the home", c.turn.talkNode())
 	}
 	if c.turnAbout() != "" {
 		t.Errorf("the wake is about %q", c.turnAbout())

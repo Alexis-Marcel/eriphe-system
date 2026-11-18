@@ -125,7 +125,7 @@ func (c *core) brainIntend(in intendIn) (map[string]any, error) {
 	}
 	x := &Intention{Kind: in.Kind, Text: in.Text, Owner: in.Owner, OwedTo: in.OwedTo, About: in.About, Cue: in.Cue}
 	if x.About == "" {
-		x.About = c.turnAbout() // the turn's thread, or what my message named (about.go)
+		x.About = c.turnAbout() // the turn's node, or what my message named (about.go)
 	}
 	var err error
 	if x.DueAt, err = parseWhen(in.DueAt); err != nil {

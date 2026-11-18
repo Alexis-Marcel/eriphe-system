@@ -567,13 +567,11 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 			Data: map[string]any{"id": pid, "tool_name": "Bash", "input": map[string]any{"command": "go test ./..."}}}})
 	}
 	cs := connectTo(t, newMCPServer(c))
-	// A task is a step of a thread: the turn's.
-	th, err := c.openThread(threadIn{Title: "Issue", Goal: "Elle est traitée.", Alias: "topic:issue"}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// A task works for the turn's node.
+	openGraph(t, c)
+	th := workNode(t, c, "Elle est traitée.")
 	run := func(tools ...string) *mcp.CallToolResult {
-		c.turnThread(th.ID)
+		c.turnNode(th)
 		args := map[string]any{"prompt": "do it"}
 		var lent []map[string]any
 		for _, ref := range tools {

@@ -53,7 +53,7 @@ const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	attached INTEGER NOT NULL DEFAULT 0,
 	decided  INTEGER NOT NULL DEFAULT 0,
 	by       TEXT NOT NULL DEFAULT '',
-	about  TEXT NOT NULL DEFAULT ''   -- what it is about: thread:<id> or an entity's key (about.go)
+	about  TEXT NOT NULL DEFAULT ''   -- what it is about: node:<id> or an entity's key (about.go)
 );
 CREATE INDEX IF NOT EXISTS convo_cards_seq ON convo_cards (seq);`
 
@@ -473,10 +473,10 @@ func (c *core) cardProposed(kind string, id int64) {
 
 // cardProposedBy is cardProposed for a proposal its maker's about
 // inherits (nil: none) and source raised: a card born in a turn about a
-// thread, or by a task step of one, shows in its timeline by the code.
+// node is linked to it by the code, and the node waits for the user.
 func (c *core) cardProposedBy(kind string, id int64, inherit func() string, source string) {
 	if source != "" {
-		c.cardRaisedFor(source, proposalRef(kind, id)) // thread_light.go
+		c.cardRaisedFor(source, proposalRef(kind, id)) // linked to its node (node_turn.go)
 	}
 	p := c.proposalOf(kind, id)
 	if !p.Pending {
@@ -492,9 +492,9 @@ func (c *core) cardProposedBy(kind string, id int64, inherit func() string, sour
 // cardNow puts the card of a proposal made outside a brain turn in the
 // attention queue (attention.go): no message of the brain's will carry it,
 // so the queue delivers it under a message of its own, text (as the
-// brain's, written by eriphe-core): at once when a task or a thread waits
+// brain's, written by eriphe-core): at once when a task or a node waits
 // on it (weight 4), else at its breakpoint. source is who made it
-// (task:<id>, thread:<id>, skill:<name>). A card already shown and still
+// (task:<id>, node:<id>, skill:<name>). A card already shown and still
 // waiting is not shown twice. The brain is not woken: it reads the open
 // items at its next turn, and nothing it does waits on the card.
 func (c *core) cardNow(kind string, id int64, text, source string) {
@@ -503,7 +503,7 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 		return
 	}
 	ref := proposalRef(kind, id)
-	c.cardRaisedFor(source, ref) // a thread's: in its timeline (thread_light.go)
+	c.cardRaisedFor(source, ref) // a node's: linked to it (node_turn.go)
 	var shown int
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM convo_cards WHERE ref = ? AND seq > 0 AND state = ?`, ref, cardPending).Scan(&shown)
 	if shown > 0 {
@@ -654,7 +654,7 @@ func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string
 	c.attentionDone(cardItemRef(x.ID))
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ?`, x.State, x.Decided.Unix(), by, id)
 	c.proposalMoved(x.Ref)
-	c.linkedCardMoved(x.Ref) // the surface of a thread it is linked to (thread_turn.go)
+	c.linkedCardMoved(x.Ref) // the nodes it is linked to (node_turn.go)
 	log.Printf("cards: %s %s by %s", x.Ref, x.State, by)
 	return x, nil
 }
@@ -749,9 +749,9 @@ func cardAnswerKey(seq int) string { return fmt.Sprintf("card_answer:%d", seq) }
 // come from external content.
 func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 	var none convoCard
-	// In the message's own thread: the card above it in its exchange (thread_talk.go).
+	// In the message's own node: the card above it in its exchange (node_turn.go).
 	msgs, err := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq <= ? AND role IN ('user', 'brain')
-		AND thread = (SELECT thread FROM messages WHERE seq = ?) ORDER BY seq DESC LIMIT 2`, seq, seq)
+		AND node = (SELECT node FROM messages WHERE seq = ?) ORDER BY seq DESC LIMIT 2`, seq, seq)
 	if err != nil || len(msgs) != 2 {
 		return none, false
 	}

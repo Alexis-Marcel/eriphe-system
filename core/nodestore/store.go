@@ -589,7 +589,8 @@ func (s *Store) Versions(id string) ([]Version, error) {
 }
 
 // AppendTrace adds an entry at the end of a node's trace: when, who, and
-// its text, never cut. The trace is not a version of the node.
+// its text, never cut. The trace is not a version of the node; the node
+// is changed now all the same (Summary.Updated).
 func (s *Store) AppendTrace(id, author, text string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -618,6 +619,10 @@ func (s *Store) AppendTrace(id, author, text string) error {
 	}
 	hash, err := s.commit(fmt.Sprintf("trace %s", id), author, now, []change{{path: file, data: append(old, entry...)}}, nil)
 	if err != nil {
+		return err
+	}
+	// The node moved: it is among the last changed (Recent).
+	if _, err := s.db.Exec(`UPDATE nodes SET updated = ? WHERE id = ?`, now.Unix(), id); err != nil {
 		return err
 	}
 	return setIndexed(s.db, hash)
@@ -661,23 +666,9 @@ func (s *Store) Archive(id, author string) error {
 	if strings.TrimSpace(author) == "" {
 		return errors.New("a write has an author")
 	}
-	if _, err := s.summary(id); err != nil {
+	ids, err := s.below(id)
+	if err != nil {
 		return err
-	}
-	// The node and those below, each once (a parent's loop made by hand
-	// stops there).
-	ids, seen := []string{id}, map[string]bool{id: true}
-	for i := 0; i < len(ids); i++ {
-		kids, err := s.children(ids[i])
-		if err != nil {
-			return err
-		}
-		for _, k := range kids {
-			if !seen[k.ID] {
-				seen[k.ID] = true
-				ids = append(ids, k.ID)
-			}
-		}
 	}
 	now := s.opts.Now().Truncate(time.Second)
 	var changes []change

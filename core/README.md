@@ -715,7 +715,19 @@ whatever address it dials) and one client certificate per device.
 | `stop_task` | stop the agent |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)) |
-| `workspace_read`, `catalog_read`, `sources_read` | read the workspace, the catalog and what a block may read ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
+| `catalog_read`, `sources_read` | read the catalog of a node's blocks and what a block may read |
+| `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)); written in a tainted turn, the node is external ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; an external node's title is not quoted |
+| `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
+| `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields) |
+| `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
+| `node_link` | link a node to another (its front matter's `links`), once; never to itself |
+| `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
+| `item_note` | note an item of a node's source: what the user should know and a state (`act`, `look`, `info`, `none`, `done`) |
+
+The brain has no archive tool: only the user archives a node (`archiveNode`, by `user` alone), which
+archives every node under it, stops their tasks and their steps' work, and unlinks their cards;
+`node_find` with `archived` finds them again.
 
 The scheduler takes the requested device if it is online and fits. Otherwise it works in two passes,
 like Kubernetes': it **filters** the online devices that offer the agent's runtime and carry all its
@@ -894,24 +906,19 @@ structured block rather than a prefix in its prose, in its receipt (`attentionIn
 `receiptInstruction` in `skillVoice`):
 
 ```json
-"attention": [{"refs": ["thread:12"], "weight": 4, "why": "une facture due aujourd'hui", "say": "Ta facture est due."}]
+"attention": [{"refs": ["node:k3x9m2p7qa"], "weight": 4, "why": "une facture due aujourd'hui", "say": "Ta facture est due."}]
 ```
 
-`refs` name the objects it is about, `<kind>:<id>` with a kind among `thread`, `card`, `task`,
-`surface` (a surface of the workspace, by its id) and the keys' kinds (`project`, `alert`…);
-no kind is a tool's (no `mail:`, `agenda:`, `event:`): an item of a thread's source is raised
-through its thread. Only the form is checked, by `parseRef`. An item about a
-surface is shown by that surface (no `q-` surface of its own) and leaves the queue with it. An
-item about a thread (`thread:<id>`, a skill's `set_thread` raise or a receipt's entry) raises
-that thread's tile whatever its weight (`threadSurfaceIn` takes `queueSurfaceWeight` of it),
-puts nothing in a `q-` surface, and ends once the user opened that thread's surface and left it;
-the tile then goes back to its own weight.
+`refs` name the objects it is about, `<kind>:<id>` with a kind among `node`, `card`, `task` and
+the keys' kinds (`project`, `alert`…); no kind is a tool's (no `mail:`, `agenda:`, `event:`): an
+item of a node's source is raised through its node. Only the form is checked, by `parseRef`. An
+entry whose refs are all nodes raises them on the graph and is not told in the run's message.
 `weight` is 5 interrupts, 4 needs the user now, 3 matters today, 2 a glance, 1 background; `why` is
 cut to 80 characters, `say` is optional. One block alone, or refs given as one string, are read as
 a list. A ref of another form, a weight outside 1 to 5 (or not whole), an entry that is not an
 object are dropped and logged, never fatal; the rest of the receipt stands. Each ref of a kept
 signal enters the [attention queue](#workspace-web) (`c.attend`) with its source (`skill:<name>`,
-`assistant:<name>`), marked as drawn from external content when the run or the thread read some:
+`assistant:<name>`), marked as drawn from external content when the run read some:
 the brain reads it as data.
 
 In a skill's receipt the block is also what tells: no entry tells the user nothing (the run's
@@ -919,145 +926,68 @@ message stays in its note), and an entry may leave `refs` out to be about the ru
 which then enters the queue as the notification it became (`notification:<id>`), at its weight
 (`tellRun`, [Triggered skills](#triggered-skills)). A worker's receipt carries no signal.
 
-### Threads (`threads.go`, `thread_light.go`)
+### The brain on nodes (`node_tools.go`, `node_turn.go`, `node_net.go`)
 
-A **thread** is one matter followed to its real goal: a pull request until it is merged and
-deployed, an appointment, a brand name to find, a service to rebuild. An assistant has no end; a
-thread has one (its goal). It replaced the work session (#464): one object for every matter,
-until the graph's nodes replace it (#625). Its work runs in nodes: a task works in a node of its
-own, and long work in steps of a node ([Work in steps](#work-in-steps-node_stepsgo)); a thread
-has no plan, no steps and no budget of its own.
+The node of the graph is the one object the user sees (#625, #632): one per matter (a pull request
+until deployed, an appointment, a research), its doc saying where the matter stands, its trace
+what happened in it. Threads are gone: what they did is the nodes' ([Node
+store](#node-store-nodestore-nodesgo)).
 
-A thread has a title, a goal (its real outcome: the brain's and the agents' target, never shown to
-the user), a **headline** (the one line the user reads at its top and on its chip, written for
-them: `open_thread` or `set_thread`), an **alias** (a key in the names, see [About and
-names](#about-and-names): `project:site`, `pr:owner/repo#12`, `alert:<id>`) and the names the user
-gives it, a **state** (`open`, `done`, `dropped`), a summary, and its times. It is held by the
-brain:
-
-- `open_thread` opens it at once, with no card, and needs its alias. **One thread an alias**
-  (`openThreadOnce`): an alias that has a thread already gives that thread back instead of a
-  second one, reopened (why « même chose ») if it ended, and the result says so. **Threads near a
-  matter** (`nearThreads`, the one candidate matcher): with no thread on the alias, a thread one of
-  whose names is in the new alias's words or title, or whose names or title hold all the alias's
-  words, ended and tidied ones included, refuses the open (`nearMatch`, listing them, at most 5)
-  until the opener takes one (`take`: given back, reopened if it ended, and given the alias,
-  unless the turn or the task read external content) or says why this is another matter
-  (`new_because`, logged on the new thread). A task offered a tainted thread this way reads its
-  words (`taskRead`). A skill's run has no model to answer: its thread is its alias's alone.
-  `openThreadOnce` is the only path that opens a thread (a test holds it).
-- `find_thread` finds threads by words of their title, goal, names or summary, or by an alias or a
-  name, the ended ones included; `close_thread` closes it only on its goal, with how it was reached
-  as its summary (`done`); `stop_thread` drops it, and stops the tasks about it; `reopen_thread`
-  opens it again when its matter comes back, its log kept.
-
-**How it ends** (`threads.ends`, #571); the family is never shown to the user, it only changes the
-thread's life:
-
-- `goal` (the default): it ends on its goal (`close_thread`) or is dropped (`stop_thread`). Ended,
-  its surface stays until the user's midnight (an hour at least), or until the user puts it away
-  with **« Ranger »**, a button code places on its surface (the action `tidy`): `tidied` is set,
-  the surface leaves at once, the thread is never deleted and is still found (`find_thread`, its
-  alias) and reopened when its matter comes back. Reopening clears `tidied`.
-- `standing`: what the user manages continuously (their mail, their agenda, a supervision);
-  `close_thread` and `stop_thread` refuse it (`errStanding`, so the page is refused too): it is
-  never ended, so never hidden.
-- `day`: a view for the day (an answer shown, « j'ai quoi demain ? »). The tick ends it (`done`)
-  once the user's midnight passed since it started (`endDays`) and its surface leaves at once.
-  Reopened, its day is the reopening's. Its `thread.ended` (payload `ends` `day`) is no breakpoint
-  of the attention queue: nothing held is told at midnight.
-
-`open_thread` with `ends` on an alias whose thread exists gives that thread back ending as asked
-now (`endsAgain`).
-
-**Child threads** (`thread_children.go`, `threads.parent`, #609): a part of a thread that becomes a
-matter of its own is a thread of its own, its child (`open_thread` `parent`). Nothing else tells a
-child from a top thread: it ends on its goal or stands, as any other.
-
-- **Depth 2** (`parentFor`): a parent is an active top thread; a child has no children, and a
-  thread with children is never made a child. A standing thread, what the user manages
-  continuously, is a top thread: never opened, moved or turned (`ends`) into a child.
-  `open_thread` `parent` on an alias that has a thread already moves that thread under the parent,
-  once nothing else refuses the open (logged on it, the result says so); the parent itself is never
-  one of the threads near the child's matter. `name_thread` `merge` gives the merged
-  thread's children to the other, a top thread only.
-- **No active child under an ended parent**: `close_thread` on a parent with active children is
-  refused, naming them (`activeChildrenError`); a parent that ends any other way (`stop_thread`,
-  its day over) stops them with it (`endChildren`, logged « Arrêté avec son thread parent »); a
-  child of an ended parent does not reopen before its parent.
-  An ended child's surface leaves with its parent's (put away, its day over, its time on the
-  workspace past), and a child's surface that leaves takes its row from its parent's
-  (`keepThreadKin`, also after the tick removes a surface whose lifetime ended); a link that shows
-  an ended child again shows its parent again too.
-- `find_thread` lists each thread with its `parent` and its `children` (id, title, state);
-  `read_thread` gives its `parent`, `parent_title` and `children`: the brain finds the child that
-  exists before it opens another.
-- On the workspace, a child is never a tile nor a chip: it opens inside its parent (below, and
-  [the layout](#the-layout-workspace_layoutgo)). Its parent shows it among its children; what waits
-  for the user in a child raises its parent.
-
-**The thread holds where its matter stands** (`thread_progress.go`): its summary is the only record
-of it, written by `remember` kind `progress` (and a task's `remember`, and the nightly
-extraction), never from a turn or a source that read external content (unless the thread is
-external already: its summary is then never quoted; the extraction's never); its log says who
-wrote it (`brain`, `task`, `extraction`). The code never opens a thread for it: a progress about
-no thread is refused (« open_thread first »; the extraction drops it), one whose thread ended is
-refused until the brain reopens it; without an about, it is the turn's thread's (a task's: its
-about's). A card born in a turn about the thread, or raised with the source `thread:<id>` or by a
-task about it, shows in its timeline (`thread_cards`). Closing a thread on its goal
-(`close_thread`) writes a dated decision memory about it from its summary (`source_kind`
-`thread`, `source_ref` `thread:<id>`; one from an earlier close is superseded; external when the
-thread's words may be someone else's). `link_thread` is left for the exceptions: an intention
-about another thread, a card raised elsewhere. A thread that ends drops what still waits or runs
-about it: its tasks stop.
-
-**The brain's turn about a thread** (`thread_turn.go`): a turn that names a thread (a thread tool
-called on it, or a delivered message that belongs to it: an event of one of its linked cards or of a task
-about it while it is live (`notifyBrain`), a message of the user's written in it, by the messages' `thread` column) is about it until it
-names another. The cards it raises meanwhile (one of its own calls' access cards, a task's start)
-are that thread's and show in its timeline; while one waits, the thread's surface shows it under
-« À toi », answered in place (and not again in the attention queue's surfaces), and a decision
-moves the thread (`linkedCardMoved`). How a call kept on a linked card went (run on a yes, or
-refused) comes back as that thread's event (`callToBrain`: `[thread N « title »] …`, belonging
-to it), so the turn that reads it is about the thread. A new delivery
-(or a heartbeat) starts about no thread, unless it carries a message that belongs to a thread (an
-event of it, or a message of the user's written with it open); a thread tool on an id that
-is no thread changes nothing. The user writing over a thread's surface about something else
-(« j'ai quoi de prévu aujourd'hui ? »): the brain opens or finds that other matter's thread
-(`open_thread`, a `day` one for what is only today's) before its first card or task, and the turn is
-about that one from then on. `run_task` in a turn about a thread is about it (its `about`, the
-turn's source by default): its cards and its surface go to the thread. The prompt
-(`brain-prompt.md`, « Les fils »: « fil » is the word the user reads) says that the thread is the
-one object the user sees, how it ends (`goal`, `standing`, `day`, for the brain alone), when the
-brain opens or resumes one (a question about a matter, a request of more than one step, a research,
-an alert worth following, anything shown: `open_thread` with its alias, `take` or `new_because`
-when the matcher lists near ones; a one-line answer stays text), that a standing thread comes
-from a watcher (a skill with its `thread:` alias), how what follows grows from what is found, how
-notes and offered actions propose on it, when its surface `thread-<id>` takes the stage
-(« where does it stand », from the workspace: `workspace_focus`) and when it opens on the side
-(« launch », « while I… »), that a wake turn updates the thread without asking the user, and how
-work in steps runs (« Un travail en étapes »: `node_open` with `steps` by a task, `node_settle` on
-the `[nœud …]` wakes).
-
-For the thread's surface: `threadMoved(id)` fires on every change (the thread, its log, a linked
-card); it writes the thread's surface again and makes the attention queue's surfaces again.
-
-- The end of any thread is the journal's `thread.ended` (key `thread:<id>`, its state).
-- Tables: `threads`, `thread_log`, `thread_cards` (the cards linked to a thread).
-
-**One drawing** (#574): a thread is shown by its surface on the workspace only, and acted on there
-([a thread's surface](#a-thread-has-no-surface-631)): its cards and Stop, code's buttons. A
-link to a thread (a card's origin, the tasks panel, a skill's run) opens its surface:
-`/espace?open=thread-<id>`, which the page opens once the surface is there. An ended thread whose
-surface has left is shown again first (`showThreadAgain`), for as long as one that just ended; not
-one put away, nor a `day` thread. The tasks panel of the conversation shows the threads open first.
-
-#### A thread has no surface (#631)
-
-A thread's tile is drawn from its row and its cards by the page (`/espace`): no code writes a
-`thread-<id>` surface any more, and the brain composes no part of one. What the user follows
-continuously is a [view](#views-node_livego-view_cardgo): a standing node, its live blocks, its
-monitor and its skill. Day threads are gone: `ends` is `goal` or `standing`.
+- **Tools.** The brain finds a node before it opens another (`node_find`), opens one at once, with
+  no card (`node_open`; `work` by default, `standing` for what the user follows continuously, never
+  done), reads it (`node_read`: its version's `hash`), writes it on the version it read
+  (`node_write`, `node_edit`, refused when stale: `ErrConflict`), sets its title, goal or `done`
+  (`node_set`), links it (`node_link`) and opens its page on the user's screen (`node_show`). Each
+  checks the node exists (`no node <id>: node_find finds it`) and refuses an archived one
+  (`ErrArchived`); a body carrying a block's marks, snapshot or external is refused
+  (`nodefile`'s author API: those are code's). There is **no archive tool**: archiving is the
+  user's gesture (`archiveNode`, `by` `user` alone): it archives the node and every node under it
+  (`nodestore.Below`), stops their tasks and their steps' work, and unlinks their cards
+  (`node_cards`); `node_find` `archived` finds them again.
+- **Done.** `node_set` `done` (`setNodeDone`) marks the front matter's `done` and the state
+  `done` (`nodestore.SetDone`, a version of its own that never conflicts with an author's write),
+  once: done again changes nothing. A node done now leaves one dated **decision memory** about it
+  (`About` and `source_ref` `node:<id>`, `source_kind` `node`, from its title and its doc's first
+  line; external when the node is; one of an earlier done superseded) and the journal's event
+  `node.done` (key: its id), a breakpoint of the attention queue while the user is there. A
+  standing node is never done.
+- **Taint.** Reading a node marked external, or an item note written in a tainted turn, taints
+  the turn (`c.turn.taint`); a node written or opened in a tainted turn is marked external, so is
+  a title or goal it sets; `node_find`, the context pack, the about cards and events name an
+  external node by its id, never quoting its title.
+- **The conversation per node.** Each message belongs to a node or to the home: the `messages.node`
+  column (`""`: the home). The user's message belongs to the node the console talks to: the page
+  sends it with the message (`node`, checked by `nodeSaid`: one of the graph's, not archived);
+  the brain reads it as `[Sam HH:MM #N · nœud <id>]`. The brain's answer belongs to the node of
+  what it answers (`talkOf`: the last user message's, else the last event of a node), an event of
+  a node to it (a task's end: `taskEventNode`; a call kept on a card linked to a node:
+  `callToBrain`, `[nœud <id> « title »] …`). The turn is **about** the last node it named (a node
+  tool on it, a delivered message of it): what it raises meanwhile (an access card, a task's start,
+  a proposal) is linked to it (`node_cards`), and the node waits for the user while one waits
+  (`cardRaisedFor`, `linkedCardMoved`). `run_task` in a turn about a node is about it (its
+  `about`); its own node is a child of `node` when given.
+- **Code's safety net** (`node_net.go`, contract 5): at the turn's end, the turn's answer (its
+  texts joined), past `netMinRunes` (600), when the brain wrote no node in the turn (`node_open`,
+  `node_write`, `node_edit`), is filed by code: in the node the turn answers in (whole in its
+  trace, and as its doc when it has none, never a standing node's), else in a new work node at
+  the top titled from the user's request (its first line; a neutral « Réponse du … » when there is
+  none, or when it may not be the user's words or holds a secret), the answer its doc. The answer's
+  messages say where (`messages.filed`, `filed` in the exchange's lines). Written in a tainted
+  turn, the node is external. A refusal never loses the answer: it stays in the conversation.
+  Code opens no other node.
+- **The context pack and the cards.** A fresh session's pack lists the nodes running and waiting
+  (`activeNodes`, the last changed first, at most 20), each with its card (`about_card.go`: the
+  node's line, its state, title and its doc's first line, then its decisions, facts, people,
+  intentions, cards and preferences); a turn about a node gets its card when the session does not
+  hold it as it is. `since` lists the nodes changed (kind `node`: where each stands now, its title and its doc's first line, an external one's not quoted), and `where_now` the nodes that wait for the user (`nodes_waiting`). The tasks panel lists the nodes
+  running and waiting above the tasks (`/espace?open=node-<id>`).
+- **Memory.** Where a matter stands is its node's doc, never a memory: the `progress` kind is
+  gone. The nightly extraction reads the day's node traces (`nodeSegments`: what each node's trace
+  says that day, a segment `node:<id>`; an external node gives nothing) and keeps their decisions,
+  facts and people.
+- **Showing a node** (`node_show.go`): `node_show` keeps the request (kv `node_show`: `node`, `by`,
+  `at`, `seq`, growing at each) and wakes who watches (`watchShown`); the graph page (#633) opens
+  the page. It writes nothing in the node.
 
 ## Node files (`nodefile/`)
 
@@ -1749,8 +1679,8 @@ version, read with its diff.
   `tools`). Its standing node, with its monitor and its views, comes with #631.
 - **Its last message** is optional, the run's report, weighed by its receipt's
   [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
-  as everywhere; a skill's instructions write no prefix. Entries whose refs are all threads
-  raise their tiles and never tell the message. No entry (or no receipt) tells nothing:
+  as everywhere; a skill's instructions write no prefix. Entries whose refs are all nodes
+  raise them on the graph and never tell the message. No entry (or no receipt) tells nothing:
   the run is `silent`, its message kept in its note. Otherwise its message is a notification, why
   « Skill « name » », ref `skill:<name>`, its link-free rules when the task is tainted, weighed as
   its heaviest entry (delivered at once from 4, pushed at 5). One entry without refs (or whose refs
@@ -1779,9 +1709,9 @@ version, read with its diff.
   The same call on the same item still waiting, from any run, is the card already there. Its words
   are code's: the action by its tool, its origin the node (unless it is external), Oui running each
   call once as kept; its results go to the run's note and to the node's trace, never to the brain.
-- **Its alias**: its runs are about `thread: kind:slug`; without it, their events' key when it
-  names a thing (a monitor's, `topic:<name>`, or `kind:slug`; about.go). Their tasks,
-  notifications, cards and signals carry it. A run no longer opens nor tends a thread.
+- **Its about**: its runs are about their events' key when it names a thing (a monitor's,
+  `topic:<name>`, or `kind:slug`; about.go). Their tasks, notifications, cards and signals carry
+  it. A run works in its node, never in a thread.
 - **Urgent**: with `urgent: <text>`, a run whose attention list weighs something 5 sends that
   fixed text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the
   run read enters it: a tainted run cannot write what wakes the user. Its own message goes as any
@@ -1795,7 +1725,7 @@ version, read with its diff.
 A triggered skill's page lists its runs over 30 days, the latest first:
 - when it ran, and its state (running, done, nothing to say, failed, not started);
 - its events (kind, key, a few words of their subject);
-- its task and its thread;
+- its task and its node;
 - its last message;
 - the actions it proposed, each answered there on its own (`POST
   /settings/skills/<name>/calls/<ask>/approve|reject`: a yes runs it as kept);
@@ -1846,7 +1776,7 @@ the rest dropped.
 |---|---|---|---|
 | `monitor.changed`, `monitor.new`, `monitor.crossed`, `monitor.failed`, `monitor.recovered`, `monitor.received` | a [monitor](#monitors) (`monitor.received`: an incoming address was called, `status` from the body's top-level `status` when it is a short word: `firing`, `resolved`) | the monitor's name | unless its server is trusted |
 | `task.ended` | a worker task's end | the task | no |
-| `thread.ended` | a thread's end | `thread:<id>` | no |
+| `node.done` | a node set done (`node_set` `done`) | the node's id | no |
 | `user.returned` | the user's first activity after an absence of an hour or more; payload `left`, `back`, `away_minutes` | | no |
 
 ### Monitors
@@ -2034,7 +1964,7 @@ It gets one turn per event: my messages (`POST /v1/messages {text}`) and what ha
 `GET /v1/messages?after=N&wait=S` returns the conversation. Restarts back off from 5 s to 5 min, and a
 resume that keeps failing is dropped for a fresh session.
 
-eriphe-core, not the harness, holds the thread: the harness session (`--resume`) is only a cache.
+eriphe-core, not the harness, holds the conversation: the harness session (`--resume`) is only a cache.
 Each resumed call reads the whole history, and a cache left for over an hour is written again in
 full: a new brain task resumes its session only while its last turn's context was under 150,000
 tokens per call and, above 60,000 tokens, that turn ended less than 55 minutes ago
@@ -2046,14 +1976,15 @@ call), or else the turn's input, cache reads and writes. Past either bound, the 
 session. A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
 device could not do, another harness) gets a context pack in its first turn, never in its system prompt,
 within about 16,000 tokens (`brain_context.go`). The state of things comes first, in at most half of
-it: the card of each open thread, up to 20 threads (`thread_card.go`: its summary says where
-its matter stands), the tasks under way, the decisions of the last 14 days, the people and facts
-of these threads, the open intentions (the due ones first), what waits for the user (permissions,
-cards), the last day's episodes. A card that does not fit leaves its thread in a line; a record a
+it: the card of each node running or waiting, up to 20 (`about_card.go`: its line says its
+state, title and the first line of its doc), the tasks under way, the decisions of the last 14
+days, the people and facts of these nodes, the open intentions (the due ones first), what waits
+for the user (permissions, cards), the last day's episodes. A card that does not fit leaves its
+node in a line; a record a
 card shows (its refs) is not said again in the sections after it; then the last messages between
 the user and the brain in what is left, the newest kept.
-It is quoted data; what may carry what someone else wrote (an external memory, episode or card, a
-tainted thread, the summary of a thread whose steps read external content) is named, not quoted,
+It is quoted data; what may carry what someone else wrote (an external memory, episode, card or
+node) is named, not quoted,
 and events are left out, since they carry what tasks said. eriphe-core logs its composition: each
 section's lines written out of those it had and its size, the state's and the messages' chars.
 
@@ -2824,7 +2755,7 @@ prefilled, and the brain proposes again). The event stream keeps cards up to dat
 approved, declined, no longer current). The memory's extraction makes no card: what it is not
 sure of waits in À valider and expires (see [Memory](#memory)). Other proposals (a skill's run, a
 turn that said nothing) are queued and enter the attention queue at their card's weight
-(`cardWeight`: one a task or a thread waits on 4; a skill, a monitor or a run's calls 3; a
+(`cardWeight`: one a task or a node waits on 4; a skill, a monitor or a run's calls 3; a
 reminder 2; a memory, a rule, a setting or an undo 1; `attendQueuedCards` each minute on the
 journal's timer); the queue delivers them like anything else that goes to the user. A card made
 outside a brain turn (the start of a task the brain did not launch, such as a step of a work;
@@ -2833,9 +2764,9 @@ enters the queue with the message eriphe-core will write for it (`cardNow`); the
 woken for it, and nothing it does waits on it.
 
 **Attention queue** (`attention.go`). It is the one path of what goes to the user, kept by code,
-one item per object: a ref (`card:<id>`, `notification:<id>`, `thread:<id>`, `mail:<id>`…), a
+one item per object: a ref (`card:<id>`, `notification:<id>`, `node:<id>`, `mail:<id>`…), a
 weight from 1 to 5 (5 interrupts, 4 needs the user now, 3 matters today, 2 is a glance, 1 is
-background), a short why, an optional say, its source (`brain`, `task:<id>`, `thread:<id>`,
+background), a short why, an optional say, its source (`brain`, `task:<id>`, `node:<id>`,
 `skill:<name>`) and its time. Items about the same ref merge (the highest weight, the latest why).
 Every notification (`notification:<id>`, a record's ref no signal can name, apart from the `alert`
 key kind), every card (weighted by its kind, above) and every assistant's
@@ -2848,9 +2779,9 @@ user wants shown more, less or never is not applied to the queue: it is a
 [preference in memory](#preferences-gestures-and-the-brains-tools-workspacego) whoever notes
 items follows. The rest is delivered by code, in a message of its own written by eriphe-core as the
 brain's, the heaviest first, its cards under it (`attentionBreak`): **weight 4 and 5 at once**
-(nothing a running task or thread waits on is ever delayed; one message for what enters
+(nothing a running task or node waits on is ever delayed; one message for what enters
 together); **weight 3 at the next breakpoint**, where an interruption costs the user least
-(Iqbal & Bailey, OASIS): the end of the brain's answer to a user message, the end of a thread
+(Iqbal & Bailey, OASIS): the end of the brain's answer to a user message, a node set done
 while the user is there (away, it waits), or its cap, two hours after it entered (checked every
 minute, never in the quiet hours); **weight 1 and 2 only at the user's return** after an absence
 (`user.returned`), together: the brief (« Pendant ton absence : … »), three light cards at most
@@ -3210,44 +3141,15 @@ tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspa
   workspace) with no gap of more than an hour, within one activity day (from 05:00: a night's work
   after midnight is the same day; `sessionStartIn`). Kept in kv (`workspace_placement`): a restart
   keeps both.
-- **The brain sees the workspace.** Each of its turns carries the workspace as the page shows it
-  (`workspaceBlock`, French, a few lines; nothing when the workspace is empty):
-
-  ```
-  [l'espace de Sam, tel que sa page le montre (grille de 12 × 8, colonne et ligne depuis 0 ; …) :
-  - agenda « Agenda du jour » · xl en 0,0 · ouverte
-  - q-card-12 · l en 6,0
-  - notes « Notes » · m en 9,6 · placée par lui
-  replié : news « Nouvelles », veille
-  fermé par lui pour la session (ne le remets pas devant sans qu'il le demande) : meteo
-  ses gestes : 10:02 ouvert agenda ; 10:03 fermé meteo ; 10:05 déplacé notes ; 10:06 écrit à propos de agenda
-  ses marques (liste/élément ; read_thread les donne toutes) : 10:07 gardé thread-4 options/b ; 10:07 écarté thread-4 options/c]
-  ```
-
-  A title is quoted only when its author wrote it in a clean turn; a gesture only by its surface's
-  id, a mark by its surface's id, list and item (ids). The session's last 10 gestures, and apart
-  its last 40 marks, so that none is lost among the moves between two turns. `workspace_read` has the detail, the page included
-  (`screen`: each tile's id, size, col, row and `pinned`; `open`, `folded`, `closed`).
-- **`workspace_arrange`** (`items`: 8 at most, each `{id, size, col, row}`, size s, m, l or xl,
-  one xl at most, col and row both or neither; `reset`): the brain arranges the workspace as the
-  user asks (« mets l'agenda en grand »), as the user's own placement, kept: a
-  surface with a place goes there, one without in the order given, top left first. An id that
-  is no surface's, a size or a place off the grid is refused by name; a surface the user closed
-  and the brain places is shown again. `reset` drops the placements first (closed
-  surfaces stay closed). It answers where each went (`{id, size, col, row}`, or `folded`).
-- **`workspace_focus`** (`id`): puts a surface on stage, as if the user had opened it
-  ([an answer on stage](#workspace-web)). Refused outside the turn that answers a message the user
-  sent from the workspace, for a second surface in the same turn, and for an id that is no
-  surface's; it answers `in front` (with `previous` when another was on stage) or `already in front`.
-- **A message from the workspace.** A message typed in the workspace's input is marked
-  (`POST /messages` with `from` `workspace`, kept as `from_workspace:<seq>`), even with no surface
-  open: the brain reads it as `[Sam 10:02 #12 · depuis l'espace]`, its cue to answer a question
-  about a thing on stage.
+- **The brain does not see the workspace's layout** (#632): no block of it in its turns, no tool
+  that places or focuses a tile. It works on nodes ([The brain on
+  nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)); `node_show` asks the page to
+  open one.
 - **A message about what is open.** A message written on `/espace` while a surface is open
   carries it (`POST /messages` with `about` `surface:<id>`; kept as `about_msg:<seq>` when it names
   a surface): the brain reads it as `[Sam 10:02 #12 · depuis l'espace · à propos de surface:…]`. « Montre-m'en moins », « lance une
-  recherche là-dessus » are said in words. With a thread open, the message belongs to it (see
-  **The conversation leads**, below): the brain reads `· fil 7` instead.
+  recherche là-dessus » are said in words. Said to a node, the message belongs to it (`node`):
+  the brain reads `· nœud <id>`.
 
 ### The composed workspace, the home page (`/`)
 
@@ -3303,34 +3205,32 @@ kept where it was, until the next exchange. The brain's memory and the stored me
 untouched: only what the column shows. The thread's card shows no exchange. The
 cards the user must answer are not repeated there: they are the queue's surfaces (`q-card-*`).
 
-**The conversation leads** (#613, `thread_talk.go`, `brain_suggest.go`). One brain, one queue: every message of the
-conversation belongs to a thread or to the home, in its `thread` column (`0`: the home; messages
-from before it belong to the home).
+**The conversation per node** (#613, #632, `node_turn.go`, `brain_suggest.go`). One brain, one
+queue: every message of the conversation belongs to a node or to the home, in its `node` column
+(`""`: the home).
 
-- **A message written with a thread open belongs to it.** `handleSend` resolves the `about` the
-  page sends (`surfaceThread`): a thread's own surface (`thread-<id>`, a child's opened inside its
-  parent included) or a surface about a live thread. A button's `ask` on such a surface too. The
-  message is a turn like any other, the thread named: the brain reads
-  `[Sam 10:02 #12 · depuis l'espace · fil 7]` (its id only: a title may carry someone else's words,
-  and the thread's card gives the rest), and the turn is about it (`threadsDelivered`). A channel's, the CLI's and the API's messages belong to the home.
-- **The brain's answer belongs to the thread of what it answers**, fixed at delivery (`talkOf`, kept
+- **A message said to a node belongs to it.** `handleSend` takes the node the console talks to
+  (`node`, checked by `nodeSaid`: one of the graph's, not archived; anything else is the home).
+  The message is a turn like any other, the node named: the brain reads
+  `[Sam 10:02 #12 · nœud <id>]` (its id only: a title may carry someone else's words, and the
+  node's card gives the rest), and the turn is about it (`nodesDelivered`). A channel's, the CLI's,
+  the API's messages and a button's `ask` belong to the home.
+- **The brain's answer belongs to the node of what it answers**, fixed at delivery (`talkOf`, kept
   in the turn as `talk`): the last message of the user's in the delivery, else the last event of a
-  thread; the home for anything else. The thread the turn names later (a tool on another thread)
-  is for its cards only. A failure of the turn (the error line) and the note that asks it again for
-  a tool call written as text belong there too; a heartbeat's answer and a failure to start, to the
-  home. An event of a thread (a card linked to it decided, a task about it that ended its turn or
-  stopped, a task's start declined or access decided) belongs to it; the catalog's, a machine's and the
-  brain's own notes and notifications to the home.
-- **The exchange goes with what Eriphe puts on stage.** When the brain answers with
-  `workspace_focus` on a thread, the turn's messages (the user's it answers, what it said since)
-  move to that thread (`talkMoves`): the question was about it, and the column shows it there.
-- **The column.** The stream's `exchange` event is the exchange of the thread open in the last
-  layout (`threadOpen`: `inside`, else `focus`), with `thread` and `title`; the page says
-  « Sur « titre » » / "On “title”" above it. With none open, the home's. The stream sends it again
-  when the layout changes. `GET /api/espace/earlier` takes `thread=<id>`. Eriphe's draft shows in
+  node; the home for anything else. The node the turn names later (a tool on another node) is for
+  its cards only. A failure of the turn (the error line) and the note that asks it again for a
+  tool call written as text belong there too; a heartbeat's answer and a failure to start, to the
+  home. An event of a node (a card linked to it decided, a task of it that ended its turn or
+  stopped, a task's start declined or access decided) belongs to it; the catalog's, a machine's and
+  the brain's own notes and notifications to the home. A long answer code filed says where
+  (`filed`, [the safety net](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)).
+- **The column.** The stream (`GET /events?a2ui=1&node=<id>`) sends the `exchange` event of
+  the node the console talks to, with `node` and its `title` (none when the node is external);
+  without `node`, the home's. Each line (`seq`, `role`, `time`, `text`, `external`) says `filed`:
+  the node code filed it in. `GET /api/espace/earlier` takes `node=<id>`. Eriphe's draft shows in
   the exchange its turn answers in only, and its work (`thinking`) there or under a message of the
-  user's still waiting. A message being sent shows only where it was written. A plain "oui" decides
-  the card just above in its own thread only (`resolveByText`).
+  user's still waiting. A message being sent shows only where it was written. A plain "oui"
+  decides the card just above in its own node only (`resolveByText`).
 - **Suggested replies.** The brain may close an answer with up to 3 replies in its own words, one
   per line, in a block: `<suggestions>` … `</suggestions>`. Code cuts it where the text is stored
   (`copyBrainOutput`) and where the draft is kept (`brainWrote`, prefix-safe: a marker being
@@ -3343,8 +3243,8 @@ from before it belong to the home).
   make it a working note, and one before would suggest replies to an answer not written yet. The
   `exchange` event carries them (`suggestions`) only for its last line, the brain's, clean, with no
   draft; the page shows them as chips under it, hidden while a message is on its way or Eriphe
-  writes. A chip sends its sentence as the user's message, in the thread open (`POST /messages`
-  with `from` `suggestion`): typed in the workspace for the brain, but it never decides a card (no
+  writes. A chip sends its sentence as the user's message, to the node the console talks to (`POST /messages`
+  with `from` `suggestion` and `node`), but it never decides a card (no
   click does). It is no A2UI action: the click grammar is unchanged.
 
 **The fallback.** The conversation is where the user lands when the workspace cannot open. The
@@ -3620,7 +3520,7 @@ and update the commit in the two `NOTICE` files.
 A surface is one tile of the workspace, and code writes every one (#574): its **author** is
 `core`, [the attention queue's](#the-layout-workspace_layoutgo) (`q-…`); `writeSurface` refuses
 any other author or id (`codeSurfaceOf`), and at start code removes any surface another author
-wrote before (`dropFreeSurfaces`), a thread's too ([a thread has no surface](#a-thread-has-no-surface-631)).
+wrote before (`dropFreeSurfaces`).
 No assistant, task or skill writes a tile of its own. A
 surface has a title, A2UI components, data, **sources**, a refresh, a **lifetime**, a weight (1
 to 100) and a why; code keeps its data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
@@ -3743,17 +3643,15 @@ writes.
 
 Anything else (another name, a function call, a component that carries no such action, an answer
 to a proposal the surface does not show, or on a tainted surface) is refused with 400 and told
-to the surface's author (`surfaceError`, code `ACTION_REFUSED`), which reads it with
-`workspace_read`. A tainted surface can only ask: a proposal shown
+to the surface's author (`surfaceError`, code `ACTION_REFUSED`). A tainted surface can only ask: a proposal shown
 there is answered in the conversation.
 
 #### Proposals in the surfaces they concern (`surface_proposals.go`)
 
 A proposal shows where it matters (#428), with no code for any tool:
 
-- **Embedded.** `workspace_read` lists the proposals that wait, newest first (`proposals`:
-  `ref`, the text unless it was drawn from external content, `when`); an author places a `Proposal` whose
-  `proposalId` is one of those refs (`kind:id`), written or bound to the data. Its Oui and Non
+- **Embedded.** An author places a `Proposal` whose `proposalId` is the ref of a proposal that
+  waits (`kind:id`), written or bound to the data. Its Oui and Non
   answer that proposal and no other ([`answer`](#the-actions-of-a-surface)). One drawn from
   external content carries a small badge (« extérieur »), its whole sentence on hover and for a
   screen reader.
@@ -3780,15 +3678,14 @@ A proposal shows where it matters (#428), with no code for any tool:
   stretches the span, and a call with a start and a duration but no end shows a half-hour
   ghost.
 
-### The assistants' workspace tools (`workspace_tools.go`)
+### The catalog tools (`node_catalog.go`)
 
-The workspace shows what waits for the user; no assistant writes a tile, and a thread has no
-surface (#631: what is followed continuously is a [view](#views-node_livego-view_cardgo)). Three
-tools; the **author is the caller**, never a field:
+No assistant writes a tile (#631: what is followed continuously is a
+[view](#views-node_livego-view_cardgo)). Two tools, to compose a node's blocks; the **author is the
+caller**, never a field:
 
 | Tool | Does |
 |---|---|
-| `workspace_read` | the queue's surfaces (`queue`: id, title, state), the user's gestures of the last hour (what, ref, time), the page (`screen`: each tile's id, size, col, row, `pinned`; `open`, `folded`, `closed`) and the proposals that wait (`ref`, text, `when`; at most 20). A title drawn from external content, and the text of a proposal drawn from it, are never quoted |
 | `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand, to compose a node's blocks |
 | `sources_read` | what code may read for a block (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: code reads them under the access policy (`sourceWhy`) |
 
@@ -3801,7 +3698,7 @@ tools; the **author is the caller**, never a field:
   its grant covers; a task not lent it gets 403). The name is reserved. A task's image upload
   (`/v1/device/tasks/{id}/media`) is refused: no surface takes it.
 - **Taint.** Calling `eriphe-workspace` does not taint a task by itself, as eriphe-core's own tools
-  do not (`eventsTaint`): `workspace_read` quotes nothing written after external content.
+  do not (`eventsTaint`).
 ### Signing in
 
 The workspace has one owner; how they sign in is set in Settings → Access → Web workspace → Connexion, or in
@@ -4016,8 +3913,8 @@ outcomes `brief` were rewritten `held` at start.
   The time zone is the configuration's, or the one set in Settings.
 - **A daily cap** of pushes (weight 5; 4 by default, 0 to 20 in Settings), besides reminders the
   user asked for in their own words; over it, the next breakpoint (weight 3).
-- **Topic rules** bound the weight of what is about a thread or a key (`project:getout`, which also
-  matches `project:getout:prod` and the thread it is the alias of) or a kind of key or record alone with its colon (`project:`, `skill:`; a word without one is a
+- **Topic rules** bound the weight of what is about a node or a key (`project:getout`, which also
+  matches `project:getout:prod`) or a kind of key or record alone with its colon (`project:`, `skill:`; a word without one is a
   topic, `mail` is `topic:mail`; the longest match
   wins): a floor raises it, a ceiling lowers it, a ceiling of 0 is never. A turn that read external
   content may be lowered, never raised: what it notifies never interrupts, waits for the next
@@ -4049,11 +3946,11 @@ outcomes `brief` were rewritten `held` at start.
   feedback: what a brief or a point made on the user's return summarises.
 
 - **One topic vocabulary** (`topics.go`). A rule matches what a notification is about (set by
-  the code, or given to `notify`: its thread, or one of the thread's keys), else its record's ref,
+  the code, or given to `notify`: its node or key), else its record's ref,
   so labels must not drift: an about is kept by `aboutKey` ([About and names](#about-and-names)),
   on both sides of the match; a record's ref (`skill:<name>`, `intention:<id>`) as written. The
-  known topics (rules, notifications of the last 90 days, the live threads, the memory's
-  `thread:`, `project:`, `person:` and `client:` abouts) are listed in
+  known topics (rules, notifications of the last 90 days, the nodes running or waiting, the memory's
+  `node:`, `project:`, `person:` and `client:` abouts) are listed in
   `notifications`; a new label of a known word family is kept under the known topic, and a new one
   is flagged to the brain with the known ones.
 - **Settings through the brain** (`settings_brain.go`, tool `setting`): the device order, the lines
@@ -4427,115 +4324,78 @@ are never shown back nor logged.
 
 ## About and names
 
-One matter is one thread (#573). What a record is about, its **about**, is a thread
-(`thread:<id>`) or an entity of the memory: a person (`person:lina`), the user (`owner`), the home,
-a tool (`tool:x`), Eriphe's own topics (`topic:workspace`, `topic:journal`, `topic:heartbeat`).
-Entities are the memory's only: they never have a thread, and nothing shows them as such.
-Notifications, attention items, cards, tasks, surfaces and card pushes (core.db), memories and
-intentions (memory.db) carry an `about` column next to their ref (which record: `intention:12`,
-`skill:<name>`).
+What a record is about, its **about**, is a node (`node:<id>`) or a key: an entity of the memory
+(a person, `person:lina`; the user, `owner`; the home; a tool, `tool:x`; Eriphe's own topics,
+`topic:workspace`, `topic:journal`, `topic:heartbeat`) or a matter remembered (`project:site`,
+`pr:owner/repo#12`, `alert:backup`). Notifications, attention items, cards, tasks, surfaces and
+card pushes (core.db), memories and intentions (memory.db) carry an `about` column next to their
+ref (which record: `intention:12`, `skill:<name>`).
 
 - **Keys** (`about_key.go`): a key is `kind:slug`, made by one function (`aliasKey`) for every
-  store that keeps one; `aboutKey` takes `thread:<id>` too. A test forbids any other normaliser.
-  Kinds: `project`, `person`, `client`, `pr`, `alert`, `home`, `owner`, `tool`, `topic`. A French
-  or plural name is an alias (`projet:` → `project:`, `alerte:` → `alert:`); an unknown kind or a
-  bare word is a topic (`brand:velora` → `topic:brand-velora`, `factures` → `topic:facture`).
-  `owner` and `home` stand alone. A name's slug is lower case, accents folded, spaces as hyphens,
-  its sub-parts kept (`project:site:prod`); a topic's single word is singular; a pull request is
-  `pr:owner/repo#12`, lower case; an alert's id is kept as written. **A mail or an event is an
-  item** of a node's source (`item_note`), never a key: `mail:` and `event:` are refused. A ref
-  (`card:12`, `task:t-…`, `intention:5`, `skill:<name>`) names one record, never a key.
-- **The names index** (`names.go`, core.db `names(name, target, seen)`): a key names one target
-  (a unique index on keys): the thread it is the **alias** of (`thread:<id>`), or itself while no
-  thread has it. A name the user gives a thread (`Velora`, `le site`) names it too, and a thread
-  merged into another names that one (`thread:7` → `thread:9`). `resolveAbout` follows it;
-  `noteAbout` notes a key written. A record written about a key is kept about its target: what is
-  written about `project:site` once a thread has that alias is about the thread.
-- **One thread an alias**, whoever opens it (the brain, code):
-  `openThread` refuses a key another thread has, ended or not; `openThreadOnce` gives that thread
-  back (reopened, « même chose », if it ended). A key that
-  names a person, the user, the home or Eriphe's own topics is no alias.
-- **Giving an alias rekeys**: when a thread takes a key (at its opening, or with `name_thread`),
-  every record about the key moves to the thread: core.db's tables, the names, the topic rules
-  (`rematchTopicRules`), then memory.db's memories (their stems too) and intentions (about, owner,
-  `owed_to`) (`rekeyAbout`).
-- **`name_thread`** gives a thread names and keys, and with `merge` merges into it a thread that
-  ended and is the same matter: everything about the merged one is rekeyed, its names follow, and
-  `thread:<from>` names the other. A live thread is not merged. Refused in a turn that read
-  external content: a name taken from someone else's words would bind their matter to a thread.
-- **Named in a message** (`named`): a message of the user's names a thread by one of its names or
-  the words of its keys, an entity by its key's words (project, person, client, tool, topic),
-  compared by their stems, three letters at least; never `owner`, `home`, an id or Eriphe's own
-  topics. A name inside a longer one named too gives way to it (`site` to `site web`), five at
-  most. What is named goes to the brain under the message (`[nommés] Ce message nomme :
-  thread:12, person:lina.`, refs only: a title may be someone else's words), and the turn is about
-  it (`brainTurn.namedRefs`, kept with the turn). A person's intention cue is matched the same way.
-- **A thread's card** (`thread_card.go`): `aboutCard(about, budget)` compiles, with no model, in
-  about 1000 characters, what eriphe-core knows of a thread (or an entity): the thread itself
-  (goal, state, open steps, and its summary: where it stands), its last 3 decisions, its facts and
-  people (with the people its intentions name), its open intentions, the cards that wait for the
-  user about it (`convo_cards.about`, or what a card proposes), its preferences. The budget is
-  shared in rounds (each part's first line, then each part's second…), and what does not fit is
-  said. Only its ref heads it, and a line that may carry someone else's words (an external memory,
-  a tainted thread, card or intention) is named, not quoted: a card never taints a turn.
-  `read_thread` gives it with the thread, and its names.
+  store that keeps one; `aboutKey` takes `node:<id>` too (its id checked, `nodefile.IDOK`). A test
+  forbids any other normaliser. Kinds: `project`, `person`, `client`, `pr`, `alert`, `home`,
+  `owner`, `tool`, `topic`. A French or plural name is an alias (`projet:` → `project:`, `alerte:`
+  → `alert:`); an unknown kind or a bare word is a topic (`brand:velora` → `topic:brand-velora`,
+  `factures` → `topic:facture`). `owner` and `home` stand alone. A name's slug is lower case,
+  accents folded, spaces as hyphens, its sub-parts kept (`project:site:prod`); a topic's single
+  word is singular; a pull request is `pr:owner/repo#12`, lower case; an alert's id is kept as
+  written. **A mail or an event is an item** of a node's source (`item_note`), never a key:
+  `mail:` and `event:` are refused. A ref (`card:12`, `task:t-…`, `intention:5`, `skill:<name>`)
+  names one record, never a key.
+- **The names index** (`names.go`, core.db `names(name, target, seen)`): each key written is
+  noted (`noteAbout`), naming itself; a key is no node's alias (#632: nodes have no aliases).
+- **Named in a message** (`named`): a message of the user's names an entity by its key's words
+  (project, person, client, tool, topic), compared by their stems, three letters at least; never
+  `owner`, `home`, an id or Eriphe's own topics. A name inside a longer one named too gives way to
+  it (`site` to `site web`), five at most. What is named goes to the brain under the message
+  (`[nommés] Ce message nomme : project:site, person:lina.`, keys only), and the turn is about it
+  (`brainTurn.namedRefs`, kept with the turn) when it names one alone and the turn is about no
+  node. A person's intention cue is matched the same way.
+- **An about card** (`about_card.go`): `aboutCard(about, budget)` compiles, with no model, in
+  about 1000 characters, what eriphe-core knows of a node (or an entity): the node's line (its
+  state, title and its doc's first line), its last 3 decisions, its facts and people (with the
+  people its intentions name), its open intentions, the cards that wait for the user about it
+  (`convo_cards.about`, or what a card proposes), its preferences. The budget is shared in rounds
+  (each part's first line, then each part's second…), and what does not fit is said. Only its ref
+  heads it, and a line that may carry someone else's words (an external memory or node, a tainted
+  card or intention) is named, not quoted: a card never taints a turn.
 - **Cards pushed**: the code gives a card without being asked. To the brain's turn, after the
   named block, when what the turn is about (`turnAbout`) has a card its session does not hold as
   it is now: the session's cards are kept by hash (`AssistantStatus.Cards`, like the profile), set
   to the pack's on a fresh session and to the cards given since. To a fresh session's context
-  pack, one per open thread. To a worker task's first prompt, after what it is asked (its shown
+  pack, one per node running or waiting. To a worker task's first prompt, after what it is asked (its shown
   prompt unchanged). A brain on a self-hosted model gets
-  600-character cards. Each card pushed is logged: `card <about> → <place> [<task id or thread>]:
+  600-character cards. Each card pushed is logged: `card <about> → <place> [<task id>]:
   <chars>, <lines>, <left out>`.
 - **Cards measured** (`card_use.go`): each card pushed is counted in `card_pushes` (about, place:
   `turn`, `pack`, `task`; size; the brain's turn; the task) and
   judged once its window is over (30 minutes for the brain, 2 hours for a task), with a
   proxy said as it is: **wrote** when the model it went to wrote or changed a record about it in
-  the window (the brain: a memory, an intention or a line of the thread written by `brain`; a
-  task: a memory its `remember` wrote, `task:<id>`, or the thread's summary noted by a task); else **answered** when it was the
+  the window (the brain: a memory, an intention or a version of the node written by `brain`; a
+  task: a memory its `remember` wrote, `task:<id>`, or a version of the node written by a task or a run); else **answered** when it was the
   card of what the turn is about (the turn's, or that one of a pack delivered with the turn) and
   the turn's answer, the first message after it, is the brain's, without asking for it again in
-  the turn (`recall` about it or naming it, `read_thread` of it); else **no**. A pack's other
+  the turn (`recall` about it or naming it, `node_read` of it); else **no**. A pack's other
   cards, and a fresh session's first pack, are no turn's: only wrote counts for them. The tasks'
   reliability panel shows the share of the tasks' cards used. Pushes are kept 90 days.
 - **A record's about, set by the code**, and one given explicitly wins:
-  - **the brain's turn** (`turnAbout`): its thread (`brainTurn.thread`), else the one thread or
-    entity the user's messages name; two named give none, and a clock wake none. What the brain
-    makes in the turn takes it: `notify`, `remember` (a fact, a decision, a progress, never a
-    replacement, which keeps the one it replaces; never a profile, a preference, a person, a lesson
-    or a situation), `intend`, `run_task`, a card it proposes;
-  - **a maker** (`sourceAbout`): a thread (`thread:`) gives its thread, a task (`task:`) its
-    about: a task about a thread, notifications and signals take
-    the thread, a card raised by a task or a thread its maker's, an attention item its source's (an
-    offered card's, its card's), a surface its author's;
-  - **a card** takes its proposal's first (a memory's, an intention's, a thread's, a skill run's);
-  - **a skill's run** takes the thread of the alias its SKILL.md declares (`thread:`), else of its
-    events' key where it names a thing: a monitor's (`monitor.*`: `topic:<name>`) or a key written
-    `kind:slug`; a task's, a thread's or a surface's id gives none. Its notifications, signals,
-    cards and surfaces follow its task;
-  - **the extraction** reuses a task's about (shown on its segment): a decision or a progress added
-    from a task is the task's whatever was guessed, anything else takes it when none was given; a
-    replacement keeps its own, the day's journal `topic:journal`.
-  Notification rules match what a notification is about (its thread, or one of the thread's keys:
-  a rule on `project:` matches a thread aliased `project:site`), else its record's ref
-  (`itemRule`).
-- **Schemas**: a core.db made before says `subject` where it now says `about`: the column is
-  renamed at store open, and the threads' `subject` indexes dropped (the column itself is left for
-  step 8 of #578 to convert, then drop). memory.db goes from schema 7 to 8 (`migrateAbout`): the
-  columns renamed, the full-text index rebuilt on `about`. Values are kept as they are: converting
-  them (keys to `thread:<id>`, the old `subjects` table to names) is step 8's.
-- **The one-shot conversion** (`convert_one_thread.go`, step 8 of #578; deleted once the single
-  install has run it): once per database, behind the kv flag `one_thread_converted`. At core.db's
-  open, the subjects become names (a thread's subject its alias, the latest thread of a key wins;
-  a merged subject names what it went into; titles and aliases name their target), the about
-  columns and topic rules are kept under their target (a `mail:` or `event:` about is dropped),
-  `threads.subject`, `subjects`, `thread_monitors` and their kv go, the default skill `arrivee` is
-  deleted, and a skill whose approved version no longer reads or uses `can`/`subject` is turned
-  off (`skills.off.old`). When the memory attaches, a matter that memories are about and no thread
-  follows (not an entity: person, tool, owner, home, Eriphe's topics; not a key a stored skill or a
-  monitor keeps, whose watcher opens its standing thread) becomes an ended thread, tidied away
-  (Q7); then the memories' and intentions' abouts, owners and owed_to are rekeyed, the stems and
-  the full-text index rebuilt. Counts are logged.
+  - **the brain's turn** (`turnAbout`): its node (`brainTurn.node`), else the one entity the
+    user's messages name; two named give none, and a clock wake none. What the brain makes in the
+    turn takes it: `notify`, `remember` (a fact, a decision, never a replacement, which keeps the
+    one it replaces; never a profile, a preference, a person, a lesson or a situation), `intend`,
+    `run_task`, a card it proposes;
+  - **a maker** (`sourceAbout`): a node (`node:`) gives itself, a task (`task:`) its about;
+    notifications and signals of a task take its about, a card raised by a task or a node its
+    maker's, an attention item its source's (an offered card's, its card's), a surface its
+    author's;
+  - **a card** takes its proposal's first (a memory's, an intention's, a skill run's);
+  - **a skill's run** takes its events' key where it names a thing: a monitor's (`monitor.*`:
+    `topic:<name>`) or a key written `kind:slug`; a task's, a node's or a surface's id gives none.
+    Its notifications, signals, cards and surfaces follow its task;
+  - **the extraction** reuses a task's about (shown on its segment) and a node's trace's
+    (`node:<id>`): a decision added from a task is the task's whatever was guessed, anything else
+    takes it when none was given; a replacement keeps its own, the day's journal `topic:journal`.
+  Notification rules match what a notification is about, else its record's ref (`itemRule`).
 
 ## Memory
 
@@ -4543,23 +4403,22 @@ Eriphe's own memory, separate from the vault, in `memory.db` next to the databas
 text search with FTS5, accents ignored). It points at the vault (`links`) rather than copying it.
 A memory has a kind (`profile`, `preference`, `fact`, `person`, `episode`, `lesson`,
 `decision`, `situation`; what is owed is an intention, never a memory; where a matter stands is
-its thread's summary, never a memory), an about (see [About and names](#about-and-names): a thread
-`thread:<id>`, or an entity `owner`, `person:<slug>`, `client:<slug>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
+its node's doc, never a memory), an about (see [About and names](#about-and-names): a node
+`node:<id>`, or an entity `owner`, `person:<slug>`, `client:<slug>`, `home`…), dates (`valid_from`, `valid_to` once no longer true, or planned for
 what is temporary; `occurred_at` for an episode), where it
-comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`, `thread:<id>`), a trust level (`owner`,
+comes from (`source_kind`, `source_ref`: `msg:N`, `task:<id>`, `node:<id>`), a trust level (`owner`,
 `first_party`, `external`), and for what the extraction derived a `basis`: `stated` (said in so
 many words), `inferred` (deduced) or `ambiguous`. A change over time supersedes the old memory,
 which stays, dated; every change is in `memory_log`. Forgotten memories are purged after 30 days.
 An episode is the day's journal (or a wake of the brain's, `topic:heartbeat`), never a task's: what
-a task did is its log and its thread's timeline. memory.db says its schema in `meta`
+a task did is its log and its node's. memory.db says its schema in `meta`
 (`schema_version`, 7): a new file is made at it, a file at another is refused, never changed.
 
 **Durable state.** Raw history is kept for audit (the conversation, `memory_log`, the journal
 episodes); what the brain needs to act is compiled from it in facts, lessons, **decisions** (a
-choice and its reason, superseded when reversed; closing a thread writes one). Where a project,
-client job or goal stands is not a memory: `remember` kind `progress` (a `state` `active`,
-`blocked`, `done` or `paused`, and a text saying what is done, under way, blocked and left)
-writes the summary of its thread (see [Threads](#threads-threadsgo-thread_lightgo)).
+choice and its reason, superseded when reversed; a node set done writes one). Where a project,
+client job or goal stands is not a memory: it is its node's doc (see [The brain on
+nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)).
 
 **En ce moment** (`situations.go`). A `situation` is where the user is or what they do for a
 while (« en vacances à Lyon jusqu'à dimanche »): about `owner` by default, and a `valid_to`,
@@ -4573,8 +4432,7 @@ gone.
 **Tasks read it.** Every worker task has a memory server of its own, `eriphe-memory`, relayed by
 its device (`/v1/tasks/<id>/mcp/eriphe-memory`; the name is reserved in the catalog): `recall`,
 current facts only, allowed without a card. A triggered skill's run also has `remember` (fact,
-person, decision, situation, and progress: its thread's summary, refused when the task read
-someone else's content; never an episode, the user's profile, preferences or
+person, decision, situation; never where the work stands, which its node keeps, never an episode, the user's profile, preferences or
 lessons): `source_kind` `task`, `source_ref` `task:<id>`, first party when the task is clean,
 `external` and only proposed when it read someone else's content.
 
@@ -4655,9 +4513,10 @@ messages whenever it changed. Claude Code's own auto-memory is turned off for th
 (`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`): one memory.
 
 **Extraction and journal.** Every night at `extract_at` (and once a busy day's conversation has
-been quiet `idle_minutes`), eriphe-core writes out the day's transcript (messages and finished
-tasks, each labelled with its trust; a task that read someone else's content is left out, its log
-and its thread's timeline keep what it found, and a clean one is first party) and starts a `memory` task (not listed, never the brain's)
+been quiet `idle_minutes`), eriphe-core writes out the day's transcript (messages, finished
+tasks and what the day wrote in each node's trace, each labelled with its trust; a task that read
+someone else's content is left out, its log and its node keep what it found, and a clean one is
+first party; so is a node that may hold someone else's words) and starts a `memory` task (not listed, never the brain's)
 with a cheap agent and the memories it may touch. Its JSON answer (ADD, SUPERSEDE, NOOP, each
 citing a `source_ref` of the transcript, with `keywords`, an `importance` 1–5, a `basis` and,
 for what is temporary, a `valid_to`) is checked and applied. Its regime, kept for what serves the

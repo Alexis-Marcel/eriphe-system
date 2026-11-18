@@ -296,11 +296,6 @@ func TestTaskStartCardOutsideTurn(t *testing.T) {
 // or pending with no device.
 func TestRunTaskTellsStartState(t *testing.T) {
 	c := startCore(t)
-	th, err := c.openThread(threadIn{Title: "Dépôt", Goal: "Sam sait ce qu'il fait.", Alias: "project:depot"}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.turnThread(th.ID)
 	out, isErr := callBrainTool(t, c, "run_task", map[string]any{"title": "Lire le dépôt", "prompt": "Lis le README."})
 	st, _ := out["start_state"].(map[string]any)
 	if isErr || out["task"] == nil || st["start"] != "started" {
@@ -331,7 +326,6 @@ func TestRunTaskTellsStartState(t *testing.T) {
 	}
 
 	c.store.setDeviceStatus("nas", false, nil)
-	c.turnThread(th.ID)
 	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer", "prompt": "Résume."})
 	st, _ = out["start_state"].(map[string]any)
 	if isErr || st["start"] != "waits_for_device" || st["pending_reason"] == "" {

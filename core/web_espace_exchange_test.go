@@ -17,11 +17,11 @@ import (
 func TestLastExchange(t *testing.T) {
 	tw := newTestWeb(t)
 	st := tw.c.store
-	if got, earlier, err := st.lastExchange(0); err != nil || len(got) != 0 || earlier {
+	if got, earlier, err := st.lastExchange(""); err != nil || len(got) != 0 || earlier {
 		t.Fatalf("empty conversation: %+v %v %v", got, earlier, err)
 	}
 	st.addMessage(roleBrain, "Bonjour Sam.", true)
-	if got, earlier, _ := st.lastExchange(0); len(got) != 1 || got[0].Role != roleBrain || earlier {
+	if got, earlier, _ := st.lastExchange(""); len(got) != 1 || got[0].Role != roleBrain || earlier {
 		t.Fatalf("no message of the user's: Eriphe's last line, %+v", got)
 	}
 	st.addMessage(roleUser, "avant", true)
@@ -34,7 +34,7 @@ func TestLastExchange(t *testing.T) {
 	tainted, _ := st.addMessage(roleBrain, "lu dans un mail", true)
 	st.set(taintKey(int(tainted)), "brain:task:t-1")
 	st.addMessageVia(roleUser, "réglage", firstRunVia, true) // the first run's, hidden
-	got, earlier, err := st.lastExchange(0)
+	got, earlier, err := st.lastExchange("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestLastExchange(t *testing.T) {
 	}
 	st.addMessage(roleUser, "et demain ?", true)
 	st.addMessageVia(roleError, "panic: raw trace", "turn", true)
-	got, _, _ = st.lastExchange(0)
+	got, _, _ = st.lastExchange("")
 	if len(got) != 2 || got[1].Role != roleError || got[1].Text != "" || got[1].Via != "" {
 		t.Fatalf("an error, without its text: %+v", got)
 	}
@@ -61,7 +61,7 @@ func TestLastExchange(t *testing.T) {
 		st.addMessage(roleBrain, "encore", true)
 	}
 	st.addMessage(roleBrain, "enfin", true)
-	got, _, _ = st.lastExchange(0)
+	got, _, _ = st.lastExchange("")
 	if len(got) != 1+exchangeReplies || got[0].Text != "et demain ?" || got[len(got)-1].Text != "enfin" {
 		t.Fatalf("after many lines: %+v", got)
 	}
