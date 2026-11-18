@@ -127,12 +127,13 @@ func (s benchScore) String() string {
 func playNodesBench(t *testing.T, cli, model string) benchScore {
 	ctx, stop := context.WithCancel(context.Background())
 	live := &liveBrain{cli: cli, model: model, dir: t.TempDir(), sess: map[string]*liveSession{}}
+	start := time.Now()
+	sc := newScenarioWith(t, ctx, live)
+	// The CLI goes first: the test core's servers close once it is gone.
 	t.Cleanup(func() {
 		stop()
 		live.close()
 	})
-	start := time.Now()
-	sc := newScenarioWith(t, ctx, live)
 	b := &bench{t: t, sc: sc}
 	b.quiet()
 	day, substack := sc.nodes["day"], sc.nodes["substack"]
@@ -168,6 +169,9 @@ func playNodesBench(t *testing.T, cli, model string) benchScore {
 	b.quiet()
 	b.say("Réponds que je regarde dans l'heure, ouvre-moi la prod, et lance en arrière-plan une recherche sur l'erreur.", mail, turnWork)
 	// 9. The user says yes to what waits (the send, a start, a view).
+	if !b.shows("prod/erreurs") {
+		b.note("the production is shown in no node and proposed in no view")
+	}
 	cards := b.approveAll()
 	b.quiet()
 	if sent := sc.tools.sentTo("sam@example.org"); sent == 0 {
@@ -294,6 +298,19 @@ func (b *bench) codes(id string) bool {
 func (b *bench) viewMade(id string) bool {
 	var n int
 	b.sc.c.store.db.QueryRow(`SELECT COUNT(*) FROM view_proposals WHERE node = ? AND state = ?`, id, viewApproved).Scan(&n)
+	return n > 0
+}
+
+// shows tells a live block reads tool (a node's, or a view proposed).
+func (b *bench) shows(tool string) bool {
+	srcs, _ := b.sc.c.nodes.Sources("")
+	for _, s := range srcs {
+		if s.Source.Tool == tool {
+			return true
+		}
+	}
+	var n int
+	b.sc.c.store.db.QueryRow(`SELECT COUNT(*) FROM view_proposals WHERE body LIKE ?`, "%"+tool+"%").Scan(&n)
 	return n > 0
 }
 
@@ -610,10 +627,21 @@ func (l *liveBrain) decide(ctx context.Context, task, tool string, input map[str
 			if it.Kind == "permission" && fmt.Sprint(it.Data["id"]) == pid {
 				allow, _ := it.Data["allow"].(bool)
 				msg, _ := it.Data["message"].(string)
+				// Its answer is handled: acknowledged, as a device does,
+				// unless a message before it still waits for its turn.
+				ack := it.Seq
 				s.mu.Lock()
 				s.answered[pid] = true
+				for _, x := range items {
+					if x.Kind == "message" && x.Seq < it.Seq && x.Seq > s.delivered {
+						ack = 0
+					}
+				}
+				if ack > 0 {
+					s.delivered = max(s.delivered, ack)
+				}
 				s.mu.Unlock()
-				l.emit(s, stateRunning, 0, EventRow{Type: "permission_answer", Data: map[string]any{"id": pid, "allow": allow, "message": msg}})
+				l.emit(s, stateRunning, ack, EventRow{Type: "permission_answer", Data: map[string]any{"id": pid, "allow": allow, "message": msg}})
 				return allow, msg
 			}
 		}
