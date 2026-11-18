@@ -953,6 +953,9 @@ func (c *core) workForUser(parent string) {
 	steps, _ := c.workSteps(parent)
 	after := map[string]bool{}
 	for _, st := range steps {
+		if st.Status != stepAccepted {
+			continue // a dropped step is no one's sequel
+		}
 		for _, a := range st.After {
 			after[a] = true
 		}
@@ -968,7 +971,10 @@ func (c *core) workForUser(parent string) {
 		return
 	}
 	for _, id := range results {
-		c.nodes.SetState(id, nodestore.Waiting)
+		// One the user already said done, or archived, stays so.
+		if sum, err := c.nodes.Get(id); err == nil && sum.Done.IsZero() && sum.Archived.IsZero() {
+			c.nodes.SetState(id, nodestore.Waiting)
+		}
 	}
 	c.nodes.SetState(parent, nodestore.Done)
 }

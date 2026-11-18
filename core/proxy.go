@@ -304,16 +304,17 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 }
 
 // traceBrainCall writes a call the brain made with the user's permission
-// in the trace of the node its turn is about, else of the node it talks
-// to: what it did there stays on record, though no version is written. A
-// turn of the home that named no node logs it nowhere but the decisions.
+// in the trace of the node it talks to (the page the user spoke from),
+// else, from the home, of the node its turn is about (the last it named):
+// what it did there stays on record, though no version is written. A turn
+// of the home that named no node logs it nowhere but the decisions.
 func (c *core) traceBrainCall(server, tool string) {
 	if c.nodes == nil {
 		return
 	}
-	id := c.turn.aboutNode()
+	id := c.turn.talkNode()
 	if id == "" {
-		id = c.turn.talkNode()
+		id = c.turn.aboutNode()
 	}
 	if id == "" {
 		return

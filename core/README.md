@@ -990,9 +990,9 @@ store](#node-store-nodestore-nodesgo)).
   the page beside the others, the console still talking where it talked (only the user's gesture
   moves it). It writes nothing in the node.
 - **A call in the trace** (`proxy.go`, `traceBrainCall`): a call the brain made with the user's
-  permission (a ticket, not a free read) is a line of the trace of the node the turn is about,
-  else of the node it talks to (`Appel : <server>/<tool>.`). A turn of the home that named no node
-  logs it in the decisions only.
+  permission (a ticket, not a free read) is a line of the trace of the node it talks to (the page
+  the user spoke from), else, from the home, of the node the turn is about (the last it named):
+  `Appel : <server>/<tool>.`. A turn of the home that named no node logs it in the decisions only.
 
 ## Node files (`nodefile/`)
 
@@ -1149,7 +1149,8 @@ The **engine** is code, without a model:
   work (« Contrôle de l'objectif »), lent read-only what the steps wrote, given the goal and each
   step's result. Its receipt done with no failed check makes the work done; its verdict goes into
   the work's trace. A work done puts its **result before the user** (`workForUser`): the accepted
-  steps no other step comes after wait for the user, the work around them done, until the user,
+  steps no other accepted step comes after wait for the user (one already done or archived stays
+  so), the work around them done, until the user,
   or the brain on their word (`node_set` done), says it is done, or they archive it. A work with no
   such step waits itself.
 - **Restart**: what the engine knows is in core.db (`node_steps`: node, parent, after, spec,
@@ -3100,7 +3101,7 @@ token in `X-CSRF-Token`:
   graph. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
   gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
   bigger, what waits for the user brighter, what runs a little, what is done or old quieter. Under
-  700 px wide the graph is a list (`graph/List.tsx`, `listOrder`): each subject, then its bubbles
+  760 px wide the graph is a list (`graph/List.tsx`, `listOrder`): each subject, then its bubbles
   under it, depth first, in the order they were made; a tap opens its page alone over the list.
 - `page/`: a page in the graph, any number open: a click opens one alone, ⌘, Ctrl or shift with
   the click one more. Dragged by its head; its head says what it belongs to, its title, its date

@@ -177,5 +177,8 @@ describe("the camera", () => {
     // b in the middle of the screen
     expect(one.x + 2600 * one.k).toBeCloseTo(size.w / 2, 0);
     expect(one.k).toBeGreaterThanOrEqual(READABLE);
+    // the console on the home: the last page opened (the one Eriphe just showed)
+    const home = framePages(far, null, [], size);
+    expect(home.x + 2600 * home.k).toBeCloseTo(size.w / 2, 0);
   });
 });

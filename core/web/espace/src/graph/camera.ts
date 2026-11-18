@@ -33,12 +33,13 @@ export function fit(bs: Box[], size: Size, max = 1, min = 0.3): Cam {
 export const boxAt = (at: Pt, [w, h]: Pt): Box => [at[0] - w / 2, at[1] - h / 2, at[0] + w / 2, at[1] + h / 2];
 
 // framePages frames the open pages: all of them if they fit at READABLE or
-// more, else the one the console talks to (talk); the bubbles around them
+// more, else the one the console talks to (talk), or with the home's
+// console the last one opened (pages in the order they opened); the bubbles around them
 // too (near) while the pages stay readable.
 export function framePages(pages: { id: string; box: Box }[], talk: string | null, near: Box[], size: Size, max = 1): Cam {
   let boxes = pages.map((p) => p.box);
   if (boxes.length > 1 && fitK(boxes, size) < READABLE) {
-    const t = pages.find((p) => p.id === talk) ?? pages[0];
+    const t = pages.find((p) => p.id === talk) ?? pages[pages.length - 1];
     boxes = [t.box];
   }
   if (near.length && fitK([...boxes, ...near], size) >= 0.72) boxes = [...boxes, ...near];

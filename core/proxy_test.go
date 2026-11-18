@@ -705,4 +705,17 @@ func TestBrainCallTraced(t *testing.T) {
 	if n := strings.Count(string(raw), "Appel : "); n != 1 || !strings.Contains(string(raw), "Appel : github/create_issue.") {
 		t.Fatalf("trace:\n%s", raw)
 	}
+	// Said from a page, the call is that page's, whatever the turn named.
+	page := workNode(t, c, "Le projet.")
+	c.turn.answersIn(page)
+	c.store.recordDecision("b-1", "p2", "mcp__github__create_issue", args, decideAllow, byUser, "")
+	if out, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "create_issue", Arguments: args}); out.IsError {
+		t.Fatalf("allowed call = %s", resultText(out))
+	}
+	if raw, _ := c.nodes.Trace(page); !strings.Contains(string(raw), "Appel : github/create_issue.") {
+		t.Fatalf("the page's trace:\n%s", raw)
+	}
+	if raw, _ := c.nodes.Trace(id); strings.Count(string(raw), "Appel : ") != 1 {
+		t.Fatalf("the node named got it too:\n%s", raw)
+	}
 }

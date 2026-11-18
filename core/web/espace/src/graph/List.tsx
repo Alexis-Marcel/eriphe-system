@@ -10,7 +10,7 @@ import { listOrder, titleOf, waits } from "./model";
 // same console: only the graph gives way.
 
 // NARROW is the screen width under which the list replaces the graph.
-export const NARROW = 700;
+export const NARROW = 760; // the width under which the HUD narrows too (espace.css)
 
 export function useNarrow(): boolean {
   const q = `(max-width: ${NARROW}px)`;

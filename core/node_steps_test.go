@@ -172,6 +172,21 @@ func TestStepsRunWithoutTheBrain(t *testing.T) {
 	if sum, _ := c.nodes.Get(check); sum.State != nodestore.Waiting {
 		t.Errorf("the work's result is %s", sum.State)
 	}
+	// The user's word stands: the result said done stays done.
+	sum, _ := c.nodes.Get(check)
+	if _, err := c.setNodeDone(sum, true, byUser); err != nil {
+		t.Fatal(err)
+	}
+	c.workForUser(parent)
+	if sum, _ := c.nodes.Get(check); sum.State != nodestore.Done {
+		t.Errorf("a result said done is %s again", sum.State)
+	}
+	// Had the last step been dropped, the ones before it would be the result.
+	c.setStep(check, map[string]any{"status": stepDropped})
+	c.workForUser(parent)
+	if sum, _ := c.nodes.Get(names); sum.State != nodestore.Waiting {
+		t.Errorf("the result, its sequel dropped, is %s", sum.State)
+	}
 
 	if w := wakes(c); len(w) != 0 {
 		t.Fatalf("the brain was woken: %q", w)
