@@ -148,7 +148,7 @@ func threadWaitsUser(steps []threadSurfaceStep, asks []int64, linked []string) b
 }
 
 // threadStateLine is the thread's state under its goal, when it says more
-// than the header: not for a light thread the brain holds that is open.
+// than the header: not for a thread that is open.
 func (c *core) threadStateLine(s Thread, lang string) string {
 	if s.active() && s.State == threadOpen {
 		return ""

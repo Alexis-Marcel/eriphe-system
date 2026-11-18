@@ -237,7 +237,7 @@ func TestFailedProofWakesOnce(t *testing.T) {
 
 // A step whose receipt is not done may be accepted by the brain as it is;
 // one dropped takes the steps after it along; replan leaves the work
-// waiting for new steps, which run it again.
+// replaced by the new steps given with it, which run it again.
 func TestSettleAcceptDropReplan(t *testing.T) {
 	c := graphCore(t)
 	ctx := context.Background()
@@ -259,22 +259,26 @@ func TestSettleAcceptDropReplan(t *testing.T) {
 	if stepNow(t, c, ids["a"]).Status != stepAccepted || b.Status != stepRunning {
 		t.Fatalf("after accept: %s", b.Status)
 	}
-	if _, err := c.settleStep(ctx, parent, ids["b"], settleReplan, "Autre chemin."); err != nil {
+	// A replan gives its new steps: one refused changes nothing.
+	if _, err := c.settleStep(ctx, parent, ids["b"], settleReplan, "Autre chemin."); err == nil {
+		t.Error("a replan without its steps")
+	}
+	if _, err := c.replan(ctx, parent, ids["b"], "Autre chemin.", []stepSpec{{Key: "b2", Title: "B autrement", Prompt: "Fais B autrement.", After: []string{ids["c"]}}}, nil); err == nil {
+		t.Error("a new step after one the replan drops")
+	}
+	if stepNow(t, c, ids["b"]).Status != stepRunning || stepNow(t, c, ids["c"]).Status != stepWaiting {
+		t.Fatal("a refused replan dropped steps")
+	}
+	note, err := c.replan(ctx, parent, ids["b"], "Autre chemin.", []stepSpec{{Key: "b2", Title: "B autrement", Prompt: "Fais B autrement.", After: []string{ids["a"]}}}, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if stepNow(t, c, ids["b"]).Status != stepDropped || stepNow(t, c, ids["c"]).Status != stepDropped {
 		t.Fatal("replan left the steps after it")
 	}
-	if w, _ := c.work(parent); w.State != workReplan {
-		t.Fatalf("work %s", w.State)
-	}
-	more, err := c.openSteps(ctx, parent, []stepSpec{{Key: "b2", Title: "B autrement", Prompt: "Fais B autrement.", After: []string{ids["a"]}}}, 0, stepOpener{author: "brain"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	b2 := stepNow(t, c, more["b2"])
-	if w, _ := c.work(parent); w.State != workRunning || b2.Status != stepRunning {
-		t.Fatalf("the new plan: work %s, step %s", w.State, b2.Status)
+	b2, ok := c.stepOfTask(stepKeyTask(t, c, parent, "b2"))
+	if w, _ := c.work(parent); !ok || w.State != workRunning || b2.Status != stepRunning {
+		t.Fatalf("the new plan (%s): work %s, step %s", note, w.State, b2.Status)
 	}
 	endStepTurn(t, c, b2.Task, "B fait", "done")
 	if w, _ := c.work(parent); w.State != workDone {
@@ -488,6 +492,16 @@ func TestFinalCheck(t *testing.T) {
 	if w, _ = c.work(parent); w.State != workDone || w.Checks != 2 {
 		t.Fatalf("after the second check: %+v", w)
 	}
+	// A replan on the work itself adds steps, after those it keeps: it runs again.
+	if _, err := c.replan(ctx, parent, "", "Une page de plus.", []stepSpec{{Key: "faq", Title: "FAQ", Prompt: "Écris la FAQ.", After: []string{ids["page"]}}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if w, _ = c.work(parent); w.State != workRunning {
+		t.Fatalf("after a replan: %s", w.State)
+	}
+	if st, ok := c.stepOfTask(stepKeyTask(t, c, parent, "faq")); !ok || st.Status != stepRunning {
+		t.Fatalf("the step added: %+v", st)
+	}
 }
 
 // What the engine holds is in core.db: a core started again on the same
@@ -585,4 +599,17 @@ func TestNodeOpenWithSteps(t *testing.T) {
 	if w, _ := c.work(id); w.Budget != 45 {
 		t.Errorf("budget %d", w.Budget)
 	}
+}
+
+// stepKeyTask is the task of a work's step, by its key.
+func stepKeyTask(t *testing.T, c *core, parent, key string) string {
+	t.Helper()
+	steps, _ := c.workSteps(parent)
+	for _, st := range steps {
+		if st.Spec.Key == key {
+			return st.Task
+		}
+	}
+	t.Fatalf("no step %s", key)
+	return ""
 }

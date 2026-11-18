@@ -713,7 +713,7 @@ whatever address it dials) and one client certificate per device.
 | `list_tasks` | recent tasks |
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card) and on the thread's surface, under the step and in its header's facts, so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
-| `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan`; on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
+| `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write or remove a block of its part of a thread's surface, as `brain`, and read the threads on screen ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
 
 The scheduler takes the requested device if it is online and fits. Otherwise it works in two passes,
@@ -1011,8 +1011,8 @@ about another thread, a card raised elsewhere. A thread that ends drops what sti
 about it: its tasks stop.
 
 **The brain's turn about a thread** (`thread_turn.go`): a turn that names a thread (a thread tool
-called on it, or a delivered message that belongs to it: an event of one of its linked cards, a
-message of the user's written in it, by the messages' `thread` column) is about it until it
+called on it, or a delivered message that belongs to it: an event of one of its linked cards or of a task
+about it while it is live (`notifyBrain`), a message of the user's written in it, by the messages' `thread` column) is about it until it
 names another. The cards it raises meanwhile (one of its own calls' access cards, a task's start)
 are that thread's and show in its timeline; while one waits, the thread's surface shows it under
 « À toi », answered in place (and not again in the attention queue's surfaces), and a decision
@@ -1408,9 +1408,11 @@ The **engine** is code, without a model:
   finish), the final check not holding. It decides with **`node_settle`** `{id, step?, outcome,
   note}`: on a step, `accept` (a failed proof whose work holds; never failed checks), `retry`
   with what to fix (2 at most: it answers the idle task, or starts a new one), `drop` (with the
-  steps that come after it), `replan` (drop them, the work waits for new steps); on the work, no
-  step, `accept` gives it half its budget more (30 minutes at least) or holds it done after a
-  final check that fails, `retry` runs the final check again (2 at most), `drop` stops it.
+  steps that come after it), `replan` with `steps` (drop them and open those in their place, by
+  the brain, tainted by its turn; a plan refused changes nothing); on the work, no step, `accept`
+  gives it half its budget more (30 minutes at least) or holds it done after a final check that
+  fails, `retry` runs the final check again (2 at most), `replan` with `steps` adds them, `drop`
+  stops it.
 - Once every step is accepted or dropped, a **final check**: a fresh agent in a child node of the
   work (« Contrôle de l'objectif »), lent read-only what the steps wrote, given the goal and each
   step's result. Its receipt done with no failed check makes the work done; its verdict goes into
@@ -3534,8 +3536,8 @@ from before it belong to the home).
   thread; the home for anything else. The thread the turn names later (a tool on another thread)
   is for its cards only. A failure of the turn (the error line) and the note that asks it again for
   a tool call written as text belong there too; a heartbeat's answer and a failure to start, to the
-  home. An event of a thread (a card linked to it decided, a task's start declined or access decided)
-  belongs to it; the catalog's, a machine's and the
+  home. An event of a thread (a card linked to it decided, a task about it that ended its turn or
+  stopped, a task's start declined or access decided) belongs to it; the catalog's, a machine's and the
   brain's own notes and notifications to the home.
 - **The exchange goes with what Eriphe puts on stage.** When the brain answers with
   `workspace_focus` on a thread, the turn's messages (the user's it answers, what it said since)

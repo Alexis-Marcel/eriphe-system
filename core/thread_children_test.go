@@ -96,8 +96,8 @@ func TestChildThreadDepth(t *testing.T) {
 	}
 }
 
-// Closing a parent with active children is refused, naming them, light
-// or led; once they ended, it closes.
+// Closing a parent with active children is refused, naming them; once
+// they ended, it closes.
 func TestChildThreadCloseRefused(t *testing.T) {
 	c, _ := surfaceCore(t)
 	parent := lightThread(t, c)

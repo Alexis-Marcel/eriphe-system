@@ -93,14 +93,20 @@ func newMCPServer(c *core) *mcp.Server {
 		})
 
 	type settleIn struct {
-		ID      string `json:"id" jsonschema:"the node whose work is cut in steps (the parent of the steps)"`
-		Step    string `json:"step,omitempty" jsonschema:"the step's node; leave it out to decide on the work itself (its budget spent, its final check)"`
-		Outcome string `json:"outcome" jsonschema:"accept, retry, drop or replan"`
-		Note    string `json:"note,omitempty" jsonschema:"why, in a sentence; for a retry, what to fix: the agent reads it"`
+		ID      string     `json:"id" jsonschema:"the node whose work is cut in steps (the parent of the steps)"`
+		Step    string     `json:"step,omitempty" jsonschema:"the step's node; leave it out to decide on the work itself (its budget spent, its final check)"`
+		Outcome string     `json:"outcome" jsonschema:"accept, retry, drop or replan"`
+		Note    string     `json:"note,omitempty" jsonschema:"why, in a sentence; for a retry, what to fix: the agent reads it"`
+		Steps   []stepSpec `json:"steps,omitempty" jsonschema:"for replan only: the new steps, as node_open's; after may name the work's steps that stay by their node id"`
 	}
-	tool(s, "node_settle", "Decide on an exception of a work cut in steps, when you are woken for one ([nœud <id> « title »]); Eriphe accepts a proven step and starts the next ones by itself. On a step: accept one whose proof failed but whose work holds (never one whose checks failed), retry it saying what to fix (at most 2), drop it (with the steps that come after it), or replan (drop it and those after it; the work waits for its new steps). On the work (no step): accept gives it more time when its budget is spent, or holds it done when the final check does not hold; retry runs the final check again; drop stops it.",
+	tool(s, "node_settle", "Decide on an exception of a work cut in steps, when you are woken for one ([nœud <id> « title »]); Eriphe accepts a proven step and starts the next ones by itself. On a step: accept one whose proof failed but whose work holds (never one whose checks failed), retry it saying what to fix (at most 2), drop it (with the steps that come after it), or replan (drop it and those after it, and open the steps you give in their place). On the work (no step): accept gives it more time when its budget is spent, or holds it done when the final check does not hold; retry runs the final check again; replan adds the steps you give; drop stops it.",
 		func(ctx context.Context, in settleIn) (map[string]any, error) {
-			note, err := c.settleStep(ctx, strings.TrimSpace(in.ID), strings.TrimSpace(in.Step), strings.ToLower(strings.TrimSpace(in.Outcome)), in.Note)
+			id, step, outcome := strings.TrimSpace(in.ID), strings.TrimSpace(in.Step), strings.ToLower(strings.TrimSpace(in.Outcome))
+			if outcome == settleReplan {
+				note, err := c.replan(ctx, id, step, strings.TrimSpace(in.Note), in.Steps, c.turnTaint())
+				return map[string]any{"note": note}, err
+			}
+			note, err := c.settleStep(ctx, id, step, outcome, in.Note)
 			return map[string]any{"note": note}, err
 		})
 

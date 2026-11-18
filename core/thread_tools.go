@@ -112,8 +112,8 @@ const sameMatter = "même chose"
 
 // openThreadOnce opens a thread, one per matter, for the brain or code
 // (by); it is the only path
-// that opens one. A light one needs its alias, and an alias that has a
-// thread already gives that thread back (reopened light if it ended)
+// that opens one. It needs its alias, and an alias that has a thread
+// already gives that thread back (reopened if it ended)
 // rather than a second one; again says so. Without one, threads near the
 // matter (nearThreads, ended ones too) refuse it, listed (*nearMatch),
 // until the opener takes one (take: given back, and given the alias
@@ -242,7 +242,7 @@ func (c *core) matterThread(old Thread, in threadIn, by string) (s Thread, again
 }
 
 func registerThreadTools(s *mcp.Server, c *core) {
-	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). A matter has one thread: give its alias, the matter's key (required for a light one); an alias that has a thread already gives that thread back, reopened if it ended, instead of a second one. When threads near the matter exist (ended ones too), it is refused and lists them: open again with take (the one that is it: given back, reopened if it ended, and given the alias) or new_because (why it is another matter). It opens at once, with no card, and you hold it. With parent, a child thread: a step of that thread that became a matter of its own (find_thread or read_thread on the parent first: its children are listed, take the one that exists). For one task alone, use run_task.",
+	tool(s, "open_thread", "Open a thread: one matter followed to its real goal (a pull request until merged and deployed, an appointment, a brand name to find). A matter has one thread: give its alias, the matter's key (required); an alias that has a thread already gives that thread back, reopened if it ended, instead of a second one. When threads near the matter exist (ended ones too), it is refused and lists them: open again with take (the one that is it: given back, reopened if it ended, and given the alias) or new_because (why it is another matter). It opens at once, with no card, and you hold it. With parent, a child thread: a step of that thread that became a matter of its own (find_thread or read_thread on the parent first: its children are listed, take the one that exists). For one task alone, use run_task.",
 		func(ctx context.Context, in threadIn) (map[string]any, error) {
 			s, again, err := c.openThreadOnce(in, c.turnTaint(), byBrain)
 			if err != nil {

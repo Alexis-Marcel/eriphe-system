@@ -74,7 +74,7 @@ CREATE INDEX IF NOT EXISTS node_steps_parent ON node_steps (parent, n);
 CREATE INDEX IF NOT EXISTS node_steps_task ON node_steps (task);
 CREATE TABLE IF NOT EXISTS node_works (
 	parent  TEXT PRIMARY KEY,           -- the work's node
-	state   TEXT NOT NULL,              -- running, held, replan, checking, failed, done, stopped
+	state   TEXT NOT NULL,              -- running, held, checking, failed, done, stopped
 	held    TEXT NOT NULL DEFAULT '',   -- why it is held: budget
 	budget  INTEGER NOT NULL,           -- minutes of running time
 	spent   INTEGER NOT NULL DEFAULT 0, -- seconds it ran, until since
@@ -100,7 +100,6 @@ const (
 const (
 	workRunning  = "running"
 	workHeld     = "held"     // nothing new starts: its budget is spent
-	workReplan   = "replan"   // a step was dropped for a new plan: it waits for new steps
 	workChecking = "checking" // every step is accepted: a fresh agent checks the goal
 	workFailed   = "failed"   // the final check does not hold: the brain decides
 	workDone     = "done"     // every step accepted, the goal checked
@@ -579,14 +578,18 @@ func (c *core) checkSteps(specs []stepSpec, budget int, tainted []string) error 
 // those that may. budget is the work's minutes, 0 for the default (or
 // what it has). It gives the steps' nodes by key.
 func (c *core) openSteps(ctx context.Context, parent string, specs []stepSpec, budget int, by stepOpener) (map[string]string, error) {
+	stepMu.Lock()
+	defer stepMu.Unlock()
+	return c.openStepsLocked(ctx, parent, specs, budget, by)
+}
+
+func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepSpec, budget int, by stepOpener) (map[string]string, error) {
 	if c.nodes == nil {
 		return nil, errors.New("the graph is not open on this eriphe-core")
 	}
 	if budget < 0 || budget > maxBudget {
 		return nil, fmt.Errorf("budget_minutes: 1 to %d", maxBudget)
 	}
-	stepMu.Lock()
-	defer stepMu.Unlock()
 	sum, err := c.nodes.Get(parent)
 	if err != nil {
 		return nil, fmt.Errorf("node %s: %w", parent, err)
@@ -655,7 +658,7 @@ func (c *core) openSteps(ctx context.Context, parent string, specs []stepSpec, b
 		}
 		c.store.db.Exec(`INSERT INTO node_works (parent, state, budget, since) VALUES (?, ?, ?, ?)`, parent, workRunning, budget, now)
 	case w.State != workRunning && w.State != workHeld:
-		// New steps for a work that ended, or waited for a new plan: it runs again.
+		// New steps for a work that ended, or whose goal did not hold: it runs again.
 		fields := map[string]any{"state": workRunning, "since": now, "final": "", "checks": 0}
 		if budget > 0 {
 			fields["budget"] = budget
@@ -1101,28 +1104,84 @@ func (c *core) settleStep(ctx context.Context, parent, step, outcome, note strin
 			return "", err
 		}
 		c.traceWork(parent, fmt.Sprintf("Étape « %s » à reprendre : %s", st.Spec.Title, note), "")
-	case settleDrop, settleReplan:
+	case settleDrop:
 		if st.over() {
 			return "", fmt.Errorf("step %s is %s: nothing to drop", step, st.Status)
 		}
-		dropped := c.dropStep(ctx, st)
-		words := "abandonnée"
-		if outcome == settleReplan {
-			words = "abandonnée pour un nouveau plan"
-			c.setWork(parent, map[string]any{"state": workReplan, "spent": int64(w.elapsed(time.Now()) / time.Second), "since": 0})
-		}
-		c.traceWork(parent, fmt.Sprintf("Étape « %s » %s.%s", st.Spec.Title, words, withNote(note)), "")
-		if len(dropped) > 1 {
-			c.traceWork(parent, fmt.Sprintf("Avec elle, les étapes qui en dépendaient : %d.", len(dropped)-1), "")
-		}
-		if outcome == settleReplan {
-			return fmt.Sprintf("Dropped %d step(s). The work waits for its new steps: open them under node %s.", len(dropped), parent), nil
-		}
+		c.traceDrop(st, c.dropStep(ctx, st), "abandonnée", note)
+	case settleReplan:
+		return "", errors.New("replan gives the new steps: node_settle with steps")
 	default:
 		return "", fmt.Errorf("outcome %q: accept, retry, drop or replan", outcome)
 	}
 	c.advanceLocked(ctx, parent)
 	return "Done.", nil
+}
+
+// traceDrop writes a step dropped, and those after it, in the work's trace.
+func (c *core) traceDrop(st Step, gone []string, words, note string) {
+	c.traceWork(st.Parent, fmt.Sprintf("Étape « %s » %s.%s", st.Spec.Title, words, withNote(note)), "")
+	if len(gone) > 1 {
+		c.traceWork(st.Parent, fmt.Sprintf("Avec elle, les étapes qui en dépendaient : %d.", len(gone)-1), "")
+	}
+}
+
+// replan is the brain's new plan for a work: the step named and the
+// steps after it are dropped (none for no step), and the steps given are
+// opened in their place, by the brain, tainted by its turn. A plan
+// refused changes nothing.
+func (c *core) replan(ctx context.Context, parent, step, note string, specs []stepSpec, taint []string) (string, error) {
+	if len(specs) == 0 {
+		return "", errors.New("replan gives the new steps: steps, as node_open's")
+	}
+	stepMu.Lock()
+	defer stepMu.Unlock()
+	w, ok := c.work(parent)
+	switch {
+	case !ok:
+		return "", fmt.Errorf("node %s has no steps", parent)
+	case w.State == workStopped:
+		return "", errors.New("the work is stopped: open another node for new work")
+	case w.State == workChecking:
+		return "", errors.New("the final check runs: wait for its verdict")
+	}
+	have, err := c.workSteps(parent)
+	if err != nil {
+		return "", err
+	}
+	var st Step
+	var gone []string
+	if step != "" {
+		if st, ok = c.nodeStep(step); !ok || st.Parent != parent {
+			return "", fmt.Errorf("node %s is no step of %s", step, parent)
+		}
+		if st.over() {
+			return "", fmt.Errorf("step %s is %s: nothing to replan", step, st.Status)
+		}
+		gone = dropSet(have, st.Node)
+		for i := range have {
+			if slices.Contains(gone, have[i].Node) {
+				have[i].Status = stepDropped
+			}
+		}
+	}
+	plan, err := checkPlan(have, slices.Clone(specs))
+	if err != nil {
+		return "", err
+	}
+	for _, sp := range plan {
+		if err := c.checkStepRequest(sp, taint); err != nil {
+			return "", err
+		}
+	}
+	if step != "" {
+		c.traceDrop(st, c.dropStep(ctx, st), "abandonnée pour un nouveau plan", note)
+	}
+	ids, err := c.openStepsLocked(ctx, parent, specs, 0, stepOpener{author: surfaceAuthorBrain, tainted: taint})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Dropped %d step(s); opened %s.", len(gone), strings.Join(slices.Sorted(maps.Keys(ids)), ", ")), nil
 }
 
 // settleWork is the brain's word on a work, not on a step.
@@ -1142,7 +1201,7 @@ func (c *core) settleWork(ctx context.Context, w work, outcome, note string) (st
 		return "The work is done.", nil
 	case outcome == settleRetry && w.State == workFailed:
 		if w.Checks >= finalChecks {
-			return "", fmt.Errorf("the goal was checked %d times and does not hold: open other steps, accept it as it is, or drop it", w.Checks)
+			return "", fmt.Errorf("the goal was checked %d times and does not hold: replan with other steps, accept it as it is, or drop it", w.Checks)
 		}
 		c.setWork(w.Parent, map[string]any{"state": workRunning, "since": now})
 		c.traceWork(w.Parent, "Contrôle final relancé."+withNote(note), "")
@@ -1195,7 +1254,22 @@ func (c *core) retryStep(ctx context.Context, st Step, note string) error {
 // longer start; their tasks stop. It gives the steps dropped.
 func (c *core) dropStep(ctx context.Context, st Step) []string {
 	steps, _ := c.workSteps(st.Parent)
-	gone := []string{st.Node}
+	gone := dropSet(steps, st.Node)
+	now := time.Now().Unix()
+	for _, x := range steps {
+		if slices.Contains(gone, x.Node) {
+			c.stopStepTask(ctx, x.Task)
+			c.setStep(x.Node, map[string]any{"status": stepDropped, "ended": now})
+			c.stepState(x.Node, stepDropped)
+		}
+	}
+	return gone
+}
+
+// dropSet is a step and the unfinished steps that come after it, which
+// go with it.
+func dropSet(steps []Step, node string) []string {
+	gone := []string{node}
 	for moved := true; moved; {
 		moved = false
 		for _, x := range steps {
@@ -1206,14 +1280,6 @@ func (c *core) dropStep(ctx context.Context, st Step) []string {
 				gone = append(gone, x.Node)
 				moved = true
 			}
-		}
-	}
-	now := time.Now().Unix()
-	for _, x := range steps {
-		if slices.Contains(gone, x.Node) {
-			c.stopStepTask(ctx, x.Task)
-			c.setStep(x.Node, map[string]any{"status": stepDropped, "ended": now})
-			c.stepState(x.Node, stepDropped)
 		}
 	}
 	return gone
