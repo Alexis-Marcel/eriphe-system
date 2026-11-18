@@ -38,7 +38,7 @@ func head(body string) string {
 
 func TestRoundTrip(t *testing.T) {
 	files, _ := filepath.Glob("testdata/*.md")
-	if len(files) < 4 {
+	if len(files) < 3 {
 		t.Fatalf("fixtures: %v", files)
 	}
 	for _, f := range files {
@@ -52,6 +52,23 @@ func TestRoundTrip(t *testing.T) {
 				t.Errorf("round trip changed the file:\n%s", out)
 			}
 		})
+	}
+}
+
+// CRLF line ends are kept, in the front matter, the text and a block (a
+// string here: git would turn a fixture's into LF).
+func TestRoundTripCRLF(t *testing.T) {
+	raw := []byte("---\r\nid: abc123\r\ntitle: Windows\r\nlifetime: work\r\ncreated: 2026-11-17T09:00:00Z\r\n---\r\nText.\r\n\r\n" +
+		"```eriphe:block note\r\n{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"Hi\"}]}\r\n```\r\nAfter.\r\n")
+	n, err := Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Meta.Title != "Windows" || n.Block("note") == nil || n.Text() != "Text.\r\n\r\nAfter.\r\n" {
+		t.Errorf("read: %+v %q", n.Meta, n.Text())
+	}
+	if out := mustBytes(t, n); !bytes.Equal(out, raw) {
+		t.Errorf("round trip changed the file:\n%q", out)
 	}
 }
 
