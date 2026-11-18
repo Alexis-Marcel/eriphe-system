@@ -286,11 +286,11 @@ func TestRemoteStateMachine(t *testing.T) {
 
 	f.set(func(f *fakeTailnet) {
 		f.st = running(false, h.clock.now().Add(180*24*time.Hour))
-		f.httpsURL = "https://login.tailscale.com/f/serve?node=abc"
+		f.httpsURL = "https://login.tailscale.com/f/serve?device=abc"
 	})
 	v = h.phase(phaseHTTPS)
 	v = h.wait("consent URL", func(v remoteView) bool { return v.HTTPSURL != "" })
-	if v.HTTPSURL != "https://login.tailscale.com/f/serve?node=abc" || v.Name != testTSName || v.Listening {
+	if v.HTTPSURL != "https://login.tailscale.com/f/serve?device=abc" || v.Name != testTSName || v.Listening {
 		t.Fatalf("https phase: %+v", v)
 	}
 
@@ -329,19 +329,19 @@ func TestRemoteStateMachine(t *testing.T) {
 	if string(body) != "workspace" {
 		t.Fatalf("workspace on the tailnet: %q", body)
 	}
-	// A node presents its certificate there too, with the tailnet's one in front.
+	// A device presents its certificate there too, with the tailnet's one in front.
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	_, nodeLeaf, _ := machines.issueNode("laptop", &key.PublicKey)
-	nodeClient := client(":8800")
-	nodeClient.Transport.(*http.Transport).TLSClientConfig.Certificates = []tls.Certificate{{Certificate: [][]byte{nodeLeaf.Raw}, PrivateKey: key}}
-	resp, err = nodeClient.Get("https://" + testTSName + ":8800/peer")
+	_, deviceLeaf, _ := machines.issueDevice("laptop", &key.PublicKey)
+	deviceClient := client(":8800")
+	deviceClient.Transport.(*http.Transport).TLSClientConfig.Certificates = []tls.Certificate{{Certificate: [][]byte{deviceLeaf.Raw}, PrivateKey: key}}
+	resp, err = deviceClient.Get("https://" + testTSName + ":8800/peer")
 	if err != nil {
 		t.Fatal(err)
 	}
 	body, _ = io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if string(body) != "laptop" {
-		t.Fatalf("node certificate on the tailnet: %q", body)
+		t.Fatalf("device certificate on the tailnet: %q", body)
 	}
 
 	// Fourteen days before the key expires, the page warns.

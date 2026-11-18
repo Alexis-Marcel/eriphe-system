@@ -1,0 +1,259 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+)
+
+// The access log keeps what Eriphe did on a device, newest first, without
+// repeating the same entry at once, and forgets what is past 90 days.
+func TestDeviceLogStore(t *testing.T) {
+	_, store := foldersCore(t)
+	store.logDevice("pc", DeviceLogEntry{Kind: logList, Detail: "data:/"})
+	store.logDevice("pc", DeviceLogEntry{Kind: logList, Detail: "data:/"}) // the same, just after: not repeated
+	store.logDevice("pc", DeviceLogEntry{Kind: logTask, Task: "t1", Detail: "sonnet"})
+	store.logDevice("nas", DeviceLogEntry{Kind: logCut})
+	got, err := store.deviceLog("pc", 10, 0)
+	if err != nil || len(got) != 2 || got[0].Kind != logTask || got[0].Task != "t1" || got[1].Kind != logList {
+		t.Fatalf("log %+v, %v", got, err)
+	}
+	if older, _ := store.deviceLog("pc", 10, got[0].ID); len(older) != 1 || older[0].Kind != logList {
+		t.Fatalf("before %d: %+v", got[0].ID, older)
+	}
+	// An entry past the retention is no longer shown, and goes at the next one.
+	store.db.Exec(`UPDATE device_log SET time = ? WHERE kind = ?`, time.Now().Add(-deviceLogRetention-time.Hour).Unix(), logList)
+	if got, _ := store.deviceLog("pc", 10, 0); len(got) != 1 {
+		t.Fatalf("old entries shown: %+v", got)
+	}
+	store.logDevice("pc", DeviceLogEntry{Kind: logShare, Folder: "Clients", Access: accessRead})
+	var n int
+	store.db.QueryRow(`SELECT COUNT(*) FROM device_log WHERE device = 'pc'`).Scan(&n)
+	if n != 2 {
+		t.Fatalf("%d entries kept, want 2", n)
+	}
+	// Forgetting a device forgets its log.
+	store.deleteDevice("pc")
+	if got, _ := store.deviceLog("pc", 10, 0); len(got) != 0 {
+		t.Fatalf("log of a forgotten device: %+v", got)
+	}
+}
+
+// Eriphe logs a folder shared on the device, lent to a task with its
+// right, the task itself, a file it wrote there, and the folder closed.
+func TestDeviceLogRecordsAccess(t *testing.T) {
+	c, store := foldersCore(t)
+	ctx := context.Background()
+	task, err := c.runTask(ctx, runRequest{Prompt: "sum the invoices", Resources: folderRefs("Clients")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.logResults(task, []EventRow{
+		{Type: "tool_use", Data: map[string]any{"name": "Write", "input": map[string]any{"file_path": "/work/folders/Clients/summary.md"}}},
+		{Type: "tool_use", Data: map[string]any{"name": "Write", "input": map[string]any{"file_path": "/work/out.md"}}},
+		{Type: "tool_use", Data: map[string]any{"name": "Bash", "input": map[string]any{"command": "ls"}}},
+	})
+	if err := c.removeFolder(ctx, "clients"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := store.deviceLog("nas", 20, 0)
+	var kinds []string
+	for _, e := range got {
+		kinds = append(kinds, e.Kind)
+	}
+	if strings.Join(kinds, ",") != "unshare,result,lend,task,share,share" {
+		t.Fatalf("kinds %v", kinds)
+	}
+	if e := got[1]; e.Task != task.ID || e.Folder != "Clients" || e.Detail != "summary.md" {
+		t.Fatalf("result %+v", e)
+	}
+	if e := got[2]; e.Task != task.ID || e.Folder != "Clients" || e.Access != accessWrite {
+		t.Fatalf("lend %+v", e)
+	}
+	if e := got[3]; e.Task != task.ID || e.Detail != "sonnet" {
+		t.Fatalf("task %+v", e)
+	}
+	if e := got[5]; e.Folder != "Clients" || e.Access != accessWrite || e.Detail != "" {
+		t.Fatalf("share %+v", e)
+	}
+	if other, _ := store.deviceLog("pc", 20, 0); len(other) != 0 {
+		t.Fatalf("logged on another device: %+v", other)
+	}
+}
+
+// Cutting a device's access stops its tasks, sends it no new work, refuses
+// to list or lend its folders, drops its tunnel and refuses it again until
+// access is restored; nothing is forgotten.
+func TestSuspendDevice(t *testing.T) {
+	c, store := foldersCore(t)
+	ctx := context.Background()
+	running, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients")})
+	if err != nil || running.Device != "nas" {
+		t.Fatalf("task %+v, %v", running, err)
+	}
+
+	if err := c.suspendDevice("nas"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.suspendDevice("ghost"); err != errNoDevice {
+		t.Fatalf("unknown device: %v", err)
+	}
+	// Its tunnel is dropped, its task stopped.
+	if c.device("nas").connected() {
+		t.Fatal("the tunnel is still up")
+	}
+	if got, _ := store.task(running.ID); got.State != stateStopped {
+		t.Fatalf("its task is %s", got.State)
+	}
+	devices, _ := store.devices()
+	for _, n := range devices {
+		if n.Name == "nas" && (!n.Suspended || n.Online) {
+			t.Fatalf("nas %+v", n)
+		}
+	}
+	// No work: neither asked for by name, nor chosen, nor for its folders.
+	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Device: "nas"}); err == nil || !strings.Contains(err.Error(), "cut") {
+		t.Fatalf("by name: %v", err)
+	}
+	if task, err := c.runTask(ctx, runRequest{Prompt: "x"}); err != nil || task.Device != "pc" {
+		t.Fatalf("chosen: %+v, %v", task, err)
+	}
+	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Resources: folderRefs("Clients")}); err == nil || !strings.Contains(err.Error(), "cut") {
+		t.Fatalf("its folders lent: %v", err)
+	}
+	// It is let in neither through its tunnel nor for its assignments,
+	// even with its right secret.
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/devices/connect", c.handleConnect)
+	mux.HandleFunc("GET /v1/device/assignments", c.handleAssignments)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	call := func(path string) int {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+		req.Header.Set("Authorization", "Bearer x")
+		req.Header.Set("Eriphe-Device", "nas")
+		req.Header.Set("Connection", "Upgrade")
+		req.Header.Set("Upgrade", tunnelProto)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := call("/v1/devices/connect"); code != http.StatusForbidden {
+		t.Fatalf("reconnection: %d", code)
+	}
+	if code := call("/v1/device/assignments"); code != http.StatusUnauthorized {
+		t.Fatalf("assignments: %d", code)
+	}
+	// Nothing is forgotten; restored, it may connect again.
+	if f, err := store.folder("Clients"); err != nil || f.Device != "nas" || !store.checkDevice("nas", hashSecret("x")) {
+		t.Fatalf("forgotten: %+v, %v", f, err)
+	}
+	if err := c.resumeDevice("nas"); err != nil {
+		t.Fatal(err)
+	}
+	if code := call("/v1/devices/connect"); code == http.StatusForbidden || code == http.StatusUnauthorized {
+		t.Fatalf("restored, connection: %d", code)
+	}
+	got, _ := store.deviceLog("nas", 10, 0)
+	if len(got) < 2 || got[0].Kind != logRestore || got[1].Kind != logCut {
+		t.Fatalf("log %+v", got)
+	}
+}
+
+// The API: the log, and cutting and restoring access.
+func TestDeviceAccessAPI(t *testing.T) {
+	c, store := foldersCore(t)
+	mux := http.NewServeMux()
+	c.deviceAccessRoutes(mux, "tok")
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	call := func(method, path string, out any) int {
+		req, _ := http.NewRequest(method, srv.URL+path, nil)
+		req.Header.Set("Authorization", "Bearer tok")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if out != nil {
+			json.NewDecoder(resp.Body).Decode(out)
+		}
+		return resp.StatusCode
+	}
+	if code := call("POST", "/v1/devices/nas/suspend", nil); code != http.StatusOK || !store.deviceSuspended("nas") {
+		t.Fatalf("suspend: %d", code)
+	}
+	var out struct {
+		Suspended bool             `json:"suspended"`
+		Log       []DeviceLogEntry `json:"log"`
+	}
+	if code := call("GET", "/v1/devices/nas/log", &out); code != http.StatusOK || !out.Suspended || len(out.Log) != 3 || out.Log[0].Kind != logCut {
+		t.Fatalf("log: %d %+v", code, out)
+	}
+	if code := call("POST", "/v1/devices/nas/resume", nil); code != http.StatusOK || store.deviceSuspended("nas") {
+		t.Fatalf("resume: %d", code)
+	}
+	if code := call("GET", "/v1/devices/ghost/log", nil); code != http.StatusNotFound {
+		t.Fatalf("unknown: %d", code)
+	}
+	if code := call("POST", "/v1/devices/ghost/suspend", nil); code != http.StatusNotFound {
+		t.Fatalf("unknown suspend: %d", code)
+	}
+	req, _ := http.NewRequest("POST", srv.URL+"/v1/devices/nas/suspend", nil)
+	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("without the token: %d", resp.StatusCode)
+	}
+}
+
+// Settings → Devices: each card says what Eriphe sees and can do there,
+// and opens the device's page as a whole (its name is a stretched link);
+// a device's page shows its log; cutting access shows on the card.
+func TestWebDevices(t *testing.T) {
+	c, _ := foldersCore(t)
+	tw := newTestWebFor(t, c)
+	csrf := tw.setup()
+
+	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
+	for _, want := range []string{"Appareils", "Connecter un appareil", "Ce qu&#39;Eriphe voit ici", "Ce qu&#39;Eriphe peut faire ici",
+		"Faire travailler des agents", `<a href="/settings/folders">`, "Clients", "Modifier", "Rien d&#39;ouvert",
+		`href="/settings/folders#folders-pc"`, `<a href="/settings/devices/nas" class="stretched">nas</a>`, `<span class="device-more" aria-hidden="true">Détails ›</span>`, "Couper l&#39;accès", `hx-post="/settings/devices/nas/suspend"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("GET /settings/devices lacks %q", want)
+		}
+	}
+
+	_, body, _ = tw.do("GET", "/settings/devices/nas", nil, nil)
+	for _, want := range []string{"Journal des accès", "Dossier ouvert à Eriphe", "Clients", "Couper l&#39;accès"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("GET /settings/devices/nas lacks %q", want)
+		}
+	}
+	if code, _, h := tw.do("GET", "/settings/devices/ghost", nil, nil); code != http.StatusSeeOther || h.Get("Location") != "/settings/devices" {
+		t.Errorf("unknown device: %d", code)
+	}
+
+	if code, _, h := tw.post("/settings/devices/nas/suspend", url.Values{}, csrf); code != http.StatusOK || h.Get("HX-Refresh") != "true" {
+		t.Fatalf("suspend: %d", code)
+	}
+	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
+	for _, want := range []string{"Accès coupé", `class="tile device is-cut"`, "Rétablir l&#39;accès", `hx-post="/settings/devices/nas/resume"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("cut: GET /settings/devices lacks %q", want)
+		}
+	}
+	// A cut device is no longer offered to share a folder from.
+	if _, body, _ = tw.do("GET", "/settings/folders", nil, nil); strings.Contains(body, `<option value="nas"`) {
+		t.Error("the folders page offers a cut device")
+	}
+	if code, _, _ := tw.post("/settings/devices/nas/resume", url.Values{}, csrf); code != http.StatusOK || c.store.deviceSuspended("nas") {
+		t.Fatalf("resume: %d", code)
+	}
+}

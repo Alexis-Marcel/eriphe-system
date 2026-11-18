@@ -168,23 +168,23 @@ func TestProxyFiltersAndForwards(t *testing.T) {
 	}
 }
 
-// The node-facing endpoint: the node's own secret, a task of that node, a
+// The device-facing endpoint: the device's own secret, a task of that device, a
 // server of its grant.
 func TestTaskMCPEndpoint(t *testing.T) {
 	c := newCatalogCore(t)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", State: stateRunning, Tools: "github"})
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Runtime: "claude-code", State: stateRunning, Tools: "github"})
 	mux := http.NewServeMux()
-	mux.Handle("/v1/node/tasks/{id}/mcp/{server}", c.taskMCPHandler())
+	mux.Handle("/v1/device/tasks/{id}/mcp/{server}", c.taskMCPHandler())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	session := func(server, secret string) (*mcp.ClientSession, error) {
-		hc := &http.Client{Transport: headerTransport{"Authorization": "Bearer " + secret, "Eriphe-Node": "pc"}}
-		tr := &mcp.StreamableClientTransport{Endpoint: srv.URL + "/v1/node/tasks/t-1/mcp/" + server, HTTPClient: hc, MaxRetries: -1}
+		hc := &http.Client{Transport: headerTransport{"Authorization": "Bearer " + secret, "Eriphe-Device": "pc"}}
+		tr := &mcp.StreamableClientTransport{Endpoint: srv.URL + "/v1/device/tasks/t-1/mcp/" + server, HTTPClient: hc, MaxRetries: -1}
 		return mcp.NewClient(&mcp.Implementation{Name: "relay"}, nil).Connect(context.Background(), tr, nil)
 	}
-	cs, err := session("github", "node-secret")
+	cs, err := session("github", "device-secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,11 +192,11 @@ func TestTaskMCPEndpoint(t *testing.T) {
 	if res, err := cs.ListTools(context.Background(), nil); err != nil || len(res.Tools) != 2 {
 		t.Fatalf("tools = %+v, %v", res, err)
 	}
-	if _, err := session("notes", "node-secret"); err == nil {
+	if _, err := session("notes", "device-secret"); err == nil {
 		t.Fatal("a server outside the grant answered")
 	}
 	if _, err := session("github", "wrong"); err == nil {
-		t.Fatal("a wrong node secret answered")
+		t.Fatal("a wrong device secret answered")
 	}
 }
 
@@ -210,12 +210,12 @@ func (h headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r)
 }
 
-// A task's assignment names its servers only, pointing at nothing: the node
+// A task's assignment names its servers only, pointing at nothing: the device
 // relays them. No vendor token is anywhere in it.
 func TestAssignmentCatalogServers(t *testing.T) {
 	c := newCatalogCore(t)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
 	ctx := context.Background()
 	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Tools: []string{"mail"}}); err == nil {
 		t.Fatal("an unknown server was granted")
@@ -238,14 +238,14 @@ func TestAssignmentCatalogServers(t *testing.T) {
 	if task.Tools != "github.get_*,github.list_*" {
 		t.Fatalf("stored grant = %q", task.Tools)
 	}
-	req := httptest.NewRequest("GET", "/v1/node/assignments?rev=0&wait=0", nil)
-	req.Header.Set("Authorization", "Bearer node-secret")
-	req.Header.Set("Eriphe-Node", "pc")
+	req := httptest.NewRequest("GET", "/v1/device/assignments?rev=0&wait=0", nil)
+	req.Header.Set("Authorization", "Bearer device-secret")
+	req.Header.Set("Eriphe-Device", "pc")
 	w := httptest.NewRecorder()
 	c.handleAssignments(w, req)
 	raw := w.Body.Bytes()
 	var out struct {
-		Tasks []nodeAssignment `json:"tasks"`
+		Tasks []deviceAssignment `json:"tasks"`
 	}
 	json.Unmarshal(raw, &out)
 	if len(out.Tasks) != 1 || strings.Join(out.Tasks[0].Spec.Servers, ",") != "github" {
@@ -312,7 +312,7 @@ func TestBrainCatalogPermission(t *testing.T) {
 	setBrain(c, &BrainConfig{Tools: []string{"github"}})
 	ctx := context.Background()
 	ask := func(id, tool string, input map[string]any) *TaskRow {
-		c.store.insertTask(&TaskRow{ID: id, Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateWaitingPermission})
+		c.store.insertTask(&TaskRow{ID: id, Device: "pc", Kind: "brain", Runtime: "claude-code", State: stateWaitingPermission})
 		c.store.addEvents(id, []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
 			Data: map[string]any{"id": "p1", "tool_name": tool, "input": input}}})
 		task, _ := c.store.task(id)
@@ -391,7 +391,7 @@ func TestBrainRestartsOnToolChange(t *testing.T) {
 	waitStatus(t, gh, statusReady)
 	setBrain(c, &BrainConfig{Agent: "sonnet"})
 	ctx := context.Background()
-	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "b-1", Device: "pc", Kind: "brain", Runtime: "claude-code", State: stateIdle})
 	setBrainTask(c, "b-1")
 	setBrainStatus(c, func(st *AssistantStatus) { st.ToolsHash = c.assistantToolsHash(theBrain(c)) })
 	restarted := func() bool {
@@ -425,7 +425,7 @@ func TestBrainRestartsOnToolChange(t *testing.T) {
 func TestBrainFreeReadProxy(t *testing.T) {
 	c := newCatalogCore(t)
 	setBrain(c, &BrainConfig{})
-	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateRunning})
+	c.store.insertTask(&TaskRow{ID: "b-1", Device: "pc", Kind: "brain", Runtime: "claude-code", State: stateRunning})
 	setBrainTask(c, "b-1")
 	c.turn.start(1, 1, 0)
 	ctx := context.Background()
@@ -456,7 +456,7 @@ func TestBrainFreeReadProxy(t *testing.T) {
 		t.Fatalf("write without a permission = %+v", out)
 	}
 	// A worker's read still needs its ticket.
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", State: stateRunning, Tools: "github"})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Runtime: "claude-code", State: stateRunning, Tools: "github"})
 	w := connectTo(t, c.taskServer("t-1", []string{"github"}, "github"))
 	if out, _ := w.CallTool(ctx, &mcp.CallToolParams{Name: "get_issue", Arguments: map[string]any{"number": 3}}); !out.IsError {
 		t.Fatal("a worker read without a ticket")
@@ -469,26 +469,26 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 	c := newCatalogCore(t)
 	setBrain(c, &BrainConfig{})
 	setServer(c, "github", func(s *Server) { s.AlwaysLoad = true })
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
-	if _, err := c.startTask(context.Background(), "brain", runRequest{Prompt: "x", Node: "pc"},
-		nodeTaskSpec{AllowedTools: []string{"mcp__eriphe-core"}}); err != nil {
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	if _, err := c.startTask(context.Background(), "brain", runRequest{Prompt: "x", Device: "pc"},
+		deviceTaskSpec{AllowedTools: []string{"mcp__eriphe-core"}}); err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest("GET", "/v1/node/assignments?rev=0&wait=0", nil)
-	req.Header.Set("Authorization", "Bearer node-secret")
-	req.Header.Set("Eriphe-Node", "pc")
+	req := httptest.NewRequest("GET", "/v1/device/assignments?rev=0&wait=0", nil)
+	req.Header.Set("Authorization", "Bearer device-secret")
+	req.Header.Set("Eriphe-Device", "pc")
 	w := httptest.NewRecorder()
 	c.handleAssignments(w, req)
 	var out struct {
-		Tasks []nodeAssignment `json:"tasks"`
+		Tasks []deviceAssignment `json:"tasks"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &out)
 	if len(out.Tasks) != 1 {
 		t.Fatalf("assignment = %s", w.Body.Bytes())
 	}
 	spec := out.Tasks[0].Spec
-	// Without self_url, the node relays eriphe-core's own server too,
+	// Without self_url, the device relays eriphe-core's own server too,
 	// loaded upfront.
 	if strings.Join(spec.AllowedTools, ",") != "mcp__eriphe-core,mcp__github__get_issue" || strings.Join(spec.Servers, ",") != "github,notes,eriphe-core" ||
 		strings.Join(spec.AlwaysLoad, ",") != "github,eriphe-core" || len(spec.MCPServers) != 0 {
@@ -513,22 +513,22 @@ func TestBrainAssignmentFreeReads(t *testing.T) {
 	}
 }
 
-// Without self_url, the node relays eriphe-core's own tools to the brain,
+// Without self_url, the device relays eriphe-core's own tools to the brain,
 // and to no other task.
 func TestSelfServerRelay(t *testing.T) {
 	c := newCatalogCore(t)
 	setBrain(c, &BrainConfig{})
 	c.self = newMCPServer(c)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Runtime: "claude-code", State: stateRunning})
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", State: stateRunning, Tools: "github"})
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "pc", Runtime: "claude-code", State: stateRunning})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Runtime: "claude-code", State: stateRunning, Tools: "github"})
 	mux := http.NewServeMux()
-	mux.Handle("/v1/node/tasks/{id}/mcp/{server}", c.taskMCPHandler())
+	mux.Handle("/v1/device/tasks/{id}/mcp/{server}", c.taskMCPHandler())
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	session := func(task string) (*mcp.ClientSession, error) {
-		hc := &http.Client{Transport: headerTransport{"Authorization": "Bearer node-secret", "Eriphe-Node": "pc"}}
-		tr := &mcp.StreamableClientTransport{Endpoint: srv.URL + "/v1/node/tasks/" + task + "/mcp/" + selfServer, HTTPClient: hc, MaxRetries: -1}
+		hc := &http.Client{Transport: headerTransport{"Authorization": "Bearer device-secret", "Eriphe-Device": "pc"}}
+		tr := &mcp.StreamableClientTransport{Endpoint: srv.URL + "/v1/device/tasks/" + task + "/mcp/" + selfServer, HTTPClient: hc, MaxRetries: -1}
 		return mcp.NewClient(&mcp.Implementation{Name: "relay"}, nil).Connect(context.Background(), tr, nil)
 	}
 	cs, err := session("b-1")
@@ -556,13 +556,13 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 	c := newCatalogCore(t)
 	c.conf().User = "Sam"
 	setBrain(c, &BrainConfig{})
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
-	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateRunning})
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.insertTask(&TaskRow{ID: "b-1", Device: "pc", Kind: "brain", Runtime: "claude-code", State: stateRunning})
 	setBrainTask(c, "b-1")
 	ctx := context.Background()
 	wait := func(id, pid string) {
-		c.store.insertTask(&TaskRow{ID: id, Node: "pc", Runtime: "claude-code", State: stateWaitingPermission})
+		c.store.insertTask(&TaskRow{ID: id, Device: "pc", Runtime: "claude-code", State: stateWaitingPermission})
 		c.store.addEvents(id, []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
 			Data: map[string]any{"id": pid, "tool_name": "Bash", "input": map[string]any{"command": "go test ./..."}}}})
 	}
@@ -633,7 +633,7 @@ func TestBrainRestartsOnAgentChange(t *testing.T) {
 	waitStatus(t, c.pool.get("github"), statusReady)
 	setBrain(c, &BrainConfig{Agent: "sonnet"})
 	ctx := context.Background()
-	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "b-1", Device: "pc", Kind: "brain", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
 	setBrainTask(c, "b-1")
 	setBrainStatus(c, func(st *AssistantStatus) { st.ToolsHash = c.assistantToolsHash(theBrain(c)) })
 	setBrainStatus(c, func(st *AssistantStatus) { st.SpecHash = c.assistantSpecHash(theBrain(c)) })
@@ -653,7 +653,7 @@ func TestBrainRestartsOnAgentChange(t *testing.T) {
 	}
 }
 
-// In eriphe-core's first minute, a trusted server whose node has not
+// In eriphe-core's first minute, a trusted server whose device has not
 // connected yet leaves the brain's tools unknown: the idle brain is not
 // restarted, a stopped one waits; after that minute, it is a real outage.
 func TestBrainWaitsForTheCatalogAtStart(t *testing.T) {
@@ -662,12 +662,12 @@ func TestBrainWaitsForTheCatalogAtStart(t *testing.T) {
 	waitStatus(t, gh, statusReady)
 	setBrain(c, &BrainConfig{Agent: "sonnet"})
 	ctx := context.Background()
-	c.store.insertTask(&TaskRow{ID: "b-1", Node: "pc", Kind: "brain", Runtime: "claude-code", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "b-1", Device: "pc", Kind: "brain", Runtime: "claude-code", State: stateIdle})
 	setBrainTask(c, "b-1")
 	setBrainStatus(c, func(st *AssistantStatus) { st.ToolsHash = c.assistantToolsHash(theBrain(c)) })
 	setBrainStatus(c, func(st *AssistantStatus) { st.SpecHash = c.assistantSpecHash(theBrain(c)) })
 	gh.mu.Lock()
-	gh.status = statusError // its node is not connected yet
+	gh.status = statusError // its device is not connected yet
 	gh.mu.Unlock()
 	if tendBrain(ctx, c); c.store.get("brain_stopped:b-1") != "" {
 		t.Fatal("restarted on a catalog still settling")

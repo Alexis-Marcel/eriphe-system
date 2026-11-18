@@ -636,8 +636,8 @@ func TestRowTestsTheAccount(t *testing.T) {
 // A local tool a machine is starting says so, and the list refreshes itself
 // until it is up; one no machine has taken still waits.
 func TestToolStartState(t *testing.T) {
-	local := func(node, service, status string) serverView {
-		return serverView{serverInfo: serverInfo{Kind: "local", Status: status}, Node: node, Service: service}
+	local := func(device, service, status string) serverView {
+		return serverView{serverInfo: serverInfo{Kind: "local", Status: status}, Device: device, Service: service}
 	}
 	for _, tc := range []struct {
 		name            string
@@ -660,7 +660,7 @@ func TestToolStartState(t *testing.T) {
 // Why a local tool does not start, in words.
 func TestServiceProblem(t *testing.T) {
 	failed := func(msg string) serverView {
-		return serverView{serverInfo: serverInfo{Kind: "local", Error: msg}, Node: "pc", Service: stateFailed}
+		return serverView{serverInfo: serverInfo{Kind: "local", Error: msg}, Device: "pc", Service: stateFailed}
 	}
 	pull := `service agenda is failed on pc: exit status 125: Unable to find image 'x' locally
 docker: Error response from daemon: Head "https://ghcr.io/v2/x/manifests/latest": unauthorized`
@@ -670,7 +670,7 @@ docker: Error response from daemon: Head "https://ghcr.io/v2/x/manifests/latest"
 	if got := serviceProblem("fr", failed("exit status 1: panic")); !strings.Contains(got, "s'arrête sans cesse sur l'appareil pc") {
 		t.Errorf("stopped: %q", got)
 	}
-	if got := serviceProblem("fr", serverView{serverInfo: serverInfo{Kind: "local"}, Node: "pc", Service: "starting"}); got != "" {
+	if got := serviceProblem("fr", serverView{serverInfo: serverInfo{Kind: "local"}, Device: "pc", Service: "starting"}); got != "" {
 		t.Errorf("starting: %q", got)
 	}
 }

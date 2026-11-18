@@ -25,7 +25,7 @@ import (
 //	{"kind": "tool",         "ref": "github.get_*"}
 //	{"kind": "access",       "ref": "npm"}
 //
-// The list is kept with the task (tasks.resources), and the node gets its
+// The list is kept with the task (tasks.resources), and the device gets its
 // spec fields (repo, folders…), derived from it.
 // The same list decides the task's credentials (repo_lend.go) and what
 // a tainted turn may not lend (taintedResources).
@@ -201,7 +201,7 @@ func (c *core) resolveResources(list []ResourceRef) (*lentResources, error) {
 			}
 			if c.folderCase(f, cat) == gridNever {
 				if cat == catChange && f.Access != accessWrite {
-					return nil, fmt.Errorf("folder %q is shared read-only on %s: it cannot be lent write", f.Name, f.Node)
+					return nil, fmt.Errorf("folder %q is shared read-only on %s: it cannot be lent write", f.Name, f.Device)
 				}
 				return nil, fmt.Errorf("folder %q: %s is never allowed (Settings → Folders)", f.Name, cat)
 			}

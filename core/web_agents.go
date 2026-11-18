@@ -302,7 +302,7 @@ type agentForm struct {
 	Needs      string
 	PrefCPU    bool
 	PrefMem    bool
-	Prefers    string // other preferences: node labels
+	Prefers    string // other preferences: device labels
 	Image      string
 	Command    string // an ACP agent's command, one argument per line
 	Brain      bool
@@ -640,33 +640,33 @@ type providerForm struct {
 	Env     string      // the variable of its credential, when the provider names it
 	BaseURL string      // a self-hosted model server's address
 	Picker  modelPicker // the models it serves, to tick (web_models.go)
-	// A self-hosted model server: on one of the user's devices ("node",
-	// Node lends it through its tunnel) or at an address ("address").
-	Where      string
-	Node       string
-	ModelNodes []string // the devices that lend one (their -model-server)
-	KeySet     bool
-	Presets    []presetChoice
-	Login      *loginView // a ChatGPT sign-in going on or done (chatgpt.go)
-	Agents     []string   // the agents using it, on an edit
-	Error      string
-	Gallery    bool
-	AllKinds   []providerKind
-	Next       string // "welcome" in the first-run wizard (web_welcome.go), which it goes back to
+	// A self-hosted model server: on one of the user's devices ("device",
+	// Device lends it through its tunnel) or at an address ("address").
+	Where        string
+	Device       string
+	ModelDevices []string // the devices that lend one (their -model-server)
+	KeySet       bool
+	Presets      []presetChoice
+	Login        *loginView // a ChatGPT sign-in going on or done (chatgpt.go)
+	Agents       []string   // the agents using it, on an edit
+	Error        string
+	Gallery      bool
+	AllKinds     []providerKind
+	Next         string // "welcome" in the first-run wizard (web_welcome.go), which it goes back to
 }
 
 func (w *web) providerFormPage(rw http.ResponseWriter, r *http.Request, s *session, f providerForm, block string) {
 	f.AllKinds = providerKinds
 	if f.Kind.ID == selfHostedKind {
-		f.ModelNodes = w.c.modelNodes()
-		if f.Node != "" && !slices.Contains(f.ModelNodes, f.Node) {
-			f.ModelNodes = append(f.ModelNodes, f.Node) // its device, even while it lends none
+		f.ModelDevices = w.c.modelDevices()
+		if f.Device != "" && !slices.Contains(f.ModelDevices, f.Device) {
+			f.ModelDevices = append(f.ModelDevices, f.Device) // its device, even while it lends none
 		}
 		if f.Where == "" {
 			// A device that lends a model first: nothing to open on the network.
 			f.Where = whereAddress
-			if f.Node != "" || f.BaseURL == "" && len(f.ModelNodes) > 0 {
-				f.Where = whereNode
+			if f.Device != "" || f.BaseURL == "" && len(f.ModelDevices) > 0 {
+				f.Where = whereOnDevice
 			}
 		}
 		if f.Edit {
@@ -674,7 +674,7 @@ func (w *web) providerFormPage(rw http.ResponseWriter, r *http.Request, s *sessi
 		}
 		// Its models are asked at once from a device, or from the server of
 		// an account being edited; an address waits for "Detect".
-		f.Picker.Auto = f.Picker.Result == nil && (f.Edit || f.Where == whereNode && len(f.ModelNodes) > 0)
+		f.Picker.Auto = f.Picker.Result == nil && (f.Edit || f.Where == whereOnDevice && len(f.ModelDevices) > 0)
 	}
 	if !f.Edit && f.Kind.ID != "" {
 		f.Presets = w.presetChoices(f.Kind, f.Name, f.Presets)
@@ -725,7 +725,7 @@ func (w *web) handleEditProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	agents := m.agentsOf(name)
 	sort.Strings(agents)
 	w.providerFormPage(rw, r, s, providerForm{Edit: true, Name: name, Kind: k, Env: p.Env, BaseURL: p.BaseURL, Picker: modelPicker{Picks: pickModels(p.Models, nil, true, nil)},
-		Node: p.Node, KeySet: p.Secret != "", Agents: agents}, "")
+		Device: p.Device, KeySet: p.Secret != "", Agents: agents}, "")
 }
 
 // providerPost is the provider form as posted: the form to show again, the
@@ -832,12 +832,12 @@ func (w *web) readProviderForm(r *http.Request, s *session, m *Config) *provider
 func readSelfHostedForm(r *http.Request, pp *providerPost) {
 	f := &pp.f
 	f.BaseURL = strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
-	f.Where, f.Node = r.PostFormValue("where"), r.PostFormValue("node")
+	f.Where, f.Device = r.PostFormValue("where"), r.PostFormValue("device")
 	ticked := postedTicks(r)
 	f.Picker = modelPicker{Manual: r.PostFormValue("models"), Picks: pickModels(pp.usedModels, ticked, f.Edit, nil)}
 	pp.p.Models = modelLines(strings.Join(append(slices.Clone(ticked), f.Picker.Manual), "\n"))
-	if f.Where == whereNode {
-		pp.p.Node = f.Node
+	if f.Where == whereOnDevice {
+		pp.p.Device = f.Device
 	} else {
 		f.Where, pp.p.BaseURL = whereAddress, f.BaseURL
 	}
@@ -858,9 +858,9 @@ func (w *web) providerFormError(r *http.Request, s *session, m *Config, pp *prov
 		return errors.New("providers.badenv")
 	case !selfHosted:
 		return nil
-	case f.Where == whereNode && !w.c.lendsModel(p.Node, m.Providers[f.Name].Node):
-		return errors.New("providers.nonode")
-	case p.Node == "" && checkBaseURL(p.BaseURL) != nil:
+	case f.Where == whereOnDevice && !w.c.lendsModel(p.Device, m.Providers[f.Name].Device):
+		return errors.New("providers.nodevice")
+	case p.Device == "" && checkBaseURL(p.BaseURL) != nil:
 		return errors.New("providers.badbaseurl")
 	case clearToInternet(p.BaseURL):
 		return errors.New("providers.clearbaseurl")
@@ -981,15 +981,15 @@ func (w *web) handleDeleteProvider(rw http.ResponseWriter, r *http.Request, s *s
 
 // Where a self-hosted model server is, in the provider form.
 const (
-	whereNode    = "node"    // on one of the user's devices, through its tunnel
-	whereAddress = "address" // at an address on the network
+	whereOnDevice = "device"  // on one of the user's devices, through its tunnel
+	whereAddress  = "address" // at an address on the network
 )
 
 // checkSelfHostedForm tries a self-hosted model server as the form names
 // it: on a device, or at an address.
-func (w *web) checkSelfHostedForm(r *http.Request, lang, where, base, node, key string) testView {
-	if where == whereNode {
-		return w.c.checkNodeModel(r.Context(), lang, node, key)
+func (w *web) checkSelfHostedForm(r *http.Request, lang, where, base, device, key string) testView {
+	if where == whereOnDevice {
+		return w.c.checkDeviceModel(r.Context(), lang, device, key)
 	}
 	v := checkSelfHosted(r.Context(), lang, base, key)
 	if v.State == "err" && v.Cause == causeNetwork && tailnetURL(base) {
@@ -1043,12 +1043,12 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 		kind = p.Kind
 		if kind == selfHostedKind {
 			// The address or device of the form, else the stored one; the same for its key.
-			where, base, node, key, err := w.selfHostedTarget(r, n)
+			where, base, device, key, err := w.selfHostedTarget(r, n)
 			if err != nil {
 				show(testView{State: "err", Text: tr(lang, err.Error())})
 				return
 			}
-			v := w.checkSelfHostedForm(r, lang, where, base, node, key)
+			v := w.checkSelfHostedForm(r, lang, where, base, device, key)
 			log.Printf("web: provider test (%s): %s", kind, v.State) // never the key
 			show(v)
 			return
@@ -1068,7 +1068,7 @@ func (w *web) handleTestProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	}
 	var v testView
 	if kind == selfHostedKind {
-		v = w.checkSelfHostedForm(r, lang, r.PostFormValue("where"), strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/"), r.PostFormValue("node"), key)
+		v = w.checkSelfHostedForm(r, lang, r.PostFormValue("where"), strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/"), r.PostFormValue("device"), key)
 	} else {
 		v = checkProvider(r.Context(), lang, kind, key)
 	}

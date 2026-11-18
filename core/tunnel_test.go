@@ -15,7 +15,7 @@ import (
 	"github.com/hashicorp/yamux"
 )
 
-// A node joins with a join token, connects, and is then reachable through
+// A device joins with a join token, connects, and is then reachable through
 // its tunnel; the token works only once.
 func TestJoinAndConnect(t *testing.T) {
 	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
@@ -25,8 +25,8 @@ func TestJoinAndConnect(t *testing.T) {
 	c := newCore(&Config{}, store)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/join-tokens", c.handleJoinToken)
-	mux.HandleFunc("POST /v1/nodes/join", c.handleJoin)
-	mux.HandleFunc("GET /v1/nodes/connect", c.handleConnect)
+	mux.HandleFunc("POST /v1/devices/join", c.handleJoin)
+	mux.HandleFunc("GET /v1/devices/connect", c.handleConnect)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -47,17 +47,17 @@ func TestJoinAndConnect(t *testing.T) {
 		t.Fatal("join token")
 	}
 	var joined struct{ Secret string }
-	if code := post("/v1/nodes/join", map[string]string{"name": "pc", "token": tok.Token}, &joined); code != http.StatusOK {
+	if code := post("/v1/devices/join", map[string]string{"name": "pc", "token": tok.Token}, &joined); code != http.StatusOK {
 		t.Fatalf("join: %d", code)
 	}
-	if code := post("/v1/nodes/join", map[string]string{"name": "pc", "token": tok.Token}, nil); code != http.StatusUnauthorized {
+	if code := post("/v1/devices/join", map[string]string{"name": "pc", "token": tok.Token}, nil); code != http.StatusUnauthorized {
 		t.Fatalf("reused token: %d", code)
 	}
 
-	// The node side: upgrade, then serve its API on the session.
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/nodes/connect", nil)
+	// The device side: upgrade, then serve its API on the session.
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/devices/connect", nil)
 	req.Header.Set("Authorization", "Bearer "+joined.Secret)
-	req.Header.Set("Eriphe-Node", "pc")
+	req.Header.Set("Eriphe-Device", "pc")
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", tunnelProto)
 	resp, err := http.DefaultClient.Do(req)
@@ -72,23 +72,23 @@ func TestJoinAndConnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	api := http.NewServeMux()
-	api.HandleFunc("GET /v1/node", func(w http.ResponseWriter, _ *http.Request) {
+	api.HandleFunc("GET /v1/device", func(w http.ResponseWriter, _ *http.Request) {
 		io.WriteString(w, `{"runtimes":["claude-code"]}`)
 	})
 	go http.Serve(session, api)
 
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		nodes, _ := store.nodes()
-		if len(nodes) == 1 && nodes[0].Online {
+		devices, _ := store.devices()
+		if len(devices) == 1 && devices[0].Online {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("node never came online: %+v", nodes)
+			t.Fatalf("device never came online: %+v", devices)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	info, err := c.node("pc").info(context.Background(), 1)
+	info, err := c.device("pc").info(context.Background(), 1)
 	if err != nil || string(bytes.TrimSpace(info)) != `{"runtimes":["claude-code"]}` {
 		t.Fatalf("info = %s, %v", info, err)
 	}
@@ -96,33 +96,33 @@ func TestJoinAndConnect(t *testing.T) {
 	session.Close()
 	deadline = time.Now().Add(5 * time.Second)
 	for {
-		nodes, _ := store.nodes()
-		if !nodes[0].Online {
+		devices, _ := store.devices()
+		if !devices[0].Online {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("node still online after disconnect")
+			t.Fatal("device still online after disconnect")
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	bad, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/nodes/connect", nil)
+	bad, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/devices/connect", nil)
 	bad.Header.Set("Authorization", "Bearer wrong")
-	bad.Header.Set("Eriphe-Node", "pc")
+	bad.Header.Set("Eriphe-Device", "pc")
 	if resp, _ := http.DefaultClient.Do(bad); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("wrong secret: %s", resp.Status)
 	}
 }
 
-// registerNode registers a node directly, for tests that need one.
-func (s *Store) registerNode(name, secretHash string) error {
-	_, err := s.db.Exec(`INSERT INTO nodes (name, url, secret_hash) VALUES (?, '', ?)
+// registerDevice registers a device directly, for tests that need one.
+func (s *Store) registerDevice(name, secretHash string) error {
+	_, err := s.db.Exec(`INSERT INTO devices (name, url, secret_hash) VALUES (?, '', ?)
 		ON CONFLICT(name) DO UPDATE SET secret_hash = excluded.secret_hash`, name, secretHash)
 	return err
 }
 
-// A join token is for one node name. It cannot take over a registered node,
-// unless it was made to rejoin that node; registered nodes keep working.
+// A join token is for one device name. It cannot take over a registered device,
+// unless it was made to rejoin that device; registered devices keep working.
 func TestJoinTokenNameBinding(t *testing.T) {
 	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
 	if err != nil {
@@ -131,7 +131,7 @@ func TestJoinTokenNameBinding(t *testing.T) {
 	c := newCore(&Config{}, store)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/join-tokens", c.handleJoinToken)
-	mux.HandleFunc("POST /v1/nodes/join", c.handleJoin)
+	mux.HandleFunc("POST /v1/devices/join", c.handleJoin)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	post := func(path string, in any, out any) int {
@@ -155,12 +155,12 @@ func TestJoinTokenNameBinding(t *testing.T) {
 	}
 	join := func(name, tok string) (int, string) {
 		var out struct{ Secret string }
-		code := post("/v1/nodes/join", map[string]string{"name": name, "token": tok}, &out)
+		code := post("/v1/devices/join", map[string]string{"name": name, "token": tok}, &out)
 		return code, out.Secret
 	}
 
-	// A node registered before named tokens (the NAS, the PC) keeps its secret.
-	if err := store.registerNode("nas", hashSecret("nas-secret")); err != nil {
+	// A device registered before named tokens (the NAS, the PC) keeps its secret.
+	if err := store.registerDevice("nas", hashSecret("nas-secret")); err != nil {
 		t.Fatal(err)
 	}
 	token("", http.StatusBadRequest)
@@ -175,7 +175,7 @@ func TestJoinTokenNameBinding(t *testing.T) {
 	if code, _ := join("nas", pc); code != http.StatusForbidden {
 		t.Fatalf("a token for pc joined as nas: %d", code)
 	}
-	if !store.checkNode("nas", hashSecret("nas-secret")) {
+	if !store.checkDevice("nas", hashSecret("nas-secret")) {
 		t.Fatal("nas lost its secret")
 	}
 	code, pcSecret := join("pc", pc) // the refused try left the token unused
@@ -209,7 +209,7 @@ func TestJoinTokenNameBinding(t *testing.T) {
 	if code != http.StatusOK || newSecret == pcSecret {
 		t.Fatalf("rejoin pc: %d", code)
 	}
-	if store.checkNode("pc", hashSecret(pcSecret)) || !store.checkNode("pc", hashSecret(newSecret)) {
+	if store.checkDevice("pc", hashSecret(pcSecret)) || !store.checkDevice("pc", hashSecret(newSecret)) {
 		t.Fatal("rejoining did not replace pc's secret")
 	}
 	if code, _ := join("pc", re); code != http.StatusUnauthorized {

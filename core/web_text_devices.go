@@ -1,7 +1,7 @@
 package main
 
 // The words of Settings → Devices: what Eriphe sees and can do on each
-// device, its access log and "Cut access" (web_devices.go, node_access.go).
+// device, its access log and "Cut access" (web_devices.go, device_access.go).
 
 func init() {
 	for lang, words := range deviceStrings {

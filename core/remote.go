@@ -57,7 +57,7 @@ type tsStatus struct {
 	Tailnet     string
 	MagicDNS    bool
 	CertDomains []string
-	KeyExpiry   time.Time // zero: the key does not expire (a tagged node)
+	KeyExpiry   time.Time // zero: the key does not expire (a tagged device)
 }
 
 type tailnetOptions struct {
@@ -143,7 +143,7 @@ func (v remoteView) URL() string {
 	return "https://" + v.Name
 }
 
-// APIURL is eriphe-core's API on the tailnet, for nodes away from home.
+// APIURL is eriphe-core's API on the tailnet, for devices away from home.
 func (v remoteView) APIURL() string {
 	if v.Name == "" {
 		return ""
@@ -164,7 +164,7 @@ type remoteAccess struct {
 	authKey    func() string                    // from the vault
 	forgetKey  func() error                     // removes it from the vault
 	logf       func(format string, args ...any)
-	// The machines' CA (machine_tls.go): the API asks nodes for their
+	// The machines' CA (machine_tls.go): the API asks devices for their
 	// certificate of it, without requiring one. Nil: it asks for none.
 	clientCAs *x509.CertPool
 
@@ -726,7 +726,7 @@ func (r *remoteAccess) listenLocked(ts tailnet) error {
 	if err != nil {
 		return fail(fmt.Errorf("listen :%s: %w", remoteAPIPort, err))
 	}
-	// HTTP/1.1 only: the nodes' tunnel is an HTTP/1.1 upgrade.
+	// HTTP/1.1 only: the devices' tunnel is an HTTP/1.1 upgrade.
 	srv := &http.Server{Handler: r.api, ReadHeaderTimeout: 10 * time.Second, ErrorLog: log.New(tlsNoise{}, "", 0)}
 	opened = append(opened, srv)
 	apiTLS := tlsConfig("http/1.1")

@@ -30,22 +30,22 @@ import (
 
 // Machines reach eriphe-core over TLS, with a certificate authority of
 // their own, like kubeadm's cluster CA. It is not the workspace's
-// certificate: it only signs eriphe-core's certificate for the nodes and
-// one client certificate per node.
+// certificate: it only signs eriphe-core's certificate for the devices and
+// one client certificate per device.
 //
 //   - eriphe-core makes the CA at first start, next to the database
-//     (machine-ca.pem, machine-ca-key.pem), and keeps it: nodes pin it.
+//     (machine-ca.pem, machine-ca-key.pem), and keeps it: devices pin it.
 //   - The join command carries the hash of the CA's public key (-ca-hash
-//     sha256:<hex>, as kubeadm's --discovery-token-ca-cert-hash): the node
+//     sha256:<hex>, as kubeadm's --discovery-token-ca-cert-hash): the device
 //     checks it in the TLS handshake of its join.
-//   - A node asks for its client certificate (POST /v1/node/certificate)
+//   - A device asks for its client certificate (POST /v1/device/certificate)
 //     with its secret, then with its certificate to renew it. A request that
-//     presents one must present the node's current (or previous) one:
-//     forgetting a node or letting it join again revokes it at once.
+//     presents one must present the device's current (or previous) one:
+//     forgetting a device or letting it join again revokes it at once.
 //   - The API port serves TLS and plain HTTP side by side (sniffListener):
 //     the CLI, Home Assistant and the brain keep their plain HTTP, and a
-//     node that joined over plain HTTP moves to TLS by itself on the same
-//     address. nodesTLSOnlyKey then closes the plain path for nodes: from
+//     device that joined over plain HTTP moves to TLS by itself on the same
+//     address. devicesTLSOnlyKey then closes the plain path for devices: from
 //     the start on a new installation, and on an older one as soon as
 //     every machine has its certificate.
 
@@ -53,16 +53,16 @@ const (
 	machineCAFile    = "machine-ca.pem"
 	machineCAKeyFile = "machine-ca-key.pem"
 	// machineServerName is the name in eriphe-core's certificate for the
-	// nodes: they check it whatever address they dial (an IP, a container's
+	// devices: they check it whatever address they dial (an IP, a container's
 	// name), since only this CA can sign it.
-	machineServerName = "eriphe-core"
-	nodeCertLifetime  = 365 * 24 * time.Hour
-	// nodesTLSOnlyKey, when "1", refuses nodes over plain HTTP and nodes
+	machineServerName  = "eriphe-core"
+	deviceCertLifetime = 365 * 24 * time.Hour
+	// devicesTLSOnlyKey, when "1", refuses devices over plain HTTP and devices
 	// without their certificate. Unset, eriphe-core sets it by itself once
 	// every machine has its certificate (autoTLSOnly): at once on a new
 	// installation. "0" is the API's explicit choice to keep the plain path
-	// open (PUT /v1/nodes/tls), never changed by itself.
-	nodesTLSOnlyKey = "nodes_tls_only"
+	// open (PUT /v1/devices/tls), never changed by itself.
+	devicesTLSOnlyKey = "devices_tls_only"
 )
 
 type machineCA struct {
@@ -79,7 +79,7 @@ type machineCA struct {
 
 // openMachineCA loads the machines' CA from dir, or makes it if there is
 // none yet. A CA that is there but does not load is an error, never
-// replaced: every node pins it.
+// replaced: every device pins it.
 func openMachineCA(dir string) (*machineCA, error) {
 	certFile, keyFile := filepath.Join(dir, machineCAFile), filepath.Join(dir, machineCAKeyFile)
 	certPEM, err := os.ReadFile(certFile)
@@ -173,8 +173,8 @@ func randomSerial() *big.Int {
 
 func serialHex(cert *x509.Certificate) string { return cert.SerialNumber.Text(16) }
 
-// serverCertificate is eriphe-core's certificate for the nodes, signed by
-// the CA and sent with it (a joining node finds it by its hash), made again
+// serverCertificate is eriphe-core's certificate for the devices, signed by
+// the CA and sent with it (a joining device finds it by its hash), made again
 // a month before its end.
 func (ca *machineCA) serverCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 	ca.mu.Lock()
@@ -205,14 +205,14 @@ func (ca *machineCA) serverCertificate(*tls.ClientHelloInfo) (*tls.Certificate, 
 	return ca.server, nil
 }
 
-// issueNode signs a client certificate for the node name, for pub.
-func (ca *machineCA) issueNode(name string, pub crypto.PublicKey) (certPEM []byte, cert *x509.Certificate, err error) {
+// issueDevice signs a client certificate for the device name, for pub.
+func (ca *machineCA) issueDevice(name string, pub crypto.PublicKey) (certPEM []byte, cert *x509.Certificate, err error) {
 	now := ca.now()
 	tmpl := &x509.Certificate{
 		SerialNumber: randomSerial(),
-		Subject:      pkix.Name{CommonName: name, Organization: []string{"Eriphe nodes"}},
+		Subject:      pkix.Name{CommonName: name, Organization: []string{"Eriphe devices"}},
 		NotBefore:    now.Add(-time.Hour),
-		NotAfter:     now.Add(nodeCertLifetime),
+		NotAfter:     now.Add(deviceCertLifetime),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
@@ -228,14 +228,14 @@ func (ca *machineCA) issueNode(name string, pub crypto.PublicKey) (certPEM []byt
 }
 
 // clientAuth asks clients for a certificate of this CA, without requiring
-// one: the CLI and the brain have none, and a node is checked per request.
+// one: the CLI and the brain have none, and a device is checked per request.
 func (ca *machineCA) clientAuth(cfg *tls.Config) *tls.Config {
 	cfg.ClientAuth = tls.VerifyClientCertIfGiven
 	cfg.ClientCAs = ca.pool
 	return cfg
 }
 
-// listener serves TLS, with eriphe-core's certificate for the nodes, and
+// listener serves TLS, with eriphe-core's certificate for the devices, and
 // plain HTTP on the same port.
 func (ca *machineCA) listener(ln net.Listener) net.Listener {
 	cfg := ca.clientAuth(&tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: ca.serverCertificate,
@@ -324,49 +324,49 @@ type peekedConn struct {
 func (p *peekedConn) Read(b []byte) (int, error) { return p.r.Read(b) }
 
 var (
-	errNodeTLSRequired = errors.New("eriphe-core accepts machines over TLS only, with their certificate: update eriphe-node, or join again with -ca-hash")
-	errNodeCert        = errors.New("this certificate is not the node's: it was revoked, or is for another node")
+	errDeviceTLSRequired = errors.New("eriphe-core accepts machines over TLS only, with their certificate: update eriphe-device, or join again with -ca-hash")
+	errDeviceCert        = errors.New("this certificate is not the device's: it was revoked, or is for another device")
 )
 
-// authNode authenticates a node by its name and secret, and by its
+// authDevice authenticates a device by its name and secret, and by its
 // certificate when it presents one; without one, only while the plain path
 // is open. The status is what to answer when it fails.
-func (c *core) authNode(r *http.Request) (string, int, error) {
-	name := r.Header.Get("Eriphe-Node")
+func (c *core) authDevice(r *http.Request) (string, int, error) {
+	name := r.Header.Get("Eriphe-Device")
 	secret := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if name == "" || !c.store.checkNode(name, hashSecret(secret)) {
+	if name == "" || !c.store.checkDevice(name, hashSecret(secret)) {
 		return name, http.StatusUnauthorized, errors.New("unauthorized")
 	}
-	if c.store.nodeSuspended(name) {
-		return name, http.StatusForbidden, errNodeSuspended // node_access.go
+	if c.store.deviceSuspended(name) {
+		return name, http.StatusForbidden, errDeviceSuspended // device_access.go
 	}
 	if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 		leaf := r.TLS.PeerCertificates[0]
 		// Both listeners verify a given certificate against the CA; a chain
 		// is there only if it was.
-		if len(r.TLS.VerifiedChains) == 0 || leaf.Subject.CommonName != name || !c.store.nodeCertValid(name, serialHex(leaf)) {
-			log.Printf("node %s: refused a certificate that is not its own (serial %s)", name, serialHex(leaf))
-			return name, http.StatusUnauthorized, errNodeCert
+		if len(r.TLS.VerifiedChains) == 0 || leaf.Subject.CommonName != name || !c.store.deviceCertValid(name, serialHex(leaf)) {
+			log.Printf("device %s: refused a certificate that is not its own (serial %s)", name, serialHex(leaf))
+			return name, http.StatusUnauthorized, errDeviceCert
 		}
 		return name, 0, nil
 	}
-	if c.nodesTLSOnly() {
-		return name, http.StatusForbidden, errNodeTLSRequired
+	if c.devicesTLSOnly() {
+		return name, http.StatusForbidden, errDeviceTLSRequired
 	}
 	return name, 0, nil
 }
 
-func (c *core) nodesTLSOnly() bool { return c.store.get(nodesTLSOnlyKey) == "1" }
+func (c *core) devicesTLSOnly() bool { return c.store.get(devicesTLSOnlyKey) == "1" }
 
-// handleNodeCertificate signs a client certificate for the calling node,
+// handleDeviceCertificate signs a client certificate for the calling device,
 // for the public key of its request ({"csr": PEM}): its first one, with its
 // secret, or a new one before its current one ends. It answers the CA too,
-// which a node that joined over plain HTTP pins from then on. Once the
-// plain path is closed, a node with no certificate yet (it has just joined
+// which a device that joined over plain HTTP pins from then on. Once the
+// plain path is closed, a device with no certificate yet (it has just joined
 // over pinned TLS) still gets its first one here, over TLS, with its secret.
-func (c *core) handleNodeCertificate(w http.ResponseWriter, r *http.Request) {
-	name, status, err := c.authNode(r)
-	if errors.Is(err, errNodeTLSRequired) && r.TLS != nil {
+func (c *core) handleDeviceCertificate(w http.ResponseWriter, r *http.Request) {
+	name, status, err := c.authDevice(r)
+	if errors.Is(err, errDeviceTLSRequired) && r.TLS != nil {
 		err = nil
 	}
 	if err != nil {
@@ -391,38 +391,38 @@ func (c *core) handleNodeCertificate(w http.ResponseWriter, r *http.Request) {
 	}
 	csr, err := x509.ParseCertificateRequest(block.Bytes)
 	if err == nil {
-		err = csr.CheckSignature() // the node holds the key
+		err = csr.CheckSignature() // the device holds the key
 	}
 	if err != nil {
 		http.Error(w, "certificate request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	certPEM, cert, err := c.machines.issueNode(name, csr.PublicKey)
+	certPEM, cert, err := c.machines.issueDevice(name, csr.PublicKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	secret := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if err := c.store.setNodeCert(name, hashSecret(secret), serialHex(cert), cert.NotAfter); err != nil {
+	if err := c.store.setDeviceCert(name, hashSecret(secret), serialHex(cert), cert.NotAfter); err != nil {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
 	if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
-		log.Printf("node %s: certificate renewed, until %s", name, cert.NotAfter.Format(time.DateOnly))
+		log.Printf("device %s: certificate renewed, until %s", name, cert.NotAfter.Format(time.DateOnly))
 	} else {
-		log.Printf("node %s: first certificate, until %s", name, cert.NotAfter.Format(time.DateOnly))
+		log.Printf("device %s: first certificate, until %s", name, cert.NotAfter.Format(time.DateOnly))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ca": string(c.machines.pem), "certificate": string(certPEM), "expires": cert.NotAfter})
 }
 
-// handleNodesTLS shows the CA's hash and whether nodes must use TLS
-// (GET), or opens and closes the plain path for nodes (PUT
+// handleDevicesTLS shows the CA's hash and whether devices must use TLS
+// (GET), or opens and closes the plain path for devices (PUT
 // {"tls_only": true}, admin only). It is an advanced setting: eriphe-core
 // closes the plain path by itself (autoTLSOnly), and the PUT only matters
 // to keep it open for a machine that cannot have its certificate yet.
-// Closing it drops the tunnels of nodes connected without their
+// Closing it drops the tunnels of devices connected without their
 // certificate.
-func (c *core) handleNodesTLS(w http.ResponseWriter, r *http.Request) {
+func (c *core) handleDevicesTLS(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPut {
 		var in struct {
 			TLSOnly bool `json:"tls_only"`
@@ -431,26 +431,26 @@ func (c *core) handleNodesTLS(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "{\"tls_only\": true|false} is required", http.StatusBadRequest)
 			return
 		}
-		if err := c.setNodesTLSOnly(in.TLSOnly); err != nil {
+		if err := c.setDevicesTLSOnly(in.TLSOnly); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
 	}
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	plain := []string{}
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.CertExpires.IsZero() {
 			plain = append(plain, n.Name)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ca_hash": c.caHash(), "tls_only": c.nodesTLSOnly(), "without_certificate": plain})
+	writeJSON(w, http.StatusOK, map[string]any{"ca_hash": c.caHash(), "tls_only": c.devicesTLSOnly(), "without_certificate": plain})
 }
 
-func (c *core) setNodesTLSOnly(on bool) error {
+func (c *core) setDevicesTLSOnly(on bool) error {
 	if on && c.machines == nil {
 		return errors.New("eriphe-core has no certificate authority for machines")
 	}
@@ -458,14 +458,14 @@ func (c *core) setNodesTLSOnly(on bool) error {
 	if on {
 		v = "1"
 	}
-	if err := c.store.set(nodesTLSOnlyKey, v); err != nil {
+	if err := c.store.set(devicesTLSOnlyKey, v); err != nil {
 		return err
 	}
-	log.Printf("machines: plain path for nodes %s", map[bool]string{true: "closed", false: "open"}[on])
+	log.Printf("machines: plain path for devices %s", map[bool]string{true: "closed", false: "open"}[on])
 	if on {
 		c.mu.Lock()
 		var plain []string
-		for name, n := range c.nodes {
+		for name, n := range c.devices {
 			n.mu.Lock()
 			if n.session != nil && !n.tls {
 				plain = append(plain, name)
@@ -474,31 +474,31 @@ func (c *core) setNodesTLSOnly(on bool) error {
 		}
 		c.mu.Unlock()
 		for _, name := range plain {
-			log.Printf("node %s: connected without its certificate, disconnected", name)
+			log.Printf("device %s: connected without its certificate, disconnected", name)
 			c.disconnect(name)
 		}
 	}
 	return nil
 }
 
-// autoTLSOnly closes the plain path for nodes once every registered machine
+// autoTLSOnly closes the plain path for devices once every registered machine
 // has its certificate, unless the API chose to keep it open: at once on a
 // new installation, which has none; after the last one moves to TLS on an
 // older one.
-func (c *core) autoTLSOnly(nodes []NodeRow) {
-	if c.machines == nil || c.store.get(nodesTLSOnlyKey) != "" {
+func (c *core) autoTLSOnly(devices []DeviceRow) {
+	if c.machines == nil || c.store.get(devicesTLSOnlyKey) != "" {
 		return
 	}
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.CertExpires.IsZero() {
 			return
 		}
 	}
-	if err := c.setNodesTLSOnly(true); err != nil {
+	if err := c.setDevicesTLSOnly(true); err != nil {
 		log.Printf("machines: %v", err)
 		return
 	}
-	if len(nodes) == 0 {
+	if len(devices) == 0 {
 		log.Printf("machines: TLS only, from the start")
 	} else {
 		log.Printf("machines: every machine has its certificate: TLS only from now on")
@@ -514,21 +514,21 @@ func (c *core) caHash() string {
 }
 
 // startMachineTLS opens the machines' CA in the data folder; without it
-// (it could not be read), nodes stay on plain HTTP.
+// (it could not be read), devices stay on plain HTTP.
 func (c *core) startMachineTLS() {
 	ca, err := openMachineCA(c.store.dir)
 	if err != nil {
-		log.Printf("machines: no TLS for nodes: %v", err)
+		log.Printf("machines: no TLS for devices: %v", err)
 		return
 	}
 	c.machines = ca
-	log.Printf("machines: TLS for nodes on the API port, CA %s", ca.hash)
-	if nodes, err := c.store.nodes(); err == nil {
-		c.autoTLSOnly(nodes)
+	log.Printf("machines: TLS for devices on the API port, CA %s", ca.hash)
+	if devices, err := c.store.devices(); err == nil {
+		c.autoTLSOnly(devices)
 	}
 }
 
-// apiListener is the API's listener: TLS for nodes and plain HTTP side by
+// apiListener is the API's listener: TLS for devices and plain HTTP side by
 // side when the machines' CA is there.
 func (c *core) apiListener(ln net.Listener) net.Listener {
 	if c.machines == nil {

@@ -13,14 +13,14 @@ import (
 )
 
 // attachMac connects a fake Mac "mac" on a tunnel: it shares Notes, which
-// macOS keeps from its node, and counts the times it is asked to open
+// macOS keeps from its device, and counts the times it is asked to open
 // System Settings.
 func attachMac(t *testing.T, c *core, store *Store) *atomic.Int32 {
 	t.Helper()
-	store.registerNode("mac", hashSecret("z"))
+	store.registerDevice("mac", hashSecret("z"))
 	opened := &atomic.Int32{}
 	api := http.NewServeMux()
-	api.HandleFunc("GET /v1/node", func(w http.ResponseWriter, _ *http.Request) {
+	api.HandleFunc("GET /v1/device", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"os": "darwin", "install": "macos", "runtimes": []string{"claude-code"},
 			"folders": []sharedFolder{{ID: "m1", Name: "Notes", Access: accessRead, Problem: "denied"},
 				{ID: "m2", Name: "Music", Access: accessRead, Copyable: true, Problem: "denied", Program: "syncthing"}}})
@@ -29,9 +29,9 @@ func attachMac(t *testing.T, c *core, store *Store) *atomic.Int32 {
 		opened.Add(1)
 		w.WriteHeader(http.StatusNoContent)
 	})
-	coreEnd, nodeEnd := net.Pipe()
-	nodeSession, _ := yamux.Server(nodeEnd, tunnelConfig())
-	go http.Serve(nodeSession, api)
+	coreEnd, deviceEnd := net.Pipe()
+	deviceSession, _ := yamux.Server(deviceEnd, tunnelConfig())
+	go http.Serve(deviceSession, api)
 	coreSession, _ := yamux.Client(coreEnd, tunnelConfig())
 	c.attach("mac", coreSession, false)
 	t.Cleanup(func() { coreSession.Close() })
@@ -42,19 +42,19 @@ func attachMac(t *testing.T, c *core, store *Store) *atomic.Int32 {
 	return opened
 }
 
-// A folder macOS keeps from its node is said on Settings → Folders and on
+// A folder macOS keeps from its device is said on Settings → Folders and on
 // the device's card, with "Allow", which has that Mac open System
 // Settings; on another system, a plain explanation, no button.
 func TestFolderBlocked(t *testing.T) {
 	c, store := foldersCore(t)
 	opened := attachMac(t, c, store)
-	store.setNodeStatus("pc", true, []byte(`{"os":"linux","runtimes":["claude-code"],"folders":[{"id":"p1","name":"Scans","access":"write","problem":"read_only"}]}`))
+	store.setDeviceStatus("pc", true, []byte(`{"os":"linux","runtimes":["claude-code"],"folders":[{"id":"p1","name":"Scans","access":"write","problem":"read_only"}]}`))
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	code, body, _ := tw.do("GET", "/settings/folders", nil, nil)
 	for _, want := range []string{"macOS bloque l&#39;accès à ce dossier", `hx-post="/settings/devices/mac/privacy"`, "Autoriser",
 		"Confidentialité et sécurité › Fichiers et dossiers", "Ce dossier est en lecture seule sur son appareil",
-		"Active eriphe-node, et le dossier", "Active syncthing, et le dossier", `name="program" value="syncthing"`} {
+		"Active eriphe-device, et le dossier", "Active syncthing, et le dossier", `name="program" value="syncthing"`} {
 		if code != 200 || !strings.Contains(body, want) {
 			t.Fatalf("folders page lacks %q: %d %s", want, code, body)
 		}
@@ -84,11 +84,11 @@ func TestFolderBlocked(t *testing.T) {
 	if err := c.openPrivacy(t.Context(), "pc"); err != errNotMac {
 		t.Errorf("pc: %v", err)
 	}
-	if err := c.openPrivacy(t.Context(), "ghost"); err != errNoNode {
+	if err := c.openPrivacy(t.Context(), "ghost"); err != errNoDevice {
 		t.Errorf("ghost: %v", err)
 	}
 	c.disconnect("mac")
-	waitUntil(t, func() bool { return !c.node("mac").connected() })
+	waitUntil(t, func() bool { return !c.device("mac").connected() })
 	if err := c.openPrivacy(t.Context(), "mac"); err != errOffline {
 		t.Errorf("offline: %v", err)
 	}
@@ -97,13 +97,13 @@ func TestFolderBlocked(t *testing.T) {
 // A copy its machine cannot write is an error with its problem, and says
 // whether that machine is a Mac.
 func TestCopyBlocked(t *testing.T) {
-	v := &syncView{nodes: map[string]NodeRow{
+	v := &syncView{devices: map[string]DeviceRow{
 		"nas": {Name: "nas", Online: true, LastSeen: time.Now()},
 		"mac": {Name: "mac", Online: true, OS: "darwin", Info: []byte(`{"syncthing":{"device_id":"X","folders":[` +
-			`{"id":"e-nas-f1","share":"f1","source":"nas","role":"copy","state":"missing","error":"this machine cannot write the copy: permission denied","problem":"denied","program":"eriphe-node"}]}}`)},
+			`{"id":"e-nas-f1","share":"f1","source":"nas","role":"copy","state":"missing","error":"this machine cannot write the copy: permission denied","problem":"denied","program":"eriphe-device"}]}}`)},
 	}}
-	cv := v.copyStatus(&Folder{Node: "nas", ID: "f1"}, "mac")
-	if cv.Status != "error" || cv.Problem != "denied" || cv.Program != "eriphe-node" || !cv.Mac || !strings.Contains(cv.Error, "cannot write") {
+	cv := v.copyStatus(&Folder{Device: "nas", ID: "f1"}, "mac")
+	if cv.Status != "error" || cv.Problem != "denied" || cv.Program != "eriphe-device" || !cv.Mac || !strings.Contains(cv.Error, "cannot write") {
 		t.Fatalf("copy %+v", cv)
 	}
 }

@@ -391,7 +391,7 @@ func TestIntentionLinkedToThread(t *testing.T) {
 func TestCardInThreadTimeline(t *testing.T) {
 	c := stepsCore(t)
 	s := lightThread(t, c)
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 7})
 	ref := accessCard(t, c, "merge").Ref
 	if out, isErr := callBrainTool(t, c, "link_thread", map[string]any{"thread_id": s.ID, "ref": ref}); isErr {

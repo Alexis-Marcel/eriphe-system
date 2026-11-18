@@ -42,7 +42,7 @@ func fakeWakeHere(t *testing.T) *[]wakeInfo {
 }
 
 // wakeCore is a core with "pc", off, which reported its card, and "nas",
-// the machine that stays on, a fake node on a tunnel that records the
+// the machine that stays on, a fake device on a tunnel that records the
 // wake requests it relays.
 func wakeCore(t *testing.T) (*core, *Store, func() []wakeInfo) {
 	t.Helper()
@@ -53,15 +53,15 @@ func wakeCore(t *testing.T) (*core, *Store, func() []wakeInfo) {
 	c := newCore(&Config{User: "Sam", DefaultAgent: "small",
 		Providers: map[string]Provider{"p": {Kind: "claude-subscription", Secret: "/nonexistent"}},
 		Agents:    map[string]Agent{"small": {Runtime: "claude-code", Provider: "p"}}}, store)
-	store.registerNode("pc", hashSecret("x"))
-	store.setNodeStatus("pc", true, []byte(pcWakeInfo))
-	store.setNodeStatus("pc", false, nil)
-	store.registerNode("nas", hashSecret("y"))
+	store.registerDevice("pc", hashSecret("x"))
+	store.setDeviceStatus("pc", true, []byte(pcWakeInfo))
+	store.setDeviceStatus("pc", false, nil)
+	store.registerDevice("nas", hashSecret("y"))
 
 	var mu sync.Mutex
 	var relayed []wakeInfo
 	api := http.NewServeMux()
-	api.HandleFunc("GET /v1/node", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(nasWakeInfo)) })
+	api.HandleFunc("GET /v1/device", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(nasWakeInfo)) })
 	api.HandleFunc("POST /v1/wake", func(w http.ResponseWriter, r *http.Request) {
 		var in wakeInfo
 		json.NewDecoder(r.Body).Decode(&in)
@@ -70,14 +70,14 @@ func wakeCore(t *testing.T) (*core, *Store, func() []wakeInfo) {
 		mu.Unlock()
 		writeJSON(w, 200, map[string]any{"sent": []string{"host"}})
 	})
-	coreEnd, nodeEnd := net.Pipe()
-	nodeSession, _ := yamux.Server(nodeEnd, tunnelConfig())
-	go http.Serve(nodeSession, api)
+	coreEnd, deviceEnd := net.Pipe()
+	deviceSession, _ := yamux.Server(deviceEnd, tunnelConfig())
+	go http.Serve(deviceSession, api)
 	coreSession, _ := yamux.Client(coreEnd, tunnelConfig())
 	c.attach("nas", coreSession, false)
 	t.Cleanup(func() { coreSession.Close() })
 	waitUntil(t, func() bool {
-		n, _ := store.nodes()
+		n, _ := store.devices()
 		for _, row := range n {
 			if row.Name == "nas" && row.Online {
 				return true
@@ -116,7 +116,7 @@ func TestWake(t *testing.T) {
 	if _, err := c.wake(ctx, "pc"); !errors.Is(err, errWakeNotAllowed) {
 		t.Fatalf("not allowed: %v", err)
 	}
-	if err := store.setWakeAllowed("ghost", true); !errors.Is(err, errNoNode) {
+	if err := store.setWakeAllowed("ghost", true); !errors.Is(err, errNoDevice) {
 		t.Fatalf("unknown device: %v", err)
 	}
 	if err := store.setWakeAllowed("pc", true); err != nil || !store.wakeAllowed("pc") {
@@ -142,21 +142,21 @@ func TestWake(t *testing.T) {
 	if _, err := c.wake(ctx, "nas"); !errors.Is(err, errWakeOnline) {
 		t.Fatalf("a device that is on: %v", err)
 	}
-	// A device whose card is unknown (an older eriphe-node).
-	store.registerNode("old", hashSecret("z"))
+	// A device whose card is unknown (an older eriphe-device).
+	store.registerDevice("old", hashSecret("z"))
 	store.setWakeAllowed("old", true)
 	if _, err := c.wake(ctx, "old"); !errors.Is(err, errWakeNoMAC) {
 		t.Fatalf("no MAC: %v", err)
 	}
 	// Cut access: nothing.
-	store.setNodeSuspended("pc", true)
-	if _, err := c.wake(ctx, "pc"); !errors.Is(err, errNodeSuspended) {
+	store.setDeviceSuspended("pc", true)
+	if _, err := c.wake(ctx, "pc"); !errors.Is(err, errDeviceSuspended) {
 		t.Fatalf("access cut: %v", err)
 	}
-	store.setNodeSuspended("pc", false)
+	store.setDeviceSuspended("pc", false)
 	// Forgotten, the device's choice goes with it.
-	store.deleteNode("pc")
-	store.registerNode("pc", hashSecret("x"))
+	store.deleteDevice("pc")
+	store.registerDevice("pc", hashSecret("x"))
 	if store.wakeAllowed("pc") {
 		t.Fatal("a forgotten device may still be woken")
 	}
@@ -184,11 +184,11 @@ func TestWakeForWaitingTask(t *testing.T) {
 		t.Fatalf("woken again within the back-off: %d", len(relayed()))
 	}
 	// After the back-off, once more.
-	store.db.Exec(`UPDATE node_wake SET last_auto = ? WHERE name = 'pc'`, time.Now().Add(-wakeBackoff-time.Minute).Unix())
+	store.db.Exec(`UPDATE device_wake SET last_auto = ? WHERE name = 'pc'`, time.Now().Add(-wakeBackoff-time.Minute).Unix())
 	c.wakeFor(task)
 	waitUntil(t, func() bool { return len(relayed()) == 2 })
 	// A task that needs no device of its own wakes nothing.
-	store.db.Exec(`UPDATE node_wake SET last_auto = 0 WHERE name = 'pc'`)
+	store.db.Exec(`UPDATE device_wake SET last_auto = 0 WHERE name = 'pc'`)
 	c.wakeFor(&TaskRow{ID: "t-any", Agent: "small"})
 	time.Sleep(100 * time.Millisecond)
 	if len(relayed()) != 2 {
@@ -241,7 +241,7 @@ func TestWebWake(t *testing.T) {
 	if b := state(time.Now().Add(-wakeWait - time.Second).Unix()); !strings.Contains(b, "pc n&#39;a pas répondu en 2 minutes") || strings.Contains(b, "every 5s") {
 		t.Fatalf("not back in time: %s", b)
 	}
-	store.setNodeStatus("pc", true, []byte(pcWakeInfo))
+	store.setDeviceStatus("pc", true, []byte(pcWakeInfo))
 	if b := state(since); !strings.Contains(b, "pc est de retour") {
 		t.Fatalf("back: %s", b)
 	}

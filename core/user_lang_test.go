@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-// taskSpec is a task's spec as eriphe-core sends it to its node.
-func taskSpec(t *testing.T, c *core, id string) nodeTaskSpec {
+// taskSpec is a task's spec as eriphe-core sends it to its device.
+func taskSpec(t *testing.T, c *core, id string) deviceTaskSpec {
 	t.Helper()
 	var raw string
 	c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, id).Scan(&raw)
-	var spec nodeTaskSpec
+	var spec deviceTaskSpec
 	if err := json.Unmarshal([]byte(raw), &spec); err != nil {
 		t.Fatal(err)
 	}
@@ -80,8 +80,8 @@ func TestVoicesInUserLang(t *testing.T) {
 // The prompts sent with a task and a skill run carry the user's language.
 func TestTaskPromptsInUserLang(t *testing.T) {
 	c := newCatalogCore(t)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
 	c.noteUserLang("en")
 	task, err := c.runTask(context.Background(), runRequest{Prompt: "count the lines"})
 	if err != nil {

@@ -114,7 +114,7 @@ func (c *core) decideTurn(t *TaskRow, events []EventRow, cr *checkedReceipt) (tu
 	}
 	if failed := cr.failedChecks(); len(failed) > 0 && failed[0].Seq > end.Seq {
 		// A check of this turn failed: the same way as the last failure, or
-		// twice in a row on the node, it stops the task.
+		// twice in a row on the device, it stops the task.
 		ch := failed[0]
 		sig := failureSig(classCheck, fmt.Sprintf("%s %d %s", ch.Name, ch.ExitCode, ch.Output))
 		c.noteFailure(t.ID, h, classCheck, sig)
@@ -139,7 +139,7 @@ func lastTurnEnd(events []EventRow) (EventRow, bool) {
 }
 
 // configFailure is a check of the turn that ended at seq which could not
-// run at all (its "config" from the node).
+// run at all (its "config" from the device).
 func configFailure(cr *checkedReceipt, seq int) (checkResult, bool) {
 	for _, ch := range cr.failedChecks() {
 		if ch.Seq > seq && ch.Config != "" {
@@ -150,7 +150,7 @@ func configFailure(cr *checkedReceipt, seq int) (checkResult, bool) {
 }
 
 // configNote tells the brain that a task's contract is misconfigured, with
-// the node's exact reason, and how to fix it.
+// the device's exact reason, and how to fix it.
 func configNote(id string, ch checkResult) string {
 	what := "`" + ch.Run + "`"
 	if ch.Run == "" {
@@ -162,7 +162,7 @@ func configNote(id string, ch checkResult) string {
 		"N'en parle à l'utilisateur que si tu ne sais pas le corriger.)", ch.Name, what, ch.Config, id)
 }
 
-// checkStoppedSame tells whether the node stopped sending a check back,
+// checkStoppedSame tells whether the device stopped sending a check back,
 // after the turn that ended at seq, because it failed the same way twice.
 func checkStoppedSame(events []EventRow, seq int) bool {
 	for _, e := range events {
@@ -210,7 +210,7 @@ func (c *core) overBudget(t *TaskRow, k *taskContract, now time.Time) string {
 }
 
 // autoStop stops a task for a reason of eriphe-core's, which the brain hears
-// when its node says it stopped (endedNote).
+// when its device says it stopped (endedNote).
 func (c *core) autoStop(t *TaskRow, reason string) {
 	log.Printf("task %s stopped by eriphe-core: %s", t.ID, reason)
 	h := c.store.harness(t.ID)
@@ -242,16 +242,16 @@ func (c *core) endedNote(t *TaskRow) string {
 	return c.stopReasonNote(t) + c.workNote(t.ID)
 }
 
-// workNote is what the node did with a task's commits no remote had when
+// workNote is what the device did with a task's commits no remote had when
 // it stopped (its "work" event): pushed to the lent branch, or kept on the
-// node.
+// device.
 func (c *core) workNote(id string) string {
 	w, ok := c.store.lastWork(id)
 	if !ok {
 		return ""
 	}
 	if e, _ := w["error"].(string); e != "" {
-		return " Son travail non poussé n'a pas pu être gardé sur le nœud : " + e + "."
+		return " Son travail non poussé n'a pas pu être gardé sur l'appareil : " + e + "."
 	}
 	branch, _ := w["branch"].(string)
 	kept, _ := w["kept"].(string)
@@ -262,7 +262,7 @@ func (c *core) workNote(id string) string {
 		note = fmt.Sprintf(" Avant l'arrêt, ses commits ont été poussés sur la branche %s.", branch)
 	}
 	if kept != "" {
-		note += fmt.Sprintf(" Ses commits non poussés ne sont pas perdus : son dépôt est gardé sur le nœud, dans %s (7 jours par défaut, comme les instantanés) ; raison du nœud : %s. Dis-le à %s s'il en a besoin.",
+		note += fmt.Sprintf(" Ses commits non poussés ne sont pas perdus : son dépôt est gardé sur l'appareil, dans %s (7 jours par défaut, comme les instantanés) ; raison de l'appareil : %s. Dis-le à %s s'il en a besoin.",
 			kept, reason, c.conf().User)
 	}
 	return note

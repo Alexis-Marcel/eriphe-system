@@ -110,7 +110,7 @@
       {{if .Want}}<p class="small notice-line">{{tf "tools.behind" .Version .Want}}</p>{{end}}
       <p class="muted small meta-line">
         {{if .Detail}}{{.Detail}}{{else if eq .Kind "local"}}{{t "tools.local"}}{{else}}<span class="mono">{{.URL}}</span> · {{t (printf "auth.%s" .Auth)}}{{end}}
-        {{if eq .Kind "local"}}{{if .Node}} · {{.Node}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
+        {{if eq .Kind "local"}}{{if .Device}} · {{.Device}}{{end}}{{if .Service}} · {{t (printf "service.%s" .Service)}}{{end}}{{end}}
         · <a class="access-tag level-{{.Access}}" href="{{.AccessURL}}" title="{{t (printf "access.%s" .Access)}} — {{t (printf "access.%s.hint" .Access)}}">{{t (printf "access.%s.short" .Access)}}</a>
         {{if .Allowed}} · <a class="muted" href="{{.AllowedURL}}">{{if eq .Allowed 1}}{{t "allowed.count1"}}{{else}}{{tf "allowed.count" .Allowed}}{{end}}</a>{{end}}
         {{if .TrustedContent}} · <a class="tag tag-accent" href="{{.TrustURL}}" title="{{t "trust.on"}}">{{t "trust.tag"}}</a>{{end}}
@@ -933,7 +933,7 @@
           <label class="check"><input type="checkbox" name="writable" value="1" {{if .Writable}}checked{{end}}><span><b>{{t "form.writable"}}</b><small>{{t "form.writablehint"}}</small></span></label>
         </div>
         <div class="form-grid">
-          <label class="field"><span>{{t "form.node"}}</span><input type="text" name="node" value="{{.Node}}" spellcheck="false" class="mono" placeholder="nas"></label>
+          <label class="field"><span>{{t "form.device"}}</span><input type="text" name="device" value="{{.Device}}" spellcheck="false" class="mono" placeholder="nas"></label>
           <label class="field"><span>{{t "form.needs"}}</span><input type="text" name="needs" value="{{.Needs}}" spellcheck="false" class="mono" placeholder="gpu"></label>
           <label class="field"><span>{{t "form.prefers"}}</span><input type="text" name="prefers" value="{{.Prefers}}" spellcheck="false" class="mono" placeholder="cpu, memory"></label>
           <label class="field"><span>{{t "form.user"}}</span><input type="text" name="user" value="{{.User}}" spellcheck="false" class="mono" placeholder="1000:1000"></label>

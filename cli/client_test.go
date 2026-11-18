@@ -116,7 +116,7 @@ func atoi(s string) int {
 func TestClient(t *testing.T) {
 	now := time.Now()
 	f := &fakeCore{
-		tasks: []Task{{ID: "t-1", Node: "pc", State: stateIdle}, {ID: "t-2", Node: "pc", State: stateStopped}},
+		tasks: []Task{{ID: "t-1", Device: "pc", State: stateIdle}, {ID: "t-2", Device: "pc", State: stateStopped}},
 		events: map[string][]Event{"t-1": {
 			{Seq: 1, Time: now, Type: "text", Data: map[string]any{"text": "hi"}},
 			{Seq: 2, Time: now, Type: "turn_end", Data: map[string]any{}},
@@ -176,7 +176,7 @@ func TestClient(t *testing.T) {
 func TestSayAndAttach(t *testing.T) {
 	now := time.Now()
 	f := &fakeCore{
-		tasks:  []Task{{ID: "t-1", Node: "pc", Agent: "opus", State: stateStopped, Prompt: "do it"}},
+		tasks:  []Task{{ID: "t-1", Device: "pc", Agent: "opus", State: stateStopped, Prompt: "do it"}},
 		events: map[string][]Event{"t-1": {{Seq: 1, Time: now, Type: "text", Data: map[string]any{"text": "done"}}}},
 	}
 	c := NewClient(f.server(t).URL, "tok")
@@ -206,7 +206,7 @@ func TestPrintTasks(t *testing.T) {
 	}
 	out.Reset()
 	now := time.Now()
-	printTasks(&out, []Task{{ID: "t-1", State: stateRunning, Node: "pc", Dir: "https://github.com/o/r.git", Created: now}}, now)
+	printTasks(&out, []Task{{ID: "t-1", State: stateRunning, Device: "pc", Dir: "https://github.com/o/r.git", Created: now}}, now)
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 	if len(lines) != 2 || !strings.HasPrefix(lines[0], "ID") || !strings.Contains(lines[1], "o/r") || !strings.Contains(lines[1], " - ") {
 		t.Fatalf("table:\n%s", out.String())

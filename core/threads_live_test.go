@@ -18,7 +18,7 @@ import (
 // surfaces and the workspace, its tools for threads and the workspace (as
 // an MCP client lists them) and the catalog appended to the system prompt,
 // the case's turn as the prompt, no tool, low effort, no session kept. It
-// needs no node, only `claude` signed in on this machine.
+// needs no device, only `claude` signed in on this machine.
 //
 //	ERIPHE_LIVE_THREADS=1 go test -run TestThreadsLive -v .
 //

@@ -23,54 +23,54 @@ const (
 	nasDevice = "MFZWI3D-BONSGYC-YLTMRWG-C43ENR5-QXGZDMM-FZWI3DP-BONSGYY-LTMRWAD"
 )
 
-// syncNode is a fake node with Syncthing: what it reports (GET /v1/node)
+// syncDevice is a fake device with Syncthing: what it reports (GET /v1/device)
 // and the plans it was handed (PUT /v1/sync).
-type syncNode struct {
+type syncDevice struct {
 	mu    sync.Mutex
 	info  map[string]any
-	plans []nodePlan
+	plans []devicePlan
 }
 
-func (s *syncNode) set(k string, v any) {
+func (s *syncDevice) set(k string, v any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.info[k] = v
 }
 
-func (s *syncNode) last() (nodePlan, int) {
+func (s *syncDevice) last() (devicePlan, int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.plans) == 0 {
-		return nodePlan{}, 0
+		return devicePlan{}, 0
 	}
 	return s.plans[len(s.plans)-1], len(s.plans)
 }
 
-func attachFakeSync(t *testing.T, c *core, name string, info map[string]any) *syncNode {
+func attachFakeSync(t *testing.T, c *core, name string, info map[string]any) *syncDevice {
 	t.Helper()
-	sn := &syncNode{info: info}
+	sn := &syncDevice{info: info}
 	api := http.NewServeMux()
-	api.HandleFunc("GET /v1/node", func(w http.ResponseWriter, _ *http.Request) {
+	api.HandleFunc("GET /v1/device", func(w http.ResponseWriter, _ *http.Request) {
 		sn.mu.Lock()
 		defer sn.mu.Unlock()
 		writeJSON(w, 200, sn.info)
 	})
 	api.HandleFunc("PUT /v1/sync", func(w http.ResponseWriter, r *http.Request) {
-		var p nodePlan
+		var p devicePlan
 		json.NewDecoder(r.Body).Decode(&p)
 		sn.mu.Lock()
 		sn.plans = append(sn.plans, p)
 		sn.mu.Unlock()
 		writeJSON(w, 200, map[string]any{"problems": map[string]string{}})
 	})
-	coreEnd, nodeEnd := net.Pipe()
-	nodeSession, _ := yamux.Server(nodeEnd, tunnelConfig())
-	go http.Serve(nodeSession, api)
+	coreEnd, deviceEnd := net.Pipe()
+	deviceSession, _ := yamux.Server(deviceEnd, tunnelConfig())
+	go http.Serve(deviceSession, api)
 	coreSession, _ := yamux.Client(coreEnd, tunnelConfig())
 	c.attach(name, coreSession, false)
 	t.Cleanup(func() { coreSession.Close() })
 	waitUntil(t, func() bool {
-		rows, _ := c.store.nodes()
+		rows, _ := c.store.devices()
 		for _, r := range rows {
 			if r.Name == name && r.Online && parseInfo(r).Syncthing != nil {
 				return true
@@ -83,7 +83,7 @@ func attachFakeSync(t *testing.T, c *core, name string, info map[string]any) *sy
 
 // copiesCore: a Mac sharing Docs (drop, copyable) and Private (manage, not
 // copyable), a NAS, both with Syncthing, and a PC without.
-func copiesCore(t *testing.T) (*core, *syncNode, *syncNode) {
+func copiesCore(t *testing.T) (*core, *syncDevice, *syncDevice) {
 	t.Helper()
 	store, err := openStore(filepath.Join(t.TempDir(), "core.db"))
 	if err != nil {
@@ -91,9 +91,9 @@ func copiesCore(t *testing.T) (*core, *syncNode, *syncNode) {
 	}
 	c := newCore(&Config{User: "Sam", Agents: map[string]Agent{"a": {Runtime: "claude-code"}}, DefaultAgent: "a"}, store)
 	for _, n := range []string{"mac", "nas", "pc"} {
-		store.registerNode(n, hashSecret(n))
+		store.registerDevice(n, hashSecret(n))
 	}
-	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	mac := attachFakeSync(t, c, "mac", map[string]any{"runtimes": []string{"claude-code"},
 		"folders": []sharedFolder{{ID: "00112233445566aa", Name: "Docs", Access: accessWrite, Copyable: true},
 			{ID: "00112233445566bb", Name: "Private", Access: accessWrite}},
@@ -104,8 +104,8 @@ func copiesCore(t *testing.T) (*core, *syncNode, *syncNode) {
 }
 
 // The user picks the machines that keep a copy of a copyable folder: each
-// node is handed its plan, the folder's machine sending it at its level,
-// the copy's keeping it, each pinning the other's device ID; a plan is
+// device is handed its plan, the folder's machine sending it at its level,
+// the copy's keeping it, each pinning the other's Syncthing device ID; a plan is
 // handed again only when it changes.
 func TestFolderCopiesPlan(t *testing.T) {
 	c, mac, nas := copiesCore(t)
@@ -149,12 +149,12 @@ func TestFolderCopiesPlan(t *testing.T) {
 	}
 
 	// The Mac suspended: the copy is kept, paused, not deleted.
-	c.store.db.Exec(`UPDATE nodes SET suspended = 1 WHERE name = 'mac'`)
+	c.store.db.Exec(`UPDATE devices SET suspended = 1 WHERE name = 'mac'`)
 	c.syncAll(ctx)
 	if np, _ := nas.last(); len(np.Folders) != 1 || !np.Folders[0].Paused || len(np.Peers) != 0 {
 		t.Fatalf("nas, the Mac suspended: %+v", np)
 	}
-	c.store.db.Exec(`UPDATE nodes SET suspended = 0 WHERE name = 'mac'`)
+	c.store.db.Exec(`UPDATE devices SET suspended = 0 WHERE name = 'mac'`)
 	c.syncAll(ctx)
 	if np, _ := nas.last(); len(np.Folders) != 1 || np.Folders[0].Paused {
 		t.Fatalf("nas, the Mac back: %+v", np)
@@ -179,7 +179,7 @@ func TestFolderCopiesGo(t *testing.T) {
 	for name, undo := range map[string]func(){
 		"copies off on its machine": func() {
 			mac.set("folders", []sharedFolder{{ID: "00112233445566aa", Name: "Docs", Access: accessWrite}})
-			c.refreshNode(ctx, c.node("mac"))
+			c.refreshDevice(ctx, c.device("mac"))
 			c.syncAll(ctx)
 		},
 		"unshared from here": func() { c.removeFolder(ctx, "Docs") },
@@ -187,7 +187,7 @@ func TestFolderCopiesGo(t *testing.T) {
 	} {
 		mac.set("folders", []sharedFolder{{ID: "00112233445566aa", Name: "Docs", Access: accessWrite, Copyable: true}})
 		c.store.db.Exec(`DELETE FROM folders_unshared`)
-		c.refreshNode(ctx, c.node("mac"))
+		c.refreshDevice(ctx, c.device("mac"))
 		if err := c.setCopies(ctx, "Docs", []string{"nas"}); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -201,9 +201,9 @@ func TestFolderCopiesGo(t *testing.T) {
 	}
 }
 
-// copyState sets what node's Syncthing reports of folder share of mac
+// copyState sets what device name's Syncthing reports of folder share of mac
 // (role source on mac, copy elsewhere), and reads it again.
-func copyState(t *testing.T, c *core, sn *syncNode, node, device string, s ...syncState) {
+func copyState(t *testing.T, c *core, sn *syncDevice, name, stID string, s ...syncState) {
 	t.Helper()
 	for i := range s {
 		if s[i].ID == "" {
@@ -211,11 +211,11 @@ func copyState(t *testing.T, c *core, sn *syncNode, node, device string, s ...sy
 		}
 		s[i].Source = "mac"
 		if s[i].Role == "" {
-			s[i].Role = map[bool]string{true: "source", false: "copy"}[node == "mac"]
+			s[i].Role = map[bool]string{true: "source", false: "copy"}[name == "mac"]
 		}
 	}
-	sn.set("syncthing", map[string]any{"device_id": device, "folders": s})
-	c.refreshNode(context.Background(), c.node(node))
+	sn.set("syncthing", map[string]any{"device_id": stID, "folders": s})
+	c.refreshDevice(context.Background(), c.device(name))
 }
 
 // placeFolders is where the scheduler puts a task of agent lent the
@@ -227,8 +227,8 @@ func placeFolders(t *testing.T, c *core, a Agent, names ...string) (string, plac
 		t.Fatal(err)
 	}
 	p := c.taskPlacement(a, fs)
-	nodes, _ := c.store.nodes()
-	name, err := schedule(c.schedulable(nodes), "", p, func(string) (int, error) { return 0, nil })
+	devices, _ := c.store.devices()
+	name, err := schedule(c.schedulable(devices), "", p, func(string) (int, error) { return 0, nil })
 	var waiting *waitingError
 	if err != nil && !errors.As(err, &waiting) {
 		t.Fatalf("schedule %v: %v", names, err)
@@ -276,9 +276,9 @@ func TestFolderCopyStatusAndPlacement(t *testing.T) {
 
 	// The Mac goes away, its copy complete just before.
 	state(syncState{Share: docsID, State: "idle", Done: 100, SyncedAt: time.Now()})
-	c.node("mac").session.Close()
-	waitUntil(t, func() bool { return !c.node("mac").connected() })
-	c.refreshNode(ctx, c.node("mac"))
+	c.device("mac").session.Close()
+	waitUntil(t, func() bool { return !c.device("mac").connected() })
+	c.refreshDevice(ctx, c.device("mac"))
 	if hosts := c.folderHosts([]*Folder{view().Folder}); !slices.Equal(hosts, []string{"mac", "nas"}) { // the Mac to wait for
 		t.Fatalf("hosts %v", hosts)
 	}
@@ -364,12 +364,12 @@ func TestFolderTaskOnAnyHolder(t *testing.T) {
 	// The Mac away and the copy not complete then: the task waits for one.
 	copyState(t, c, mac, "mac", macDevice, settled)
 	copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "syncing", NeedBytes: 10})
-	c.node("mac").session.Close()
-	waitUntil(t, func() bool { return !c.node("mac").connected() })
-	c.refreshNode(ctx, c.node("mac"))
-	nodes, _ := c.store.nodes()
+	c.device("mac").session.Close()
+	waitUntil(t, func() bool { return !c.device("mac").connected() })
+	c.refreshDevice(ctx, c.device("mac"))
+	devices, _ := c.store.devices()
 	_, p = placeFolders(t, c, cpu, "Docs")
-	if _, err := schedule(c.schedulable(nodes), "", p, func(string) (int, error) { return 0, nil }); err == nil || !strings.Contains(err.Error(), "mac") {
+	if _, err := schedule(c.schedulable(devices), "", p, func(string) (int, error) { return 0, nil }); err == nil || !strings.Contains(err.Error(), "mac") {
 		t.Fatalf("waits: %v", err)
 	}
 }
@@ -382,9 +382,9 @@ func TestFolderTaskSeveralFolders(t *testing.T) {
 	const musicID, mediaID = "00112233445566cc", "00112233445566dd"
 	mac.set("folders", []sharedFolder{{ID: docsID, Name: "Docs", Access: accessWrite, Copyable: true},
 		{ID: "00112233445566bb", Name: "Private", Access: accessWrite}, {ID: musicID, Name: "Music", Access: accessRead, Copyable: true}})
-	c.refreshNode(ctx, c.node("mac"))
+	c.refreshDevice(ctx, c.device("mac"))
 	nas.set("folders", []sharedFolder{{ID: mediaID, Name: "Media", Access: accessRead}})
-	c.refreshNode(ctx, c.node("nas"))
+	c.refreshDevice(ctx, c.device("nas"))
 	c.setCopies(ctx, "Docs", []string{"nas"})
 	c.setCopies(ctx, "Music", []string{"nas"})
 	settledBoth := []syncState{{Share: docsID, State: "idle"}, {Share: musicID, State: "idle"}}
@@ -412,13 +412,13 @@ func TestFolderTaskSeveralFolders(t *testing.T) {
 	// The NAS's copy of Docs not up to date: the task waits for it.
 	copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "syncing", NeedBytes: 1})
 	_, p := placeFolders(t, c, Agent{Runtime: "claude-code"}, "Docs", "Media")
-	nodes, _ := c.store.nodes()
-	_, err = schedule(c.schedulable(nodes), "", p, func(string) (int, error) { return 0, nil })
+	devices, _ := c.store.devices()
+	_, err = schedule(c.schedulable(devices), "", p, func(string) (int, error) { return 0, nil })
 	var waiting *waitingError
 	if len(p.Hosts) != 0 || !errors.As(err, &waiting) || !strings.Contains(err.Error(), "up to date") || !strings.Contains(err.Error(), "nas") {
 		t.Fatalf("waits for the copy: %+v %v", p, err)
 	}
-	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Docs", "Media"), Node: "mac"}); err == nil || !strings.Contains(err.Error(), "nor copied") {
+	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Docs", "Media"), Device: "mac"}); err == nil || !strings.Contains(err.Error(), "nor copied") {
 		t.Fatalf("pinned on a machine without them all: %v", err)
 	}
 	// No machine holds them all: not lent together.
@@ -433,12 +433,12 @@ func TestWebFolderCopies(t *testing.T) {
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	_, body, _ := tw.do("GET", "/settings/folders", nil, nil)
-	for _, want := range []string{`hx-post="/settings/folders/copies"`, `name="node" value="nas"`, `value="pc"  disabled`, "à mettre à jour"} {
+	for _, want := range []string{`hx-post="/settings/folders/copies"`, `name="device" value="nas"`, `value="pc"  disabled`, "à mettre à jour"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("page lacks %q", want)
 		}
 	}
-	code, _, h := tw.post("/settings/folders/copies", url.Values{"name": {"Docs"}, "node": {"nas"}}, csrf)
+	code, _, h := tw.post("/settings/folders/copies", url.Values{"name": {"Docs"}, "device": {"nas"}}, csrf)
 	if code != 200 || h.Get("HX-Refresh") != "true" {
 		t.Fatalf("copies: %d", code)
 	}
@@ -448,7 +448,7 @@ func TestWebFolderCopies(t *testing.T) {
 	if _, body, _ = tw.do("GET", "/settings/folders", nil, nil); !strings.Contains(body, "en attente") || !strings.Contains(body, `value="nas" checked`) {
 		t.Fatal("the copy is not shown")
 	}
-	if _, _, h = tw.post("/settings/folders/copies", url.Values{"name": {"Private"}, "node": {"nas"}}, csrf); h.Get("HX-Refresh") == "true" {
+	if _, _, h = tw.post("/settings/folders/copies", url.Values{"name": {"Private"}, "device": {"nas"}}, csrf); h.Get("HX-Refresh") == "true" {
 		t.Fatal("a folder not copyable copied")
 	}
 
@@ -462,15 +462,15 @@ func TestWebFolderCopies(t *testing.T) {
 		mux.ServeHTTP(rec, r)
 		return rec.Code, rec.Body.String()
 	}
-	if code, out := call("Docs", `{"nodes":[]}`); code != 200 || strings.Contains(out, `"copies"`) {
+	if code, out := call("Docs", `{"devices":[]}`); code != 200 || strings.Contains(out, `"copies"`) {
 		t.Fatalf("API: %d %s", code, out)
 	}
-	for body, want := range map[string]int{`nope`: 400, `{"nodes":["pc"]}`: 409} {
+	for body, want := range map[string]int{`nope`: 400, `{"devices":["pc"]}`: 409} {
 		if code, out := call("Docs", body); code != want {
 			t.Errorf("%s: %d %s", body, code, out)
 		}
 	}
-	if code, _ := call("Private", `{"nodes":["nas"]}`); code == 200 {
+	if code, _ := call("Private", `{"devices":["nas"]}`); code == 200 {
 		t.Error("API: a folder not copyable copied")
 	}
 }
@@ -493,7 +493,7 @@ func TestListFoldersMachines(t *testing.T) {
 	}
 	copyState(t, c, mac, "mac", macDevice, syncState{Share: docsID, State: "idle"})
 	copyState(t, c, nas, "nas", nasDevice, syncState{Share: docsID, State: "syncing", NeedBytes: 3})
-	want := []folderHolder{{Node: "mac", Role: "machine", Online: true, UpToDate: true}, {Node: "nas", Role: "copy", Online: true}}
+	want := []folderHolder{{Device: "mac", Role: "machine", Online: true, UpToDate: true}, {Device: "nas", Role: "copy", Online: true}}
 	if got := docs().Machines; !slices.Equal(got, want) {
 		t.Fatalf("syncing: %+v", got)
 	}
@@ -503,13 +503,13 @@ func TestListFoldersMachines(t *testing.T) {
 		t.Fatalf("in sync: %+v", got)
 	}
 	raw, _ := json.Marshal(docs())
-	if !strings.Contains(string(raw), `"machines":[{"node":"mac","role":"machine","online":true,"up_to_date":true},{"node":"nas","role":"copy","online":true,"up_to_date":true}]`) {
+	if !strings.Contains(string(raw), `"machines":[{"device":"mac","role":"machine","online":true,"up_to_date":true},{"device":"nas","role":"copy","online":true,"up_to_date":true}]`) {
 		t.Fatalf("json %s", raw)
 	}
 	// The Mac away, the copy complete then: still up to date there.
-	c.node("mac").session.Close()
-	waitUntil(t, func() bool { return !c.node("mac").connected() })
-	c.refreshNode(ctx, c.node("mac"))
+	c.device("mac").session.Close()
+	waitUntil(t, func() bool { return !c.device("mac").connected() })
+	c.refreshDevice(ctx, c.device("mac"))
 	want[0].Online = false
 	if got := docs().Machines; !slices.Equal(got, want) {
 		t.Fatalf("the Mac away: %+v", got)
@@ -517,7 +517,7 @@ func TestListFoldersMachines(t *testing.T) {
 	// A folder without copies: its machine only.
 	vs, _ := c.folderViews()
 	for _, v := range vs {
-		if v.Name == "Private" && (len(v.Machines) != 1 || v.Machines[0].Node != "mac" || v.Machines[0].Role != "machine") {
+		if v.Name == "Private" && (len(v.Machines) != 1 || v.Machines[0].Device != "mac" || v.Machines[0].Role != "machine") {
 			t.Fatalf("Private %+v", v.Machines)
 		}
 	}

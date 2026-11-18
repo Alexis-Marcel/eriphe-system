@@ -33,7 +33,7 @@ func TestThreadPlanChecked(t *testing.T) {
 	}
 }
 
-// threadCore is a core with a node, and a thread of three steps: two in
+// threadCore is a core with a device, and a thread of three steps: two in
 // parallel, then a review the user approves.
 func threadCore(t *testing.T) (*core, Thread) {
 	t.Helper()

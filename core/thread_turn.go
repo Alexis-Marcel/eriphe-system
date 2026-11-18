@@ -126,7 +126,7 @@ func (c *core) callToBrain(a accessQuestion, text, taint string) {
 // user's message named. A task is never left loose and code never opens
 // a thread for it: with neither, the brain opens (or finds) the matter's
 // thread first. A led thread's plan changes with amend_thread, an ended
-// one is reopened first. A node named goes with the step.
+// one is reopened first. A device named goes with the step.
 func (c *core) taskOfThread(ctx context.Context, in runRequest) (map[string]any, error) {
 	s, err := c.taskThread()
 	if err != nil {
@@ -144,7 +144,7 @@ func (c *core) taskOfThread(ctx context.Context, in runRequest) (map[string]any,
 	}
 	c.turnThread(s.ID) // what the turn raises next is the thread's
 	sp := stepSpec{Key: c.freeStepKey(s.ID), Title: title, Kind: stepTask, Prompt: in.Prompt,
-		Agent: in.Agent, Resources: in.Resources, Contract: in.Contract, Node: in.Node}
+		Agent: in.Agent, Resources: in.Resources, Contract: in.Contract, Device: in.Device}
 	st, err := c.addStep(ctx, s.ID, sp, c.turnTaint(), byBrain)
 	if err != nil {
 		return nil, fmt.Errorf("not a step of thread %d « %s »: %w", s.ID, s.Title, err)

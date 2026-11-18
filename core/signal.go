@@ -19,7 +19,7 @@ import (
 // Eriphe has an account of its own, with a number of its own (a landline
 // works: Signal verifies it by a voice call), held by eriphe-signal
 // (servers/signal): the channel's own service (botSpec.Service,
-// channel-signal), run while Signal is on, outside the catalog: a node
+// channel-signal), run while Signal is on, outside the catalog: a device
 // runs it, on amd64 (its signal-cli is x86_64 only), with a volume for the
 // account's keys; the channel alone calls it (b.svc). There is no token:
 // the number registered stands for it.
@@ -41,7 +41,7 @@ import (
 //     the service, then the service.
 //
 // Messages are end-to-end encrypted between the user's phone and
-// signal-cli, which keeps them, and the account's keys, on the node:
+// signal-cli, which keeps them, and the account's keys, on the device:
 // Settings says so.
 
 const (

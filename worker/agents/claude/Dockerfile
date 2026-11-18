@@ -1,5 +1,5 @@
 # eriphe-agent-claude: Claude Code's native binary, as Anthropic publishes
-# it, and nothing else. eriphe-node injects /opt/eriphe of this image into a
+# it, and nothing else. eriphe-device injects /opt/eriphe of this image into a
 # task container (worker/README.md); it is never run as a container itself.
 FROM alpine:3.22 AS fetch
 ARG CLAUDE_CODE_VERSION=2.1.310
@@ -34,5 +34,5 @@ RUN set -eu; \
 FROM scratch
 COPY --from=fetch /out/ /
 ARG CLAUDE_CODE_VERSION
-# The runtime it is for (node/inject.go) and the agent's own version.
+# The runtime it is for (device/inject.go) and the agent's own version.
 LABEL eriphe.agent="claude-code" eriphe.agent.version="${CLAUDE_CODE_VERSION}"

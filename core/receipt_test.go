@@ -157,7 +157,7 @@ func ev(seq int, typ string, data map[string]any) EventRow {
 }
 
 // What the agent says is verified, eriphe-core reads against the checks
-// the node ran and the diff it saw: nothing that failed comes out verified.
+// the device ran and the diff it saw: nothing that failed comes out verified.
 func TestCrossCheck(t *testing.T) {
 	events := []EventRow{
 		ev(1, "text", map[string]any{"text": "working"}),
@@ -247,7 +247,7 @@ func lastEvent(t *testing.T, c *core) string {
 // brain then hears of the turn, with the receipt or the last message.
 func TestReceiptRepair(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": "All done!"}), ev(2, "turn_end", map[string]any{"subtype": "success"})})
 	c.notifyBrain("t-1", stateIdle)
 	if msg := lastEvent(t, c); msg != "" {
@@ -275,7 +275,7 @@ func TestReceiptRepair(t *testing.T) {
 // With a receipt, the brain reads it instead of the agent's message.
 func TestReceiptToBrain(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"})})
 	c.notifyBrain("t-1", stateIdle)
 	msg := lastEvent(t, c)
@@ -294,7 +294,7 @@ func TestReceiptToBrain(t *testing.T) {
 // A failed turn is not asked for its receipt.
 func TestNoRepairAfterFailure(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.addEvents("t-1", []EventRow{ev(1, "turn_end", map[string]any{"subtype": "success", "is_error": true, "result": "API Error: 500"})})
 	c.notifyBrain("t-1", stateIdle)
 	if items, _ := c.store.inbox("t-1"); len(items) != 0 {
@@ -305,7 +305,7 @@ func TestNoRepairAfterFailure(t *testing.T) {
 // The night's extraction reads a task's receipt rather than its last message.
 func TestTranscriptReadsReceipt(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped})
 	c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"})})
 	segs, err := c.transcript(time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
 	if err != nil || len(segs) != 1 {
@@ -324,7 +324,7 @@ func TestTranscriptReadsReceipt(t *testing.T) {
 func TestReceiptOnCard(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	tw.c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	tw.c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	tw.c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"}),
 		ev(3, "check", map[string]any{"name": "tests", "ok": false, "exit_code": 2, "output": "FAIL here"})})
 	_, body, _ := tw.do("GET", "/tasks/t-1", nil, map[string]string{"HX-Request": "true"})

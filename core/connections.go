@@ -270,7 +270,7 @@ func (c *core) connectionWoken(cn connection) {
 // The check of the connections.
 
 // connectionTick checks the connections due, in the background: called
-// with the nodes' check (every 15 s), it does something every
+// with the devices' check (every 15 s), it does something every
 // connectionCheckEvery. It also collects the tokens no connection keeps.
 func (c *core) connectionTick(ctx context.Context, now time.Time) {
 	due := false

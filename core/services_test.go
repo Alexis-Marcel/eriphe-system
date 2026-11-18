@@ -25,7 +25,7 @@ func TestRunSpecValidation(t *testing.T) {
 	ok := []RunSpec{
 		{Image: "mcp/time", Transport: "stdio"},
 		{Image: "ghcr.io/x/caldav:1", Transport: "http", Port: 8080, Env: map[string]EnvValue{"A": {Value: "b"}, "B": {File: "/secrets/b"}}},
-		{Image: "x", Transport: "stdio", User: "1001", Volume: true, Writable: true, Egress: &no, Node: "nas", Needs: []string{"gpu"}},
+		{Image: "x", Transport: "stdio", User: "1001", Volume: true, Writable: true, Egress: &no, Device: "nas", Needs: []string{"gpu"}},
 	}
 	for _, s := range ok {
 		n, err := s.normalize()
@@ -53,7 +53,7 @@ func TestRunSpecValidation(t *testing.T) {
 		{Image: "x", Transport: "stdio", User: "root"},
 		{Image: "x", Transport: "stdio", Env: map[string]EnvValue{"A-B": {Value: "x"}}},
 		{Image: "x", Transport: "stdio", Env: map[string]EnvValue{"A": {File: "relative"}}},
-		{Image: "x", Transport: "stdio", Node: "Not A Node"},
+		{Image: "x", Transport: "stdio", Device: "Not A Device"},
 		{Image: "x", Transport: "stdio", Prefers: []string{"a b"}},
 	}
 	for _, s := range bad {
@@ -95,15 +95,15 @@ func newServiceCore(t *testing.T) (*core, *Store) {
 func TestServicePlacement(t *testing.T) {
 	c, store := newServiceCore(t)
 	for _, n := range []string{"nas", "pc", "old"} {
-		store.registerNode(n, hashSecret(n))
+		store.registerDevice(n, hashSecret(n))
 	}
-	store.setNodeStatus("nas", true, []byte(`{"services":true,"cpus":4}`))
-	store.setNodeStatus("pc", true, []byte(`{"services":true,"cpus":16,"labels":["gpu"],"images":["mcp/time:latest"]}`))
-	store.setNodeStatus("old", true, []byte(`{"runtimes":["claude-code"],"cpus":64}`)) // runs no services
+	store.setDeviceStatus("nas", true, []byte(`{"services":true,"cpus":4}`))
+	store.setDeviceStatus("pc", true, []byte(`{"services":true,"cpus":16,"labels":["gpu"],"images":["mcp/time:latest"]}`))
+	store.setDeviceStatus("old", true, []byte(`{"runtimes":["claude-code"],"cpus":64}`)) // runs no services
 
 	err := c.registerServices(map[string]RunSpec{
 		"time":  {Image: "mcp/time", Transport: "stdio", Prefers: []string{"gpu"}},        // prefers pc
-		"mail":  {Image: "mail", Transport: "stdio", Node: "nas"},                         // pinned
+		"mail":  {Image: "mail", Transport: "stdio", Device: "nas"},                       // pinned
 		"gpu":   {Image: "x", Transport: "stdio", Needs: []string{"gpu"}},                 // only pc
 		"tpu":   {Image: "x", Transport: "stdio", Needs: []string{"tpu"}},                 // nobody: waits
 		"notes": {Image: "x", Transport: "stdio", Volume: true, Prefers: []string{"cpu"}}, // pc, then sticks to it
@@ -118,9 +118,9 @@ func TestServicePlacement(t *testing.T) {
 		}
 		return s
 	}
-	for name, node := range map[string]string{"time": "pc", "mail": "nas", "gpu": "pc", "tpu": "", "notes": "pc"} {
-		if s := where(name); s.Node != node || s.State != statePending {
-			t.Errorf("%s on %q (%s), want %q", name, s.Node, s.State, node)
+	for name, device := range map[string]string{"time": "pc", "mail": "nas", "gpu": "pc", "tpu": "", "notes": "pc"} {
+		if s := where(name); s.Device != device || s.State != statePending {
+			t.Errorf("%s on %q (%s), want %q", name, s.Device, s.State, device)
 		}
 	}
 	if s := where("tpu"); !strings.Contains(s.PendingReason, "tpu") {
@@ -129,37 +129,37 @@ func TestServicePlacement(t *testing.T) {
 
 	// pc goes away: within the grace period nothing moves; after it, the
 	// services that may move do, a volume stays.
-	store.setNodeStatus("pc", false, nil)
+	store.setDeviceStatus("pc", false, nil)
 	c.placeServices()
-	if s := where("time"); s.Node != "pc" {
+	if s := where("time"); s.Device != "pc" {
 		t.Fatalf("moved within the grace period: %+v", s)
 	}
-	store.db.Exec(`UPDATE nodes SET last_seen = ? WHERE name = 'pc'`, time.Now().Add(-serviceNodeGrace-time.Minute).Unix())
+	store.db.Exec(`UPDATE devices SET last_seen = ? WHERE name = 'pc'`, time.Now().Add(-serviceDeviceGrace-time.Minute).Unix())
 	c.placeServices()
-	if s := where("time"); s.Node != "nas" {
+	if s := where("time"); s.Device != "nas" {
 		t.Errorf("time = %+v, want re-placed on nas", s)
 	}
-	if s := where("gpu"); s.Node != "" || s.PendingReason == "" {
+	if s := where("gpu"); s.Device != "" || s.PendingReason == "" {
 		t.Errorf("gpu = %+v, want waiting", s)
 	}
-	if s := where("notes"); s.Node != "pc" {
+	if s := where("notes"); s.Device != "pc" {
 		t.Errorf("notes (volume) = %+v, want kept on pc", s)
 	}
 
-	// The pinned service waits for its node.
-	store.setNodeStatus("nas", false, nil)
-	store.db.Exec(`UPDATE nodes SET last_seen = 0 WHERE name = 'nas'`)
+	// The pinned service waits for its device.
+	store.setDeviceStatus("nas", false, nil)
+	store.db.Exec(`UPDATE devices SET last_seen = 0 WHERE name = 'nas'`)
 	c.placeServices()
-	if s := where("mail"); s.Node != "nas" {
+	if s := where("mail"); s.Device != "nas" {
 		t.Errorf("mail (pinned) = %+v", s)
 	}
 
 	// A new pin moves it; a service left out is removed.
-	store.setNodeStatus("pc", true, []byte(`{"services":true,"labels":["gpu"]}`))
-	if err := c.registerServices(map[string]RunSpec{"time": {Image: "mcp/time", Transport: "stdio", Node: "pc"}}); err != nil {
+	store.setDeviceStatus("pc", true, []byte(`{"services":true,"labels":["gpu"]}`))
+	if err := c.registerServices(map[string]RunSpec{"time": {Image: "mcp/time", Transport: "stdio", Device: "pc"}}); err != nil {
 		t.Fatal(err)
 	}
-	if s := where("time"); s.Node != "pc" {
+	if s := where("time"); s.Device != "pc" {
 		t.Errorf("time = %+v, want moved to its new pin", s)
 	}
 	if rows, _ := store.services(); len(rows) != 1 {
@@ -167,16 +167,16 @@ func TestServicePlacement(t *testing.T) {
 	}
 }
 
-// A node fetches its services with their secrets, which are never stored,
+// A device fetches its services with their secrets, which are never stored,
 // and reports their state.
 func TestServiceAssignments(t *testing.T) {
 	c, store := newServiceCore(t)
 	secret := filepath.Join(t.TempDir(), "mail")
 	os.WriteFile(secret, []byte("hunter2\n"), 0o600)
-	store.registerNode("nas", hashSecret("nas-secret"))
-	store.registerNode("pc", hashSecret("pc-secret"))
-	store.setNodeStatus("nas", true, []byte(`{"services":true}`))
-	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	store.registerDevice("nas", hashSecret("nas-secret"))
+	store.registerDevice("pc", hashSecret("pc-secret"))
+	store.setDeviceStatus("nas", true, []byte(`{"services":true}`))
+	store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	if err := c.registerServices(map[string]RunSpec{
 		"mail": {Image: "mail", Transport: "stdio", Volume: true,
 			Env: map[string]EnvValue{"IMAP_HOST": {Value: "imap.example.org"}, "IMAP_PASSWORD": {File: secret}}},
@@ -186,16 +186,16 @@ func TestServiceAssignments(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/node/assignments", c.handleAssignments)
-	mux.HandleFunc("POST /v1/node/services/{name}/report", c.handleServiceReport)
+	mux.HandleFunc("GET /v1/device/assignments", c.handleAssignments)
+	mux.HandleFunc("POST /v1/device/services/{name}/report", c.handleServiceReport)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	call := func(node, method, path string, in, out any) int {
+	call := func(device, method, path string, in, out any) int {
 		var body bytes.Buffer
 		json.NewEncoder(&body).Encode(in)
 		req, _ := http.NewRequest(method, srv.URL+path, &body)
-		req.Header.Set("Authorization", "Bearer "+node+"-secret")
-		req.Header.Set("Eriphe-Node", node)
+		req.Header.Set("Authorization", "Bearer "+device+"-secret")
+		req.Header.Set("Eriphe-Device", device)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -207,10 +207,10 @@ func TestServiceAssignments(t *testing.T) {
 		return resp.StatusCode
 	}
 	var a struct {
-		Tasks    []nodeAssignment `json:"tasks"`
-		Services []nodeService    `json:"services"`
+		Tasks    []deviceAssignment `json:"tasks"`
+		Services []deviceService    `json:"services"`
 	}
-	call("nas", "GET", "/v1/node/assignments?rev=0&wait=0", nil, &a)
+	call("nas", "GET", "/v1/device/assignments?rev=0&wait=0", nil, &a)
 	if len(a.Services) != 1 || a.Services[0].Name != "mail" {
 		t.Fatalf("services = %+v", a.Services)
 	}
@@ -237,23 +237,23 @@ func TestServiceAssignments(t *testing.T) {
 		t.Fatalf("web = %+v", s)
 	}
 
-	if code := call("nas", "POST", "/v1/node/services/mail/report", serviceReport{State: stateRunning, Restarts: 2}, nil); code != http.StatusNoContent {
+	if code := call("nas", "POST", "/v1/device/services/mail/report", serviceReport{State: stateRunning, Restarts: 2}, nil); code != http.StatusNoContent {
 		t.Fatalf("report: %d", code)
 	}
 	if s, _ := store.service("mail"); s.State != stateRunning || s.Restarts != 2 {
 		t.Fatalf("mail = %+v", s)
 	}
-	// Another node cannot report on it, and does not get it.
-	if code := call("pc", "POST", "/v1/node/services/mail/report", serviceReport{State: stateFailed}, nil); code != http.StatusNotFound {
-		t.Fatalf("report from another node: %d", code)
+	// Another device cannot report on it, and does not get it.
+	if code := call("pc", "POST", "/v1/device/services/mail/report", serviceReport{State: stateFailed}, nil); code != http.StatusNotFound {
+		t.Fatalf("report from another device: %d", code)
 	}
-	call("pc", "GET", "/v1/node/assignments?rev=0&wait=0", nil, &a)
+	call("pc", "GET", "/v1/device/assignments?rev=0&wait=0", nil, &a)
 	if len(a.Services) != 0 {
 		t.Fatalf("pc got %+v", a.Services)
 	}
 }
 
-// dialService reaches a service's MCP endpoint on its node, through the
+// dialService reaches a service's MCP endpoint on its device, through the
 // tunnel.
 func TestDialService(t *testing.T) {
 	cfg := &Config{Servers: map[string]Server{
@@ -276,27 +276,27 @@ func TestDialService(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := newCore(cfg, store)
-	store.registerNode("nas", hashSecret("x"))
+	store.registerDevice("nas", hashSecret("x"))
 	if _, err := c.dialService(context.Background(), "time"); err == nil {
 		t.Fatal("dialed an unknown service")
 	}
 
-	// A fake node on the other end of a tunnel, serving one MCP server.
+	// A fake device on the other end of a tunnel, serving one MCP server.
 	server := mcp.NewServer(&mcp.Implementation{Name: "time"}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "now"}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "noon"}}}, nil, nil
 	})
 	api := http.NewServeMux()
-	api.HandleFunc("GET /v1/node", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(`{"services":true}`)) })
+	api.HandleFunc("GET /v1/device", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte(`{"services":true}`)) })
 	api.Handle("/v1/services/time/mcp", mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server },
 		&mcp.StreamableHTTPOptions{DisableLocalhostProtection: true}))
-	coreEnd, nodeEnd := net.Pipe()
-	nodeSession, _ := yamux.Server(nodeEnd, tunnelConfig())
-	go http.Serve(nodeSession, api)
+	coreEnd, deviceEnd := net.Pipe()
+	deviceSession, _ := yamux.Server(deviceEnd, tunnelConfig())
+	go http.Serve(deviceSession, api)
 	coreSession, _ := yamux.Client(coreEnd, tunnelConfig())
 	c.attach("nas", coreSession, false)
 	defer coreSession.Close()
-	waitUntil(t, func() bool { n, _ := store.nodes(); return len(n) == 1 && n[0].Online })
+	waitUntil(t, func() bool { n, _ := store.devices(); return len(n) == 1 && n[0].Online })
 
 	if err := c.registerServices(specs); err != nil {
 		t.Fatal(err)
@@ -337,19 +337,19 @@ func waitUntil(t *testing.T, ok func() bool) {
 // The tools go to the machines that never sleep, leave a sleeping one when
 // such a machine can take them, and try another machine when they keep
 // failing on one.
-func TestServicesOnAlwaysOnNodes(t *testing.T) {
+func TestServicesOnAlwaysOnDevices(t *testing.T) {
 	c, store := newServiceCore(t)
 	for _, n := range []string{"nas", "pc"} {
-		store.registerNode(n, hashSecret(n))
+		store.registerDevice(n, hashSecret(n))
 	}
-	store.setNodeStatus("nas", false, []byte(`{"services":true,"always_on":true,"cpus":4}`))
-	store.setNodeStatus("pc", true, []byte(`{"services":true,"cpus":16,"labels":["gpu"]}`))
+	store.setDeviceStatus("nas", false, []byte(`{"services":true,"always_on":true,"cpus":4}`))
+	store.setDeviceStatus("pc", true, []byte(`{"services":true,"cpus":16,"labels":["gpu"]}`))
 	where := func(name string) string {
 		s, err := store.service(name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return s.Node
+		return s.Device
 	}
 	err := c.registerServices(map[string]RunSpec{
 		"agenda": {Image: "cal", Transport: "stdio", Prefers: []string{"cpu"}}, // pc is stronger, but sleeps
@@ -362,7 +362,7 @@ func TestServicesOnAlwaysOnNodes(t *testing.T) {
 		t.Fatalf("agenda on %q, want pc while nas is off", where("agenda"))
 	}
 	// nas comes up: the tool leaves pc for it; the one only pc can run stays.
-	store.setNodeStatus("nas", true, []byte(`{"services":true,"always_on":true,"cpus":4}`))
+	store.setDeviceStatus("nas", true, []byte(`{"services":true,"always_on":true,"cpus":4}`))
 	c.placeServices()
 	c.placeServices()
 	if where("agenda") != "nas" || where("gpu") != "pc" {
@@ -388,7 +388,7 @@ func TestServicesOnAlwaysOnNodes(t *testing.T) {
 	}
 }
 
-// Eriphe's own tools run the image of eriphe-core's version: a node never
+// Eriphe's own tools run the image of eriphe-core's version: a device never
 // pulls a newer image of one it has, and their configuration changes with
 // eriphe-core.
 func TestPinnedImage(t *testing.T) {
@@ -408,7 +408,7 @@ func TestPinnedImage(t *testing.T) {
 	}
 }
 
-// A new version of eriphe-core changes the spec of its tools: their node
+// A new version of eriphe-core changes the spec of its tools: their device
 // runs them again, with the new image.
 func TestOwnServicesFollowTheVersion(t *testing.T) {
 	was := version

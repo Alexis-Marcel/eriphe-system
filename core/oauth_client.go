@@ -28,7 +28,7 @@ import (
 // calendar, a drive): the OAuth 2.0 authorization code flow with PKCE, run
 // by eriphe-core with the user's own OAuth client (their "app"). The
 // refresh token it gets is kept in the vault and lent to the tool's server
-// on its node, like a password: it never enters a task.
+// on its device, like a password: it never enters a task.
 //
 // Nothing here names a provider: a signInProvider says where to send the
 // browser, where to exchange and refresh, how to revoke, what a client id

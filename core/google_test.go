@@ -188,7 +188,7 @@ func TestGoogleAccounts(t *testing.T) {
 	for _, name := range []string{"mail", "agenda", filesService.Base} {
 		u := c.pool.get(name)
 		u.mu.Lock()
-		u.status, u.err = statusError, "service "+name+" has no node: not placed yet"
+		u.status, u.err = statusError, "service "+name+" has no device: not placed yet"
 		u.mu.Unlock()
 	}
 	for _, name := range []string{"mail", "agenda", filesService.Base} {

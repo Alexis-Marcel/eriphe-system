@@ -444,7 +444,7 @@ func TestCatalogTellsTheBrain(t *testing.T) {
 // agent first, then my choice, kept across a restart; a harness that cannot
 // be the brain, an unknown agent or the brain's own removal are refused.
 func TestCatalogBrainAgent(t *testing.T) {
-	c := newDynamicCore(t, func(cfg *Config) { cfg.Brain = &BrainConfig{Node: "nas"} })
+	c := newDynamicCore(t, func(cfg *Config) { cfg.Brain = &BrainConfig{Device: "nas"} })
 	if a := c.conf().brain().Agent; a != "sonnet" {
 		t.Fatalf("brain agent = %q, want the default one", a)
 	}

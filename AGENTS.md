@@ -19,7 +19,7 @@ describes). You do not need to build anything: the installers download released 
 | Path | What |
 |---|---|
 | `core/` | eriphe-core (Go): control plane, brain, web workspace (`web*.go`, `web/templates`, `web/static`), API, memory |
-| `node/` | eriphe-node (Go): runs tasks as containers on a machine; `node/cred/` is a module of its own |
+| `device/` | eriphe-device (Go): runs tasks as containers on a machine; `device/cred/` is a module of its own |
 | `worker/` | the task images: `worker/base` (`eriphe-base`) and one image per agent in `worker/agents/` |
 | `install/` | `install.sh` (Linux, macOS), `install.ps1` (Windows), `eriphe-launcher` (the one-container install) |
 | `unraid/` | the Unraid template of the launcher |
@@ -40,12 +40,12 @@ Each Go module builds on its own; run the checks from its folder (CI runs the sa
 
 | Module | Checks |
 |---|---|
-| `core/`, `cli/`, `servers/mail/`, `servers/calendar/`, `servers/files/`, `servers/signal/`, `node/cred/` | `go build ./... && go vet ./... && go test ./...` |
-| `node/` | the same, plus `GOOS=windows go build ./...` |
+| `core/`, `cli/`, `servers/mail/`, `servers/calendar/`, `servers/files/`, `servers/signal/`, `device/cred/` | `go build ./... && go vet ./... && go test ./...` |
+| `device/` | the same, plus `GOOS=windows go build ./...` |
 | `install/` | `sh install/lint.sh` (needs `shellcheck`), `sh install/launcher_test.sh` and `sh install/wsl_test.sh` |
 | `.github/scripts/` | `sh .github/scripts/release_test.sh` |
 | `ha/` | `python3 -m pytest ha/tests` |
-| images | `docker build -t eriphe-base:dev worker/base`, `docker build -t eriphe-agent-claude:dev worker/agents/claude`, and the same for `core/` and the servers; `docker build --build-context installer=install -t eriphe-node:dev node` (it carries the installers) |
+| images | `docker build -t eriphe-base:dev worker/base`, `docker build -t eriphe-agent-claude:dev worker/agents/claude`, and the same for `core/` and the servers; `docker build --build-context installer=install -t eriphe-device:dev device` (it carries the installers) |
 
 Go code is formatted with `gofmt` (`gofmt -l .` prints nothing). Tests need no network and no real
 account: providers and servers are faked; tests that need a real machine or account are named
@@ -55,7 +55,7 @@ account: providers and servers are faked; tests that need a real machine or acco
 
 - **Pull request titles drive releases.** PRs are squash-merged and the title becomes the commit
   on `main`: write it as a [Conventional Commit](https://www.conventionalcommits.org/en/v1.0.0/)
-  (`feat(node): …`, `fix(core): …`, `docs: …`, `!` for a breaking change). `feat` releases a minor
+  (`feat(device): …`, `fix(core): …`, `docs: …`, `!` for a breaking change). `feat` releases a minor
   version, `fix`/`perf` a patch, the others nothing. Details: [CONTRIBUTING.md](CONTRIBUTING.md).
 - **English everywhere**: code, comments, commits, docs, logs and errors.
 - **UI texts in French and English.** The workspace is French by default with an English
@@ -74,8 +74,8 @@ account: providers and servers are faked; tests that need a real machine or acco
 
 ### Safety while developing
 
-- **Do not run an eriphe-node on a machine that already runs one** (yours, for a real Eriphe): two
-  nodes share the same container runtime, networks and data paths. Test with the fakes, or in a
+- **Do not run an eriphe-device on a machine that already runs one** (yours, for a real Eriphe): two
+  devices share the same container runtime, networks and data paths. Test with the fakes, or in a
   throwaway VM.
 - Do not point tests or scripts at a real eriphe-core, NAS or account.
 - Do not run the installers on your own machine to test a change unless that is the machine you

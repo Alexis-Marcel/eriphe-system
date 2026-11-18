@@ -9,24 +9,24 @@ import (
 	"time"
 )
 
-// A folder its machine cannot use (node/access.go): macOS refused it to
-// eriphe-node or to Syncthing, its permissions, a read-only volume, an
-// unplugged disk. The node reports it (Folder.Problem and Program,
+// A folder its machine cannot use (device/access.go): macOS refused it to
+// eriphe-device or to Syncthing, its permissions, a read-only volume, an
+// unplugged disk. The device reports it (Folder.Problem and Program,
 // syncState.Problem and Program); Settings → Folders and the device's card
 // say so, naming on a Mac the program to turn on, and offer "Allow", which
-// asks that Mac's node to open System Settings › Privacy & Security › Files and
+// asks that Mac's device to open System Settings › Privacy & Security › Files and
 // Folders there (POST /v1/privacy/open): nothing else can be opened, and
 // the user decides there.
 
 var (
-	errNotMac  = errors.New("not a Mac")
-	errNodeOld = errors.New("its eriphe-node is too old to open its Settings")
+	errNotMac    = errors.New("not a Mac")
+	errDeviceOld = errors.New("its eriphe-device is too old to open its Settings")
 )
 
-// openPrivacy asks a Mac's node to open the pane where its user allows it a
+// openPrivacy asks a Mac's device to open the pane where its user allows it a
 // folder.
 func (c *core) openPrivacy(ctx context.Context, name string) error {
-	rows, err := c.store.nodes()
+	rows, err := c.store.devices()
 	if err != nil {
 		return err
 	}
@@ -40,25 +40,25 @@ func (c *core) openPrivacy(ctx context.Context, name string) error {
 		}
 	}
 	if !found {
-		return errNoNode
+		return errNoDevice
 	}
-	n := c.node(name)
+	n := c.device(name)
 	if !n.connected() {
 		return errOffline
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	if err := n.call(ctx, http.MethodPost, "/v1/privacy/open", nil, nil); err != nil {
-		var ne *nodeError
+		var ne *deviceError
 		if errors.As(err, &ne) && ne.status == http.StatusNotFound {
-			return errNodeOld
+			return errDeviceOld
 		}
 		return err
 	}
 	return nil
 }
 
-// handlePrivacy is the "Allow" button of a folder macOS keeps from its node.
+// handlePrivacy is the "Allow" button of a folder macOS keeps from its device.
 func (w *web) handlePrivacy(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
 	lang := w.lang(r)
@@ -68,23 +68,23 @@ func (w *web) handlePrivacy(rw http.ResponseWriter, r *http.Request, s *session)
 	case err == nil:
 		log.Printf("web: System Settings opened on %s, for a folder", name)
 		w.toast(rw, fmt.Sprintf(tr(lang, "folders.allowopened"), name, program), true)
-	case errors.Is(err, errNodeOld):
+	case errors.Is(err, errDeviceOld):
 		w.toast(rw, fmt.Sprintf(tr(lang, "folders.allowold"), name), false)
 	case errors.Is(err, errOffline):
 		w.toast(rw, fmt.Sprintf(tr(lang, "folders.allowoffline"), name, program), false)
-	case errors.Is(err, errNoNode), errors.Is(err, errNotMac):
-		w.toast(rw, tr(lang, "machines.nonode"), false)
+	case errors.Is(err, errNoDevice), errors.Is(err, errNotMac):
+		w.toast(rw, tr(lang, "machines.nodevice"), false)
 	default:
 		w.toast(rw, err.Error(), false)
 	}
 }
 
 // macProgram is the program to turn on in Files and Folders: syncthing
-// when it is the one refused, else eriphe-node (also for an older node,
+// when it is the one refused, else eriphe-device (also for an older device,
 // which does not say).
 func macProgram(p string) string {
 	if p == "syncthing" {
 		return p
 	}
-	return "eriphe-node"
+	return "eriphe-device"
 }

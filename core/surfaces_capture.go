@@ -20,10 +20,10 @@ import (
 // being framed, and a surface never loads anything from outside
 // (surfaces_media.go): to show a page, a task step of a thread, lent
 // eriphe-workspace, captures it in its container (eriphe-capture,
-// worker/base) and posts the image to its node, which relays it here with
-// the node's secret and the task's id:
+// worker/base) and posts the image to its device, which relays it here with
+// the device's secret and the task's id:
 //
-//	POST /v1/node/tasks/{id}/media?surface=thread-<id>   (node secret, the image as body)
+//	POST /v1/device/tasks/{id}/media?surface=thread-<id>   (device secret, the image as body)
 //
 // eriphe-core keeps it in its data folder under a random id, for the
 // surface of the thread the task is a step of only, and answers its
@@ -211,17 +211,17 @@ func (c *core) sweepSurfaceMedia(all []surface, now time.Time) {
 	c.surfaceMediaDrop(gone)
 }
 
-// handleTaskMedia is POST /v1/node/tasks/{id}/media, for nodes: an image a
+// handleTaskMedia is POST /v1/device/tasks/{id}/media, for devices: an image a
 // task lent the workspace gives for its thread's surface.
 func (c *core) handleTaskMedia(w http.ResponseWriter, r *http.Request) {
-	node, ok := c.nodeFromRequest(r)
+	device, ok := c.deviceFromRequest(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	t, err := c.store.task(r.PathValue("id"))
-	if err != nil || t.Node != node || finished(t.State) {
-		http.Error(w, "no such task on this node", http.StatusNotFound)
+	if err != nil || t.Device != device || finished(t.State) {
+		http.Error(w, "no such task on this device", http.StatusNotFound)
 		return
 	}
 	if !grantAllows(c.taskGrant(t), workspaceServer, "surface_write") {

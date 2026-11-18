@@ -522,15 +522,15 @@ func TestWebACPAgents(t *testing.T) {
 	}
 
 	// A task of the ACP agent carries its command; its instructions come first.
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["acp"]}`))
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["acp"]}`))
 	task, err := c.runTask(context.Background(), runRequest{Prompt: "tidy up", Agent: "goose"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var raw string
 	c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, task.ID).Scan(&raw)
-	var spec nodeTaskSpec
+	var spec deviceTaskSpec
 	json.Unmarshal([]byte(raw), &spec)
 	if spec.Runtime != "acp" || !slices.Equal(spec.Command, []string{"goose", "acp"}) || spec.AppendSystemPrompt != "" ||
 		!strings.HasSuffix(spec.Prompt, "\n\ntidy up") {
@@ -544,7 +544,7 @@ func TestWebACPAgents(t *testing.T) {
 
 // Settings → Agents picks the brain's agent among those that can be it.
 func TestWebBrainAgent(t *testing.T) {
-	tw, c, csrf := catalogWeb(t, func(cfg *Config) { noAgents(cfg); cfg.Brain = &BrainConfig{Node: "nas"} })
+	tw, c, csrf := catalogWeb(t, func(cfg *Config) { noAgents(cfg); cfg.Brain = &BrainConfig{Device: "nas"} })
 	tw.post("/settings/providers", url.Values{"kind": {"claude-subscription"}, "key": {"sk-ant-oat01-" + strings.Repeat("x", 40)},
 		"preset": {"opus", "sonnet"}}, csrf)
 	if len(c.conf().Agents) == 0 {

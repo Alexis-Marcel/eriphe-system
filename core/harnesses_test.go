@@ -122,9 +122,9 @@ func TestModelCard(t *testing.T) {
 // get it as such.
 func TestWorkerSystemPrompt(t *testing.T) {
 	c := newCatalogCore(t)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
-	spec := func(agent string) nodeTaskSpec {
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code","opencode"]}`))
+	spec := func(agent string) deviceTaskSpec {
 		t.Helper()
 		task, err := c.runTask(context.Background(), runRequest{Prompt: "count the lines", Agent: agent})
 		if err != nil {
@@ -132,7 +132,7 @@ func TestWorkerSystemPrompt(t *testing.T) {
 		}
 		var raw string
 		c.store.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, task.ID).Scan(&raw)
-		var s nodeTaskSpec
+		var s deviceTaskSpec
 		json.Unmarshal([]byte(raw), &s)
 		return s
 	}

@@ -169,7 +169,7 @@ func startState(sv serverView) (pending, placed bool) {
 	if sv.Kind != "local" || sv.Service == stateRunning || sv.Status == statusReady {
 		return false, false
 	}
-	return true, sv.Node != "" && sv.Service != stateFailed
+	return true, sv.Device != "" && sv.Service != stateFailed
 }
 
 // serviceProblem says in words why a local tool does not start, from the
@@ -181,10 +181,10 @@ func serviceProblem(lang string, sv serverView) string {
 	e := strings.ToLower(sv.Error)
 	for _, s := range []string{"unauthorized", "pull access denied", "manifest unknown", "unable to find image", "denied:"} {
 		if strings.Contains(e, s) {
-			return fmt.Sprintf(tr(lang, "tools.err.pull"), sv.Node)
+			return fmt.Sprintf(tr(lang, "tools.err.pull"), sv.Device)
 		}
 	}
-	return fmt.Sprintf(tr(lang, "tools.err.stopped"), sv.Node)
+	return fmt.Sprintf(tr(lang, "tools.err.stopped"), sv.Device)
 }
 
 func (w *web) handleTools(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -349,7 +349,7 @@ type toolForm struct {
 	Timeout string
 	// Local servers.
 	Image, Transport, Port, Path, Args string
-	Node, Needs, Prefers, User         string
+	Device, Needs, Prefers, User       string
 	Volume, Egress, Writable           bool
 	Env                                []envRow
 	// An account of a tool with a card (account_forms.go): the kind of
@@ -559,7 +559,7 @@ func toolFormOf(name string, s Server) toolForm {
 		if spec.Port > 0 {
 			f.Port = strconv.Itoa(spec.Port)
 		}
-		f.Node, f.Needs, f.Prefers = spec.Node, strings.Join(spec.Needs, ", "), strings.Join(spec.Prefers, ", ")
+		f.Device, f.Needs, f.Prefers = spec.Device, strings.Join(spec.Needs, ", "), strings.Join(spec.Prefers, ", ")
 		f.Volume, f.Writable, f.Egress = spec.Volume, spec.Writable, spec.Egress == nil || *spec.Egress
 		if spec.User != defaultUser {
 			f.User = spec.User
@@ -583,7 +583,7 @@ func readToolForm(r *http.Request) toolForm {
 	f := toolForm{Name: v("name"), Use: v("use"), Kind: v("kind"), URL: v("url"), Auth: v("auth"),
 		Scopes: v("scopes"), ClientMetadata: v("client_metadata_url"), Timeout: v("timeout"),
 		Image: v("image"), Transport: v("transport"), Port: v("port"), Path: v("path"), Args: r.PostFormValue("args"),
-		Node: v("node"), Needs: v("needs"), Prefers: v("prefers"), User: v("user"),
+		Device: v("device"), Needs: v("needs"), Prefers: v("prefers"), User: v("user"),
 		Volume: on("volume"), Egress: on("egress"), Writable: on("writable"),
 		Account: v("account")}
 	f.Access = formAccess(v("access"))
@@ -644,9 +644,9 @@ func (f toolForm) server(r *http.Request, old *Server) (Server, credentials, err
 	return f.remoteServer(r, s, old)
 }
 
-// localServer is a server run on a node, from its image.
+// localServer is a server run on a device, from its image.
 func (f toolForm) localServer(r *http.Request, s Server, oldSpec *RunSpec) (Server, credentials, error) {
-	spec := RunSpec{Image: f.Image, Transport: f.Transport, Path: f.Path, Node: f.Node,
+	spec := RunSpec{Image: f.Image, Transport: f.Transport, Path: f.Path, Device: f.Device,
 		Needs: words(f.Needs), Prefers: words(f.Prefers), User: f.User, Volume: f.Volume, Writable: f.Writable}
 	egress := f.Egress
 	spec.Egress = &egress

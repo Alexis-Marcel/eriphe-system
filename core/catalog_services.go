@@ -9,7 +9,7 @@ import (
 )
 
 // The catalog as an owner of services (service_owners.go): its local
-// servers, each the service of its name, run by a node and reached by the
+// servers, each the service of its name, run by a device and reached by the
 // pool (pool.go). Its names are any but a channel's.
 
 func init() {

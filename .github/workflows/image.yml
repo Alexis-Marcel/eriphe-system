@@ -34,7 +34,7 @@ on:
         type: boolean
         default: false
       build-contexts:
-        description: Other build contexts, name=path lines (e.g. installer=install for eriphe-node)
+        description: Other build contexts, name=path lines (e.g. installer=install for eriphe-device)
         type: string
         default: ''
 

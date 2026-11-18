@@ -15,7 +15,7 @@ import (
 // let them update by themselves at night.
 
 type updateRow struct {
-	Machine string // core, or node:<name>
+	Machine string // core, or device:<name>
 	Name    string
 	Core    bool
 	Online  bool
@@ -23,12 +23,12 @@ type updateRow struct {
 	Latest  string // the latest version, when this one is behind
 	updaterInfo
 	Pending   *machineUpdate
-	CoreFirst bool // a node, while eriphe-core is behind: eriphe-core goes first
-	// CoreUpdater: eriphe-core has an updater, so a node's button updates it
-	// first, then the node (updateNow); without one, the node waits for
+	CoreFirst bool // a device, while eriphe-core is behind: eriphe-core goes first
+	// CoreUpdater: eriphe-core has an updater, so a device's button updates it
+	// first, then the device (updateNow); without one, the device waits for
 	// eriphe-core's command.
 	CoreUpdater bool
-	AfterCore   bool          // a node asked while eriphe-core was behind: it waits for it
+	AfterCore   bool          // a device asked while eriphe-core was behind: it waits for it
 	Manual      updateCommand // the command that updates it by hand, without an updater
 	// Done: the request the page follows has just ended (handleUpdateState),
 	// and its outcome shows once.
@@ -45,7 +45,7 @@ type updatesData struct {
 	Behind  int // machines behind that an updater can update now
 }
 
-func (w *web) updatesData(nodes []NodeRow) updatesData {
+func (w *web) updatesData(devices []DeviceRow) updatesData {
 	c := w.c
 	d := updatesData{Night: c.nightUpdates(), Checked: c.updates.checked()}
 	coreBehind := c.updates.behind("eriphe-core", version)
@@ -59,22 +59,22 @@ func (w *web) updatesData(nodes []NodeRow) updatesData {
 		row.Latest = latest
 	}
 	d.add(row)
-	for _, n := range nodes {
+	for _, n := range devices {
 		info := parseInfo(n)
-		m := "node:" + n.Name
+		m := "device:" + n.Name
 		row := updateRow{Machine: m, Name: n.Name, Online: n.Online, Version: info.Version,
 			updaterInfo: info.Update, Pending: c.pendingUpdate(m), CoreFirst: coreBehind,
-			CoreUpdater: d.Rows[0].Updater, AfterCore: c.afterCore(m), Manual: manualUpdate(nodeInstall(n, info))}
+			CoreUpdater: d.Rows[0].Updater, AfterCore: c.afterCore(m), Manual: manualUpdate(deviceInstall(n, info))}
 		if row.Pending == nil {
 			row.Status = c.stalledStatus(m, row.Status)
 		}
-		// A node takes eriphe-core's build: the latest release once
+		// A device takes eriphe-core's build: the latest release once
 		// eriphe-core runs it, never one eriphe-core does not run yet.
 		switch {
-		case coreBehind && (c.updates.behind("eriphe-node", info.Version) || nodeBehindCore(info.Version, version)):
+		case coreBehind && (c.updates.behind("eriphe-device", info.Version) || deviceBehindCore(info.Version, version)):
 			row.Latest = latest
-		case !coreBehind && latest != "" && nodeBehindCore(info.Version, version):
-			row.Latest = version // eriphe-core's, the latest: where the node goes
+		case !coreBehind && latest != "" && deviceBehindCore(info.Version, version):
+			row.Latest = version // eriphe-core's, the latest: where the device goes
 		}
 		d.add(row)
 	}
@@ -115,9 +115,9 @@ func (d *updatesData) add(r updateRow) {
 	d.Rows = append(d.Rows, r)
 }
 
-// nodeInstall is how a node was installed: as it reports it, or as it
+// deviceInstall is how a device was installed: as it reports it, or as it
 // last did while it is offline.
-func nodeInstall(n NodeRow, info nodeInfo) string {
+func deviceInstall(n DeviceRow, info deviceInfo) string {
 	if info.Install != "" || n.Install == "" {
 		return info.Install
 	}
@@ -129,8 +129,8 @@ func (w *web) machineParam(m string) bool {
 	if m == coreMachine {
 		return true
 	}
-	name, ok := strings.CutPrefix(m, "node:")
-	return ok && w.c.store.hasNode(name)
+	name, ok := strings.CutPrefix(m, "device:")
+	return ok && w.c.store.hasDevice(name)
 }
 
 // handleNightUpdates turns the automatic updates at night on or off, for
@@ -154,7 +154,7 @@ func (w *web) handleUpdateNow(rw http.ResponseWriter, r *http.Request, s *sessio
 	lang := w.lang(r)
 	m := r.PostFormValue("machine")
 	if !w.machineParam(m) {
-		w.toast(rw, tr(lang, "machines.nonode"), false)
+		w.toast(rw, tr(lang, "machines.nodevice"), false)
 		return
 	}
 	if p := w.c.pendingUpdate(m); p != nil {
@@ -165,7 +165,7 @@ func (w *web) handleUpdateNow(rw http.ResponseWriter, r *http.Request, s *sessio
 		w.toast(rw, tr(lang, "update.already"), false)
 		return
 	}
-	// A node while eriphe-core is behind: eriphe-core first, then the node,
+	// A device while eriphe-core is behind: eriphe-core first, then the device,
 	// which its card says; eriphe-core's row, told, follows its request.
 	if _, err := w.c.updateNow(m); err != nil {
 		w.updateError(rw, lang, err)
@@ -188,18 +188,18 @@ const updatesChanged = "updates-changed"
 func (w *web) handleUpdateState(rw http.ResponseWriter, r *http.Request, s *session) {
 	m := coreMachine
 	if name := r.PathValue("name"); name != "" {
-		m = "node:" + name
+		m = "device:" + name
 	}
 	w.updateState(rw, r, s, m, r.URL.Query().Get("id"))
 }
 
 func (w *web) updateState(rw http.ResponseWriter, r *http.Request, s *session, m, follow string) {
-	nodes, err := w.c.store.nodes()
+	devices, err := w.c.store.devices()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := w.updatesData(nodes)
+	d := w.updatesData(devices)
 	for i := range d.Rows {
 		if row := &d.Rows[i]; follow != "" && row.Pending == nil && row.Status != nil && row.Status.ID == follow {
 			row.Done = true
@@ -210,13 +210,13 @@ func (w *web) updateState(rw http.ResponseWriter, r *http.Request, s *session, m
 		w.render(rw, r, s, "settings", "core-update-fragment", page{Data: d.Rows[0]})
 		return
 	}
-	views, err := w.deviceViews(nodes, d)
+	views, err := w.deviceViews(devices, d)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	for _, v := range views {
-		if "node:"+v.Name == m {
+		if "device:"+v.Name == m {
 			w.render(rw, r, s, "settings", "device-foot-fragment", page{Data: v})
 			return
 		}
@@ -228,35 +228,35 @@ func (w *web) updateState(rw http.ResponseWriter, r *http.Request, s *session, m
 // a minute at most, and answers with the updates panel. A new latest
 // version reloads the page: the devices' cards say it too.
 func (w *web) handleCheckUpdates(rw http.ResponseWriter, r *http.Request, s *session) {
-	before := [2]string{w.c.updates.version("eriphe-core"), w.c.updates.version("eriphe-node")}
+	before := [2]string{w.c.updates.version("eriphe-core"), w.c.updates.version("eriphe-device")}
 	if !w.c.updates.checkNow(r.Context()) {
 		rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "updates.checkwait"), false, false))
 		rw.Header().Set("HX-Reswap", "none")
 		rw.WriteHeader(http.StatusTooManyRequests)
 		return
 	}
-	if [2]string{w.c.updates.version("eriphe-core"), w.c.updates.version("eriphe-node")} != before {
+	if [2]string{w.c.updates.version("eriphe-core"), w.c.updates.version("eriphe-device")} != before {
 		rw.Header().Set("HX-Refresh", "true")
 		rw.WriteHeader(http.StatusOK)
 		return
 	}
-	nodes, err := w.c.store.nodes()
+	devices, err := w.c.store.devices()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.render(rw, r, s, "settings", "updates-fragment", page{Data: w.updatesData(nodes)})
+	w.render(rw, r, s, "settings", "updates-fragment", page{Data: w.updatesData(devices)})
 }
 
 // handleUpdateAllButton is "Update all", for the page to follow the
 // requests made from the cards.
 func (w *web) handleUpdateAllButton(rw http.ResponseWriter, r *http.Request, s *session) {
-	nodes, err := w.c.store.nodes()
+	devices, err := w.c.store.devices()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.render(rw, r, s, "settings", "updates-all-fragment", page{Data: w.updatesData(nodes)})
+	w.render(rw, r, s, "settings", "updates-all-fragment", page{Data: w.updatesData(devices)})
 }
 
 // handleUpdateAll asks every machine behind to update, eriphe-core first.

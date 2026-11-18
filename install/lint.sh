@@ -22,7 +22,7 @@ for p in "$d"/part*.sh; do
 	{
 		echo '#!/bin/sh'
 		echo '# shellcheck disable=SC2034'
-		echo 'CONF= DATA= CORE_UID= MODE= NODE_NAME= IMAGES= ALL_REPOS= JOIN_TOKEN= COMPOSE= ENVF= INSTALL_CONF='
+		echo 'CONF= DATA= CORE_UID= MODE= DEVICE_NAME= IMAGES= ALL_REPOS= JOIN_TOKEN= COMPOSE= ENVF= INSTALL_CONF='
 		sed -n '/^die()/,/^dc()/p' "$d/part2.sh"
 		cat "$p"
 	} >"$p.x"
@@ -38,18 +38,18 @@ done
 # of an install from before runs too), and the scripts it writes there.
 ps=$(dirname "$0")/install.ps1
 awk '/^[$]changed = Invoke-InDistro @.$/ { f = 1; next } f && /^.@$/ { exit } f' "$ps" >"$d/wsl-setup"
-grep -q '^cat > /usr/local/bin/eriphe-node-run ' "$d/wsl-setup" || {
-	echo "lint.sh: install.ps1's setup writes no eriphe-node-run (the updater of before looks for it)" >&2
+grep -q '^cat > /usr/local/bin/eriphe-device-run ' "$d/wsl-setup" || {
+	echo "lint.sh: install.ps1's setup writes no eriphe-device-run (the updater of before looks for it)" >&2
 	exit 1
 }
-for s in eriphe-node-run eriphe-share eriphe-dockerd; do
+for s in eriphe-device-run eriphe-share eriphe-dockerd; do
 	awk '/^cat > \/usr\/local\/bin\/'"$s"' <<.EOF.$/ { f = 1; next } f && /^EOF$/ { exit } f' "$ps" >"$d/$s"
 	[ "$(wc -l <"$d/$s")" -gt 5 ] || {
 		echo "lint.sh: no $s in install.ps1" >&2
 		exit 1
 	}
 done
-for s in wsl-setup eriphe-node-run eriphe-share eriphe-dockerd; do
+for s in wsl-setup eriphe-device-run eriphe-share eriphe-dockerd; do
 	shellcheck -s sh "$d/$s"
 	sh -n "$d/$s"
 done

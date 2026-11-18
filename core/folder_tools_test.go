@@ -12,8 +12,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// serveFiles is the fake node's files of its shared folders: it holds
-// each call to the folder as the node does (no path out, nothing hidden),
+// serveFiles is the fake device's files of its shared folders: it holds
+// each call to the folder as the device does (no path out, nothing hidden),
 // in words of its own.
 func (f *fakeShares) serveFiles(w http.ResponseWriter, r *http.Request) {
 	var req folderFilesReq
@@ -78,7 +78,7 @@ func (f *fakeShares) serveFiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// writes are the changes the fake node was asked.
+// writes are the changes the fake device was asked.
 func (f *fakeShares) writes() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -107,7 +107,7 @@ func folderFilesCore(t *testing.T) (*core, *fakeShares) {
 	c.pool.run(ctx)
 	waitStatus(t, c.pool.get(foldersServer), statusReady)
 	setBrain(c, &BrainConfig{})
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "pc", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "pc", Runtime: "claude-code", State: stateWaitingPermission})
 	setBrainTask(c, "b-1")
 	return c, shares
 }
@@ -157,7 +157,7 @@ func TestFoldersToolReads(t *testing.T) {
 		t.Fatalf("list_folders: %s", s)
 	}
 	// The user's own folder taints neither a task nor the brain's turn.
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "pc", State: stateRunning})
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "pc", State: stateRunning})
 	c.calledCatalog("t-1", foldersServer, "read_file")
 	c.calledCatalog("b-1", foldersServer, "read_file")
 	if why := c.store.get(taskTaintKey("t-1")); why != "" {
@@ -179,7 +179,7 @@ func TestFoldersToolReads(t *testing.T) {
 	}
 }
 
-// What the node refuses comes back in its words, never as a path: a path
+// What the device refuses comes back in its words, never as a path: a path
 // out of the folder, a hidden file.
 func TestFoldersToolStaysInTheFolder(t *testing.T) {
 	c, shares := folderFilesCore(t)
@@ -193,7 +193,7 @@ func TestFoldersToolStaysInTheFolder(t *testing.T) {
 			t.Errorf("write %s: %s", p, resultText(res))
 		}
 	}
-	if w := shares.writes(); len(w) != 4 { // asked, and refused by the node
+	if w := shares.writes(); len(w) != 4 { // asked, and refused by the device
 		t.Errorf("writes %v", w)
 	}
 }
@@ -282,7 +282,7 @@ func TestFoldersToolNever(t *testing.T) {
 	// Free on a turn that read external content asks.
 	c.setFolderCase("Clients", catChange, gridFree)
 	// A skill's run (not started by the user) asks a free write too.
-	run := &TaskRow{ID: "t-run", Kind: "worker", Node: "pc", State: stateRunning, Tools: foldersServer}
+	run := &TaskRow{ID: "t-run", Kind: "worker", Device: "pc", State: stateRunning, Tools: foldersServer}
 	c.store.insertTask(run)
 	if d, _ := c.decideTask(run, "mcp__eriphe-folders__write_file", map[string]any{"folder": "Clients", "path": "n.md", "content": "x"}); d != decideAsk {
 		t.Errorf("a free write of a run: %s", d)

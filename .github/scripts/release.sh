@@ -118,7 +118,7 @@ title)
 The title of a pull request becomes its commit on main, which CI reads to release
 (RELEASING.md). Write it as "type(scope)!: description", scope and "!" optional, with
 type one of: $TYPES
-  feat: let a node rejoin under its own name    -> minor release
+  feat: let a device rejoin under its own name    -> minor release
   fix(core): keep the session on a reload       -> patch release
   feat!: drop the v1 API                        -> breaking change
   docs: explain the backups                     -> no release by itself

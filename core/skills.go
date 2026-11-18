@@ -21,7 +21,7 @@ import (
 // The user's skills (agentskills.io): a folder with a SKILL.md, its
 // instructions, and maybe scripts, references and assets. The user adds one
 // in Settings → Skills (web_skills.go), reads it and approves it; from then
-// on every worker task has it (node/skills.go), and the brain reads it
+// on every worker task has it (device/skills.go), and the brain reads it
 // with read_skill (skills_tools.go).
 //
 // A skill is kept as an immutable bundle: a tar of its files in a fixed
@@ -29,7 +29,7 @@ import (
 // points at the version the user approved, and at a new one waiting for
 // approval: uploading a changed version never reaches a task before the
 // user approves it, after reading its diff. Tasks get the approved
-// version's name and hash; their node fetches the bundle and checks it.
+// version's name and hash; their device fetches the bundle and checks it.
 
 const skillSchema = `CREATE TABLE IF NOT EXISTS skill_bundles (sha TEXT PRIMARY KEY, data BLOB NOT NULL, time INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS skills (name TEXT PRIMARY KEY, approved TEXT NOT NULL DEFAULT '', pending TEXT NOT NULL DEFAULT '',

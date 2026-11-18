@@ -30,7 +30,7 @@ import (
 //   - a thread's lead: its own tools (registerLeadTools), as lead:<thread>;
 //   - a task: eriphe-workspace, a server Eriphe provides, lent like any
 //     tool of the catalog ({kind: tool, ref: eriphe-workspace} in run_task;
-//     never in a skill's tools). It is in the task's grant, its node relays
+//     never in a skill's tools). It is in the task's grant, its device relays
 //     it as any other (proxy.go). A task holds no thread: it reads the
 //     workspace, and gives a captured page to its thread's surface
 //     (surfaces_capture.go).

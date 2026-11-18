@@ -58,7 +58,7 @@ type tasksData struct {
 // taskCard is a task as the side panel shows it.
 type taskCard struct {
 	ID, Title, Prompt    string
-	Node, Agent          string
+	Device, Agent        string
 	Repo, Branch         string
 	State, PendingReason string
 	Link, LinkLabel      string
@@ -123,7 +123,7 @@ func (w *web) card(st *taskStatus) taskCard {
 	if h.RetryAt > 0 {
 		retryAt = time.Unix(h.RetryAt, 0)
 	}
-	return taskCard{StopReason: h.StopReason, RetryAt: retryAt, ID: t.ID, Title: t.label(), Prompt: t.Prompt, Node: t.Node, Agent: t.Agent,
+	return taskCard{StopReason: h.StopReason, RetryAt: retryAt, ID: t.ID, Title: t.label(), Prompt: t.Prompt, Device: t.Device, Agent: t.Agent,
 		Repo: repo, Branch: branch, State: t.State, PendingReason: t.PendingReason, Link: link, LinkLabel: label,
 		Updated: t.Updated, Created: t.Created, Finished: finished(t.State), LastText: st.LastText,
 		NeedsYou: w.needsUser(st), Receipt: st.Receipt, Contract: st.Contract, Usage: w.c.store.usageOf(t.ID)}
@@ -217,7 +217,7 @@ func hasPending(st *taskStatus, pid string) bool {
 }
 
 // pendingPermission is the permission a task waits for, unless an answer
-// is already on its way to the node.
+// is already on its way to the device.
 func (w *web) pendingPermission(st *taskStatus) map[string]any {
 	p := st.PendingPermission
 	if p == nil || w.c.store.answered(st.Task.ID, fmt.Sprint(p["id"])) {
@@ -538,7 +538,7 @@ func (w *web) toast(rw http.ResponseWriter, msg string, ok bool) {
 // Settings.
 
 type machineView struct {
-	NodeRow
+	DeviceRow
 	CPUs     int
 	Memory   int64
 	Runtimes []string
@@ -546,7 +546,7 @@ type machineView struct {
 	Active   int
 	AlwaysOn bool   // the tools run here
 	Model    bool   // it lends a model server (model_relay.go)
-	Version  string // its eriphe-node's
+	Version  string // its eriphe-device's
 	System   string // its system in words, a key of web_text.go (system.*)
 	Arch     string
 	Update   updateRow // where its update stands (web_updates.go)
@@ -557,40 +557,40 @@ type machineView struct {
 	// denied first, which the user can fix from here on a Mac.
 	Problem string
 	Program string // the program refused it, to allow on a Mac
-	// What it can do there: put agents to work, if the node runs tasks.
+	// What it can do there: put agents to work, if the device runs tasks.
 	Workers bool
 	// Whether Eriphe may wake it (web_wake.go).
 	Wake wakeView
-	// What its node says of the user's session now (observe.go): active,
+	// What its device says of the user's session now (observe.go): active,
 	// idle or locked, and not to be disturbed; "" when it cannot tell.
 	Presence string
 	IdleMin  int
 	DND      bool
 }
 
-// deviceViews are the devices' cards, in the order of nodes, with the
+// deviceViews are the devices' cards, in the order of devices, with the
 // updates' rows they come from.
-func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, error) {
+func (w *web) deviceViews(devices []DeviceRow, updates updatesData) ([]machineView, error) {
 	folders, err := w.c.store.folders()
 	if err != nil {
 		return nil, err
 	}
 	tls := w.c.caHash() != ""
 	var out []machineView
-	for i, n := range nodes {
+	for i, n := range devices {
 		info := parseInfo(n)
 		n.Asleep = w.c.asleep(n)
 		active, _ := w.c.store.activeCount(n.Name)
-		m := machineView{NodeRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
+		m := machineView{DeviceRow: n, CPUs: info.CPUs, Memory: info.Memory, Runtimes: info.Runtimes,
 			Labels: info.Labels, Active: active, AlwaysOn: info.AlwaysOn, Model: info.ModelServer, Version: info.Version,
-			System: systemKey(nodeInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1],
+			System: systemKey(deviceInstall(n, info), n.OS), Arch: n.Arch, Update: updates.Rows[i+1],
 			Workers: len(info.Runtimes) > 0, NoTLS: tls && n.CertExpires.IsZero()}
 		m.Wake = w.wakeView(n, info)
 		if o, ok := w.c.obs.machine(n.Name, time.Now()); ok {
 			m.Presence, m.IdleMin, m.DND = o.presence(), int(o.Idle/time.Minute), o.DND
 		}
 		for _, f := range folders {
-			if f.Node == n.Name {
+			if f.Device == n.Name {
 				m.Folders = append(m.Folders, f)
 				if f.Problem != "" && (m.Problem == "" || f.Problem == "denied") {
 					m.Problem, m.Program = f.Problem, f.Program
@@ -603,20 +603,20 @@ func (w *web) deviceViews(nodes []NodeRow, updates updatesData) ([]machineView, 
 }
 
 func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session) {
-	nodes, err := w.c.store.nodes()
+	devices, err := w.c.store.devices()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	updates := w.updatesData(nodes)
-	out, err := w.deviceViews(nodes, updates)
+	updates := w.updatesData(devices)
+	out, err := w.deviceViews(devices, updates)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.c.updates.refreshStale(context.Background())
 	var plain []string
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.CertExpires.IsZero() {
 			plain = append(plain, n.Name)
 		}
@@ -628,12 +628,12 @@ func (w *web) handleMachines(rw http.ResponseWriter, r *http.Request, s *session
 		remote = strings.Join(away, ", ")
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.machines", Nav: "settings", Tab: "devices",
-		Data: machinesData{Nodes: out, Remote: remote, CAHash: w.c.caHash(), TLSOnly: w.c.nodesTLSOnly(),
+		Data: machinesData{Devices: out, Remote: remote, CAHash: w.c.caHash(), TLSOnly: w.c.devicesTLSOnly(),
 			Plain: strings.Join(plain, ", "), Updates: updates}})
 }
 
 // systemKey names a machine's system in words, from how it was installed
-// and the system its eriphe-node runs on: on a Mac, the node runs on macOS
+// and the system its eriphe-device runs on: on a Mac, the device runs on macOS
 // itself with Apple's container, or in Lima's Linux VM; on Windows, in WSL;
 // installed by hand on Linux, it is a compose project of one's own (a NAS).
 // Empty while unknown (a machine that never reported it).
@@ -660,8 +660,8 @@ func systemKey(install, goos string) string {
 }
 
 type machinesData struct {
-	Nodes  []machineView
-	Remote string // eriphe-core's addresses away from home: the second one, the tailnet's
+	Devices []machineView
+	Remote  string // eriphe-core's addresses away from home: the second one, the tailnet's
 	// TLS for machines (machine_tls.go): the CA's hash, whether the plain
 	// path is closed, and the machines still without their certificate.
 	CAHash  string
@@ -752,7 +752,7 @@ func (w *web) handleJoinCommand(rw http.ResponseWriter, r *http.Request, s *sess
 	name := strings.TrimSpace(strings.ToLower(r.PostFormValue("name")))
 	labels := strings.ReplaceAll(strings.ToLower(r.PostFormValue("labels")), " ", "")
 	v := joinView{Name: name, Labels: labels}
-	if !nodeName.MatchString(name) || (labels != "" && !labelsRe.MatchString(labels)) {
+	if !deviceName.MatchString(name) || (labels != "" && !labelsRe.MatchString(labels)) {
 		v.Error = "machines.badname"
 		w.render(rw, r, s, "settings", "join-result", page{Data: v})
 		return
@@ -769,12 +769,12 @@ func (w *web) handleRejoinCommand(rw http.ResponseWriter, r *http.Request, s *se
 func (w *web) joinResult(rw http.ResponseWriter, r *http.Request, s *session, v joinView) {
 	token, expires, err := w.c.newJoinToken(v.Name, v.Rejoin, 24*time.Hour)
 	switch {
-	case errors.Is(err, errBadNodeName):
+	case errors.Is(err, errBadDeviceName):
 		v.Error = "machines.badname"
-	case errors.Is(err, errNodeExists):
+	case errors.Is(err, errDeviceExists):
 		v.Error = "machines.exists"
-	case errors.Is(err, errNoNode):
-		v.Error = "machines.nonode"
+	case errors.Is(err, errNoDevice):
+		v.Error = "machines.nodevice"
 	case err != nil:
 		v.Error = "err.internal"
 	}
@@ -796,12 +796,12 @@ func (w *web) joinResult(rw http.ResponseWriter, r *http.Request, s *session, v 
 
 func (w *web) handleForget(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	if err := w.c.store.deleteNode(name); err != nil {
+	if err := w.c.store.deleteDevice(name); err != nil {
 		w.toast(rw, err.Error(), false)
 		return
 	}
 	w.c.disconnect(name)
-	log.Printf("web: node %s forgotten", name)
+	log.Printf("web: device %s forgotten", name)
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
 }

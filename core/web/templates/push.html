@@ -195,15 +195,15 @@
     <button class="btn btn-soft sm" type="submit">{{t "where.save"}}</button>
   </form>
   <p class="small muted">{{t "where.delay.hint"}}</p>
-  {{if .Nodes}}<h4 class="notif-sub">{{t "where.nodes"}}</h4>
-  <p class="small muted">{{t "where.nodes.lead"}}</p>
-  <ul class="list">{{$computers := .Computers}}{{range .Nodes}}
+  {{if .Machines}}<h4 class="notif-sub">{{t "where.machines"}}</h4>
+  <p class="small muted">{{t "where.machines.lead"}}</p>
+  <ul class="list">{{$computers := .Computers}}{{range .Machines}}
     <li><div class="list-main"><span class="strong">{{.Name}}</span>
       <span class="small muted">{{if .IdleKnown}}{{if .Locked}}{{t "where.idle.locked"}}{{else}}{{tf "where.idle" .Idle}}{{end}}{{else}}{{t "where.idle.unknown"}}{{end}}</span></div>
-      <form hx-post="/where/node" hx-trigger="change" hx-target="#where-body">
-        <input type="hidden" name="node" value="{{.Name}}">
-        <select name="sub" aria-label="{{t "where.node.sub"}} · {{.Name}}">{{$sub := .Sub}}{{$sug := .Suggested}}
-          <option value=""{{if eq $sub ""}} selected{{end}}>{{t "where.node.none"}}</option>
+      <form hx-post="/where/machine" hx-trigger="change" hx-target="#where-body">
+        <input type="hidden" name="machine" value="{{.Name}}">
+        <select name="sub" aria-label="{{t "where.machine.sub"}} · {{.Name}}">{{$sub := .Sub}}{{$sug := .Suggested}}
+          <option value=""{{if eq $sub ""}} selected{{end}}>{{t "where.machine.none"}}</option>
           {{range $computers}}<option value="{{.ID}}"{{if eq $sub .ID}} selected{{end}}>{{.Label}}{{if eq $sug .ID}} {{t "where.suggested"}}{{end}}</option>{{end}}
         </select>
       </form>

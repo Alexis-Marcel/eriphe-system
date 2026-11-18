@@ -297,7 +297,7 @@ func (c *core) connectTools(lang, provider, identity string, scopes []string, se
 	if wasLapsed {
 		c.connectionWoken(cn)
 	}
-	c.bump() // the nodes fetch the services' new environment
+	c.bump() // the devices fetch the services' new environment
 	return errors.Join(errs...)
 }
 

@@ -22,7 +22,7 @@
         </span>
       </div>
       <h3 class="tile-title">{{template "i-folder"}}{{.Name}}</h3>
-      {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" $mac "Node" .Node "Copy" false)}}{{end}}
+      {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" $mac "Device" .Device "Copy" false)}}{{end}}
       <p class="chips"><span class="tag{{if eq .Access "write"}} tag-accent{{end}}">{{t (printf "folders.access.%s" .Access)}}</span></p>
       <div class="folder-rights">
         {{template "case-summary" (dict "G" .Grid "OOB" false)}}
@@ -36,10 +36,10 @@
         <ul class="copy-list">
         {{range .Copies}}
           <li>
-            <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{.Node}}</span>
+            <span class="status {{if .Online}}on{{else}}off{{end}}"><span class="led" aria-hidden="true"></span>{{.Device}}</span>
             <span class="tag{{if eq .Status "ok"}} tag-accent{{else if or (eq .Status "error") (eq .Status "behind")}} tag-no{{end}}">{{if eq .Status "syncing"}}{{tf "folders.copy.syncing" (printf "%.0f" .Done)}}{{else}}{{t (printf "folders.copy.%s" .Status)}}{{end}}</span>
             {{if .Bytes}}<span class="muted small">{{size .Bytes}}</span>{{end}}
-            {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" .Mac "Node" .Node "Copy" true)}}{{end}}
+            {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" .Mac "Device" .Device "Copy" true)}}{{end}}
             {{if .Error}}<p class="muted small copy-error">{{.Error}}</p>{{end}}
           </li>
         {{end}}
@@ -51,7 +51,7 @@
           <p class="small muted">{{t "folders.copyto"}}</p>
           <div class="checks">
           {{range .CopyTo}}
-            <label class="check"><input type="checkbox" name="node" value="{{.Node}}" {{if .Checked}}checked{{end}} {{if and (not .Able) (not .Checked)}}disabled{{end}}><span><b>{{.Node}}</b>{{if not .Able}}<small>{{t "folders.copy.unable"}}</small>{{end}}</span></label>
+            <label class="check"><input type="checkbox" name="device" value="{{.Device}}" {{if .Checked}}checked{{end}} {{if and (not .Able) (not .Checked)}}disabled{{end}}><span><b>{{.Device}}</b>{{if not .Able}}<small>{{t "folders.copy.unable"}}</small>{{end}}</span></label>
           {{end}}
           </div>
           <button class="btn sm" type="submit">{{t "folders.copiessave"}}</button>
@@ -140,13 +140,13 @@ sudo eriphe-share restore Clients latest</pre><button class="btn btn-soft sm" ty
 </dialog>
 {{end}}
 
-{{/* A folder its machine cannot use (folder_access.go): on a Mac that macOS keeps from it, "Allow" opens System Settings there; elsewhere, why. . is a dict: Problem, Program (the program refused: eriphe-node or syncthing), Mac (that machine is a Mac), Node, Copy (a copy kept on it). */}}
+{{/* A folder its machine cannot use (folder_access.go): on a Mac that macOS keeps from it, "Allow" opens System Settings there; elsewhere, why. . is a dict: Problem, Program (the program refused: eriphe-device or syncthing), Mac (that machine is a Mac), Device, Copy (a copy kept on it). */}}
 {{define "folder-problem"}}
 <div class="warn-note small folder-problem" role="status">
   {{- if and (eq .Problem "denied") .Mac}}
   <p><b>{{t "folders.problem.denied.mac"}}</b></p>
   <p>{{tf "folders.problem.macfix" (macprog .Program)}}</p>
-  <form hx-post="/settings/devices/{{.Node}}/privacy" class="inline"><input type="hidden" name="program" value="{{macprog .Program}}"><button class="btn sm" type="submit">{{t "folders.allow"}}</button></form>
+  <form hx-post="/settings/devices/{{.Device}}/privacy" class="inline"><input type="hidden" name="program" value="{{macprog .Program}}"><button class="btn sm" type="submit">{{t "folders.allow"}}</button></form>
   {{- else if .Copy}}
   <p>{{t (printf "folders.copyproblem.%s" .Problem)}}</p>
   {{- else}}

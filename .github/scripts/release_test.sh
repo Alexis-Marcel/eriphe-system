@@ -34,8 +34,8 @@ next 0.1.0 '' 'Keep the workspace page from scrolling (#6)' 'Merge pull request 
 next 0.1.0 '0.1.1' 'fix: keep the session on a reload'
 next 0.1.0 '0.1.1' 'perf(core): cache the token'
 next 0.1.0 '0.1.1' 'docs: a typo' 'fix: a crash' 'Not conventional'
-next 0.1.0 '0.2.0' 'feat: let a node rejoin under its own name'
-next 0.1.0 '0.2.0' 'fix: a' 'feat(node): b' 'fix: c'
+next 0.1.0 '0.2.0' 'feat: let a device rejoin under its own name'
+next 0.1.0 '0.2.0' 'fix: a' 'feat(device): b' 'fix: c'
 next 0.1.3 '0.2.0' 'feat: resets the patch'
 next 0.1.0 '0.2.0' 'feat!: drop the v1 API'
 next 0.1.0 '0.2.0' 'refactor(core)!: rename the config'
@@ -82,7 +82,7 @@ notes '## Breaking changes
 
 ## Features
 
-- **node:** rejoin under its own name (#8) (c000001)
+- **device:** rejoin under its own name (#8) (c000001)
 
 ## Fixes
 
@@ -93,7 +93,7 @@ notes '## Breaking changes
 
 - explain the backups (c000003)
 - Not conventional (c000007)' \
-	'feat(node): rejoin under its own name (#8)' 'fix: a crash' 'docs: explain the backups' \
+	'feat(device): rejoin under its own name (#8)' 'fix: a crash' 'docs: explain the backups' \
 	'feat!: drop the v1 API (#9)' 'perf: cache the token' 'chore(core): rename\n\nBREAKING CHANGE: x' \
 	'Not conventional'
 notes '## Fixes
@@ -111,9 +111,9 @@ title() {
 
 for t in feat fix perf docs chore ci test refactor style build; do title ok "$t: a change"; done
 title ok 'fix: release automatically from Conventional Commits'
-title ok 'feat(core): let a node rejoin'
+title ok 'feat(core): let a device rejoin'
 title ok 'feat!: drop the v1 API'
-title ok 'refactor(node)!: rename the flags'
+title ok 'refactor(device)!: rename the flags'
 title bad 'Release automatically'
 title bad 'feature: a change'
 title bad 'Fix: a change'

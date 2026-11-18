@@ -418,8 +418,8 @@ func (w *web) attention() attention {
 // updateNotice is what runs behind its latest version (updates.go), for
 // the discreet marks of the navigation and the account.
 type updateNotice struct {
-	Core  string // eriphe-core's latest version, when this one is behind
-	Nodes bool   // a machine is behind
+	Core    string // eriphe-core's latest version, when this one is behind
+	Devices bool   // a machine is behind
 }
 
 func (w *web) updateNotice() updateNotice {
@@ -430,14 +430,14 @@ func (w *web) updateNotice() updateNotice {
 			n.Core = latest
 		}
 	}
-	nodes, _ := w.c.store.nodes()
-	for _, row := range nodes {
+	devices, _ := w.c.store.devices()
+	for _, row := range devices {
 		info := parseInfo(row)
-		if pin := info.Update.Pin; pin != "" && !pinAllows(pin, w.c.updates.version("eriphe-node")) {
+		if pin := info.Update.Pin; pin != "" && !pinAllows(pin, w.c.updates.version("eriphe-device")) {
 			continue
 		}
-		if w.c.updates.behind("eriphe-node", info.Version) {
-			n.Nodes = true
+		if w.c.updates.behind("eriphe-device", info.Version) {
+			n.Devices = true
 			break
 		}
 	}

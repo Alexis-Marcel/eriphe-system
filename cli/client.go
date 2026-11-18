@@ -36,7 +36,7 @@ type Message struct {
 // Task is a worker task as eriphe-core lists it.
 type Task struct {
 	ID      string    `json:"id"`
-	Node    string    `json:"node"`
+	Device  string    `json:"device"`
 	Agent   string    `json:"agent,omitempty"`
 	Runtime string    `json:"runtime"`
 	Model   string    `json:"model,omitempty"`
@@ -121,7 +121,7 @@ func pollTimeout(wait int) time.Duration { return time.Duration(wait)*time.Secon
 
 const (
 	shortTimeout  = 15 * time.Second
-	actionTimeout = time.Minute // answers and stops go through to the node
+	actionTimeout = time.Minute // answers and stops go through to the device
 )
 
 // Messages returns the conversation after seq after, waiting up to wait

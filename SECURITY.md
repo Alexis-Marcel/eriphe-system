@@ -8,7 +8,7 @@ reports are welcome and taken seriously.
 Please do not open a public issue. Report it privately through GitHub's private vulnerability
 reporting: the repository's **Security** tab → **Report a vulnerability**.
 
-Include what you found, how to reproduce it, which component it affects (eriphe-core, eriphe-node,
+Include what you found, how to reproduce it, which component it affects (eriphe-core, eriphe-device,
 the worker image, an installer, an MCP server, the Home Assistant integration) and the version
 (such as `0.2.0`, shown in Settings → Machines). You should get an answer as soon as possible, usually within a few days. Once a fix
 is published, the advisory credits you unless you prefer otherwise.
@@ -23,13 +23,13 @@ branch get fixes.
 In scope: anything that lets a task, a tool's content (mail, web page, MCP result), a machine on
 the LAN or another user reach what it should not: credentials, other tasks, the host, the LAN, or
 actions the policy should have stopped. The design and its known limits are described in
-core/README.md (Security model, Permission policy), node/README.md and deploy/README.md (What the
+core/README.md (Security model, Permission policy), device/README.md and deploy/README.md (What the
 proxy does not stop).
 
 Credentials in tasks: the one long-lived secret a task holds is its agent's key for the model
 provider, in its environment, whose limit is the provider's. The secret of an access, an SSH key and
 a GitHub token stay in eriphe-core: a task holds a placeholder, and the real secret goes in on the
-way out, for the hosts of what it was lent (core/README.md, GitHub in a task; node/README.md,
+way out, for the hosts of what it was lent (core/README.md, GitHub in a task; device/README.md,
 Accesses). A way to get such a secret into a task, to use a repository or an access beyond its lend,
 or to approve a card without the user, is in scope.
 

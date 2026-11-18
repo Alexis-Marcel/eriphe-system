@@ -13,15 +13,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// Task states, mirrored from the node, plus the ones only eriphe-core knows.
+// Task states, mirrored from the device, plus the ones only eriphe-core knows.
 const (
-	statePending           = "pending" // not yet accepted by a node
+	statePending           = "pending" // not yet accepted by a device
 	stateRunning           = "running"
 	stateWaitingPermission = "waiting_permission"
 	stateIdle              = "idle" // the agent's turn is over: done, or asking something
 	stateStopped           = "stopped"
 	stateFailed            = "failed"
-	stateLost              = "lost" // the node no longer knows the task
+	stateLost              = "lost" // the device no longer knows the task
 )
 
 func finished(state string) bool {
@@ -33,7 +33,7 @@ type Store struct {
 	dir string // the data folder, where the database is
 }
 
-type NodeRow struct {
+type DeviceRow struct {
 	Name     string          `json:"name"`
 	Online   bool            `json:"online"`
 	Info     json.RawMessage `json:"info,omitempty"`
@@ -45,20 +45,20 @@ type NodeRow struct {
 	OS      string `json:"os,omitempty"`
 	Arch    string `json:"arch,omitempty"`
 	Install string `json:"install,omitempty"`
-	// Its access is cut (node_access.go): no work, no folder, no tunnel.
+	// Its access is cut (device_access.go): no work, no folder, no tunnel.
 	Suspended bool `json:"suspended,omitempty"`
-	// Asleep: away, but it comes back by itself (node_sleep.go). Not
+	// Asleep: away, but it comes back by itself (device_sleep.go). Not
 	// stored: set where it is shown.
 	Asleep bool `json:"asleep,omitempty"`
 }
 
 type TaskRow struct {
-	ID   string `json:"id"`
-	Node string `json:"node"` // empty while the task waits for a node
-	// Why a pending task has no node yet.
+	ID     string `json:"id"`
+	Device string `json:"device"` // empty while the task waits for a device
+	// Why a pending task has no device yet.
 	PendingReason string    `json:"pending_reason,omitempty"`
 	Agent         string    `json:"agent,omitempty"`
-	NodeTaskID    string    `json:"node_task_id,omitempty"`
+	DeviceTaskID  string    `json:"device_task_id,omitempty"`
 	Runtime       string    `json:"runtime"`
 	Model         string    `json:"model,omitempty"`
 	Kind          string    `json:"kind,omitempty"`    // worker or brain
@@ -75,7 +75,7 @@ type TaskRow struct {
 
 	// Resources is all it was lent (resources.go); nil for a task from before.
 	Resources []ResourceRef `json:"resources,omitempty"`
-	// Pinned: its node was chosen by hand, and it never moves.
+	// Pinned: its device was chosen by hand, and it never moves.
 	Pinned bool `json:"pinned,omitempty"`
 	// About is what it is about: its thread, its skill's, the brain's
 	// turn's, or the one it was given (about.go).
@@ -93,28 +93,28 @@ type EventRow struct {
 }
 
 const schema = `
-CREATE TABLE IF NOT EXISTS nodes (
+CREATE TABLE IF NOT EXISTS devices (
   name TEXT PRIMARY KEY, url TEXT NOT NULL, online INTEGER NOT NULL DEFAULT 0,
   info TEXT, last_seen INTEGER NOT NULL DEFAULT 0,
-  secret_hash TEXT NOT NULL DEFAULT '',  -- a node is known by the hash of its secret
+  secret_hash TEXT NOT NULL DEFAULT '',  -- a device is known by the hash of its secret
   cert_serial TEXT NOT NULL DEFAULT '',  -- its client certificate's serial (machine_tls.go)
   prev_serial TEXT NOT NULL DEFAULT '',  -- the one before, valid while it moves to the new one
   cert_expires INTEGER NOT NULL DEFAULT 0,
   os TEXT NOT NULL DEFAULT '', arch TEXT NOT NULL DEFAULT '', install TEXT NOT NULL DEFAULT '', -- its last report
-  suspended INTEGER NOT NULL DEFAULT 0); -- "Cut access" (node_access.go)
+  suspended INTEGER NOT NULL DEFAULT 0); -- "Cut access" (device_access.go)
 CREATE TABLE IF NOT EXISTS tasks (
-  id TEXT PRIMARY KEY, node TEXT NOT NULL, node_task_id TEXT NOT NULL DEFAULT '',
+  id TEXT PRIMARY KEY, device TEXT NOT NULL, device_task_id TEXT NOT NULL DEFAULT '',
   runtime TEXT NOT NULL, model TEXT NOT NULL DEFAULT '',
   dir TEXT NOT NULL, prompt TEXT NOT NULL, state TEXT NOT NULL,
   session_id TEXT NOT NULL DEFAULT '', last_seq INTEGER NOT NULL DEFAULT 0,
   created INTEGER NOT NULL, updated INTEGER NOT NULL,
   kind TEXT NOT NULL DEFAULT 'worker', agent TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '',
-  spec TEXT NOT NULL DEFAULT '',             -- what its node reads (lifecycle.go)
+  spec TEXT NOT NULL DEFAULT '',             -- what its device reads (lifecycle.go)
   desired TEXT NOT NULL DEFAULT 'running',   -- run or stop
-  pending_reason TEXT NOT NULL DEFAULT '',   -- why it waits for a node
+  pending_reason TEXT NOT NULL DEFAULT '',   -- why it waits for a device
   tools TEXT NOT NULL DEFAULT '', folders TEXT NOT NULL DEFAULT '',
   resources TEXT NOT NULL DEFAULT '',        -- all it is lent, as JSON (resources.go)
-  pinned INTEGER NOT NULL DEFAULT 0,         -- its node given by hand (placement.go)
+  pinned INTEGER NOT NULL DEFAULT 0,         -- its device given by hand (placement.go)
   about TEXT NOT NULL DEFAULT '');         -- what it is about: thread:<id> or an entity's key (about.go)
 CREATE TABLE IF NOT EXISTS messages (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL,
@@ -127,8 +127,8 @@ CREATE TABLE IF NOT EXISTS inbox (
   data TEXT NOT NULL, created INTEGER NOT NULL, acked INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS join_tokens (
   hash TEXT PRIMARY KEY, expires INTEGER NOT NULL,
-  name TEXT NOT NULL DEFAULT '',      -- the node it is for
-  rejoin INTEGER NOT NULL DEFAULT 0,  -- it may replace that node's secret
+  name TEXT NOT NULL DEFAULT '',      -- the device it is for
+  rejoin INTEGER NOT NULL DEFAULT 0,  -- it may replace that device's secret
   id TEXT NOT NULL DEFAULT '');       -- its public id (id.secret)
 CREATE TABLE IF NOT EXISTS events (
   task_id TEXT NOT NULL, seq INTEGER NOT NULL, time INTEGER NOT NULL,
@@ -188,7 +188,7 @@ func openStore(path string) (*Store, error) {
 }
 
 // joinToken is what a join token allows: joining as Name, and if Rejoin,
-// replacing the secret of the node already registered under that name.
+// replacing the secret of the device already registered under that name.
 type joinToken struct {
 	ID      string
 	Name    string
@@ -211,17 +211,17 @@ func (s *Store) joinTokenUnused(id string) bool {
 }
 
 var (
-	errJoinToken  = errors.New("invalid or expired join token")
-	errJoinName   = errors.New("this join token is for another node name")
-	errNodeExists = errors.New("a node is already registered under this name: rejoining it needs a rejoin token for it")
+	errJoinToken    = errors.New("invalid or expired join token")
+	errJoinName     = errors.New("this join token is for another device name")
+	errDeviceExists = errors.New("a device is already registered under this name: rejoining it needs a rejoin token for it")
 )
 
-// joinNode consumes a join token and registers the node name with its
+// joinDevice consumes a join token and registers the device name with its
 // secret. A token only joins under the name it was made for (an older,
-// unnamed token under a new name only), and replaces an existing node's
-// secret only if it was made to rejoin that node. A refused join leaves the
+// unnamed token under a new name only), and replaces an existing device's
+// secret only if it was made to rejoin that device. A refused join leaves the
 // token unused.
-func (s *Store) joinNode(tokenHash, name, secretHash string) (rejoined bool, err error) {
+func (s *Store) joinDevice(tokenHash, name, secretHash string) (rejoined bool, err error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return false, err
@@ -243,16 +243,16 @@ func (s *Store) joinNode(tokenHash, name, secretHash string) (rejoined bool, err
 		return false, errJoinName
 	}
 	var exists int
-	if err := tx.QueryRow(`SELECT COUNT(*) FROM nodes WHERE name = ?`, name).Scan(&exists); err != nil {
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM devices WHERE name = ?`, name).Scan(&exists); err != nil {
 		return false, err
 	}
 	if exists > 0 && !(rejoin && tokName == name) {
-		return false, errNodeExists
+		return false, errDeviceExists
 	}
 	if _, err := tx.Exec(`DELETE FROM join_tokens WHERE hash = ?`, tokenHash); err != nil {
 		return false, err
 	}
-	if _, err := tx.Exec(`INSERT INTO nodes (name, url, secret_hash) VALUES (?, '', ?)
+	if _, err := tx.Exec(`INSERT INTO devices (name, url, secret_hash) VALUES (?, '', ?)
 		ON CONFLICT(name) DO UPDATE SET secret_hash = excluded.secret_hash,
 		  cert_serial = '', prev_serial = '', cert_expires = 0`, name, secretHash); err != nil {
 		return false, err
@@ -260,54 +260,54 @@ func (s *Store) joinNode(tokenHash, name, secretHash string) (rejoined bool, err
 	return exists > 0, tx.Commit()
 }
 
-func (s *Store) checkNode(name, secretHash string) bool {
+func (s *Store) checkDevice(name, secretHash string) bool {
 	var stored string
-	err := s.db.QueryRow(`SELECT secret_hash FROM nodes WHERE name = ?`, name).Scan(&stored)
+	err := s.db.QueryRow(`SELECT secret_hash FROM devices WHERE name = ?`, name).Scan(&stored)
 	return err == nil && stored != "" && subtle.ConstantTimeCompare([]byte(stored), []byte(secretHash)) == 1
 }
 
-// setNodeCert makes serial the node's certificate, and its current one the
-// previous. secretHash binds it to the secret that asked: a node that
+// setDeviceCert makes serial the device's certificate, and its current one the
+// previous. secretHash binds it to the secret that asked: a device that
 // joined again meanwhile does not get it.
-func (s *Store) setNodeCert(name, secretHash, serial string, expires time.Time) error {
-	res, err := s.db.Exec(`UPDATE nodes SET prev_serial = cert_serial, cert_serial = ?, cert_expires = ?
+func (s *Store) setDeviceCert(name, secretHash, serial string, expires time.Time) error {
+	res, err := s.db.Exec(`UPDATE devices SET prev_serial = cert_serial, cert_serial = ?, cert_expires = ?
 		WHERE name = ? AND secret_hash = ?`, serial, expires.Unix(), name, secretHash)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n != 1 {
-		return errors.New("the node changed meanwhile")
+		return errors.New("the device changed meanwhile")
 	}
 	return nil
 }
 
-// nodeCertValid says whether serial is the node's certificate, or the one
-// before it. Forgetting the node or letting it join again clears both.
-func (s *Store) nodeCertValid(name, serial string) bool {
+// deviceCertValid says whether serial is the device's certificate, or the one
+// before it. Forgetting the device or letting it join again clears both.
+func (s *Store) deviceCertValid(name, serial string) bool {
 	var cur, prev string
-	err := s.db.QueryRow(`SELECT cert_serial, prev_serial FROM nodes WHERE name = ?`, name).Scan(&cur, &prev)
+	err := s.db.QueryRow(`SELECT cert_serial, prev_serial FROM devices WHERE name = ?`, name).Scan(&cur, &prev)
 	return err == nil && serial != "" && (serial == cur || serial == prev)
 }
 
-func (s *Store) hasNode(name string) bool {
+func (s *Store) hasDevice(name string) bool {
 	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM nodes WHERE name = ?`, name).Scan(&n)
+	s.db.QueryRow(`SELECT COUNT(*) FROM devices WHERE name = ?`, name).Scan(&n)
 	return n == 1
 }
 
-func (s *Store) deleteNode(name string) error {
-	if _, err := s.db.Exec(`DELETE FROM nodes WHERE name = ?`, name); err != nil {
+func (s *Store) deleteDevice(name string) error {
+	if _, err := s.db.Exec(`DELETE FROM devices WHERE name = ?`, name); err != nil {
 		return err
 	}
 	// Whether it may be woken (wake.go).
 	s.forgetWake(name)
-	_, err := s.db.Exec(`DELETE FROM node_log WHERE node = ?`, name) // its access log (node_access.go)
+	_, err := s.db.Exec(`DELETE FROM device_log WHERE device = ?`, name) // its access log (device_access.go)
 	return err
 }
 
-func (s *Store) setNodeStatus(name string, online bool, info []byte) error {
+func (s *Store) setDeviceStatus(name string, online bool, info []byte) error {
 	if online {
-		_, err := s.db.Exec(`UPDATE nodes SET online = 1, info = ?, last_seen = ? WHERE name = ?`,
+		_, err := s.db.Exec(`UPDATE devices SET online = 1, info = ?, last_seen = ? WHERE name = ?`,
 			string(info), time.Now().Unix(), name)
 		if err != nil {
 			return err
@@ -318,23 +318,23 @@ func (s *Store) setNodeStatus(name string, online bool, info []byte) error {
 			Install string `json:"install"`
 		}
 		if json.Unmarshal(info, &sys) == nil && sys.OS != "" {
-			_, err = s.db.Exec(`UPDATE nodes SET os = ?, arch = ?, install = ? WHERE name = ?`, sys.OS, sys.Arch, sys.Install, name)
+			_, err = s.db.Exec(`UPDATE devices SET os = ?, arch = ?, install = ? WHERE name = ?`, sys.OS, sys.Arch, sys.Install, name)
 		}
 		return err
 	}
-	_, err := s.db.Exec(`UPDATE nodes SET online = 0 WHERE name = ?`, name)
+	_, err := s.db.Exec(`UPDATE devices SET online = 0 WHERE name = ?`, name)
 	return err
 }
 
-func (s *Store) nodes() ([]NodeRow, error) {
-	rows, err := s.db.Query(`SELECT name, online, COALESCE(info, ''), last_seen, cert_expires, os, arch, install, suspended FROM nodes ORDER BY name`)
+func (s *Store) devices() ([]DeviceRow, error) {
+	rows, err := s.db.Query(`SELECT name, online, COALESCE(info, ''), last_seen, cert_expires, os, arch, install, suspended FROM devices ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []NodeRow
+	var out []DeviceRow
 	for rows.Next() {
-		var n NodeRow
+		var n DeviceRow
 		var info string
 		var seen, certExpires int64
 		if err := rows.Scan(&n.Name, &n.Online, &info, &seen, &certExpires, &n.OS, &n.Arch, &n.Install, &n.Suspended); err != nil {
@@ -358,8 +358,8 @@ func (s *Store) insertTask(t *TaskRow) error {
 	if t.Kind == "" {
 		t.Kind = "worker"
 	}
-	_, err := s.db.Exec(`INSERT INTO tasks (id, node, agent, runtime, model, dir, title, prompt, state, pending_reason, kind, tools, folders, resources, pinned, desired, about, created, updated)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Node, t.Agent, t.Runtime, t.Model, t.Dir, t.Title, t.Prompt,
+	_, err := s.db.Exec(`INSERT INTO tasks (id, device, agent, runtime, model, dir, title, prompt, state, pending_reason, kind, tools, folders, resources, pinned, desired, about, created, updated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, t.Device, t.Agent, t.Runtime, t.Model, t.Dir, t.Title, t.Prompt,
 		t.State, t.PendingReason, t.Kind, t.Tools, t.Folders, marshalResources(t.Resources), t.Pinned, orStr(t.Desired, desiredRunning), t.About, now.Unix(), now.Unix())
 	return err
 }
@@ -389,13 +389,13 @@ func (t *TaskRow) label() string {
 	return truncate(line, taskTitleMax)
 }
 
-const taskColumns = `id, node, agent, node_task_id, runtime, model, kind, tools, folders, resources, dir, title, prompt, state, pending_reason, session_id, last_seq, created, updated, pinned, about`
+const taskColumns = `id, device, agent, device_task_id, runtime, model, kind, tools, folders, resources, dir, title, prompt, state, pending_reason, session_id, last_seq, created, updated, pinned, about`
 
 func scanTask(sc interface{ Scan(...any) error }) (*TaskRow, error) {
 	var t TaskRow
 	var created, updated int64
 	var resources string
-	err := sc.Scan(&t.ID, &t.Node, &t.Agent, &t.NodeTaskID, &t.Runtime, &t.Model, &t.Kind, &t.Tools, &t.Folders, &resources, &t.Dir, &t.Title, &t.Prompt,
+	err := sc.Scan(&t.ID, &t.Device, &t.Agent, &t.DeviceTaskID, &t.Runtime, &t.Model, &t.Kind, &t.Tools, &t.Folders, &resources, &t.Dir, &t.Title, &t.Prompt,
 		&t.State, &t.PendingReason, &t.SessionID, &t.LastSeq, &created, &updated, &t.Pinned, &t.About)
 	t.Resources = unmarshalResources(resources)
 	t.Created, t.Updated = time.Unix(created, 0), time.Unix(updated, 0)
@@ -481,9 +481,9 @@ func (s *Store) events(taskID string, n int) ([]EventRow, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) activeCount(node string) (int, error) {
+func (s *Store) activeCount(device string) (int, error) {
 	var n int
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE node = ? AND state NOT IN ('stopped', 'failed', 'lost', 'idle')`, node).Scan(&n)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE device = ? AND state NOT IN ('stopped', 'failed', 'lost', 'idle')`, device).Scan(&n)
 	return n, err
 }
 

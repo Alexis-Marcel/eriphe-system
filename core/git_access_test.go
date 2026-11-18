@@ -89,12 +89,12 @@ func gitAuth(taskID string) string {
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:"+gitPlaceholder(taskID)))
 }
 
-func viaRelayBody(c *core, node, taskID, method, target, auth, body string, more map[string]string) *httptest.ResponseRecorder {
+func viaRelayBody(c *core, device, taskID, method, target, auth, body string, more map[string]string) *httptest.ResponseRecorder {
 	mux := http.NewServeMux()
-	mux.Handle("/v1/node/tasks/{id}/access", c.taskAccessHandler())
-	req := httptest.NewRequest(method, "/v1/node/tasks/"+taskID+"/access", strings.NewReader(body))
+	mux.Handle("/v1/device/tasks/{id}/access", c.taskAccessHandler())
+	req := httptest.NewRequest(method, "/v1/device/tasks/"+taskID+"/access", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer x")
-	req.Header.Set("Eriphe-Node", node)
+	req.Header.Set("Eriphe-Device", device)
 	req.Header.Set(accessHostHeader, gitTarget)
 	req.Header.Set(accessTargetHeader, target)
 	if auth != "" {
@@ -108,7 +108,7 @@ func viaRelayBody(c *core, node, taskID, method, target, auth, body string, more
 	return rec
 }
 
-func TestGitReachesTheNodeWithoutAToken(t *testing.T) {
+func TestGitReachesTheDeviceWithoutAToken(t *testing.T) {
 	got := lentGit("t-1", []ResourceRef{lentRepo})
 	if len(got) != 1 || !slices.Equal(got[0].Hosts, []string{gitTarget, ghTarget}) || got[0].Placeholder != gitPlaceholder("t-1") || got[0].Env != "GH_TOKEN" {
 		t.Fatalf("%+v", got)
@@ -321,8 +321,8 @@ func startGitServer(t *testing.T, c *core, taskID string) *gitServer {
 	t.Cleanup(func() { accessTransport = old })
 
 	mux := http.NewServeMux()
-	mux.Handle("/v1/node/tasks/{id}/access", c.taskAccessHandler())
-	// What the node's relay does to a request, node/egress_access.go.
+	mux.Handle("/v1/device/tasks/{id}/access", c.taskAccessHandler())
+	// What the device's relay does to a request, device/egress_access.go.
 	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// git sends nothing until it is told to authenticate.
 		if r.Header.Get("Authorization") == "" {
@@ -334,8 +334,8 @@ func startGitServer(t *testing.T, c *core, taskID string) *gitServer {
 		r.Header.Set(accessHostHeader, gitTarget)
 		r.Header.Set(accessTargetHeader, r.URL.RequestURI())
 		r.Header.Set("Authorization", "Bearer x")
-		r.Header.Set("Eriphe-Node", "nas")
-		r.URL.Path, r.URL.RawQuery = "/v1/node/tasks/"+taskID+"/access", ""
+		r.Header.Set("Eriphe-Device", "nas")
+		r.URL.Path, r.URL.RawQuery = "/v1/device/tasks/"+taskID+"/access", ""
 		mux.ServeHTTP(w, r)
 	}))
 	t.Cleanup(relay.Close)

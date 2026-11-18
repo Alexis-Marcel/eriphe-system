@@ -26,8 +26,8 @@ type fakeRegistry struct {
 
 func newFakeRegistry(t *testing.T, versions map[string]string) *fakeRegistry {
 	t.Helper()
-	// The worker is published with the node, unless a test says otherwise.
-	if v, ok := versions["eriphe-node"]; ok {
+	// The worker is published with the device, unless a test says otherwise.
+	if v, ok := versions["eriphe-device"]; ok {
 		if _, set := versions["eriphe-base"]; !set {
 			versions["eriphe-base"] = v
 		}
@@ -89,18 +89,18 @@ func (f *fakeRegistry) serve(w http.ResponseWriter, r *http.Request) {
 // it is a local one.
 func TestUpdatesLatestVersions(t *testing.T) {
 	for _, single := range []bool{false, true} {
-		f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.3.0", "eriphe-node": "0.3.0"})
+		f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.3.0", "eriphe-device": "0.3.0"})
 		f.single = single
 		u := newUpdates(f.srv.URL + "/")
 		u.check(context.Background())
 		if got := u.version("eriphe-core"); got != "0.3.0" {
 			t.Fatalf("single %t: eriphe-core latest %q", single, got)
 		}
-		if got := u.version("eriphe-node"); got != "0.3.0" {
-			t.Fatalf("single %t: eriphe-node latest %q", single, got)
+		if got := u.version("eriphe-device"); got != "0.3.0" {
+			t.Fatalf("single %t: eriphe-device latest %q", single, got)
 		}
 	}
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.2.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-device": "0.2.0"})
 	u := newUpdates(f.srv.URL)
 	u.check(context.Background())
 	for _, c := range []struct {
@@ -110,28 +110,28 @@ func TestUpdatesLatestVersions(t *testing.T) {
 		{"eriphe-core", "0.1.0", true},
 		{"eriphe-core", "0.2.0", false},
 		{"eriphe-core", "dev", false},
-		{"eriphe-node", "", false}, // an older node, without a version
-		{"eriphe-node", "0.1.0", true},
+		{"eriphe-device", "", false}, // an older device, without a version
+		{"eriphe-device", "0.1.0", true},
 		{"eriphe-worker", "0.1.0", false}, // not checked: unknown
 	} {
 		if got := u.behind(c.image, c.running); got != c.behind {
 			t.Errorf("behind(%s, %s) = %t", c.image, c.running, got)
 		}
 	}
-	// A release half published: eriphe-node's latest is out, eriphe-core's
+	// A release half published: eriphe-device's latest is out, eriphe-core's
 	// or the worker's not yet. The latest release is the one every image
 	// has, and the check runs again sooner.
 	if u.due(time.Now()) {
 		t.Fatal("due right after a check")
 	}
 	for _, half := range []map[string]string{
-		{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"},
-		{"eriphe-core": "0.3.0", "eriphe-node": "0.2.0"},
-		{"eriphe-core": "0.3.0", "eriphe-node": "0.3.0", "eriphe-base": "0.2.0"},
+		{"eriphe-core": "0.2.0", "eriphe-device": "0.3.0"},
+		{"eriphe-core": "0.3.0", "eriphe-device": "0.2.0"},
+		{"eriphe-core": "0.3.0", "eriphe-device": "0.3.0", "eriphe-base": "0.2.0"},
 	} {
 		f.versions = half
 		u.check(context.Background())
-		for _, image := range []string{"eriphe-core", "eriphe-node"} {
+		for _, image := range []string{"eriphe-core", "eriphe-device"} {
 			if got := u.version(image); got != "0.2.0" {
 				t.Errorf("%v: %s latest %q", half, image, got)
 			}
@@ -143,9 +143,9 @@ func TestUpdatesLatestVersions(t *testing.T) {
 			t.Errorf("%v: not checked again soon", half)
 		}
 	}
-	f.versions = map[string]string{"eriphe-core": "0.3.0", "eriphe-node": "0.3.0", "eriphe-base": "0.3.0"}
+	f.versions = map[string]string{"eriphe-core": "0.3.0", "eriphe-device": "0.3.0", "eriphe-base": "0.3.0"}
 	u.check(context.Background())
-	if !u.behind("eriphe-core", "0.2.0") || !u.behind("eriphe-node", "0.2.0") || u.due(time.Now().Add(updateRetry)) {
+	if !u.behind("eriphe-core", "0.2.0") || !u.behind("eriphe-device", "0.2.0") || u.due(time.Now().Add(updateRetry)) {
 		t.Error("the release, once every image has it")
 	}
 
@@ -162,7 +162,7 @@ func TestUpdatesRegistryErrors(t *testing.T) {
 	log.SetOutput(&logs)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-device": "0.3.0"})
 	u := newUpdates(f.srv.URL)
 	u.check(context.Background())
 	f.down.Store(true)
@@ -171,7 +171,7 @@ func TestUpdatesRegistryErrors(t *testing.T) {
 	if n := strings.Count(logs.String(), "updates:"); n != 1 {
 		t.Fatalf("%d log lines for a registry down twice:\n%s", n, logs.String())
 	}
-	if u.version("eriphe-core") != "0.2.0" || !u.behind("eriphe-node", "0.1.0") {
+	if u.version("eriphe-core") != "0.2.0" || !u.behind("eriphe-device", "0.1.0") {
 		t.Error("the registry down, the last answer is lost")
 	}
 	f.down.Store(false)
@@ -187,7 +187,7 @@ func TestUpdatesRegistryErrors(t *testing.T) {
 	f2 := newFakeRegistry(t, map[string]string{"eriphe-core": ""})
 	u2 := newUpdates(f2.srv.URL)
 	u2.check(context.Background())
-	if u2.version("eriphe-core") != "" || u2.version("eriphe-node") != "" {
+	if u2.version("eriphe-core") != "" || u2.version("eriphe-device") != "" {
 		t.Error("a version without a label")
 	}
 	if !strings.Contains(logs.String(), "no "+versionLabel+" label") || !strings.Contains(logs.String(), "401") {
@@ -221,36 +221,36 @@ func TestUpdateCommands(t *testing.T) {
 	}
 }
 
-// GET /v1/nodes and GET /v1/version tell the CLI what is behind, and how
+// GET /v1/devices and GET /v1/version tell the CLI what is behind, and how
 // to update it.
 func TestUpdatesAPI(t *testing.T) {
 	defer func(v string) { version = v }(version)
 	version = "0.1.0"
 	c, _ := newTestAPI(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.3.0", "eriphe-node": "0.3.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.3.0", "eriphe-device": "0.3.0"})
 	c.updates = newUpdates(f.srv.URL)
 	c.updates.check(context.Background())
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/nodes", c.handleNodes)
+	mux.HandleFunc("GET /v1/devices", c.handleDevices)
 	mux.HandleFunc("GET /v1/version", c.handleVersion)
 	api := httptest.NewServer(mux)
 	t.Cleanup(api.Close)
-	c.store.registerNode("pc", "h")
-	c.store.setNodeStatus("pc", true, []byte(`{"version":"0.1.0","install":"windows"}`))
-	c.store.registerNode("nas", "h2")
-	c.store.setNodeStatus("nas", true, []byte(`{"version":"0.3.0"}`))
+	c.store.registerDevice("pc", "h")
+	c.store.setDeviceStatus("pc", true, []byte(`{"version":"0.1.0","install":"windows"}`))
+	c.store.registerDevice("nas", "h2")
+	c.store.setDeviceStatus("nas", true, []byte(`{"version":"0.3.0"}`))
 
-	var nodes []struct {
+	var devices []struct {
 		Name     string   `json:"name"`
 		Version  string   `json:"version"`
 		Latest   string   `json:"latest"`
 		Behind   bool     `json:"update_available"`
 		Commands []string `json:"update_commands"`
 	}
-	if code := call(t, api, "GET", "/v1/nodes", "", &nodes); code != 200 || len(nodes) != 2 {
-		t.Fatalf("GET /v1/nodes: %d %+v", code, nodes)
+	if code := call(t, api, "GET", "/v1/devices", "", &devices); code != 200 || len(devices) != 2 {
+		t.Fatalf("GET /v1/devices: %d %+v", code, devices)
 	}
-	for _, n := range nodes {
+	for _, n := range devices {
 		switch n.Name {
 		case "pc":
 			if !n.Behind || n.Version != "0.1.0" || n.Latest != "0.3.0" ||
@@ -265,14 +265,14 @@ func TestUpdatesAPI(t *testing.T) {
 	}
 
 	var v struct {
-		Core versionStatus     `json:"core"`
-		Node map[string]string `json:"node"`
+		Core   versionStatus     `json:"core"`
+		Device map[string]string `json:"device"`
 	}
 	if code := call(t, api, "GET", "/v1/version", "", &v); code != 200 {
 		t.Fatalf("GET /v1/version: %d", code)
 	}
 	if !v.Core.Behind || v.Core.Version != "0.1.0" || v.Core.Latest != "0.3.0" || len(v.Core.Commands) == 0 ||
-		v.Node["latest"] != "0.3.0" {
+		v.Device["latest"] != "0.3.0" {
 		t.Errorf("GET /v1/version: %+v", v)
 	}
 }
@@ -284,10 +284,10 @@ func TestWebUpdateNotice(t *testing.T) {
 	version = "0.1.0"
 	tw := newTestWeb(t)
 	tw.setup()
-	tw.c.store.registerNode("pc", "h")
-	tw.c.store.setNodeStatus("pc", true, []byte(`{"version":"0.1.0","install":"macos"}`))
-	tw.c.store.registerNode("nas", "h2")
-	tw.c.store.setNodeStatus("nas", true, []byte(`{"version":"0.3.0"}`))
+	tw.c.store.registerDevice("pc", "h")
+	tw.c.store.setDeviceStatus("pc", true, []byte(`{"version":"0.1.0","install":"macos"}`))
+	tw.c.store.registerDevice("nas", "h2")
+	tw.c.store.setDeviceStatus("nas", true, []byte(`{"version":"0.3.0"}`))
 
 	// No answer from the registry yet: nothing.
 	for _, path := range []string{"/settings/devices", "/settings/account"} {
@@ -296,7 +296,7 @@ func TestWebUpdateNotice(t *testing.T) {
 		}
 	}
 
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-node": "0.3.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.2.0", "eriphe-device": "0.3.0"})
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
@@ -322,7 +322,7 @@ func TestWebUpdateNotice(t *testing.T) {
 
 	// A local build never claims to be behind.
 	version = "dev"
-	tw.c.store.setNodeStatus("pc", true, []byte(`{"version":"0.3.0"}`))
+	tw.c.store.setDeviceStatus("pc", true, []byte(`{"version":"0.3.0"}`))
 	for _, path := range []string{"/", "/settings/devices", "/settings/account"} {
 		if _, body, _ := tw.do("GET", path, nil, nil); strings.Contains(body, "new-dot") || strings.Contains(body, "update-available") {
 			t.Errorf("GET %s tells of a new version with everything up to date", path)

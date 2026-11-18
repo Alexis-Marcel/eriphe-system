@@ -19,7 +19,7 @@ import (
 // it only points at files.
 type Config struct {
 	Listen    string              `json:"listen"`               // e.g. "0.0.0.0:8800"
-	PublicURL string              `json:"public_url,omitempty"` // how nodes reach eriphe-core, for join commands
+	PublicURL string              `json:"public_url,omitempty"` // how devices reach eriphe-core, for join commands
 	TokenFile string              `json:"token_file"`           // bearer token for the MCP and the API
 	DB        string              `json:"db"`                   // SQLite file
 	User      string              `json:"user,omitempty"`       // how the brain names me
@@ -51,11 +51,11 @@ type Config struct {
 }
 
 // BrainConfig describes the permanent orchestrator: a long-lived task on a
-// node that only has MCP tools (eriphe-core's own, plus the servers listed).
+// device that only has MCP tools (eriphe-core's own, plus the servers listed).
 // It is the spec of the built-in assistant eriphe (assistants.go).
 type BrainConfig struct {
-	Node  string `json:"node,omitempty"`  // empty lets the scheduler choose
-	Agent string `json:"agent,omitempty"` // empty lets the workspace choose (catalog.go)
+	Device string `json:"device,omitempty"` // empty lets the scheduler choose
+	Agent  string `json:"agent,omitempty"`  // empty lets the workspace choose (catalog.go)
 	// What the user calls the assistant; empty lets the workspace choose
 	// (Eriphe until then).
 	DisplayName string `json:"display_name,omitempty"`
@@ -63,8 +63,8 @@ type BrainConfig struct {
 	// replaces them. {{user}} is replaced by the user's name, {{name}} by
 	// the assistant's.
 	PromptFile string `json:"prompt_file,omitempty"`
-	// eriphe-core's MCP URL as seen from the brain's node. Without it, the
-	// brain reaches eriphe-core through its node, as it reaches the catalog.
+	// eriphe-core's MCP URL as seen from the brain's device. Without it, the
+	// brain reaches eriphe-core through its device, as it reaches the catalog.
 	SelfURL string `json:"self_url,omitempty"`
 	// Tools is the brain's grant from the catalog, like a task's: server
 	// names or server.tool globs.

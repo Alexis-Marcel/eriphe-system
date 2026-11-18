@@ -12,7 +12,7 @@ import (
 // block (receiptInstruction): every harness (Claude Code, Codex, OpenCode,
 // any ACP agent) hands back its final text, while a tool call would need an
 // extra tool allowed in each one's permission model. eriphe-core reads the
-// block, never trusts it: what is "verified" is what a check run by the node
+// block, never trusts it: what is "verified" is what a check run by the device
 // saw pass, a file said changed is compared with the repository's diff, and
 // a claim that nothing confirms stays "not verified". Code says what is
 // verified, the model says what it did, the card shows the difference.
@@ -210,7 +210,7 @@ func stripReceipt(text string) string {
 	return strings.TrimSpace(out)
 }
 
-// checkResult is a check the node ran in the task's container when a turn
+// checkResult is a check the device ran in the task's container when a turn
 // ended (its "check" event).
 type checkResult struct {
 	Name     string `json:"name"`
@@ -232,7 +232,7 @@ type checkedReceipt struct {
 	Status  string   `json:"status"`
 	Summary string   `json:"summary,omitempty"`
 	Changed []string `json:"changed,omitempty"`
-	// Verified is what a check run by the node saw pass.
+	// Verified is what a check run by the device saw pass.
 	Verified []string `json:"verified,omitempty"`
 	// Unchecked is what the agent says it verified and no check covered.
 	Unchecked []string `json:"unchecked,omitempty"`
@@ -243,7 +243,7 @@ type checkedReceipt struct {
 	NeedsApproval []string      `json:"needs_approval,omitempty"`
 	Lessons       []string      `json:"lessons,omitempty"`
 	Checks        []checkResult `json:"checks,omitempty"`
-	// Diff is the files the repository's diff shows, when the node gave it.
+	// Diff is the files the repository's diff shows, when the device gave it.
 	Diff []string `json:"diff,omitempty"`
 	// Mismatches are where the receipt and what eriphe-core saw differ.
 	Mismatches []mismatch `json:"mismatches,omitempty"`

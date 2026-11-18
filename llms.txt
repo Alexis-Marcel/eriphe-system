@@ -1,6 +1,6 @@
 # Eriphe
 
-> Eriphe is a self-hosted personal assistant (AGPL-3.0): eriphe-core runs on one always-on machine at home (a NAS, a server, a desktop), with a web workspace at https://<address>:8443; eriphe-node connects the person's other devices. One command installs it on Linux, macOS or Windows, or one container on a NAS.
+> Eriphe is a self-hosted personal assistant (AGPL-3.0): eriphe-core runs on one always-on machine at home (a NAS, a server, a desktop), with a web workspace at https://<address>:8443; eriphe-device connects the person's other devices. One command installs it on Linux, macOS or Windows, or one container on a NAS.
 
 To install Eriphe for someone, follow the runbook for AI assistants first; it holds the safety rules.
 
@@ -18,5 +18,5 @@ To install Eriphe for someone, follow the runbook for AI assistants first; it ho
 - [AGENTS.md](https://github.com/Alexis-Marcel/eriphe-system/blob/main/AGENTS.md): layout, build and test, conventions
 - [Contributing](https://github.com/Alexis-Marcel/eriphe-system/blob/main/CONTRIBUTING.md)
 - [eriphe-core](https://github.com/Alexis-Marcel/eriphe-system/blob/main/core/README.md): control plane, brain, workspace, security model
-- [eriphe-node](https://github.com/Alexis-Marcel/eriphe-system/blob/main/node/README.md): tasks as containers on each device
+- [eriphe-device](https://github.com/Alexis-Marcel/eriphe-system/blob/main/device/README.md): tasks as containers on each device
 - [Security policy](https://github.com/Alexis-Marcel/eriphe-system/blob/main/SECURITY.md)

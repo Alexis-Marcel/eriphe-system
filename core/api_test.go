@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// newTestAPI serves the task API over a temporary store, without any node.
+// newTestAPI serves the task API over a temporary store, without any device.
 func newTestAPI(t *testing.T) (*core, *httptest.Server) {
 	t.Helper()
 	s, err := openStore(filepath.Join(t.TempDir(), "core.db"))
@@ -48,7 +48,7 @@ func call(t *testing.T, srv *httptest.Server, method, path, body string, out any
 
 func addTask(t *testing.T, c *core, id, state string) {
 	t.Helper()
-	if err := c.store.insertTask(&TaskRow{ID: id, Node: "pc", Agent: "sonnet", Runtime: "claude-code",
+	if err := c.store.insertTask(&TaskRow{ID: id, Device: "pc", Agent: "sonnet", Runtime: "claude-code",
 		Dir: "owner/repo", Prompt: "do", State: state}); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestTaskAnswerAndStop(t *testing.T) {
 		t.Fatalf("unknown task answer: %d", code)
 	}
 
-	// Stop asks for the task to stop; its node confirms (a pending task stops at once).
+	// Stop asks for the task to stop; its device confirms (a pending task stops at once).
 	var out map[string]string
 	if code := call(t, srv, "POST", "/v1/tasks/t-1/stop", "", &out); code != http.StatusAccepted || out["result"] != "stopping" {
 		t.Fatalf("stop: %d %v", code, out)
@@ -263,7 +263,7 @@ func TestLastFailure(t *testing.T) {
 	if got := c.lastFailure("nope"); got != "" {
 		t.Fatalf("unknown task: %q", got)
 	}
-	c.store.insertTask(&TaskRow{ID: "t-pending", Node: "pc", Agent: "sonnet", Runtime: "claude-code", Prompt: "do",
+	c.store.insertTask(&TaskRow{ID: "t-pending", Device: "pc", Agent: "sonnet", Runtime: "claude-code", Prompt: "do",
 		State: statePending, PendingReason: "no machine can run it"})
 	if got := c.lastFailure("t-pending"); got != "no machine can run it" {
 		t.Fatalf("pending: %q", got)

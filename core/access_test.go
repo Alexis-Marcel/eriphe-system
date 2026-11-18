@@ -165,7 +165,7 @@ func TestWebAlwaysAllow(t *testing.T) {
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	fixtures(t, c) // t-perm waits for a shell command: no "always"
-	c.store.insertTask(&TaskRow{ID: "t-gh", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "File the bug", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "t-gh", Device: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "File the bug", State: stateWaitingPermission})
 	c.store.addEvents("t-gh", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p-1",
 		"tool_name": "mcp__github__create_issue", "input": map[string]any{"title": "a bug"}}}})
 	_, body, _ := tw.do("GET", "/tasks/t-gh", nil, nil)

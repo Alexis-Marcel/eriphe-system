@@ -86,7 +86,7 @@ func renderTaskRow(t Task, selected, focused bool, width int) []string {
 	id := styleKey.Render(t.ID)
 	gap := max(width-2-lipgloss.Width(id)-lipgloss.Width(state), 1)
 	first := mark + id + strings.Repeat(" ", gap) + state
-	second := "  " + styleDim.Render(truncate(taskWhere(t, max(width-8-len(t.Node)-len(t.Agent), 8)), width-2))
+	second := "  " + styleDim.Render(truncate(taskWhere(t, max(width-8-len(t.Device)-len(t.Agent), 8)), width-2))
 	if selected && focused {
 		first = styleSelect.Width(width).Render(first)
 		second = styleSelect.Width(width).Render(second)

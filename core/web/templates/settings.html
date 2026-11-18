@@ -22,7 +22,7 @@
 {{define "machines"}}
 <header class="page-head"><h2>{{t "settings.machines"}}</h2><p>{{t "machines.lead"}}</p></header>
 <ul class="grid devices" id="devices-grid">
-{{range .Data.Nodes}}
+{{range .Data.Devices}}
   <li class="tile device{{if .Suspended}} is-cut{{end}}">
     <div class="tile-head">
       {{template "device-status" .}}
@@ -36,7 +36,7 @@
     <span class="device-more" aria-hidden="true">{{t "devices.details"}} ›</span>
   </li>
 {{end}}
-  <li class="tile tile-add"><button type="button" data-dialog="connect-dlg"><span class="tile-add-icon" aria-hidden="true">{{template "i-plus"}}</span><b>{{t "machines.add"}}</b><span class="muted small">{{if .Data.Nodes}}{{t "devices.addhint"}}{{else}}{{t "machines.none"}}{{end}}</span></button></li>
+  <li class="tile tile-add"><button type="button" data-dialog="connect-dlg"><span class="tile-add-icon" aria-hidden="true">{{template "i-plus"}}</span><b>{{t "machines.add"}}</b><span class="muted small">{{if .Data.Devices}}{{t "devices.addhint"}}{{else}}{{t "machines.none"}}{{end}}</span></button></li>
 </ul>
 
 {{template "updates" .Data.Updates}}
@@ -80,7 +80,7 @@ latest version and its button follow eriphe-core's. . is a machineView. */}}
 {{define "device-foot-fragment"}}{{template "device-foot" .Data}}{{end}}
 {{define "device-foot"}}
 <div class="device-foot" id="device-foot-{{.Name}}"{{if .Update.Pending}} hx-get="/settings/devices/{{.Name}}/update?id={{.Update.Pending.ID}}" {{template "update-poll" .Update}}{{else if .Update.AfterCore}} hx-get="/settings/devices/{{.Name}}/update" {{template "update-poll" .Update}}{{else}} hx-get="/settings/devices/{{.Name}}/update" {{template "update-follow"}}{{end}}>
-  <p class="muted small device-version">{{if .Online}}{{if .Presence}}{{t (printf "machines.presence.%s" .Presence)}}{{if and (eq .Presence "idle") .IdleMin}} ({{tf "machines.idlemin" .IdleMin}}){{end}}{{if .DND}} · {{t "machines.dnd"}}{{end}} · {{end}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-node {{ver .Version}}</span>{{if and .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}{{if .Update.Pin}} · {{tf "updates.pinned" .Update.Pin}}{{end}}</p>
+  <p class="muted small device-version">{{if .Online}}{{if .Presence}}{{t (printf "machines.presence.%s" .Presence)}}{{if and (eq .Presence "idle") .IdleMin}} ({{tf "machines.idlemin" .IdleMin}}){{end}}{{if .DND}} · {{t "machines.dnd"}}{{end}} · {{end}}{{if .Active}}{{tf "machines.active" .Active}} · {{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}} · {{end}}{{if .Version}}<span class="mono">eriphe-device {{ver .Version}}</span>{{if and .Update.Latest (not .Update.Pending)}} <span class="mono">→ {{ver .Update.Latest}}</span>{{end}}{{end}}{{if .Update.Pin}} · {{tf "updates.pinned" .Update.Pin}}{{end}}</p>
   {{template "machine-update" .Update}}
   {{if .NoTLS}}<p class="muted small">{{t "machines.notls"}}</p>{{end}}
 </div>
@@ -135,7 +135,7 @@ the updates-changed event, web_updates.go). */}}
   <ul class="device-folders">
     {{range .Folders}}<li><a href="/settings/folders">{{template "i-folder"}}<span>{{.Name}}</span></a>{{if .Problem}}<span class="tag tag-no">{{t "devices.blocked"}}</span>{{else}}<span class="tag{{if eq .Access "write"}} tag-accent{{end}}">{{t (printf "devices.access.%s" .Access)}}</span>{{end}}</li>{{end}}
   </ul>
-  {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" (eq .OS "darwin") "Node" .Name "Copy" false)}}{{end}}
+  {{if .Problem}}{{template "folder-problem" (dict "Problem" .Problem "Program" .Program "Mac" (eq .OS "darwin") "Device" .Name "Copy" false)}}{{end}}
   {{else}}
   <p class="device-none"><span class="muted">{{t "devices.seesnone"}}</span>{{if not .Suspended}}<a href="/settings/folders#folders-{{.Name}}">{{template "i-plus"}}{{t "devices.sharefolder"}}</a>{{end}}</p>
   {{end}}
@@ -166,7 +166,7 @@ the updates-changed event, web_updates.go). */}}
     {{if .AlwaysOn}}<span class="tag tag-accent" title="{{t "machines.alwaysonhint"}}">{{t "machines.alwayson"}}</span>{{end}}
     {{if .Model}}<span class="tag" title="{{t "machines.modelhint"}}">{{t "machines.model"}}</span>{{end}}
   </div>
-  <p>{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}{{t "machines.online"}}{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}{{if .Version}} · <span class="mono">eriphe-node {{ver .Version}}</span>{{end}}</p>
+  <p>{{if .Online}}{{if .Active}}{{tf "machines.active" .Active}}{{else}}{{t "machines.online"}}{{end}}{{else}}{{tf "machines.seen" (ago .LastSeen)}}{{end}}{{if .Version}} · <span class="mono">eriphe-device {{ver .Version}}</span>{{end}}</p>
 </header>
 <div class="device-detail">
   <div class="panel">{{template "device-sees" .}}</div>
@@ -268,7 +268,7 @@ back, or wakeWait has passed. . is a wakeState. */}}
 {{- end}}
 {{end}}
 
-{{/* Settings → Devices → Updates (web_updates.go): eriphe-core's own, "Update all" and the switch for the night; each node's is on its card. */}}
+{{/* Settings → Devices → Updates (web_updates.go): eriphe-core's own, "Update all" and the switch for the night; each device's is on its card. */}}
 {{define "updates-fragment"}}{{template "updates" .Data}}{{end}}
 {{define "updates"}}
 <section class="panel" id="updates" aria-labelledby="updates-title">
@@ -305,7 +305,7 @@ the requests made from the cards. . is an updatesData. */}}
 
 {{/* eriphe-core's row, which follows its update as a card does. Once done,
 eriphe-core runs its new version, and the cards and "Update all" ask again
-(update-follow): the nodes can follow it. . is an updateRow. */}}
+(update-follow): the devices can follow it. . is an updateRow. */}}
 {{define "core-update-fragment"}}{{template "core-update" .Data}}{{end}}
 {{define "core-update"}}
 <div class="update-core-row" id="update-core"{{with .Pending}} hx-get="/settings/updates/core?id={{.ID}}" {{template "update-poll" $}}{{else}} hx-get="/settings/updates/core" {{template "update-follow"}}{{end}}>
@@ -375,7 +375,7 @@ eriphe-core runs its new version, and the cards and "Update all" ask again
 <div class="cmd">
   <h4>{{t "machines.windows"}}</h4>
   <p class="muted small">{{t "machines.windowslead"}}</p>
-  <div class="code"><pre id="cmd-ps">$env:ERIPHE_CORE='{{.Core}}'; $env:ERIPHE_JOIN_TOKEN='{{.Token}}'; $env:ERIPHE_NODE_NAME='{{.Name}}';{{if .Labels}} $env:ERIPHE_NODE_LABELS='{{.Labels}}';{{end}}{{if .CAHash}} $env:ERIPHE_CA_HASH='{{.CAHash}}';{{end}}{{if .Rejoin}} $env:ERIPHE_REJOIN='1';{{end}}{{if .Assistant}} $env:ERIPHE_ASSISTANT_NAME='{{.Assistant}}';{{end}} irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-ps">{{t "machines.copy"}}</button></div>
+  <div class="code"><pre id="cmd-ps">$env:ERIPHE_CORE='{{.Core}}'; $env:ERIPHE_JOIN_TOKEN='{{.Token}}'; $env:ERIPHE_DEVICE_NAME='{{.Name}}';{{if .Labels}} $env:ERIPHE_DEVICE_LABELS='{{.Labels}}';{{end}}{{if .CAHash}} $env:ERIPHE_CA_HASH='{{.CAHash}}';{{end}}{{if .Rejoin}} $env:ERIPHE_REJOIN='1';{{end}}{{if .Assistant}} $env:ERIPHE_ASSISTANT_NAME='{{.Assistant}}';{{end}} irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-ps">{{t "machines.copy"}}</button></div>
 </div>
 <details class="advanced-opts">
   <summary>{{t "form.advanced"}}</summary>
@@ -385,15 +385,15 @@ eriphe-core runs its new version, and the cards and "Update all" ask again
     <p class="muted small">{{t "machines.linuxlead"}}</p>
     <div class="code"><pre id="cmd-compose">environment:
   ERIPHE_CORE: {{.Core}}
-  ERIPHE_NODE_NAME: {{.Name}}{{if .Labels}}
-  ERIPHE_NODE_LABELS: {{.Labels}}{{end}}{{if .CAHash}}
+  ERIPHE_DEVICE_NAME: {{.Name}}{{if .Labels}}
+  ERIPHE_DEVICE_LABELS: {{.Labels}}{{end}}{{if .CAHash}}
   ERIPHE_CA_HASH: {{.CAHash}}{{end}}
   ERIPHE_JOIN_TOKEN: {{.Token}}{{if .Assistant}}
   ERIPHE_ASSISTANT_NAME: "{{.Assistant}}"{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-compose">{{t "machines.copy"}}</button></div>
   </div>
   <div class="cmd">
     <h4>{{t "machines.binary"}}</h4>
-    <div class="code"><pre id="cmd-binary">eriphe-node -core {{.Core}} -join-token {{.Token}} -name {{.Name}}{{if .Labels}} -labels {{.Labels}}{{end}}{{if .CAHash}} -ca-hash {{.CAHash}}{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-binary">{{t "machines.copy"}}</button></div>
+    <div class="code"><pre id="cmd-binary">eriphe-device -core {{.Core}} -join-token {{.Token}} -name {{.Name}}{{if .Labels}} -labels {{.Labels}}{{end}}{{if .CAHash}} -ca-hash {{.CAHash}}{{end}}</pre><button class="btn btn-soft sm" type="button" data-copy="cmd-binary">{{t "machines.copy"}}</button></div>
   </div>
   <div class="cmd">
     <h4>{{t "machines.windowsfile"}}</h4>

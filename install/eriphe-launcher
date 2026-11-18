@@ -11,15 +11,15 @@
 #
 # It creates and keeps running the containers install.sh makes on a Linux
 # host, with install.sh's own functions (sourced): eriphe-core in core mode,
-# with no Docker access; eriphe-node, which has no Docker access either:
-# it asks eriphe-node engine; the engine, the only one with the socket; the
+# with no Docker access; eriphe-device, which has no Docker access either:
+# it asks eriphe-device engine; the engine, the only one with the socket; the
 # task network. Their data is under /data, given
 # to them at its path on the host, which it reads from its own container.
 # It listens on no port and runs nothing else; it is their updater: it
-# applies eriphe-core's and the node's update requests as install.sh's
+# applies eriphe-core's and the device's update requests as install.sh's
 # updater does, then updates itself. It keeps the list of the folders of
 # this machine shared with Eriphe (eriphe share): the engine gives the
-# node's tasks those folders only, nothing else of the host.
+# device's tasks those folders only, nothing else of the host.
 #
 #   eriphe-launcher run                 the container's command
 #   eriphe-launcher update              update now, as the workspace's Update
@@ -43,7 +43,7 @@ SWAP=eriphe-launcher-swap
 OS=Linux NATIVE='' INSTALL=docker
 MOUNTINFO=${ERIPHE_MOUNTINFO:-/proc/self/mountinfo}
 # The folders shared, one host path a line (:ro: a read-only one); the
-# engine's copy of it, in a folder of the data the node never sees (proxy/);
+# engine's copy of it, in a folder of the data the device never sees (proxy/);
 # the folders Syncthing has now (it may copy them).
 FOLDERS=$CONF/folders
 BINDS=$DATA/proxy/binds
@@ -124,15 +124,15 @@ settings() {
 	set --
 	case $mode in
 	core)
-		[ -z "${ERIPHE_CORE:-}" ] || die "ERIPHE_CORE is for ERIPHE_MODE=node: in core mode eriphe-core runs here"
+		[ -z "${ERIPHE_CORE:-}" ] || die "ERIPHE_CORE is for ERIPHE_MODE=device: in core mode eriphe-core runs here"
 		set -- --core-mode
 		;;
-	node)
-		[ -n "${ERIPHE_CORE:-}" ] || die "ERIPHE_MODE=node joins an eriphe-core: give its address in ERIPHE_CORE (https://192.0.2.10:8800)"
-		[ -f "$DATA/node/node.json" ] || [ -n "${ERIPHE_JOIN_TOKEN:-}" ] ||
-			die "a new node needs ERIPHE_JOIN_TOKEN: the workspace's Connect a device gives it"
+	device)
+		[ -n "${ERIPHE_CORE:-}" ] || die "ERIPHE_MODE=device joins an eriphe-core: give its address in ERIPHE_CORE (https://192.0.2.10:8800)"
+		[ -f "$DATA/device/device.json" ] || [ -n "${ERIPHE_JOIN_TOKEN:-}" ] ||
+			die "a new device needs ERIPHE_JOIN_TOKEN: the workspace's Connect a device gives it"
 		;;
-	*) die "ERIPHE_MODE is core or node, not $mode" ;;
+	*) die "ERIPHE_MODE is core or device, not $mode" ;;
 	esac
 	# The version: ERIPHE_VERSION, or this image's tag (eriphe:edge follows main).
 	pin=${ERIPHE_VERSION:-}
@@ -141,12 +141,12 @@ settings() {
 		printf '%s' "$pin" | grep -Eq '^(latest|edge|sha-[0-9a-f]{7,40}|[0-9]+\.[0-9]+(\.[0-9]+(-[0-9A-Za-z.-]+)?)?)$' || pin=latest
 	fi
 	# No place: the folders shared are the launcher's list (eriphe share).
-	set -- "$@" --version "$pin" --labels "${ERIPHE_NODE_LABELS:-}" --model-server "${ERIPHE_MODEL_SERVER:-}" --no-share
+	set -- "$@" --version "$pin" --labels "${ERIPHE_DEVICE_LABELS:-}" --model-server "${ERIPHE_MODEL_SERVER:-}" --no-share
 	parse_args "$@" # ERIPHE_BIND too
 	BIND_SET=1      # not kept from a run before either
-	FOLDER_HELPER=1 # install.sh's compose: the node mounts no folder, the engine reads $BINDS
+	FOLDER_HELPER=1 # install.sh's compose: the device mounts no folder, the engine reads $BINDS
 	COPIED=$(copied) || COPIED=$(cat "$COPIED_NOW" 2>/dev/null || true)
-	# The command a user shares a folder with, as said here and by the node:
+	# The command a user shares a folder with, as said here and by the device:
 	# this container's, unless the machine has its own (Windows' Explorer).
 	SHARE_COMMAND=${ERIPHE_SHARE_COMMAND:-docker exec ${SELF_NAME:-eriphe} eriphe share}
 	case $SHARE_COMMAND in
@@ -154,7 +154,7 @@ settings() {
 	esac
 	wake_given
 	# The folder a helper in the user's session writes session.json to (on
-	# Windows, eriphe-session.exe), given to the node read-only.
+	# Windows, eriphe-session.exe), given to the device read-only.
 	SESSION_DIR=${ERIPHE_SESSION_DIR:-}
 	case $SESSION_DIR in
 	'') ;;
@@ -173,19 +173,19 @@ settings() {
 
 # ---- The folders shared (eriphe share)
 #
-# eriphe-node mounts no shared folder: a task gets its folders from the
-# Docker daemon when eriphe-node engine makes its container, which it does
+# eriphe-device mounts no shared folder: a task gets its folders from the
+# Docker daemon when eriphe-device engine makes its container, which it does
 # with bind mounts from the folders of the launcher's list only ($BINDS,
-# read again at each request). What the node does in a folder (its checks,
+# read again at each request). What the device does in a folder (its checks,
 # a snapshot, a restore, a handback) runs in a short-lived
-# container of its image given that folder only (node/helper.go). Sharing a
+# container of its image given that folder only (device/helper.go). Sharing a
 # folder, or stopping, so restarts nothing: the next task has it, or no
 # longer has it; a task at work keeps what it was given until it ends (the
-# node lends a folder no longer shared to no new task). Syncthing alone sees
+# device lends a folder no longer shared to no new task). Syncthing alone sees
 # the folders it may copy, each mounted at its path: it is made again (its
-# copies pause a few seconds) when they change. The node keeps its own list
+# copies pause a few seconds) when they change. The device keeps its own list
 # (shares.json in its data: names, levels, copies), and shares only what is
-# in the launcher's; the launcher's follows it: a folder the node no longer
+# in the launcher's; the launcher's follows it: a folder the device no longer
 # shares (stopped from the workspace) leaves it within seconds (tick).
 
 # folders: the launcher's list, one a line.
@@ -208,16 +208,16 @@ present() {
 		--mount "type=bind,src=$1,dst=/place,readonly" "$SELF_IMAGE" >/dev/null 2>&1
 }
 
-# copyable_paths: the folders the node lets be copied (shares.json), one a
+# copyable_paths: the folders the device lets be copied (shares.json), one a
 # line; fails when its list cannot be read.
 copyable_paths() {
-	[ -f "$DATA/node/shares.json" ] || return 0
-	jq -r '(.folders // [])[] | select(.copyable == true) | .path | select(type == "string" and (explode | all(. >= 32 and . != 127)))' "$DATA/node/shares.json"
+	[ -f "$DATA/device/shares.json" ] || return 0
+	jq -r '(.folders // [])[] | select(.copyable == true) | .path | select(type == "string" and (explode | all(. >= 32 and . != 127)))' "$DATA/device/shares.json"
 }
 
 # copied: the folders of the list Syncthing is to have, one a line (as in
-# the list, :ro kept): those the node lets be copied, and on the host now;
-# fails when the node's list cannot be read.
+# the list, :ro kept): those the device lets be copied, and on the host now;
+# fails when the device's list cannot be read.
 copied() {
 	cp=$(copyable_paths) || return 1
 	[ -n "$cp" ] || return 0
@@ -271,33 +271,33 @@ folder_ok() {
 	return 0
 }
 
-# folder_check PATH: the node's own checks, on the host, before PATH is
-# mounted into it (eriphe-node share check): a short-lived container of the
-# node's image, without a network nor a capability but reading every
+# folder_check PATH: the device's own checks, on the host, before PATH is
+# mounted into it (eriphe-device share check): a short-lived container of the
+# device's image, without a network nor a capability but reading every
 # folder, sees the host's / read-only; no symlink on the way, nothing
 # sensitive or private in it or above it. It says why not.
 folder_check() {
 	if out=$(docker run --rm --network none --read-only --cap-drop ALL --cap-add DAC_READ_SEARCH \
 		--security-opt no-new-privileges --user 0:0 --mount type=bind,src=/,dst=/host,readonly \
-		--entrypoint eriphe-node "$NODE_IMAGE" share check -host /host -data "$HOST_DATA" "$1" 2>&1); then
+		--entrypoint eriphe-device "$DEVICE_IMAGE" share check -host /host -data "$HOST_DATA" "$1" 2>&1); then
 		return 0
 	fi
 	out=$(printf '%s\n' "$out" | tail -n 1)
-	out=${out#"eriphe-node share: "}
+	out=${out#"eriphe-device share: "}
 	printf '%s\n' "${out#"$1: "}"
 	return 1
 }
 
-# shared_paths: the folders in the node's list (shares.json), one a line;
+# shared_paths: the folders in the device's list (shares.json), one a line;
 # fails when it cannot be read. None before the first share.
 shared_paths() {
-	[ -f "$DATA/node/shares.json" ] || return 0
-	jq -r '(.folders // [])[] | .path | select(type == "string" and (explode | all(. >= 32 and . != 127)))' "$DATA/node/shares.json"
+	[ -f "$DATA/device/shares.json" ] || return 0
+	jq -r '(.folders // [])[] | .path | select(type == "string" and (explode | all(. >= 32 and . != 127)))' "$DATA/device/shares.json"
 }
 
-# unshared [ONLY]: the folders of the launcher's list the node does not
+# unshared [ONLY]: the folders of the launcher's list the device does not
 # share (any longer), only those of ONLY (lines) if given; fails when the
-# node's list cannot be read.
+# device's list cannot be read.
 unshared() {
 	shared=$(shared_paths) || return 1
 	folders | while IFS= read -r l; do
@@ -390,7 +390,7 @@ run() {
 	fi
 	mkdir -p "$CONF"
 	chmod 700 "$CONF"
-	# What the node no longer shares leaves the list.
+	# What the device no longer shares leaves the list.
 	if gone=$(unshared) && [ -n "$gone" ]; then
 		drop_folders "$gone"
 	fi
@@ -401,7 +401,7 @@ run() {
 	[ -f "$CONF/install.conf" ] || PULL=always FIRST=1
 	settings
 	say ""
-	if [ -n "$FIRST" ] && [ "$MODE" = node ]; then
+	if [ -n "$FIRST" ] && [ "$MODE" = device ]; then
 		say "Connecting this machine to $ASSISTANT"
 	elif [ -n "$FIRST" ]; then
 		say "Installing Eriphe on this machine"
@@ -487,7 +487,7 @@ summary() {
 	fi
 	good_to_know
 	say ""
-	logs="docker logs eriphe-node"
+	logs="docker logs eriphe-device"
 	[ "$MODE" != core ] || logs="docker logs eriphe-core, $logs"
 	say "Logs: $logs (updates: docker logs ${SELF_NAME:-eriphe})"
 	say ""
@@ -505,10 +505,10 @@ loop() {
 }
 
 # tick: the requests waiting, if any, then eriphe-launcher itself, last;
-# and the node's list followed when it changed (a folder stopped from the
+# and the device's list followed when it changed (a folder stopped from the
 # workspace, its copies turned off), unless a share command is under way.
 tick() {
-	sum=$(cksum <"$DATA/node/shares.json" 2>/dev/null || true)
+	sum=$(cksum <"$DATA/device/shares.json" 2>/dev/null || true)
 	if [ "$sum" != "${SHARES_SUM:-}" ]; then
 		exec 7>"$CONF/apply.lock"
 		if ! command -v flock >/dev/null 2>&1 || flock -n 7; then
@@ -521,7 +521,7 @@ tick() {
 		fi
 		exec 7>&-
 	fi
-	for t in core node; do
+	for t in core device; do
 		if [ -f "$DATA/$t/update-requested" ]; then
 			apply
 			[ -z "$SELF_TO" ] || self_update "$SELF_TO"
@@ -540,9 +540,9 @@ apply() {
 	SELF_TO=
 	exec 8>"$CONF/apply.lock"
 	! command -v flock >/dev/null 2>&1 || flock 8
-	before="core=$(status_of core id) node=$(status_of node id)"
+	before="core=$(status_of core id) device=$(status_of device id)"
 	sh "$CONF/update.sh" "$@" || log "the updater failed"
-	for t in core node; do
+	for t in core device; do
 		id=$(status_of "$t" id)
 		case "$before " in
 		*"$t=$id "*) continue ;; # not one of this run
@@ -651,18 +651,18 @@ request() {
 }
 
 # local_update ACTION: an update (eriphe-core's machine first, then its
-# node, on eriphe-core's build) or a rollback, now.
+# device, on eriphe-core's build) or a rollback, now.
 local_update() {
 	[ -f "$CONF/update.sh" ] || die "Eriphe is not installed here yet: the container's first start does it"
 	uninstalled && die "Eriphe was uninstalled from here"
-	# A task at work would start over: the node writes this file while one
-	# runs a turn (node/awake.go). eriphe-core's requests wait by themselves.
-	if [ "${2:-}" != --now ] && [ -f "$DATA/node/awake" ]; then
-		die "$(sed -n 's/^tasks=//p' "$DATA/node/awake") task(s) at work here: try again once they are done, or add --now (they would start over)"
+	# A task at work would start over: the device writes this file while one
+	# runs a turn (device/awake.go). eriphe-core's requests wait by themselves.
+	if [ "${2:-}" != --now ] && [ -f "$DATA/device/awake" ]; then
+		die "$(sed -n 's/^tasks=//p' "$DATA/device/awake") task(s) at work here: try again once they are done, or add --now (they would start over)"
 	fi
 	discover
 	MODE=$(sed -n 's/^mode=//p' "$CONF/install.conf")
-	main=node to=
+	main=device to=
 	[ "$MODE" != core ] || main=core
 	if [ "$1" = rollback ]; then
 		apply rollback
@@ -671,12 +671,12 @@ local_update() {
 		apply
 		to=$SELF_TO
 		if [ "$main" = core ] && [ -n "$to" ]; then
-			request update node "$to"
+			request update device "$to"
 			apply
 			to=${SELF_TO:-$to}
 		fi
 	fi
-	for t in core node; do
+	for t in core device; do
 		[ -f "$DATA/$t/update-status" ] || continue
 		say "eriphe-$t: $(show_status <"$DATA/$t/update-status")"
 	done
@@ -724,7 +724,7 @@ share() {
 	remove | rm) share_remove "$@" ;;
 	list | snapshots | restore)
 		share_installed
-		exec docker exec eriphe-node eriphe-node share "$cmd" "$@"
+		exec docker exec eriphe-device eriphe-device share "$cmd" "$@"
 		;;
 	'' | -h | --help | help) share_usage ;;
 	*) die "unknown command eriphe share $cmd (eriphe share --help)" ;;
@@ -751,9 +751,9 @@ share_ready() {
 }
 
 # share_add ARGS...: each folder checked here (folder_ok), then by the
-# node's own checks on the host (folder_check), put in the list (the
-# engine's too), then shared by the node, with the level and copies asked; a
-# folder the node does not share leaves the list again.
+# device's own checks on the host (folder_check), put in the list (the
+# engine's too), then shared by the device, with the level and copies asked; a
+# folder the device does not share leaves the list again.
 share_add() {
 	level='' copy='' fname='' named='' asked=''
 	while [ $# -gt 0 ]; do
@@ -821,12 +821,12 @@ share_add() {
 	want=$(printf '%s\n' "$want" | grep -v '^$' || true)
 	[ "$want" = "$cur" ] || set_folders "$want"
 	write_binds
-	# The node's own share add, the engine allowing the folders: its checks
+	# The device's own share add, the engine allowing the folders: its checks
 	# (in helpers given the folder), the level and the copies, its list.
 	# A folder kept read-only by its place is shared to read.
 	rc=0
-	node_share_add "$level" "$copy" "$named" "$fname" "$given" || rc=$?
-	node_share_add --read "$copy" "$named" "$fname" "$given_ro" || rc=$?
+	device_share_add "$level" "$copy" "$named" "$fname" "$given" || rc=$?
+	device_share_add --read "$copy" "$named" "$fname" "$given_ro" || rc=$?
 	given=$given$given_ro
 	if gone=$(unshared "$given") && [ -n "$gone" ]; then
 		drop_folders "$gone"
@@ -836,9 +836,9 @@ share_add() {
 	exit "$rc"
 }
 
-# node_share_add LEVEL COPY NAMED NAME FOLDERS: the node's own share add of
+# device_share_add LEVEL COPY NAMED NAME FOLDERS: the device's own share add of
 # those folders (one a line), if any.
-node_share_add() {
+device_share_add() {
 	[ -n "$5" ] || return 0
 	nlevel=$1 ncopy=$2 nnamed=$3 nname=$4 nfolders=$5
 	set --
@@ -850,10 +850,10 @@ node_share_add() {
 	for p in $nfolders; do set -- "$@" "$p"; done
 	IFS=$old_ifs
 	set +f
-	docker exec -e ERIPHE_SHARE_COMMAND= eriphe-node eriphe-node share add "$@"
+	docker exec -e ERIPHE_SHARE_COMMAND= eriphe-device eriphe-device share add "$@"
 }
 
-# share_remove NAME|FOLDER...: the node stops sharing them (no new task
+# share_remove NAME|FOLDER...: the device stops sharing them (no new task
 # gets them; a task at work keeps them until it ends), then they leave the
 # list, the engine's and Syncthing's.
 share_remove() {
@@ -863,7 +863,7 @@ share_remove() {
 	fi
 	share_ready
 	rc=0
-	docker exec eriphe-node eriphe-node share remove "$@" || rc=$?
+	docker exec eriphe-device eriphe-device share remove "$@" || rc=$?
 	if gone=$(unshared) && [ -n "$gone" ]; then
 		drop_folders "$gone"
 	fi
@@ -893,7 +893,7 @@ uninstall() {
 	[ -z "$ids" ] || docker rm -f $ids >/dev/null
 	docker network rm eriphe-tasks eriphe-system eriphe-docker >/dev/null 2>&1 || true
 	docker volume rm eriphe-cache eriphe-cache-untrusted >/dev/null 2>&1 || true
-	for repo in $REGISTRY/eriphe-node $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core; do
+	for repo in $REGISTRY/eriphe-device $REGISTRY/eriphe-base $REGISTRY/eriphe-worker $REGISTRY/eriphe-core; do
 		refs=$(docker images --format '{{.Repository}}:{{.Tag}}' "$repo" | grep -v ':<none>$' || true)
 		# shellcheck disable=SC2086 # one argument per image
 		[ -z "$refs" ] || docker image rm $refs >/dev/null 2>&1 || true

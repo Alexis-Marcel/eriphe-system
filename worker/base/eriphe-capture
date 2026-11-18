@@ -12,7 +12,7 @@
 // machine's cache), with a fixed window (1280×800), a time limit, a profile
 // of its own thrown away after (no cookie, no sign-in), downloads refused,
 // no dialog answered, http(s) only, through the task's egress relay. Only
-// the image goes to eriphe-core, through the node (ERIPHE_MEDIA_URL), with
+// the image goes to eriphe-core, through the device (ERIPHE_MEDIA_URL), with
 // the task's secret: never the page itself.
 'use strict';
 

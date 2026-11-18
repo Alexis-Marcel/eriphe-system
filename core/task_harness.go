@@ -116,7 +116,7 @@ func (c *core) settleTurn(t *TaskRow) turnOutcome {
 	if h.Repairs >= maxReceiptRepairs || h.RepairTurn != 0 && turns == h.RepairTurn+1 {
 		return turnOutcome{receipt: cr} // asked already, or the answer to the last ask
 	}
-	// skip_checks: the node runs no check after this turn, which changes nothing.
+	// skip_checks: the device runs no check after this turn, which changes nothing.
 	if err := c.store.addInbox(t.ID, "message", map[string]any{"text": receiptRepair, "skip_checks": true}); err != nil {
 		return turnOutcome{receipt: cr}
 	}

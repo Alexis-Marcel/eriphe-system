@@ -315,7 +315,7 @@ func (c *core) launchStep(ctx context.Context, s Thread, st Step, steps []Step, 
 	taint = appendNew(taint, handed...)
 	approved := planned // what it is lent was approved with the plan
 	r := runRequest{Title: st.Title, Prompt: b.String(), Resources: st.Resources, Agent: st.Agent, Contract: st.Contract, About: threadRef(s.ID),
-		Node: st.Node, askStart: true, cleanStart: planned && len(taint) == 0, approvedInAdvance: approved, taint: taint}
+		Device: st.Device, askStart: true, cleanStart: planned && len(taint) == 0, approvedInAdvance: approved, taint: taint}
 	t, err := c.runTask(ctx, r)
 	if err != nil {
 		return nil, err

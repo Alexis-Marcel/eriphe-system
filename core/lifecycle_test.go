@@ -14,7 +14,7 @@ import (
 )
 
 // A task goes through its whole life without eriphe-core ever calling the
-// node: the node reads its assignment (with the lent credential), reports,
+// device: the device reads its assignment (with the lent credential), reports,
 // receives an answer through the inbox, and is told to stop.
 func TestDeclarativeLifecycle(t *testing.T) {
 	dir := t.TempDir()
@@ -32,13 +32,13 @@ func TestDeclarativeLifecycle(t *testing.T) {
 		Brain:        &BrainConfig{},
 	}
 	c := newCore(cfg, store)
-	store.registerNode("pc", hashSecret("node-secret"))
-	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	store.registerDevice("pc", hashSecret("device-secret"))
+	store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	giveRepos(t, c, "owner/repo")
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/node/assignments", c.handleAssignments)
-	mux.HandleFunc("POST /v1/node/tasks/{id}/report", c.handleReport)
+	mux.HandleFunc("GET /v1/device/assignments", c.handleAssignments)
+	mux.HandleFunc("POST /v1/device/tasks/{id}/report", c.handleReport)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	call := func(method, path string, in, out any) int {
@@ -47,8 +47,8 @@ func TestDeclarativeLifecycle(t *testing.T) {
 			json.NewEncoder(&body).Encode(in)
 		}
 		req, _ := http.NewRequest(method, srv.URL+path, &body)
-		req.Header.Set("Authorization", "Bearer node-secret")
-		req.Header.Set("Eriphe-Node", "pc")
+		req.Header.Set("Authorization", "Bearer device-secret")
+		req.Header.Set("Eriphe-Device", "pc")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -60,8 +60,8 @@ func TestDeclarativeLifecycle(t *testing.T) {
 		return resp.StatusCode
 	}
 	type assignments struct {
-		Rev   int64            `json:"rev"`
-		Tasks []nodeAssignment `json:"tasks"`
+		Rev   int64              `json:"rev"`
+		Tasks []deviceAssignment `json:"tasks"`
 	}
 
 	task, err := c.runTask(context.Background(), runRequest{Prompt: "count the lines", Resources: []ResourceRef{{Kind: resRepo, Ref: "owner/repo"}}})
@@ -69,7 +69,7 @@ func TestDeclarativeLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	var a assignments
-	call("GET", "/v1/node/assignments?rev=0&wait=0", nil, &a)
+	call("GET", "/v1/device/assignments?rev=0&wait=0", nil, &a)
 	if len(a.Tasks) != 1 || a.Tasks[0].Desired != desiredRunning || a.Tasks[0].Spec.Prompt != "count the lines" ||
 		a.Tasks[0].Spec.AgentEnv["CLAUDE_CODE_OAUTH_TOKEN"] != "tok" || a.Tasks[0].Spec.Model != "sonnet" ||
 		a.Tasks[0].Spec.TZ != "Europe/Paris" || a.Tasks[0].Spec.AppendSystemPrompt != workerVoice(defaultDisplayName, "fr") ||
@@ -86,21 +86,21 @@ func TestDeclarativeLifecycle(t *testing.T) {
 	done := make(chan assignments, 1)
 	go func() {
 		var b assignments
-		call("GET", "/v1/node/assignments?rev="+jsonInt(a.Rev)+"&wait=10", nil, &b)
+		call("GET", "/v1/device/assignments?rev="+jsonInt(a.Rev)+"&wait=10", nil, &b)
 		done <- b
 	}()
 	time.Sleep(100 * time.Millisecond)
 	now := time.Now()
-	call("POST", "/v1/node/tasks/"+task.ID+"/report", nodeReport{State: stateWaitingPermission, SessionID: "s1",
+	call("POST", "/v1/device/tasks/"+task.ID+"/report", deviceReport{State: stateWaitingPermission, SessionID: "s1",
 		Events: []EventRow{{Seq: 1, Time: now, Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "mcp__notes__write"}}}}, nil)
 	select {
 	case b := <-done:
 		// The watch woke on the report; the answer is there by now.
-		call("GET", "/v1/node/assignments?rev=0&wait=0", nil, &b)
+		call("GET", "/v1/device/assignments?rev=0&wait=0", nil, &b)
 		if len(b.Tasks) != 1 || len(b.Tasks[0].Inbox) != 1 || b.Tasks[0].Inbox[0].Kind != "permission" {
 			t.Fatalf("after answer = %+v", b)
 		}
-		call("POST", "/v1/node/tasks/"+task.ID+"/report", nodeReport{State: stateIdle, Delivered: b.Tasks[0].Inbox[0].Seq,
+		call("POST", "/v1/device/tasks/"+task.ID+"/report", deviceReport{State: stateIdle, Delivered: b.Tasks[0].Inbox[0].Seq,
 			Events: []EventRow{{Seq: 2, Time: now, Type: "permission_answer", Data: map[string]any{"id": "p1", "allow": false}},
 				{Seq: 3, Time: now, Type: "text", Data: map[string]any{"text": "42 lines"}}}}, nil)
 	case <-time.After(5 * time.Second):
@@ -115,12 +115,12 @@ func TestDeclarativeLifecycle(t *testing.T) {
 	}
 
 	c.stopByBrain(context.Background(), task.ID)
-	call("GET", "/v1/node/assignments?rev=0&wait=0", nil, &a)
+	call("GET", "/v1/device/assignments?rev=0&wait=0", nil, &a)
 	if a.Tasks[0].Desired != desiredStopped {
 		t.Fatalf("desired = %s", a.Tasks[0].Desired)
 	}
-	call("POST", "/v1/node/tasks/"+task.ID+"/report", nodeReport{State: stateStopped}, nil)
-	call("GET", "/v1/node/assignments?rev=0&wait=0", nil, &a)
+	call("POST", "/v1/device/tasks/"+task.ID+"/report", deviceReport{State: stateStopped}, nil)
+	call("GET", "/v1/device/assignments?rev=0&wait=0", nil, &a)
 	if len(a.Tasks) != 0 {
 		t.Fatalf("a stopped task is still assigned: %+v", a.Tasks)
 	}
@@ -130,10 +130,10 @@ func TestDeclarativeLifecycle(t *testing.T) {
 		t.Fatalf("brain events = %+v", msgs)
 	}
 
-	// Another node cannot report on it.
-	req, _ := http.NewRequest("POST", srv.URL+"/v1/node/tasks/"+task.ID+"/report", bytes.NewReader([]byte(`{}`)))
+	// Another device cannot report on it.
+	req, _ := http.NewRequest("POST", srv.URL+"/v1/device/tasks/"+task.ID+"/report", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Authorization", "Bearer wrong")
-	req.Header.Set("Eriphe-Node", "pc")
+	req.Header.Set("Eriphe-Device", "pc")
 	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("wrong secret: %s", resp.Status)
 	}
@@ -142,7 +142,7 @@ func TestDeclarativeLifecycle(t *testing.T) {
 func jsonInt(n int64) string { raw, _ := json.Marshal(n); return string(raw) }
 
 // A task of an agent on a self-hosted model server gets its address and
-// that one host:port in its egress rule, when its node fetches it.
+// that one host:port in its egress rule, when its device fetches it.
 func TestSelfHostedAssignment(t *testing.T) {
 	dir := t.TempDir()
 	store, err := openStore(filepath.Join(dir, "core.db"))
@@ -158,19 +158,19 @@ func TestSelfHostedAssignment(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := newCore(cfg, store)
-	store.registerNode("pc", hashSecret("node-secret"))
-	store.setNodeStatus("pc", true, []byte(`{"runtimes":["opencode"]}`))
+	store.registerDevice("pc", hashSecret("device-secret"))
+	store.setDeviceStatus("pc", true, []byte(`{"runtimes":["opencode"]}`))
 	task, err := c.runTask(context.Background(), runRequest{Prompt: "summarize"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest("GET", "/v1/node/assignments?rev=0&wait=0", nil)
-	req.Header.Set("Authorization", "Bearer node-secret")
-	req.Header.Set("Eriphe-Node", "pc")
+	req := httptest.NewRequest("GET", "/v1/device/assignments?rev=0&wait=0", nil)
+	req.Header.Set("Authorization", "Bearer device-secret")
+	req.Header.Set("Eriphe-Device", "pc")
 	rec := httptest.NewRecorder()
 	c.handleAssignments(rec, req)
 	var a struct {
-		Tasks []nodeAssignment `json:"tasks"`
+		Tasks []deviceAssignment `json:"tasks"`
 	}
 	json.NewDecoder(rec.Body).Decode(&a)
 	if len(a.Tasks) != 1 {

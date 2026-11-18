@@ -35,7 +35,7 @@ type pool struct {
 	// dial opens the transport to a server: remote ones over streamable
 	// HTTP, local ones through dialLocal. Tests replace it.
 	dial func(ctx context.Context, u *upstream) (mcp.Transport, error)
-	// dialLocal reaches a local server (run), which a node runs as a
+	// dialLocal reaches a local server (run), which a device runs as a
 	// service. Until services exist, local servers are not supported.
 	dialLocal func(ctx context.Context, name string, run json.RawMessage) (mcp.Transport, error)
 	// http is the client for remote servers and their authorization servers.

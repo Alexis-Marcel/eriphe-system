@@ -120,7 +120,7 @@ func TestLaunchOpensThreadOnTheSide(t *testing.T) {
 // nothing links nothing.
 func TestCardsOfThreadTurnLinked(t *testing.T) {
 	c := stepsCore(t)
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	pr := lightThread(t, c)
 	if _, isErr := callBrainTool(t, c, "read_thread", map[string]any{"thread_id": pr.ID}); isErr {
 		t.Fatal("read_thread")
@@ -168,7 +168,7 @@ func TestCardsOfThreadTurnLinked(t *testing.T) {
 	}
 
 	// A task started by the brain in that turn: its start card too.
-	c.store.insertTask(&TaskRow{ID: "t-9", Kind: "worker", Node: "box", Runtime: "claude-code", Prompt: "Cherche", State: statePending})
+	c.store.insertTask(&TaskRow{ID: "t-9", Kind: "worker", Device: "box", Runtime: "claude-code", Prompt: "Cherche", State: statePending})
 	if err := c.holdTask(&TaskRow{ID: "t-9", Title: "Chercher des noms"}, nil, nil, true); err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestCardsOfThreadTurnLinked(t *testing.T) {
 // that thread's, never the one it was written over.
 func TestOtherMatterOpensItsThread(t *testing.T) {
 	c := stepsCore(t)
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	pr := lightThread(t, c)
 	c.store.markDelivered(c.store.lastMessageSeq())
 	seq, _ := c.store.addUserMessage("J'ai quoi de prévu aujourd'hui ?", nil, pr.ID)
@@ -267,15 +267,15 @@ func TestRunTaskNeedsAThread(t *testing.T) {
 	if _, err := c.taskThread(); err == nil || !strings.Contains(err.Error(), "reopen_thread") {
 		t.Errorf("a task in an ended thread's turn: %v", err)
 	}
-	// With a node named, the task is a step all the same, run there.
+	// With a device named, the task is a step all the same, run there.
 	if _, err := c.reopenThread(pr.ID, "revient", "brain"); err != nil {
 		t.Fatal(err)
 	}
-	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"prompt": "Cherche.", "node": "nas"})
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"prompt": "Cherche.", "device": "nas"})
 	if isErr || int64(out["thread"].(float64)) != pr.ID {
-		t.Fatalf("a node named: %v", out)
+		t.Fatalf("a device named: %v", out)
 	}
-	if task, err := c.store.task(out["task"].(string)); err != nil || task.Node != "nas" {
+	if task, err := c.store.task(out["task"].(string)); err != nil || task.Device != "nas" {
 		t.Errorf("its task: %+v, %v", task, err)
 	}
 }
@@ -312,7 +312,7 @@ func timelineCards(t *testing.T, c *core, id int64) string {
 func TestWakeOnStepUpdatesThread(t *testing.T) {
 	c := stepsCore(t)
 	ctx := context.Background()
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	s := lightThread(t, c)
 	if _, err := c.addStep(ctx, s.ID, stepSpec{Key: "deploy", Title: "Déployer", Kind: stepUser, Question: "Déploie la nouvelle version"}, nil, "brain"); err != nil {
 		t.Fatal(err)
@@ -512,7 +512,7 @@ func cardItem(x convoCard) string { return "card:" + strconv.FormatInt(x.ID, 10)
 // ended, the card still waiting comes back to the queue.
 func TestThreadCardsLeaveTheQueue(t *testing.T) {
 	c := stepsCore(t)
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	pr := lightThread(t, c)
 	callBrainTool(t, c, "read_thread", map[string]any{"thread_id": pr.ID})
 	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})
@@ -589,7 +589,7 @@ func TestThreadCardsLeaveTheQueue(t *testing.T) {
 func TestLinkedCallResultAboutThread(t *testing.T) {
 	c := stepsCore(t)
 	ctx := context.Background()
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	pr := lightThread(t, c)
 	callBrainTool(t, c, "read_thread", map[string]any{"thread_id": pr.ID})
 	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 12})

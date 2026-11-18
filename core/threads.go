@@ -199,7 +199,7 @@ const (
 	stepWaiting  = "waiting"  // for the steps it comes after, or its turn to write
 	stepRunning  = "running"  // its task works, or its question waits for the user
 	stepReported = "reported" // its agent says it is done: only a claim
-	stepVerified = "verified" // and the checks the node ran all passed
+	stepVerified = "verified" // and the checks the device ran all passed
 	stepAccepted = "accepted" // the lead judged it done
 	stepRejected = "rejected" // the lead judged it failed, or the user said no
 	stepBlocked  = "blocked"  // its task failed, stopped or was lost
@@ -297,7 +297,7 @@ type stepSpec struct {
 	Agent     string         `json:"agent,omitempty" jsonschema:"task: agent from list_agents; empty for the default one"`
 	Resources []ResourceRef  `json:"resources,omitempty" jsonschema:"task: what it is lent, as run_task's resources"`
 	Contract  *taskContract  `json:"contract,omitempty" jsonschema:"task: as run_task's contract; its checks are the step's evidence"`
-	Node      string         `json:"node,omitempty" jsonschema:"task: node name; empty lets the scheduler choose"`
+	Device    string         `json:"device,omitempty" jsonschema:"task: device name; empty lets the scheduler choose"`
 	Question  string         `json:"question,omitempty" jsonschema:"choice or approval: what the user is asked; user: what only the user does, in their language"`
 	Options   []string       `json:"options,omitempty" jsonschema:"choice: what the user picks from, 2 to 6"`
 	Tool      string         `json:"tool,omitempty" jsonschema:"call, or a check that reads: the tool to call, one of yours, by its full name"`

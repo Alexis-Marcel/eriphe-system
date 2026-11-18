@@ -572,7 +572,7 @@ func (c *core) applyCatalog(m *Config) {
 	}
 	c.placePending()
 	if c.changed != nil {
-		c.bump() // the nodes get ready for the agents as they are now (nodePrepare)
+		c.bump() // the devices get ready for the agents as they are now (devicePrepare)
 	}
 }
 

@@ -45,7 +45,7 @@ func TestThreadLead(t *testing.T) {
 	}
 
 	// It reads all of it at its next wake, in one turn.
-	c.store.insertTask(&TaskRow{ID: "t-lead", Node: "nas", Agent: "sonnet", Runtime: "claude-code", Prompt: "x", State: stateIdle, Kind: assistantRoleLead})
+	c.store.insertTask(&TaskRow{ID: "t-lead", Device: "nas", Agent: "sonnet", Runtime: "claude-code", Prompt: "x", State: stateIdle, Kind: assistantRoleLead})
 	started, err := c.deliverLead(ctx, a, &TaskRow{ID: "t-lead"})
 	if err != nil || !started {
 		t.Fatalf("deliver: %v %v", started, err)

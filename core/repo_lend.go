@@ -13,7 +13,7 @@ import (
 )
 
 // A task and GitHub. A task lent a GitHub repository holds a placeholder; git
-// and gh use it as a token, and each request crosses the node's relay to
+// and gh use it as a token, and each request crosses the device's relay to
 // eriphe-core (git_access.go), which decides, deny by default (decideRepo):
 // the repository must be lent to the task, as a repo resource (resources.go),
 // for write to push, and the push is held to the repository's case
@@ -242,9 +242,9 @@ func (c *core) handleTaskAccessLog(w http.ResponseWriter, r *http.Request) {
 }
 
 // taskSpec is a task's stored spec (no secrets in it).
-func (s *Store) taskSpec(id string) (nodeTaskSpec, error) {
+func (s *Store) taskSpec(id string) (deviceTaskSpec, error) {
 	var raw string
-	var spec nodeTaskSpec
+	var spec deviceTaskSpec
 	if err := s.db.QueryRow(`SELECT spec FROM tasks WHERE id = ?`, id).Scan(&raw); err != nil {
 		return spec, err
 	}

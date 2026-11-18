@@ -381,7 +381,7 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 	if external {
 		r.taint = []string{"skill events: " + strings.Join(kinds, ", ")}
 	}
-	t, err := c.startTask(ctx, "worker", r, nodeTaskSpec{AppendSystemPrompt: skillVoice(c.userLang(), containsStr(sk.Trigger.Tools, threadsServer))})
+	t, err := c.startTask(ctx, "worker", r, deviceTaskSpec{AppendSystemPrompt: skillVoice(c.userLang(), containsStr(sk.Trigger.Tools, threadsServer))})
 	if err != nil {
 		c.endRun(runID, skillRunRefused, err.Error())
 		log.Printf("skill %s: run %d: %v", sk.Name, runID, err)

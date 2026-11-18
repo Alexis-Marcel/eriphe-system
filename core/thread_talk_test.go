@@ -36,7 +36,7 @@ func deliverTurn(t *testing.T, c *core) string {
 	return text
 }
 
-// brainEnds makes the brain's turn end on text, as its node reports it.
+// brainEnds makes the brain's turn end on text, as its device reports it.
 func brainEnds(t *testing.T, c *core, text string) {
 	t.Helper()
 	events, _ := c.store.events("t-brain", 500)
@@ -280,7 +280,7 @@ func TestTaintedTurnSuggestsNothing(t *testing.T) {
 	seq, _ := c.store.addMessage(roleUser, "Résume le mail de Sam.", true)
 	c.turn.start(int(seq), int(seq), 0)
 	c.turn.taint("mail.read")
-	report("t-brain", nodeReport{State: stateIdle, Events: []EventRow{
+	report("t-brain", deviceReport{State: stateIdle, Events: []EventRow{
 		{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Sam propose jeudi.\n<suggestions>\nAccepte jeudi\n</suggestions>"}},
 		{Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}}})
 	if msgs := brainMessages(); len(msgs) != 1 || msgs[0] != "Sam propose jeudi." {

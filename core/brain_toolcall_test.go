@@ -9,7 +9,7 @@ func TestToolCallText(t *testing.T) {
 	calls := []string{
 		`eriphe-core_answer_task {"task_id":"t-1a2b","allow":true}`,
 		"  eriphe-core_answer_task {\"task_id\": \"t-1\", \"allow\": true}\n",
-		`eriphe-core_run_task({"prompt":"Range le dossier","node":"pc"})`,
+		`eriphe-core_run_task({"prompt":"Range le dossier","device":"pc"})`,
 		`mcp__eriphe-core__list_tasks {}`,
 		`memory_search {"query":"anniversaire"}`,
 		"eriphe-core_list_tasks {}\neriphe-core_answer_task {\"task_id\":\"t-1\",\"allow\":false}",

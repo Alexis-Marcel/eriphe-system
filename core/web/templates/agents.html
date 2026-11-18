@@ -393,17 +393,17 @@
     <fieldset class="choices model-where" hx-post="/settings/provider-models{{if .Edit}}/{{.Name}}{{end}}" hx-trigger="change" hx-include="closest form" hx-vals='{"reset": "1"}' hx-target="#model-picker" hx-swap="outerHTML">
       <legend>{{t "providers.where"}}</legend>
       <div class="choice-row">
-        <label class="choice"><input type="radio" name="where" value="node" {{if eq .Where "node"}}checked{{end}}><b>{{t "providers.where.node"}}</b><small>{{t "providers.where.nodelead"}}</small></label>
+        <label class="choice"><input type="radio" name="where" value="device" {{if eq .Where "device"}}checked{{end}}><b>{{t "providers.where.device"}}</b><small>{{t "providers.where.devicelead"}}</small></label>
         <label class="choice"><input type="radio" name="where" value="address" {{if eq .Where "address"}}checked{{end}}><b>{{t "providers.where.address"}}</b><small>{{t "providers.where.addresslead"}}</small></label>
       </div>
     </fieldset>
-    <div class="if-where-node stack">
-      {{if .ModelNodes}}
-      <label class="field narrow-2"><span>{{t "providers.node"}}</span>
-        <select name="node" aria-describedby="pnode-h" hx-post="/settings/provider-models{{if .Edit}}/{{.Name}}{{end}}" hx-trigger="change" hx-include="closest form" hx-vals='{"reset": "1"}' hx-target="#model-picker" hx-swap="outerHTML">{{$node := .Node}}{{range .ModelNodes}}<option value="{{.}}" {{if eq . $node}}selected{{end}}>{{.}}</option>{{end}}</select>
-        <small id="pnode-h">{{t "providers.nodehint"}}</small></label>
+    <div class="if-where-device stack">
+      {{if .ModelDevices}}
+      <label class="field narrow-2"><span>{{t "providers.device"}}</span>
+        <select name="device" aria-describedby="pdevice-h" hx-post="/settings/provider-models{{if .Edit}}/{{.Name}}{{end}}" hx-trigger="change" hx-include="closest form" hx-vals='{"reset": "1"}' hx-target="#model-picker" hx-swap="outerHTML">{{$device := .Device}}{{range .ModelDevices}}<option value="{{.}}" {{if eq . $device}}selected{{end}}>{{.}}</option>{{end}}</select>
+        <small id="pdevice-h">{{t "providers.devicehint"}}</small></label>
       {{else}}
-      <p class="muted small">{{t "providers.nomodelnode"}}</p>
+      <p class="muted small">{{t "providers.nomodeldevice"}}</p>
       {{end}}
     </div>
     <label class="field if-where-address"><span>{{t "providers.baseurl"}}</span>

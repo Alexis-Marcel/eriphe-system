@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// The brain is Eriphe's permanent orchestrator: a long-lived task on a node,
+// The brain is Eriphe's permanent orchestrator: a long-lived task on a device,
 // with only MCP tools. eriphe-core gives it one turn per event: my messages,
 // and what happens to its workers. It never polls.
 
@@ -69,7 +69,7 @@ func (c *core) notifyBrain(id, state string) {
 			}
 			told = append(told, pid)
 			in, _ := json.Marshal(p["input"])
-			line := fmt.Sprintf("La tâche %s (nœud %s) demande une permission : %v %s", t.ID, t.Node, p["tool_name"], truncate(string(in), 400))
+			line := fmt.Sprintf("La tâche %s (appareil %s) demande une permission : %v %s", t.ID, t.Device, p["tool_name"], truncate(string(in), 400))
 			if reason := c.store.userOnly(t.ID, pid); reason != "" && c.accessAsked(t.ID, pid) {
 				line += fmt.Sprintf("\nUne carte le demande déjà à %s (%s) : ne relaie pas, tu ne peux pas y répondre.", c.conf().User, reason)
 			} else {
@@ -94,14 +94,14 @@ func (c *core) notifyBrain(id, state string) {
 	case stateStopped, stateFailed, stateLost:
 		if state == stateStopped && c.store.get("brain_stopped:"+t.ID) != "" {
 			// The brain stopped it itself: nothing to tell, unless its
-			// work was kept on the node rather than pushed.
+			// work was kept on the device rather than pushed.
 			if w, _ := c.store.lastWork(t.ID); w["kept"] == nil {
 				return
 			}
-			text = fmt.Sprintf(taskEndedEvent, t.ID, t.Node, state) + c.workNote(t.ID)
+			text = fmt.Sprintf(taskEndedEvent, t.ID, t.Device, state) + c.workNote(t.ID)
 			break
 		}
-		text = fmt.Sprintf(taskEndedEvent, t.ID, t.Node, state) + c.endedNote(t)
+		text = fmt.Sprintf(taskEndedEvent, t.ID, t.Device, state) + c.endedNote(t)
 	default:
 		return
 	}
@@ -131,7 +131,7 @@ func (c *core) notifyBrain(id, state string) {
 // idleEvent tells the brain that a worker's turn ended: its checked
 // receipt, or without one its last message.
 func idleEvent(t *TaskRow, lastText string, r *checkedReceipt) string {
-	head := fmt.Sprintf("La tâche %s (nœud %s) a fini son tour.", t.ID, t.Node)
+	head := fmt.Sprintf("La tâche %s (appareil %s) a fini son tour.", t.ID, t.Device)
 	if r.missing() {
 		text := fmt.Sprintf("%s Son dernier message (sans reçu lisible) : %s", head, truncate(lastText, 1500))
 		if r != nil && len(r.Checks) > 0 {
@@ -410,7 +410,7 @@ func (c *core) brainPermissionOne(ctx context.Context, t *TaskRow, p map[string]
 
 // catalogSettling tells whether, in eriphe-core's first minute, a server
 // whose reads are free is not ready yet: still connecting, or a
-// local one whose node has not connected to run it. Its free reads are
+// local one whose device has not connected to run it. Its free reads are
 // part of the brain's tools.
 func (c *core) catalogSettling() bool {
 	if time.Since(c.started) > time.Minute {
@@ -485,7 +485,7 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) (undecided string) {
 		last = e.Seq
 		switch {
 		case e.Type == "error":
-			// The node's own notes (a session not resumed…) are not the turn's end.
+			// The device's own notes (a session not resumed…) are not the turn's end.
 		case bad && e.Type == "text":
 			// A harness's error written as its answer is never shown as one.
 			failed = raw
@@ -547,7 +547,7 @@ func heldTexts(events []EventRow) string {
 //go:embed brain-prompt.md
 var brainPrompt string
 
-// selfServer is eriphe-core's own MCP server, as its node relays it to an
+// selfServer is eriphe-core's own MCP server, as its device relays it to an
 // assistant whose role has it, when the configuration gives no self_url
 // (taskMCPHandler).
 const selfServer = "eriphe-core"

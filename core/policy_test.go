@@ -77,7 +77,7 @@ func TestPolicyInReports(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := newCore(&Config{User: "Sam", Brain: &BrainConfig{}}, store)
-	store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", Dir: "/w", Prompt: "do", State: stateRunning})
+	store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Runtime: "claude-code", Dir: "/w", Prompt: "do", State: stateRunning})
 	report := func(seq int, tool, cmd string) bool {
 		ev := []EventRow{{Seq: seq, Time: time.Now(), Type: "permission",
 			Data: map[string]any{"id": "p" + string(rune('0'+seq)), "tool_name": tool, "input": map[string]any{"command": cmd}}}}
@@ -116,7 +116,7 @@ func TestConcurrentPermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := newCore(&Config{User: "Sam", Brain: &BrainConfig{}}, store)
-	store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Runtime: "claude-code", Dir: "/w", Prompt: "do", State: stateWaitingPermission})
+	store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Runtime: "claude-code", Dir: "/w", Prompt: "do", State: stateWaitingPermission})
 	var evs []EventRow
 	for i, tool := range []string{"mcp__maison__read", "mcp__github__get_me", "mcp__linear__list_teams"} {
 		evs = append(evs, EventRow{Seq: i + 1, Time: time.Now(), Type: "permission",
