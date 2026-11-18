@@ -283,7 +283,7 @@ func TestBrainPromptNodes(t *testing.T) {
 		"`node_open` avec `parent`", "`Mark`", "`Grid`", "`\"kind\": \"stack\"`",
 		"## Les vues", "`propose_view`", "un seul oui les crée", "la dernière bonne valeur reste", "marqué extérieur",
 		"« Répondre à Sam »", "attend son oui sur une carte",
-		"**une action simple**", "**une question**", "**un travail**", "le nœud permanent de sa journée, jamais dans un nouveau nœud",
+		"**une action simple**", "**une question**", "**un travail**", "le nœud permanent de sa journée s'il en a un, jamais dans un nouveau nœud",
 		"découpe-le toi-même", "une nouvelle version du même nœud",
 		"**Une vue est le travail fait d'avance de son assistant**", "Tu ne crées jamais une vue toi-même",
 	} {

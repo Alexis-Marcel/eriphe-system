@@ -134,7 +134,10 @@ func playNodesBench(t *testing.T, cli, model string) benchScore {
 		stop()
 		live.close()
 	})
-	b := &bench{t: t, sc: sc}
+	b := &bench{t: t, sc: sc, allowed: map[string]bool{}}
+	for _, id := range sc.nodes {
+		b.allowed[id] = true // the seed
+	}
 	b.quiet()
 	day, substack := sc.nodes["day"], sc.nodes["substack"]
 
@@ -166,6 +169,7 @@ func playNodesBench(t *testing.T, cli, model string) benchScore {
 	if err != nil {
 		t.Fatal(err)
 	}
+	b.allowed[mail] = true
 	b.quiet()
 	b.say("Réponds que je regarde dans l'heure, ouvre-moi la prod, et lance en arrière-plan une recherche sur l'erreur.", mail, turnWork)
 	// 9. The user says yes to what waits (the send, a start, a view).
@@ -206,12 +210,12 @@ func playNodesBench(t *testing.T, cli, model string) benchScore {
 	if sum, _ := sc.c.nodes.Get(mail); !sum.Archived.IsZero() {
 		b.note("the mail was archived by someone else than the user")
 	}
+	b.end(work) // before the archive: the whole graph is scored
 	if err := sc.c.archiveNode(ctx, mail, byUser); err != nil {
 		b.note("archive: " + err.Error())
 	}
 	b.quiet()
-
-	b.end(work)
+	b.filed() // the turns no message of the user's started, the last included
 	b.s.cost, b.s.turns = live.spent()
 	b.s.took = time.Since(start)
 	return b.s
@@ -225,9 +229,11 @@ const (
 
 // bench drives one run: the user's turns, the cards, and the scoring.
 type bench struct {
-	t  *testing.T
-	sc *scenario
-	s  benchScore
+	t       *testing.T
+	sc      *scenario
+	s       benchScore
+	allowed map[string]bool // the nodes that may be: the seed, the mail, those born of new work
+	counted map[int]bool    // the answers already counted as filed by the net
 }
 
 func (b *bench) note(s string) { b.s.notes = append(b.s.notes, s) }
@@ -248,7 +254,11 @@ func (b *bench) say(text, node, may string) {
 	var said []string
 	for _, m := range msgs {
 		said = append(said, m.Text)
-		if m.Filed != "" {
+		if m.Filed != "" && !b.counted[m.Seq] {
+			if b.counted == nil {
+				b.counted = map[int]bool{}
+			}
+			b.counted[m.Seq] = true
 			b.s.netFiled = append(b.s.netFiled, fmt.Sprintf("%s: %d runes filed in %s", turn, runeLen(m.Text), m.Filed))
 		}
 	}
@@ -264,12 +274,18 @@ func (b *bench) say(text, node, may string) {
 			continue // a task's node or a step: code opened it
 		}
 		born = append(born, sum.Title)
+		b.allowed[id] = true // counted here, once
 		if sum.Lifetime == nodefile.Standing && !b.viewMade(id) {
 			b.s.selfView = append(b.s.selfView, fmt.Sprintf("%s: %s", turn, sum.Title))
 		}
 	}
 	if may == turnNoNode && len(born) > 0 {
 		b.s.reopened = append(b.s.reopened, fmt.Sprintf("%s: %q", turn, born))
+	}
+	if may == turnWork {
+		for id := range b.liveNodes() {
+			b.allowed[id] = true // what the work's wakes open after counts as its own
+		}
 	}
 	b.t.Logf("« %s » → %s; nodes born %q; calls %v", text, truncate(strings.Join(said, " / "), 400), born, b.sc.live.calls())
 }
@@ -441,6 +457,14 @@ func (b *bench) end(work string) {
 			b.s.stuck = append(b.s.stuck, fmt.Sprintf("%s: %s", key, status))
 		}
 	}
+	// A node born in a turn no message of the user's started (a card's
+	// yes, a task's end), out of any new work.
+	for id, sum := range b.liveNodes() {
+		if !b.allowed[id] && !b.codes(id) && !b.viewMade(id) {
+			b.s.reopened = append(b.s.reopened, fmt.Sprintf("between turns: %q", sum.Title))
+			b.allowed[id] = true
+		}
+	}
 	titles := map[string][]string{}
 	for id, sum := range b.liveNodes() {
 		k := strings.ToLower(strings.TrimSpace(sum.Title))
@@ -462,6 +486,17 @@ func (b *bench) end(work string) {
 	}
 }
 
+// filed counts every answer code's safety net filed, those of the turns
+// a wake started included.
+func (b *bench) filed() {
+	msgs, _ := b.sc.c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? AND filed != '' ORDER BY seq`, roleBrain)
+	for _, m := range msgs {
+		if !b.counted[m.Seq] {
+			b.s.netFiled = append(b.s.netFiled, fmt.Sprintf("a wake's turn: %d runes filed in %s", runeLen(m.Text), m.Filed))
+		}
+	}
+}
+
 // quiet waits until the brain has nothing left to do: no message for it,
 // its session idle, for a few seconds in a row.
 func (b *bench) quiet() {
@@ -478,7 +513,7 @@ func (b *bench) quiet() {
 		}
 		calm = 0
 	}
-	b.t.Logf("the brain is still busy after 6 minutes")
+	b.t.Errorf("the brain is still busy after 6 minutes: the turn is scored half done")
 }
 
 // The faked tools' record.
@@ -691,6 +726,9 @@ func (l *liveBrain) assign(a deviceAssignment) {
 // start runs the CLI for a brain task, from its spec as its device would.
 func (l *liveBrain) start(a deviceAssignment) (*liveSession, error) {
 	spec := a.Spec
+	if !strings.Contains(spec.AppendSystemPrompt, "## Les nœuds") {
+		return nil, fmt.Errorf("the brain's spec carries no built-in prompt: the bench would measure another")
+	}
 	dir := filepath.Join(l.dir, a.ID)
 	work := filepath.Join(dir, "work")
 	if err := os.MkdirAll(work, 0o700); err != nil {
