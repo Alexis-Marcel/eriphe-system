@@ -713,6 +713,7 @@ whatever address it dials) and one client certificate per device.
 | `list_tasks` | recent tasks |
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task that is a thread's step, what it settled shows in the thread's log (« question de l'assistant → Eriphe a répondu : … », the release asked, then the user's answer on its card) and on the thread's surface, under the step and in its header's facts, so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
+| `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan`; on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write or remove a block of its part of a thread's surface, as `brain`, and read the threads on screen ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
 
 The scheduler takes the requested device if it is online and fits. Otherwise it works in two passes,
@@ -887,9 +888,9 @@ from outside; a task that did is left out of it).
 
 ### Attention signals (`attention_signal.go`)
 
-An assistant (a skill's run, a thread's lead) says what deserves the user's attention with an
-**attention signal**, a structured block rather than a prefix in its prose: in a skill's receipt
-(`attentionInstruction`, after `receiptInstruction` in `skillVoice`) or in a lead's `report`:
+A skill's run says what deserves the user's attention with an **attention signal**, a
+structured block rather than a prefix in its prose, in its receipt (`attentionInstruction`, after
+`receiptInstruction` in `skillVoice`):
 
 ```json
 "attention": [{"refs": ["thread:12"], "weight": 4, "why": "une facture due aujourd'hui", "say": "Ta facture est due."}]
@@ -915,68 +916,62 @@ the brain reads it as data.
 In a skill's receipt the block is also what tells: no entry tells the user nothing (the run's
 message stays in its note), and an entry may leave `refs` out to be about the run's own message,
 which then enters the queue as the notification it became (`notification:<id>`), at its weight
-(`tellRun`, [Triggered skills](#triggered-skills)). A lead's
-`report` needs its refs, and only a report with a kept item wakes the brain: without one it is
-kept in the conversation as read and costs no turn. A worker's receipt carries no signal.
+(`tellRun`, [Triggered skills](#triggered-skills)). A worker's receipt carries no signal.
 
-### Threads (`threads.go`, `thread_engine.go`)
+### Threads (`threads.go`, `thread_light.go`)
 
 A **thread** is one matter followed to its real goal: a pull request until it is merged and
 deployed, an appointment, a brand name to find, a service to rebuild. An assistant has no end; a
-thread has one (its goal); a task is one step. It replaced the work session (#464): one object for
-every matter.
+thread has one (its goal). It replaced the work session (#464): one object for every matter,
+until the graph's nodes replace it (#625). Its work runs in nodes: a task works in a node of its
+own, and long work in steps of a node ([Work in steps](#work-in-steps-node_stepsgo)); a thread
+has no plan, no steps and no budget of its own.
 
 A thread has a title, a goal (its real outcome: the brain's and the agents' target, never shown to
 the user), a **headline** (the one line the user reads at its top and on its chip, written for
 them: `open_thread` or `set_thread`), an **alias** (a key in the names, see [About and
 names](#about-and-names): `project:site`, `pr:owner/repo#12`, `alert:<id>`) and the names the user
-gives it, a **state** (`open`, `waiting`, `done`,
-`dropped`), a summary, and its times. Its **mode** is one of two:
+gives it, a **state** (`open`, `done`, `dropped`), a summary, and its times. It is held by the
+brain:
 
-- **Light** (the default, without steps): held by the brain. `open_thread` opens it at once, with no
-  card and no budget, and needs its alias. **One thread an alias** (`openThreadOnce`): an alias
-  that has a thread already gives that thread back instead of a second one, reopened light (why
-  « même chose ») if it ended, and the result says so; a led open on the alias of a thread is
-  refused, naming it. **Threads near a matter** (`nearThreads`, the one candidate matcher): with
-  no thread on the alias, a thread one of whose names is in the new alias's words or title, or
-  whose names or title hold all the alias's words, ended and tidied ones included, refuses the open
-  (`nearMatch`, listing them, at most 5) until the opener takes one (`take`: given back, reopened
-  light if it ended, and given the alias, unless the turn or the task read external content) or
-  says why this is another matter (`new_because`, logged on the new thread). A task offered a
-  tainted thread this way reads its words (`taskRead`). A skill's run has no model to answer: its
-  thread is its alias's alone. `openThreadOnce` is the only path that opens a thread (a test holds
-  it). `find_thread` finds threads by words of their title, goal, names or summary,
-  or by an alias or a name, the ended ones included; `close_thread` closes it
-  only on its goal, with how it was reached as its summary (`done`); `stop_thread` drops it;
-  `reopen_thread` opens it again, light, when its matter comes back, its steps and log kept.
-- **Led** (with steps): long autonomous work of several steps toward the goal, not only code: an
-  approved plan, a lead, a budget. Its engine's **phase** (`proposed`, `running`, `paused`, `done`,
-  `stopped`, `declined`) moves its state (`stateOf`: running is open, proposed and paused are
-  waiting, stopped and declined are dropped). A led thread that ended reopens light: its lead went
-  with its end.
+- `open_thread` opens it at once, with no card, and needs its alias. **One thread an alias**
+  (`openThreadOnce`): an alias that has a thread already gives that thread back instead of a
+  second one, reopened (why « même chose ») if it ended, and the result says so. **Threads near a
+  matter** (`nearThreads`, the one candidate matcher): with no thread on the alias, a thread one of
+  whose names is in the new alias's words or title, or whose names or title hold all the alias's
+  words, ended and tidied ones included, refuses the open (`nearMatch`, listing them, at most 5)
+  until the opener takes one (`take`: given back, reopened if it ended, and given the alias,
+  unless the turn or the task read external content) or says why this is another matter
+  (`new_because`, logged on the new thread). A task offered a tainted thread this way reads its
+  words (`taskRead`). A skill's run has no model to answer: its thread is its alias's alone.
+  `openThreadOnce` is the only path that opens a thread (a test holds it).
+- `find_thread` finds threads by words of their title, goal, names or summary, or by an alias or a
+  name, the ended ones included; `close_thread` closes it only on its goal, with how it was reached
+  as its summary (`done`); `stop_thread` drops it, and stops the tasks about it; `reopen_thread`
+  opens it again when its matter comes back, its log kept.
 
-**How it ends** (`threads.ends`, #571), whatever it holds; the family is never shown to the user,
-it only changes the thread's life:
+**How it ends** (`threads.ends`, #571); the family is never shown to the user, it only changes the
+thread's life:
 
 - `goal` (the default): it ends on its goal (`close_thread`) or is dropped (`stop_thread`). Ended,
   its surface stays until the user's midnight (an hour at least), or until the user puts it away
   with **« Ranger »**, a button code places on its surface (the action `tidy`): `tidied` is set,
   the surface leaves at once, the thread is never deleted and is still found (`find_thread`, its
   alias) and reopened when its matter comes back. Reopening clears `tidied`.
-- `standing`: what the user manages continuously (their mail, their agenda, a supervision). Light
-  only; `close_thread` and `stop_thread` refuse it (`errStanding`, from the engine, so the page and
-  a lead are refused too): it is never ended, so never hidden.
-- `day`: a view for the day (an answer shown, « j'ai quoi demain ? »). Light only; the engine's
-  tick ends it (`done`) once the user's midnight passed since it started (`endDays`) and its
-  surface leaves at once. Reopened, its day is the reopening's. Its `thread.ended` (payload `ends`
-  `day`) is no breakpoint of the attention queue: nothing held is told at midnight.
+- `standing`: what the user manages continuously (their mail, their agenda, a supervision);
+  `close_thread` and `stop_thread` refuse it (`errStanding`, so the page is refused too): it is
+  never ended, so never hidden.
+- `day`: a view for the day (an answer shown, « j'ai quoi demain ? »). The tick ends it (`done`)
+  once the user's midnight passed since it started (`endDays`) and its surface leaves at once.
+  Reopened, its day is the reopening's. Its `thread.ended` (payload `ends` `day`) is no breakpoint
+  of the attention queue: nothing held is told at midnight.
 
 `open_thread` with `ends` on an alias whose thread exists gives that thread back ending as asked
-now (`endsAgain`): a light one only, a led one ends on its goal and the open is refused.
+now (`endsAgain`).
 
-**Child threads** (`thread_children.go`, `threads.parent`, #609): a step of a thread that becomes a
+**Child threads** (`thread_children.go`, `threads.parent`, #609): a part of a thread that becomes a
 matter of its own is a thread of its own, its child (`open_thread` `parent`). Nothing else tells a
-child from a top thread: it is light or led, ends on its goal or stands, as any other.
+child from a top thread: it ends on its goal or stands, as any other.
 
 - **Depth 2** (`parentFor`): a parent is an active top thread; a child has no children, and a
   thread with children is never made a child. A standing thread, what the user manages
@@ -986,9 +981,9 @@ child from a top thread: it is light or led, ends on its goal or stands, as any 
   one of the threads near the child's matter. `name_thread` `merge` gives the merged
   thread's children to the other, a top thread only.
 - **No active child under an ended parent**: `close_thread` on a parent with active children is
-  refused (light or led), naming them (`activeChildrenError`); a parent that ends any other way
-  (`stop_thread`, its plan declined, its day over) stops them with it (`endChildren`, logged « Arrêté
-  avec son thread parent »); a child of an ended parent does not reopen before its parent.
+  refused, naming them (`activeChildrenError`); a parent that ends any other way (`stop_thread`,
+  its day over) stops them with it (`endChildren`, logged « Arrêté avec son thread parent »); a
+  child of an ended parent does not reopen before its parent.
   An ended child's surface leaves with its parent's (put away, its day over, its time on the
   workspace past), and a child's surface that leaves takes its row from its parent's
   (`keepThreadKin`, also after the tick removes a surface whose lifetime ended); a link that shows
@@ -1000,65 +995,24 @@ child from a top thread: it is light or led, ends on its goal or stands, as any 
   [the layout](#the-layout-workspace_layoutgo)). Its parent shows it among its children; what waits
   for the user in a child raises its parent.
 
-| Who | Does |
-|---|---|
-| Brain | opens the thread with the user (`open_thread`: title, goal, headline, alias; led: `done_when`, budget, steps), the only voice |
-| Lead | a led thread's temporary assistant (role `lead`, `thread_lead.go`): judges each step on its evidence (`settle_step`: accept, retry, reject), amends the plan (`amend_thread`), closes it (`close_thread`), reports to the brain. The brain when no agent can run one |
-| Engine (code, no model) | starts each step once those it comes `after` are accepted, in parallel, passes them their outputs, asks the cards, holds the limits |
-| User | approves the plan, answers the choices and approvals, gives more time |
-
-A step is a `task` (prompt, agent, resources, contract, as `run_task`'s), a `choice` (a question
-and 2 to 6 options, recorded with `choose_step` in the turn of the user's answer) or an `approval`
-(a yes or no card). Its statuses: `waiting`, `running`, `reported` (its agent says it is done: a
-claim), `verified` (its checks passed), `accepted`, `rejected`, `blocked` (its task failed or
-stopped), `dropped`. A step whose checks failed, or whose receipt claims what they deny, cannot be
-accepted.
-
-**Steps of every kind** (`thread_steps.go`): besides `task`, `choice` and `approval`, a step may be:
-
-- `call`: one of the brain's catalog tools with its input (`tool`, `input`). It passes the same
-  gate as the brain's own call (`callGate`: a catalog tool lent to the brain, the policy with the
-  thread's taint). A read the policy leaves free runs at once, without a card; anything else that
-  may run asks its **access card**, which is the step's yes (`thread_steps.card`, source
-  `thread:<id>`). On the yes the call runs (`runCallStep`, the card's proposal showing it running,
-  then done or failed, as `setCallState`) and the step settles: `accepted`, or `blocked` with why;
-  on a no it is `rejected`. The brain hears it from its thread, not as the card's usual event.
-- `user`: what only the user does (`question`). The user answers « C'est fait »
-  on the thread's surface (`stepDone`, their session and CSRF token; `userStepDone`), or the
-  holder settles it from evidence (`settle_step` accept, with what shows it in `note`).
-- `check`: a task (`prompt`, read-only resources) or a read call (`tool`, and `expect`: words its
-  result must contain). Its outcome settles it: a task's receipt `done` with no failed check, or the
-  call run and its result as expected; otherwise `rejected`. The holder gives no verdict.
-- `deadline`: a date (`due`) or a linked intention (`intention`). The engine's pass (and the
-  intentions' minute, when one becomes due) settles it when the date comes or the intention is due
-  or done (`accepted`), or cancelled (`rejected`); the steps after it then start.
-
-A **light** thread takes its steps from the brain (`add_step`), each born as the matter goes and
-started once the steps it comes `after` are accepted; a task step asks its own start card when it is
-lent what needs a yes. The brain settles them (`settle_step`). **The thread holds where its
-matter stands** (`thread_progress.go`): its summary is the only record of it, written
-by `remember` kind `progress` (and a task's `remember`, and the nightly extraction), never from a
-turn or a source that read external content (unless the thread's own steps read some already: its
-summary is then never quoted; the extraction's never); its log says who wrote it (`brain`, `task`,
-`extraction`). The code never opens a thread for it: a progress about no thread is
-refused (« open_thread first »; the extraction drops it), one whose thread ended is refused until
-the brain reopens it; without an about, it is the turn's thread's (a task's: its step's thread). The code links the rest: an open intention
-about a live light thread becomes its deadline step (`intention-<id>`, once, at the engine's
-pass), a card born in a turn about the thread, or raised with the source `thread:<id>` or by the
-task of one of its steps, shows in its timeline (`thread_cards`). Closing a thread on its goal
-(`close_thread`, a led thread's engine done) writes a dated decision memory about it from its
-summary (`source_kind` `thread`, `source_ref` `thread:<id>`; one from an earlier close is
-superseded; external when the thread's words may be someone else's). `link_thread` is left for the
-exceptions: an intention about another thread, a card raised elsewhere. **A step's change wakes its holder**,
-when someone else made it (the user, a card, the clock, a task): the lead through `thread_inbox`,
-or the brain by an event `[thread N « title »] étape « … » (key, kind) → status`, which does not
-block it. What a tool said, or an intention drawn from external content, taints the step
-(`thread_steps.tainted`), the event that carries it, and `read_thread`. A thread that ends drops
-what still waits or runs in it: its tasks stop, its step cards are withdrawn (`callStepGone`).
+**The thread holds where its matter stands** (`thread_progress.go`): its summary is the only record
+of it, written by `remember` kind `progress` (and a task's `remember`, and the nightly
+extraction), never from a turn or a source that read external content (unless the thread is
+external already: its summary is then never quoted; the extraction's never); its log says who
+wrote it (`brain`, `task`, `extraction`). The code never opens a thread for it: a progress about
+no thread is refused (« open_thread first »; the extraction drops it), one whose thread ended is
+refused until the brain reopens it; without an about, it is the turn's thread's (a task's: its
+about's). A card born in a turn about the thread, or raised with the source `thread:<id>` or by a
+task about it, shows in its timeline (`thread_cards`). Closing a thread on its goal
+(`close_thread`) writes a dated decision memory about it from its summary (`source_kind`
+`thread`, `source_ref` `thread:<id>`; one from an earlier close is superseded; external when the
+thread's words may be someone else's). `link_thread` is left for the exceptions: an intention
+about another thread, a card raised elsewhere. A thread that ends drops what still waits or runs
+about it: its tasks stop.
 
 **The brain's turn about a thread** (`thread_turn.go`): a turn that names a thread (a thread tool
-called on it, or a delivered message that belongs to it: an event of one of its steps, a message of
-the user's written in it, by the messages' `thread` column) is about it until it
+called on it, or a delivered message that belongs to it: an event of one of its linked cards, a
+message of the user's written in it, by the messages' `thread` column) is about it until it
 names another. The cards it raises meanwhile (one of its own calls' access cards, a task's start)
 are that thread's and show in its timeline; while one waits, the thread's surface shows it under
 « À toi », answered in place (and not again in the attention queue's surfaces), and a decision
@@ -1070,84 +1024,36 @@ event of it, or a message of the user's written with it open); a thread tool on 
 is no thread changes nothing. The user writing over a thread's surface about something else
 (« j'ai quoi de prévu aujourd'hui ? »): the brain opens or finds that other matter's thread
 (`open_thread`, a `day` one for what is only today's) before its first card or task, and the turn is
-about that one from then on.
-`run_task` in a turn about a light, active thread (`taskOfThread`) is a `task` step of that thread
-(the same prompt, title, agent, resources and contract; key `task`, `task-2`…), so the thread's
-surface follows it and its end comes back as the thread's event; its result gives the thread, the
-step and its task. What `run_task` refuses of the task itself (no prompt, an agent or a resource
-that is none) is refused before any step is born; a task that still cannot start leaves its step
-blocked and the call refused. A `surface` to fill and a `device` named go with the step. In a turn
-about no thread, the task is a step of the live light thread the user's message named
-(`taskThread`); with none, `run_task` is refused (« open_thread first »): a task is never left
-loose, and the code never opens a thread for it. A turn about a led thread is refused too (its plan
-changes with `amend_thread`), and so is one about an ended thread (reopen it first), or a thread
-that cannot take one more step. The prompt
+about that one from then on. `run_task` in a turn about a thread is about it (its `about`, the
+turn's source by default): its cards and its surface go to the thread. The prompt
 (`brain-prompt.md`, « Les fils »: « fil » is the word the user reads) says that the thread is the
 one object the user sees, how it ends (`goal`, `standing`, `day`, for the brain alone), when the
 brain opens or resumes one (a question about a matter, a request of more than one step, a research,
 an alert worth following, anything shown: `open_thread` with its alias, `take` or `new_because`
 when the matcher lists near ones; a one-line answer stays text), that a standing thread comes
-from a watcher (a skill with its `thread:` alias), how its steps grow from
-what is found, how notes and offered actions propose on it, when its surface `thread-<id>` takes the stage
+from a watcher (a skill with its `thread:` alias), how what follows grows from what is found, how
+notes and offered actions propose on it, when its surface `thread-<id>` takes the stage
 (« where does it stand », from the workspace: `workspace_focus`) and when it opens on the side
-(« launch », « while I… »), and that a wake turn updates the thread without asking the user.
+(« launch », « while I… »), that a wake turn updates the thread without asking the user, and how
+work in steps runs (« Un travail en étapes »: `node_open` with `steps` by a task, `node_settle` on
+the `[nœud …]` wakes).
 
-For the thread's surface: `threadMoved(id)` fires on every change (a step, the thread, its log, a
-linked card); it writes the thread's surface again and makes the attention queue's surfaces again.
+For the thread's surface: `threadMoved(id)` fires on every change (the thread, its log, a linked
+card); it writes the thread's surface again and makes the attention queue's surfaces again.
 
-- **The plan card** (card kind `thread`) is the user's approval of the steps as planned: they start
-  without asking again, their resources granted as on a clean start. A step added
-  later asks its own start card.
-- **One writer per scope**: two steps writing the same repository branch or folder never run at
-  once; the second waits.
-- **Handoff**: a task step's prompt gets the thread's goal, `done_when` and the outputs of the
-  steps it comes after (the agent's last message, or what the lead gave on accepting). An output
-  that may carry what someone else wrote (a tainted step, a task that read external content) taints
-  the task it is handed to, approved plan or not: it starts tainted, never as a clean start.
-- **Limits held by the code**: 20 unfinished steps at once (a light thread grows as the matter goes
-  and comes back: what it went through does not count), 200 over a thread's life; 2 retries per step (a retry answers the idle task with what to fix,
-  or starts a new one), 2 plan changes without asking (then a card), a budget of running time (60
-  minutes by default; past it the thread pauses, the running steps finish, and a card offers more
-  time). The brain never gives itself more time.
-- Each step's end reaches the lead as an event `[thread N « title »]`, instead of the task's own;
-  a thread complete or stuck is told once. `find_thread` and `read_thread` read them;
-  `stop_thread` stops the tasks and withdraws the cards. The engine's pass runs every 15 seconds
-  with the devices' check, over the active threads: deadlines, a led thread's budget, and steps
-  whose task ended while eriphe-core was down.
 - The end of any thread is the journal's `thread.ended` (key `thread:<id>`, its state).
-- Tables: `threads`, `thread_steps`, `thread_asks` (what a thread asks, one card each),
-  `thread_log`, `thread_cards` (the cards linked to a thread).
-
-**The thread's lead** is born when the user approves the plan (`lead-<id>`, « Chef du thread N »)
-and goes when the thread ends. Its trigger `thread:<id>` wakes it with what happened to its steps
-(`thread_inbox`), one turn at a time; its own tools are `thread`, `settle_step`,
-`amend_thread`, `close_thread`, `report` and the [workspace's tools](#the-assistants-workspace-tools-workspace_toolsgo).
-It does not write **its thread's surface**: code does ([below](#a-threads-surface-thread_surfacego));
-it may add its part to it (`lead-prompt.md`: a state block, points to see, a diff, a link), and
-writes no other surface. It never talks to the user nor starts a task. The
-brain no longer judges a thread that has a lead: it passes the user's words with `tell_lead`, and
-hears the lead's reports, the choices to ask, the budget's card and the end. A report may carry an
-[attention signal](#attention-signals-attention_signalgo) (`attention`, the same block as a skill's
-receipt): its items enter the attention queue with the source `assistant:lead-<id>`, and the tool's
-result lists what was `dropped`. A report with no item kept does not wake the brain: it is kept in the conversation as read, and the result says so.
-
-**The final objective check**: `close_thread` on a led thread with a `done_when` adds a last step,
-`final-check`, a fresh agent lent read-only what the steps wrote (their repository branches and
-folders) and given the goal and what each step produced; only its receipt with status `done` and no
-failed check closes the thread. Otherwise the lead hears what is missing; after 2 checks that fail,
-the decision goes back to the user through the brain.
+- Tables: `threads`, `thread_log`, `thread_cards` (the cards linked to a thread).
 
 **One drawing** (#574): a thread is shown by its surface on the workspace only, and acted on there
-([a thread's surface](#a-threads-surface-thread_surfacego)): its cards, « C'est fait », a
-choice's options, Pause, Resume and Stop, all code's buttons. A link to a thread (a card's origin,
-the tasks panel, a skill's run) opens its surface: `/espace?open=thread-<id>`, which the page opens once
-the surface is there. An ended thread whose surface has left is shown again first
-(`showThreadAgain`), for as long as one that just ended; not one put away, nor a `day` thread. The user's word to a lead is a message written with the thread open: the
-brain passes it on (`tell_lead`). The tasks panel of the conversation shows the threads open first.
+([a thread's surface](#a-threads-surface-thread_surfacego)): its cards and Stop, code's buttons. A
+link to a thread (a card's origin, the tasks panel, a skill's run) opens its surface:
+`/espace?open=thread-<id>`, which the page opens once the surface is there. An ended thread whose
+surface has left is shown again first (`showThreadAgain`), for as long as one that just ended; not
+one put away, nor a `day` thread. The tasks panel of the conversation shows the threads open first.
 
 #### A thread's surface (`thread_surface.go`)
 
-Every thread, light or led, has its live surface on the workspace, `thread-<id>`, written and kept
+Every thread has its live surface on the workspace, `thread-<id>`, written and kept
 by code from the thread's data (#468): it never depends on a model remembering to write it.
 
 - **Its author is `thread:<id>`**, code's for that thread (not `core`, the attention queue's):
@@ -1162,26 +1068,20 @@ by code from the thread's data (#468): it never depends on a model remembering t
   Code keeps only:
   1. **the head**: a child's **crumb** first, a Button with its parent's title (`/thread/parent`)
      that opens the parent's surface; a `Progress` (the state word in a pill, « À toi », « Urgent
-     », « En cours », « Terminé », coloured by its tone, and with steps a bar of them, done,
-     running, to come, « 2/5 »; none for a calm thread with no steps); the **state line**
+     », « En cours », « Terminé », coloured by its tone; none for a calm thread); the **state line**
      (`threadStateText`): its headline (below), with « extérieur » beside it when it may carry
      someone else's words, else what its items count (« 1 pour info · 2 rien à faire »), else its
-     state and who holds it when that says more (« En cours · mené par son chef »); then when its
-     items were last sorted (« trié à 9 h 12 », the last note's time); the controls (Pause or
-     Resume for a thread that runs steps, Stop); once it ended, an `Alert` saying how and when,
+     state when that says more; then when its
+     items were last sorted (« trié à 9 h 12 », the last note's time); the controls (Stop); once it ended, an `Alert` saying how and when,
      with where it stood (« Fait ✓ · 14 h 02 » and the summary, else its headline; never its
      goal), and **« Ranger »** beside it for a thread that ends on its goal, the only block that
      reads `ends`. The same words as the state line, but the time, are its chip's line (the page's
-     `summary`), else its steps' one line. A thread with nothing yet to show says « Rien pour
+     `summary`). A thread with nothing yet to show says « Rien pour
      l'instant. ». Its surface has no `why`;
-  2. **À toi** (active threads, only when something waits): every card, ask, choice and approval
-     that commits the user, each once: the thread's own cards (its plan, a change of it, more
-     time), the cards linked to it (a card raised for it, the card an action offered on one of its
-     items made, `item_cards.go`), each step's (an approval's card, a task step's held start, a
-     call's) as `Proposal` components bound to their refs, a choice to make (one Button per
-     option), and for a step the user does (kind `user`) a « C'est fait » button. What waits there
-     is in no other place of the surface: a step that waits is not in `/thread/steps`, a card that
-     waits on no row;
+  2. **À toi** (active threads, only when something waits): every card that commits the user, each
+     once: the cards linked to it (a card raised for it, a task's held start, the card an action
+     offered on one of its items made, `item_cards.go`) as `Proposal` components bound to their
+     refs. What waits there is in no other place of the surface: a card that waits on no row;
   3. **children** (`blockChildren`, a thread that has some): « Sous-fils », then one row each, an
      `Item` with its title, its status word (« À toi », « Urgent », « En cours », « À jour », or how
      it ended) and its one line, read from the child's own surface as code wrote it (an active
@@ -1196,30 +1096,25 @@ by code from the thread's data (#468): it never depends on a model remembering t
      first (`keepThreadSurface`);
   4. then **what is composed**: the holder's blocks in their order (below), or, while the holder
      has written none, the **default composition** (`thread_default.go`), the same for every
-     thread, drawn from the thread's data by the paths a block binds alike: its steps when it has
-     some (those done folded in one line, a `Fold` saying « 2 étapes faites · accord : Fusion »,
-     the last call whose card was approved, opened to see them as a `Timeline`; the others as a
-     `Timeline`; the cards decided on them, each a compact `Proposal`, one line opened by a
-     click), then each source's data, in the order the thread added them (below). The first
+     thread, drawn from the thread's data by the paths a block binds alike: each source's data, in
+     the order the thread added them (below). The code that drew steps there (a `Fold` of those
+     done, a `Timeline` of the others) is kept for the views on nodes (#631) and given none: a
+     thread has no steps since #630. The first
      block written takes its place; the last block removed brings it back.
 
   **The thread's data**, code's, under `/thread`, there with or without blocks for the default
   and the holder's blocks to bind (a block is checked against code's data as its surface shows
   it, `threadCodeData`):
-  - `/thread/steps`: `done` and `open`, `Timeline` items (a step's state, its time, its kind, its
-    checks and the last word on it; while the thread is active, a step that waits for the user is
-    not there: it is in « À toi »), `summary` (the line of the steps done, `""` with none),
-    `cards` (`{ref}`, the cards decided on its steps: a call's, with how its run went). What was
-    settled for a step's task (Eriphe's reply, its checks fixed, a release) is in the task's
-    node's trace ([a task's node](#a-tasks-node-task_nodego-task_nodesgo));
+  - `/thread/steps`: `done`, `open`, `summary` and `cards`, kept for the blocks that bind them and
+    always empty: the work's steps are nodes ([Work in steps](#work-in-steps-node_stepsgo)), shown
+    by the views on nodes (#631);
   - `/thread/items/<source>`: each source's data (below); once the thread ended, no longer read, the
     same keys empty (`endedItems`), so a block bound to them still holds;
   - `/thread/children`, `/thread/parent`, `/thread/marks` (below);
-  - `/thread/since`: facts made by code from the thread's data (a step started, done, failed or
-    handing in its work, what was settled for its task, the summary written again, the thread's
-    end), each a line with its time, since the user's visit before the last one, oldest first,
+  - `/thread/since`: facts made by code from the thread's data (it opened, the summary written again,
+    the thread's end), each a line with its time, since the user's visit before the last one, oldest first,
     the last 5 (« … et 2 plus tôt » before them); none before a first visit (all of the thread is
-    new then). Never the log's lines (French only, and they may quote a lead). A visit is the
+    new then). Never the log's lines (French only). A visit is the
     page's `open` action on the surface: `seen` takes the last visit, `visited` is now, so the
     visit that opens it still shows what was new; opened again within 5 minutes, the same visit.
     Times are absolute (« 14 h 32 », « 13 nov. 9 h 05 »): the surface is written again only when
@@ -1274,16 +1169,16 @@ by code from the thread's data (#468): it never depends on a model remembering t
     them, in the default composition and in a holder's block alike (`offerOf`). All bound by
     paths: a read again changes the data, not the components.
 - **Notes on items** (#571, `thread_items.go`, table `thread_items`): the brain (`note_item`, with
-  the thread, its turn's by default) and a thread's lead (`note_item`, its own) note one item a source lists, by the
+  the thread, its turn's by default) notes one item a source lists, by the
   source's name and the item's id: a short note (300 characters), a state (`act`, `look`, `info`,
   `none`, `done`) and a due date; the same item noted again replaces it, nothing at all takes it
-  away; 500 a thread. Its `author` (`brain`, `lead:<id>`) and `tainted` (the brain turn's taint,
-  the lead session's) are code's, never given. Code joins it to its item's row (`note`, `state`,
+  away; 500 a thread. Its `author` (`brain`) and `tainted` (the brain turn's taint) are code's,
+  never given. Code joins it to its item's row (`note`, `state`,
   `due`, `by`, `level`: `high` for `act`, `low` for `info`, `none`, `done`; `mark` « extérieur »
   for a tainted one, on its row only, which taints the surface for the models,
   `note:<source>/<item>`). A tainted note is shown, never quoted into a summary: it is in no
   summary, fact, one-line summary or message code writes, and reading it (`read_thread`'s
-  `notes`, the lead's `thread`) taints the reader, so `remember` kind `progress` is then refused
+  `notes`) taints the reader, so `remember` kind `progress` is then refused
   (`errProgressTainted`). No item row carries an action, so a tainted note's never asks. A note
   stays while its item is listed; once a good read no longer lists it (never a failed or refused
   one; every item the source lists counts, beyond the 200 shown), or its source is taken away,
@@ -1304,16 +1199,12 @@ by code from the thread's data (#468): it never depends on a model remembering t
   not trusted says « extérieur » on its caption and makes the surface tainted for the models
   (`monitor:<name>`), its Proposals still answer in place. Nothing wakes the brain: a skill reacts
   to the monitor's events as before.
-- **Rewritten at each change** of the thread: the store's `setThread`, `setStep`, `insertSteps`,
-  a card asked, decided or withdrawn call `keepThreadSurface`, which writes only when what the
+- **Rewritten at each change** of the thread: the store's `setThread`, a card asked, decided or
+  withdrawn call `keepThreadSurface`, which writes only when what the
   surface shows changed (a hash of it, `thread_shown:<id>`); the engine's tick gives an active
-  thread that has none its surface (a surface another author wrote at its id goes). Steps are
-  shown through a generic list (`threadSurfaceStep`: key, label, kind, state, time, card ref,
-  checks, note, external, waits, yours: while its card, choice or doing waits it is in « À toi »;
-  a call's card stays after in `/thread/steps/cards` with how its run went; a card gone is not
-  shown), so
-  a new kind of step plugs in by its mapping (`threadSurfaceSteps`).
-- **The holder's part** (#610, `thread_part.go`): who holds the thread (the brain, or its lead)
+  thread that has none its surface (a surface another author wrote at its id goes). The generic
+  list of steps (`threadSurfaceStep`) stays, given none (#631).
+- **The holder's part** (#610, `thread_part.go`): who holds the thread (the brain)
   composes it by **named blocks**: a state, points to see, a diff (`Code`), a `Link`, each its
   block. `surface_write` with `block` adds that block, or replaces it alone where it stands;
   `surface_remove` with `block` takes it away; without a block nothing is written or removed:
@@ -1336,7 +1227,7 @@ by code from the thread's data (#468): it never depends on a model remembering t
   that still fails. A part written whole by an older eriphe-core is dropped at start, with the
   sources it gave: its holder writes it again, by blocks.
 - **The user's marks** (#610, `thread_marks.go`, table `thread_marks`): keep, drop or done on
-  something a thread shows (an option, a lead, a line of a checklist), recorded by code in the
+  something a thread shows (an option, a candidate, a line of a checklist), recorded by code in the
   thread's data, never in the composed part: a holder's block places a `Mark` (its `list` and
   `item`, ids written or bound to a row's id, and the `marks` it offers: `keep` and `drop`, or
   `done` alone, a box to check), which sends the closed action `mark` (`{"list", "item",
@@ -1350,10 +1241,10 @@ by code from the thread's data (#468): it never depends on a model remembering t
   all. The page cannot say one as a gesture (`/api/espace/gesture` refuses those names). A mark
   set on a tainted surface is **external** (`thread_marks.external`): no charset tells an id from
   someone else's words, so it is kept and served, but its gesture does not quote its list and item
-  (« élément extérieur, non cité »), and `read_thread` (the lead's `thread`, a task's) taints its
+  (« élément extérieur, non cité »), and `read_thread` (a task's too) taints its
   reader (`mark:<list>/<item>`), as a tainted note does.
 - **Taint, per part**: « extérieur » shows only beside what may carry someone else's words, never
-  alone: a step whose task read external content in its detail, a row on its `Item`, a monitor on
+  alone: a row on its `Item`, a monitor on
   its caption, a child on its row, the headline in the state line, a block beside it (a block
   written after reading external content may not hold a `Proposal`, its media dropped as for any
   tainted author). For the models that read the workspace the surface
@@ -1361,27 +1252,17 @@ by code from the thread's data (#468): it never depends on a model remembering t
   answer in place (`look.answers`, the page's `extensions.eriphe.answers`), as the attention
   queue's do: code bound each to one of the thread's own cards, unless the thread itself is
   tainted, which the surface then says, and its cards are answered in the conversation.
-- **Small**: a one-line summary (`look.summary`, the page's `extensions.eriphe.summary`): the last
-  step done, then what waits (« Fusion ✓ · Déploiement à toi »), the state when nothing moves,
+- **Small**: a one-line summary (`look.summary`, the page's `extensions.eriphe.summary`): what
+  waits, the state when nothing moves,
   « Fait ✓ » once done. A small tile (`s`) shows that line rather than a slice of the surface, a
   chip shows it beside its title.
 - **Lifetime**: `while: thread:<id>`; once done or dropped, rewritten with `until` the end of its
   day in the user's zone (an hour at least), then it leaves and never comes back unless the thread
   is reopened. Weight 50, 70 while something waits for the user (80 while one of its cards does:
   they leave the attention queue for it), 30 once ended.
-- **« C'est fait »** sends `stepDone` with `{"thread": <id>, "step": "<key>"}`
-  ([the actions of a surface](#the-actions-of-a-surface)); code checks it against the button it
-  wrote, then `settleUserStep` settles the step through `userStepDone` (`thread_steps.go`); 409
-  for a step that no longer waits.
-- **A choice** that waits shows one button per option, each sending `choose` with
-  `{"thread": <id>, "step": "<key>", "option": "<option>"}`; code checks it against the button it
-  wrote (`chooseOf`: the step still waits, the option is one of its own), then `chooseStep`.
-- **Pause, Resume, Stop** (`thread_controls`), in the head of an active thread: `control` with
-  `{"thread": <id>, "do": "pause"|"resume"|"stop"}`, checked against the button (`controlOf`),
-  then `pauseThread`, `resumeThread` (by the user: more time when its budget held it, « Donner plus
-  de temps ») or `stopThread`. Stop is on every thread `stopThread` takes (a light one is dropped);
-  Pause and Resume only on a thread that runs steps (led). A standing thread has none: it never
-  ends.
+- **Stop** (`thread_controls`), in the head of an active thread: `control` with
+  `{"thread": <id>, "do": "stop"}`, checked against the button (`controlOf`), then `stopThread`.
+  A standing thread has none: it never ends.
 - **« Ranger »** (`thread_tidy`), on an ended `goal` thread's surface only, sends `tidy` with
   `{"thread": <id>}`; code checks it against the button it wrote (`tidyOf`), then `tidyThread`
   puts the thread away: its surface leaves at once (a day thread's leaves at its end, a standing
@@ -1398,7 +1279,7 @@ body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
 - **Each block checked alone**, like a thread's part block: the catalog (`a2ui`), its links, and its
   bindings against its own data, its sources (`/<name>`) and the user's marks (`/marks/<list>/<item>`).
   A bad block is a `BlockError` that names it.
-- **Code's fields** (a block's `snapshot`, `marks` and `external`, the node's `external`) are set by
+- **Code's fields** (a block's `snapshot`, `marks` and `external`, the node's `after` and `external`) are set by
   code (`SetMark`, `SetSnapshot`, `SetBlockExternal`, `Meta.External`). An author's write goes
   through `ParseAuthor`, `AuthorBody` or `PutAuthorBlock`: left out, they are kept from the version
   written over; written otherwise, the write is refused (`ErrCodeField`). Authors may give a block
@@ -1477,7 +1358,7 @@ permission), `idle` (its turn ended), `done` (it ended).
   (the whole body), `node_edit` (one block, or a piece of text found once) and `node_append` work
   on **its own node only**: another id is refused, naming the task's node. Each write names the
   hash of the version it was made on (`expect`; `node_append` writes over nothing). `node_open`
-  opens a child of its node (title, goal, body), which it does not write. `item_note` notes an item
+  opens a child of its node (title, goal, body), which it does not write; with `steps`, its work cut in steps ([below](#work-in-steps-node_stepsgo)). `item_note` notes an item
   a source of its node lists. `progress` adds one line to its trace. It never starts a task.
 - **Who writes** is code's: `skill:<name>` for a skill's run, `task:<id>` for another. Its calls
   to `eriphe-nodes` never taint it: what it reads there taints by its own record. A node whose
@@ -1497,9 +1378,58 @@ permission), `idle` (its turn ended), `done` (it ended).
   filed once; a tainted task's report marks its node external. A report refused (a secret) or that cannot be the
   doc is said to the brain, which reads it whole with `task_status`.
 - **The brain is woken short**: the task's title, its receipt's verdict (status, checks passed or
-  failed, what waits for approval), the report's first line, and its node. A thread's step tells
-  its lead the same way; the step keeps its output whole. What Eriphe or the user settles for a task
-  (`answer_task`, a release's card) is a line of its node's trace.
+  failed, what waits for approval), the report's first line, and its node. A step's task does not
+  wake it: the engine judges it ([below](#work-in-steps-node_stepsgo)). What Eriphe or the user
+  settles for a task (`answer_task`, a release's card) is a line of its node's trace.
+
+## Work in steps (`node_steps.go`)
+
+A piece of work cut in steps is a node whose children are the steps (#630). A task opens them
+with `node_open` and `steps` (each a `key`, a `title`, the `after` keys it needs, a `prompt`, and,
+as `run_task`'s, an `agent`, `resources`, a `contract`, a `device`), with the work's
+`budget_minutes` (60 by default, a day at most). The plan is checked before any node is made:
+keys unique, what each comes `after` a step of the plan or of the work, no cycle, 20 unfinished
+steps at once and 200 over the work's life, and each step's task as `run_task` would refuse it.
+Each step is a child node of the work's node, its `after` written by code in its front matter
+([docs/node-format.md](../docs/node-format.md)), never changed by an author.
+
+The **engine** is code, without a model:
+
+- It starts every step whose predecessors are accepted, in parallel when they may: never two that
+  write the same repository branch or folder (the second waits). Each step's task works in the
+  step's node (`runRequest.inNode`), given the work's goal and the results of the steps it comes
+  after (2000 characters each); what those may carry of someone else's words taints it.
+- It **accepts a proven step on its own** (`proven`): its receipt says done, no check of its
+  contract failed, nothing it claims is denied by what the device saw. The step's node is done,
+  its result kept, the decision a line of the work's trace, and the next steps start. No brain turn.
+- The brain is **woken only for an exception**, once, by an event `[nœud <id> « title »] …`
+  (`wakeForWork`): a failed proof (`failed`), a blocked step (its task could not start, failed,
+  stopped or was lost), the budget spent (the work is `held`: nothing new starts, the running steps
+  finish), the final check not holding. It decides with **`node_settle`** `{id, step?, outcome,
+  note}`: on a step, `accept` (a failed proof whose work holds; never failed checks), `retry`
+  with what to fix (2 at most: it answers the idle task, or starts a new one), `drop` (with the
+  steps that come after it), `replan` (drop them, the work waits for new steps); on the work, no
+  step, `accept` gives it half its budget more (30 minutes at least) or holds it done after a
+  final check that fails, `retry` runs the final check again (2 at most), `drop` stops it.
+- Once every step is accepted or dropped, a **final check**: a fresh agent in a child node of the
+  work (« Contrôle de l'objectif »), lent read-only what the steps wrote, given the goal and each
+  step's result. Its receipt done with no failed check makes the work done; its verdict goes into
+  the work's trace.
+- **Restart**: what the engine knows is in core.db (`node_steps`: node, parent, after, spec,
+  status, task, tries, output, opener, taint, skill, clean, times; `node_works`: state, held,
+  budget, time spent, final check), never read back from a node's file. The tick
+  (`stepsTick`, every 15 seconds with the devices' check) picks up a task that ended, or turned idle
+  with its receipt, while eriphe-core was down, then starts what may start.
+
+**Start cards** follow the rights unchanged: a step starts as a task the brain starts, its cards
+asked at launch, tainted by its opener's taint and by what the steps before it handed it. One
+bounded addition: a step opened by a **skill's run** (or by a step of one) borrows only what the
+skill declares: its trigger's `tools` and its `repos:` (front matter, approved with the skill). It
+starts **clean**, its Free writes holding without a card (`cleanStart`, lent by the user), only
+when the run was clean (no external event, no external content read), its opener was not tainted,
+it borrows nothing the skill does not declare, and nothing external was handed to it. Anything
+else (an external event, external content read, an undeclared repository) asks its start card as
+any task's.
 
 ## Permission policy
 
@@ -1646,8 +1576,8 @@ is allowed once, a start starts the task. A task's card is shown:
 3. **at the first call** of a category not granted yet; the calls that wait on it are answered with it.
 
 A card at the first call or on release has a message of its own, the question, which notifies as
-any question does; so has a start's card when the brain did not launch the task (a thread's step).
-These cards, a start's and a led thread's go to
+any question does; so has a start's card when the brain did not launch the task (a step of a work, a skill's run).
+These cards and a start's go to
 the channels the user writes from as well (Telegram), whatever the messages around them did,
 answered from the linked account only ("Alerts only" sends none): that account is the user, a
 trusted channel, so its buttons answer as the workspace's. A task's raw permission (a rule's `ask`,
@@ -1962,6 +1892,7 @@ turn is not tainted. Its front matter:
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
 | `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
+| `repos` | the repositories its runs' steps may borrow, `owner/name`, by commas or a list (10 at most): a clean run's step on them starts without a card ([Work in steps](#work-in-steps-node_stepsgo)); a run itself is not lent them |
 | `thread` | its thread's alias, `kind:slug` (`topic:mails`); without it, its events' key when it names a thing (`topic:<monitor>`) |
 | `title` | its thread's name for the user, 60 characters at most (`title: Mes mails`); without it, its name made a title (`mails-pro` → « Mails pro »). A new version's title renames its thread, the one already open too |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
@@ -2047,7 +1978,7 @@ version, read with its diff.
   words are never a run's: a skill's run's says the label its skill's approved version declares
   for that action (`actions:`, tool and arguments matched), tainted note or not; any other action
   of a task says the tool's own words (`toolWords`: its title from its server, else `callVerb`).
-  The brain's and a lead's say their label, but for a tainted note: the tool's words. Its card
+  The brain's say their label, but for a tainted note: the tool's words. Its card
   keeps the note's taint.
 - **Its alias**: its runs are about `thread: kind:slug`; without it, their events' key when it
   names a thing (a monitor's, `topic:<name>`, or `kind:slug`; about.go). Their tasks,
@@ -2193,16 +2124,16 @@ item, so a skill follows the mail with `when: monitor.new key=mails`. The calend
   looks saw, its next look).
 
 The test case: `getout-prod` calls Grafana's alert rules every 2 minutes with `path`
-`data.rules[state=firing].name`; a skill `when: monitor.changed key=getout-prod` investigates and
-opens a led thread. Nothing runs a model while nothing fires, and nothing reaches Eriphe from
+`data.rules[state=firing].name`; a skill `when: monitor.changed key=getout-prod` investigates in its node,
+cutting its work in steps when it needs several. Nothing runs a model while nothing fires, and nothing reaches Eriphe from
 outside: the call goes out from eriphe-core to the tool.
 
 ## Assistants
 
 An assistant is a long-lived agent that owns one task, as a Kubernetes Deployment owns its Pod.
-Two are built in, and there are no others: **the brain** (`eriphe`, role `brain`: the only voice
-and the only orchestrator, see [The brain](#the-brain)) and each led thread's **lead** (role
-`lead`, see the threads). What used to be a specialist assistant (role `assistant`, with a typed
+One is built in, and there are no others: **the brain** (`eriphe`, role `brain`: the only voice
+and the only orchestrator, see [The brain](#the-brain)). Work of several steps has no assistant
+of its own: code runs its steps ([Work in steps](#work-in-steps-node_stepsgo)). What used to be a specialist assistant (role `assistant`, with a typed
 state, views, lent facts and a team page) is a [triggered skill](#triggered-skills) now: a task in
 the background, started by an event or a time, that tells the user with its last message.
 
@@ -2211,18 +2142,16 @@ their task:
 
 | Spec | |
 |---|---|
-| `role` | `brain` or `lead`, with the powers it allows |
+| `role` | `brain`, with the powers it allows |
 | `display_name` | what the user calls the brain, as a person (see [its name](#the-assistants-name)); Eriphe by default |
 | `agent`, `device` | what it runs on; without an agent, the default one or the first that can run it |
 | `instructions` | its standing instructions (`{{user}}` and `{{name}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
 | `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
-| `powers` | what it may do, within its role's: `talksToUser`, `receivesConversation`, `launchesTasks`, `lendsResources` (the brain's), `reports` (the lead's) |
+| `powers` | what it may do, within its role's: `talksToUser`, `receivesConversation`, `launchesTasks`, `lendsResources`, `notifies` (the brain's) |
 | `triggers` | the brain's: `conversation` (the user's messages and the tasks' events) and `clock` (an intention that comes due: the wake packet, see [Memory](#memory)) |
 | `disabled` | its task is stopped, and none started |
 | `self_url` | the file only (see the brain) |
 
-The lead's own tools (`report`, and its role's) are an MCP server of its own, under
-eriphe-core's name, relayed by its device (`assistant_own_tools.go`): it holds no token.
 
 ### The assistant's name
 
@@ -3099,8 +3028,7 @@ turn that said nothing) are queued and enter the attention queue at their card's
 (`cardWeight`: one a task or a thread waits on 4; a skill, a monitor or a run's calls 3; a
 reminder 2; a memory, a rule, a setting or an undo 1; `attendQueuedCards` each minute on the
 journal's timer); the queue delivers them like anything else that goes to the user. A card made
-outside a brain turn (the start of a task the brain did not launch, such as a thread's step; what
-a thread asks: its plan when a skill opened it, an approval step, a change of plan or more time;
+outside a brain turn (the start of a task the brain did not launch, such as a step of a work;
 a skill run's calls when its message is held or not sent; an access asked at a task's call)
 enters the queue with the message eriphe-core will write for it (`cardNow`); the brain is not
 woken for it, and nothing it does waits on it.
@@ -3270,7 +3198,7 @@ it, that is the workspace opening (`/espace/boot`), the language switch in Setti
 settings or a channel's link code; before any, `web.lang`, else French. The fixed texts use it (the
 workspace queue's surfaces, the bot channels' messages), and so do the models' lines: a skill run's
 and a task's final message (`skillVoice`, `workerVoice` name it), and a `[langue de l'utilisateur : …]` line at the head of each turn of
-the brain, the assistants and a thread's lead, for their notifications, cards, surfaces and
+the brain and the assistants, for their notifications, cards, surfaces and
 summaries (the brain answers a message in the language it is written in). The fields of the tools
 the user reads (`notify`'s text and why, a rule's or a setting's why, an intention, attention's why
 and say, a thread's summary) ask for "the user's language". What only the models read (their
@@ -3394,7 +3322,7 @@ most, the rest folded.
 What relates is found by code from what every surface declares, never from a tool's name
 (`surfaceRelations`, 6 at most, the closest first): the same source (a tool with the same
 arguments, or the same resource), the same ref it lives with (its `while`, or what its author
-stands for: a lead its thread, a task itself and the thread it is a step of, a skill itself),
+stands for: a task itself and the thread it is about, a skill itself),
 a day (a `Day` component on a date the open surface carries, or the reverse), then the same
 server. Back, closing it, its removal or its 15 minutes passing lay the workspace out again in
 its order. The tiles a focus folds or gives back are not gestures `ignored` on the page.
@@ -3606,8 +3534,8 @@ from before it belong to the home).
   thread; the home for anything else. The thread the turn names later (a tool on another thread)
   is for its cards only. A failure of the turn (the error line) and the note that asks it again for
   a tool call written as text belong there too; a heartbeat's answer and a failure to start, to the
-  home. An event of a thread (a step moved, a card linked to it decided, its lead's report, a task
-  step's start declined or access decided) belongs to it; the catalog's, a machine's and the
+  home. An event of a thread (a card linked to it decided, a task's start declined or access decided)
+  belongs to it; the catalog's, a machine's and the
   brain's own notes and notifications to the home.
 - **The exchange goes with what Eriphe puts on stage.** When the brain answers with
   `workspace_focus` on a thread, the turn's messages (the user's it answers, what it said since)
@@ -3909,7 +3837,7 @@ A surface is one tile of the workspace, and code writes every one (#574): its **
 `thread:<id>` for [a thread's](#a-threads-surface-thread_surfacego) (`thread-<id>`) or `core` for
 [the attention queue's](#the-layout-workspace_layoutgo) (`q-…`); `writeSurface` refuses any other
 author or id (`codeSurfaceOf`), and at start code removes any surface another author wrote
-before (`dropFreeSurfaces`). No assistant, lead, task or skill writes a tile of its own: who
+before (`dropFreeSurfaces`). No assistant, task or skill writes a tile of its own: who
 holds a thread adds [its part](#a-threads-surface-thread_surfacego) to the thread's surface. A
 surface has a title, A2UI components, data, **sources**, a refresh, a **lifetime**, a weight (1
 to 100) and a why; code keeps its data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
@@ -3976,7 +3904,7 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
   without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
   `nosniff`, a sandbox CSP and 10 minutes of private cache.
 - **Captured pages** (`surfaces_capture.go`, #470): most sites refuse being framed, so a task
-  step of a thread, lent `eriphe-workspace`, shows a page as an image.
+  about a thread, lent `eriphe-workspace`, shows a page as an image.
   `eriphe-capture <url> thread-<id>` (worker/base) captures it in the task's container and posts
   the PNG to its device (`ERIPHE_MEDIA_URL`, task secret), which relays it to
   `POST /v1/device/tasks/{id}/media?surface=thread-<id>` (device secret). eriphe-core checks the task
@@ -4045,10 +3973,8 @@ writes.
 | `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does; a thread's, unless the thread itself is tainted or the Proposal is in a part written after reading external content), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
 | `mark` | never by an author: only the Mark component sends it, `{"list": "<id>", "item": "<id>", "mark": "keep"\|"drop"\|"done"\|""}` (the thread is the surface's), a mark it offers, or `""` when the user takes theirs away; the holder of a thread places a Mark in a block of its part, `list` and `item` literal ids or bound to the data (a row's id); allowed after reading external content (ids only) | checked against the clicked Mark of the thread's own surface (`markOf`): a mark it offers or `""`, `list` and `item` the literals or values its binding takes in the surface's data, each an id (`a2ui.MarkIDOK`: letters, digits, `_.:@=+-`, 128 at most, no `/`), the thread active; then recorded (`setMark`), a gesture for the brain's next turn, no turn of its own |
 | `offer` | never by an author: only the Offers component sends it, one of the offers code put in the thread's data (`/thread/items`), `{"thread": <id>, "source": "<name>", "item": "<id>"\|"state": "<state>", "offer": "<key>"}`, never its words | checked against the clicked Offers of the thread's own surface (`offerOf`): bound under `/thread/items`, the offer one its binding takes in the stored data; then the note is read again from the store (`offerCalls`) and a calls card is made: nothing runs |
-| `stepDone` | never by an author: code places it on a thread's surface, the « C'est fait » of a step the user does, `{"thread": <id>, "step": "<key>"}` | checked against the Button code wrote there (its thread and step), for a step of kind `user` that waits; then `settleUserStep`, the engine's `userStepDone` (409 once it no longer waits) |
 | `tidy` | never by an author: code places it on an ended thread's surface, its « Ranger », `{"thread": <id>}` | checked against the Button code wrote there (its thread); then `tidyThread`: the surface leaves, the thread is kept (409 once put away) |
-| `choose` | never by an author: code places it on a thread's surface, one Button per option of a choice step that waits, `{"thread": <id>, "step": "<key>", "option": "<option>"}` | checked against the Button code wrote there (its whole context), for a choice step that still waits and one of its own options; then `chooseStep` |
-| `control` | never by an author: code places it in the head of an active thread (Stop; Pause and Resume on one that runs steps), `{"thread": <id>, "do": "pause"\|"resume"\|"stop"}` | checked against the Button code wrote there (its whole context); then `pauseThread`, `resumeThread` (by the user) or `stopThread` |
+| `control` | never by an author: code places it in the head of an active thread (Stop), `{"thread": <id>, "do": "stop"}` | checked against the Button code wrote there (its whole context); then `stopThread` |
 | local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs. Code alone places an `open` that names another surface, `{"surface": "<id>"}`, on a thread's surface (a child's row, a child's crumb to its parent) | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer. An `open` that names another surface is not sent as is: the page opens that surface, as it opens a tile (`opensSurface`, `place("open", <id>)`), the one it came from as where it opens when it is not laid out |
 
 Anything else (another name, a function call, a component that carries no such action, an answer
@@ -4109,8 +4035,7 @@ never a tile of its own. Five tools; the **author is the caller**, never a field
   away (`endDays`, `dropThreadPart`): reopened the next day, the brain writes it again. A
   recurring request is a skill, whose runs write in their nodes and write no surface.
 - **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint; it
-  holds every light thread. A thread's lead, on its own tools (`registerLeadTools`), as
-  `lead:<thread>`, for its thread. A task through **`eriphe-workspace`, a server Eriphe
+  holds every thread. A task through **`eriphe-workspace`, a server Eriphe
   provides**: lent like any catalog server (`{kind: tool, ref: eriphe-workspace}` or
   `eriphe-workspace.<tool>` in `run_task`'s resources, never in a skill's `tools`), checked by
   `checkGrant`, listed by `list_tools` under `provided`, put in the task's spec by `specServers`
@@ -4180,7 +4105,7 @@ only when the CLI does.
 **Who keeps which surface** (`surface_authors.go`, #423). Nothing is recurring by default.
 
 - **A thread's surface is code's** ([a thread's surface](#a-threads-surface-thread_surfacego)):
-  who holds the thread (the brain, or its lead) adds its part to it.
+  who holds the thread (the brain) adds its part to it.
 - **A skill writes no surface**: each run writes in its node ([Triggered skills](#triggered-skills)).
 - **The brain** writes what the user asks; asked for something that comes back (« chaque matin »),
   it writes a skill.
@@ -4836,9 +4761,9 @@ intentions (memory.db) carry an `about` column next to their ref (which record: 
   merged into another names that one (`thread:7` → `thread:9`). `resolveAbout` follows it;
   `noteAbout` notes a key written. A record written about a key is kept about its target: what is
   written about `project:site` once a thread has that alias is about the thread.
-- **One thread an alias**, whoever opens it (the brain, a lead, code):
+- **One thread an alias**, whoever opens it (the brain, code):
   `openThread` refuses a key another thread has, ended or not; `openThreadOnce` gives that thread
-  back (reopened light, « même chose », if it ended) and refuses a led open on it. A key that
+  back (reopened, « même chose », if it ended). A key that
   names a person, the user, the home or Eriphe's own topics is no alias.
 - **Giving an alias rekeys**: when a thread takes a key (at its opening, or with `name_thread`),
   every record about the key moves to the thread: core.db's tables, the names, the topic rules
@@ -4869,16 +4794,15 @@ intentions (memory.db) carry an `about` column next to their ref (which record: 
   it is now: the session's cards are kept by hash (`AssistantStatus.Cards`, like the profile), set
   to the pack's on a fresh session and to the cards given since. To a fresh session's context
   pack, one per open thread. To a worker task's first prompt, after what it is asked (its shown
-  prompt unchanged), and a thread lead's first turn. A brain on a self-hosted model gets
+  prompt unchanged). A brain on a self-hosted model gets
   600-character cards. Each card pushed is logged: `card <about> → <place> [<task id or thread>]:
   <chars>, <lines>, <left out>`.
 - **Cards measured** (`card_use.go`): each card pushed is counted in `card_pushes` (about, place:
-  `turn`, `pack`, `task`, `lead`; size; the brain's turn; the task or the lead's thread) and
-  judged once its window is over (30 minutes for the brain, 2 hours for a task or a lead), with a
+  `turn`, `pack`, `task`; size; the brain's turn; the task) and
+  judged once its window is over (30 minutes for the brain, 2 hours for a task), with a
   proxy said as it is: **wrote** when the model it went to wrote or changed a record about it in
   the window (the brain: a memory, an intention or a line of the thread written by `brain`; a
-  task: a memory its `remember` wrote, `task:<id>`, or the thread's summary noted by a task; a
-  lead: a line a lead wrote in the thread, nearly always so); else **answered** when it was the
+  task: a memory its `remember` wrote, `task:<id>`, or the thread's summary noted by a task); else **answered** when it was the
   card of what the turn is about (the turn's, or that one of a pack delivered with the turn) and
   the turn's answer, the first message after it, is the brain's, without asking for it again in
   the turn (`recall` about it or naming it, `read_thread` of it); else **no**. A pack's other
@@ -4891,8 +4815,8 @@ intentions (memory.db) carry an `about` column next to their ref (which record: 
     replacement, which keeps the one it replaces; never a profile, a preference, a person, a lesson
     or a situation), `intend`, `run_task`, a new surface (`surface_write`: one written again keeps
     its about unless one is given), a card it proposes;
-  - **a maker** (`sourceAbout`): a thread or a lead (`thread:`, `lead:`) gives its thread, a task
-    (`task:`) its about: a thread's step task and its lead's task, notifications and signals take
+  - **a maker** (`sourceAbout`): a thread (`thread:`) gives its thread, a task (`task:`) its
+    about: a task about a thread, notifications and signals take
     the thread, a card raised by a task or a thread its maker's, an attention item its source's (an
     offered card's, its card's), a surface its author's;
   - **a card** takes its proposal's first (a memory's, an intention's, a thread's, a skill run's);
@@ -4946,7 +4870,7 @@ episodes); what the brain needs to act is compiled from it in facts, lessons, **
 choice and its reason, superseded when reversed; closing a thread writes one). Where a project,
 client job or goal stands is not a memory: `remember` kind `progress` (a `state` `active`,
 `blocked`, `done` or `paused`, and a text saying what is done, under way, blocked and left)
-writes the summary of its thread (see [Threads](#threads-threadsgo-thread_enginego)).
+writes the summary of its thread (see [Threads](#threads-threadsgo-thread_lightgo)).
 
 **En ce moment** (`situations.go`). A `situation` is where the user is or what they do for a
 while (« en vacances à Lyon jusqu'à dimanche »): about `owner` by default, and a `valid_to`,

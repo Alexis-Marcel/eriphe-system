@@ -61,7 +61,7 @@ var errNoProgressThread = errors.New("where a matter stands is its thread's summ
 
 // progressThread is the thread a progress is written on: the thread it
 // is about (thread:<id>, or an alias), else the one given (the turn's, the
-// task's step's). An ended thread is refused (reopen it first), and so is
+// task's about). An ended thread is refused (reopen it first), and so is
 // none at all: code never opens a thread for a progress.
 func (c *core) progressThread(about string, given int64) (int64, error) {
 	if about != "" {

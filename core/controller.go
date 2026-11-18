@@ -181,7 +181,7 @@ func (c *core) checkDevices(ctx context.Context) {
 	c.autoUpdates(time.Now())
 	c.replaceStranded()               // placement.go
 	c.harnessTick(time.Now())         // retries due, time budgets (task_retry.go)
-	c.threadsTick(time.Now())         // the threads' engine (thread_engine.go)
+	c.threadsTick(time.Now())         // the threads and the steps (thread_light.go, node_steps.go)
 	c.judgeCardPushes(time.Now())     // how the cards pushed were used (card_use.go)
 	c.placeServices()                 // also when no device answers: a device gone too long loses its services
 	c.connectionTick(ctx, time.Now()) // the connections' tokens, now and then (connections.go)

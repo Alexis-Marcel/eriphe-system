@@ -9,7 +9,7 @@ import (
 // thread tool called on it, or the event of one of its steps delivered)
 // is about that thread until it names another: what it raises then for
 // the user (the card of one of its own calls, a task's start) is the
-// thread's, and shows in its timeline (linkCard, thread_steps.go). Two
+// thread's, and shows in its timeline (linkCard, thread_light.go). Two
 // threads in one turn (« pendant que je relis la PR, cherche… »): the
 // last one named.
 

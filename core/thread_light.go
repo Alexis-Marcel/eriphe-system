@@ -73,21 +73,6 @@ func (c *core) openThread(in threadIn, taint []string, by string) (Thread, error
 	return c.thread(id)
 }
 
-// tellBrain tells the brain, as an event of the conversation: what the
-// user must hear or answer.
-func (c *core) tellBrain(s Thread, text string, taint []string) {
-	line := fmt.Sprintf("[thread %d « %s »] %s", s.ID, s.Title, text)
-	seq, err := c.store.addThreadMessage(roleEvent, line, "", s.ID, true) // its turn is about the thread (thread_turn.go)
-	if err != nil {
-		return
-	}
-	if len(taint) > 0 {
-		c.store.set(taintKey(int(seq)), strings.Join(taint, ", "))
-	}
-	c.store.undeliver(int(seq), int(seq))
-	c.ping()
-}
-
 // stopThread stops a thread: it is dropped, its active children with it.
 func (c *core) stopThread(ctx context.Context, id int64, by string) error {
 	threadMu.Lock()

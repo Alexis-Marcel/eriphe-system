@@ -155,7 +155,7 @@ func TestThreadMessageLeads(t *testing.T) {
 // shows where the answer would have.
 func TestThreadEventTalk(t *testing.T) {
 	c, _, _, th := talkCore(t)
-	c.tellBrain(th, "étape check → done", nil)
+	c.store.addThreadMessage(roleEvent, "[thread 1 « x »] carte acceptée", "", th.ID, true) // as callToBrain writes it
 	ev := lastMessage(t, c, roleEvent)
 	if ev.Thread != th.ID {
 		t.Fatalf("the thread's event belongs to %d", ev.Thread)
