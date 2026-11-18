@@ -240,7 +240,7 @@ func (c *core) aboutPendingCards(key string) cardSection {
 // asked: to the brain's turn when its thread's card is not the one its
 // session holds (AssistantStatus.Cards, by hash, like the profile), to a
 // fresh session's context pack (the open threads, brain_context.go), to a
-// worker task's first prompt and a thread lead's first turn. Each card
+// worker task's first prompt. Each card
 // pushed is logged (what it is about, its size and where) and counted
 // (card_use.go).
 
@@ -292,8 +292,8 @@ func (c *core) turnCard(held map[string]string) (pushedCard, bool) {
 	return x, true
 }
 
-// startCard is the card a task or a lead starts with, for its thread; ""
-// without one. place and who (the task's id, the lead's thread) are where
+// startCard is the card a task starts with, for its thread; "" without
+// one. place and who (the task's id) are where
 // it is counted (card_use.go).
 func (c *core) startCard(key, place, who string) string {
 	if key == "" {

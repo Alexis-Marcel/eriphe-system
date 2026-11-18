@@ -230,7 +230,7 @@ func (c *core) setThread(id int64, fields map[string]any) error {
 // ThreadLine is a line of a thread's log: what happened, and who did it.
 type ThreadLine struct {
 	At   time.Time `json:"at"`
-	Who  string    `json:"who"` // engine, lead, user, brain
+	Who  string    `json:"who"` // engine (code), user, brain
 	Text string    `json:"text"`
 }
 

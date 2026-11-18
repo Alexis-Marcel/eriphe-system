@@ -129,7 +129,7 @@ func TestThreadItemNotes(t *testing.T) {
 // ask (an action offered on it is a Button whose click only makes a card,
 // item_offers.go); reading it taints the brain's turn, so where the subject stands
 // is then refused (remember kind progress). Its author and taint are
-// code's: a lead's note says so.
+// code's.
 func TestThreadItemNoteTainted(t *testing.T) {
 	c, _ := surfaceCore(t)
 	th := lightThread(t, c)
@@ -181,13 +181,5 @@ func TestThreadItemNoteTainted(t *testing.T) {
 	}
 	if th, _ = c.thread(th.ID); strings.Contains(th.Summary, "virer") {
 		t.Errorf("quoted into its summary: %q", th.Summary)
-	}
-
-	// A lead's note says who wrote it.
-	if _, err := c.noteItem(th.ID, noteItemIn{Source: "ledger", Item: "Courant", Note: "Vu."}, "lead:9", nil); err != nil {
-		t.Fatal(err)
-	}
-	if row = itemRows(t, c, th.ID)["Courant"]; row["by"] != "Ajouté par son chef" || row["mark"] != "" {
-		t.Errorf("lead's row %v", row)
 	}
 }

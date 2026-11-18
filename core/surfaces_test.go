@@ -340,7 +340,7 @@ func TestSurfaceSourceGuards(t *testing.T) {
 	// Only code writes a surface: a thread its own, the queue its q-… ones.
 	for _, w := range []struct{ author, id string }{
 		{"someone", "x"}, {"brain", "x"}, {"brain", "thread-1"}, {"brain", "q-decide"}, {"task:t-1", "x"}, {"skill:revue", "revue"},
-		{"lead:1", "thread-1"}, {"thread:1", "thread-2"}, {"thread:1", "x"}, {surfaceAuthorCore, "thread-1"}, {surfaceAuthorCore, "x"},
+		{"task:t-1", "thread-1"}, {"thread:1", "thread-2"}, {"thread:1", "x"}, {surfaceAuthorCore, "thread-1"}, {surfaceAuthorCore, "x"},
 	} {
 		if _, _, err := c.writeSurface(w.author, surfaceIn{ID: w.id, Title: "x", Components: accountsSurface(), Sources: balances, Weight: 50, Lifetime: surfaceLifetime{Kept: true}}); err == nil {
 			t.Errorf("%s wrote %s", w.author, w.id)

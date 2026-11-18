@@ -27,7 +27,6 @@ import (
 // The author is the caller, never a field:
 //
 //   - the brain: its own tools (newMCPServer), as brain, its turn's taint;
-//   - a thread's lead: its own tools (registerLeadTools), as lead:<thread>;
 //   - a task: eriphe-workspace, a server Eriphe provides, lent like any
 //     tool of the catalog ({kind: tool, ref: eriphe-workspace} in run_task;
 //     never in a skill's tools). It is in the task's grant, its device relays
@@ -67,7 +66,7 @@ func providedServer(name string) bool { return slices.Contains(providedServers, 
 
 // surfaceCaller is who calls the workspace's tools.
 type surfaceCaller struct {
-	author string // brain, lead:<thread>, task:<id>
+	author string // brain, task:<id>
 	// sawSource marks a task that was told what a source gave (an error,
 	// the fields of a result): that taints it (workspace_sources.go).
 	sawSource func()

@@ -3,8 +3,8 @@ package main
 // Who keeps the workspace's surfaces (#423, #574): code only.
 //
 //   - A thread's surface is code's (thread_surface.go): written from the
-//     thread's data at each of its changes. Who holds the thread (the
-//     brain, or its lead) adds its part to it; nobody writes a tile of
+//     thread's data at each of its changes. The brain, who holds the
+//     thread, adds its part to it; nobody writes a tile of
 //     their own.
 //   - What waits for the user that no thread shows is the attention
 //     queue's (workspace_queue.go), code's too.

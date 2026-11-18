@@ -217,8 +217,7 @@ func pushRows(t *testing.T, c *core) string {
 }
 
 // A worker task of a thread starts with its card, after what it is
-// asked; its prompt as shown is what it was asked. A lead starts with its
-// thread's.
+// asked; its prompt as shown is what it was asked.
 func TestThreadCardAtStart(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	th := siteThread(t, c)

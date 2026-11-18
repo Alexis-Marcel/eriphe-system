@@ -27,7 +27,7 @@ import (
 //     steps' starts and ends, its summary written again, its end) since
 //     the user's visit before the last one, oldest first, the last
 //     threadFactsMax; none before a first visit. Never the log's lines: they are
-//     French only, and may quote a lead.
+//     French only.
 //   - /thread/summary: the thread's summary, as remember (kind progress),
 //     the extraction or its close wrote it; no model call.
 //

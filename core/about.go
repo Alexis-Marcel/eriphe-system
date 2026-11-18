@@ -70,8 +70,8 @@ func (c *core) turnAbout() string {
 	return ""
 }
 
-// sourceAbout is what who made a record is about: a thread (thread:,
-// lead:), a task's about; "" for anyone else.
+// sourceAbout is what who made a record is about: a thread (thread:), a
+// task's about; "" for anyone else.
 func (c *core) sourceAbout(source string) string {
 	kind, id, _ := strings.Cut(source, ":")
 	switch kind {

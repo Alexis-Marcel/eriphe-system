@@ -22,7 +22,7 @@ import (
 //   - Relations are found by code, from what every surface declares, never
 //     from a tool's name (surfaceRelations): the same source, the same
 //     server, the same ref it lives while or its author stands for (a
-//     thread, its lead and its steps' tasks, a task, a skill), the same
+//     thread and its tasks, a task, a skill), the same
 //     proposal shown in a Proposal (the queue's tile of it), a day: a Day
 //     component on a date the focused surface carries, or the reverse.
 //   - Back (or the focus closed, removed or past focusFor) lays the
@@ -123,8 +123,8 @@ func sourceKeys(s surface) (sources, servers map[string]bool) {
 }
 
 // liveRefs are the refs a surface lives with: the one its lifetime waits on
-// and the one its author stands for (a lead its thread, a task itself and
-// the thread it is a step of, a skill itself). The brain and code stand
+// and the one its author stands for (a task itself and the thread it is
+// about, a skill itself). The brain and code stand
 // for no one in particular.
 func liveRefs(s surface, threadOf func(task string) int64) map[string]bool {
 	out := map[string]bool{}
@@ -133,8 +133,6 @@ func liveRefs(s surface, threadOf func(task string) int64) map[string]bool {
 		switch kind {
 		case "thread", "card", "skill":
 			out[ref] = true
-		case "lead":
-			out["thread:"+id] = true
 		case "task":
 			out[ref] = true
 			if threadOf != nil {

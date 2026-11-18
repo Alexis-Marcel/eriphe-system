@@ -35,7 +35,7 @@ import (
 //     (/thread/items/<source>), its children, the user's marks
 //     (/thread/marks, thread_marks.go).
 //   - What is composed: the holder's part, who holds the thread (the
-//     brain, or its lead) composing it by named blocks with surface_write
+//     brain) composing it by named blocks with surface_write
 //     on thread-<id> (a state, points to see, a diff, a link), each kept
 //     apart, checked alone, and shown under the frame in its order
 //     (thread_part.go); their sources become the thread's

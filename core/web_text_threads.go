@@ -28,7 +28,6 @@ var threadStrings = map[string]map[string]string{
 
 		// A thread's surface on the workspace (thread_surface.go).
 		"thread.surface.brain":         "tenu par {{name}}",
-		"thread.surface.lead":          "mené par son chef",
 		"thread.surface.yours":         "À toi",
 		"thread.children":              "Sous-fils",
 		"thread.child.open":            "Ouvrir",
@@ -45,7 +44,6 @@ var threadStrings = map[string]map[string]string{
 		"thread.surface.check.failed":  "contrôles en échec",
 		"thread.surface.external":      "extérieur",
 		"thread.surface.part.brain":    "Ajouté par {{name}}",
-		"thread.surface.part.lead":     "Ajouté par son chef",
 		"thread.item.by.skill":         "Noté par le skill « %s »",
 		"thread.item.by.task":          "Noté par une tâche",
 		"thread.offer.group":           "%s · %d",
@@ -135,7 +133,6 @@ var threadStrings = map[string]map[string]string{
 		"thread.state.dropped":  "Dropped",
 
 		"thread.surface.brain":         "held by {{name}}",
-		"thread.surface.lead":          "led by its lead",
 		"thread.surface.yours":         "Yours",
 		"thread.children":              "Sub-threads",
 		"thread.child.open":            "Open",
@@ -152,7 +149,6 @@ var threadStrings = map[string]map[string]string{
 		"thread.surface.check.failed":  "checks failed",
 		"thread.surface.external":      "external",
 		"thread.surface.part.brain":    "Added by {{name}}",
-		"thread.surface.part.lead":     "Added by its lead",
 		"thread.item.by.skill":         "Noted by the skill “%s”",
 		"thread.item.by.task":          "Noted by a task",
 		"thread.offer.group":           "%s · %d",

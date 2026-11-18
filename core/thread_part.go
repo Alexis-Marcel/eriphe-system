@@ -16,7 +16,7 @@ import (
 )
 
 // The holder's part of a thread's surface (#610): named blocks. Who holds
-// a thread (the brain, or its lead: mayAddPart) composes its part, shown
+// a thread (the brain: mayAddPart) composes its part, shown
 // under code's section, block by block:
 //
 //   - surface_write with block adds that block, or replaces it where it
@@ -83,8 +83,8 @@ type partBlock struct {
 // prefix, so that no author's id meets it.
 func partRoot(block string) string { return threadPartRoot + "_" + block }
 
-// threadPartMu makes the changes of the parts one at a time: the brain
-// and a lead may write blocks of one part at the same moment.
+// threadPartMu makes the changes of the parts one at a time: two turns may
+// write blocks of one part at the same moment.
 var threadPartMu sync.Mutex
 
 // threadPartOf is a thread's part; nil when it has no block.
@@ -296,9 +296,9 @@ func blockList(p *threadPart) string {
 }
 
 // mayAddPart tells whether an author holds a thread, and so may compose
-// its part of the thread's surface: the brain, or its own lead.
+// its part of the thread's surface: the brain.
 func mayAddPart(author string, thread int64) bool {
-	return author == surfaceAuthorBrain || author == "lead:"+strconv.FormatInt(thread, 10)
+	return author == surfaceAuthorBrain
 }
 
 // writeThreadPart is surface_write on a thread's surface: one block of

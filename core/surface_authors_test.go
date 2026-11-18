@@ -30,7 +30,7 @@ func TestDropFreeSurfaces(t *testing.T) {
 	c, _ := surfaceCore(t)
 	comps := []byte(`[{"id":"root","component":"Text","text":"x"}]`)
 	for _, w := range []struct{ author, id string }{
-		{"brain", "revue"}, {"skill:arrivee", "arrivee"}, {"task:t-1", "page-site"}, {"lead:3", "suivi"},
+		{"brain", "revue"}, {"skill:arrivee", "arrivee"}, {"task:t-1", "page-site"}, {"assistant:veille", "suivi"},
 		{threadAuthor(1), threadSurfaceID(1)}, {surfaceAuthorCore, "q-decide"},
 	} {
 		if _, _, err := c.fixtureSurface(w.author, surfaceIn{ID: w.id, Title: "x", Components: comps}); err != nil {

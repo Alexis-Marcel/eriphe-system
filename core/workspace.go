@@ -19,7 +19,7 @@ import (
 //     What they want to see more or less of (« moins de lettres de news »)
 //     is a preference memory about "topic:workspace", from the user's words
 //     (the nightly extraction never writes a preference): whoever notes
-//     the items of a thread (the brain, a thread's lead, a skill that
+//     the items of a thread (the brain, a skill that
 //     watches a source) reads it, and notes those items so.
 //   - What the user does on it: a surface opened, a tile that left the
 //     grid unopened, a tile closed, moved or resized, a message written

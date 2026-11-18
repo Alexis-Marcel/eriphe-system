@@ -10,7 +10,7 @@ import (
 )
 
 // The user's marks (#610): keep, drop or done on something a thread
-// shows, an option, a lead, a line of a checklist. Code records them in
+// shows, an option, a candidate, a line of a checklist. Code records them in
 // the thread's data, never in the composed part, so a rewrite of the part
 // never loses one.
 //

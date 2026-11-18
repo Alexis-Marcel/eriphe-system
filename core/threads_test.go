@@ -93,8 +93,7 @@ func TestFindThread(t *testing.T) {
 }
 
 // A thread closes only on its goal, with how; it reopens when its subject
-// comes back, light, its history kept; stopped, it is dropped. A led
-// thread that ended reopens light: its lead went with its end.
+// comes back, its history kept; stopped, it is dropped.
 func TestCloseAndReopenThread(t *testing.T) {
 	c := startCore(t)
 	th, err := c.openThread(threadIn{Title: "PR alerting", Goal: "Merged and deployed.", Alias: "pr:example/infra#12"}, nil, byBrain)

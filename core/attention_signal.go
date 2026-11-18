@@ -9,10 +9,9 @@ import (
 	"strings"
 )
 
-// The attention signal: what an assistant (a skill's run, a thread's lead)
-// says deserves the user's attention, as a structured block rather than a
-// prefix in its prose. A skill writes it in its receipt (receipt.go), a
-// lead in its report; code checks its form and puts each of its refs in
+// The attention signal: what a skill's run says deserves the user's
+// attention, as a structured block rather than a prefix in its prose. A
+// skill writes it in its receipt (receipt.go); code checks its form and puts each of its refs in
 // the attention queue (attention.go), with who raised it. Nothing in a
 // signal is trusted beyond its form: a ref of a kind not known, or a
 // weight outside 1 to 5, is dropped and logged, never fatal.
@@ -181,7 +180,7 @@ func cleanSignals(in []attentionSignal, own bool) ([]attentionSignal, []string) 
 
 // attendSignals puts each ref of the signals in the attention queue, from
 // source (skill:<name>, assistant:<name>), about what maker is about (a
-// run's task:<id>, a lead's thread:<id>; "" for none: sourceAbout); tainted when who wrote them read
+// run's task:<id>; "" for none: sourceAbout); tainted when who wrote them read
 // external content. The dropped are logged. A signal without refs makes
 // no item here: its caller knows what it is about.
 func (c *core) attendSignals(signals []attentionSignal, dropped []string, maker, source string, tainted bool) int {

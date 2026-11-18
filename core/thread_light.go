@@ -15,7 +15,7 @@ import (
 // A thread's life, until the graph's nodes replace it (#625): the brain
 // opens it, closes it on its goal, stops it, reopens it when its matter
 // comes back; the user puts an ended one away. Its work runs as steps of
-// a node (node_steps.go): a thread has no plan, no lead and no budget.
+// a node (node_steps.go): a thread has no plan nor budget of its own.
 
 // threadMu makes the changes of a thread one at a time.
 var threadMu sync.Mutex

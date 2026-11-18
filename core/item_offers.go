@@ -49,7 +49,7 @@ import (
 //     note that matches one says that label, tainted note or not (the
 //     user approved those words, the run only chose the item). Any other
 //     action of a task says the tool's own words (toolWords: its title in
-//     the catalog, else its name). The brain's and a lead's say their
+//     the catalog, else its name). The brain's say their
 //     label, but for a note written after reading external content: the
 //     tool's words then. Its card is code's words, and keeps the note's
 //     taint (« extérieur », buttons only).
@@ -322,8 +322,8 @@ func (c *core) offerWords(lang string) *offerWords {
 }
 
 // label is what an action's button says: a skill's run's, the label its
-// skill declares for it; another task's, the tool's words; the brain's or
-// a lead's, its label, but the tool's words for a note written after
+// skill declares for it; another task's, the tool's words; the brain's,
+// its label, but the tool's words for a note written after
 // reading external content.
 func (w *offerWords) label(a noteAction, n itemNote) string {
 	if name, ok := strings.CutPrefix(n.Author, "skill:"); ok {
