@@ -73,8 +73,7 @@ func TestNearThreadsRefuse(t *testing.T) {
 	if s, _, err := c.openThreadOnce(threadIn{Title: "Velora", Goal: "x", Alias: "topic:velora"}, nil, byBrain); err != nil || s.ID != velora.ID {
 		t.Fatalf("exact alias: %+v %v", s, err)
 	}
-	// A message that names a thread that ended: the turn is about it, and
-	// a task there is told to reopen it.
+	// A message that names a thread that ended: the turn is about it.
 	if err := c.closeLight(garden.ID, "Planté.", byBrain); err != nil {
 		t.Fatal(err)
 	}
@@ -82,9 +81,6 @@ func TestNearThreadsRefuse(t *testing.T) {
 	c.turn.name(c.named("Et le potager ?"))
 	if a := c.turnAbout(); a != threadRef(garden.ID) {
 		t.Fatalf("the turn is about %q", a)
-	}
-	if _, err := c.taskThread(); err == nil || !strings.Contains(err.Error(), "reopen_thread") {
-		t.Errorf("a task about an ended thread: %v", err)
 	}
 }
 

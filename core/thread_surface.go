@@ -269,7 +269,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	// The frame (thread_blocks.go): the head is composed last, once the
 	// weight is known, and put first.
 	c.blockEnded(&out, data, s, now)
-	c.threadYours(&in, &out, s, steps, asks, linked)
+	c.threadYours(&in, &out, s, linked)
 	// Its children (thread_children.go): what waits in one raises it.
 	kids := c.threadKidsOf(s, lang)
 	blockChildren(&out, data, kids.rows, lang)
@@ -390,7 +390,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	// its steps.
 	in.summary = threadSays(headline, items.seen, lang)
 	if in.summary == "" || !s.active() {
-		in.summary = threadLine(s, steps, asks, lang)
+		in.summary = threadLine(s, steps, linked, lang)
 	} else if headline != nil && len(headline.Tainted) > 0 {
 		in.summary += threadExternalSep + w("thread.surface.external") // someone else's words may be in it
 	}
@@ -401,8 +401,9 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 }
 
 // threadLine is a thread's one-line summary, for a small tile or a chip:
-// the last step done, then what waits (« Fusion ✓ · Déploiement à toi »).
-func threadLine(s Thread, steps []threadSurfaceStep, asks []int64, lang string) string {
+// the last step done, then what waits (« Fusion ✓ · Déploiement à toi »),
+// a card linked to it that waits for the user.
+func threadLine(s Thread, steps []threadSurfaceStep, cards []string, lang string) string {
 	if !s.active() {
 		return tr(lang, "thread.line."+s.State)
 	}
@@ -420,7 +421,7 @@ func threadLine(s Thread, steps []threadSurfaceStep, asks []int64, lang string) 
 			break
 		}
 	}
-	if next == "" && len(asks) > 0 {
+	if next == "" && len(cards) > 0 {
 		next = tr(lang, "thread.line.asks")
 	}
 	if next == "" {
@@ -624,4 +625,3 @@ func tidyOf(s surface, a a2ui.Action) (int64, *errActionRefused) {
 	}
 	return thread, nil
 }
-

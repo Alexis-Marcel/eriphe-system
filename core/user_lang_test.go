@@ -45,12 +45,9 @@ func TestUserLang(t *testing.T) {
 		t.Fatalf("after de %q", c.userLang())
 	}
 
-	// The brain's (and the assistants') turn, and a session lead's first.
+	// The brain's (and the assistants') turn.
 	if h := c.turnHead(time.Now()); !strings.Contains(h, "[langue de l'utilisateur : écris en anglais") {
 		t.Fatalf("turn head:\n%s", h)
-	}
-	if p := assistantRoles[assistantRoleLead].firstPrompt(c, Assistant{}, false); !strings.Contains(p, "en anglais") {
-		t.Fatalf("lead's first turn:\n%s", p)
 	}
 	c.noteUserLang("fr")
 	if h := c.turnHead(time.Now()); !strings.Contains(h, "en français, sa langue, en le tutoyant") {

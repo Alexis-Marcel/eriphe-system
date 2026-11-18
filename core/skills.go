@@ -233,7 +233,7 @@ type skillManifest struct {
 	// Its trigger, as written (skill_triggers.go): when, every, model,
 	// tools, repos, urgent, thread.
 	When, Every, Model, Tools, Repos, Urgent, Thread string
-	Trigger                                   *skillTrigger
+	Trigger                                          *skillTrigger
 }
 
 // skillTitleMax is the most runes of a skill's title, its thread's name

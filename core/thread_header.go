@@ -283,24 +283,23 @@ func (c *core) threadStateText(s Thread, h *threadHeadline, seen threadItemsSeen
 	return strings.Join(parts, threadExternalSep)
 }
 
-// threadYours composes « À toi »: what waits for the user, the thread's
-// own cards, the cards raised for it (thread_turn.go), then its steps';
-// nothing when nothing waits, or once it ended. What waits gives the
-// surface its weight.
-func (c *core) threadYours(in *surfaceIn, out *threadComps, s Thread, steps []threadSurfaceStep, asks []int64, linked []string) {
+// threadYours composes « À toi »: what waits for the user, the cards
+// raised for it (thread_turn.go); nothing when nothing waits, or once it
+// ended. What waits gives the surface its weight.
+func (c *core) threadYours(in *surfaceIn, out *threadComps, s Thread, linked []string) {
 	w := func(key string) string { return tr(c.userLang(), key) }
 	type comp = map[string]any
 	if !s.active() {
 		return
 	}
-	if !threadWaitsUser(steps, asks, linked) {
+	if len(linked) == 0 {
 		return
 	}
 	out.add(comp{"id": "thread_yours", "component": "Text", "variant": "subtitle", "text": w("thread.surface.yours")})
 	// Its cards leave the attention queue for it when it answers them
 	// (threadShownCards): it takes their weight.
 	in.Weight = threadWeightYours
-	for _, ref := range threadCardsWaiting(steps, asks, linked) {
+	for _, ref := range linked {
 		kind, _, _ := parseProposalRef(ref)
 		in.Weight = max(in.Weight, queueSurfaceWeight(cardWeight(kind)))
 	}

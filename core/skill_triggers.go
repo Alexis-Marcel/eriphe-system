@@ -52,8 +52,8 @@ type skillTrigger struct {
 	Model    string
 	Tools    []string
 	Repos    []string // the repositories its runs' steps may borrow, owner/name (node_steps.go)
-	Urgent   string // the fixed text of an urgent run (skill_cards.go)
-	Thread   string // its thread's alias: what its runs are about; else their events' key (skillRunAlias)
+	Urgent   string   // the fixed text of an urgent run (skill_cards.go)
+	Thread   string   // its thread's alias: what its runs are about; else their events' key (skillRunAlias)
 }
 
 // filterBound is a filter on a number of the event's payload.

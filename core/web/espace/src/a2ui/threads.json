@@ -12,8 +12,6 @@
       "children": [
        "thread_progress",
        "thread_controls",
-       "thread_yours",
-       "thread_card_2",
        "thread_children_title",
        "thread_children",
        "thread_steps_fold",
@@ -30,7 +28,7 @@
       "label": {
        "@path": "/thread/progress/label"
       },
-      "tone": "attention",
+      "tone": "default",
       "total": {
        "@path": "/thread/progress/total"
       },
@@ -60,17 +58,6 @@
       "children": [
        "thread_control_stop"
       ]
-     },
-     {
-      "id": "thread_yours",
-      "component": "Text",
-      "text": "Yours",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_card_2",
-      "component": "Proposal",
-      "proposalId": "card:20"
      },
      {
       "id": "thread_child",
@@ -186,7 +173,7 @@
       "marks": {},
       "progress": {
        "current": 2,
-       "label": "Yours",
+       "label": "Running",
        "total": 5,
        "value": 2
       },
@@ -199,13 +186,13 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T14:24:31+01:00",
+         "date": "2026-11-18T12:02:43+01:00",
          "detail": "Task",
          "label": "Prepare the page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T15:04:31+01:00",
+         "date": "2026-11-18T12:42:43+01:00",
          "detail": "Proposed action",
          "label": "Merge the branch",
          "state": "done"
@@ -213,7 +200,13 @@
        ],
        "open": [
         {
-         "date": "2026-11-16T16:34:31+01:00",
+         "date": "2026-11-18T14:22:43+01:00",
+         "detail": "Your approval",
+         "label": "Publish the site",
+         "state": "current"
+        },
+        {
+         "date": "2026-11-18T14:12:43+01:00",
          "detail": "Task · 12 of 30",
          "label": "Resize the photos",
          "state": "current"
@@ -234,10 +227,10 @@
       "eriphe": {
        "title": "The club's site",
        "author": "thread:101",
-       "weight": 70,
+       "weight": 50,
        "answers": true,
-       "summary": "Merge the branch ✓ · Publish the site: yours",
-       "state": "yours",
+       "summary": "Merge the branch ✓ · Publish the site …",
+       "state": "new",
        "new": 6,
        "updated": "0001-01-01T00:00:00Z"
       }
@@ -424,7 +417,7 @@
             "by": "Added by Eriphe",
             "cards": [],
             "detail": "120",
-            "due": "2026-11-17",
+            "due": "2026-11-19",
             "id": "Courant",
             "level": "high",
             "mark": "external",
@@ -661,7 +654,7 @@
       "children": [],
       "ended": {
        "text": "The quote is signed and the work starts on Monday.",
-       "title": "Done ✓ · 15:54"
+       "title": "Done ✓ · 13:32"
       },
       "items": {},
       "marks": {},
@@ -680,25 +673,25 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T14:24:31+01:00",
+         "date": "2026-11-18T12:02:43+01:00",
          "detail": "Task",
          "label": "Prepare the page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T15:04:31+01:00",
+         "date": "2026-11-18T12:42:43+01:00",
          "detail": "Proposed action",
          "label": "Merge the branch",
          "state": "done"
         },
         {
-         "date": "2026-11-16T16:44:31+01:00",
+         "date": "2026-11-18T14:22:43+01:00",
          "detail": "Your approval",
          "label": "Publish the site",
          "state": "done"
         },
         {
-         "date": "2026-11-16T16:34:31+01:00",
+         "date": "2026-11-18T14:12:43+01:00",
          "detail": "Task · 12 of 30",
          "label": "Resize the photos",
          "state": "done"
@@ -1475,7 +1468,7 @@
             "by": "Added by Eriphe",
             "cards": [],
             "detail": "120",
-            "due": "2026-11-17",
+            "due": "2026-11-19",
             "id": "Courant",
             "level": "high",
             "mark": "external",
@@ -1793,8 +1786,6 @@
       "children": [
        "thread_progress",
        "thread_controls",
-       "thread_yours",
-       "thread_card_2",
        "thread_children_title",
        "thread_children",
        "thread_steps_fold",
@@ -1811,7 +1802,7 @@
       "label": {
        "@path": "/thread/progress/label"
       },
-      "tone": "attention",
+      "tone": "default",
       "total": {
        "@path": "/thread/progress/total"
       },
@@ -1841,17 +1832,6 @@
       "children": [
        "thread_control_stop"
       ]
-     },
-     {
-      "id": "thread_yours",
-      "component": "Text",
-      "text": "À toi",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_card_2",
-      "component": "Proposal",
-      "proposalId": "card:20"
      },
      {
       "id": "thread_child",
@@ -1967,7 +1947,7 @@
       "marks": {},
       "progress": {
        "current": 2,
-       "label": "À toi",
+       "label": "En cours",
        "total": 5,
        "value": 2
       },
@@ -1980,13 +1960,13 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T14:24:30+01:00",
+         "date": "2026-11-18T12:02:43+01:00",
          "detail": "Tâche",
          "label": "Préparer la page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T15:04:30+01:00",
+         "date": "2026-11-18T12:42:43+01:00",
          "detail": "Action proposée",
          "label": "Fusionner la branche",
          "state": "done"
@@ -1994,7 +1974,13 @@
        ],
        "open": [
         {
-         "date": "2026-11-16T16:34:30+01:00",
+         "date": "2026-11-18T14:22:43+01:00",
+         "detail": "Ta validation",
+         "label": "Publier le site",
+         "state": "current"
+        },
+        {
+         "date": "2026-11-18T14:12:43+01:00",
          "detail": "Tâche · 12 sur 30",
          "label": "Redimensionner les photos",
          "state": "current"
@@ -2015,10 +2001,10 @@
       "eriphe": {
        "title": "Le site du club",
        "author": "thread:101",
-       "weight": 70,
+       "weight": 50,
        "answers": true,
-       "summary": "Fusionner la branche ✓ · Publier le site à toi",
-       "state": "yours",
+       "summary": "Fusionner la branche ✓ · Publier le site …",
+       "state": "new",
        "new": 6,
        "updated": "0001-01-01T00:00:00Z"
       }
@@ -2205,7 +2191,7 @@
             "by": "Ajouté par Eriphe",
             "cards": [],
             "detail": "120",
-            "due": "2026-11-17",
+            "due": "2026-11-19",
             "id": "Courant",
             "level": "high",
             "mark": "extérieur",
@@ -2442,7 +2428,7 @@
       "children": [],
       "ended": {
        "text": "Le devis est signé et les travaux commencent lundi.",
-       "title": "Fait ✓ · 15 h 54"
+       "title": "Fait ✓ · 13 h 32"
       },
       "items": {},
       "marks": {},
@@ -2461,25 +2447,25 @@
        ],
        "done": [
         {
-         "date": "2026-11-16T14:24:30+01:00",
+         "date": "2026-11-18T12:02:43+01:00",
          "detail": "Tâche",
          "label": "Préparer la page",
          "state": "done"
         },
         {
-         "date": "2026-11-16T15:04:30+01:00",
+         "date": "2026-11-18T12:42:43+01:00",
          "detail": "Action proposée",
          "label": "Fusionner la branche",
          "state": "done"
         },
         {
-         "date": "2026-11-16T16:44:30+01:00",
+         "date": "2026-11-18T14:22:43+01:00",
          "detail": "Ta validation",
          "label": "Publier le site",
          "state": "done"
         },
         {
-         "date": "2026-11-16T16:34:30+01:00",
+         "date": "2026-11-18T14:12:43+01:00",
          "detail": "Tâche · 12 sur 30",
          "label": "Redimensionner les photos",
          "state": "done"
@@ -3256,7 +3242,7 @@
             "by": "Ajouté par Eriphe",
             "cards": [],
             "detail": "120",
-            "due": "2026-11-17",
+            "due": "2026-11-19",
             "id": "Courant",
             "level": "high",
             "mark": "extérieur",
@@ -3562,27 +3548,9 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "thread_progress",
        "thread_controls",
        "thread_external_etat"
       ]
-     },
-     {
-      "id": "thread_progress",
-      "component": "Progress",
-      "current": {
-       "@path": "/thread/progress/current"
-      },
-      "label": {
-       "@path": "/thread/progress/label"
-      },
-      "tone": "default",
-      "total": {
-       "@path": "/thread/progress/total"
-      },
-      "value": {
-       "@path": "/thread/progress/value"
-      }
      },
      {
       "id": "thread_control_stop",
@@ -3652,25 +3620,12 @@
       "children": [],
       "items": {},
       "marks": {},
-      "progress": {
-       "current": 0,
-       "label": "À jour",
-       "total": 1,
-       "value": 1
-      },
       "since": [],
       "steps": {
        "cards": [],
-       "done": [
-        {
-         "date": "2026-11-16T16:54:30+01:00",
-         "detail": "extérieur · Vérification",
-         "label": "Vérifier que la règle est active",
-         "state": "done"
-        }
-       ],
+       "done": [],
        "open": [],
-       "summary": "1 étape faite"
+       "summary": ""
       },
       "summary": ""
      },
@@ -3684,9 +3639,9 @@
        "weight": 50,
        "tainted": true,
        "answers": true,
-       "summary": "Vérifier que la règle est active ✓",
+       "summary": "Ouvert",
        "state": "new",
-       "new": 2,
+       "new": 1,
        "updated": "0001-01-01T00:00:00Z"
       }
      }
@@ -3703,29 +3658,9 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "thread_progress",
        "thread_controls",
-       "thread_yours",
-       "thread_card_0",
        "thread_part_etat"
       ]
-     },
-     {
-      "id": "thread_progress",
-      "component": "Progress",
-      "current": {
-       "@path": "/thread/progress/current"
-      },
-      "label": {
-       "@path": "/thread/progress/label"
-      },
-      "tone": "urgent",
-      "total": {
-       "@path": "/thread/progress/total"
-      },
-      "value": {
-       "@path": "/thread/progress/value"
-      }
      },
      {
       "id": "thread_control_stop",
@@ -3749,17 +3684,6 @@
       "children": [
        "thread_control_stop"
       ]
-     },
-     {
-      "id": "thread_yours",
-      "component": "Text",
-      "text": "À toi",
-      "variant": "subtitle"
-     },
-     {
-      "id": "thread_card_0",
-      "component": "Proposal",
-      "proposalId": "access:1"
      },
      {
       "id": "thread_part_etat",
@@ -3826,12 +3750,6 @@
       "children": [],
       "items": {},
       "marks": {},
-      "progress": {
-       "current": 1,
-       "label": "À toi",
-       "total": 1,
-       "value": 0
-      },
       "since": [],
       "steps": {
        "cards": [],
@@ -3848,11 +3766,11 @@
       "eriphe": {
        "title": "PR 42 · règles d'alerte",
        "author": "thread:7",
-       "weight": 80,
+       "weight": 50,
        "answers": true,
-       "summary": "Fusionner la PR à toi",
-       "state": "yours",
-       "new": 2,
+       "summary": "Ouvert",
+       "state": "new",
+       "new": 1,
        "updated": "0001-01-01T00:00:00Z"
       }
      }
@@ -4358,10 +4276,19 @@
       "id": "root",
       "component": "Column",
       "children": [
+       "thread_progress",
        "thread_state",
        "thread_controls",
        "thread_external_mails"
       ]
+     },
+     {
+      "id": "thread_progress",
+      "component": "Progress",
+      "label": {
+       "@path": "/thread/progress/label"
+      },
+      "tone": "urgent"
      },
      {
       "id": "thread_state",
@@ -4617,8 +4544,11 @@
        }
       },
       "marks": {},
+      "progress": {
+       "label": "Urgent"
+      },
       "since": [],
-      "state": "1 à faire · 1 pour info · 1 rien à faire · trié à 16 h 54",
+      "state": "1 à faire · 1 pour info · 1 rien à faire · trié à 14 h 32",
       "steps": {
        "cards": [],
        "done": [],
@@ -4633,11 +4563,11 @@
       "eriphe": {
        "title": "Les mails de l'école",
        "author": "thread:51",
-       "weight": 50,
+       "weight": 80,
        "tainted": true,
        "answers": true,
        "summary": "1 à faire · 1 pour info · 1 rien à faire",
-       "state": "new",
+       "state": "urgent",
        "new": 4,
        "updated": "0001-01-01T00:00:00Z"
       }
@@ -4730,27 +4660,9 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "thread_progress",
        "thread_controls",
-       "thread_steps_open"
+       "thread_state"
       ]
-     },
-     {
-      "id": "thread_progress",
-      "component": "Progress",
-      "current": {
-       "@path": "/thread/progress/current"
-      },
-      "label": {
-       "@path": "/thread/progress/label"
-      },
-      "tone": "default",
-      "total": {
-       "@path": "/thread/progress/total"
-      },
-      "value": {
-       "@path": "/thread/progress/value"
-      }
      },
      {
       "id": "thread_control_stop",
@@ -4776,11 +4688,10 @@
       ]
      },
      {
-      "id": "thread_steps_open",
-      "component": "Timeline",
-      "items": {
-       "@path": "/thread/steps/open"
-      }
+      "id": "thread_state",
+      "component": "Text",
+      "text": "Rien pour l'instant.",
+      "variant": "caption"
      }
     ],
     "dataModel": {
@@ -4788,24 +4699,11 @@
       "children": [],
       "items": {},
       "marks": {},
-      "progress": {
-       "current": 1,
-       "label": "En cours",
-       "total": 1,
-       "value": 0
-      },
       "since": [],
       "steps": {
        "cards": [],
        "done": [],
-       "open": [
-        {
-         "date": "2026-11-16T16:54:31+01:00",
-         "detail": "Tâche",
-         "label": "Rechercher la marque Velora",
-         "state": "current"
-        }
-       ],
+       "open": [],
        "summary": ""
       },
       "summary": ""
@@ -4818,9 +4716,9 @@
        "author": "thread:22",
        "weight": 50,
        "answers": true,
-       "summary": "Rechercher la marque Velora …",
+       "summary": "Ouvert",
        "state": "new",
-       "new": 2,
+       "new": 1,
        "updated": "0001-01-01T00:00:00Z"
       }
      }

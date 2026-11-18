@@ -11,14 +11,15 @@ import (
 // thread shows, and the thread's tile is the user's, first.
 func TestThreadCardNeverInTheQueue(t *testing.T) {
 	c := startCore(t)
-	th, err := c.openThread(threadIn{Title: "Invoice", Goal: "Pay the invoice.", Steps: []stepSpec{
-		{Key: "pay", Title: "Pay", Kind: stepApproval, Question: "Pay it?"},
-	}}, nil, byBrain)
+	th, err := c.openThread(threadIn{Title: "Invoice", Goal: "Pay the invoice."}, nil, byBrain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ask := c.wholeThreadAsks(th.ID)[0]
-	x := cardOf(t, c, cardThread, ask)
+	r := proposedRule(t, c, "facture", "")
+	if _, err := c.linkThread(th.ID, proposalRef(cardRule, r.ID), byBrain); err != nil {
+		t.Fatal(err)
+	}
+	x := cardOf(t, c, cardRule, r.ID)
 	today := time.Now().Truncate(24 * time.Hour)
 	for _, w := range []int{2, weightBlocksATask, weightInterrupts} {
 		e := c.queuePlace(attentionItem{Ref: cardItemRef(x.ID), Weight: w}, today, c.threadShownCards())

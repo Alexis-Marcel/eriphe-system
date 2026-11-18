@@ -95,14 +95,14 @@ func TestThreadHeaderFactsAndYours(t *testing.T) {
 	c := startCore(t)
 	now := time.Now()
 	at := func(m int) time.Time { return now.Add(time.Duration(m) * time.Minute) }
-	s := Thread{ID: 4242, State: threadOpen, Mode: modeLed, Phase: "running", Created: at(-600), seen: at(-120).Unix()}
+	s := Thread{ID: 4242, State: threadOpen, Created: at(-600), seen: at(-120).Unix()}
 	steps := []threadSurfaceStep{
 		{Label: "Old", State: "done", Started: at(-500), Ended: at(-400)},
 		{Label: "Home page", State: "done", Started: at(-200), Ended: at(-100)},
 		{Label: "Contact page", State: "current", Started: at(-90)},
 		{Label: "Tests", State: "failed", Started: at(-80), Ended: at(-70)},
 		{Label: "Review", State: "current", Started: at(-60), Ended: at(-50)},
-		{Label: "Deploy", Kind: stepUser, State: "current", Started: at(-40), Waits: true, Yours: true, Key: "deploy"},
+		{Label: "Deploy", Kind: "user", State: "current", Started: at(-40), Waits: true, Yours: true, Key: "deploy"},
 	}
 	facts := threadFacts(s, steps, s.seen, "fr")
 	var texts []string
@@ -124,10 +124,10 @@ func TestThreadHeaderFactsAndYours(t *testing.T) {
 		t.Errorf("capped: %v", since)
 	}
 
-	yours := func(steps []threadSurfaceStep) (map[string]string, surfaceIn) {
+	yours := func(linked []string) (map[string]string, surfaceIn) {
 		in := surfaceIn{Weight: threadWeight}
 		var out threadComps
-		c.threadYours(&in, &out, s, steps, nil, nil)
+		c.threadYours(&in, &out, s, linked)
 		texts := map[string]string{}
 		for _, id := range out.children {
 			texts[id] = ""
@@ -139,17 +139,18 @@ func TestThreadHeaderFactsAndYours(t *testing.T) {
 		}
 		return texts, in
 	}
-	// À toi: the user's step, with its « C'est fait », and the weight.
-	if h, in := yours(extra); h["thread_user_5_label"] != "Deploy" || h["thread_yours"] != "À toi" || in.Weight != threadWeightYours {
+	// À toi: a card raised for it, and the weight.
+	card := []string{proposalRef(cardRule, 1)}
+	if h, in := yours(card); h["thread_yours"] != "À toi" || in.Weight != threadWeightYours {
 		t.Errorf("yours: %v weight %d", h, in.Weight)
 	}
 	// Nothing waits: no « À toi », the usual weight.
-	if h, in := yours(steps[:5]); h["thread_yours"] != "" || len(h) != 0 || in.Weight != threadWeight {
+	if h, in := yours(nil); h["thread_yours"] != "" || len(h) != 0 || in.Weight != threadWeight {
 		t.Errorf("nothing yours: %v weight %d", h, in.Weight)
 	}
 	// An ended thread has no « À toi »; its end is a fact.
 	s.State, s.Ended = threadDone, at(-10)
-	if h, _ := yours(extra); len(h) != 0 {
+	if h, _ := yours(card); len(h) != 0 {
 		t.Errorf("ended: %v", h)
 	}
 	if since := c.threadSinceData(s, steps[:5], now); !strings.HasSuffix(since[len(since)-1].(string), "Fait ✓") {
