@@ -28,6 +28,8 @@ type fakeMonitor struct {
 	cpu      float64          // status: data.cpu
 	got      []map[string]any // monitor://received: messages, each id, subject
 	silenced []string         // silence: the uids it was called on
+	invites  []map[string]any // monitor://invitations: invitations, each id, title
+	sent     []map[string]any // send and respond: what they were called with
 }
 
 func (m *fakeMonitor) server() *mcp.Server {
@@ -84,6 +86,41 @@ func (m *fakeMonitor) server() *mcp.Server {
 			m.mu.Lock()
 			defer m.mu.Unlock()
 			m.silenced = append(m.silenced, in.UID)
+			return nil, map[string]any{"ok": true}, nil
+		})
+	// The invitations waiting for an answer, as the calendar server's
+	// calendar://invitations lists them.
+	s.AddResource(&mcp.Resource{URI: "monitor://invitations", Name: "invitations", MIMEType: "application/json"},
+		func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			list := []any{}
+			for _, g := range m.invites {
+				list = append(list, g)
+			}
+			raw, _ := json.Marshal(map[string]any{"invitations": list})
+			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: "monitor://invitations", Text: string(raw)}}}, nil
+		})
+	// send replies to a message, respond answers an invitation: actions on
+	// an item, by its id.
+	mcp.AddTool(s, &mcp.Tool{Name: "send"},
+		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+			ID   string `json:"id"`
+			Body string `json:"body"`
+		}) (*mcp.CallToolResult, map[string]any, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			m.sent = append(m.sent, map[string]any{"tool": "send", "id": in.ID, "body": in.Body})
+			return nil, map[string]any{"ok": true}, nil
+		})
+	mcp.AddTool(s, &mcp.Tool{Name: "respond"},
+		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+			ID     string `json:"id"`
+			Answer string `json:"answer"`
+		}) (*mcp.CallToolResult, map[string]any, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			m.sent = append(m.sent, map[string]any{"tool": "respond", "id": in.ID, "answer": in.Answer})
 			return nil, map[string]any{"ok": true}, nil
 		})
 	// page reads the open web: no openWorldHint.

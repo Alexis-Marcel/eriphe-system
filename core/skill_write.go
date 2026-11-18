@@ -75,29 +75,48 @@ func writtenSkillMD(in writeSkillIn) string {
 	return b.String()
 }
 
-func (c *core) writeSkill(in writeSkillIn, tainted []string) (map[string]any, error) {
+// checkSkill checks a skill the brain writes, and gives its SKILL.md.
+func (c *core) checkSkill(in writeSkillIn) (string, skillManifest, error) {
 	if strings.TrimSpace(in.Instructions) == "" {
-		return nil, fmt.Errorf("instructions are needed")
+		return "", skillManifest{}, fmt.Errorf("instructions are needed")
 	}
 	if len(in.Instructions) > skillBodyMax {
-		return nil, fmt.Errorf("instructions of %d bytes: %d at most", len(in.Instructions), skillBodyMax)
+		return "", skillManifest{}, fmt.Errorf("instructions of %d bytes: %d at most", len(in.Instructions), skillBodyMax)
 	}
 	if m := strings.TrimSpace(in.Model); m != "" {
 		if _, _, err := c.conf().agent(m); err != nil {
-			return nil, fmt.Errorf("model %q: %w", m, err)
+			return "", skillManifest{}, fmt.Errorf("model %q: %w", m, err)
 		}
 	}
 	for _, t := range in.Tools {
 		if _, ok := c.conf().Servers[t]; !ok && !providedServer(t) {
-			return nil, fmt.Errorf("tool %q is not a catalog server (list_tools)", t)
+			return "", skillManifest{}, fmt.Errorf("tool %q is not a catalog server (list_tools)", t)
 		}
 	}
-	k, changed, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte(writtenSkillMD(in))}}, skillFromEriphe)
+	md := writtenSkillMD(in)
+	m, err := parseSkillMD([]byte(md))
 	if err != nil {
-		if se, ok := err.(*skillError); ok {
-			return nil, fmt.Errorf("%s", fmt.Sprintf(tr("en", se.Key), se.Arg))
-		}
+		return "", skillManifest{}, skillErrText(err)
+	}
+	return md, m, nil
+}
+
+// skillErrText is a skill's error in the brain's words.
+func skillErrText(err error) error {
+	if se, ok := err.(*skillError); ok {
+		return fmt.Errorf("%s", fmt.Sprintf(tr("en", se.Key), se.Arg))
+	}
+	return err
+}
+
+func (c *core) writeSkill(in writeSkillIn, tainted []string) (map[string]any, error) {
+	md, _, err := c.checkSkill(in)
+	if err != nil {
 		return nil, err
+	}
+	k, changed, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte(md)}}, skillFromEriphe)
+	if err != nil {
+		return nil, skillErrText(err)
 	}
 	if !changed {
 		return map[string]any{"result": "the same as the version already approved: nothing to approve"}, nil

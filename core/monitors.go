@@ -761,18 +761,9 @@ func (s monitorSpec) source() string {
 // writeMonitor saves a monitor the brain proposes: a new one waits for its
 // card, proposed; a change of one waits as its pending spec.
 func (c *core) writeMonitor(name string, s monitorSpec, tainted []string) (map[string]any, error) {
-	name = strings.ToLower(strings.TrimSpace(name))
-	if !monitorNameRe.MatchString(name) {
-		return nil, errors.New("a name of lowercase letters, digits and dashes: getout-prod")
-	}
-	if s.Way == wayListen {
-		return nil, errors.New("you propose a monitor that polls a tool or a resource: an address is made by the user, on the Monitors page (its token never goes through the conversation)")
-	}
-	if err := s.check(); err != nil {
+	name, err := c.checkMonitor(name, &s)
+	if err != nil {
 		return nil, err
-	}
-	if why := c.monitorWhy(s); why != "" {
-		return nil, errors.New(why)
 	}
 	raw, _ := json.Marshal(s)
 	now := time.Now().Unix()
@@ -809,6 +800,25 @@ func (c *core) writeMonitor(name string, s monitorSpec, tainted []string) (map[s
 	return map[string]any{"result": "proposed; it waits for the user's approval on its card, then looks as it says. " +
 		"A skill reacts to its events with when: " + evMonitorChanged + " key=" + name + " (or " + evMonitorNew + ", " + evMonitorCrossed + " holds=true, " + evMonitorFailed + ")",
 		"monitor": name}, nil
+}
+
+// checkMonitor checks a monitor the brain proposes, completing its spec
+// (check), and gives its name as kept.
+func (c *core) checkMonitor(name string, s *monitorSpec) (string, error) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if !monitorNameRe.MatchString(name) {
+		return "", errors.New("a name of lowercase letters, digits and dashes: getout-prod")
+	}
+	if s.Way == wayListen {
+		return "", errors.New("you propose a monitor that polls a tool or a resource: an address is made by the user, on the Monitors page (its token never goes through the conversation)")
+	}
+	if err := s.check(); err != nil {
+		return "", err
+	}
+	if why := c.monitorWhy(*s); why != "" {
+		return "", errors.New(why)
+	}
+	return name, nil
 }
 
 // monitorProposal is a monitor's card, pending while the brain's proposal
@@ -910,6 +920,20 @@ func (c *core) monitorsSaid(lang string) []map[string]any {
 	return out
 }
 
+// spec is the monitor the brain wrote, as kept.
+func (in writeMonitorIn) spec() (monitorSpec, error) {
+	every := 0
+	if e := strings.TrimSpace(in.Every); e != "" {
+		d, err := parseMonitorEvery(e)
+		if err != nil {
+			return monitorSpec{}, err
+		}
+		every = int(d / time.Minute)
+	}
+	return monitorSpec{Way: wayPoll, Server: in.Server, Tool: in.Tool, Resource: in.Resource, Args: in.Args, Every: every,
+		Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID, Above: in.Above, Below: in.Below}, nil
+}
+
 type writeMonitorIn struct {
 	Name     string         `json:"name" jsonschema:"lowercase letters, digits and dashes: getout-prod; the key of its events"`
 	Server   string         `json:"server" jsonschema:"the catalog server (list_tools)"`
@@ -944,16 +968,11 @@ type tryMonitorIn struct {
 func registerMonitorTools(s *mcp.Server, c *core) {
 	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core itself calls one read-only tool of the catalog, or reads one of a server's resources, at an interval, without a model, and writes an event when what it watches changes (monitor.changed), when a list gets a new item (monitor.new), when a number crosses a limit either way (monitor.crossed, holds true or false), or when its looks keep failing (monitor.failed, then monitor.recovered); keyed by its name. It only detects: a skill reacts to its events (write_skill with when: monitor.changed key=<name>). Use it to watch a tool that does not tell by itself (« surveille les alertes Grafana de la prod »): never a time skill that calls the tool every few minutes. New mail: the mail server's resource mail://received, cond new, path messages, id id: one monitor.new per message received, its sender and subject in the item. New invitations: the calendar server's resource calendar://invitations, cond new, path invitations, id id: one monitor.new per invitation waiting for the user's answer, its title, start, organizer and event id in the item. Nothing looks before the user approves it on its card.",
 		func(ctx context.Context, in writeMonitorIn) (map[string]any, error) {
-			every := 0
-			if e := strings.TrimSpace(in.Every); e != "" {
-				d, err := parseMonitorEvery(e)
-				if err != nil {
-					return nil, err
-				}
-				every = int(d / time.Minute)
+			spec, err := in.spec()
+			if err != nil {
+				return nil, err
 			}
-			return c.writeMonitor(in.Name, monitorSpec{Way: wayPoll, Server: in.Server, Tool: in.Tool, Resource: in.Resource, Args: in.Args, Every: every,
-				Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID, Above: in.Above, Below: in.Below}, c.turnTaint())
+			return c.writeMonitor(in.Name, spec, c.turnTaint())
 		})
 	tool(s, "try_monitor", "Try a monitor once, without keeping or writing anything: call its tool (or read its resource), apply its path and say what it extracts (the value, the list's items and their ids, or the number), or why it cannot (not a free read, a path that finds nothing, not a list, not a number). Give the name of one of the user's monitors to check it works (and whether a look now would find a change since its last look), or a draft (server, tool or resource, args, cond, path, id, above, below, as write_monitor) to try before proposing it. Only a monitor that polls.",
 		func(ctx context.Context, in tryMonitorIn) (map[string]any, error) {

@@ -100,7 +100,7 @@ func f(p string) bool { return p == "github" || len(mailService.ID) > 0 }
 // workspaceFiles are the workspace's surfaces and what they stand on: no
 // tool or server is known there, so a tool linked tomorrow is a source
 // with no code (#415). Patterns, so that a file added there is guarded.
-var workspaceFiles = []string{"surface*.go", "workspace*.go", "web_espace*.go", "web_text_espace.go", "node_live.go", "node_items.go", "item_cards.go", "pool_follow.go", "a2ui/*.go"}
+var workspaceFiles = []string{"surface*.go", "workspace*.go", "web_espace*.go", "web_text_espace.go", "node_live.go", "node_items.go", "item_cards.go", "view_card.go", "pool_follow.go", "a2ui/*.go"}
 
 // toolWords are the names a tool goes by in eriphe-core's own data, taken
 // from the data so a preset added is guarded too: words, the names of
