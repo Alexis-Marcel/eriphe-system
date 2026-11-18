@@ -106,7 +106,7 @@ export function Markdown({ text, newTab }: { text: string; newTab: string }) {
         const k = String(i);
         switch (b.kind) {
           case "h": {
-            // Inside a tile, headings sit under the tile's own title.
+            // Inside a block, headings sit under the page's own title.
             const H = (["h3", "h4", "h5", "h6", "h6", "h6"] as const)[b.level - 1];
             return <H key={k}>{inline(b.text, newTab, k)}</H>;
           }

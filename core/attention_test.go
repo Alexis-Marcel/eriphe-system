@@ -73,7 +73,7 @@ func TestAttentionMergeByRef(t *testing.T) {
 }
 
 // A card enters the queue with a weight by its kind: one a task or a
-// thread waits on, 4; what the user asked to be done, 3; a reminder, 2;
+// node waits on, 4; what the user asked to be done, 3; a reminder, 2;
 // the small things, 1. Decided, it leaves.
 func TestAttentionWeightByKind(t *testing.T) {
 	for kind, want := range map[string]int{cardTaskStart: 4, cardAccess: 4, cardSkill: 3, cardMonitor: 3, cardRunCalls: 3,

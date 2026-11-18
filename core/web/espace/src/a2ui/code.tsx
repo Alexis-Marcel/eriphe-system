@@ -1,21 +1,7 @@
-import { createContext, useContext } from "react";
-import { useWords } from "../i18n";
-
-// Code: text in a fixed-width font, as it is, one block per line so that a
-// tile with too little room hides its last lines whole (place.ts, FOLDABLE)
-// and says the rest is there, open. A diff is a unified diff, read line by
-// line: its files' headers, its hunks (@@), the lines added, removed and
-// kept, each a class (espace.css), never a style.
-//
-// A tile on the grid never scrolls: its long lines wrap. The surface open
-// (OnStage) keeps them as they are and scrolls sideways; it shows every
-// line, where a tile draws GRID_LINES at most and says how many more.
-
-// OnStage tells a component whether its surface is open on stage (or alone,
-// as in the gallery), not a tile among the others on the grid.
-export const OnStage = createContext(true);
-
-export const GRID_LINES = 60;
+// Code: text in a fixed-width font, as it is, one block per line, every
+// line shown. A diff is a unified diff, read line by line: its files'
+// headers, its hunks (@@), the lines added, removed and kept, each a class
+// (espace.css), never a style.
 
 export type LineKind = "code" | "file" | "hunk" | "add" | "del" | "ctx" | "note";
 export type Line = { kind: LineKind; text: string };
@@ -81,11 +67,7 @@ export function codeLines(text: string, mode: "code" | "diff"): Line[] {
 }
 
 export function Code({ text, language, mode }: { text: string; language: string; mode: "code" | "diff" }) {
-  const { t } = useWords();
-  const stage = useContext(OnStage);
-  const all = codeLines(text, mode);
-  const shown = stage ? all : all.slice(0, GRID_LINES);
-  const rest = all.length - shown.length;
+  const shown = codeLines(text, mode);
   return (
     <figure className={`a2-code a2-code-${mode}`}>
       {language && <figcaption className="a2-code-lang">{language}</figcaption>}
@@ -98,7 +80,6 @@ export function Code({ text, language, mode }: { text: string; language: string;
           ))}
         </code>
       </pre>
-      {rest > 0 && <p className="a2-code-rest">{t("espace.a2.code.rest", rest)}</p>}
     </figure>
   );
 }

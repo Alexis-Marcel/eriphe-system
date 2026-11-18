@@ -166,7 +166,7 @@ button, input, select, textarea { font: inherit; }
   color: var(--warn-text); background: var(--warn-soft);
 }
 .a2-text-mark::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); }
-/* A tile with too little room hides the block: its mark goes with it. */
+/* A Mark at the head of a column marks what follows it. */
 .a2-column > .a2-text-mark + * { padding-left: 12px; border-left: 2px solid color-mix(in oklab, var(--warn) 55%, transparent); }
 .a2-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .a2-list-horizontal { flex-direction: row; flex-wrap: wrap; gap: 8px; }
@@ -185,7 +185,7 @@ button, input, select, textarea { font: inherit; }
 .a2-row > :is(.a2-item, .a2-message) { flex: 1 1 14rem; }
 .a2-button:disabled { opacity: 0.5; cursor: default; }
 
-/* Card: the tile's own frame when it is the root, a quiet box inside. */
+/* Card: the block's own frame when it is the root, a quiet box inside. */
 .a2-card { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .a2-card-title { margin: 0; font-weight: 600; font-size: 17px; line-height: 1.3; letter-spacing: -0.015em; }
 /* A card inside another, or a cell of a gallery: framed, as one of several. */
@@ -229,22 +229,18 @@ button, input, select, textarea { font: inherit; }
 .a2-link:hover .a2-link-label { text-decoration-thickness: 2px; }
 .a2-link-off { color: var(--fg3); }
 
-/* Code: as it is, one block per line (a tile hides its last lines whole).
-   A tile never scrolls: long lines wrap. Open, they keep their place and
-   the block scrolls sideways. A diff colours its lines by class. */
+/* Code: as it is, one block per line; long lines wrap. A diff colours its
+   lines by class. */
 .a2-code { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .a2-code-lang { align-self: flex-start; padding: 0 8px; border-radius: 999px; font: 11.5px/18px var(--mono); color: var(--fg3); background: var(--fill); }
 .a2-code-body { margin: 0; padding: 8px 0; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--fill); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
 .a2-code-body > code { display: block; font: inherit; }
 .a2-code-line { display: block; min-height: 1.5em; padding: 0 12px; }
-.mod.focus .a2-code-body { white-space: pre; overflow-wrap: normal; overflow-x: auto; scrollbar-width: thin; }
-.mod.focus .a2-code-body > code { min-width: max-content; }
 .a2-diff-file { color: var(--fg); background: var(--fill-strong); }
 .a2-diff-hunk { color: var(--accent-text); background: var(--accent-soft); }
 .a2-diff-add { background: var(--ok-soft); }
 .a2-diff-del { background: var(--hot-soft); }
 .a2-diff-note { color: var(--fg3); font-style: italic; }
-.a2-code-rest { margin: 0; font-size: 12.5px; color: var(--fg3); }
 
 /* Fields: what the user enters goes to the surface's data. */
 .a2-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }

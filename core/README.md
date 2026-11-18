@@ -3308,9 +3308,8 @@ through `a2ui.Validate`).
   [links](#surfaces-in-a2ui-a2ui)), Code (`code.tsx`: text as it is in a
   fixed-width font, an optional language label; `mode: "diff"` reads a unified diff, its
   files' headers, hunks, added, removed and kept lines each a class, a hunk's counts telling a
-  removed `-- x` line from a header. One block per line: a page wraps long lines, draws 60 at
-  most with how many more, and hides its last lines whole; open, every line, and the block
-  scrolls sideways).
+  removed `-- x` line from a header. One block per line, every line shown, long lines
+  wrapped).
 - *Input*: Button (with its icon), Choice, TextField, DateField; the fields write what the
   user enters to the bound data path, as A2UI does. A Button's action keeps to the
   actions' grammar (`a2ui/actions.go`: a Button sends `ask`, its author's words only, never the

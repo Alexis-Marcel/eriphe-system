@@ -266,7 +266,7 @@ func startedBrain(t *testing.T, c *core, resume bool) *TaskRow {
 }
 
 // Only a fresh session gets the pack, in its first turn, not in its
-// system prompt; a resumed one has the thread already.
+// system prompt; a resumed one has the conversation already.
 func TestContextPackOnlyFresh(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	say(t, c, roleUser, "Rappelle-moi le devis", true)

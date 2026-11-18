@@ -59,7 +59,7 @@ const Text = createComponentImplementation(
   ({ props }) => {
     const v = props.variant ?? "body";
     const cls = `a2-text a2-text-${v}`;
-    // A title is a heading, under the tile's: assistive technology can
+    // A title is a heading, under the page's: assistive technology can
     // jump between them.
     if (v === "title") return <h3 className={cls}>{props.text}</h3>;
     if (v === "subtitle") return <h4 className={cls}>{props.text}</h4>;
