@@ -29,10 +29,8 @@ import (
 //   - Its task is lent the skill's tools, with no start card (the user
 //     approved the skill and what it says); an external event taints it from
 //     its start, so its writes then ask a card.
-//   - Lent eriphe-threads, it acts on its thread (task_threads.go): it
-//     notes items, says the thread waits for the user, sets a deadline,
-//     raises it, adds what the user does or decides. That is where the
-//     user sees what it found, ordered by code, without a model speaking.
+//   - Its task works in a node of its own, as any worker's (task_node.go):
+//     it writes there what it found and notes the items of its sources.
 //   - Its last message is optional: kept in its note, and a notification,
 //     why "Skill « name »", only when its receipt's attention list weighs
 //     it (tellRun); no entry tells nothing. Then its task stops.
@@ -48,7 +46,7 @@ CREATE TABLE IF NOT EXISTS skill_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT, skill TEXT NOT NULL, sha TEXT NOT NULL, key TEXT NOT NULL DEFAULT '',
   events TEXT NOT NULL DEFAULT '[]', task TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',
   external INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, ended INTEGER,
-  thread INTEGER NOT NULL DEFAULT 0); -- the thread of its alias, lent eriphe-threads (task_threads.go)
+  thread INTEGER NOT NULL DEFAULT 0); -- the thread its item cards go to (item_cards.go)
 CREATE INDEX IF NOT EXISTS skill_runs_skill ON skill_runs (skill, id);
 CREATE INDEX IF NOT EXISTS skill_runs_task ON skill_runs (task);`
 
@@ -274,8 +272,7 @@ func scanSkillRun(row interface{ Scan(...any) error }) (*skillRun, error) {
 	return &r, nil
 }
 
-// openRun is a run of the skill and key whose task is still open. Its
-// thread stays: the next run finds it again (skillThread).
+// openRun is a run of the skill and key whose task is still open.
 func (c *core) openRun(skill, key string) *skillRun {
 	r, err := scanSkillRun(c.store.db.QueryRow(`SELECT `+skillRunCols+` FROM skill_runs WHERE skill = ? AND key = ? AND state = ? ORDER BY id DESC LIMIT 1`,
 		skill, key, skillRunOpen))

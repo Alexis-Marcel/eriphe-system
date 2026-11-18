@@ -72,7 +72,7 @@ func oldInstall(t *testing.T) (core, memory string) {
 	addSkill("arrivee", "default", "---\nname: arrivee\ndescription: Ce que Sam voit en arrivant.\n---\nBonjour.\n")
 	addSkill("alertes", skillFromEriphe, "---\nname: alertes\ndescription: Les alertes de la prod.\nwhen: monitor.changed key=prod\ntools: [grafana]\ncan: [open-thread]\n---\nVérifie.\n")
 	addSkill("tableau", skillFromEriphe, "---\nname: tableau\ndescription: Un tableau.\nwhen: monitor.new key=prod\ntools: [eriphe-workspace]\n---\nÉcris.\n")
-	addSkill("mails", skillFromEriphe, "---\nname: mails\ndescription: Les mails.\nwhen: monitor.new key=mails\ntools: [mail, eriphe-threads]\nthread: topic:mails\n---\nNote chaque mail.\n")
+	addSkill("mails", skillFromEriphe, "---\nname: mails\ndescription: Les mails.\nwhen: monitor.new key=mails\ntools: [mail]\nthread: topic:mails\n---\nNote chaque mail.\n")
 	s.db.Close()
 
 	m, err := openMemory(memory)
@@ -233,7 +233,7 @@ func TestConvertOneThread(t *testing.T) {
 	}
 
 	// Approving a new version turns an old skill back on.
-	if _, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte("---\nname: alertes\ndescription: Les alertes de la prod.\nwhen: monitor.changed key=prod\ntools: [grafana, eriphe-threads]\n---\nNote chaque alerte.\n")}}, skillFromEriphe); err != nil {
+	if _, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte("---\nname: alertes\ndescription: Les alertes de la prod.\nwhen: monitor.changed key=prod\ntools: [grafana]\n---\nNote chaque alerte.\n")}}, skillFromEriphe); err != nil {
 		t.Fatal(err)
 	}
 	k, _ := c.store.skill("alertes")
@@ -261,7 +261,7 @@ func TestSkillPageUnreadable(t *testing.T) {
 	tw := newTestWebFor(t, c)
 	tw.setup()
 	code, body, _ := tw.do("GET", "/settings/skills/tableau", nil, nil)
-	if code != http.StatusOK || !strings.Contains(body, "il agit sur son fil") || !strings.Contains(body, "ancien Eriphe") {
+	if code != http.StatusOK || !strings.Contains(body, "chaque exécution écrit dans son nœud") || !strings.Contains(body, "ancien Eriphe") {
 		t.Fatalf("GET a skill that does not read: %d", code)
 	}
 	if code, body, _ = tw.do("GET", "/settings/skills", nil, nil); code != http.StatusOK || strings.Count(body, "ancien Eriphe") != 2 {

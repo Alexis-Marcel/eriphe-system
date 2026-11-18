@@ -37,7 +37,7 @@ type threadIn struct {
 	NewBy    string     `json:"new_because,omitempty" jsonschema:"after a refusal that lists threads near this matter: why this is another matter, in a few words; logged on the new thread"`
 	Parent   int64      `json:"parent,omitempty" jsonschema:"the thread this one is a child of: a step of that thread that became a matter of its own. An active top thread (a child has no children); the child opens inside it on the workspace, and what waits for the user in the child raises it. Given with an alias that has a thread already, that thread moves under it"`
 
-	exact bool // only the thread of its alias, no matcher: a skill's run (skillThread)
+	exact bool // only the thread of its alias, no matcher
 }
 
 // openThread records a thread. A light one is open at once: no card, no

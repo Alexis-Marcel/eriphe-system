@@ -154,8 +154,8 @@ func (c *core) endsAgain(old Thread, ends string) error {
 // again: a matter has one thread.
 const sameMatter = "même chose"
 
-// openThreadOnce opens a thread, one per matter, for the brain or a task
-// lent eriphe-threads (by: skill:<name>, task:<id>); it is the only path
+// openThreadOnce opens a thread, one per matter, for the brain, a lead or
+// code (by); it is the only path
 // that opens one. A light one needs its alias, and an alias that has a
 // thread already gives that thread back (reopened light if it ended)
 // rather than a second one; again says so. Without one, threads near the

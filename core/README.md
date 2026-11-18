@@ -1087,7 +1087,7 @@ one object the user sees, how it ends (`goal`, `standing`, `day`, for the brain 
 brain opens or resumes one (a question about a matter, a request of more than one step, a research,
 an alert worth following, anything shown: `open_thread` with its alias, `take` or `new_because`
 when the matcher lists near ones; a one-line answer stays text), that a standing thread comes
-from a watcher (a skill lent `eriphe-threads` with its `thread:` alias), how its steps grow from
+from a watcher (a skill with its `thread:` alias), how its steps grow from
 what is found, how notes and offered actions propose on it, when its surface `thread-<id>` takes the stage
 (« where does it stand », from the workspace: `workspace_focus`) and when it opens on the side
 (« launch », « while I… »), and that a wake turn updates the thread without asking the user.
@@ -1209,13 +1209,9 @@ by code from the thread's data (#468): it never depends on a model remembering t
   - `/thread/steps`: `done` and `open`, `Timeline` items (a step's state, its time, its kind, its
     checks and the last word on it; while the thread is active, a step that waits for the user is
     not there: it is in « À toi »), `summary` (the line of the steps done, `""` with none),
-    `cards` (`{ref}`, the cards decided on its steps: a call's, with how its run went). Under a
-    task step, what was settled for its task (#564): Eriphe's reply to its question (« Question
-    de l'assistant → Eriphe a répondu : … »), its checks fixed, a release Eriphe asked on a card
-    and the user's answer on it. Kept as facts in `thread_answers` (a kind, its refs, Eriphe's
-    reply, the brain turn's taint) by `task_answer_log.go`, worded by code in the user's language,
-    never the task's question; a reply written on a tainted turn says « extérieur » in its detail
-    and taints the surface (`answer:<id>`);
+    `cards` (`{ref}`, the cards decided on its steps: a call's, with how its run went). What was
+    settled for a step's task (Eriphe's reply, its checks fixed, a release) is in the task's
+    node's trace ([a task's node](#a-tasks-node-task_nodego-task_nodesgo));
   - `/thread/items/<source>`: each source's data (below); once the thread ended, no longer read, the
     same keys empty (`endedItems`), so a block bound to them still holds;
   - `/thread/children`, `/thread/parent`, `/thread/marks` (below);
@@ -1433,7 +1429,17 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   body alike makes no version. An archived node is not written (`ErrArchived`). A node is 512 KiB
   and 32 blocks at most. Secrets are refused by the memory's filter (`scanSecrets` in
   `memory_trust.go`: credentials, long random strings, links with a password or a token); its
-  injection rules are not applied, as a node may quote someone else's words.
+  injection rules are not applied, as a node may quote someone else's words. A link's path is not
+  read as a random string (a pull request's `owner/repo/pull/640/files`, a document's id): a
+  token's known shape anywhere, a query's or fragment's token key or long random value, and a
+  link's password still are. A random secret as a bare path segment, in no known shape, passes.
+- **Code's writes:** `Change(id, expect, author, fn)` lets code change what no author may (a
+  block's or the node's `external`, the title, the goal); the id, parent, creation, done and
+  archived never change this way, and the filter runs over the node written. `Create` with
+  `External` marks the node and each of its blocks.
+- **Item notes:** `NoteItem(id, item)` keeps a note and a state (`act`, `look`, `info`, `none`,
+  `done`) on an item one of the node's blocks' sources lists, in `node_items`, with its author
+  and taint; no note nor state takes it away. `Items(id)` reads them. A note is not a version.
 - **Reads:** `Read(id, n)` gives version `n` (0: the last), `Versions`, `Children` (archived ones
   included), `Find(query, archived, limit)` (all the words, prefixes from three letters; archived
   nodes only when asked), `Get`.
@@ -1455,6 +1461,40 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   `nodes-<day>.bundle` (a git bundle: `git clone` reads it) and `nodes-<day>.db` (a copy of the
   index). Writes wait meanwhile; a start after the hour finds the night's copy and does not make
   another.
+
+## A task's node (`task_node.go`, `task_nodes.go`)
+
+Every worker task works in a node of its own (#629). `run_task` takes `node`: the task's node is
+opened as a child of it, else at the top (an unknown or archived node refuses the start). The node
+is titled as the task, its goal its contract's objective or its prompt's first line, `external`
+when the task starts on a tainted turn. Code keeps which task works in which node (`task_nodes`)
+and follows its state on the node: `running`, `waiting` (held for its start card, or for a
+permission), `idle` (its turn ended), `done` (it ended).
+
+- **`eriphe-nodes`**, an MCP server Eriphe provides, relayed by the device like `eriphe-memory`
+  (the name is reserved in the catalog): every worker with a node has it, its tools allowed in
+  advance; it is not lent. `node_read` (a version, its hash, its body, its item notes), `node_write`
+  (the whole body), `node_edit` (one block, or a piece of text found once) and `node_append` work
+  on **its own node only**: another id is refused, naming the task's node. Each write names the
+  hash of the version it was made on (`expect`; `node_append` writes over nothing). `node_open`
+  opens a child of its node (title, goal, body), which it does not write. `item_note` notes an item
+  a source of its node lists. `progress` adds one line to its trace. It never starts a task.
+- **Who writes** is code's: `skill:<name>` for a skill's run, `task:<id>` for another.
+- **Taint**: a task tainted at start or by what it read (`taskTaint`, read at each call) writes
+  external: code marks its node and the blocks it writes, in the same version; a child it opens is
+  external; its item notes carry the taint. Reading an external node taints the task.
+- **Guards** nodefile does not hold: the actions' grammar (`a2ui.CheckActions`); written tainted, a
+  block asks nothing (no `ask` button, no `Proposal`); no `Offers` (code's); a `Link` never opens a
+  source's value; a block's source reads a tool or server the task is lent, or a monitor the user
+  approved, and one of a server not trusted marks the block external.
+- **Its report**: at the end of each turn, the task's last message (its receipt left out) is filed
+  by code, whole: in its node's trace (in several entries past 256 KiB), and as its doc when the
+  task wrote none. The same report is filed once. A report refused (a secret) or that cannot be the
+  doc is said to the brain, which reads it whole with `task_status`.
+- **The brain is woken short**: the task's title, its receipt's verdict (status, checks passed or
+  failed, what waits for approval), the report's first line, and its node. A thread's step tells
+  its lead the same way; the step keeps its output whole. What Eriphe or the user settles for a task
+  (`answer_task`, a release's card) is a line of its node's trace.
 
 ## Permission policy
 
@@ -1916,7 +1956,7 @@ turn is not tainted. Its front matter:
 | `when` | an event kind of the [journal](#events) (`monitor.new key=mails`, `monitor.changed key=getout-prod`), with filters on its key or payload (`monitor.received key=getout status=firing`), or a payload number compared (`user.returned away_minutes>=180`, `<=` too); or up to 5 kinds, by commas, that share the filters (`monitor.failed, monitor.recovered key=getout-prod`: one skill for one way of reacting, its run says each event's kind); or `time` and a schedule (`time weekdays 08:00`, `time every 2h 08:00-20:00`, as rules' schedules); or both, the schedule then `;` and the events (`time daily 06:00; user.returned away_minutes>=180`): it runs at its times and on its events |
 | `every` | batching, 5m to 1d: the period starts with the first event waiting; then one task gets all of them. Without it, at once |
 | `model` | the agent of its tasks (Settings → Agents); the default one otherwise |
-| `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid; `eriphe-threads` to act on threads |
+| `tools` | the catalog servers its tasks are lent (10 at most); each call still goes through the grid |
 | `thread` | its thread's alias, `kind:slug` (`topic:mails`); without it, its events' key when it names a thing (`topic:<monitor>`) |
 | `title` | its thread's name for the user, 60 characters at most (`title: Mes mails`); without it, its name made a title (`mails-pro` → « Mails pro »). A new version's title renames its thread, the one already open too |
 | `urgent` | a fixed message, 160 characters at most, no link: sent at any hour when a run weighs something 5 |
@@ -1931,12 +1971,11 @@ version, read with its diff.
   no start card: the user approved the skill. An external event taints it from its start
   (`task_taint:<id>`), so its writes ask a card as a tainted task's do; a time trigger or own
   events start it clean.
-- **It acts on its thread** when lent `eriphe-threads` (`skillVoice`): it notes the items it
-  looked at, says the thread waits for the user or gives it a deadline, raises it, adds what the
-  user must do or decide, gives it a headline. That is what the user sees, as is: it is told to
-  write in the user's language, short and concrete, with no ids nor jargon (`threadsUserReads`,
-  also the server's instructions). It is ordered by code; a skill writes no surface
-  (`eriphe-workspace` is refused in its `tools`). The run's note says how many notes it wrote.
+- **It works in a node of its own**, as any worker task
+  ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)): it writes there what it found and
+  notes the items of its sources (`item_note`), with the user's preferences about what they see
+  in its prompt (`seePreferences`). A skill writes no surface (`eriphe-workspace` is refused in its
+  `tools`). Its standing node, with its monitor and its views, comes with #631.
 - **Its last message** is optional, the run's report, weighed by its receipt's
   [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
   as everywhere; a skill's instructions write no prefix. Entries whose refs are all threads
@@ -2005,51 +2044,9 @@ version, read with its diff.
   of a task says the tool's own words (`toolWords`: its title from its server, else `callVerb`).
   The brain's and a lead's say their label, but for a tainted note: the tool's words. Its card
   keeps the note's taint.
-- **Its thread** (`task_threads.go`): its runs are about its alias, `thread: kind:slug`; without
-  it, their events' key when it names a thing (a monitor's, `topic:<name>`, or `kind:slug`;
-  about.go). Their tasks, notifications, cards and signals carry it. Lent `eriphe-threads`, a
-  run acts on the thread of that alias: code finds it when the run starts, reopens it if it
-  ended, or opens it **standing**, titled by its `title:` (else `mails-pro` → « Mails pro ») with its
-  description as goal: words the user approved, never the run's. A run of a poll monitor's new
-  items gives that thread the monitor's read as a source with items (thread_sources.go), each
-  item by the id its `monitor.new` carries: the run notes them there. The run is told its thread
-  and its sources; the next run finds the same thread. Nothing creates a thread because a tool
-  is connected: it is born when a watcher acts on its alias, for any source.
-  **It exists as soon as the skill is on** (`openSkillThreads`): when its version is approved
-  (on its card or in Réglages), when it is turned on, and at core start for every skill on whose
-  alias has no thread yet (an active one gets its monitor's source there should it lack it; an
-  ended one stays ended), code opens it the same way (`openSkillThread`, held by one lock so a
-  run and an approval never open two), without a model run. Its alias is the one its trigger
-  gives before any event (`skillOwnThread`): its `thread:`, else on `monitor.*` events with
-  `key=<name>`, `topic:<name>`. A watcher of a poll monitor's new items (`monitor.new
-  key=<name>`) gets that monitor's read as its source with items at once, so its list shows,
-  read by code; a skill on time with `thread:` gets its thread with no source; a skill off, not
-  lent `eriphe-threads`, or whose alias is only known from its events gets none until its run.
-- **eriphe-threads**, a server Eriphe provides, lent like any tool (`tools: [eriphe-threads]`,
-  `{kind: tool, ref: eriphe-threads}` in `run_task`; `eriphe-threads.note_item` lends one tool).
-  Its tools ask nothing (writing on a thread is not an external write) and act as
-  `skill:<name>` (`task:<id>` for another task), with the task's taint read at each call:
-  - `find_thread`, `read_thread` (what others wrote taints the task);
-  - `open_thread` on an alias: the thread it has, reopened if it ended, else a new one, light or
-    standing (never `day`, and it never changes how a thread found ends), with an optional
-    `headline` stored as `set_thread`'s; with steps, a led thread
-    whose plan waits for the user's card: nothing starts before the yes;
-  - `note_item` on an item of a source (tainted from a tainted run: shown « extérieur », never
-    quoted into a summary);
-  - `set_thread`: `waiting` (it waits for the user) or `open`, a deadline (its `deadline` step,
-    made or moved), a raise (an attention item `thread:<id>`, held to 3 from a tainted run), a
-    `headline` (120 characters, `""` takes it away): the line the user reads at the top of the
-    thread and on its chip, in place of its items' counts; kept apart (`thread_headline:<id>`)
-    with its author and the run's taint, code's: from a tainted run it taints the surface
-    (`headline`) and the state line says « extérieur » beside it;
-  - `add_step` of kind `user`, `deadline` or `call`: a call is one of the task's own tools, and
-    always a card, a free read included (`step_ask:<thread>:<key>`); what it adds taints the thread
-    from a tainted run;
-  - `link_thread` with a source: a read of one of its tools or servers, or an approved monitor; a
-    name alone takes away one it gave.
-
-  It never offers `settle_step`, `close_thread`, `stop_thread`, `reopen_thread` nor any approval:
-  skills propose, the user decides. A plan is never approved by code.
+- **Its alias**: its runs are about `thread: kind:slug`; without it, their events' key when it
+  names a thing (a monitor's, `topic:<name>`, or `kind:slug`; about.go). Their tasks,
+  notifications, cards and signals carry it. A run no longer opens nor tends a thread.
 - **Urgent**: with `urgent: <text>`, a run whose attention list weighs something 5 sends that
   fixed text over the quiet hours and the daily cap, once per run, as an urgent rule's. Nothing the
   run read enters it: a tainted run cannot write what wakes the user. Its own message goes as any
@@ -4105,7 +4102,7 @@ never a tile of its own. Five tools; the **author is the caller**, never a field
   `ends: day` and its alias, the brain's part on its surface; asked again, `open_thread` on the
   same alias gives the same thread back. At the user's midnight code ends it and takes its part
   away (`endDays`, `dropThreadPart`): reopened the next day, the brain writes it again. A
-  recurring request is a skill, which acts on its thread (`eriphe-threads`) and writes no surface.
+  recurring request is a skill, whose runs write in their nodes and write no surface.
 - **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint; it
   holds every light thread. A thread's lead, on its own tools (`registerLeadTools`), as
   `lead:<thread>`, for its thread. A task through **`eriphe-workspace`, a server Eriphe
@@ -4179,10 +4176,9 @@ only when the CLI does.
 
 - **A thread's surface is code's** ([a thread's surface](#a-threads-surface-thread_surfacego)):
   who holds the thread (the brain, or its lead) adds its part to it.
-- **A skill writes no surface**: lent `eriphe-threads`, it acts on its thread, whose surface is
-  code's ([Triggered skills](#triggered-skills)).
+- **A skill writes no surface**: each run writes in its node ([Triggered skills](#triggered-skills)).
 - **The brain** writes what the user asks; asked for something that comes back (« chaque matin »),
-  it writes a skill with `tools: [eriphe-threads]` that tends its thread.
+  it writes a skill.
 - **No model judges the workspace**: nothing tells a surface stale or something missing; what a
   thread shows is kept up to date by code from its sources and by whoever tends it.
 
@@ -4835,7 +4831,7 @@ intentions (memory.db) carry an `about` column next to their ref (which record: 
   merged into another names that one (`thread:7` → `thread:9`). `resolveAbout` follows it;
   `noteAbout` notes a key written. A record written about a key is kept about its target: what is
   written about `project:site` once a thread has that alias is about the thread.
-- **One thread an alias**, whoever opens it (the brain, a skill, a task lent `eriphe-threads`):
+- **One thread an alias**, whoever opens it (the brain, a lead, code):
   `openThread` refuses a key another thread has, ended or not; `openThreadOnce` gives that thread
   back (reopened light, « même chose », if it ended) and refuses a led open on it. A key that
   names a person, the user, the home or Eriphe's own topics is no alias.

@@ -471,7 +471,7 @@ func TestBrainPromptThreads(t *testing.T) {
 	for _, want := range []string{
 		"**Quand en ouvrir un.**", "`open_thread` avec sa clé", "reste du texte, sans fil", "tout ce qui se **montre** est un fil", "`take`", "`new_because`",
 		"une étape `call` de fusion", "une étape `user`", "seulement le `check`, rien d'autre", "devient une étape `task` de ce fil", "Une tâche est toujours une étape d'un fil",
-		"un **veilleur**", "`tools: [eriphe-threads]`", "`note_item`", "`stop_thread`", "une recherche",
+		"un **veilleur**", "`item_note`", "`note_item`", "`stop_thread`", "une recherche",
 		"`workspace_focus` avec `thread-<id>`", "**sans** `workspace_focus`",
 		"aucune question de toi-même", "`[rien]`", "son **but** est atteint",
 		"se range seul dans sa chronologie", "Sa réponse sur une de ces cartes",

@@ -46,7 +46,7 @@ const attentionInstruction = "When something deserves the user's attention, add 
 // The kinds of records an attention item may be about: kind:id. It may be
 // about a key too (about_key.go): project:<name>, pr:<owner>/<repo>#<n>,
 // alert:<id>…, the id as written. No kind is a tool's: an item of a
-// thread's source is raised through its thread (task_threads.go).
+// thread's source is raised through its thread (thread_items.go).
 const (
 	refThread = "thread" // thread:<id>: its tile takes the weight (workspace_queue.go)
 	refCard   = "card"   // card:<id>, a card of the conversation

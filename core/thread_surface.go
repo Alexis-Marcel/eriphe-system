@@ -400,7 +400,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	data["items"] = items.data
 	data["since"] = c.threadSinceData(s, steps, now)
 	data["summary"] = strings.TrimSpace(s.Summary)
-	// Raised (a skill's set_thread, a signal about it): it takes the
+	// Raised (a signal about it): it takes the
 	// item's weight, as a surface its item's (workspace_queue.go).
 	if w := c.threadRaised(s.ID); w > 0 {
 		in.Weight = max(in.Weight, queueSurfaceWeight(w))

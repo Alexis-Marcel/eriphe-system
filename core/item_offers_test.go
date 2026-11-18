@@ -299,7 +299,7 @@ func TestOfferLabelsFromApprovedSkill(t *testing.T) {
 	c, _, id := alertsThread(t)
 	declare := func(actions string) {
 		t.Helper()
-		addTriggered(t, c, "---\nname: veille-alertes\ndescription: Trie les alertes de la prod.\nwhen: monitor.new key=alertes\ntools: [eriphe-threads, monitor]\nactions:\n"+actions+"---\nNote chaque alerte sur ton fil.\n")
+		addTriggered(t, c, "---\nname: veille-alertes\ndescription: Trie les alertes de la prod.\nwhen: monitor.new key=alertes\ntools: [monitor]\nactions:\n"+actions+"---\nNote chaque alerte sur ton fil.\n")
 	}
 	declare("  - \"Couper l'alerte: monitor/silence\"\n")
 	label := func(item string) string {
@@ -331,7 +331,7 @@ func TestOfferLabelsFromApprovedSkill(t *testing.T) {
 	}
 	// A version waiting for the user's yes does not word it.
 	declare("  - \"Couper l'alerte: monitor/silence\"\n")
-	if _, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte("---\nname: veille-alertes\ndescription: Trie les alertes de la prod.\nwhen: monitor.new key=alertes\ntools: [eriphe-threads, monitor]\nactions:\n  - \"Tout effacer: monitor/silence\"\n---\nx\n")}}, "upload"); err != nil {
+	if _, _, err := c.store.addSkillVersion([]skillFile{{Path: "SKILL.md", Data: []byte("---\nname: veille-alertes\ndescription: Trie les alertes de la prod.\nwhen: monitor.new key=alertes\ntools: [monitor]\nactions:\n  - \"Tout effacer: monitor/silence\"\n---\nx\n")}}, "upload"); err != nil {
 		t.Fatal(err)
 	}
 	if got := label("a"); got != "Couper l'alerte" {

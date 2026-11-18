@@ -17,8 +17,6 @@ import (
 //     card (kind runcalls), with its message: each action and its
 //     parameters; the yes runs them all as kept, the no none. The brain is
 //     not told of their results: the run's note keeps them.
-//   - Lent eriphe-threads, it acts on threads with tools (task_threads.go),
-//     never with its message.
 //   - With urgent: <fixed text>, a run that weighs something 5 in its
 //     attention list sends that fixed text over the quiet hours and the
 //     daily cap, once per run, as an urgent rule does: nothing the run read
