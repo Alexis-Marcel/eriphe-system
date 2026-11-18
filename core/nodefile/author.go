@@ -168,6 +168,27 @@ func (b *Block) keepCode(prev *Block) error {
 	return nil
 }
 
+// AuthorText is the body as its author writes it (AuthorBody takes it
+// back): its text and blocks, without code's fields of the blocks (a
+// source's snapshot, the user's marks, external).
+func (n *Node) AuthorText() (string, error) {
+	var b bytes.Buffer
+	for _, s := range n.segs {
+		if s.block == nil {
+			b.WriteString(s.text)
+			continue
+		}
+		bare := *s.block
+		bare.Snapshot, bare.Marks, bare.External = nil, nil, false
+		out, err := bare.canonical()
+		if err != nil {
+			return "", err
+		}
+		b.Write(out)
+	}
+	return b.String(), nil
+}
+
 // AuthorBytes is the node as its authors wrote it: its front matter and
 // body in their canonical form, without code's fields (a block's
 // snapshot, marks and external, the node's external, done and links).

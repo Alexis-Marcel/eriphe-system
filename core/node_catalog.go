@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
-	"sort"
-	"strconv"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -103,27 +100,4 @@ func providedInfo() []map[string]any {
 	}
 	return []map[string]any{{"name": workspaceServer, "use": "the catalog of a node's blocks: a task reads it (catalog_read, sources_read) to compose the blocks of its node. Free. Lend it as {kind: tool, ref: " + workspaceServer + "}.",
 		"tools": tools}}
-}
-
-// actionGuard keeps a surface's actions to the grammar (a2ui.CheckActions:
-// ask with its author's own words, or a local name) and, from an author
-// whose turn read external content, which may have written it, allows no
-// ask at all (#415, #425).
-func actionGuard(id string, comps json.RawMessage, tainted bool) []a2ui.ValidationError {
-	errs := a2ui.CheckActions(id, 0, comps)
-	if !tainted {
-		return errs
-	}
-	var list []map[string]any
-	json.Unmarshal(comps, &list)
-	for i, comp := range list {
-		a, _ := comp["action"].(map[string]any)
-		if ev, ok := a["event"].(map[string]any); ok && ev["name"] == a2ui.ActionAsk {
-			errs = append(errs, a2ui.ValidationError{Code: a2ui.CodeValidationFailed, SurfaceID: id,
-				Path:    "/components/" + strconv.Itoa(i) + "/action/event",
-				Message: "an ask written after reading external content could carry it to the brain as a request: leave the button out"})
-		}
-	}
-	sort.SliceStable(errs, func(i, j int) bool { return errs[i].Path < errs[j].Path })
-	return errs
 }

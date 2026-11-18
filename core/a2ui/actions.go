@@ -3,71 +3,45 @@ package a2ui
 import (
 	"encoding/json"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 )
 
-// The actions of Eriphe's workspace are a small closed grammar (#425): a
-// click does only what is safe, and code checks it both when an author
-// writes it and when the page sends it.
+// The actions of Eriphe's workspace are a small closed grammar (#425,
+// #633): a click does only what is safe, and code checks it both when an
+// author writes it and when the page sends it. Every surface is a block
+// of a node's page (or code's own, its cards).
 //
 //   - ask: a request to the brain, in the author's own words. Its event's
-//     context is exactly {"text": "<literal>"}; code adds the surface and
-//     the component.
-//   - answer: the user's yes or no to one proposal, {"proposal": "<ref>",
-//     "answer": "yes"|"no"}, and "at": its place in the data when it is bound
-//     inside a list. Only the Proposal component sends it, for the proposal
-//     it shows: an author never writes one.
-//   - local: open, back, expand, tab. The page's own gestures; core records
-//     them ("open", the user opened a tile or a chip, also places the
-//     surface first and reads its sources again; "back" gives the layout
-//     back). An author's carries no context. Code alone places an open
-//     that names another surface, {"surface": "<id>"}, on a thread's own
-//     surface: its child's row, a child's crumb back to its parent. The
-//     page opens that surface as it opens a tile; nothing reaches the
-//     brain.
-//   - tidy: « Ranger », the user puts an ended thread away, {"thread":
-//     <id>}. Only code places it, on the thread's own surface.
-//   - control: the user stops a thread, {"thread": <id>, "do": "stop"}.
-//     Only code places it, on the thread's own surface.
-//   - offer: the user takes an action offered on an item of a thread, or
-//     on a group of them, {"thread": <id>, "source": "<name>", "item":
-//     "<id>" or "state": "<state>", "offer": "<key>"}: a card is made for
-//     it, nothing runs. Only the Offers component sends it, one button per
-//     offer code put in the data: an author never writes one, nor an
-//     Offers in a node's block (nodeGuard).
-//   - mark: the user keeps, drops or marks done something a thread shows,
+//     context is exactly {"text": "<literal>"}. The page names only the
+//     block and the button; code reads the words again from the stored
+//     block and sends them as the user's message to its node.
+//   - answer: the user's yes or no to one proposal. Only the Proposal
+//     component sends it, for the proposal it shows: an author never
+//     writes one.
+//   - mark: the user keeps, drops or marks done something a block shows,
 //     {"list": "<id>", "item": "<id>", "mark": "keep"|"drop"|"done"|""}
-//     ("" clears it): ids only, never text; the surface names the thread.
-//     Only the Mark component sends it, one of the marks it offers: an
-//     author places a Mark on a thread's own surface only, list and item
-//     each a literal id or bound to the data (a row of a list). Code
-//     records it in the thread's data, never in the composed part, and
-//     starts no turn.
+//     ("" clears it): ids only, never text. Only the Mark component sends
+//     it, one of the marks it offers, list and item each a literal id or
+//     bound to the data (a row of a list). Code records it in the block
+//     (its marks, never its author's part) and starts no turn.
+//   - local: expand, tab. The page's own gestures, done in the page; an
+//     author's carries no context.
 //
 // Any other name, and any action that is not an event (a function call),
-// is refused. No action calls a tool that writes.
+// is refused. No action calls a tool.
 const (
-	ActionAsk     = "ask"
-	ActionAnswer  = "answer"
-	ActionTidy    = "tidy"
-	ActionControl = "control"
-	ActionOffer   = "offer"
-	ActionMark    = "mark"
-	ActionOpen    = "open"
-	ActionBack    = "back"
-	ActionExpand  = "expand"
-	ActionTab     = "tab"
+	ActionAsk    = "ask"
+	ActionAnswer = "answer"
+	ActionMark   = "mark"
+	ActionExpand = "expand"
+	ActionTab    = "tab"
 
 	// The kinds of action.
-	KindAsk     = "ask"
-	KindAnswer  = "answer"
-	KindTidy    = "tidy"
-	KindControl = "control"
-	KindOffer   = "offer"
-	KindMark    = "mark"
-	KindLocal   = "local"
+	KindAsk    = "ask"
+	KindAnswer = "answer"
+	KindMark   = "mark"
+	KindLocal  = "local"
 
 	// AskTextMax is the longest ask, in characters.
 	AskTextMax = 1000
@@ -86,9 +60,9 @@ var markIDRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.:@=+-]{0,127}$`)
 func MarkIDOK(s string) bool { return markIDRe.MatchString(s) }
 
 // LocalActions are the names done in the page.
-var LocalActions = []string{ActionOpen, ActionBack, ActionExpand, ActionTab}
+var LocalActions = []string{ActionExpand, ActionTab}
 
-// ActionKind is the kind of an action name: KindAsk, KindAnswer, KindTidy,
+// ActionKind is the kind of an action name: KindAsk, KindAnswer, KindMark,
 // KindLocal, or "" for a name outside the grammar.
 func ActionKind(name string) string {
 	switch name {
@@ -96,32 +70,20 @@ func ActionKind(name string) string {
 		return KindAsk
 	case ActionAnswer:
 		return KindAnswer
-	case ActionTidy:
-		return KindTidy
-	case ActionControl:
-		return KindControl
-	case ActionOffer:
-		return KindOffer
 	case ActionMark:
 		return KindMark
-	case ActionOpen, ActionBack, ActionExpand, ActionTab:
+	case ActionExpand, ActionTab:
 		return KindLocal
 	}
 	return ""
 }
 
-// ThreadOnly are the components that send an action code checks against
-// where they are: in a node's block only (thread -1 in CheckActions).
-var ThreadOnly = []string{"Mark", "Offers"}
-
-// CheckActions checks the actions of a surface's components against the
+// CheckActions checks the actions of a block's components against the
 // grammar, as an author writes them: an event, ask with a literal text
-// only, a local name with no context; never answer, mark or offer (their
-// components send them), never a function call. A Mark or an Offers is in
-// a node's block only (thread -1; 0 for a surface).
-// Each error's path points at the action in the components list
-// ("/components/2/action/event"), or at the component.
-func CheckActions(surfaceID string, thread int64, components json.RawMessage) []ValidationError {
+// only, a local name with no context; never answer nor mark (their
+// components send them), never a function call. Each error's path points
+// at the action in the components list ("/components/2/action/event").
+func CheckActions(surfaceID string, components json.RawMessage) []ValidationError {
 	var list []map[string]any
 	if json.Unmarshal(components, &list) != nil {
 		return nil
@@ -130,9 +92,6 @@ func CheckActions(surfaceID string, thread int64, components json.RawMessage) []
 	for i, comp := range list {
 		fail := func(path, msg string) {
 			errs = append(errs, ValidationError{Code: CodeValidationFailed, SurfaceID: surfaceID, Path: path, Message: msg})
-		}
-		if name, _ := comp["component"].(string); slices.Contains(ThreadOnly, name) && thread == 0 {
-			fail("/components/"+strconv.Itoa(i), name+" is placed in a node's block only")
 		}
 		a, ok := comp["action"].(map[string]any)
 		if !ok {
@@ -167,15 +126,9 @@ func CheckActions(surfaceID string, thread int64, components json.RawMessage) []
 				fail(at+"/context", "a local action ("+name+") carries no context")
 			}
 		case KindMark:
-			fail(at+"/name", "mark is sent by a Mark component only, on a thread's surface: write a Mark")
-		case KindOffer:
-			fail(at+"/name", "offer is sent by an Offers component only, bound to the offers code puts in a thread's data: write an Offers")
+			fail(at+"/name", "mark is sent by a Mark component only: write a Mark")
 		case KindAnswer:
 			fail(at+"/name", "answer is sent by a Proposal component only, for the proposal it shows: write a Proposal")
-		case KindTidy:
-			fail(at+"/name", "tidy is placed by code only, on an ended thread's own surface")
-		case KindControl:
-			fail(at+"/name", name+" is placed by code only, on a thread's own surface")
 		default:
 			fail(at+"/name", "no action "+strconv.Quote(name)+": a button asks Eriphe (ask) or acts in the page ("+strings.Join(LocalActions, ", ")+")")
 		}

@@ -6,29 +6,19 @@ import (
 	"testing"
 )
 
-// An author never writes mark nor offer on a Button: the Mark and Offers
-// components send them.
-func TestCheckActionsRefusesThreadActions(t *testing.T) {
-	for name, want := range map[string]string{"mark": "write a Mark", "offer": "write an Offers"} {
+// An author never writes mark nor answer on a Button: the Mark and
+// Proposal components send them; a name outside the grammar is refused.
+func TestCheckActionsRefusesComponentActions(t *testing.T) {
+	for name, want := range map[string]string{"mark": "write a Mark", "answer": "write a Proposal", "offer": "no action", "open": "no action"} {
 		button := json.RawMessage(`[{"id":"root","component":"Button","label":"x","action":{"event":{"name":"` + name + `","context":{"list":"options","item":"a","mark":"keep"}}}}]`)
-		errs := CheckActions("thread-12", 12, button)
+		errs := CheckActions("block:x", button)
 		if len(errs) != 1 || errs[0].Path != "/components/0/action/event/name" || !strings.Contains(errs[0].Message, want) {
 			t.Errorf("%s on a Button: %+v", name, errs)
 		}
 	}
-}
-
-// Mark and Offers are in a node's block only (thread -1).
-func TestCheckActionsThreadOnly(t *testing.T) {
-	comps := json.RawMessage(`[{"id":"root","component":"Column","children":["m","o"]},
-		{"id":"m","component":"Mark","list":"options","item":"a","marks":["keep"]},
-		{"id":"o","component":"Offers","offers":{"@path":"/thread/items/mails/groups/0/offers"}}]`)
-	if errs := CheckActions("block:x", -1, comps); len(errs) > 0 {
-		t.Errorf("in a node's block: %+v", errs)
-	}
-	errs := CheckActions("q-x", 0, comps)
-	if len(errs) != 2 || errs[0].Path != "/components/1" || errs[1].Path != "/components/2" || !strings.Contains(errs[0].Message, "node's block only") {
-		t.Errorf("on a surface: %+v", errs)
+	mark := json.RawMessage(`[{"id":"root","component":"Mark","list":"options","item":"a","marks":["keep"]}]`)
+	if errs := CheckActions("block:x", mark); len(errs) > 0 {
+		t.Errorf("a Mark: %+v", errs)
 	}
 }
 
@@ -61,26 +51,6 @@ func TestMarkShape(t *testing.T) {
 		"a thread":        `"thread":12,"list":"options","item":"a","marks":["keep"]`,
 	} {
 		if errs := ValidateSurface(mark(bad)); len(errs) == 0 {
-			t.Errorf("%s: accepted", name)
-		}
-	}
-}
-
-// Offers binds code's offers, never a list written by its author.
-func TestOffersShape(t *testing.T) {
-	if errs := ValidateSurface(surfaceOf(`{"id":"root","component":"Offers","offers":{"@path":"/thread/items/mails/groups/0/offers"}}`)); len(errs) > 0 {
-		t.Errorf("bound: %v", errs)
-	}
-	for name, bad := range map[string]string{
-		"a literal list":  `"offers":[{"label":"Archiver","thread":1,"source":"mails","item":"a","offer":"0123456789ab"}]`,
-		"a function call": `"offers":{"@call":"formatString","args":{"value":"x"}}`,
-		"nothing":         ``,
-	} {
-		props := `"id":"root","component":"Offers"`
-		if bad != "" {
-			props += "," + bad
-		}
-		if errs := ValidateSurface(surfaceOf("{" + props + "}")); len(errs) == 0 {
 			t.Errorf("%s: accepted", name)
 		}
 	}

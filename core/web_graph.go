@@ -31,7 +31,10 @@ import (
 //     renderer: its components and its data, the sources' last values in
 //     it), and the cards it waits on;
 //   - its trace (GET /api/nodes/{id}/trace), as entries;
-//   - its file (GET /api/nodes/{id}/md), as it is.
+//   - its file (GET /api/nodes/{id}/md), as it is, and its body as the
+//     user edits it.
+//
+// What the user does there is in web_gestures.go.
 //
 // A title that may be someone else's words is never sent (cleanNodeTitle);
 // a node's goal is the brain's, never shown.
@@ -51,21 +54,24 @@ func (w *web) graphRoutes(mux *webMux) {
 
 // handleEspace is the app's page.
 func (w *web) handleEspace(rw http.ResponseWriter, r *http.Request, s *session) {
-	w.render(rw, r, s, "espace", "espace", page{Title: "nav.espace"})
+	w.render(rw, r, s, "espace", "espace", page{Title: "nav.espace", Data: w.c.view().Theme}) // the theme chosen, before the app draws
 }
 
 // espaceBoot is what the app needs before its first paint.
 type espaceBoot struct {
-	Lang    string            `json:"lang"`
-	Name    string            `json:"name"`
-	CSRF    string            `json:"csrf"`
-	Strings map[string]string `json:"strings"`
+	Lang    string             `json:"lang"`
+	Name    string             `json:"name"`
+	CSRF    string             `json:"csrf"`
+	Strings map[string]string  `json:"strings"`
+	View    espaceView         `json:"view"`   // the pages open, the display settings (web_gestures.go)
+	Places  map[string]placeIn `json:"places"` // where the user dropped bubbles
 }
 
 func (w *web) handleEspaceBoot(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
 	w.c.noteUserLang(lang) // Eriphe's lines follow it
-	b := espaceBoot{Lang: lang, Name: assistantName(), CSRF: s.CSRF, Strings: espaceWords(lang, assistantName())}
+	b := espaceBoot{Lang: lang, Name: assistantName(), CSRF: s.CSRF, Strings: espaceWords(lang, assistantName()),
+		View: w.c.view(), Places: w.c.dropped()}
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(rw).Encode(b)
@@ -425,7 +431,9 @@ func (w *web) handleNodeMD(rw http.ResponseWriter, r *http.Request, _ *session) 
 		return
 	}
 	rw.Header().Set("Cache-Control", "no-store")
-	writeJSON(rw, http.StatusOK, map[string]any{"md": string(d.Raw), "version": d.Version.N, "hash": d.Version.Hash, "last": d.Last})
+	// body is what the user edits: the author's view of the body, without
+	// the front matter and code's fields (web_gestures.go).
+	writeJSON(rw, http.StatusOK, map[string]any{"md": string(d.Raw), "body": authorBody(d), "version": d.Version.N, "hash": d.Version.Hash, "last": d.Last})
 }
 
 // espaceWords are the app's words in a language, with the assistant's name.

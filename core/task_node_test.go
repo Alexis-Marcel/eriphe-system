@@ -294,7 +294,7 @@ func TestTaintedTaskWritesExternal(t *testing.T) {
 	}
 }
 
-// What a task's blocks may hold: no Offers (code's), no Link opening a
+// What a task's blocks may hold: no component outside the catalog, no Link opening a
 // source's value, a source of a tool it is lent only; a source of a
 // server not trusted marks the block external.
 func TestTaskBlocksGuarded(t *testing.T) {

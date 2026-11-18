@@ -13,7 +13,7 @@ import (
 func TestCatalogComponents(t *testing.T) {
 	want := []string{"Text", "Markdown", "Image", "Icon", "Link", "Code", "Row", "Column", "List", "Grid", "Card", "Tabs", "Fold", "Divider",
 		"Button", "Mark", "Choice", "TextField", "DateField", "Metric", "Progress", "Chart", "Table", "Timeline", "Item", "Message", "Day",
-		"Proposal", "Offers", "Alert", "Placeholder"}
+		"Proposal", "Alert", "Placeholder"}
 	c := Eriphe()
 	if got := c.Components(); !slices.Equal(got, want) {
 		t.Errorf("components:\n got %v\nwant %v", got, want)
