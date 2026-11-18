@@ -58,7 +58,7 @@ func sourcePlan(name, share, access string) planFolder {
 
 // On the folder's machine, the folder is sent as its level says: read
 // sends only, write both ways with 30 days of versions out of the folder;
-// the peer's device ID is pinned at a loopback port of the device's. A plan
+// the peer's Syncthing device ID is pinned at a loopback port of the device's. A plan
 // of before the two levels reads drop as read and manage as write.
 func TestSyncSourceLevels(t *testing.T) {
 	n, f, root := syncFixture(t)

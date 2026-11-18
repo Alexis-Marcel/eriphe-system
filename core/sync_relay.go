@@ -28,7 +28,7 @@ import (
 // of folder_copies, whichever way): any other pair is refused, and the
 // streams of a pair are cut when its last copy goes. It copies bytes and
 // sees nothing else: Syncthing's TLS runs end to end, each side pinning
-// the other's device ID, which the devices reported and eriphe-core handed
+// the other's Syncthing device ID, which the devices reported and eriphe-core handed
 // over (public keys, not secrets). A device that is not sure of eriphe-core
 // still talks only to the device IDs it was given, and refuses data for
 // folders it did not set up.

@@ -1423,14 +1423,14 @@ The device opens one loopback port per peer (`127.0.0.1`, kept from one start to
 `<root>/sync/ports.json`), the peer's static address in Syncthing. eriphe-core joins the two
 devices only if it set up a copy between those two machines (core/README.md, Copies); device B takes
 the connection only from a peer it was told about. Syncthing's own TLS runs end to end, each side
-pinning the other's device ID: eriphe-core and the devices carry ciphertext only. What this device
+pinning the other's Syncthing device ID: eriphe-core and the devices carry ciphertext only. What this device
 sends into its tunnel for Syncthing is held to `-sync-limit` per second (8 MiB by default, env
 `ERIPHE_SYNC_LIMIT`, `0` for no limit), all its peers together, so that a big copy leaves room on
 the same connection for the tasks and eriphe-core; each stream also has yamux's window (256 KiB).
 All of a copy's traffic goes through the machine eriphe-core runs on.
 
 **The folders** (`syncfolders.go`). eriphe-core hands each device its plan (`PUT /v1/sync`, kept in
-`<root>/sync/plan.json`): its peers and their device IDs, the folders it sends (`role: source`)
+`<root>/sync/plan.json`): its peers and their Syncthing device IDs, the folders it sends (`role: source`)
 and the copies it keeps (`role: copy`), each with the folder's level now. The device decides what
 Syncthing may touch:
 

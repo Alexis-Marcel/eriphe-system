@@ -88,7 +88,7 @@ func (p syncPlan) check() error {
 	peers := map[string]bool{}
 	for _, pe := range p.Peers {
 		if !validPeer(pe.Name) || !validDeviceID(pe.DeviceID) || peers[pe.Name] {
-			return fmt.Errorf("peer %q: a device name and a device ID, once", pe.Name)
+			return fmt.Errorf("peer %q: a device name and a Syncthing device ID, once", pe.Name)
 		}
 		peers[pe.Name] = true
 	}

@@ -31,7 +31,7 @@
     {"id": "unknown-desktop-in-use", "what": "a label that names no device, from a computer's browser, in use: a computer", "level": "now",
      "devices": [{"id": "x", "label": "Firefox", "ua": "computer", "idle": 10}, {"id": "iphone", "label": "iPhone · Safari · app"}],
      "first": ["computer:x"], "then": ["phone:iphone"], "after": 10},
-    {"id": "computer-no-device", "what": "only a computer, no device to say it is in use: still that computer rather than nothing", "level": "now",
+    {"id": "computer-no-eriphe-device", "what": "only a computer, no eriphe-device on it to say it is in use: still that computer rather than nothing", "level": "now",
      "devices": [{"id": "mac", "label": "Mac · Chrome"}],
      "first": ["computer:mac"]},
     {"id": "tab-without-subscription", "what": "a tab in front whose browser has no subscription: in that page", "level": "now",

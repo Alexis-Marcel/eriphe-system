@@ -170,7 +170,7 @@ var webStrings = map[string]map[string]string{
 		"machines.forgetconfirm":   "Oublier cet appareil ? Ses tâches seront perdues et il devra être connecté à nouveau.",
 		"machines.rejoin":          "Réinscrire cet appareil",
 		"machines.rejoinconfirm":   "Réinscrire cet appareil ? Le jeton permet à un appareil de reprendre ce nom, avec ses tâches et ses accès.",
-		"machines.rejoinlead":      "Jeton de réinscription pour %s. Si Eriphe est encore installé sur l'appareil, efface d'abord son identité : sous Linux ou macOS, lance le script avec --uninstall (ou supprime device.json dans le dossier de eriphe-device) ; sous Windows, -Rejoin s'en charge. Puis lance la commande. L'ancien secret de l'appareil cessera de fonctionner.",
+		"machines.rejoinlead":      "Jeton de réinscription pour %s. Si Eriphe est encore installé sur l'appareil, efface d'abord son identité : sous Linux ou macOS, lance le script avec --uninstall (ou supprime device.json dans le dossier d'eriphe-device) ; sous Windows, -Rejoin s'en charge. Puis lance la commande. L'ancien secret de l'appareil cessera de fonctionner.",
 		"machines.exists":          "Un appareil porte déjà ce nom. Pour le réinstaller, utilise « Réinscrire cet appareil » sur sa fiche.",
 		"machines.nodevice":        "Aucun appareil ne porte ce nom.",
 		"machines.notls":           "Connexion non chiffrée · passera en TLS d'elle-même à sa mise à jour",

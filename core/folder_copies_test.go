@@ -105,7 +105,7 @@ func copiesCore(t *testing.T) (*core, *syncDevice, *syncDevice) {
 
 // The user picks the machines that keep a copy of a copyable folder: each
 // device is handed its plan, the folder's machine sending it at its level,
-// the copy's keeping it, each pinning the other's device ID; a plan is
+// the copy's keeping it, each pinning the other's Syncthing device ID; a plan is
 // handed again only when it changes.
 func TestFolderCopiesPlan(t *testing.T) {
 	c, mac, nas := copiesCore(t)

@@ -2883,7 +2883,7 @@ from here, never on) can be kept, up to date, on the user's other machines: Sett
 "Copies", tick the machines (`PUT /v1/folders/{name}/copies`, `{"devices": [...]}`). Each machine
 needs Syncthing, which comes with the installation (device/README.md, Copies); one without is
 shown greyed, to update. eriphe-core keeps who holds a copy of what (`folder_copies.go`,
-`folder_copies`) and hands each device its plan (`PUT /v1/sync`), with the peers' device IDs (from
+`folder_copies`) and hands each device its plan (`PUT /v1/sync`), with the peers' Syncthing device IDs (from
 `GET /v1/device`, `syncthing.device_id`) and each folder at its level now: `read` sent only, `write` both ways with 30 days of versions on the
 folder's machine. A plan is handed again only when it changes (and after a reconnection), every
 15 s at most. Unticking a machine, turning a folder's copies off, unsharing it or forgetting a

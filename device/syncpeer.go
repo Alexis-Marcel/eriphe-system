@@ -26,7 +26,7 @@ import (
 // joins it to the peer's device only if it set up a copy between the two
 // machines (core/sync_relay.go). The peer's device hands it to its own
 // Syncthing. Syncthing's TLS runs end to end, each side pinning the other's
-// device ID: eriphe-core and this device see only ciphertext.
+// Syncthing device ID: eriphe-core and this device see only ciphertext.
 //
 //	Syncthing → this device:  127.0.0.1:<the peer's port>
 //	this device → eriphe-core: GET /v1/device/sync/{peer}, Upgrade: eriphe-sync
