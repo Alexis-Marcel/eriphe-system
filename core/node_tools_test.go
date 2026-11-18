@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -282,6 +283,9 @@ func TestBrainPromptNodes(t *testing.T) {
 		"`node_open` avec `parent`", "`Mark`", "`Grid`", "`\"kind\": \"stack\"`",
 		"## Les vues", "`propose_view`", "un seul oui les crée", "la dernière bonne valeur reste", "marqué extérieur",
 		"« Répondre à Sam »", "attend son oui sur une carte",
+		"**une action simple**", "**une question**", "**un travail**", "le nœud permanent de sa journée, jamais dans un nouveau nœud",
+		"découpe-le toi-même", "une nouvelle version du même nœud",
+		"**Une vue est le travail fait d'avance de son assistant**", "Tu ne crées jamais une vue toi-même",
 	} {
 		if !strings.Contains(section, want) {
 			t.Errorf("« Les nœuds » lacks %q", want)
@@ -298,6 +302,11 @@ func TestBrainPromptNodes(t *testing.T) {
 		if strings.Contains(prompt, gone) {
 			t.Errorf("the prompt still says %q", gone)
 		}
+	}
+	// No word of the thread workspace is left: threads, tiles, surfaces,
+	// leads (whole words: « profil » and « utile » stay).
+	if w := regexp.MustCompile(`(?i)\b(fils?|tuiles?|surfaces?|pistes?|threads?|tiles?|leads?)\b`).FindString(prompt); w != "" {
+		t.Errorf("the prompt still says %q", w)
 	}
 }
 
