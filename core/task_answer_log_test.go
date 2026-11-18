@@ -65,7 +65,7 @@ func TestAnswerTaskShowsInThread(t *testing.T) {
 	addTask(t, c, "t-3", stateIdle)
 	addTaskStep(t, c, s, "tests", "t-3", "Tests")
 	c.store.setContract("t-3", &taskContract{Objective: "Les tests passent.", Checks: []taskCheck{{Name: "tests", Run: "go test ./...", Dir: "/work/nowhere"}}})
-	c.store.setSpec("t-3", nodeTaskSpec{})
+	c.store.setSpec("t-3", deviceTaskSpec{})
 	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-3", "checks": []any{map[string]any{"name": "tests", "run": "go test ./..."}}}); isErr {
 		t.Fatalf("checks: %v", out)
 	}
@@ -92,7 +92,7 @@ func TestAnswerTaskShowsInThread(t *testing.T) {
 func TestReleaseShowsInThreadAsAnAsk(t *testing.T) {
 	c := newMailCore(t, accessReads)
 	c.store.set(lentByUserKey("t-1"), "1")
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
 		State: stateIdle, Tools: "mail", Resources: []ResourceRef{{Kind: resTool, Ref: "mail.move", Access: accessWrite, Hold: true}}})
 	s := taskStep(t, c, "t-1", "Ranger les mails")
 	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "release": []string{" mail.move "}}); isErr {
@@ -204,7 +204,7 @@ func TestTaskAnswerOfTaintedTask(t *testing.T) {
 func TestReleaseOnThreadSurface(t *testing.T) {
 	c := newMailCore(t, accessReads)
 	c.store.set(lentByUserKey("t-1"), "1")
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
 		State: stateIdle, Tools: "mail", Resources: []ResourceRef{{Kind: resTool, Ref: "mail.move", Access: accessWrite, Hold: true}}})
 	s := taskStep(t, c, "t-1", "Ranger les mails")
 	if out, isErr := callBrainTool(t, c, "answer_task", map[string]any{"task_id": "t-1", "release": []string{"mail.move"}}); isErr {

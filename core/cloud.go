@@ -10,7 +10,7 @@ import (
 // local server like eriphe-mail with a card like it (tool_cards.go), serves
 // an account's folders to tasks. eriphe-core runs the
 // sign-in (oauth_client.go), keeps the refresh token in the vault and lends
-// it to the files service on its node, like a password: it never enters a
+// it to the files service on its device, like a password: it never enters a
 // task. The app the sign-in uses is the user's own, kept in the vault
 // (connection_apps.go); its places are picked on the tool's page
 // (places.go, web_places.go).

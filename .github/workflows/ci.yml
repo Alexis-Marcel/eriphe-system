@@ -112,17 +112,17 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "version $v, tags $tags, release $release"
 
-  node:
+  device:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: node
+        working-directory: device
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version-file: node/go.mod
-          cache-dependency-path: node/go.sum
+          go-version-file: device/go.mod
+          cache-dependency-path: device/go.sum
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
@@ -130,17 +130,17 @@ jobs:
       - run: sudo "$(command -v go)" test -run HandBack -v .
       - run: GOOS=windows go build ./...
 
-  # eriphe-cred, the SSH agent and tunnel the node lends every task.
+  # eriphe-cred, the SSH agent and tunnel the device lends every task.
   cred:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: node/cred
+        working-directory: device/cred
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version-file: node/cred/go.mod
+          go-version-file: device/cred/go.mod
           # No dependency, hence no go.sum: nothing to cache.
           cache: false
       - run: go build ./...
@@ -196,7 +196,7 @@ jobs:
   # Every test passes before any image is published (the publish job): a release tags
   # `latest`, and a workspace offers that version as soon as one image has it.
   tests:
-    needs: [scripts, node, cred, core, espace, install, cli, mail, calendar, files, signal]
+    needs: [scripts, device, cred, core, espace, install, cli, mail, calendar, files, signal]
     runs-on: ubuntu-latest
     steps:
       - run: 'true'
@@ -214,16 +214,16 @@ jobs:
       version-arg: true
       go-cache: true
 
-  node-image:
+  device-image:
     needs: version
     permissions:
       contents: read
       packages: write
     uses: ./.github/workflows/image.yml
     with:
-      image: eriphe-node
-      context: node
-      # The installers it carries, for the updaters (node/Dockerfile).
+      image: eriphe-device
+      context: device
+      # The installers it carries, for the updaters (device/Dockerfile).
       build-contexts: installer=install
       version: ${{ needs.version.outputs.version }}
       version-arg: true
@@ -266,7 +266,7 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       version-arg: true
 
-  # The image tasks start from, and one image per agent the node injects into it
+  # The image tasks start from, and one image per agent the device injects into it
   # (worker/README.md).
   worker:
     needs: version
@@ -426,13 +426,13 @@ jobs:
   # nothing is named, no version is published, before. One entry per image job above.
   publish:
     if: github.event_name == 'push'
-    needs: [version, tests, core-image, node-image, launcher-image, worker, mail-image, calendar-image, files-image, signal-image]
+    needs: [version, tests, core-image, device-image, launcher-image, worker, mail-image, calendar-image, files-image, signal-image]
     strategy:
       fail-fast: false
       matrix:
         include:
           - image: eriphe-core
-          - image: eriphe-node
+          - image: eriphe-device
           - image: eriphe
           # Also as eriphe-worker, the image it replaces: the updaters of the machines
           # installed before pull it (install/README.md).

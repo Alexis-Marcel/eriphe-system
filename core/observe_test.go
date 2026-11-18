@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// What a node says of its machine is kept in memory, closed: a reason off
+// What a device says of its machine is kept in memory, closed: a reason off
 // the list is dropped, the app in front is never read; where_now and the
 // proposal moment read it.
 func TestMachineObservations(t *testing.T) {
@@ -39,8 +39,8 @@ func TestMachineObservations(t *testing.T) {
 // there.
 func TestDevicesShowPresence(t *testing.T) {
 	tw, c, _ := catalogWeb(t, nil)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, json.RawMessage(`{}`))
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, json.RawMessage(`{}`))
 	c.obs.put("pc", machineObs{IdleKnown: true, Idle: 10 * time.Minute, DND: true, At: time.Now()})
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	if !strings.Contains(body, "inactive (10 min)") || !strings.Contains(body, "ne pas déranger") {

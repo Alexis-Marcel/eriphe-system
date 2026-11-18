@@ -14,7 +14,7 @@ import (
 
 // testMemoryCore is a core with a store, a memory, a brain task and an
 // agent whose credential exists, so that tasks can be started (they wait
-// for a node).
+// for a device).
 func testMemoryCore(t *testing.T) (*core, *fakeClock) {
 	t.Helper()
 	dir := t.TempDir()
@@ -31,10 +31,10 @@ func testMemoryCore(t *testing.T) (*core, *fakeClock) {
 		Memory: &MemoryConfig{}, Brain: &BrainConfig{}}
 	c := newCore(cfg, s)
 	c.setServerTrust("vault", true, trustByUser)
-	// A node that has gone offline: tasks wait for it.
-	s.registerNode("nas", hashSecret("a"))
-	s.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code"]}`))
-	s.setNodeStatus("nas", false, nil)
+	// A device that has gone offline: tasks wait for it.
+	s.registerDevice("nas", hashSecret("a"))
+	s.setDeviceStatus("nas", true, []byte(`{"runtimes":["claude-code"]}`))
+	s.setDeviceStatus("nas", false, nil)
 	m, clock := testMemory(t)
 	c.useMemory(m)
 	s.insertTask(&TaskRow{ID: "t-brain", Kind: "brain", Runtime: "claude-code", State: stateIdle, Prompt: "brain"})

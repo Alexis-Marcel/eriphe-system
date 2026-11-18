@@ -478,16 +478,16 @@ func (c *core) packTasks() (perms, tasks []string) {
 		if isRoleKind(t.Kind) {
 			continue // an assistant's task (a brain task's leftover: this session is a new one)
 		}
-		node := t.Node
-		if node == "" {
-			node = "aucun pour l'instant"
+		device := t.Device
+		if device == "" {
+			device = "aucun pour l'instant"
 		}
 		where := ""
 		if t.Dir != "" {
 			where = ", " + t.Dir
 		}
-		tasks = append(tasks, truncate(fmt.Sprintf("- %s [%s] nœud %s, agent %s%s, depuis le %s : %s",
-			t.ID, t.State, node, t.Agent, where, t.Created.Local().Format("01-02 15:04"), packQuote(t.Prompt)), packLineMax))
+		tasks = append(tasks, truncate(fmt.Sprintf("- %s [%s] appareil %s, agent %s%s, depuis le %s : %s",
+			t.ID, t.State, device, t.Agent, where, t.Created.Local().Format("01-02 15:04"), packQuote(t.Prompt)), packLineMax))
 		if t.State != stateWaitingPermission {
 			continue
 		}

@@ -9,7 +9,7 @@ eriphe-core's to decide, call by call, like any tool's access: the server keeps 
 the folders, and an account core marks `read_only` to reading. Its OAuth token is lent by eriphe-core, which ran the authorization
 (the server never runs an OAuth flow, like eriphe-mail).
 
-In Eriphe it runs as a local service on a node, created by the workspace (Settings → Tools →
+In Eriphe it runs as a local service on a device, created by the workspace (Settings → Tools →
 Google Drive, see core/README.md, "Google Drive"): the token comes from the vault in its
 environment, never through a task.
 

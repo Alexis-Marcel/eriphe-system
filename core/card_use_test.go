@@ -52,7 +52,7 @@ func TestCardUses(t *testing.T) {
 	c.store.addMessage(roleBrain, "Elle vend des tasses.", true)
 	// A task's card, and its remember of the subject: wrote; another
 	// task's that writes nothing: no.
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "nas", Runtime: "claude-code", State: stateRunning, About: "project:blog"})
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "nas", Runtime: "claude-code", State: stateRunning, About: "project:blog"})
 	pushCard(t, c, "project:blog", placeTask, 0, "t-1")
 	if _, err := c.taskRemember("t-1", taskRememberIn{Kind: "fact", About: "project:blog", Text: "Le blog a un flux RSS"}); err != nil {
 		t.Fatal(err)

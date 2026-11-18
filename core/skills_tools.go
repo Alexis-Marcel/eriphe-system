@@ -9,7 +9,7 @@ import (
 )
 
 // The brain's side of the user's skills. The brain never loads a skill by
-// itself (node/skills.go): it lists them with list_skills and reads one
+// itself (device/skills.go): it lists them with list_skills and reads one
 // with read_skill, as text. Nothing of a skill runs in the brain's
 // container: its scripts run in tasks, which all have the skills. A tool
 // rather than a mount keeps code and the user's files out of the brain's

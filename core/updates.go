@@ -18,7 +18,7 @@ import (
 
 // "A new version is available": every hour, eriphe-core asks the
 // registry, anonymously, which version the images' `latest` tag is (the
-// latest release), and compares it with its own and each node's. The images
+// latest release), and compares it with its own and each device's. The images
 // carry their version as a label (org.opencontainers.image.version, from
 // the Dockerfiles), the same as the binaries' (see the README's
 // "Versions"): the manifest of `latest` leads to the image's configuration,
@@ -32,10 +32,10 @@ import (
 // minute at most (checkNow).
 //
 // Each image publishes its latest tag on its own, as its build ends
-// (RELEASING.md): for a few minutes, eriphe-node's latest may be the new
+// (RELEASING.md): for a few minutes, eriphe-device's latest may be the new
 // release and eriphe-core's not yet, or the other way round. The latest
 // release is then the older of the two (version): eriphe-core's machine
-// pulls the node and the worker of its own build, and a node takes
+// pulls the device and the worker of its own build, and a device takes
 // eriphe-core's, so a release is offered once every image has it. The check
 // runs again sooner meanwhile.
 
@@ -53,8 +53,8 @@ const (
 )
 
 // The images whose latest version is checked: what an update pulls (the
-// worker, eriphe-base, with the node).
-var updateImages = []string{"eriphe-core", "eriphe-node", "eriphe-base"}
+// worker, eriphe-base, with the device).
+var updateImages = []string{"eriphe-core", "eriphe-device", "eriphe-base"}
 
 type updates struct {
 	base   string // the registry, replaced in tests
@@ -367,7 +367,7 @@ func (c *core) versionStatus(image, running, install string) versionStatus {
 // GET /v1/version.
 func (c *core) handleVersion(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"core": c.versionStatus("eriphe-core", version, coreInstall),
-		"node": map[string]string{"latest": c.updates.version("eriphe-node")},
+		"core":   c.versionStatus("eriphe-core", version, coreInstall),
+		"device": map[string]string{"latest": c.updates.version("eriphe-device")},
 	})
 }

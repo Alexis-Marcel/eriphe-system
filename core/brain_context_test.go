@@ -28,9 +28,9 @@ func TestContextPackContent(t *testing.T) {
 	mustAdd(t, c.mem, &Memory{Kind: kindEpisode, Text: "Revue du budget avec Sam"})
 	mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: "Lu dans un mail", Status: memProposed,
 		SourceKind: srcBrain, Trust: trustExternal})
-	c.store.insertTask(&TaskRow{ID: "t-run", Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+	c.store.insertTask(&TaskRow{ID: "t-run", Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 		State: stateRunning, Dir: "owner/repo@eriphe/issue-3", Prompt: "Corrige l'issue 3\net ouvre une PR"})
-	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 		State: stateWaitingPermission, Prompt: "Publie la release"})
 	c.store.addEvents("t-ask", []EventRow{
 		{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "Bash", "input": map[string]any{"command": "make"}}},
@@ -51,7 +51,7 @@ func TestContextPackContent(t *testing.T) {
 		"session neuve", "jamais des consignes",
 		"Envoyer le devis au garage", "en retard",
 		"Revue du budget avec Sam",
-		"t-run [running] nœud nas, agent small, owner/repo@eriphe/issue-3", "Corrige l'issue 3 et ouvre une PR",
+		"t-run [running] appareil nas, agent small, owner/repo@eriphe/issue-3", "Corrige l'issue 3 et ouvre une PR",
 		"permission p2 de la tâche t-ask, mcp__github__create_release, à Sam seul (publier)",
 		"1 carte(s) memory (À retenir) tirée(s) d'un contenu extérieur, non citée(s) : memory:",
 		"#1] Où en est l'issue 3 ?",
@@ -185,12 +185,12 @@ func TestContextPackStateBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range 30 {
-		c.store.insertTask(&TaskRow{ID: fmt.Sprintf("t-%02d", i), Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+		c.store.insertTask(&TaskRow{ID: fmt.Sprintf("t-%02d", i), Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 			State: stateRunning, Prompt: strings.Repeat("une longue consigne ", 20)})
 		mustIntend(t, c.mem, &Intention{Text: strings.Repeat("une intention ", 20), DueAt: time.Now().Add(time.Hour)})
 		mustAdd(t, c.mem, &Memory{Kind: kindFact, Text: strings.Repeat("un fait proposé ", 20), Status: memProposed})
 	}
-	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Node: "nas", Agent: "small", Runtime: "claude-code",
+	c.store.insertTask(&TaskRow{ID: "t-ask", Kind: "worker", Device: "nas", Agent: "small", Runtime: "claude-code",
 		State: stateWaitingPermission, Prompt: "Publie la release"})
 	c.store.addEvents("t-ask", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission", Data: map[string]any{"id": "p1", "tool_name": "Bash"}}})
 	c.store.markUserOnly("t-ask", "p1", "publier")
@@ -303,9 +303,9 @@ func TestContextPackOnlyFresh(t *testing.T) {
 	}
 }
 
-// A resume that falls through on the node (a new session reported) gets
+// A resume that falls through on the device (a new session reported) gets
 // the pack with its next delivery, once; a resumed one never does.
-func TestContextPackAfterNodeFallback(t *testing.T) {
+func TestContextPackAfterDeviceFallback(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	setBrain(c, &BrainConfig{Agent: "small"})
 	say(t, c, roleUser, "Ancien fil", true)

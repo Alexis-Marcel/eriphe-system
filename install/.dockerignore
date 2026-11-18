@@ -1,5 +1,5 @@
 # The launcher's image (install/Dockerfile) takes install.sh and
-# eriphe-launcher; eriphe-node's (node/Dockerfile, build context
+# eriphe-launcher; eriphe-device's (device/Dockerfile, build context
 # "installer") takes install.sh and install.ps1.
 *
 !install.sh

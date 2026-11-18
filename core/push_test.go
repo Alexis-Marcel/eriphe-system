@@ -321,9 +321,9 @@ func TestPushTaskEnded(t *testing.T) {
 	c, b := pushCore(t)
 	c.push.subscribe(b.sub("/push/1"))
 	for _, task := range []*TaskRow{
-		{ID: "t-w", Node: "box", Runtime: "claude-code", Prompt: "Fix the form", State: stateIdle},
-		{ID: "t-f", Node: "box", Runtime: "claude-code", Prompt: "Sort the photos", State: stateFailed},
-		{ID: "t-b", Node: "box", Runtime: "claude-code", Prompt: "brain", State: stateIdle, Kind: "brain"},
+		{ID: "t-w", Device: "box", Runtime: "claude-code", Prompt: "Fix the form", State: stateIdle},
+		{ID: "t-f", Device: "box", Runtime: "claude-code", Prompt: "Sort the photos", State: stateFailed},
+		{ID: "t-b", Device: "box", Runtime: "claude-code", Prompt: "brain", State: stateIdle, Kind: "brain"},
 	} {
 		if err := c.store.insertTask(task); err != nil {
 			t.Fatal(err)

@@ -7,16 +7,16 @@ import (
 )
 
 // The user's skills in worker tasks. Every worker task gets the skills
-// active when it starts, by name and hash (spec.skills); its node fetches
+// active when it starts, by name and hash (spec.skills); its device fetches
 // each bundle with its own secret, checks the hash, and mounts the skills
 // read-only at /run/eriphe/skills/.claude/skills/<name>, where it points
-// the agent (node/skills.go). Scripts run in the task's container, under
+// the agent (device/skills.go). Scripts run in the task's container, under
 // its permissions, like any other command.
 //
-//	GET /v1/node/tasks/{id}/skills/{sha256}   (node secret) → the bundle (a tar)
+//	GET /v1/device/tasks/{id}/skills/{sha256}   (device secret) → the bundle (a tar)
 
-// nodeSkill is a skill as a task's spec names it.
-type nodeSkill struct {
+// deviceSkill is a skill as a task's spec names it.
+type deviceSkill struct {
 	Name   string `json:"name"`
 	SHA256 string `json:"sha256"`
 }
@@ -38,13 +38,13 @@ func skillsIndex(skills []Skill) string {
 
 // lendSkills gives a worker task the active skills, and tells its agent of
 // them when it does not load them itself.
-func (c *core) lendSkills(spec *nodeTaskSpec) {
+func (c *core) lendSkills(spec *deviceTaskSpec) {
 	skills := c.activeSkills()
 	if len(skills) == 0 {
 		return
 	}
 	for _, k := range skills {
-		spec.Skills = append(spec.Skills, nodeSkill{Name: k.Name, SHA256: k.Approved})
+		spec.Skills = append(spec.Skills, deviceSkill{Name: k.Name, SHA256: k.Approved})
 	}
 	// A harness that loads none, or keeps them off on this repository,
 	// gets them listed in the task's instructions (harnesses.go).
@@ -53,21 +53,21 @@ func (c *core) lendSkills(spec *nodeTaskSpec) {
 	}
 }
 
-// handleTaskSkill serves a node one of its task's skills.
+// handleTaskSkill serves a device one of its task's skills.
 func (c *core) handleTaskSkill(w http.ResponseWriter, r *http.Request) {
-	node, ok := c.nodeFromRequest(r)
+	device, ok := c.deviceFromRequest(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	t, err := c.store.task(r.PathValue("id"))
-	if err != nil || t.Node != node || finished(t.State) {
-		http.Error(w, "no such task on this node", http.StatusNotFound)
+	if err != nil || t.Device != device || finished(t.State) {
+		http.Error(w, "no such task on this device", http.StatusNotFound)
 		return
 	}
 	spec, err := c.store.taskSpec(t.ID)
 	sha := r.PathValue("sha")
-	if err != nil || !slices.ContainsFunc(spec.Skills, func(k nodeSkill) bool { return k.SHA256 == sha }) {
+	if err != nil || !slices.ContainsFunc(spec.Skills, func(k deviceSkill) bool { return k.SHA256 == sha }) {
 		http.Error(w, "no such skill in this task", http.StatusNotFound)
 		return
 	}

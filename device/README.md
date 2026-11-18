@@ -1,0 +1,1559 @@
+# eriphe-device
+
+Runs Eriphe's tasks on one machine, like a kubelet: every task is a container started from a worker
+image (`ghcr.io/alexis-marcel/eriphe-base` by default, built from `worker/base/`), into which the
+device injects the agent (see [Agents](#agents)) and in which the agent works. eriphe-device relays its
+progress, questions and permission requests to eriphe-core.
+
+The device dials eriphe-core and keeps that connection open; eriphe-core sends its requests back
+through it (a yamux tunnel over an HTTP upgrade). The device needs no open port and works behind NAT
+or inside WSL.
+
+## Join
+
+On the machine running eriphe-core:
+
+```sh
+eriphe-core join-token -config core.json -name pc   # single use, for pc only, valid 24 h
+```
+
+Then on the new machine, once:
+
+```sh
+eriphe-device -core https://nas:8800 -join-token <token> -name pc -ca-hash sha256:<hex>
+```
+
+The device saves its own secret in `<root>/device.json`; later runs need no flag. Every flag also reads
+an environment variable (`ERIPHE_CORE`, `ERIPHE_JOIN_TOKEN`, `ERIPHE_DEVICE_NAME`, `ERIPHE_CA_HASH`,
+`ERIPHE_ROOT`).
+
+**TLS.** `-ca-hash` is the hash of eriphe-core's certificate authority for machines (see TLS
+between machines in eriphe-core's README). With it, the device reaches eriphe-core over TLS only,
+`http://` addresses as `https://` on the same port, and joins only once eriphe-core's handshake
+shows the CA of that hash: a machine in the middle cannot get the join token. It then asks
+eriphe-core for a client certificate of its own (the key never leaves the device), presents it on
+every request, and asks for a new one when a third of its life is left. Without `-ca-hash`:
+
+- an `http://` address still joins, and the device gets the CA and its certificate right
+  after, then moves to TLS (it trusts the network for that first exchange, as for the join);
+- an `https://` address must have a publicly trusted certificate, as eriphe-core's Tailscale one
+  (`https://eriphe.<tailnet>.ts.net:8800`); eriphe-core's own is refused.
+
+`device.json` keeps the CA (`ca`), the certificate (`cert`) and its key (`key`), next to the secret:
+it stays 0600, a secret of the machine. The addresses stay as given. A device without a certificate
+needs nothing: on its next connection it asks for its certificate with its secret and moves to TLS
+by itself. Given `-ca-hash` then, it checks the CA it receives
+against it; given a `-ca-hash` that is not the CA it already pinned, it refuses to start.
+To join again under the same name (a reinstalled machine), delete `device.json` and use a rejoin token
+(`eriphe-core join-token -name pc -rejoin`, or "Réinscrire cet appareil" in the workspace): a plain
+join token never replaces a registered device. `DELETE /v1/devices/{name}` on eriphe-core forgets a device.
+
+**Several addresses.** `-core` (or `ERIPHE_CORE`) takes several addresses separated by commas,
+preferred first, e.g. the local one then eriphe-core's remote address over Tailscale (Settings →
+Remote access on eriphe-core, with the Tailscale app on this machine):
+
+```sh
+eriphe-device -core http://192.0.2.10:8800,https://eriphe.tail1234.ts.net:8800 -join-token <token> -name laptop
+```
+
+The device connects to the first one that answers (an address that does not answer within 5 s is
+skipped), uses it for everything, and, when it is on a later one, checks every 2 minutes whether
+an earlier one answers again and moves back there: a laptop works at home and away. `device.json`
+keeps one address in `core`, several in `cores`. Given again on a later run, `-core` replaces the saved
+addresses, e.g. to add the remote one to a machine that already joined. The workspace's "Connect a
+device" offers both addresses once remote access is ready.
+
+## Install
+
+- **Linux, macOS**: `install/install.sh`, one command that brings its own container runtime
+  (Docker Engine on Linux; on a Mac with Apple silicon and macOS 26, Apple's container, the device on
+  the Mac itself, see [The container engine](#the-container-engine-a-mac); on other Macs Lima and
+  a Linux VM that sees no Mac folder, without Docker Desktop) and runs the device as below, behind
+  eriphe-device engine where there is Docker; `--core-mode` installs eriphe-core next to it. See
+  `install/README.md`.
+
+  ```sh
+  curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s -- --core http://192.0.2.10:8800 --join-token <token> --name laptop
+  ```
+
+- **NAS** (or by hand on Linux): run the image with the root at the same path inside and outside, attached to the
+  task network (`-task-network`, see Networks) so that tasks reach it at `-callback-url`, with no Docker
+  access but eriphe-device engine (`-engine-url`, see [The engine](#eriphe-device-engine)), never the socket
+  itself; see `deploy/nas/compose.yaml` and `deploy/README.md`. The image has no docker CLI. A device that
+  cannot reach its engine (or Docker) at start connects all the same, with no runtime to offer, says
+  so in its log ("no container engine here"), and starts again once the engine answers. Until then
+  it runs nothing: its tasks stay assigned and wait ("N task(s) wait for it"), and it touches no
+  container; only updates go on.
+- **Windows**: `install/install.ps1` at the root of the repository (it was `device/install/install.ps1`),
+  from an administrator PowerShell; see `install/README.md`. It installs WSL if needed, creates a
+  WSL distribution `eriphe` (Alpine, Docker Engine), without Docker Desktop, which runs Eriphe's
+  launcher as any Linux does (eriphe-device in a container, behind eriphe-device engine), and a
+  scheduled task that starts it with Windows, logged in or not. Windows drives and programs are not
+  visible from it. `-CoreMode` runs eriphe-core there too.
+
+  ```powershell
+  & ([scriptblock]::Create((irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1))) -Core 'https://192.0.2.10:8800' -JoinToken <token> -Name pc -Labels 'gpu' -CaHash sha256:<hex>
+  ```
+
+  In this distribution eriphe-device runs as root next to dockerd, without a proxy: whoever takes
+  over the device is root in the distribution. The distribution is the boundary: it sees no Windows
+  drive and cannot start Windows programs. Rootless dockerd is not practical in it (no systemd or
+  cgroup delegation in WSL's Alpine, slirp4netns networking, GPU access through the NVIDIA
+  runtime). The plan: run eriphe-device in a container behind eriphe-device engine, which checks
+  the whole create request (see [The engine](#eriphe-device-engine)), as on the NAS.
+
+## What the device offers
+
+`GET /v1/device` is what the scheduler knows of the machine, and keeps while it is offline: its CPUs,
+total memory (`/proc/meminfo` on Linux and WSL, `sysctl` on macOS, absent elsewhere), runtimes,
+labels, the images already pulled and the agents already unpacked (`agents_ready`: a task whose
+image and agent are there starts sooner), and its volumes.
+
+Labels (`-labels gpu,fast`, env `ERIPHE_DEVICE_LABELS`) are free words agents can require (`needs`)
+or prefer (`prefers`). Volumes are named host folders the device offers to tasks:
+`-volume media=/mnt/media`, repeatable, or env `ERIPHE_DEVICE_VOLUMES=media=/mnt/media,code=/srv/code`.
+Only their names are reported, never their paths; they are not mounted into tasks yet: the user's
+folders go through shares instead (see [Shares](#shares-the-users-folders)), which `folders` reports
+(`[{id, name, access, missing}]`).
+
+### A model behind this device
+
+`-model-server http://127.0.0.1:11434` (env `ERIPHE_MODEL_SERVER`, the installers'
+`--model-server`) lends a model server of this machine (Ollama, llama.cpp's `llama-server`, vLLM,
+LM Studio) to Eriphe, as the device reaches it: the server keeps listening on this machine only, no
+port is opened, and the user needs no other account. `GET /v1/device` then says `model_server:
+true`, and eriphe-core reaches the server through the tunnel at `/v1/model/{path}`, which this
+device forwards to `<model-server>/v1/{path}` (a `/v1` given by habit is dropped):
+
+- only `GET` and `POST`, only under `/v1`: a `..`, even escaped, is refused, so Ollama's own
+  `/api` (pull, delete) stays out of reach. eriphe-core can name a path, never another address:
+  the device is no way into its network;
+- the answer streams as it comes; no time limit but 15 minutes for the first byte;
+- the request goes direct, never through a proxy of the environment; `Authorization` is the
+  server's key that eriphe-core adds, if the provider has one.
+
+A task whose agent uses such a model, on any device (the brain's too), has `model_endpoint:
+{"relay": true}`. OpenCode is pointed at its own device's task listener,
+`<callback>/model/v1`, with the task's secret as its key (`{env:ERIPHE_MODEL_TOKEN}`, never in
+its config); the device relays to eriphe-core at `/v1/device/tasks/{id}/model/{path}` with its own
+secret, as the catalog relay does, streaming, only for a running task whose spec says `relay`.
+eriphe-core checks the task's agent and goes on through the lending device's tunnel
+(`core/README.md`, A model behind a device).
+
+The address is the one this device reaches: `http://127.0.0.1:11434` where the device runs on the
+machine itself (a Mac with Apple's container; Windows' WSL distribution with mirrored networking).
+On Linux the device is a container: run Ollama next to it on its network, without publishing a port
+(`install/README.md`), and give `http://eriphe-ollama:11434`.
+
+### Waking the machine (Wake-on-LAN)
+
+`GET /v1/device` also reports `wake: {macs, broadcast}`: the MAC address of the network card the
+machine reaches eriphe-core through, and that network's broadcast address, so that eriphe-core can
+wake it when the user allows it (Settings → Devices, off by default; core/README.md, Waking a
+device). The installers record them: `-wake-mac` and `-wake-broadcast` (env `ERIPHE_WAKE_MAC`,
+comma-separated, and `ERIPHE_WAKE_BROADCAST`). `install.sh` takes the card of the route to
+eriphe-core's address (or of the default route) on Linux and macOS, eriphe-launcher the same from a
+short-lived container on the host's network, and `install.ps1` the PC's own card from Windows
+(`Find-NetRoute`, `Get-NetAdapter`; behind a Hyper-V virtual switch, the physical cards that are up
+too), which neither the launcher nor eriphe-device in WSL can see (the launcher's `ERIPHE_WAKE_MAC`). A device run by hand on the machine itself, without them,
+finds its card alone (the source address of a UDP socket connected to eriphe-core, which sends
+nothing); in a container or in WSL, whose cards are virtual, it reports none.
+
+`POST /v1/wake` `{macs, broadcast}` asks a machine that stays on to send the magic packets (six
+`0xff`, then the MAC address 16 times) to `255.255.255.255` and to the broadcast address, on ports
+9 and 7. It sends them from its own network and, when it runs in a container (the NAS), from a
+short-lived container of its own image on the host's network: on a Docker bridge network a
+broadcast stays on the bridge. That container is `docker run --rm --pull never --network host
+--cap-drop ALL --read-only --security-opt no-new-privileges:true --entrypoint
+/usr/local/bin/eriphe-device <its image> wake-send -mac … -broadcast …`: nothing mounted, no
+capability, gone once sent. The device finds its image with `docker ps`, which the socket proxy
+allows, as it allows the rest of that `docker run`; eriphe-device engine knows it (`-device-image`). It answers `{sent: ["here", "host"], errors}`.
+
+## Updates
+
+The device does not update itself: it has no right to pull its own image or recreate its own
+container. eriphe-core's request ("update" or "rollback", with eriphe-core's own version, never an
+image nor a command) comes in the assignments (`update`). The device keeps it until none of its tasks
+is at work (`running` or `waiting_permission`; an idle one resumes after the restart), then writes
+it in its root for the updater the installer put on the host side (install/README.md, The machines
+update themselves):
+
+| File in the root | Written by | What |
+|---|---|---|
+| `updater` | the installer | an updater is there (`pin=` the version it is pinned to, `layout=` the install's layout) |
+| `update-requested` | the device | `id`, `action`, `core`, `auto`, key=value lines |
+| `update-status` | the updater | `id`, `action`, `outcome`, `message`, `from`, `to`, `at` |
+| `update-needs` | the installer the updater ran | `why`: a step left for the user (`password`, `admin`, `layout`) |
+
+`GET /v1/device` reports them as `update`: `{updater, pin, waiting, requested, status, layout,
+needs}`. Without `updater` (a device set up by hand) the device writes
+nothing and eriphe-core offers no update.
+
+An update also brings the machine to the install's layout of its version (install/README.md,
+The machines update themselves): what an install puts there besides eriphe-device, such as
+Syncthing. This build is made for layout 5 (`installLayout`, install.sh's `LAYOUT`). `needs` says
+what the install waits for from its user: `update-needs` when there is one. Only the reason: the command to run is eriphe-core's, for how the machine was installed.
+
+## Sleep
+
+While at least one task is at work (its agent running a turn), the device keeps the machine out of
+system sleep, and lets it sleep again once none is: a laptop no longer cuts a task short by going
+to sleep. A task waiting for a permission or for the user does not hold it: its container waits
+through the sleep. `GET /v1/device` reports how as `keeps_awake`.
+
+| Where the device runs | What holds the machine |
+|---|---|
+| macOS, Apple's container (the device on the Mac itself) | `caffeinate -i -s -w <device's pid>`: no idle sleep, and no system sleep while on AC power. On battery macOS may still sleep, and closing the lid always does |
+| Linux, in its container (`install.sh`) | the device writes `<root>/awake` while it holds the machine; `eriphe-awake.path` (systemd, on the host) then runs `systemd-inhibit --what=sleep:idle` until the file is gone. Without systemd, nothing |
+| Linux, by hand on a system with systemd | `systemd-inhibit`, run by the device itself |
+| Windows (WSL) | `<root>/awake` too; the distribution starts no Windows program, so the scheduled task "Eriphe awake" looks every 30 s and calls `SetThreadExecutionState(ES_CONTINUOUS \| ES_SYSTEM_REQUIRED)` while the file is there |
+| macOS in Lima's VM | nothing: the VM's systemd holds the VM, not the Mac |
+
+A machine installed before this gets the host's part (`eriphe-awake`, "Eriphe awake") by running
+its install command again; the device's own part comes with its update.
+
+### Idle time
+
+`GET /v1/device` also reports `idle`: `{"known": true, "seconds": 42, "locked": false}`, how long the
+machine's keyboard and mouse have been idle and whether its screen is locked, so that eriphe-core
+notifies the computer the user is at, else their phone (`core/route.go`). A number and a flag,
+nothing of what is on screen. On macOS with the device on the Mac itself it is read from IOKit
+(`ioreg`'s `HIDIdleTime` and the console session's lock, a few milliseconds, no permission); on
+Windows, from the session helper (see The user's session); elsewhere (Linux, Lima's VM) it is
+`{"known": false}` for now. eriphe-core keeps it in memory only.
+
+### The user's session (context)
+
+eriphe-core asks with a level, `GET /v1/device?context=N`; it asks 1 (`core/route_signals.go`), so
+the category of the app in front (level 2) is no longer computed for it. At 0 the device tells nothing of the user (`idle` too
+is `{"known": false}`), nor without the parameter. From 1, it also reports `context`:
+
+```json
+{"known": true, "dnd": true, "reason": "game", "activity": "game"}
+```
+
+- `dnd` and `reason` (level 1): not to be disturbed, and why as a class: `game` or `meeting` when
+  the app in front is one, `fullscreen`, `mic` or `focus` when the system says so.
+- `activity` (level 2 only): the category of the app in front, `game`, `meeting`, `code`, `web`,
+  `video`, `music`, `chat` or `other`.
+
+Everything is worked out on the machine (`context.go`): the app's identifier never leaves it, only
+the category. `categorize(id, declared)` is a pure function: a local table first (browsers → `web`,
+Zoom, Teams, FaceTime → `meeting`, editors and terminals → `code`, Steam → `game`, …), then the
+app's declared `LSApplicationCategoryType` (`public.app-category.games` and the `*-games` →
+`game`, `developer-tools` → `code`, …), else `other`.
+
+On macOS (device on the Mac, as the user's LaunchAgent) the app in front and its declared category
+come from `lsappinfo front` and `lsappinfo info` (LaunchServices, no permission, about 12 ms).
+Fullscreen and the microphone are **not** read: fullscreen has no answer without the
+screen-recording or accessibility permission, and the microphone (CoreAudio's
+`kAudioDevicePropertyDeviceIsRunningSomewhere`) needs cgo, which this device is built without.
+
+Elsewhere the device cannot see the session (Windows runs it in WSL; Linux and containers have no one
+answer): it reports `{"known": false}`, unless a **session helper** running in the user's session
+writes a file the device reads, named by `ERIPHE_SESSION_FILE` (at most 4 KiB, ignored once older
+than 30 s, so a helper that stops makes the session unknown again):
+
+```json
+{"at": "2026-11-01T20:15:00Z", "activity": "game", "dnd": true, "reason": "game",
+ "idle_seconds": 42, "locked": false}
+```
+
+`activity` is a category of the closed list, worked out by the helper; a helper may give `app`
+(the executable or identifier in front) and `declared` instead, for the device to map with the same
+table (`usersession.Category`). A value off the lists is dropped. `idle_seconds` and `locked`
+fill `idle` where the device cannot read it. The file's format, the closed lists and the tables are
+in `usersession/`, shared by the device and the helper.
+
+**Windows: `eriphe-session.exe`** (`cmd/eriphe-session`). The device runs in WSL and its scheduled
+tasks in session 0 (S4U): none of them sees the keyboard, the screen or the windows. This small
+program (2 MB, Go without cgo) does, from the user's session, as the user, with no window and no
+privilege; it writes only its file, opens no port and sends nothing. Every 5 s it reads:
+
+| Signal | From | Written |
+|---|---|---|
+| idle | `GetLastInputInfo` against `GetTickCount` | `idle_seconds` |
+| locked | `WTSQuerySessionInformation` (`WTSSessionInfoEx`: locked, or not the session at the screen); `QUNS_NOT_PRESENT` | `locked` |
+| not to be disturbed | `SHQueryUserNotificationState`: `QUNS_RUNNING_D3D_FULL_SCREEN` → `game`; `QUNS_BUSY`, `QUNS_PRESENTATION_MODE` (and Windows 8's `QUNS_APP`) → `fullscreen`; `QUNS_QUIET_TIME` (the first hour after an account's first logon) says nothing | `dnd`, `reason` |
+| the app in front | `GetForegroundWindow`, then its process's path (`QueryFullProcessImageName`, with `PROCESS_QUERY_LIMITED_INFORMATION`), mapped **in the session** by `usersession.WindowsCategory`: the executable's name in the table (browsers → `web`, Teams, Zoom, Webex → `meeting`, editors, terminals and shells → `code`, game stores → `game`, …), else `game` when it is installed where game stores put games (`steamapps\common`, `Epic Games`, `XboxGames`, …), else `other`; nothing behind a locked screen | `activity` |
+
+The program's name and path stay in the helper's memory, never in the file; a window's title and
+the Focus assist setting (which Windows does not expose to programs) are not read. A meeting in a browser counts as `web`. The
+device then adds `dnd` with `game` or `meeting` from the category, as on a Mac.
+
+It is installed by `install.ps1` (install/README.md, Windows), which takes it from the device's image
+(`/usr/local/share/eriphe/windows/<arch>/eriphe-session.exe`, built with `-H windowsgui`):
+`%ProgramData%\eriphe-device\bin\eriphe-session.exe`, run at logon by the scheduled task "Eriphe
+session" for the user signed in at the PC, writing `%ProgramData%\eriphe-device\session\session.json`;
+the distribution mounts that folder only, read-only, at `/mnt/eriphe-session`. To see what it
+writes: `& "$env:ProgramData\eriphe-device\bin\eriphe-session.exe" -print | more`.
+
+A probe for another system is a `sessionProbe`.
+
+## API (through the tunnel)
+
+| Call | What |
+|---|---|
+| `GET /v1/device` | OS, CPUs, `memory_bytes`, Docker version, default image, runtimes, labels (`-labels gpu`), `volumes`, `folders` (the shared folders: `{id, name, access, missing, problem, program}`, never a path; see Folders it cannot use), `images` (up to 50 local `repo:tag`), `agents_ready` (the runtimes whose agent is unpacked, see Agents), active tasks, `wake` (its network card, see Waking the machine), `syncthing` (its Syncthing's `device_id`, see Copies) |
+| `GET /v1/shares` | the folders shared on this machine: `{folders: [{id, name, access, missing, problem, program}]}`, never a path (see Shares) |
+| `DELETE /v1/shares/{id}` | take a folder off the list (eriphe-core may restrict, never add); the tasks holding it are stopped |
+| `POST /v1/shares/{id}/files` | the files of a shared folder (or, with `copy`, of the copy kept here), held to the folder: `{op: list\|search\|read\|write\|update\|move\|delete, path, to?, query?, content?, expect?, copy?}`; see Files of a folder |
+| `POST /v1/tasks` | start a task: `{runtime, prompt, image?, repo?, ref?, branch?, dir?, model?, agent_env?, resume?, ...}`; `runtime` is `claude-code`, `opencode`, `codex`, `vibe` or `acp` (with `command`) |
+| `GET /v1/tasks`, `GET /v1/tasks/{id}` | state, agent session, pending permissions |
+| `GET /v1/tasks/{id}/events?after=N&wait=S` | events after N, long polling |
+| `POST /v1/tasks/{id}/messages` | next user turn `{text}` (when the agent is idle) |
+| `POST /v1/tasks/{id}/permissions/{pid}` | answer a permission request `{allow, message?}` |
+| `POST /v1/tasks/{id}/stop` | stop the agent |
+| `/v1/services/{name}/mcp` | a service's streamable HTTP MCP endpoint (see Services) |
+| `GET`/`POST /v1/model/{path}` | the model server it lends (`-model-server`): its `/v1/{path}`, streamed (see A model behind this device) |
+| `POST /v1/wake` | send another machine's Wake-on-LAN packets: `{macs, broadcast}` (see Waking the machine) |
+| `POST /v1/privacy/open` | on a Mac, open System Settings › Privacy & Security › Files and Folders there, nothing else (the workspace's "Allow"); 404 elsewhere (see Folders it cannot use) |
+| `PUT /v1/sync` | the copies' plan, from eriphe-core: `{peers: [{name, device_id}], folders: [{id, share, name, source, role, access, peers}]}` (see Copies); answers `{problems}`, what it left out and why |
+| `GET /v1/sync/connect` | a peer's Syncthing connection, handed over by eriphe-core (`Upgrade: eriphe-sync`, `Eriphe-Sync-Peer`), on to this machine's Syncthing (see Copies) |
+
+States: `running`, `waiting_permission`, `idle` (turn over: done or asking something, the
+orchestrator decides), `stopped`, `failed`.
+
+**When a turn ends** (`turnend.go`), the device looks at the task's container before eriphe-core
+hears that it is idle; meanwhile the task is reported `running`, and no message is delivered. A
+task with a repository gets a `diff` event: `{files}`, the files changed since the commit it started
+from (committed or not, and the new ones, at most 200), listed by `git` in the container (`docker
+exec`, or `container exec` with Apple's engine), with the container's own rights. eriphe-core
+compares it with the agent's receipt.
+
+Then the **checks** of the task's contract (`checks` of the spec), in the container too: first the
+paths that must exist (`exists`, `test -e`), then the commands (`run`, in `dir` relative to the
+agent's working directory, under `timeout` seconds, 300 by default, with the image's `timeout`
+when it has one, the device giving up 30 seconds later), with the environment the agent has: the
+container's, plus the toolchains its repository asked for, first in `PATH`, and their caches (see
+Toolchains), in their order; the first that fails stops
+the others. Each is a `check` event: `{name, ok, exit_code, duration_ms, run | exists, output}`,
+with the last 4 KB of its output. A failed check goes back to the agent as its next turn (the end of
+its output, "fix the cause, then end your turn with your receipt"), without eriphe-core: a `retry`
+event `{reason: check, check, round}`, at most `check_rounds` times (2 by default, 5 at most; kept
+in `task.json` across restarts). The same failure twice in a row (same check, exit code and output)
+is not sent back again: a `check_stop` event `{check, reason: same_failure | rounds}` ends it, and
+the turn stays idle for eriphe-core to read. A message delivered with `skip_checks` (the receipt
+asked again) is not followed by checks.
+
+A check that **could not run at all** is not a failure of the code: its `dir` is not there (the
+script says so itself, exit code 125), its command is not found (exit code 127), or it could not be
+started: the engine refused or failed the exec (the script prints its own exit code last, so that
+the docker CLI's is never taken for it). Its `check` event carries `config`, the exact reason (`its folder /work/repo/repo does not
+exist (dir "repo" is relative to /work/repo, the task's working directory)`); it is not sent back
+to the agent and does not count as the last failure: a `check_stop` event `{check, reason: config,
+detail}` ends the turn, idle, and eriphe-core tells the brain to fix the contract. A check that ran
+out of time did run (the code may hang): a failure as before. A message whose data carries `checks`
+(the brain fixed them) replaces the task's checks for the turns after it.
+
+**When a task stops** (eriphe-core wants it stopped: the brain, a budget, "the same failure
+twice"), a task with a repository has its work saved before the container stops (`keepwork.go`),
+once: in the container, with the task's git (no prompt), the commits no remote has (`git rev-list
+--branches --not --remotes`) on the branch the task was lent (`branch` of the spec) are pushed to
+that branch only, so eriphe-core still decides. What could not be pushed (no branch lent, the push refused, commits on
+other branches, or the repository could not be read) is **kept on the device**: once the container
+is stopped, `/work/repo` is moved to `kept/<task>/repo` under `-root` with a `meta.json` (task,
+branch, time), which no task mounts, kept `-snapshot-days` (7) like the snapshots and pruned at
+start and every hour. A `work` event says what was done: `{commits, branch, pushed, kept, reason}`
+(`kept` is `kept/<task>`), or `{error}` when the move failed. Nothing to save, no event.
+
+The only ports the device listens on are for its task containers, each with its own secret: the task
+listener (`-listen`, 8790), where a Claude Code task calls its permission endpoint `/perm/{id}/mcp`,
+its catalog servers at `/mcp/{server}`, a model behind a device at `/model/v1/{path}`, its
+credentials at `/v1/task/credential`, its toolchains at `/v1/task/toolchains` and, lent
+`eriphe-workspace`, its images for a surface at `/v1/task/media` (`media.go`, named by
+`ERIPHE_MEDIA_URL`: 8 MiB at most, relayed to eriphe-core's `/v1/device/tasks/{id}/media` with the
+device's secret, see core/README.md, Captured pages), and the egress relay (`-egress-listen`, 8791, see
+Egress). It binds only the device's address on the task network: its interface there when
+the device is a container on it (the NAS), the network's gateway when the device runs on the Docker
+host (WSL), or else the loopback (Docker Desktop). `-listen 10.0.0.2:8790` forces an address,
+`-listen 0.0.0.0:8790` the old behaviour. The relay binds the same host unless `-egress-listen`
+gives one.
+
+## Networks
+
+Tasks run untrusted work, so they are kept apart from what they must not reach:
+
+| Network | Who is on it | Flag |
+|---|---|---|
+| a task's own network (`eriphe-task-<id>`, internal), with eriphe-device engine | one task container, and eriphe-device | the engine's `-device-container`, `-task-pool` |
+| task network (`eriphe-tasks`, internal) | task containers, without such an engine; on the NAS, eriphe-device too | `-task-network` |
+| service network (the NAS's `eriphe-system`, else Docker's default bridge) | services with egress; on the NAS, eriphe-core and eriphe-device | `-network` |
+| internal service network | http services without egress, eriphe-device | `-service-network` |
+
+Docker drops traffic between bridge networks, so a task cannot call a service container directly
+(`eriphe-svc-<name>:<port>`, which would bypass eriphe-core's grants, policy and tickets) nor
+eriphe-core. The task network is internal: a task has no route out, and reaches only the device (its
+listener and its egress relay), never the LAN. The device refuses a task network that is also
+`-network` or `-service-network`, and never starts an http service on the tasks' network (both on
+Docker's default bridge: give `-task-network`). If the task network does not exist, the device creates
+it as an internal bridge with `enable_icc=false` (tasks cannot reach one another; the device, outside
+Docker, is reached on the gateway). On the NAS the compose file creates it instead, internal with an
+isolated gateway (the bridge has no address on the host, so the NAS's own services are not reachable
+on it), since the device is a container the tasks must reach by name. An existing task network that is
+not internal is kept, with a warning at start: Docker cannot change it, remove it with no task
+running and the device (or compose) creates it again.
+
+With eriphe-device engine (the one-container install, install.sh, `deploy/nas`), each task has a
+network of its own, as with Apple's container: the engine makes `eriphe-task-<id>` before the
+task's container (`engine_tasknet.go`), internal and with the task network's driver options (its
+isolated gateway), on a /28 of `-task-pool` (10.213.0.0/16 by default: Docker's own pools hold some
+thirty networks, and a machine with other stacks has used most), and joins the device's container to
+it. The task reaches its device at its address there, nothing else: no other task. The device listens on
+every address but accepts only its tasks' networks (`taskListener`). Once the task is over the device
+leaves and the network goes; `remove-stray` removes those a run left. Change `-task-pool` if the LAN
+uses those addresses.
+
+What it does not stop: without such an engine, tasks share the task network and can reach one
+another (each has its own secret). Where the device runs on the Docker host itself (a device run
+by hand), the bridge's gateway is the host: a service of the host listening on all its addresses
+is reachable there. The listener's address keeps it off the LAN, not off the host's other bridges:
+every call still needs a task's secret.
+
+## Egress
+
+The tasks' one way out is the egress relay, an HTTP forward proxy in eriphe-device, like the egress
+gateway of a Kubernetes NetworkPolicy. Each task gets `HTTP_PROXY`/`HTTPS_PROXY` (and lowercase)
+set to `http://<task id>:<task secret>@<callback host>:8791`, `NO_PROXY` for the device itself (its
+listener stays direct), and `NODE_USE_ENV_PROXY=1` (Node's own `fetch` ignores the variables
+otherwise). The relay:
+
+- knows the task by its credentials (`Proxy-Authorization: Basic`), refused once the task is over;
+- connects to ports 80 and 443 only (HTTPS through `CONNECT`, plain HTTP forwarded without the
+  task's credentials): git over HTTPS works, git over SSH does not;
+- resolves names itself and dials only public addresses: never loopback, RFC 1918, link-local
+  (`169.254.169.254` included), CGNAT `100.64.0.0/10`, ULA `fc00::/7`, multicast, unspecified,
+  NAT64/6to4 or other special ranges. It dials the address it checked, and checks it again on the
+  socket, so DNS rebinding gains nothing;
+- lets a task whose agent uses a self-hosted model server reach that server, and nothing else of
+  the LAN: eriphe-core adds its `host:port` to the rule's `endpoints` (`["192.0.2.10:11434"]`)
+  when the device fetches the task. Only a target that is exactly a declared `host:port` (the name
+  or address as declared, the same port) is let through, on any port and even at a private
+  address. Its name
+  is resolved by the relay, which still refuses loopback (the device itself), link-local (the cloud's
+  metadata included), multicast and unspecified addresses, and dials the very address it checked
+  (checked again on the socket). Another port of the same machine, or another machine of the LAN,
+  is refused as before;
+- lets a task reach the device's own listener through it (for a client that ignores `NO_PROXY`);
+- logs the first connection of a task to each host, allowed or refused:
+  `task t-1: egress to github.com`.
+
+What honors the variables (checked through the relay): curl, git, npm, Node's `fetch` (with
+`NODE_USE_ENV_PROXY`), Claude Code, Codex, OpenCode (Bun), apt (Debian's mirrors over plain HTTP,
+forwarded), uv and pip. A task's installs go out the same way: every public mirror is reachable.
+A program that ignores them fails closed: no route, no DNS for outside names. The brain (`system_network`) gets no proxy:
+it is also on the services' network, which has egress, and calls its MCP servers directly.
+`-egress-listen ""` turns the relay off (tasks then reach only the device).
+
+Why networks and not a bearer per service: a local MCP server is a third-party image, which checks
+no token the device could inject; only keeping tasks off its network protects it.
+
+## Accesses
+
+An access is what a program in the task uses with a secret ([core/README](../core/README.md)). The
+task's spec names each one's `hosts` (`host:port`), `env` and `placeholder`, never its secret, which
+does not come to the device. For exactly those hosts, the relay ends the task's TLS session instead of
+tunnelling it, and hands each request to eriphe-core at `/v1/device/tasks/{id}/access`, with the device's
+secret, streaming; eriphe-core puts the secret in and goes on to the service. The target is what the
+task connected to, never what its request says, and the headers only the relay writes are dropped
+from what the task sends. Every other `CONNECT` stays a blind tunnel, under the rule above: a
+declared host on another port is not its access. A task with egress `none` gets none.
+
+- **An authority per task**, made in memory: its key is never in the container and goes with the
+  task. Only its certificate is given, as a run file (`/run/eriphe/access-ca.pem`).
+- **A merged bundle.** The entrypoint writes `/tmp/eriphe-ca-bundle.pem`, the image's own
+  certificates then the task's, and `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`,
+  `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO` and `PIP_CERT` point at it, for accesses only: the task still
+  trusts the rest of the Internet. A program that ignores them fails on that access, closed.
+- HTTP/1.1 only, so a gRPC client fails on an injected host.
+
+**SSH accesses.** An access with `ssh` ([core/README](../core/README.md)) has no hosts for the relay
+to decrypt: `{name, ssh: {target, user, host_key, public_key}}`, and never a private key.
+
+- The entrypoint installs `openssh-client` if the image has no `ssh`, as for git, copies the run
+  file `ssh-config` to the account's `~/.ssh/config`, and starts `eriphe-cred ssh-agent` on
+  `SSH_AUTH_SOCK`. Each access is a `Host` of its name and its address, its known host in
+  `ssh-known-hosts`, under `HostKeyAlias`, offering only its own public key; every host gets
+  `StrictHostKeyChecking yes`.
+- `POST /v1/task/ssh` on the task listener (task secret) relays `{op: keys | sign}` to eriphe-core.
+  No host socket is mounted, so it works on every engine.
+- `eriphe-cred tunnel %h %p`, ssh's `ProxyCommand`, sends a `CONNECT` to the relay, for that exact
+  `host:port` only. The session leaves from eriphe-core, as an HTTP access's requests do: the relay
+  upgrades `GET /v1/device/tasks/{id}/ssh/connect?target=host:port` (`eriphe-ssh`), through the
+  core relay on a Mac, and eriphe-core decides and dials. So a device
+  that cannot reach the LAN, as a Mac's, still reaches the machine, with no right of its own.
+- A machine eriphe-core cannot reach (502, the decision taken) is dialed from the device itself: private addresses
+  included, as for a model server, never the loopback, link-local addresses or multicast. Any other
+  host or port of the LAN stays refused, and so does a task with egress `none`.
+
+## Catalog relay
+
+A task's assignment lists the catalog servers of its grant (`servers`), by name only. The device
+puts each in the agent's MCP configuration as `<callback-url>/mcp/<server>` with the task's
+secret, and relays the requests to eriphe-core (`/v1/device/tasks/{id}/mcp/{server}`, with the
+device's secret and name), streaming the answers. The task's secret is dropped on the way; a task
+reaches only the servers lent to it, and only while it runs. The relay uses the same plain HTTP to
+eriphe-core as assignments and reports, not the tunnel: it works wherever they do, needs no new
+route, and the server's credential stays in eriphe-core (the device never sees it). Catalog servers
+reach every runtime the same way (see [ACP](#acp) and [Codex](#codex)); eriphe-core still lends
+them to `claude-code` tasks only.
+
+## git and gh
+
+A task lent a GitHub repository has `github.com:443` and `api.github.com:443` among its
+[accesses](#accesses), with a placeholder in `GH_TOKEN`. gh reads it; git gets it from a fixed
+credential helper in the task's environment (`GIT_CONFIG_*`, nothing written), before the clone, so
+a private repository clones the same way. Each request crosses the relay to eriphe-core, which
+decides and puts the token in: the device never sees it. A refusal is a 403 with its reason in plain
+text, which git shows as `remote: …`. See core/README.md, "GitHub in a task".
+
+**`eriphe-cred`** (`cred/`, a module of its own, standard library only) is the SSH agent and tunnel
+of [SSH accesses](#accesses). It is one of the [injected programs](#injected-programs-optbin): the
+device's image ships it for both Linux architectures in
+`/usr/local/share/eriphe/task-bin/linux-{amd64,arm64}/`, so every task finds it in
+`/opt/eriphe/bin`, first on its `PATH`. On a Mac with Apple's container, install.sh takes the
+`linux-arm64` folder from the image with eriphe-device and passes it as `-task-bin`.
+
+## Runtimes
+
+A task's `runtime` is the agent program the device drives in its container (`runtime.go`). All
+write the same events (`text`, `tool_use`, `permission`, `permission_answer`, `turn_end`, `state`, `diff`, `check`, `retry`, `check_stop`,
+`work`, `error`, `restart`), and all send every permission request to eriphe-core through the task's
+inbox. The device injects the agent of `claude-code`, `opencode`, `codex` and `vibe` into any image (see
+[Agents](#agents)), so `GET /v1/device` reports these and `acp` once its engine answers.
+
+- `claude-code` (`runtime_claude.go`): `claude -p` in stream-json mode. Permission requests go
+  through an MCP tool served by the device (`approve`, on `/perm/{id}/mcp`). The session id is
+  Claude Code's, resumed with `--resume`.
+  Its MCP servers (with the task's secret), its settings and the system prompt it appends are
+  files, never arguments: a command line is any local user's to read (`ps`). The device writes
+  them to `<root>/tasks/<id>/run` (0700, files 0600), mounts it read-only at `/run/eriphe`, passes
+  `--mcp-config /run/eriphe/mcp.json`, `--settings /run/eriphe/settings.json` and
+  `--append-system-prompt-file /run/eriphe/system-prompt.md`, and deletes it when the container
+  ends (`runfiles.go`). The other runtimes get theirs over stdin or by variable name.
+- `opencode` (`runtime_acp.go`, `runtime_opencode.go`): `opencode acp`, driven over the Agent
+  Client Protocol (JSON-RPC 2.0 on stdin and stdout), for models reached with an API key
+  (OpenAI, Google, Mistral, OpenRouter, Anthropic). The ACP client is generic; only the command
+  line and the configuration are OpenCode's.
+- `vibe` (`runtime_acp.go`, `runtime_vibe.go`): Mistral Vibe's `vibe-acp`, driven over ACP like
+  OpenCode, for a Mistral plan or API key. See [Mistral Vibe](#mistral-vibe).
+- `acp` (`runtime_acp.go`): any other ACP agent (Goose, Qwen Code…), started by the spec's
+  `command`, one argument per item, run as is by the entrypoint's `exec`: never through a shell
+  (a shell or `env` as the program is refused, as is a relative path or a line break). Its
+  credential is its provider's, in the variable the provider names; no system prompt (ACP v1 has
+  none), so eriphe-core puts the instructions before the prompt.
+- `codex` (`runtime_codex.go`): `codex app-server`, OpenAI's Codex driven over its app-server
+  protocol (JSON-RPC 2.0 without the `jsonrpc` member, one message per line), for a ChatGPT
+  subscription. See [Codex](#codex).
+
+A `turn_end` carries the turn's usage where the harness reports it (`usage.go`), in one shape:
+`usage` `{input_tokens, output_tokens, cache_read_tokens, cache_write_tokens}`, and `cost_usd`.
+Claude Code's result gives both, with `duration_ms`, and the device adds `usage.context_tokens`: the
+last main-thread API call's input, cache reads and writes (from its `assistant` messages), the
+session's size, which the turn's sum over its calls is not; Codex its tokens
+(`thread/tokenUsage/updated`: the turn's share of the thread's total, its cached input counted as
+cache reads); OpenCode and other ACP agents nothing yet.
+
+The container puts `/opt/eriphe/bin` first in `PATH`, clones `repo` if given (installing git and gh
+with apt first when the image lacks them; without a repository, neither), then runs the runtime's command. Nothing else is set up for a
+repository (no `mise install`, no devcontainer): the agent installs what it needs (see Task
+containers). The agent's environment (for example `CLAUDE_CODE_OAUTH_TOKEN`, `OPENROUTER_API_KEY`)
+is passed as environment variables, never on a command line.
+
+### ACP
+
+The device is the ACP client. It declares no file system and no terminal capability: the agent
+reads, writes and runs commands itself, in its container.
+
+| ACP | Task |
+|---|---|
+| `initialize` (version 1), then `session/new` with `cwd` (the repository, or `/work`) and the task's MCP servers (see below) | session id saved as the task's, like Claude Code's |
+| `session/load` with the saved id and the same MCP servers, if the agent has `loadSession` | after a restart; the replayed conversation is not reported again. If loading fails, a new session starts from the prompt and an `error` event says so |
+| `session/prompt`, one per turn | `turn_end` then `idle` when it returns: `stopReason` `end_turn` → subtype `success`, `max_tokens` → `error_max_tokens`, `max_turn_requests` → `error_max_turns`, `refusal`, `cancelled`; a JSON-RPC error → `error_during_execution` (with `auth_error` if it is about a key). `result` is the agent's last message |
+| `session/update` `agent_message_chunk` | one `text` event per message (chunks are joined until another message, a tool call, a permission or the end of the turn); with `stream`, each chunk also grows the task's draft, as Claude Code's partial messages do |
+| `session/update` `tool_call` / `tool_call_update` | one `tool_use` per call, once it runs (its input is complete then) |
+| `session/request_permission` | `Task.decide`, then the `allow_once` or `reject_once` option; never an `always` one. Cancelled if the agent stops meanwhile |
+| stop | `session/cancel` if a turn is going on, then stdin is closed |
+| any other request of the agent | JSON-RPC error `-32601` |
+
+Tool names and inputs are those of Claude Code, so eriphe-core's policy reads them alike: a call
+is named after OpenCode's tool (`bash` → `Bash`, `edit`/`patch` → `Edit`, `write` → `Write`,
+`read` → `Read`, `webfetch` → `WebFetch`, `websearch`, `glob`, `grep`, `list`, `task`…), or else
+its ACP kind (`execute` → `Bash`, `edit`/`delete`/`move` → `Edit`, `read` → `Read`, `search` →
+`Grep`, `fetch` → `WebFetch`). An agent that gives the tool's own name in the call's
+`_meta.tool_name` (Mistral Vibe, whose title is a summary such as `Run: ls`) is named after that
+instead (`read_file` → `Read`, `write_file` → `Write`, `web_fetch` → `WebFetch`, `web_search` →
+`WebSearch`). The input is the agent's raw input plus `command`, `file_path` or
+`url` (from the raw input, the call's location or its title).
+
+The MCP servers are the ones Claude Code gets (`runtime_mcp.go`): the spec's `mcp_servers` (the
+brain's `eriphe-core`; a `${NAME}` in a URL or header is read from the task's environment) and the
+catalog servers at `<callback>/mcp/<name>` with the task's secret as bearer, but for the device's
+`eriphe_device` (`approve`), which only Claude Code's `--permission-prompt-tool` needs. They go as
+ACP's `McpServerHttp` (`{"type":"http","name","url","headers":[{"name","value"}]}`), so only to
+an agent that announces `mcpCapabilities.http`, or that the device knows takes them (Vibe, which
+does not announce it): otherwise the task fails. An MCP tool that
+OpenCode names `<server>_<tool>` is reported and asked for as `mcp__<server>__<tool>`; OpenCode
+asks for one without its input, which is taken from the tool call that runs it.
+
+ACP carries no reason with a denial: the agent learns that the call was refused, and the
+reasons of the turn's denials are put before its next prompt (lost if the device restarts
+meanwhile).
+
+If the agent reports which model its session runs (a `model` config option) and it is not the
+task's, the task fails: OpenCode falls back on another model when the one asked for is not
+available.
+
+### Mistral Vibe
+
+`/opt/eriphe/vibe/vibe-acp`, by its path: Vibe's Linux release is a PyInstaller directory, not one
+binary (worker/README.md). The device configures it through its `VIBE_*` variables, which win over
+its files and its remote experiments: `VIBE_ACTIVE_MODEL` (the task's `model`, an alias of Vibe's
+such as `mistral-medium-3.5`; none, Vibe's default), `VIBE_DEFAULT_AGENT=ask` and
+`VIBE_ENABLE_AUTO_APPROVE=false` (every tool call asked through ACP; Vibe's default mode edits
+files without asking), `VIBE_ENABLE_CONNECTORS=false` (the Mistral account's connectors would be
+tools eriphe-core does not see), telemetry, update checks, auto-update and notifications off, and
+`VIBE_HOME=/profile/vibe`, so a restarted task loads its own session. The key comes from the
+agent's provider in `MISTRAL_API_KEY`. The task's folder is never in Vibe's trusted folders, so a
+repository's `.vibe/` settings, `AGENTS.md` and skills are not read. No system prompt over ACP:
+eriphe-core puts the instructions before the prompt, and Vibe cannot be the brain.
+
+### OpenCode
+
+The device configures it through `OPENCODE_CONFIG_CONTENT`: the task's `model` (`provider/model`,
+for example `openrouter/moonshotai/kimi-k2`), `autoupdate` off, `share` disabled, `ask` for
+`edit`, `bash` and `webfetch`, `deny` for `websearch` (a third party's search, off for now; reading
+files needs no permission, as with Claude Code), `experimental.continue_loop_on_deny` (a denial does not end the turn, as with Claude Code)
+and the workspace's `AGENTS.md` and `CLAUDE.md` as instructions. With a model of another provider
+than OpenCode's own, OpenCode's free models are disabled, so the code never goes to them instead.
+
+`OPENCODE_DISABLE_PROJECT_CONFIG=1`: a repository's `opencode.json` is ignored, since it could add
+plugins or MCP servers that run without asking, or send the key elsewhere. Sessions live in
+`/profile` (`XDG_DATA_HOME=/profile/data`, `XDG_STATE_HOME=/profile/state`), so a restarted task
+loads its own. The key comes from the agent's provider, in the variable OpenCode reads.
+
+**A self-hosted model server** (Ollama, llama.cpp, vLLM, LM Studio): a task whose `model` is
+`selfhosted/<model>` comes with `model_endpoint` (`{"base_url": "http://192.0.2.10:11434/v1",
+"key_env": "SELFHOSTED_API_KEY"}`, `key_env` only when the server has a key). The config then
+declares a provider `selfhosted` on OpenCode's built-in `@ai-sdk/openai-compatible`: `baseURL`, a
+15-minute request `timeout` (a home machine can be slow), the one model with `tool_call`, and,
+with a key, `"apiKey": "{env:SELFHOSTED_API_KEY}"`, which OpenCode reads from the task's
+environment: the key is never written in the config. OpenCode substitutes `{env:…}` and `{file:…}`
+in the config's text, so an address, model or key holding a brace, a quote, a backslash or a
+control character gets no provider block (eriphe-core refuses them when saved). The server is
+reached through the egress relay, at the one `host:port` of its address (see Egress); plain
+`http://` goes through the relay's forward path, as OpenCode honors `HTTP_PROXY`. A model behind
+a device (`"relay": true`) has no address: `baseURL` is this device's `<callback>/model/v1`, and
+`apiKey` `{env:ERIPHE_MODEL_TOKEN}`, the task's own secret (see A model behind this device).
+
+OpenCode takes no system prompt over ACP: `append_system_prompt` is passed by name as
+`ERIPHE_INSTRUCTIONS` to the command, which writes it to `/tmp/eriphe/instructions.md` (the tmpfs),
+unsets the variable and starts `opencode acp`; the file is one of the config's `instructions`.
+OpenCode would run MCP tools without asking: the config asks for every tool of the task's servers
+(`<server>_*`) but the `allowed_tools` (`mcp__<server>` → `<server>_*`, `mcp__<server>__<tool>`
+→ `<server>_<tool>`: `allow`), and gives MCP calls an hour (`experimental.mcp_timeout`), as Claude
+Code's `MCP_TOOL_TIMEOUT`. With `no_agent_memory` (the brain), the workspace's `AGENTS.md` and
+`CLAUDE.md` are left out and `OPENCODE_DISABLE_CLAUDE_CODE=1` turns off `~/.claude/CLAUDE.md` and
+Claude Code's skills. OpenCode still attaches an `AGENTS.md` it finds next to a file it reads.
+
+### Codex
+
+Codex, OpenAI's coding agent, signed in with ChatGPT: the way a ChatGPT Plus or Pro plan is
+used. The device drives `codex app-server` directly rather than through `codex-acp` (the ACP
+adapter): the adapter's modes either rely on Codex's own sandbox (bubblewrap, which cannot run in
+a task container without privileges) or never ask. The task container is the sandbox, so every
+thread runs with sandbox `danger-full-access` and approval policy `untrusted`: Codex asks before
+every command and every file change, and each request goes to `Task.decide`, as with the other
+runtimes.
+
+| App-server | Task |
+|---|---|
+| `initialize`, `initialized`, then `thread/start` with `cwd`, `model`, `approvalPolicy: "untrusted"`, `sandbox: "danger-full-access"`, `developerInstructions` (the task's `append_system_prompt`) and `config` (its MCP servers, see below) | thread id saved as the task's session; a thread running another model than the task's fails it |
+| `thread/resume` with the saved id and the same parameters (today's prompt and servers) | after a restart; if it fails, a new thread starts from the prompt and an `error` event says so |
+| `turn/start`, one per turn; `turn/completed` ends it | `turn_end` then `idle`: `completed` → `success`, `interrupted` → `cancelled`, `failed` → `error_during_execution` (with `auth_error` if it is about the sign-in). `result` is the agent's last message |
+| `item/completed` of an `agentMessage` | one `text` event |
+| `item/agentMessage/delta` | with `stream`, grows the task's draft |
+| `item/started` of a `commandExecution`, `fileChange`, `mcpToolCall`, `webSearch` | `tool_use` (`Bash`, one `Edit` per file, `mcp__<server>__<tool>`, `WebSearch`) |
+| `item/commandExecution/requestApproval` | `Task.decide("Bash", {command})`, then `accept` or `decline`, never for the session |
+| `item/fileChange/requestApproval` | `Task.decide("Edit", {file_path})` for each file of the change (from its `item/started`); `decline` at the first denial |
+| `mcpServer/elicitation/request` with `_meta.codex_approval_kind: "mcp_tool_call"` | `Task.decide("mcp__<server>__<tool>", arguments)` (the tool from the call's `item/started`), then `accept` or `decline`; any other elicitation is declined |
+| stop | `turn/interrupt` if a turn is going on, then stdin is closed |
+| any other request (more permissions, questions, client tools) | JSON-RPC error `-32601` |
+
+The thread's `config` sets `mcp_servers` to the task's servers, the same as ACP's (each with `url`
+and `http_headers`, or `command`, `args` and `env`, `tool_timeout_sec` 3600), replacing any of
+Codex's own. Each asks for every tool (`default_tools_approval_mode: "prompt"`) but the
+`allowed_tools` (`approve`, for the server or under `tools.<tool>.approval_mode`). Codex sends
+those approvals as MCP elicitations (`features.tool_call_mcp_elicitation=true`, its default, is
+set anyway). With `no_agent_memory`, `project_doc_max_bytes` 0: no `AGENTS.md` of the workspace.
+`web_search` is always `cached` (OpenAI's index, never `live`, which full access would default to:
+live pages would be opened from OpenAI's servers, out of eriphe-core's sight).
+
+Codex runs every command as `/bin/bash -lc '<command>'`: the policy is given the command inside,
+so its rules (which look for the start of a command) read it as they read Claude Code's. Denial
+reasons are put before the next prompt, as with ACP.
+
+The credential is an `auth.json` of a ChatGPT sign-in that eriphe-core lends as
+`ERIPHE_CODEX_AUTH` (see `core/README.md`): a fresh access token, no refresh token. The command
+writes it to `/tmp/eriphe-codex/auth.json` (the tmpfs, mode 600), links it from
+`CODEX_HOME=/profile/codex/auth.json`, takes the variable out of the environment and starts the
+app-server. `CODEX_HOME` is in `/profile`, so a restarted task resumes its thread; the token itself
+never reaches the device's disk. Codex is started with `cli_auth_credentials_store="file"`, no
+update check, no analytics or feedback.
+
+`ERIPHE_LIVE_IMAGE=eriphe-base:dev ERIPHE_LIVE_AGENT_IMAGE=localhost:5001/eriphe-agent-{agent}:dev go test -run CodexLive -v`
+runs the real Codex, injected into an image (from a local registry, see worker/README.md) and
+hardened as every task, against a fake OpenAI Responses API on the machine (no ChatGPT plan
+needed; `ERIPHE_LIVE_HOST=host.orb.internal` with OrbStack): an allowed command, a denied one,
+a restart that resumes the thread, and the auth.json left off the disk.
+
+The same with `-run OpenCodeLive` (and `ERIPHE_LIVE_CACHE=<volume>`) runs the real OpenCode on
+one of its free models (`ERIPHE_LIVE_MODEL`, default `opencode/big-pickle`; no account needed):
+two turns with an allowed command and a denied write, a restart and a loaded session.
+
+Every task container mounts the Docker volume `eriphe-cache` at `/cache` (`-cache-volume`, empty to
+disable): the base image keeps apt's, uv's, npm's and pip's caches there (worker/README.md, Cache),
+so a package is downloaded once per device. A task eriphe-core marks `untrusted` (one started on
+what came from outside: the brain, the assistants, memory extraction, a worker started on a
+tainted turn) mounts `eriphe-cache-untrusted` instead (`<root>/cache-untrusted` with Apple's
+container): what it leaves there is never run by the other tasks (`cache.go`). A trusted task that
+reads the web later in its run still shares the trusted cache.
+
+### Agent skills
+
+A skill ([agentskills.io](https://agentskills.io/specification)) is a folder with a `SKILL.md`,
+instructions and often scripts, which the agents load by themselves from their configuration and
+from the repository they work in (`skills.go`). Two rules hold for every runtime:
+
+- **A repository's own skills** (`.claude/skills`, `.agents/skills`, `.opencode/skills`) load
+  only when the spec says `repo_skills: true`: eriphe-core sets it for the user's own repository,
+  or one lent with `trust_skills`. Otherwise, and always for the brain (`no_agent_memory`), they
+  stay off.
+- **A skill never approves a tool.** Claude Code would run the tools a skill lists in its
+  `allowed-tools` without asking, even with `-p`. The device writes the task a managed settings file,
+  `<run>/claude-managed/managed-settings.json`, mounted read-only at `/etc/claude-code`, with
+  `allowManagedPermissionRulesOnly: true`: Claude Code then takes permission rules from it only
+  (the spec's `allowed_tools` are its `permissions.allow`), and ignores `--allowedTools`, the user's,
+  the project's and `--settings` rules, and the `allowed-tools` of project, user and `--add-dir`
+  skills (Claude Code 2.1.282 or later). Anything else asks through `approve`. OpenCode and Codex
+  do not read `allowed-tools`: their permission requests stay the device's.
+
+| Runtime | Skills off |
+|---|---|
+| `claude-code` | `--disable-slash-commands` (no skill, no `Skill` tool), and `disableSkillShellExecution` in the managed settings |
+| `opencode` | `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` (`.claude/skills` and `.agents/skills`, the repository's and the home's); `.opencode/skills` are off with the project's configuration (`OPENCODE_DISABLE_PROJECT_CONFIG`); the brain also gets `permission.skill: deny` |
+| `codex` | `-c skills.include_instructions=false`: no skill catalog in the model's context |
+| `vibe` | the task's folder is never trusted: Vibe reads no skill of the repository's |
+| `acp` | nothing: a custom agent's own |
+
+**The user's skills** (approved in eriphe-core, Settings → Skills) come as the spec's `skills`,
+the name and sha256 of each bundle (`skills_user.go`). Before the container starts, the device
+fetches each one (`GET /v1/device/tasks/{id}/skills/{sha256}`, with its own secret). It checks the
+hash and unpacks the regular files only, each inside the skill, into
+`<run>/skills/.claude/skills/<name>`, which is mounted read-only with the run files. A skill that
+cannot be fetched or does not match its hash is left out.
+
+| Runtime | Pointed at them |
+|---|---|
+| `claude-code` | `--add-dir /run/eriphe/skills` (not in a task where skills are off) |
+| `opencode` | `skills.paths: ["/run/eriphe/skills/.claude/skills"]`, which `OPENCODE_DISABLE_EXTERNAL_SKILLS` leaves alone |
+| `codex` | the command links `$CODEX_HOME/skills/eriphe` to that folder (a user skills folder of Codex's) |
+| `vibe`, `acp`, and the others where skills are off | eriphe-core lists them in the task's instructions |
+
+## Task containers
+
+Every task container is started with:
+
+- `--user 0:0`: the agent is root in its container, whatever the image says, so that it installs
+  what the task needs (`apt-get install`, `uv`, `npm -g`) in a container thrown away with the task.
+  The root filesystem is writable (no `--read-only`): what is installed goes with the container.
+- `--cap-drop ALL`, then only `--cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add FOWNER`:
+  - CHOWN and FOWNER are what dpkg needs: a package's files belong to its own users and groups
+    (checked: without them, `openssh-client`, `cron`, `man-db` or `build-essential` fail; with
+    them, those and `git`, `imagemagick`, `postgresql-client`, `sudo` install);
+  - DAC_OVERRIDE lets root read and write what is mounted as its owner did: the task's folders
+    from before (UID 1000), a user's folder lent to it whose files are theirs only;
+  - not SETUID nor SETGID: apt runs as root, without its `_apt` sandbox user
+    (`APT::Sandbox::User "root"` in the base image); nor any network capability (no raw sockets,
+    no binding below 1024, no change to the container's network), MKNOD, SYS_CHROOT, KILL,
+    SETFCAP or the others Docker gives by default.
+- `--security-opt no-new-privileges`, `--pids-limit 1024`.
+- a tmpfs at `/tmp` (2 GB, exec allowed for builds and test binaries; it counts towards the
+  memory limit).
+- `--memory` from `-task-memory` (default `8g`, empty for none) and `--cpus` from `-task-cpus`
+  (default empty: all the machine's CPUs).
+- no host mount but the task's `work` and `agent` folders (or its profile), refused unless they
+  are under `-root`, the agent (read-only, see Agents), the device's toolchains for a task with a
+  repository (read-only, see Toolchains), and the user's folders lent to it
+  (`folders`, see Shares): read-only, but those lent to write; checked again at each start; never the
+  Docker socket.
+
+Root in the container is not root of the machine: no capability but those three, no new privilege,
+the internal network and the egress relay as the only way out (Networks, Egress), nothing of the
+machine mounted but what is listed above. The task's folders stay the device's (0700, under the
+device's root): what a task leaves there, a setuid program included, no user of the machine reaches.
+The folders lent to it are the user's, so what it writes in a folder lent to write is **handed
+back** (`handback.go`): at the end of each turn, every minute while the task runs, and when its
+container is gone, every entry there owned by root goes to the folder's owner, and any file with a
+setuid or setgid bit loses it. The walk goes through file descriptors and never follows a symbolic
+link (a link is changed itself), so a task changing the tree meanwhile cannot point it elsewhere. Apple's container needs none of it: the Mac's file sharing
+writes everything as the Mac's user.
+
+Disk: a task's root filesystem has no size limit of its own (Docker's overlay2 has none without
+XFS quotas), like `/work` before it.
+
+## Agents
+
+The agent is not in the task's image: the device injects it (`inject.go`). Each agent is an image of
+its own (`ghcr.io/alexis-marcel/eriphe-agent-claude`, `-codex`, `-opencode`, `-vibe`, see
+worker/README.md) holding only its binary at `/opt/eriphe/bin/<agent>` (Vibe: its directory at
+`/opt/eriphe/vibe`). The device:
+
+1. reads the image's manifest for `linux/<its arch>` from the registry itself (an anonymous token
+   when the registry asks for one; `registry.go`), not through Docker: it works the same behind
+   the NAS's socket proxy, which lets it read no image's files, and with Apple's container;
+2. downloads its layers, checks each against its digest, and unpacks what is under `/opt/eriphe`
+   into `<root>/agents/<agent>/<manifest digest>/`: directories and regular files only (a link, a
+   device, a whiteout or a path out of it fails the package), never a setuid bit; `current`
+   names the version a task takes;
+3. mounts that directory read-only at `/opt/eriphe` in the task's container (`--mount
+   type=bind,src=…,dst=/opt/eriphe,readonly`, or container's `--mount
+   type=bind,source=…,target=/opt/eriphe,readonly`); the entrypoint puts `/opt/eriphe/bin` first
+   in `PATH` (the base image has it there already);
+4. removes the older versions no running task uses.
+
+`-agent-image` names the images, `{agent}` for `claude`, `codex`, `opencode` or `vibe` (default
+`ghcr.io/alexis-marcel/eriphe-agent-{agent}:<tag>`, env `ERIPHE_AGENT_IMAGE`); the tag, and the
+default `-image`'s, are the device's own build: its version for a release, `sha-<commit>` for a
+build of `main`, `latest` for a build by hand. Empty, no agent is injected (the image must have
+it, as `eriphe-worker` had). An `acp` task gets no agent: its command comes from its image.
+
+**Ready in advance.** Each assignments answer carries `prepare` (`core/README.md`): the runtimes of
+the agents configured in eriphe-core that this device could run (it carries their needed labels),
+and the images they name. At the first answer, whenever that list changes, and every 6 hours (a
+newer image under the same tag), the device pulls the default image and those images
+(`docker pull`, `container image pull`) and unpacks those agents, in the background. An agent that
+no configured agent uses is never downloaded. A task whose agent is unpacked starts at once,
+without asking the registry (also offline); otherwise its container starts once the device has
+unpacked it (the task stays `running` meanwhile). `agents_ready` in `GET /v1/device` tells the
+scheduler, which prefers such a device (`core/scheduler.go`). Without a
+`prepare`, the device pulls its default image only, and unpacks an agent at its first task.
+
+### Injected programs (`/opt/eriphe/bin`)
+
+`/opt/eriphe/bin` is read-only in every task, first in `PATH` (before `/usr/local/bin` and the
+system's), and holds the agent's binary and the device's own programs for tasks, such as
+`eriphe-cred`. The contract for such a program:
+
+- it is a Linux executable, static or for glibc, for the device's architecture (the tasks'): `amd64`
+  or `arm64`;
+- it is in `<-task-bin>/linux-<arch>/` on the device (`-task-bin`, env `ERIPHE_TASK_BIN`, default
+  `/usr/local/share/eriphe/task-bin`: in the device's image, e.g.
+  `/usr/local/share/eriphe/task-bin/linux-amd64/eriphe-cred`; on a Mac, a folder given by
+  install.sh);
+- at each task's start the device copies every regular file there (a name of lowercase letters,
+  digits, `-` and `_`; no link, nothing hidden) into the `bin/` of the agent's directory, mode
+  0755, by a rename when its content changed, so a running task keeps the one it started with. A
+  task without an agent (`acp`) gets them alone, from `<root>/agents/none/`;
+- a program there runs as the task's root, with the task's environment and network: it is reached
+  by name (`eriphe-cred`), and talks to the device through the listener (`ERIPHE_*` variables the
+  device sets for it), never through a file of the host.
+
+## Toolchains
+
+A task with a repository finds the toolchain its repository names ready, and its checks run with the
+same one (`toolchain.go`, `toolchain_kinds.go`). Once the entrypoint has cloned the repository, it
+asks the device (`POST /v1/task/toolchains` on the task listener, the task's secret as a bearer
+token, with the image's `curl`); the device reads the repository's files itself, under the task's
+`work/repo` only (no link out of it, regular files of 1 MB at most), from the agent's working
+directory up to the repository's root, the nearest file of each kind winning:
+
+| Kind | Files, in order | Version |
+|---|---|---|
+| Go | `go.mod` | its `toolchain goX` line, or its `go X` line when newer or alone; `1.25.7` exactly, `1.25` the newest stable 1.25.x |
+| Node.js | `.nvmrc`, `.node-version`, then `package.json`'s `engines.node` | an exact version, `lts/*`, `lts/<name>`, `node`, or an npm range (`>=20`, `^20.11`, `20.x \|\| 22.x`, `18 - 20`): its newest LTS release, else its newest |
+
+For each, the device downloads the official release for `linux/<its arch>` (`amd64`, `arm64`)
+**itself**, through its own network, never the task's: `go.dev/dl` (its JSON index gives each
+archive's SHA-256) and `nodejs.org/dist` (`index.json`, then the release's `SHASUMS256.txt`). The
+archive is checked against that SHA-256 before anything of it is unpacked; a mismatch fails it and
+nothing is kept. It is unpacked under `<root>/toolchains/.partial-*` (directories, regular files and
+links that stay in the tree; no setuid bit, nothing out of it; 512 MB of archive and 2 GB unpacked
+at most) and renamed `<root>/toolchains/<name>`, e.g. `go1.25.7-linux-arm64` or
+`node-v22.11.0-linux-x64`. Each download is logged (`toolchain … ready (… downloaded from … in …,
+sha256 … checked)`), and so is what each task gets.
+
+`<root>/toolchains` is mounted read-only at `/opt/eriphe-toolchains` in every task with a
+repository (a toolchain made ready after the container started appears in it). The device's answer is
+the environment to add, one `NAME=value` per line, which the entrypoint exports (as data: nothing of
+it runs):
+
+- `ERIPHE_TOOLCHAIN_PATH`, the toolchains' `bin` directories, which the entrypoint puts first in
+  `PATH` (e.g. `/opt/eriphe-toolchains/go1.25.7-linux-arm64/bin`), before the image's own Node.js;
+- with the device's cache (`-cache-volume`), `GOMODCACHE=/cache/go/mod` and `GOCACHE=/cache/go/build`
+  for Go, `npm_config_cache=/cache/npm` for Node.js (what `eriphe-base` sets already, for any other
+  image): modules and builds are downloaded and compiled once per machine.
+
+The device keeps that environment for the task, and its **checks** get it: `docker exec -e …` (or
+`container exec -e …`) with the same variables and the same `PATH` put first, in the same working
+directory, so `go build ./...` finds the `go` the agent used and its module cache. A toolchain that
+could not be had (no release, offline, checksum) is left out and named in the answer's
+`X-Eriphe-Toolchain-Error` header; the task starts anyway, and the agent can install one itself.
+`GOTOOLCHAIN` is left as Go's default: a `go.mod` raised later in the task makes `go` fetch the newer
+toolchain into the module cache.
+
+The release indexes are kept an hour in memory; a toolchain already there whose version is exact
+(`go 1.25.7`, `.nvmrc` `22.11.0`) is taken without asking the network. A toolchain that no task used
+for 30 days, and none runs with, is removed (each use refreshes its directory's time). To clear them
+all, stop the tasks and remove `<root>/toolchains` (`-root`, e.g. `~/.eriphe/device/toolchains`
+for an install by install.sh); the next task downloads what it needs again. A Go toolchain takes about 55 MB to
+download and 230 MB on disk, Node.js about 60 MB and 190 MB.
+
+Another language is one more `toolchainKind` (`toolchain_kinds.go`): the files that name its
+version, where its releases and their checksums are, and what a task gets of it. Python
+(`.python-version`, which `uv` in `eriphe-base` already serves) and Rust (`rust-toolchain.toml`) are
+not detected yet, nor a repository in a folder lent to the task (the device does not read the user's
+folders).
+
+**Why on the device, not in `eriphe-base`.** Baking Go in the base image would add about 70 MB
+compressed per architecture to every machine, Go repositories or not, and still give one version
+only: a repository asking for another would download it in the task, as before. The device's cache
+gives each repository the version it names, for each architecture natively, once per machine and
+only on the machines whose tasks need it; it is checked against the publisher's checksums by the
+device, not by the task, and it keeps the base image at its size.
+
+## The engine
+
+The device never runs `docker` or `container` itself: it asks its engine (`engine.go`), an
+interface of a few verbs with typed specifications, the way Kubernetes' CRI or Nomad's task drivers
+do: `runTask` (the agent's stdin and stdout are the container's), `execSync` (a check, its exit
+code apart from a failure to run it), `stop`, `runService`, `removeStray`, `runHelper` (a
+short-lived helper: the folder helper, the Mac's explorer), `wake`, `pull`, `info`,
+`ensureNetwork`. The device says what it wants (an image, folders and their access, an
+environment); the engine says it to its tool, with the hardening built in: a caller never passes a
+capability, a security option or a network of its own. Three engines: Docker through its CLI
+(`engine_docker.go`), Apple's container through its own (`apple.go`), chosen from `-engine`, and
+eriphe-device engine (`engine_remote.go`, below), chosen by `-engine-url`.
+Where they differ in a way the device must know, the engine says so in its traits: tasks on networks
+of their own, folders seen only through the explorer, files written as the user's. The device's tests
+use an engine in memory (`engine_fake_test.go`); what each engine says to its tool is tested with a
+fake CLI. `TestEngineBoundaries` fails when a file other than the engines' runs their CLI or asks
+which engine it has.
+
+### eriphe-device engine
+
+`eriphe-device engine` (`engine_server.go`) is the same image in a container of its own next to the
+device, the only one that holds the Docker socket. The device, given `-engine-url` (env
+`ERIPHE_ENGINE_URL`, e.g. `http://eriphe-engine:8792`), has no `DOCKER_HOST` and no Docker CLI: it
+sends each verb to the engine, which builds the container itself and speaks to the Docker API
+directly. The device is not trusted: a compromised device gets its own tasks, nothing more.
+
+- **Nothing to ask for.** A request says what is wanted (a task with its image, folders and their
+  access, environment, entrypoint and limits; a service; a folder helper; a wake), never how. Its
+  fields are the only ones taken (a request with any other is refused), and none can express a
+  privilege, a capability, a security option, a device, a host namespace, a network or a volume: the
+  hardening is the engine's, the same as the docker CLI engine's (Task containers, Services).
+- **The operator's policy**, in the engine's flags, the way Nomad's Docker driver has it:
+  `-bind-from` (the places folders may be mounted from, the device's root among them, `PATH:ro` for one
+  read-only), `-bind-file` (more, one a line, read again at each request: eriphe-launcher's folders
+  shared), `-host-root` (where the host's `/` is seen read-only: folders are resolved in it and the
+  resolved path is what the daemon mounts), `-device-image` (the device's own image: the only one run on
+  the host's network, to wake a machine, and as a folder helper), `-images` (the images tasks and
+  services may run or pull: a repository, any of its tags; `REPO:TAG` or `REPO@DIGEST`, that one
+  only; `REGISTRY/NAMESPACE/`, all of a namespace, `mcp/` for Docker Hub's; `*` for any; default
+  Eriphe's own, `ghcr.io/alexis-marcel/`, and the device's image always), `-image-file` (more, one a
+  line, read again at each request: `<data>/proxy/images` with the installers, `images.go`),
+  `-task-network`, `-network`,
+  `-service-network`, `-cache-volume` (the device takes these from the engine at start, whatever its own
+  flags say), `-allow-from` (the only host answered, by name), `-listen` (`:8792`), `-socket`.
+- **Its own containers only.** A check runs (`/v1/exec`) in the running container of the task it
+  names, which must carry that task's label: never in a service's, a helper's, a wake's or any other
+  of the machine. A stop is for a task's or a service's container carrying its label, a removal for
+  the device's labels only. The check's exit code comes from the daemon, apart from its output: a check
+  that could not run is an error, never a failed check.
+- **The API** is versioned by its prefix, `/v1`: a path the engine does not know answers 404 and
+  says that the device and the engine must be of the same version; the device logs a warning when their
+  versions differ. `GET /v1/config`, `POST /v1/tasks`, `/v1/services` (streams), `/v1/exec`, `/v1/stop`,
+  `/v1/remove-stray`, `/v1/helpers`, `/v1/wake`, `/v1/pull`, `/v1/networks/ensure`, `GET /v1/info`,
+  `/v1/networks/tasks`. Refusals answer `{error}` and are logged without the request's body.
+- **Streams.** A task's or a service's container runs on a connection of its own (`Upgrade:
+  eriphe-engine`, `engine_stream.go`): frames of the Docker daemon's own format, the device's input
+  (an empty frame closes it), the container's stdout and stderr, then its end (`{exit, error}`). The
+  container outlives the device's connection, as it outlived the docker CLI: a stop stops it. An image
+  the daemon does not have is pulled first, as `docker run` does.
+
+A folder is checked when its container is made and mounted when it starts: no container mounts a
+path strictly under a place a running task can write, nor does a task get a place to write over
+what a container not started yet mounts (`mountClash`, `engine_policy.go`). The engine answers 409
+and the device tries again every 15 s, for up to 12 hours (`runTaskWhenFree`), so that a task cannot
+swap another's folder for a symlink in between. What it cannot prevent is the device itself, which
+writes its own root, doing so with a task's folder there. `TestEngineRunsTheDevice` runs the device's own functions through the engine to a fake
+daemon (a new verb belongs there); `TestEngineRefusesWhatTheDeviceMayNotDo` is a compromised device
+calling the engine directly. install.sh (Linux, a Mac's Lima VM), eriphe-launcher and
+`deploy/nas` run it as `eriphe-engine` (`ERIPHE_ENGINE_URL=http://eriphe-engine:8792`), and so
+does Windows, whose WSL distribution runs the launcher (install.ps1).
+
+## The container engine (a Mac)
+
+`-engine container` (env `ERIPHE_ENGINE=container`, what install.sh sets on a Mac with Apple
+silicon and macOS 26) runs each task with [Apple's container](https://github.com/apple/container)
+(1.6.1 or later) instead of Docker: eriphe-device runs on macOS itself, as the user, and every task
+is a micro-VM of its own (its own Linux kernel, started in about 0.75 s), with the same contract as
+a Docker task (`apple.go`). `-docker` is then the `container` CLI (default `container`; the
+LaunchAgent gives `/usr/local/bin/container`).
+
+| Docker task | `container run` |
+|---|---|
+| `-i --rm --name eriphe-task-<id> --label eriphe.task=<id>` | the same, and `--progress none` |
+| `--user 0:0`, `--cap-drop ALL`, `--cap-add CHOWN` (`DAC_OVERRIDE`, `FOWNER`) | the same, as `CAP_CHOWN`… |
+| `--tmpfs /tmp:rw,exec,nosuid,nodev,size=2g` | the same |
+| `--pids-limit 1024` | `--ulimit nproc=1024` (per user in the VM, the task's only user) |
+| `--security-opt no-new-privileges` | none in container: with every capability dropped from the bounding set but those three, a setuid program gains no other |
+| `--memory`, `--cpus` | `--memory`, `--cpus`; without `-task-cpus`, all the Mac's CPUs (container's own default is 4 CPUs and 1 GB) |
+| `-v <dir>:/work`, `/profile` | `--mount type=bind,source=<dir>,target=/work` (no comma in a path) |
+| `-v eriphe-cache:/cache` | `<root>/cache` mounted at `/cache` |
+| `--mount type=bind,src=<root>/agents/…,dst=/opt/eriphe,readonly` | `--mount type=bind,source=…,target=/opt/eriphe,readonly` |
+| `--mount type=bind,src=<root>/tasks/<id>/run,dst=/run/eriphe,readonly` | `--mount type=bind,source=…,target=/run/eriphe,readonly` |
+| `--network eriphe-tasks`, `--add-host host.docker.internal:<gateway>` | `--network eriphe-task-<id>`, its own (below); the callback is its gateway's address |
+| `-e NAME`, `--entrypoint sh <image> -c …` | the same (`-e NAME` takes the value from the CLI's environment) |
+| `docker stop -t 10`, `docker rm -f` of strays | `container stop -t 10`, `container delete --force` of what carries `eriphe.task`, and the strays' networks |
+| `--group-add` of a folder's group, what is written handed back to the folder's owner | none: what the task writes lands as the Mac user's (checked: what a root task writes is the Mac user's) |
+
+`GET /v1/device` says `"engine": "container"` and `engine_version` (`docker` is empty); the images
+are container's (`container image ls`), the runtimes those the device injects.
+
+**Networks.** Each task gets a network of its own, `container network create --internal --label
+eriphe.task=<id> eriphe-task-<id>` (vmnet's host-only mode), deleted with the task: no route out,
+no DNS, and no other task on it (container has no `enable_icc`; a network per task is its
+equivalent, made in about 0.1 s). The Mac is its gateway, where the device's task listener and egress
+relay answer, so the agent's configuration and `HTTP_PROXY` name the gateway's address. A
+host-only network's bridge exists only while a container is on it: the listener and the relay bind
+every address (`0.0.0.0:8790`, `:8791`) and close at once any connection that comes neither from a
+task's network nor from the loopback (`taskListener`): the LAN never reaches them. The brain
+(`system_network`) stays on its own network too: it reaches eriphe-core through the device (no
+`self_url`), as every task. An http service without egress gets an internal network of its own as
+well (the device reaches it on its address; it does not reach the listener); with egress, a service
+is on container's default network (NAT), like Docker's default bridge.
+
+Checked on a Mac (`TestAppleLive`, below): a task reaches the listener and the relay; through the
+relay, the Internet and not the LAN; directly, neither the Internet, nor DNS, nor the LAN (the
+router), nor another task's address. This does not depend on macOS's "find devices on local
+networks" permission of `container-runtime-linux`: allowed, tasks still have no route to the LAN.
+
+What it does not stop: **a service of the Mac that listens on all its addresses is reachable from a
+task**, on the gateway or any address of the Mac (eriphe-core's 8800 and 8443 in core mode, file
+sharing, a development server, AirPlay…), as on WSL (see Networks). The device's own listener
+refuses what is not a task. Keeping the Mac's own services out would need a packet filter rule
+(pf) on the tasks' subnets, which needs root and is not done.
+
+**macOS's privacy, and the explorer.** Documents, the Desktop, Downloads, iCloud Drive and the
+clouds' folders are protected: a program reads them once the user allows it, the permission tied to
+the program's signature. eriphe-device is not signed with a Developer ID: each update would ask again
+(and a program that launchd starts waits for the answer). So the device does not list or check a
+shared place itself (`apple_explore.go`):
+
+- the checks of `eriphe-device share add` run in a short-lived container, the explorer: alpine, the
+  place's root mounted read-only, no network, UID 1000, every capability dropped, about 0.7 s.
+  Paths are resolved there, so a symlink out of the root points nowhere it can see (`outside`).
+  Then the checks of Shares apply to what it reports: nothing hidden or sensitive on the way, nor in
+  the folder three levels down (`holds_sensitive`), not the device's own data (`~/.eriphe`: hidden,
+  and a folder holding it, the home, is not shareable). The folders' paths are not even looked at
+  for `missing`;
+- a task's folders are checked the same way when it starts;
+- `~/Library` is never listed nor shared from a root that holds it (mail, messages, browsers' and
+  apps' data): iCloud Drive and `~/Library/CloudStorage/*` inside it are roots of their own.
+
+macOS asks once, for Apple's `container-runtime-linux`, the first time a protected folder is shared
+or mounted, and keeps the answer across Eriphe's updates.
+
+**Asked when sharing.** Two other programs open a shared folder on the Mac itself: eriphe-device
+(the dataless files of Files in the cloud, its checks before the copies) and Syncthing, which copies
+a folder that may be copied to the user's other machines (see Copies). So that macOS asks for them
+while the user is at the terminal (or in the Finder, for its Quick Action), not later from a
+LaunchAgent where nobody answers, `eriphe-device share add` says first that macOS may ask, up to
+twice for a folder that may be copied (eriphe-device, then Syncthing), and to allow both; then it asks
+the running device, through its local socket (`<root>/local.sock`, the device's user's only,
+`local.go`), to open each folder it shares. The device opens it, and for a folder that may be copied
+hands it to its Syncthing at once (`syncshare.go`: a send-only folder, id `e-<machine>-<share>`, no
+device yet) and has it scanned, which makes macOS ask for Syncthing too; the command waits for the
+answers (up to 3 minutes). Refused, it names the program refused, says how to allow it (System
+Settings › Privacy & Security › Files and Folders, then turn on eriphe-device or syncthing), and
+opens that pane. The folder is shared either way, and the device opens only a folder of its list
+there. It then never opens a folder of the Mac just to report on it: what it saw is kept
+(`access.json`), and only a folder found blocked is tried again, every 30 seconds (see Folders it
+cannot use). Syncthing's answer is tied to Kastelo AB's signature and holds across updates;
+eriphe-device's is tied to its ad hoc signature, which changes with each build, so macOS may ask
+again for it after an update of the device: the folder then shows as blocked in the workspace, with
+"Allow".
+
+**Files in the cloud.** iCloud Drive and the File Provider clouds keep files "dataless" on a Mac
+that optimises its storage. A task cannot have them downloaded (a read in the container fails with
+EDEADLK); a read on the Mac does. Before a task starts, the device has the dataless files of its
+folders downloaded through Apple's own tools (`find -flags +dataless`, `stat`, `head -c 1`, which
+macOS lets into a protected folder where it would hold eriphe-device back), up to `-download-limit`
+(2 GB) for the task; beyond, the task fails and says to choose "Keep Downloaded" on the folder in
+the Finder.
+
+**The LAN, and the core relay.** macOS's local network privacy ([TN3179](https://developer.apple.com/documentation/technotes/tn3179-understanding-local-network-privacy))
+keeps a LaunchAgent off the LAN ("no route to host", checked: the loopback, the Internet and
+container's networks are not held back). It would ask only for a program it can identify by its
+signature, and an ad-hoc signed eriphe-device is another program after each update; the question
+also needs a bundle's `NSLocalNetworkUsageDescription`. What is allowed without asking is a
+program run as root. Checked on a Mac: a LaunchDaemon run as the user (`UserName`) is held back
+and asked about like an agent; one run as root, a binary never allowed before, reaches the LAN
+with no question. eriphe-device itself cannot be a daemon: Apple's container has its services in
+the user's session (the `gui/<uid>` launchd domain), and from a daemon its CLI gets "XPC
+connection error: Connection invalid". So a root LaunchDaemon, `org.eriphe.relay` (install.sh,
+not in core mode), does only the connections to eriphe-core (`corerelay.go`,
+`corerelay_unix.go`): `/usr/local/libexec/eriphe-relay core-relay -socket
+/var/run/eriphe/relay.sock -dir ~/.eriphe -owner <uid>`, from a copy of eriphe-device that only
+root can change (the device's own binary is the user's: root never runs it).
+
+- The device, given `ERIPHE_CORE_RELAY=<sock>`, sends `host:port` and a line break, then the
+  connection's bytes once the relay answers `ok`; TLS stays end to end, checked against the
+  pinned CA. The loopback is dialed directly, and so is everything when no relay answers.
+- The socket is in a folder of root's that no one else writes to, made 0600 from its creation,
+  then given to the user (`lchown`): only the user's programs reach the relay.
+- The relay dials only eriphe-core's addresses, read at each connection from the user's
+  `device/device.json` (`core`, `cores`, as JSON) and `device.env` (`ERIPHE_CORE='url,url'`, for the
+  join), as root reads a user's files: no symlink followed (`O_NOFOLLOW`, `device/` and the folder
+  checked with `lstat`), regular files owned by `-owner`, at most 64 KB, only http(s) URLs with a
+  host and a port, nothing else in them used, nothing of them logged. It takes nothing else from
+  the socket than that one line (at most 300 bytes, within 10 s), and refuses anything not in the
+  list: it is no way out for anything but the device's tunnel, assignments, reports and catalog
+  relay.
+- An update of eriphe-device does not change the relay (it needs root); running install.sh again
+  does (`sudo`), when the binaries differ. Its log is `/var/log/eriphe-relay.log`.
+
+`ERIPHE_LIVE_CONTAINER=1 ERIPHE_LIVE_LAN=<router>:80 go test -run AppleLive -v` runs real task
+containers on a Mac with container: hardening, the network checks above, and folders
+(`ERIPHE_LIVE_FOLDERS=a,b` of the home, the first read-only; `ERIPHE_LIVE_ICLOUD=<folder>` of iCloud
+Drive, `brctl evict` a file there first to see it downloaded); `ERIPHE_LIVE_IMAGE` for another image
+than alpine (the worker's).
+
+`go test -run InjectLive` checks a task end to end with its agent injected, twice: Claude Code's
+`claude --version` from `/opt/eriphe/bin`, read-only; root, with a writable root filesystem;
+`apt-get install imagemagick` through the relay, the second time from the cache; a folder lent
+to write, what the task wrote there ending up its owner's; the listener and the relay reached,
+nothing else (no Internet, DNS nor LAN directly, no LAN through the relay). `TestAppleInjectLive`
+with Apple's container on a Mac (`ERIPHE_LIVE_CONTAINER=1 ERIPHE_LIVE_IMAGE=<base>
+ERIPHE_LIVE_AGENT_IMAGE=<agents> ERIPHE_LIVE_LAN=<router>:80`), `TestInjectLive` with Docker in the
+NAS's layout: the test in a container with the docker CLI and socket, on an internal task network
+and one with egress, a share at the same path for it and the daemon (`ERIPHE_LIVE_DOCKER=1`, and
+`ERIPHE_LIVE_SHARE`, `ERIPHE_LIVE_SELF`, `ERIPHE_LIVE_TASK_NETWORK`, see the test).
+
+## Shares (the user's folders)
+
+A folder is shared with Eriphe **on the machine that holds it**, never from eriphe-core: the user
+runs `eriphe-device share` there (the installers wrap it as `eriphe-share`, and the Finder's and the
+Explorer's "Share with Eriphe..." call it). eriphe-core sees each shared folder's name, level,
+whether it may be copied, and an opaque id, never its path; it can lend a task one of them, take
+one off the list, lower its level or turn its copies off (restricting is always allowed), but it can
+neither add a folder, raise one, nor look into the machine.
+
+Two levels, chosen when the folder is shared:
+
+| Level | Flag | A task lent it at that level |
+|---|---|---|
+| `write` | none, or `--write` | reads, creates, changes, renames and deletes anywhere in it; a snapshot of it is taken first |
+| `read` | `--read` | reads it: the folder is mounted read-only; for a sensitive folder |
+
+A folder is shared to write by default (read on a `:ro` place). What a task may then do there is
+set in eriphe-core, Settings → Folders: Lire and Modifier, each free, on approval or never, a
+default per device and an exception per folder; a folder shared read-only greys Modifier. The
+lists of before the two levels are read once as `drop` → `read` (nothing widened) and `manage` →
+`write`; `--drop` and `--manage`, which right clicks installed before pass, are taken as `--read`
+and `--write`.
+
+The level chosen on the machine is the most the folder ever gets (its ceiling, `max`): eriphe-core
+may lower it (`PATCH /v1/shares/{id}` through the tunnel, `{"access": "read"}`), never raise it,
+not even back to `max`; only the machine raises it, by sharing the folder again. `--copyable`
+(off by default) records that the user allows copies of the folder on their other machines, for
+the synchronisation to come; eriphe-core may turn it off (`{"copyable": false}`), never on. A raise
+of either through the tunnel is refused (403, `raise`) and logged.
+
+```sh
+eriphe-device share add [--name NAME] [--read|--write] [--copyable] FOLDER...
+eriphe-device share list [--json]
+eriphe-device share remove NAME|FOLDER...                  # the tasks holding it are stopped
+eriphe-device share snapshots NAME|FOLDER                  # its snapshots, newest first
+eriphe-device share restore NAME|FOLDER SNAPSHOT|latest    # back as it was (after a snapshot of it now)
+```
+
+Sharing a folder already shared again keeps its id (and its name, unless `--name` is given) and
+sets its level, ceiling and copies to those given: that is how the machine raises a level.
+
+On a Mac, `share add` also has the running device open each folder it shares, and hand one that may
+be copied to Syncthing, so that macOS asks the user then for eriphe-device and for Syncthing;
+refused, it names the program to allow and opens System Settings there (see The container engine,
+Asked when sharing). The folder is shared either way: the workspace shows it blocked until it is
+allowed.
+
+Options, before the command: `-root` (env `ERIPHE_ROOT`), `-share` (env `ERIPHE_DEVICE_SHARES`),
+`-engine` (env `ERIPHE_ENGINE`), `-docker`, `-snapshot-days` (env `ERIPHE_SNAPSHOT_DAYS`),
+`-snapshot-limit` (env `ERIPHE_SNAPSHOT_LIMIT`). It must run as the device's user, with its settings:
+`sudo eriphe-share` on Linux (`docker exec eriphe-device eriphe-device share` in the device's
+container, which sees the places at their paths on the machine; `ERIPHE_ROOT` is set there),
+`docker exec eriphe eriphe share` with the one-container install (below),
+`~/.eriphe/bin/eriphe-share` on a Mac (the device's `device.env`), also behind the Finder's Quick
+Action "Share with Eriphe..." (`~/Library/Services`: it asks for the level (Modifier by default, or Lecture) and the copies with
+macOS's own dialogs, `eriphe-share --ask`, and a notification says how it went), and the
+Explorer's "Share with Eriphe..." on Windows (below).
+
+**The list** is `shares.json` in the device's data (`-root`, mode 0600): `{id, name, path, access,
+max, copyable, added}` per folder, the path absolute and resolved; `access` is the level now
+(`read` or `write`), `max` the level chosen on the machine (empty: `access`), `copyable` true when the user allowed copies. `GET /v1/device` and `GET
+/v1/shares` report `{id, name, access, max, copyable, missing}`, never the path. The command changes it under a lock file
+(`shares.lock`); the device reads it at every use (`GET /v1/device`, a mount) and looks at it every two
+seconds: a folder taken off, or lowered below the level a task holds it at, stops the tasks that
+hold it (a `folder_revoked` event, then the container is stopped). Neither eriphe-core (the tunnel has no way to write it) nor a task (the
+device's data is never mounted nor shared) reaches it. `shares.log`, next to it, is the device's own
+append-only log, one JSON line per event: `add`, `change` (shared again) and `remove` (`by`:
+`local` or `eriphe-core`), `lower` (`from`, `access`, `copyable`), `mount` (task, folder,
+access), `snapshot`, `snapshot_failed`, `snapshot_pruned`, `restore`, `refused`, `stop`.
+
+**The places** of this machine are declared when it is installed, never by eriphe-core: `-share
+name=/path`, repeatable, or `-share name=/path:ro` for a place whose folders may only be read; env
+`ERIPHE_DEVICE_SHARES=home=/home/sam,media=/mnt/media:ro`. They only bound where a folder may be
+shared from: nothing in them is shared until the user shares it. The path must be the same for the
+device and for the Docker daemon (as `-root` without `-host-root`): in a container, mount it at the
+same path (`install.sh --share` does, see install/README.md), and let the socket proxy bind-mount
+from it (`-allowbindmountfrom`). A shared folder that is not there now (an unplugged disk), or no
+longer in a place, is reported `missing` and logged at start.
+
+**The one-container install** (eriphe-launcher, install/README.md) has no places to declare, and
+the device mounts no shared folder at all: the launcher keeps the list of the folders shared on the
+machine and writes it to a file the socket proxy reads again at each request (`-bind-file`, one
+path a line, `PATH:ro` for one mounted read-only only; in a folder of the data mounted into the
+proxy only, read-only), its paths resolved in the host's `/`, seen read-only (`-host-root`). A
+task gets its folders from the Docker daemon when its container is made, so a folder shared now
+is the next task's, and one unshared is lent to no new task (a task at work keeps it until it
+ends). Nothing else of the host is mounted, Eriphe's own data included: the device can never share,
+nor reach, a folder not on the launcher's list. Syncthing alone mounts the folders that may be
+copied, and is made again (copies pause a few seconds) when they change. The
+user shares a folder with the launcher (`docker exec eriphe eriphe share add FOLDER`, the same
+options), which checks it, then runs `eriphe-device share check` in a short-lived container of the
+device's image (no network, no capability but `DAC_READ_SEARCH`, the host's `/` read-only at
+`/host`): a path with no symlink anywhere on the way (the mount is then what was checked), nothing
+hidden, sensitive or private on the way, above it (a `.eriphe-private` in a parent, an Unraid
+share's `system` or `domains`) or inside it, not Eriphe's data (`-data`, host paths) nor holding
+it. Then it puts the folder on the proxy's list and runs this device's own `share add` on it
+(`ERIPHE_SHARE_COMMAND` cleared), which checks it again in a helper and keeps the name, the level
+and the copies as anywhere; nothing restarts.
+
+**Folder helpers** (`-folder-helper IMAGE`, env `ERIPHE_FOLDER_HELPER`, the device's own image; set
+by the one-container install). What the device does inside a shared folder runs instead in a
+short-lived container of its image, `eriphe-device folder-helper` (a JSON request on stdin, the
+answer on stdout), made through the socket proxy with only the folder needed bind-mounted at its
+path (read-only unless it writes there), no network, a read-only root, `--user 0:0`, every
+capability dropped but `CHOWN`, `DAC_OVERRIDE` and `FOWNER`, `no-new-privileges`, label
+`eriphe.helper`; the proxy allows such a container only from the device's image (`-wake-image`),
+running `folder-helper`, with no network and a read-only root. The helpers are: `check` (a
+folder's checks, at `share add` and before every lend: resolved, shareable, nothing sensitive in
+it), `prepare` (a folder lent to a task, checked again, and its group for `--group-add`),
+`snapshot` (the copy before a task lent the folder to write, made in the helper from the folder, read-only,
+straight into the snapshot's new folder in the device's data: nothing goes through the device, and a
+clone where the filesystem has one), `restore` (the folder emptied and the snapshot copied back,
+after a snapshot of it as it was), `handback` (what was written as root given back to the
+folders' owners, at each turn's end), `probe` (whether each folder opens and may be written to, every
+5 minutes and when the copies need it: what `GET /v1/shares` reports as `missing`) and `files` (an
+operation on a folder's files, see Files of a folder). `ERIPHE_SHARE_COMMAND`, set on the device's container, makes a user's own
+`eriphe-device share add` print the launcher's command instead; `list`, `remove`, `snapshots` and
+`restore` work as before.
+
+Every path is checked when it is shared, and again at every mount:
+
+- in a place: the deepest place that holds it lexically, or through a symlink to one (`outside`
+  otherwise); no empty, `.` or `..` part, nor a control character (`invalid_path`);
+- symlinks are resolved (the place's own too) and the result must stay in the place (`outside`); a
+  folder is kept under its resolved path, and a mount whose path now leads elsewhere (a folder
+  swapped for a symlink) is refused (`moved`);
+- never a hidden or sensitive directory on the way (`sensitive`): any name starting with a dot, and
+  `sensitiveNames` in `shares.go` without case: keys and credentials (`.ssh`, `.gnupg`,
+  `.password-store`, `.aws`, `.azure`, `.kube`, `.docker`, `Keychains`, `credentials`,
+  `secrets`…), settings and app state where tokens live (`.config`, `.local`, browser and mail
+  profiles, `.claude`, `.codex`), a NAS's `appdata`; and key or credential files (`.netrc`,
+  `.git-credentials`, `.pgpass`, `id_ed25519`…), a project's `.env` and `.envrc`, and any KeePass
+  database (`*.kdbx`);
+- never Unraid's `system` (`docker.img`, `libvirt.img`) and `domains` (the VMs' disks) shares,
+  on Linux at `/mnt/<user, cache, disk…>/system` and `domains` only (a folder called `system`
+  elsewhere is the user's), unless a root is itself inside one (`sensitive`, `holds_sensitive`);
+- never a folder its owner made private (`.eriphe-private`), nor `~/Library` on a Mac;
+- never the device's own data (`-root`: its secret, the list, the tasks' folders), nor a folder
+  holding it (`eriphe_data`);
+- a folder can be shared, and mounted, only if no sensitive name nor private folder is in it or in its subfolders down
+  to three levels (`holds_sensitive`, `holds_private`): a whole home is refused, its `Documents` is not. The search
+  is whole or the folder is not shared: more than 20,000 directories (`too_large`), or one the device
+  cannot read (`unreadable_sub`: a task, root, might), and it is refused. On a Mac the explorer's
+  tree is held to the same (more than 200,000 entries, or a folder it could not read).
+- `--write` is refused on a `:ro` place.
+
+A task's spec lists its folders: `folders: [{name, id, manage}]`, `manage` true for a folder lent
+to write (`manage` on the wire: an older eriphe-core's `write` meant a results subfolder, and is
+never read as a write). At each start the device takes each from the list by its id (a folder not in
+it is refused, `not_shared`; `manage` on a read-only folder too, `read_only`), checks it again,
+then gives the container:
+
+- `--mount type=bind,src=<folder>,dst=/work/folders/<name>,readonly`;
+- with `manage`, instead, `--mount type=bind,src=<folder>,dst=/work/folders/<name>`, writable,
+  once a snapshot of the folder is taken (below): without one, the task does not start; refused on
+  a `:ro` place. What the task writes there as root goes back to the folder's owner
+  (`handback.go`);
+- `--group-add` of the folder's group (not root's), so the task reads what that group may, and
+  `umask 002` in the container: what it writes is group-writable;
+- `ERIPHE_FOLDERS` with the folders' names.
+
+**Snapshots.** Before a task lent a folder to write starts, the device copies the folder into its
+own data, `snapshots/<id>/<time>/files` under `-root` (with a `meta.json`: folder, path, task,
+method, bytes copied), which no task mounts and no folder can share. A snapshot is kept
+`-snapshot-days` (7) and pruned at start, every hour and after each new one. If it fails, the task
+does not start (fail closed), and `snapshot_failed` is logged. How the copy is made:
+
+- a Mac: Apple's `cp -c`, an APFS clone, instant and free until a file changes (the device's data is
+  on the same volume as the user's folders). Apple's `cp` rather than the device itself, which never
+  reads a protected place. A folder on another volume is copied, if it is within `-snapshot-limit`
+  (2 GB) by Apple's `du`. No APFS local snapshot: it needs root (`tmutil`), which the LaunchAgent is not;
+- elsewhere (a NAS, Linux, Windows' WSL): the tree walked without following a symlink, each file
+  cloned where the file system can (`FICLONE`: btrfs, XFS), copied otherwise, with its mode, times
+  and owner; what is copied, not cloned, stays within `-snapshot-limit`, beyond which the snapshot
+  fails (lend the folder to read, or raise the limit).
+
+Never hard links (`cp -al`, `rsync --link-dest`): a task writing a file in place, as most editors
+and agents do, would change the snapshot's copy with it. A folder lent to read gets no snapshot.
+`eriphe-device share restore` is a local action: it first snapshots the folder as it is (so the
+restore can be undone; refused if that fails), then empties the folder and copies the snapshot
+back. Stop the tasks using the folder before. `latest` is the newest snapshot taken before a task.
+
+A folder's content is visible to a task whole: the device does not hide a file inside it. What it
+does not cover: a sensitive name deeper than three levels, a sensitive file under another name, and
+what changes in the folder between the check and the mount.
+
+**For other hosts** (the contract the Mac and Windows installers build on): declare the places with
+`-share` (or `ERIPHE_DEVICE_SHARES`) at paths the device and its Docker daemon both see, the same path
+for both, and give the user a way to run `eriphe-device share` as the device's user; the device does the
+checks and the mounts. On a Mac with Apple's container
+the device runs on the Mac and its places are Mac paths; the listing and the checks go through the
+explorer, see [The container engine](#the-container-engine-a-mac). A Mac in Lima's VM shares no
+folder. On Windows,
+automount stays off: `install.ps1` mounts only the folder of the user signed in at the PC
+(`C:\Users\<user>`, DrvFs, `noexec,nosuid,nodev`) at `/mnt/eriphe/home`, the one place folders
+are shared from; the launcher keeps the list of the folders shared, as on any Linux with Docker,
+and eriphe-device engine gives a task those only. Its `AppData` is sensitive, like
+a NAS's `appdata`. The Explorer's "Share with Eriphe..." runs `eriphe-share.ps1`
+(`%ProgramData%\eriphe-device\bin`), which asks for the level and the copies (a small Windows Forms
+window), maps the folder under `/mnt/eriphe/home` and runs `wsl -d <distro> -u root --exec
+eriphe-share add --read|--write --copyable[=false]` in the distribution (the launcher's
+`eriphe share add`, which gives the engine that folder, then the device's `share add`). Writes through such a mount follow its own owner mapping (virtiofs, 9p,
+DrvFs), not the setgid rule above.
+
+### Files of a folder
+
+A folder is a tool like any other (core/README.md, A folder is a tool): eriphe-core lists, searches
+and reads the files of a folder shared here, and writes, replaces, moves and deletes them, through
+`POST /v1/shares/{id}/files` (`folder_files.go`). eriphe-core holds each call to the folder's
+rights (its policy and cards); the device holds it to the folder:
+
+- the folder is the one in the list now, under the path it was shared with (all of Shares' checks
+  again), at its level now: a write needs it shared `write`; a copy kept here (`copy`, its
+  Syncthing id) is only read;
+- a path is relative to the folder: no `..`, nothing hidden or sensitive on the way, no folder
+  holding `.eriphe-private`, no symlink followed (listings and searches skip them all), and an
+  `os.Root` keeps every open inside the folder besides;
+- an answer never holds a path of this machine: paths relative to the folder, and errors in its own
+  words (`not_found`, `exists`, `invalid_path`, `sensitive`, `symlink`, `changed`, `too_large`…);
+- limits: 500 entries a listing, 50 matches a search (text files up to 1 MB, 5000 files looked
+  at), a text read or written up to 1 MB (UTF-8), an image read up to 5 MB;
+- `write` makes a new file only, `move` never overwrites, `update` refuses a file changed since its
+  `expect` hash, `delete` takes a file or an empty folder;
+- before a write, a snapshot of the folder (Snapshots), at most one an hour for these writes
+  (`eriphe-core files` in `share snapshots`); and the previous version of a file replaced or
+  deleted is kept in the device's data (`trash/<id>/<time>/<path>`, `-snapshot-days`), never in the
+  folder. Each write and refusal goes to `shares.log`. A file made gets the owner of its folder,
+  where the device may.
+
+With the one-container install, a helper does it (`files`), the folder alone mounted, read-only
+unless the call writes, with the place its previous versions go. A Mac with Apple's container never
+reads a shared place itself: it answers `lend_only` (409) for its own folders (eriphe-core then reads an up-to-date copy
+elsewhere, if any), and such a folder is lent to a task; a copy kept here is still read. A write
+whose caller is gone once its snapshot is taken is not made.
+
+## Copies (Syncthing)
+
+A folder shared on one machine can be kept, up to date, on the user's other machines: Syncthing
+runs next to every device and copies it.
+
+**Syncthing on each machine.** The installation runs it beside the device, never as the device's
+child, and pins its version (2.1.7); it never upgrades itself:
+
+| Machine | Syncthing | Home (`-syncthing-home`) |
+|---|---|---|
+| Linux, NAS, one-container install, a Mac in Lima's VM | the official image `syncthing/syncthing`, by digest, container `eriphe-syncthing` in the device's network namespace (`network_mode: service:device`), the shared places (one-container: the folders that may be copied only) and `<root>/sync` at their paths | `/var/lib/eriphe/syncthing` |
+| Mac with Apple's container | the official signed build (Developer ID of Kastelo AB, Team ID `LQE5SYM783`, notarized) in `~/.eriphe/syncthing`, run by its own LaunchAgent `org.eriphe.syncthing` | `~/.eriphe/syncthing/home` |
+| Windows | as the one-container install: the launcher runs it in the WSL distribution | `/var/lib/eriphe/syncthing` |
+
+On a Mac, Syncthing must not be the device's child: macOS grants access to Documents, iCloud Drive or
+a cloud's folder to the program that asks, and the device is not signed. Syncthing's own signed
+binary, in its own LaunchAgent, asks once, when the folder is shared (see The container engine, Asked
+when sharing); the answer is tied to Kastelo AB's signature and holds
+across Syncthing's versions, Eriphe's updates and restarts. On Windows, the user's folder is a
+DrvFs mount, where Syncthing sees no change notification: it rescans it (every hour by default).
+
+The installation writes Syncthing's first `config.xml` once, before its first start
+(`testdata/syncthing-config.xml`): its API on `127.0.0.1:18384` with a generated key, listening on
+`tcp://127.0.0.1:22100` only, and no global or local discovery, relay, NAT traversal, LAN address
+announcement, usage or crash report, browser nor upgrade. The device (`syncthing.go`) reads the API's
+address and key there (`-syncthing-home`, env `ERIPHE_SYNCTHING_HOME`; empty: no copies on this
+machine), refuses an API or a listening address off the loopback, sets those options again at every
+start through the REST API, and reports Syncthing's device ID in `GET /v1/device` (`syncthing:
+{device_id}`), which eriphe-core hands to the peers. The API key never leaves the machine. It
+drives Syncthing through its REST API only, waiting for it while it is not up yet.
+
+**The way between machines.** Syncthing listens on the loopback only, without global or local
+discovery, nor relays, nor NAT traversal: no port opens, no third party is involved. The machines
+reach one another through eriphe-core, on the tunnels the devices already keep open:
+
+```
+Syncthing A → device A        tcp://127.0.0.1:<port of B>        (a loopback port per peer)
+device A → eriphe-core        GET /v1/device/sync/{B}, Upgrade: eriphe-sync   (device secret, TLS)
+eriphe-core → device B        GET /v1/sync/connect, Upgrade: eriphe-sync    (B's tunnel)
+device B → Syncthing B        its listening address (127.0.0.1:22100)
+```
+
+The device opens one loopback port per peer (`127.0.0.1`, kept from one start to the next in
+`<root>/sync/ports.json`), the peer's static address in Syncthing. eriphe-core joins the two
+devices only if it set up a copy between those two machines (core/README.md, Copies); device B takes
+the connection only from a peer it was told about. Syncthing's own TLS runs end to end, each side
+pinning the other's device ID: eriphe-core and the devices carry ciphertext only. What this device
+sends into its tunnel for Syncthing is held to `-sync-limit` per second (8 MiB by default, env
+`ERIPHE_SYNC_LIMIT`, `0` for no limit), all its peers together, so that a big copy leaves room on
+the same connection for the tasks and eriphe-core; each stream also has yamux's window (256 KiB).
+All of a copy's traffic goes through the machine eriphe-core runs on.
+
+**The folders** (`syncfolders.go`). eriphe-core hands each device its plan (`PUT /v1/sync`, kept in
+`<root>/sync/plan.json`): its peers and their device IDs, the folders it sends (`role: source`)
+and the copies it keeps (`role: copy`), each with the folder's level now. The device decides what
+Syncthing may touch:
+
+- it sends a folder only if it is in its list and the user allowed copies of it when sharing it
+  (`copyable`), and never above the level it is shared with now (a `:ro` place sends only);
+  eriphe-core can only restrict. A folder unshared, lowered or no longer copyable here leaves
+  Syncthing within seconds (the device watches its list), whatever eriphe-core says;
+- a copy is kept only in the device's data, `<root>/sync/copies/<id>` (`e-<machine>-<share id>`, the
+  same Syncthing folder id on every machine), never inside a shared folder nor where eriphe-core
+  names: owned by the tasks' user on Linux, where Syncthing, as root, keeps the owner of the folder
+  above what it writes (`copyOwnershipFromParent`);
+- the direction follows the level:
+
+| Level | The folder's machine | A copy |
+|---|---|---|
+| `read` | send only | receive only |
+| `write` | both ways, with 30 days of staggered versions of what a copy deleted or replaced, in `<root>/sync/versions/<id>` (out of the folder) | both ways |
+
+  Conflicts keep both files (`.sync-conflict-…`, `maxConflicts -1`). Syncthing adds its marker
+  `.stfolder` at the folder's root. A plan of before the two levels reads `drop` as `read` and
+  `manage` as `write`;
+- a copy no longer in the plan (copies turned off, the folder unshared or no longer copyable, a
+  machine forgotten) is taken out of Syncthing and deleted, once the tasks working on it are
+  stopped (`folder_revoked`, `copy_deleted` in `shares.log`); the peer's device goes with its last
+  folder. The versions of a folder no longer synced are deleted after 30 days. A copy planned
+  `paused` (a machine of the pair suspended, or without Syncthing for now) is kept as it is, not
+  synced.
+
+`GET /v1/device` reports each synced folder's state (`syncthing.folders`): Syncthing's `state`,
+`done` (the % of the folder a copy has; on the folder's machine, the least any copy has),
+`need_bytes`, `bytes` (what it takes here), the first `error`, and for a copy `synced_at`, when it
+was last complete. On a Mac, a folder in iCloud Drive or `~/Library/CloudStorage` whose files are
+kept in the cloud only fails with "resource deadlock avoided" (macOS does not download them for
+Syncthing): the state says `icloud: true`, and the workspace tells the user to keep the folder
+downloaded (right-click › Keep Downloaded). Nothing asks for more rights.
+
+A task's spec may lend a copy in place of the folder (`folders: [{…, copy: "<id>"}]`), when
+eriphe-core places the task on this machine rather than the folder's (the copy in sync, or
+complete when the folder's machine was last seen): the device mounts `<root>/sync/copies/<id>` only
+if its plan keeps that copy of that folder, and at most at the copy's level; lent to write, the
+snapshot is of the copy, taken here. What the task writes there goes back to the folder's machine,
+at once or when it returns.
+
+### Folders it cannot use
+
+A folder this device cannot reach is never silent (`access.go`). `GET /v1/device` gives each shared
+folder a `problem`, and each synced folder (`syncthing.folders`) too, when there is one, with the
+`program` refused, `eriphe-device` or `syncthing` (the one to turn on in macOS's Files and Folders):
+
+| `problem` | What |
+|---|---|
+| `denied` | the system refuses it: macOS's privacy (Files and Folders), or the folder's permissions (EPERM, EACCES; Syncthing's "operation not permitted", "permission denied") |
+| `read_only` | it may be read, not written: a read-only volume, or a folder lent above read that the device cannot write |
+| `missing` | not there: an unplugged disk, a folder moved (also `missing: true`) |
+
+How it is known: on Linux and Windows, a shared folder is opened when the device reports (and checked
+writable when lent above read); on a Mac, what the device saw when it last opened it (`access.json`,
+see The container engine, Asked when sharing). Before Syncthing gets a folder, the device opens the
+one it sends from here (not on a Mac, where Syncthing's own answer counts), and writes then removes
+a file of its own (`.eriphe-probe-*`) in the copy it keeps here, so a copy is never received where
+it cannot be written: either failing, the folder is left out of Syncthing (`problems` of `PUT
+/v1/sync`), its state says why, and it is tried again every 30 seconds. What Syncthing itself
+reports of a folder (its error, its files' errors) gives the problem too, for `syncthing`; a folder
+it was refused is scanned again every 30 seconds until it is allowed. A folder handed to Syncthing
+when it was shared stays there with no device until copies are planned, then is the plan's folder
+of the same id, taken as it is (its devices added), never added twice; it goes from Syncthing once
+the folder may no longer be copied or is unshared. eriphe-core shows the problem on Settings →
+Folders and on the device's card; on a Mac whose `problem` is `denied`, its "Allow" calls `POST
+/v1/privacy/open`, which opens System Settings › Privacy & Security › Files and Folders on the Mac,
+where the user turns on the program named.
+
+## Services (local MCP servers)
+
+eriphe-core assigns MCP servers to the device next to its tasks (`services` in the assignments, see
+`core/README.md`). The device keeps each one's container running (`service.go`) and serves it as a
+streamable HTTP MCP endpoint through the tunnel, `/v1/services/{name}/mcp`, which only eriphe-core
+reaches (`service_mcp.go`). `GET /v1/device` says `"services": true` when Docker answers.
+
+- A service container is `docker run --rm` (`-i` for stdio), named `eriphe-svc-<name>`, labelled
+  `eriphe.service=<name>`. Task containers carry `eriphe.task` instead: at start the device removes
+  the stray containers of each label separately, and neither cleanup touches the other's.
+- It restarts when it exits or never comes up (5 minutes to pull its image and answer `initialize`,
+  or answer HTTP), after a backoff from 1 s doubled up to 5 minutes, back to 1 s once a container
+  has run for 2 minutes; there is no maximum. It is reported `failed` with stderr's tail meanwhile.
+- A new spec, or a new value of its environment (a rotated secret), restarts it once the old
+  container is gone. Unassigned, it is stopped (`docker stop`); its folder stays.
+- Hardened: `--user` (the service's, `1000:1000` by default, never root),
+  `--cap-drop ALL`, `--security-opt no-new-privileges`, `--pids-limit 256`, `--read-only` unless
+  `writable`, a tmpfs at `/tmp` (256 MB), `--memory` from `-service-memory` (default `1g`). Its
+  only host mount is `/data` from `<root>/services/<name>` if it has a `volume`, given to its
+  user and refused outside `-root`. Its environment is passed by name (`-e NAME`), never on a
+  command line. `HOME` is the image's: on a read-only root, set `HOME` (to `/tmp` or `/data`) in
+  `env` if the server writes there.
+- Network: with egress, the device's `-network` (the NAS's `eriphe-system`) or Docker's default
+  bridge, never the task network (see Networks). Without egress, `--network none` for stdio; an http server must still be reached, so it
+  goes on `-service-network`, an internal Docker network the device is on (declare it in compose with
+  `internal: true` and attach the device), and fails without one.
+
+### stdio: the bridge
+
+The device is the only client of the server's process, over the container's stdin and stdout
+(go-sdk `IOTransport`), and serves its tools and resources again as its own MCP server (with the server's name
+and instructions), so several sessions of eriphe-core share one process. Caveats: the process sees
+one client, so whatever state it keeps between calls (a selected mailbox, a login, a working
+directory) is shared by every session; tools and resources are relayed (the mail server's
+`mail://received`, which a monitor reads), not prompts, resource templates, its
+notifications (progress, logs) or its requests (sampling, elicitation). The bridge outlives the
+container: during a restart a call fails ("restarting"), and when it is back the same sessions go
+on, its tools and resources listed again (`list_changed` if they changed). Sessions idle for an hour, and
+all of them when the device restarts, are dropped: the client opens a new one.
+
+### http: the proxy
+
+The device proxies the endpoint to the container's `path`, with a `localhost` Host header (servers
+with DNS rebinding protection accept it) and server-sent events flushed as they come. It reaches
+the container by name on a network it shares (the NAS: `eriphe-svc-<name>:<port>` on
+`eriphe-system`), or else on a loopback port it picks and publishes (`-p 127.0.0.1:<port>:<port>`:
+WSL, a Mac).
+
+On the NAS this needs no Docker call beyond those the socket proxy allows already (create with
+its options, attach, start, wait, stop, delete, ps), and the volume is under the device's root,
+where bind mounts are allowed.
+
+`ERIPHE_LIVE_SERVICE_IMAGE=mcp/sequentialthinking go test -run LiveService -v` runs a real stdio
+server image through the reconciler and the bridge with the local Docker (no network, read-only,
+UID 1000, a volume) and lists its tools through the device's endpoint.

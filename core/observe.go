@@ -6,9 +6,9 @@ import (
 )
 
 // What Eriphe observes of the user's machines, for the router (route.go)
-// and where_now (where_now.go): per node, whether its machine is locked,
+// and where_now (where_now.go): per device, whether its machine is locked,
 // how long it has been idle, and whether it is not to be disturbed. Told
-// by the node with its status (GET /v1/node "idle" and "context"), kept in
+// by the device with its status (GET /v1/device "idle" and "context"), kept in
 // memory only, a few minutes at most, never in the database. These are
 // observations, not a context: closed values, no app name, no window, and
 // they only make Eriphe quieter (a locked, idle or busy machine is skipped).
@@ -17,10 +17,10 @@ import (
 // (channel_out.go); anything else, Eriphe reads from a tool when it needs
 // it.
 
-// dndReasons are the reasons a node may give for not to be disturbed.
+// dndReasons are the reasons a device may give for not to be disturbed.
 var dndReasons = []string{"game", "meeting", "fullscreen", "mic", "focus"}
 
-// machineObs is what a node said of its machine, when.
+// machineObs is what a device said of its machine, when.
 type machineObs struct {
 	IdleKnown bool
 	Idle      time.Duration
@@ -31,7 +31,7 @@ type machineObs struct {
 }
 
 // presence is the machine as a word: locked, idle (two minutes or more) or
-// active; "" when the node cannot tell.
+// active; "" when the device cannot tell.
 func (m machineObs) presence() string {
 	switch {
 	case !m.IdleKnown:
@@ -47,30 +47,30 @@ func (m machineObs) presence() string {
 // observations keeps the machines' observations. Its zero value is ready.
 type observations struct {
 	mu       sync.Mutex
-	machines map[string]machineObs // by node
+	machines map[string]machineObs // by device
 }
 
-func (o *observations) put(node string, m machineObs) {
+func (o *observations) put(device string, m machineObs) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.machines == nil {
 		o.machines = map[string]machineObs{}
 	}
-	o.machines[node] = m
+	o.machines[device] = m
 }
 
-func (o *observations) forget(node string) {
+func (o *observations) forget(device string) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	delete(o.machines, node)
+	delete(o.machines, device)
 }
 
-// machine is what a node said lately of its machine; an observation older
+// machine is what a device said lately of its machine; an observation older
 // than idleFresh is unknown.
-func (o *observations) machine(node string, now time.Time) (machineObs, bool) {
+func (o *observations) machine(device string, now time.Time) (machineObs, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	m, ok := o.machines[node]
+	m, ok := o.machines[device]
 	if !ok || now.Before(m.At) || now.Sub(m.At) >= idleFresh {
 		return machineObs{}, false
 	}

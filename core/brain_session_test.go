@@ -9,7 +9,7 @@ import (
 // sessionTask records a brain task that ran session s.
 func sessionTask(t *testing.T, c *core, id, s, state string) {
 	t.Helper()
-	if err := c.store.insertTask(&TaskRow{ID: id, Node: "n", Runtime: "claude-code", Kind: assistantRoleBrain, State: state}); err != nil {
+	if err := c.store.insertTask(&TaskRow{ID: id, Device: "n", Runtime: "claude-code", Kind: assistantRoleBrain, State: state}); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.store.updateTask(id, map[string]any{"session_id": s}); err != nil {

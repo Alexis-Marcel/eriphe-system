@@ -248,9 +248,9 @@ func (w *web) awayCoreURLs() []string {
 }
 
 // joinCoreURL is the -core of a join command: the local address, the
-// ones away from home, or all (the node tries them in order: at home, then
+// ones away from home, or all (the device tries them in order: at home, then
 // away). Every installer takes such a list, comma-separated. With the
-// machines' CA the command carries its hash and the node checks it from its
+// machines' CA the command carries its hash and the device checks it from its
 // first request: the local address says https:// (the join token never
 // crosses in clear), on the same port.
 func (w *web) joinCoreURL(r *http.Request, via string) string {

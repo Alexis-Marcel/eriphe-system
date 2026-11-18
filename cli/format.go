@@ -166,9 +166,9 @@ func waitingCount(tasks []Task) int {
 	return n
 }
 
-// taskWhere is a task's node, agent and short directory, for one line.
+// taskWhere is a task's device, agent and short directory, for one line.
 func taskWhere(t Task, dirWidth int) string {
-	parts := []string{t.Node}
+	parts := []string{t.Device}
 	if t.Agent != "" {
 		parts = append(parts, t.Agent)
 	}

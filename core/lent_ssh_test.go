@@ -94,14 +94,14 @@ const testHostKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLs
 
 var box = ResourceRef{Kind: resAccess, Ref: "box"}
 
-// sshAsk sends what a node sends for a task.
-func sshAsk(c *core, node, taskID string, req sshRequest) (int, sshAnswer, string) {
+// sshAsk sends what a device sends for a task.
+func sshAsk(c *core, device, taskID string, req sshRequest) (int, sshAnswer, string) {
 	mux := http.NewServeMux()
-	mux.Handle("POST /v1/node/tasks/{id}/ssh", c.taskSSHHandler())
+	mux.Handle("POST /v1/device/tasks/{id}/ssh", c.taskSSHHandler())
 	raw, _ := json.Marshal(req)
-	r := httptest.NewRequest(http.MethodPost, "/v1/node/tasks/"+taskID+"/ssh", strings.NewReader(string(raw)))
+	r := httptest.NewRequest(http.MethodPost, "/v1/device/tasks/"+taskID+"/ssh", strings.NewReader(string(raw)))
 	r.Header.Set("Authorization", "Bearer x")
-	r.Header.Set("Eriphe-Node", node)
+	r.Header.Set("Eriphe-Device", device)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, r)
 	var a sshAnswer
@@ -136,7 +136,7 @@ func TestSSHKeyIsMadeAndStaysInTheVault(t *testing.T) {
 	spec := c.lentAccesses(task.ID, task.Resources)
 	raw, _ := json.Marshal(spec)
 	if secret, _ := readSecret(a.Secret); strings.Contains(string(raw), "PRIVATE") || strings.Contains(string(raw), secret) {
-		t.Fatalf("the private key goes to the node: %s", raw)
+		t.Fatalf("the private key goes to the device: %s", raw)
 	}
 	if len(spec) != 1 || spec[0].SSH == nil || spec[0].SSH.Target != sshHost+":22" || len(spec[0].Hosts) != 0 || spec[0].Env != "" {
 		t.Fatalf("spec = %+v", spec)
@@ -189,12 +189,12 @@ func TestSSHSignsTheLoginOnly(t *testing.T) {
 	s, _ := a.sshSigner()
 	key := s.PublicKey().Marshal()
 
-	code, ans, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpKeys})
+	code, ans, _ := sshAsk(c, task.Device, task.ID, sshRequest{Op: sshOpKeys})
 	if code != 200 || len(ans.Keys) != 1 || string(ans.Keys[0].Key) != string(key) {
 		t.Fatalf("keys: %d %+v", code, ans)
 	}
 	data := loginData("sam", key)
-	code, ans, body := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: data})
+	code, ans, body := sshAsk(c, task.Device, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: data})
 	if code != 200 {
 		t.Fatalf("sign: %d %s", code, body)
 	}
@@ -210,15 +210,15 @@ func TestSSHSignsTheLoginOnly(t *testing.T) {
 		"another key":     loginData("sam", []byte("other")),
 		"a commit":        []byte("SSHSIG some data to sign"),
 	} {
-		if code, _, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: d}); code != http.StatusForbidden {
+		if code, _, _ := sshAsk(c, task.Device, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: d}); code != http.StatusForbidden {
 			t.Errorf("%s: signed (%d)", name, code)
 		}
 	}
-	if code, _, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: []byte("unknown"), Data: data}); code != http.StatusForbidden {
+	if code, _, _ := sshAsk(c, task.Device, task.ID, sshRequest{Op: sshOpSign, Key: []byte("unknown"), Data: data}); code != http.StatusForbidden {
 		t.Errorf("an unknown key: %d", code)
 	}
-	if code, _, _ := sshAsk(c, "another-node", task.ID, sshRequest{Op: sshOpKeys}); code == http.StatusOK {
-		t.Errorf("another node: %d", code)
+	if code, _, _ := sshAsk(c, "another-device", task.ID, sshRequest{Op: sshOpKeys}); code == http.StatusOK {
+		t.Errorf("another device: %d", code)
 	}
 	var allowed, denied int
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM access_log WHERE task_id = ? AND tool = ? AND decision = ?`, task.ID, accessLogTool, decideAllow).Scan(&allowed)
@@ -233,17 +233,17 @@ func TestSSHNeedsTheUsersYes(t *testing.T) {
 	task := lendAccess(t, c, false, box)
 	s, _ := a.sshSigner()
 	key := s.PublicKey().Marshal()
-	if code, ans, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpKeys}); code != 200 || len(ans.Keys) != 0 {
+	if code, ans, _ := sshAsk(c, task.Device, task.ID, sshRequest{Op: sshOpKeys}); code != 200 || len(ans.Keys) != 0 {
 		t.Fatalf("keys before the yes: %d %+v", code, ans)
 	}
-	if code, _, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: loginData("sam", key)}); code != http.StatusForbidden {
+	if code, _, _ := sshAsk(c, task.Device, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: loginData("sam", key)}); code != http.StatusForbidden {
 		t.Fatalf("signed without a yes: %d", code)
 	}
 	if err := c.sshConnect(task, sshHost+":22"); err == nil {
 		t.Fatal("a tunnel without a yes")
 	}
 	c.store.grantAccess(task.ID, accessNeed{Server: "box", Category: catUse})
-	if code, _, body := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: loginData("sam", key)}); code != 200 {
+	if code, _, body := sshAsk(c, task.Device, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: loginData("sam", key)}); code != 200 {
 		t.Fatalf("after the yes: %d %s", code, body)
 	}
 }
@@ -385,10 +385,10 @@ func TestSSHSignsAHostBoundLoginForThePinnedMachine(t *testing.T) {
 	s, _ := a.sshSigner()
 	key := s.PublicKey().Marshal()
 	pin, _, _, _, _ := ssh.ParseAuthorizedKey([]byte(testHostKey))
-	if code, _, body := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: boundLogin("sam", key, pin.Marshal())}); code != 200 {
+	if code, _, body := sshAsk(c, task.Device, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: boundLogin("sam", key, pin.Marshal())}); code != 200 {
 		t.Fatalf("%d %s", code, body)
 	}
-	if code, _, _ := sshAsk(c, task.Node, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: boundLogin("sam", key, key)}); code != http.StatusForbidden {
+	if code, _, _ := sshAsk(c, task.Device, task.ID, sshRequest{Op: sshOpSign, Key: key, Data: boundLogin("sam", key, key)}); code != http.StatusForbidden {
 		t.Fatalf("another machine: %d", code)
 	}
 	if _, err := parseSSHLogin(append(loginData("sam", key), 1, 2, 3)); err == nil {
@@ -456,22 +456,22 @@ func TestNormalHostKey(t *testing.T) {
 	}
 }
 
-// sshTunnelServer serves a node's session requests, with sshDial on dial.
+// sshTunnelServer serves a device's session requests, with sshDial on dial.
 func sshTunnelServer(t *testing.T, c *core, dial func(context.Context, string) (net.Conn, error)) string {
 	t.Helper()
 	before := sshDial
 	sshDial = dial
 	t.Cleanup(func() { sshDial = before })
 	mux := http.NewServeMux()
-	mux.Handle("GET /v1/node/tasks/{id}/ssh/connect", c.taskSSHTunnelHandler())
+	mux.Handle("GET /v1/device/tasks/{id}/ssh/connect", c.taskSSHTunnelHandler())
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.Listener.Addr().String()
 }
 
-// sshOpenSession sends what a node sends to open a session, and returns the
+// sshOpenSession sends what a device sends to open a session, and returns the
 // connection, its reader, and eriphe-core's status.
-func sshOpenSession(t *testing.T, addr, node, taskID, target, upgrade string) (net.Conn, *bufio.Reader, int) {
+func sshOpenSession(t *testing.T, addr, device, taskID, target, upgrade string) (net.Conn, *bufio.Reader, int) {
 	t.Helper()
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -479,8 +479,8 @@ func sshOpenSession(t *testing.T, addr, node, taskID, target, upgrade string) (n
 	}
 	t.Cleanup(func() { conn.Close() })
 	conn.SetDeadline(time.Now().Add(5 * time.Second))
-	fmt.Fprintf(conn, "GET /v1/node/tasks/%s/ssh/connect?target=%s HTTP/1.1\r\nHost: core\r\nAuthorization: Bearer x\r\nEriphe-Node: %s\r\nConnection: Upgrade\r\nUpgrade: %s\r\n\r\n",
-		taskID, url.QueryEscape(target), node, upgrade)
+	fmt.Fprintf(conn, "GET /v1/device/tasks/%s/ssh/connect?target=%s HTTP/1.1\r\nHost: core\r\nAuthorization: Bearer x\r\nEriphe-Device: %s\r\nConnection: Upgrade\r\nUpgrade: %s\r\n\r\n",
+		taskID, url.QueryEscape(target), device, upgrade)
 	br := bufio.NewReader(conn)
 	res, err := http.ReadResponse(br, nil)
 	if err != nil {
@@ -506,7 +506,7 @@ func TestSSHSessionGoesThroughCore(t *testing.T) {
 		}()
 		return mine, nil
 	})
-	conn, br, code := sshOpenSession(t, addr, task.Node, task.ID, sshHost+":22", sshProto)
+	conn, br, code := sshOpenSession(t, addr, task.Device, task.ID, sshHost+":22", sshProto)
 	if code != http.StatusSwitchingProtocols {
 		t.Fatalf("session: %d", code)
 	}
@@ -525,9 +525,9 @@ func TestSSHSessionGoesThroughCore(t *testing.T) {
 	}
 }
 
-// Nothing is dialed for what the task may not reach, for an unknown node, or
+// Nothing is dialed for what the task may not reach, for an unknown device, or
 // without the upgrade; a machine eriphe-core cannot reach says so, for the
-// node to try.
+// device to try.
 func TestSSHSessionRefused(t *testing.T) {
 	c, _ := sshCore(t, gridFree, testHostKey)
 	task := lendAccess(t, c, true, box)
@@ -537,22 +537,22 @@ func TestSSHSessionRefused(t *testing.T) {
 		return nil, errors.New("no route to host")
 	})
 	for _, r := range []struct {
-		node, target, upgrade string
-		want                  int
+		device, target, upgrade string
+		want                    int
 	}{
-		{task.Node, sshHost + ":2222", sshProto, http.StatusForbidden},
-		{task.Node, "192.0.2.11:22", sshProto, http.StatusForbidden},
+		{task.Device, sshHost + ":2222", sshProto, http.StatusForbidden},
+		{task.Device, "192.0.2.11:22", sshProto, http.StatusForbidden},
 		{"another", sshHost + ":22", sshProto, http.StatusUnauthorized},
-		{task.Node, sshHost + ":22", "eriphe-sync", http.StatusUpgradeRequired},
+		{task.Device, sshHost + ":22", "eriphe-sync", http.StatusUpgradeRequired},
 	} {
-		if _, _, code := sshOpenSession(t, addr, r.node, task.ID, r.target, r.upgrade); code != r.want {
+		if _, _, code := sshOpenSession(t, addr, r.device, task.ID, r.target, r.upgrade); code != r.want {
 			t.Errorf("%+v: %d", r, code)
 		}
 	}
 	if dials != 0 {
 		t.Fatalf("dialed %d times", dials)
 	}
-	if _, _, code := sshOpenSession(t, addr, task.Node, task.ID, sshHost+":22", sshProto); code != http.StatusBadGateway {
+	if _, _, code := sshOpenSession(t, addr, task.Device, task.ID, sshHost+":22", sshProto); code != http.StatusBadGateway {
 		t.Fatalf("an unreachable machine: %d", code)
 	}
 }

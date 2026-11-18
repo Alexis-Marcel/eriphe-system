@@ -30,7 +30,7 @@ import (
 //   - The tokens are kept in the vault, as the provider's credential, and
 //     refreshed here only, one refresh at a time: a refresh token is single
 //     use, so two holders refreshing it would sign the other out.
-//   - Each task gets, when its node fetches it, a Codex auth.json with a
+//   - Each task gets, when its device fetches it, a Codex auth.json with a
 //     fresh access token and no refresh token, marked as just refreshed so
 //     that Codex does not try to refresh it.
 //

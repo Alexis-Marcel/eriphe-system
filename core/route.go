@@ -12,7 +12,7 @@ import (
 // says what and why (notify.go), decideNotify says when, and route says
 // where, from signals eriphe-core already has: a workspace tab in front of
 // the user, how long a computer's keyboard and mouse have been idle (its
-// node), which push subscription is a phone. One device at a time:
+// device), which push subscription is a phone. One device at a time:
 //
 //  1. Eriphe open and in front on a device → in the page there, no push;
 //  2. a computer in use (idle under two minutes, not locked, not in a game
@@ -133,7 +133,7 @@ type routeDevice struct {
 	App   bool     // the installed app
 	Push  bool     // it has a push subscription
 	Tabs  []string // its workspace tabs in front of the user now
-	// From the node on the same machine, when one is tied to it.
+	// From the device on the same machine, when one is tied to it.
 	IdleKnown bool
 	Idle      time.Duration
 	Locked    bool

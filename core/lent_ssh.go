@@ -33,22 +33,22 @@ import (
 // ends it.
 //
 // In the task, eriphe-cred is the SSH agent (SSH_AUTH_SOCK) and each
-// signature comes here, through the task's node:
+// signature comes here, through the task's device:
 //
-//	ssh → eriphe-cred → the node (POST /v1/task/ssh) → eriphe-core (signs)
+//	ssh → eriphe-cred → the device (POST /v1/task/ssh) → eriphe-core (signs)
 //
-//	POST /v1/node/tasks/{id}/ssh   {op: keys | sign | connect, ...}   (node secret)
+//	POST /v1/device/tasks/{id}/ssh   {op: keys | sign | connect, ...}   (device secret)
 //
 // The session's bytes leave from here too, as an HTTP access's requests do:
 // eriphe-cred tunnels them through the relay, which upgrades a request to
 // eriphe-core, and eriphe-core dials the access's exact host and port:
 //
-//	GET /v1/node/tasks/{id}/ssh/connect?target=host:port, Upgrade: eriphe-ssh   (node secret)
+//	GET /v1/device/tasks/{id}/ssh/connect?target=host:port, Upgrade: eriphe-ssh   (device secret)
 //
-// So a node need not reach the machine, which a Mac's node cannot on the LAN
-// (node/README.md). The bytes are SSH's, encrypted between the task and the
+// So a device need not reach the machine, which a Mac's device cannot on the LAN
+// (device/README.md). The bytes are SSH's, encrypted between the task and the
 // machine. A machine eriphe-core cannot reach answers 502, the decision
-// taken: the node dials it itself, if it can (node/egress_ssh.go). Only a
+// taken: the device dials it itself, if it can (device/egress_ssh.go). Only a
 // login signature is given, for the access's own account: the key signs
 // nothing else, whatever the task asks.
 //
@@ -151,7 +151,7 @@ func (a Access) checkSSH(name string) error {
 }
 
 // sshAddr is an address an SSH access may name: unicast, private included,
-// as the relay dials it (endpointAddr, node/egress.go): never the loopback,
+// as the relay dials it (endpointAddr, device/egress.go): never the loopback,
 // link-local (the cloud's metadata), multicast nor unspecified.
 func sshAddr(a netip.Addr) bool {
 	a = a.Unmap()
@@ -251,7 +251,7 @@ func (a Access) pinned(hostKey []byte) bool {
 	return err == nil && bytes.Equal(k.Marshal(), hostKey)
 }
 
-// sshRequest is what a node asks for a task.
+// sshRequest is what a device asks for a task.
 type sshRequest struct {
 	Op   string `json:"op"`
 	Key  []byte `json:"key,omitempty"`  // sign: the public key, as the agent lists it
@@ -282,7 +282,7 @@ func (c *core) lentSSH(t *TaskRow) map[string]Access {
 	return out
 }
 
-// taskSSHHandler serves /v1/node/tasks/{id}/ssh, for nodes.
+// taskSSHHandler serves /v1/device/tasks/{id}/ssh, for devices.
 func (c *core) taskSSHHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t, ok := c.sshTask(w, r)
@@ -313,22 +313,22 @@ func (c *core) taskSSHHandler() http.Handler {
 	})
 }
 
-// sshTask is the running task a node asks for, or the answer that it is not.
+// sshTask is the running task a device asks for, or the answer that it is not.
 func (c *core) sshTask(w http.ResponseWriter, r *http.Request) (*TaskRow, bool) {
-	node, ok := c.nodeFromRequest(r)
+	device, ok := c.deviceFromRequest(r)
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return nil, false
 	}
 	t, err := c.store.task(r.PathValue("id"))
-	if err != nil || t.Node != node || finished(t.State) {
-		http.Error(w, "no such task on this node", http.StatusNotFound)
+	if err != nil || t.Device != device || finished(t.State) {
+		http.Error(w, "no such task on this device", http.StatusNotFound)
 		return nil, false
 	}
 	return t, true
 }
 
-// taskSSHTunnelHandler serves /v1/node/tasks/{id}/ssh/connect: a session of
+// taskSSHTunnelHandler serves /v1/device/tasks/{id}/ssh/connect: a session of
 // the task, from here to the access's machine.
 func (c *core) taskSSHTunnelHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -463,7 +463,7 @@ func (c *core) sshConnect(t *TaskRow, target string) error {
 // testSSH connects once to the access's machine from eriphe-core, with its
 // key: that confirms the key is in place. A host key not pinned yet is
 // recorded then, and a pinned one must be the machine's. A machine only a
-// node reaches fails here: its host key can be pasted on the page.
+// device reaches fails here: its host key can be pasted on the page.
 func (c *core) testSSH(ctx context.Context, name string) (hostKey string, err error) {
 	a, ok := c.conf().Accesses[name]
 	if !ok || !a.isSSH() {

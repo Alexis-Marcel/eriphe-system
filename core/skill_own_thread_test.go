@@ -28,8 +28,8 @@ func skillThreadOf(t *testing.T, c *core, alias string) int64 {
 // nothing new on it; its first run lands on it.
 func TestSkillThreadOnApproval(t *testing.T) {
 	c, fm, now := pollCore(t)
-	c.store.registerNode("pc", hashSecret("pc-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.registerDevice("pc", hashSecret("pc-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	c.subscribeEvents(c.queueSkillEvent)
 	fm.mu.Lock()
 	fm.rules = []map[string]any{{"uid": "a", "name": "5xx"}}

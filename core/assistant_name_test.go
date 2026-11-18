@@ -30,7 +30,7 @@ func TestAssistantNameDefault(t *testing.T) {
 	}
 	// The fingerprint as it was before the name.
 	h := sha256.New()
-	json.NewEncoder(h).Encode([]any{b.Agent, c.conf().Agents[b.Agent], b.Instructions, b.InstructionsFile, b.Node, b.Resources})
+	json.NewEncoder(h).Encode([]any{b.Agent, c.conf().Agents[b.Agent], b.Instructions, b.InstructionsFile, b.Device, b.Resources})
 	if old := hex.EncodeToString(h.Sum(nil)); c.assistantSpecHash(*b) != old {
 		t.Fatal("the unnamed brain's fingerprint changed: it would restart on the upgrade")
 	}

@@ -226,7 +226,7 @@ func (x threadCase) toolNames() []string {
 }
 
 // benchThreadCore is a core linked to the case's servers, lent to the
-// brain (their reads free, their changes on a card), with a node to run
+// brain (their reads free, their changes on a card), with a device to run
 // tasks, and the case's thread on stage if it has one.
 func benchThreadCore(t *testing.T, x threadCase) *core {
 	t.Helper()
@@ -267,8 +267,8 @@ func benchThreadCore(t *testing.T, x threadCase) *core {
 	c := newCore(cfg, store)
 	m, _ := testMemory(t)
 	c.useMemory(m)
-	store.registerNode("box", hashSecret("x"))
-	store.setNodeStatus("box", true, []byte(`{"runtimes":["claude-code"],"cpus":8}`))
+	store.registerDevice("box", hashSecret("x"))
+	store.setDeviceStatus("box", true, []byte(`{"runtimes":["claude-code"],"cpus":8}`))
 	c.pool.dial = func(ctx context.Context, u *upstream) (mcp.Transport, error) {
 		ct, st := mcp.NewInMemoryTransports()
 		if _, err := servers[u.name].Connect(context.Background(), st, nil); err != nil {

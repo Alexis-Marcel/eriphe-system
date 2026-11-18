@@ -21,7 +21,7 @@ import (
 
 type serverView struct {
 	serverInfo
-	Node    string // a local server's node and state
+	Device  string // a local server's device and state
 	Service string
 }
 
@@ -40,7 +40,7 @@ func (w *web) servers() []serverView {
 		v := serverView{serverInfo: info}
 		if info.Kind == "local" {
 			if s, err := w.c.store.service(info.Name); err == nil {
-				v.Node, v.Service = s.Node, s.State
+				v.Device, v.Service = s.Device, s.State
 			}
 		}
 		out = append(out, v)

@@ -86,7 +86,7 @@ func TestChangedToolIsHeldUntilAccepted(t *testing.T) {
 		t.Errorf("a held tool is called: %v", err)
 	}
 	// Through a task's proxy too, with a ticket of an earlier yes.
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "brain", Node: "box", Runtime: "claude-code"})
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "brain", Device: "box", Runtime: "claude-code"})
 	c.store.addTicket("t-1", "mcp__web__fetch", map[string]any{})
 	if res := c.proxyCall(ctx, "t-1", []string{"web"}, u, "fetch", nil); !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "changed") {
 		t.Errorf("the proxy calls a held tool: %+v", res)

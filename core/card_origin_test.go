@@ -139,7 +139,7 @@ func TestCallStepCardOrigin(t *testing.T) {
 		t.Errorf("step %+v", o)
 	}
 
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	brainCalls(t, c, "p-1", mergeTool, map[string]any{"number": 7})
 	var linked convoCard
 	xs, _ := c.cardsWhere(`kind = ? AND state = ? ORDER BY id DESC`, cardAccess, cardPending)

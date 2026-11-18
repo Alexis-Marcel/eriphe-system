@@ -39,7 +39,7 @@ type assistantRole struct {
 	Triggers      []string // its triggers when its spec names none
 	// The kinds of trigger its assistants may have; empty: those of Triggers.
 	Wakes []string
-	// The node profile that keeps its sessions between its tasks;
+	// The device profile that keeps its sessions between its tasks;
 	// assistant-<name> by default.
 	Profile      string
 	FreeReads    bool     // the catalog's believed reads: in its grant, allowed in advance
@@ -206,7 +206,7 @@ func (r assistantRole) check() error {
 type assistantTrigger struct {
 	check   func(arg string) error                                                    // its argument; nil: it takes none
 	relay   func(c *core, a Assistant, t *TaskRow)                                    // its new events, out
-	wrote   func(c *core, a Assistant, t *TaskRow, events bool, draft string)         // its node's report (Streams)
+	wrote   func(c *core, a Assistant, t *TaskRow, events bool, draft string)         // its device's report (Streams)
 	deliver func(c *core, ctx context.Context, a Assistant, t *TaskRow) (bool, error) // what waits, in: true if a turn started
 }
 
@@ -279,7 +279,7 @@ func (c *core) tendAssistant(ctx context.Context, a Assistant, token string) err
 	if t == nil || finished(t.State) {
 		return c.restartAssistant(ctx, a, r, st, t, token)
 	}
-	// Its node gone, or an always-on one free for it: it moves (placement.go).
+	// Its device gone, or an always-on one free for it: it moves (placement.go).
 	if c.moveResident(a, r, t) {
 		return nil
 	}
@@ -333,10 +333,10 @@ func (c *core) restartAssistant(ctx context.Context, a Assistant, r assistantRol
 	return c.startAssistant(ctx, a, r, token, resume)
 }
 
-// awaitAlwaysOn tells whether a resident assistant not pinned to a node
-// waits for its always-on node to come back (placement.go) before it starts.
+// awaitAlwaysOn tells whether a resident assistant not pinned to a device
+// waits for its always-on device to come back (placement.go) before it starts.
 func (c *core) awaitAlwaysOn(a Assistant, r assistantRole) bool {
-	if a.Node != "" || !r.resident() {
+	if a.Device != "" || !r.resident() {
 		return false
 	}
 	_, agent, err := c.conf().agent(a.Agent)
@@ -456,7 +456,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 		prompt = r.instructions(c, a, prompt)
 	}
 	// Its catalog tools are not allowed in advance, but for its free reads,
-	// added when its node fetches the task: the others go through its
+	// added when its device fetches the task: the others go through its
 	// approval path.
 	var allowed []string
 	if a.can(powerLaunchesTasks) || hasOwnTools(a) {
@@ -467,9 +467,9 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	if profile == "" {
 		profile = "assistant-" + a.Name
 	}
-	// A stable profile on the node keeps the session's transcript between its tasks.
-	// Its MCP servers carry tokens: they are added when its node fetches the task.
-	extra := nodeTaskSpec{AppendSystemPrompt: prompt, AllowedTools: allowed, Profile: profile, NoAgentMemory: true}
+	// A stable profile on the device keeps the session's transcript between its tasks.
+	// Its MCP servers carry tokens: they are added when its device fetches the task.
+	extra := deviceTaskSpec{AppendSystemPrompt: prompt, AllowedTools: allowed, Profile: profile, NoAgentMemory: true}
 	// Another harness cannot resume this one's session: the context pack
 	// carries the thread over instead (brain_context.go).
 	_, agent, _ := c.conf().agent(a.Agent)
@@ -485,7 +485,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	if r.firstPrompt != nil {
 		first = r.firstPrompt(c, a, extra.Resume != "")
 	}
-	t, err := c.startTask(ctx, a.Role, runRequest{Prompt: first, Node: a.Node, Agent: a.Agent,
+	t, err := c.startTask(ctx, a.Role, runRequest{Prompt: first, Device: a.Device, Agent: a.Agent,
 		Tools: c.conf().assistantTools(a), About: c.sourceAbout(threadRef(leadThread(a)))}, extra)
 	if err != nil {
 		return err
@@ -509,7 +509,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 		st.Resume = extra.Resume // checked against the session it reports
 		st.PackDue = false       // a fresh session has it in its first turn
 	})
-	log.Printf("%s: started task %s on %s (resume=%v)", c.assistantLog(a), t.ID, orStr(t.Node, "no node yet"), extra.Resume != "")
+	log.Printf("%s: started task %s on %s (resume=%v)", c.assistantLog(a), t.ID, orStr(t.Device, "no device yet"), extra.Resume != "")
 	return nil
 }
 
@@ -532,7 +532,7 @@ func (c *core) sessionWorn(r assistantRole, session string) string {
 	return ""
 }
 
-// A resume can also fall through on the node, which then opens a new
+// A resume can also fall through on the device, which then opens a new
 // session (ACP, Codex) with the start prompt alone. eriphe-core sees it by
 // the session the task reports: another than the one it asked for. The
 // pack then goes with the next delivery.
@@ -557,11 +557,11 @@ func (c *core) noteSession(a Assistant, t *TaskRow) {
 }
 
 // assistantSpecHash fingerprints what an assistant's task was started on:
-// its agent's name and spec, its instructions, its node and resources.
+// its agent's name and spec, its instructions, its device and resources.
 // Its tools are assistantToolsHash's.
 func (c *core) assistantSpecHash(a Assistant) string {
 	h := sha256.New()
-	spec := []any{a.Agent, c.conf().Agents[a.Agent], a.Instructions, a.InstructionsFile, a.Node, a.Resources}
+	spec := []any{a.Agent, c.conf().Agents[a.Agent], a.Instructions, a.InstructionsFile, a.Device, a.Resources}
 	// Its name is in its instructions: another restarts it. Eriphe, the
 	// name it had before it could have another, keeps the fingerprint.
 	if n := a.displayName(); a.Role == assistantRoleBrain && n != defaultDisplayName || a.Role != assistantRoleBrain && n != a.Name {
@@ -667,7 +667,7 @@ func assistantToken(token string) string {
 // assistantServers are an assistant's MCP servers, with their tokens:
 // eriphe-core's own at self_url, if its role launches tasks, with the
 // assistant's token. Without self_url,
-// eriphe-core's own goes through the node (spec.Servers): the node reaches
+// eriphe-core's own goes through the device (spec.Servers): the device reaches
 // eriphe-core wherever it is, and the assistant holds no token.
 func (c *core) assistantServers(a Assistant, r assistantRole) map[string]any {
 	servers := map[string]any{}
@@ -689,9 +689,9 @@ func (c *core) reportingAssistant(id string) (Assistant, bool) {
 	return a, ok
 }
 
-// fetchAssistant completes an assistant task's spec as its node fetches
+// fetchAssistant completes an assistant task's spec as its device fetches
 // it, from its role's card.
-func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
+func (c *core) fetchAssistant(t *TaskRow, spec *deviceTaskSpec) error {
 	a, r, ok := c.assistantOf(t)
 	if !ok {
 		return nil
@@ -708,7 +708,7 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 		spec.AgentEnv[v] = r.Effort
 	}
 	// Its free reads, as the catalog lists them now: allowed in advance,
-	// they never wait for a permission. The node reads them when it starts.
+	// they never wait for a permission. The device reads them when it starts.
 	if r.FreeReads {
 		spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), c.brainFreeReads()...)
 	} else if reads := c.freeReadsIn(c.assistantGrant(a)); len(reads) > 0 {
@@ -717,7 +717,7 @@ func (c *core) fetchAssistant(t *TaskRow, spec *nodeTaskSpec) error {
 	}
 	spec.MCPServers = c.assistantServers(a, r)
 	if a.can(powerLaunchesTasks) && a.SelfURL == "" || !a.can(powerLaunchesTasks) && hasOwnTools(a) {
-		spec.Servers = append(spec.Servers, selfServer) // relayed by its node
+		spec.Servers = append(spec.Servers, selfServer) // relayed by its device
 		// Its own tools, used nearly every turn and named by its concept
 		// map: loaded upfront, never searched for first.
 		spec.AlwaysLoad = append(spec.AlwaysLoad, selfServer)

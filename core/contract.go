@@ -12,7 +12,7 @@ import (
 
 // A task's contract: what the brain says must be true at the end, before
 // the agent starts. It is optional (a search needs none) and structured,
-// not prose. What maps to code is enforced by code: the checks the node
+// not prose. What maps to code is enforced by code: the checks the device
 // runs when a turn ends, and the budget eriphe-core keeps. The objective,
 // the constraints and the evidence are advice: shown to the agent and on
 // the card, and asked for in the receipt; a constraint that is an access is
@@ -22,7 +22,7 @@ import (
 type taskContract struct {
 	Objective   string      `json:"objective" jsonschema:"one sentence: what must be true at the end (required)"`
 	Constraints []string    `json:"constraints,omitempty" jsonschema:"what the agent must not do or change, in its words (advice; access is enforced by the resources)"`
-	Checks      []taskCheck `json:"checks,omitempty" jsonschema:"deterministic checks the node runs in the task's container when a turn ends, cheapest first: only what a check sees pass counts as verified"`
+	Checks      []taskCheck `json:"checks,omitempty" jsonschema:"deterministic checks the device runs in the task's container when a turn ends, cheapest first: only what a check sees pass counts as verified"`
 	Evidence    []string    `json:"evidence,omitempty" jsonschema:"what the receipt must show (a PR link, test output…)"`
 	Verify      string      `json:"verify,omitempty" jsonschema:"none, auto (default) or always: whether an independent review may run (recorded, not used yet)"`
 	Budget      *taskBudget `json:"budget,omitempty" jsonschema:"limits eriphe-core enforces: it stops the task beyond them"`
@@ -135,7 +135,7 @@ func (ch *taskCheck) normalize() error {
 
 // checkWorkPath says what is certainly wrong with a check's path: outside
 // /work, climbing with "..", or not a single line. Whether a folder
-// exists is only known once the repository is cloned: the node says so
+// exists is only known once the repository is cloned: the device says so
 // then (a config failure, which the brain fixes).
 func checkWorkPath(field, p string) error {
 	switch {
@@ -239,7 +239,7 @@ const fixedChecksReply = "Eriphe fixed the checks of your task's contract (one c
 
 // fixChecks replaces the checks of an idle task's contract, when one could
 // not run (a misconfigured contract): checked like at the start, kept, and
-// sent to its node with the next turn, after which they run. The rest of
+// sent to its device with the next turn, after which they run. The rest of
 // the contract stays.
 func (c *core) fixChecks(ctx context.Context, id string, checks []taskCheck, reply string) (string, error) {
 	t, err := c.store.task(id)

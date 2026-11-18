@@ -21,33 +21,33 @@ func newUpdateCore(t *testing.T, latestCore string) *core {
 	t.Cleanup(func() { version = old })
 	version = "0.1.0"
 	c, _ := newTestAPI(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": latestCore, "eriphe-node": latestCore})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": latestCore, "eriphe-device": latestCore})
 	c.updates = newUpdates(f.srv.URL)
 	c.updates.check(context.Background())
 	os.WriteFile(filepath.Join(c.store.dir, "updater"), []byte("version=1\npin=\n"), 0o600)
 	return c
 }
 
-// setNode registers a node with its version and updater as it reports them.
-func setNode(t *testing.T, c *core, name, info string) {
+// setDevice registers a device with its version and updater as it reports them.
+func setDevice(t *testing.T, c *core, name, info string) {
 	t.Helper()
-	if !c.store.hasNode(name) {
-		c.store.registerNode(name, hashSecret(name+"-secret"))
+	if !c.store.hasDevice(name) {
+		c.store.registerDevice(name, hashSecret(name+"-secret"))
 	}
-	if err := c.store.setNodeStatus(name, true, []byte(info)); err != nil {
+	if err := c.store.setDeviceStatus(name, true, []byte(info)); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func assignmentUpdate(t *testing.T, c *core, name string) *nodeUpdate {
+func assignmentUpdate(t *testing.T, c *core, name string) *deviceUpdate {
 	t.Helper()
-	req := httptest.NewRequest("GET", "/v1/node/assignments?rev=0&wait=0", nil)
+	req := httptest.NewRequest("GET", "/v1/device/assignments?rev=0&wait=0", nil)
 	req.Header.Set("Authorization", "Bearer "+name+"-secret")
-	req.Header.Set("Eriphe-Node", name)
+	req.Header.Set("Eriphe-Device", name)
 	w := httptest.NewRecorder()
 	c.handleAssignments(w, req)
 	var out struct {
-		Update *nodeUpdate `json:"update"`
+		Update *deviceUpdate `json:"update"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatalf("assignments: %d %s", w.Code, w.Body)
@@ -70,20 +70,20 @@ func TestNightUpdatesSwitch(t *testing.T) {
 
 }
 
-// A request reaches the node in its assignments, with eriphe-core's own
-// version as the most the node may get; no new task goes to the node
+// A request reaches the device in its assignments, with eriphe-core's own
+// version as the most the device may get; no new task goes to the device
 // meanwhile; the updater's outcome ends it.
 func TestUpdateRequestFlow(t *testing.T) {
 	c := newUpdateCore(t, "0.1.0")
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
-	setNode(t, c, "old", `{"version":"0.0.1"}`)
-	if _, err := c.requestUpdate("node:old", "update", false); !errors.Is(err, errNoUpdater) {
-		t.Fatalf("a node without updater: %v", err)
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	setDevice(t, c, "old", `{"version":"0.0.1"}`)
+	if _, err := c.requestUpdate("device:old", "update", false); !errors.Is(err, errNoUpdater) {
+		t.Fatalf("a device without updater: %v", err)
 	}
 	if u := assignmentUpdate(t, c, "pc"); u != nil {
 		t.Fatalf("an update before any request: %+v", u)
 	}
-	r, err := c.requestUpdate("node:pc", "update", false)
+	r, err := c.requestUpdate("device:pc", "update", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,55 +94,55 @@ func TestUpdateRequestFlow(t *testing.T) {
 	if u := assignmentUpdate(t, c, "old"); u != nil {
 		t.Fatalf("old gets pc's update: %+v", u)
 	}
-	nodes, _ := c.store.nodes()
-	for _, n := range c.schedulable(nodes) {
+	devices, _ := c.store.devices()
+	for _, n := range c.schedulable(devices) {
 		if n.Online != (n.Name != "pc") {
 			t.Errorf("%s schedulable = %t while pc updates", n.Name, n.Online)
 		}
 	}
 
 	// The updater is at it, then done.
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running"}}}`)
-	nodes, _ = c.store.nodes()
-	c.resolveUpdates(nodes)
-	if c.pendingUpdate("node:pc") == nil {
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running"}}}`)
+	devices, _ = c.store.devices()
+	c.resolveUpdates(devices)
+	if c.pendingUpdate("device:pc") == nil {
 		t.Fatal("dropped while the updater is at it")
 	}
-	setNode(t, c, "pc", `{"version":"0.1.0","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"ok","to":"0.1.0"}}}`)
-	nodes, _ = c.store.nodes()
-	c.resolveUpdates(nodes)
-	if c.pendingUpdate("node:pc") != nil || assignmentUpdate(t, c, "pc") != nil {
+	setDevice(t, c, "pc", `{"version":"0.1.0","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"ok","to":"0.1.0"}}}`)
+	devices, _ = c.store.devices()
+	c.resolveUpdates(devices)
+	if c.pendingUpdate("device:pc") != nil || assignmentUpdate(t, c, "pc") != nil {
 		t.Fatal("the request outlives its outcome")
 	}
-	for _, n := range c.schedulable(nodes) {
+	for _, n := range c.schedulable(devices) {
 		if !n.Online {
 			t.Errorf("%s still cordoned", n.Name)
 		}
 	}
 
 	// A request nobody does is dropped after a day.
-	c.requestUpdate("node:pc", "rollback", false)
-	r2 := c.pendingUpdate("node:pc")
+	c.requestUpdate("device:pc", "rollback", false)
+	r2 := c.pendingUpdate("device:pc")
 	r2.At = time.Now().Add(-requestTTL - time.Minute)
 	raw, _ := json.Marshal(r2)
-	c.store.set("update_request:node:pc", string(raw))
-	c.resolveUpdates(nodes)
-	if c.pendingUpdate("node:pc") != nil {
+	c.store.set("update_request:device:pc", string(raw))
+	c.resolveUpdates(devices)
+	if c.pendingUpdate("device:pc") != nil {
 		t.Fatal("a stale request is kept")
 	}
 }
 
-// eriphe-core's machine first: while a newer eriphe-core is out, a node is
+// eriphe-core's machine first: while a newer eriphe-core is out, a device is
 // not updated (it would become newer than eriphe-core). eriphe-core's own
 // request goes to its data folder, for its updater.
 func TestUpdateCoreFirst(t *testing.T) {
 	c := newUpdateCore(t, "0.2.0")
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
-	if _, err := c.requestUpdate("node:pc", "update", false); !errors.Is(err, errCoreFirst) {
-		t.Fatalf("node before eriphe-core: %v", err)
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	if _, err := c.requestUpdate("device:pc", "update", false); !errors.Is(err, errCoreFirst) {
+		t.Fatalf("device before eriphe-core: %v", err)
 	}
 	// Going back is always allowed.
-	if _, err := c.requestUpdate("node:pc", "rollback", false); err != nil {
+	if _, err := c.requestUpdate("device:pc", "rollback", false); err != nil {
 		t.Fatalf("rollback: %v", err)
 	}
 	r, err := c.requestUpdate(coreMachine, "update", false)
@@ -177,11 +177,11 @@ func TestUpdateCoreFirst(t *testing.T) {
 	}
 }
 
-// At night, once the switch is on: eriphe-core first, the nodes after it,
+// At night, once the switch is on: eriphe-core first, the devices after it,
 // each once a night, never one with a task at work nor a pinned one.
 func TestAutoUpdatesAtNight(t *testing.T) {
 	c := newUpdateCore(t, "0.2.0")
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
 	// The user's time zone: this configuration has none, so the machine's.
 	day := time.Date(2026, 10, 28, 14, 0, 0, 0, time.Local)
 	night := time.Date(2026, 10, 29, 3, 30, 0, 0, time.Local)
@@ -192,7 +192,7 @@ func TestAutoUpdatesAtNight(t *testing.T) {
 	}
 	c.setNightUpdates(true)
 	c.autoUpdates(day)
-	if c.pendingUpdate(coreMachine) != nil || c.pendingUpdate("node:pc") != nil {
+	if c.pendingUpdate(coreMachine) != nil || c.pendingUpdate("device:pc") != nil {
 		t.Fatal("an automatic update in the day")
 	}
 	c.autoUpdates(night)
@@ -200,8 +200,8 @@ func TestAutoUpdatesAtNight(t *testing.T) {
 	if r == nil || !r.Auto {
 		t.Fatalf("eriphe-core not updated at night: %+v", r)
 	}
-	if c.pendingUpdate("node:pc") != nil {
-		t.Fatal("a node updated before eriphe-core")
+	if c.pendingUpdate("device:pc") != nil {
+		t.Fatal("a device updated before eriphe-core")
 	}
 	// Once a night: the request done (and failed), not again until the next.
 	c.store.db.Exec(`DELETE FROM kv WHERE key = 'update_request:core'`)
@@ -210,32 +210,32 @@ func TestAutoUpdatesAtNight(t *testing.T) {
 		t.Fatal("eriphe-core tried twice a night")
 	}
 
-	// eriphe-core runs the latest version: the nodes now.
+	// eriphe-core runs the latest version: the devices now.
 	version = "0.2.0"
-	setNode(t, c, "busy", `{"version":"0.0.1","update":{"updater":true}}`)
-	setNode(t, c, "pinned", `{"version":"0.0.1","update":{"updater":true,"pin":"0.0.1"}}`)
-	setNode(t, c, "same", `{"version":"0.2.0","update":{"updater":true}}`)
-	c.store.insertTask(&TaskRow{ID: "t1", Node: "busy", Runtime: "claude-code", State: stateRunning, Created: time.Now(), Updated: time.Now()})
+	setDevice(t, c, "busy", `{"version":"0.0.1","update":{"updater":true}}`)
+	setDevice(t, c, "pinned", `{"version":"0.0.1","update":{"updater":true,"pin":"0.0.1"}}`)
+	setDevice(t, c, "same", `{"version":"0.2.0","update":{"updater":true}}`)
+	c.store.insertTask(&TaskRow{ID: "t1", Device: "busy", Runtime: "claude-code", State: stateRunning, Created: time.Now(), Updated: time.Now()})
 	c.autoUpdates(night.Add(20 * time.Minute))
-	if r := c.pendingUpdate("node:pc"); r == nil || !r.Auto {
+	if r := c.pendingUpdate("device:pc"); r == nil || !r.Auto {
 		t.Fatalf("pc not updated: %+v", r)
 	}
 	for _, n := range []string{"busy", "pinned", "same"} {
-		if c.pendingUpdate("node:"+n) != nil {
+		if c.pendingUpdate("device:"+n) != nil {
 			t.Errorf("%s updated automatically", n)
 		}
 	}
 	// A pinned machine is never updated automatically, even when asked.
-	if _, err := c.requestUpdate("node:pinned", "update", true); !errors.Is(err, errPinned) {
+	if _, err := c.requestUpdate("device:pinned", "update", true); !errors.Is(err, errPinned) {
 		t.Fatalf("pinned: %v", err)
 	}
-	if _, err := c.requestUpdate("node:pinned", "update", false); err != nil {
+	if _, err := c.requestUpdate("device:pinned", "update", false); err != nil {
 		t.Fatalf("pinned, by hand: %v", err)
 	}
 	// The busy one, once its task is over, the same night.
 	c.store.updateTask("t1", map[string]any{"state": stateIdle})
 	c.autoUpdates(night.Add(30 * time.Minute))
-	if c.pendingUpdate("node:busy") == nil {
+	if c.pendingUpdate("device:busy") == nil {
 		t.Fatal("busy not updated once idle")
 	}
 }
@@ -246,23 +246,23 @@ func TestWebUpdates(t *testing.T) {
 	defer func(v string) { version = v }(version)
 	version = "0.1.0"
 	tw := newTestWeb(t)
-	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.1.0", "eriphe-node": "0.1.0"})
+	f := newFakeRegistry(t, map[string]string{"eriphe-core": "0.1.0", "eriphe-device": "0.1.0"})
 	tw.c.updates = newUpdates(f.srv.URL)
 	tw.c.updates.check(context.Background())
 	csrf := tw.setup()
 	h := map[string]string{"X-CSRF-Token": csrf, "HX-Request": "true"}
-	setNode(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"status":{"id":"u-1","outcome":"rolled_back","message":"eriphe-node did not connect","to":"0.0.2","at":"2026-10-28T03:10:00Z"}}}`)
-	setNode(t, tw.c, "nas", `{"os":"linux","version":"0.0.1"}`)
+	setDevice(t, tw.c, "pc", `{"os":"linux","install":"linux","version":"0.0.1","update":{"updater":true,"status":{"id":"u-1","outcome":"rolled_back","message":"eriphe-device did not connect","to":"0.0.2","at":"2026-10-28T03:10:00Z"}}}`)
+	setDevice(t, tw.c, "nas", `{"os":"linux","version":"0.0.1"}`)
 
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	for _, want := range []string{"Mises à jour", "Mettre à jour automatiquement la nuit", "Mise à jour disponible",
-		"La mise à jour a échoué, version précédente remise", "eriphe-node did not connect",
-		`value="node:pc"`, "docker compose pull &amp;&amp; docker compose up -d", "--rollback"} {
+		"La mise à jour a échoué, version précédente remise", "eriphe-device did not connect",
+		`value="device:pc"`, "docker compose pull &amp;&amp; docker compose up -d", "--rollback"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET /settings/devices lacks %q", want)
 		}
 	}
-	for _, gone := range []string{"Me prévenir", "Jamais", "Comme les autres", "Revenir à la version précédente", `value="node:nas"`,
+	for _, gone := range []string{"Me prévenir", "Jamais", "Comme les autres", "Revenir à la version précédente", `value="device:nas"`,
 		"curl -fsSL https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.sh | sh -s</pre>"} {
 		if strings.Contains(body, gone) {
 			t.Errorf("GET /settings/devices still has %q", gone)
@@ -279,48 +279,48 @@ func TestWebUpdates(t *testing.T) {
 		t.Fatal("switch off")
 	}
 
-	_, body, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:pc"}}, h)
-	if r := tw.c.pendingUpdate("node:pc"); r == nil || r.Auto || r.Action != "update" || !strings.Contains(body, `id="device-foot-pc"`) {
+	_, body, hdr := tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:pc"}}, h)
+	if r := tw.c.pendingUpdate("device:pc"); r == nil || r.Auto || r.Action != "update" || !strings.Contains(body, `id="device-foot-pc"`) {
 		t.Fatalf("update now: %+v %v\n%s", r, hdr, body)
 	}
 	_, body, _ = tw.do("GET", "/settings/devices", nil, nil)
 	if !strings.Contains(body, "Mise à jour demandée") {
 		t.Error("the request does not show")
 	}
-	_, _, hdr = tw.do("POST", "/settings/updates/request", url.Values{"machine": {"node:nas"}}, h)
-	if tw.c.pendingUpdate("node:nas") != nil || !strings.Contains(hdr.Get("HX-Trigger"), "relance une fois") {
+	_, _, hdr = tw.do("POST", "/settings/updates/request", url.Values{"machine": {"device:nas"}}, h)
+	if tw.c.pendingUpdate("device:nas") != nil || !strings.Contains(hdr.Get("HX-Trigger"), "relance une fois") {
 		t.Fatalf("a machine without updater: %v", hdr)
 	}
 }
 
-// "Update all": eriphe-core first while it is behind, the nodes once it
-// runs the latest version; the nodes at once when it does already.
+// "Update all": eriphe-core first while it is behind, the devices once it
+// runs the latest version; the devices at once when it does already.
 func TestUpdateAll(t *testing.T) {
 	c := newUpdateCore(t, "0.2.0")
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
-	setNode(t, c, "laptop", `{"version":"0.0.1","update":{"updater":true}}`)
-	setNode(t, c, "nas", `{"version":"0.0.1"}`)
-	setNode(t, c, "same", `{"version":"0.2.0","update":{"updater":true}}`)
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	setDevice(t, c, "laptop", `{"version":"0.0.1","update":{"updater":true}}`)
+	setDevice(t, c, "nas", `{"version":"0.0.1"}`)
+	setDevice(t, c, "same", `{"version":"0.2.0","update":{"updater":true}}`)
 
-	if n, err := c.updateAll(); err != nil || n != 1 || c.pendingUpdate(coreMachine) == nil || c.pendingUpdate("node:pc") != nil {
+	if n, err := c.updateAll(); err != nil || n != 1 || c.pendingUpdate(coreMachine) == nil || c.pendingUpdate("device:pc") != nil {
 		t.Fatalf("eriphe-core behind: %d %v", n, err)
 	}
 	c.followUpdates()
-	if c.pendingUpdate("node:pc") != nil {
-		t.Fatal("a node asked before eriphe-core updated")
+	if c.pendingUpdate("device:pc") != nil {
+		t.Fatal("a device asked before eriphe-core updated")
 	}
 
-	// eriphe-core updated (and restarted): the nodes follow.
+	// eriphe-core updated (and restarted): the devices follow.
 	c.store.db.Exec(`DELETE FROM kv WHERE key = 'update_request:core'`)
 	version = "0.2.0"
 	c.followUpdates()
 	for _, n := range []string{"pc", "laptop"} {
-		if c.pendingUpdate("node:"+n) == nil {
+		if c.pendingUpdate("device:"+n) == nil {
 			t.Errorf("%s not asked", n)
 		}
 	}
 	for _, n := range []string{"nas", "same"} {
-		if c.pendingUpdate("node:"+n) != nil {
+		if c.pendingUpdate("device:"+n) != nil {
 			t.Errorf("%s asked", n)
 		}
 	}
@@ -329,7 +329,7 @@ func TestUpdateAll(t *testing.T) {
 	}
 
 	c.store.db.Exec(`DELETE FROM kv WHERE key LIKE 'update_request:%'`)
-	if n, err := c.updateAll(); err != nil || n != 2 || c.pendingUpdate("node:laptop") == nil {
+	if n, err := c.updateAll(); err != nil || n != 2 || c.pendingUpdate("device:laptop") == nil {
 		t.Fatalf("eriphe-core up to date: %d %v", n, err)
 	}
 }
@@ -353,14 +353,14 @@ func TestMachineSystem(t *testing.T) {
 
 	tw := newTestWeb(t)
 	tw.setup()
-	setNode(t, tw.c, "mac", `{"os":"darwin","arch":"arm64","install":"macos"}`)
-	setNode(t, tw.c, "nas", `{"os":"linux","arch":"amd64"}`)
-	tw.c.store.setNodeStatus("mac", false, nil)
+	setDevice(t, tw.c, "mac", `{"os":"darwin","arch":"arm64","install":"macos"}`)
+	setDevice(t, tw.c, "nas", `{"os":"linux","arch":"amd64"}`)
+	tw.c.store.setDeviceStatus("mac", false, nil)
 	// An offline machine keeps what it said last, even if a report without it came between.
-	tw.c.store.setNodeStatus("nas", true, []byte(`{"cpus":4}`))
-	nodes, _ := tw.c.store.nodes()
-	if len(nodes) != 2 || nodes[0].OS != "darwin" || nodes[0].Arch != "arm64" || nodes[0].Install != "macos" || nodes[1].OS != "linux" {
-		t.Fatalf("nodes = %+v", nodes)
+	tw.c.store.setDeviceStatus("nas", true, []byte(`{"cpus":4}`))
+	devices, _ := tw.c.store.devices()
+	if len(devices) != 2 || devices[0].OS != "darwin" || devices[0].Arch != "arm64" || devices[0].Install != "macos" || devices[1].OS != "linux" {
+		t.Fatalf("devices = %+v", devices)
 	}
 	_, body, _ := tw.do("GET", "/settings/devices", nil, nil)
 	for _, want := range []string{"macOS (Apple container)", "Linux (Docker Compose)"} {
@@ -370,45 +370,45 @@ func TestMachineSystem(t *testing.T) {
 	}
 }
 
-// A node asked by hand while eriphe-core is behind: eriphe-core is asked
-// first (once, for every node waiting), and the node follows only once
+// A device asked by hand while eriphe-core is behind: eriphe-core is asked
+// first (once, for every device waiting), and the device follows only once
 // eriphe-core runs the latest version; not when eriphe-core's update ends
 // elsewhere, nor before eriphe-core, just restarted, read the latest
 // versions.
 func TestUpdateNowAfterCore(t *testing.T) {
 	c := newUpdateCore(t, "0.2.0")
-	setNode(t, c, "pc", `{"version":"0.1.0","update":{"updater":true}}`)
-	setNode(t, c, "laptop", `{"version":"0.1.0","update":{"updater":true}}`)
-	setNode(t, c, "old", `{"version":"0.1.0"}`)
+	setDevice(t, c, "pc", `{"version":"0.1.0","update":{"updater":true}}`)
+	setDevice(t, c, "laptop", `{"version":"0.1.0","update":{"updater":true}}`)
+	setDevice(t, c, "old", `{"version":"0.1.0"}`)
 
-	if _, err := c.updateNow("node:old"); !errors.Is(err, errNoUpdater) {
-		t.Fatalf("a node without updater: %v", err)
+	if _, err := c.updateNow("device:old"); !errors.Is(err, errNoUpdater) {
+		t.Fatalf("a device without updater: %v", err)
 	}
-	after, err := c.updateNow("node:pc")
+	after, err := c.updateNow("device:pc")
 	r := c.pendingUpdate(coreMachine)
-	if err != nil || !after || r == nil || c.pendingUpdate("node:pc") != nil || !c.afterCore("node:pc") {
+	if err != nil || !after || r == nil || c.pendingUpdate("device:pc") != nil || !c.afterCore("device:pc") {
 		t.Fatalf("eriphe-core behind: %t %v %+v", after, err, r)
 	}
-	if _, err := c.updateNow("node:laptop"); err != nil || c.pendingUpdate(coreMachine).ID != r.ID {
-		t.Fatalf("a second node asks eriphe-core again: %v", err)
+	if _, err := c.updateNow("device:laptop"); err != nil || c.pendingUpdate(coreMachine).ID != r.ID {
+		t.Fatalf("a second device asks eriphe-core again: %v", err)
 	}
 	c.followUpdates()
-	if c.pendingUpdate("node:pc") != nil {
-		t.Fatal("a node asked while eriphe-core updates")
+	if c.pendingUpdate("device:pc") != nil {
+		t.Fatal("a device asked while eriphe-core updates")
 	}
 
-	// eriphe-core's update rolled back: it still runs 0.1.0, the nodes
+	// eriphe-core's update rolled back: it still runs 0.1.0, the devices
 	// would take that same build; they are not asked.
 	os.WriteFile(filepath.Join(c.store.dir, "update-status"), []byte("id="+r.ID+"\naction=update\noutcome=rolled_back\nto=0.2.0\n"), 0o600)
 	c.resolveUpdates(nil)
 	c.followUpdates()
-	if c.pendingUpdate("node:pc") != nil || c.pendingUpdate("node:laptop") != nil || c.afterCore("node:pc") || c.afterCore("node:laptop") {
-		t.Fatal("the nodes asked after eriphe-core failed to update")
+	if c.pendingUpdate("device:pc") != nil || c.pendingUpdate("device:laptop") != nil || c.afterCore("device:pc") || c.afterCore("device:laptop") {
+		t.Fatal("the devices asked after eriphe-core failed to update")
 	}
 
 	// Asked again; eriphe-core restarts on 0.2.0, before its first check:
-	// the node waits for it, then follows.
-	if _, err := c.updateNow("node:pc"); err != nil {
+	// the device waits for it, then follows.
+	if _, err := c.updateNow("device:pc"); err != nil {
 		t.Fatal(err)
 	}
 	r = c.pendingUpdate(coreMachine)
@@ -418,94 +418,94 @@ func TestUpdateNowAfterCore(t *testing.T) {
 	checked := c.updates
 	c.updates = newUpdates(checked.base)
 	c.followUpdates()
-	if c.pendingUpdate("node:pc") != nil || !c.afterCore("node:pc") {
+	if c.pendingUpdate("device:pc") != nil || !c.afterCore("device:pc") {
 		t.Fatal("followed before the latest versions were read")
 	}
 	c.updates = checked
 	c.followUpdates()
-	if c.pendingUpdate("node:pc") == nil || c.afterCore("node:pc") {
-		t.Fatal("the node does not follow eriphe-core")
+	if c.pendingUpdate("device:pc") == nil || c.afterCore("device:pc") {
+		t.Fatal("the device does not follow eriphe-core")
 	}
 
 	// eriphe-core without an updater: nothing here can update it.
 	version = "0.1.0"
 	os.Remove(filepath.Join(c.store.dir, "updater"))
-	if _, err := c.updateNow("node:laptop"); !errors.Is(err, errCoreFirst) {
+	if _, err := c.updateNow("device:laptop"); !errors.Is(err, errCoreFirst) {
 		t.Fatalf("eriphe-core by its command: %v", err)
 	}
 }
 
 // A request whose updater stopped (handed to it, or "running", and nothing
-// since) does not keep the node out of the scheduler for a day: it is
+// since) does not keep the device out of the scheduler for a day: it is
 // dropped after stalledAfter, and the machine's line says it stalled. One
-// left to a node that runs eriphe-core's version already (its install
+// left to a device that runs eriphe-core's version already (its install
 // command was run again) is neither sent nor kept.
 func TestUpdateStalledAndDone(t *testing.T) {
 	c := newUpdateCore(t, "0.1.0")
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
-	r, err := c.requestUpdate("node:pc", "update", false)
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true}}`)
+	r, err := c.requestUpdate("device:pc", "update", false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-stalledAfter - time.Minute).UTC().Format(time.RFC3339)
-	// Waiting for the node's tasks: not with the updater, kept.
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"waiting":"`+r.ID+`"}}`)
+	// Waiting for the device's tasks: not with the updater, kept.
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"waiting":"`+r.ID+`"}}`)
 	age := func(r *machineUpdate) {
 		r.At = time.Now().Add(-stalledAfter - time.Minute)
 		raw, _ := json.Marshal(r)
-		c.store.set("update_request:node:pc", string(raw))
+		c.store.set("update_request:device:pc", string(raw))
 	}
 	age(r)
-	c.resolveUpdates(mustNodes(t, c))
-	if c.pendingUpdate("node:pc") == nil {
+	c.resolveUpdates(mustDevices(t, c))
+	if c.pendingUpdate("device:pc") == nil {
 		t.Fatal("a request waiting for the tasks is dropped as stalled")
 	}
 	// Under way, recently: kept; under way for too long: dropped.
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running","from":"0.0.1","at":"`+time.Now().UTC().Format(time.RFC3339)+`"}}}`)
-	c.resolveUpdates(mustNodes(t, c))
-	if c.pendingUpdate("node:pc") == nil {
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running","from":"0.0.1","at":"`+time.Now().UTC().Format(time.RFC3339)+`"}}}`)
+	c.resolveUpdates(mustDevices(t, c))
+	if c.pendingUpdate("device:pc") == nil {
 		t.Fatal("a running update is dropped")
 	}
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running","from":"0.0.1","at":"`+old+`"}}}`)
-	c.resolveUpdates(mustNodes(t, c))
-	if c.pendingUpdate("node:pc") != nil {
-		t.Fatal("a stalled update keeps the node")
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running","from":"0.0.1","at":"`+old+`"}}}`)
+	c.resolveUpdates(mustDevices(t, c))
+	if c.pendingUpdate("device:pc") != nil {
+		t.Fatal("a stalled update keeps the device")
 	}
-	for _, n := range c.schedulable(mustNodes(t, c)) {
+	for _, n := range c.schedulable(mustDevices(t, c)) {
 		if !n.Online {
-			t.Fatal("the node stays unschedulable")
+			t.Fatal("the device stays unschedulable")
 		}
 	}
-	if st := c.stalledStatus("node:pc", parseInfo(mustNodes(t, c)[0]).Update.Status); st == nil || st.Outcome != "stalled" || st.ID != r.ID {
+	if st := c.stalledStatus("device:pc", parseInfo(mustDevices(t, c)[0]).Update.Status); st == nil || st.Outcome != "stalled" || st.ID != r.ID {
 		t.Fatalf("stalled status = %+v", st)
 	}
 	// Handed to an updater that never takes it: the same.
-	r, _ = c.requestUpdate("node:pc", "update", false)
-	if st := c.stalledStatus("node:pc", nil); st != nil {
+	r, _ = c.requestUpdate("device:pc", "update", false)
+	if st := c.stalledStatus("device:pc", nil); st != nil {
 		t.Fatalf("a new request still says stalled: %+v", st)
 	}
-	setNode(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"requested":"`+r.ID+`"}}`)
+	setDevice(t, c, "pc", `{"version":"0.0.1","update":{"updater":true,"requested":"`+r.ID+`"}}`)
 	age(r)
-	c.resolveUpdates(mustNodes(t, c))
-	if c.pendingUpdate("node:pc") != nil {
-		t.Fatal("a request the updater never took keeps the node")
+	c.resolveUpdates(mustDevices(t, c))
+	if c.pendingUpdate("device:pc") != nil {
+		t.Fatal("a request the updater never took keeps the device")
 	}
 
 	// Reinstalled on eriphe-core's version meanwhile: not sent, dropped.
-	r, _ = c.requestUpdate("node:pc", "update", false)
-	setNode(t, c, "pc", `{"version":"0.1.0","update":{"updater":true}}`)
+	r, _ = c.requestUpdate("device:pc", "update", false)
+	setDevice(t, c, "pc", `{"version":"0.1.0","update":{"updater":true}}`)
 	if u := assignmentUpdate(t, c, "pc"); u != nil {
-		t.Fatalf("an update sent to a node on eriphe-core's version: %+v", u)
+		t.Fatalf("an update sent to a device on eriphe-core's version: %+v", u)
 	}
-	c.resolveUpdates(mustNodes(t, c))
-	if c.pendingUpdate("node:pc") != nil {
+	c.resolveUpdates(mustDevices(t, c))
+	if c.pendingUpdate("device:pc") != nil {
 		t.Fatal("the request outlives the reinstall")
 	}
 	// Unless its updater is at it (the same version, recreated).
-	r, _ = c.requestUpdate("node:pc", "update", false)
-	setNode(t, c, "pc", `{"version":"0.1.0","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running"}}}`)
-	c.resolveUpdates(mustNodes(t, c))
-	if c.pendingUpdate("node:pc") == nil {
+	r, _ = c.requestUpdate("device:pc", "update", false)
+	setDevice(t, c, "pc", `{"version":"0.1.0","update":{"updater":true,"status":{"id":"`+r.ID+`","outcome":"running"}}}`)
+	c.resolveUpdates(mustDevices(t, c))
+	if c.pendingUpdate("device:pc") == nil {
 		t.Fatal("a request under way is dropped")
 	}
 }
@@ -531,33 +531,33 @@ func TestTellNeedsOnce(t *testing.T) {
 		return out
 	}
 	needs := `{"os":"darwin","install":"macos","version":"0.1.0","update":{"updater":true,"layout":2,"needs":{"why":"password"}}}`
-	setNode(t, c, "mac", needs)
-	c.resolveUpdates(mustNodes(t, c))
+	setDevice(t, c, "mac", needs)
+	c.resolveUpdates(mustDevices(t, c))
 	if got := events(); len(got) != 0 {
 		t.Fatalf("told at once: %v", got)
 	}
 	// Seen a while ago: told, once.
-	c.store.set(needsSeenKey+"node:mac", "password "+time.Now().Add(-needsQuiet-time.Minute).UTC().Format(time.RFC3339))
-	c.resolveUpdates(mustNodes(t, c))
-	c.resolveUpdates(mustNodes(t, c))
+	c.store.set(needsSeenKey+"device:mac", "password "+time.Now().Add(-needsQuiet-time.Minute).UTC().Format(time.RFC3339))
+	c.resolveUpdates(mustDevices(t, c))
+	c.resolveUpdates(mustDevices(t, c))
 	got := events()
 	if len(got) != 1 || !strings.Contains(got[0], "mac") || !strings.Contains(got[0], "Terminal du Mac") ||
 		!strings.Contains(got[0], "Cette mise à jour a besoin de toi") {
 		t.Fatalf("events: %v", got)
 	}
 	// Met (the user ran the command): forgotten; a later need is told again.
-	setNode(t, c, "mac", `{"os":"darwin","install":"macos","version":"0.1.0","update":{"updater":true,"layout":2}}`)
-	c.resolveUpdates(mustNodes(t, c))
-	if c.store.get(needsToldKey+"node:mac") != "" || c.store.get(needsSeenKey+"node:mac") != "" {
+	setDevice(t, c, "mac", `{"os":"darwin","install":"macos","version":"0.1.0","update":{"updater":true,"layout":2}}`)
+	c.resolveUpdates(mustDevices(t, c))
+	if c.store.get(needsToldKey+"device:mac") != "" || c.store.get(needsSeenKey+"device:mac") != "" {
 		t.Fatal("a need met is not forgotten")
 	}
 	// A request under way: not told meanwhile.
-	setNode(t, c, "mac", needs)
-	c.store.set(needsSeenKey+"node:mac", "password "+time.Now().Add(-needsQuiet-time.Minute).UTC().Format(time.RFC3339))
-	if _, err := c.requestUpdate("node:mac", "update", false); err != nil {
+	setDevice(t, c, "mac", needs)
+	c.store.set(needsSeenKey+"device:mac", "password "+time.Now().Add(-needsQuiet-time.Minute).UTC().Format(time.RFC3339))
+	if _, err := c.requestUpdate("device:mac", "update", false); err != nil {
 		t.Fatal(err)
 	}
-	c.tellNeeds(mustNodes(t, c))
+	c.tellNeeds(mustDevices(t, c))
 	if got := events(); len(got) != 1 {
 		t.Fatalf("told during an update: %v", got)
 	}

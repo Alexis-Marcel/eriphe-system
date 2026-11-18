@@ -72,7 +72,7 @@ func (c *core) testedHealth(name string, v testView) {
 // turnFailure tells whether an event says that a turn failed, with the
 // raw words of the failure: a turn that ended on an error, an error a
 // harness wrote as the agent's text (Claude Code's "API Error: …"), or an
-// error of the node.
+// error of the device.
 func turnFailure(e EventRow) (string, bool) {
 	switch e.Type {
 	case "turn_end":

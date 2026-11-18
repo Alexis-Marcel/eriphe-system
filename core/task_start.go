@@ -13,7 +13,7 @@ import (
 // is foreseen with the same decision as the push itself (decideRepo), for
 // the case its lend names (its branch, or the default branch),
 // and asked once, when the task starts. The task waits meanwhile: it is kept,
-// pending, with desired "held", which no node sees and no placement moves.
+// pending, with desired "held", which no device sees and no placement moves.
 // The user gets one card in the conversation (convo_cards.go, kind
 // taskstart): Oui records the grants (repo_grants, access_grants), and
 // lets the task go; Non stops it and tells the brain. As every card, the
@@ -240,7 +240,7 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 	c.store.db.Exec(`UPDATE tasks SET desired = ?, pending_reason = '', updated = ? WHERE id = ? AND desired = ?`,
 		desiredRunning, time.Now().Unix(), s.TaskID, desiredHeld)
 	log.Printf("task %s: start approved by the user", s.TaskID)
-	if t, err := c.store.task(s.TaskID); err == nil && t.Node == "" {
+	if t, err := c.store.task(s.TaskID); err == nil && t.Device == "" {
 		c.placePending()
 	}
 	c.bump()
@@ -262,7 +262,7 @@ func (c *core) taskStartDeclined(id int64) {
 
 // startState says, for the brain, what a task's start waits for, as it is
 // when run_task returns: started now, held for the user's card (its ref
-// and what it asks), or pending with no node. The brain says that and
+// and what it asks), or pending with no device. The brain says that and
 // never guesses a card.
 func (c *core) startState(t *TaskRow) map[string]any {
 	if t == nil {
@@ -280,9 +280,9 @@ func (c *core) startState(t *TaskRow) map[string]any {
 		return map[string]any{"start": "waits_for_card", "card": proposalRef(cardTaskStart, id), "asks": asks,
 			"note": "It starts only after the user's yes on its card, shown with your message: say what it asks, nothing more."}
 	}
-	if t.Node == "" {
-		return map[string]any{"start": "waits_for_node", "pending_reason": t.PendingReason,
-			"note": "No node can run it now: it starts by itself when one comes online. No card is asked."}
+	if t.Device == "" {
+		return map[string]any{"start": "waits_for_device", "pending_reason": t.PendingReason,
+			"note": "No device can run it now: it starts by itself when one comes online. No card is asked."}
 	}
 	return map[string]any{"start": "started", "note": "Started now: no card was asked for its start."}
 }

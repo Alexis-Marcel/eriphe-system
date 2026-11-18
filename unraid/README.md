@@ -1,7 +1,7 @@
 # Eriphe on Unraid
 
 `eriphe.xml` is the Unraid template of `ghcr.io/alexis-marcel/eriphe`, Eriphe's launcher: one
-container that creates and keeps running Eriphe's own containers (eriphe-core, eriphe-node, the
+container that creates and keeps running Eriphe's own containers (eriphe-core, eriphe-device, the
 engine that alone holds the Docker socket), applies the updates started from the workspace and then updates itself. How it
 works, and the same install on any Linux with Docker: [install/README.md, One
 container](../install/README.md#one-container-nas-any-linux-with-docker).
@@ -21,7 +21,7 @@ container](../install/README.md#one-container-nas-any-linux-with-docker).
    `--copyable` allows copies on your other machines). What a task may do there is set in the
    workspace, Settings → Folders. `docker exec eriphe eriphe share list` shows them,
    `remove` stops one. Eriphe's tasks get each folder shared alone; nothing else of the NAS, not
-   `/mnt/user` nor `appdata`, is mounted into eriphe-node or its tasks. Nothing restarts: the next
+   `/mnt/user` nor `appdata`, is mounted into eriphe-device or its tasks. Nothing restarts: the next
    task has the folder (a task at work keeps the folders it was given until it ends); only the
    copies to your other machines pause a few seconds when the folders that may be copied change.
 
@@ -32,7 +32,7 @@ from an earlier template keeps its own settings: add them by hand (Docker → er
 Advanced View → Extra Parameters).
 
 The containers it makes show on the Docker page as containers without a template (eriphe-core,
-eriphe-node, eriphe-engine, eriphe-syncthing): leave them to it, it recreates them on updates. To remove
+eriphe-device, eriphe-engine, eriphe-syncthing): leave them to it, it recreates them on updates. To remove
 everything: `docker exec eriphe eriphe-launcher uninstall` (with `--data` to delete
 `/mnt/user/appdata/eriphe` too), then remove the `eriphe` container.
 

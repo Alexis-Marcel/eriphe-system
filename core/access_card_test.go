@@ -38,7 +38,7 @@ func accessCards(t *testing.T, c *core) int {
 // waitingTask is a worker lent the whole mail, started cleanly.
 func waitingTask(c *core, id string) {
 	c.store.set(lentByUserKey(id), "1")
-	c.store.insertTask(&TaskRow{ID: id, Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "Trie les mails",
+	c.store.insertTask(&TaskRow{ID: id, Kind: "worker", Device: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "Trie les mails",
 		State: stateWaitingPermission, Tools: "mail", Resources: []ResourceRef{{Kind: resTool, Ref: "mail", Access: accessWrite}}})
 }
 
@@ -191,7 +191,7 @@ func TestAccessCardNotifies(t *testing.T) {
 func TestHoldIsNotAGrant(t *testing.T) {
 	c := newMailCore(t, accessReads)
 	c.store.set(lentByUserKey("t-1"), "1")
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x",
 		State: stateWaitingPermission, Tools: "mail", Resources: []ResourceRef{
 			{Kind: resTool, Ref: "mail.move", Access: accessWrite, Hold: true},
 			{Kind: resTool, Ref: "mail.search_messages", Access: accessRead, Hold: true},
@@ -363,7 +363,7 @@ func TestLaunchOfFreeFollowsTheStart(t *testing.T) {
 func TestBrainCardIsForOneCall(t *testing.T) {
 	c := newMailCore(t, "")
 	ctx := context.Background()
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	in := map[string]any{}
 	c.store.addEvents("b-1", []EventRow{{Seq: 1, Time: time.Now(), Type: "permission",
 		Data: map[string]any{"id": "p-1", "tool_name": "mcp__mail__move", "input": in}}})
@@ -417,7 +417,7 @@ func brainCalls(t *testing.T, c *core, pid, tool string, in map[string]any) {
 // A no runs nothing, and the brain is told; the same call asked twice is one card.
 func TestBrainCardNo(t *testing.T) {
 	c := newMailCore(t, "")
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	in := map[string]any{"id": "42"}
 	brainCalls(t, c, "p-1", "mcp__mail__move", in)
 	brainCalls(t, c, "p-2", "mcp__mail__move", in)
@@ -439,7 +439,7 @@ func TestBrainCardNo(t *testing.T) {
 // What the user forbade since is not run on an old yes.
 func TestBrainCardToolGone(t *testing.T) {
 	c := newMailCore(t, "")
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	brainCalls(t, c, "p-1", "mcp__mail__nothing", map[string]any{})
 	if _, err := c.decideCard(context.Background(), accessCard(t, c, "nothing").ID, true, "web"); err != nil {
 		t.Fatal(err)
@@ -453,7 +453,7 @@ func TestBrainCardReads(t *testing.T) {
 	c := newMailCore(t, "")
 	long := strings.Repeat("x", cardValueMax+50)
 	in := map[string]any{"repo": "portfolio", "number": 7, "body": long}
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	brainCalls(t, c, "p-1", "mcp__mail__merge_pull_request", in)
 	_, p := c.liveCard(accessCard(t, c, "merge a pull request"))
 	if fr := p.Text("fr"); !strings.Contains(fr, "fusionner une pull request") || strings.Contains(fr, "mcp__") || strings.Contains(fr, "{") {
@@ -506,7 +506,7 @@ func TestDrawerShowsGrants(t *testing.T) {
 	c.conf().User = "Sam"
 	tw := newTestWebFor(t, c)
 	tw.setup()
-	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x", State: stateRunning})
+	c.store.insertTask(&TaskRow{ID: "t-1", Kind: "worker", Device: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "x", State: stateRunning})
 	c.store.grantAccess("t-1", accessNeed{"mail", catDelete, "sam@example.org"})
 	if _, body, _ := tw.do("GET", "/tasks/t-1", nil, nil); !strings.Contains(body, "supprimer, mail sam@example.org") {
 		t.Errorf("no grant in the drawer: %s", body)
@@ -517,7 +517,7 @@ func TestDrawerShowsGrants(t *testing.T) {
 // not held, and a yes runs that call.
 func TestBrainOpenWorldReadCard(t *testing.T) {
 	c := newMailCore(t, accessFree)
-	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Node: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	c.turn.taint("mail.search_messages")
 	in := map[string]any{}
 	if got, why := c.decideBrainCall("mcp__mail__fetch_page", in, nil); got != decideAsk || !accessReason(why) {

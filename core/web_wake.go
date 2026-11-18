@@ -24,8 +24,8 @@ type wakeView struct {
 	MACs    []string // its network card, as it reported it
 }
 
-func (w *web) wakeView(n NodeRow, info nodeInfo) wakeView {
-	return wakeView{Can: !info.AlwaysOn, Allowed: w.c.store.wakeAllowed(n.Name), MACs: nodeWakeInfo(n).MACs}
+func (w *web) wakeView(n DeviceRow, info deviceInfo) wakeView {
+	return wakeView{Can: !info.AlwaysOn, Allowed: w.c.store.wakeAllowed(n.Name), MACs: deviceWakeInfo(n).MACs}
 }
 
 // handleWakeAllow turns "Eriphe may wake this device" on or off.
@@ -33,8 +33,8 @@ func (w *web) handleWakeAllow(rw http.ResponseWriter, r *http.Request, s *sessio
 	name, lang := r.PathValue("name"), w.lang(r)
 	on := r.PostFormValue("allow") != ""
 	if err := w.c.store.setWakeAllowed(name, on); err != nil {
-		if errors.Is(err, errNoNode) {
-			w.toast(rw, tr(lang, "machines.nonode"), false)
+		if errors.Is(err, errNoDevice) {
+			w.toast(rw, tr(lang, "machines.nodevice"), false)
 			return
 		}
 		w.toast(rw, err.Error(), false)
@@ -63,15 +63,15 @@ func (w *web) handleWakeNow(rw http.ResponseWriter, r *http.Request, s *session)
 	if err != nil {
 		key := ""
 		switch {
-		case errors.Is(err, errNoNode):
-			key = "machines.nonode"
+		case errors.Is(err, errNoDevice):
+			key = "machines.nodevice"
 		case errors.Is(err, errWakeNotAllowed):
 			key = "wake.err.notallowed"
 		case errors.Is(err, errWakeNoMAC):
 			key = "wake.err.nomac"
 		case errors.Is(err, errWakeOnline):
 			key = "wake.err.online"
-		case errors.Is(err, errNodeSuspended):
+		case errors.Is(err, errDeviceSuspended):
 			key = "folders.err.suspended"
 		}
 		msg := err.Error()
@@ -88,17 +88,17 @@ func (w *web) handleWakeNow(rw http.ResponseWriter, r *http.Request, s *session)
 func (w *web) handleWakeState(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
 	since, err := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
-	if !nodeName.MatchString(name) || err != nil {
+	if !deviceName.MatchString(name) || err != nil {
 		http.NotFound(rw, r)
 		return
 	}
-	nodes, err := w.c.store.nodes()
+	devices, err := w.c.store.devices()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	v := wakeState{Name: name, Since: since, State: "waiting"}
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.Name == name && n.Online && n.LastSeen.Unix() >= since {
 			v.State = "back"
 		}

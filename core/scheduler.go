@@ -8,16 +8,16 @@ import (
 	"strings"
 )
 
-// placement is what a task asks of its node.
+// placement is what a task asks of its device.
 type placement struct {
 	Runtime string
-	Service bool     // a local MCP server: any node that runs services, whatever its runtimes
+	Service bool     // a local MCP server: any device that runs services, whatever its runtimes
 	Needs   []string // labels required
 	Prefers []string // soft: cpu, memory, or a label
-	Image   string   // worker image; the node's default if empty
+	Image   string   // worker image; the device's default if empty
 	Arch    string   // a service whose image runs on this architecture only (amd64); none: any
 	// Bound: the task has the user's folders. Hosts are then the only
-	// nodes that fit, those holding each of them up to date now
+	// devices that fit, those holding each of them up to date now
 	// (folderHosts, folder_copies.go); Holders those holding them at all,
 	// up to date or not: while none of Hosts is online, the task waits for
 	// one of them.
@@ -25,7 +25,7 @@ type placement struct {
 	Hosts   []string
 	Holders []string
 	// Resident: an assistant that someone waits on (placement.go). Hard
-	// rule: an online always-on node that fits, if there is one.
+	// rule: an online always-on device that fits, if there is one.
 	Resident bool
 }
 
@@ -49,24 +49,24 @@ func (p placement) String() string {
 	return s
 }
 
-// nodeInfo is what a node reports about itself (GET /v1/node).
-type nodeInfo struct {
+// deviceInfo is what a device reports about itself (GET /v1/device).
+type deviceInfo struct {
 	CPUs     int      `json:"cpus"`
 	Arch     string   `json:"arch"` // amd64 or arm64
 	Memory   int64    `json:"memory_bytes"`
 	Image    string   `json:"image"` // its default worker image
 	Images   []string `json:"images"`
 	Runtimes []string `json:"runtimes"`
-	// The runtimes whose agent the node has unpacked: their tasks start at
-	// once (node/inject.go). None from an older node.
+	// The runtimes whose agent the device has unpacked: their tasks start at
+	// once (device/inject.go). None from an older device.
 	AgentsReady []string    `json:"agents_ready"`
 	Labels      []string    `json:"labels"`
 	Services    bool        `json:"services"`  // it runs local MCP servers
 	AlwaysOn    bool        `json:"always_on"` // it never sleeps: the tools go there first
-	Version     string      `json:"version"`   // eriphe-node's; empty from an older one
+	Version     string      `json:"version"`   // eriphe-device's; empty from an older one
 	Install     string      `json:"install"`   // how it was installed: linux, macos, windows, or empty (by hand)
 	Update      updaterInfo `json:"update"`    // its updater, from the installer (machine_updates.go)
-	// The folders shared on it, by the user there (node/shared.go); none
+	// The folders shared on it, by the user there (device/shared.go); none
 	// from an older one.
 	Folders []sharedFolder `json:"folders"`
 	// It lends a model server through its tunnel (its -model-server,
@@ -75,23 +75,23 @@ type nodeInfo struct {
 	// Its Syncthing, for the copies of shared folders: its device ID and
 	// the state of each folder synced there (folder_copies.go); nil
 	// without one.
-	Syncthing *nodeSyncthing `json:"syncthing"`
+	Syncthing *deviceSyncthing `json:"syncthing"`
 }
 
-func parseInfo(n NodeRow) nodeInfo {
-	var info nodeInfo
+func parseInfo(n DeviceRow) deviceInfo {
+	var info deviceInfo
 	json.Unmarshal(n.Info, &info)
 	return info
 }
 
-// waitingError means no online node can run a task now, but a registered
+// waitingError means no online device can run a task now, but a registered
 // one could by what it last reported: the task can wait for it.
 type waitingError struct{ reason string }
 
 func (e *waitingError) Error() string { return e.reason }
 
 // Scores, in two passes like the Kubernetes scheduler. The filter keeps the
-// online nodes that offer the runtime and carry every needed label. Each one
+// online devices that offer the runtime and carry every needed label. Each one
 // left then scores: +1 per CPU if the task prefers cpu, +1 per GiB of RAM if
 // it prefers memory, +8 per preferred label it carries, +2 if the task's
 // image is already there, +2 if its agent is unpacked there, and -4 per
@@ -103,36 +103,36 @@ const (
 	scoreActive = -4
 )
 
-// schedule picks the node for a task: the requested one if it is online and
-// fits, otherwise the best scoring node; for a resident task, the best of
-// the online always-on nodes that fit when there is one. If none is online
+// schedule picks the device for a task: the requested one if it is online and
+// fits, otherwise the best scoring device; for a resident task, the best of
+// the online always-on devices that fit when there is one. If none is online
 // but one would fit, it returns a *waitingError.
-func schedule(nodes []NodeRow, want string, p placement, active func(string) (int, error)) (string, error) {
+func schedule(devices []DeviceRow, want string, p placement, active func(string) (int, error)) (string, error) {
 	if want != "" {
-		for _, n := range nodes {
+		for _, n := range devices {
 			if n.Name != want {
 				continue
 			}
 			if !n.Online {
-				return "", fmt.Errorf("node %s is offline", want)
+				return "", fmt.Errorf("device %s is offline", want)
 			}
 			if !p.fits(n) {
-				return "", fmt.Errorf("node %s cannot run %s", want, p)
+				return "", fmt.Errorf("device %s cannot run %s", want, p)
 			}
 			return n.Name, nil
 		}
-		return "", fmt.Errorf("unknown node %s", want)
+		return "", fmt.Errorf("unknown device %s", want)
 	}
 	if p.Resident {
-		if steady := steadyNodes(nodes, p); len(steady) > 0 {
-			nodes = steady
+		if steady := steadyDevices(devices, p); len(steady) > 0 {
+			devices = steady
 		}
 	}
-	nodes = slices.Clone(nodes)
-	sort.Slice(nodes, func(i, j int) bool { return nodes[i].Name < nodes[j].Name })
+	devices = slices.Clone(devices)
+	sort.Slice(devices, func(i, j int) bool { return devices[i].Name < devices[j].Name })
 	best, bestScore := "", 0
 	var offline []string
-	for _, n := range nodes {
+	for _, n := range devices {
 		if !p.fits(n) {
 			continue
 		}
@@ -153,7 +153,7 @@ func schedule(nodes []NodeRow, want string, p placement, active func(string) (in
 		// there yet: it waits for them.
 		free := p
 		free.Bound = false
-		for _, n := range nodes {
+		for _, n := range devices {
 			if slices.Contains(p.Holders, n.Name) && free.fits(n) {
 				offline = append(offline, n.Name)
 			}
@@ -166,12 +166,12 @@ func schedule(nodes []NodeRow, want string, p placement, active func(string) (in
 	case best != "":
 		return best, nil
 	case len(offline) > 0:
-		return "", &waitingError{fmt.Sprintf("waiting for a node that can run %s (offline: %s)", p, strings.Join(offline, ", "))}
+		return "", &waitingError{fmt.Sprintf("waiting for a device that can run %s (offline: %s)", p, strings.Join(offline, ", "))}
 	}
-	return "", fmt.Errorf("no node can run %s", p)
+	return "", fmt.Errorf("no device can run %s", p)
 }
 
-func score(info nodeInfo, p placement, load int) int {
+func score(info deviceInfo, p placement, load int) int {
 	s := scoreActive * load
 	for _, pref := range p.Prefers {
 		switch pref {

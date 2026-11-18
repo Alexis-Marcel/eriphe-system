@@ -17,7 +17,7 @@ import (
 // wrote is only proposed (memory_trust.go) and shows once approved.
 //
 // Tasks read the memory too, through their own MCP server (taskMemServer,
-// relayed by their node): recall, current facts only. A triggered skill's
+// relayed by their device): recall, current facts only. A triggered skill's
 // task may also remember, trusted as the task is: a tainted one only
 // proposes.
 

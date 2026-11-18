@@ -15,15 +15,15 @@ import (
 )
 
 // Waking a device (Wake-on-LAN), when the user allows it for that device
-// (Settings → Devices, off by default). A node reports the MAC address of
-// its network card and its subnet's broadcast address (node/wake.go), kept
+// (Settings → Devices, off by default). A device reports the MAC address of
+// its network card and its subnet's broadcast address (device/wake.go), kept
 // with what it last reported while it is offline. wake sends the magic
 // packets twice over:
 //
 //   - from eriphe-core itself, which reaches the home network when it runs
 //     on the host's network (or on the machine itself);
-//   - through the machines that stay on (the NAS's node, next to
-//     eriphe-core), POST /v1/wake: in its container, the node sends them
+//   - through the machines that stay on (the NAS's device, next to
+//     eriphe-core), POST /v1/wake: in its container, the device sends them
 //     from a short-lived container on the host's network. eriphe-core, on a
 //     Docker bridge network as the installers run it, cannot: a broadcast
 //     does not leave the bridge.
@@ -36,7 +36,7 @@ import (
 
 func init() {
 	extraSchema = append(extraSchema, `
-CREATE TABLE IF NOT EXISTS node_wake (
+CREATE TABLE IF NOT EXISTS device_wake (
   name TEXT PRIMARY KEY, allowed INTEGER NOT NULL DEFAULT 0,
   last_sent INTEGER NOT NULL DEFAULT 0, last_auto INTEGER NOT NULL DEFAULT 0);`)
 }
@@ -48,14 +48,14 @@ const wakeBackoff = 15 * time.Minute
 // wakeWait is how long the workspace waits for a woken device to connect.
 const wakeWait = 2 * time.Minute
 
-// wakeInfo is what a node reports so that it can be woken.
+// wakeInfo is what a device reports so that it can be woken.
 type wakeInfo struct {
 	MACs      []string `json:"macs,omitempty"`
 	Broadcast string   `json:"broadcast,omitempty"`
 }
 
-// nodeWakeInfo reads a node's card from what it last reported.
-func nodeWakeInfo(n NodeRow) wakeInfo {
+// deviceWakeInfo reads a device's card from what it last reported.
+func deviceWakeInfo(n DeviceRow) wakeInfo {
 	var info struct {
 		Wake wakeInfo `json:"wake"`
 	}
@@ -66,15 +66,15 @@ func nodeWakeInfo(n NodeRow) wakeInfo {
 // wakeAllowed says whether the user lets Eriphe wake a device.
 func (s *Store) wakeAllowed(name string) bool {
 	var v bool
-	s.db.QueryRow(`SELECT allowed FROM node_wake WHERE name = ?`, name).Scan(&v)
+	s.db.QueryRow(`SELECT allowed FROM device_wake WHERE name = ?`, name).Scan(&v)
 	return v
 }
 
 func (s *Store) setWakeAllowed(name string, allowed bool) error {
-	if !s.hasNode(name) {
-		return errNoNode
+	if !s.hasDevice(name) {
+		return errNoDevice
 	}
-	_, err := s.db.Exec(`INSERT INTO node_wake (name, allowed) VALUES (?, ?)
+	_, err := s.db.Exec(`INSERT INTO device_wake (name, allowed) VALUES (?, ?)
 		ON CONFLICT(name) DO UPDATE SET allowed = excluded.allowed`, name, allowed)
 	return err
 }
@@ -82,7 +82,7 @@ func (s *Store) setWakeAllowed(name string, allowed bool) error {
 // wakeAutoDue records that the scheduler wakes a device now, unless it did
 // within wakeBackoff: false then.
 func (s *Store) wakeAutoDue(name string, now time.Time) bool {
-	res, err := s.db.Exec(`UPDATE node_wake SET last_auto = ? WHERE name = ? AND allowed = 1 AND last_auto <= ?`,
+	res, err := s.db.Exec(`UPDATE device_wake SET last_auto = ? WHERE name = ? AND allowed = 1 AND last_auto <= ?`,
 		now.Unix(), name, now.Add(-wakeBackoff).Unix())
 	if err != nil {
 		return false
@@ -92,11 +92,11 @@ func (s *Store) wakeAutoDue(name string, now time.Time) bool {
 }
 
 func (s *Store) wakeSent(name string, now time.Time) {
-	s.db.Exec(`UPDATE node_wake SET last_sent = ? WHERE name = ?`, now.Unix(), name)
+	s.db.Exec(`UPDATE device_wake SET last_sent = ? WHERE name = ?`, now.Unix(), name)
 }
 
 func (s *Store) forgetWake(name string) {
-	s.db.Exec(`DELETE FROM node_wake WHERE name = ?`, name)
+	s.db.Exec(`DELETE FROM device_wake WHERE name = ?`, name)
 }
 
 var (
@@ -170,27 +170,27 @@ func wakeTargets(broadcast string) []string {
 // off. It returns the ways they went: "eriphe-core" and the names of the
 // machines that relayed them.
 func (c *core) wake(ctx context.Context, name string) ([]string, error) {
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		return nil, err
 	}
-	var target *NodeRow
-	for i := range nodes {
-		if nodes[i].Name == name {
-			target = &nodes[i]
+	var target *DeviceRow
+	for i := range devices {
+		if devices[i].Name == name {
+			target = &devices[i]
 		}
 	}
 	switch {
 	case target == nil:
-		return nil, errNoNode
+		return nil, errNoDevice
 	case target.Suspended:
-		return nil, errNodeSuspended
+		return nil, errDeviceSuspended
 	case !c.store.wakeAllowed(name):
 		return nil, errWakeNotAllowed
 	case target.Online:
 		return nil, errWakeOnline
 	}
-	w := nodeWakeInfo(*target)
+	w := deviceWakeInfo(*target)
 	if len(w.MACs) == 0 {
 		return nil, errWakeNoMAC
 	}
@@ -203,7 +203,7 @@ func (c *core) wake(ctx context.Context, name string) ([]string, error) {
 	// The machines that stay on, at home with eriphe-core, at the same time.
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.Name == name || !n.Online || n.Suspended || !parseInfo(n).AlwaysOn {
 			continue
 		}
@@ -212,7 +212,7 @@ func (c *core) wake(ctx context.Context, name string) ([]string, error) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(ctx, 40*time.Second)
 			defer cancel()
-			err := c.node(relay).call(ctx, http.MethodPost, "/v1/wake", w, nil)
+			err := c.device(relay).call(ctx, http.MethodPost, "/v1/wake", w, nil)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -232,7 +232,7 @@ func (c *core) wake(ctx context.Context, name string) ([]string, error) {
 	return via, nil
 }
 
-// wakeFor is the scheduler's hook (placePending): a task waits for a node;
+// wakeFor is the scheduler's hook (placePending): a task waits for a device;
 // if it needs one device, the one its folders are on, and that device is
 // off, may be woken and was not woken for a task within wakeBackoff, it is
 // woken, in the background.
@@ -244,15 +244,15 @@ func (c *core) wakeFor(t *TaskRow) {
 	if err != nil || machine == "" {
 		return
 	}
-	nodes, err := c.store.nodes()
+	devices, err := c.store.devices()
 	if err != nil {
 		return
 	}
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.Name != machine {
 			continue
 		}
-		if n.Online || n.Suspended || len(nodeWakeInfo(n).MACs) == 0 || !c.store.wakeAutoDue(machine, time.Now()) {
+		if n.Online || n.Suspended || len(deviceWakeInfo(n).MACs) == 0 || !c.store.wakeAutoDue(machine, time.Now()) {
 			return
 		}
 		log.Printf("task %s waits for %s, which is off: waking it", t.ID, machine)

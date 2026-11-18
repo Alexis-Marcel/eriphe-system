@@ -236,7 +236,7 @@ func TestSavedRowFollowsTheTool(t *testing.T) {
 		t.Errorf("ready: %s", s)
 	}
 	// Still coming up: the row asks for itself again, in place.
-	sv := serverView{serverInfo: serverInfo{Name: "mails", Kind: "local", Source: sourceWorkspace, Status: statusError}, Node: "pc", Service: "starting"}
+	sv := serverView{serverInfo: serverInfo{Name: "mails", Kind: "local", Source: sourceWorkspace, Status: statusError}, Device: "pc", Service: "starting"}
 	st := statusOf("fr", sv)
 	rec := httptest.NewRecorder()
 	tw.w.render(rec, httptest.NewRequest("GET", "/", nil), nil, "settings", "tool-row-frag", page{Data: toolView{serverView: sv, Follow: &st}})
@@ -263,8 +263,8 @@ func TestSavedRowFollowsTheTool(t *testing.T) {
 // Every state of the line: what it says, whether it asks again, and
 // whether it offers to change the tool.
 func TestStatusOf(t *testing.T) {
-	local := func(node, service, status, err string) serverView {
-		return serverView{serverInfo: serverInfo{Name: "t", Kind: "local", Source: sourceWorkspace, Status: status, Error: err}, Node: node, Service: service}
+	local := func(device, service, status, err string) serverView {
+		return serverView{serverInfo: serverInfo{Name: "t", Kind: "local", Source: sourceWorkspace, Status: status, Error: err}, Device: device, Service: service}
 	}
 	remote := func(status, err string) serverView {
 		return serverView{serverInfo: serverInfo{Name: "t", Kind: "remote", Source: sourceWorkspace, Status: status, Error: err, ToolCount: 3}}

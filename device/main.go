@@ -1,0 +1,434 @@
+// eriphe-device runs Eriphe's tasks on one machine, like a kubelet: every task
+// is a container started from a worker image, in which the agent works.
+// eriphe-device relays its progress, questions and permission requests.
+//
+// It dials eriphe-core and needs no open port. The first run joins with a
+// token from `eriphe-core join-token`; later runs reuse the saved secret and
+// certificate.
+//
+//	eriphe-device -core https://nas:8800 -join-token <token> -name pc -ca-hash sha256:<hex>
+//	eriphe-device
+package main
+
+import (
+	"errors"
+	"flag"
+	"fmt"
+	"io/fs"
+	"log"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// version is set at build time (the image: X.Y.Z for a release,
+// X.Y.Z-dev+<commit> for a build of main, see core/README.md, Versions),
+// and reported to eriphe-core with what this machine offers.
+var version = "dev"
+
+type options struct {
+	root        string // where tasks and profiles live, as seen by eriphe-device
+	hostRoot    string // the same directory as seen by the Docker daemon
+	image       string // default worker image
+	agentImage  string // image of each agent package, {agent} for its name (inject.go); empty: none injected
+	taskBin     string // the device's own programs for tasks, by platform (inject.go)
+	network     string // Docker network of services with egress, shared with eriphe-device (and eriphe-core on the NAS)
+	taskNetwork string // Docker network of task containers, of their own
+	cacheVolume string // Docker volume mounted at /cache in task containers
+	callbackURL string // how task containers reach eriphe-device
+	listenAddr  string // where the task listener is bound (set at start)
+	egressPort  string // port of the egress relay, on the listener's host (empty: none)
+	docker      string // docker CLI, or Apple's container CLI with that engine
+	engine      string // what runs the tasks: docker, or container (Apple's, on a Mac: apple.go)
+	// engineURL is eriphe-device engine's address (engine_remote.go): Docker
+	// through it only; empty: through the docker CLI.
+	engineURL      string
+	engineTaskNets bool // the engine makes each task a network of its own (engine_tasknet.go)
+	// With the container engine: what the device downloads at most, in bytes,
+	// of a task's folders kept in the cloud (iCloud Drive), before it starts.
+	downloadLimit int64
+	// Snapshots of the folders lent to write (snapshot.go): kept so many
+	// days, and what is copied (not cloned) of a folder at most, in bytes.
+	snapshotDays  int
+	snapshotLimit int64
+	labels        []string          // what the scheduler can ask for, e.g. gpu
+	install       string            // how the installers installed it: linux, macos or windows; empty by hand
+	alwaysOn      bool              // the machine never sleeps: eriphe-core puts the tools (services) here
+	wake          wakeInfo          // how eriphe-core can wake this machine (wake.go)
+	volumes       map[string]string // named host folders offered to tasks, by name
+	shares        shareFlag         // roots the user may share folders from, by name (shares.go)
+	taskMemory    string            // memory limit of a task container (docker --memory), empty: none
+	taskCPUs      string            // CPU limit of a task container (docker --cpus), empty: none
+	// Services (local MCP servers).
+	serviceMemory  string // memory limit of a service container, empty: none
+	serviceNetwork string // internal Docker network for http services without egress, empty: none
+	// A model server on this machine (Ollama, llama.cpp, vLLM, LM Studio)
+	// that eriphe-core may reach through the tunnel: its root address, its
+	// /v1 API under it (model.go). Empty: none.
+	modelServer string
+	// Syncthing on this machine, for the copies of shared folders
+	// (syncthing.go): its home, where its config.xml is (empty: none), and
+	// what its connections send into the tunnel at most, per second.
+	syncthingHome string
+	syncLimit     int64
+	// The device's own image, for the helpers that work in the shared
+	// folders it does not see (helper.go); empty: it sees them itself.
+	folderHelper string
+}
+
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == "core-relay" {
+		runCoreRelay(os.Args[2:]) // a Mac's LaunchDaemon (corerelay.go)
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "folder-helper" {
+		os.Exit(runFolderHelper(os.Stdin, os.Stdout)) // in a helper's container (helper.go)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "share" {
+		os.Exit(runShare(os.Args[2:], os.Stdout, os.Stderr)) // the user shares a folder here (share_cmd.go)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "wake-send" {
+		runWakeSend(os.Args[2:]) // the short-lived container that wakes a machine (wake.go)
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "engine" {
+		runEngine(os.Args[2:]) // the device's engine, which holds the Docker socket (engine_server.go)
+		return
+	}
+	core := flag.String("core", os.Getenv("ERIPHE_CORE"), "eriphe-core URL, or several separated by commas, preferred first, e.g. the local one then the remote one (env ERIPHE_CORE)")
+	joinToken := flag.String("join-token", os.Getenv("ERIPHE_JOIN_TOKEN"), "join token, for the first run (env ERIPHE_JOIN_TOKEN)")
+	caHashFlag := flag.String("ca-hash", os.Getenv("ERIPHE_CA_HASH"), "sha256:<hex> of eriphe-core's certificate authority, as join-token prints it: the device then reaches eriphe-core over TLS only, checked against it (env ERIPHE_CA_HASH)")
+	name := flag.String("name", envOr("ERIPHE_DEVICE_NAME", defaultName()), "device name, for the first run (env ERIPHE_DEVICE_NAME)")
+	listen := flag.String("listen", ":8790", "address task containers reach this device on; without a host, this device's address on the task network")
+	egressListen := flag.String("egress-listen", ":8791", "address of the egress relay, the tasks' only way out of their internal network; without a host, the -listen one (empty: none, tasks reach only this device)")
+	var o options
+	flag.StringVar(&o.root, "root", envOr("ERIPHE_ROOT", "data"), "directory for the device's state and task profiles (env ERIPHE_ROOT)")
+	flag.StringVar(&o.hostRoot, "host-root", "", "the -root directory as the Docker daemon sees it (default: same path)")
+	flag.StringVar(&o.image, "image", "ghcr.io/alexis-marcel/eriphe-base:"+imageTag(version), "default worker image, the one tasks start from (the agent is injected)")
+	flag.StringVar(&o.agentImage, "agent-image", envOr("ERIPHE_AGENT_IMAGE", "ghcr.io/alexis-marcel/eriphe-agent-{agent}:"+imageTag(version)), "image of each agent injected into tasks, {agent} for claude, codex, opencode or vibe (env ERIPHE_AGENT_IMAGE)")
+	flag.StringVar(&o.taskBin, "task-bin", envOr("ERIPHE_TASK_BIN", "/usr/local/share/eriphe/task-bin"), "the device's programs for tasks: linux-<arch>/ in it is copied into every task's /opt/eriphe/bin (env ERIPHE_TASK_BIN)")
+	flag.StringVar(&o.network, "network", "", "Docker network for services with egress, shared with this device (empty: Docker's default bridge)")
+	flag.StringVar(&o.taskNetwork, "task-network", "eriphe-tasks", "Docker network for task containers, apart from eriphe-core and the services (created if missing)")
+	flag.StringVar(&o.cacheVolume, "cache-volume", "eriphe-cache", "Docker volume for the tasks' tool and package caches (empty: none)")
+	flag.StringVar(&o.callbackURL, "callback-url", "http://host.docker.internal:8790", "URL task containers use to reach this device")
+	flag.StringVar(&o.docker, "docker", "", "the engine's CLI (default: docker, or container with -engine container)")
+	flag.StringVar(&o.engine, "engine", envOr("ERIPHE_ENGINE", engineDocker), "what runs the tasks: docker, or container (Apple's container, on a Mac with Apple silicon and macOS 26: a micro-VM per task) (env ERIPHE_ENGINE)")
+	flag.StringVar(&o.engineURL, "engine-url", os.Getenv("ERIPHE_ENGINE_URL"), "eriphe-device engine's address, e.g. http://eriphe-engine:8792: Docker only through it, with its networks and cache volume (env ERIPHE_ENGINE_URL)")
+	downloadLimit := flag.String("download-limit", "2g", "with -engine container: what the device downloads at most of a task's folders kept in the cloud (iCloud Drive) before it starts, e.g. 2g")
+	flag.IntVar(&o.snapshotDays, "snapshot-days", envInt("ERIPHE_SNAPSHOT_DAYS", defaultSnapshotDays), "days a snapshot of a folder is kept, taken before each task lent it to write (env ERIPHE_SNAPSHOT_DAYS)")
+	snapshotLimit := flag.String("snapshot-limit", envOr("ERIPHE_SNAPSHOT_LIMIT", defaultSnapshotLimit), "what a snapshot of a folder copies at most where its files cannot be cloned, e.g. 2g; a bigger folder is not lent to write (env ERIPHE_SNAPSHOT_LIMIT)")
+	flag.StringVar(&o.taskMemory, "task-memory", "8g", "memory limit of each task container, e.g. 8g (empty: none)")
+	flag.StringVar(&o.taskCPUs, "task-cpus", "", "CPU limit of each task container, e.g. 4 (empty: all the machine's CPUs)")
+	flag.StringVar(&o.serviceMemory, "service-memory", "1g", "memory limit of each service container (empty: none)")
+	flag.StringVar(&o.serviceNetwork, "service-network", "", "internal Docker network, shared with the device, for http services without egress")
+	flag.BoolVar(&o.alwaysOn, "always-on", os.Getenv("ERIPHE_ALWAYS_ON") == "1", "this machine stays on, like the one eriphe-core runs on: tools go here first (env ERIPHE_ALWAYS_ON=1)")
+	// From install.sh and install.ps1, or guessed (install.go): eriphe-core shows the command that updates this machine.
+	o.install = installKind(thisHost())
+	wakeMAC := flag.String("wake-mac", os.Getenv("ERIPHE_WAKE_MAC"), "MAC address(es) of this machine's network card, comma-separated, so that eriphe-core can wake it (Wake-on-LAN); default: the card it reaches eriphe-core through, when the device runs on the machine itself (env ERIPHE_WAKE_MAC)")
+	wakeBroadcast := flag.String("wake-broadcast", os.Getenv("ERIPHE_WAKE_BROADCAST"), "broadcast address of that card's network, e.g. 192.0.2.255 (env ERIPHE_WAKE_BROADCAST)")
+	modelServer := flag.String("model-server", os.Getenv("ERIPHE_MODEL_SERVER"), "a model server this device may lend to Eriphe through its tunnel (Ollama, llama.cpp, vLLM, LM Studio), as this device reaches it, e.g. http://127.0.0.1:11434; only its OpenAI-compatible /v1 API is reached, and no port is opened (env ERIPHE_MODEL_SERVER)")
+	flag.StringVar(&o.syncthingHome, "syncthing-home", os.Getenv("ERIPHE_SYNCTHING_HOME"), "the home of this machine's Syncthing, as this device sees it: its config.xml gives the API's address and key and where it listens, all on the loopback; its peers reach it through eriphe-core only (empty: no copies here) (env ERIPHE_SYNCTHING_HOME)")
+	syncLimit := flag.String("sync-limit", envOr("ERIPHE_SYNC_LIMIT", "8m"), "what Syncthing's connections send into the tunnel at most, per second, e.g. 8m (0: no limit) (env ERIPHE_SYNC_LIMIT)")
+	flag.StringVar(&o.folderHelper, "folder-helper", os.Getenv("ERIPHE_FOLDER_HELPER"), "the device's own image: the shared folders are not mounted here, short-lived containers of it work in them (the one-container install) (env ERIPHE_FOLDER_HELPER)")
+	labels := flag.String("labels", os.Getenv("ERIPHE_DEVICE_LABELS"), "comma-separated labels agents can require, e.g. gpu (env ERIPHE_DEVICE_LABELS)")
+	o.volumes = volumeFlag{}
+	if err := volumeFlag(o.volumes).Set(os.Getenv("ERIPHE_DEVICE_VOLUMES")); err != nil {
+		log.Fatal(err)
+	}
+	o.shares = shareFlag{}
+	if err := o.shares.Set(os.Getenv("ERIPHE_DEVICE_SHARES")); err != nil {
+		log.Fatal(err)
+	}
+	flag.Var(o.shares, "share", "root the user may share folders from, name=/path, or name=/path:ro whose folders are never written to; the same path for this device and the Docker daemon; repeatable (env ERIPHE_DEVICE_SHARES: name=path,name2=path2:ro)")
+	flag.Var(volumeFlag(o.volumes), "volume", "host folder offered to tasks, name=/host/path, repeatable (env ERIPHE_DEVICE_VOLUMES: name=path,name2=path2)")
+	flag.Parse()
+	o.labels = parseLabels(*labels)
+
+	if err := o.complete(*modelServer, *downloadLimit, runtime.GOOS); err != nil {
+		log.Fatal(err)
+	}
+	limit, err := parseBytes(*snapshotLimit)
+	if err != nil {
+		log.Fatalf("-snapshot-limit: %v", err)
+	}
+	o.snapshotLimit = limit
+	syncLim, err := parseBytes(*syncLimit)
+	if err != nil {
+		log.Fatalf("-sync-limit: %v", err)
+	}
+	o.syncLimit = syncLim
+	if err := makeRoot(o.root); err != nil {
+		log.Fatal(err)
+	}
+	pin, err := parseCAHash(*caHashFlag)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s, err := loadOrJoin(filepath.Join(o.root, "device.json"), *core, *joinToken, *name, pin)
+	if err != nil {
+		log.Fatal(err)
+	}
+	go s.renewLoop()
+	if o.wake, err = wakeSettings(thisHost(), *wakeMAC, *wakeBroadcast, s.urls()); err != nil {
+		log.Fatal(err)
+	}
+
+	var noEngine error
+	if o.engineURL != "" {
+		noEngine = loadEngineConfig(&o, 30, 2*time.Second)
+	}
+	if err := checkNetworks(o); err != nil {
+		log.Fatal(err)
+	}
+	n := newDevice(o)
+	n.name = s.Name // its folders' ids in Syncthing (syncfolders.go)
+	n.syncNet = newSyncNet(o.root, "", o.syncLimit, coreSyncDialer(s))
+	go n.startSyncthing(o.syncthingHome) // syncthing.go
+	if runtime.GOOS == "darwin" {
+		// eriphe-device share asks the device itself to open a folder it
+		// shares, and Syncthing to scan it (local.go).
+		if err := n.listenLocal(); err != nil {
+			log.Printf("local socket: %v", err)
+		}
+	}
+	if noEngine == nil {
+		noEngine = n.engine().ensureNetwork()
+	}
+	if noEngine != nil {
+		n.withoutEngine(s, noEngine)
+	}
+	addr, err := n.listenAddr(*listen)
+	if err != nil {
+		log.Fatal(err)
+	}
+	n.opt.listenAddr = addr
+	var egressAddr string
+	if *egressListen != "" {
+		var relay *egressProxy
+		var l net.Listener
+		if relay, l, egressAddr, err = n.egressRelay(*egressListen, addr); err != nil {
+			log.Fatal(err)
+		}
+		relay.access = n.accessRelay(s) // egress_access.go
+		relay.sshCore = s.sshCore       // egress_ssh.go
+		go func() { log.Fatal(http.Serve(l, relay)) }()
+	}
+	api := http.NewServeMux()
+	n.routes(api)
+	go serve(s, api)
+	n.skillFetch = s.fetchSkill // skills.go
+	go n.sync(s)
+	go n.prepareLoop()
+
+	perm := n.taskRoutes(s)
+	for _, sh := range n.sharedList() {
+		if sh.Missing {
+			log.Printf("shared folder %s is not there now", sh.Name)
+		} else if sh.Problem != "" {
+			log.Printf("shared folder %s cannot be used now: %s", sh.Name, sh.Problem)
+		}
+	}
+	go n.watchShared(2 * time.Second)  // folders unshared here stop their tasks (shared.go)
+	go n.watchAccess(30 * time.Second) // folders found blocked, tried again (access.go)
+	if n.helper() {
+		go n.probeLoop(5 * time.Minute) // what the device reports of the folders it does not see (helper.go)
+	}
+	go n.pruneLoop(time.Hour) // old snapshots go (snapshot.go)
+	l, err := n.listenTasks(addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Print(n.startMessage(s.Name, addr, egressAddr))
+	log.Fatal(http.Serve(l, perm))
+}
+
+// parseLabels reads -labels: comma-separated, blanks ignored.
+func parseLabels(s string) []string {
+	var labels []string
+	for _, l := range strings.Split(s, ",") {
+		if l = strings.TrimSpace(l); l != "" {
+			labels = append(labels, l)
+		}
+	}
+	return labels
+}
+
+// complete checks the options read from the flags and fills in their
+// defaults: the engine (Apple's container on a Mac only) and its CLI, the
+// download limit, the model server, an absolute root.
+func (o *options) complete(modelServer, downloadLimit, goos string) error {
+	var err error
+	if o.modelServer, err = parseModelServer(modelServer); err != nil {
+		return err
+	}
+	switch o.engine {
+	case engineDocker, engineContainer:
+	default:
+		return fmt.Errorf("-engine %q: docker or container", o.engine)
+	}
+	if o.engine == engineContainer && goos != "darwin" {
+		return errors.New("-engine container is Apple's container, on a Mac: use docker here")
+	}
+	if o.engineURL != "" && o.engine != engineDocker {
+		return errors.New("-engine-url is eriphe-device engine, for Docker: not with -engine container")
+	}
+	if o.docker == "" {
+		o.docker = o.engine
+	}
+	if o.downloadLimit, err = parseBytes(downloadLimit); err != nil {
+		return fmt.Errorf("-download-limit: %v", err)
+	}
+	if o.root, err = filepath.Abs(o.root); err != nil {
+		return err
+	}
+	if o.hostRoot == "" {
+		o.hostRoot = o.root
+	}
+	return nil
+}
+
+// makeRoot makes the device's directories under root, its own only.
+func makeRoot(root string) error {
+	for _, d := range []string{"profiles", "tasks", "services", "agents"} {
+		if err := os.MkdirAll(filepath.Join(root, d), 0o700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// loadOrJoin loads the device's saved state, or joins eriphe-core with a token
+// the first time. Addresses given again replace the saved ones (e.g. to add
+// the remote one).
+func loadOrJoin(statePath, core, joinToken, name, pin string) (*state, error) {
+	s, err := loadState(statePath)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		if core == "" || joinToken == "" {
+			return nil, errors.New("this device has not joined yet: give -core and -join-token (from `eriphe-core join-token`)")
+		}
+		if s, err = join(statePath, parseCores(core), name, joinToken, pin); err != nil {
+			return nil, err
+		}
+		log.Printf("joined %s as %s", s.urls()[0], s.Name)
+		return s, nil
+	case err != nil:
+		return nil, err
+	}
+	s.path = statePath
+	if err := s.loadTLS(pin); err != nil {
+		return nil, err
+	}
+	if s.setURLs(parseCores(core)) {
+		if err := s.save(statePath); err != nil {
+			return nil, err
+		}
+		log.Printf("eriphe-core addresses: %s", strings.Join(s.urls(), ", "))
+	}
+	return s, nil
+}
+
+// egressRelay listens for the egress relay, at listen (-egress-listen) or,
+// without a host, on the task listener's (addr), and says where.
+func (n *device) egressRelay(listen, addr string) (relay *egressProxy, l net.Listener, egressAddr string, err error) {
+	if egressAddr, err = egressListenAddr(listen, addr); err != nil {
+		return nil, nil, "", err
+	}
+	_, n.opt.egressPort, _ = net.SplitHostPort(egressAddr)
+	if n.engine().traits().ownNetworks {
+		// The listener answers on the loopback too; a task names it by
+		// its network's gateway.
+		_, port, _ := net.SplitHostPort(addr)
+		relay = newEgressProxy(n.egressAuthorizer, nil, net.JoinHostPort("127.0.0.1", port))
+		relay.isSelf = func(hp string) bool { return n.nets.gateway(hp, port) }
+	} else {
+		relay = newEgressProxy(n.egressAuthorizer, selfTargets(n.opt.callbackURL, addr), addr)
+	}
+	if l, err = n.listenTasks(egressAddr); err != nil {
+		return nil, nil, "", err
+	}
+	return relay, l, egressAddr, nil
+}
+
+// taskRoutes is the task listener's API. Only task containers call it,
+// each with its own secret: their permission endpoint, the relay to their
+// catalog servers, their SSH agent's questions, their toolchains and their images for the workspace.
+func (n *device) taskRoutes(s *state) *http.ServeMux {
+	perm := http.NewServeMux()
+	perm.Handle("/perm/{id}/mcp", n.permHandler())
+	perm.Handle("/mcp/{server}", n.relayHandler(s))
+	perm.Handle("/model/v1/{path...}", n.modelRelayHandler(s))
+	perm.Handle("POST "+sshPath, n.sshHandler(s))
+	perm.Handle("POST "+toolchainPath, n.toolchainHandler())
+	perm.Handle("POST "+mediaPath, n.mediaHandler(s)) // media.go
+	return perm
+}
+
+// startMessage is what the device logs once it is up.
+func (n *device) startMessage(name, addr, egressAddr string) string {
+	o := n.opt
+	if n.engine().traits().ownNetworks {
+		with := "eriphe-device engine"
+		if o.engine == engineContainer {
+			with = "Apple's container"
+		}
+		return fmt.Sprintf("eriphe-device %s (%s), image %s, tasks with %s, each on a network of its own, task listener on %s, egress relay on %s (tasks' networks only)",
+			name, version, o.image, with, addr, orNone(egressAddr))
+	}
+	return fmt.Sprintf("eriphe-device %s (%s), image %s, tasks on %s, services on %s, task listener on %s, egress relay on %s",
+		name, version, o.image, dockerNetwork(o.taskNetwork), dockerNetwork(o.network), addr, orNone(egressAddr))
+}
+
+// listenTasks listens for the task containers; with the container engine,
+// on every address but for the tasks' networks and the loopback only.
+func (n *device) listenTasks(addr string) (net.Listener, error) {
+	l, err := net.Listen("tcp", addr)
+	if err != nil || !n.engine().traits().ownNetworks {
+		return l, err
+	}
+	return taskListener{l, &n.nets}, nil
+}
+
+// parseBytes reads a size such as 2g, 500m or 1024 (bytes).
+func parseBytes(s string) (int64, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	mult := int64(1)
+	for suffix, m := range map[string]int64{"k": 1 << 10, "m": 1 << 20, "g": 1 << 30, "t": 1 << 40} {
+		if v, ok := strings.CutSuffix(s, suffix); ok {
+			s, mult = v, m
+			break
+		}
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || v < 0 {
+		return 0, fmt.Errorf("%q: a size such as 2g or 500m", s)
+	}
+	return v * mult, nil
+}
+
+// envInt is an integer environment variable, def when unset or invalid.
+func envInt(key string, def int) int {
+	if v, err := strconv.Atoi(os.Getenv(key)); err == nil {
+		return v
+	}
+	return def
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func orNone(s string) string {
+	if s == "" {
+		return "none"
+	}
+	return s
+}

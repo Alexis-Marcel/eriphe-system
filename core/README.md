@@ -1,7 +1,7 @@
 # eriphe-core
 
-Eriphe's control plane (v0): it keeps the state of nodes and tasks in SQLite, schedules tasks on
-nodes, follows them, lends credentials, and gives the brain its tools over MCP. One binary, with
+Eriphe's control plane (v0): it keeps the state of devices and tasks in SQLite, schedules tasks on
+devices, follows them, lends credentials, and gives the brain its tools over MCP. One binary, with
 k8s-like modules: `store`, `api`/`mcp`, `scheduler`, controllers.
 
 ```sh
@@ -42,7 +42,7 @@ usual agents). The brain starts as soon as a machine has joined.
 Nothing else is on by default: no tool, no policy rule, no access; the catalog's tools (Home
 Assistant, GitHub, mail…) are added from Settings → Tools.
 
-An installer gets a join token for the machine's own node without the workspace:
+An installer gets a join token for the machine's own device without the workspace:
 
 ```sh
 docker exec eriphe-core eriphe-core join-token -name pc -quiet   # prints the token alone
@@ -112,15 +112,15 @@ to reach them; its kind says which runtimes can use it and in which variable its
 | `openai-compatible` | `opencode` | `SELFHOSTED_API_KEY`, optional (see [Self-hosted model server](#self-hosted-model-server)) |
 | `custom-api` | `acp` | the provider's own `env` (for example `DASHSCOPE_API_KEY`); not a system variable |
 
-The `opencode` runtime (OpenCode driven over ACP, see `node/README.md`) reaches any of these with
+The `opencode` runtime (OpenCode driven over ACP, see `device/README.md`) reaches any of these with
 an API key; its `model` is OpenCode's `provider/model`, and the provider must be the agent's
 (`openai/…` for `openai-api`, `google/…`, `mistral/…`, `openrouter/…`, `anthropic/…`), which the
 configuration checks. `vibe` is Mistral Vibe, Mistral's own program, driven over ACP too; its
 `model` is one of Vibe's aliases (`mistral-medium-3.5`), or none for Vibe's default. `acp` is any other ACP agent (Goose, Qwen Code…): the agent gives its `command`, one argument per item (`["goose", "acp"]`), run as is in the worker
 image or the agent's `image`, never through a shell; it takes no `model`. An
 **agent** is what the brain picks for a task: a runtime, a provider, a model, an optional image, the
-node labels it needs (`needs`, for example `gpu`), what it would rather have (`prefers`: `cpu`, `memory`,
-or any node label), and `use`, which tells the brain when to pick it.
+device labels it needs (`needs`, for example `gpu`), what it would rather have (`prefers`: `cpu`, `memory`,
+or any device label), and `use`, which tells the brain when to pick it.
 The brain is an agent too (`brain.agent`, or Settings → Agents when the file names none): changing
 it restarts the brain once its turn is over, on its session if the harness is the same, or on a
 fresh one with the context pack. Its runtime must take MCP servers and a system prompt. The provider's credential is lent to each task.
@@ -142,9 +142,9 @@ into Eriphe (Settings → Access).
 | `header` | the one header the secret goes in; `Authorization` by default, Bearer and Basic alike |
 | `rules` | if any, the only requests the secret goes on: `GET /v1/*`, `* /exact`. A path that may climb on the service, or is still encoded, is refused, and a method override header dropped: a limit against mistakes, the real one being the token's rights |
 
-The task never holds the secret. Its variable holds a placeholder; the node's relay decrypts the
-access's hosts only ([node/README](../node/README.md#accesses)) and hands each request to
-`/v1/node/tasks/{id}/access`, where eriphe-core puts the secret in that header and goes on to the
+The task never holds the secret. Its variable holds a placeholder; the device's relay decrypts the
+access's hosts only ([device/README](../device/README.md#accesses)) and hands each request to
+`/v1/device/tasks/{id}/access`, where eriphe-core puts the secret in that header and goes on to the
 host the task connected to, whatever its request says. A placeholder sent anywhere else, or in
 another header, stays a placeholder; a request that carries none goes as it is. An access has no
 grid, since Eriphe sees the use of the secret and not what the program does with it. `approval` is
@@ -158,7 +158,7 @@ What this does not do:
 - A service that reflects its headers hands the secret back. Response headers are scrubbed, as a
   raw value or as Basic; bodies, trailers and 1xx answers are not: inject into the one header, and
   prefer short-lived tokens. The page says so.
-- The node sees an access's requests, though not its secret. A client that pins its certificates
+- The device sees an access's requests, though not its secret. A client that pins its certificates
   fails on that access, and so does gRPC (HTTP/1.1 only), and a presigned URL cannot be made from a
   placeholder.
 - Each use is one row of `access_log`, written before the request goes, and the table is not
@@ -177,16 +177,16 @@ the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (p
   `authorized_keys`. One key per access: removing that line, or the access, ends it. Saving the
   access again keeps the key.
 - **The host key.** The page's test connects once from eriphe-core, which confirms the key is in
-  place, and records the machine's host key. A machine only a node reaches cannot be tested: its
+  place, and records the machine's host key. A machine only a device reaches cannot be tested: its
   key can be pasted (`ssh-keyscan`). An access with no host key cannot be lent. A key that changed
   fails the test; emptying the field and testing again records the new one.
-- **The path.** `eriphe-cred` is the task's SSH agent, and asks `/v1/node/tasks/{id}/ssh`
-  (`{op: keys | sign | connect}`) through its node. eriphe-core signs a login only (RFC 4252's
+- **The path.** `eriphe-cred` is the task's SSH agent, and asks `/v1/device/tasks/{id}/ssh`
+  (`{op: keys | sign | connect}`) through its device. eriphe-core signs a login only (RFC 4252's
   `publickey` request, or OpenSSH's host-bound one, whose host key must be the pinned one, for that
   key and the access's `user`): the key signs no commit or file and logs in to no other account. The session leaves from eriphe-core, as an HTTP access's requests
-  do: the relay upgrades `GET /v1/node/tasks/{id}/ssh/connect?target=host:port` (`eriphe-ssh`), and
-  eriphe-core decides and dials that exact address, carrying SSH's encrypted bytes. So a node need
-  not reach the machine. A machine eriphe-core cannot reach answers 502, and the node dials it
+  do: the relay upgrades `GET /v1/device/tasks/{id}/ssh/connect?target=host:port` (`eriphe-ssh`), and
+  eriphe-core decides and dials that exact address, carrying SSH's encrypted bytes. So a device need
+  not reach the machine. A machine eriphe-core cannot reach answers 502, and the device dials it
   itself. Each connection, login
   and refusal goes in `access_log` (tool `access`). A task lent an SSH access no longer gets the
   built-in ask on `ssh`, `scp`, `sftp` and `rsync`: the access was decided, and reaches that machine only.
@@ -195,7 +195,7 @@ the machine and the account; in the file, `kind: "ssh"`, one entry in `hosts` (p
   pinned in the task's own `ssh` configuration, which a task can change: it protects a task from
   another machine, not a machine from the task.
 
-**Harness cards.** What each runtime can do, as the node drives it, is one entry of `harnesses`
+**Harness cards.** What each runtime can do, as the device drives it, is one entry of `harnesses`
 (`harnesses.go`): MCP servers, how it takes a system prompt (a flag, developer instructions, an
 instructions file, or prepended to the prompt), streaming, a PDF or an image in a tool result, its
 own web search and fetch, resume, and whether it picks a model when none is named. The core asks
@@ -235,10 +235,10 @@ brain, through OpenCode:
 - `models` are the server's model names, one word each (`qwen3:8b`, `org/model`): the agent form
   offers them, and the workspace creates one agent per model when the account is added (the first
   the default when there is none). An agent's `model` is `selfhosted/<model>`.
-- When a node fetches a task of such an agent, eriphe-core adds `model_endpoint` (`base_url`, and
+- When a device fetches a task of such an agent, eriphe-core adds `model_endpoint` (`base_url`, and
   `key_env` with a key) to its spec and that one `host:port` to a copy of its egress rule
-  (`endpoints`): the node's relay lets the task reach that server, even on the LAN or another
-  port, and nothing else of the LAN (`node/README.md`, Egress).
+  (`endpoints`): the device's relay lets the task reach that server, even on the LAN or another
+  port, and nothing else of the LAN (`device/README.md`, Egress).
 - Nothing is assumed of the models but tool calling. Pick one made for it (Qwen 3, Llama 3.1+,
   Mistral…), and give it enough context: Ollama's default is small, and its documentation
   recommends 16k to 32k tokens for tool calling (`OLLAMA_CONTEXT_LENGTH=32768`, or `num_ctx` in a
@@ -259,48 +259,48 @@ model added; a save with none ticked lists them instead. A name can be typed by 
 server cannot be asked. On an edit, the models the server serves that the account does not use yet
 are offered as new.
 
-#### A model behind a node
+#### A model behind a device
 
 The server can also stay on its machine, listening on that machine only, a home PC or a rented
-server, with no port opened and no account elsewhere: eriphe-node runs there with
+server, with no port opened and no account elsewhere: eriphe-device runs there with
 `-model-server http://127.0.0.1:11434` (the installers' `--model-server`, `-ModelServer` on
-Windows), and the provider names that node in place of an address:
+Windows), and the provider names that device in place of an address:
 
 ```json
-"providers": {"gpu": {"kind": "openai-compatible", "node": "gpu-box", "models": ["qwen3:8b"]}}
+"providers": {"gpu": {"kind": "openai-compatible", "device": "gpu-box", "models": ["qwen3:8b"]}}
 ```
 
 In the workspace: Add an AI account → Modèle auto-hébergé → "Sur un de mes appareils", then the
-device (the ones whose node reports `model_server`; Settings → Devices tags them "Prête un
-modèle"). `node` and `base_url` exclude each other.
+device (the ones whose device reports `model_server`; Settings → Devices tags them "Prête un
+modèle"). `device` and `base_url` exclude each other.
 
-The address is the one the node reaches (`install/README.md`, A model behind this machine): on
-Linux the node is a container, so the server is a container next to it on `eriphe-system`
-(`http://eriphe-ollama:11434`); on a Mac with Apple's container, `127.0.0.1`; on Windows, the node
+The address is the one the device reaches (`install/README.md`, A model behind this machine): on
+Linux the device is a container, so the server is a container next to it on `eriphe-system`
+(`http://eriphe-ollama:11434`); on a Mac with Apple's container, `127.0.0.1`; on Windows, the device
 runs in WSL, which reaches Windows' `127.0.0.1` only with mirrored networking (`networkingMode=mirrored`
 in the `[wsl2]` section of `%USERPROFILE%\.wslconfig`, Windows 11 22H2 or later, then
 `wsl --shutdown`, which applies to every distribution, and the install again). Ollama for Windows
-runs only in its user's session, while the node runs without anyone logged in: put it in the
+runs only in its user's session, while the device runs without anyone logged in: put it in the
 startup programs (Win+R, `shell:startup`). The installers check at the end that the server answers
-the node.
+the device.
 
 The path (`model_relay.go`):
 
 ```
-task (any node, the brain too) → its node:   <callback>/model/v1/{path}   (the task's secret)
-its node → eriphe-core:                      /v1/node/tasks/{id}/model/{path}  (node secret, mTLS)
-eriphe-core → the lending node:              /v1/model/{path}   (that node's tunnel)
-the lending node → the server:               <model-server>/v1/{path}
+task (any device, the brain too) → its device:   <callback>/model/v1/{path}   (the task's secret)
+its device → eriphe-core:                      /v1/device/tasks/{id}/model/{path}  (device secret, mTLS)
+eriphe-core → the lending device:              /v1/model/{path}   (that device's tunnel)
+the lending device → the server:               <model-server>/v1/{path}
 ```
 
-- eriphe-core relays only for a task that runs on the calling node, is not finished, and whose
-  agent (OpenCode) uses a provider with `node`; only `GET` and `POST`, only paths under `/v1`
-  (`..`, even escaped, is refused here and again by the lending node, so Ollama's own `/api`,
-  with pull and delete, stays out of reach); bodies up to 64 MiB. The task's and the node's
+- eriphe-core relays only for a task that runs on the calling device, is not finished, and whose
+  agent (OpenCode) uses a provider with `device`; only `GET` and `POST`, only paths under `/v1`
+  (`..`, even escaped, is refused here and again by the lending device, so Ollama's own `/api`,
+  with pull and delete, stays out of reach); bodies up to 64 MiB. The task's and the device's
   secrets stop here: the server gets the provider's key (`secret`), if any, which is never lent
   to a task.
 - The task's spec carries `model_endpoint: {"relay": true}`, no address and no key; its egress
-  rule is unchanged (its node is reached directly, as for its catalog servers).
+  rule is unchanged (its device is reached directly, as for its catalog servers).
 - Answers stream through as they come (`FlushInterval: -1` at every hop): a chat completion's
   server-sent events arrive token by token.
 - The lending machine must be connected: otherwise the task's request fails with `502` ("the
@@ -323,15 +323,15 @@ holders refreshing it would sign each other out):
   is a week old; the new refresh token is written to the vault before the new access token is
   used. A refusal (the sign-in was revoked) fails the lend with "sign in again"; a passing failure
   lends the current token while it is still valid.
-- **Lent to each task.** When a node fetches a task, eriphe-core lends an `auth.json` with the
+- **Lent to each task.** When a device fetches a task, eriphe-core lends an `auth.json` with the
   access token, the ID token and the account, **no refresh token**, and `last_refresh` set to
-  now, so Codex does not refresh it (see `node/README.md` for where the node puts it). A task
+  now, so Codex does not refresh it (see `device/README.md` for where the device puts it). A task
   that outlives its access token stops with an authentication error; a restart lends a fresh one.
 - Tokens are never logged (the log names a sign-in by the first characters of its random id), never
   stored in a task's spec, never shown: the page shows the account's e-mail and plan only.
   `ERIPHE_CHATGPT_ISSUER` points the sign-in at a fake OpenAI, for tests.
 
-Secrets stay in files (or the vault). A provider's key is read when a task starts, sent to its node,
+Secrets stay in files (or the vault). A provider's key is read when a task starts, sent to its device,
 and never stored or logged; an access's never leaves eriphe-core.
 
 ## Dynamic catalog (workspace)
@@ -357,7 +357,7 @@ in eriphe-core's database (`catalog` table) and merged with the configuration at
 - **Live.** The merged configuration is an immutable snapshot, swapped whole on each change (the
   many goroutines that read it never see half a change). Then the upstream pool connects new
   servers, closes removed ones and starts changed ones over; local servers are registered again as
-  services; tasks waiting for a node are placed again; `list_tools` and `list_agents` show the new
+  services; tasks waiting for a device are placed again; `list_tools` and `list_agents` show the new
   state; and, with a brain, an event message in the conversation tells it what changed. A running
   brain's own MCP servers are set when it starts: a tool added to `brain.tools` reaches it at its
   next start.
@@ -394,7 +394,7 @@ holds their credentials and is the only one to reach them: **a task never sees a
 |---|---|
 | `url` | a remote server (streamable HTTP) |
 | `auth` | exactly one of `{"bearer_file": "/secrets/x"}` (a static token, read at each connection), `{"oauth": {...}}`, `{"connection": "<id>"}` (a connection whose provider mints the tokens, refreshed before they end: Eriphe's GitHub App on one account's or organization's installation, see [GitHub in a task](#the-github-app)), `{"none": true}` |
-| `run` | instead of `url` and `auth`: a local server, a container a node runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
+| `run` | instead of `url` and `auth`: a local server, a container a device runs as a service (see [Local MCP servers](#local-mcp-servers-services)) |
 | `use` | what it is for, for the brain: one sentence, 300 characters at most, shown under the heading of its page and edited there in place (its pencil, `POST /settings/tools/{name}/use`) |
 | `title` | the user's own name for it, shown on its card and as its page's heading (edited there in place: the pencil beside it, Enter saves, Escape cancels; `POST /settings/tools/{name}/title`); the key stays its technical name, in its tools' names, and a new title restarts nothing |
 | `access` | what Eriphe may do on it: `read-only`, `reads`, `free` or `ask` (see [access levels](#access-levels)); without it, `ask` |
@@ -415,12 +415,12 @@ the task. The brain's is `brain.tools` plus, without configuration, every read-o
 servers trusted for their annotations (see the brain). Catalog tools need an agent whose runtime
 takes MCP servers.
 
-**The path of a call.** When a node fetches a task, its assignment names the catalog servers of
-its grant (`spec.servers`), nothing else. The node gives the agent, for each, an MCP server at
+**The path of a call.** When a device fetches a task, its assignment names the catalog servers of
+its grant (`spec.servers`), nothing else. The device gives the agent, for each, an MCP server at
 `<callback-url>/mcp/<server>` with the task's own secret, and relays its requests to eriphe-core
-at `/v1/node/tasks/{id}/mcp/{server}` with the node's secret (and certificate), over the same
-connection as its assignments and reports (so it works wherever they do: the NAS node on the Docker
-network, the PC node under WSL). eriphe-core serves there an MCP server built from the cached tools the grant
+at `/v1/device/tasks/{id}/mcp/{server}` with the device's secret (and certificate), over the same
+connection as its assignments and reports (so it works wherever they do: the NAS device on the Docker
+network, the PC device under WSL). eriphe-core serves there an MCP server built from the cached tools the grant
 covers (their own input schemas; `tools/list` shows only them, any other call is refused), and
 forwards each call upstream with the real credential. Tools only for now (no resources or
 prompts); a long call streams, within the server's `timeout`.
@@ -530,10 +530,10 @@ new access token is used. The database file is as sensitive as `/secrets`.
 - Vendor credentials live in `/secrets` (bearer tokens, OAuth clients) and in eriphe-core's
   database (OAuth tokens). A remote server's go from eriphe-core to that server only. A local
   service of Eriphe's own (the mail, the calendar, the files) reads its account's token in its
-  environment, lent by eriphe-core to the node that runs it, which passes it to that service's
+  environment, lent by eriphe-core to the device that runs it, which passes it to that service's
   container only ([connections](#connections)): a token is never in a task, a task's spec or a
-  service's spec, and never in a node's other containers.
-- A task reaches only its node, with its own secret, and only the servers of its grant; the node
+  service's spec, and never in a device's other containers.
+- A task reaches only its device, with its own secret, and only the servers of its grant; the device
   reaches eriphe-core with its secret, and only for its own running tasks.
 - Every call is a permission request first, under the policy below; the proxy enforces it with
   tickets.
@@ -544,32 +544,32 @@ new access token is used. The database file is as sensitive as `/secrets`.
 - What servers say (descriptions, results, errors) is data for the agents, never instructions:
   the brain's prompt says so, and the policy, not the brain, decides what reaches a third party.
 
-## Nodes
+## Devices
 
-Nodes are not configured: they join. `eriphe-core join-token -name pc` creates a single-use token
-for the node `pc` (valid 24 h, `-ttl` to change) and prints the command to run on the new machine;
+Devices are not configured: they join. `eriphe-core join-token -name pc` creates a single-use token
+for the device `pc` (valid 24 h, `-ttl` to change) and prints the command to run on the new machine;
 the workspace's "Connecter un appareil" does the same. It reads the same `-config` or `-data` as
 eriphe-core and asks the running one; `-quiet` prints the token alone, for a script. The address
 in the command is `public_url` or, without it, the workspace's own host on eriphe-core's port
 (a workspace opened at `localhost` says that address only works on that computer); the CLI then
 prints a placeholder. A token is `id.secret` and joins only under
-the name it was made for, and never under the name of a registered node: a stolen or mistyped token
-cannot take over another node's tasks and lent credentials. A reinstalled machine joins again with a
+the name it was made for, and never under the name of a registered device: a stolen or mistyped token
+cannot take over another device's tasks and lent credentials. A reinstalled machine joins again with a
 rejoin token for its own name (`join-token -name pc -rejoin`, or "Réinscrire cet appareil" on its
-card), which replaces its secret. Tokens made before names existed join a new name only. The node gets its own
-secret (only its hash is stored), then keeps a tunnel open to `GET /v1/nodes/connect`; eriphe-core
-speaks the node's API through it. A node is online while its tunnel is up and answers.
+card), which replaces its secret. Tokens made before names existed join a new name only. The device gets its own
+secret (only its hash is stored), then keeps a tunnel open to `GET /v1/devices/connect`; eriphe-core
+speaks the device's API through it. A device is online while its tunnel is up and answers.
 
 | Call | What |
 |---|---|
-| `POST /v1/join-tokens?name=pc&ttl=24h` | new join token for `pc`, with `ca_hash`; `&rejoin=1` for a registered node (bearer token) |
-| `GET /v1/nodes` | registered nodes, with `cert_expires` once a node has its certificate, and `version`, `latest`, `update_available`, `update_commands` (bearer token) |
-| `GET /v1/version` | `{core: {version, latest, update_available, update_commands}, node: {latest}}`: the latest versions on the registry, empty while unknown (bearer token) |
-| `DELETE /v1/nodes/{name}` | forget a node; its tasks become `lost`, its certificate is revoked (bearer token) |
-| `GET /v1/nodes/tls`, `PUT /v1/nodes/tls` | the CA's hash, whether nodes must use TLS, which have no certificate yet; advanced: `{"tls_only": false}` keeps the plain path open, `{"tls_only": true}` closes it (bearer token) |
-| `POST /v1/nodes/join` | `{name, token}` → `{secret}` (join token for that name) |
-| `POST /v1/node/certificate` | `{csr}` (PEM) → `{ca, certificate, expires}` (node secret, and its certificate once it has one) |
-| `GET /v1/nodes/connect` | the tunnel (node secret, `Eriphe-Node: name`, and its certificate) |
+| `POST /v1/join-tokens?name=pc&ttl=24h` | new join token for `pc`, with `ca_hash`; `&rejoin=1` for a registered device (bearer token) |
+| `GET /v1/devices` | registered devices, with `cert_expires` once a device has its certificate, and `version`, `latest`, `update_available`, `update_commands` (bearer token) |
+| `GET /v1/version` | `{core: {version, latest, update_available, update_commands}, device: {latest}}`: the latest versions on the registry, empty while unknown (bearer token) |
+| `DELETE /v1/devices/{name}` | forget a device; its tasks become `lost`, its certificate is revoked (bearer token) |
+| `GET /v1/devices/tls`, `PUT /v1/devices/tls` | the CA's hash, whether devices must use TLS, which have no certificate yet; advanced: `{"tls_only": false}` keeps the plain path open, `{"tls_only": true}` closes it (bearer token) |
+| `POST /v1/devices/join` | `{name, token}` → `{secret}` (join token for that name) |
+| `POST /v1/device/certificate` | `{csr}` (PEM) → `{ca, certificate, expires}` (device secret, and its certificate once it has one) |
+| `GET /v1/devices/connect` | the tunnel (device secret, `Eriphe-Device: name`, and its certificate) |
 
 **Versions.** Releases are Git tags `vX.Y.Z`, which CI creates from the Conventional Commits merged
 to `main` ([RELEASING.md](../RELEASING.md)). All the images of one CI build share its version
@@ -590,7 +590,7 @@ answer older than 15 minutes, asks again in the background; "Vérifier maintenan
 Devices → Updates asks at once (once a minute at most) and says when it last did. A machine is behind when it runs a release older than that one
 (semver order, `version.go`); a build of
 `main` or a local one never says so, as someone is testing it. The images publish their `latest`
-tag each on its own, as their build ends: while a release is half published (eriphe-node's
+tag each on its own, as their build ends: while a release is half published (eriphe-device's
 `latest` out, eriphe-core's or eriphe-base's not yet), the latest release is the older one, which
 every image has, and the check runs again five minutes later. The workspace shows `0.2.0`, and a
 build of `main` as `0.2.0-dev` with its commit in small.
@@ -601,7 +601,7 @@ Each machine updates itself, with the updater its installer put on the host side
 (install/README.md, The machines update themselves); eriphe-core says when (`machine_updates.go`).
 The workspace always says when a machine is behind (a dot, "Mise à jour disponible"), with one
 "Mettre à jour" button on each machine that has an updater, "Tout mettre à jour" when several are
-behind (eriphe-core first; the nodes follow once it runs the latest version), and one switch for
+behind (eriphe-core first; the devices follow once it runs the latest version), and one switch for
 all machines, "Mettre à jour automatiquement la nuit" (off by default; 3:00 to 5:00 in `timezone`,
 once a night). A machine without an updater shows the one command that updates it, for how it was
 installed (`ERIPHE_INSTALL`: `linux`, `macos`, `windows`, or `docker` for the one-container
@@ -614,31 +614,31 @@ choices of before, for all machines and for each one, are dropped at start; "at 
 turns the switch on.
 
 The order is Kubernetes': eriphe-core's machine first (its request goes to `update-requested` in
-the data folder, for the updater; the outcome comes back in `update-status`); a node only once
+the data folder, for the updater; the outcome comes back in `update-status`); a device only once
 eriphe-core runs the latest version, in its assignments (`update`, with eriphe-core's version, the
-most the node may get), and the node waits for its tasks to end. A node is offered eriphe-core's
-build, never a newer one: while eriphe-core is behind, a node's "Mettre à jour" asks eriphe-core
+most the device may get), and the device waits for its tasks to end. A device is offered eriphe-core's
+build, never a newer one: while eriphe-core is behind, a device's "Mettre à jour" asks eriphe-core
 first ("Eriphe se met d'abord à jour, puis cet appareil"), and the card says it waits for
-eriphe-core until eriphe-core runs the latest version; the node is asked then (`followUpdates`,
+eriphe-core until eriphe-core runs the latest version; the device is asked then (`followUpdates`,
 as for "Tout mettre à jour"), and not at all if eriphe-core's update ends elsewhere (failed,
 rolled back, pinned). Without an updater on eriphe-core's machine, the button waits for its
 command. An update that ends "ok" or "current" on another version than the one offered says it
-did not reach it, never "À jour". While a node has a request, the
+did not reach it, never "À jour". While a device has a request, the
 scheduler treats it as offline: new tasks wait for it. A request not done within a day is dropped;
 one with the updater (handed to it, or "running") that has not ended within 30 minutes stopped (its
 updater died, or a reinstall restarted it): it is dropped, and the machine's line says "La mise à
-jour s'est arrêtée sans résultat". A node that runs eriphe-core's version already (its install
+jour s'est arrêtée sans résultat". A device that runs eriphe-core's version already (its install
 command was run again) is not sent its update request, which is dropped.
 A machine without updater (installed before, or by hand, as `deploy/nas/compose.yaml`) says so and
 gets no request.
 
 An update also brings a machine to the install's layout of its version (what an install puts there
 besides the images: services, LaunchAgents, Syncthing; install/README.md, The machines update
-themselves). What its updater cannot do alone, the node reports in `update.needs` (`why`:
+themselves). What its updater cannot do alone, the device reports in `update.needs` (`why`:
 `password`, a step that needs the Mac's password; `admin`, one that needs an administrator's
 PowerShell; `layout`, any other, such as an updater from before the layouts), and the device's card
 says « Cette mise à jour a besoin de toi : … » with the command that updates that machine in a code
-block to copy (`manualUpdate`, from how it was installed: never a command a node names), while no
+block to copy (`manualUpdate`, from how it was installed: never a command a device names), while no
 request is under way. The brain is told once, after 10 minutes with no request under way
 (`tellNeeds`), to mention it to the user; it is forgotten once the machine needs nothing.
 
@@ -652,58 +652,58 @@ database; after 10 minutes without an answer it stops and says to reload the pag
 
 ### TLS between machines
 
-Nodes reach eriphe-core over TLS, with a certificate authority for machines that eriphe-core makes
+Devices reach eriphe-core over TLS, with a certificate authority for machines that eriphe-core makes
 at its first start, as kubeadm does for a cluster. It is not the workspace's certificate: it signs
-only eriphe-core's certificate for the nodes (for the name `eriphe-core`, which a node checks
-whatever address it dials) and one client certificate per node.
+only eriphe-core's certificate for the devices (for the name `eriphe-core`, which a device checks
+whatever address it dials) and one client certificate per device.
 
 - **Where.** `machine-ca.pem` and `machine-ca-key.pem` (0600) in the data folder, next to the
   database. The key is a secret like the vault key. The CA lasts ten years and is never replaced
-  by itself: a CA file that does not load stops TLS for nodes (logged at start) rather than making
-  a new one, since every node pins it.
+  by itself: a CA file that does not load stops TLS for devices (logged at start) rather than making
+  a new one, since every device pins it.
 - **One port.** The API port serves TLS and plain HTTP side by side: eriphe-core tells them apart by
   the first byte a client sends (a TLS handshake starts with `0x16`). On the local network, the CLI,
   Home Assistant, the brain's MCP and every other API caller may keep their plain `http://…:8800`;
-  a node reaches the same address as `https://…:8800`, and the join commands say `https://` when
+  a device reaches the same address as `https://…:8800`, and the join commands say `https://` when
   they carry `-ca-hash`. On the tailnet, `:8800` keeps its Tailscale certificate (publicly trusted:
-  the address to give the CLI or Home Assistant away from home) and asks for a node's certificate
+  the address to give the CLI or Home Assistant away from home) and asks for a device's certificate
   too.
 - **No token in clear over the internet.** A call with the API's token (or a channel's token) over plain HTTP from a public address is refused (403): the token already crossed the
   internet in clear, and a setup like that should fail at once rather than leak it at every call.
   Plain HTTP stays open to private, loopback, link-local and Tailscale addresses (and to the
-  Docker gateway, which may be the host itself); TLS works from anywhere. Node requests (join,
-  tunnel, reports) are not affected: they are TLS once the node knows the CA.
+  Docker gateway, which may be the host itself); TLS works from anywhere. Device requests (join,
+  tunnel, reports) are not affected: they are TLS once the device knows the CA.
 - **Joining.** The join command carries `-ca-hash sha256:<hex>`, the SHA-256 of the CA's public key
-  (like kubeadm's `--discovery-token-ca-cert-hash`): the node finds that CA in eriphe-core's TLS
+  (like kubeadm's `--discovery-token-ca-cert-hash`): the device finds that CA in eriphe-core's TLS
   handshake, pins it, and only then sends its join token. `eriphe-core join-token` and "Ajouter une
   machine" print it, and Settings → Appareils → Avancé shows it, for a machine set up by hand.
-- **Client certificates (mTLS).** A node asks for its certificate with its secret
-  (`POST /v1/node/certificate`, with a certificate request: the key never leaves the node), valid
+- **Client certificates (mTLS).** A device asks for its certificate with its secret
+  (`POST /v1/device/certificate`, with a certificate request: the key never leaves the device), valid
   one year, and for a new one with its current one when a third of its life is left. A request
-  that presents a certificate needs the node's secret and its current certificate (or the one
-  before, while it moves to the new one): forgetting a node or letting it join again revokes it at
+  that presents a certificate needs the device's secret and its current certificate (or the one
+  before, while it moves to the new one): forgetting a device or letting it join again revokes it at
   once, and drops its tunnel.
-- **Nodes that joined over plain HTTP.** An existing node (its secret only, in `node.json`) asks for
+- **Devices that joined over plain HTTP.** An existing device (its secret only, in `device.json`) asks for
   its certificate with its secret on its next connection, at the address it knows, pins the CA that
   comes with it, and connects over TLS from then on: nothing to do on it but update it. That first
-  request trusts the network it crosses, as the plain join did; given `-ca-hash`, the node checks
+  request trusts the network it crosses, as the plain join did; given `-ca-hash`, the device checks
   the CA instead.
-- **Closing the plain path.** eriphe-core accepts nodes over TLS only, with their certificate: from
-  the start on a new installation, and on an older one by itself as soon as every node has its
-  certificate (logged; Settings → Appareils marks those still without one, `GET /v1/nodes/tls`
-  lists them). It then refuses nodes over plain HTTP and nodes without their certificate, and drops
-  the tunnels of those connected so. Joins then need TLS too. API callers other than nodes are not
-  affected. `PUT /v1/nodes/tls {"tls_only": false}` is the advanced way out, to keep the plain path
+- **Closing the plain path.** eriphe-core accepts devices over TLS only, with their certificate: from
+  the start on a new installation, and on an older one by itself as soon as every device has its
+  certificate (logged; Settings → Appareils marks those still without one, `GET /v1/devices/tls`
+  lists them). It then refuses devices over plain HTTP and devices without their certificate, and drops
+  the tunnels of those connected so. Joins then need TLS too. API callers other than devices are not
+  affected. `PUT /v1/devices/tls {"tls_only": false}` is the advanced way out, to keep the plain path
   open for a machine that cannot have its certificate yet; eriphe-core then leaves it so.
 
 ## MCP tools (`/mcp`, bearer token)
 
 | Tool | What |
 |---|---|
-| `list_agents` | agents, when to use each, and whether a node can run them now |
+| `list_agents` | agents, when to use each, and whether a device can run them now |
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
-| `list_nodes` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
-| `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), node (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
+| `list_devices` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
+| `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), device (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
 | `list_repos` | the GitHub repositories the app's connections reach: `repo`, its `cases` (`read`, `change`, `delete`, `send`: `free`, `approval` or `never`) and `own_rules` when it has cases of its own (listed first); a task is lent only one of these |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read` or `write`, as shared on its machine), `rights` (`read`, `change`: free, approval or never), `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
@@ -714,53 +714,53 @@ whatever address it dials) and one client certificate per node.
 | `stop_task` | stop the agent |
 | `surface_write`, `surface_remove`, `workspace_read`, `catalog_read` | write or remove a block of its part of a thread's surface, as `brain`, and read the threads on screen ([the workspace tools](#the-assistants-workspace-tools-workspace_toolsgo)) |
 
-The scheduler takes the requested node if it is online and fits. Otherwise it works in two passes,
-like Kubernetes': it **filters** the online nodes that offer the agent's runtime and carry all its
+The scheduler takes the requested device if it is online and fits. Otherwise it works in two passes,
+like Kubernetes': it **filters** the online devices that offer the agent's runtime and carry all its
 `needs` labels, then **scores** them: +1 per CPU if the agent prefers `cpu`, +1 per GiB of RAM if it
-prefers `memory`, +8 per preferred label the node carries, +2 if the agent's image (or the node's
-default image) is already pulled, +2 if the node has the agent's runtime unpacked (`agents_ready`),
+prefers `memory`, +8 per preferred label the device carries, +2 if the agent's image (or the device's
+default image) is already pulled, +2 if the device has the agent's runtime unpacked (`agents_ready`),
 -4 per active task. The highest score wins, ties by name.
 
 **Placement classes** (`placement.go`), like Kubernetes' hard rules and preferences; none is a
 setting:
 
 - **Resident**: an assistant that talks to the user or is woken by events (the brain first). Hard
-  rule: an online node started with `-always-on` (the machine eriphe-core runs on) that fits, the
-  best other node only when none does (the log says why). If its node has been offline for 30
-  seconds and another online node can take it, it moves; if it runs on a node that may sleep and an
+  rule: an online device started with `-always-on` (the machine eriphe-core runs on) that fits, the
+  best other device only when none does (the log says why). If its device has been offline for 30
+  seconds and another online device can take it, it moves; if it runs on a device that may sleep and an
   always-on one can take it, it moves there between two turns. Moving starts a fresh session with
-  the context pack: the thread is eriphe-core's, and a message its old node never received is
+  the context pack: the thread is eriphe-core's, and a message its old device never received is
   delivered again.
-- **Bound**: a task with the user's folders goes to a node that holds each of them up to date,
+- **Bound**: a task with the user's folders goes to a device that holds each of them up to date,
   the folder's machine or one keeping a copy in sync ([Tasks on a copy](#copies-of-a-folder)),
-  the best of them by the scores above, and waits for one. A task its node has not started yet
-  is placed again, like the others, when another such node is online.
-- **The others**: the scores above. A task its node has not started yet is placed again after that
-  node has been offline for 5 minutes; a running task keeps its node.
+  the best of them by the scores above, and waits for one. A task its device has not started yet
+  is placed again, like the others, when another such device is online.
+- **The others**: the scores above. A task its device has not started yet is placed again after that
+  device has been offline for 5 minutes; a running task keeps its device.
 
-A node given by hand (`node` of `run_task`, or an assistant's) always wins: such a task never moves.
+A device given by hand (`device` of `run_task`, or an assistant's) always wins: such a task never moves.
 
-**Asleep or offline** (`node_sleep.go`). A machine that sleeps disconnects and comes back by itself:
+**Asleep or offline** (`device_sleep.go`). A machine that sleeps disconnects and comes back by itself:
 a Mac in maintenance sleep wakes for a minute every quarter of an hour. eriphe-core counts the
-times a node came back after an absence of 2 minutes or more; one that did twice in the last 24
-hours is *asleep* while it is away (Settings → Devices says "En veille", `list_nodes` says
-`asleep`), any other node away is *offline*. The always-on machine is never asleep. A task its node
-has not started yet is placed again after 30 seconds when that node is asleep, instead of 5 minutes.
-The node itself keeps its machine awake while a task is at work (node/README.md, Sleep).
+times a device came back after an absence of 2 minutes or more; one that did twice in the last 24
+hours is *asleep* while it is away (Settings → Devices says "En veille", `list_devices` says
+`asleep`), any other device away is *offline*. The always-on machine is never asleep. A task its device
+has not started yet is placed again after 30 seconds when that device is asleep, instead of 5 minutes.
+The device itself keeps its machine awake while a task is at work (device/README.md, Sleep).
 
-**Ready in advance.** Each node's assignments carry `prepare`: `{runtimes, images}`, the runtimes
-of the configured agents the node could run (it carries their `needs`) and the images they name.
-The node unpacks those agents and pulls those images (and its default one) in the background, at
-its first assignments and whenever the list changes: a change of the catalog wakes every node
-(node/README.md, Agents). An agent no one configured is never downloaded anywhere.
+**Ready in advance.** Each device's assignments carry `prepare`: `{runtimes, images}`, the runtimes
+of the configured agents the device could run (it carries their `needs`) and the images they name.
+The device unpacks those agents and pulls those images (and its default one) in the background, at
+its first assignments and whenever the list changes: a change of the catalog wakes every device
+(device/README.md, Agents). An agent no one configured is never downloaded anywhere.
 
-If no online node fits but a registered one would by what it last reported (a desktop that is off,
-say), the task is created `pending` with no `node` and a `pending_reason` ("waiting for a node that
+If no online device fits but a registered one would by what it last reported (a desktop that is off,
+say), the task is created `pending` with no `device` and a `pending_reason` ("waiting for a device that
 can run claude-code with gpu (offline: pc)"), so the brain sees it waits. Such tasks are scheduled
-again whenever a node comes online and every 15 seconds; stopping one stops it at once. If no
-registered node could ever run it, `run_task` fails. Nodes are checked every 15 seconds. Tasks that were active when eriphe-core stopped are
-followed again at start, and a disconnected node's tasks are followed again when it reconnects; a
-node that forgot a task marks it `lost`.
+again whenever a device comes online and every 15 seconds; stopping one stops it at once. If no
+registered device could ever run it, `run_task` fails. Devices are checked every 15 seconds. Tasks that were active when eriphe-core stopped are
+followed again at start, and a disconnected device's tasks are followed again when it reconnects; a
+device that forgot a task marks it `lost`.
 
 ### Contracts (`contract.go`)
 
@@ -795,16 +795,16 @@ brain can act on, what is certainly wrong in a check: an empty `run`, a `dir` gi
 a `dir` or `exists` outside `/work` or with a `..` element, a path on several lines, a path under
 `/work/repo` without a repository lent, or under `/work/folders/<name>` for a folder not lent.
 `dir` is relative to the task's working directory (`/work/repo` with a repository: `"core"`, not
-`"repo/core"`); whether it exists is only known once the repository is cloned, so the node says it
+`"repo/core"`); whether it exists is only known once the repository is cloned, so the device says it
 then (a *config* failure, below).
 
 **A misconfigured check.** A check that could not run at all (its `dir` is not there, its command
-is not found, it could not be started: the node's `config`) is the contract's fault, neither the
+is not found, it could not be started: the device's `config`) is the contract's fault, neither the
 code's nor the agent's: it is not sent back to the agent, does not count toward "the same failure
 twice", is no unsupported claim of the receipt, and does not stop the task. The task stays idle and
-the brain hears that the contract is misconfigured, with the node's exact reason. It fixes it with
+the brain hears that the contract is misconfigured, with the device's exact reason. It fixes it with
 `answer_task` and `checks` (all of them, checked like at the start; `reply` optional): the
-contract and the task's spec are updated, and the new checks go to the node with the next turn,
+contract and the task's spec are updated, and the new checks go to the device with the next turn,
 after which they run. The drawer shows such a check as "could not run".
 
 ### Retries and budgets (`task_retry.go`)
@@ -818,23 +818,23 @@ causes of `problems.go`), before the brain hears of it:
 | account | key refused, quota or credit spent, model missing | no retry: the brain is told to warn the user |
 | invalid | a request refused (400), a turn cut by its limits | no blind retry: the brain changes the instructions or warns the user |
 | permission | the policy refused an action | never retried: the brain hears it as before |
-| check | a check of the contract failed | sent back to the agent by its node (see eriphe-node's README) |
+| check | a check of the contract failed | sent back to the agent by its device (see eriphe-device's README) |
 | config | a check of the contract could not run (its folder missing, its command not found) | never sent back, never counted, never stopped: the brain is told to fix the contract (above) |
-| same failure twice | the same class and words (numbers aside) twice in a row, or a check the node stopped sending back | **stops** the task, even with attempts left |
+| same failure twice | the same class and words (numbers aside) twice in a row, or a check the device stopped sending back | **stops** the task, even with attempts left |
 
 The budget of a contract is kept by eriphe-core: `minutes` (checked every 15 seconds), `turns`
 and `tokens` (input, output and cache writes from the turns' `usage`, where the harness reports
 it) at the end of a turn; a turn whose receipt says `done` is not stopped (the brain closes the
 task), and `answer_task` refuses a new turn once the turns are spent. A task eriphe-core stops
-keeps why (`stop_reason`): the brain hears it with the last receipt when the node reports it
+keeps why (`stop_reason`): the brain hears it with the last receipt when the device reports it
 stopped, and the drawer says so; a retry on its way shows its time. A task whose agent or container
 failed is told to the brain with its class: worth starting again once, or not. Each failure's class
 is kept in `task_harness` for the measures. The brain's prompt no longer counts retries itself.
 
 **No work lost on stop.** Before a task's container is removed (stopped by the brain, a budget or
-"the same failure twice"), its node pushes the commits no remote has on the branch the task was
+"the same failure twice"), its device pushes the commits no remote has on the branch the task was
 lent, with the task's own git (the same decision applies), or keeps
-the repository on the node (see eriphe-node's README). Its `work` event says which: the brain hears
+the repository on the device (see eriphe-device's README). Its `work` event says which: the brain hears
 it with the stop, even a stop of its own when the work was kept.
 
 ### Usage and measures (`task_stats.go`)
@@ -868,13 +868,13 @@ every harness (Claude Code, Codex, OpenCode, any ACP agent) hands back its final
 would have to be allowed in each one's permission model. eriphe-core reads the last block that
 parses (a `<receipt>` tag and a message that is only the JSON work too) and never trusts it:
 
-- **verified** is only what a check run by the node saw pass (`check` events); what the agent says
+- **verified** is only what a check run by the device saw pass (`check` events); what the agent says
   it verified without a check stays *claimed, not checked*; a failed check is *not verified*;
-- a file said `changed` is compared with the repository's diff, which the node reports when the
+- a file said `changed` is compared with the repository's diff, which the device reports when the
   turn ends (`diff` event); files of the diff left out are counted;
 - `done` with a failed check, or a change the diff does not have, is an **unsupported claim**.
 
-A turn with no readable receipt is asked once for it (`skip_checks`: the node runs no check after
+A turn with no readable receipt is asked once for it (`skip_checks`: the device runs no check after
 that turn), at most twice per task and never twice in a row, without the brain; a turn that failed
 is not asked. The brain then gets the checked receipt (in French, like its other events) instead of
 the agent's last message; without one, the last message, truncated, as before. `task_status`
@@ -1075,7 +1075,7 @@ about that one from then on.
 surface follows it and its end comes back as the thread's event; its result gives the thread, the
 step and its task. What `run_task` refuses of the task itself (no prompt, an agent or a resource
 that is none) is refused before any step is born; a task that still cannot start leaves its step
-blocked and the call refused. A `surface` to fill and a `node` named go with the step. In a turn
+blocked and the call refused. A `surface` to fill and a `device` named go with the step. In a turn
 about no thread, the task is a step of the live light thread the user's message named
 (`taskThread`); with none, `run_task` is refused (« open_thread first »): a task is never left
 loose, and the code never opens a thread for it. A turn about a led thread is refused too (its plan
@@ -1111,7 +1111,7 @@ linked card); it writes the thread's surface again and makes the attention queue
 - Each step's end reaches the lead as an event `[thread N « title »]`, instead of the task's own;
   a thread complete or stuck is told once. `find_thread` and `read_thread` read them;
   `stop_thread` stops the tasks and withdraws the cards. The engine's pass runs every 15 seconds
-  with the nodes' check, over the active threads: deadlines, a led thread's budget, and steps
+  with the devices' check, over the active threads: deadlines, a led thread's budget, and steps
   whose task ended while eriphe-core was down.
 - The end of any thread is the journal's `thread.ended` (key `thread:<id>`, its state).
 - Tables: `threads`, `thread_steps`, `thread_asks` (what a thread asks, one card each),
@@ -1412,7 +1412,7 @@ of it, so that a prompt injection (a mail, a web page) cannot talk the brain int
    with a secret is what it was lent, decided at launch, and Free asks nothing;
 6. anything else that stays in the task's container (its shell, files and web tools: `Bash`,
    `Write`, `Edit`, `WebFetch`…) is allowed (`inContainer`). The container
-   is the boundary: what leaves it goes through the node's mounts (a folder's level), its egress
+   is the boundary: what leaves it goes through the device's mounts (a folder's level), its egress
    filter and the credentials eriphe-core lends, which the shell rules above cannot replace (they
    read a command line, and only stop mistakes);
 8. what is left is the brain's to judge. A request the brain was told of and left at the end of
@@ -1622,19 +1622,19 @@ rename and delete in it).
 The access defaults to `read` (for a tool, to what its annotations say). Each entry is checked
 against what the user opened: an unknown folder or server is refused, and so is a `write` on a
 folder shared read-only, or a case the folder's rights set to Never. The list is kept with the task
-(`tasks.resources`, JSON), and the node gets its spec fields (`repo`, `folders`…), derived from it.
+(`tasks.resources`, JSON), and the device gets its spec fields (`repo`, `folders`…), derived from it.
 
 **A repository's skills** (`.claude/skills`, `.agents/skills`, `.opencode/skills`: instructions
 and scripts its agents load by themselves) load only from the user's own repositories
 (`repo_skills.go`): with the GitHub App, one it is installed on; without it, one the GitHub tool's
 token may push to. Anything else (another host, someone else's repository, GitHub not reachable)
-keeps them off, unless the entry says `"trust_skills": true`. The node gets the answer as the
-spec's `repo_skills` and turns them off per agent (node/README.md, Agent skills); whatever loads,
+keeps them off, unless the entry says `"trust_skills": true`. The device gets the answer as the
+spec's `repo_skills` and turns them off per agent (device/README.md, Agent skills); whatever loads,
 a skill never approves a tool by itself.
 
 **Held back** (`"hold": true`, a `tool` entry only): for work the user validates before it acts
 (analyse, report, then act on what they approved). The task sees the tool from the start (its
-agent lists its tools once, and the node its servers when it fetches the task), but none of its
+agent lists its tools once, and the device its servers when it fetches the task), but none of its
 calls is authorized, whatever the grid or a grant says (`lend.go`). The brain asks with `answer_task`
 `release` (the entries' `ref`, `mail.move`), for an entry lent held only: the user gets a
 [card](#the-approval-card), and only their yes releases it. The release is kept in the task's
@@ -1662,7 +1662,7 @@ Skills** (`web_skills.go`):
 - **Approving**: nothing reaches a task or the brain before the user has read the skill on its page
   and approved it. The page shows its `SKILL.md` and its files, with the scripts marked (in
   `scripts/`, executable, a script's extension, or not text). A skill's `allowed-tools` is shown
-  as ignored: Eriphe's permissions stay the only judge (node/README.md, Agent skills).
+  as ignored: Eriphe's permissions stay the only judge (device/README.md, Agent skills).
 - **A new version** (the same name, uploaded again) waits for approval with its diff against the
   approved one, file by file. Tasks keep the approved version until the user approves the new one
   (the hash they read is checked) or keeps the old one.
@@ -1671,8 +1671,8 @@ Skills** (`web_skills.go`):
   reads (its front matter refused) is shown still, with the reason. Bundles no skill points at any more are deleted, but for the last five versions a skill replaced or had when deleted (`skill_kept`), which the [learning journal](#what-eriphe-learned) needs to undo a change; they are never given to a task.
 
 **In tasks.** Every worker task gets the skills that are approved and on when it starts, as its
-spec's `skills` (name and sha256 of each, `skills_tasks.go`). Its node fetches each bundle with its
-own secret (`GET /v1/node/tasks/{id}/skills/{sha256}`: only that task's, only on its node), checks
+spec's `skills` (name and sha256 of each, `skills_tasks.go`). Its device fetches each bundle with its
+own secret (`GET /v1/device/tasks/{id}/skills/{sha256}`: only that task's, only on its device), checks
 the hash, and mounts them read-only at `/run/eriphe/skills/.claude/skills/<name>`. It points
 Claude Code, OpenCode and Codex at them. Scripts run in the task's container, under its permissions,
 like any other command. When the agent does not load them itself, eriphe-core lists them (name,
@@ -1688,8 +1688,8 @@ reading one does not taint the turn.
 
 A task lent a GitHub repository uses the real `git` and the real `gh`, which the agent installs with
 apt. It holds a placeholder in `GH_TOKEN`: gh reads it, and git gets it from a fixed credential
-helper in the task's environment. Each request crosses the node's relay, as for any
-[access](../node/README.md#accesses), and eriphe-core decides and puts the token in.
+helper in the task's environment. Each request crosses the device's relay, as for any
+[access](../device/README.md#accesses), and eriphe-core decides and puts the token in.
 
 **The decision** (`decideRepo`, deny by default; first that applies):
 
@@ -1714,7 +1714,7 @@ ref: a deletion is Supprimer, the default branch (asked of GitHub, kept ten minu
 Envoyer, any other branch Modifier. One ref refused refuses the push, before GitHub sees it. gh's
 writes are Modifier.
 
-What is decided is the lend, at launch, as for an [access](../node/README.md#accesses): what the task reads afterwards
+What is decided is the lend, at launch, as for an [access](../device/README.md#accesses): what the task reads afterwards
 changes nothing, and nothing waits in a command. The same rules hold with the GitHub App or without.
 
 gh's token writes pull requests and issues, never contents: GitHub itself refuses it a merge, a
@@ -1729,7 +1729,7 @@ goes without one. git and gh need the GitHub App: no other token is ever lent, a
 are not classified:
 
 ```
-git → the node's relay → eriphe-core (decides, mints) → GitHub
+git → the device's relay → eriphe-core (decides, mints) → GitHub
 ```
 
 - **Each request is decided**, from what it is: a push is `git-receive-pack`, and a placeholder
@@ -1747,7 +1747,7 @@ git → the node's relay → eriphe-core (decides, mints) → GitHub
 with the same decision (`startNeeds`, `task_start.go`): for each GitHub repository lent for `write`,
 the case its lend names: Modifier for its `branch`, Envoyer without one (it pushes the default
 branch). Supprimer is not asked ahead: a deletion goes only where it is Free, on a clean start. When that takes the user's yes, the task does not start: it is kept `pending` with
-`desired` `held` (no node is given it, no placement moves it, its `pending_reason` says why) and the
+`desired` `held` (no device is given it, no placement moves it, its `pending_reason` says why) and the
 user gets one card in the conversation (kind `taskstart`, [conversation cards](#workspace-web)),
 « Pour pousser `eriphe/x` sur owner/repo, il me faut ton accord. ». Oui keeps the approval
 (`repo_grants`, logged "approved at launch": that case of that repository, by git or gh, for the
@@ -2145,7 +2145,7 @@ their task:
 |---|---|
 | `role` | `brain` or `lead`, with the powers it allows |
 | `display_name` | what the user calls the brain, as a person (see [its name](#the-assistants-name)); Eriphe by default |
-| `agent`, `node` | what it runs on; without an agent, the default one or the first that can run it |
+| `agent`, `device` | what it runs on; without an agent, the default one or the first that can run it |
 | `instructions` | its standing instructions (`{{user}}` and `{{name}}` replaced); its role's built-in ones by default; `instructions_file` in the file only |
 | `tools` | its grant from the catalog, like a task's; its role may add the catalog's free reads |
 | `powers` | what it may do, within its role's: `talksToUser`, `receivesConversation`, `launchesTasks`, `lendsResources` (the brain's), `reports` (the lead's) |
@@ -2154,7 +2154,7 @@ their task:
 | `self_url` | the file only (see the brain) |
 
 The lead's own tools (`report`, and its role's) are an MCP server of its own, under
-eriphe-core's name, relayed by its node (`assistant_own_tools.go`): it holds no token.
+eriphe-core's name, relayed by its device (`assistant_own_tools.go`): it holds no token.
 
 ### The assistant's name
 
@@ -2172,21 +2172,21 @@ workspace's words (`{{name}}` in the texts of `web_text*.go`, French elision inc
 de {{name}} » reads « Tâches d'Eriphe »), the pages' title suffix and the brand next to the logo,
 the login page, the installed app (`/manifest.webmanifest` is served with its `name` and
 `short_name`), and an added channel's app (`GET /v1/channel`, Home Assistant's conversation agent). The software keeps its name: the logo glyph, the
-images and binaries, the install scripts, eriphe-core and eriphe-node, the GitHub and Google apps
+images and binaries, the install scripts, eriphe-core and eriphe-device, the GitHub and Google apps
 and the OAuth client, the certificate authority, the app passwords and tokens named Eriphe, the
 Home Assistant integration's domain, and the system texts that name the software.
 
 ## The brain
 
 With a `brain` section in the config, eriphe-core keeps a permanent orchestrator alive: a long-lived
-task on a node (stable `profile`, so its session survives restarts), with only MCP tools
+task on a device (stable `profile`, so its session survives restarts), with only MCP tools
 (eriphe-core's own plus its grant from the catalog, `brain.tools`) and its standing instructions:
 `brain-prompt.md`, built into the binary, or the file `prompt_file` names instead.
 
-**How it reaches eriphe-core.** Without `self_url`, the brain's node relays eriphe-core's own MCP
+**How it reaches eriphe-core.** Without `self_url`, the brain's device relays eriphe-core's own MCP
 server to it as it relays a catalog server (`<callback-url>/mcp/eriphe-core`, with the task's
-secret; the node calls `/v1/node/tasks/{id}/mcp/eriphe-core` with its own): it works wherever the
-node reaches eriphe-core (the same machine, the LAN, the tailnet), with no address to configure,
+secret; the device calls `/v1/device/tasks/{id}/mcp/eriphe-core` with its own): it works wherever the
+device reaches eriphe-core (the same machine, the LAN, the tailnet), with no address to configure,
 and the brain's container never holds eriphe-core's API token. Only the brain's task gets it.
 `self_url` (e.g. `http://eriphe-core:8800/mcp` when the brain shares a Docker network with
 eriphe-core) still makes the brain call that address directly, with a token of its own derived
@@ -2210,7 +2210,7 @@ on a clean turn and asked on a [card](#the-approval-card) on a tainted one, and 
 of the open web; On approval is a card
 per call. A read named by a
 policy rule of the configuration is not free: it goes through the policy with its input. The list
-is computed when its node fetches the task, so a tool or server added later reaches the brain at
+is computed when its device fetches the task, so a tool or server added later reaches the brain at
 its next start (the proxy itself follows the catalog at once); in eriphe-core's first minute, the
 brain waits for the trusted servers that are still connecting before it starts.
 
@@ -2221,7 +2221,7 @@ task shows in `GET /v1/tasks` (and the CLI) until the user allows or denies it. 
 permission requests are denied, but for the web.
 
 **The web.** The brain searches with its harness's own search: Claude Code's `WebSearch` is in its
-`allowed_tools`; Codex is held to `web_search = "cached"` by the node; OpenCode's `websearch` is
+`allowed_tools`; Codex is held to `web_search = "cached"` by the device; OpenCode's `websearch` is
 denied (a harness without a search is told so in its standing instructions). Its page reader
 (`WebFetch`, OpenCode's `webfetch`) and its search are not allowed in advance: the web is a row of
 Settings → Tools, Free, On approval or Never, for the brain only (a task's web is its container's).
@@ -2245,10 +2245,10 @@ tokens per call and, above 60,000 tokens, that turn ended less than 55 minutes a
 (`brainResumeTokens`, `brainResumeIdle`, `brainResumeIdleFloor`; the role card's `ResumeTokens`,
 `ResumeIdle` and `ResumeIdleFloor`): a smaller session costs little to write again and holds more
 than the pack. The measure is the session's
-last `turn_end`, whichever task ran it: its `usage.context_tokens` (the node's, Claude Code's last
+last `turn_end`, whichever task ran it: its `usage.context_tokens` (the device's, Claude Code's last
 call), or else the turn's input, cache reads and writes. Past either bound, the task starts a fresh
 session. A fresh session (the first one, a dropped resume, a session past its bounds, a resume the
-node could not do, another harness) gets a context pack in its first turn, never in its system prompt,
+device could not do, another harness) gets a context pack in its first turn, never in its system prompt,
 within about 16,000 tokens (`brain_context.go`). The state of things comes first, in at most half of
 it: the card of each open thread, up to 20 threads (`thread_card.go`: its summary says where
 its matter stands), the tasks under way, the decisions of the last 14 days, the people and facts
@@ -2337,7 +2337,7 @@ and secret and where to refresh it (`token_url`), is kept **once per account**: 
 (`TOOL_TOKEN_<hash>`, [the servers' contract](../servers/README.md)), refreshing its access token itself: the token never enters a task or
 a spec. Which servers belong to an account is read from their specs (that vault reference). A
 service Google did not grant (its box unticked on Google's page) is said back. Connecting again
-writes the new token for every service of the account, and the nodes restart them with it.
+writes the new token for every service of the account, and the devices restart them with it.
 
 **Several accounts.** Every account's mailbox is an account of the one `mail`, its calendar an
 account of the one `agenda`, its Drive an account of the one `fichiers` with its own grid, each
@@ -2346,7 +2346,7 @@ accounts, each with its services, their tools and states, "Ajouter" for a servic
 "Reconnecter" and "Retirer ce compte" (its servers and Drive folders go, its token leaves the vault
 and is revoked at Google, `oauth2.googleapis.com/revoke`).
 
-**To reconnect.** Every 30 minutes (`connectionTick`, with the nodes' check) eriphe-core asks
+**To reconnect.** Every 30 minutes (`connectionTick`, with the devices' check) eriphe-core asks
 Google for an access token with each account's refresh token ([connections](#connections)). `invalid_grant` (revoked, or the 7 days of
 an app in Testing) or a refused client marks the account "À reconnecter": its servers are held in
 `needs_auth` (the pool's `authHold`; a server with another working account is not), a call says
@@ -2460,7 +2460,7 @@ configured with and what is inside them (it walks each id's parents up through t
 refuses everything else, never touches the folder itself, and keeps an account core marks
 `read_only` to reading. eriphe-core runs the
 authorization, keeps the refresh token in the vault, and lends it to the service's environment on
-its node; it never enters a task or a task's spec.
+its device; it never enters a task or a task's spec.
 
 Settings → Tools → Add → Google Drive (the logic in `cloud.go`, the sign-in in `oauth_client.go`):
 
@@ -2576,9 +2576,9 @@ long as that app's client exists.
 
 ## Services (local MCP servers)
 
-A service is an MCP server run as a long-lived container on a node, like a Kubernetes Deployment of
-one replica behind a Service: eriphe-core keeps what it should be and where, the node keeps its
-container running, and eriphe-core reaches it as a streamable HTTP MCP endpoint through the node's
+A service is an MCP server run as a long-lived container on a device, like a Kubernetes Deployment of
+one replica behind a Service: eriphe-core keeps what it should be and where, the device keeps its
+container running, and eriphe-core reaches it as a streamable HTTP MCP endpoint through the device's
 tunnel. The services are a module of their own (`services.go`, `service_owners.go`,
 `service_client.go`), which knows nothing of tools or channels: its **owners** say which services
 they want.
@@ -2594,7 +2594,7 @@ they want.
 desired services. No owner can drop another's, and none has to be asked first: at start, a
 channel's service is not dropped because the catalog was read before the channel. A name is one
 owner's (its `Owns`): a name an owner does not own is left out, and the log says so. An owner
-that cannot say what it wants keeps what it has. When a node reports a service `running`, its owner
+that cannot say what it wants keeps what it has. When a device reports a service `running`, its owner
 is told (`Running`): the pool wakes the server's upstream, and a channel its own listening.
 
 A catalog server with `run`:
@@ -2602,7 +2602,7 @@ A catalog server with `run`:
 ```json
 "servers": {
   "thinking": {"use": "think step by step", "run": {"image": "mcp/sequentialthinking", "transport": "stdio", "egress": false}},
-  "notes": {"use": "my notes", "run": {"image": "<your image>", "transport": "http", "port": 8080, "node": "nas", "volume": true,
+  "notes": {"use": "my notes", "run": {"image": "<your image>", "transport": "http", "port": 8080, "device": "nas", "volume": true,
             "env": {"LOG_LEVEL": "info", "API_KEY": {"file": "/secrets/notes-key"}}}}
 }
 ```
@@ -2614,40 +2614,40 @@ with the defaults. Not every image does: `mcp/time` keeps its Python interpreter
 | Field | What |
 |---|---|
 | `image` | the server's image |
-| `transport` | `stdio` (the node holds its stdin and stdout) or `http` (it listens on `port`, MCP at `path`, `/mcp` by default) |
+| `transport` | `stdio` (the device holds its stdin and stdout) or `http` (it listens on `port`, MCP at `path`, `/mcp` by default) |
 | `args` | arguments after the image's entrypoint |
-| `env` | `"NAME": "literal"` or `"NAME": {"file": "/secrets/x"}` (or `{"file": "vault:<name>"}`): the secret is read when the node fetches the service, sent to it, never stored or logged |
-| `node`, `needs`, `prefers` | as for agents: pin a node, require labels, prefer `cpu`, `memory` or a label |
-| `arch` | `amd64` or `arm64`: an image built for one architecture only runs on a node of it (the node's `arch` in `GET /v1/node`) |
-| `volume` | a persistent `/data`, kept on its node in `<root>/services/<name>` |
+| `env` | `"NAME": "literal"` or `"NAME": {"file": "/secrets/x"}` (or `{"file": "vault:<name>"}`): the secret is read when the device fetches the service, sent to it, never stored or logged |
+| `device`, `needs`, `prefers` | as for agents: pin a device, require labels, prefer `cpu`, `memory` or a label |
+| `arch` | `amd64` or `arm64`: an image built for one architecture only runs on a device of it (the device's `arch` in `GET /v1/device`) |
+| `volume` | a persistent `/data`, kept on its device in `<root>/services/<name>` |
 | `user` | `uid:gid` in numbers, `1000:1000` by default; never root |
 | `writable` | a writable root filesystem (read-only by default) |
 | `egress` | reach the network (default `true`); without it a stdio server gets `--network none` |
 
-The `services` table keeps each one's spec (without secrets), its hash, its node, desired state,
+The `services` table keeps each one's spec (without secrets), its hash, its device, desired state,
 state (`pending`, `starting`, `running`, `failed`, `stopped`), restarts and last error;
 `GET /v1/services` (bearer token) lists them. The scheduler places a service like a task, on
-online nodes that run services (new nodes say so in `GET /v1/node`), with `needs` and `prefers`,
-counting the node's services and tasks as its load. A node gone for 5 minutes loses its services
-to another node, unless they are pinned to it or keep a volume there: their data stays where it
-is, so they wait for their node. A forgotten node (`DELETE /v1/nodes/{name}`) loses them all.
-A changed spec starts the service over on its node, or elsewhere if the node no longer fits; a
-server left out of the configuration is removed, and its node stops it (the volume stays).
+online devices that run services (new devices say so in `GET /v1/device`), with `needs` and `prefers`,
+counting the device's services and tasks as its load. A device gone for 5 minutes loses its services
+to another device, unless they are pinned to it or keep a volume there: their data stays where it
+is, so they wait for their device. A forgotten device (`DELETE /v1/devices/{name}`) loses them all.
+A changed spec starts the service over on its device, or elsewhere if the device no longer fits; a
+server left out of the configuration is removed, and its device stops it (the volume stays).
 
-Nodes receive their services in their assignments, as a `services` list next to `tasks` (old nodes
-ignore it), and report each one on `POST /v1/node/services/{name}/report`
+Devices receive their services in their assignments, as a `services` list next to `tasks` (old devices
+ignore it), and report each one on `POST /v1/device/services/{name}/report`
 (`{state, restarts, error}`). A service whose secret cannot be read fails and is not sent.
 
-Credentials are lent, never stored: they are read at every fetch of the assignments, and the node
+Credentials are lent, never stored: they are read at every fetch of the assignments, and the device
 restarts a service whose environment changed, its `/data` untouched. Rotating a file-backed
 password restarts the server with the new one at the next fetch; a token source lent by
 eriphe-core (an OAuth access token for XOAUTH2, refreshed by eriphe-core) fits the same place,
 as another kind of `env` value resolved in `lendService`.
 
 `c.dialService(ctx, name)` returns an `mcp.Transport` (a `StreamableClientTransport` to
-`http://node/v1/services/{name}/mcp` over the node's tunnel, with no timeout): the pool's
+`http://device/v1/services/{name}/mcp` over the device's tunnel, with no timeout): the pool's
 `dialLocal`, and a `serviceClient`'s. It fails, with the reason, if the service is not placed, not
-`running`, or its node not connected; `serviceEndpoint` gives the `*http.Client` and URL instead.
+`running`, or its device not connected; `serviceEndpoint` gives the `*http.Client` and URL instead.
 A `serviceClient` (`c.newServiceClient(name)`) is a session to one service for an owner that calls
 it itself. The session opens at the first call and is kept, and a new one opens after a call
 whose session failed. Its `call` decodes a tool's structured answer and turns a tool's error into
@@ -2675,9 +2675,9 @@ per account, with its own form, access page and removal; the server goes with it
 These servers read the configuration eriphe-core writes them, which changes with it: they run the
 image of eriphe-core's version (`services.go`, `pinnedImage`), as eriphe-files does. A release
 0.79.0 runs `eriphe-mail:0.79.0`, a build of `main` `eriphe-mail:sha-<commit>`, the tags CI
-publishes them under; a development build ("dev") runs the untagged image. A node pulls an image
+publishes them under; a development build ("dev") runs the untagged image. A device pulls an image
 it does not have, never a newer one of one it has: without this, a machine kept the image it pulled
-first. A new version of eriphe-core changes their specs, and their node runs them again with the
+first. A new version of eriphe-core changes their specs, and their device runs them again with the
 new image.
 A tool of another version still says so: its version (its MCP `serverInfo`) is in `list_tools`
 (`version`, and `want_version` when it is not eriphe-core's), its row in Settings → Tools says it
@@ -2696,13 +2696,13 @@ The user's own folders, given to Eriphe ("Dossiers"). A folder is a name ("Clien
 machine and a path inside one of the places that machine shares, declared when it was installed:
 `--share NAME=/PATH`, see install/README.md; eriphe-core never sees a host path, only the place's
 name and a path relative to it) and a level, chosen there: `write` (Modifier, the default), read,
-create, change, rename and delete anywhere in it, its node taking a snapshot of the
-folder before each such task (node/README.md, Shares), or `read` (Lecture seule), for a sensitive
-folder.folder before each such task (node/README.md, Shares). A folder is shared on the machine that holds
+create, change, rename and delete anywhere in it, its device taking a snapshot of the
+folder before each such task (device/README.md, Shares), or `read` (Lecture seule), for a sensitive
+folder.folder before each such task (device/README.md, Shares). A folder is shared on the machine that holds
 it, by the user there (`eriphe-share add`, or a right click in the Finder or the Explorer): its
-node keeps the list and reports each folder's `name`, `access` (its level, `read` or `write`; an
-older node's `drop` reads as `read`, its `manage` as `write`), `copyable` (the user allows copies on their other machines, for the
-synchronisation to come) and `id` (`folders` in `GET /v1/node`), never its path. eriphe-core reads
+device keeps the list and reports each folder's `name`, `access` (its level, `read` or `write`; an
+older device's `drop` reads as `read`, its `manage` as `write`), `copyable` (the user allows copies on their other machines, for the
+synchronisation to come) and `id` (`folders` in `GET /v1/device`), never its path. eriphe-core reads
 that list, and may only restrict it: take a folder off, turn its copies off, and set what Eriphe
 may do there (its rights, below). It cannot add a folder, share one to write, nor look into a machine
 outside the folders shared (a shared folder's files are read through its tool, below). A name shared by two machines is told
@@ -2712,7 +2712,7 @@ apart as `Name (machine)`.
 folder, see [Places](#places)). Settings → Dossiers, `GET /v1/folders` and `list_folders` show
 both, each with its `source` (`machine`, or `place` with its `tool` and `place_id`) and `lend`, how
 a task gets it. Each source keeps its own store and its own enforcement: a machine's folder is in
-its node's list and mounted by its node; a place stays in its tool's configuration, which its
+its device's list and mounted by its device; a place stays in its tool's configuration, which its
 server reads and enforces itself, and is lent as `{kind: place}` (its tool whole), not through
 `folders`, which refuses it with that hint. A tool's places are set on its account's page
 (Settings → Tools → an account), to which their tile in Settings → Dossiers links; "Ne plus
@@ -2743,11 +2743,11 @@ in-memory session), so every path a catalog call takes applies to it unchanged:
   when every folder's Lire is free. The folder is the call's account (`callAccount`): a task's yes
   for one folder is not another's, and lending the tool to a task asks at its start for the
   folders On approval (`folderToolNeeds`).
-- **The card shows the change.** A change's card reads the file on its node when it is made: the
+- **The card shows the change.** A change's card reads the file on its device when it is made: the
   file, and for `update_file` its diff instead of the new content (`folderCardContext`); for a
   delete its size and time. Nothing runs before the yes; the yes runs exactly that call.
-- **Where it runs.** Every call goes to the node holding the folder (`POST /v1/shares/{id}/files`,
-  node/README.md), which holds it to the folder: relative paths only, nothing hidden, sensitive or
+- **Where it runs.** Every call goes to the device holding the folder (`POST /v1/shares/{id}/files`,
+  device/README.md), which holds it to the folder: relative paths only, nothing hidden, sensitive or
   made private on the way, no symlink, never a host path in what it answers; a snapshot of the
   folder before a write (one an hour for these writes) and the previous version of a file changed
   or deleted kept in its data. A read goes to a machine keeping a copy up to date when the
@@ -2763,7 +2763,7 @@ in-memory session), so every path a catalog call takes applies to it unchanged:
   `{kind: tool, ref: eriphe-folders}`. Lending the folder itself to a task stays for heavy work.
 - **Surfaces.** Its reads are read-only by their annotations: `sources_read` lists them and a
   surface may read a file live (`{tool: eriphe-folders/read_file, args: {folder, path}}`, bound
-  to `/…/text`). The nodes reach a folder through short-lived helpers too, which cannot watch it:
+  to `/…/text`). The devices reach a folder through short-lived helpers too, which cannot watch it:
   such a surface is read again on its own schedule, and at once after a write through these
   tools (`refreshFolderSurfaces`).
 
@@ -2802,10 +2802,10 @@ reason.
 
 **Its rights.** What Eriphe may do in a machine's folder is two cases, Lire and Modifier, each Free,
 On approval or Never, as in a tool's grid (`folder_values.go`): a default per machine (Free and Free
-until set; `POST /settings/folders/case` with `node=` and `case-<category>=`, kept as
-`folder_grid:<node>`), and a folder may set a case of its own, above or below it, in its
+until set; `POST /settings/folders/case` with `device=` and `case-<category>=`, kept as
+`folder_grid:<device>`), and a folder may set a case of its own, above or below it, in its
 [grid](#a-places-grid) (`GET /settings/folders/grid?name=`; "Comme l'appareil", `name=`, empty to
-follow; kept by machine and id, `folder_case:<node>:<id>`). A folder shared read-only greys Modifier: Never,
+follow; kept by machine and id, `folder_case:<device>:<id>`). A folder shared read-only greys Modifier: Never,
 with the reason. On approval is asked on the task's [start card](#the-approval-card), once per
 task, before it starts; so is a Free Modifier of a task that did not start cleanly (a tainted turn,
 or a turn that is not the user's). Never is refused when the task is lent, and a Modifier set Never
@@ -2824,19 +2824,19 @@ here (`folders_unshared`: it is never lent again), and on the machine now, or as
 back (`DELETE /v1/shares/{id}` through its tunnel), which stops the tasks that hold it. A folder
 shared or unshared on the machine shows in its access log at the next refresh (every 15 s).
 
-**A folder its machine cannot use** is never silent (`folder_access.go`, node/README.md, Folders it
-cannot use): its node reports a `problem` for the folder (`denied`, `read_only`, `missing`; the
+**A folder its machine cannot use** is never silent (`folder_access.go`, device/README.md, Folders it
+cannot use): its device reports a `problem` for the folder (`denied`, `read_only`, `missing`; the
 folder's `problem` in `GET /v1/folders`), and for a copy (its `problem` among `copies`), with the
-`program` refused, `eriphe-node` or `syncthing`. Settings →
+`program` refused, `eriphe-device` or `syncthing`. Settings →
 Dossiers says it on the folder's tile and on the copy's line, and the device's card marks the folder
 "bloqué" with the same note. On a Mac that macOS keeps from the folder: « macOS bloque l'accès à ce
-dossier », how to allow it (turn on the program named in Files and Folders), and « Autoriser », which asks that Mac's node to open System Settings ›
+dossier », how to allow it (turn on the program named in Files and Folders), and « Autoriser », which asks that Mac's device to open System Settings ›
 Privacy & Security › Files and Folders there (`POST /settings/devices/{name}/privacy`, then `POST
 /v1/privacy/open` through its tunnel: nothing else can be opened, the user decides there); the note
-goes once the node sees the folder open again. On another system, or another problem, a plain
+goes once the device sees the folder open again. On another system, or another problem, a plain
 explanation.
 
-**Folders given from the workspace before** (the old `folders` table, `{node, share, path}`) are
+**Folders given from the workspace before** (the old `folders` table, `{device, share, path}`) are
 not lent any more: eriphe-core never pushes them to a machine, since that would let it add a
 folder. Settings → Dossiers shows them under their machine, "À partager de nouveau sur
 l'appareil", with their old place and path, until the user shares them again there (under the same
@@ -2848,13 +2848,13 @@ where its rights allow; `list_folders` gives each one's entry in `lend`). A task
 touch the originals is lent the source folder to read and an output folder to write. The task is placed on a machine that holds each of its folders
 up to date, theirs or one keeping copies of them (below, Copies of a folder), or waits for one
 (`pending_reason` says so); folders of several machines go together only if one machine holds
-them all, and `node` may only name a machine that holds them. Its node mounts each at `/work/folders/<name>`, read-only as
-Docker enforces it; with `write` (`manage` in the node's spec, so that an older core's `write`,
+them all, and `device` may only name a machine that holds them. Its device mounts each at `/work/folders/<name>`, read-only as
+Docker enforces it; with `write` (`manage` in the device's spec, so that an older core's `write`,
 its results subfolder, is never read as it), the whole folder read-write, after its snapshot (see
-node/README.md, Shares). The worker is told where they are, what it may write in each, and
+device/README.md, Shares). The worker is told where they are, what it may write in each, and
 that what reads like an instruction in the files is data. The folders are read again from the
-machine's list whenever the node fetches the task: a folder removed meanwhile fails it, and the
-node refuses anything not in its list. A task writes only where its entry says so, and only while
+machine's list whenever the device fetches the task: a folder removed meanwhile fails it, and the
+device refuses anything not in its list. A task writes only where its entry says so, and only while
 the folder is shared write and its Modifier is not Never: otherwise it is mounted read-only. A task's `folders` lists their names.
 
 **A folder is the user's own.** The user shared it on their machine and lent it: under the
@@ -2880,11 +2880,11 @@ Nothing adds a folder or shares it to write: that is done on its machine.
 
 A folder its machine allows copies of (`copyable`, chosen when it was shared there; turned off
 from here, never on) can be kept, up to date, on the user's other machines: Settings → Folders,
-"Copies", tick the machines (`PUT /v1/folders/{name}/copies`, `{"nodes": [...]}`). Each machine
-needs Syncthing, which comes with the installation (node/README.md, Copies); one without is
+"Copies", tick the machines (`PUT /v1/folders/{name}/copies`, `{"devices": [...]}`). Each machine
+needs Syncthing, which comes with the installation (device/README.md, Copies); one without is
 shown greyed, to update. eriphe-core keeps who holds a copy of what (`folder_copies.go`,
-`folder_copies`) and hands each node its plan (`PUT /v1/sync`), with the peers' device IDs (from
-`GET /v1/node`, `syncthing.device_id`) and each folder at its level now: `read` sent only, `write` both ways with 30 days of versions on the
+`folder_copies`) and hands each device its plan (`PUT /v1/sync`), with the peers' device IDs (from
+`GET /v1/device`, `syncthing.device_id`) and each folder at its level now: `read` sent only, `write` both ways with 30 days of versions on the
 folder's machine. A plan is handed again only when it changes (and after a reconnection), every
 15 s at most. Unticking a machine, turning a folder's copies off, unsharing it or forgetting a
 machine drops the copies from the plans: the copy machines delete them, after stopping the tasks
@@ -2904,23 +2904,23 @@ the folder's machine idle with nothing to receive from its copies, without error
 folder's machine is away, a copy that was complete when that machine was last seen (within 2
 minutes: `synced_at`) will do. A task lent several folders goes to a machine that holds them all
 so. Its spec lends the copy (`copy` in its folders), at the level the task asked for, never above
-the folder's on its machine; with `write`, the node running the task takes the snapshot of the
+the folder's on its machine; with `write`, the device running the task takes the snapshot of the
 copy first, and writes on the copy, and Syncthing brings that back to the
 folder's machine, at once or when it returns (a conflict keeps both files). With no machine up to
 date online, the task waits: for the folder's machine, or for a copy to catch up.
 
 | Call (bearer token) | What |
 |---|---|
-| `PUT /v1/folders/{name}/copies` | the machines that keep a copy: `{"nodes": ["nas"]}` (`[]`: none, the copies are deleted); 409 if the folder is not copyable or a machine has no Syncthing |
+| `PUT /v1/folders/{name}/copies` | the machines that keep a copy: `{"devices": ["nas"]}` (`[]`: none, the copies are deleted); 409 if the folder is not copyable or a machine has no Syncthing |
 
 ### Copies: the way between machines
 
 The copies of a shared folder on the user's other machines are kept by Syncthing, one next to each
-node (node/README.md, Copies). The machines never reach one another directly: a node carries its
-Syncthing's connection to a peer as `GET /v1/node/sync/{peer}` with `Upgrade: eriphe-sync` and its
+device (device/README.md, Copies). The machines never reach one another directly: a device carries its
+Syncthing's connection to a peer as `GET /v1/device/sync/{peer}` with `Upgrade: eriphe-sync` and its
 secret (`sync_relay.go`), and eriphe-core goes on through the peer's tunnel (`GET /v1/sync/connect`),
 then copies bytes both ways. It does so only if it set up a copy between the two machines, either
-way (`folder_copies`: `{node, folder, copy}`): any other pair is refused (403), as is a suspended
+way (`folder_copies`: `{device, folder, copy}`): any other pair is refused (403), as is a suspended
 machine, and a pair holds at most 4 connections at once (429). When the last copy between two
 machines goes, their connections are cut. Syncthing's TLS runs end to end with pinned device IDs:
 eriphe-core sees only ciphertext.
@@ -2928,13 +2928,13 @@ eriphe-core sees only ciphertext.
 ## Devices: what Eriphe sees and does there
 
 Connecting a device gives Eriphe access to it, so it can help with what is there; letting agents
-work on it is an extra (a node that reports runtimes). Settings → Appareils shows, for each device,
+work on it is an extra (a device that reports runtimes). Settings → Appareils shows, for each device,
 first what Eriphe sees there (its Folders, with their right, or "Rien d'ouvert" and a link to share
 one), then what it can do there ("Faire travailler des agents", oui or non, its system, its CPUs,
 memory, runtimes and labels), then its status and update, as before (`web_pages.go`,
 `web_devices.go`).
 
-**Access log.** eriphe-core records what it did on each device (`node_access.go`, `node_log`
+**Access log.** eriphe-core records what it did on each device (`device_access.go`, `device_log`
 table): a folder listed (`list`, with `share:/path`), a folder opened or closed (`share`,
 `unshare`), a task run there (`task`, with its agent; the brain itself is not logged), a folder
 lent to a task (`lend`, with its right), a file a task wrote in a folder lent to write (`result`,
@@ -2947,40 +2947,40 @@ the last ones, 50 at a time.
 suspends the device at once, without uninstalling anything: its active tasks are stopped (they
 cannot report any more), no new task is placed there (by name, by the scheduler, or for its
 folders), its folders are neither listed, opened nor lent, its movable services go to another
-device, its tunnel is dropped, and the node is refused (403 on `connect`, and on every node call)
+device, its tunnel is dropped, and the device is refused (403 on `connect`, and on every device call)
 until "Rétablir l'accès". Its registration, secret, certificate and folders stay; it reconnects by
 itself once access is restored.
 
 | Call (bearer token) | What |
 |---|---|
-| `GET /v1/nodes/{name}/log?limit=N&before=ID` | `{node, suspended, log: [{id, time, kind, task, folder, access, detail}]}`, newest first (100, up to 500) |
-| `POST /v1/nodes/{name}/suspend` | cut access |
-| `POST /v1/nodes/{name}/resume` | restore access |
+| `GET /v1/devices/{name}/log?limit=N&before=ID` | `{device, suspended, log: [{id, time, kind, task, folder, access, detail}]}`, newest first (100, up to 500) |
+| `POST /v1/devices/{name}/suspend` | cut access |
+| `POST /v1/devices/{name}/resume` | restore access |
 
 **Waking a device (Wake-on-LAN).** "Eriphe peut réveiller cet appareil" (the device's page; not on
-the machine that stays on) is off by default, a choice per device kept in the `node_wake` table,
+the machine that stays on) is off by default, a choice per device kept in the `device_wake` table,
 and forgotten with the device. Once on, the page shows "Réveiller maintenant" while the device is
-off, the card's MAC address it reported (node/README.md, Waking the machine), and how to get it
+off, the card's MAC address it reported (device/README.md, Waking the machine), and how to get it
 ready: Wake-on-LAN in the BIOS/UEFI and on the network adapter (Windows: Device Manager → the
 adapter → Power Management, and "Wake on Magic Packet" under Advanced; Fast Startup off to wake
 from a full shutdown), a cable rather than Wi-Fi; on a Mac, "Wake for network access", from sleep
 only. After "Wake now" the page asks every 5 s whether the device connected again since, and says
 so, or that it did not within 2 minutes.
 
-`wake(node)` (`wake.go`) sends the magic packets, for each MAC address, to `255.255.255.255` and to
+`wake(device)` (`wake.go`) sends the magic packets, for each MAC address, to `255.255.255.255` and to
 the device's subnet broadcast, on ports 9 and 7, two ways at once: from eriphe-core's own network,
-and through every online machine that stays on (`POST /v1/wake` on its node), which sends them from
+and through every online machine that stays on (`POST /v1/wake` on its device), which sends them from
 the host's network. Only the second reaches the home network when eriphe-core runs in a container
 on a Docker bridge network, as every installer runs it (`eriphe-system`, published ports): a
 broadcast from a bridge stays on the bridge, and Linux does not forward a directed broadcast either
 (`bc_forwarding` is off). The first one counts where eriphe-core is on the host's network. It is
 refused for a device that is on, whose access is cut, that has not reported a MAC address (an
-older eriphe-node), or that the user did not allow. Nothing crosses the Internet: the device must
+older eriphe-device), or that the user did not allow. Nothing crosses the Internet: the device must
 be on the same network as the machine that stays on. On a Windows or Mac home, where the machine
-that stays on runs its node in WSL behind NAT, or as a macOS LaunchAgent held off the LAN, the
+that stays on runs its device in WSL behind NAT, or as a macOS LaunchAgent held off the LAN, the
 packets may not leave it (not checked).
 
-The scheduler wakes a device by itself: when a task waits for a node (`placePending`) and the
+The scheduler wakes a device by itself: when a task waits for a device (`placePending`) and the
 device its folders are on is off, may be woken and reported its card, eriphe-core wakes it, in the
 background, at most once per 15 minutes per device (`last_auto`), and logs it ("task t-… waits for
 pc, which is off: waking it").
@@ -2999,7 +2999,7 @@ handlers are thin layers over the methods behind the MCP tools.
 | `POST /v1/tasks/{id}/answer` | `{reply, allow}`: allow or deny the pending permission (`allow` set), or reply to an idle task |
 | `POST /v1/tasks/{id}/stop` | stop the task's agent |
 
-An unknown task answers 404; a call the task's state does not allow (or that its node refuses)
+An unknown task answers 404; a call the task's state does not allow (or that its device refuses)
 answers 409 with the reason.
 
 ## Workspace (`web`)
@@ -3248,7 +3248,7 @@ published on `[::]` with that address) may stand for anyone: they share one coun
 with 20 failures, and never count as the local network (below). The installers publish the ports
 on IPv4 only, so that clients keep their own address. At most two
 argon2 hashes are computed at once. Changing the password ends the other sessions.
-The bearer-token API is unchanged for the CLI and the nodes.
+The bearer-token API is unchanged for the CLI and the devices.
 
 ### The layout (`workspace_layout.go`)
 
@@ -3910,9 +3910,9 @@ the surfaces' files, `pool_follow.go` and `a2ui/` to no preset, card, provider o
 - **Captured pages** (`surfaces_capture.go`, #470): most sites refuse being framed, so a task
   step of a thread, lent `eriphe-workspace`, shows a page as an image.
   `eriphe-capture <url> thread-<id>` (worker/base) captures it in the task's container and posts
-  the PNG to its node (`ERIPHE_MEDIA_URL`, task secret), which relays it to
-  `POST /v1/node/tasks/{id}/media?surface=thread-<id>` (node secret). eriphe-core checks the task
-  (on that node, running, its grant covering `surface_write`) and the surface (the surface of the
+  the PNG to its device (`ERIPHE_MEDIA_URL`, task secret), which relays it to
+  `POST /v1/device/tasks/{id}/media?surface=thread-<id>` (device secret). eriphe-core checks the task
+  (on that device, running, its grant covering `surface_write`) and the surface (the surface of the
   thread the task is a step of, no other), sniffs a PNG or a JPEG only, 5 MiB at most, 10 per
   surface, keeps it under `surface-media/<random id>` (table `surface_media`) and answers
   `{src: "media:med_…"}`; the bytes never go through a model. Whoever holds the thread writes
@@ -4046,7 +4046,7 @@ never a tile of its own. Five tools; the **author is the caller**, never a field
   provides**: lent like any catalog server (`{kind: tool, ref: eriphe-workspace}` or
   `eriphe-workspace.<tool>` in `run_task`'s resources, never in a skill's `tools`), checked by
   `checkGrant`, listed by `list_tools` under `provided`, put in the task's spec by `specServers`
-  and relayed by its node at `/v1/node/tasks/<id>/mcp/eriphe-workspace` like the others
+  and relayed by its device at `/v1/device/tasks/<id>/mcp/eriphe-workspace` like the others
   (`taskMCPHandler` serves the tools its grant covers; a task not lent it gets 403). The name is
   reserved. A task holds no thread: it reads the workspace and gives captured images
   (below); what it found goes back to the brain, which writes its part.
@@ -4500,9 +4500,9 @@ number of its own (a landline works: Signal verifies it by a voice call).
 (`botSpec.Service`, [Services](#services-local-mcp-servers)), named `channel-signal`, and runs
 while Signal is on, outside the catalog: in no list of tools, under no access level, reached by the
 channel alone through its `serviceClient`. The service is one of Eriphe's own images, which runs
-eriphe-core's version, on an amd64 node only (its signal-cli is x86_64 only), with a volume for the
+eriphe-core's version, on an amd64 device only (its signal-cli is x86_64 only), with a volume for the
 account's keys. It is wanted while `signal_service` is on. That is read from the store, so a
-reconciliation before the channel starts keeps it. When its node reports it running, the channel
+reconciliation before the channel starts keeps it. When its device reports it running, the channel
 listens again at once.
 
 There is no token: the number registered stands for it (`botSpec.Account`). Until then, the page's
@@ -4526,7 +4526,7 @@ position (`👍 Oui · 👎 Non`, `⏳` third). A reaction with that emoji to th
 
 Removing the channel unregisters the number, deletes its data in the service, then turns the
 service off. Messages are end-to-end encrypted up to the service, which keeps them and the
-account's keys on the node, and Settings says so. Untested against a real account: the tests fake
+account's keys on the device, and Settings says so. Untested against a real account: the tests fake
 the service.
 
 **Where to reach the user** (`route.go`, `route_signals.go`, `route_send.go`, `web_where.go`).
@@ -4536,7 +4536,7 @@ eriphe-core already has, never from the model nor the notification's text:
 1. Eriphe open and in front on a device (its tab tells its push subscription with `POST
    /presence`) → a banner in that page (the event stream's `notice`, or the presence answer), no
    system push;
-2. a computer in use (its node reports the machine's idle time under 2 minutes, not locked, not
+2. a computer in use (its device reports the machine's idle time under 2 minutes, not locked, not
    to be disturbed: a game or a meeting in front, the context below) → a push to that computer's
    subscription only;
 3. the voice in the room: a channel the user added that says a sentence, listening and reaching
@@ -4547,7 +4547,7 @@ eriphe-core already has, never from the model nor the notification's text:
 4. otherwise the phone (subscriptions whose label, the user's choice or the browser says phone;
    the installed app first), then each adapter's own line (Telegram), in the order registered.
 
-A tab left in front on a machine its node says is idle, locked or not to be disturbed is not the
+A tab left in front on a machine its device says is idle, locked or not to be disturbed is not the
 user. A "now" not seen
 (opened, answered, or shown in a page) within the delay (10 minutes, Settings; 3 for an
 "even at night" topic) is routed again without the devices tried, two steps at most, never in the
@@ -4556,10 +4556,10 @@ to one device and not moved on; a test goes to its device. A topic rule keeps ch
 (`channels`), adds lines to the first step (`also`: "Getout: the phone too") or forbids some
 (`never`); a note from a tainted turn never gets a line added nor moves on. Settings →
 Notifications (Où te prévenir) orders the lines (each shown once what it needs is connected, one switch each), sets the
-delay, says which subscription is a phone or a computer and which node is on which computer
+delay, says which subscription is a phone or a computer and which device is on which computer
 (suggested by system), and lists the last decisions (`route_log`, planned next to sent). It starts
 in **observe** mode: everything goes as before (every channel, nothing while a tab is in front)
-and the log shows what the router would have done; one switch turns routing on. What a node tells
+and the log shows what the router would have done; one switch turns routing on. What a device tells
 of its machine is kept as context signals, in memory for two minutes, never stored. The `notifications` tool gives the brain the order
 and, by device, what was seen fast, late or moved on, from which it proposes rules. The bench
 (`route_eval_test.go`, `testdata/routeeval`) checks every case, no duplicate, every injection
@@ -4576,12 +4576,12 @@ none yet: reading a connected calendar on every turn would cost a call each time
 turn; a source that keeps free/busy times only (never titles) joins there.
 
 **What Eriphe observes of the machines** (`observe.go`). No context subsystem: with its status
-(`GET /v1/node?context=1`), a node tells `idle` (seconds, locked) and `context` (`{known, dnd,
-reason}`, worked out on the machine: `node/context.go`; eriphe-core never asks level 2, so the
+(`GET /v1/device?context=1`), a device tells `idle` (seconds, locked) and `context` (`{known, dnd,
+reason}`, worked out on the machine: `device/context.go`; eriphe-core never asks level 2, so the
 app in front is never computed). Kept **in memory only**, for two minutes, never stored with the
-node's info; a reason off its list (`game`, `meeting`, `fullscreen`, `mic`, `focus`) is dropped.
+device's info; a reason off its list (`game`, `meeting`, `fullscreen`, `mic`, `focus`) is dropped.
 Settings → Devices shows it on each machine (in use, idle, locked, do not disturb). The router
-reads it for the node tied to a subscription: a device locked, idle or not to be disturbed is
+reads it for the device tied to a subscription: a device locked, idle or not to be disturbed is
 skipped by every line; a machine not to be disturbed also holds the cards for a better moment. It
 only ever makes Eriphe quieter. The user's situation ("in Lyon until Sunday") is dated memory
 (`situation`); anything else (who is home, the next meeting) Eriphe reads from a tool when it
@@ -4656,7 +4656,7 @@ Tailscale starts again with eriphe-core. On the tailnet, eriphe-core serves:
 | Port | What |
 |---|---|
 | `443` | the workspace, with HSTS, only for its tailnet name (another `Host` is redirected or refused) |
-| `8800` | the API (nodes, CLI, MCP), HTTP/1.1, with the same certificate; a node presents its own (see TLS between machines) |
+| `8800` | the API (devices, CLI, MCP), HTTP/1.1, with the same certificate; a device presents its own (see TLS between machines) |
 
 The local listeners do not change: remote access adds the tailnet, it closes nothing. So when the
 page is opened at a public address, or from one (not through a declared proxy), it says so in a
@@ -4707,8 +4707,8 @@ shown in the workspace only).
   "grants": [{"src": ["autogroup:member"], "dst": ["tag:eriphe"], "ip": ["443", "8800"]}]
   ```
 
-- A node away from home uses the operating system's Tailscale app and the tailnet address of the
-  API (see the node's README, several addresses).
+- A device away from home uses the operating system's Tailscale app and the tailnet address of the
+  API (see the device's README, several addresses).
 - The embedded Tailscale only **receives**: eriphe-core's own outgoing calls, and its tasks', do
   not go through it. A model server at a tailnet address (`100.x`, `….ts.net`) is reachable only
   when the host itself runs Tailscale; otherwise the provider's test says so. Lend it from a device
@@ -4891,7 +4891,7 @@ says it, a triggered skill when it reads it (a calendar, a home). When its end p
 gone.
 
 **Tasks read it.** Every worker task has a memory server of its own, `eriphe-memory`, relayed by
-its node (`/v1/tasks/<id>/mcp/eriphe-memory`; the name is reserved in the catalog): `recall`,
+its device (`/v1/tasks/<id>/mcp/eriphe-memory`; the name is reserved in the catalog): `recall`,
 current facts only, allowed without a card. A triggered skill's run also has `remember` (fact,
 person, decision, situation, and progress: its thread's summary, refused when the task read
 someone else's content; never an episode, the user's profile, preferences or

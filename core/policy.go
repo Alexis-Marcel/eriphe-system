@@ -290,7 +290,7 @@ func (c *core) applyPolicy(id string, events []EventRow) bool {
 // inContainer tells whether a worker's tool acts only inside its task's
 // container: its own tools (shell, files, web), not a lent catalog tool.
 // The container is the boundary: what leaves it goes through
-// the node's mounts (a folder's level), its egress filter and the
+// the device's mounts (a folder's level), its egress filter and the
 // credentials eriphe-core lends (repo_lend.go), never through the shell
 // rules above, which only stop mistakes. So what the policy left undecided
 // there is allowed, without waking the brain.

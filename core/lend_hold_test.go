@@ -12,7 +12,7 @@ import (
 func heldTask(t *testing.T, c *core, id string) {
 	t.Helper()
 	c.store.set(lentByUserKey(id), "1")
-	c.store.insertTask(&TaskRow{ID: id, Kind: "worker", Node: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "Trie les mails",
+	c.store.insertTask(&TaskRow{ID: id, Kind: "worker", Device: "box", Agent: "sonnet", Runtime: "claude-code", Prompt: "Trie les mails",
 		State: stateIdle, Tools: "mail.search_messages,mail.move", Resources: []ResourceRef{
 			{Kind: resTool, Ref: "mail.search_messages", Access: accessRead},
 			{Kind: resTool, Ref: "mail.move", Access: accessWrite, Hold: true},

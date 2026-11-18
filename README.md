@@ -62,7 +62,7 @@ built-in instructions are in French.
   act on what matters. Each device's card says what Eriphe sees and can do there, an access log
   keeps what it did, and "Cut access" stops it at once, without uninstalling anything.
 - **Tasks delegated to your devices**: the brain starts an agent in an isolated container on one of
-  your devices (eriphe-node), follows it, and relays its questions and permission requests to you.
+  your devices (eriphe-device), follows it, and relays its questions and permission requests to you.
   On by default when the full install is possible.
 - **Tools**: mail (IMAP/SMTP), calendars (CalDAV, Microsoft Graph), Google Drive folders, folders of
   your devices, Home Assistant, GitHub and any MCP server, from a catalog in the workspace.
@@ -117,41 +117,41 @@ guide, options and troubleshooting: [install/README.md](install/README.md).
 
 Eriphe is designed like a small Kubernetes:
 
-- **eriphe-core** ([core/](core/README.md)) is the control plane: it keeps nodes, tasks, the tool
+- **eriphe-core** ([core/](core/README.md)) is the control plane: it keeps devices, tasks, the tool
   catalog and memory in SQLite, schedules tasks, enforces the permission policy, holds the
   credentials, serves the workspace and the API, and runs the **brain**, a long-lived agent session
   that talks with you and has MCP tools to start and steer tasks.
-- **eriphe-node** ([node/](node/README.md)) is the kubelet: on every device connected to Eriphe, it
+- **eriphe-device** ([device/](device/README.md)) is the kubelet: on every device connected to Eriphe, it
   joins eriphe-core, then runs each task as a container from the base image, with the agent
   injected ([worker/](worker/README.md)), and relays its events.
 - **The catalog**: tools are MCP servers, remote (with OAuth or a token) or run as local services
-  on a node: [servers/mail](servers/mail/README.md), [servers/calendar](servers/calendar/README.md),
+  on a device: [servers/mail](servers/mail/README.md), [servers/calendar](servers/calendar/README.md),
   [servers/files](servers/files/README.md), or any MCP image.
 - **Clients**: the web workspace (in eriphe-core), the terminal UI ([cli/](cli/)), and the Home
   Assistant integration ([ha/](ha/README.md)).
 
 ## Security model
 
-- **Nodes dial out.** A node needs no open port: it keeps a tunnel to eriphe-core, which speaks the
-  node's API through it. Nodes join with a single-use token bound to their name.
+- **Devices dial out.** A device needs no open port: it keeps a tunnel to eriphe-core, which speaks the
+  device's API through it. Devices join with a single-use token bound to their name.
 - **Access stays visible and yours.** Eriphe sees only the folders you open on a device; each
   device keeps an access log (folders listed or lent, tasks run), and "Cut access"
   stops its work, its folders and its tunnel until you restore it.
 - **TLS with per-machine certificates.** eriphe-core runs a certificate authority for its machines;
-  each node gets its own client certificate (its key never leaves it) and can pin the CA's hash.
+  each device gets its own client certificate (its key never leaves it) and can pin the CA's hash.
 - **Tasks are isolated.** Each task is a container with its own secret, on a network that reaches
-  only its node, and the agent is root in it, not on the machine. The catalog's credentials stay in
-  eriphe-core (a task calls a server through its node, only for the servers it was granted), and so
+  only its device, and the agent is root in it, not on the machine. The catalog's credentials stay in
+  eriphe-core (a task calls a server through its device, only for the servers it was granted), and so
   do its credentials, SSH keys and GitHub tokens: it holds a placeholder. The one long-lived secret in a
   task is its agent's key for the model provider.
-- **Egress relay.** A task's only way to the Internet is its node's relay, which never dials the
+- **Egress relay.** A task's only way to the Internet is its device's relay, which never dials the
   LAN, loopback or metadata addresses.
 - **Policy in code.** Every tool call and permission request goes through eriphe-core's policy
   (rules, user approval), not through the brain's judgement.
 - **Taint.** A turn in which the brain read outside content (mail, web page, tool result) is
   tainted: it cannot approve permissions or write trusted memory on its own; those go back to you.
 
-Details: core/README.md (Security model, Permission policy, Memory), node/README.md (Egress), and
+Details: core/README.md (Security model, Permission policy, Memory), device/README.md (Egress), and
 [deploy/README.md](deploy/README.md). To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## AI accounts and providers' terms
@@ -165,8 +165,8 @@ and is responsible for using it within their provider's terms.
 | Path | What |
 |---|---|
 | `core/` | eriphe-core: control plane, brain, workspace, API, memory |
-| `node/` | eriphe-node: runs tasks as containers on a machine |
-| `worker/` | the images of tasks: `eriphe-base`, which task containers start from, and one image per agent the node injects into it |
+| `device/` | eriphe-device: runs tasks as containers on a machine |
+| `worker/` | the images of tasks: `eriphe-base`, which task containers start from, and one image per agent the device injects into it |
 | `install/` | `install.sh` (Linux, macOS), `install.ps1` (Windows), and `eriphe-launcher`, the one-container install (`ghcr.io/alexis-marcel/eriphe`) |
 | `unraid/` | the Unraid template of that container |
 | `cli/` | `eriphe`: terminal UI and commands |

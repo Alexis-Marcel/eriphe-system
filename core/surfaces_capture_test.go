@@ -17,24 +17,24 @@ var (
 	testJPEG = append([]byte("\xff\xd8\xff\xe0\x00\x10JFIF\x00"), bytes.Repeat([]byte{2}, 64)...)
 )
 
-// postTaskMedia sends what a node relays of a task's image.
-func postTaskMedia(c *core, node, secret, taskID, surfaceID string, data []byte) (int, string) {
+// postTaskMedia sends what a device relays of a task's image.
+func postTaskMedia(c *core, device, secret, taskID, surfaceID string, data []byte) (int, string) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/node/tasks/{id}/media", c.handleTaskMedia)
-	req := httptest.NewRequest("POST", "/v1/node/tasks/"+taskID+"/media?"+url.Values{"surface": {surfaceID}}.Encode(), bytes.NewReader(data))
+	mux.HandleFunc("POST /v1/device/tasks/{id}/media", c.handleTaskMedia)
+	req := httptest.NewRequest("POST", "/v1/device/tasks/"+taskID+"/media?"+url.Values{"surface": {surfaceID}}.Encode(), bytes.NewReader(data))
 	req.Header.Set("Authorization", "Bearer "+secret)
-	req.Header.Set("Eriphe-Node", node)
+	req.Header.Set("Eriphe-Device", device)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	return rec.Code, rec.Body.String()
 }
 
 // captureTask is a task step of a thread, lent the workspace, running on
-// the node pc, as a task capturing a page is; and its thread's surface.
+// the device pc, as a task capturing a page is; and its thread's surface.
 func captureTask(t *testing.T, c *core) (string, string) {
 	t.Helper()
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	brain := connectServer(t, newMCPServer(c))
 	th := turnOnThread(t, c)
 	got, msg := callOn(t, brain, "run_task", map[string]any{"prompt": "Montre la page d'accueil de example.org.",
@@ -43,7 +43,7 @@ func captureTask(t *testing.T, c *core) (string, string) {
 		t.Fatalf("run_task: %s", msg)
 	}
 	task := got["task"].(string)
-	c.store.updateTask(task, map[string]any{"node": "pc", "state": stateRunning})
+	c.store.updateTask(task, map[string]any{"device": "pc", "state": stateRunning})
 	return task, threadSurfaceID(th.ID)
 }
 
@@ -68,7 +68,7 @@ func partWith(t *testing.T, c *core, sid, src string) surface {
 }
 
 // A task gives the image of a page it captured for its thread's surface:
-// through its node, a PNG or a JPEG, within the limit, for the surface of
+// through its device, a PNG or a JPEG, within the limit, for the surface of
 // the thread it is a step of only.
 func TestTaskMediaUpload(t *testing.T) {
 	c, _ := surfaceCore(t)
@@ -92,7 +92,7 @@ func TestTaskMediaUpload(t *testing.T) {
 		t.Fatal("a part from the task")
 	}
 
-	code, body := postTaskMedia(c, "pc", "node-secret", task, sid, testPNG)
+	code, body := postTaskMedia(c, "pc", "device-secret", task, sid, testPNG)
 	var got struct{ Src, Type string }
 	json.Unmarshal([]byte(body), &got)
 	if code != 200 || surfaceMediaRef(got.Src) == "" || got.Type != "image/png" {
@@ -101,33 +101,33 @@ func TestTaskMediaUpload(t *testing.T) {
 	if data, err := os.ReadFile(c.store.surfaceMediaPath(surfaceMediaRef(got.Src))); err != nil || !bytes.Equal(data, testPNG) {
 		t.Fatalf("kept %q %v", data, err)
 	}
-	if code, body := postTaskMedia(c, "pc", "node-secret", task, sid, testJPEG); code != 200 || !strings.Contains(body, "image/jpeg") {
+	if code, body := postTaskMedia(c, "pc", "device-secret", task, sid, testJPEG); code != 200 || !strings.Contains(body, "image/jpeg") {
 		t.Fatalf("jpeg: %d %s", code, body)
 	}
 
 	for name, tc := range map[string]struct {
-		node, secret, surface string
-		data                  []byte
-		want                  int
+		device, secret, surface string
+		data                    []byte
+		want                    int
 	}{
 		"wrong secret":   {"pc", "wrong", sid, testPNG, http.StatusUnauthorized},
-		"another node":   {"nas", "node-secret", sid, testPNG, http.StatusUnauthorized},
-		"a free surface": {"pc", "node-secret", "page-site", testPNG, http.StatusForbidden},
-		"another thread": {"pc", "node-secret", threadSurfaceID(other.ID), testPNG, http.StatusForbidden},
-		"no surface":     {"pc", "node-secret", "", testPNG, http.StatusBadRequest},
-		"a gif":          {"pc", "node-secret", sid, []byte("GIF89a\x01\x00\x01\x00"), http.StatusUnsupportedMediaType},
-		"an svg":         {"pc", "node-secret", sid, []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>`), http.StatusUnsupportedMediaType},
-		"html":           {"pc", "node-secret", sid, []byte("<html><body>x"), http.StatusUnsupportedMediaType},
-		"empty":          {"pc", "node-secret", sid, nil, http.StatusBadRequest},
-		"too large":      {"pc", "node-secret", sid, append(testPNG, make([]byte, surfaceMediaMax)...), http.StatusRequestEntityTooLarge},
-		"unknown task":   {"pc", "node-secret", sid, testPNG, http.StatusNotFound},
-		"invalid surfid": {"pc", "node-secret", "../x", testPNG, http.StatusBadRequest},
+		"another device": {"nas", "device-secret", sid, testPNG, http.StatusUnauthorized},
+		"a free surface": {"pc", "device-secret", "page-site", testPNG, http.StatusForbidden},
+		"another thread": {"pc", "device-secret", threadSurfaceID(other.ID), testPNG, http.StatusForbidden},
+		"no surface":     {"pc", "device-secret", "", testPNG, http.StatusBadRequest},
+		"a gif":          {"pc", "device-secret", sid, []byte("GIF89a\x01\x00\x01\x00"), http.StatusUnsupportedMediaType},
+		"an svg":         {"pc", "device-secret", sid, []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>`), http.StatusUnsupportedMediaType},
+		"html":           {"pc", "device-secret", sid, []byte("<html><body>x"), http.StatusUnsupportedMediaType},
+		"empty":          {"pc", "device-secret", sid, nil, http.StatusBadRequest},
+		"too large":      {"pc", "device-secret", sid, append(testPNG, make([]byte, surfaceMediaMax)...), http.StatusRequestEntityTooLarge},
+		"unknown task":   {"pc", "device-secret", sid, testPNG, http.StatusNotFound},
+		"invalid surfid": {"pc", "device-secret", "../x", testPNG, http.StatusBadRequest},
 	} {
 		id := task
 		if name == "unknown task" {
 			id = "t-nope"
 		}
-		if code, body := postTaskMedia(c, tc.node, tc.secret, id, tc.surface, tc.data); code != tc.want {
+		if code, body := postTaskMedia(c, tc.device, tc.secret, id, tc.surface, tc.data); code != tc.want {
 			t.Errorf("%s: %d %s, want %d", name, code, body, tc.want)
 		}
 	}
@@ -136,14 +136,14 @@ func TestTaskMediaUpload(t *testing.T) {
 	}
 	// A few per surface.
 	for range surfaceMediaPerSurface - 2 {
-		postTaskMedia(c, "pc", "node-secret", task, sid, testPNG)
+		postTaskMedia(c, "pc", "device-secret", task, sid, testPNG)
 	}
-	if code, _ := postTaskMedia(c, "pc", "node-secret", task, sid, testPNG); code != http.StatusTooManyRequests {
+	if code, _ := postTaskMedia(c, "pc", "device-secret", task, sid, testPNG); code != http.StatusTooManyRequests {
 		t.Fatalf("over the count: %d", code)
 	}
 	// A task over gives nothing more.
 	c.store.updateTask(task, map[string]any{"state": stateStopped})
-	if code, _ := postTaskMedia(c, "pc", "node-secret", task, sid, testPNG); code != http.StatusNotFound {
+	if code, _ := postTaskMedia(c, "pc", "device-secret", task, sid, testPNG); code != http.StatusNotFound {
 		t.Fatalf("finished task: %d", code)
 	}
 }
@@ -151,12 +151,12 @@ func TestTaskMediaUpload(t *testing.T) {
 // A task without the workspace gives no image.
 func TestTaskMediaNeedsTheWorkspace(t *testing.T) {
 	c, _ := surfaceCore(t)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	task := &TaskRow{ID: "t-plain", Prompt: "x", State: stateRunning, Node: "pc", Tools: "ledger"}
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	task := &TaskRow{ID: "t-plain", Prompt: "x", State: stateRunning, Device: "pc", Tools: "ledger"}
 	if err := c.store.insertTask(task); err != nil {
 		t.Fatal(err)
 	}
-	if code, body := postTaskMedia(c, "pc", "node-secret", task.ID, "thread-1", testPNG); code != http.StatusForbidden {
+	if code, body := postTaskMedia(c, "pc", "device-secret", task.ID, "thread-1", testPNG); code != http.StatusForbidden {
 		t.Fatalf("%d %s", code, body)
 	}
 }
@@ -168,7 +168,7 @@ func TestTaskMediaNeedsTheWorkspace(t *testing.T) {
 func TestTaskMediaShown(t *testing.T) {
 	c, _ := surfaceCore(t)
 	task, sid := captureTask(t, c)
-	_, body := postTaskMedia(c, "pc", "node-secret", task, sid, testPNG)
+	_, body := postTaskMedia(c, "pc", "device-secret", task, sid, testPNG)
 	var got struct{ Src string }
 	json.Unmarshal([]byte(body), &got)
 
@@ -233,7 +233,7 @@ func TestTaskMediaSweep(t *testing.T) {
 	c, _ := surfaceCore(t)
 	task, sid := captureTask(t, c)
 	put := func() string {
-		_, body := postTaskMedia(c, "pc", "node-secret", task, sid, testPNG)
+		_, body := postTaskMedia(c, "pc", "device-secret", task, sid, testPNG)
 		var got struct{ Src string }
 		json.Unmarshal([]byte(body), &got)
 		return got.Src

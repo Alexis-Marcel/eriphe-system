@@ -19,18 +19,18 @@ import (
 	"github.com/hashicorp/yamux"
 )
 
-// Nodes dial eriphe-core, never the reverse, like kubelets dial the API
-// server: a node needs no open port, and works behind NAT or WSL.
+// Devices dial eriphe-core, never the reverse, like kubelets dial the API
+// server: a device needs no open port, and works behind NAT or WSL.
 //
 //  1. An admin creates a join token (POST /v1/join-tokens).
-//  2. The node joins once with it (POST /v1/nodes/join) and gets its own secret.
-//  3. The node connects with that secret (GET /v1/nodes/connect, HTTP upgrade).
+//  2. The device joins once with it (POST /v1/devices/join) and gets its own secret.
+//  3. The device connects with that secret (GET /v1/devices/connect, HTTP upgrade).
 //     The connection becomes a yamux session on which eriphe-core opens
-//     streams and speaks the node's HTTP API.
+//     streams and speaks the device's HTTP API.
 
 const tunnelProto = "eriphe-tunnel"
 
-var nodeName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+var deviceName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
 func randomSecret() string {
 	b := make([]byte, 24)
@@ -43,18 +43,18 @@ func hashSecret(s string) string {
 	return hex.EncodeToString(h[:])
 }
 
-// newJoinToken makes a single-use token that joins a node as name, or if
-// rejoin, replaces the secret of the node registered as name. A token is
+// newJoinToken makes a single-use token that joins a device as name, or if
+// rejoin, replaces the secret of the device registered as name. A token is
 // id.secret: the id names it, only its hash is kept.
 func (c *core) newJoinToken(name string, rejoin bool, ttl time.Duration) (string, time.Time, error) {
-	if !nodeName.MatchString(name) {
-		return "", time.Time{}, errBadNodeName
+	if !deviceName.MatchString(name) {
+		return "", time.Time{}, errBadDeviceName
 	}
-	switch exists := c.store.hasNode(name); {
+	switch exists := c.store.hasDevice(name); {
 	case exists && !rejoin:
-		return "", time.Time{}, errNodeExists
+		return "", time.Time{}, errDeviceExists
 	case !exists && rejoin:
-		return "", time.Time{}, errNoNode
+		return "", time.Time{}, errNoDevice
 	}
 	b := make([]byte, 8)
 	rand.Read(b)
@@ -66,12 +66,12 @@ func (c *core) newJoinToken(name string, rejoin bool, ttl time.Duration) (string
 }
 
 var (
-	errBadNodeName = errors.New("a node name of lowercase letters, digits and dashes (1 to 32) is required")
-	errNoNode      = errors.New("no node is registered under this name: make a join token instead")
+	errBadDeviceName = errors.New("a device name of lowercase letters, digits and dashes (1 to 32) is required")
+	errNoDevice      = errors.New("no device is registered under this name: make a join token instead")
 )
 
-// handleJoinToken creates a single-use join token for a node name (admin
-// only): ?name=pc to add a node, ?name=pc&rejoin=1 to let an existing node
+// handleJoinToken creates a single-use join token for a device name (admin
+// only): ?name=pc to add a device, ?name=pc&rejoin=1 to let an existing device
 // join again with a new secret.
 func (c *core) handleJoinToken(w http.ResponseWriter, r *http.Request) {
 	ttl := 24 * time.Hour
@@ -81,13 +81,13 @@ func (c *core) handleJoinToken(w http.ResponseWriter, r *http.Request) {
 	name, rejoin := r.URL.Query().Get("name"), r.URL.Query().Get("rejoin") == "1"
 	token, expires, err := c.newJoinToken(name, rejoin, ttl)
 	switch {
-	case errors.Is(err, errBadNodeName):
+	case errors.Is(err, errBadDeviceName):
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
-	case errors.Is(err, errNodeExists):
-		http.Error(w, "a node is already registered under this name: ask for a rejoin token (rejoin=1)", http.StatusConflict)
+	case errors.Is(err, errDeviceExists):
+		http.Error(w, "a device is already registered under this name: ask for a rejoin token (rejoin=1)", http.StatusConflict)
 		return
-	case errors.Is(err, errNoNode):
+	case errors.Is(err, errNoDevice):
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	case err != nil:
@@ -98,25 +98,25 @@ func (c *core) handleJoinToken(w http.ResponseWriter, r *http.Request) {
 		"ca_hash": c.caHash()})
 }
 
-// handleJoin registers a node with a join token and returns its own secret.
-// The token decides the name: a node joins only under the name its token was
-// made for, and an existing node's secret is replaced only with a rejoin
+// handleJoin registers a device with a join token and returns its own secret.
+// The token decides the name: a device joins only under the name its token was
+// made for, and an existing device's secret is replaced only with a rejoin
 // token for it.
 func (c *core) handleJoin(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Name  string `json:"name"`
 		Token string `json:"token"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in); err != nil || !nodeName.MatchString(in.Name) {
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in); err != nil || !deviceName.MatchString(in.Name) {
 		http.Error(w, "a name of lowercase letters, digits and dashes is required", http.StatusBadRequest)
 		return
 	}
-	if r.TLS == nil && c.nodesTLSOnly() {
-		http.Error(w, errNodeTLSRequired.Error(), http.StatusForbidden)
+	if r.TLS == nil && c.devicesTLSOnly() {
+		http.Error(w, errDeviceTLSRequired.Error(), http.StatusForbidden)
 		return
 	}
 	secret := randomSecret()
-	rejoined, err := c.store.joinNode(hashSecret(in.Token), in.Name, hashSecret(secret))
+	rejoined, err := c.store.joinDevice(hashSecret(in.Token), in.Name, hashSecret(secret))
 	switch {
 	case errors.Is(err, errJoinToken):
 		http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -125,7 +125,7 @@ func (c *core) handleJoin(w http.ResponseWriter, r *http.Request) {
 		log.Printf("join refused: a token for another name used for %s", in.Name)
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
-	case errors.Is(err, errNodeExists):
+	case errors.Is(err, errDeviceExists):
 		log.Printf("join refused: %s is already registered", in.Name)
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
@@ -135,16 +135,16 @@ func (c *core) handleJoin(w http.ResponseWriter, r *http.Request) {
 	}
 	c.disconnect(in.Name)
 	if rejoined {
-		log.Printf("node %s joined again, with a new secret", in.Name)
+		log.Printf("device %s joined again, with a new secret", in.Name)
 	} else {
-		log.Printf("node %s joined", in.Name)
+		log.Printf("device %s joined", in.Name)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"name": in.Name, "secret": secret})
 }
 
-// handleConnect turns a node's request into the tunnel to that node.
+// handleConnect turns a device's request into the tunnel to that device.
 func (c *core) handleConnect(w http.ResponseWriter, r *http.Request) {
-	name, status, err := c.authNode(r)
+	name, status, err := c.authDevice(r)
 	if err != nil {
 		http.Error(w, err.Error(), status)
 		return
@@ -187,11 +187,11 @@ func tunnelConfig() *yamux.Config {
 	return cfg
 }
 
-// attach makes session the way to reach a node, replacing any older one,
-// and marks the node offline when it closes. withCert says whether the node
+// attach makes session the way to reach a device, replacing any older one,
+// and marks the device offline when it closes. withCert says whether the device
 // connected with its certificate (machine_tls.go).
 func (c *core) attach(name string, session *yamux.Session, withCert bool) {
-	n := c.node(name)
+	n := c.device(name)
 	n.mu.Lock()
 	old := n.session
 	n.session, n.tls = session, withCert
@@ -204,10 +204,10 @@ func (c *core) attach(name string, session *yamux.Session, withCert bool) {
 	if withCert {
 		how = "over TLS"
 	}
-	log.Printf("node %s connected from %s, %s", name, session.RemoteAddr(), how)
+	log.Printf("device %s connected from %s, %s", name, session.RemoteAddr(), how)
 	go func() {
-		c.noteConnect(name, time.Now()) // node_sleep.go
-		c.refreshNode(context.Background(), n)
+		c.noteConnect(name, time.Now()) // device_sleep.go
+		c.refreshDevice(context.Background(), n)
 		<-session.CloseChan()
 		n.mu.Lock()
 		current := n.session == session
@@ -216,14 +216,14 @@ func (c *core) attach(name string, session *yamux.Session, withCert bool) {
 		}
 		n.mu.Unlock()
 		if current {
-			log.Printf("node %s disconnected", name)
-			c.store.setNodeStatus(name, false, nil)
+			log.Printf("device %s disconnected", name)
+			c.store.setDeviceStatus(name, false, nil)
 		}
 	}()
 }
 
 func (c *core) disconnect(name string) {
-	n := c.node(name)
+	n := c.device(name)
 	n.mu.Lock()
 	s := n.session
 	n.session = nil
@@ -233,10 +233,10 @@ func (c *core) disconnect(name string) {
 	}
 }
 
-var errOffline = errors.New("node is not connected")
+var errOffline = errors.New("device is not connected")
 
-// dial opens a stream to the node, for the HTTP client.
-func (n *nodeClient) dial(context.Context, string, string) (net.Conn, error) {
+// dial opens a stream to the device, for the HTTP client.
+func (n *deviceClient) dial(context.Context, string, string) (net.Conn, error) {
 	n.mu.Lock()
 	s := n.session
 	n.mu.Unlock()
@@ -246,30 +246,30 @@ func (n *nodeClient) dial(context.Context, string, string) (net.Conn, error) {
 	return s.Open()
 }
 
-// handleNodes lists the registered nodes (admin only).
-func (c *core) handleNodes(w http.ResponseWriter, _ *http.Request) {
-	nodes, err := c.store.nodes()
+// handleDevices lists the registered devices (admin only).
+func (c *core) handleDevices(w http.ResponseWriter, _ *http.Request) {
+	devices, err := c.store.devices()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	// Each with its version next to the latest one (updates.go).
-	type nodeVersion struct {
-		NodeRow
+	type deviceVersion struct {
+		DeviceRow
 		versionStatus
 	}
-	out := []nodeVersion{}
-	for _, n := range nodes {
+	out := []deviceVersion{}
+	for _, n := range devices {
 		info := parseInfo(n)
-		out = append(out, nodeVersion{n, c.versionStatus("eriphe-node", info.Version, info.Install)})
+		out = append(out, deviceVersion{n, c.versionStatus("eriphe-device", info.Version, info.Install)})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
-// handleDeleteNode forgets a node: it must join again (admin only).
-func (c *core) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
+// handleDeleteDevice forgets a device: it must join again (admin only).
+func (c *core) handleDeleteDevice(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	if err := c.store.deleteNode(name); err != nil {
+	if err := c.store.deleteDevice(name); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

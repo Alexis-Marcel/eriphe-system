@@ -54,8 +54,8 @@ func brainCore(t *testing.T, b *BrainConfig) *catalogCore {
 		cfg.Brain = b
 		cfg.Providers["anthropic"] = Provider{Kind: "claude-subscription", Secret: secret}
 	})
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	// The catalog's servers start in the background: until they are ready
 	// the brain's tools have no hash, and the hash they take then would
 	// restart the brain for its tools in the middle of a test.
@@ -87,7 +87,7 @@ func TestBrainIsAnAssistant(t *testing.T) {
 		!strings.Contains(spec.AppendSystemPrompt, "Eriphe") {
 		t.Fatalf("spec = %+v, %v", spec, err)
 	}
-	// Its node gets what the brain's card says.
+	// Its device gets what the brain's card says.
 	if err := c.fetchAssistant(task, &spec); err != nil || !spec.SystemNetwork || !spec.Stream ||
 		strings.Join(spec.Servers, ",") != selfServer || strings.Join(spec.AlwaysLoad, ",") != selfServer ||
 		strings.Join(spec.HarnessTools, ",") != "WebSearch,WebFetch,ToolSearch" || spec.AgentEnv["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] != "1" {
@@ -162,10 +162,10 @@ func TestAssistantFileReadOnly(t *testing.T) {
 		}
 	}
 	// The same values, and what the file leaves out, are fine.
-	if err := c.putAssistant(brainAssistant, Assistant{Agent: "sonnet", Node: "nas"}); err != nil {
+	if err := c.putAssistant(brainAssistant, Assistant{Agent: "sonnet", Device: "nas"}); err != nil {
 		t.Fatal(err)
 	}
-	if b := c.conf().brain(); b.Node != "nas" || b.InstructionsFile != prompt || strings.Join(b.Tools, ",") != "docs" {
+	if b := c.conf().brain(); b.Device != "nas" || b.InstructionsFile != prompt || strings.Join(b.Tools, ",") != "docs" {
 		t.Fatalf("brain = %+v", b)
 	}
 	if v := c.assistantView(*c.conf().brain()); v.Source != sourceConfig || strings.Join(v.FileSets, ",") != "agent,instructions,tools" {
@@ -273,7 +273,7 @@ func TestAssistantStatus(t *testing.T) {
 	}
 	c.tendAssistants(ctx, "tok")
 	id := brainStatus(c.core).Task
-	if got := cond(); got != "" { // no node yet: pending
+	if got := cond(); got != "" { // no device yet: pending
 		t.Fatalf("pending: %s", got)
 	}
 	c.store.updateTask(id, map[string]any{"state": stateRunning})
@@ -365,7 +365,7 @@ func TestWebAssistants(t *testing.T) {
 // file's own value, but not change what the file sets. The role counts
 // even when the file has none.
 func TestReadOnlyField(t *testing.T) {
-	file := Assistant{Role: roleTest, DisplayName: "Sam", Agent: "sonnet", Node: "nas", Instructions: "x",
+	file := Assistant{Role: roleTest, DisplayName: "Sam", Agent: "sonnet", Device: "nas", Instructions: "x",
 		Tools: []string{"docs"}, Resources: []ResourceRef{{Kind: "repo", Ref: "o/r"}}, Triggers: []string{triggerConversation}, ReportsTo: brainAssistant}
 	for _, c := range []struct {
 		file, ws Assistant
@@ -379,8 +379,8 @@ func TestReadOnlyField(t *testing.T) {
 		{Assistant{}, Assistant{DisplayName: "Alex"}, ""},
 		{file, Assistant{Agent: "opus"}, "agent"},
 		{Assistant{}, Assistant{Agent: "opus"}, ""},
-		{file, Assistant{Node: "pc"}, "node"},
-		{Assistant{}, Assistant{Node: "pc"}, ""},
+		{file, Assistant{Device: "pc"}, "device"},
+		{Assistant{}, Assistant{Device: "pc"}, ""},
 		{file, Assistant{Instructions: "y"}, "instructions"},
 		{Assistant{InstructionsFile: "/p.md"}, Assistant{Instructions: "y"}, "instructions"},
 		{Assistant{}, Assistant{Instructions: "y"}, ""},

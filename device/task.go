@@ -1,0 +1,440 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"runtime"
+	"sync"
+	"time"
+)
+
+// Task states. A turn that ends without the agent asking for anything
+// leaves the task idle: the orchestrator decides whether it is done.
+const (
+	stateRunning           = "running"
+	stateWaitingPermission = "waiting_permission"
+	stateIdle              = "idle"
+	stateStopped           = "stopped"
+	stateFailed            = "failed"
+)
+
+// TaskSpec is what eriphe-core assigns. AgentEnv (environment
+// variables) is lent for this task only.
+type TaskSpec struct {
+	Runtime  string            `json:"runtime"`             // agent in the container: claude-code, opencode, codex or acp
+	Prompt   string            `json:"prompt"`              // first user turn
+	Image    string            `json:"image,omitempty"`     // worker image; the device's default if empty
+	Repo     string            `json:"repo,omitempty"`      // git URL or owner/name on GitHub, cloned into /work/repo
+	Ref      string            `json:"ref,omitempty"`       // branch or tag to start from
+	Branch   string            `json:"branch,omitempty"`    // work branch to create
+	Dir      string            `json:"dir,omitempty"`       // working directory inside the container
+	Model    string            `json:"model,omitempty"`     // optional model override
+	Command  []string          `json:"command,omitempty"`   // an ACP agent's command line (runtime acp), run as is
+	AgentEnv map[string]string `json:"agent_env,omitempty"` // env vars, e.g. CLAUDE_CODE_OAUTH_TOKEN
+	Resume   string            `json:"resume,omitempty"`    // agent session to resume
+	TZ       string            `json:"tz,omitempty"`        // the user's time zone, e.g. Europe/Paris
+
+	// Catalog servers lent to the task: the device relays them to eriphe-core
+	// (relay.go).
+	Servers []string `json:"servers,omitempty"`
+	// Those of Servers whose tools are loaded upfront, not searched for.
+	AlwaysLoad []string `json:"always_load,omitempty"`
+
+	// For long-lived agents such as the orchestrator brain.
+	MCPServers         map[string]any `json:"mcp_servers,omitempty"`          // extra MCP servers, .mcp.json format
+	AppendSystemPrompt string         `json:"append_system_prompt,omitempty"` // standing instructions
+	AllowedTools       []string       `json:"allowed_tools,omitempty"`        // tools that need no permission
+	HarnessTools       []string       `json:"harness_tools,omitempty"`        // the only harness tools it keeps (Claude Code's --tools); empty: all
+	Profile            string         `json:"profile,omitempty"`              // persistent agent config, so a session can be resumed
+	SystemNetwork      bool           `json:"system_network,omitempty"`       // the brain: also on eriphe-core's network, to reach its tools
+	Stream             bool           `json:"stream,omitempty"`               // report the text being written as a draft
+	NoAgentMemory      bool           `json:"no_agent_memory,omitempty"`      // the agent's own memory and instruction files are off
+	// RepoSkills: the agent may load the skills its repository carries;
+	// they stay off otherwise (skills.go).
+	RepoSkills bool `json:"repo_skills,omitempty"`
+	// The user's skills, by name and hash: the device fetches, checks and
+	// mounts them (skills.go).
+	Skills []TaskSkill `json:"skills,omitempty"`
+
+	// Folders of this machine lent to the task, mounted at
+	// /work/folders/<name> (shares.go).
+	Folders []TaskFolder `json:"folders,omitempty"`
+
+	// Where the task may connect, enforced by the egress relay (egress.go);
+	// none given: the public Internet.
+	Egress *EgressRule `json:"egress,omitempty"`
+
+	// What it uses with its own programs: placeholders, and the hosts the
+	// relay decrypts (egress_access.go).
+	Accesses []TaskAccess `json:"accesses,omitempty"`
+
+	// A self-hosted model server the agent uses (OpenCode, a selfhosted/
+	// model): its address, reachable through Egress.Endpoints, or one
+	// behind a device, reached through this device's task listener (model.go).
+	ModelEndpoint *ModelEndpoint `json:"model_endpoint,omitempty"`
+
+	// The checks of the task's contract, run in its container when a turn
+	// ends, and how many times a failed one goes back to the agent
+	// (turnend.go). None without a contract.
+	Checks      []TaskCheck `json:"checks,omitempty"`
+	CheckRounds int         `json:"check_rounds,omitempty"`
+
+	// Untrusted: eriphe-core started the task on what came from outside (a
+	// tainted turn, the brain, memory extraction): it gets a cache of its
+	// own, never the one the other tasks run from (cache.go).
+	Untrusted bool `json:"untrusted,omitempty"`
+}
+
+// ModelEndpoint is a self-hosted, OpenAI-compatible model server: its /v1
+// address and the variable of AgentEnv that carries its key, if any. With
+// Relay, the server is behind one of the user's devices: the task reaches it
+// at this device's /model/v1, with its own secret, and this device relays to
+// eriphe-core, which goes on through that device's tunnel (model.go).
+type ModelEndpoint struct {
+	BaseURL string `json:"base_url,omitempty"`
+	KeyEnv  string `json:"key_env,omitempty"`
+	Relay   bool   `json:"relay,omitempty"`
+}
+
+// Event is one line of what happened in a task, in order.
+type Event struct {
+	Seq  int            `json:"seq"`
+	Time time.Time      `json:"time"`
+	Type string         `json:"type"` // text, tool_use, permission, permission_answer, turn_end, diff, check, retry, check_stop, error, state
+	Data map[string]any `json:"data"`
+}
+
+type permission struct {
+	ID       string         `json:"id"`
+	ToolName string         `json:"tool_name"`
+	Input    map[string]any `json:"input"`
+	answer   chan permAnswer
+}
+
+type permAnswer struct {
+	Allow   bool   `json:"allow"`
+	Message string `json:"message,omitempty"`
+}
+
+type Task struct {
+	ID        string    `json:"id"`
+	Spec      TaskSpec  `json:"-"`
+	Runtime   string    `json:"runtime"`
+	Image     string    `json:"image"`
+	State     string    `json:"state"`
+	SessionID string    `json:"session_id,omitempty"`
+	Created   time.Time `json:"created"`
+
+	dir      string // <root>/tasks/<id>: its workspace and agent config, kept across restarts
+	secret   string // the task container's credential for its permission endpoint
+	stopping bool   // stop was asked: the container's exit is not a failure
+	mu       sync.Mutex
+	seq      int     // last event number, continued across restarts
+	events   []Event // events not reported yet
+	perms    map[string]*permission
+	run      session
+	draft    string // the text the agent is writing, reported but never an event
+	drafting bool   // a report of the draft is on its way
+
+	inbox     []inboxItem // from the last assignment
+	delivery  sync.Mutex  // one delivery at a time
+	delivered int         // inbox items handled, up to this seq
+	reported  struct {
+		state     string
+		session   string
+		delivered int
+		draft     string
+	}
+	restarts int
+	onChange func() // tells the device something must be delivered or reported
+
+	// The MCP servers the agent is given, as its runtime's command read
+	// them (runtime_mcp.go), or why they could not be.
+	mcp    []mcpServer
+	mcpErr error
+
+	egressHosts map[string]bool // hosts the task went to through the relay, logged once each
+	ca          *taskCA         // its accesses' authority: in memory only (egress_access.go)
+
+	// The agent's directory mounted at /opt/eriphe while the container runs
+	// (inject.go), and the folders it writes to (handback.go).
+	agentDir  string
+	written   []string
+	onTurnEnd func()
+
+	// onIdle runs when a turn has ended and the task is idle (turnend.go);
+	// while it runs, finishing holds the task reported as running.
+	onIdle    func()
+	finishing int // runs of onIdle under way
+
+	// The checks of its contract (turnend.go): no check after the turn
+	// asked with skip_checks; failed checks sent back so far, and the last
+	// failure, never sent back twice.
+	skipChecks  bool
+	checkRounds int
+	lastFailure string
+
+	// The environment of the toolchains its repository asked for,
+	// NAME=value (toolchain.go): its checks run with it too.
+	toolchainEnv []string
+
+	// With the container engine (apple.go): the task's own network, and the
+	// device's address on it, where the task reaches the device.
+	network, gateway string
+
+	// With a model behind a device: where the task reaches it, this device's
+	// task listener (model.go), set when its agent starts.
+	modelURL string
+}
+
+// emit records an event. Any event ends the draft: a text completes it,
+// anything else means it stopped there.
+func (t *Task) emit(typ string, data map[string]any) {
+	t.mu.Lock()
+	t.seq++
+	t.events = append(t.events, Event{Seq: t.seq, Time: time.Now(), Type: typ, Data: data})
+	t.draft = ""
+	notify, turnEnd := t.onChange, t.onTurnEnd
+	t.mu.Unlock()
+	if notify != nil {
+		notify()
+	}
+	if typ == "turn_end" && turnEnd != nil {
+		go turnEnd()
+	}
+}
+
+// draftEvery spaces the reports of a growing draft.
+const draftEvery = 100 * time.Millisecond
+
+// write adds to the draft: the text the agent is writing, before it comes
+// whole as a text event. It is reported at most every draftEvery, and only
+// the latest one: eriphe-core shows it live and never stores it.
+func (t *Task) write(text string) {
+	t.mu.Lock()
+	t.draft += text
+	scheduled := t.drafting
+	t.drafting = true
+	notify := t.onChange
+	t.mu.Unlock()
+	if scheduled || notify == nil {
+		return
+	}
+	time.AfterFunc(draftEvery, func() {
+		t.mu.Lock()
+		t.drafting = false
+		t.mu.Unlock()
+		notify()
+	})
+}
+
+func (t *Task) setState(s string) {
+	t.mu.Lock()
+	t.State = s
+	idle := t.onIdle
+	if s != stateIdle {
+		idle = nil
+	}
+	if idle != nil {
+		t.finishing++ // in the same lock: never reported idle before it ran
+	}
+	t.mu.Unlock()
+	t.emit("state", map[string]any{"state": s})
+	if idle != nil {
+		go idle()
+	}
+}
+
+// reportedState is the state eriphe-core is told: running while the end of
+// a turn is still being looked at.
+func (t *Task) reportedState() string {
+	if t.finishing > 0 && t.State == stateIdle {
+		return stateRunning
+	}
+	return t.State
+}
+
+// busyFinishing tells whether the end of the turn is still being looked at.
+func (t *Task) busyFinishing() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.finishing > 0
+}
+
+func (t *Task) state() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.State
+}
+
+func finished(state string) bool { return state == stateStopped || state == stateFailed }
+
+type device struct {
+	opt        options
+	eng        engine // a test's; else the one -engine names (engine.go)
+	mu         sync.Mutex
+	tasks      map[string]*Task
+	services   map[string]*service // local MCP servers, by name (service.go)
+	retired    map[string]*service // unassigned services whose container is stopping
+	kick       chan struct{}       // something to deliver or report
+	stops      sync.WaitGroup      // the stops under way (stopLater)
+	upd        *updates            // eriphe-core's update request, for the updater (update.go)
+	nets       taskNets            // the tasks' networks, with the container engine (apple.go)
+	agents     *agentStore         // the agents injected into tasks (inject.go)
+	toolchains *toolchainStore     // the toolchains tasks build with (toolchain.go)
+	prep       preparer            // what eriphe-core wants ready on this device
+	// noEngine: started without its container engine (withoutEngine): it
+	// runs nothing, and what is assigned waits for the engine.
+	noEngine bool
+	waiting  int        // the tasks waiting, last said
+	awake    *keepAwake // the machine out of sleep while a task works (awake.go)
+	// skillFetch gets a task's skill from eriphe-core (skills.go).
+	skillFetch func(ctx context.Context, taskID, sha string) ([]byte, error)
+	// syncNet carries Syncthing's connections to its peers (syncpeer.go).
+	syncNet *syncNet
+	// st drives this machine's Syncthing, once it answered, stID its
+	// device ID (syncthing.go); held by mu.
+	st   *syncthing
+	stID string
+	// syncMu: one application of the copies' plan at a time; synced, when
+	// each copy was last complete (syncfolders.go).
+	syncMu sync.Mutex
+	synced map[string]time.Time
+	// access: what the device last saw of the folders it opened (access.go).
+	access *accessState
+	// name: this machine's, as eriphe-core knows it: its folders' ids in
+	// Syncthing are e-<name>-<share id> (syncfolders.go).
+	name string
+}
+
+func newDevice(o options) *device {
+	return &device{opt: o, tasks: map[string]*Task{}, services: map[string]*service{}, retired: map[string]*service{}, kick: make(chan struct{}, 1),
+		upd: &updates{root: o.root}, awake: newKeepAwake(o.root), agents: newAgentStore(o.root, o.taskBin), toolchains: newToolchainStore(o.root), prep: preparer{wake: make(chan struct{}, 1)}, access: newAccessState(o.root)}
+}
+
+func (n *device) poke() {
+	select {
+	case n.kick <- struct{}{}:
+	default:
+	}
+}
+
+func newID() string {
+	b := make([]byte, 6)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// The device's API, through the tunnel: what this machine offers. Tasks come
+// from its assignments (sync.go), not from calls.
+func (n *device) routes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/device", n.handleDevice)
+	mux.HandleFunc("/v1/services/{name}/mcp", n.handleServiceMCP)
+	mux.HandleFunc("POST /v1/wake", n.handleWake)
+	mux.HandleFunc("POST /v1/privacy/open", n.handlePrivacy) // local.go
+	mux.HandleFunc("/v1/model/{path...}", n.handleModel)
+	mux.HandleFunc("GET /v1/sync/connect", func(w http.ResponseWriter, r *http.Request) { n.syncNet.handleSyncConnect(w, r) })
+	n.syncRoutes(mux)
+	n.shareRoutes(mux)
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+
+func (n *device) get(id string) *Task {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.tasks[id]
+}
+
+// handleDevice reports what this machine offers, for the scheduler.
+func (n *device) handleDevice(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	level := requestLevel(r.URL.Query().Get("context")) // context.go
+	runtimes := []string{}
+	ei := n.engine().info(ctx)
+	if ei.version != "" {
+		runtimes = injectedRuntimes
+	}
+	active := n.running()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"os": runtime.GOOS, "arch": runtime.GOARCH, "cpus": runtime.NumCPU(),
+		"docker": ei.docker, "engine": n.opt.engine, "engine_version": ei.version,
+		"image": n.opt.image, "runtimes": runtimes, "labels": n.opt.labels,
+		"active_tasks": active, "memory_bytes": memoryBytes(), "volumes": n.opt.volumeNames(),
+		// The folders shared on this machine, never their paths (shared.go).
+		"folders": n.sharedList(),
+		"images":  ei.images, "services": ei.version != "",
+		"always_on": n.opt.alwaysOn, "keeps_awake": n.awake.how, "version": version, "install": n.opt.install,
+		// Its network card, for Wake-on-LAN (wake.go).
+		"wake":   n.opt.wake,
+		"update": n.upd.info(),
+		// The agents unpacked here: a task of theirs starts at once (inject.go).
+		"agents_ready": n.agents.readyRuntimes(),
+		// A model server eriphe-core may reach through the tunnel (model.go).
+		"model_server": n.opt.modelServer != "",
+		// Its Syncthing's device ID, for the copies of shared folders (syncthing.go).
+		"syncthing": n.syncthingInfo(ctx),
+		// How long the machine's keyboard and mouse have been idle (idle.go).
+		"idle": userIdle(ctx, level),
+		// What it may tell of the user's session, at the level asked (context.go).
+		"context": machineSession(ctx, level),
+	})
+}
+
+func trimNL(b []byte) []byte {
+	for len(b) > 0 && (b[len(b)-1] == '\n' || b[len(b)-1] == '\r') {
+		b = b[:len(b)-1]
+	}
+	return b
+}
+
+// decide records a permission request from a task's agent and blocks until
+// eriphe-core answers through the task's inbox, or denies it after an hour.
+func (t *Task) decide(ctx context.Context, tool string, input map[string]any) permAnswer {
+	p := &permission{ID: newID(), ToolName: tool, Input: input, answer: make(chan permAnswer, 1)}
+	t.mu.Lock()
+	t.perms[p.ID] = p
+	t.mu.Unlock()
+	t.setState(stateWaitingPermission)
+	t.emit("permission", map[string]any{"id": p.ID, "tool_name": tool, "input": input})
+
+	var a permAnswer
+	select {
+	case a = <-p.answer:
+	case <-time.After(time.Hour):
+		a = permAnswer{Allow: false, Message: "No answer within an hour."}
+	case <-ctx.Done():
+		a = permAnswer{Allow: false, Message: "Cancelled."}
+	}
+	t.mu.Lock()
+	delete(t.perms, p.ID)
+	waiting := len(t.perms) > 0
+	t.mu.Unlock()
+	t.emit("permission_answer", map[string]any{"id": p.ID, "allow": a.Allow, "message": a.Message})
+	if !waiting {
+		// An agent may ask for several at once: it runs again only when
+		// none is left, so the others stay pending for eriphe-core.
+		t.setState(stateRunning)
+	}
+	return a
+}
+
+func validName(p string) bool {
+	for _, r := range p {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return p != ""
+}
+
+var errNotIdle = errors.New("the agent is busy; wait for the end of its turn")

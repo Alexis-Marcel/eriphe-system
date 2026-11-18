@@ -33,7 +33,7 @@ Read these first and keep to them for the whole session.
    own domain behind a reverse proxy that they set up and sign in to.
 4. **Run only commands from this page or from the workspace**, and only after reading them. Do
    not pipe other scripts into a shell. Prefer the documented one-liners over hand-made steps.
-5. **One eriphe-node per machine.** Do not install Eriphe a second time on a machine that already
+5. **One eriphe-device per machine.** Do not install Eriphe a second time on a machine that already
    runs it (on itself or for another Eriphe): running the same command again updates it, which is
    fine; a second, different install is not.
 6. **Prompts you cannot answer.** The installers may ask for the computer's password (`sudo`, or
@@ -49,8 +49,8 @@ Read these first and keep to them for the whole session.
 - **eriphe-core** is the assistant itself: its memory, its accounts and the **workspace**, a web
   page at `https://<address>:8443`. It runs on **one machine that stays on**: a NAS, a mini-PC or
   server, or a desktop that does not sleep. This is Eriphe's *home*.
-- **eriphe-node** runs on every device connected to Eriphe, the home machine included. It lets
-  Eriphe see the folders the person opens to it and run agents there. A node dials eriphe-core;
+- **eriphe-device** runs on every device connected to Eriphe, the home machine included. It lets
+  Eriphe see the folders the person opens to it and run agents there. A device dials eriphe-core;
   it needs no open port.
 - The installer brings everything it needs (its own container runtime). Nothing to install first,
   not even Docker.
@@ -164,7 +164,7 @@ Requirements (the installer checks them and says so if one is missing):
    installer installs Docker Engine (Docker's own packages, or the distribution's on Alpine, Arch,
    openSUSE). An existing Docker is kept; rootless Docker is not supported.
 3. Expected end: as in §4A, "Done: Eriphe runs on this computer…", the `https://<address>:8443/setup`
-   address and the setup code, then `Logs: docker logs eriphe-core, docker logs eriphe-node`.
+   address and the setup code, then `Logs: docker logs eriphe-core, docker logs eriphe-device`.
 4. Optional, to let Eriphe see folders of this machine, run the same command again with
    `--share NAME=/PATH` (repeatable), e.g. `--share documents=/home/<user>/Documents`. The installer
    suggests it at the end.
@@ -220,7 +220,7 @@ Requirements (the installer checks them and says so if one is missing):
    Virtualization Technology, AMD-V, SVM Mode). Do not change other firmware settings.
 5. Expected end: "Done: Eriphe runs on this PC. To finish, open this address in your browser and
    give the setup code:", the address, the code, then
-   `Logs: wsl -d eriphe -- tail /var/log/eriphe-node.log`.
+   `Logs: wsl -d eriphe -- tail /var/log/eriphe-device.log`.
 6. If a "Good to know" note says the network is set to **Public**: Windows Settings → Network &
    internet → the connection → **Private** (in French: Paramètres → Réseau et Internet → Ethernet
    or Wi-Fi → Type de profil réseau → **Réseau privé**). Otherwise the other devices cannot reach
@@ -232,7 +232,7 @@ Requirements (the installer checks them and says so if one is missing):
 ### 4D. NAS or Linux with Docker: one container
 
 Eriphe installs as one container, `ghcr.io/alexis-marcel/eriphe`, the *launcher*, which creates
-and updates Eriphe's own containers next to it (eriphe-core, eriphe-node, eriphe-engine,
+and updates Eriphe's own containers next to it (eriphe-core, eriphe-device, eriphe-engine,
 eriphe-syncthing).
 
 **Unraid** (its template, from the Docker page; details in [unraid/README.md](../unraid/README.md)):
@@ -266,7 +266,7 @@ docker logs -f eriphe
   address in your browser and give the setup code:", the address, the setup code, and "Good to
   know: then the browser asks you to name your assistant and connect its AI account." Stop
   following the log with Ctrl+C (the container keeps running).
-- The containers it makes (eriphe-core, eriphe-node, eriphe-engine, eriphe-syncthing) show without a template:
+- The containers it makes (eriphe-core, eriphe-device, eriphe-engine, eriphe-syncthing) show without a template:
   leave them alone, the launcher recreates them on updates.
 
 ### 4E. A server rented in the cloud (VPS)
@@ -403,18 +403,18 @@ For each other computer (or a second NAS):
    ```
 
    ```powershell
-   $env:ERIPHE_CORE='https://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_NODE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
+   $env:ERIPHE_CORE='https://192.0.2.10:8800'; $env:ERIPHE_JOIN_TOKEN='<token>'; $env:ERIPHE_DEVICE_NAME='pc'; $env:ERIPHE_CA_HASH='sha256:<hex>'; irm https://github.com/Alexis-Marcel/eriphe-system/releases/latest/download/install.ps1 | iex
    ```
 
-   A NAS with Docker joins with the one container of §4D in node mode: `ERIPHE_MODE=node`,
+   A NAS with Docker joins with the one container of §4D in device mode: `ERIPHE_MODE=device`,
    `ERIPHE_CORE`, `ERIPHE_JOIN_TOKEN`, `ERIPHE_CA_HASH` (on Unraid, the template's advanced
    settings). The workspace's "Advanced options" give those values.
 3. On a Mac that joins, macOS asks for the password once: it installs a small helper
    (`org.eriphe.relay`) that lets Eriphe reach the home machine on the local network.
 4. Expected end: "Done: <device> is connected to <assistant name>. Go back to your browser: it now
-   appears in Devices." The device's card shows in Settings → Devices. In the node's log
-   (`docker logs eriphe-node`, `~/.eriphe/node.log`, or on Windows
-   `wsl -d eriphe -- tail /var/log/eriphe-node.log`), the line `connected to http://… as <name>`
+   appears in Devices." The device's card shows in Settings → Devices. In the device's log
+   (`docker logs eriphe-device`, `~/.eriphe/device.log`, or on Windows
+   `wsl -d eriphe -- tail /var/log/eriphe-device.log`), the line `connected to http://… as <name>`
    says it joined.
 5. Folders: the person shares what Eriphe may see **on the device itself**: `sudo eriphe-share add
    <folder>` on Linux, `~/.eriphe/bin/eriphe-share add <folder>` on a Mac, `docker exec eriphe
@@ -438,11 +438,11 @@ For each other computer (or a second NAS):
      container toolkit), `docker exec eriphe-ollama ollama pull qwen3:8b`, then run the install
      command again with `--model-server http://eriphe-ollama:11434`.
    - Windows (11 22H2 or later): Ollama for Windows, then WSL's mirrored networking, so that the
-     node in WSL reaches Windows' `127.0.0.1`: add `networkingMode=mirrored` under a `[wsl2]` line
+     device in WSL reaches Windows' `127.0.0.1`: add `networkingMode=mirrored` under a `[wsl2]` line
      in `%USERPROFILE%\.wslconfig` (create the file if needed), run `wsl --shutdown` (tell the
      person first: it stops every WSL distribution, and the setting applies to all of them), then
      run the install command again with `-ModelServer http://127.0.0.1:11434`. Ollama for Windows
-     runs only while the person is logged in, and the node runs without anyone logged in: have
+     runs only while the person is logged in, and the device runs without anyone logged in: have
      them add Ollama to their startup programs (Win+R, `shell:startup`, a shortcut to Ollama).
 
    The installer ends with "Lends the model server at … (answers: yes/no)". On "no", the server is
@@ -542,7 +542,7 @@ device stays listed in the workspace: "Forget" it on its card.
 | Windows: "Eriphe needs an administrator PowerShell" | Open Terminal (Admin) as in §4C and paste the line again. |
 | Windows: Defender or SmartScreen blocks the script | Do not turn Defender off. Download `install.ps1` from the [latest release](https://github.com/Alexis-Marcel/eriphe-system/releases/latest), let the person check it, and run it from an administrator PowerShell with `powershell -ExecutionPolicy Bypass -File .\install.ps1 -CoreMode` (or the other parameters, see [install/README.md, Windows](../install/README.md#windows)). If Defender quarantines a file, open an issue rather than adding exclusions. |
 | Windows: "Windows needs to restart…" | Restart, sign in as the same user: the install carries on in a window. If it does not, paste the same line again. |
-| Windows: the window shows nothing new for a long time | On a recent PC, Windows installs its own updates first and WSL waits for them (§4C step 3): wait. The progress is in `C:\ProgramData\eriphe-node\install.log`; Task Manager shows `wsl.exe`, `msiexec.exe` or `DismHost.exe` at work. |
+| Windows: the window shows nothing new for a long time | On a recent PC, Windows installs its own updates first and WSL waits for them (§4C step 3): wait. The progress is in `C:\ProgramData\eriphe-device\install.log`; Task Manager shows `wsl.exe`, `msiexec.exe` or `DismHost.exe` at work. |
 | Windows: "…turn on virtualization in the PC's firmware" | §4C step 4. |
 | Windows: other devices cannot reach the workspace | Set the network to Private (§4C step 6). |
 | macOS: a folder listing fails or a task cannot read Documents | The "container-runtime-linux" prompt was refused: System Settings → Privacy & Security → Files and Folders → container-runtime-linux → allow. The first listing may time out while the question waits; the next one works. |
@@ -560,12 +560,12 @@ device stays listed in the workspace: "Forget" it on its card.
 **Logs**, to read when something fails (they hold no secret, but read them yourself rather than
 asking the person to post them publicly):
 
-| | eriphe-node | eriphe-core (home machine) | the install |
+| | eriphe-device | eriphe-core (home machine) | the install |
 |---|---|---|---|
-| Linux, one container | `docker logs eriphe-node` | `docker logs eriphe-core` (and `docker logs eriphe` for the launcher) | `/var/log/eriphe-install.log` |
-| Mac, Apple's container | `~/.eriphe/node.log` | `~/.eriphe/core.log` | `~/.eriphe/install.log` |
-| Mac, Lima | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker logs eriphe-node` | the same with `eriphe-core` | `~/.eriphe/install.log` |
-| Windows | `wsl -d eriphe -- tail /var/log/eriphe-node.log` | `wsl -d eriphe -- docker logs eriphe-core` | `C:\ProgramData\eriphe-node\install.log` |
+| Linux, one container | `docker logs eriphe-device` | `docker logs eriphe-core` (and `docker logs eriphe` for the launcher) | `/var/log/eriphe-install.log` |
+| Mac, Apple's container | `~/.eriphe/device.log` | `~/.eriphe/core.log` | `~/.eriphe/install.log` |
+| Mac, Lima | `LIMA_HOME=~/.eriphe/vm ~/.eriphe/lima/bin/limactl shell eriphe sudo docker logs eriphe-device` | the same with `eriphe-core` | `~/.eriphe/install.log` |
+| Windows | `wsl -d eriphe -- tail /var/log/eriphe-device.log` | `wsl -d eriphe -- docker logs eriphe-core` | `C:\ProgramData\eriphe-device\install.log` |
 
 Still stuck: open an issue at <https://github.com/Alexis-Marcel/eriphe-system/issues> with the
 system, the command run and the end of the install log, after removing any address, name or

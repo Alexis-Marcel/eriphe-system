@@ -153,9 +153,9 @@ func printTasks(w io.Writer, tasks []Task, now time.Time) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tSTATE\tNODE\tAGENT\tDIR\tCREATED")
+	fmt.Fprintln(tw, "ID\tSTATE\tDEVICE\tAGENT\tDIR\tCREATED")
 	for _, t := range tasks {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.State, t.Node, orDash(t.Agent), shortDir(t.Dir, 40), clock(t.Created, now))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", t.ID, t.State, t.Device, orDash(t.Agent), shortDir(t.Dir, 40), clock(t.Created, now))
 	}
 	tw.Flush()
 }
@@ -186,7 +186,7 @@ func attach(ctx context.Context, c *Client, w io.Writer, id string) error {
 		return err
 	}
 	t := st.Task
-	fmt.Fprintf(w, "%s on %s (%s), %s: %s\n", t.ID, t.Node, orDash(t.Agent), t.State, truncate(oneLine(t.Prompt), 200))
+	fmt.Fprintf(w, "%s on %s (%s), %s: %s\n", t.ID, t.Device, orDash(t.Agent), t.State, truncate(oneLine(t.Prompt), 200))
 	after := 0
 	for _, e := range st.Recent {
 		fmt.Fprintln(w, plainEvent(e))

@@ -62,8 +62,8 @@ func runThreadOf(c *core, r *skillRun) int64 {
 func alertsWatcher(t *testing.T) (*core, *fakeMonitor, *time.Time) {
 	t.Helper()
 	c, fm, now := pollCore(t)
-	c.store.registerNode("pc", hashSecret("pc-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.registerDevice("pc", hashSecret("pc-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	c.subscribeEvents(c.queueSkillEvent)
 	fm.mu.Lock()
 	fm.rules = []map[string]any{{"uid": "a", "name": "5xx", "state": "firing"}}

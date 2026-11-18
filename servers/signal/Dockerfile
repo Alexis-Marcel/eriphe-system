@@ -27,7 +27,7 @@ RUN mkdir /out && cp -a /usr/lib/*-linux-gnu/libz.so.1* /out/
 
 # glibc and libgcc (libsignal's library, which signal-cli unpacks in /tmp, needs
 # it) on distroless, no shell, non-root. The account and its keys are in
-# /data (a volume); /tmp is the node's tmpfs.
+# /data (a volume); /tmp is the device's tmpfs.
 FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=zlib /out/ /usr/local/lib/eriphe/
 COPY --from=signal-cli /out/ /usr/local/bin/

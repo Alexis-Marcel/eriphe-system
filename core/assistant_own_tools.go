@@ -11,7 +11,7 @@ import (
 )
 
 // An assistant's own tools (the thread lead's): its own MCP server, under
-// eriphe-core's name, built as its powers say and relayed by its node like
+// eriphe-core's name, built as its powers say and relayed by its device like
 // the brain's: it holds no token.
 const (
 	notifyFromAssistant  = "assistant"  // an assistant's notify

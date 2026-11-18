@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-var instructions = `Eriphe's control plane. You delegate work to agents running as tasks on nodes (machines).
+var instructions = `Eriphe's control plane. You delegate work to agents running as tasks on devices (machines).
 Pick the agent of each task from list_agents, by what it is good at; empty means the default one.
 Write each task prompt so it stands alone: the agent does not see this conversation.
 After run_task, call task_status with wait (e.g. 120) rather than polling: it returns as soon as the task needs you or ends. A task in waiting_permission waits for the user, on a card: you have nothing to answer.
@@ -33,19 +33,19 @@ func newMCPServer(c *core) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "eriphe-core", Version: version},
 		&mcp.ServerOptions{Instructions: instructions})
 
-	tool(s, "list_agents", "Agents you can give a task to: runtime, model, when to use each, and whether a node can run it now.",
+	tool(s, "list_agents", "Agents you can give a task to: runtime, model, when to use each, and whether a device can run it now.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
 			agents, err := c.listAgents()
 			return map[string]any{"agents": agents}, err
 		})
 
-	tool(s, "list_nodes", "Machines that can run tasks: online or not (asleep: away but it comes back by itself), CPUs, memory, labels, runtimes, folders (volumes) and images they offer, active tasks.",
+	tool(s, "list_devices", "Machines that can run tasks: online or not (asleep: away but it comes back by itself), CPUs, memory, labels, runtimes, folders (volumes) and images they offer, active tasks.",
 		func(ctx context.Context, _ struct{}) (map[string]any, error) {
-			nodes, err := c.store.nodes()
-			for i := range nodes {
-				nodes[i].Asleep = c.asleep(nodes[i])
+			devices, err := c.store.devices()
+			for i := range devices {
+				devices[i].Asleep = c.asleep(devices[i])
 			}
-			return map[string]any{"nodes": nodes}, err
+			return map[string]any{"devices": devices}, err
 		})
 
 	type toolsIn struct {
@@ -86,7 +86,7 @@ func newMCPServer(c *core) *mcp.Server {
 			return out, nil
 		})
 
-	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a node, with the resources it is lent (a repository, folders, tools: kind, ref, access). A task is always a task step of a light thread, which follows it: the thread the turn is about (one you opened, read or moved in this turn, or the one the user wrote from), else the live thread the user's message named; the result gives the thread and the step, and its end reaches you as the thread's event. In a turn about no thread, open_thread the matter's thread first (it gives back the one that exists); a led thread's plan changes with amend_thread, an ended thread is reopened first. If no online node can run it but an offline one could, the task stays pending with no node and a pending_reason, and starts when such a node comes online; stop_task cancels it.",
+	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a device, with the resources it is lent (a repository, folders, tools: kind, ref, access). A task is always a task step of a light thread, which follows it: the thread the turn is about (one you opened, read or moved in this turn, or the one the user wrote from), else the live thread the user's message named; the result gives the thread and the step, and its end reaches you as the thread's event. In a turn about no thread, open_thread the matter's thread first (it gives back the one that exists); a led thread's plan changes with amend_thread, an ended thread is reopened first. If no online device can run it but an offline one could, the task stays pending with no device and a pending_reason, and starts when such a device comes online; stop_task cancels it.",
 		func(ctx context.Context, in runRequest) (map[string]any, error) {
 			return c.taskOfThread(ctx, in) // thread_turn.go
 		})

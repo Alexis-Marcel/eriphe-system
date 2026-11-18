@@ -19,36 +19,36 @@ const (
 	routeOrderKey   = "route_order"   // the lines in the user's order
 	routeOffKey     = "route_off"     // the lines turned off; "none" once the user turned all on
 	routeDelayKey   = "route_delay"   // minutes before a "now" not seen goes to the next line
-	routeDevicesKey = "route_devices" // the user's say on each subscription: its kind, its node
+	routeDevicesKey = "route_devices" // the user's say on each subscription: its kind, its device
 
 	idleFresh = 2 * time.Minute // a machine's idle time older than this is unknown
 )
 
-// nodeIdle is what a node reports of its machine (GET /v1/node "idle"):
+// deviceIdle is what a device reports of its machine (GET /v1/device "idle"):
 // seconds since the last key or mouse event, and whether the screen is
-// locked. Known is false where the node cannot tell (Windows, Linux, a
+// locked. Known is false where the device cannot tell (Windows, Linux, a
 // container).
-type nodeIdle struct {
+type deviceIdle struct {
 	Known   bool  `json:"known"`
 	Seconds int64 `json:"seconds"`
 	Locked  bool  `json:"locked,omitempty"`
 }
 
-// nodeSession is what a node says of the user's session beside its idle
-// time (GET /v1/node "context", node/context.go): whether the machine is
-// not to be disturbed and why. eriphe-core asks at level 1, so a node never
+// deviceSession is what a device says of the user's session beside its idle
+// time (GET /v1/device "context", device/context.go): whether the machine is
+// not to be disturbed and why. eriphe-core asks at level 1, so a device never
 // computes the category of the app in front.
-type nodeSession struct {
+type deviceSession struct {
 	Known  bool   `json:"known"`
 	DND    bool   `json:"dnd,omitempty"`
 	Reason string `json:"reason,omitempty"`
 }
 
-// nodeContextLevel is the level eriphe-core asks a node for: presence and
-// do not disturb, never the app in front (node/context.go).
-const nodeContextLevel = 1
+// deviceContextLevel is the level eriphe-core asks a device for: presence and
+// do not disturb, never the app in front (device/context.go).
+const deviceContextLevel = 1
 
-// takeIdle keeps what a node says of its machine as an observation, in
+// takeIdle keeps what a device says of its machine as an observation, in
 // memory only (observe.go), and returns its info without it, as it is
 // stored.
 func (c *core) takeIdle(name string, info json.RawMessage, now time.Time) json.RawMessage {
@@ -57,11 +57,11 @@ func (c *core) takeIdle(name string, info json.RawMessage, now time.Time) json.R
 		return info
 	}
 	m := machineObs{At: now}
-	var idle nodeIdle
+	var idle deviceIdle
 	if raw, ok := all["idle"]; ok && json.Unmarshal(raw, &idle) == nil && idle.Known && idle.Seconds >= 0 {
 		m.IdleKnown, m.Idle, m.Locked = true, time.Duration(idle.Seconds)*time.Second, idle.Locked
 	}
-	var sess nodeSession
+	var sess deviceSession
 	if raw, ok := all["context"]; ok && json.Unmarshal(raw, &sess) == nil && sess.Known && sess.DND {
 		m.DND = true
 		if slices.Contains(dndReasons, sess.Reason) {
@@ -82,19 +82,19 @@ func (c *core) takeIdle(name string, info json.RawMessage, now time.Time) json.R
 	return out
 }
 
-// idleOf is a node's idle time now, if it reported one lately.
-func (c *core) idleOf(name string, now time.Time) (nodeIdle, bool) {
+// idleOf is a device's idle time now, if it reported one lately.
+func (c *core) idleOf(name string, now time.Time) (deviceIdle, bool) {
 	m, ok := c.obs.machine(name, now)
 	if !ok || !m.IdleKnown {
-		return nodeIdle{}, false
+		return deviceIdle{}, false
 	}
-	return nodeIdle{Known: true, Seconds: int64(m.Idle / time.Second), Locked: m.Locked}, true
+	return deviceIdle{Known: true, Seconds: int64(m.Idle / time.Second), Locked: m.Locked}, true
 }
 
 // devicePref is the user's say on a subscription.
 type devicePref struct {
-	Kind string `json:"kind,omitempty"` // computer or phone; from its label when empty
-	Node string `json:"node,omitempty"` // the node on the same machine
+	Kind    string `json:"kind,omitempty"`    // computer or phone; from its label when empty
+	Machine string `json:"machine,omitempty"` // the device on the same machine
 }
 
 func (c *core) devicePrefs() map[string]devicePref {
@@ -212,7 +212,7 @@ func (c *core) routeSignals(now time.Time) routeSignals {
 		p := prefs[s.ID]
 		d := routeDevice{ID: s.ID, Label: s.Label, Kind: subKind(s, p), App: strings.Contains(s.Label, " · "+tr("fr", "push.app")) ||
 			strings.Contains(s.Label, " · "+tr("en", "push.app")), Push: true}
-		if m, ok := c.obs.machine(p.Node, now); ok && p.Node != "" {
+		if m, ok := c.obs.machine(p.Machine, now); ok && p.Machine != "" {
 			applyMachine(&d, m)
 		}
 		index[s.ID] = len(sig.Devices)
@@ -239,7 +239,7 @@ func (c *core) routeSignals(now time.Time) routeSignals {
 	return sig
 }
 
-// applyMachine gives a device what its machine's node says: its idle
+// applyMachine gives a device what its machine's device says: its idle
 // time, locked, not to be disturbed. Each of these only takes the device
 // out of a line (route.go): none puts it in one.
 func applyMachine(d *routeDevice, m machineObs) {
@@ -249,9 +249,9 @@ func applyMachine(d *routeDevice, m machineObs) {
 	d.DND = m.DND
 }
 
-// suggestNode is the node a computer subscription is likely on: the one
-// node of its system, if only one.
-func suggestNode(label string, nodes []NodeRow) string {
+// suggestDevice is the device a computer subscription is likely on: the one
+// device of its system, if only one.
+func suggestDevice(label string, devices []DeviceRow) string {
 	want := ""
 	switch {
 	case strings.Contains(label, "Mac"):
@@ -264,7 +264,7 @@ func suggestNode(label string, nodes []NodeRow) string {
 		return ""
 	}
 	found := ""
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.OS == want {
 			if found != "" {
 				return ""

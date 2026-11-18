@@ -10,7 +10,7 @@ import (
 )
 
 // routeCore is notifyCore with two devices: the Android phone of
-// notifyCore (/push/1) and a Mac (/push/mac) whose node says it is in use.
+// notifyCore (/push/1) and a Mac (/push/mac) whose device says it is in use.
 func routeCore(t *testing.T, now time.Time) (*core, *browser, string, string) {
 	t.Helper()
 	c, b := notifyCore(t, now)
@@ -20,7 +20,7 @@ func routeCore(t *testing.T, now time.Time) (*core, *browser, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.setDevicePref(macID, func(p *devicePref) { p.Node = "studio" })
+	c.setDevicePref(macID, func(p *devicePref) { p.Machine = "studio" })
 	c.obs.put("studio", machineObs{IdleKnown: true, Idle: 5 * time.Second, At: now})
 	return c, b, macID, pushID(b.sub("/push/1").Endpoint)
 }
@@ -174,7 +174,7 @@ func TestRouteRuleLines(t *testing.T) {
 	}
 }
 
-// A node's idle time is kept in memory, never in its stored info.
+// A device's idle time is kept in memory, never in its stored info.
 func TestTakeIdle(t *testing.T) {
 	c, _ := pushCore(t)
 	now := time.Now()
@@ -207,10 +207,10 @@ func TestDeviceKind(t *testing.T) {
 	if uaKind("Mozilla/5.0 (Linux; Android 14) Mobile Safari") != kindPhone || uaKind("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)") != kindComputer {
 		t.Fatal("uaKind")
 	}
-	if got := suggestNode("Mac · Chrome", []NodeRow{{Name: "studio", OS: "darwin"}, {Name: "nas", OS: "linux"}}); got != "studio" {
+	if got := suggestDevice("Mac · Chrome", []DeviceRow{{Name: "studio", OS: "darwin"}, {Name: "nas", OS: "linux"}}); got != "studio" {
 		t.Fatalf("suggested %q", got)
 	}
-	if got := suggestNode("Mac · Chrome", []NodeRow{{Name: "a", OS: "darwin"}, {Name: "b", OS: "darwin"}}); got != "" {
+	if got := suggestDevice("Mac · Chrome", []DeviceRow{{Name: "a", OS: "darwin"}, {Name: "b", OS: "darwin"}}); got != "" {
 		t.Fatalf("two Macs, suggested %q", got)
 	}
 }

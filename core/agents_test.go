@@ -29,7 +29,7 @@ func TestSelfHostedConfig(t *testing.T) {
 	}
 	// The task: its address, and that host:port in a copy of its rule.
 	shared := defaultEgress()
-	spec := nodeTaskSpec{Egress: shared}
+	spec := deviceTaskSpec{Egress: shared}
 	cfg.modelEndpoint("qwen", map[string]string{}, &spec)
 	if spec.ModelEndpoint == nil || spec.ModelEndpoint.BaseURL != "http://192.0.2.10:11434/v1" || spec.ModelEndpoint.KeyEnv != "" ||
 		!slices.Equal(spec.Egress.Endpoints, []string{"192.0.2.10:11434"}) || len(shared.Endpoints) != 0 {
@@ -41,7 +41,7 @@ func TestSelfHostedConfig(t *testing.T) {
 	if err != nil || env["SELFHOSTED_API_KEY"] != "k-123" {
 		t.Fatalf("lent %v, %v", env, err)
 	}
-	spec = nodeTaskSpec{Egress: defaultEgress()}
+	spec = deviceTaskSpec{Egress: defaultEgress()}
 	cfg.modelEndpoint("qwen", env, &spec)
 	if spec.ModelEndpoint.KeyEnv != "SELFHOSTED_API_KEY" || !slices.Equal(spec.Egress.Endpoints, []string{"llm.example.org:443"}) {
 		t.Fatalf("spec %+v, egress %+v", spec.ModelEndpoint, spec.Egress)
@@ -49,7 +49,7 @@ func TestSelfHostedConfig(t *testing.T) {
 	// Another provider's agent gets nothing.
 	cfg.Providers["or"] = Provider{Kind: "openrouter-api", Secret: secret}
 	cfg.Agents["kimi"] = Agent{Runtime: "opencode", Provider: "or", Model: "openrouter/kimi"}
-	spec = nodeTaskSpec{Egress: defaultEgress()}
+	spec = deviceTaskSpec{Egress: defaultEgress()}
 	if cfg.modelEndpoint("kimi", env, &spec); spec.ModelEndpoint != nil || len(spec.Egress.Endpoints) != 0 {
 		t.Errorf("openrouter: %+v %+v", spec.ModelEndpoint, spec.Egress)
 	}

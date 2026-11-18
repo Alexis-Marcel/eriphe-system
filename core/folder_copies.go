@@ -12,15 +12,15 @@ import (
 )
 
 // Copies of a shared folder on the user's other machines, kept by Syncthing
-// (node/syncfolders.go), through eriphe-core's tunnels (sync_relay.go).
+// (device/syncfolders.go), through eriphe-core's tunnels (sync_relay.go).
 //
 // Only a folder its machine allows copies of (copyable, chosen when it was
 // shared there, and never turned back on from here) is copied, to the
 // machines the user ticks on Settings → Folders. eriphe-core keeps which
-// machine holds a copy of which folder (folder_copies), and hands each node
+// machine holds a copy of which folder (folder_copies), and hands each device
 // its plan (PUT /v1/sync): the peers, with their Syncthing device IDs, the
 // folders it sends and the copies it keeps, each at the folder's level now.
-// The nodes decide the rest: the folder's machine sends only what is shared
+// The devices decide the rest: the folder's machine sends only what is shared
 // and copyable there, at most at its level there; a copy lives only in the
 // copy machine's data. Turning copies off, lowering a folder to "not
 // copyable", unsharing it or forgetting a machine removes the copies from
@@ -42,7 +42,7 @@ import (
 // have been complete to stand in for it.
 const syncGrace = 2 * time.Minute
 
-// syncState is a synced folder's state on a machine (node/syncfolders.go).
+// syncState is a synced folder's state on a machine (device/syncfolders.go).
 type syncState struct {
 	ID        string    `json:"id"`
 	Share     string    `json:"share"`
@@ -54,22 +54,22 @@ type syncState struct {
 	Bytes     int64     `json:"bytes"`
 	Error     string    `json:"error,omitempty"`
 	ICloud    bool      `json:"icloud,omitempty"`
-	Problem   string    `json:"problem,omitempty"` // its machine cannot read or write it (node/access.go)
-	Program   string    `json:"program,omitempty"` // eriphe-node or syncthing: the one refused
+	Problem   string    `json:"problem,omitempty"` // its machine cannot read or write it (device/access.go)
+	Program   string    `json:"program,omitempty"` // eriphe-device or syncthing: the one refused
 	SyncedAt  time.Time `json:"synced_at,omitzero"`
 }
 
-// nodeSyncthing is what a node reports of its Syncthing.
-type nodeSyncthing struct {
+// deviceSyncthing is what a device reports of its Syncthing.
+type deviceSyncthing struct {
 	DeviceID string      `json:"device_id"`
 	Folders  []syncState `json:"folders"`
 }
 
 // syncFolderID is a folder's id in Syncthing, the same on every machine.
-func syncFolderID(node, share string) string { return "e-" + node + "-" + share }
+func syncFolderID(device, share string) string { return "e-" + device + "-" + share }
 
-// nodePlan is what a node is asked to sync (node/syncfolders.go syncPlan).
-type nodePlan struct {
+// devicePlan is what a device is asked to sync (device/syncfolders.go syncPlan).
+type devicePlan struct {
 	Peers   []planPeer   `json:"peers"`
 	Folders []planFolder `json:"folders"`
 }
@@ -94,13 +94,13 @@ type planFolder struct {
 
 // syncView is what the plans are made of, read once.
 type syncView struct {
-	nodes   map[string]NodeRow
-	folders map[string]*Folder // by node/id
+	devices map[string]DeviceRow
+	folders map[string]*Folder // by device/id
 	copies  []folderCopy
 }
 
 func (c *core) syncView() (*syncView, error) {
-	rows, err := c.store.nodes()
+	rows, err := c.store.devices()
 	if err != nil {
 		return nil, err
 	}
@@ -112,19 +112,19 @@ func (c *core) syncView() (*syncView, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &syncView{nodes: map[string]NodeRow{}, folders: map[string]*Folder{}, copies: copies}
+	v := &syncView{devices: map[string]DeviceRow{}, folders: map[string]*Folder{}, copies: copies}
 	for _, n := range rows {
-		v.nodes[n.Name] = n
+		v.devices[n.Name] = n
 	}
 	for _, f := range fs {
-		v.folders[f.Node+"/"+f.ID] = f
+		v.folders[f.Device+"/"+f.ID] = f
 	}
 	return v, nil
 }
 
 // deviceID is a machine's Syncthing device ID, as it last reported it.
-func (v *syncView) deviceID(node string) string {
-	n, ok := v.nodes[node]
+func (v *syncView) deviceID(device string) string {
+	n, ok := v.devices[device]
 	if !ok || n.Suspended {
 		return ""
 	}
@@ -139,34 +139,34 @@ func (v *syncView) deviceID(node string) string {
 // still copyable but a machine suspended or without Syncthing for now is
 // planned paused: kept, not deleted.
 func (v *syncView) live(fc folderCopy) (*Folder, bool) {
-	f := v.folders[fc.Node+"/"+fc.Folder]
-	return f, f != nil && f.Copyable && v.deviceID(fc.Node) != "" && v.deviceID(fc.Copy) != ""
+	f := v.folders[fc.Device+"/"+fc.Folder]
+	return f, f != nil && f.Copyable && v.deviceID(fc.Device) != "" && v.deviceID(fc.Copy) != ""
 }
 
-// plan is what node is asked to sync.
-func (c *core) plan(v *syncView, node string) nodePlan {
-	p := nodePlan{Peers: []planPeer{}, Folders: []planFolder{}}
+// plan is what device is asked to sync.
+func (c *core) plan(v *syncView, device string) devicePlan {
+	p := devicePlan{Peers: []planPeer{}, Folders: []planFolder{}}
 	peers := map[string]bool{}
 	sources := map[string]int{} // folder id → its entry
 	for _, fc := range v.copies {
-		if fc.Node != node && fc.Copy != node {
+		if fc.Device != device && fc.Copy != device {
 			continue
 		}
 		f, ok := v.live(fc)
 		if f == nil || !f.Copyable {
 			continue
 		}
-		pf := planFolder{ID: syncFolderID(f.Node, f.ID), Share: f.ID, Name: f.Name, Source: f.Node, Access: f.Access}
+		pf := planFolder{ID: syncFolderID(f.Device, f.ID), Share: f.ID, Name: f.Name, Source: f.Device, Access: f.Access}
 		if !ok {
 			// Paused, with no peer: kept as it is until both are back.
-			if fc.Copy == node && !slices.ContainsFunc(p.Folders, func(g planFolder) bool { return g.ID == pf.ID }) {
+			if fc.Copy == device && !slices.ContainsFunc(p.Folders, func(g planFolder) bool { return g.ID == pf.ID }) {
 				pf.Role, pf.Peers, pf.Paused = "copy", []string{}, true
 				p.Folders = append(p.Folders, pf)
 			}
 			continue
 		}
-		peer := fc.Node
-		if fc.Node == node {
+		peer := fc.Device
+		if fc.Device == device {
 			peer = fc.Copy
 			if i, ok := sources[pf.ID]; ok {
 				p.Folders[i].Peers = append(p.Folders[i].Peers, peer)
@@ -188,7 +188,7 @@ func (c *core) plan(v *syncView, node string) nodePlan {
 }
 
 // syncAll forgets the copies that may no longer be (their folder unshared,
-// no longer copyable, a machine forgotten), hands every node with Syncthing
+// no longer copyable, a machine forgotten), hands every device with Syncthing
 // its plan when it changed, and cuts the connections of the machines that
 // no longer share a copy.
 func (c *core) syncAll(ctx context.Context) {
@@ -200,17 +200,17 @@ func (c *core) syncAll(ctx context.Context) {
 		return
 	}
 	for _, fc := range v.copies {
-		f := v.folders[fc.Node+"/"+fc.Folder]
-		_, copyKnown := v.nodes[fc.Copy]
+		f := v.folders[fc.Device+"/"+fc.Folder]
+		_, copyKnown := v.devices[fc.Copy]
 		if f == nil || !f.Copyable || !copyKnown {
-			log.Printf("copies: the copy of %s/%s on %s goes: the folder may no longer be copied there", fc.Node, fc.Folder, fc.Copy)
-			c.store.removeCopy(fc.Node, fc.Folder, fc.Copy)
+			log.Printf("copies: the copy of %s/%s on %s goes: the folder may no longer be copied there", fc.Device, fc.Folder, fc.Copy)
+			c.store.removeCopy(fc.Device, fc.Folder, fc.Copy)
 		}
 	}
 	if v, err = c.syncView(); err != nil {
 		return
 	}
-	for name, n := range v.nodes {
+	for name, n := range v.devices {
 		if v.deviceID(name) == "" || !n.Online {
 			continue
 		}
@@ -219,13 +219,13 @@ func (c *core) syncAll(ctx context.Context) {
 	c.cutUnpaired()
 }
 
-// pushPlan hands a node its plan, unless it has it already.
-func (c *core) pushPlan(ctx context.Context, node string, p nodePlan) {
+// pushPlan hands a device its plan, unless it has it already.
+func (c *core) pushPlan(ctx context.Context, device string, p devicePlan) {
 	raw, _ := json.Marshal(p)
-	if last, ok := c.syncPushed.Load(node); ok && last.(string) == string(raw) {
+	if last, ok := c.syncPushed.Load(device); ok && last.(string) == string(raw) {
 		return
 	}
-	n := c.node(node)
+	n := c.device(device)
 	if !n.connected() {
 		return
 	}
@@ -235,12 +235,12 @@ func (c *core) pushPlan(ctx context.Context, node string, p nodePlan) {
 	cctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	if err := n.call(cctx, http.MethodPut, "/v1/sync", p, &out); err != nil {
-		log.Printf("copies: %s did not take its plan: %v", node, err)
+		log.Printf("copies: %s did not take its plan: %v", device, err)
 		return
 	}
-	c.syncPushed.Store(node, string(raw))
+	c.syncPushed.Store(device, string(raw))
 	for id, why := range out.Problems {
-		log.Printf("copies: %s leaves %s out: %s", node, id, why)
+		log.Printf("copies: %s leaves %s out: %s", device, id, why)
 	}
 }
 
@@ -252,7 +252,7 @@ func (c *core) setCopies(ctx context.Context, name string, machines []string) er
 		return err
 	}
 	if len(machines) > 0 && !f.Copyable {
-		return &folderError{Code: "not_copyable", Msg: fmt.Sprintf("folder %q may not be copied: allow it when sharing it on %s", f.Name, f.Node)}
+		return &folderError{Code: "not_copyable", Msg: fmt.Sprintf("folder %q may not be copied: allow it when sharing it on %s", f.Name, f.Device)}
 	}
 	v, err := c.syncView()
 	if err != nil {
@@ -261,7 +261,7 @@ func (c *core) setCopies(ctx context.Context, name string, machines []string) er
 	want := map[string]bool{}
 	for _, m := range machines {
 		m = strings.TrimSpace(m)
-		if _, ok := v.nodes[m]; !ok || m == f.Node {
+		if _, ok := v.devices[m]; !ok || m == f.Device {
 			return &folderError{Code: "invalid", Msg: fmt.Sprintf("%q: another of your machines", m)}
 		}
 		if v.deviceID(m) == "" {
@@ -269,23 +269,23 @@ func (c *core) setCopies(ctx context.Context, name string, machines []string) er
 		}
 		want[m] = true
 	}
-	if v.deviceID(f.Node) == "" && len(want) > 0 {
-		return &folderError{Code: "no_syncthing", Msg: fmt.Sprintf("%s cannot send copies yet: update it (Syncthing comes with the installation)", f.Node)}
+	if v.deviceID(f.Device) == "" && len(want) > 0 {
+		return &folderError{Code: "no_syncthing", Msg: fmt.Sprintf("%s cannot send copies yet: update it (Syncthing comes with the installation)", f.Device)}
 	}
 	for _, fc := range v.copies {
-		if fc.Node == f.Node && fc.Folder == f.ID && !want[fc.Copy] {
-			if err := c.store.removeCopy(fc.Node, fc.Folder, fc.Copy); err != nil {
+		if fc.Device == f.Device && fc.Folder == f.ID && !want[fc.Copy] {
+			if err := c.store.removeCopy(fc.Device, fc.Folder, fc.Copy); err != nil {
 				return err
 			}
-			c.logNode(fc.Copy, NodeLogEntry{Kind: logCopy, Folder: f.Name, Detail: "copy deleted"})
+			c.logDevice(fc.Copy, DeviceLogEntry{Kind: logCopy, Folder: f.Name, Detail: "copy deleted"})
 		}
 	}
 	for m := range want {
-		if !slices.ContainsFunc(v.copies, func(fc folderCopy) bool { return fc.Node == f.Node && fc.Folder == f.ID && fc.Copy == m }) {
-			if err := c.store.addCopy(f.Node, f.ID, m); err != nil {
+		if !slices.ContainsFunc(v.copies, func(fc folderCopy) bool { return fc.Device == f.Device && fc.Folder == f.ID && fc.Copy == m }) {
+			if err := c.store.addCopy(f.Device, f.ID, m); err != nil {
 				return err
 			}
-			c.logNode(m, NodeLogEntry{Kind: logCopy, Folder: f.Name, Detail: "copy from " + f.Node})
+			c.logDevice(m, DeviceLogEntry{Kind: logCopy, Folder: f.Name, Detail: "copy from " + f.Device})
 		}
 	}
 	c.syncAll(ctx)
@@ -293,41 +293,41 @@ func (c *core) setCopies(ctx context.Context, name string, machines []string) er
 }
 
 // forgetMachineCopies forgets the copies a machine kept or sent.
-func (s *Store) forgetMachineCopies(node string) {
-	s.db.Exec(`DELETE FROM folder_copies WHERE node = ? OR copy = ?`, node, node)
+func (s *Store) forgetMachineCopies(device string) {
+	s.db.Exec(`DELETE FROM folder_copies WHERE device = ? OR copy = ?`, device, device)
 }
 
 // copyView is one copy of a folder, as Settings → Folders shows it.
 type copyView struct {
-	Node   string  `json:"node"`
+	Device string  `json:"device"`
 	Online bool    `json:"online"`
 	Status string  `json:"status"` // ok (up to date), syncing, behind, error, waiting
 	Done   float64 `json:"done"`   // %, while syncing
 	Bytes  int64   `json:"bytes"`  // what it takes on that machine
 	Error  string  `json:"error,omitempty"`
 	// Problem: that machine cannot write the copy, or read the folder it
-	// sends (node/access.go); Mac: it is a Mac, whose Settings it may open.
+	// sends (device/access.go); Mac: it is a Mac, whose Settings it may open.
 	Problem string `json:"problem,omitempty"`
-	Program string `json:"program,omitempty"` // the program refused: eriphe-node or syncthing
+	Program string `json:"program,omitempty"` // the program refused: eriphe-device or syncthing
 	Mac     bool   `json:"mac,omitempty"`
 }
 
 // copyChoice is a machine the user may tick to keep a copy.
 type copyChoice struct {
-	Node    string
+	Device  string
 	Checked bool
 	Able    bool // it runs Syncthing
 }
 
 // copyStatus is a copy's state: up to date, syncing, behind, an error, or
 // waiting (not synced there yet).
-func (v *syncView) copyStatus(f *Folder, node string) copyView {
-	cv := copyView{Node: node, Online: v.nodes[node].Online, Status: "waiting", Mac: v.nodes[node].OS == "darwin"}
-	st := parseInfo(v.nodes[node]).Syncthing
+func (v *syncView) copyStatus(f *Folder, device string) copyView {
+	cv := copyView{Device: device, Online: v.devices[device].Online, Status: "waiting", Mac: v.devices[device].OS == "darwin"}
+	st := parseInfo(v.devices[device]).Syncthing
 	if st == nil {
 		return cv
 	}
-	id := syncFolderID(f.Node, f.ID)
+	id := syncFolderID(f.Device, f.ID)
 	i := slices.IndexFunc(st.Folders, func(s syncState) bool { return s.ID == id && s.Role == "copy" })
 	if i < 0 {
 		return cv
@@ -335,7 +335,7 @@ func (v *syncView) copyStatus(f *Folder, node string) copyView {
 	s := st.Folders[i]
 	cv.Done, cv.Bytes = s.Done, s.Bytes
 	cv.Problem, cv.Program = s.Problem, s.Program
-	src := v.nodes[f.Node]
+	src := v.devices[f.Device]
 	switch {
 	case s.Problem != "":
 		cv.Status, cv.Error = "error", s.Error
@@ -359,31 +359,31 @@ func (v *syncView) copiesOf(f *Folder) ([]copyView, []copyChoice) {
 	var out []copyView
 	have := map[string]bool{}
 	for _, fc := range v.copies {
-		if fc.Node == f.Node && fc.Folder == f.ID {
+		if fc.Device == f.Device && fc.Folder == f.ID {
 			out = append(out, v.copyStatus(f, fc.Copy))
 			have[fc.Copy] = true
 		}
 	}
 	var choices []copyChoice
-	for name, n := range v.nodes {
-		if name == f.Node || n.Suspended {
+	for name, n := range v.devices {
+		if name == f.Device || n.Suspended {
 			continue
 		}
-		choices = append(choices, copyChoice{Node: name, Checked: have[name], Able: v.deviceID(name) != ""})
+		choices = append(choices, copyChoice{Device: name, Checked: have[name], Able: v.deviceID(name) != ""})
 	}
-	slices.SortFunc(choices, func(a, b copyChoice) int { return strings.Compare(a.Node, b.Node) })
-	slices.SortFunc(out, func(a, b copyView) int { return strings.Compare(a.Node, b.Node) })
+	slices.SortFunc(choices, func(a, b copyChoice) int { return strings.Compare(a.Device, b.Device) })
+	slices.SortFunc(out, func(a, b copyView) int { return strings.Compare(a.Device, b.Device) })
 	return out, choices
 }
 
 // iCloudHint: the folder's machine says Syncthing cannot read files that
 // iCloud Drive keeps in the cloud only.
 func (v *syncView) iCloudHint(f *Folder) bool {
-	st := parseInfo(v.nodes[f.Node]).Syncthing
+	st := parseInfo(v.devices[f.Device]).Syncthing
 	if st == nil {
 		return false
 	}
-	id := syncFolderID(f.Node, f.ID)
+	id := syncFolderID(f.Device, f.ID)
 	return slices.ContainsFunc(st.Folders, func(s syncState) bool { return s.ID == id && s.ICloud })
 }
 
@@ -398,7 +398,7 @@ func (c *core) folderHosts(fs []*Folder) []string {
 		return nil
 	}
 	var out []string
-	for name := range v.nodes {
+	for name := range v.devices {
 		if !slices.ContainsFunc(fs, func(f *Folder) bool { return !v.holdsNow(f, name) }) {
 			out = append(out, name)
 		}
@@ -407,47 +407,47 @@ func (c *core) folderHosts(fs []*Folder) []string {
 	return out
 }
 
-// holdsNow tells whether node may lend f to a task now: its own machine
+// holdsNow tells whether device may lend f to a task now: its own machine
 // sharing it, or its copy in sync.
-func (v *syncView) holdsNow(f *Folder, node string) bool {
-	if node == f.Node {
-		return slices.ContainsFunc(parseInfo(v.nodes[node]).Folders, func(sf sharedFolder) bool { return sf.ID == f.ID })
+func (v *syncView) holdsNow(f *Folder, device string) bool {
+	if device == f.Device {
+		return slices.ContainsFunc(parseInfo(v.devices[device]).Folders, func(sf sharedFolder) bool { return sf.ID == f.ID })
 	}
-	return v.copyUsable(f, node)
+	return v.copyUsable(f, device)
 }
 
-// copyUsable tells whether node's copy of f may stand in for it now: kept
+// copyUsable tells whether device's copy of f may stand in for it now: kept
 // and synced there, that machine online, and the copy in sync. With the
 // folder's machine online, nothing may be pending either way: the copy
 // idle with nothing to receive, the folder's machine idle with nothing to
 // receive from its copies. With it away, the copy must have been complete
 // when it was last seen (syncGrace).
-func (v *syncView) copyUsable(f *Folder, node string) bool {
-	n := v.nodes[node]
-	if !n.Online || n.Suspended || !v.hasCopy(f, node) {
+func (v *syncView) copyUsable(f *Folder, device string) bool {
+	n := v.devices[device]
+	if !n.Online || n.Suspended || !v.hasCopy(f, device) {
 		return false
 	}
-	if _, live := v.live(folderCopy{Node: f.Node, Folder: f.ID, Copy: node}); !live || v.copyStatus(f, node).Status != "ok" {
+	if _, live := v.live(folderCopy{Device: f.Device, Folder: f.ID, Copy: device}); !live || v.copyStatus(f, device).Status != "ok" {
 		return false
 	}
-	return !v.nodes[f.Node].Online || v.sourceSettled(f)
+	return !v.devices[f.Device].Online || v.sourceSettled(f)
 }
 
 // sourceSettled tells whether f's machine reports its side of the copies
 // idle, with nothing to receive from them and no error.
 func (v *syncView) sourceSettled(f *Folder) bool {
-	st := parseInfo(v.nodes[f.Node]).Syncthing
+	st := parseInfo(v.devices[f.Device]).Syncthing
 	if st == nil {
 		return false
 	}
-	id := syncFolderID(f.Node, f.ID)
+	id := syncFolderID(f.Device, f.ID)
 	i := slices.IndexFunc(st.Folders, func(s syncState) bool { return s.ID == id && s.Role == "source" })
 	return i >= 0 && st.Folders[i].State == "idle" && st.Folders[i].NeedBytes == 0 && st.Folders[i].Error == ""
 }
 
 // folderHolder is a machine holding a folder, for the brain (list_folders).
 type folderHolder struct {
-	Node     string `json:"node"`
+	Device   string `json:"device"`
 	Role     string `json:"role"` // its machine, or a copy
 	Online   bool   `json:"online"`
 	UpToDate bool   `json:"up_to_date"` // a task may be lent it there now
@@ -455,10 +455,10 @@ type folderHolder struct {
 
 // holdersOf are the machines holding f: its own, then those keeping a copy.
 func (v *syncView) holdersOf(f *Folder) []folderHolder {
-	out := []folderHolder{{Node: f.Node, Role: "machine", Online: v.nodes[f.Node].Online, UpToDate: v.holdsNow(f, f.Node)}}
+	out := []folderHolder{{Device: f.Device, Role: "machine", Online: v.devices[f.Device].Online, UpToDate: v.holdsNow(f, f.Device)}}
 	for _, fc := range v.copies {
-		if fc.Node == f.Node && fc.Folder == f.ID {
-			out = append(out, folderHolder{Node: fc.Copy, Role: "copy", Online: v.nodes[fc.Copy].Online, UpToDate: v.copyUsable(f, fc.Copy)})
+		if fc.Device == f.Device && fc.Folder == f.ID {
+			out = append(out, folderHolder{Device: fc.Copy, Role: "copy", Online: v.devices[fc.Copy].Online, UpToDate: v.copyUsable(f, fc.Copy)})
 		}
 	}
 	return out
@@ -473,8 +473,8 @@ func (c *core) folderHolders(fs []*Folder) []string {
 		return nil
 	}
 	var out []string
-	for name := range v.nodes {
-		if !slices.ContainsFunc(fs, func(f *Folder) bool { return name != f.Node && !v.hasCopy(f, name) }) {
+	for name := range v.devices {
+		if !slices.ContainsFunc(fs, func(f *Folder) bool { return name != f.Device && !v.hasCopy(f, name) }) {
 			out = append(out, name)
 		}
 	}
@@ -482,21 +482,21 @@ func (c *core) folderHolders(fs []*Folder) []string {
 	return out
 }
 
-func (v *syncView) hasCopy(f *Folder, node string) bool {
-	return slices.ContainsFunc(v.copies, func(fc folderCopy) bool { return fc.Node == f.Node && fc.Folder == f.ID && fc.Copy == node })
+func (v *syncView) hasCopy(f *Folder, device string) bool {
+	return slices.ContainsFunc(v.copies, func(fc folderCopy) bool { return fc.Device == f.Device && fc.Folder == f.ID && fc.Copy == device })
 }
 
 // handleFolderCopies sets the machines that keep a copy of a folder (PUT
-// /v1/folders/{name}/copies, {"nodes": [...]}).
+// /v1/folders/{name}/copies, {"devices": [...]}).
 func (c *core) handleFolderCopies(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Nodes []string `json:"nodes"`
+		Devices []string `json:"devices"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
-		folderHTTPError(w, &folderError{Code: "invalid", Msg: `want {"nodes": ["machine", …]}`})
+		folderHTTPError(w, &folderError{Code: "invalid", Msg: `want {"devices": ["machine", …]}`})
 		return
 	}
-	if err := c.setCopies(r.Context(), r.PathValue("name"), body.Nodes); err != nil {
+	if err := c.setCopies(r.Context(), r.PathValue("name"), body.Devices); err != nil {
 		folderHTTPError(w, err)
 		return
 	}

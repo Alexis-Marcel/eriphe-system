@@ -97,21 +97,21 @@ func lendAccess(t *testing.T, c *core, clean bool, e ResourceRef) *TaskRow {
 	if clean {
 		c.store.set(lentByUserKey(task.ID), "1")
 	}
-	if task.Node == "" {
-		t.Fatal("no node")
+	if task.Device == "" {
+		t.Fatal("no device")
 	}
 	return task
 }
 
 var npm = ResourceRef{Kind: resAccess, Ref: "npm"}
 
-// viaRelay sends what the node's relay sends for one request of the task.
-func viaRelay(c *core, node, taskID, host, method, target, auth string, more map[string]string) *httptest.ResponseRecorder {
+// viaRelay sends what the device's relay sends for one request of the task.
+func viaRelay(c *core, device, taskID, host, method, target, auth string, more map[string]string) *httptest.ResponseRecorder {
 	mux := http.NewServeMux()
-	mux.Handle("/v1/node/tasks/{id}/access", c.taskAccessHandler())
-	req := httptest.NewRequest(method, "/v1/node/tasks/"+taskID+"/access", strings.NewReader("a body"))
+	mux.Handle("/v1/device/tasks/{id}/access", c.taskAccessHandler())
+	req := httptest.NewRequest(method, "/v1/device/tasks/"+taskID+"/access", strings.NewReader("a body"))
 	req.Header.Set("Authorization", "Bearer x")
-	req.Header.Set("Eriphe-Node", node)
+	req.Header.Set("Eriphe-Device", device)
 	req.Header.Set(accessHostHeader, host)
 	req.Header.Set(accessTargetHeader, target)
 	if auth != "" {
@@ -159,8 +159,8 @@ func TestAccessInjectsTheSecret(t *testing.T) {
 	}
 }
 
-// Without a placeholder, the node's own secret must not go out in its place.
-func TestAccessNeverSendsTheNodesSecret(t *testing.T) {
+// Without a placeholder, the device's own secret must not go out in its place.
+func TestAccessNeverSendsTheDevicesSecret(t *testing.T) {
 	c, svc := accessCore(t, Access{Value: gridFree})
 	task := lendAccess(t, c, true, npm)
 	if rec := viaRelay(c, "nas", task.ID, accessHost+":443", "GET", "/public", "", nil); rec.Code != 200 {
@@ -231,15 +231,15 @@ func TestAccessStaysWithItsTaskAndHosts(t *testing.T) {
 	}
 }
 
-func TestAccessAsksTheNodeWhoItIs(t *testing.T) {
+func TestAccessAsksTheDeviceWhoItIs(t *testing.T) {
 	c, svc := accessCore(t, Access{Value: gridFree})
 	task := lendAccess(t, c, true, npm)
-	c.store.registerNode("pc", hashSecret("x"))
+	c.store.registerDevice("pc", hashSecret("x"))
 	if rec := viaRelay(c, "pc", task.ID, accessHost+":443", "GET", "/", placeholderAuth(task.ID), nil); rec.Code != 404 {
-		t.Errorf("another node: %d", rec.Code)
+		t.Errorf("another device: %d", rec.Code)
 	}
 	if rec := viaRelay(c, "ghost", task.ID, accessHost+":443", "GET", "/", placeholderAuth(task.ID), nil); rec.Code != 401 {
-		t.Errorf("no node: %d", rec.Code)
+		t.Errorf("no device: %d", rec.Code)
 	}
 	c.store.updateTask(task.ID, map[string]any{"state": stateStopped})
 	if rec := viaRelay(c, "nas", task.ID, accessHost+":443", "GET", "/", placeholderAuth(task.ID), nil); rec.Code != 404 {
@@ -521,19 +521,19 @@ func TestAccessLending(t *testing.T) {
 	}
 }
 
-// A node gets the placeholder and the hosts, never the secret, and the task
+// A device gets the placeholder and the hosts, never the secret, and the task
 // is told what it holds.
-func TestAccessReachesTheNodeWithoutItsSecret(t *testing.T) {
+func TestAccessReachesTheDeviceWithoutItsSecret(t *testing.T) {
 	c, _ := accessCore(t, Access{Value: gridFree})
 	task := lendAccess(t, c, true, npm)
-	req := httptest.NewRequest("GET", "/v1/node/assignments?rev=0&wait=0", nil)
+	req := httptest.NewRequest("GET", "/v1/device/assignments?rev=0&wait=0", nil)
 	req.Header.Set("Authorization", "Bearer x")
-	req.Header.Set("Eriphe-Node", "nas")
+	req.Header.Set("Eriphe-Device", "nas")
 	rec := httptest.NewRecorder()
 	c.handleAssignments(rec, req)
 	body := rec.Body.String()
 	if strings.Contains(body, accessSecret) {
-		t.Fatal("the secret went to the node")
+		t.Fatal("the secret went to the device")
 	}
 	if !strings.Contains(body, accessPlaceholder(task.ID, "npm")) || !strings.Contains(body, accessHost+":443") || !strings.Contains(body, "NPM_TOKEN") {
 		t.Fatalf("assignment = %s", body)

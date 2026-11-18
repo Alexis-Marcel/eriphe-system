@@ -33,7 +33,7 @@ func TestFailureClass(t *testing.T) {
 func idleTask(t *testing.T, c *core, id string, events ...EventRow) {
 	t.Helper()
 	if _, err := c.store.task(id); err != nil {
-		c.store.insertTask(&TaskRow{ID: id, Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+		c.store.insertTask(&TaskRow{ID: id, Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	}
 	c.store.updateTask(id, map[string]any{"state": stateIdle})
 	c.store.addEvents(id, events)
@@ -108,7 +108,7 @@ func TestAccountFailureNotRetried(t *testing.T) {
 // Passing failures are retried within the attempts, then told.
 func TestTransientAttemptsSpent(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.setContract("t-1", &taskContract{Objective: "x", Budget: &taskBudget{Attempts: 1}})
 	c.store.setHarness("t-1", map[string]any{"retries": 1})
 	idleTask(t, c, "t-1", failedTurn(1, "connection reset by peer"))
@@ -121,7 +121,7 @@ func TestTransientAttemptsSpent(t *testing.T) {
 // the end of its turn, and no new turn is given.
 func TestBudgets(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-time", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateRunning})
+	c.store.insertTask(&TaskRow{ID: "t-time", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateRunning})
 	c.store.setContract("t-time", &taskContract{Objective: "x", Budget: &taskBudget{Minutes: 10}})
 	c.harnessTick(time.Now())
 	if h := c.store.harness("t-time"); h.StopReason != "" {
@@ -137,7 +137,7 @@ func TestBudgets(t *testing.T) {
 		t.Errorf("brain event %q", msg)
 	}
 
-	c.store.insertTask(&TaskRow{ID: "t-turns", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-turns", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.setContract("t-turns", &taskContract{Objective: "x", Budget: &taskBudget{Turns: 1}})
 	partial := "```json\n{\"receipt\": {\"status\": \"partial\"}}\n```"
 	if _, err := c.answer(context.Background(), "t-turns", "", "go on", nil, byBrain); err != nil {
@@ -151,7 +151,7 @@ func TestBudgets(t *testing.T) {
 		t.Errorf("answered past its budget: %v", err)
 	}
 
-	c.store.insertTask(&TaskRow{ID: "t-tokens", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-tokens", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.setContract("t-tokens", &taskContract{Objective: "x", Budget: &taskBudget{Tokens: 1000}})
 	idleTask(t, c, "t-tokens", ev(1, "text", map[string]any{"text": partial}), ev(2, "turn_end", map[string]any{"subtype": "success",
 		"usage": map[string]any{"input_tokens": 400, "output_tokens": 500, "cache_write_tokens": 200, "cache_read_tokens": 90000}}))
@@ -166,7 +166,7 @@ func TestBudgets(t *testing.T) {
 // A done task is not stopped for its budget: the brain closes it.
 func TestDoneNotStoppedForBudget(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	c.store.setContract("t-1", &taskContract{Objective: "x", Budget: &taskBudget{Turns: 1}})
 	idleTask(t, c, "t-1", ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"}))
 	if h := c.store.harness("t-1"); h.StopReason != "" {
@@ -180,7 +180,7 @@ func TestDoneNotStoppedForBudget(t *testing.T) {
 // A failed task's end comes with its class: whether starting it again is worth it.
 func TestFailedTaskClassed(t *testing.T) {
 	c := receiptCore(t)
-	c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateFailed})
+	c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateFailed})
 	c.store.addEvents("t-1", []EventRow{ev(1, "error", map[string]any{"message": "dial tcp 192.0.2.1:443: i/o timeout"})})
 	c.notifyBrain("t-1", stateFailed)
 	if msg := lastEvent(t, c); !strings.Contains(msg, "est maintenant failed. (Échec passager : la relancer une fois peut suffire.)") {
@@ -195,9 +195,9 @@ func TestFailedTaskClassed(t *testing.T) {
 func TestStopReasonOnDrawer(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	tw.c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped})
+	tw.c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateStopped})
 	tw.c.store.setHarness("t-1", map[string]any{"stop_reason": stopMinutes})
-	tw.c.store.insertTask(&TaskRow{ID: "t-2", Node: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
+	tw.c.store.insertTask(&TaskRow{ID: "t-2", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	tw.c.store.setHarness("t-2", map[string]any{"retry_at": time.Now().Add(time.Minute).Unix()})
 	if _, body, _ := tw.do("GET", "/tasks/t-1", nil, map[string]string{"HX-Request": "true"}); !strings.Contains(body, "Arrêtée par Eriphe : son budget de temps est épuisé.") {
 		t.Error("no stop reason")
@@ -207,7 +207,7 @@ func TestStopReasonOnDrawer(t *testing.T) {
 	}
 }
 
-// A check the node stopped sending back (the same failure twice) stops
+// A check the device stopped sending back (the same failure twice) stops
 // the task.
 func TestCheckSameFailureStops(t *testing.T) {
 	c := receiptCore(t)

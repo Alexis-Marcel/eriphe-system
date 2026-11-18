@@ -21,13 +21,13 @@ import (
 )
 
 // fakeShares is the list of folders shared on the fake machine "nas", as
-// its node keeps it (node/shared.go): eriphe-core may take one off it.
+// its device keeps it (device/shared.go): eriphe-core may take one off it.
 type fakeShares struct {
 	mu      sync.Mutex
 	folders []sharedFolder
 	deleted []string
-	// files: each folder's files, by id then path, as the node reaches
-	// them (node/folder_files.go); ops, each operation it was asked.
+	// files: each folder's files, by id then path, as the device reaches
+	// them (device/folder_files.go); ops, each operation it was asked.
 	files   map[string]map[string]string
 	ops     []string
 	patched []string // id:access of each lowering asked
@@ -46,7 +46,7 @@ func (f *fakeShares) gone() []string {
 }
 
 // foldersCore is a core with one agent, a machine "nas" sharing the folders
-// Clients (drop) and Photos (read) through a fake node on a tunnel, and a
+// Clients (drop) and Photos (read) through a fake device on a tunnel, and a
 // machine "pc" sharing nothing.
 func foldersCore(t *testing.T) (*core, *Store) {
 	c, store, _ := foldersCoreShares(t)
@@ -70,13 +70,13 @@ func foldersCoreShares(t *testing.T) (*core, *Store, *fakeShares) {
 		User:         "Alex",
 	}
 	c := newCore(cfg, store)
-	store.registerNode("nas", hashSecret("x"))
-	store.registerNode("pc", hashSecret("y"))
-	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"],"cpus":64}`))
+	store.registerDevice("nas", hashSecret("x"))
+	store.registerDevice("pc", hashSecret("y"))
+	store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"],"cpus":64}`))
 
 	shares := &fakeShares{folders: []sharedFolder{{ID: "f1", Name: "Clients", Access: accessWrite}, {ID: "f2", Name: "Photos", Access: accessRead}}}
 	api := http.NewServeMux()
-	// Copies turned off, as the node does it: never on (node/shared.go).
+	// Copies turned off, as the device does it: never on (device/shared.go).
 	api.HandleFunc("PATCH /v1/shares/{id}", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Copyable *bool `json:"copyable"`
@@ -102,7 +102,7 @@ func foldersCoreShares(t *testing.T) (*core, *Store, *fakeShares) {
 		w.WriteHeader(http.StatusNotFound)
 	})
 	api.HandleFunc("POST /v1/shares/{id}/files", shares.serveFiles) // folder_tools_test.go
-	api.HandleFunc("GET /v1/node", func(w http.ResponseWriter, _ *http.Request) {
+	api.HandleFunc("GET /v1/device", func(w http.ResponseWriter, _ *http.Request) {
 		shares.mu.Lock()
 		defer shares.mu.Unlock()
 		writeJSON(w, 200, map[string]any{"runtimes": []string{"claude-code"}, "cpus": 2, "folders": shares.folders})
@@ -114,14 +114,14 @@ func foldersCoreShares(t *testing.T) (*core, *Store, *fakeShares) {
 		shares.folders = slices.DeleteFunc(shares.folders, func(f sharedFolder) bool { return f.ID == r.PathValue("id") })
 		w.WriteHeader(http.StatusNoContent)
 	})
-	coreEnd, nodeEnd := net.Pipe()
-	nodeSession, _ := yamux.Server(nodeEnd, tunnelConfig())
-	go http.Serve(nodeSession, api)
+	coreEnd, deviceEnd := net.Pipe()
+	deviceSession, _ := yamux.Server(deviceEnd, tunnelConfig())
+	go http.Serve(deviceSession, api)
 	coreSession, _ := yamux.Client(coreEnd, tunnelConfig())
 	c.attach("nas", coreSession, false)
 	t.Cleanup(func() { coreSession.Close() })
 	waitUntil(t, func() bool {
-		n, _ := store.nodes()
+		n, _ := store.devices()
 		for _, row := range n {
 			if row.Name == "nas" && row.Online && len(parseInfo(row).Folders) == 2 {
 				return true
@@ -137,7 +137,7 @@ func foldersCoreShares(t *testing.T) (*core, *Store, *fakeShares) {
 // folder here is left out.
 func TestFolders(t *testing.T) {
 	c, store := foldersCore(t)
-	store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"],"folders":[`+
+	store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"],"folders":[`+
 		`{"id":"p1","name":"clients","access":"read"},{"id":"p2","name":"../x","access":"write"},{"id":"","name":"NoID"},{"id":"p3","name":"Scans","access":"manage","missing":true},{"id":"p4","name":"Old","access":"drop"}]}`))
 	fs, err := store.folders()
 	if err != nil {
@@ -145,9 +145,9 @@ func TestFolders(t *testing.T) {
 	}
 	var got []string
 	for _, f := range fs {
-		got = append(got, fmt.Sprintf("%s@%s:%s:%s:%v", f.Name, f.Node, f.ID, f.Access, f.Missing))
+		got = append(got, fmt.Sprintf("%s@%s:%s:%s:%v", f.Name, f.Device, f.ID, f.Access, f.Missing))
 	}
-	// An older node's manage is write, its drop read.
+	// An older device's manage is write, its drop read.
 	want := []string{"Clients (nas)@nas:f1:write:false", "clients (pc)@pc:p1:read:false", "Old@pc:p4:read:false", "Photos@nas:f2:read:false", "Scans@pc:p3:write:true"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %v\nwant %v", got, want)
@@ -181,21 +181,21 @@ func TestRemoveFolder(t *testing.T) {
 	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients")}); err == nil {
 		t.Fatal("lent once removed")
 	}
-	c.refreshNode(ctx, c.node("nas"))
+	c.refreshDevice(ctx, c.device("nas"))
 	if u, _ := store.unsharedFolders(); len(u) != 0 {
 		t.Fatalf("still kept %v once the machine dropped it", u)
 	}
 	// Offline: kept here until the machine is back.
-	nodes, _ := store.nodes()
+	devices, _ := store.devices()
 	var info json.RawMessage
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.Name == "nas" {
 			info = n.Info
 		}
 	}
 	c.disconnect("nas")
-	waitUntil(t, func() bool { return !c.node("nas").connected() })
-	store.setNodeStatus("nas", false, info)
+	waitUntil(t, func() bool { return !c.device("nas").connected() })
+	store.setDeviceStatus("nas", false, info)
 	if err := c.removeFolder(ctx, "Photos"); err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestRemoveFolder(t *testing.T) {
 	if err := c.removeFolder(ctx, "nope"); !errors.Is(err, errNoFolder) {
 		t.Fatalf("unknown: %v", err)
 	}
-	log, _ := store.nodeLog("nas", 10, 0)
+	log, _ := store.deviceLog("nas", 10, 0)
 	if len(log) < 2 || log[0].Kind != logUnshare || log[0].Folder != "Photos" {
 		t.Fatalf("access log %+v", log)
 	}
@@ -217,10 +217,10 @@ func TestRemoveFolder(t *testing.T) {
 // Folders shared or unshared on a machine are in its access log.
 func TestNoteShared(t *testing.T) {
 	c, store := foldersCore(t)
-	before := nodeInfo{Folders: []sharedFolder{{ID: "a", Name: "Old", Access: accessRead}, {ID: "b", Name: "Kept"}}}
-	after := nodeInfo{Folders: []sharedFolder{{ID: "b", Name: "Kept"}, {ID: "c", Name: "New", Access: accessWrite}}}
+	before := deviceInfo{Folders: []sharedFolder{{ID: "a", Name: "Old", Access: accessRead}, {ID: "b", Name: "Kept"}}}
+	after := deviceInfo{Folders: []sharedFolder{{ID: "b", Name: "Kept"}, {ID: "c", Name: "New", Access: accessWrite}}}
 	c.noteShared("pc", before, after)
-	log, _ := store.nodeLog("pc", 10, 0)
+	log, _ := store.deviceLog("pc", 10, 0)
 	var got []string
 	for _, e := range log {
 		got = append(got, e.Kind+":"+e.Folder+":"+e.Access)
@@ -237,7 +237,7 @@ func TestTaskWithFolders(t *testing.T) {
 	c, store, shares := foldersCoreShares(t)
 	ctx := context.Background()
 
-	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients"), Node: "pc"}); err == nil {
+	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients"), Device: "pc"}); err == nil {
 		t.Fatal("ran on a machine without the folder")
 	}
 	if _, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Nope")}); err == nil {
@@ -247,12 +247,12 @@ func TestTaskWithFolders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Node != "nas" || task.Folders != "Clients,Photos" {
+	if task.Device != "nas" || task.Folders != "Clients,Photos" {
 		t.Fatalf("task %+v", task) // pc scores higher (64 CPUs) but has not the folders
 	}
 	spec := assignedSpec(t, c, "nas", task.ID)
-	if len(spec.Folders) != 2 || !reflect.DeepEqual(spec.Folders[0], nodeFolder{Name: "Clients", ID: "f1", Write: true}) ||
-		!reflect.DeepEqual(spec.Folders[1], nodeFolder{Name: "Photos", ID: "f2"}) {
+	if len(spec.Folders) != 2 || !reflect.DeepEqual(spec.Folders[0], deviceFolder{Name: "Clients", ID: "f1", Write: true}) ||
+		!reflect.DeepEqual(spec.Folders[1], deviceFolder{Name: "Photos", ID: "f2"}) {
 		t.Fatalf("folders %+v", spec.Folders)
 	}
 	if !strings.Contains(spec.AppendSystemPrompt, "/work/folders/Clients (you may create") || !strings.Contains(spec.AppendSystemPrompt, "/work/folders/Photos (read-only)") ||
@@ -267,7 +267,7 @@ func TestTaskWithFolders(t *testing.T) {
 
 	// Unshared on the machine.
 	shares.set(sharedFolder{ID: "f2", Name: "Photos", Access: accessRead})
-	c.refreshNode(ctx, c.node("nas"))
+	c.refreshDevice(ctx, c.device("nas"))
 	assignedSpec(t, c, "nas", "")
 	if got, _ := store.task(task.ID); got.State != stateFailed {
 		t.Fatalf("state %s after its folder was removed", got.State)
@@ -278,25 +278,25 @@ func TestTaskWithFolders(t *testing.T) {
 func TestFolderTaskWaitsForItsMachine(t *testing.T) {
 	c, store := foldersCore(t)
 	ctx := context.Background()
-	nodes, _ := store.nodes()
+	devices, _ := store.devices()
 	var info json.RawMessage
-	for _, n := range nodes {
+	for _, n := range devices {
 		if n.Name == "nas" {
 			info = n.Info
 		}
 	}
-	store.setNodeStatus("nas", false, info)
+	store.setDeviceStatus("nas", false, info)
 	task, err := c.runTask(ctx, runRequest{Prompt: "sum", Resources: folderRefs("Clients")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Node != "" || !strings.Contains(task.PendingReason, "nas") {
+	if task.Device != "" || !strings.Contains(task.PendingReason, "nas") {
 		t.Fatalf("task %+v", task)
 	}
-	store.setNodeStatus("nas", true, info)
+	store.setDeviceStatus("nas", true, info)
 	c.placePending()
-	if got, _ := store.task(task.ID); got.Node != "nas" {
-		t.Fatalf("placed on %q", got.Node)
+	if got, _ := store.task(task.ID); got.Device != "nas" {
+		t.Fatalf("placed on %q", got.Device)
 	}
 }
 
@@ -361,12 +361,12 @@ func TestWebFolders(t *testing.T) {
 		strings.Count(body, `name="case-change"`) != strings.Count(body, `name="case-change" value="`) {
 		t.Fatalf("ceiling: %s", body)
 	}
-	for _, u := range []string{"/settings/folders/browse?node=nas", "/settings/folders/browse?node=nas&share=data&path=Clients"} {
+	for _, u := range []string{"/settings/folders/browse?device=nas", "/settings/folders/browse?device=nas&share=data&path=Clients"} {
 		if code, _, _ := tw.do("GET", u, nil, nil); code == 200 {
 			t.Errorf("%s: %d", u, code)
 		}
 	}
-	if code, _, _ := tw.post("/settings/folders", url.Values{"node": {"nas"}, "share": {"data"}, "path": {"Clients"}, "name": {"x"}}, csrf); code == 200 {
+	if code, _, _ := tw.post("/settings/folders", url.Values{"device": {"nas"}, "share": {"data"}, "path": {"Clients"}, "name": {"x"}}, csrf); code == 200 {
 		t.Fatalf("shared from the workspace: %d", code)
 	}
 	code, _, h := tw.post("/settings/folders/delete", url.Values{"source": {"machine"}, "name": {"Clients"}}, csrf)
@@ -375,16 +375,16 @@ func TestWebFolders(t *testing.T) {
 	}
 }
 
-// assignedSpec is the spec of a task as its node reads it ("" for none).
-func assignedSpec(t *testing.T, c *core, node, id string) nodeTaskSpec {
+// assignedSpec is the spec of a task as its device reads it ("" for none).
+func assignedSpec(t *testing.T, c *core, device, id string) deviceTaskSpec {
 	t.Helper()
-	req := httptest.NewRequest("GET", "/v1/node/assignments?rev=0&wait=0", nil)
+	req := httptest.NewRequest("GET", "/v1/device/assignments?rev=0&wait=0", nil)
 	req.Header.Set("Authorization", "Bearer x")
-	req.Header.Set("Eriphe-Node", node)
+	req.Header.Set("Eriphe-Device", device)
 	rec := httptest.NewRecorder()
 	c.handleAssignments(rec, req)
 	var out struct {
-		Tasks []nodeAssignment `json:"tasks"`
+		Tasks []deviceAssignment `json:"tasks"`
 	}
 	json.Unmarshal(rec.Body.Bytes(), &out)
 	for _, a := range out.Tasks {
@@ -395,7 +395,7 @@ func assignedSpec(t *testing.T, c *core, node, id string) nodeTaskSpec {
 	if id != "" {
 		t.Fatalf("no task %s in %s", id, rec.Body)
 	}
-	return nodeTaskSpec{}
+	return deviceTaskSpec{}
 }
 
 // The folder API: behind the token, the workspace's methods, their errors
@@ -430,9 +430,9 @@ func TestFolderAPI(t *testing.T) {
 		code               int
 		want               string
 	}{
-		{"POST", "/v1/folders", `{"name":"Clients","node":"nas","share":"data","path":"Clients","access":"drop"}`, http.StatusMethodNotAllowed, ""},
-		{"GET", "/v1/nodes/nas/shares", "", http.StatusNotFound, ""},
-		{"GET", "/v1/nodes/nas/shares/data/dirs?path=work", "", http.StatusNotFound, ""},
+		{"POST", "/v1/folders", `{"name":"Clients","device":"nas","share":"data","path":"Clients","access":"drop"}`, http.StatusMethodNotAllowed, ""},
+		{"GET", "/v1/devices/nas/shares", "", http.StatusNotFound, ""},
+		{"GET", "/v1/devices/nas/shares/data/dirs?path=work", "", http.StatusNotFound, ""},
 		{"DELETE", "/v1/folders/nope", "", http.StatusNotFound, `{"code":"not_found","error":"no such folder"}`},
 		{"DELETE", "/v1/folders/clients", "", http.StatusNoContent, ""},
 	} {
@@ -448,7 +448,7 @@ func TestNoCopies(t *testing.T) {
 	c, store, shares := foldersCoreShares(t)
 	ctx := context.Background()
 	shares.set(sharedFolder{ID: "f1", Name: "Clients", Access: accessWrite, Copyable: true}, sharedFolder{ID: "f2", Name: "Photos", Access: accessRead})
-	c.refreshNode(ctx, c.node("nas"))
+	c.refreshDevice(ctx, c.device("nas"))
 	if f, _ := store.folder("Clients"); f.Access != accessWrite || !f.Copyable {
 		t.Fatalf("shared %+v", f)
 	}
@@ -464,18 +464,18 @@ func TestNoCopies(t *testing.T) {
 	if !slices.Equal(patched, []string{"f1"}) {
 		t.Fatalf("told the machine %v", patched)
 	}
-	c.refreshNode(ctx, c.node("nas"))
+	c.refreshDevice(ctx, c.device("nas"))
 	if l, _ := store.noCopyFolders(); len(l) != 0 {
 		t.Fatalf("kept %v once the machine turned them off", l)
 	}
-	// Offline, or an older node: off here all the same.
-	store.db.Exec(`INSERT INTO folders_lowered (node, id, nocopy) VALUES ('nas', 'f2', 1)`)
+	// Offline, or an older device: off here all the same.
+	store.db.Exec(`INSERT INTO folders_lowered (device, id, nocopy) VALUES ('nas', 'f2', 1)`)
 	shares.set(sharedFolder{ID: "f1", Name: "Clients", Access: accessWrite}, sharedFolder{ID: "f2", Name: "Photos", Access: accessRead, Copyable: true})
-	store.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code"],"folders":[{"id":"f2","name":"Photos","access":"read","copyable":true}]}`))
+	store.setDeviceStatus("nas", true, []byte(`{"runtimes":["claude-code"],"folders":[{"id":"f2","name":"Photos","access":"read","copyable":true}]}`))
 	if f, _ := store.folder("Photos"); f.Copyable {
 		t.Fatalf("copies on: %+v", f)
 	}
-	log, _ := store.nodeLog("nas", 10, 0)
+	log, _ := store.deviceLog("nas", 10, 0)
 	if len(log) == 0 || log[0].Kind != logLower {
 		t.Fatalf("access log %+v", log)
 	}
@@ -498,7 +498,7 @@ func TestWriteFolderSpec(t *testing.T) {
 		t.Fatalf("folders %+v", spec.Folders)
 	}
 	if raw, _ := json.Marshal(spec.Folders[0]); !strings.Contains(string(raw), `"manage":true`) || strings.Contains(string(raw), `"write"`) {
-		t.Fatalf("on the wire: %s", raw) // an older node's write was drop
+		t.Fatalf("on the wire: %s", raw) // an older device's write was drop
 	}
 	if !strings.Contains(spec.AppendSystemPrompt, "rename and delete files anywhere in it") || !strings.Contains(spec.AppendSystemPrompt, "snapshot") {
 		t.Fatalf("instructions %q", spec.AppendSystemPrompt)
@@ -522,7 +522,7 @@ func TestWriteFolderSpec(t *testing.T) {
 func TestWebNoCopies(t *testing.T) {
 	c, store, shares := foldersCoreShares(t)
 	shares.set(sharedFolder{ID: "f1", Name: "Clients", Access: accessWrite, Copyable: true}, sharedFolder{ID: "f2", Name: "Photos", Access: accessRead})
-	c.refreshNode(context.Background(), c.node("nas"))
+	c.refreshDevice(context.Background(), c.device("nas"))
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	_, body, _ := tw.do("GET", "/settings/folders", nil, nil)
@@ -668,7 +668,7 @@ func TestWebFolderCases(t *testing.T) {
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()
 	_, body, _ := tw.do("GET", "/settings/folders", nil, nil)
-	if !strings.Contains(body, `name="node" value="nas"`) || !strings.Contains(body, `name="case-read" value="free"`) ||
+	if !strings.Contains(body, `name="device" value="nas"`) || !strings.Contains(body, `name="case-read" value="free"`) ||
 		!strings.Contains(body, "/settings/folders/grid?name=Clients") || !strings.Contains(body, "Comme l&#39;appareil") {
 		t.Fatalf("page: %s", mainPart(t, body))
 	}
@@ -683,7 +683,7 @@ func TestWebFolderCases(t *testing.T) {
 	if c.folderCase(clients, catChange) != gridApproval {
 		t.Fatal("not kept")
 	}
-	code, _, h := tw.post("/settings/folders/case", url.Values{"node": {"nas"}, "case-read": {"never"}, "case-change": {"free"}}, csrf)
+	code, _, h := tw.post("/settings/folders/case", url.Values{"device": {"nas"}, "case-read": {"never"}, "case-change": {"free"}}, csrf)
 	if code != 200 || h.Get("HX-Refresh") != "true" || c.deviceGrid("nas").Read != gridNever {
 		t.Fatalf("device: %d %v", code, h)
 	}

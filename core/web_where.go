@@ -12,7 +12,7 @@ import (
 // Settings → Notifications → Où te prévenir: the router's page (route.go). The lines in
 // the user's order, one switch each, shown when what they need is there;
 // the delay before the next one; observe or route; which subscription is
-// a phone or a computer, and which node is on which computer; and the
+// a phone or a computer, and which device is on which computer; and the
 // last decisions, planned next to sent.
 
 func (w *web) whereRoutes(mux *webMux) {
@@ -20,7 +20,7 @@ func (w *web) whereRoutes(mux *webMux) {
 	mux.Handle("POST /where/line", w.auth(w.handleWhereLine))
 	mux.Handle("POST /where/delay", w.auth(w.handleWhereDelay))
 	mux.Handle("POST /where/device", w.auth(w.handleWhereDevice))
-	mux.Handle("POST /where/node", w.auth(w.handleWhereNode))
+	mux.Handle("POST /where/machine", w.auth(w.handleWhereMachine))
 }
 
 type whereLine struct {
@@ -62,7 +62,7 @@ type wherePage struct {
 	Delay     int
 	Devices   []whereDevice
 	Computers []whereDevice
-	Nodes     []whereMachine
+	Machines  []whereMachine
 	Log       []whereEntry
 }
 
@@ -114,7 +114,7 @@ func (w *web) wherePage(lang string) wherePage {
 	if n := len(v.Lines); n > 0 {
 		v.Lines[0].First, v.Lines[n-1].Last = true, true
 	}
-	v.Nodes = w.whereNodes(v.Computers, prefs)
+	v.Machines = w.whereMachines(v.Computers, prefs)
 	for _, e := range c.recentRoutes(20) {
 		v.Log = append(v.Log, whereEntry{At: e.At, What: e.What, Mode: e.Mode, Planned: describePlan(lang, e.Planned),
 			Sent: describeSent(lang, e.Sent, e.Skip), Seen: e.AckedHow})
@@ -122,25 +122,25 @@ func (w *web) wherePage(lang string) wherePage {
 	return v
 }
 
-// whereNodes are the user's machines, each with the subscription tied to it.
-func (w *web) whereNodes(computers []whereDevice, prefs map[string]devicePref) []whereMachine {
-	nodes, err := w.c.store.nodes()
+// whereMachines are the user's machines, each with the subscription tied to it.
+func (w *web) whereMachines(computers []whereDevice, prefs map[string]devicePref) []whereMachine {
+	devices, err := w.c.store.devices()
 	if err != nil {
 		return nil
 	}
 	var out []whereMachine
 	now := time.Now()
-	for _, n := range nodes {
+	for _, n := range devices {
 		wn := whereMachine{Name: n.Name, OS: n.OS}
 		for _, d := range computers {
-			if prefs[d.ID].Node == n.Name {
+			if prefs[d.ID].Machine == n.Name {
 				wn.Sub = d.ID
 			}
 		}
 		if wn.Sub == "" {
 			var match []string
 			for _, d := range computers {
-				if prefs[d.ID].Node == "" && suggestNode(d.Label, nodes) == n.Name {
+				if prefs[d.ID].Machine == "" && suggestDevice(d.Label, devices) == n.Name {
 					match = append(match, d.ID)
 				}
 			}
@@ -302,22 +302,22 @@ func (w *web) handleWhereDevice(rw http.ResponseWriter, r *http.Request, s *sess
 	w.renderWhere(rw, r, s, tr(w.lang(r), "where.saved"))
 }
 
-// handleWhereNode ties a node to the subscription on the same machine,
+// handleWhereMachine ties a device to the subscription on the same machine,
 // or unties it (sub empty).
-func (w *web) handleWhereNode(rw http.ResponseWriter, r *http.Request, s *session) {
-	node, sub := r.PostFormValue("node"), r.PostFormValue("sub")
-	nodes, err := w.c.store.nodes()
-	if err != nil || !slices.ContainsFunc(nodes, func(n NodeRow) bool { return n.Name == node }) || sub != "" && !isPushID(sub) {
-		http.Error(rw, "bad node", http.StatusBadRequest)
+func (w *web) handleWhereMachine(rw http.ResponseWriter, r *http.Request, s *session) {
+	device, sub := r.PostFormValue("machine"), r.PostFormValue("sub")
+	devices, err := w.c.store.devices()
+	if err != nil || !slices.ContainsFunc(devices, func(n DeviceRow) bool { return n.Name == device }) || sub != "" && !isPushID(sub) {
+		http.Error(rw, "bad device", http.StatusBadRequest)
 		return
 	}
 	for id, p := range w.c.devicePrefs() {
-		if p.Node == node && id != sub {
-			w.c.setDevicePref(id, func(p *devicePref) { p.Node = "" })
+		if p.Machine == device && id != sub {
+			w.c.setDevicePref(id, func(p *devicePref) { p.Machine = "" })
 		}
 	}
 	if sub != "" {
-		w.c.setDevicePref(sub, func(p *devicePref) { p.Node = node })
+		w.c.setDevicePref(sub, func(p *devicePref) { p.Machine = device })
 	}
 	w.renderWhere(rw, r, s, tr(w.lang(r), "where.saved"))
 }

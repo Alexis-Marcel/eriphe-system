@@ -17,11 +17,11 @@ import (
 )
 
 // The per-task proxy. A task's MCP configuration names, for every catalog
-// server it was granted, its own node (callback-url/mcp/<server>, with the
-// task's secret); the node relays to eriphe-core with its own secret and the
+// server it was granted, its own device (callback-url/mcp/<server>, with the
+// task's secret); the device relays to eriphe-core with its own secret and the
 // task's id:
 //
-//	/v1/node/tasks/{id}/mcp/{server}   (node secret)
+//	/v1/device/tasks/{id}/mcp/{server}   (device secret)
 //
 // eriphe-core serves there an MCP server made of the upstream's cached
 // tools that the task's grant covers, and forwards each call upstream with
@@ -31,21 +31,21 @@ import (
 
 type proxyServerKey struct{}
 
-// taskMCPHandler serves the per-task MCP endpoints, for nodes.
+// taskMCPHandler serves the per-task MCP endpoints, for devices.
 func (c *core) taskMCPHandler() http.Handler {
 	h := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		s, _ := r.Context().Value(proxyServerKey{}).(*mcp.Server)
 		return s
 	}, &mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		node, ok := c.nodeFromRequest(r)
+		device, ok := c.deviceFromRequest(r)
 		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		t, err := c.store.task(r.PathValue("id"))
-		if err != nil || t.Node != node || finished(t.State) {
-			http.Error(w, "no such task on this node", http.StatusNotFound)
+		if err != nil || t.Device != device || finished(t.State) {
+			http.Error(w, "no such task on this device", http.StatusNotFound)
 			return
 		}
 		server := r.PathValue("server")
@@ -169,7 +169,7 @@ func (c *core) readsFreely(taskID string) bool {
 	return ok && assistantRoles[a.Role].FreeReads
 }
 
-// brainFreeReads are the Claude Code names of the free reads: the node of
+// brainFreeReads are the Claude Code names of the free reads: the device of
 // an assistant that reads freely allows them in advance, so they never
 // wait for a permission.
 func (c *core) brainFreeReads() []string {
@@ -222,7 +222,7 @@ func (c *core) actingGrant(grant []string) []string {
 	return out
 }
 
-// specServers are the catalog servers a task's node must relay for it.
+// specServers are the catalog servers a task's device must relay for it.
 func (c *core) specServers(t *TaskRow) []string {
 	var out []string
 	for _, s := range grantServers(c.taskGrant(t)) {

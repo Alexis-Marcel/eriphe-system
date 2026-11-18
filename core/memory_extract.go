@@ -431,7 +431,7 @@ func (c *core) startExtraction(ctx context.Context, day string, upto time.Time) 
 	raw, _ := json.Marshal(refs)
 	c.mem.set(fmt.Sprintf("run:%d:refs", runID), string(raw))
 	prompt := c.extractionPrompt(day, segs)
-	t, err := c.startTask(ctx, taskKindMemory, runRequest{Prompt: prompt, Agent: c.extractionAgent()}, nodeTaskSpec{})
+	t, err := c.startTask(ctx, taskKindMemory, runRequest{Prompt: prompt, Agent: c.extractionAgent()}, deviceTaskSpec{})
 	if err != nil {
 		c.mem.finishRun(runID, runFailed, err.Error(), 0)
 		return nil, err

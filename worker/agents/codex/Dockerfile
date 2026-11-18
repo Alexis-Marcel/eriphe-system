@@ -1,5 +1,5 @@
 # eriphe-agent-codex: OpenAI Codex's static (musl) binary, from its GitHub
-# release, and nothing else. eriphe-node injects /opt/eriphe of this image
+# release, and nothing else. eriphe-device injects /opt/eriphe of this image
 # into a task container (worker/README.md).
 FROM alpine:3.22 AS fetch
 ARG CODEX_VERSION=0.164.0

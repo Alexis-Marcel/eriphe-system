@@ -13,9 +13,9 @@ import (
 
 // taskEndedEvent is the brain's note of a task that ended (notifyBrain),
 // and taskEndedRe reads it back.
-const taskEndedEvent = "La tâche %s (nœud %s) est maintenant %s."
+const taskEndedEvent = "La tâche %s (appareil %s) est maintenant %s."
 
-var taskEndedRe = regexp.MustCompile(`^La tâche (\S+) \(nœud [^)]*\) est maintenant (\w+)\.`)
+var taskEndedRe = regexp.MustCompile(`^La tâche (\S+) \(appareil [^)]*\) est maintenant (\w+)\.`)
 
 // eventNotice is the line the workspace shows for an event.
 type eventNotice struct {

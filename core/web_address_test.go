@@ -249,7 +249,7 @@ func TestAddressLocked(t *testing.T) {
 // The connect commands give the local address, then the second one, then
 // the tailnet's: every installer takes the list (install.sh --core,
 // install.ps1 -Core and ERIPHE_CORE, the launcher's and compose's
-// ERIPHE_CORE, eriphe-node -core).
+// ERIPHE_CORE, eriphe-device -core).
 func TestJoinTwoAddresses(t *testing.T) {
 	tw := newTestWeb(t)
 	csrf := tw.setup()
@@ -265,7 +265,7 @@ func TestJoinTwoAddresses(t *testing.T) {
 	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"laptop"}, "via": {"both"}}, csrf)
 	both := lan + ",http://100.64.0.2:8800"
 	hasAll(t, "two addresses", body, "sh -s -- --core "+both+" ", "$env:ERIPHE_CORE='"+both+"';",
-		"-Core '"+both+"'", "ERIPHE_CORE: "+both+"\n", "eriphe-node -core "+both+" ")
+		"-Core '"+both+"'", "ERIPHE_CORE: "+both+"\n", "eriphe-device -core "+both+" ")
 	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"laptop"}, "via": {"remote"}}, csrf)
 	hasAll(t, "away only", body, "--core http://100.64.0.2:8800 ")
 	_, body, _ = tw.post("/settings/devices/join", url.Values{"name": {"laptop"}, "via": {"lan"}}, csrf)

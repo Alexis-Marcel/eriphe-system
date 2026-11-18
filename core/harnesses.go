@@ -1,10 +1,10 @@
 package main
 
-// What each runtime, as the node drives it, can do: the core asks the card,
+// What each runtime, as the device drives it, can do: the core asks the card,
 // never the runtime's name. A new harness is one more entry here, and its
 // name in the Runtimes of the providers it can use (agents_kinds.go). The
 // card describes our adaptor, not the program alone: it changes with the
-// node's code. See the study "ACP pour tous les harnais" (2026-10-27).
+// device's code. See the study "ACP pour tous les harnais" (2026-10-27).
 
 // How a harness takes standing instructions (a task's AppendSystemPrompt).
 const (
@@ -18,7 +18,7 @@ const (
 const (
 	skillsListed  = ""        // it loads none: they are listed in the task's instructions
 	skillsLoaded  = "loaded"  // it loads them by itself
-	skillsTrusted = "trusted" // … but keeps every skill off in a repository not the user's (node/skills.go)
+	skillsTrusted = "trusted" // … but keeps every skill off in a repository not the user's (device/skills.go)
 )
 
 type harness struct {
@@ -39,7 +39,7 @@ type harness struct {
 }
 
 // harnesses by runtime. MCP for codex and opencode, and their standing
-// instructions, are the node's: they reach the program with the node's
+// instructions, are the device's: they reach the program with the device's
 // release that sends them.
 var harnesses = map[string]harness{
 	// Native stream-json. A PDF is saved and read with its own Read,
@@ -51,7 +51,7 @@ var harnesses = map[string]harness{
 	"codex": {MCP: true, SystemPrompt: promptDeveloper, Streams: true, ImageInToolResult: true,
 		BuiltinWebSearch: true, Resume: true, Skills: skillsTrusted},
 	// ACP. A PDF is passed to the model inline. Its webfetch is built in
-	// (asked for); its websearch is denied (node/runtime_opencode.go).
+	// (asked for); its websearch is denied (device/runtime_opencode.go).
 	"opencode": {MCP: true, SystemPrompt: promptInstructions, Streams: true, PDFInToolResult: true, ImageInToolResult: true,
 		BuiltinWebFetch: true, Resume: true, ProviderModels: true, Skills: skillsLoaded, ModelServer: true},
 	// Any other ACP agent, by its command (Goose, Qwen Code…). What ACP
@@ -59,7 +59,7 @@ var harnesses = map[string]harness{
 	// prompt in ACP v1 (its RFD is a draft), so the instructions come first
 	// in the prompt, and it cannot be the brain. Its model is its own.
 	"acp": {MCP: true, SystemPrompt: promptPrepended, AutoModel: true, ByCommand: true},
-	// Mistral Vibe, by ACP (node/runtime_vibe.go). No system prompt through
+	// Mistral Vibe, by ACP (device/runtime_vibe.go). No system prompt through
 	// ACP either, so it cannot be the brain; its folder is never trusted,
 	// so it loads no skill by itself. Its web search and page reads are
 	// its own (Mistral's), each asked. Its model is an alias of its own;

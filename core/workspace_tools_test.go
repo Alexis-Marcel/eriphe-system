@@ -168,19 +168,19 @@ func TestWorkspaceToolsThroughMCP(t *testing.T) {
 	}
 }
 
-// taskEndpoint opens a task's MCP server as its node relays it.
+// taskEndpoint opens a task's MCP server as its device relays it.
 func taskEndpoint(t *testing.T, c *core, task, server string, secret ...string) (*mcp.ClientSession, error) {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle("/v1/node/tasks/{id}/mcp/{server}", c.taskMCPHandler())
+	mux.Handle("/v1/device/tasks/{id}/mcp/{server}", c.taskMCPHandler())
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	bearer := "node-secret"
+	bearer := "device-secret"
 	if len(secret) > 0 {
 		bearer = secret[0]
 	}
-	hc := &http.Client{Transport: headerTransport{"Authorization": "Bearer " + bearer, "Eriphe-Node": "pc"}}
-	tr := &mcp.StreamableClientTransport{Endpoint: srv.URL + "/v1/node/tasks/" + task + "/mcp/" + server, HTTPClient: hc, MaxRetries: -1}
+	hc := &http.Client{Transport: headerTransport{"Authorization": "Bearer " + bearer, "Eriphe-Device": "pc"}}
+	tr := &mcp.StreamableClientTransport{Endpoint: srv.URL + "/v1/device/tasks/" + task + "/mcp/" + server, HTTPClient: hc, MaxRetries: -1}
 	sess, err := mcp.NewClient(&mcp.Implementation{Name: "relay"}, nil).Connect(context.Background(), tr, nil)
 	if err == nil {
 		t.Cleanup(func() { sess.Close() })
@@ -218,12 +218,12 @@ func TestWorkspaceReadQuotesNoTaint(t *testing.T) {
 
 // The workspace reaches a task through its grant only, like any tool: a
 // task not lent it does not reach it; one lent a tool of it sees that one,
-// its node relays it and allows it in advance; skills lend it by name.
+// its device relays it and allows it in advance; skills lend it by name.
 func TestWorkspaceGrantPath(t *testing.T) {
 	c, _ := surfaceCore(t)
-	c.store.registerNode("pc", hashSecret("node-secret"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
-	c.store.insertTask(&TaskRow{ID: "t-none", Node: "pc", Runtime: "claude-code", State: stateRunning, Tools: "ledger"})
+	c.store.registerDevice("pc", hashSecret("device-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.insertTask(&TaskRow{ID: "t-none", Device: "pc", Runtime: "claude-code", State: stateRunning, Tools: "ledger"})
 	if _, err := taskEndpoint(t, c, "t-none", workspaceServer); err == nil {
 		t.Fatal("a task without the grant reached the workspace")
 	}
@@ -236,7 +236,7 @@ func TestWorkspaceGrantPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.store.updateTask(task.ID, map[string]any{"node": "pc", "state": stateRunning})
+	c.store.updateTask(task.ID, map[string]any{"device": "pc", "state": stateRunning})
 	sess, err := taskEndpoint(t, c, task.ID, workspaceServer)
 	if err != nil {
 		t.Fatal(err)
@@ -246,13 +246,13 @@ func TestWorkspaceGrantPath(t *testing.T) {
 		t.Fatalf("tools %+v %v", res, err)
 	}
 
-	req := httptest.NewRequest("GET", "/v1/node/assignments?rev=0&wait=0", nil)
-	req.Header.Set("Authorization", "Bearer node-secret")
-	req.Header.Set("Eriphe-Node", "pc")
+	req := httptest.NewRequest("GET", "/v1/device/assignments?rev=0&wait=0", nil)
+	req.Header.Set("Authorization", "Bearer device-secret")
+	req.Header.Set("Eriphe-Device", "pc")
 	w := httptest.NewRecorder()
 	c.handleAssignments(w, req)
 	var out struct {
-		Tasks []nodeAssignment `json:"tasks"`
+		Tasks []deviceAssignment `json:"tasks"`
 	}
 	json.Unmarshal(w.Body.Bytes(), &out)
 	found := false

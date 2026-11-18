@@ -10,7 +10,7 @@ import (
 
 // Settings → Devices: the devices connected to Eriphe (web_pages.go has
 // their cards), each one's page with its access log, and "Cut access"
-// (node_access.go).
+// (device_access.go).
 
 func (w *web) deviceRoutes(mux *webMux) {
 	mux.Handle("GET /settings/devices", w.auth(w.handleMachines))
@@ -31,7 +31,7 @@ const deviceLogPage = 50
 
 type deviceData struct {
 	Device machineView
-	Log    []NodeLogEntry
+	Log    []DeviceLogEntry
 	Next   int64 // the entry to show more before, if there are more
 }
 
@@ -39,12 +39,12 @@ type deviceData struct {
 // its access log. With before, only the next rows of the log (htmx).
 func (w *web) handleDevice(rw http.ResponseWriter, r *http.Request, s *session) {
 	name := r.PathValue("name")
-	nodes, err := w.c.store.nodes()
+	devices, err := w.c.store.devices()
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	views, err := w.deviceViews(nodes, w.updatesData(nodes))
+	views, err := w.deviceViews(devices, w.updatesData(devices))
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -61,7 +61,7 @@ func (w *web) handleDevice(rw http.ResponseWriter, r *http.Request, s *session) 
 		return
 	}
 	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
-	entries, err := w.c.store.nodeLog(name, deviceLogPage+1, before)
+	entries, err := w.c.store.deviceLog(name, deviceLogPage+1, before)
 	if err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -92,17 +92,17 @@ var joinTokenID = regexp.MustCompile(`^[0-9a-f]{16}$`)
 // token to has connected: it joined with that token and is online.
 func (w *web) handleJoinWait(rw http.ResponseWriter, r *http.Request, s *session) {
 	v := joinWait{Name: r.PathValue("name"), ID: r.URL.Query().Get("token")}
-	if !nodeName.MatchString(v.Name) || !joinTokenID.MatchString(v.ID) {
+	if !deviceName.MatchString(v.Name) || !joinTokenID.MatchString(v.ID) {
 		http.NotFound(rw, r)
 		return
 	}
 	if !w.c.store.joinTokenUnused(v.ID) {
-		nodes, err := w.c.store.nodes()
+		devices, err := w.c.store.devices()
 		if err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		for _, n := range nodes {
+		for _, n := range devices {
 			v.Connected = v.Connected || n.Name == v.Name && n.Online
 		}
 	}
@@ -113,13 +113,13 @@ func (w *web) handleJoinWait(rw http.ResponseWriter, r *http.Request, s *session
 func (w *web) handleDeviceAccess(suspend bool) func(http.ResponseWriter, *http.Request, *session) {
 	return func(rw http.ResponseWriter, r *http.Request, s *session) {
 		name := r.PathValue("name")
-		do, what := w.c.resumeNode, "restored"
+		do, what := w.c.resumeDevice, "restored"
 		if suspend {
-			do, what = w.c.suspendNode, "cut"
+			do, what = w.c.suspendDevice, "cut"
 		}
 		if err := do(name); err != nil {
-			if errors.Is(err, errNoNode) {
-				w.toast(rw, tr(w.lang(r), "machines.nonode"), false)
+			if errors.Is(err, errNoDevice) {
+				w.toast(rw, tr(w.lang(r), "machines.nodevice"), false)
 				return
 			}
 			w.toast(rw, err.Error(), false)

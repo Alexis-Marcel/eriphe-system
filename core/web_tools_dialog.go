@@ -145,7 +145,7 @@ func statusOf(lang string, sv serverView) toolStatus {
 	case pending && !placed:
 		v.State, v.Text, v.Hint, v.Edit, v.Poll = "wait", tr(lang, "server.pending"), tr(lang, "tools.pendinghint"), false, "3s"
 	case pending:
-		v.State, v.Text, v.Edit, v.Poll = "start", fmt.Sprintf(tr(lang, "added.startingon"), sv.Node), false, "1500ms"
+		v.State, v.Text, v.Edit, v.Poll = "start", fmt.Sprintf(tr(lang, "added.startingon"), sv.Device), false, "1500ms"
 	case sv.Status == statusReady:
 		v.State, v.Text, v.Edit = "ok", tr(lang, "added.ready"), false
 		v.Hint = tr(lang, "tools.count1")

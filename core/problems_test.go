@@ -169,7 +169,7 @@ func TestBrainFailedTurn(t *testing.T) {
 	}
 }
 
-// What a node reports of a failed turn, old nodes included (no error mark).
+// What a device reports of a failed turn, old devices included (no error mark).
 func TestTurnFailure(t *testing.T) {
 	for _, c := range []struct {
 		e   EventRow
@@ -209,8 +209,8 @@ func countRole(t *testing.T, c *core, role string) int {
 // do its agents, instead of "Ready"; a turn that goes through clears it.
 func TestProviderHealthFromUse(t *testing.T) {
 	tw, c, _ := catalogWeb(t, nil)
-	c.store.registerNode("pc", hashSecret("s"))
-	c.store.setNodeStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.store.registerDevice("pc", hashSecret("s"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	task := &TaskRow{Agent: "sonnet"}
 	c.noteAgentHealth(task, []EventRow{{Type: "turn_end", Data: map[string]any{"subtype": "success", "auth_error": true,
 		"result": "Failed to authenticate. API Error: 401 OAuth token has expired"}}})
@@ -336,13 +336,13 @@ func TestProviderSavedWithRefusedKey(t *testing.T) {
 func TestConversationHidesNotes(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	tw.c.store.insertTask(&TaskRow{ID: "t-ac14385a", Node: "pc", Agent: "small", Runtime: "claude-code",
+	tw.c.store.insertTask(&TaskRow{ID: "t-ac14385a", Device: "pc", Agent: "small", Runtime: "claude-code",
 		Prompt: "Trie les factures\net fais un tableau", State: stateFailed})
 	for _, text := range []string{
 		"Catalogue : le compte « claude » a été ajouté depuis l'espace de travail, avec les agents haiku, opus. list_agents les montre.",
-		"La tâche t-ac14385a (nœud pc) a fini son tour. Son dernier message : fini",
-		"La tâche t-ac14385a (nœud pc) demande une permission (permission_id 1) : Bash {}",
-		"La tâche t-ac14385a (nœud pc) est maintenant failed.",
+		"La tâche t-ac14385a (appareil pc) a fini son tour. Son dernier message : fini",
+		"La tâche t-ac14385a (appareil pc) demande une permission (permission_id 1) : Bash {}",
+		"La tâche t-ac14385a (appareil pc) est maintenant failed.",
 	} {
 		tw.c.store.addMessage(roleEvent, text, false)
 	}
@@ -383,7 +383,7 @@ func TestToolRowErrors(t *testing.T) {
 	}{
 		{toolView{serverView: serverView{serverInfo: serverInfo{Name: "github", Status: statusError, Error: `calling "initialize": sending "initialize": Unauthorized`}}},
 			[]string{"Le service a refusé la connexion : reconnecte-le", "<summary>Détails</summary>", "Unauthorized"}, nil},
-		{toolView{serverView: serverView{serverInfo: serverInfo{Name: "mail", Kind: "local", Status: statusError, Error: "service mail is pending on pc-bureau"}, Node: "pc-bureau", Service: "pending"},
+		{toolView{serverView: serverView{serverInfo: serverInfo{Name: "mail", Kind: "local", Status: statusError, Error: "service mail is pending on pc-bureau"}, Device: "pc-bureau", Service: "pending"},
 			Pending: true, Placed: true},
 			[]string{"Il démarre sur son appareil"}, []string{"is pending on", "problem-text"}},
 	} {
@@ -408,7 +408,7 @@ func TestToolRowErrors(t *testing.T) {
 func TestTaskDrawerError(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	tw.c.store.insertTask(&TaskRow{ID: "t-1", Node: "pc", Agent: "small", Runtime: "opencode", Prompt: "Écris un script", State: stateFailed})
+	tw.c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "opencode", Prompt: "Écris un script", State: stateFailed})
 	raw := "the agent runs model openrouter/a, not openrouter/b: is the key of its provider there?"
 	tw.c.store.addEvents("t-1", []EventRow{{Seq: 1, Time: time.Now(), Type: "error", Data: map[string]any{"message": raw}}})
 	_, body, _ := tw.do("GET", "/tasks/t-1", nil, map[string]string{"HX-Request": "true"})
