@@ -60,7 +60,7 @@ func boundText(path string) []map[string]any {
 // nor surface_remove; the catalog in full on demand, and its section
 // stays out of its tools' descriptions and instructions.
 func TestWorkspaceToolsThroughMCP(t *testing.T) {
-	c, _ := surfaceCore(t)
+	c, _ := ledgerCore(t)
 	brain := connectServer(t, newMCPServer(c))
 
 	tools, err := brain.ListTools(context.Background(), nil)
@@ -82,9 +82,6 @@ func TestWorkspaceToolsThroughMCP(t *testing.T) {
 	got, _ := callOn(t, brain, "catalog_read", map[string]any{})
 	if got["catalog"] != full {
 		t.Fatalf("catalog_read: %v", got)
-	}
-	if all, _ := c.surfaces(); len(all) != 0 {
-		t.Fatalf("written: %+v", all)
 	}
 }
 
@@ -112,7 +109,7 @@ func taskEndpoint(t *testing.T, c *core, task, server string, secret ...string) 
 // task not lent it does not reach it; one lent a tool of it sees that one,
 // its device relays it and allows it in advance; skills lend it by name.
 func TestWorkspaceGrantPath(t *testing.T) {
-	c, _ := surfaceCore(t)
+	c, _ := ledgerCore(t)
 	c.store.registerDevice("pc", hashSecret("device-secret"))
 	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
 	c.store.insertTask(&TaskRow{ID: "t-none", Device: "pc", Runtime: "claude-code", State: stateRunning, Tools: "ledger"})

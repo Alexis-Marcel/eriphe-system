@@ -186,3 +186,27 @@ func TestCheckMakesNothing(t *testing.T) {
 		t.Fatal("an id taken passed")
 	}
 }
+
+// The watcher hears each change: a version, a trace, a state; a state set
+// again to what it was is no change.
+func TestWatch(t *testing.T) {
+	s, _ := newEnv(t).open(t)
+	var got []string
+	s.Watch(func(c Change) { got = append(got, c.What+" "+c.ID) })
+	d := mustCreate(t, s, New{Title: "Plan", Body: "Text."})
+	if _, err := s.Write("n1", "More.", d.Version.Hash, "brain"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AppendTrace("n1", "brain", "Wrote it."); err != nil {
+		t.Fatal(err)
+	}
+	s.SetState("n1", Running)
+	s.SetState("n1", Running)
+	if err := s.Archive("n1", "user"); err != nil {
+		t.Fatal(err)
+	}
+	want := "doc n1,doc n1,trace n1,state n1,doc n1"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("heard %v, want %s", got, want)
+	}
+}

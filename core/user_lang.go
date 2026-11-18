@@ -24,15 +24,13 @@ func (c *core) userLang() string {
 	return "fr"
 }
 
-// noteUserLang keeps the user's language, from a signed-in request only;
-// the workspace's queue is written in it again when it changes.
+// noteUserLang keeps the user's language, from a signed-in request only.
 func (c *core) noteUserLang(lang string) {
 	if lang != "fr" && lang != "en" {
 		return
 	}
 	if c.store.get(userLangKey) != lang {
 		c.store.set(userLangKey, lang)
-		c.kickWorkspace()
 	}
 }
 

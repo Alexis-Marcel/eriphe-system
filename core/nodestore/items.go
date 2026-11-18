@@ -70,11 +70,14 @@ func (s *Store) NoteItem(id string, it Item) error {
 		return fmt.Errorf("%s has no source %q (its sources: %s)", id, it.Source, strings.Join(names, ", "))
 	}
 	if it.Note == "" && it.State == "" {
-		_, err := s.db.Exec(`DELETE FROM node_items WHERE id = ? AND source = ? AND item = ?`, id, it.Source, it.Item)
-		return err
+		_, err = s.db.Exec(`DELETE FROM node_items WHERE id = ? AND source = ? AND item = ?`, id, it.Source, it.Item)
+	} else {
+		_, err = s.db.Exec(`INSERT OR REPLACE INTO node_items (id, source, item, note, state, author, tainted, noted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, it.Source, it.Item, it.Note, it.State, it.Author, it.Tainted, s.opts.Now().Unix())
 	}
-	_, err = s.db.Exec(`INSERT OR REPLACE INTO node_items (id, source, item, note, state, author, tainted, noted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, it.Source, it.Item, it.Note, it.State, it.Author, it.Tainted, s.opts.Now().Unix())
+	if err == nil {
+		s.changed(ChangedState, id)
+	}
 	return err
 }
 

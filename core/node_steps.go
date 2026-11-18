@@ -1177,7 +1177,7 @@ func (c *core) replan(ctx context.Context, parent, step, note string, specs []st
 	if step != "" {
 		c.traceDrop(st, c.dropStep(ctx, st), "abandonnée pour un nouveau plan", note)
 	}
-	ids, err := c.openStepsLocked(ctx, parent, specs, 0, stepOpener{author: surfaceAuthorBrain, tainted: taint})
+	ids, err := c.openStepsLocked(ctx, parent, specs, 0, stepOpener{author: byBrain, tainted: taint})
 	if err != nil {
 		return "", err
 	}

@@ -103,6 +103,28 @@ func (n *Node) Blocks() []*Block {
 	return out
 }
 
+// Part is a piece of a node's body, in order: its markdown text, or one
+// of its blocks.
+type Part struct {
+	Text  string
+	Block *Block
+}
+
+// Parts are the node's body, piece by piece, in order: text and blocks.
+// Text that holds only blank lines is left out.
+func (n *Node) Parts() []Part {
+	var out []Part
+	for _, s := range n.segs {
+		switch {
+		case s.block != nil:
+			out = append(out, Part{Block: s.block})
+		case strings.TrimSpace(s.text) != "":
+			out = append(out, Part{Text: s.text})
+		}
+	}
+	return out
+}
+
 // Block is the block so named; nil when the node has none.
 func (n *Node) Block(name string) *Block {
 	for _, s := range n.segs {

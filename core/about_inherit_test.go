@@ -151,39 +151,6 @@ func TestCardAndItemAbouts(t *testing.T) {
 	}
 }
 
-// A surface keeps its about when written again without one; one given
-// changes it.
-func TestSurfaceKeepsItsAbout(t *testing.T) {
-	c := graphCore(t)
-	th := workNode(t, c, "")
-	write := func(about string) {
-		t.Helper()
-		in := surfaceIn{ID: "pr", Title: "PR", Components: []byte(`[{"id":"root","component":"Text","text":"x"}]`), About: about}
-		if about == "" {
-			in.inherit = c.turnAbout()
-		}
-		if _, errs, err := c.fixtureSurface(surfaceAuthorBrain, in); err != nil || len(errs) > 0 {
-			t.Fatal(err, errs)
-		}
-	}
-	c.turn.about(th)
-	write("")
-	if got := aboutOfRow(c, "surfaces", "id = 'pr'"); got != nodeRef(th) {
-		t.Fatalf("new surface under %q", got)
-	}
-	c.store.noteAbout("project:site")
-	c.turn.name([]string{"project:site"})
-	c.turn.about("")
-	write("")
-	if got := aboutOfRow(c, "surfaces", "id = 'pr'"); got != nodeRef(th) {
-		t.Errorf("rewritten under %q", got)
-	}
-	write("project:site")
-	if got := aboutOfRow(c, "surfaces", "id = 'pr'"); got != "project:site" {
-		t.Errorf("given, under %q", got)
-	}
-}
-
 // A skill's run is about its events' key when it names a thing; a node
 // that is not a node's id refuses the skill.
 func TestSkillRunSubject(t *testing.T) {

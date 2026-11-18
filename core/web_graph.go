@@ -1,0 +1,468 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
+)
+
+// The graph workspace (#633), Eriphe's home page (/, and always at
+// /espace; the conversation is at /conversation, web_pages.go): the graph
+// of nodes, their pages opened inside it, and one console. It is a React
+// app (web/espace), built into web/static/espace and embedded with the
+// other static files; eriphe-core serves it from a small HTML shell
+// (templates/espace.html). The app gets its words, the CSRF token and the
+// assistant's name from /espace/boot, never from inline code: the CSP
+// stays strict (web.go).
+//
+// Go reads the nodes; the page gets them ready to draw:
+//
+//   - the graph, its rows, by the stream (web_sse.go, graph_feed.go);
+//   - a node's page (GET /api/nodes/{id}): its row, its versions, its
+//     body as parts (markdown text, or a block ready for the A2UI
+//     renderer: its components and its data, the sources' last values in
+//     it), and the cards it waits on;
+//   - its trace (GET /api/nodes/{id}/trace), as entries;
+//   - its file (GET /api/nodes/{id}/md), as it is.
+//
+// A title that may be someone else's words is never sent (cleanNodeTitle);
+// a node's goal is the brain's, never shown.
+
+func (w *web) graphRoutes(mux *webMux) {
+	mux.Handle("GET /espace", w.auth(w.handleEspace))
+	mux.Handle("GET /espace/boot", w.auth(w.handleEspaceBoot))
+	mux.Handle("GET /espace/catalog/v1.json", w.auth(w.handleEspaceCatalog))
+	mux.Handle("GET /espace/media", w.auth(w.handleMedia))  // web_media.go
+	mux.Handle("GET /api/earlier", w.auth(w.handleEarlier)) // web_console.go
+	mux.Handle("GET /api/nodes/{id}", w.auth(w.handleNodePage))
+	mux.Handle("GET /api/nodes/{id}/trace", w.auth(w.handleNodeTrace))
+	mux.Handle("GET /api/nodes/{id}/md", w.auth(w.handleNodeMD))
+	mux.Handle("GET /api/proposals/{ref}", w.auth(w.handleProposal)) // web_proposals.go
+	mux.Handle("GET /api/proposals", w.auth(w.handleDayProposals))   // web_proposals.go
+}
+
+// handleEspace is the app's page.
+func (w *web) handleEspace(rw http.ResponseWriter, r *http.Request, s *session) {
+	w.render(rw, r, s, "espace", "espace", page{Title: "nav.espace"})
+}
+
+// espaceBoot is what the app needs before its first paint.
+type espaceBoot struct {
+	Lang    string            `json:"lang"`
+	Name    string            `json:"name"`
+	CSRF    string            `json:"csrf"`
+	Strings map[string]string `json:"strings"`
+}
+
+func (w *web) handleEspaceBoot(rw http.ResponseWriter, r *http.Request, s *session) {
+	lang := w.lang(r)
+	w.c.noteUserLang(lang) // Eriphe's lines follow it
+	b := espaceBoot{Lang: lang, Name: assistantName(), CSRF: s.CSRF, Strings: espaceWords(lang, assistantName())}
+	rw.Header().Set("Content-Type", "application/json")
+	rw.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(rw).Encode(b)
+}
+
+// handleEspaceCatalog is GET /espace/catalog/v1.json: the catalog of the
+// components a block is made of (core/a2ui), which the app's renderer
+// reads. The path carries the catalog's version: a v2 gets a path of its
+// own.
+func (w *web) handleEspaceCatalog(rw http.ResponseWriter, r *http.Request, _ *session) {
+	rw.Header().Set("Content-Type", "application/json")
+	rw.Header().Set("Cache-Control", "no-cache")
+	rw.Write(a2ui.CatalogJSON())
+}
+
+// graphNode is a node's row as the page gets it: what the graph draws.
+type graphNode struct {
+	ID       string     `json:"id"`
+	Title    string     `json:"title,omitempty"` // "" when it may be someone else's words
+	Parent   string     `json:"parent,omitempty"`
+	Links    []string   `json:"links,omitempty"`
+	Lifetime string     `json:"lifetime"`
+	State    string     `json:"state"`
+	Created  time.Time  `json:"created"`
+	Updated  time.Time  `json:"updated"`
+	Done     *time.Time `json:"done,omitempty"`
+	External bool       `json:"external,omitempty"`
+	Version  int        `json:"version"`
+	Waits    bool       `json:"waits,omitempty"` // one of its cards waits for the user
+	Line     string     `json:"line,omitempty"`  // while it runs: its task's last word of where it is
+}
+
+// graphRow is a node's row.
+func (c *core) graphRow(sum nodestore.Summary) graphNode {
+	g := graphNode{ID: sum.ID, Parent: sum.Parent, Links: sum.Links, Lifetime: string(sum.Lifetime), State: sum.State,
+		Created: sum.Created, Updated: sum.Updated, External: sum.External, Version: sum.Version}
+	if !sum.External {
+		g.Title = sum.Title
+	}
+	if !sum.Done.IsZero() {
+		d := sum.Done
+		g.Done = &d
+	}
+	g.Waits = c.nodeCardWaits(sum.ID)
+	if p, ok := c.progressOf(sum.ID); ok && sum.State == nodestore.Running {
+		g.Line = p.Text
+	}
+	return g
+}
+
+// graphRows is the graph: every node not archived.
+func (c *core) graphRows() ([]graphNode, error) {
+	if c.nodes == nil {
+		return []graphNode{}, nil
+	}
+	xs, err := c.nodes.Graph()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]graphNode, 0, len(xs))
+	for _, x := range xs {
+		out = append(out, c.graphRow(x))
+	}
+	return out, nil
+}
+
+// nodePage is a node's page: its row, the version shown and the others,
+// its body in parts, and its cards.
+type nodePage struct {
+	Node     graphNode      `json:"node"`
+	Version  int            `json:"version"` // the version shown
+	Archived *time.Time     `json:"archived,omitempty"`
+	Versions []pageVersion  `json:"versions"`
+	Parts    []pagePart     `json:"parts"`
+	Cards    []proposalView `json:"cards"`
+}
+
+// pageVersion is a version of a node: its number, who made it, when.
+// Code's own versions (a source's new values) are not listed, but the
+// last one.
+type pageVersion struct {
+	N      int       `json:"n"`
+	Author string    `json:"author"`
+	At     time.Time `json:"at"`
+}
+
+// pagePart is a piece of a node's body: markdown text, or a block.
+type pagePart struct {
+	Text  string     `json:"text,omitempty"`
+	Block *pageBlock `json:"block,omitempty"`
+}
+
+// pageBlock is a block ready to draw: its components and its data, with
+// the sources' last values at /<name> and the user's marks at /marks; or,
+// when it does not read as a block, what is wrong (its raw JSON is the
+// file's, in the .md tab).
+type pageBlock struct {
+	Name       string           `json:"name"`
+	External   bool             `json:"external,omitempty"`
+	Components []a2ui.Component `json:"components"`
+	Data       map[string]any   `json:"data"`
+	Error      string           `json:"error,omitempty"`
+}
+
+var errNoNode = errors.New("no such node")
+
+// nodePageOf is a node's page, at a version (0: the last).
+func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) {
+	c := w.c
+	if c.nodes == nil || !nodefile.IDOK(id) {
+		return nodePage{}, errNoNode
+	}
+	sum, err := c.nodes.Get(id)
+	if err != nil {
+		return nodePage{}, errNoNode
+	}
+	d, err := c.nodes.Read(id, version)
+	if err != nil {
+		return nodePage{}, errNoNode
+	}
+	p := nodePage{Node: c.graphRow(sum), Version: d.Version.N, Versions: []pageVersion{}, Parts: []pagePart{}, Cards: []proposalView{}}
+	if !sum.Archived.IsZero() {
+		a := sum.Archived
+		p.Archived = &a
+	}
+	if vs, err := c.nodes.Versions(id); err == nil {
+		for i, v := range vs {
+			if v.Author == nodeByCode && i < len(vs)-1 && v.N != d.Version.N {
+				continue
+			}
+			p.Versions = append(p.Versions, pageVersion{N: v.N, Author: v.Author, At: v.At})
+		}
+	}
+	// The sources' last values are the reads' at the last version; an
+	// older one shows its own snapshot.
+	var reads []nodeRead
+	if d.Version.N == d.Last {
+		reads = c.nodeReads(id)
+	}
+	for _, part := range d.Node.Parts() {
+		if part.Block == nil {
+			p.Parts = append(p.Parts, pagePart{Text: part.Text})
+			continue
+		}
+		b := c.blockView(part.Block, reads)
+		p.Parts = append(p.Parts, pagePart{Block: &b})
+	}
+	p.Cards = w.nodeCards(id, lang)
+	return p, nil
+}
+
+// blockView is a block ready to draw. Its media addresses go through
+// eriphe-core's endpoint (web_media.go), never loaded from outside: one a
+// source gave, or one the author wrote when the block is not external
+// (then a model that read something from outside may have written it, to
+// carry what it read out in its address: A2UI #4045), else it is dropped.
+// A Link's address goes as it is, but one that is not an address a Link
+// may open goes as "".
+func (c *core) blockView(b *nodefile.Block, reads []nodeRead) pageBlock {
+	v := pageBlock{Name: b.Name, External: b.External, Components: []a2ui.Component{}, Data: map[string]any{}}
+	if err := b.Validate(); err != nil {
+		v.Error = err.Error()
+		return v
+	}
+	if b.Data != nil {
+		json.Unmarshal(b.Data, &v.Data)
+		if v.Data == nil {
+			v.Data = map[string]any{}
+		}
+	}
+	var snap map[string]any
+	json.Unmarshal(b.Snapshot, &snap)
+	for name := range b.Sources {
+		if val, ok := snap[name]; ok {
+			v.Data[name] = val
+		}
+		for _, r := range reads {
+			if r.Block == b.Name && r.Name == name && r.Value != nil {
+				v.Data[name] = r.Value
+			}
+		}
+	}
+	marks := map[string]any{}
+	for list, items := range b.Marks {
+		m := map[string]any{}
+		for item, mark := range items {
+			m[item] = mark
+		}
+		marks[list] = m
+	}
+	v.Data[nodefile.MarksKey] = marks
+
+	var list []map[string]any
+	json.Unmarshal(b.Components, &list)
+	authorOK := !b.External
+	for _, comp := range list {
+		kind, _ := comp["component"].(string)
+		for prop, val := range comp {
+			if s, ok := val.(string); ok && a2ui.IsMedia(kind, prop) {
+				comp[prop] = c.mediaOrDrop(s, authorOK)
+			}
+			if s, ok := val.(string); ok && a2ui.IsLink(kind, prop) {
+				comp[prop] = linkOrDrop(s)
+			}
+		}
+	}
+	raw, _ := json.Marshal(list)
+	json.Unmarshal(raw, &v.Components)
+	if v.Components == nil {
+		v.Components = []a2ui.Component{}
+	}
+	for _, bound := range a2ui.Eriphe().BoundPaths(b.Components) {
+		at := tokens(bound.Path)
+		if bound.Link {
+			rewriteAt(v.Data, at, linkOrDrop)
+		}
+		if !bound.Media || len(at) == 0 {
+			continue
+		}
+		_, fromSource := b.Sources[at[0]]
+		ok := fromSource || authorOK
+		rewriteAt(v.Data, at, func(u string) string { return c.mediaOrDrop(u, ok) })
+	}
+	return v
+}
+
+// sourceValue is the value at /<name> of a block as the page draws it:
+// what a "source" event sends. false when the node, the block or the
+// source is no more.
+func (c *core) sourceValue(id, block, name string) (any, bool) {
+	if c.nodes == nil {
+		return nil, false
+	}
+	d, err := c.nodes.Read(id, 0)
+	if err != nil {
+		return nil, false
+	}
+	b := d.Node.Block(block)
+	if b == nil {
+		return nil, false
+	}
+	if _, ok := b.Sources[name]; !ok {
+		return nil, false
+	}
+	v := c.blockView(b, c.nodeReads(id))
+	val, ok := v.Data[name]
+	return val, ok
+}
+
+// nodeCards are the cards a node waits on, or did: those linked to it
+// (node_turn.go), the last first.
+func (w *web) nodeCards(id, lang string) []proposalView {
+	out := []proposalView{}
+	rows, err := w.c.store.db.Query(`SELECT ref FROM node_cards WHERE node = ? ORDER BY created DESC`, id)
+	if err != nil {
+		return out
+	}
+	var refs []string
+	for rows.Next() {
+		var ref string
+		if rows.Scan(&ref) == nil {
+			refs = append(refs, ref)
+		}
+	}
+	rows.Close()
+	for _, ref := range refs {
+		xs, err := w.c.cardsWhere(`ref = ?`, ref)
+		if err != nil || len(xs) == 0 {
+			continue
+		}
+		x, p := w.c.liveCard(xs[0])
+		out = append(out, w.proposalView(x, p, lang))
+	}
+	return out
+}
+
+// handleNodePage is GET /api/nodes/{id}: a node's page, at a version
+// (?version=, the last by default); 404 for a node there is not.
+func (w *web) handleNodePage(rw http.ResponseWriter, r *http.Request, _ *session) {
+	version, _ := strconv.Atoi(r.URL.Query().Get("version"))
+	p, err := w.nodePageOf(r.PathValue("id"), max(0, version), w.lang(r))
+	if err != nil {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	writeJSON(rw, http.StatusOK, p)
+}
+
+// traceEntry is an entry of a node's trace: when, who, what.
+type traceEntry struct {
+	At     time.Time `json:"at"`
+	Author string    `json:"author"` // brain, user, task:<id>, eriphe (code), outside
+	Text   string    `json:"text"`
+}
+
+// traceEntries reads a trace's entries (nodestore's AppendTrace: a
+// heading "## <time> · <author>", then the text), oldest first.
+func traceEntries(raw []byte) []traceEntry {
+	out := []traceEntry{}
+	var cur *traceEntry
+	var body []string
+	flush := func() {
+		if cur != nil {
+			cur.Text = strings.TrimSpace(strings.Join(body, "\n"))
+			out = append(out, *cur)
+		}
+		cur, body = nil, nil
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if head, ok := strings.CutPrefix(line, "## "); ok {
+			at, author, ok := strings.Cut(head, " · ")
+			if t, err := time.Parse(time.RFC3339, at); ok && err == nil {
+				flush()
+				cur = &traceEntry{At: t, Author: author}
+				continue
+			}
+		}
+		if cur != nil {
+			body = append(body, line)
+		}
+	}
+	flush()
+	return out
+}
+
+// handleNodeTrace is GET /api/nodes/{id}/trace: a node's trace, as
+// entries; 404 for a node there is not.
+func (w *web) handleNodeTrace(rw http.ResponseWriter, r *http.Request, _ *session) {
+	id := r.PathValue("id")
+	if w.c.nodes == nil || !nodefile.IDOK(id) {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": errNoNode.Error()})
+		return
+	}
+	raw, err := w.c.nodes.Trace(id)
+	if err != nil {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": errNoNode.Error()})
+		return
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	writeJSON(rw, http.StatusOK, map[string]any{"entries": traceEntries(raw)})
+}
+
+// handleNodeMD is GET /api/nodes/{id}/md: a node's file as it is, at a
+// version (?version=), with the hash of that version (what a write
+// expects); 404 for a node there is not.
+func (w *web) handleNodeMD(rw http.ResponseWriter, r *http.Request, _ *session) {
+	id := r.PathValue("id")
+	version, _ := strconv.Atoi(r.URL.Query().Get("version"))
+	if w.c.nodes == nil || !nodefile.IDOK(id) {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": errNoNode.Error()})
+		return
+	}
+	d, err := w.c.nodes.Read(id, max(0, version))
+	if err != nil {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": errNoNode.Error()})
+		return
+	}
+	rw.Header().Set("Cache-Control", "no-store")
+	writeJSON(rw, http.StatusOK, map[string]any{"md": string(d.Raw), "version": d.Version.N, "hash": d.Version.Hash, "last": d.Last})
+}
+
+// espaceWords are the app's words in a language, with the assistant's name.
+func espaceWords(lang, name string) map[string]string {
+	out := map[string]string{}
+	for k := range espaceStrings["fr"] {
+		in := lang
+		s, ok := espaceStrings[in][k]
+		if !ok {
+			s, in = espaceStrings["fr"][k], "fr"
+		}
+		out[k] = withName(in, s, name)
+	}
+	return out
+}
+
+// espaceStringsFile is the words the app uses on its dev server, with no
+// eriphe-core behind (web/espace/src/strings.json): a test keeps it the
+// same as the tables above.
+func espaceStringsFile() []byte {
+	langs := map[string]map[string]string{}
+	for _, lang := range []string{"fr", "en"} {
+		langs[lang] = espaceWords(lang, defaultDisplayName)
+	}
+	// Sorted keys, two-space indent: json.Marshal sorts map keys.
+	raw, _ := json.MarshalIndent(langs, "", "  ")
+	return append(raw, '\n')
+}
+
+// espaceKeys lists the keys of a language, for the tests.
+func espaceKeys(lang string) []string {
+	var keys []string
+	for k := range espaceStrings[lang] {
+		if strings.HasPrefix(k, "espace.") || k == "nav.espace" {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	return keys
+}

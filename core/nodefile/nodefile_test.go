@@ -558,3 +558,15 @@ func TestAuthorKeepsAfter(t *testing.T) {
 		t.Errorf("a new node's after from an author: %v", err)
 	}
 }
+
+// A node's parts are its text and blocks, in order, blank text left out.
+func TestParts(t *testing.T) {
+	n, err := Parse([]byte("---\nid: a1\ntitle: Plan\nlifetime: work\ncreated: 2026-11-17T10:00:00Z\n---\n# Plan\n\nIntro.\n\n```eriphe:block status\n{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"Ok.\"}]}\n```\n\nAfter.\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ps := n.Parts()
+	if len(ps) != 3 || !strings.Contains(ps[0].Text, "Intro.") || ps[1].Block == nil || ps[1].Block.Name != "status" || !strings.Contains(ps[2].Text, "After.") {
+		t.Fatalf("parts: %+v", ps)
+	}
+}

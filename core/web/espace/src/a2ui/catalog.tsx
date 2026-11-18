@@ -392,9 +392,9 @@ function useDataAt(context: ComponentContext, path: string | null): unknown {
   return v;
 }
 
-// Mark is the user's mark on something a thread shows: a toggle for each
-// mark it offers, pressed when it is theirs, read where eriphe-core keeps
-// it (/thread/marks/<list>/<item>). A click sends "mark" with ids only,
+// Mark is the user's mark on something a node's block shows: a toggle for
+// each mark it offers, pressed when it is theirs, read where eriphe-core
+// keeps it (/marks/<list>/<item> of the block's data). A click sends "mark" with ids only,
 // the mark or "" to take it away; eriphe-core checks it against this Mark
 // and writes the data again. done alone is a box to check.
 const MARK_ID = /^[A-Za-z0-9_][A-Za-z0-9_.:@=+-]{0,127}$/;
@@ -412,7 +412,7 @@ const Mark = createComponentImplementation(
     const ok = MARK_ID.test(list) && MARK_ID.test(item);
     // Shown as eriphe-core keeps it, never ahead of it: it writes the
     // data again once it took the mark.
-    const shown = str(useDataAt(context, ok ? `/thread/marks/${list}/${item}` : null));
+    const shown = str(useDataAt(context, ok ? `/marks/${list}/${item}` : null));
     const set = (m: string) => void context.dispatchAction({ event: { name: "mark", context: { list, item, mark: shown === m ? "" : m } } });
     const marks = props.marks ?? [];
     return (
@@ -1044,7 +1044,7 @@ const Proposal = createComponentImplementation(
             ))}
           </dl>
         )}
-        {p.from && <p className="a2-proposal-from">{p.thread ? <a href={`/espace?open=thread-${p.thread}`}>{p.from}</a> : p.from}</p>}
+        {p.from && <p className="a2-proposal-from">{p.node ? <a href={`/espace?open=node-${p.node}`}>{p.from}</a> : p.from}</p>}
         {pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
         {pending && elsewhere && <p className="a2-proposal-why a2-proposal-inchat">{t("espace.a2.proposal.inchat")}</p>}
         {pending && !elsewhere && (

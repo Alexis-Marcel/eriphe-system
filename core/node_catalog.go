@@ -41,7 +41,7 @@ func providedServer(name string) bool { return slices.Contains(providedServers, 
 type surfaceCaller struct {
 	author string // brain, task:<id>
 	// sawSource marks a task that was told what a source gave (an error,
-	// the fields of a result): that taints it (workspace_sources.go).
+	// the fields of a result): that taints it (sources_offer.go).
 	sawSource func()
 	taint     func() []string // why what it writes may come from outside
 }
@@ -65,7 +65,7 @@ func (c *core) registerSurfaceTools(s *mcp.Server, who func() surfaceCaller, all
 // brainSurfaceTools are the brain's: as brain, its turn's taint.
 func registerBrainSurfaceTools(s *mcp.Server, c *core) {
 	c.registerSurfaceTools(s, func() surfaceCaller {
-		return surfaceCaller{author: surfaceAuthorBrain, taint: c.turnTaint}
+		return surfaceCaller{author: byBrain, taint: c.turnTaint}
 	}, nil)
 }
 

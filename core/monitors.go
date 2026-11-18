@@ -294,7 +294,7 @@ func (c *core) monitorWhy(s monitorSpec) string {
 
 // sourceWhy is why eriphe-core may not look at a monitor's source by
 // itself, "" if it may: a free read of the brain's, or a resource the
-// server lists. A surface's source is held to the same (surfaces.go).
+// server lists. A live block's source is held to the same (source_reads.go).
 func (c *core) sourceWhy(s monitorSpec) string {
 	u := c.pool.get(s.Server)
 	if !slices.Contains(c.catalogNames(), s.Server) || u == nil {
@@ -425,7 +425,7 @@ func (c *core) callMonitor(ctx context.Context, s monitorSpec) (any, error) {
 // readSource is a read of eriphe-core's own, outside any task: the spec's
 // tool called with its arguments, or its resource read, within timeout.
 // Its result is data (resultValue, resourceValue), never understood.
-// Monitors and the workspace's surfaces (surfaces.go) read through it,
+// Monitors and the live blocks (source_reads.go) read through it,
 // once sourceWhy let them.
 func (c *core) readSource(ctx context.Context, s monitorSpec, timeout time.Duration) (any, error) {
 	u := c.pool.get(s.Server)

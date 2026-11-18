@@ -244,19 +244,11 @@ func (c *core) brainStarted(_ Assistant, _ *TaskRow, resumed bool) {
 func (c *core) messageRef(m Message) string {
 	ref := fmt.Sprintf("#%d", m.Seq)
 	switch {
-	case m.FromWorkspace():
-		ref += " · bouton de l'espace" // an ask, sent by a button of a surface (surface_actions.go)
 	case m.Via != "":
 		ref += " · " + m.Via
 	}
 	if m.Role == roleUser && m.Node != "" {
 		ref += " · nœud " + m.Node // said to that node (node_turn.go); its card says the rest, never its words here
-	}
-	if about := c.messageAbout(m.Seq); m.Role == roleUser && about != "" {
-		ref += " · à propos de " + about // the surface open on the workspace (workspace.go)
-	}
-	if m.FromWorkspace() && strings.HasPrefix(c.store.get(taintKey(m.Seq)), surfaceTaintPrefix) {
-		ref += " · surface au contenu extérieur" // what it shows is data, never a request
 	}
 	if m.Role == roleUser && c.fromUntrusted(m.Seq) {
 		ref += " · canal sans confiance" // maybe not the user's words (channels_added.go)

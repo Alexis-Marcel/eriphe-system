@@ -41,8 +41,11 @@ func (s *Store) SetDone(id string, done bool, author string) (bool, error) {
 	if done {
 		state = Done
 	}
-	_, err = s.db.Exec(`UPDATE nodes SET state = ? WHERE id = ?`, state, id)
-	return true, err
+	if _, err = s.db.Exec(`UPDATE nodes SET state = ? WHERE id = ?`, state, id); err != nil {
+		return true, err
+	}
+	s.changed(ChangedState, id)
+	return true, nil
 }
 
 // Link links a node to another: to joins its links. It tells whether it
@@ -127,4 +130,9 @@ func (s *Store) below(id string) ([]string, error) {
 		}
 	}
 	return ids, nil
+}
+
+// Graph is the graph: every node not archived, the oldest first.
+func (s *Store) Graph() ([]Summary, error) {
+	return s.summaries(`WHERE n.archived = 0 ORDER BY n.created, n.id`)
 }

@@ -1,0 +1,91 @@
+{
+  "node": {
+    "id": "plan1",
+    "title": "Plan du 1er article",
+    "lifetime": "work",
+    "state": "idle",
+    "created": "0001-01-01T00:00:00Z",
+    "updated": "0001-01-01T00:00:00Z",
+    "version": 1
+  },
+  "version": 1,
+  "versions": [
+    {
+      "n": 1,
+      "author": "brain",
+      "at": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "parts": [
+    {
+      "text": "# Plan\n\nTrois titres.\n\n"
+    },
+    {
+      "block": {
+        "name": "titles",
+        "components": [
+          {
+            "id": "root",
+            "component": "Column",
+            "children": [
+              "h",
+              "rows",
+              "pic",
+              "go"
+            ]
+          },
+          {
+            "id": "h",
+            "component": "Text",
+            "text": {
+              "@path": "/heading"
+            },
+            "variant": "title"
+          },
+          {
+            "id": "rows",
+            "component": "List",
+            "children": {
+              "componentId": "row",
+              "path": "/ledger/accounts"
+            }
+          },
+          {
+            "id": "row",
+            "component": "Text",
+            "text": {
+              "@path": "name"
+            }
+          },
+          {
+            "id": "pic",
+            "component": "Image",
+            "alt": "A",
+            "url": "/espace/media?s=SIG\u0026u=https%3A%2F%2Fimg.example.org%2Fa.png"
+          },
+          {
+            "id": "go",
+            "component": "Link",
+            "label": "Site",
+            "url": "https://site.example.org/"
+          }
+        ],
+        "data": {
+          "heading": "Titres",
+          "ledger": {
+            "accounts": [
+              {
+                "name": "Titre 1"
+              },
+              {
+                "name": "Titre 2"
+              }
+            ]
+          },
+          "marks": {}
+        }
+      }
+    }
+  ],
+  "cards": []
+}

@@ -263,7 +263,13 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			case len([]rune(text)) > progressMax:
 				return nil, fmt.Errorf("a progress line is %d characters at most", progressMax)
 			}
-			c.traceTask(w.task, w.author, text, c.writeTaint(w.task))
+			taint := c.writeTaint(w.task)
+			c.traceTask(w.task, w.author, text, taint)
+			// Under its bubble too, while it runs; never a line that may
+			// carry someone else's words: the trace has it.
+			if id := c.taskNode(w.task); id != "" && taint == "" {
+				c.nodeProgress(id, text)
+			}
 			return map[string]any{"note": "Noted."}, nil
 		})
 	return s

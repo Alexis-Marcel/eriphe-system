@@ -71,11 +71,9 @@ type core struct {
 	skillRuns   skillRunner            // the triggered skills (skill_runs.go)
 	out         channelOut             // what goes out through the channels the user added (channel_out.go)
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
-	surf        surfaceHub             // the surfaces' changes and their subscribers (surfaces.go)
-	layout      layoutState            // where the surfaces are on the workspace (workspace_layout.go)
-	props       proposalFeed           // the proposals that moved, for the workspace (surface_proposals.go)
+	props       proposalFeed           // the proposals that moved, for the workspace (card_moves.go)
 	live        nodeLive               // the live blocks being read (node_live.go)
-	shows       showFeed               // the nodes the brain shows on the user's screen (node_show.go)
+	graph       graphFeed              // what changes on the graph, for the workspace (graph_feed.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)
 	// minters are the providers whose connections core mints tokens for,
@@ -124,7 +122,7 @@ func newCore(cfg *Config, store *Store) *core {
 	c.pool.connToken = c.connectionToken // a tool on a connection that mints its tokens
 	c.pool.connRefused = c.connectionRefused
 	c.pool.authHold = c.connectionHold // an account to connect again (connections.go)
-	c.pool.resourceUpdated = c.surfaceResourceUpdated
+	c.pool.resourceUpdated = c.nodeResourceUpdated
 	c.pool.toolsHeld = c.toolsHeld
 	c.pool.trusted = c.trustsServer
 	c.provideFolders() // the user's folders, a tool like any other (folder_tools.go)

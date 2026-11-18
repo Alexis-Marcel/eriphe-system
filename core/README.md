@@ -2732,14 +2732,14 @@ answers 409 with the reason.
 ## Workspace (`web`)
 
 Eriphe's own interface, served by eriphe-core on its own HTTPS listener. Its home page is the
-[composed workspace](#the-composed-workspace-the-home-page-) (`/`); the conversation, at
+[graph workspace](#the-graph-workspace-the-home-page-) (`/`); the conversation, at
 `/conversation`, has Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
 state, the pull request or document the agent mentioned), the permissions waiting for an answer
 inline in the conversation (Yes / No, with an optional reason for the agent), and the settings. The assistant manages: what the brain can set itself
 (a notification rule, a memory, an intention) is asked of it in the conversation, and its pages show
 the state, say why, and undo, with a line saying how to ask rather than a form.
-The conversation's header has three buttons, Espace composé (the
-[composed workspace](#the-composed-workspace-the-home-page-), also behind Eriphe's name), Tâches (a badge counts the
+The conversation's header has three buttons, Espace (the
+[graph workspace](#the-graph-workspace-the-home-page-), also behind Eriphe's name), Tâches (a badge counts the
 running tasks, and turns urgent when one waits for the user) and Réglages. On a wide screen Tâches
 hides or shows the side panel; on a phone it opens the tasks as a sheet over the conversation
 (closed by its button, Escape or the browser's back), and from any other page it comes back to
@@ -2772,11 +2772,10 @@ Every notification (`notification:<id>`, a record's ref no signal can name, apar
 key kind), every card (weighted by its kind, above) and every assistant's
 [attention signal](#attention-signals-attention_signalgo) enters it; what is in front of the user
 already enters delivered (the brain's own message, a card under it). An item leaves once decided
-or gone. Each open item is a surface of the workspace, written by code while it is open
-([the queue as surfaces](#the-layout-workspace_layoutgo));
+or gone. An item about a node raises it on the graph (its card at the foot of its page);
 an item drawn from external content stays marked so, and the brain reads it as data. What the
 user wants shown more, less or never is not applied to the queue: it is a
-[preference in memory](#preferences-gestures-and-the-brains-tools-workspacego) whoever notes
+[preference in memory](#preferences-workspace_prefsgo) whoever notes
 items follows. The rest is delivered by code, in a message of its own written by eriphe-core as the
 brain's, the heaviest first, its cards under it (`attentionBreak`): **weight 4 and 5 at once**
 (nothing a running task or node waits on is ever delayed; one message for what enters
@@ -2926,7 +2925,7 @@ Server-Sent Events for what changes; everything is embedded in the binary, with 
 (`userLang`, `core/user_lang.go`, kv `user_lang`): the language of the last signed-in page that set
 it, that is the workspace opening (`/espace/boot`), the language switch in Settings, the channel
 settings or a channel's link code; before any, `web.lang`, else French. The fixed texts use it (the
-workspace queue's surfaces, the bot channels' messages), and so do the models' lines: a skill run's
+workspace's words, the bot channels' messages), and so do the models' lines: a skill run's
 and a task's final message (`skillVoice`, `workerVoice` name it), and a `[langue de l'utilisateur : …]` line at the head of each turn of
 the brain and the assistants, for their notifications, cards, surfaces and
 summaries (the brain answers a message in the language it is written in). The fields of the tools
@@ -2976,216 +2975,121 @@ on IPv4 only, so that clients keep their own address. At most two
 argon2 hashes are computed at once. Changing the password ends the other sessions.
 The bearer-token API is unchanged for the CLI and the devices.
 
-### The layout (`workspace_layout.go`)
-
-The workspace is one dynamic page of [surfaces](#surfaces-and-their-sources-surfacesgo). Where each
-is shown is **eriphe-core's**: a fixed grid of 12 × 8 cells that never scrolls, each surface a
-tile of one of four sizes (s 3 × 1, m 3 × 2, l 4 × 3, xl 6 × 5; one xl at most) or a chip in the
-strip above the grid when it is folded.
-
-**Code orders, no model** (#574). Code lays the pool out (`layoutStage`, pure) at once and again
-whenever it changes (`relayout`, called by every write and removal of a surface), always the same
-way for the same pool:
-
-1. what the user placed (or the brain at their request: `workspace_arrange`), at its place and
-   size;
-2. with a surface open, what is urgent (weight 80 and up) before it;
-3. the surface open, xl unless placed;
-4. the one on stage just before it, m at most;
-5. what relates to it, m at most; with nothing related, the rest:
-6. in the **tile order** (`tileOrder`): by state, then the heaviest, the latest changed, the id.
-
-**Threads draw no tile any more** (#631): a thread has no surface, so the folding of a quiet
-standing thread and a child laid inside its parent apply to no surface until the workspace moves
-to the graph (#633). The layout below lays out the queue's surfaces.
-
-**A tile's state** is code's (`tileStateOf`), never a model's: `yours` (something waits for the
-user: a card on it, a step of theirs), `urgent` (weight 80 and up; a thread with a note due within
-two hours, `dueSoon`), `new` (something changed since the user last opened it), `running` (a step
-runs), `quiet`, `done` (its thread ended), ranked in that order. A queue's surface that
-holds a card is `yours`; any other surface is `urgent` or `quiet` by its weight. The state and the
-count of what is new (`new`: the facts and notes after the user's last visit, `visited`) go in the
-surface's metadata (`extensions.eriphe.state`, `.new`): the page colours the tile's edge by it and
-shows a badge, « À toi », « Urgent », « Nouveau · 3 », outside the focus too.
-
-Each tile goes at the first place where it fits, top left first; one that fits nowhere shrinks a
-size, then is folded; with room left, a surface of weight 40 or more grows a size (never into xl)
-if nothing else shrinks for it; tiles stretch over the empty columns on their rows. Nothing in the
-pool goes unseen while the strip has room (12 chips). A new urgent surface is in front within
-milliseconds.
-
-**The layout** is sent to the workspace as the event stream's `layout` event (with `a2ui=1`),
-after the `a2ui` event of the surfaces it names and whenever it changes, and kept in kv
-(`workspace_layout`):
-
-```json
-{"focus": "week",
- "items": [{"id": "q-card-12", "title": "Accès à un outil", "size": "xl",
-            "col": 0, "row": 0, "w": 6, "h": 5, "why": "Attend ton accord"}],
- "chips": [{"id": "news", "title": "Nouvelles", "why": "Rien de pressé"}]}
-```
-
-`col` and `row` count from 0, `w` and `h` in cells. With a surface open, a tile related to it has
-`"related": true`; `focusBy` is `brain` when Eriphe put it on stage (below), and `previous` names
-the surface that was on stage just before it. A tile of weight 80 or more has `"urgent": true`:
-laying a surface the user opens out at once, the page keeps it in front. A tile placed has
-`"pinned": true`.
-
-**Focus** (`workspace_focus.go`): one workspace, and opening a surface does what a separate
-dashboard would. The open action places it first at once: xl, what relates to it around at m at
-most, the rest folded.
-What relates is found by code from what every surface declares, never from a tool's name
-(`surfaceRelations`, 6 at most, the closest first): the same source (a tool with the same
-arguments, or the same resource), the same ref it lives with (its `while`, or what its author
-stands for: a task itself and the thread it is about, a skill itself),
-a day (a `Day` component on a date the open surface carries, or the reverse), then the same
-server. Back, closing it, its removal or its 15 minutes passing lay the workspace out again in
-its order. The tiles a focus folds or gives back are not gestures `ignored` on the page.
-
-**The stage** (`workspace_front.go`, #458): the workspace is one dashboard with a stage, the
-surface open in the center, large, and around it smaller tiles. Opening another tile puts it on
-stage; the one that was there stays next to it, reduced (m at most, never grown), live, never
-folded for the others (`layoutStage`; the layout's `previous`, the brain's « au centre juste
-avant »): nothing goes back, the user clicks it to
-swap again. Back (or Escape) ends the stage and lays the base out, as above, with no previous.
-
-Opening a surface sends nothing to the brain (#550): opening one, or going back and forth between
-them, is no turn of the conversation; only the workspace is laid out again around it. What the surface
-shows (a thread's header, for a thread) says where things stand.
-
-**An answer on stage.** When the user asks from the workspace about a thing (« où en est la PR
-… ? »), the brain finds or opens the thing's thread, adds its part to the thread's surface when it
-helps (its state, the points to see, what is next), and puts it on stage with `workspace_focus`, then replies in one line. The tool is the brain's
-only, allowed in the turn that answers a message of the user's sent from the workspace (typed in
-its input, `· depuis l'espace`, or a button's ask), never on events alone, once per turn; it is
-display-only (it writes nothing, sends nothing, the next click takes the stage back), so a tainted
-turn may use it too: the surface keeps its taint and its Proposal the rules below. The layout
-says `focusBy: brain`, the brain's next turn « au centre, mise par toi ». A surface whose Proposal shows a proposal relates to the queue's tile showing the
-same proposal (alone or in its group) (`proposal:<ref>`, « même proposition »), so a tainted answer, whose Proposal can only
-say « answer it in the conversation », gets the answerable tile next to it.
-
-**The attention queue as surfaces** (`workspace_queue.go`). The open items of the
-[attention queue](#workspace-web) are shown by surfaces written by code (author `core`), grouped
-by what they ask, with no code per kind of item (#457):
-
-| Surface | Items | Title |
-|---|---|---|
-| `q-decide` | the cards whose proposal does something once accepted (a rule, an access, a run's calls, a task start, a skill, a setting, a monitor…) | « À décider » |
-| `q-reminders` | the intention cards: yes keeps the reminder, it runs nothing | « Rappels à garder » |
-| `q-memories` | the memory cards: yes keeps the extracted memory | « Souvenirs à garder » |
-| `q-notes` | anything else (a skill's message, a notification held, an alert, a card whose proposal the `Proposal` cannot show), an `Alert` each with what Eriphe would say of it, else its why | « À voir » |
-
-A group of cards is a `List` whose template is a `Proposal` bound to each item's ref in the
-surface's data (`{"items": [{"ref": "memory:12"}, …]}`, read and answered through
-`GET /api/proposals/{ref}`; `answerOf` checks the clicked `Proposal` shows the ref). It lists the
-heaviest then the newest first, 20 at most, and its title counts them all (« Souvenirs à garder · 12 »);
-with one item, its title is that item's subject, short, from the card's text (its kind when the
-card may carry external content). An **urgent** item has a surface of its own, `q-<kind>-<id>`
-(a hash of the ref when its id cannot be a surface's): weight 4 or 5 (a card a task waits on, an
-alert), or a proposal that takes place today (its time, `proposalSpans`, never a tool's name); a
-card alone is a `Proposal` titled by its subject, an `Alert` by its weight (« Urgent »,
-« Attend ta réponse »). A card an active thread's surface shows (a step's, one linked to it, the
-thread's own: `threadShownCards`) is answered there and in no surface of the queue, whatever its
-weight: the thread's surface takes its weight (× 20, at least 70) and the state `yours`, first of
-the workspace. The queue's tiles are for the cards no thread shows. A tainted thread's surface
-does not answer its cards in place: they stay in the queue. Once the thread ended, a card still
-waiting comes back to the queue (`threadMoved` kicks it). The group ids stay the same while they
-live, so the brain's workspace block keeps naming them. A surface's weight is its first item's × 20 (`queueSurfaceWeight`), its taint any of
-its items'; its words are in the user's language (`userLang`, see below). It lives while it has
-an item: `syncQueueSurfaces` makes the queue's surfaces again whenever the queue changes (`attend`
-and `attentionDone` kick `runWorkspace`, never inline) and every 2 s, writing only what changed
-(components, data, title, why, weight, taint) and removing what left. No assistant writes or
-removes them, the brain neither. The user closing a queue's surface on the page hides it for the session and
-ends its items other than cards: a card waits for its answer (it may not be in the conversation
-yet), its surface back the next session. An item other than a card also ends on its own once the
-user has seen it: a day after it was delivered (or raised again), or once they opened its surface
-and left it (went back, opened another, or the 15 minutes of the focus passed; `queueSweep`, on
-`runWorkspace`'s tick), only the items it showed when opened. A card stays until it is decided; an
-item still held (for a breakpoint or the brief) has not been delivered.
-
-### Preferences, gestures and the brain's tools (`workspace.go`)
+### Preferences (`workspace_prefs.go`)
 
 The workspace keeps no rule and has no fixed control but a card's Oui / Non (the user's answer
 under the access policy). How the user wants it is memory; what the brain can do with it are
 tools. The user's side of it is in the guide [docs/workspace.md](../docs/workspace.md).
+Preferences are [memories](#memory) of kind `preference` about `topic:workspace`, written as facts
+about the user. The brain remembers one from the user's words (`remember`; a workspace preference
+is never sent to `rule`, whatever its words); the nightly extraction never writes one. A
+preference about content is read by whoever notes items: a triggered skill that tends a node with
+sources gets the active, current ones in its run (`seePreferences`, 12 at most, the latest first),
+and leaves out what the user no longer wants to see. A proposed preference is not read. The brain
+does not see the workspace's layout: it works on nodes ([The brain on
+nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)); `node_show` asks the page to open one.
 
-- **Preferences are memory.** « plus de lettres de news.example.org », « montre-m'en moins » are
-  [memories](#memory) of kind `preference` about `topic:workspace`, written as facts about the
-  user. The brain remembers one from the user's words (`remember`; a workspace preference is never
-  sent to `rule`, whatever its words); the nightly extraction never writes one, from the
-  conversation or from gestures. A preference about **content** is read by whoever notes items:
-  a triggered skill that tends a thread with sources gets the active, current ones in its run
-  (`seePreferences`, 12 at most, the latest first: « ce que l'utilisateur veut voir »), and leaves
-  out what the user no longer wants to see. A preference about **layout** (« l'agenda toujours en
-  grand ») is a placement: the brain keeps it with `workspace_arrange`. Code orders the rest. A
-  proposed preference is not read.
-- **Gestures** (`workspace.go`, `workspace_gestures.go`). The page tells eriphe-core what the user
-  does to a surface (`surface:<id>`): `opened` (a tile or a chip opened: the page's own action
-  `open`), `ignored` (a tile in front while the page was visible that left the grid, folded or
-  gone, without being opened), `closed`, `moved` and `resized` (a tile's three small buttons), and
-  `about` (a message written with a surface open). `POST /api/espace/gesture` with `{what, ref}`,
-  and for `moved` and `resized` the tile's new `size`, `col` and `row` (204; 400 for another
-  gesture, a ref that is not a surface's, or a place off the grid; 404 for a surface there is not;
-  the workspace's session, CSRF in `X-CSRF-Token`). Kept in `workspace_log`: `opened`, `ignored`
-  and `about` once per surface in
-  10 minutes, every close, and every move or resize but one that goes on the one just before
-  (the same tile, within a minute: the arrow keys); 30 days at most. A surface's title is core's, never
-  the page's, and only when its author wrote it in a clean turn. The brain reads them
-  (`workspace_read`). No counter, no score in code.
-- **Placement** (`workspace_gestures.go`). What the user moved or resized is pinned there, at
-  that size, kept past the session until placed again, reset or its surface gone: laid out first
-  (the latest wins a place two want), never grown or widened; the others are laid out around it.
-  What the user closed is not shown again in the **session**: folded last in the chip strip,
-  marked `closed`; opening its chip shows it again. A session lasts while the user is active
-  (their messages, a tab in front, their answers to notifications, their gestures on the
-  workspace) with no gap of more than an hour, within one activity day (from 05:00: a night's work
-  after midnight is the same day; `sessionStartIn`). Kept in kv (`workspace_placement`): a restart
-  keeps both.
-- **The brain does not see the workspace's layout** (#632): no block of it in its turns, no tool
-  that places or focuses a tile. It works on nodes ([The brain on
-  nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)); `node_show` asks the page to
-  open one.
-- **A message about what is open.** A message written on `/espace` while a surface is open
-  carries it (`POST /messages` with `about` `surface:<id>`; kept as `about_msg:<seq>` when it names
-  a surface): the brain reads it as `[Sam 10:02 #12 · depuis l'espace · à propos de surface:…]`. « Montre-m'en moins », « lance une
-  recherche là-dessus » are said in words. Said to a node, the message belongs to it (`node`):
-  the brain reads `· nœud <id>`.
+### The graph workspace, the home page (`/`)
 
-### The composed workspace, the home page (`/`)
-
-Eriphe's home page: where what Eriphe composes is laid out (`web_espace.go`, the app in
-`web/espace`). On a wide screen it never scrolls: a fixed grid of 12 × 8 cells. On a phone the page
-scrolls (see below).
+Eriphe's home page is the graph of nodes (#633, `web_graph.go`, `graph_feed.go`, the app in
+`web/espace`): every node a bubble (« bulle », a subject when it is a root), its bubbles around
+it, its links; an open node is its page, drawn right where its bubble was. Nothing on it is a
+screen planned in code: what shows is the graph eriphe-core streams and what the user opens. On
+screen, in French, a node is « bulle » or « sujet », never « nœud ».
 
 **The routes** (`web_pages.go`). `GET /` opens the workspace, the wizard before it while the brain
 has no agent (`needsWelcome`). It opens the conversation instead (`homeConvoNow`) while no AI
-composes the workspace (no brain, or its wizard left for later: the conversation says so, with the
-way to set one up), and for a browser that chose it: `POST /settings/home` with `home`
-`conversation` or `espace` (Réglages → Mon espace → Page d'accueil, htmx, which reloads the page;
-or the workspace's fallback, a plain form, which goes back to `/`) keeps the choice in an
-`HttpOnly` cookie (`home`) for 400 days. The conversation stays at `GET /conversation` (`convoPath`)
-whatever the home page; `GET /espace` always opens the workspace. What points into the
-conversation names it: a message (`/conversation#m12`, `convoAt`), a permission
-(`/conversation#perm-…`), a task's drawer (`/conversation?task=…`, a task's address opened as a
-page), in push notes, channels' links, the journal and the evidence; what means home (the brand,
-closing the settings, the wizard's end, the sign-in) stays `/`. The workspace's stream
-(`/events?a2ui=1`) starts after the conversation's last message: it does not carry them, nor any
-of the conversation's HTML events, but its last exchange as JSON (below).
+works for it, and for a browser that chose it: `POST /settings/home` with `home` `conversation`
+or `espace` keeps the choice in an `HttpOnly` cookie (`home`) for 400 days. The conversation stays
+at `GET /conversation` (`convoPath`); `GET /espace` always opens the workspace. What points into the
+conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/`.
+
+**What the page reads** (`web_graph.go`), with a session:
+
+- `GET /api/nodes/{id}[?version=n]`: a node's page (`nodePage`): its row (below), the version
+  shown, its versions (`n`, `author`, `at`; code's own versions, a source's new values, are not
+  listed but the last), its body as parts in order (`parts`: Markdown `text`, or a `block`), and
+  the cards it waits on (`cards`, as the [proposals](#proposals-in-the-blocks-they-concern-card_movesgo)
+  show them). A block (`pageBlock`) is ready to draw: its `name`, its A2UI `components`, its
+  `data` with each source's last value at `/<name>` (the version's snapshot, then the latest read
+  while the last version shows) and the user's marks at `/marks/<list>/<item>`; or its `error`
+  when it does not read as a block. Its media go through eriphe-core (`/espace/media`, signed),
+  those an external block's author wrote dropped unless a source gave them; a Link keeps to the
+  addresses a Link may open. The node's goal is never sent (it is in its file).
+- `GET /api/nodes/{id}/trace`: the trace's entries, oldest first (`at`, `author`: brain, user,
+  `task:<id>`, eriphe, outside; `text`).
+- `GET /api/nodes/{id}/md[?version=n]`: the file as it is (`md`), its `version`, its `hash` and the
+  last version (`last`).
+- A node's row (`graphNode`), in the page and the stream: `id`, `title` (empty when the node is
+  external: a title that may be someone else's words is never shown), `parent`, `links`,
+  `lifetime`, `state`, `created`, `updated`, `done`, `external`, `version`, `waits` (one of its
+  cards waits for the user) and, while it runs, `line`: its task's last word of where it is.
+
+**The stream** (`/events?a2ui=1&tab=<tab>&node=<id>`, `web_sse.go`). JSON events, the graph's from
+`graph_feed.go`, which the node store tells of each change (`nodestore.Watch`):
+
+- `node`: all the rows at once (`reset`) and when the stream fell behind the feed's last 512
+  changes, then those that changed, and the ids of those that left (`gone`: archived);
+- `doc`: a new version (`{id, version}`) or a trace that grew (`{id, trace: true}`): a page shown
+  reads it again;
+- `progress`: a task's line (`{node, text, at}`), from its `progress` tool, only when the task read
+  nothing external (a tainted line stays in the trace, never under the bubble);
+- `source`: a live block's new value (`{node, block, name, value}`), sent when its read changed;
+- `show`: Eriphe asks to open a node's page (`{node, by, at, seq}`), the last one at once, then each
+  new one; the page opens it beside what is open, once (an old one, over a minute, is not news);
+- `exchange` (below), `proposals` and `notice`.
+
+**The app** (`web/espace/src`):
+
+- `data/`: the requests (`api.ts`), the stream (`stream.ts`: one per page, opened again with the
+  node the console talks to) and the store (`store.ts`, Zustand): the graph as streamed, and what is
+  open, each event a pure step tested on its own. `presence.ts` says the user is there.
+- `graph/`: the layout (`layout.ts`, a small force simulation): roots held to their home (where
+  they first found room, `homesFor`: a new subject never moves the others), children pulled to
+  their parent, links as weak springs, every bubble and its label a box that pushes the others
+  away. An open page is a box node of its measured size: the others make room around it and
+  nothing else moves; closed, the subjects go back home. The user drags a bubble anywhere it
+  stays reachable: a subject within a step (380 px) of the nearest other subject, measured from the
+  edge of an open page, a bubble within 300 px of its parent; past it the bubble lags behind by a
+  rubber band (0.3), and dropped there it comes back to the edge. A dropped bubble stays exactly
+  where dropped (a subject as a spot, a bubble as an offset from its parent), unless an open page
+  needs the room. Near the screen's edge the camera scrolls, driven by the dragged bubble's place
+  on screen, not the pointer: a 110 px zone, after 200 ms, speeding up over 700 ms to 16 px a
+  frame. The camera (`camera.ts`) frames every open page if they fit at a scale of 0.8 or more,
+  else the page the console talks to, the others open in place; with no page open, the whole
+  graph. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
+  gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
+  bigger, what waits for the user brighter, what runs a little, what is done or old quieter.
+- `page/`: a page in the graph, any number open: a click opens one alone, ⌘, Ctrl or shift with
+  the click one more. Dragged by its head; its head says what it belongs to, its title, its date
+  or « En cours » on the title line, its versions, the cross that closes this page only; the tabs
+  Contenu, Trace and .md; at its foot the cards it waits on, answered by their card's Oui or Non
+  (`POST /cards/{id}/yes|no`). An older version shows as it was.
+- `doc/`: the page's parts: text as Markdown by the page's own renderer, which makes no HTML of it;
+  each block an A2UI surface (`<node>--<block>`) of the page's own adapter, a source's new value put
+  at its place in the block's data. A block marked external is a tainted surface: there a
+  Proposal only asks.
+- `console/`: the one input. It talks to the page the console talks to (the last one opened or
+  clicked), else to the home (`POST /messages` with `node`); Eriphe's newest line shows by the orb,
+  the replies it suggests under it; the conversation of that node opens over it.
+- `hud/`: the way home and the path of the page the console talks to; the ticker of what waits for
+  the user and what runs, each a way to its page; the settings; the notices and a word when the
+  stream is down.
+
+A link may open a page: `/espace?open=node-<id>`. The theme follows the system, light or dark,
+on the tokens of `espace.css`.
 
 **A full home** (#455). The workspace does what the conversation's page does to say the user is
-there (`presence.ts`, as `static/app.js`): it tells eriphe-core when it comes in front or leaves
+there (`data/presence.ts`, as `static/app.js`): it tells eriphe-core when it comes in front or leaves
 (`POST /presence`, visible and focused, `tab`, `front`, `sub` its push subscription's id, the CSRF
 token in the form and the header; every 20 s while in front; a beacon as it closes) and registers
 the service worker (`/sw.js`). Its tab id is also in its stream's query (`tab`), so a notification
 routed to it comes as an in-app notice, by the stream's `notice` or the presence answer: a small
-card at the bottom right for 15 s, its text a link when its URL is a path of the site (`Notices`,
-`Exchange.tsx`). A workspace left open is activity, and so are the gestures on it
-([`gestureActivity`](#preferences-gestures-and-the-brains-tools-workspacego)): a return that only
-opens tiles is a return (`user.returned`).
+card at the top right for 15 s, its text a link when its URL is a path of the site (`hud/Hud.tsx`).
+A workspace left open in front is activity.
 
-**The last exchange** (`web_espace_exchange.go`, `Exchange.tsx`). Not a second chat: what the
-user says updates a thread or a surface at the centre, so the left column keeps to the last
-exchange: the user's last message and Eriphe's lines after it (`lastExchange`: the last 12,
+**The last exchange** (`web_console.go`, `console/`). Not a second chat: what the user says
+updates a node's page, so the console keeps to the last exchange of the node it talks to: the user's last message and Eriphe's lines after it (`lastExchange`: the last 12,
 however many events came between; with no message of the user's, Eriphe's last line; an error as a
 line that says it, never its raw text; an event's line and the first run's messages never), the
 message Eriphe is writing (the draft, by the same rule as the conversation's) and whether it is at
@@ -3198,12 +3102,11 @@ small bubbles; a link to the whole conversation by Eriphe's name. All of it is t
 `exchange` event (JSON, `exchangeEvent`, each text cut at 4000 characters, `earlier` when lines
 come before it), sent when the stream opens and whenever it changes; Eriphe's text drawn by the
 app's Markdown renderer, never as HTML, a line written in a tainted turn (`markBrainMessage`)
-marked as such. Scrolling up the column (a wheel, a touch, a scroll or an upward key) shows
-**Messages d'avant**, which brings the lines before, 10 at a time
-(`GET /api/espace/earlier?before=<seq>`, `{lines, more}`, the same filter); they stay, the view
+marked as such. In the conversation the console opens, **Messages d'avant** brings the lines before, 10 at a time
+(`GET /api/earlier?before=<seq>`, `{lines, more}`, the same filter); they stay, the view
 kept where it was, until the next exchange. The brain's memory and the stored messages are
-untouched: only what the column shows. The thread's card shows no exchange. The
-cards the user must answer are not repeated there: they are the queue's surfaces (`q-card-*`).
+untouched: only what the console shows. The cards the user must answer are not repeated there:
+they are at the foot of their node's page, and the attention queue delivers the others.
 
 **The conversation per node** (#613, #632, `node_turn.go`, `brain_suggest.go`). One brain, one
 queue: every message of the conversation belongs to a node or to the home, in its `node` column
@@ -3227,7 +3130,7 @@ queue: every message of the conversation belongs to a node or to the home, in it
 - **The column.** The stream (`GET /events?a2ui=1&node=<id>`) sends the `exchange` event of
   the node the console talks to, with `node` and its `title` (none when the node is external);
   without `node`, the home's. Each line (`seq`, `role`, `time`, `text`, `external`) says `filed`:
-  the node code filed it in. `GET /api/espace/earlier` takes `node=<id>`. Eriphe's draft shows in
+  the node code filed it in. `GET /api/earlier` takes `node=<id>`. Eriphe's draft shows in
   the exchange its turn answers in only, and its work (`thinking`) there or under a message of the
   user's still waiting. A message being sent shows only where it was written. A plain "oui"
   decides the card just above in its own node only (`resolveByText`).
@@ -3258,97 +3161,21 @@ than 20 s (`streamDown`, `STREAM_GRACE`; the browser opens it again by itself, t
 it closed for good, after checking the session) shows a line with the link to the conversation;
 the workspace stays as it was.
 
-**On a phone** (`.narrow`, the width of `NARROW` in `Grid.tsx`, 900 px, `useNarrow`): one
-column and the page scrolls: Eriphe's column first, then the surfaces one under the other in the
-code's order (the layout's `items`, never their place on the grid), then the chips
-(`stacked`). A tile keeps only its cross: no move nor size on a column. A surface open takes the
-whole screen (`.focused`, `.canvas.full`), alone, under a bar with Retour and the line to write to
-Eriphe about it.
+**The look** (`espace.css`, `fonts.css`): neutral greys, light or dark as the system says
+(`prefers-color-scheme`; the shell's `color-scheme` and `theme-color` follow it), pages as flat
+cards on a quiet ground, hairlines rather than shadows. Colour says a state, never a tool or a
+subject: the accent for what waits for the user, hot for what is urgent or failed, warn for a
+warning or someone else's words, ok for what is done; each has a fill and a text tone that reads
+at WCAG AA on the card and on its own soft fill. Code's « extérieur » beside a block that may
+carry someone else's words is a small tag attached to the block under it. One typeface, Geist
+(Vercel, `geist` 1.9.2, unchanged): the sans as one variable font, the mono in its one weight,
+under the SIL Open Font License (`web/espace/src/fonts/OFL.txt`), served by eriphe-core with the
+app (`font-src 'self'`, nothing fetched elsewhere). With no node at all, a line says so
+(`espace.empty`). There is no menu and no button that keeps a rule: what the user wants is said
+to Eriphe.
 
-**The surfaces, where core says** (`web/espace/src/Grid.tsx`). The page draws each surface where
-the event stream's `layout` puts it ([the layout](#the-layout-workspace_layoutgo)):
-a tile at its cells, by class (`.at-cN .at-rN .w-N .h-N .size-*`), its title over it and its why
-under it, Motion moving a tile that changed place and CSS fading a new one in (by `scale`, fill `backwards`,
-so the animation never holds a transform Motion sets); the folded
-surfaces as chips in the strip above, and a surface the layout does not name yet (it comes right
-after) there too. A chip never shows a raw id: the layout's title, else the surface's own
-(`extensions.eriphe.title`), else « Sans titre »; chips with the same title are one, with their
-count (« Souvenirs à garder · 12 », the first opened by a click; `chips.ts`). Eriphe's line is the layout's. A click on a tile or a chip sends the page's own
-action `open` (`POST /api/espace/action`): core places the surface first and keeps the gesture
-(`surface:<id>`); Retour or Escape sends `back`. A message written while a surface is open
-carries `surface:<id>` as its `about`. Each tile has three small buttons in its corner
-(real buttons, reachable by keyboard): the grip moves it (dragged to a cell, a dashed ghost placed
-by class showing where, or with the arrow keys), the size button changes its size (a click goes
-up, from xl back to s; + or − and the arrow keys), the cross closes it for the session. The page
-shows the change at once and sends the gesture; core's next layout places the others around it.
-A tile that leaves the grid unopened while the page is visible is sent as `ignored`.
-
-**A surface open re-lays the workspace out** (`Grid.tsx`, focus mode, on a wide screen). The
-surface open is large in the centre, a working area that scrolls, with the way back (←) and its
-cross; everything else is in a column at the side (`sideOf`), the strip's chips included:
-folded, whatever its state (a state chip, the title, one line: the surface's
-`extensions.eriphe.summary`, else its why; never the surface itself), live, and a click on one
-opens it instead. Nothing is dimmed nor blurred. What needs the user (urgent: `urgent` in the
-layout, or a weight of 80 and up in `extensions.eriphe.weight`) comes first, marked « À toi »,
-and opened to answer; « Lié » marks what relates to the surface open, « Fermé » what was closed. What arrives
-or is written again while the focus lasts (its `extensions.eriphe.updated` changed: a new item in a
-group of the queue, a thread's line) says « nouveau », and pulses a few times when it needs the
-user; it never takes the centre. Each surface keeps its Motion `layoutId` from the grid or the
-strip to the centre or the column and back, so the re-layout is animated. Core's places on the
-grid around the focus are not used on a wide screen, nor fitted. Escape, Retour or ← gives the
-grid again.
-
-**A tile fits its content** (`place.ts`, `fitted`; `Grid.tsx`, `measureTiles`). A tile on the grid
-never scrolls and never cuts a sentence: after each drawing, and when a tile's content or the
-canvas changes size (a `ResizeObserver`), the page measures each tile's content at its natural
-height (`.mod-fit`), at its width, and counts the rows it needs. Over core's layout, in core's
-order, a tile that needs more grows: as tall as it needs under itself when the rows are free, else
-at the first place where it fits as tall, else a row less, and so on down to core's height; one
-with no place left is folded, first of the chips. The identity when every tile holds its content.
-The surface open and a tile the user placed keep their cells, taken first. A tile that still has too
-little room shows its first blocks whole, hides the last ones (`foldOut`: list items, rows, a
-column's children, a proposal's why…, never the first) and says the rest is there once opened
-(`espace.tile.more`); one block alone too tall (a day, a chart) fades out at its foot. Only the
-surface open scrolls: it is the workspace within the workspace. Fitting is the page's, per
-screen (core keeps one layout for every tab and the phone, and rows depend on the window's
-height): core's layout, and what the brain reads of it (`workspaceBlock`), keep core's cells and
-sizes before fitting. Not on a phone, where a tile is as tall as its content.
-
-**A click answers at once.** Opening a tile or a chip lays it out at once, before core's layout
-comes (`focusedIn`), by core's own stage rule (`layoutStage`): what the user placed at its place,
-what is urgent (`urgent`), then the surface opened, l at least, then the one that was on stage
-before it, m at most, still live, then the rest packed after, the last folded. Retour gives back
-the layout from before the opening at once (`unfocused`). The page keeps what the user asked over
-each layout core sends until core's agrees, or for 6 s (`shownLayout`, `INTENT_FOR`), so a layout
-already on its way does not undo the click; core's then comes in with Motion's move. An `open` or
-`back` that core refused or never got is undone, with a toast. A proposal's Oui or Non says at
-once that the answer is on its way (the pressed button spins, both are disabled). Closing a tile was already shown at once.
-
-**The look** (`espace.css`, `fonts.css`, prototype `?moderne` and `?travail`): neutral greys,
-light or dark as the system says (`prefers-color-scheme`; the shell's `color-scheme` and
-`theme-color` follow it), flat cards on a quiet ground, hairlines rather than shadows. Colour says a
-state, never a tool or a subject: the accent for what waits for the user, hot for what is urgent
-or failed, warn for a warning or someone else's words, ok for what is done; each has a fill and a
-text tone that reads at WCAG AA on the card and on its own soft fill. The conversation is a tile
-like the others, in the same frame. A tile's title heads it, its state a small pill beside it;
-its three buttons stay out of sight until the tile is hovered or holds the keyboard's focus (on a
-touch screen they sit in the head's line). What a tile is shows by the component at its root
-(`:has`), never by its tool: a proposal waiting edges it in the accent, a warning or an error
-tints it, their own box giving way to the tile's. Code's « extérieur » beside a block that may
-carry someone else's words is a Text of variant `mark`: a small tag attached to the block under
-it, which it edges. One typeface, Geist (Vercel, `geist` 1.9.2, unchanged): the sans as one
-variable font, the mono in its one weight, under the SIL Open Font License
-(`web/espace/src/fonts/OFL.txt`), served by eriphe-core with the app (`font-src 'self'`, nothing
-fetched elsewhere). With no
-surface at all, Eriphe says so in the column (`espace.empty`): never an empty grid without a word.
-The chat is a narrow column, the whole height; its right edge can be dragged to set its width
-(240-640 px, kept in the browser, double-click resets), with a link to the conversation
-at its foot and a quiet gear by Eriphe's name that opens the settings (`/settings`), and a message
-written there goes to the conversation; there is no menu and no button that keeps a rule: what the user wants of a surface
-is said to Eriphe.
-
-A 401 sends the page to the sign-in. `web/espace/src/data.ts` is the one place that talks to
-eriphe-core; a surface's proposal is read from `GET /api/proposals/{ref}`.
+A 401 sends the page to the sign-in. `web/espace/src/data/` is the one place that talks to
+eriphe-core.
 
 **A2UI surfaces** (`web/espace/src/a2ui/`, epic #415). The page renders [A2UI v1.0](https://github.com/a2ui-project/a2ui) surfaces with the workspace catalog's
 components, ours, written in React. The engine is the official one: `@a2ui/web_core` keeps each
@@ -3363,10 +3190,9 @@ the messages core sends (`createSurface`, `updateComponents`, `updateDataModel`,
 `catalog.tsx` names the catalog once (`CATALOG`: its id and where core serves it, `/espace/catalog/v1.json`)
 and implements all 23 of its components, each with exactly the catalog's properties;
 `catalog.test.ts` checks both ways against `a2ui/catalog_v1.json` (every component, its
-properties and their allowed values, the icon names, the four functions). eriphe-core streams
-the surfaces (`data.stream`: the event stream's `a2ui` events, applied through the adapter; the
-adapter's actions and errors posted back, see "The page and the surfaces" below). With no core
-behind, the dev server shows a made-up one (`a2ui/fixtures.ts`), or with
+properties and their allowed values, the icon names, the four functions). A node's page
+makes a surface of each block (`doc/`, above). With no core behind, the dev server shows a
+made-up graph (`data/sample.ts`), or with
 `?gallery` the gallery (`a2ui/gallery.json`: surfaces using every component, in French and
 English, which the component tests render and a Go test, `TestEspaceGalleryIsValid`, runs
 through `a2ui.Validate`).
@@ -3393,24 +3219,24 @@ through `a2ui.Validate`).
   scrolls sideways).
 - *Input*: Button (with its icon), Choice, TextField, DateField; the fields write what the
   user enters to the bound data path, as A2UI does. A Button's action keeps to the
-  [actions' grammar](#the-actions-of-a-surface) (an ask carries its author's words only, never
-  the fields).
+  actions' grammar (`a2ui/actions.go`: an ask carries its author's words only, never the
+  fields); in a node's page its actions are not sent yet (#633, the gestures come next).
 - *Data*: Metric (value, unit, signed delta coloured by `better`), Chart (lines or bars in
   SVG, `chart.tsx`: one axis, a palette checked for colour blindness, a legend from two
   series, a tooltip on each mark, the numbers in a table for screen readers), Table (columns
   `text`, `number`, `date`), Timeline (`done`, `current`, `pending`, `failed`), Message
   (short: the excerpt; full: the body, opened in place), Day (`day.tsx`: events on a grid of
   half-hour rows, overlaps side by side and marked, all-day ones above, and the day's
-  [dated proposals as ghosts](#proposals-in-the-surfaces-they-concern-surface_proposalsgo)),
+  [dated proposals as ghosts](#proposals-in-the-blocks-they-concern-card_movesgo)),
   Alert (four levels), Placeholder (« En préparation », a slow shimmer).
 - *Proposal* shows one proposal of Eriphe's by its own ref (`kind:id`, the `proposal` of a
-  card): `GET /api/proposals/{ref}` (`web_espace_proposal.go`) gives its kind, text, why, fields
-  and state in the user's language, where it comes from (`thread`, `from`) and what its Oui does
+  card): `GET /api/proposals/{ref}` (`web_proposals.go`) gives its kind, text, why, fields
+  and state in the user's language, where it comes from (`node`, `from`) and what its Oui does
   (`yes`) when it is an [access or a start's card](#the-approval-card), and the card that answers it (404 when no card carries
   it). Its header and buttons say what the card asks, by its kind: a memory « Garder en mémoire ? »
   and an intention « Garder ce rappel ? », Garder / Oublier (kept or forgotten once answered: yes runs
-  nothing); any other kind « Proposition », Oui / Non, its text saying what will be done. Its buttons send an `answer` action on the surface (`POST /api/espace/action`, see
-  [the actions](#the-actions-of-a-surface)), never the card endpoint, then the proposal is read
+  nothing); any other kind « Proposition », Oui / Non, its text saying what will be done. Its buttons answer the proposal's card (`POST /cards/{id}/yes|no`, the proposal read first: one no card
+  carries, or no longer waiting, is not answered), then the proposal is read
   again, as it is whenever the stream says it moved (answered anywhere). On a surface showing external content (its createSurface's `extensions.eriphe.tainted`)
   that code did not write (`author` other than `core`) it shows no Oui or Non: such a surface can only ask, the proposal is answered in the
   conversation. Once approved, a held call's proposal shows what it is doing (`exec`: `running`,
@@ -3441,9 +3267,9 @@ console for violations.
 ```sh
 cd core/web/espace
 npm ci
-npm test            # the grid's, the data layer's and the A2UI surfaces' tests (vitest)
+npm test            # the layout's, the store's, the pages' and the A2UI components' tests (vitest)
 npm run build       # type checks, then writes ../static/espace/espace.js and espace.css
-npm run dev         # http://localhost:5300, on a made-up surface, no eriphe-core needed
+npm run dev         # http://localhost:5300, on a made-up graph, no eriphe-core needed
 ```
 
 CI rebuilds and fails when the committed files differ from the build. The words are in
@@ -3453,14 +3279,14 @@ CI rebuilds and fails when the committed files differ from the build. The words 
 
 **CSP.** The page keeps the workspace's policy, with no `'unsafe-inline'`: the shell
 (`templates/espace.html`) loads one script and one stylesheet; the app's words come from JSON.
-A tile's place on the grid is a class (`.at-c3 .at-r0 .w-6 .h-5`), never a `style` attribute,
-which the policy refuses (`style-src-attr`). Motion animates by setting the element's style
-object from script (CSSOM), which a CSP does not govern; `AnimatePresence`'s `popLayout` mode is
+No markup carries a `style` attribute, which the policy refuses (`style-src-attr`): Motion and the
+layout place things by setting the element's style object from script (CSSOM), which a CSP does
+not govern; `AnimatePresence`'s `popLayout` mode is
 not used, since it injects a `<style>` element.
 
 ### Surfaces in A2UI (`a2ui/`)
 
-A surface, one tile of the workspace, is written by a model in
+A block of a node's page is written by a model in
 [A2UI v1.0](https://github.com/a2ui-project/a2ui): a flat list of components, each with an `id`
 and a `component` type, one of them the `root`; children named by id (`child`, `children`),
 or a list template `{"path": "/mails", "componentId": "row"}` repeated for each item; values
@@ -3472,7 +3298,7 @@ template) or computed by a function (`{"@call": "formatDate", "args": {…}}`). 
   2020-12 document by A2UI's catalog rules. Shapes only, never tools, none named after a
   subject: Text, Markdown, Image, Icon, Link, Code, Row, Column, List, Grid (a gallery of cards,
   as many to a row as fit), Card, Tabs, Fold, Divider, Button, Mark (the user's keep, drop or
-  done, on a thread's surface), Choice, TextField, DateField, Metric, Progress, Chart (`line`,
+  done, in a node's block), Choice, TextField, DateField, Metric, Progress, Chart (`line`,
   `bar`, or `stack`: one bar per x, the series its parts, an allocation now against its
   target), Table, Timeline, Item, Message, Day, Proposal, Offers (code's offers on a thread's
   rows), Alert, Placeholder. Steps, notes, options, checklists and drafts are compositions of
@@ -3515,58 +3341,10 @@ tests (`a2ui/testdata/conformance`, with their notice), as their runner runs the
 To move to a newer A2UI release, copy its `specification/v1_0/json` and test cases over these
 and update the commit in the two `NOTICE` files.
 
-### Surfaces and their sources (`surfaces.go`)
+### What a block may show (`web_graph.go`, `a2ui/`)
 
-A surface is one tile of the workspace, and code writes every one (#574): its **author** is
-`core`, [the attention queue's](#the-layout-workspace_layoutgo) (`q-…`); `writeSurface` refuses
-any other author or id (`codeSurfaceOf`), and at start code removes any surface another author
-wrote before (`dropFreeSurfaces`).
-No assistant, task or skill writes a tile of its own. A
-surface has a title, A2UI components, data, **sources**, a refresh, a **lifetime**, a weight (1
-to 100) and a why; code keeps its data fresh, guards it and removes it. Nothing in this code knows a tool: a source is whatever the
-author declares, so a tool linked tomorrow is a source with no code (`TestNoToolInSurfaces` holds
-the surfaces' files, the live blocks' and the view card's, `pool_follow.go` and `a2ui/` to no preset, card, provider or host name;
-`TestSurfaceFromAnyTool` serves a live surface from a fake server nobody wrote for).
+A block is drawn as its author wrote it, its data kept fresh by its [live sources](#views-node_livego-view_cardgo); what it shows goes through code first:
 
-- **Sources**: a JSON pointer of the data model (not the root, none inside another) →
-  `{"tool": "server/tool", "args": {…}}` or `{"resource": "server", "uri": "…"}`. Code runs it as
-  a monitor runs its look (`sourceWhy`, `readSource` in `monitors.go`): a tool must be one of the
-  brain's, read-only by its own annotation and a free read in the user's grid (with its
-  arguments), not of the open web unless the user trusts its server (its `openWorldHint` false:
-  code never reads the web by itself, with arguments a tainted turn may have chosen); a resource must be listed by its server. Checked when written and before every
-  read (refused, it waits with why, nothing called). 20 s per read (8 s for a refresh on schedule), 256 KiB per result, 8 sources.
-  The result is put at the pointer as it came (structured content, else text read as JSON),
-  never understood. A server not trusted taints the surface (`tainted`: its sources, and the
-  author's turn taint it is written with).
-- **Live binding check**: each path the components bind (`a2ui.Catalog.BoundPaths`: absolute,
-  `*` for each item of a template's list) must exist: under a source, in its first result or in
-  its tool's `outputSchema`; elsewhere, in the composed data. A source that could not be read and
-  has no schema, or an empty list, cannot tell: not checked. Otherwise the author gets an A2UI
-  validation error at the binding (`/components/1/value/@path`), with the fields that are there.
-- **Two ways to fill it**: live (sources, read again by code) or composed once (`data`, the values
-  the author wrote, dated by `data_at`); both at once is allowed.
-- **Refresh, never by a model**: on a resource's update (the pool subscribes to the resources
-  surfaces read, `resources/subscribe`, again after each reconnection; `pool_follow.go`), every
-  `refresh.every` minutes (1 to 1440; 5 by default with sources) on the surfaces' own loop
-  (`runSurfaces` → `tickSurfaces`, every 15 s, apart from the monitors' so that a slow source
-  never delays a look), and when the user opens it (`surfaceOpened`, not within 30 s
-  of the last read). One refresh of a surface at a time; one asked meanwhile runs right after, and
-  a read whose source was replaced meanwhile is dropped. The tick never waits for a read: it hands
-  each due surface (once, until its refresh is over) to a worker that reads 4 surfaces at once at
-  most, each pass within 8 s (`refreshLater`, `surfaceReaders`, `surfaceRefreshCap`). Only a
-  source whose value changed goes out, as `updateDataModel` at its pointer; a taint that appears or goes sends the surface again.
-- **Lifetime**, exactly one, always given by code: `until` a date (90 days at most: an ended
-  thread's surface), `while` a thread is active (`thread:<id>` not ended), or `kept` (the queue's,
-  which code removes when its items leave). Code removes an ended one on the surfaces' loop.
-- **Who writes**: only its author writes it again or removes it, and code when its lifetime
-  ended. Components and data of 64 KiB each.
-- **Actions** (`actionGuard`, `a2ui.CheckActions`): a button's action keeps to
-  [the grammar](#the-actions-of-a-surface): an `ask` (a request to the brain) carries its
-  author's own words only, `{"text": "…"}` (a value bound to the data, `@path` or `@call`, is
-  refused, and so is any ask written in a turn that read external content, which may have
-  written it); a local name (`open`, `expand`, `tab`) carries no context; `answer`, `mark`,
-  `offer` (their components send them), another name or a function call is refused. A `Mark` or
-  an `Offers` is placed on a thread's surface only (`a2ui.ThreadOnly`).
 - **Links** (`a2ui/links.go`): a Link's address is never built, so that it cannot carry out
   what its author read (A2UI #4045): `url` is a literal or a binding (`@path`), never a function
   call (the schema has no such form: no `formatString`). A literal must be http(s) with a host,
@@ -3574,85 +3352,28 @@ the surfaces' files, the live blocks' and the view card's, `pool_follow.go` and 
   (`a2ui.CheckLinks`, `a2ui.LinkURLOK`); a binding must hold such an address as a whole, in a
   source (a page's address a tool gives) or in the author's data (checked like a literal, in
   `checkBindings`); and every bound value goes to the page as it is or as `""`, no link
-  (`surfaceView`: a source may later give anything). A tainted surface may show links: unlike
+  (`blockView`: a source may later give anything). An external block may show links: unlike
   an image, nothing leaves without the user's click, and the page then shows the whole address,
   not only its host. Markdown links can still be built with `formatString`: not covered here.
 - **Media**: the page never loads an address from outside (A2UI #4045; the CSP forbids it
   anyway). Each media address (an `Image`'s `url`, `a2ui.IsMedia`) is rewritten to
-  `GET /espace/media?u=<address>&s=<signature>` (`surfaces_media.go`, with a session): one a
-  source gave, and one the author wrote unless its turn was tainted (a model that read something
+  `GET /espace/media?u=<address>&s=<signature>` (`web_media.go`, with a session): one a
+  source gave, and one the author wrote unless the block is external (a model that read something
   from outside could carry it out in an address: dropped); anything but http(s) is dropped. The
   endpoint serves only an address eriphe-core signed (a key per process), fetches it on a public
   address only (the accesses' dialer: never its own network, the LAN or the cloud's metadata),
   without proxy, cookie or credential, 3 redirects, 8 MiB, an image (not SVG) or a video, with
   `nosniff`, a sandbox CSP and 10 minutes of private cache.
 
-**Go API** (for the workspace's stream and the assistants' tools, #421):
+A task's pictures (`POST /v1/device/tasks/{id}/media`, `eriphe-capture`) are not kept: the route answers 410 until a node keeps its files.
 
-| Call | Does |
-|---|---|
-| `c.writeSurface(author, surfaceIn) (surface, []a2ui.ValidationError, error)` | code writes a surface: `thread:<id>` its `thread-<id>`, `core` its `q-…` (`codeSurfaceOf`; any other author or id refused); validation errors for the A2UI and the bindings, an error for the rest (a refused source, a field) |
-| `c.surfaceRemove(id, by) error` | by its author, or `surfaceByLifetime` |
-| `c.surfaces() ([]surface, error)`, `c.surface(id) (surface, error)` | all (heaviest, then latest first), one (`errNoSurface`) |
-| `c.surfaceOpened(ctx, id) error` | the user opened it: its sources read again |
-| `c.surfaceSubscribe() (snapshot []surfaceChange, changes <-chan surfaceChange, cancel func())` | the surfaces now (one `createSurface` each), then every change, nothing missed between |
-| `c.feedSurfaces() (*surfaceFeed, a2uiEvent)` | a subscription for one event stream: the snapshot to send first, then `feed.next(change, ok)` batches what waits, or gives a new snapshot when the hub dropped it |
-| `c.surfaceAction(ctx, id, a2ui.Action) error` | an action of the user's, of [the grammar](#the-actions-of-a-surface): checked against the stored surface, recorded (`look.action`), done (an ask a message to the brain, an answer its proposal decided; `open` places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back); a refused one is `*errActionRefused`, told to the author first |
-| `c.surfaceError(id, a2ui.Error) error` | an error about a surface for its author to fix (one the page met rendering it, or one code met): kept as `look.last_error` (code, path, message, at; read with `c.surface(id)`), logged, nothing sent to the page; the author writing it again clears it |
-
-A change is `{seq, message}`: one A2UI message (`createSurface`, `updateComponents`,
-`updateDataModel`, `deleteSurface`), `seq` growing by one in the order they are sent (from 0 at
-each start of eriphe-core: a page that reconnects starts from a snapshot). A subscriber 256
-changes behind has its channel closed: it subscribes again. A surface written again sends its
-components and its whole data, or, when a component went away or its title, weight, why or taint
-changed, `deleteSurface` then `createSurface`. `createSurface` carries the catalog's id and, in
-`metadata.extensions.eriphe`, `title`, `author`, `weight`, `why`, `tainted` (true when external)
-and `updated`.
-
-**The page and the surfaces** (`surfaces_stream.go`). `GET /events?a2ui=1` (the workspace asks
-for it; the conversation does not) adds `a2ui` events to the event stream, whose data is
-`{"seq": N, "reset": true, "messages": [<A2UI v1.0 message>, …]}`: the messages in order, `seq`
-the last one's. The first event of a connection is a snapshot (`reset`, one `createSurface` per
-surface, possibly none): the page drops the surfaces it has and applies it. So is one after the
-stream fell 256 changes behind, transparently. A `layout` event follows the first `a2ui` event
-and each later one, and is sent at once whenever the layout changes (`watchLayout`), only when it
-differs from the last sent: where each surface is
-([the layout](#the-layout-workspace_layoutgo)). A
-`proposals` event (`{"refs": [...]}`) says which proposals were made or decided since
-([proposals in surfaces](#proposals-in-the-surfaces-they-concern-surface_proposalsgo)). The SSE `id` stays the conversation's. Back from
-the page, with the session's cookie and CSRF token (401 without a session):
-
-| Endpoint | Takes | Answers |
-|---|---|---|
-| `POST /api/espace/action` | an A2UI v1.0 `action` (`a2ui.ValidateEvent`), of [the grammar](#the-actions-of-a-surface) | 204; 400 not a valid action, or one refused (told to the surface's author); 404 no such surface, or an answer to a proposal no card carries; 409 a proposal, or a user step, that no longer waits |
-| `POST /api/espace/error` | an A2UI v1.0 `error` naming its surface | 204, kept for the author (`surfaceError`); 400, 404 |
-
-#### The actions of a surface
-
-A click does only what is safe (`surface_actions.go`, `a2ui/actions.go`). The action names are a
-closed grammar, checked by code twice: when code writes a surface or an author a node's block (`a2ui.CheckActions`, in
-`writeSurface` and `nodeGuard`; each error points at the action) and when the page sends one, against the
-surface as it is stored, never against what the page says of it. No action calls a tool that
-writes.
-
-| Kind | Written as | Done |
-|---|---|---|
-| `ask` | a Button's `{"event": {"name": "ask", "context": {"text": "…"}}}`: literal words, nothing else, never bound data; none at all from an author whose turn read external content | the text written on the clicked Button becomes a message of the user's to the brain, as if typed (`Via` `workspace:ask`, shown as « bouton de l'espace » / "workspace button"; `about` = `surface:<id>`, which the brain reads as `[Sam 10:02 #12 · bouton de l'espace · à propos de surface:…]`); a plain "oui" so sent decides no card. The brain is woken, never waited for. On a tainted surface the message taints the brain's turn (`surface:<id>`) and its line adds « surface au contenu extérieur »: what it shows is data |
-| `answer` | never by an author: only the Proposal component sends it, `{"proposal": "<ref>", "answer": "yes"\|"no"}` | bound by code to that one proposal: the clicked component must be a Proposal of the surface that shows that ref (written, or bound to the data), the surface must not be tainted (unless code wrote it: the attention queue's `q-` surfaces, whose Proposal shows its own taint, as the card does; a thread's, unless the thread itself is tainted or the Proposal is in a part written after reading external content), and the proposal must still wait; then it is decided as its card's Oui or Non (`decideCard`, by `workspace`) |
-| local | `open`, `back`, `expand`, `tab`, with no context: the page's own gestures, which a Button seldom needs. Code alone places an `open` that names another surface, `{"surface": "<id>"}`, on a thread's surface (a child's row, a child's crumb to its parent) | the page's own gestures; core records them (`look.action`). `open` (the user opened a tile or a chip) places the surface first on the layout, keeps the gesture and reads its sources again in the background; `back` gives the layout back to the composer. An `open` that names another surface is not sent as is: the page opens that surface, as it opens a tile (`opensSurface`, `place("open", <id>)`), the one it came from as where it opens when it is not laid out |
-
-Anything else (another name, a function call, a component that carries no such action, an answer
-to a proposal the surface does not show, or on a tainted surface) is refused with 400 and told
-to the surface's author (`surfaceError`, code `ACTION_REFUSED`). A tainted surface can only ask: a proposal shown
-there is answered in the conversation.
-
-#### Proposals in the surfaces they concern (`surface_proposals.go`)
+### Proposals in the blocks they concern (`card_moves.go`)
 
 A proposal shows where it matters (#428), with no code for any tool:
 
 - **Embedded.** An author places a `Proposal` whose `proposalId` is the ref of a proposal that
   waits (`kind:id`), written or bound to the data. Its Oui and Non
-  answer that proposal and no other ([`answer`](#the-actions-of-a-surface)). One drawn from
+  answer that proposal and no other (its card, `POST /cards/{id}/yes\|no`). One drawn from
   external content carries a small badge (« extérieur »), its whole sentence on hover and for a
   screen reader.
 - **Dated.** A proposal that has a time shows as a ghost in every `Day` of its day (unless the
@@ -3668,11 +3389,11 @@ A proposal shows where it matters (#428), with no code for any tool:
   (`{"day", "proposals": [<proposal view with when>]}`, the times with the user's offset; 400
   without a day); `GET /api/proposals/{ref}` gives `when` too.
 - **Moved.** A card made (`cardProposed`, `cardNow`, `syncCards`), decided (`decideCard`, from
-  its buttons, a channel, a plain "oui" or a surface; `proposalDecided`, from a page) or found
+  its buttons, a channel, a plain "oui" or a page; `proposalDecided`, from a page) or found
   decided when read (`liveCard`) notes its ref (`proposalMoved`, the last 64 kept). The
   workspace's stream sends them as a `proposals` event, `{"refs": [...]}` (`{"all": true}` for
   a stream further behind), at once (`watchProposals`); the page reads again each `Proposal` of
-  those refs, and every Day's ghosts. The first `proposals` event of a connection, after the
+  those refs, and the cards at a page's foot, and every Day's ghosts. The first `proposals` event of a connection, after the
   snapshot, is `{"all": true}`: what the page shows may have been decided while it was away.
   The limits of a time read from values: an unrelated date argument (a recurrence's end, say)
   stretches the span, and a call with a start and a duration but no end shows a half-hour

@@ -164,12 +164,16 @@ func TestBrainNodeSetLinkShow(t *testing.T) {
 	if _, msg := brainNodes(t, c, "node_link", map[string]any{"id": id, "to": id}); msg == "" {
 		t.Error("a node linked to itself")
 	}
-	before, _, ch := c.watchShown()
+	before, _ := c.lastShown()
+	_, seq, _, ch := c.graphAfter(0)
 	mustBrainNodes(t, c, "node_show", map[string]any{"id": other})
 	select {
 	case <-ch:
 	default:
 		t.Fatal("the screens were not told")
+	}
+	if evs, _, _, _ := c.graphAfter(seq); len(evs) != 1 || evs[0].Kind != graphEvShow || evs[0].Node != other {
+		t.Errorf("told %+v", evs)
 	}
 	if x, ok := c.lastShown(); !ok || x.Node != other || x.By != byBrain || x.Seq != before.Seq+1 {
 		t.Errorf("shown %+v", x)
