@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 )
 
 // The authors' API: what the brain, a task or the user writes. Code's
@@ -169,12 +170,13 @@ func (b *Block) keepCode(prev *Block) error {
 
 // AuthorBytes is the node as its authors wrote it: its front matter and
 // body in their canonical form, without code's fields (a block's
-// snapshot, marks and external, the node's external). Two versions alike
+// snapshot, marks and external, the node's external, done and links).
+// Two versions alike
 // there differ only by what code wrote: an author's write made on one
 // applies on the other.
 func (n *Node) AuthorBytes() ([]byte, error) {
 	m := n.Meta
-	m.External = false
+	m.External, m.Done, m.Links = false, time.Time{}, nil
 	front, err := encodeMeta(m)
 	if err != nil {
 		return nil, err

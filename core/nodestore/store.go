@@ -661,23 +661,9 @@ func (s *Store) Archive(id, author string) error {
 	if strings.TrimSpace(author) == "" {
 		return errors.New("a write has an author")
 	}
-	if _, err := s.summary(id); err != nil {
+	ids, err := s.below(id)
+	if err != nil {
 		return err
-	}
-	// The node and those below, each once (a parent's loop made by hand
-	// stops there).
-	ids, seen := []string{id}, map[string]bool{id: true}
-	for i := 0; i < len(ids); i++ {
-		kids, err := s.children(ids[i])
-		if err != nil {
-			return err
-		}
-		for _, k := range kids {
-			if !seen[k.ID] {
-				seen[k.ID] = true
-				ids = append(ids, k.ID)
-			}
-		}
 	}
 	now := s.opts.Now().Truncate(time.Second)
 	var changes []change
