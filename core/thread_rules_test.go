@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -141,15 +140,6 @@ func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
 		c.threadsDelivered(msgs)
 	}
 
-	turnOn("Refais les règles proprement.", "surface:"+threadSurfaceID(th.ID))
-	if c.turn.aboutThread() != th.ID {
-		t.Fatalf("the turn is about %d, not %d", c.turn.aboutThread(), th.ID)
-	}
-	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Refaire les règles", "prompt": "Refais les règles de latence."})
-	if task, err := c.store.task(fmt.Sprint(out["task"])); isErr || err != nil || task.About != c.store.resolveAbout(threadRef(th.ID)) {
-		t.Fatalf("not about thread %d: %v", th.ID, out)
-	}
-
 	// A surface of the thread's subject: its thread.
 	if _, _, err := c.fixtureSurface("brain", surfaceIn{ID: "pr-12", Title: "PR 12", About: "pr:example/infra#12",
 		Components: []byte(`[{"id":"root","component":"Text","text":"PR 12"}]`)}); err != nil {
@@ -165,7 +155,7 @@ func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
 		Components: []byte(`[{"id":"root","component":"Text","text":"Soleil"}]`)}); err != nil {
 		t.Fatal(err)
 	}
-	for _, about := range []string{"surface:meteo", "surface:" + threadSurfaceID(999), ""} {
+	for _, about := range []string{"surface:meteo", "surface:thread-999", ""} {
 		turnOn("Et la météo ?", about)
 		if c.turn.aboutThread() != 0 {
 			t.Errorf("about %q: turn about %d", about, c.turn.aboutThread())

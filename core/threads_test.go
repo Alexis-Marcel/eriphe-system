@@ -146,7 +146,7 @@ func TestFreshStoreSchema(t *testing.T) {
 		"threads":       {"summarized", "seen", "visited"},
 		"attention":     {"tainted", "delivered", "due"},
 		"notifications": {"weight"},
-		"skill_runs":    {"thread"},
+		"access_asks":   {"node", "source", "item"},
 	}
 	for _, table := range aboutTables {
 		want[table] = append(want[table], "about")

@@ -337,7 +337,7 @@ func TestSurfaceSourceGuards(t *testing.T) {
 			t.Errorf("%+v: written", bad)
 		}
 	}
-	// Only code writes a surface: a thread its own, the queue its q-… ones.
+	// Only code writes a surface: the queue its q-… ones.
 	for _, w := range []struct{ author, id string }{
 		{"someone", "x"}, {"brain", "x"}, {"brain", "thread-1"}, {"brain", "q-decide"}, {"task:t-1", "x"}, {"skill:revue", "revue"},
 		{"task:t-1", "thread-1"}, {"thread:1", "thread-2"}, {"thread:1", "x"}, {surfaceAuthorCore, "thread-1"}, {surfaceAuthorCore, "x"},
@@ -345,10 +345,6 @@ func TestSurfaceSourceGuards(t *testing.T) {
 		if _, _, err := c.writeSurface(w.author, surfaceIn{ID: w.id, Title: "x", Components: accountsSurface(), Sources: balances, Weight: 50, Lifetime: surfaceLifetime{Kept: true}}); err == nil {
 			t.Errorf("%s wrote %s", w.author, w.id)
 		}
-	}
-	if _, _, err := c.writeSurface(threadAuthor(1), surfaceIn{ID: threadSurfaceID(1), Title: "x", Components: accountsSurface(), Sources: balances,
-		Weight: 50, Lifetime: surfaceLifetime{Kept: true}}); err != nil {
-		t.Errorf("a thread's own: %v", err)
 	}
 
 	s, _, err := c.fixtureSurface("brain", surfaceIn{Title: "x", Components: accountsSurface(), Sources: balances})
@@ -553,7 +549,6 @@ func TestSurfaceLifetime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.surfaceRemove(threadSurfaceID(th.ID), surfaceByLifetime) // only the fixtures counted
 	until, _, _ := c.fixtureSurface("brain", surfaceIn{Title: "a", Components: comps, Lifetime: surfaceLifetime{Until: time.Now().Add(time.Hour)}})
 	while, _, err := c.fixtureSurface("brain", surfaceIn{Title: "b", Components: comps, Lifetime: surfaceLifetime{While: threadRef(th.ID)}})
 	if err != nil {

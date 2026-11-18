@@ -174,18 +174,4 @@ func TestWorkspaceStreamExchange(t *testing.T) {
 		t.Fatalf("reply %+v", got)
 	}
 
-	// A thread opened: its exchange, named; back, the home's (#613).
-	th, err := tw.c.openThread(threadIn{Title: "Garage", Goal: "La voiture est réparée."}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tw.c.store.addThreadMessage(roleUser, "et le garage ?", "", th.ID, true)
-	tw.c.focusSurface(threadSurfaceID(th.ID), time.Now())
-	if x := next(func(ev exchangeEvent) bool { return ev.Thread == th.ID }); x.Title != "Garage" || len(x.Lines) != 1 || x.Lines[0].Text != "et le garage ?" {
-		t.Fatalf("the thread's exchange %+v", x)
-	}
-	tw.c.focusSurface("", time.Now())
-	if x := next(func(ev exchangeEvent) bool { return ev.Thread == 0 }); len(x.Lines) != 2 || x.Title != "" {
-		t.Fatalf("the home's exchange %+v", x)
-	}
 }

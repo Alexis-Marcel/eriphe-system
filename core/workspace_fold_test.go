@@ -2,7 +2,6 @@ package main
 
 import (
 	"slices"
-	"strconv"
 	"testing"
 	"time"
 )
@@ -48,47 +47,5 @@ func TestLayoutFoldsQuietStanding(t *testing.T) {
 	}
 	if _, ok := tileOf(l, "mails"); ok {
 		t.Fatalf("quiet standing a tile: %s", tilesOf(l))
-	}
-}
-
-// A standing thread's surface says it folds, a work thread's does not;
-// quiet once visited, the standing thread is a chip and the work thread a
-// tile. A surface written before it said so is written again by the tick.
-func TestThreadSurfaceFolds(t *testing.T) {
-	c, _ := surfaceCore(t)
-	work := lightThread(t, c)
-	standing, err := c.openThread(threadIn{Title: "Mails", Goal: "Les mails.", Alias: "topic:mails", Ends: endsStanding}, nil, "skill:mails")
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	c.threadVisited(work.ID, now)
-	c.threadVisited(standing.ID, now)
-	sid := threadSurfaceID(standing.ID)
-	sf, err := c.surface(sid)
-	if err != nil || !sf.Look.Folds || tileStateOf(sf) != tileQuiet {
-		t.Fatalf("standing %+v %v", sf.Look, err)
-	}
-	if wf, _ := c.surface(threadSurfaceID(work.ID)); wf.Look.Folds {
-		t.Fatal("a work thread folds")
-	}
-	l := c.relayout()
-	if _, ok := tileOf(l, threadSurfaceID(work.ID)); !ok {
-		t.Fatalf("work: %s", tilesOf(l))
-	}
-	if _, ok := tileOf(l, sid); ok || !slices.Contains(chipsOf(l), sid) {
-		t.Fatalf("standing: %s / %v", tilesOf(l), chipsOf(l))
-	}
-
-	// Written before surfaces said whether they fold (another hash): the
-	// tick writes it again.
-	c.store.db.Exec(`UPDATE surfaces SET look = json_remove(look, '$.folds') WHERE id = ?`, sid)
-	c.store.set(threadShownKey+strconv.FormatInt(standing.ID, 10), "an older hash")
-	if sf, _ = c.surface(sid); sf.Look.Folds {
-		t.Fatal("the look kept folds")
-	}
-	c.keepThreadSurfaces()
-	if sf, _ = c.surface(sid); !sf.Look.Folds {
-		t.Fatal("not written again")
 	}
 }

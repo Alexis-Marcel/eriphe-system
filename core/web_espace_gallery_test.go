@@ -49,22 +49,11 @@ func TestEspaceGalleryIsValid(t *testing.T) {
 				t.Errorf("%s: %+v", lang, e)
 			}
 		}
-		// Every component of the catalog is in it, but those placed on a
-		// thread's own surface only: the threads code draws show them
-		// (threads.json).
+		// Every component of the catalog is in it, but those a node's
+		// blocks place only (a2ui.ThreadOnly; #633 draws them).
 		used := componentsUsed(t, msgs)
-		threads, err := os.ReadFile(threadsFixture)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var drawn map[string]json.RawMessage
-		json.Unmarshal(threads, &drawn)
-		onThreads := componentsUsed(t, drawn[lang])
 		for name := range cat.Components {
-			switch {
-			case slices.Contains(a2ui.ThreadOnly, name) && !onThreads[name]:
-				t.Errorf("%s threads lack %s", lang, name)
-			case !slices.Contains(a2ui.ThreadOnly, name) && !used[name]:
+			if !slices.Contains(a2ui.ThreadOnly, name) && !used[name] {
 				t.Errorf("%s gallery lacks %s", lang, name)
 			}
 		}
