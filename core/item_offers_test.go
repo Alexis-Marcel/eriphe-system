@@ -82,7 +82,7 @@ func TestNoteActionsChecked(t *testing.T) {
 	}{
 		{"no such tool", noteAction{Label: "X", Tool: "monitor/nope", Args: map[string]any{"uid": offerItemArg}}},
 		{"no item", noteAction{Label: "X", Tool: "monitor/silence", Args: map[string]any{"uid": "b"}}},
-		{"Eriphe's own", noteAction{Label: "X", Tool: threadsServer + "/note_item", Args: map[string]any{"item": offerItemArg}}},
+		{"Eriphe's own", noteAction{Label: "X", Tool: workspaceServer + "/surface_write", Args: map[string]any{"item": offerItemArg}}},
 		{"no label", noteAction{Tool: "monitor/silence", Args: map[string]any{"uid": offerItemArg}}},
 		{"not a tool name", noteAction{Label: "X", Tool: "silence", Args: map[string]any{"uid": offerItemArg}}},
 	} {
@@ -107,20 +107,14 @@ func TestNoteActionsChecked(t *testing.T) {
 	if n := c.itemNotes(id); len(n) != 1 || len(n[0].Actions) != 1 || n[0].Actions[0].Tool != "mcp__monitor__silence" {
 		t.Fatalf("notes %+v", n)
 	}
-	// A watcher's run offers through eriphe-threads one of its tools, by
-	// the name the catalog gives it or server/tool; one it is not lent is
-	// refused (threadCaller.lends).
-	task := runsOfSkill(t, c, "veille-alertes")[0].Task
-	if out, isErr := callTaskThreads(t, c, task, "note_item", map[string]any{"source": "alertes", "item": "c", "note": "À couper",
-		"actions": []any{map[string]any{"label": "Faire taire", "tool": "monitor/silence", "args": map[string]any{"uid": offerItemArg}}}}); isErr {
-		t.Fatalf("note_item with an action: %v", out)
+	// A task offers one of its tools, by server/tool.
+	lent := func(string) error { return nil }
+	if _, err := c.noteItemBy(id, noteItemIn{Source: "alertes", Item: "c", Note: "À couper", Actions: []noteAction{silence}}, "task:t", nil, lent); err != nil {
+		t.Fatalf("note_item with an action: %v", err)
 	}
 	notes := c.itemNotes(id)
 	if i := slices.IndexFunc(notes, func(n itemNote) bool { return n.Item == "c" }); i < 0 || len(notes[i].Actions) != 1 || notes[i].Actions[0].bound("c")["uid"] != "c" {
 		t.Fatalf("notes %+v", notes)
-	}
-	if err := (threadCaller{grant: []string{threadsServer}}).lends("mcp__monitor__silence"); err == nil {
-		t.Error("a tool not lent is lent")
 	}
 	// An author may never write an offer: an Offers shows code's.
 	errs := a2ui.CheckActions("s", 0, json.RawMessage(`[{"id":"b","component":"Button","label":"x","action":{"event":{"name":"offer","context":{"thread":1}}}}]`))

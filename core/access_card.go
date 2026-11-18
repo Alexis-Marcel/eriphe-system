@@ -636,12 +636,12 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 			if err := c.releaseApproved(a); err != nil {
 				return err
 			}
-			c.logReleaseDecided(a.TaskID, a.Refs, true) // task_answer_log.go
+			c.traceTask(a.TaskID, byUser, fmt.Sprintf("%s a débloqué %s sur la carte.", c.conf().User, strings.Join(a.Refs, ", ")), "") // task_node.go
 			c.settleWaiting(ctx, a, true)
 			return nil
 		}
 		c.store.logDecision(a.TaskID, "", "release "+strings.Join(a.Refs, ", "), nil, decideDeny, byUser, "refusé sur la carte")
-		c.logReleaseDecided(a.TaskID, a.Refs, false)
+		c.traceTask(a.TaskID, byUser, fmt.Sprintf("%s a refusé de débloquer %s sur la carte.", c.conf().User, strings.Join(a.Refs, ", ")), "")
 		return nil
 	case a.Call != "":
 		if approve {

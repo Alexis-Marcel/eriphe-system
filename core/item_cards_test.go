@@ -229,3 +229,39 @@ func TestCallItemMatch(t *testing.T) {
 		}
 	}
 }
+
+// alertsWatcher is a core with a monitor of new alerts and a skill that
+// watches them.
+func alertsWatcher(t *testing.T) (*core, *fakeMonitor, *time.Time) {
+	t.Helper()
+	c, fm, now := pollCore(t)
+	c.store.registerDevice("pc", hashSecret("pc-secret"))
+	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
+	c.subscribeEvents(c.queueSkillEvent)
+	fm.mu.Lock()
+	fm.rules = []map[string]any{{"uid": "a", "name": "5xx", "state": "firing"}}
+	fm.mu.Unlock()
+	approvedMonitor(t, c, "alertes", monitorSpec{Server: "monitor", Tool: "alerts", Every: 1, Cond: condNew, Path: "data.rules", ID: "uid"})
+	addTriggered(t, c, "---\nname: veille-alertes\ndescription: Trie les alertes de la prod.\nwhen: monitor.new key=alertes\ntools: [monitor]\n---\nNote chaque alerte.\n")
+	lookAt(c, *now) // the baseline
+	return c, fm, now
+}
+
+// runThreadOf gives a run the thread its items are on: the alerts'
+// thread, standing, its monitor's list as its source. A run no longer
+// gets one by itself; item cards stay on threads until they move to
+// nodes (#631).
+func runThreadOf(c *core, r *skillRun) int64 {
+	s, _, err := c.openThreadOnce(threadIn{Title: "Veille alertes", Goal: "Trie les alertes.", Alias: "topic:alertes", Ends: endsStanding, exact: true}, nil, "skill:veille-alertes")
+	if err != nil {
+		panic(err)
+	}
+	if !slices.ContainsFunc(c.threadSources(s.ID), func(x storedSource) bool { return x.Name == "alertes" }) {
+		src := threadSource{Name: "alertes", Tool: "monitor/alerts", Items: &sourceItems{Path: "data.rules", ID: "uid"}, Every: 1}
+		if _, err := c.addThreadSource(s.ID, src, "skill:veille-alertes"); err != nil {
+			panic(err)
+		}
+	}
+	c.store.db.Exec(`UPDATE skill_runs SET thread = ? WHERE id = ?`, s.ID, r.ID)
+	return s.ID
+}

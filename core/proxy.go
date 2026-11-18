@@ -74,14 +74,14 @@ func (c *core) taskMCPHandler() http.Handler {
 			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskMemoryServer(t)))) // situations.go
 			return
 		}
+		if server == nodesServer && t.Kind == "worker" && c.nodes != nil && c.taskNode(t.ID) != "" {
+			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskNodesServer(t)))) // task_nodes.go
+			return
+		}
 		grant := c.taskGrant(t)
 		if server == workspaceServer && slices.Contains(grantServers(grant), server) {
 			// A server Eriphe provides, lent like any (workspace_tools.go).
 			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskWorkspaceServer(t, grant))))
-			return
-		}
-		if server == threadsServer && slices.Contains(grantServers(grant), server) {
-			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskThreadsServer(t, grant)))) // task_threads.go
 			return
 		}
 		if !slices.Contains(grantServers(grant), server) || c.pool.get(server) == nil {

@@ -112,15 +112,6 @@ func threadFacts(s Thread, steps []threadSurfaceStep, since int64, lang string) 
 			}
 			out = append(out, threadFact{st.Started, fmt.Sprintf(tr(lang, word), st.Label)})
 		}
-		for _, a := range st.Answers {
-			if after(a.At) {
-				text := fmt.Sprintf(tr(lang, "thread.fact.answer"), st.Label, a.text(lang))
-				if a.Tainted != "" {
-					text += threadExternalSep + tr(lang, "thread.surface.external")
-				}
-				out = append(out, threadFact{a.At, text})
-			}
-		}
 	}
 	if s.summarized > since && s.summarized > 0 {
 		out = append(out, threadFact{time.Unix(s.summarized, 0), tr(lang, "thread.fact.summary")})

@@ -226,7 +226,7 @@ type New struct {
 	Lifetime nodefile.Lifetime // work by default
 	Goal     string
 	Body     string // the author's: text and blocks, short forms accepted
-	External bool   // code's: it holds someone else's words
+	External bool   // code's: it holds someone else's words, and so do its blocks
 	Author   string
 }
 
@@ -264,6 +264,11 @@ func (s *Store) Create(nw New) (*Doc, error) {
 	}
 	if err := n.AuthorBody(nw.Body); err != nil {
 		return nil, err
+	}
+	if nw.External {
+		for _, b := range n.Blocks() {
+			n.SetBlockExternal(b.Name, true)
+		}
 	}
 	file := slug(n.Meta.Title) + "-" + id + ".md"
 	return s.save(n, file, nil, nw.Author, "create")
@@ -308,6 +313,31 @@ func (s *Store) change(id, expect, author, op string, fn func(*nodefile.Node) er
 		return nil, err
 	}
 	return s.save(n, cur.File, cur, author, op)
+}
+
+// Change is code's write of a node: fn changes its last version, which
+// expect names, as code does what no author may (a block's or the
+// node's external, its title or goal). The node's id, parent, creation,
+// done and archived are never changed this way. The store's filter runs
+// over the node written.
+func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error) (*Doc, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.change(id, expect, author, "change", func(n *nodefile.Node) error {
+		was := n.Meta
+		if err := fn(n); err != nil {
+			return err
+		}
+		m := n.Meta
+		if m.ID != was.ID || m.Parent != was.Parent || !m.Created.Equal(was.Created) || !m.Done.Equal(was.Done) || !m.Archived.Equal(was.Archived) {
+			return errors.New("a node's id, parent, creation, done and archived are not changed by a write")
+		}
+		raw, err := n.Bytes()
+		if err != nil {
+			return err
+		}
+		return s.refuse(string(raw))
+	})
 }
 
 func short(hash string) string {

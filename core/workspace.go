@@ -79,8 +79,8 @@ func init() {
 }
 
 // seePreferences are the user's preferences about what they see (about
-// topic:workspace), the latest first: what a skill that notes a thread's
-// items reads with its run (skillRunPrompt). Active and current ones only:
+// topic:workspace), the latest first: what a skill's run reads, for the
+// items it notes (skillRunPrompt). Active and current ones only:
 // a proposed preference waits for the user.
 func (c *core) seePreferences() []string {
 	if c.mem == nil {

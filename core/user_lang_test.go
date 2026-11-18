@@ -61,12 +61,12 @@ func TestUserLang(t *testing.T) {
 // A task's and a skill run's voice: the user's language, the code's rules
 // kept whatever it is.
 func TestVoicesInUserLang(t *testing.T) {
-	en, fr := skillVoice("en", true), skillVoice("fr", false)
+	en, fr := skillVoice("en"), skillVoice("fr")
 	if !strings.Contains(en, "in the user's language, English") || strings.Contains(en, "French") ||
-		!strings.Contains(en, "no entry, and nothing is told") || strings.Contains(en, "[brief]") || !strings.Contains(en, "note_item") {
+		!strings.Contains(en, "no entry, and nothing is told") || strings.Contains(en, "[brief]") {
 		t.Fatalf("en:\n%s", en)
 	}
-	if !strings.Contains(fr, "French, with tutoiement") || strings.Contains(fr, "note_item") {
+	if !strings.Contains(fr, "French, with tutoiement") {
 		t.Fatalf("fr:\n%s", fr)
 	}
 	if w := workerVoice("Iris", "en"); !strings.Contains(w, "in the user's language, English") || strings.Contains(w, "French") {

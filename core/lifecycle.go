@@ -124,12 +124,13 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 					// surfaces only (workspace_tools.go).
 					spec.AlwaysLoad = append(spec.AlwaysLoad, s)
 					spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskWorkspaceTools(splitGrant(a.Tools))...)
-				case threadsServer:
-					// Lent, its tools ask nothing: writing on a thread is not
-					// an external write; a call step asks its card (task_threads.go).
-					spec.AlwaysLoad = append(spec.AlwaysLoad, s)
-					spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskThreadsTools(splitGrant(a.Tools))...)
 				}
+			}
+			// Its own node, written through its device (task_nodes.go).
+			if a.Kind == "worker" && c.nodes != nil && c.taskNode(a.ID) != "" {
+				spec.Servers = append(spec.Servers, nodesServer)
+				spec.AlwaysLoad = append(spec.AlwaysLoad, nodesServer)
+				spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskNodesTools()...)
 			}
 			// Its memory, read through its device (situations.go).
 			if !isRoleKind(a.Kind) && c.mem != nil {

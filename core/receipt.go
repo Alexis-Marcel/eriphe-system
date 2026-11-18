@@ -555,6 +555,41 @@ func (r *checkedReceipt) brainText() string {
 	return b.String()
 }
 
+// verdict is the receipt in a few words, for the brain's wake: its
+// status, the checks that passed and those that did not, and how many
+// things it left open; its whole is in task_status.
+func (r *checkedReceipt) verdict() string {
+	if r == nil {
+		return "sans reçu lisible"
+	}
+	parts := []string{"statut " + r.Status}
+	if r.missing() {
+		parts[0] = "sans reçu lisible"
+	}
+	var ok, failed []string
+	for _, ch := range r.Checks {
+		switch {
+		case ch.OK:
+			ok = append(ok, ch.Name)
+		case ch.Config != "":
+			failed = append(failed, "contrôle "+ch.Name+" mal configuré")
+		default:
+			failed = append(failed, "contrôle "+ch.Name+" échoué")
+		}
+	}
+	if len(ok) > 0 {
+		parts = append(parts, "contrôles passés : "+strings.Join(ok, ", "))
+	}
+	parts = append(parts, failed...)
+	if n := len(r.NeedsApproval); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d point(s) attendent l'accord", n))
+	}
+	if n := len(r.Mismatches); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d écart(s) relevé(s) par eriphe-core", n))
+	}
+	return strings.Join(parts, " ; ")
+}
+
 // memoryText is the receipt as the night's extraction reads it
 // (memory_extract.go): the task's own words, external, with what
 // eriphe-core verified marked as such.

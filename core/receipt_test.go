@@ -279,7 +279,7 @@ func TestReceiptToBrain(t *testing.T) {
 	c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"})})
 	c.notifyBrain("t-1", stateIdle)
 	msg := lastEvent(t, c)
-	if !strings.Contains(msg, "Reçu (recoupé par eriphe-core) : statut done") || strings.Contains(msg, "```") {
+	if !strings.Contains(msg, "statut done") || !strings.Contains(msg, "Fixed the form.") || strings.Contains(msg, "```") {
 		t.Errorf("brain event %q", msg)
 	}
 	if h := c.store.harness("t-1"); h.Receipt == nil || h.Receipt.Status != "done" {

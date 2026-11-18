@@ -121,31 +121,30 @@ func keptByCode(author string) bool {
 type threadSurfaceStep struct {
 	Key      string
 	Label    string
-	Kind     string       // task, choice, approval, call, user, check, deadline
-	State    string       // a Timeline item's: done, current, pending, failed
-	At       time.Time    // when it ended, else when it started
-	Started  time.Time    // when it started, zero if not yet
-	Ended    time.Time    // when it ended, zero if not yet
-	Card     string       // the ref of its proposal, shown in place: answered there while it waits, then a call's outcome
-	Check    string       // ok or failed: what its checks said
-	Note     string       // the last word on it
-	External bool         // what it reports may come from outside
-	Waits    bool         // it waits for the user: its card, their choice, their doing
-	Options  []string     // a choice that waits: what the user picks from
-	Yours    bool         // the user does it and has not yet: « C'est fait »
-	Answers  []taskAnswer // what was settled for its task: Eriphe's answers, a release asked and the user's answer (task_answer_log.go)
+	Kind     string    // task, choice, approval, call, user, check, deadline
+	State    string    // a Timeline item's: done, current, pending, failed
+	At       time.Time // when it ended, else when it started
+	Started  time.Time // when it started, zero if not yet
+	Ended    time.Time // when it ended, zero if not yet
+	Card     string    // the ref of its proposal, shown in place: answered there while it waits, then a call's outcome
+	Check    string    // ok or failed: what its checks said
+	Note     string    // the last word on it
+	External bool      // what it reports may come from outside
+	Waits    bool      // it waits for the user: its card, their choice, their doing
+	Options  []string  // a choice that waits: what the user picks from
+	Yours    bool      // the user does it and has not yet: « C'est fait »
 }
 
 // threadSurfaceSteps maps a thread's steps to what its surface shows. A
 // dropped step is not shown.
 func (c *core) threadSurfaceSteps(s Thread, steps []Step) []threadSurfaceStep {
-	asks, answers := c.pendingAsks(s.ID), c.stepAnswers(s.ID)
+	asks := c.pendingAsks(s.ID)
 	var out []threadSurfaceStep
 	for _, st := range steps {
 		if st.Status == stepDropped {
 			continue
 		}
-		v := threadSurfaceStep{Key: st.Key, Label: st.Title, Kind: st.Kind, Note: st.Note, Answers: answers[st.Key]}
+		v := threadSurfaceStep{Key: st.Key, Label: st.Title, Kind: st.Kind, Note: st.Note}
 		switch st.Status {
 		case stepAccepted:
 			v.State = "done"
@@ -420,11 +419,6 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	for _, st := range steps {
 		if st.External {
 			in.codeTaint = append(in.codeTaint, "step:"+st.Key)
-		}
-		for _, a := range st.Answers {
-			if a.Tainted != "" {
-				in.codeTaint = append(in.codeTaint, "answer:"+strconv.FormatInt(a.ID, 10))
-			}
 		}
 	}
 	headline := c.threadHeadlineOf(s.ID)

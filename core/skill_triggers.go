@@ -269,7 +269,7 @@ func (st *skillTrigger) Text(lang string) string {
 	if len(st.Tools) > 0 {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.tools"), strings.Join(st.Tools, ", ")))
 	}
-	if containsStr(st.Tools, threadsServer) && st.Thread != "" {
+	if st.Thread != "" {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.thread"), st.Thread))
 	}
 	if st.Urgent != "" {

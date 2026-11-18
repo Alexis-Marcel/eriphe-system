@@ -418,10 +418,15 @@ func (c *core) threadTaskChanged(id, state string, outcome turnOutcome) bool {
 		if output == "" && !r.missing() {
 			output = r.Summary
 		}
-		c.setStep(s.ID, st.Key, map[string]any{"status": status, "failed": failed, "evidence": truncate(evidence, 4000), "output": truncate(output, 8000)})
+		// Kept whole: the step's, and its node's (task_node.go).
+		c.setStep(s.ID, st.Key, map[string]any{"status": status, "failed": failed, "evidence": evidence, "output": output})
 		c.logThread(s.ID, "engine", fmt.Sprintf("L'étape « %s » a rendu son travail (%s).", st.Title, word))
-		text := fmt.Sprintf("L'étape « %s » (%s, tâche %s) a rendu son travail : %s.\n%s\nSon message : %s\nJuge-la avec settle_step : accept (avec son résultat pour les étapes suivantes, si son message ne suffit pas), retry (en disant quoi corriger ; %d essai(s) restant(s)) ou reject.",
-			st.Title, st.Key, id, word, evidence, truncate(output, 1200), max(0, stepRetries-st.Tries))
+		where := "task_status le donne"
+		if node := c.taskNode(id); node != "" {
+			where = "dans son nœud " + node
+		}
+		text := fmt.Sprintf("L'étape « %s » (%s, tâche %s) a rendu son travail : %s.\n%s\nPremière ligne : %s\nSon rapport entier : %s.\nJuge-la avec settle_step : accept (avec son résultat pour les étapes suivantes, si son message ne suffit pas), retry (en disant quoi corriger ; %d essai(s) restant(s)) ou reject.",
+			st.Title, st.Key, id, word, r.verdict(), firstLine(output), where, max(0, stepRetries-st.Tries))
 		c.tellLead(s, text, taint)
 	case stateStopped, stateFailed, stateLost:
 		if c.store.get("brain_stopped:"+id) != "" {
@@ -513,7 +518,7 @@ func (c *core) settleStep(ctx context.Context, id int64, key, verdict, note, out
 		}
 		fields := map[string]any{"status": stepAccepted, "note": truncate(note, threadTextMax), "ended": now}
 		if out := strings.TrimSpace(output); out != "" {
-			fields["output"] = truncate(out, 8000)
+			fields["output"] = out
 		}
 		c.setStep(id, key, fields)
 		c.stopStepTask(ctx, st)
@@ -1180,4 +1185,20 @@ func (c *core) decideThreadAsk(ctx context.Context, id int64, approve bool) erro
 	}
 	c.advanceLocked(ctx, s.ID)
 	return nil
+}
+
+// byTask tells an author that is a task's: a skill's run, or another.
+func byTask(by string) bool { return strings.HasPrefix(by, "skill:") || strings.HasPrefix(by, "task:") }
+
+// threadOfTask is the thread a task is a step of: its id and title.
+func (c *core) threadOfTask(id string) (int64, string) {
+	st, ok := c.stepOfTask(id)
+	if !ok {
+		return 0, ""
+	}
+	s, err := c.thread(st.Thread)
+	if err != nil {
+		return 0, ""
+	}
+	return s.ID, s.Title
 }

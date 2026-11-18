@@ -38,6 +38,13 @@ func (c *core) notifyBrain(id, state string) {
 		}
 	}
 	c.logTask(id, state, outcome.receipt) // for since (since.go)
+	// Its node first, whoever hears of it next (task_node.go): the report
+	// filed whole, the node's state.
+	var filing string
+	if state == stateIdle {
+		filing = c.fileTaskReport(id, outcome.receipt)
+	}
+	c.taskNodeState(id, state)
 	if c.skillTaskChanged(id, state, outcome) {
 		return // a triggered skill's: it tells the user itself (skill_runs.go)
 	}
@@ -84,7 +91,10 @@ func (c *core) notifyBrain(id, state string) {
 			return
 		}
 	case stateIdle:
-		text = idleEvent(t, st.LastText, outcome.receipt)
+		text = idleEvent(t, c.taskNode(t.ID), st.LastText, outcome.receipt)
+		if filing != "" {
+			text += "\nSon rapport n'a pas été rangé entier dans son nœud (" + filing + ") : task_status le donne."
+		}
 		if outcome.note != "" {
 			text += "\n" + outcome.note
 		}
@@ -128,22 +138,21 @@ func (c *core) notifyBrain(id, state string) {
 	c.ping()
 }
 
-// idleEvent tells the brain that a worker's turn ended: its checked
-// receipt, or without one its last message.
-func idleEvent(t *TaskRow, lastText string, r *checkedReceipt) string {
-	head := fmt.Sprintf("La tâche %s (appareil %s) a fini son tour.", t.ID, t.Device)
-	if r.missing() {
-		text := fmt.Sprintf("%s Son dernier message (sans reçu lisible) : %s", head, truncate(lastText, 1500))
-		if r != nil && len(r.Checks) > 0 {
-			text += "\n" + r.brainText()
-		}
-		return text
+// idleEvent tells the brain, in short, that a worker's turn ended: its
+// title, its receipt's verdict, the first line of its report, and where
+// the whole report is: its node (task_node.go), else task_status.
+func idleEvent(t *TaskRow, node, lastText string, r *checkedReceipt) string {
+	head := fmt.Sprintf("La tâche %s « %s » (appareil %s) a fini son tour", t.ID, t.label(), t.Device)
+	text := head + " : " + r.verdict() + "."
+	if line := firstLine(lastText); line != "" {
+		text += "\nPremière ligne : " + line
+	} else if !r.missing() && r.Summary != "" {
+		text += "\nRésumé : " + truncate(oneLine(r.Summary), 200)
 	}
-	text := head + "\n" + r.brainText()
-	if r.Status == "blocked" && lastText != "" {
-		text += "\nSon message : " + truncate(lastText, 800)
+	if node != "" {
+		return text + "\nSon rapport entier est dans son nœud " + node + "."
 	}
-	return text
+	return text + "\nSon rapport entier : task_status."
 }
 
 func (c *core) ping() {

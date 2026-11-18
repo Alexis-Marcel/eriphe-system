@@ -58,15 +58,14 @@ func TestWatchersReadSeePreferences(t *testing.T) {
 		t.Fatalf("preferences %q", got)
 	}
 	sk := triggeredSkill{Name: "mails", Manifest: skillManifest{Description: "Trie les mails", Body: "Note chaque mail."},
-		Trigger: &skillTrigger{Tools: []string{threadsServer}}}
-	th := &Thread{ID: 3, Title: "Mes mails"}
-	prompt := skillRunPrompt(sk, nil, time.Now(), th, []string{"inbox"}, got)
+		Trigger: &skillTrigger{Tools: []string{"mail"}}}
+	prompt := skillRunPrompt(sk, nil, time.Now(), got)
 	for _, want := range []string{"ce que l'utilisateur veut voir", "- Sam ne veut plus les lettres de news.example.org.", "`none`"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the run's prompt lacks %q:\n%s", want, prompt)
 		}
 	}
-	if p := skillRunPrompt(sk, nil, time.Now(), th, []string{"inbox"}, nil); strings.Contains(p, "veut voir") {
+	if p := skillRunPrompt(sk, nil, time.Now(), nil); strings.Contains(p, "veut voir") {
 		t.Errorf("no preference, still the line:\n%s", p)
 	}
 }
