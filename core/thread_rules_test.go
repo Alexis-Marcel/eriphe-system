@@ -1,13 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
 
-// The thread rules the code holds for the brain: one thread a subject, a
-// light one opened with its subject, and a task started in a turn about a
-// light thread followed by that thread.
+// The thread rules the code holds for the brain: one thread a subject, one
+// opened with its subject, and a task started in a turn about a thread
+// about that thread.
 
 func openedThread(t *testing.T, out map[string]any) Thread {
 	t.Helper()
@@ -15,11 +16,11 @@ func openedThread(t *testing.T, out map[string]any) Thread {
 	if !ok {
 		t.Fatalf("no thread: %v", out)
 	}
-	return Thread{ID: int64(th["id"].(float64)), State: th["state"].(string), Mode: th["mode"].(string)}
+	return Thread{ID: int64(th["id"].(float64)), State: th["state"].(string)}
 }
 
 // open_thread on a subject that has a thread gives that thread back, in
-// any case; ended, it is reopened light, why « même sujet ».
+// any case; ended, it is reopened, why « même sujet ».
 func TestOpenThreadSameSubjectGivesItBack(t *testing.T) {
 	c := stepsCore(t)
 	first := lightThread(t, c)
@@ -45,7 +46,7 @@ func TestOpenThreadSameSubjectGivesItBack(t *testing.T) {
 		t.Fatalf("open again: %v", out)
 	}
 	got := openedThread(t, out)
-	if got.ID != first.ID || got.State != threadOpen || got.Mode != modeLight {
+	if got.ID != first.ID || got.State != threadOpen {
 		t.Fatalf("not reopened: %+v", got)
 	}
 	if log := c.threadLog(first.ID, 10); !strings.Contains(threadLogText(log), "Thread rouvert : "+sameMatter) {
@@ -61,33 +62,23 @@ func TestOpenThreadSameSubjectGivesItBack(t *testing.T) {
 	}
 }
 
-// A light thread needs its subject; a led one on the subject of an active
-// thread is refused, naming it.
+// A thread needs its subject.
 func TestOpenThreadSubjectRules(t *testing.T) {
-	c, _ := threadCore(t)
+	c := startCore(t)
 	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Sans sujet", "goal": "Rien."})
 	if !isErr {
-		t.Fatalf("a light thread without subject opened: %v", out)
+		t.Fatalf("a thread without subject opened: %v", out)
 	}
-	if all, _ := c.threads(false, 10); len(all) != 1 {
+	if all, _ := c.threads(false, 10); len(all) != 0 {
 		t.Errorf("%d threads", len(all))
-	}
-	light, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque", "goal": "Un nom libre.", "alias": "brand:velora"})
-	if isErr {
-		t.Fatalf("open: %v", light)
-	}
-	out, isErr = callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque menée", "goal": "Un nom libre.", "alias": "brand:velora",
-		"done_when": "Sam a un nom libre", "steps": []any{map[string]any{"key": "a", "title": "Chercher", "prompt": "Cherche."}}})
-	if !isErr {
-		t.Fatalf("a led thread beside the active one: %v", out)
 	}
 }
 
-// run_task in a turn about a light thread is a task step of it, a surface
-// to fill too; a turn about a led thread, an ended one or none refuses it:
-// a task is never loose, and code never opens a thread for it.
-func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
-	c, led := threadCore(t)
+// run_task in a turn about a thread is a task about it, in a node of its
+// own; one in a turn about no thread is about nothing, and code never
+// opens a thread for it.
+func TestRunTaskInThreadTurnIsAboutIt(t *testing.T) {
+	c := startCore(t)
 	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "Marque Velora", "goal": "Sam sait si le nom est libre.", "alias": "brand:velora"})
 	if isErr {
 		t.Fatalf("open: %v", out)
@@ -97,35 +88,14 @@ func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
 	if isErr {
 		t.Fatalf("run_task: %v", out)
 	}
-	if int64(out["thread"].(float64)) != th.ID || out["step"] != stepTask {
-		t.Fatalf("not a step of thread %d: %v", th.ID, out)
-	}
-	st, err := c.step(th.ID, stepTask)
-	if err != nil || st.Kind != stepTask || st.Title != "Rechercher la marque" || !strings.HasPrefix(st.Prompt, "Cherche qui") {
-		t.Fatalf("the step: %+v, %v", st, err)
-	}
-	if st.Task == "" || out["task"] != st.Task {
-		t.Errorf("its task: %q, result %v", st.Task, out["task"])
+	task, err := c.store.task(out["task"].(string))
+	if err != nil || task.About != c.store.resolveAbout(threadRef(th.ID)) {
+		t.Fatalf("not about thread %d: %+v %v", th.ID, task, err)
 	}
 	if ss, _ := out["start_state"].(map[string]any); ss["start"] != "started" {
 		t.Errorf("its start: %v", out["start_state"])
 	}
-	// A second one gets a key of its own.
-	out, _ = callBrainTool(t, c, "run_task", map[string]any{"prompt": "Cherche les marques proches."})
-	if out["step"] != stepTask+"-2" {
-		t.Errorf("second step: %v", out)
-	}
-	// thread none is gone: a task is never left loose.
-	if _, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume les mails.", "thread": "none"}); !isErr {
-		t.Fatal("thread none taken")
-	}
-	if steps, _ := c.steps(th.ID); len(steps) != 2 {
-		t.Errorf("%d steps", len(steps))
-	}
-	if _, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "x", "thread": "7"}); !isErr {
-		t.Error("a thread other than none taken")
-	}
-	// What run_task refuses of the task is refused as before, no step born.
+	// What run_task refuses of the task is refused as before.
 	for name, bad := range map[string]map[string]any{
 		"an agent that is none": {"prompt": "Corrige.", "agent": "nobody"},
 		"a folder that is none": {"prompt": "Corrige.", "resources": []any{map[string]any{"kind": "folder", "ref": "nowhere", "access": "read"}}},
@@ -134,45 +104,26 @@ func TestRunTaskInThreadTurnIsItsStep(t *testing.T) {
 			t.Errorf("%s: taken", name)
 		}
 	}
-	// A turn about a led thread: refused, its plan changes with amend_thread.
-	c.turn.about(led.ID)
-	if out, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume la veille."}); !isErr {
-		t.Fatalf("led thread: %v", out)
-	}
-	if steps, _ := c.steps(led.ID); len(steps) != 4 { // its plan, untouched
-		t.Errorf("the led thread has %d steps", len(steps))
-	}
-	// A turn about no thread: refused, and no thread opened for it.
+	// A turn about no thread: a task about nothing, and no thread opened.
 	c.turn.about(0)
 	before, _ := c.threads(false, 50)
-	if out, isErr := callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer l'agenda", "prompt": "Résume l'agenda."}); !isErr {
+	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Résumer l'agenda", "prompt": "Résume l'agenda."})
+	if isErr {
 		t.Fatalf("no thread: %v", out)
+	}
+	if task, _ := c.store.task(out["task"].(string)); task.About != "" {
+		t.Errorf("about %q", task.About)
 	}
 	if after, _ := c.threads(false, 50); len(after) != len(before) {
 		t.Errorf("a thread opened for a task: %d, then %d", len(before), len(after))
 	}
-	// A turn about no thread that names a subject with a live light
-	// thread: a step of that one, no new thread (one thread a subject).
-	c.turn.name([]string{"brand:velora"})
-	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Vérifier l'INPI", "prompt": "Cherche Velora à l'INPI."})
-	if isErr || out["thread"] == nil || int64(out["thread"].(float64)) != th.ID {
-		t.Fatalf("the subject's thread %d: %v", th.ID, out)
-	}
-	c.turn.name(nil)
-	// About a thread that ended: refused, reopen it first.
-	c.closeLight(th.ID, "Fait.", "brain")
-	c.turn.about(th.ID)
-	if out, isErr := callBrainTool(t, c, "run_task", map[string]any{"prompt": "Résume la semaine."}); !isErr {
-		t.Fatalf("ended thread: %v", out)
-	}
 }
 
 // A message the user wrote with a thread's surface open makes the turn
-// about that thread, and so does one about a surface of its subject:
-// run_task then starts a step of it. A message about another surface, or
-// none, leaves the turn about no thread.
+// about that thread, and so does one about a surface of its subject. A
+// message about another surface, or none, leaves the turn about no thread.
 func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
-	c, _ := threadCore(t)
+	c := startCore(t)
 	out, isErr := callBrainTool(t, c, "open_thread", map[string]any{"title": "PR alerting", "goal": "La PR est en prod.", "alias": "pr:example/infra#12"})
 	if isErr {
 		t.Fatalf("open: %v", out)
@@ -195,8 +146,8 @@ func TestMessageAboutThreadMakesTurnItsOwn(t *testing.T) {
 		t.Fatalf("the turn is about %d, not %d", c.turn.aboutThread(), th.ID)
 	}
 	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Refaire les règles", "prompt": "Refais les règles de latence."})
-	if isErr || out["thread"] == nil || int64(out["thread"].(float64)) != th.ID || out["step"] == nil {
-		t.Fatalf("not a step of thread %d: %v", th.ID, out)
+	if task, err := c.store.task(fmt.Sprint(out["task"])); isErr || err != nil || task.About != c.store.resolveAbout(threadRef(th.ID)) {
+		t.Fatalf("not about thread %d: %v", th.ID, out)
 	}
 
 	// A surface of the thread's subject: its thread.

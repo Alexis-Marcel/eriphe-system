@@ -152,7 +152,7 @@ func TestBrainWorkingNoteNotShown(t *testing.T) {
 	// call: nothing for the user.
 	report("t-brain", deviceReport{State: stateIdle, Events: []EventRow{
 		{Seq: 5, Time: time.Now(), Type: "text", Data: map[string]any{"text": "Checking the step."}},
-		{Seq: 6, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "mcp__eriphe-core__settle_step", "input": map[string]any{}}},
+		{Seq: 6, Time: time.Now(), Type: "tool_use", Data: map[string]any{"name": "mcp__eriphe-core__node_settle", "input": map[string]any{}}},
 		{Seq: 7, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}}})
 	if msgs := brainMessages(); len(msgs) != 1 {
 		t.Fatalf("brain messages = %q", msgs)

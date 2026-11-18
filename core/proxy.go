@@ -60,8 +60,6 @@ func (c *core) taskMCPHandler() http.Handler {
 				if a.SelfURL == "" {
 					s = c.self
 				}
-			case hasOwnTools(a):
-				s = c.assistantServer(a, t) // the lead's (assistant_own_tools.go)
 			}
 			if s == nil {
 				http.Error(w, "this task has no access to "+server, http.StatusForbidden)

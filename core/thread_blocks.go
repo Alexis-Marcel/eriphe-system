@@ -54,9 +54,6 @@ func threadStatus(s Thread, steps []threadSurfaceStep, waits bool, weight int, l
 			return tr(lang, "thread.state.running"), "default"
 		}
 	}
-	if s.led() && s.Phase == phasePaused {
-		return tr(lang, "thread.state.paused"), "muted"
-	}
 	return tr(lang, "thread.status.calm"), "default"
 }
 
@@ -161,10 +158,9 @@ func (c *core) blockHead(out *threadComps, data map[string]any, s Thread, steps 
 	}
 }
 
-// blockControls composes the head's buttons, each code's (controlOf):
-// Stop on any active thread stopThread takes (not a standing one, which
-// never ends); on a thread that runs steps (led), Pause while it runs and
-// Resume while paused (more time when its budget held it) before it.
+// blockControls composes the head's button, code's (controlOf): Stop on
+// any active thread stopThread takes (not a standing one, which never
+// ends).
 func blockControls(out *threadComps, s Thread, lang string) {
 	if !s.active() || s.standing() {
 		return
@@ -176,17 +172,7 @@ func blockControls(out *threadComps, s Thread, lang string) {
 			"action": map[string]any{"event": map[string]any{"name": a2ui.ActionControl, "context": map[string]any{"thread": s.ID, "do": do}}}})
 		return id
 	}
-	var row []string
-	switch {
-	case !s.led():
-	case s.Phase == phaseRunning:
-		row = append(row, button("pause", "thread.surface.pause", "default"))
-	case s.Phase == phasePaused && s.Held == heldBudget:
-		row = append(row, button("resume", "thread.surface.resume.more", "primary"))
-	case s.Phase == phasePaused:
-		row = append(row, button("resume", "thread.surface.resume", "primary"))
-	}
-	row = append(row, button("stop", "thread.surface.stop", "quiet"))
+	row := []string{button("stop", "thread.surface.stop", "quiet")}
 	out.add(comp{"id": "thread_controls", "component": "Row", "align": "center", "children": row})
 }
 

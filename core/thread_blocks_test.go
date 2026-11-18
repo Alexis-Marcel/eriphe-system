@@ -25,11 +25,11 @@ func sampleSteps(lang string, now time.Time) []threadSurfaceStep {
 		return fr
 	}
 	return []threadSurfaceStep{
-		{Key: "plan", Label: pick("Préparer la page", "Prepare the page"), Kind: stepTask, State: "done", Started: now.Add(-3 * time.Hour), Ended: now.Add(-150 * time.Minute), At: now.Add(-150 * time.Minute)},
-		{Key: "merge", Label: pick("Fusionner la branche", "Merge the branch"), Kind: stepCall, State: "done", Card: "access:5", Started: now.Add(-2 * time.Hour), Ended: now.Add(-110 * time.Minute), At: now.Add(-110 * time.Minute)},
-		{Key: "publish", Label: pick("Publier le site", "Publish the site"), Kind: stepApproval, State: "current", Card: "card:20", Waits: true, Started: now.Add(-10 * time.Minute), At: now.Add(-10 * time.Minute)},
-		{Key: "photos", Label: pick("Redimensionner les photos", "Resize the photos"), Kind: stepTask, State: "current", Note: pick("12 sur 30", "12 of 30"), Started: now.Add(-20 * time.Minute), At: now.Add(-20 * time.Minute)},
-		{Key: finalStep, Label: tr(lang, "thread.surface.final"), Kind: stepCheck, State: "pending"},
+		{Key: "plan", Label: pick("Préparer la page", "Prepare the page"), Kind: "task", State: "done", Started: now.Add(-3 * time.Hour), Ended: now.Add(-150 * time.Minute), At: now.Add(-150 * time.Minute)},
+		{Key: "merge", Label: pick("Fusionner la branche", "Merge the branch"), Kind: "call", State: "done", Card: "access:5", Started: now.Add(-2 * time.Hour), Ended: now.Add(-110 * time.Minute), At: now.Add(-110 * time.Minute)},
+		{Key: "publish", Label: pick("Publier le site", "Publish the site"), Kind: "approval", State: "current", Started: now.Add(-10 * time.Minute), At: now.Add(-10 * time.Minute)},
+		{Key: "photos", Label: pick("Redimensionner les photos", "Resize the photos"), Kind: "task", State: "current", Note: pick("12 sur 30", "12 of 30"), Started: now.Add(-20 * time.Minute), At: now.Add(-20 * time.Minute)},
+		{Key: "final", Label: tr(lang, "thread.surface.final"), Kind: "check", State: "pending"},
 	}
 }
 
@@ -146,35 +146,27 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 
 	// The frame, then the default composition, in their order.
 	kids := rootChildren(t, a.Components)
-	order := []string{"thread_progress", "thread_state", "thread_controls", "thread_yours", "thread_card_2",
+	order := []string{"thread_progress", "thread_state", "thread_controls",
 		"thread_steps_fold", "thread_steps_open", "thread_steps_cards", "thread_items_0_cards", "thread_items_0_groups"}
 	if !slices.Equal(kids, order) {
 		t.Fatalf("root %v, want %v", kids, order)
 	}
 	comps := string(a.Components)
-	// The card that waits is the user's, whole, once; the decided one is in
-	// the steps' data, one line (compact) where the default draws it.
+	// The decided card is in the steps' data, one line (compact) where the
+	// default draws it.
 	var data map[string]any
 	json.Unmarshal(a.Data, &data)
 	thread := data[threadDataKey].(map[string]any)
 	stepData := thread["steps"].(map[string]any)
-	if strings.Count(comps, `"card:20"`) != 1 || strings.Contains(comps, `"access:5"`) ||
+	if strings.Contains(comps, `"access:5"`) ||
 		!strings.Contains(comps, `{"compact":true,"component":"Proposal","id":"thread_steps_card","proposalId":{"@path":"ref"}}`) {
 		t.Errorf("cards: %s", comps)
 	}
 	if cards := stepData["cards"].([]any); len(cards) != 1 || cards[0].(map[string]any)["ref"] != "access:5" {
 		t.Errorf("decided cards %v", cards)
 	}
-	if stepData["summary"] != "2 étapes faites" || thread["progress"].(map[string]any)["label"] != "À toi" {
+	if stepData["summary"] != "2 étapes faites" {
 		t.Errorf("head and fold: %v", thread)
-	}
-	// The step that waits for the user is in « À toi » only.
-	var labels []string
-	for _, it := range stepItems(thread) {
-		labels = append(labels, it.(map[string]any)["label"].(string))
-	}
-	if slices.Contains(labels, "Publier le site") || len(labels) != 4 {
-		t.Errorf("steps %v", labels)
 	}
 	// Items by their notes' state, counted on their groups' lines and in
 	// the state line; « extérieur » on each row of the source not trusted,
@@ -211,7 +203,7 @@ func TestThreadBlocksSameForEveryThread(t *testing.T) {
 	// stays, the data too for the block to bind.
 	part := &threadPart{Blocks: []partBlock{{Name: "etat", Author: surfaceAuthorBrain, Components: json.RawMessage(`[{"id":"thread_part_etat","component":"Text","text":"Prêt."}]`)}}}
 	held, _ := c.threadSurfaceIn(work, sampleSteps("fr", now), nil, part, now)
-	if kids := rootChildren(t, held.Components); !slices.Equal(kids, []string{"thread_progress", "thread_state", "thread_controls", "thread_yours", "thread_card_2", "thread_part_etat"}) {
+	if kids := rootChildren(t, held.Components); !slices.Equal(kids, []string{"thread_progress", "thread_state", "thread_controls", "thread_part_etat"}) {
 		t.Errorf("with a block: %v", kids)
 	}
 	if strings.Contains(string(held.Components), "thread_steps_") || strings.Contains(string(held.Components), "thread_items_") ||
@@ -389,8 +381,8 @@ func threadFixtures(t *testing.T, lang string) []a2ui.Message {
 		title  string
 		parent int64
 	}{{101, work.Title, 0}, {105, pick("Les photos du club", "The club's photos"), 101}} {
-		if _, err := c.store.db.Exec(`INSERT INTO threads (id, title, goal, mode, state, created, started, parent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			q.id, q.title, q.title+".", modeLight, threadOpen, now.Unix(), now.Unix(), q.parent); err != nil {
+		if _, err := c.store.db.Exec(`INSERT INTO threads (id, title, goal, state, created, started, parent) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			q.id, q.title, q.title+".", threadOpen, now.Unix(), now.Unix(), q.parent); err != nil {
 			t.Fatal(err)
 		}
 	}

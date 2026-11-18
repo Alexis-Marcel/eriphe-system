@@ -12,7 +12,7 @@ import (
 )
 
 // The threads' bench on a real model: each turn of testdata/threads (a
-// case's request, and its wake if it has one), ERIPHE_LIVE_THREADS_RUNS
+// case's request), ERIPHE_LIVE_THREADS_RUNS
 // times (1 by default), through the local Claude Code CLI as the surfaces'
 // bench runs it (runClaude): the brain's « Les fils », its paragraphs on
 // surfaces and the workspace, its tools for threads and the workspace (as
@@ -26,8 +26,7 @@ import (
 // ERIPHE_LIVE_THREADS_CLI the command (claude by default),
 // ERIPHE_LIVE_THREADS_CASES the cases (ids, comma-separated; all by
 // default). Each answer is played and scored as the bench scores its
-// reference (threadRun.score); a wake is played after the case's reference
-// first turn, so each turn is judged on its own. It reports, per turn and
+// reference (threadRun.score). It reports, per turn and
 // in all: the faults, agreement, latency and cost. It fails only when the
 // CLI does; the numbers are for reading.
 
@@ -94,21 +93,10 @@ func TestThreadsLive(t *testing.T) {
 		if only != nil && !slices.Contains(only, x.ID) {
 			continue
 		}
-		ask(x, phaseAsk, func() (*core, *threadRun, string) {
+		ask(x, "ask", func() (*core, *threadRun, string) {
 			c := benchThreadCore(t, x)
 			r := beginAsk(c, x)
-			return c, r, threadTurn(x, c, r, "")
-		})
-		if x.Wake == nil {
-			continue
-		}
-		ask(x, phaseWake, func() (*core, *threadRun, string) {
-			c, _, _ := playAsk(t, x, x.Answer)
-			r, event, err := beginWake(c, x)
-			if err != nil {
-				t.Fatalf("%s wake: %v", x.ID, err)
-			}
-			return c, r, threadTurn(x, c, r, event)
+			return c, r, threadTurn(x, c, r)
 		})
 	}
 	t.Logf("all (%s, %d runs a turn): %s", model, runs, summarizeThreadRuns(all))

@@ -70,12 +70,12 @@ func (c *core) turnAbout() string {
 	return ""
 }
 
-// sourceAbout is what who made a record is about: a thread (thread:,
-// lead:), a task's about; "" for anyone else.
+// sourceAbout is what who made a record is about: a thread (thread:), a
+// task's about; "" for anyone else.
 func (c *core) sourceAbout(source string) string {
 	kind, id, _ := strings.Cut(source, ":")
 	switch kind {
-	case "thread", "lead":
+	case "thread":
 		n, err := strconv.ParseInt(id, 10, 64)
 		if err != nil {
 			return ""
@@ -120,8 +120,6 @@ func (c *core) proposalAbout(kind string, id int64) string {
 				return x.About
 			}
 		}
-	case cardThread:
-		return c.sourceAbout(threadRef(id))
 	case cardCalls:
 		if asks := c.batchAsks(id); len(asks) > 0 && asks[0].Thread > 0 {
 			return c.sourceAbout(threadRef(asks[0].Thread))

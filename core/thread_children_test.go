@@ -96,8 +96,8 @@ func TestChildThreadDepth(t *testing.T) {
 	}
 }
 
-// Closing a parent with active children is refused, naming them, light
-// or led; once they ended, it closes.
+// Closing a parent with active children is refused, naming them; once
+// they ended, it closes.
 func TestChildThreadCloseRefused(t *testing.T) {
 	c, _ := surfaceCore(t)
 	parent := lightThread(t, c)
@@ -114,14 +114,6 @@ func TestChildThreadCloseRefused(t *testing.T) {
 	}
 	if err := c.closeLight(parent.ID, "Fusionnée.", byBrain); err != nil {
 		t.Fatalf("once its child closed: %v", err)
-	}
-
-	// Led: its engine's close is refused the same.
-	led, ls := threadCore(t)
-	led.setThread(ls.ID, map[string]any{"phase": phaseRunning})
-	childThread(t, led, ls.ID, "Les noms libres", "topic:noms")
-	if _, err := led.finishThread(context.Background(), ls.ID, "Fini.", byBrain); err == nil || !strings.Contains(err.Error(), "« Les noms libres »") {
-		t.Fatalf("a led parent closed with an active child: %v", err)
 	}
 }
 
@@ -174,7 +166,8 @@ func TestChildThreadRaisesParent(t *testing.T) {
 		t.Fatalf("children %v", kids)
 	}
 
-	if _, err := c.addStep(context.Background(), kid.ID, stepSpec{Key: "sign", Title: "Signer le devis", Kind: stepUser, Question: "Signe le devis."}, nil, byBrain); err != nil {
+	r := proposedRule(t, c, "devis", "")
+	if _, err := c.linkThread(kid.ID, proposalRef(cardRule, r.ID), byBrain); err != nil {
 		t.Fatal(err)
 	}
 	ks, _ := c.surface(ksid)
@@ -203,8 +196,8 @@ func TestChildThreadRaisesParent(t *testing.T) {
 		t.Fatalf("crumb %v %s", kd["parent"], ks.Components)
 	}
 
-	// Done by the user: the parent calms down again.
-	if _, err := c.userStepDone(context.Background(), kid.ID, "sign", byUser); err != nil {
+	// Answered by the user: the parent calms down again.
+	if _, err := c.decideCard(context.Background(), cardOf(t, c, cardRule, r.ID).ID, true, "web"); err != nil {
 		t.Fatal(err)
 	}
 	if ps, _ = c.surface(psid); ps.Look.State == tileYours {

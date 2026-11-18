@@ -306,10 +306,10 @@ func TestRunTaskTellsStartState(t *testing.T) {
 	if isErr || out["task"] == nil || st["start"] != "started" {
 		t.Fatalf("started now: %v", out)
 	}
-	// A second task step says the same.
+	// A second task says the same.
 	out, isErr = callBrainTool(t, c, "run_task", map[string]any{"title": "Lire la doc", "prompt": "Lis la doc."})
 	st, _ = out["start_state"].(map[string]any)
-	if isErr || out["thread"] == nil || st["start"] != "started" {
+	if isErr || out["task"] == nil || st["start"] != "started" {
 		t.Fatalf("a step started now: %v", out)
 	}
 

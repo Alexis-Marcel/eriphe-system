@@ -30,7 +30,6 @@ func siteThread(t *testing.T, c *core) Thread {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.insertSteps(th.ID, []stepSpec{{Key: "cert", Title: "Obtenir le certificat", Kind: stepTask}}, false)
 	c.setThread(th.ID, map[string]any{"summary": "Il reste le certificat"})
 	return th
 }
@@ -44,8 +43,8 @@ func TestThreadCard(t *testing.T) {
 	th := siteThread(t, c)
 	card, st := c.aboutCard(threadRef(th.ID), 4000)
 	for _, want := range []string{
-		"Fiche de " + threadRef(th.ID), fmt.Sprintf("- fil %d [light, open, project:site", th.ID), "but : Le site répond en https.",
-		"cert « Obtenir le certificat »", "résumé : Il reste le certificat",
+		"Fiche de " + threadRef(th.ID), fmt.Sprintf("- fil %d [open, project:site", th.ID), "but : Le site répond en https.",
+		"résumé : Il reste le certificat",
 		"Décision 4 du site", "Décision 2 du site",
 		"Le domaine est example.org", "fact tiré d'un contenu extérieur", "Lina relit les pages du site",
 		"Relancer Lina pour le site", "carte memory:", "Une idée à valider", "Le site reste sobre",
@@ -89,12 +88,12 @@ func TestThreadCardBudget(t *testing.T) {
 		t.Errorf("the thread first:\n%s", card)
 	}
 	small, st := c.aboutCard(threadRef(th.ID), 500)
-	if st.Dropped == 0 || !strings.Contains(small, "(7 de plus : recall") || runeLen(small) > 500 || strings.Count(small, "```") != 2 {
+	if st.Dropped == 0 || !strings.Contains(small, "(6 de plus : recall") || runeLen(small) > 500 || strings.Count(small, "```") != 2 {
 		t.Errorf("cut %+v:\n%s", st, small)
 	}
 }
 
-// A tainted thread is named, its plan not quoted.
+// A tainted thread is named, its title not quoted.
 func TestThreadCardTainted(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	th, err := c.openThread(threadIn{Title: "PLAN EXTÉRIEUR", Goal: "Suivre ce que dit le mail.", Alias: "project:mail"}, []string{"external:mail:43"}, byBrain)
@@ -102,7 +101,7 @@ func TestThreadCardTainted(t *testing.T) {
 		t.Fatal(err)
 	}
 	card, _ := c.aboutCard(threadRef(th.ID), threadCardChars)
-	if !strings.Contains(card, fmt.Sprintf("- fil %d [light, open] : son plan peut porter", th.ID)) || strings.Contains(card, "PLAN EXTÉRIEUR") {
+	if !strings.Contains(card, fmt.Sprintf("- fil %d [open] : il peut porter", th.ID)) || strings.Contains(card, "PLAN EXTÉRIEUR") {
 		t.Fatalf("card:\n%s", card)
 	}
 }
@@ -218,8 +217,7 @@ func pushRows(t *testing.T, c *core) string {
 }
 
 // A worker task of a thread starts with its card, after what it is
-// asked; its prompt as shown is what it was asked. A lead starts with its
-// thread's.
+// asked; its prompt as shown is what it was asked.
 func TestThreadCardAtStart(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	th := siteThread(t, c)
@@ -237,11 +235,7 @@ func TestThreadCardAtStart(t *testing.T) {
 	if spec, _ := c.store.taskSpec(other.ID); strings.Contains(spec.Prompt, "Fiche de") {
 		t.Fatalf("a card about nothing:\n%s", spec.Prompt)
 	}
-	lead := Assistant{Role: assistantRoleLead, Triggers: []string{triggerThread + ":" + itoa(int(th.ID))}}
-	if first := assistantRoles[assistantRoleLead].firstPrompt(c, lead, false); !strings.Contains(first, card) {
-		t.Fatalf("lead:\n%s", first)
-	}
-	if rows, want := pushRows(t, c), fmt.Sprintf("%s task 0 %s\n%s lead 0 %d", key, task.ID, key, th.ID); rows != want {
+	if rows, want := pushRows(t, c), fmt.Sprintf("%s task 0 %s", key, task.ID); rows != want {
 		t.Fatalf("counted: %q, want %q", rows, want)
 	}
 }

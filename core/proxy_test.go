@@ -602,13 +602,12 @@ func TestTaintedTurnLimitsActions(t *testing.T) {
 			t.Fatalf("tainted run_task with %v = %s", tools, resultText(out))
 		}
 	}
-	// A step of the turn's thread, held.
+	// A task about the turn's thread, held.
 	out := run("github")
 	var step struct {
-		Thread int64  `json:"thread"`
-		Task   string `json:"task"`
+		Task string `json:"task"`
 	}
-	if json.Unmarshal([]byte(resultText(out)), &step) != nil || step.Thread != th.ID || !c.heldTask(step.Task) {
+	if json.Unmarshal([]byte(resultText(out)), &step) != nil || !c.heldTask(step.Task) {
 		t.Fatalf("tainted run_task as a step = %s", resultText(out))
 	}
 

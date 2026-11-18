@@ -28,6 +28,13 @@ func ParseAuthor(raw []byte, prev *Node) (*Node, error) {
 		return nil, fmt.Errorf("front matter: external is %w: leave it out", ErrCodeField)
 	}
 	n.Meta.External = ext
+	var after []string
+	if prev != nil {
+		after = prev.Meta.After
+	}
+	if !slices.Equal(n.Meta.After, after) {
+		return nil, fmt.Errorf("front matter: after is %w: leave it as it is", ErrCodeField)
+	}
 	for _, b := range n.Blocks() {
 		var pb *Block
 		if prev != nil {

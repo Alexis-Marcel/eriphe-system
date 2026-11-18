@@ -15,8 +15,7 @@ import (
 //     brain (a turn's card, a pack's), a memory, an intention or a line in
 //     the thread written by "brain"; for a worker task, a memory its
 //     remember wrote (source task:<id>), or the thread's summary noted by
-//     a task; for a lead, a line written by a lead in the thread (nearly
-//     always: a lead works on its thread, so its count says little).
+//     a task.
 //   - answered: the card of what a brain turn is about (the turn's, or the
 //     one of a pack delivered with the turn's messages; a pack's other
 //     cards are no turn's) when the turn's answer, the first message after
@@ -26,18 +25,18 @@ import (
 //     so it is counted apart from wrote.
 //   - no: neither.
 //
-// The window is cardUseWindow for the brain, cardUseLongWindow for a task
-// or a lead, which work longer. Counts are shown in
+// The window is cardUseWindow for the brain, cardUseLongWindow for a task,
+// which works longer. Counts are shown in
 // the tasks' reliability panel; each push is logged too.
 
 const cardPushesSchema = `CREATE TABLE IF NOT EXISTS card_pushes (
 	id      INTEGER PRIMARY KEY AUTOINCREMENT,
 	at      INTEGER NOT NULL,
 	about   TEXT NOT NULL DEFAULT '',
-	place   TEXT NOT NULL,               -- turn, pack, task, lead
+	place   TEXT NOT NULL,               -- turn, pack, task
 	chars   INTEGER NOT NULL,
 	turn    INTEGER NOT NULL DEFAULT 0,  -- the brain's turn it went in (its last message's seq); 0 for none
-	who     TEXT NOT NULL DEFAULT '',    -- the task's id, the lead's thread
+	who     TEXT NOT NULL DEFAULT '',    -- the task's id
 	looked  INTEGER NOT NULL DEFAULT 0,  -- recall or read_thread asked for it in that turn
 	used    TEXT NOT NULL DEFAULT ''     -- '' until judged; wrote, answered, no
 );
@@ -50,10 +49,7 @@ const (
 	placeTurn = "turn" // the brain's turn, its card
 	placePack = "pack" // a fresh session's context pack
 	placeTask = "task" // a worker task's first prompt
-	placeLead = "lead" // a thread lead's first turn
 )
-
-var cardPlaces = []string{placeTurn, placePack, placeTask, placeLead}
 
 // How a card pushed was judged.
 const (
@@ -69,14 +65,14 @@ const (
 )
 
 func cardWindow(place string) time.Duration {
-	if place == placeTask || place == placeLead {
+	if place == placeTask {
 		return cardUseLongWindow
 	}
 	return cardUseWindow
 }
 
 // cardPushed logs a card given to a model and counts it: where (place),
-// in which brain turn (0 for none), to which task or lead.
+// in which brain turn (0 for none), to which task.
 func (c *core) cardPushed(x pushedCard, place string, turn int, who string) {
 	where := place
 	if who != "" {
@@ -190,8 +186,6 @@ func (c *core) judgeCard(x cardPush) string {
 				WHERE m.about = ? AND l.time BETWEEN ? AND ? AND l.who = 'task' AND m.source_ref = ?`, x.About, from, to, "task:"+x.Who).Scan(&m)
 			n += m
 		}
-	case placeLead:
-		n = threadBy("lead")
 	}
 	if n > 0 {
 		return cardWrote
@@ -263,7 +257,7 @@ func (s *Store) cardUses(since time.Time, about string) []cardUse {
 		}
 	}
 	var out []cardUse
-	for _, p := range cardPlaces {
+	for _, p := range []string{placeTurn, placePack, placeTask} {
 		if u := byPlace[p]; u != nil {
 			out = append(out, *u)
 		}

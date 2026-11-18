@@ -1720,19 +1720,11 @@ details.app-install > * + * { margin-top: 10px; }
 .chip-thread-stopped, .chip-thread-declined, .chip-thread-dropped { background: var(--surface-2); color: var(--faint); }
 .waits .chip, .needs-you .chip[class*="chip-thread"] { background: var(--accent-soft); color: var(--accent-text); }
 
-/* The strip: one mark per step. */
-.thread-strip { display: inline-flex; gap: 3px; align-items: center; }
-.thread-strip i { width: 14px; height: 6px; border-radius: 3px; background: var(--st); }
-.thread-strip i.st-waiting { background: transparent; box-shadow: inset 0 0 0 1.5px var(--border-strong); }
-.thread-strip i.st-running { animation: pulse 1.6s infinite; }
-.thread-strip i.st-dropped { display: none; }
-
 /* The tasks panel's threads. */
 .side-thread { margin-bottom: 22px; }
 .side-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; padding: 0 4px; }
 .side-sub h3 { font-size: .9rem; }
-.thread-card .thread-strip { margin-top: 2px; }
-@media (prefers-reduced-motion: reduce) { .thread-strip i.st-running, .chip-thread-running .pulse { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .chip-thread-running .pulse { animation: none; } }
 /* Sujets (subjects.html): a card as the model gets it. */
 .subject-card-box { margin-bottom: 18px; }
 .subject-card-box h3 { font-size: 1rem; margin: 0 0 6px; }

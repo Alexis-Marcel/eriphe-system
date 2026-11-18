@@ -35,7 +35,7 @@ import (
 //     (/thread/items/<source>), its children, the user's marks
 //     (/thread/marks, thread_marks.go).
 //   - What is composed: the holder's part, who holds the thread (the
-//     brain, or its lead) composing it by named blocks with surface_write
+//     brain) composing it by named blocks with surface_write
 //     on thread-<id> (a state, points to see, a diff, a link), each kept
 //     apart, checked alone, and shown under the frame in its order
 //     (thread_part.go); their sources become the thread's
@@ -135,105 +135,6 @@ type threadSurfaceStep struct {
 	Yours    bool      // the user does it and has not yet: « C'est fait »
 }
 
-// threadSurfaceSteps maps a thread's steps to what its surface shows. A
-// dropped step is not shown.
-func (c *core) threadSurfaceSteps(s Thread, steps []Step) []threadSurfaceStep {
-	asks := c.pendingAsks(s.ID)
-	var out []threadSurfaceStep
-	for _, st := range steps {
-		if st.Status == stepDropped {
-			continue
-		}
-		v := threadSurfaceStep{Key: st.Key, Label: st.Title, Kind: st.Kind, Note: st.Note}
-		switch st.Status {
-		case stepAccepted:
-			v.State = "done"
-		case stepRunning, stepReported, stepVerified:
-			v.State = "current"
-		case stepRejected, stepBlocked:
-			v.State = "failed"
-		default:
-			v.State = "pending"
-		}
-		if st.Key == finalStep {
-			v.Label = tr(c.userLang(), "thread.surface.final")
-		}
-		v.Started, v.Ended = unixOrZero(st.Started), unixOrZero(st.Ended)
-		switch {
-		case st.Ended > 0:
-			v.At = v.Ended
-		case st.Started > 0:
-			v.At = v.Started
-		}
-		switch {
-		case st.Failed:
-			v.Check = "failed"
-		case st.Status == stepVerified:
-			v.Check = "ok"
-		}
-		// A step's card: while it waits; once decided, only a call's, which
-		// then shows how its run went. A card gone is not shown.
-		if id, ok := asks[st.Key]; ok {
-			v.Card, v.Waits = proposalRef(cardThread, id), true
-		} else if ref := c.stepCard(s.ID, st); ref != "" {
-			switch state := c.cardState(ref); {
-			case state == cardPending:
-				v.Card, v.Waits = ref, true
-			case state != cardGone && st.Kind == stepCall:
-				v.Card = ref
-			}
-		}
-		if st.Kind == stepDeadline && st.DueAt > 0 && st.Ended == 0 {
-			v.At = time.Unix(st.DueAt, 0)
-		}
-		v.External = st.Tainted != "" || (st.Task != "" && c.taskResultTaint(st.Task) != "")
-		v.Yours = st.Kind == stepUser && st.Status == stepRunning
-		if st.Kind == stepChoice && st.Status == stepRunning {
-			v.Waits, v.Options = true, st.Options
-		}
-		v.Waits = v.Waits || v.Yours
-		out = append(out, v)
-	}
-	return out
-}
-
-// pendingAsks are what a thread asks about a step that still waits, by
-// the step's key.
-func (c *core) pendingAsks(thread int64) map[string]int64 {
-	out := map[string]int64{}
-	rows, err := c.store.db.Query(`SELECT id, step FROM thread_asks WHERE thread = ? AND state = ? ORDER BY id`, thread, askPending)
-	if err != nil {
-		return out
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id int64
-		var step string
-		if rows.Scan(&id, &step) == nil && step != "" {
-			out[step] = id
-		}
-	}
-	return out
-}
-
-// wholeThreadAsks are what a thread asks about itself that waits: its
-// plan, a change of it, more time.
-func (c *core) wholeThreadAsks(thread int64) []int64 {
-	rows, err := c.store.db.Query(`SELECT id FROM thread_asks WHERE thread = ? AND state = ? AND step = '' ORDER BY id`, thread, askPending)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []int64
-	for rows.Next() {
-		var id int64
-		if rows.Scan(&id) == nil {
-			out = append(out, id)
-		}
-	}
-	return out
-}
-
 // linkedWaiting are the cards linked to a thread (thread_cards) that still
 // wait for the user and are no step's: they are answered on its surface.
 func (c *core) linkedWaiting(thread int64, steps []threadSurfaceStep) []string {
@@ -254,7 +155,7 @@ func (c *core) linkedWaiting(thread int64, steps []threadSurfaceStep) []string {
 		if slices.ContainsFunc(steps, func(st threadSurfaceStep) bool { return st.Card == ref }) {
 			continue
 		}
-		if kind, _, ok := parseProposalRef(ref); ok && kind != cardThread && c.cardState(ref) == cardPending {
+		if _, _, ok := parseProposalRef(ref); ok && c.cardState(ref) == cardPending {
 			out = append(out, ref)
 		}
 	}
@@ -265,11 +166,7 @@ func (c *core) linkedWaiting(thread int64, steps []threadSurfaceStep) []string {
 // a thread's surface shows: its own (asks), the ones linked to it, its
 // steps'.
 func threadCardsWaiting(steps []threadSurfaceStep, asks []int64, linked []string) []string {
-	out := make([]string, 0, len(asks)+len(linked))
-	for _, id := range asks {
-		out = append(out, proposalRef(cardThread, id))
-	}
-	out = append(out, linked...)
+	out := slices.Clone(linked)
 	for _, st := range steps {
 		if st.Waits && st.Card != "" {
 			out = append(out, st.Card)
@@ -289,12 +186,7 @@ func (c *core) threadShownCards() map[string]int64 {
 		return out
 	}
 	for _, s := range ss {
-		all, err := c.steps(s.ID)
-		if err != nil {
-			continue
-		}
-		steps := c.threadSurfaceSteps(s, all)
-		for _, ref := range threadCardsWaiting(steps, c.wholeThreadAsks(s.ID), c.linkedWaiting(s.ID, steps)) {
+		for _, ref := range threadCardsWaiting(nil, nil, c.linkedWaiting(s.ID, nil)) {
 			if _, ok := out[ref]; !ok {
 				out[ref] = s.ID
 			}
@@ -377,7 +269,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	// The frame (thread_blocks.go): the head is composed last, once the
 	// weight is known, and put first.
 	c.blockEnded(&out, data, s, now)
-	c.threadYours(&in, &out, s, steps, asks, linked)
+	c.threadYours(&in, &out, s, linked)
 	// Its children (thread_children.go): what waits in one raises it.
 	kids := c.threadKidsOf(s, lang)
 	blockChildren(&out, data, kids.rows, lang)
@@ -498,7 +390,7 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 	// its steps.
 	in.summary = threadSays(headline, items.seen, lang)
 	if in.summary == "" || !s.active() {
-		in.summary = threadLine(s, steps, asks, lang)
+		in.summary = threadLine(s, steps, linked, lang)
 	} else if headline != nil && len(headline.Tainted) > 0 {
 		in.summary += threadExternalSep + w("thread.surface.external") // someone else's words may be in it
 	}
@@ -509,8 +401,9 @@ func (c *core) threadSurfaceIn(s Thread, steps []threadSurfaceStep, asks []int64
 }
 
 // threadLine is a thread's one-line summary, for a small tile or a chip:
-// the last step done, then what waits (« Fusion ✓ · Déploiement à toi »).
-func threadLine(s Thread, steps []threadSurfaceStep, asks []int64, lang string) string {
+// the last step done, then what waits (« Fusion ✓ · Déploiement à toi »),
+// a card linked to it that waits for the user.
+func threadLine(s Thread, steps []threadSurfaceStep, cards []string, lang string) string {
 	if !s.active() {
 		return tr(lang, "thread.line."+s.State)
 	}
@@ -528,7 +421,7 @@ func threadLine(s Thread, steps []threadSurfaceStep, asks []int64, lang string) 
 			break
 		}
 	}
-	if next == "" && len(asks) > 0 {
+	if next == "" && len(cards) > 0 {
 		next = tr(lang, "thread.line.asks")
 	}
 	if next == "" {
@@ -579,11 +472,11 @@ func (c *core) writeThreadSurface(id int64) (has bool) {
 	if !s.active() && !exists && c.threadAgain(id).IsZero() {
 		return
 	}
-	all, err := c.steps(id)
-	if err != nil {
-		return
-	}
-	steps, asks, part := c.threadSurfaceSteps(s, all), c.wholeThreadAsks(id), c.threadPartOf(id)
+	// A thread has no steps nor asks any more (node_steps.go): its
+	// surface shows its part, its sources and its cards.
+	var steps []threadSurfaceStep
+	var asks []int64
+	part := c.threadPartOf(id)
 	in, ok := c.threadSurfaceIn(s, steps, asks, part, time.Now())
 	if !ok {
 		if exists {
@@ -657,39 +550,8 @@ func (c *core) keepThreadSurfaces() {
 	}
 }
 
-// stepDoneOf is the step a « C'est fait » settles: the one the clicked
-// Button carries as code wrote it, on its thread's surface, a step the
-// user does that waits.
-func (c *core) stepDoneOf(s surface, a a2ui.Action) (int64, string, *errActionRefused) {
-	thread, ok := threadOfAuthor(s.Author)
-	comp, at, found := componentOf(s, a.SourceComponentID)
-	if !ok || !found || comp["component"] != "Button" || !strings.HasPrefix(a.SourceComponentID, threadCompPrefix) {
-		return 0, "", &errActionRefused{Path: at, Message: "stepDone comes from a thread's own « C'est fait », on its surface"}
-	}
-	act, _ := comp["action"].(map[string]any)
-	ev, _ := act["event"].(map[string]any)
-	ctx, _ := ev["context"].(map[string]any)
-	step, _ := ctx["step"].(string)
-	n, _ := ctx["thread"].(float64)
-	if ev["name"] != a2ui.ActionStepDone || int64(n) != thread || step == "" {
-		return 0, "", &errActionRefused{Path: at + "/action", Message: "this component carries no stepDone"}
-	}
-	var sentThread int64
-	var sentStep string
-	json.Unmarshal(a.Context["thread"], &sentThread)
-	json.Unmarshal(a.Context["step"], &sentStep)
-	if sentThread != thread || sentStep != step || len(a.Context) != 2 {
-		return 0, "", &errActionRefused{Path: at + "/action", Message: `a stepDone's context is the one its button carries: {"thread": id, "step": key}`}
-	}
-	st, err := c.step(thread, step)
-	if err != nil || st.Kind != stepUser || st.Status != stepRunning {
-		return 0, "", &errActionRefused{Path: at, Message: "step " + strconv.Quote(step) + " does not wait for the user"}
-	}
-	return thread, step, nil
-}
-
 // threadButtonOf is the context a code's button of a thread's surface
-// carries for an action (choose, control): the clicked Button is code's
+// carries for an action (control): the clicked Button is code's
 // (its id starts with thread_), on its thread's own surface, carries that
 // action for that thread, and the page sends its context unchanged.
 func threadButtonOf(s surface, a a2ui.Action, name string) (int64, map[string]any, *errActionRefused) {
@@ -717,24 +579,7 @@ func threadButtonOf(s surface, a a2ui.Action, name string) (int64, map[string]an
 	return thread, carried, nil
 }
 
-// chooseOf is the choice a button of a thread's surface makes: a choice
-// step of that thread that still waits, one of its options.
-func (c *core) chooseOf(s surface, a a2ui.Action) (int64, string, string, *errActionRefused) {
-	thread, ctx, refused := threadButtonOf(s, a, a2ui.ActionChoose)
-	if refused != nil {
-		return 0, "", "", refused
-	}
-	step, _ := ctx["step"].(string)
-	option, _ := ctx["option"].(string)
-	st, err := c.step(thread, step)
-	if err != nil || st.Kind != stepChoice || st.Status != stepRunning || !slices.Contains(st.Options, option) {
-		return 0, "", "", &errActionRefused{Message: "step " + strconv.Quote(step) + " does not wait for that choice"}
-	}
-	return thread, step, option, nil
-}
-
-// controlOf is what a button of a thread's surface does to it: pause,
-// resume or stop.
+// controlOf is what a button of a thread's surface does to it: stop.
 func controlOf(s surface, a a2ui.Action) (int64, string, *errActionRefused) {
 	thread, ctx, refused := threadButtonOf(s, a, a2ui.ActionControl)
 	if refused != nil {
@@ -747,17 +592,11 @@ func controlOf(s surface, a a2ui.Action) (int64, string, *errActionRefused) {
 	return thread, do, nil
 }
 
-// threadControls are what the user does to a thread that runs.
-var threadControls = []string{"pause", "resume", "stop"}
+// threadControls are what the user does to a thread.
+var threadControls = []string{"stop"}
 
 // controlThread does a control the user clicked.
 func (c *core) controlThread(ctx context.Context, thread int64, do string) error {
-	switch do {
-	case "pause":
-		return c.pauseThread(thread, byUser)
-	case "resume":
-		return c.resumeThread(ctx, thread, byUser)
-	}
 	return c.stopThread(ctx, thread, byUser)
 }
 
@@ -785,18 +624,4 @@ func tidyOf(s surface, a a2ui.Action) (int64, *errActionRefused) {
 		return 0, &errActionRefused{Path: at + "/action", Message: `a tidy's context is the one its button carries: {"thread": id}`}
 	}
 	return thread, nil
-}
-
-// errStepSettled is the answer to « C'est fait » for a step that no
-// longer waits for the user: done meanwhile, or its thread ended. 409.
-var errStepSettled = errors.New("the step no longer waits for the user")
-
-// settleUserStep settles a step the user says is done, from its thread's
-// surface: the engine's userStepDone (thread_steps.go), as from the
-// thread's page.
-func (c *core) settleUserStep(ctx context.Context, thread int64, step string) error {
-	if _, err := c.userStepDone(ctx, thread, step, "user"); err != nil {
-		return fmt.Errorf("%w: %v", errStepSettled, err)
-	}
-	return nil
 }

@@ -32,14 +32,10 @@ import (
 //     the thread read: surfaceLook.Answers). A Proposal bound inside a
 //     list answers only the proposal at the place it says (at): a row's
 //     card from its row (item_cards.go).
-//   - stepDone: « C'est fait » on a thread's surface, for a step the user
-//     does: the Button code wrote there, its thread and step as stored
-//     (thread_surface.go, settleUserStep).
 //   - tidy: « Ranger » on an ended thread's surface: the Button code wrote
 //     there, its thread as stored (thread_surface.go, tidyThread).
-//   - choose, control: an option of a thread's choice step, Pause, Resume
-//     or Stop: the Buttons code wrote on its surface, their context as
-//     stored (thread_surface.go, chooseOf, controlOf).
+//   - control: Stop, the Button code wrote on a thread's surface, its
+//     context as stored (thread_surface.go, controlOf).
 //   - offer: an action offered on an item of a thread's source, or on a
 //     group of them: the Button code wrote on its surface; the note and
 //     its action read again from the store, it makes one card bound to
@@ -81,7 +77,7 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 	if err != nil {
 		return err
 	}
-	var text, ref, step, option, do, source, item, state, offer, list, mark string
+	var text, ref, do, source, item, state, offer, list, mark string
 	var yes, external bool
 	var thread int64
 	var refused *errActionRefused
@@ -91,12 +87,8 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		text, refused = askOf(s, a)
 	case a2ui.KindAnswer:
 		ref, yes, refused = c.answerOf(s, a)
-	case a2ui.KindStep:
-		thread, step, refused = c.stepDoneOf(s, a) // thread_surface.go
 	case a2ui.KindTidy:
 		thread, refused = tidyOf(s, a) // thread_surface.go
-	case a2ui.KindChoose:
-		thread, step, option, refused = c.chooseOf(s, a)
 	case a2ui.KindControl:
 		thread, do, refused = controlOf(s, a)
 	case a2ui.KindOffer:
@@ -113,7 +105,7 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		thread, list, item, mark, external, refused = c.markOf(s, a) // thread_marks.go
 	case a2ui.KindLocal:
 	default:
-		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), stepDone, tidy, choose, control, offer and mark (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
+		refused = &errActionRefused{Message: fmt.Sprintf("no action %q: only ask, answer (a Proposal's), tidy, control, offer and mark (a thread's) and %s", a.Name, strings.Join(a2ui.LocalActions, ", "))}
 	}
 	if refused != nil {
 		refused.Message = "the user's action " + strconv.Quote(truncate(a.Name, 64)) + " on " + truncate(a.SourceComponentID, 64) + " was refused: " + refused.Message
@@ -138,13 +130,8 @@ func (c *core) surfaceAction(ctx context.Context, id string, a a2ui.Action) erro
 		return c.askFromSurface(s, text)
 	case a2ui.KindAnswer:
 		return c.answerFromSurface(ctx, ref, yes)
-	case a2ui.KindStep:
-		return c.settleUserStep(ctx, thread, step)
 	case a2ui.KindTidy:
 		return c.tidyThread(thread, "user")
-	case a2ui.KindChoose:
-		_, err := c.chooseStep(ctx, thread, step, option, byUser)
-		return err
 	case a2ui.KindControl:
 		return c.controlThread(ctx, thread, do)
 	case a2ui.KindOffer:

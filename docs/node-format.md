@@ -65,6 +65,7 @@ The titles proposed for the first article:
 | `title` | text | Its title for the user: one line, 120 characters at most. Required. |
 | `parent` | id | The node it belongs to; none for a node at the top. |
 | `links` | list of ids | The nodes it links to; no duplicate, never itself. |
+| `after` | list of ids | Written by code only, at a step's creation: the sibling steps it waits for (no duplicate, never itself). Absent for a node that is no step. |
 | `lifetime` | `work` or `standing` | Work ends when it is done; a standing node (the day, the mails) stays. Required. |
 | `goal` | text | What the node is for. Never shown to the user. |
 | `created` | timestamp | When it was created (RFC 3339). Required. |
@@ -127,7 +128,7 @@ also a key of `data`, and `marks` is no source's or data key's name.
 
 ### Code's fields
 
-`snapshot`, `marks` and `external`, and the front matter's `external`, are written by code only:
+`snapshot`, `marks` and `external`, and the front matter's `after` and `external`, are written by code only:
 
 - An author (the brain, a task, the user in Eriphe's editor) may leave them out: code keeps them as
   the version written over has them.

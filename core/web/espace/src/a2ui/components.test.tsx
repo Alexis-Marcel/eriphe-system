@@ -777,15 +777,14 @@ describe("the catalog's components", () => {
     await act(async () => {});
     expect(errors).toEqual([]);
     const work = (sel: string) => $$(`[data-surface=thread-101] ${sel}`);
-    expect(work(".a2-progress")[0].className).toContain("a2-tone-attention");
-    expect(work(".a2-pill")[0].textContent).toBe("À toi");
+    expect(work(".a2-progress")[0].className).toContain("a2-tone-default");
+    expect(work(".a2-pill")[0].textContent).toBe("En cours");
     expect(work(".a2-bar > span")).toHaveLength(5);
     expect(work(".a2-seg-done")).toHaveLength(2);
     expect(work(".a2-seg-now")).toHaveLength(2);
     expect(work(".a2-bar")[0].getAttribute("aria-label")).toBe("2 sur 5 faites, 2 en cours");
-    // What waits for the user, whole, once: not again among the steps.
-    expect(work(".a2-proposal-pending")).toHaveLength(1);
-    expect(work(".a2-step-label").map((n) => n.textContent)).toEqual(["Redimensionner les photos", "Contrôle de l'objectif"]);
+    expect(work(".a2-proposal-pending")).toHaveLength(0);
+    expect(work(".a2-step-label").map((n) => n.textContent)).toEqual(["Publier le site", "Redimensionner les photos", "Contrôle de l'objectif"]);
     // The steps done, one line, closed; a decided card, one line.
     const fold = work(".a2-fold-head")[0];
     expect(fold.textContent).toContain("2 étapes faites");

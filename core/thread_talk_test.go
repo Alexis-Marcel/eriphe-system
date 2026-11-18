@@ -150,12 +150,34 @@ func TestThreadMessageLeads(t *testing.T) {
 	}
 }
 
+// The end of a task about a live thread is an event of that thread; of a
+// task about none, or about an ended one, the home's.
+func TestTaskEventOfItsThread(t *testing.T) {
+	c, _, _, th := talkCore(t)
+	for _, task := range []*TaskRow{
+		{ID: "t-1", Kind: "worker", Device: "box", Runtime: "claude-code", State: stateStopped, Prompt: "x", About: threadRef(th.ID)},
+		{ID: "t-2", Kind: "worker", Device: "box", Runtime: "claude-code", State: stateStopped, Prompt: "x"},
+	} {
+		if err := c.store.insertTask(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c.notifyBrain("t-1", stateStopped)
+	if ev := lastMessage(t, c, roleEvent); !strings.Contains(ev.Text, "t-1") || ev.Thread != th.ID {
+		t.Fatalf("a task of the thread: %+v", ev)
+	}
+	c.notifyBrain("t-2", stateStopped)
+	if ev := lastMessage(t, c, roleEvent); !strings.Contains(ev.Text, "t-2") || ev.Thread != 0 {
+		t.Fatalf("a task of none: %+v", ev)
+	}
+}
+
 // A thread's event belongs to it, and a turn of events alone answers in
 // the thread of its last event of a thread; the home otherwise. A failure
 // shows where the answer would have.
 func TestThreadEventTalk(t *testing.T) {
 	c, _, _, th := talkCore(t)
-	c.tellBrain(th, "étape check → done", nil)
+	c.store.addThreadMessage(roleEvent, "[thread 1 « x »] carte acceptée", "", th.ID, true) // as callToBrain writes it
 	ev := lastMessage(t, c, roleEvent)
 	if ev.Thread != th.ID {
 		t.Fatalf("the thread's event belongs to %d", ev.Thread)

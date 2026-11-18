@@ -10,9 +10,9 @@ import (
 // what their Oui does. Facts the code knows only, never words of the
 // model's next to Oui and Non:
 //
-//   - the thread is the one of the step the card is (stepOfCard) or of the
-//     step whose task asks (stepOfTask), never a link the brain made
-//     (link_thread): a card is not said to be a thread's on its word;
+//   - the thread is the one of the item a calls card acts on
+//     (item_cards.go), never a link the brain made (link_thread): a card
+//     is not said to be a thread's on its word;
 //   - a thread's title is shown only when no outside content reached the
 //     thread (Thread.Tainted empty: its title is written once, at its
 //     opening), else it is named by its number; a task's title only when
@@ -73,30 +73,19 @@ func (c *core) cleanTaskTitle(id string) string {
 	return t.label()
 }
 
-// accessOrigin is an access card's origin: the thread of its step, or of
-// the task that asks; the task when its text does not name it (a call of
-// a task other than the brain's, a skill's run); what its Oui does.
+// accessOrigin is an access card's origin: the task when its text does
+// not name it (a call of a task other than the brain's, a skill's run);
+// what its Oui does.
 func (c *core) accessOrigin(a accessQuestion, lang string) cardOrigin {
 	var o originParts
-	brain := a.TaskID == c.brainTaskID()
-	st, isStep := c.stepOfCard(proposalRef(cardAccess, a.ID))
-	switch {
-	case isStep:
-		o.thread = st.Thread
-	case !brain && a.TaskID != "":
-		o.thread, _ = c.threadOfTask(a.TaskID) // web_threads.go
-	}
-	if o.thread > 0 {
-		o.title = c.cleanThreadTitle(o.thread)
-	}
-	if a.Call != "" && !brain {
+	if a.Call != "" && a.TaskID != c.brainTaskID() {
 		o.task = c.cleanTaskTitle(a.TaskID) // a grant or a release names its task in its text
 	}
-	return cardOrigin{Thread: o.thread, From: o.from(lang), Yes: c.accessYes(a, isStep, lang)}
+	return cardOrigin{From: o.from(lang), Yes: c.accessYes(a, lang)}
 }
 
 // accessYes says what an access card's Oui does, as decideAccess does it.
-func (c *core) accessYes(a accessQuestion, step bool, lang string) string {
+func (c *core) accessYes(a accessQuestion, lang string) string {
 	switch {
 	case len(a.Refs) > 0:
 		return fmt.Sprintf(tr(lang, "card.yes.release"), strings.Join(a.Refs, ", "))
@@ -104,22 +93,15 @@ func (c *core) accessYes(a accessQuestion, step bool, lang string) string {
 		return fmt.Sprintf(tr(lang, "card.yes.search"), c.conf().assistantName())
 	case strings.HasPrefix(a.Call, webFetchTool+" "):
 		return fmt.Sprintf(tr(lang, "card.yes.page"), c.conf().assistantName())
-	case a.Call != "" && step:
-		return tr(lang, "card.yes.step")
 	case a.Call != "":
 		return tr(lang, "card.yes.call")
 	}
 	return fmt.Sprintf(tr(lang, "card.yes.grant"), verbs([]string{a.Need.Category}, lang), a.Need.TargetIn(lang))
 }
 
-// startOrigin is a task's start card's origin: the thread whose step the
-// task is, the task (its text says only what it will use), what its Oui
-// does.
+// startOrigin is a task's start card's origin: the task (its text says
+// only what it will use), what its Oui does.
 func (c *core) startOrigin(taskID, lang string) cardOrigin {
 	o := originParts{task: c.cleanTaskTitle(taskID)}
-	o.thread, _ = c.threadOfTask(taskID)
-	if o.thread > 0 {
-		o.title = c.cleanThreadTitle(o.thread)
-	}
-	return cardOrigin{Thread: o.thread, From: o.from(lang), Yes: tr(lang, "card.yes.start")}
+	return cardOrigin{From: o.from(lang), Yes: tr(lang, "card.yes.start")}
 }

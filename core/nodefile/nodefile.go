@@ -54,6 +54,7 @@ type Meta struct {
 	Title    string
 	Parent   string   // the parent's id, "" for a node at the top
 	Links    []string // ids of the nodes it links to
+	After    []string // a step's: ids of its sibling steps it waits for (written by code at its creation)
 	Lifetime Lifetime
 	Goal     string // what the node is for, never shown to the user
 	Created  time.Time
@@ -72,7 +73,7 @@ type Field struct {
 }
 
 // known are the front matter's fields, in the order they are written.
-var known = []string{"id", "title", "parent", "links", "lifetime", "goal", "created", "done", "archived", "external"}
+var known = []string{"id", "title", "parent", "links", "after", "lifetime", "goal", "created", "done", "archived", "external"}
 
 // Node is a node's file, parsed.
 type Node struct {
@@ -234,6 +235,16 @@ func (m Meta) validate() error {
 			return fmt.Errorf("front matter: links: %s is there twice", l)
 		}
 	}
+	for i, a := range m.After {
+		switch {
+		case !IDOK(a):
+			return fmt.Errorf("front matter: after: %q is not a node's id", a)
+		case a == m.ID:
+			return errors.New("front matter: after: a node does not wait for itself")
+		case slices.Contains(m.After[:i], a):
+			return fmt.Errorf("front matter: after: %s is there twice", a)
+		}
+	}
 	return nil
 }
 
@@ -299,6 +310,8 @@ func decodeMeta(yml []byte) (m Meta, ext bool, err error) {
 			err = v.Decode(&m.Parent)
 		case "links":
 			err = v.Decode(&m.Links)
+		case "after":
+			err = v.Decode(&m.After)
 		case "lifetime":
 			err = v.Decode(&m.Lifetime)
 		case "goal":
@@ -331,7 +344,7 @@ func encodeMeta(m Meta) ([]byte, error) {
 		if err := val.Encode(v); err != nil {
 			return fmt.Errorf("front matter: %s: %w", key, err)
 		}
-		if key == "links" {
+		if key == "links" || key == "after" {
 			val.Style = yaml.FlowStyle
 		}
 		top.Content = append(top.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: key}, &val)
@@ -349,6 +362,10 @@ func encodeMeta(m Meta) ([]byte, error) {
 		case "links":
 			if len(m.Links) > 0 {
 				v = m.Links
+			}
+		case "after":
+			if len(m.After) > 0 {
+				v = m.After
 			}
 		case "lifetime":
 			v = string(m.Lifetime)

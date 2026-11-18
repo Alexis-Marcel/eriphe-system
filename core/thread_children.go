@@ -9,10 +9,10 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
 
-// Child threads (#609): a step of a thread that becomes a matter of its
+// Child threads (#609): a part of a thread that becomes a matter of its
 // own is a thread of its own, its child (open_thread parent). Nothing
-// else tells a child from a top thread: it is light or led, ends on its
-// goal or stands, as any other.
+// else tells a child from a top thread: it ends on its goal or stands, as
+// any other.
 //
 //   - Depth 2: a child has no children, and a thread with children is
 //     never made a child (parentFor). A standing thread, what the user

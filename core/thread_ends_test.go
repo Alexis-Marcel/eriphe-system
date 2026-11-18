@@ -123,29 +123,14 @@ func TestThreadEndsAcrossMidnight(t *testing.T) {
 		t.Errorf("asked again: %+v %v", again, err)
 	}
 
-	// Asked to stand, the thread its subject has becomes a standing one; a
-	// led one stays on its goal.
+	// Asked to stand, the thread its subject has becomes a standing one.
 	got, _, err := c.openThreadOnce(threadIn{Title: "PR 12", Goal: "Merged.", Alias: "pr:example/site#12", Ends: endsStanding}, nil, byBrain)
 	if err != nil || got.ID != goal.ID || got.Ends != endsStanding || !got.active() {
 		t.Fatalf("again: %+v %v", got, err)
 	}
-	led, err := c.openThread(threadIn{Title: "Refonte", Goal: "En ligne.", Alias: "project:refonte", Steps: []stepSpec{{Key: "a", Title: "A", Kind: stepUser, Question: "Fais-le."}}}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := c.openThreadOnce(threadIn{Title: "Refonte", Goal: "En ligne.", Alias: "project:refonte", Ends: endsDay}, nil, byBrain); err == nil {
-		t.Error("a led thread was made a day's")
-	}
-	if th, _ := c.thread(led.ID); th.Ends != endsGoal {
-		t.Errorf("led thread ends %q", th.Ends)
-	}
-
-	// A standing or day thread is light; ends is one of three.
+	// Ends is one of three.
 	if _, err := c.openThread(threadIn{Title: "x", Goal: "y", Alias: "topic:x", Ends: "forever"}, nil, byBrain); err == nil {
 		t.Error("ends forever accepted")
-	}
-	if _, err := c.openThread(threadIn{Title: "x", Goal: "y", Alias: "topic:y", Ends: endsStanding, Steps: []stepSpec{{Key: "a", Title: "A"}}}, nil, byBrain); err == nil {
-		t.Error("a led standing thread was opened")
 	}
 }
 

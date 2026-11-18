@@ -2,16 +2,14 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 )
 
 // The thread a brain's turn is about. A turn that names a thread (a
 // thread tool called on it, or the event of one of its steps delivered)
 // is about that thread until it names another: what it raises then for
 // the user (the card of one of its own calls, a task's start) is the
-// thread's, and shows in its timeline (linkCard, thread_steps.go). Two
+// thread's, and shows in its timeline (linkCard, thread_light.go). Two
 // threads in one turn (« pendant que je relis la PR, cherche… »): the
 // last one named.
 
@@ -60,9 +58,6 @@ func (c *core) turnThread(id int64) {
 // linkedCardMoved tells the threads a card is linked to that it was
 // decided: their surface shows it waiting no more.
 func (c *core) linkedCardMoved(ref string) {
-	if _, ok := c.stepOfCard(ref); ok {
-		return // a step's card: its step moves the thread
-	}
 	rows, err := c.store.db.Query(`SELECT thread FROM thread_cards WHERE ref = ?`, ref)
 	if err != nil {
 		return
@@ -121,110 +116,26 @@ func (c *core) callToBrain(a accessQuestion, text, taint string) {
 	c.ping()
 }
 
-// taskOfThread makes the task the brain starts a task step of a thread:
-// the thread its turn is about, else the live thread the
-// user's message named. A task is never left loose and code never opens
-// a thread for it: with neither, the brain opens (or finds) the matter's
-// thread first. A led thread's plan changes with amend_thread, an ended
-// one is reopened first. A device named goes with the step.
-func (c *core) taskOfThread(ctx context.Context, in runRequest) (map[string]any, error) {
-	s, err := c.taskThread()
-	if err != nil {
-		return nil, err
-	}
+// brainRunTask starts the task the brain asks for, in a node of its own
+// (a child of node, when it names one): its start's card goes with the
+// brain's message, it is tainted by the turn, and its end reaches the
+// brain as an event pointing to its node (task_node.go). A turn about a
+// thread makes the task about it.
+func (c *core) brainRunTask(ctx context.Context, in runRequest) (map[string]any, error) {
 	if err := c.taintedResources(in); err != nil { // resources.go
 		return nil, err
 	}
-	if err := c.checkTaskRequest(in); err != nil {
-		return nil, err // refused as run_task refuses it, with no step born
+	if in.About == "" {
+		in.About = c.turnSource()
 	}
-	title := in.Title
-	if title == "" {
-		title = (&TaskRow{Prompt: in.Prompt}).label()
-	}
-	c.turnThread(s.ID) // what the turn raises next is the thread's
-	sp := stepSpec{Key: c.freeStepKey(s.ID), Title: title, Kind: stepTask, Prompt: in.Prompt,
-		Agent: in.Agent, Resources: in.Resources, Contract: in.Contract, Device: in.Device}
-	st, err := c.addStep(ctx, s.ID, sp, c.turnTaint(), byBrain)
+	in.askStart, in.byBrain, in.taint = true, true, c.turnTaint()
+	t, err := c.runTask(ctx, in)
 	if err != nil {
-		return nil, fmt.Errorf("not a step of thread %d « %s »: %w", s.ID, s.Title, err)
+		return nil, err
 	}
-	if st.Status == stepBlocked { // its task could not start: the thread shows why
-		return nil, fmt.Errorf("the task could not start (step %s of thread %d, blocked): %s", st.Key, s.ID, st.Note)
-	}
-	out := map[string]any{"thread": s.ID, "step": st.Key, "task": st.Task, "status": st.Status,
-		"note": fmt.Sprintf("A task step of thread %d « %s »: the thread follows it, and its end reaches you as the thread's event; settle it with settle_step.", s.ID, s.Title)}
-	if t, err := c.store.task(st.Task); st.Task != "" && err == nil {
-		out["start_state"] = c.startState(t) // task_start.go
+	out := map[string]any{"task": t.ID, "state": t.State, "start_state": c.startState(t)} // task_start.go
+	if node := c.taskNode(t.ID); node != "" {
+		out["node"] = node
 	}
 	return out, nil
-}
-
-// errOpenThreadFirst is run_task's refusal in a turn about no thread.
-var errOpenThreadFirst = errors.New("a task is a step of a thread, and this turn is about none: open_thread the matter's thread first (it gives back the one that exists), then run_task; add_step adds a task to another thread")
-
-// taskThread is the thread a task the brain starts is a step of: the one
-// its turn is about, else the thread the user's
-// message named, ended ones too. A led one, an ended one or none is refused, saying what
-// to do instead.
-func (c *core) taskThread() (Thread, error) {
-	id := c.turn.aboutThread()
-	if id <= 0 {
-		if about := c.turnAbout(); about != "" {
-			if key, err := c.aboutLookup(about); err == nil {
-				id, _ = threadOfAbout(key) // ended too: it says to reopen it
-			}
-		}
-	}
-	if id <= 0 {
-		return Thread{}, errOpenThreadFirst
-	}
-	s, err := c.thread(id)
-	switch {
-	case err != nil:
-		return Thread{}, errOpenThreadFirst
-	case s.led():
-		return Thread{}, fmt.Errorf("thread %d « %s » is led: its plan changes with amend_thread (or tell_lead); open_thread another matter's thread for other work", s.ID, s.Title)
-	case !s.active():
-		return Thread{}, fmt.Errorf("thread %d « %s » is %s: reopen_thread it if its matter came back, or open_thread another", s.ID, s.Title, s.State)
-	}
-	return s, nil
-}
-
-// checkTaskRequest refuses before any step what startTask would refuse of
-// the task itself: no prompt, a contract or an agent that is none, what it
-// is lent that cannot be.
-func (c *core) checkTaskRequest(r runRequest) error {
-	if strings.TrimSpace(r.Prompt) == "" {
-		return errors.New("prompt is required")
-	}
-	if _, _, err := c.conf().agent(r.Agent); err != nil {
-		return err
-	}
-	lent, err := c.resolveRequest(r) // resources.go
-	if err != nil {
-		return err
-	}
-	if r.Contract != nil {
-		k := *r.Contract
-		if err := k.normalize(); err != nil { // contract.go
-			return err
-		}
-		return k.checkLent(lent.Repo != nil, folderNames(lent.Folders))
-	}
-	return nil
-}
-
-// freeStepKey is a key no step of the thread has: task, task-2…
-func (c *core) freeStepKey(id int64) string {
-	steps, _ := c.steps(id)
-	taken := map[string]bool{}
-	for _, st := range steps {
-		taken[st.Key] = true
-	}
-	key := stepTask
-	for n := 2; taken[key]; n++ {
-		key = fmt.Sprintf("%s-%d", stepTask, n)
-	}
-	return key
 }

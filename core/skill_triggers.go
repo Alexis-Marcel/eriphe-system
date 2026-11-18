@@ -51,8 +51,9 @@ type skillTrigger struct {
 	Every    time.Duration     // 0: at once
 	Model    string
 	Tools    []string
-	Urgent   string // the fixed text of an urgent run (skill_cards.go)
-	Thread   string // its thread's alias: what its runs are about; else their events' key (skillRunAlias)
+	Repos    []string // the repositories its runs' steps may borrow, owner/name (node_steps.go)
+	Urgent   string   // the fixed text of an urgent run (skill_cards.go)
+	Thread   string   // its thread's alias: what its runs are about; else their events' key (skillRunAlias)
 }
 
 // filterBound is a filter on a number of the event's payload.
@@ -89,7 +90,7 @@ func splitWhen(when string) (at, events string) {
 // someone follows it.
 func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 	if m.When == "" {
-		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "urgent": m.Urgent, "thread": m.Thread, "title": m.Title} {
+		for k, v := range map[string]string{"every": m.Every, "model": m.Model, "tools": m.Tools, "repos": m.Repos, "urgent": m.Urgent, "thread": m.Thread, "title": m.Title} {
 			if v != "" {
 				return nil, skillErr("skills.err.nowhen", k)
 			}
@@ -168,6 +169,18 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 		case t == workspaceServer:
 			return nil, skillErr("skills.err.workspace", t) // a run writes in its node (task_nodes.go)
 		}
+	}
+	for _, r := range frontList(m.Repos) {
+		repo := repoOf(r)
+		if repo == "" {
+			return nil, skillErr("skills.err.repos", r)
+		}
+		if !slices.ContainsFunc(st.Repos, func(x string) bool { return strings.EqualFold(x, repo) }) {
+			st.Repos = append(st.Repos, repo)
+		}
+	}
+	if len(st.Repos) > maxSkillTools {
+		return nil, skillErr("skills.err.repos", m.Repos)
 	}
 	if u := strings.TrimSpace(m.Urgent); u != "" {
 		if utf8.RuneCountInString(u) > urgentTextMax || urlRe2.MatchString(u) {
@@ -267,6 +280,9 @@ func (st *skillTrigger) Text(lang string) string {
 	}
 	if len(st.Tools) > 0 {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.tools"), strings.Join(st.Tools, ", ")))
+	}
+	if len(st.Repos) > 0 {
+		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.repos"), strings.Join(st.Repos, ", ")))
 	}
 	if st.Thread != "" {
 		parts = append(parts, fmt.Sprintf(tr(lang, "skills.trigger.thread"), st.Thread))

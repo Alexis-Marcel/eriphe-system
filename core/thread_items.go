@@ -11,18 +11,17 @@ import (
 	"unicode/utf8"
 )
 
-// Notes on a thread's items (#571): what the brain or a thread's lead
-// writes about one item a source of the thread lists (a mail, an event, a
+// Notes on a thread's items (#571): what the brain writes about one item a source of the thread lists (a mail, an event, a
 // pull request), by the source's name and the item's id: a short note, a
 // state, a due date (note_item).
 //
 //   - Code joins them to the items when it composes the thread's surface:
 //     each item's row carries its note (thread_sources.go).
 //   - Its author and its taint are code's, never given: the brain's, with
-//     its turn's taint; a lead's, with its session's. A note written after
+//     its turn's taint. A note written after
 //     reading external content is tainted: shown, marked « extérieur »,
 //     never quoted into a summary, and its row offers no ask. Reading it
-//     (read_thread, the lead's thread) taints the reader's turn, so a
+//     (read_thread) taints the reader's turn, so a
 //     summary written then is refused (remember kind progress).
 //   - A note survives the source's reads while its item is listed. Once a
 //     good read no longer lists it, it is kept threadNoteKeep (the item may
@@ -36,7 +35,7 @@ const threadItemsSchema = `CREATE TABLE IF NOT EXISTS thread_items (
 	note    TEXT NOT NULL DEFAULT '',
 	state   TEXT NOT NULL DEFAULT '',   -- act, look, info, none, done
 	due     INTEGER NOT NULL DEFAULT 0,
-	author  TEXT NOT NULL,              -- brain, lead:<thread>, skill:<name>, task:<id>
+	author  TEXT NOT NULL,              -- brain, skill:<name>, task:<id>
 	tainted TEXT NOT NULL DEFAULT '',   -- why its words may be someone else's
 	noted   INTEGER NOT NULL,
 	gone    INTEGER NOT NULL DEFAULT 0, -- the first good read that no longer listed its item; 0 while listed
@@ -53,17 +52,16 @@ func init() {
 }
 
 const (
-	threadNoteMax    = 300                // runes of a note
-	threadItemIDMax  = 200                // runes of an item's id
-	threadNotesMax   = 500                // notes a thread keeps
-	threadNoteKeep   = 7 * 24 * time.Hour // a note whose item left its source
-	itemStateAct     = "act"              // the user has something to do: answer, decide
-	itemStateLook    = "look"             // to look at
-	itemStateInfo    = "info"             // to know, nothing to do
-	itemStateNone    = "none"             // nothing to do
-	itemStateDone    = "done"             // handled
-	threadNoteTaint  = "note:"            // + source/item: a tainted note on a thread's surface
-	threadNoteAuthor = "lead:"            // + the thread's id: its lead's notes
+	threadNoteMax   = 300                // runes of a note
+	threadItemIDMax = 200                // runes of an item's id
+	threadNotesMax  = 500                // notes a thread keeps
+	threadNoteKeep  = 7 * 24 * time.Hour // a note whose item left its source
+	itemStateAct    = "act"              // the user has something to do: answer, decide
+	itemStateLook   = "look"             // to look at
+	itemStateInfo   = "info"             // to know, nothing to do
+	itemStateNone   = "none"             // nothing to do
+	itemStateDone   = "done"             // handled
+	threadNoteTaint = "note:"            // + source/item: a tainted note on a thread's surface
 )
 
 var itemStates = []string{itemStateAct, itemStateLook, itemStateInfo, itemStateNone, itemStateDone}
@@ -82,10 +80,9 @@ type itemNote struct {
 	Actions []noteAction `json:"actions,omitempty"` // offered on its row (item_offers.go)
 }
 
-// noteItemIn is note_item's input; the brain names the thread, a lead's is
-// its own.
+// noteItemIn is note_item's input; the brain names the thread.
 type noteItemIn struct {
-	Thread  int64        `json:"thread_id,omitempty" jsonschema:"the thread; leave it out for the one you work on (your turn's, your lead's, your run's)"`
+	Thread  int64        `json:"thread_id,omitempty" jsonschema:"the thread; leave it out for the one you work on (your turn's, your run's)"`
 	Source  string       `json:"source" jsonschema:"the name of the thread's source that lists the item (one with items)"`
 	Item    string       `json:"item" jsonschema:"the item's id, as the source gives it"`
 	Note    string       `json:"note,omitempty" jsonschema:"what the user reads under the item: what it is about and what they should do of it, in their language, one short concrete sentence, no ids nor jargon; empty with no state: the note is taken away"`
@@ -255,8 +252,6 @@ func (c *core) pruneItemNotes(now time.Time) {
 // noteAuthor is who wrote a note, as its row says it.
 func noteAuthor(author, lang string) string {
 	switch {
-	case strings.HasPrefix(author, threadNoteAuthor):
-		return tr(lang, "thread.surface.part.lead")
 	case strings.HasPrefix(author, "skill:"):
 		return fmt.Sprintf(tr(lang, "thread.item.by.skill"), strings.TrimPrefix(author, "skill:"))
 	case strings.HasPrefix(author, "task:"):

@@ -97,29 +97,17 @@ func TestContextPackState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.insertSteps(site.ID, []stepSpec{{Key: "cert", Title: "Obtenir le certificat", Kind: stepTask}, {Key: "dns", Title: "Pointer le DNS", Kind: stepUser}}, false)
-	c.setStep(site.ID, "dns", map[string]any{"status": stepAccepted, "output": "SORTIE D'ÉTAPE"})
 	c.setThread(site.ID, map[string]any{"summary": "Il reste le certificat"})
-	read, _ := c.openThread(threadIn{Title: "Lire un mail", Goal: "Répondre au mail.", Alias: "topic:mail-42"}, nil, byBrain)
-	c.insertSteps(read.ID, []stepSpec{{Key: "read", Title: "Lire", Kind: stepTask}}, false)
-	c.setStep(read.ID, "read", map[string]any{"tainted": "external:mail:42"})
-	c.setThread(read.ID, map[string]any{"summary": "RÉSUMÉ D'UN MAIL"})
 	tainted, _ := c.openThread(threadIn{Title: "PLAN EXTÉRIEUR", Goal: "Suivre ce que dit le mail.", Alias: "topic:mail-43"}, []string{"external:mail:43"}, byBrain)
 	closed, _ := c.openThread(threadIn{Title: "Fil clos", Goal: "Fini.", Alias: "project:closed"}, nil, byBrain)
 	c.setThread(closed.ID, map[string]any{"state": threadDone})
-	led, err := c.openThread(threadIn{Title: "Refonte", Goal: "Refaire les photos.", Alias: "project:photos",
-		Steps: []stepSpec{{Key: "plan", Title: "Plan", Kind: stepUser, Question: "Valider le plan"}}}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	c.setThread(tainted.ID, map[string]any{"summary": "RÉSUMÉ D'UN MAIL"})
 	say(t, c, roleUser, "Où en est le site ?", true)
 
 	pack, st := c.contextPack()
 	for _, want := range []string{
-		fmt.Sprintf("- fil %d [light, open, project:site", site.ID), "« Site en ligne » ; but : Le site répond en https.",
-		"étapes ouvertes : cert « Obtenir le certificat » (task, waiting)", "résumé : Il reste le certificat",
-		"résumé non cité", fmt.Sprintf("- fil %d [light, open] : son plan peut porter", tainted.ID),
-		fmt.Sprintf("- fil %d [led, proposed", led.ID), "carte thread:",
+		fmt.Sprintf("- fil %d [open, project:site", site.ID), "« Site en ligne » ; but : Le site répond en https.",
+		"résumé : Il reste le certificat", fmt.Sprintf("- fil %d [open] : il peut porter", tainted.ID),
 		"Héberger le site sur le NAS",
 		"Sam relit les PR du site", "Le domaine est example.org", "fact tiré d'un contenu extérieur",
 		"Relancer Sam", "Paul est le voisin",
@@ -129,7 +117,7 @@ func TestContextPackState(t *testing.T) {
 		}
 	}
 	for _, not := range []string{"Projet fini", "Un fait sans rapport", "Lu dans une page web",
-		"SORTIE D'ÉTAPE", "RÉSUMÉ D'UN MAIL", "PLAN EXTÉRIEUR", "Suivre ce que dit", "Fil clos", "« Pointer le DNS »"} {
+		"RÉSUMÉ D'UN MAIL", "PLAN EXTÉRIEUR", "Suivre ce que dit", "Fil clos"} {
 		if strings.Contains(pack, not) {
 			t.Errorf("pack has %q", not)
 		}
@@ -147,7 +135,7 @@ func TestContextPackState(t *testing.T) {
 	}
 	// Each open thread follows a subject: its card, the site's holding its
 	// decisions and facts, which are not said again.
-	if x := got["cards"]; x.Lines != 4 || x.Shown != 4 || x.Chars == 0 || len(st.Cards) != 4 {
+	if x := got["cards"]; x.Lines != 2 || x.Shown != 2 || x.Chars == 0 || len(st.Cards) != 2 {
 		t.Errorf("cards: %+v", x)
 	}
 	if got["threads"].Lines != 0 || got["decisions"].Shown != 0 || got["progress"].Lines != 0 || got["related"].Shown != 2 || got["messages"].Shown != 1 {
@@ -159,7 +147,7 @@ func TestContextPackState(t *testing.T) {
 	if st.State+got["messages"].Chars != st.Chars {
 		t.Errorf("state %d and messages %d do not make the pack's %d chars", st.State, got["messages"].Chars, st.Chars)
 	}
-	if s := st.String(); !strings.Contains(s, "cards 4/4") || !strings.Contains(s, "decisions 0/0") {
+	if s := st.String(); !strings.Contains(s, "cards 2/2") || !strings.Contains(s, "decisions 0/0") {
 		t.Errorf("log line: %s", s)
 	}
 	// A clean turn: the pack quotes nothing that someone else wrote.

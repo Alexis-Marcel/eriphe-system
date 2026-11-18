@@ -1,6 +1,6 @@
 {
   "id": "pr-open",
-  "what": "Où en est une PR pas encore fusionnée, demandé depuis l'espace : un thread léger ouvert avec son sujet (le code rend celui du sujet s'il en a un), sa surface au centre avec la partie du cerveau, une étape de fusion dont la carte est le oui, une ligne de réponse ; la fusion faite, l'étape de Sam (il déploie lui-même) puis la vérification, sans clore.",
+  "what": "Où en est une PR pas encore fusionnée, demandé depuis l'espace : un thread léger ouvert avec son sujet (le code rend celui du sujet s'il en a un), sa surface au centre avec la partie du cerveau, la fusion demandée (sa carte est le oui), une ligne de réponse.",
   "lang": "fr",
   "memory": [
     "Sam déploie lui-même la supervision après une fusion (« make deploy » sur son serveur).",
@@ -27,7 +27,7 @@
     ]}
   ],
   "request": "Où en est la PR 42 des règles d'alerte ?",
-  "expect": {"about": ["42"], "merge": "mcp__forge__merge"},
+  "expect": {"about": ["42"]},
   "answer": {
     "calls": [
       {"tool": "open_thread", "args": {"title": "PR 42 · règles d'alerte", "goal": "Les règles d'alerte de latence sont fusionnées, déployées et actives.", "alias": "pr:sam/supervision#42"}},
@@ -44,19 +44,9 @@
           {"id": "diff", "component": "Code", "mode": "diff", "text": {"@path": "/diff"}},
           {"id": "lien", "component": "Link", "label": "Ouvrir la PR", "url": {"@path": "/url"}}
         ]}},
-      {"tool": "add_step", "args": {"thread_id": 7, "step": {"key": "fusion", "title": "Fusionner la PR", "kind": "call", "tool": "mcp__forge__merge", "input": {"repo": "sam/supervision", "number": 42}}}},
+      {"tool": "mcp__forge__merge", "args": {"repo": "sam/supervision", "number": 42}},
       {"tool": "workspace_focus", "args": {"id": "thread-7"}}
     ],
     "reply": "Ouverte et prête, ses vérifications passent : la fusion n'attend que ton oui, au centre."
-  },
-  "wake": {
-    "answer": {
-      "calls": [
-        {"tool": "add_step", "args": {"thread_id": 7, "step": {"key": "deploiement", "title": "Déployer la supervision", "kind": "user", "question": "Déploie la supervision (make deploy) pour charger la nouvelle règle.", "after": ["fusion"]}}},
-        {"tool": "add_step", "args": {"thread_id": 7, "step": {"key": "verification", "title": "Vérifier que la règle est active", "kind": "check", "tool": "mcp__vigie__rules", "input": {}, "expect": "latence-p95", "after": ["deploiement"]}}},
-        {"tool": "remember", "args": {"kind": "progress", "text": "Fusionnée ; reste à déployer la supervision, puis à vérifier que la règle est active."}}
-      ],
-      "reply": "La PR 42 est fusionnée : à toi de déployer la supervision."
-    }
   }
 }

@@ -217,9 +217,6 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 	if n, _ := res.RowsAffected(); n != 1 || !c.heldTask(s.TaskID) {
 		return errCardDecided
 	}
-	if st, ok := c.stepOfTask(s.TaskID); ok {
-		defer c.keepThreadSurface(st.Thread) // its card leaves the thread's surface (thread_surface.go)
-	}
 	if !approve {
 		c.store.updateTask(s.TaskID, map[string]any{"desired": desiredStopped, "state": stateStopped, "pending_reason": "its start was declined"})
 		c.taskNodeState(s.TaskID, stateStopped) // task_node.go
@@ -256,9 +253,8 @@ func (c *core) taskStartDeclined(id int64) {
 	if err != nil {
 		return
 	}
-	thread, _ := c.threadOfTask(s.TaskID) // its step's thread's (thread_talk.go)
 	c.store.addThreadMessage(roleEvent, fmt.Sprintf("%s a refusé le lancement de la tâche %s : elle ne démarre pas. Ne la relance pas telle quelle ; "+
-		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), "", thread, false)
+		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), "", 0, false)
 	c.ping()
 }
 

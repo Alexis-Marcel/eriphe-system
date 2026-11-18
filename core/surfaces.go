@@ -21,8 +21,8 @@ import (
 )
 
 // Surfaces (#417): the tiles of the workspace, in A2UI v1.0 (core/a2ui).
-// A surface is written by an author (the brain, a skill, a thread's lead,
-// a task; or code itself: the attention queue's, a thread's,
+// A surface is written by an author (the brain, a skill, a task; or code
+// itself: the attention queue's, a thread's,
 // thread_surface.go) and kept by code: a title, components from the catalog, data,
 // sources, a refresh, a lifetime, a weight and a why.
 //
@@ -144,8 +144,8 @@ type surfaceIn struct {
 	Weight     int                      `json:"weight,omitempty"` // 1 to 100
 	Why        string                   `json:"why,omitempty"`
 	// About is what it is about, given; a new surface without one takes
-	// inherit (its writer's turn or task), else its author's (a thread's,
-	// a lead's, a task's: sourceAbout). A surface written again keeps
+	// inherit (its writer's turn or task), else its author's (a thread's, a
+	// task's: sourceAbout). A surface written again keeps
 	// the one it had unless one is given.
 	About   string `json:"-"`
 	inherit string
@@ -454,7 +454,7 @@ func (c *core) putSurface(author string, in surfaceIn) (surface, []a2ui.Validati
 
 // codeSurfaceOf checks that a surface is code's to write: a thread's own
 // (thread:<id> writes thread-<id>), or the attention queue's (core writes
-// q-…). No assistant, task, lead nor skill writes a surface (#574).
+// q-…). No assistant, task nor skill writes a surface (#574).
 func codeSurfaceOf(author, id string) error {
 	if thread, ok := threadOfAuthor(author); ok {
 		if id != threadSurfaceID(thread) {

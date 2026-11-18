@@ -107,15 +107,15 @@ type errMediaRefused struct {
 func (e errMediaRefused) Error() string { return e.msg }
 
 // surfaceMediaPut keeps an image a task gives for its thread's surface:
-// the task is a step of that thread, and its holder writes the image in
-// its part.
+// the task is about that thread (the brain started it in a turn about
+// it), and its holder writes the image in its part.
 func (c *core) surfaceMediaPut(taskID, surfaceID string, data []byte) (*surfaceMedia, error) {
 	if !surfaceIDRe.MatchString(surfaceID) {
 		return nil, errMediaRefused{http.StatusBadRequest, "surface: the id of its thread's surface, thread-<id>"}
 	}
 	thread, ok := threadOfSurface(surfaceID)
-	if st, step := c.stepOfTask(taskID); !ok || !step || st.Thread != thread {
-		return nil, errMediaRefused{http.StatusForbidden, "an image goes to the surface of the thread the task is a step of, thread-<id>, only"}
+	if t, err := c.store.task(taskID); !ok || err != nil || t.About != c.store.resolveAbout(threadRef(thread)) {
+		return nil, errMediaRefused{http.StatusForbidden, "an image goes to the surface of the thread the task is about, thread-<id>, only"}
 	}
 	if len(data) == 0 {
 		return nil, errMediaRefused{http.StatusBadRequest, "no image"}

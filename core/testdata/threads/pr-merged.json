@@ -1,6 +1,6 @@
 {
   "id": "pr-merged",
-  "what": "La même question sur une PR déjà fusionnée : un thread ouvert au centre comme pour l'autre, mais seulement une vérification proposée, ni fusion ni autre étape.",
+  "what": "La même question sur une PR déjà fusionnée : un thread ouvert au centre comme pour l'autre, sans fusion ni autre changement.",
   "lang": "fr",
   "seed": 10,
   "memory": [
@@ -24,7 +24,7 @@
     ]}
   ],
   "request": "Où en est la PR 42 des règles d'alerte ?",
-  "expect": {"about": ["42"], "check": true},
+  "expect": {"about": ["42"]},
   "answer": {
     "calls": [
       {"tool": "open_thread", "args": {"title": "PR 42 · règles d'alerte", "goal": "Les règles d'alerte de latence sont actives.", "alias": "pr:sam/supervision#42"}},
@@ -35,9 +35,8 @@
           {"id": "etat", "component": "Metric", "label": "État", "value": {"@path": "/etat"}},
           {"id": "lien", "component": "Link", "label": "Ouvrir la PR", "url": {"@path": "/url"}}
         ]}},
-      {"tool": "add_step", "args": {"thread_id": 11, "step": {"key": "verification", "title": "Vérifier que la règle est active", "kind": "check", "tool": "mcp__vigie__rules", "input": {}, "expect": "latence-p95"}}},
       {"tool": "workspace_focus", "args": {"id": "thread-11"}}
     ],
-    "reply": "Fusionnée hier soir : je vérifie que la règle est bien active, c'est au centre."
+    "reply": "Fusionnée hier soir, et sa règle de latence est active : c'est au centre."
   }
 }

@@ -87,10 +87,9 @@ func TestRememberProgressIsThreadSummary(t *testing.T) {
 	if th, _ := c.thread(id); strings.Contains(th.Summary, "LU SUR LE WEB") {
 		t.Fatal("a tainted turn wrote the summary")
 	}
-	// Unless the thread's own steps read external content: its summary is
-	// never quoted then, and a wake they tainted still says where it stands.
-	c.insertSteps(id, []stepSpec{{Key: "read", Title: "Lire la page", Kind: stepTask}}, false)
-	c.setStep(id, "read", map[string]any{"tainted": "external:web"})
+	// Unless the thread was opened on external content: its summary is
+	// never quoted then, and a turn it tainted still says where it stands.
+	c.setThread(id, map[string]any{"tainted": "external:web"})
 	if _, err := c.brainRemember(rememberIn{Kind: "progress", About: "project:portfolio", Text: "La page est relue"}); err != nil {
 		t.Fatalf("a thread already external: %v", err)
 	}
@@ -139,33 +138,6 @@ func TestCloseWritesDecision(t *testing.T) {
 	}
 }
 
-// An open intention of a live light thread's subject becomes its deadline
-// step, once; a proposed one, one of another subject or of a led thread
-// does not.
-func TestIntentionFollowsThread(t *testing.T) {
-	c, _ := testMemoryCore(t)
-	th, err := c.openThread(threadIn{Title: "Site", Goal: "En ligne.", Alias: "project:site"}, nil, byBrain)
-	if err != nil {
-		t.Fatal(err)
-	}
-	due := c.mem.now().Add(48 * time.Hour)
-	x := mustIntend(t, c.mem, &Intention{Text: "Relancer Lina pour le site", About: "project:site", DueAt: due})
-	mustIntend(t, c.mem, &Intention{Text: "Une idée proposée", About: "project:site", DueAt: due, State: intentProposed})
-	mustIntend(t, c.mem, &Intention{Text: "Rendre le livre", About: "project:autre", DueAt: due})
-	c.threadsTick(time.Now())
-	c.threadsTick(time.Now())
-	steps, _ := c.steps(th.ID)
-	if len(steps) != 1 || steps[0].Key != intentionStepKey(x.ID) || steps[0].Kind != stepDeadline || steps[0].Intention != x.ID {
-		t.Fatalf("steps: %+v", steps)
-	}
-	// Dropped, it is not added again.
-	c.setStep(th.ID, steps[0].Key, map[string]any{"status": stepDropped})
-	c.threadsTick(time.Now())
-	if steps, _ := c.steps(th.ID); len(steps) != 1 {
-		t.Fatalf("added again: %+v", steps)
-	}
-}
-
 // A card born in a turn about a thread shows in its timeline: a memory
 // the turn proposes, as well as a task's start.
 func TestCardOfThreadTurnInTimeline(t *testing.T) {
@@ -199,8 +171,8 @@ func TestThreadsBornInOnePlace(t *testing.T) {
 		src := string(raw)
 		n := strings.Count(src, "INSERT INTO threads ")
 		switch f {
-		case "thread_engine.go":
-			n -= 2 // openThread: a light thread, a led one
+		case "thread_light.go":
+			n-- // openThread
 		case "convert_one_thread.go":
 			n-- // the one-shot conversion's ended threads (Q7); goes with it
 		}

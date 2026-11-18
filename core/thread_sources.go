@@ -50,7 +50,7 @@ const threadSourcesSchema = `CREATE TABLE IF NOT EXISTS thread_sources (
 	name    TEXT NOT NULL,              -- its place in the surface's data, /<name>; a monitor's: its name
 	kind    TEXT NOT NULL,              -- tool, resource or monitor
 	spec    TEXT NOT NULL DEFAULT '{}', -- the source as given (threadSource)
-	by      TEXT NOT NULL DEFAULT '',   -- who added it: brain, lead:<id>; part: the holder's part's own
+	by      TEXT NOT NULL DEFAULT '',   -- who added it: brain; part: the holder's part's own
 	value   TEXT NOT NULL DEFAULT '',   -- its last good read, JSON
 	read    INTEGER NOT NULL DEFAULT 0, -- when
 	error   TEXT NOT NULL DEFAULT '',   -- why the last read failed

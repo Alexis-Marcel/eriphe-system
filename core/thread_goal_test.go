@@ -34,17 +34,6 @@ func TestThreadGoalShownToNoOne(t *testing.T) {
 		t.Fatal(err)
 	}
 	shows("ended")
-
-	// A led thread's plan card names it and its steps, never its goal.
-	out, isErr = callBrainTool(t, c, "open_thread", map[string]any{
-		"title": "Nom de marque", "goal": "Trouver un nom libre pour la boutique de Sam.", "budget_minutes": 30,
-		"steps": []any{map[string]any{"key": "names", "title": "Chercher des noms", "prompt": "Propose ten names."}}})
-	if isErr {
-		t.Fatalf("open_thread led: %v", out)
-	}
-	if card := threadCard(t, c, askPlan); strings.Contains(card.Text, "Trouver un nom") || !strings.Contains(card.Text, "Nom de marque") {
-		t.Errorf("plan card %q", card.Text)
-	}
 }
 
 // The brain gives the thread it opens a headline: the line the user reads

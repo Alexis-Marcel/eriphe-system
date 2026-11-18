@@ -76,9 +76,6 @@ type assistantRole struct {
 	// assistant works through its MCP tools.
 	permission func(c *core, ctx context.Context, a Assistant, t *TaskRow) error
 	failing    func(c *core, a Assistant) // its starts keep failing
-	// ownTools adds its role's own tools to its MCP server, besides its
-	// powers' (assistantServer).
-	ownTools func(c *core, s *mcp.Server, a Assistant)
 }
 
 // assistantRoles by name. Each card registers itself (init).
@@ -99,16 +96,13 @@ const (
 	// It tells the user something on its own, with notify: the code decides
 	// when, as for the brain's (assistant_tools.go).
 	powerNotifies = "notifies"
-	// It reports to the brain what it sees, with report: an event in the
-	// conversation, which the brain judges (assistant_tools.go).
-	powerReports = "reports"
 )
 
 // The closed list of powers. An assistant other than the brain never talks
 // to the user nor launches a task: it reports to the brain, the only voice
 // and the only orchestrator, or notifies when the user gave it that power.
 var assistantPowers = []string{powerTalksToUser, powerReceivesConversation, powerLaunchesTasks, powerLendsResources,
-	powerNotifies, powerReports}
+	powerNotifies}
 
 func (r assistantRole) can(power string) bool { return slices.Contains(r.Powers, power) }
 
@@ -459,7 +453,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 	// added when its device fetches the task: the others go through its
 	// approval path.
 	var allowed []string
-	if a.can(powerLaunchesTasks) || hasOwnTools(a) {
+	if a.can(powerLaunchesTasks) {
 		allowed = append(allowed, "mcp__"+selfServer)
 	}
 	allowed = append(allowed, r.AllowedTools...)
@@ -486,7 +480,7 @@ func (c *core) startAssistant(ctx context.Context, a Assistant, r assistantRole,
 		first = r.firstPrompt(c, a, extra.Resume != "")
 	}
 	t, err := c.startTask(ctx, a.Role, runRequest{Prompt: first, Device: a.Device, Agent: a.Agent,
-		Tools: c.conf().assistantTools(a), About: c.sourceAbout(threadRef(leadThread(a)))}, extra)
+		Tools: c.conf().assistantTools(a)}, extra)
 	if err != nil {
 		return err
 	}
@@ -716,7 +710,7 @@ func (c *core) fetchAssistant(t *TaskRow, spec *deviceTaskSpec) error {
 		spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), reads...)
 	}
 	spec.MCPServers = c.assistantServers(a, r)
-	if a.can(powerLaunchesTasks) && a.SelfURL == "" || !a.can(powerLaunchesTasks) && hasOwnTools(a) {
+	if a.can(powerLaunchesTasks) && a.SelfURL == "" {
 		spec.Servers = append(spec.Servers, selfServer) // relayed by its device
 		// Its own tools, used nearly every turn and named by its concept
 		// map: loaded upfront, never searched for first.

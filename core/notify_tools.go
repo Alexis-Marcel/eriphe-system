@@ -89,10 +89,9 @@ func (c *core) notifyAbout(in notifyIn, inherit func() string) (about, ref, note
 	return about, ref, ""
 }
 
-// notifyAs is notify for the brain or for an assistant with the power
-// (source notifyFromAssistant): tainted is why the turn or the session
-// that writes it read external content. Only the brain's goes in the
-// conversation, as what it said.
+// notifyAs is notify for the brain: tainted is why the turn that writes
+// it read external content. Only the brain's goes in the conversation, as
+// what it said.
 func (c *core) notifyAs(in notifyIn, source string, tainted []string, conversation bool) (map[string]any, error) {
 	text, why := strings.TrimSpace(in.Text), strings.TrimSpace(in.Why)
 	switch {

@@ -31,8 +31,8 @@ var concepts = []concept{
 	{"where", "where_now", "where a notification would reach the user now: lines, devices, the room a voice channel says they are in"},
 	{"notify", "notify, notifications", "say something on your own, now or for the brief, about the turn's thread"},
 	{"since", "since", "what happened since a time, as eriphe-core recorded it"},
-	{"task", "run_task", "long or heavy work, by an agent on a machine: a step of the thread the turn is about"},
-	{"thread", "open_thread, find_thread, read_thread, name_thread, close_thread, reopen_thread", "the one object the user sees: one per matter (a pull request, an appointment, a research, the day's agenda), found again by its alias (open_thread gives back the one it matches: take it, or new_because), closed only on its goal; a one-line answer stays text, anything shown is a thread; led (a plan the user approves, steps in parallel, a lead, a budget) for long autonomous work of several steps; every task is a step of one, and another matter asked about has its own"},
+	{"task", "run_task, node_settle", "long or heavy work, by an agent on a machine, about the thread the turn is about; long work is cut by its agent into steps, child nodes that code runs and accepts on their proof: you settle only their exceptions ([nœud …] wakes)"},
+	{"thread", "open_thread, find_thread, read_thread, name_thread, close_thread, reopen_thread", "the one object the user sees: one per matter (a pull request, an appointment, a research, the day's agenda), found again by its alias (open_thread gives back the one it matches: take it, or new_because), closed only on its goal; a one-line answer stays text, anything shown is a thread; a task started in a turn about it is about it, and another matter asked about has its own; long work of several steps runs as the steps of a node (node_settle on its exceptions)"},
 }
 
 const conceptMapEN = "memory, intention, skill, monitor, rule, workspace, surface, setting, where, notify, since, task, thread"
