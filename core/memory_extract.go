@@ -795,6 +795,9 @@ func (c *core) memoryTick(ctx context.Context) {
 		}
 	}
 	c.memoryNight(mc, now)
+	// What is true changes with time too (a valid_to passed): the mirror
+	// follows, rewriting only what changed.
+	c.mem.mirrorSync()
 	c.intentionsTick()
 	if !c.extractionOn() || c.mem.activeRun() != nil {
 		return
@@ -891,8 +894,10 @@ func (c *core) extractBusyDay(ctx context.Context, mc MemoryConfig, now time.Tim
 	}
 }
 
-// backup copies the memory into dir (VACUUM INTO) with a JSONL export,
-// keeping the last keep days.
+// backup copies the memory into dir (VACUUM INTO) with a JSONL export
+// and its readable mirror (memoire-<day>.tar.gz), keeping the last keep
+// days: a forgotten memory stays in them that long, as in the database's
+// copies.
 func (m *memStore) backup(dir string, keep int) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -914,7 +919,14 @@ func (m *memStore) backup(dir string, keep int) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	for _, pattern := range []string{"memory-*.db", "memory-*.jsonl"} {
+	// The readable mirror, as written from this copy; without it, the
+	// copies are still kept and pruned.
+	if m.mirror != nil {
+		if err := m.backupMirror(filepath.Join(dir, "memoire-"+day+".tar.gz")); err != nil {
+			log.Printf("memory: backup of the mirror: %v", err)
+		}
+	}
+	for _, pattern := range []string{"memory-*.db", "memory-*.jsonl", "memoire-*.tar.gz"} {
 		files, _ := filepath.Glob(filepath.Join(dir, pattern))
 		sort.Strings(files)
 		for len(files) > keep {
@@ -923,6 +935,22 @@ func (m *memStore) backup(dir string, keep int) error {
 		}
 	}
 	return nil
+}
+
+// backupMirror writes the mirror, synced first, as a tar.gz at path.
+func (m *memStore) backupMirror(path string) error {
+	if err := m.mirror.sync(m); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := m.mirror.archive(f); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // exportJSONL writes every memory not forgotten, one JSON object per line.

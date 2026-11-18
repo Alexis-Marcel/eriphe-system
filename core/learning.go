@@ -515,7 +515,7 @@ func (m *memStore) undoMemory(e *learnEntry, who, reason string, evidence []stri
 	if _, err := tx.Exec(`UPDATE learning_log SET status = 'reverted', undo = '' WHERE id = ?`, e.ID); err != nil {
 		return nil, err
 	}
-	return r, tx.Commit()
+	return r, m.commit(tx)
 }
 
 // unretire makes the memory a change replaced current again, as it was.

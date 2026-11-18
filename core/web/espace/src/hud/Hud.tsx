@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { wall, when } from "../a2ui/format";
 import { Icon } from "../a2ui/icons";
-import { archives, reopen, type ArchivedNode } from "../data/api";
+import { archives, known, knownSections, reopen, type ArchivedNode, type KnownFile } from "../data/api";
 import { localURL } from "../data/presence";
 import { dropNote, home, openPage, pathOf, setTheme, step, store, useGraph } from "../data/store";
 import { STREAM_GRACE } from "../data/stream";
@@ -11,7 +11,8 @@ import { useWords } from "../i18n";
 
 // The head-up display (#633): the way home and the path of the page the
 // console talks to; the ticker of what waits for the user and what runs,
-// each a way to its page; what the user archived, to reopen; the light or
+// each a way to its page; what Eriphe knows, read only; what the user
+// archived, to reopen; the light or
 // dark theme; the way to the settings. Under it, the notifications routed
 // to this tab, and a word when the stream is down.
 
@@ -54,6 +55,7 @@ export function Hud({ name, live }: { name: string; live: boolean }) {
           </AnimatePresence>
         </div>
         <div className="hud-right">
+          {live && <Known />}
           {live && <Archives />}
           <Theme />
           <a className="hud-icon" href="/settings" aria-label={t("espace.settings")} title={t("espace.settings")}>
@@ -142,6 +144,85 @@ function Archives() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// Known shows what Eriphe knows, read only, drawn from its memory with
+// recall's rules: by section, each file of the mirror a group; a memory
+// read in someone else's content is marked. Read again at each opening.
+function Known() {
+  const { t } = useWords();
+  const [open, setOpen] = useState(false);
+  const [files, setFiles] = useState<KnownFile[] | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let on = true;
+    known().then(
+      (xs) => on && setFiles(xs),
+      () => on && setFiles([]),
+    );
+    return () => {
+      on = false;
+    };
+  }, [open]);
+  const sections = knownSections(files ?? []);
+  return (
+    <div className="hud-known">
+      <button type="button" className={`hud-btn${open ? " on" : ""}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        {t("espace.known")}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div className="hud-panel known" role="region" aria-label={t("espace.known")} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
+            {files === null ? null : files.length === 0 ? (
+              <p className="hud-muted">{t("espace.known.none")}</p>
+            ) : (
+              <div className="known-body">
+                {sections.map((s) => (
+                  <section key={s.section}>
+                    <h3>{t(`espace.known.${s.section}`)}</h3>
+                    {s.files.map((f) => (
+                      <KnownGroup key={f.path} file={f} />
+                    ))}
+                  </section>
+                ))}
+              </div>
+            )}
+            <p className="hud-muted">{t("espace.known.readonly")}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function KnownGroup({ file }: { file: KnownFile }) {
+  const { t } = useWords();
+  let group = "";
+  return (
+    <details className="known-file" open={file.section === "profile"}>
+      <summary>
+        {file.title} <em>{file.lines.length}</em>
+      </summary>
+      <ul>
+        {file.lines.map((l) => {
+          const head = file.section === "profile" && l.group && l.group !== group ? l.group : "";
+          if (head) group = head;
+          return (
+            <li key={l.id} data-memory={l.id}>
+              {head && <h4>{t(`espace.known.group.${head}`)}</h4>}
+              {l.when && <time>{l.group === "situation" ? t("espace.known.until", l.when) : l.when}</time>}
+              {l.external && (
+                <span className="a2-badge a2-badge-external" title={t("espace.known.external.title")}>
+                  {t("espace.known.external")}
+                </span>
+              )}
+              <span>{l.text}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }
 
