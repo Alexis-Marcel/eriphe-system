@@ -71,12 +71,11 @@ func TestTaskMediaInItsNode(t *testing.T) {
 		t.Fatalf("not in its node: %v", err)
 	}
 
-	// The task writes it in a block of its node, external: it shows.
+	// The task writes it in a block of its node, as a task does (node_edit).
 	block := "```eriphe:block shot\n" + `{"components": [{"id": "root", "component": "Image", "url": "` + got.Src + `", "alt": "La prod"}]}` + "\n```\n"
-	d, _ := c.nodes.Read(mine, 0)
-	if _, err := c.nodes.Write(mine, block, d.Version.Hash, "task:t-cap"); err != nil {
-		t.Fatal(err)
-	}
+	read := mustNodes(t, c, "t-cap", "node_read", nil)
+	mustNodes(t, c, "t-cap", "node_edit", map[string]any{"expect": read["hash"], "block": "shot", "value": map[string]any{
+		"components": []any{map[string]any{"id": "root", "component": "Image", "url": got.Src, "alt": "La prod"}}}})
 	if _, err := c.nodes.Create(nodestore.New{Title: "Copie", External: true, Body: block, Author: byBrain}); err != nil {
 		t.Fatal(err)
 	}
