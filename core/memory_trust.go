@@ -98,33 +98,15 @@ func scanMemoryText(parts ...string) scanResult {
 			return res
 		}
 	}
-	for _, re := range secretRes {
-		if re.MatchString(text) {
-			res.Reject = "it looks like a credential: secrets belong in the vault, never in the memory"
-			return res
-		}
-	}
-	for _, m := range longTokenRe.FindAllString(text, -1) {
-		if looksRandom(m) {
-			res.Reject = "it holds a long random string, which looks like a credential"
-			return res
-		}
+	if why := scanSecrets(text); why != "" {
+		res.Reject = why
+		return res
 	}
 	for _, raw := range urlRe2.FindAllString(text, -1) {
 		u, err := url.Parse(strings.TrimRight(raw, ".,;:!?)"))
 		if err != nil {
 			res.Flags = append(res.Flags, "url")
 			continue
-		}
-		if u.User != nil {
-			res.Reject = "a link carries a user name or password"
-			return res
-		}
-		for k := range u.Query() {
-			if secretKeys.MatchString(k) {
-				res.Reject = "a link carries a token (" + k + "=…): keep the link without it"
-				return res
-			}
 		}
 		if u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "obsidian" {
 			res.Flags = append(res.Flags, "url-scheme")
@@ -137,6 +119,37 @@ func scanMemoryText(parts ...string) scanResult {
 		}
 	}
 	return res
+}
+
+// scanSecrets tells why a text holds a secret: a credential, a long
+// random string, a link with a password or a token; "" when it holds
+// none. The memory and the graph's nodes (nodes.go) refuse such a text.
+func scanSecrets(text string) string {
+	for _, re := range secretRes {
+		if re.MatchString(text) {
+			return "it looks like a credential: secrets belong in the vault"
+		}
+	}
+	for _, m := range longTokenRe.FindAllString(text, -1) {
+		if looksRandom(m) {
+			return "it holds a long random string, which looks like a credential"
+		}
+	}
+	for _, raw := range urlRe2.FindAllString(text, -1) {
+		u, err := url.Parse(strings.TrimRight(raw, ".,;:!?)"))
+		if err != nil {
+			continue
+		}
+		if u.User != nil {
+			return "a link carries a user name or password"
+		}
+		for k := range u.Query() {
+			if secretKeys.MatchString(k) {
+				return "a link carries a token (" + k + "=…): keep the link without it"
+			}
+		}
+	}
+	return ""
 }
 
 // looksRandom tells a credential-like string from a word or a path: digits,

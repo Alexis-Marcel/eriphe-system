@@ -83,6 +83,12 @@ func main() {
 		c.useMemory(mem) // its abouts are kept by the names of core.db (names.go)
 		c.mem.owner = func() string { return c.conf().User }
 	}
+	// The graph's nodes, in their own repository (nodes.go).
+	if nodes, err := openNodes(cfg); err != nil {
+		log.Printf("nodes: %v", err)
+	} else {
+		c.nodes = nodes
+	}
 	if err := c.reconcileServices(); err != nil {
 		log.Fatalf("services: %v", err)
 	}
@@ -144,6 +150,7 @@ func main() {
 	}
 	go c.runAssistants(context.Background(), token)
 	go c.runMemory(context.Background())
+	go c.runNodes(context.Background())
 	go c.runEvents(context.Background())    // event_sources.go
 	go c.runSkills(context.Background())    // skill_runs.go
 	go c.runMonitors(context.Background())  // monitors.go
