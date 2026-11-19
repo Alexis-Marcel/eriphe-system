@@ -967,7 +967,8 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   `about`); its own node is a child of `node` when given.
 - **A subject opened from the home** (`moveHomeTurn`): by default a node the brain opens
   (`node_open` without `aside`) opens in front of the user. In a turn that answers the user at the
-  home, the turn moves into it: the user's messages of the turn and what the brain wrote since get
+  home (typed in the workspace: a channel's request keeps its exchange at the home), the turn moves
+  into it, or into the node it shows (`node_show`): the user's messages of the turn and what the brain wrote since get
   the node's `node`, the rest of the answer goes there (`talk`), and the show asks the page to
   move the console into it (`talk: true`): the exchange goes on in the subject's page, and the cards
   raised next are linked to it. From a node, the new node is shown beside, the console where it

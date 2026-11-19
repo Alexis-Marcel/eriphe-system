@@ -570,6 +570,11 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 	case strings.Contains(said, "demandent une réponse"):
 		b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Les mails qui demandent une réponse", "body": "Les mails qui demandent une réponse.\n"})
 		return "Voici la vue : dis oui sur sa carte et elle s'ouvre."
+	case strings.Contains(said, "vue de l'agenda"):
+		// Proposed at the home with no subject opened: its card waits in
+		// the console (web_console.go's unheldCards).
+		b.self("propose_view", map[string]any{"title": "Mon agenda", "body": "Les rendez-vous du jour.\n"})
+		return "Voici la vue de ton agenda : dis oui sur sa carte."
 	case strings.Contains(said, "à part"):
 		// On the side: opened in the background, the console stays.
 		b.self("node_open", map[string]any{"title": "Recherche sur les newsletters", "aside": true, "goal": "Les newsletters à garder"})

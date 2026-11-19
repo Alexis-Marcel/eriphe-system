@@ -193,7 +193,18 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(bubble("Mes mails")).toBeVisible();
   await expect(pageOf("Mes mails")).toBeVisible();
 
-  // 15. Asked on the side: its node is born on the graph, not opened, and
+  // 15. A card no page holds (proposed at the home, no subject opened)
+  // waits in the console, with its Oui; answered, it leaves it.
+  await home(page);
+  await say("Propose-moi une vue de l'agenda.");
+  await expect(said).toContainText("Voici la vue de ton agenda");
+  const loose = page.locator(".cs-aside .cs-cards");
+  await expect(loose).toContainText("Mon agenda");
+  await loose.getByRole("button", { name: "Oui" }).click();
+  await expect(page.locator(".cs-cards")).toHaveCount(0);
+  await expect(bubble("Mon agenda")).toBeVisible();
+
+  // 16. Asked on the side: its node is born on the graph, not opened, and
   // the console stays at the home.
   await home(page);
   await say("Lance une recherche à part sur les newsletters.");

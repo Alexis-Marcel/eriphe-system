@@ -472,7 +472,9 @@ func (c *core) brainNodeShow(in nodeShowIn) (map[string]any, error) {
 		return nil, fmt.Errorf("%s: %w: the user reopens it from the archives", sum.ID, nodestore.ErrArchived)
 	}
 	c.turnNode(sum.ID)
-	c.showNode(sum.ID, byBrain, false)
+	if !c.moveHomeTurn(sum.ID) { // asked at the home: the exchange goes on in it (node_turn.go)
+		c.showNode(sum.ID, byBrain, false)
+	}
 	return map[string]any{"note": "Shown on the user's screen."}, nil
 }
 

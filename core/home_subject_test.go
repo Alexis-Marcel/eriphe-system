@@ -207,3 +207,55 @@ func TestStaleNameNeverAnAbout(t *testing.T) {
 		t.Errorf("%d stale names kept", n)
 	}
 }
+
+// A wake after the user's turn, or a request said on a channel, never
+// moves the home's exchange nor takes the console.
+func TestHomeMovesOnlyTheUsersWorkspaceTurn(t *testing.T) {
+	c, _ := netCore(t, "Compare les devis du garage", "")
+	asked := c.turn.answer
+	c.turn.goOn(0, 0, 0, nil) // a due intention wakes it (brain_wake.go)
+	c.turn.answersIn("")
+	if _, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Devis"}); err != nil {
+		t.Fatal(err)
+	}
+	if m := messageAt(t, c, asked); m.Node != "" {
+		t.Errorf("a wake moved the request: %+v", m)
+	}
+	if x, ok := c.lastShown(); ok {
+		t.Errorf("a wake showed %+v", x)
+	}
+
+	seq, _ := c.store.addNodeMessage(roleUser, "Garde un œil sur mes mails", "telegram", "", false)
+	c.turn.start(int(seq), int(seq), 0)
+	c.turn.answersIn("")
+	out, err := c.brainNodeOpen(context.Background(), brainNodeOpenIn{Title: "Mails"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := messageAt(t, c, int(seq)); m.Node != "" || c.turn.talkNode() != "" {
+		t.Errorf("a channel's request moved: %+v", m)
+	}
+	if x, _ := c.lastShown(); x.Node != out["id"] || x.Talk {
+		t.Errorf("shown %+v", x)
+	}
+}
+
+// From the home, showing the subject's node takes the exchange there too.
+func TestHomeShowTakesTheExchange(t *testing.T) {
+	c, _ := netCore(t, "Où en est le garage ?", "")
+	asked := c.turn.answer
+	d, err := c.nodes.Create(nodestore.New{Title: "Garage", Author: byBrain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := d.Node.Meta.ID
+	if _, err := c.brainNodeShow(nodeShowIn{ID: id}); err != nil {
+		t.Fatal(err)
+	}
+	if m := messageAt(t, c, asked); m.Node != id {
+		t.Errorf("the request stayed at the home: %+v", m)
+	}
+	if x, _ := c.lastShown(); x.Node != id || !x.Talk {
+		t.Errorf("shown %+v", x)
+	}
+}
