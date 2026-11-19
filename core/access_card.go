@@ -46,14 +46,15 @@ CREATE TABLE IF NOT EXISTS access_asks (
 	node          TEXT NOT NULL DEFAULT '',   -- the node it belongs to: its item's, else its run's (item_cards.go)
 	source        TEXT NOT NULL DEFAULT '',   -- with item: the node's source that lists it
 	item          TEXT NOT NULL DEFAULT '',   -- the item's id in that source
-	batch         INTEGER NOT NULL DEFAULT 0); -- the card it is on, kind calls: its first call's id`
+	batch         INTEGER NOT NULL DEFAULT 0,  -- the card it is on, kind calls: its first call's id
+	labels        TEXT NOT NULL DEFAULT ''); -- the items it acts on, as its node listed them when kept: JSON (call_words.go)`
 
 func init() {
 	extraSchema = append(extraSchema, accessCardSchema)
 	// A table made before the item cards lacks their columns.
 	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
 		for _, col := range []struct{ name, def string }{{"node", "TEXT NOT NULL DEFAULT ''"}, {"source", "TEXT NOT NULL DEFAULT ''"},
-			{"item", "TEXT NOT NULL DEFAULT ''"}, {"batch", "INTEGER NOT NULL DEFAULT 0"}} {
+			{"item", "TEXT NOT NULL DEFAULT ''"}, {"batch", "INTEGER NOT NULL DEFAULT 0"}, {"labels", "TEXT NOT NULL DEFAULT ''"}} {
 			if err := addColumn(db, "access_asks", col.name, col.def); err != nil {
 				return err
 			}
@@ -233,21 +234,23 @@ type accessQuestion struct {
 	Refs       []string
 	Tainted    string
 	State      string
-	Run        int64  // a triggered skill's run: its card is the run's (skill_cards.go)
-	Node       string // the node it belongs to: its item's, else its run's (item_cards.go)
-	Source     string // with Item: the node's source that lists it
-	Item       string // the item's id in that source
-	Batch      int64  // the calls card it is on, 0 when none
-	source     string // who raised it, when not its task: node:<id>
+	Run        int64       // a triggered skill's run: its card is the run's (skill_cards.go)
+	Node       string      // the node it belongs to: its item's, else its run's (item_cards.go)
+	Source     string      // with Item: the node's source that lists it
+	Item       string      // the item's id in that source
+	Batch      int64       // the calls card it is on, 0 when none
+	Labels     []itemLabel // the items it acts on, as its node listed them when it was kept (call_words.go)
+	source     string      // who raised it, when not its task: node:<id>
 }
 
 func (c *core) accessAskOf(id int64) (accessQuestion, error) {
 	var a accessQuestion
-	var refs string
-	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state, run, node, source, item, batch FROM access_asks WHERE id = ?`, id).
+	var refs, labels string
+	err := c.store.db.QueryRow(`SELECT id, task_id, permission_id, server, category, account, call, input, refs, tainted, state, run, node, source, item, batch, labels FROM access_asks WHERE id = ?`, id).
 		Scan(&a.ID, &a.TaskID, &a.Permission, &a.Need.Server, &a.Need.Category, &a.Need.Account, &a.Call, &a.Input, &refs, &a.Tainted, &a.State, &a.Run,
-			&a.Node, &a.Source, &a.Item, &a.Batch)
+			&a.Node, &a.Source, &a.Item, &a.Batch, &labels)
 	json.Unmarshal([]byte(refs), &a.Refs)
+	json.Unmarshal([]byte(labels), &a.Labels)
 	return a, err
 }
 

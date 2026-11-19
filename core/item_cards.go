@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"slices"
-	"strings"
 )
 
 // Cards bound to a node's items (#575, #631): an action on one item a
@@ -26,8 +25,10 @@ import (
 //   - Oui runs each call as kept, with the policy read again
 //     (catalogCall); Non runs none. A run's results go to its note, the
 //     others' to the node's trace: the brain is not told.
-//   - Its words are code's: the action by its tool (callVerb), the item by
-//     its source and its id, its parameters as kept. A call kept after
+//   - Its words are code's: the action in a sentence, the items by their
+//     title and detail as their source lists them (call_words.go), its
+//     exact calls, as kept, under Détails. It waits in its node
+//     (cardNodeOf), about it. A call kept after
 //     reading external content keeps that taint: « extérieur », buttons
 //     only (resolveByText).
 
@@ -103,25 +104,24 @@ func (c *core) callsProposal(p proposal) proposal {
 		}
 	}
 	items := asksItems(asks)
+	// Its words read plainly (call_words.go); the exact calls under
+	// Détails.
 	p.text = func(lang string) string {
-		verb := callVerb(first.Call, lang)
-		if len(items) > 1 {
-			return fmt.Sprintf(tr(lang, "card.calls.items"), verb, len(items))
+		text, _ := c.callsWords(asks, lang)
+		if len(items) > 1 && len(asks) == 1 {
+			return fmt.Sprintf(tr(lang, "card.calls.items"), text, len(items))
 		}
-		return verb
+		return text
 	}
-	p.fields = func(lang string) []cardField {
-		var fs []cardField
-		for _, a := range asks {
-			var lines []string
-			for _, f := range a.fields() {
-				lines = append(lines, f.Name+" : "+f.Value)
-			}
-			fs = append(fs, cardField{Name: callVerb(a.Call, lang), Value: truncate(strings.Join(lines, "\n"), cardValueMax)})
-		}
-		return fs
+	p.summary = func(lang string) []string {
+		_, lines := c.callsWords(asks, lang)
+		return lines
 	}
-	p.Fields = p.fields("fr")
+	var fs []cardField
+	for _, a := range asks {
+		fs = append(fs, callDetail(a))
+	}
+	p.Fields = fs
 	p.origin = func(lang string) cardOrigin { return c.callsOrigin(first, items, len(asks), lang) }
 	return p
 }

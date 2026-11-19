@@ -34,6 +34,7 @@ const schema = `CREATE TABLE nodes (
 	  done INTEGER NOT NULL DEFAULT 0,
 	  archived INTEGER NOT NULL DEFAULT 0,
 	  external INTEGER NOT NULL DEFAULT 0,
+	  title_trusted INTEGER NOT NULL DEFAULT 0, -- external, its title is not someone else's words
 	  version INTEGER NOT NULL,          -- the last version's n
 	  blob TEXT NOT NULL);               -- the file's git hash, to tell a change made outside
 	CREATE INDEX nodes_parent ON nodes (parent);
@@ -78,6 +79,19 @@ func openIndex(path string) (db *sql.DB, fresh bool, err error) {
 	}
 	switch version {
 	case schemaVersion:
+		// An index made before title_trusted lacks it: no title was
+		// trusted then, as no file says it (0, its default).
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('nodes') WHERE name = 'title_trusted'`).Scan(&n); err != nil {
+			db.Close()
+			return nil, false, err
+		}
+		if n == 0 {
+			if _, err := db.Exec(`ALTER TABLE nodes ADD COLUMN title_trusted INTEGER NOT NULL DEFAULT 0`); err != nil {
+				db.Close()
+				return nil, false, err
+			}
+		}
 		return db, false, nil
 	case 0:
 	default:
@@ -115,13 +129,13 @@ type execer interface {
 // there; version is the n of its last version.
 func indexNode(tx execer, n *nodefile.Node, file string, raw []byte, version int, updated time.Time) error {
 	m := n.Meta
-	_, err := tx.Exec(`INSERT INTO nodes (id, file, title, parent, lifetime, created, updated, done, archived, external, version, blob)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := tx.Exec(`INSERT INTO nodes (id, file, title, parent, lifetime, created, updated, done, archived, external, title_trusted, version, blob)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET file = excluded.file, title = excluded.title, parent = excluded.parent,
 		  lifetime = excluded.lifetime, updated = excluded.updated, done = excluded.done, archived = excluded.archived,
-		  external = excluded.external, version = excluded.version, blob = excluded.blob`,
+		  external = excluded.external, title_trusted = excluded.title_trusted, version = excluded.version, blob = excluded.blob`,
 		m.ID, file, m.Title, m.Parent, string(m.Lifetime), m.Created.Unix(), updated.Unix(),
-		unixOr0(m.Done), unixOr0(m.Archived), m.External, version, blobHash(raw))
+		unixOr0(m.Done), unixOr0(m.Archived), m.External, m.External && m.TitleTrusted, version, blobHash(raw))
 	if err != nil {
 		return err
 	}

@@ -487,9 +487,7 @@ func (c *core) cardProposed(kind string, id int64) string {
 // inherits (nil: none) and source raised: a card born in a turn about a
 // node is linked to it by the code, and the node waits for the user.
 func (c *core) cardProposedBy(kind string, id int64, inherit func() string, source string) {
-	if source != "" {
-		c.cardRaisedFor(source, proposalRef(kind, id)) // linked to its node (node_turn.go)
-	}
+	c.cardRaisedFor(source, proposalRef(kind, id)) // linked to its node, if any (node_turn.go)
 	p := c.proposalOf(kind, id)
 	if !p.Pending {
 		return
@@ -543,9 +541,11 @@ func (c *core) cardAgain(p proposal) {
 }
 
 // syncCards gives every waiting proposal without a waiting card one,
-// queued.
+// queued, linked to the node it belongs to (one raised before it was
+// linked waits there too).
 func (c *core) syncCards() {
 	for _, p := range c.pendingProposals() {
+		c.cardRaisedFor("", proposalRef(p.Kind, p.ID))
 		c.cardAgain(p)
 		res, err := c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)`,
 			proposalRef(p.Kind, p.ID), p.Kind, p.Text(c.userLang()), time.Now().Unix())

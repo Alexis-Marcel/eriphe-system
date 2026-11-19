@@ -210,7 +210,7 @@ func (c *core) nodeSaid(id string) string {
 // may be someone else's words, its title.
 func (c *core) nodeHead(id string) string {
 	if c.nodes != nil {
-		if sum, err := c.nodes.Get(id); err == nil && !sum.External {
+		if sum, err := c.nodes.Get(id); err == nil && !sum.TitleExternal() {
 			return fmt.Sprintf("[nœud %s « %s »]", id, sum.Title)
 		}
 	}
@@ -230,11 +230,11 @@ CREATE INDEX IF NOT EXISTS node_cards_ref ON node_cards (ref);`
 
 func init() { extraSchema = append(extraSchema, nodeCardsSchema) }
 
-// cardRaisedFor links a card raised for a node to it (its source is
-// node:<id>): the node waits for the user, unless it is at work.
+// cardRaisedFor links a card raised for a node to it (cardNodeOf): the
+// node waits for the user, unless it is at work.
 func (c *core) cardRaisedFor(source, ref string) {
-	id, ok := strings.CutPrefix(source, "node:")
-	if !ok || c.nodes == nil {
+	id := c.cardNodeOf(source, ref)
+	if id == "" || c.nodes == nil {
 		return
 	}
 	sum, err := c.nodes.Get(id)
@@ -245,6 +245,48 @@ func (c *core) cardRaisedFor(source, ref string) {
 	if sum.State == nodestore.Idle {
 		c.nodes.SetState(id, nodestore.Waiting)
 	}
+}
+
+// cardNodeOf is the node a card is raised for: the one its proposal
+// belongs to (proposalNode: its calls', its run's, its task's), else its
+// source's, node:<id> or a task's (task:<id>) that works in a node; ""
+// for none.
+func (c *core) cardNodeOf(source, ref string) string {
+	if kind, n, ok := parseProposalRef(ref); ok {
+		if id := c.proposalNode(kind, n); id != "" {
+			return id
+		}
+	}
+	kind, id, _ := strings.Cut(source, ":")
+	switch kind {
+	case refNode:
+		return id
+	case "task":
+		return c.taskNode(id)
+	}
+	return ""
+}
+
+// proposalNode is the node a proposal of a task's belongs to: a calls
+// card's (its calls' node: their item's, else their run's), a run's card
+// (the node its run works in), an access card's (its call's node, else
+// its task's); "" for any other.
+func (c *core) proposalNode(kind string, id int64) string {
+	switch kind {
+	case cardCalls:
+		if asks := c.batchAsks(id); len(asks) > 0 {
+			return cmpOr(asks[0].Node, c.taskNode(asks[0].TaskID))
+		}
+	case cardRunCalls:
+		if r := c.runByID(id); r != nil {
+			return c.taskNode(r.Task)
+		}
+	case cardAccess:
+		if a, err := c.accessAskOf(id); err == nil {
+			return cmpOr(a.Node, c.taskNode(a.TaskID))
+		}
+	}
+	return ""
 }
 
 // linkedCardMoved tells the nodes a card is linked to that it was

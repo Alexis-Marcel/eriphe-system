@@ -49,9 +49,14 @@ func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[s
 		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
 		cancel()
 		n := c.callNeed(tool, input, c.pool.facts(tool, input))
-		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, node, source, item)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, pid, n.Server, n.Category, n.Account, tool+" "+string(fields), string(raw),
-			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID, node, source, item)
+		labels := ""
+		if ls := c.callItemLabels(node, tool, input); len(ls) > 0 {
+			b, _ := json.Marshal(ls)
+			labels = string(b)
+		}
+		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, node, source, item, labels)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, pid, n.Server, n.Category, n.Account, tool+" "+string(fields), string(raw),
+			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID, node, source, item, labels)
 		if id, _ := rowsID(res, err); onItem && id > 0 {
 			// One card per item: the one its other calls on it are on.
 			batch := c.runItemBatch(r.ID, node, source, item)
@@ -124,19 +129,24 @@ func (c *core) runCallsProposal(p proposal) proposal {
 	}
 	p.Why = "Skill « " + r.Skill + " »"
 	n := len(asks)
-	p.text = func(lang string) string { return fmt.Sprintf(tr(lang, "card.runcalls"), r.Skill, n) }
-	p.fields = func(lang string) []cardField {
-		var fs []cardField
-		for _, a := range asks {
-			var lines []string
-			for _, f := range a.fields() {
-				lines = append(lines, f.Name+" : "+f.Value)
-			}
-			fs = append(fs, cardField{Name: callVerb(a.Call, lang), Value: truncate(strings.Join(lines, "\n"), cardValueMax)})
+	// Its words read plainly (call_words.go): one call is its sentence,
+	// several the skill's; the exact calls under Détails.
+	p.text = func(lang string) string {
+		if n == 1 {
+			text, _ := c.callsWords(asks, lang)
+			return text
 		}
-		return fs
+		return fmt.Sprintf(tr(lang, "card.runcalls"), r.Skill, n)
 	}
-	p.Fields = p.fields("fr")
+	p.summary = func(lang string) []string {
+		_, lines := c.callsWords(asks, lang)
+		return lines
+	}
+	var fs []cardField
+	for _, a := range asks {
+		fs = append(fs, callDetail(a))
+	}
+	p.Fields = fs
 	return p
 }
 

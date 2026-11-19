@@ -10,8 +10,8 @@ import (
 )
 
 // The authors' API: what the brain, a task or the user writes. Code's
-// fields (a block's snapshot, marks and external, the node's external)
-// are never theirs: left out, they are kept as the version written over
+// fields (a block's snapshot, marks and external, the node's external and
+// title_trusted) are never theirs: left out, they are kept as the version written over
 // has them; written alike, they are accepted; written otherwise, the
 // write is refused. A new block has none. A block may be written in its
 // short form (one component, its root): it is completed, and written in
@@ -30,6 +30,11 @@ func ParseAuthor(raw []byte, prev *Node) (*Node, error) {
 		return nil, fmt.Errorf("front matter: external is %w: leave it out", ErrCodeField)
 	}
 	n.Meta.External = ext
+	trusted := prev != nil && prev.Meta.TitleTrusted
+	if n.hasTrust && n.Meta.TitleTrusted != trusted {
+		return nil, fmt.Errorf("front matter: title_trusted is %w: leave it out", ErrCodeField)
+	}
+	n.Meta.TitleTrusted = trusted
 	var after []string
 	if prev != nil {
 		after = prev.Meta.After
@@ -191,13 +196,13 @@ func (n *Node) AuthorText() (string, error) {
 
 // AuthorBytes is the node as its authors wrote it: its front matter and
 // body in their canonical form, without code's fields (a block's
-// snapshot, marks and external, the node's external, done and links).
-// Two versions alike
+// snapshot, marks and external, the node's external and title_trusted,
+// done and links). Two versions alike
 // there differ only by what code wrote: an author's write made on one
 // applies on the other.
 func (n *Node) AuthorBytes() ([]byte, error) {
 	m := n.Meta
-	m.External, m.Done, m.Links = false, time.Time{}, nil
+	m.External, m.TitleTrusted, m.Done, m.Links = false, false, time.Time{}, nil
 	front, err := encodeMeta(m)
 	if err != nil {
 		return nil, err
@@ -219,3 +224,13 @@ func (n *Node) AuthorBytes() ([]byte, error) {
 	}
 	return b.Bytes(), nil
 }
+
+// VouchTitle says the node's writer stands for the title it writes now:
+// the user, or an author not tainted. The store then trusts the title of
+// an external node (Meta.TitleTrusted); without it, a title written on an
+// external node may be someone else's words. Only a writer that wrote the
+// title vouches for it.
+func (n *Node) VouchTitle() { n.vouched = true }
+
+// TitleVouched tells whether the node's writer vouched for its title.
+func (n *Node) TitleVouched() bool { return n.vouched }

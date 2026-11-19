@@ -438,7 +438,44 @@ func (c *core) decideView(id int64, approve bool) error {
 // viewNew is the node a view makes.
 func (c *core) viewNew(v viewProposal) nodestore.New {
 	return nodestore.New{ID: v.Node, Title: v.Title, Goal: v.Goal, Body: v.Body, Lifetime: nodefile.Standing,
-		External: v.Tainted != "", Author: "user"}
+		External: v.Tainted != "", TitleTrusted: true, Author: "user"} // its title, the user approved: the card showed it
+}
+
+// trustViewTitles: a view's node made before titles were trusted
+// (title_trusted) keeps the title the user approved on its card, while
+// it is still that one. Run at start; a node so vouched for is left.
+func (c *core) trustViewTitles() {
+	if c.nodes == nil {
+		return
+	}
+	rows, err := c.store.db.Query(`SELECT node, title FROM view_proposals WHERE state = ?`, viewApproved)
+	if err != nil {
+		return
+	}
+	approved := map[string]string{}
+	for rows.Next() {
+		var node, title string
+		if rows.Scan(&node, &title) == nil && node != "" {
+			approved[node] = strings.TrimSpace(title)
+		}
+	}
+	rows.Close() // one connection: the nodes are written after
+	for id, title := range approved {
+		sum, err := c.nodes.Get(id)
+		if err != nil || !sum.TitleExternal() || sum.Title != title || !sum.Archived.IsZero() {
+			continue
+		}
+		d, err := c.nodes.Read(id, 0)
+		if err != nil {
+			continue
+		}
+		if _, err := c.nodes.Change(id, d.Version.Hash, nodeByCode, func(n *nodefile.Node) error {
+			n.VouchTitle()
+			return nil
+		}); err != nil {
+			log.Printf("view node %s: its title: %v", id, err)
+		}
+	}
 }
 
 // viewFree refuses a view whose monitor or skill name is taken, or whose

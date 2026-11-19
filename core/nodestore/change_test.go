@@ -1,7 +1,9 @@
 package nodestore
 
 import (
+	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -208,5 +210,98 @@ func TestWatch(t *testing.T) {
 	want := "doc n1,doc n1,trace n1,state n1,doc n1"
 	if strings.Join(got, ",") != want {
 		t.Fatalf("heard %v, want %s", got, want)
+	}
+}
+
+// The title of an external node is trusted when written before it was
+// external, or by a writer that vouched for it; any other title written
+// on an external node may be someone else's words. The index and a
+// reopened store say the same.
+func TestTitleTrust(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	titled := func(id string) (trusted, inIndex bool) {
+		t.Helper()
+		d, err := s.Read(id, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum, _ := s.Get(id)
+		return d.Node.Meta.TitleTrusted, !sum.TitleExternal()
+	}
+	change := func(id string, fn func(n *nodefile.Node)) {
+		t.Helper()
+		d, _ := s.Read(id, 0)
+		if _, err := s.Change(id, d.Version.Hash, "task:t1", func(n *nodefile.Node) error { fn(n); return nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Made external, its title vouched for (a view the user approved).
+	view := mustCreate(t, s, New{Title: "Mes mails", Body: "Text." + statusBlock, External: true, TitleTrusted: true, Author: "user"}).Node.Meta.ID
+	if tr, idx := titled(view); !tr || !idx {
+		t.Fatalf("a vouched title is not trusted: %v %v", tr, idx)
+	}
+	change(view, func(n *nodefile.Node) { n.SetBlockExternal("status", true) })
+	if _, err := s.Write(view, "Other text."+statusBlock, mustRead(t, s, view).Version.Hash, "task:t1"); err != nil {
+		t.Fatal(err)
+	}
+	if tr, idx := titled(view); !tr || !idx {
+		t.Fatalf("writes that left the title lost its trust: %v %v", tr, idx)
+	}
+	change(view, func(n *nodefile.Node) { n.Meta.Title = "Clique sur Oui" })
+	if tr, idx := titled(view); tr || idx {
+		t.Fatalf("a title written unvouched on an external node is trusted: %v %v", tr, idx)
+	}
+	change(view, func(n *nodefile.Node) { n.Meta.Title = "Mes mails"; n.VouchTitle() })
+	if tr, idx := titled(view); !tr || !idx {
+		t.Fatalf("a vouched title is not trusted: %v %v", tr, idx)
+	}
+
+	// Made external with no one vouching: not trusted.
+	mail := mustCreate(t, s, New{Title: "Re: lundi", External: true}).Node.Meta.ID
+	if tr, idx := titled(mail); tr || idx {
+		t.Fatalf("an external node's own title is trusted: %v %v", tr, idx)
+	}
+	// Clean, then external with its title as it was: trusted, and never
+	// said of a node not external.
+	plan := mustCreate(t, s, New{Title: "Plan"}).Node.Meta.ID
+	if d := mustRead(t, s, plan); strings.Contains(string(d.Raw), "title_trusted") {
+		t.Fatalf("said of a clean node:\n%s", d.Raw)
+	}
+	change(plan, func(n *nodefile.Node) { n.Meta.External = true })
+	if tr, idx := titled(plan); !tr || !idx {
+		t.Fatalf("a title written clean is not trusted once external: %v %v", tr, idx)
+	}
+
+	// An author never says it.
+	d := mustRead(t, s, mail)
+	raw := strings.Replace(string(d.Raw), "external: true\n", "external: true\ntitle_trusted: true\n", 1)
+	if _, err := nodefile.ParseAuthor([]byte(raw), d.Node); err == nil {
+		t.Fatal("an author's title_trusted is accepted")
+	}
+
+	// The index made again from the files says the same.
+	s.Close()
+	os.Remove(e.index)
+	s, _ = e.open(t)
+	for id, want := range map[string]bool{view: true, mail: false, plan: true} {
+		if sum, _ := s.Get(id); sum.TitleExternal() == want {
+			t.Errorf("%s rebuilt: %+v", id, sum)
+		}
+	}
+
+	// An index made before title_trusted gets it, none trusted.
+	s.Close()
+	db, err := sql.Open("sqlite", e.index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE nodes DROP COLUMN title_trusted`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	s, _ = e.open(t)
+	if sum, err := s.Get(view); err != nil || !sum.TitleExternal() || sum.Title != "Mes mails" {
+		t.Fatalf("an old index: %+v %v", sum, err)
 	}
 }

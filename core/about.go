@@ -117,13 +117,22 @@ func (c *core) proposalAbout(kind string, id int64) string {
 				return x.About
 			}
 		}
-	case cardCalls:
-		if asks := c.batchAsks(id); len(asks) > 0 {
-			return c.sourceAbout("task:" + asks[0].TaskID)
+	case cardCalls, cardRunCalls:
+		// A run's calls are about the node they act in (its item's, its
+		// run's), else what its task is about.
+		if node := c.proposalNode(kind, id); node != "" {
+			if s := c.sourceAbout(refNode + ":" + node); s != "" {
+				return s
+			}
 		}
-	case cardRunCalls:
 		var task string
-		c.store.db.QueryRow(`SELECT task FROM skill_runs WHERE id = ?`, id).Scan(&task)
+		if kind == cardCalls {
+			if asks := c.batchAsks(id); len(asks) > 0 {
+				task = asks[0].TaskID
+			}
+		} else {
+			c.store.db.QueryRow(`SELECT task FROM skill_runs WHERE id = ?`, id).Scan(&task)
+		}
 		if task != "" {
 			return c.sourceAbout("task:" + task)
 		}

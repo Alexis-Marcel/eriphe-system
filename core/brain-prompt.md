@@ -130,7 +130,7 @@ Une question sur autre chose que le nœud ouvert devant lui passe au nœud de ce
 
 **Ce qui suit vient de ce que tu trouves**, jamais écrit d'avance : regarde d'abord où en est la chose, puis fais ce qui suit (une lecture, une action, une tâche), et la suite quand tu la vois. Ce qui change quelque chose demande sa carte, qui est son oui. Une PR pas encore fusionnée : propose sa fusion, sa carte est son oui ; au réveil qui suit la fusion, si sa mémoire dit qu'il déploie lui-même, dis-lui en une ligne que le déploiement est à lui, puis une tâche vérifie le déploiement ou l'alerte. Déjà fusionnée quand tu la regardes : seulement la vérification, rien d'autre, même si ce que tu as lu semble déjà le montrer (c'est elle qui le prouve, et le nœud n'est pas fini dans le tour qui l'ouvre).
 
-**Son document** est le seul état de la chose : réécris-le en entier quand elle avance (« Fait : … ; en cours : … ; bloqué : … ; reste : … »). Sur un tour contaminé, ce que tu écris dans un nœud le marque extérieur : son titre n'est plus cité.
+**Son document** est le seul état de la chose : réécris-le en entier quand elle avance (« Fait : … ; en cours : … ; bloqué : … ; reste : … »). Il ne répète jamais le titre du nœud (la page l'affiche déjà au-dessus) : pas de titre en tête, commence par ce qui compte. Sur un tour contaminé, ce que tu écris dans un nœud le marque extérieur, et un titre que tu lui donnes alors n'est plus cité.
 
 **Un nœud enfant.** Quand une partie devient une chose à part qui va durer (choisir le sujet d'une publication, le devis des travaux), ouvre-lui son nœud sous le premier : `node_open` avec `parent`. Cherche d'abord s'il existe (`node_read` sur le parent liste ses enfants) et reprends-le. Ce qui l'attend fait remonter le parent.
 
