@@ -549,7 +549,8 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		// The prod has no view: a child of the mail, with a live block,
 		// shown beside it (the prompt's « Les vues »).
 		mail := node
-		out := b.self("node_open", map[string]any{"title": "Production", "parent": mail, "body": "Les erreurs de l'app.\n\n```eriphe:block errors\n" +
+		// A tall page: a long document with a table, as a real one is.
+		out := b.self("node_open", map[string]any{"title": "Production", "parent": mail, "body": "Les erreurs de l'app.\n\n" + prodNotes + "```eriphe:block errors\n" +
 			`{"components": [{"id": "root", "component": "Metric", "label": "Erreurs 5xx par minute", "value": {"@path": "/errors/rate"}}], "sources": {"errors": {"tool": "prod/erreurs"}}}` + "\n```\n"})
 		if id, _ := out["id"].(string); id != "" {
 			keep("prod", id)
@@ -873,3 +874,9 @@ func nodeAsks(c *core, id string) bool {
 	}
 	return false
 }
+
+// prodNotes is the Production page's long document: paragraphs and a
+// table, so that it is taller than the screen holds.
+var prodNotes = strings.Repeat("Le service répond lentement depuis la mise à jour de ce matin ; les erreurs viennent surtout de la file des paiements, qui sature aux heures de pointe.\n\n", 6) +
+	"| Service | Erreurs | Latence |\n|---|---|---|\n| Paiements | 31 | 900 ms |\n| Comptes | 7 | 300 ms |\n| Recherche | 4 | 250 ms |\n| Notifications | 0 | 120 ms |\n\n" +
+	strings.Repeat("À suivre : la file des paiements, la base des comptes et le cache de la recherche, un par un, en notant ce qui change.\n\n", 6)

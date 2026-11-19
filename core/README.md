@@ -3147,14 +3147,26 @@ token in `X-CSRF-Token`:
   is open and the theme back to eriphe-core a moment after they change. `presence.ts` says the
   user is there. A page Eriphe shows (`applyShow`) opens beside the others and leaves the bar
   where it was: only the user's click or ⌘-click moves it.
-- `graph/`: the layout (`layout.ts`, a small force simulation): roots held to their home (where
-  they first found room, `homesFor`: a new subject never moves the others), children pulled to
-  their parent, links as weak springs, every bubble and its label a box that pushes the others
-  away. An open page is a box node of its measured size (measured again whenever its content
-  changes, at most what the screen holds above the bar): the others make room around it and
-  nothing else moves; closed, the subjects go back home. Open pages are solid boxes to each
+- `graph/`: the layout (`layout.ts`, a small force simulation): the subjects form a
+  constellation around the centre (`constellation`): held loosely on an ellipse around (0, 0),
+  evenly spaced, 300 px from one to the next plus 24 px for each bubble a subject holds on
+  average, as wide as the screen's free band (1.7 times as high at most); in the order they were
+  made, except that a subject linked to one already placed (front-matter `links`, its own or its
+  bubbles') comes right after it, so related subjects sit side by side. A new subject takes its
+  slot and the ring turns the way that moves the others least (they slide, a slot at most).
+  Children are pulled to their parent, links are weak springs, every body is pulled faintly to the
+  centre (none while a page is open), every bubble and its label a box that pushes the others
+  away; a graph laid out from nothing settles again until it is at rest, so the next layout moves
+  nothing. An open page is a box node of its measured size (measured again whenever its content
+  changes, at most what the screen holds above the bar): it presses on the bubbles near it and on
+  their subject with them, the others make room around it and nothing far moves; it never moves a
+  subject's spot: closed, the constellation comes back. Open pages are solid boxes to each
   other: of two that overlap (one born on the other, one that grew), the later opened steps
-  aside, sideways when it can, never the one held, and an open page is not pulled back home. The user drags a bubble anywhere it
+  aside, sideways when it can, never the one held, and an open page is not pulled back to its
+  spot. A page opened while another is open that would cover it is born right beside it, at its
+  height (`bornBeside`); a bubble that gives way steps off by the shortest way that does not lead
+  onto an open page. A standing view made from a subject's card is linked to that subject
+  (`decideView`), so it sits beside it. The user drags a bubble anywhere it
   stays reachable: a subject within a step (380 px) of the nearest other subject, measured from the
   edge of an open page, a bubble within 300 px of its parent; past it the bubble lags behind by a
   rubber band (0.3), and dropped there it comes back to the edge. A dropped bubble stays exactly

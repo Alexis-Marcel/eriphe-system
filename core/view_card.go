@@ -382,6 +382,13 @@ func (c *core) decideView(id int64, approve bool) error {
 		return err
 	}
 	nw := c.viewNew(v)
+	// linked to the subjects its card was raised in: on the graph it sits
+	// beside them
+	for _, n := range c.cardNodes(proposalRef(cardViewKind, id)) {
+		if sum, err := c.nodes.Get(n); err == nil && sum.Archived.IsZero() {
+			nw.Links = append(nw.Links, n)
+		}
+	}
 	if err := c.viewFree(v.Monitor, v.Skill); err != nil {
 		return err
 	}

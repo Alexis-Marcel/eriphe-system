@@ -4,8 +4,8 @@ import { place, type GraphNode } from "../data/api";
 import { closePage, depthOf, openPage, placeAt, step, store, subtree, talkTo, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Page } from "../page/Page";
-import { boxAt, edgeMark, frameAll, framePages, pageMax, type Box, type Cam } from "./camera";
-import { edgePush, edgeStep, homesFor, leash, simulate, tether, TETHER, type Pin, type Pos, type Pt } from "./layout";
+import { BOTTOM, boxAt, edgeMark, frameAll, framePages, pageMax, TOP, type Box, type Cam } from "./camera";
+import { bornBeside, constellation, edgePush, edgeStep, leash, simulate, tether, TETHER, type Pin, type Pos, type Pt } from "./layout";
 import { codeOf, labelBox, radiusOf, titleOf, waits, weight } from "./model";
 
 // The graph (#633): every node a bubble, a subject bigger than its own,
@@ -39,8 +39,8 @@ export function Graph({ live }: { live: boolean }) {
     return () => removeEventListener("resize", on);
   }, []);
 
-  // The nodes in the order they were made: a new subject finds its room
-  // after the others.
+  // The nodes in the order they were made: a new subject takes its slot
+  // in the constellation after the others.
   const list = useMemo(() => Object.values(nodes).sort((a, b) => a.created.localeCompare(b.created) || a.id.localeCompare(b.id)), [nodes]);
   const ids = useMemo(() => new Set(list.map((x) => x.id)), [list]);
   const parentOf = (x: GraphNode) => (x.parent && ids.has(x.parent) ? x.parent : undefined);
@@ -82,10 +82,10 @@ export function Graph({ live }: { live: boolean }) {
     return f;
   };
 
-  // The layout: the roots' homes (where they first found room), where the
-  // user dropped what, the node held; laid out again when the graph or
-  // what is open changes, and live while a node is dragged.
-  const homes = useRef<Pos>({});
+  // The layout: the subjects in a constellation around the centre, shaped
+  // like the screen, where the user dropped what, the node held; laid out
+  // again when the graph or what is open changes, and live while a node is
+  // dragged.
   const prev = useRef<Pos>({});
   // Laid out again only when a place or what it is relative to changes,
   // not at each event of the stream.
@@ -105,10 +105,13 @@ export function Graph({ live }: { live: boolean }) {
   const layoutKey =
     list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.state}`).join(",") +
     "|" + openIds.map((id) => `${id}:${boxOf(id)[1]}`).join(",");
+  // the free band's shape, by tenths (not the bar's cards, which come and
+  // go): the constellation is as wide
+  const aspect = Math.round((size.w / Math.max(200, size.h - TOP - BOTTOM)) * 10) / 10;
+  // The pages open at the last layout: one opened since is born beside
+  // the page the console talks to (or the last one opened), not over it.
+  const laidOpen = useRef<string[]>([]);
   const pos = useMemo(() => {
-    const roots = list.filter((x) => !parentOf(x)).map((x) => x.id);
-    // a subject the user dropped is where it was dropped, not at its home
-    homes.current = homesFor(roots, homes.current, Object.values(pins).flatMap((p) => (p.abs ? [p.abs] : [])));
     const lnodes = list.map((x) => ({
       id: x.id,
       parent: parentOf(x),
@@ -117,10 +120,20 @@ export function Graph({ live }: { live: boolean }) {
       box: openIds.includes(x.id) ? boxOf(x.id) : undefined,
       opened: openIds.includes(x.id) ? openIds.indexOf(x.id) : undefined,
     }));
-    const p = simulate(lnodes, prev.current, homes.current, pins, held ?? undefined, held ? 24 : undefined);
+    const spots = constellation(lnodes, aspect);
+    for (const id of openIds) {
+      const par = nodes[id] && parentOf(nodes[id]);
+      const at = prev.current[id] ?? spots[id] ?? (par ? prev.current[par] : undefined);
+      if (laidOpen.current.includes(id) || !at) continue;
+      const before = laidOpen.current.filter((o) => openIds.includes(o) && prev.current[o]);
+      const from = talk && before.includes(talk) ? talk : before.at(-1);
+      if (from) prev.current[id] = bornBeside(at, boxOf(id), prev.current[from], boxOf(from));
+    }
+    laidOpen.current = openIds;
+    const p = simulate(lnodes, prev.current, spots, pins, held ?? undefined, held ? 24 : undefined);
     prev.current = { ...prev.current, ...p };
     return p;
-  }, [layoutKey, pins, held]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [layoutKey, pins, held, aspect]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Positions ease towards the layout's, frame by frame.
   const smooth = useRef<Pos>({});
