@@ -215,7 +215,7 @@ func playNodesBench(t *testing.T, cli, model string) benchScore {
 		b.note("the mail was archived by someone else than the user")
 	}
 	// 14. Setting up a mail watch asks before proposing: the first turn
-	// opens the subject and asks, its replies suggested; the answer
+	// opens the subject and asks there, with buttons for the likely answers; the answer
 	// brings the card.
 	pending := b.setups()
 	b.say("Tu peux garder un œil sur mes mails, m'aider à les gérer et me proposer des actions à faire.", "", turnWork)
@@ -224,8 +224,8 @@ func playNodesBench(t *testing.T, cli, model string) benchScore {
 	} else if asked, ok := b.lastAnswer(); !ok || asked.Node == "" {
 		b.note("mail watch: the question is in no subject")
 	} else {
-		if len(b.sc.c.store.suggestions(asked.Seq)) == 0 {
-			b.note("mail watch: the questions suggest no reply")
+		if !nodeAsks(b.sc.c, asked.Node) {
+			b.note("mail watch: the subject's questions have no ask button")
 		}
 		b.say("Fais comme tu proposes.", asked.Node, turnNoNode)
 		if b.setups() == pending {

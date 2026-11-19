@@ -107,7 +107,7 @@ func registerNodeTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in brainNodeWriteIn) (map[string]any, error) {
 			return c.brainNodeWrite(in.ID, in.Expect, func(n *nodefile.Node) error { return n.AuthorBody(in.Body) })
 		})
-	tool(s, "node_edit", "Edit a node, made on the version whose hash is expect: write one block (block and value, before to place it), or replace a piece of its text found once (old, new).",
+	tool(s, "node_edit", "Edit a node, made on the version whose hash is expect: write one block (block and value, before to place it), or replace a piece of its text found once (old, new). A card block places one of the node's cards where it belongs in its text: its value is {\"card\": \"<ref>\"}, the ref a propose tool gave, and nothing else; code draws the card.",
 		func(ctx context.Context, in nodeEditIn) (map[string]any, error) {
 			fn, err := nodeEdit(in)
 			if err != nil {
@@ -544,7 +544,9 @@ func (c *core) nodeDoneDecision(id string) {
 // archiveNode archives a node and every node under it, the user's
 // gesture alone: their tasks and their steps' work stop, their live
 // sources are read no more (nodeSourcesDue forgets them), and the cards
-// that wait on them are withdrawn (withdrawCards).
+// that wait on them are withdrawn (withdrawCards). Their cards stay
+// linked to them, gone: a card block of their documents says so
+// (web_graph.go), and an archived node holds no card (cardHeld).
 func (c *core) archiveNode(ctx context.Context, id, by string) error {
 	if c.nodes == nil {
 		return errNoGraph
@@ -576,6 +578,30 @@ func (c *core) archiveNode(ctx context.Context, id, by string) error {
 	return nil
 }
 
+// linkedNodeGone unlinks an archived node from the cards that still wait
+// (another live node holds them): it waits for them no more, even
+// reopened. Its withdrawn cards stay linked, gone: a card block of its
+// document says so (web_graph.go).
+func (c *core) linkedNodeGone(id string) {
+	rows, err := c.store.db.Query(`SELECT ref FROM node_cards WHERE node = ?`, id)
+	if err != nil {
+		return
+	}
+	var refs []string
+	for rows.Next() {
+		var ref string
+		if rows.Scan(&ref) == nil {
+			refs = append(refs, ref)
+		}
+	}
+	rows.Close()
+	for _, ref := range refs {
+		if c.cardState(ref) == cardPending {
+			c.store.db.Exec(`DELETE FROM node_cards WHERE node = ? AND ref = ?`, id, ref)
+		}
+	}
+}
+
 // nodeTasks are the tasks that work in a node.
 func (c *core) nodeTasks(id string) []string {
 	rows, err := c.store.db.Query(`SELECT task FROM task_nodes WHERE node = ?`, id)
@@ -591,10 +617,4 @@ func (c *core) nodeTasks(id string) []string {
 		}
 	}
 	return out
-}
-
-// linkedNodeGone forgets what an archived node waited for: its cards are
-// withdrawn already (withdrawCards), it waits no more.
-func (c *core) linkedNodeGone(id string) {
-	c.store.db.Exec(`DELETE FROM node_cards WHERE node = ?`, id)
 }

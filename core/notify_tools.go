@@ -407,7 +407,7 @@ func (c *core) brainRule(in ruleIn) (map[string]any, error) {
 		out["topic"] = topicNote
 	}
 	if got.State == ruleProposed {
-		c.cardProposed(cardRule, got.ID)
+		out["card"] = c.cardProposed(cardRule, got.ID)
 		out["note"] = "Only proposed: " + why + ". " + cardNote(c.conf().User) + " Do not say it is in force."
 	}
 	return out, nil

@@ -10,7 +10,11 @@ import type { NodePage, PageBlock } from "../data/api";
 // eriphe-core sends it. A block someone else's words may have written
 // (external) is marked so: there, a Proposal can only ask.
 
-export type Piece = { kind: "text"; text: string } | { kind: "block"; surface: string; block: PageBlock } | { kind: "broken"; name: string; error: string };
+export type Piece =
+  | { kind: "text"; text: string }
+  | { kind: "block"; surface: string; block: PageBlock }
+  | { kind: "card"; surface: string; name: string; ref: string; found: boolean }
+  | { kind: "broken"; name: string; error: string };
 
 // surfaceOf names a block's surface: its node and its name, which both
 // keep to [A-Za-z0-9_-].
@@ -22,7 +26,11 @@ export function pieces(page: NodePage): Piece[] {
   for (const p of page.parts ?? []) {
     if (p.block) {
       const b = p.block;
-      if (b.error || !Array.isArray(b.components)) out.push({ kind: "broken", name: b.name, error: b.error ?? "" });
+      if (b.error) out.push({ kind: "broken", name: b.name, error: b.error });
+      // A card block: the card itself is eriphe-core's (proposal), drawn
+      // from its records; none when it is not one of the node's.
+      else if (b.card) out.push({ kind: "card", surface: surfaceOf(page.node.id, b.name), name: b.name, ref: b.card, found: !!b.proposal && b.proposal.ref === b.card });
+      else if (!Array.isArray(b.components)) out.push({ kind: "broken", name: b.name, error: "" });
       else out.push({ kind: "block", surface: surfaceOf(page.node.id, b.name), block: b });
     } else if (typeof p.text === "string" && p.text.trim()) out.push({ kind: "text", text: p.text });
   }

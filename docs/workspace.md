@@ -20,9 +20,11 @@ the screen points to it: click it to open it), what is running turns and says wh
 done or old fades. A bubble whose title could be someone else's words (a mail's subject, say) is
 named **Outside content**: its own words are never shown as a title.
 
-At the bottom, the **console**: the one field to write to Eriphe, with its orb, and above it, on a
-panel of its own, your last question in grey (click it to read it whole), Eriphe's latest line and
-the replies it suggests.
+At the bottom, the **bar**: the one field to write to Eriphe, with its orb, and above it, on a
+panel of its own, your last question in grey (click it to read it whole) and one line of Eriphe's,
+the first of its answer, which fades after a few seconds. The bar is only a bar: no history, no
+buttons. The conversation is the subject's page: what Eriphe has to say at length, its questions and
+the buttons that answer them are written there.
 
 ## Open a page
 
@@ -42,19 +44,22 @@ A page shows:
   task wrote meanwhile), nothing is saved: the page shows that version, and you take it or keep
   your text to save it over;
 - its **versions** (v1, v2…): an older one shows as it was;
-- at its foot, the cards waiting for your answer: what a yes makes in plain words first, the
-  technical details (sources, monitor, trigger, the skill's instructions) one click away under
-  **Details**;
+- the cards waiting for your answer, where Eriphe placed them in the page (under « Ce qu'on a
+  décidé », say), else at its foot: what a yes makes in plain words first, the technical details
+  (sources, monitor, trigger, the skill's instructions) one click away under **Details**. A card in
+  the page is drawn by Eriphe's code from its records, never from the page's words: once answered it
+  says **Approved** or **Declined**, and **Proposal withdrawn** when it went with its archived page; a
+  card that is not this page's shows as **Card not found**, with no Yes;
 - **Archive**: see below.
 
-The console talks to the page you opened or clicked last: « Write to Eriphe about Plan of the first
+The bar talks to the page you opened or clicked last: « Write to Eriphe about Plan of the first
 article ». With no page open it talks to the home. Close every page, or click Eriphe's name, to go
-home. The camera frames every open page when they fit readably, otherwise the one the console talks
+home. The camera frames every open page when they fit readably, otherwise the one the bar talks
 to; the others stay open where they are.
 
 A link may open a page directly: `/espace?open=node-<id>`. When Eriphe wants to show you something,
-it opens its page beside yours; the console stays where you were, its answer under your question:
-only your own click moves it.
+it opens its page beside yours; the bar stays where you were, its line under your question: only
+your own click moves it.
 
 When a work Eriphe ran ends, what it made for you (its last step, « Plan of the first article »)
 waits for you, the work around it done. It stops waiting when you say it suits you (« Ce plan me
@@ -63,7 +68,7 @@ something in it: a step opened empty for its task to write starts at v1 with the
 
 On a phone the graph gives way to a list: each subject, its bubbles under it, in the order they were
 made, what waits for you or runs said on its line. A tap opens its page over the list; closing it
-brings the list back. The console is the same.
+brings the list back. The bar is the same.
 
 ## Move things
 
@@ -85,19 +90,26 @@ never archives by itself; ask it to and it tells you where the button is. **Arch
 lists what you archived, latest first, each with **Reopen**: the bubble comes back with what was
 archived with it.
 
-In a block, a button Eriphe wrote sends its words to Eriphe about that page, and a mark (keep, drop,
-done) is kept by Eriphe's code; neither works on an older version, nor in a block marked « outside ».
+In a block, a button Eriphe wrote sends its words to Eriphe about that page, as if you had typed
+them (that is how you answer its questions: « Do as you propose » takes every default it wrote), and
+a mark (keep, drop, done) is kept by Eriphe's code; neither works on an older version, nor in a
+block marked « outside ».
 
 ## Ask for something
 
-Write to Eriphe, in the console:
+Write to Eriphe, in the bar:
 
 > Show me this week's unread mails.
 
 Eriphe answers by **showing**: the subject's page opens in front of you with what you need to know,
-like a dashboard, and the conversation goes on there. Asked from the home, the console moves into
+like a dashboard, and the conversation goes on there. Asked from the home, the bar moves into
 that page; asked from a page, the new one opens beside it. Only a one-line answer ("done", the
-time, a figure) stays in the console.
+time, a figure) stays in the bar.
+
+Each exchange rewrites the subject's page: the questions you answered go, what you chose is written
+under « Ce qu'on a décidé », and what comes next shows. When a part of it moves on in a bubble of its
+own (a research done, an angle chosen in « Choisir l'angle », a new version of the article), Eriphe
+updates the main page too: its summary, its plan, what remains.
 
 To have something done **on the side** ("run a research on this aside", "look at my mail and
 analyze it, but on the side"), say so: Eriphe opens its bubble without showing it (under the page
@@ -126,11 +138,12 @@ what it asks of you (a draft and its card). Asked from the home, the subject ope
 eye on my mail"), and Eriphe asks there before setting up anything that will run on its own: one
 message with the few questions that change it (which accounts, which senders or kinds of mail
 matter, whether and when to tell you, at night included, what to prepare for your yes and what
-only to note), each with what it will do if you say nothing, and suggested replies to answer in
-one click ("Do as you propose"). It skips what you already said or what it remembers, and asks
-once (twice only if an answer opens something essential). Then it proposes the whole view on **one
-card**, at the foot of that page: its page, the monitor and the skill together, the card recalling
-your choices, and nothing exists before your yes. Your yes opens the view. What you said matters
+only to note), each with what it will do if you say nothing, written in that page with buttons to
+answer in one click, one of them taking every default ("Do as you propose"). It skips what you
+already said or what it remembers, and asks once (twice only if an answer opens something
+essential). Then it proposes the whole view on **one card**, placed in that page under what you
+decided: its page, the monitor and the skill together, the card recalling your choices, and
+nothing exists before your yes. Your yes opens the view. What you said matters
 to you is remembered as a preference; when to tell you is a notification rule.
 
 What you want to see once ("open the production for me") is not a view: Eriphe opens a bubble
@@ -162,28 +175,27 @@ forget one. There is no settings page for the workspace and no rule to maintain.
 ## Proposals
 
 - **A proposal runs only after your yes.** When Eriphe proposes something (an event to add, a reply
-  to send, a new skill), it shows as a card with **Yes** and **No**, at the foot of its page and in
-  the console. A card that belongs to no page shows in the console, wherever you are, until
-  you answer it: no card waits out of sight. A proposed appointment shows on a day's block as a ghost marked **Proposed**.
+  to send, a new skill), it shows as a card with **Yes** and **No**, in its page. A card that
+  belongs to no page shows above the bar, wherever you are, until you answer it: no card waits
+  out of sight (the only buttons the bar ever has). A proposed appointment shows on a day's block as a ghost marked **Proposed**.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows
   **Approved · running…**, then **done** or **failed** with why.
 - **Content from outside cannot act.** A block that may carry someone else's words is marked
-  « outside »: a proposal shown inside it has no Yes / No but says to answer it in the console.
+  « outside »: a proposal shown inside it has no Yes / No but says to answer it in the conversation.
   A mail that says "click here to approve" cannot make anything happen.
 
 ## Where the conversation is
 
 The workspace is the only place to talk to Eriphe on the web: there is no separate conversation
-page. The console shows only the last exchange of the page it talks to; its speech-bubble button
-opens that page's conversation, and **Earlier messages** brings a few more lines at a time. The
-tasks at work, and how reliable they were lately, are in Settings → Journal; each task has its own
+page, and no history under the bar: the subject's page is the conversation, and Eriphe keeps it
+saying where things stand. The tasks at work, and how reliable they were lately, are in Settings → Journal; each task has its own
 page there, with its trace, **Stop**, and the answer it waits for. The settings and the memory have
 no top bar: **Workspace**, at the top of their menu, leads back.
 
 While the workspace is open in front of you, Eriphe knows you are there: a notification shows as a
 small notice in the page rather than on your phone. If the workspace cannot open on a device (an
 old browser, a script blocked, Eriphe out of reach for a while), the page says so with a link to
-try again. If Eriphe cannot answer, the console says so, with **Try again** and a link to Settings →
+try again. If Eriphe cannot answer, the bar says so, with **Try again** and a link to Settings →
 Agents.
 
 ## Where the work runs: devices

@@ -54,7 +54,7 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 	if x, ok := c.lastShown(); !ok || x.Node != subject || !x.Talk {
 		t.Errorf("the subject is not opened with the console: %+v", x)
 	}
-	if lines, _, _ := c.store.lastExchange(subject); len(lines) != 2 || lines[0].Role != roleUser {
+	if lines, _ := c.store.lastExchange(subject); len(lines) != 2 || lines[0].Role != roleUser {
 		t.Errorf("the subject's exchange: %+v", lines)
 	}
 

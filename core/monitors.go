@@ -768,6 +768,7 @@ func (c *core) writeMonitor(name string, s monitorSpec, tainted []string) (map[s
 	raw, _ := json.Marshal(s)
 	now := time.Now().Unix()
 	m, err := c.monitorNamed(name)
+	var card string // its card's ref, for a card block (cardProposed)
 	switch {
 	case err == sql.ErrNoRows:
 		var n int
@@ -781,25 +782,25 @@ func (c *core) writeMonitor(name string, s monitorSpec, tainted []string) (map[s
 			return nil, err
 		}
 		id, _ := res.LastInsertId()
-		c.cardProposed(cardMonitor, id)
+		card = c.cardProposed(cardMonitor, id)
 	case err != nil:
 		return nil, err
 	case m.Spec.Way == wayListen:
 		return nil, fmt.Errorf("%q is an address the user made: pick another name", name)
 	case m.State == monitorProposed:
 		c.store.db.Exec(`UPDATE monitors SET spec = ?, tainted = ?, updated = ? WHERE id = ?`, string(raw), strings.Join(tainted, ", "), now, m.ID)
-		c.cardProposed(cardMonitor, m.ID)
+		card = c.cardProposed(cardMonitor, m.ID)
 	default:
 		old, _ := json.Marshal(m.Spec)
 		if string(old) == string(raw) {
 			return map[string]any{"result": "the same as the monitor already approved: nothing to approve"}, nil
 		}
 		c.store.db.Exec(`UPDATE monitors SET pending = ?, tainted = ?, updated = ? WHERE id = ?`, string(raw), strings.Join(tainted, ", "), now, m.ID)
-		c.cardProposed(cardMonitor, m.ID)
+		card = c.cardProposed(cardMonitor, m.ID)
 	}
 	return map[string]any{"result": "proposed; it waits for the user's approval on its card, then looks as it says. " +
 		"A skill reacts to its events with when: " + evMonitorChanged + " key=" + name + " (or " + evMonitorNew + ", " + evMonitorCrossed + " holds=true, " + evMonitorFailed + ")",
-		"monitor": name}, nil
+		"monitor": name, "card": card}, nil
 }
 
 // checkMonitor checks a monitor the brain proposes, completing its spec

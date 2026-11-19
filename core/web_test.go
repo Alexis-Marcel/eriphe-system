@@ -593,7 +593,7 @@ func TestWebEventsStream(t *testing.T) {
 			asked = true
 			continue
 		}
-		if strings.Contains(data, `"text":"a new **answer**"`) {
+		if strings.Contains(data, `"said":{"seq":`) && strings.Contains(data, `"text":"a new answer"`) { // its first line, plain
 			return
 		}
 	}

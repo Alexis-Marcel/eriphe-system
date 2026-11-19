@@ -62,7 +62,7 @@ func TestNetFilesLongAnswerInNewNode(t *testing.T) {
 	if d.Node.Meta.Title != "Compare les devis du garage" || !strings.HasPrefix(d.Node.Text(), "Voici le comparatif") || d.Node.Meta.External {
 		t.Fatalf("node %+v: %q", d.Node.Meta, d.Node.Text())
 	}
-	lines, _, _ := c.store.lastExchange(m.Filed)
+	lines, _ := c.store.lastExchange(m.Filed)
 	if len(lines) != 2 || lines[0].Role != roleUser || lines[1].Filed != m.Filed {
 		t.Errorf("the exchange did not move into its node: %+v", lines)
 	}
@@ -117,6 +117,40 @@ func TestNetLeavesFiledAndShortAnswers(t *testing.T) {
 	for _, x := range []*core{c, c2} {
 		if all, _ := x.nodes.Recent(true, 10); len(all) != 0 {
 			t.Errorf("a node opened: %+v", all)
+		}
+	}
+}
+
+// Said in a node, an answer the bar does not show whole (it shows its
+// first line) is filed there, short as it is; a one-line answer is not.
+func TestNetFilesWhatTheBarCuts(t *testing.T) {
+	for _, c := range []struct {
+		answer string
+		filed  bool
+	}{
+		{"C'est noté.", false},
+		{"C'est noté.\n\nJe garde l'angle des managers, et le plan en trois parties.", true},
+	} {
+		x, report, _ := brainReports(t)
+		openGraph(t, x)
+		d, err := x.nodes.Create(nodestore.New{Title: "Écrire l'article", Body: "Le plan.\n", Author: byBrain})
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := d.Node.Meta.ID
+		seq, _ := x.store.addUserMessage("Garde cet angle.", nil, id)
+		x.turn.start(int(seq), int(seq), 0)
+		x.turn.answersIn(id)
+		report("t-brain", deviceReport{State: stateIdle, Events: []EventRow{
+			{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": c.answer}},
+			{Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success", "result": c.answer}}}})
+		m := lastBrainMessage(t, x)
+		trace, _ := x.nodes.Trace(id)
+		if (m.Filed == id) != c.filed || strings.Contains(string(trace), "trois parties") != c.filed {
+			t.Errorf("%q: filed %q, trace %q", c.answer, m.Filed, trace)
+		}
+		if got, _ := x.nodes.Read(id, 0); got.Node.Text() != "Le plan.\n" {
+			t.Errorf("%q: the doc was replaced: %q", c.answer, got.Node.Text())
 		}
 	}
 }
@@ -256,7 +290,7 @@ func TestStoreAddsMessagesNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.db.Close()
-	lines, _, err := s.lastExchange("")
+	lines, err := s.lastExchange("")
 	if err != nil || len(lines) != 1 || lines[0].Text != "Bonjour" {
 		t.Fatalf("exchange %+v %v", lines, err)
 	}

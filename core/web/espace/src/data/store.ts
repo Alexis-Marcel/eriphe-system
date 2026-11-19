@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { Exchange, GraphNode, Moved, Note, Place, Theme, View } from "./api";
+import type { BarLine, Exchange, GraphNode, Moved, Note, Place, Theme, View } from "./api";
 
 // The workspace's state: the graph as eriphe-core streams it (stream.ts),
 // and what the user has open. The graph is core's: the page never changes a
@@ -144,11 +144,11 @@ export function applyShow(s: State, ev: Shown, now = Date.now()): State {
 // The "exchange" event: the exchange of the node the console talks to; one
 // of another (the stream not yet moved) is not shown.
 export function applyExchange(s: State, x: Exchange): State {
-  if (!x || !Array.isArray(x.lines)) return s;
+  if (!x || typeof x !== "object") return s;
   if ((x.node ?? null) !== s.talk) return s;
-  const suggestions = Array.isArray(x.suggestions) ? x.suggestions.filter((t) => typeof t === "string") : undefined;
+  const line = (l: unknown) => (l && typeof l === "object" && typeof (l as BarLine).seq === "number" && typeof (l as BarLine).text === "string" ? (l as BarLine) : undefined);
   const cards = Array.isArray(x.cards) ? x.cards.filter((t) => typeof t === "string") : undefined;
-  return { ...s, exchange: { ...x, suggestions, cards } };
+  return { ...s, exchange: { ...x, asked: line(x.asked), said: line(x.said), draft: typeof x.draft === "string" ? x.draft : undefined, cards } };
 }
 
 // NOTES_KEPT is how many notices show at once.

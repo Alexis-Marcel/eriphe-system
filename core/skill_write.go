@@ -125,9 +125,9 @@ func (c *core) writeSkill(in writeSkillIn, tainted []string) (map[string]any, er
 	if len(tainted) > 0 {
 		c.store.set(skillTaintKey(k.Name, k.Pending), strings.Join(tainted, ", "))
 	}
-	c.cardProposed(cardSkill, id)
+	card := c.cardProposed(cardSkill, id)
 	return map[string]any{"result": "written; it waits for the user's approval on its card, then runs as it says",
-		"skill": k.Name, "see": "/settings/skills/" + k.Name}, nil
+		"skill": k.Name, "card": card, "see": "/settings/skills/" + k.Name}, nil
 }
 
 func skillTaintKey(name, sha string) string { return "skill_taint:" + name + ":" + sha }

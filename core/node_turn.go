@@ -283,6 +283,17 @@ func (c *core) cardNodes(ref string) []string {
 	return out
 }
 
+// nodeHasCard tells a card linked to node id, waiting or not: one raised
+// for it, which a card block of its document may place (nodeGuard).
+func (c *core) nodeHasCard(id, ref string) bool {
+	if id == "" {
+		return false
+	}
+	var n int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM node_cards WHERE node = ? AND ref = ?`, id, ref).Scan(&n)
+	return n > 0
+}
+
 // nodeCardWaits tells a node one of whose linked cards waits for the
 // user.
 func (c *core) nodeCardWaits(id string) bool {

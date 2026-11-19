@@ -59,6 +59,5 @@ func (c *core) brainWrote(a Assistant, t *TaskRow, events bool, draft string) {
 	if toolCallStart(draft) {
 		draft = "" // a tool call being written as text is not shown (brain_toolcall.go)
 	}
-	draft = draftText(draft) // nor its suggested replies (brain_suggest.go)
 	c.draft.set(draft, c.store.lastMessageSeq())
 }

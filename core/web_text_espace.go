@@ -83,14 +83,10 @@ var espaceStrings = map[string]map[string]string{
 
 		// La console : la conversation de la page à qui elle parle, et les
 		// notifications de l'onglet (console/, hud/).
-		"espace.exchange":          "La conversation",
-		"espace.exchange.via":      "Toi, via %s",
 		"espace.exchange.writing":  "{{name}} écrit…",
 		"espace.exchange.error":    "{{name}} n'a pas pu répondre.",
 		"espace.exchange.account":  "Vérifier son compte IA",
-		"espace.exchange.earlier":  "Messages d'avant",
 		"espace.exchange.external": "Écrit après avoir lu un contenu extérieur",
-		"espace.exchange.replies":  "Réponses suggérées",
 		"espace.exchange.asked":    "Ta question :",
 		"espace.exchange.cards":    "Ce qui attend ta réponse",
 		"espace.notices":           "Notifications",
@@ -129,7 +125,8 @@ var espaceStrings = map[string]map[string]string{
 		"espace.a2.proposal":                "Proposition",
 		"espace.a2.proposal.approved":       "Validé",
 		"espace.a2.proposal.rejected":       "Refusé",
-		"espace.a2.proposal.gone":           "Retiré",
+		"espace.a2.proposal.gone":           "Proposition retirée",
+		"espace.card.missing":               "Carte introuvable : elle n'est pas une proposition de ce sujet.",
 		"espace.a2.proposal.none":           "Cette proposition n'existe plus.",
 		"espace.a2.proposal.failed":         "La réponse n'est pas partie : réessaie.",
 		"espace.a2.proposal.details":        "Détails",
@@ -227,14 +224,10 @@ var espaceStrings = map[string]map[string]string{
 
 		// The console: the conversation of the page it talks to, and the
 		// tab's notifications (console/, hud/).
-		"espace.exchange":          "The conversation",
-		"espace.exchange.via":      "You, via %s",
 		"espace.exchange.writing":  "{{name}} is writing…",
 		"espace.exchange.error":    "{{name}} could not answer.",
 		"espace.exchange.account":  "Check its AI account",
-		"espace.exchange.earlier":  "Earlier messages",
 		"espace.exchange.external": "Written after reading external content",
-		"espace.exchange.replies":  "Suggested replies",
 		"espace.exchange.asked":    "Your question:",
 		"espace.exchange.cards":    "Waiting for your answer",
 		"espace.notices":           "Notifications",
@@ -273,7 +266,8 @@ var espaceStrings = map[string]map[string]string{
 		"espace.a2.proposal":                "Proposal",
 		"espace.a2.proposal.approved":       "Approved",
 		"espace.a2.proposal.rejected":       "Declined",
-		"espace.a2.proposal.gone":           "Withdrawn",
+		"espace.a2.proposal.gone":           "Proposal withdrawn",
+		"espace.card.missing":               "Card not found: it is not a proposal of this subject.",
 		"espace.a2.proposal.none":           "This proposal no longer exists.",
 		"espace.a2.proposal.failed":         "The answer was not sent: try again.",
 		"espace.a2.proposal.details":        "Details",

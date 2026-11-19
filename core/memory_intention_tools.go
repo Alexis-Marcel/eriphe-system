@@ -151,7 +151,7 @@ func (c *core) brainIntend(in intendIn) (map[string]any, error) {
 	if got.ID != x.ID {
 		out["note"] = "Already recorded: intention " + fmt.Sprint(got.ID) + "."
 	} else if got.State == intentProposed {
-		c.cardProposed(cardIntention, got.ID)
+		out["card"] = c.cardProposed(cardIntention, got.ID)
 		out["note"] = "Only proposed: " + d.Why + ". " + cardNote(c.conf().User)
 	}
 	return out, nil

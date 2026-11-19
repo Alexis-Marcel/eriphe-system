@@ -7,8 +7,6 @@ import strings from "../strings.json";
 // - GET /api/nodes/{id}[?version=n]: a node's page, its text and its
 //   blocks ready to draw, its versions, the cards it waits on (web_graph.go);
 // - GET /api/nodes/{id}/trace and /md: its trace, its file as it is;
-// - GET /api/earlier?before=&node=: a node's (or the home's) lines before
-//   the last exchange, a few at a time (web_console.go);
 // - GET /api/proposals/{ref}, ?day=: a proposal a block shows, those of a
 //   day (web_proposals.go);
 // - GET /api/archives: what the user archived;
@@ -150,7 +148,17 @@ export type PageVersion = { n: number; author: string; at: string };
 export type PagePart = { text?: string; block?: PageBlock };
 // A block ready to draw: its components and its data, the sources' last
 // values at /<name>, the user's marks at /marks; or what is wrong with it.
-export type PageBlock = { name: string; external?: boolean; components: unknown[] | null; data: Record<string, unknown> | null; error?: string };
+// A card block names one of the node's cards (card), with the card as
+// eriphe-core's records say it (proposal); none when it is not the node's.
+export type PageBlock = {
+  name: string;
+  external?: boolean;
+  components: unknown[] | null;
+  data: Record<string, unknown> | null;
+  error?: string;
+  card?: string;
+  proposal?: ProposalView;
+};
 
 export type TraceEntry = { at: string; author: string; text: string };
 // A node's file as it is (md), its body as the user edits it (body), the
@@ -223,43 +231,31 @@ export async function putView(v: View, keepalive = false): Promise<boolean> {
   return (await sendJSON("PUT", "/api/espace/view", v, keepalive)).status === 204;
 }
 
-// A line of the conversation (exchangeLine, web_console.go): the user's
-// (via: where they said it, when not here), Eriphe's (external: written
-// after reading external content; filed: the node code filed it in), or an
-// error, without its text.
-export type ExchangeLine = { seq: number; role: "user" | "brain" | "error"; text?: string; via?: string; time: string; external?: boolean; filed?: string };
+// A line of the bar (barLine, web_console.go): its message's seq and its
+// text, plain; external: Eriphe's, written after reading external content.
+export type BarLine = { seq: number; text: string; external?: boolean };
 
-// The "exchange" event: the last exchange of the node the console talks to
-// (node), or the home's; whether lines come before it, the message Eriphe
-// is writing, whether it is at work, the replies its last line suggests,
-// the cards no node holds.
+// The "exchange" event: what the bar shows of the node it talks to (node),
+// or of the home: the user's last message (asked), Eriphe's line (said:
+// the first line of its last answer, the rest in the subject), whether it
+// could not answer (failed), the first line of what it is writing, whether
+// it is at work, the cards no node holds.
 export type Exchange = {
   node?: string;
   title?: string;
-  lines: ExchangeLine[];
-  earlier?: boolean;
+  asked?: BarLine;
+  said?: BarLine;
+  failed?: boolean;
   draft?: string;
   thinking?: boolean;
-  suggestions?: string[];
-  // The cards that wait and no node holds (their refs): the console shows
+  // The cards that wait and no node holds (their refs): the bar shows
   // them, wherever it talks, so that none waits out of sight.
   cards?: string[];
 };
 
-export type Earlier = { lines: ExchangeLine[]; more: boolean };
-
-// earlier reads the lines of a node's exchange (none: the home's) before
-// the line seq.
-export async function earlier(before: number, node?: string): Promise<Earlier> {
-  const of = node ? `&node=${encodeURIComponent(node)}` : "";
-  return (await getJSON<Earlier>(`/api/earlier?before=${before}${of}`)) ?? { lines: [], more: false };
-}
-
-// send writes to Eriphe, said to a node (it belongs to it) or to the home,
-// typed in the workspace or a reply it suggested, chosen (from
-// "suggestion": never a card's answer).
-export function send(text: string, node?: string | null, from: "workspace" | "suggestion" = "workspace"): Promise<boolean> {
-  const body = new URLSearchParams({ text, from });
+// send writes to Eriphe, said to a node (it belongs to it) or to the home.
+export function send(text: string, node?: string | null): Promise<boolean> {
+  const body = new URLSearchParams({ text, from: "workspace" });
   if (node) body.set("node", node);
   return post("/messages", body);
 }
