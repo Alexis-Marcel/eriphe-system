@@ -3142,8 +3142,11 @@ token in `X-CSRF-Token`:
 - `graph/`: the layout (`layout.ts`, a small force simulation): roots held to their home (where
   they first found room, `homesFor`: a new subject never moves the others), children pulled to
   their parent, links as weak springs, every bubble and its label a box that pushes the others
-  away. An open page is a box node of its measured size: the others make room around it and
-  nothing else moves; closed, the subjects go back home. The user drags a bubble anywhere it
+  away. An open page is a box node of its measured size (measured again whenever its content
+  changes, at most what the screen holds above the bar): the others make room around it and
+  nothing else moves; closed, the subjects go back home. Open pages are solid boxes to each
+  other: of two that overlap (one born on the other, one that grew), the later opened steps
+  aside, sideways when it can, never the one held, and an open page is not pulled back home. The user drags a bubble anywhere it
   stays reachable: a subject within a step (380 px) of the nearest other subject, measured from the
   edge of an open page, a bubble within 300 px of its parent; past it the bubble lags behind by a
   rubber band (0.3), and dropped there it comes back to the edge. A dropped bubble stays exactly
@@ -3151,12 +3154,14 @@ token in `X-CSRF-Token`:
   needs the room, and eriphe-core keeps the place. Near the screen's edge the camera scrolls, driven by the dragged bubble's place
   on screen, not the pointer: a 110 px zone, after 200 ms, speeding up over 700 ms to 16 px a
   frame. The camera (`camera.ts`) frames every open page if they fit at a scale of 0.8 or more,
-  else the page the bar talks to, the others open in place; with no page open, the whole
-  graph. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
+  else the page in focus (the last one opened, Eriphe's show too, or the one the user turned
+  to), whole, its head on screen and its foot above the bar's zone, the others open in place;
+  with no page open, the whole graph. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
   gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
   bigger, what waits for the user brighter, what runs a little, what is done or old quieter. Under
   760 px wide the graph is a list (`graph/List.tsx`, `listOrder`): each subject, then its bubbles
-  under it, depth first, in the order they were made; a tap opens its page alone over the list.
+  under it, depth first, in the order they were made; a tap opens its page alone over the list,
+  and a page shown from it takes the screen (the bar with it) until it closes.
 - `page/`: a page in the graph, any number open: a click opens one alone, ⌘, Ctrl or shift with
   the click one more. Dragged by its head; its head says what it belongs to, its title, its date
   (`stamp`, in the browser's time: today the time alone, yesterday « hier, 13 h 13 », this year

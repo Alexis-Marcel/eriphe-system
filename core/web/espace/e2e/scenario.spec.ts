@@ -240,9 +240,18 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(details).not.toContainText("**chaque**");
   await details.locator(".a2-proposal-md").scrollIntoViewIfNeeded();
   await shot(page, "view-card-details", true);
+  // On a laptop's screen, where two pages side by side do not fit.
+  await page.setViewportSize({ width: 1180, height: 720 });
   await viewCard.getByRole("button", { name: "Oui" }).click();
   await expect(bubble("Mes mails")).toBeVisible();
   await expect(pageOf("Mes mails")).toBeVisible();
+  // Opened beside the subject, the view's page takes free room next to
+  // it: the two never overlap, the new one is framed whole, its head on
+  // screen, and no page goes under the bar.
+  await settledBox(pageOf("Mes mails"));
+  await shot(page, "view-beside", false);
+  await expectApart(page, [watch, pageOf("Mes mails")]);
+  await page.setViewportSize({ width: 1440, height: 900 });
   // Answered, the card stays in the document and says so.
   await expect(viewCard.locator(".a2-proposal-kicker")).toContainText("Validé");
   await expect(viewCard.getByRole("button", { name: "Oui" })).toHaveCount(0);
@@ -437,6 +446,43 @@ async function openMail(page: Page, id: string) {
   await expect(page.locator("article.pg")).toHaveCount(0);
   await page.locator(`[data-node="${id}"] .gr-core`).click();
   await expect(page.locator(`article.pg[aria-label="${external}"]`)).toBeVisible();
+}
+
+// settledBox waits until a page stopped moving (the camera and its spring
+// at rest).
+async function settledBox(el: Locator): Promise<void> {
+  let last = await el.boundingBox();
+  for (let i = 0; i < 40; i++) {
+    await el.page().waitForTimeout(150);
+    const now = await el.boundingBox();
+    if (last && now && Math.abs(now.x - last.x) + Math.abs(now.y - last.y) + Math.abs(now.width - last.width) < 0.5) return;
+    last = now;
+  }
+}
+
+// expectApart checks open pages: no two overlap, the last one opened is
+// whole on screen, its head in view, and none goes under the bar.
+async function expectApart(page: Page, pages: Locator[]): Promise<void> {
+  const view = page.viewportSize()!;
+  const bar = (await page.locator(".cs").boundingBox())!;
+  const boxes = await Promise.all(pages.map(async (p) => (await p.boundingBox())!));
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i], b = boxes[j];
+      const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+      expect(apart, `pages ${i} and ${j} overlap`).toBe(true);
+    }
+  }
+  const last = boxes.at(-1)!;
+  const head = (await pages.at(-1)!.locator(".pg-head").boundingBox())!;
+  expect(head.y).toBeGreaterThanOrEqual(0);
+  expect(last.x).toBeGreaterThanOrEqual(0);
+  expect(last.x + last.width).toBeLessThanOrEqual(view.width);
+  // a page in view ends above the bar zone: its last line is not under it
+  for (const b of boxes) {
+    const seen = b.x + b.width > 0 && b.x < view.width;
+    if (seen && b.x < bar.x + bar.width && bar.x < b.x + b.width) expect(b.y + b.height).toBeLessThanOrEqual(bar.y);
+  }
 }
 
 // settled is where a bubble is once it stopped moving.
