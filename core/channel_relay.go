@@ -162,8 +162,8 @@ func (c *core) channelCards() {
 	if len(on) == 0 {
 		return
 	}
-	xs, err := c.cardsWhere(`seq > 0 AND state = ? AND kind != ? AND attached >= ? ORDER BY id`,
-		cardPending, cardDigest, time.Now().Add(-24*time.Hour).Unix())
+	xs, err := c.cardsWhere(`seq > 0 AND state = ? AND attached >= ? ORDER BY id`,
+		cardPending, time.Now().Add(-24*time.Hour).Unix())
 	if err != nil {
 		return
 	}

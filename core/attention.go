@@ -185,7 +185,7 @@ func (c *core) attendCard(x convoCard, p proposal, say, source string) {
 // attendCardHeld is attendCard without the delivery: false when the card
 // does not enter.
 func (c *core) attendCardHeld(x convoCard, p proposal, say, source string) bool {
-	if x.Kind == cardDigest || x.State != cardPending {
+	if x.State != cardPending {
 		return false
 	}
 	text := p.Text(c.userLang())
@@ -425,7 +425,7 @@ const cardsAttendedEachMax = 50
 // each, delivered together.
 func (c *core) attendQueuedCards() {
 	c.syncCards()
-	queued, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? AND kind != ? ORDER BY id LIMIT ?`, cardPending, cardDigest, cardsAttendedEachMax)
+	queued, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? ORDER BY id LIMIT ?`, cardPending, cardsAttendedEachMax)
 	if err != nil {
 		return
 	}
