@@ -135,7 +135,7 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
   // one the user dropped (unless a page needs the room), then the open
   // pages, the first opened last, then the bubbles; of a rank, a new
   // bubble before one already in place (share)
-  const rank = (x: LNode) => (held?.id === x.id ? 0 : pinned(x) ? 1 : x.box ? 2 + (x.opened ?? 0) : BUBBLE);
+  const rank = (x: LNode) => (held?.id === x.id ? HELD : pinned(x) ? 1 : x.box ? 2 + (x.opened ?? 0) : BUBBLE);
   const share = (x: LNode) => (fresh.has(x.id) || !settled ? 2 : 1);
   const bodies = (strength: number) => collide(nodes, p, v, rank, share, strength);
 
@@ -252,15 +252,25 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
       p[x.id] = [p[x.parent][0] + rel[0], p[x.parent][1] + rel[1]];
     }
   }
+  // what barely moved stays where it was: laid out again, nothing creeps
+  for (const x of nodes) {
+    const was = prev[x.id];
+    if (was && held?.id !== x.id && !pinned(x) && Math.hypot(p[x.id][0] - was[0], p[x.id][1] - was[1]) < STILL) p[x.id] = [...was];
+  }
   // and in the end no two bodies sit on each other, whatever pulled them
   for (let i = 0; i < 64 && bodies(1); i++);
   return p;
 }
 
+// STILL is how far a node may be found from where it was and stay there.
+const STILL = 10;
+
 // SOFT is how much of their overlap two bodies that touch undo at each
 // step of the simulation: a soft push, finished over a few steps.
 const SOFT = 0.5;
-// BUBBLE is a bubble's rank: below every open page.
+// HELD is the rank of the node held, BUBBLE a bubble's: below every open
+// page.
+const HELD = 0;
 const BUBBLE = 1e6;
 
 // collide is the graph's one collision: every body (a bubble with its
@@ -268,8 +278,10 @@ const BUBBLE = 1e6;
 // every other. Two that overlap part along the shorter way out, sideways
 // when it is not much longer (the screen is wide), by strength of their
 // overlap. Of the two, the one of higher rank steps aside alone; of the
-// same rank, each by its share (two opened together part halfway). It
-// tells whether it moved one.
+// same rank, each by its share (two opened together part halfway). A child
+// gives way to its parent, unless held: its parent is not pushed away by
+// it. A bubble held moves no page: it passes over it. It tells whether it
+// moved one.
 function collide(nodes: LNode[], p: Pos, v: Pos, rank: (x: LNode) => number, share: (x: LNode) => number, strength: number): boolean {
   let moved = false;
   for (let i = 0; i < nodes.length; i++) {
@@ -280,9 +292,12 @@ function collide(nodes: LNode[], p: Pos, v: Pos, rank: (x: LNode) => number, sha
       const ox = ha + hb - Math.abs(dx);
       const oy = Math.min(ba, bb) - Math.max(ta, tb);
       if (ox <= 0.5 || oy <= 0.5) continue;
-      moved = true;
       const ra = rank(a), rb = rank(b);
-      const sb = ra === rb ? share(b) / (share(a) + share(b)) : rb > ra ? 1 : 0, sa = 1 - sb;
+      if ((ra === HELD && !a.box && b.box) || (rb === HELD && !b.box && a.box)) continue;
+      moved = true;
+      const sb =
+        b.parent === a.id && rb !== HELD ? 1 : a.parent === b.id && ra !== HELD ? 0 : ra === rb ? share(b) / (share(a) + share(b)) : rb > ra ? 1 : 0;
+      const sa = 1 - sb;
       if (ox <= oy * 1.5) {
         // one right on the other: the way out comes from their names
         const s = (Math.abs(dx) > 0.01 ? Math.sign(dx) : hash(a.id + b.id) < 0.5 ? 1 : -1) * (ox + 0.5) * strength;

@@ -290,6 +290,36 @@ describe("the layout", () => {
     for (const n of nodes) if (n.id !== "a") expect(overlap(nodes[0], dropped.a, n, dropped[n.id]), `a on ${n.id}`).toBeLessThanOrEqual(0.5);
   });
 
+  it("moves a subject not for its own bubble dropped on its label: the bubble steps aside", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const pins = { b1: { rel: [-120, 90] as Pt } };
+    let at = simulate(nodes, pos, homes, pins);
+    const first = at.b;
+    for (let i = 0; i < 5; i++) at = simulate(nodes, at, homes, pins);
+    expect(dist(at.b, first)).toBeLessThan(1);
+    expect(overlap(nodes.find((n) => n.id === "b")!, at.b, nodes.find((n) => n.id === "b1")!, at.b1)).toBeLessThanOrEqual(0.5);
+  });
+
+  it("lets a bubble dragged pass over an open page, which does not move", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const ns = nodes.map((n) => (n.id === "a" ? { ...n, box: [640, 420] as Pt, opened: 0 } : n));
+    const open = simulate(ns, pos, homes);
+    const over = simulate(ns, open, homes, {}, { id: "c", at: open.a }, 24);
+    expect(over.c).toEqual(open.a);
+    expect(dist(over.a, open.a)).toBeLessThan(1);
+  });
+
+  it("moves nothing when laid out again, even where children press on each other", () => {
+    const nodes = graph();
+    for (let i = 3; i < 8; i++) nodes.push(bubble(`a${i}`, "a"));
+    const { homes, pos } = settle(nodes);
+    let at = pos;
+    for (let i = 0; i < 3; i++) at = simulate(nodes, at, homes);
+    for (const n of nodes) expect(dist(at[n.id], pos[n.id]), n.id).toBeLessThan(1);
+  });
+
   it("tethers a bubble to its parent", () => {
     expect(tether([100, 0], [0, 0], [TETHER, TETHER], true)).toEqual([100, 0]);
     expect(tether([500, 0], [0, 0], [TETHER, TETHER], true)[0]).toBeCloseTo(TETHER);
