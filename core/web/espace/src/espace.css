@@ -649,31 +649,27 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 @keyframes shim { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 /* ---------- the head-up display (hud/) ---------- */
-.hud { position: absolute; top: 12px; left: 14px; right: 14px; z-index: 20; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; height: 42px; padding: 0 6px 0 14px;
-  border: 1px solid var(--glass-line); border-radius: 12px; background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-.hud-left { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13.5px; white-space: nowrap; overflow: hidden; }
-.hud-brand { border: 0; background: none; padding: 0; cursor: pointer; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--fg2); }
-.hud-crumb { display: inline-flex; align-items: center; gap: 8px; max-width: 220px; overflow: hidden; }
-.hud-crumb i { font-style: normal; color: var(--fg3); }
-.hud-crumb b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.hud-crumb button { border: 0; background: none; padding: 0; cursor: pointer; color: var(--fg2); overflow: hidden; text-overflow: ellipsis; }
-.hud-crumb button:hover { color: var(--fg); }
-.hud-ticker { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; overflow: hidden; }
-.tick { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--glass-line); background: none; cursor: pointer; white-space: nowrap; font-size: 12.5px; color: var(--fg); }
+/* No bar: the graph takes the whole screen. The ticker floats at the top,
+   the corner's three icons at the top right. */
+.hud-ticker { position: absolute; top: 14px; left: 50%; translate: -50% 0; z-index: 20; max-width: calc(100vw - 340px); display: flex; align-items: center; justify-content: center; gap: 6px; overflow: hidden; pointer-events: none; }
+.hud-ticker > * { pointer-events: auto; }
+.tick { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--glass-line); background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); cursor: pointer; white-space: nowrap; font-size: 12.5px; color: var(--fg); }
 .tick:hover { border-color: var(--link-on); }
 .tick b { font-weight: 600; }
 .tick span { color: var(--fg2); font-family: var(--mono); font-size: 11.5px; }
 .tick.yours { border-color: color-mix(in oklab, var(--accent) 50%, transparent); }
 .tick.yours span { color: var(--accent-text); }
 .tick.runs span { color: var(--run); }
-.hud-right { display: flex; align-items: center; gap: 6px; }
-.hud-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: var(--fg2); }
-.hud-icon:hover { background: var(--fill); color: var(--fg); }
-button.hud-icon { border: 0; background: none; cursor: pointer; font-size: 14px; }
-.hud-archives, .hud-known { position: relative; }
-.hud-btn { border: 0; background: none; padding: 5px 9px; border-radius: 8px; font-size: 12.5px; color: var(--fg2); white-space: nowrap; cursor: pointer; }
-.hud-btn:hover, .hud-btn.on { background: var(--fill); color: var(--fg); }
-.hud-panel { position: absolute; top: 40px; right: 0; z-index: 40; width: 330px; display: grid; gap: 10px; padding: 12px; border-radius: 14px;
+.hud-corner { position: absolute; top: 12px; right: 14px; z-index: 20; display: flex; align-items: center; gap: 4px; }
+.hud-icon { position: relative; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 999px; color: var(--fg2);
+  border: 1px solid transparent; background: color-mix(in oklab, var(--glass) 70%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.hud-icon:hover, .hud-icon.on { color: var(--fg); border-color: var(--glass-line); background: var(--glass); }
+.hud-icon .a2-icon { width: 17px; height: 17px; }
+button.hud-icon { cursor: pointer; padding: 0; font: inherit; }
+.hud-count { position: absolute; top: -3px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; display: grid; place-items: center; border-radius: 999px;
+  background: var(--fg2); color: var(--bg); font-size: 10px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.hud-archives { position: relative; }
+.hud-panel { position: absolute; top: 42px; right: 0; z-index: 40; width: 330px; display: grid; gap: 10px; padding: 12px; border-radius: 14px;
   background: var(--glass); border: 1px solid var(--glass-line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--lift); }
 .hud-muted { margin: 0; font-size: 13px; color: var(--fg3); }
 .hud-arch { list-style: none; display: grid; gap: 4px; margin: 0; padding: 0; max-height: 50vh; overflow-y: auto; }
@@ -682,23 +678,13 @@ button.hud-icon { border: 0; background: none; cursor: pointer; font-size: 14px;
 .hud-arch b { font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hud-arch em { font-style: normal; font-size: 12px; color: var(--fg3); }
 .hud-arch .btn { padding: 3px 9px; font-size: 12.5px; }
-.hud-panel.known { width: min(420px, calc(100vw - 32px)); }
-.known-body { display: grid; gap: 12px; max-height: 60vh; overflow-y: auto; }
-.known-body h3 { margin: 0 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--fg3); }
-.known-file summary { cursor: pointer; font-size: 13.5px; font-weight: 600; padding: 3px 0; }
-.known-file summary em { font-style: normal; font-weight: 400; font-size: 12px; color: var(--fg3); }
-.known-file ul { list-style: none; margin: 2px 0 6px; padding: 0 0 0 10px; display: grid; gap: 4px; }
-.known-file li { font-size: 13px; line-height: 1.4; }
-.known-file li h4 { margin: 6px 0 2px; font-size: 12px; font-weight: 600; color: var(--fg2); }
-.known-file li time { margin-right: 6px; font-size: 12px; color: var(--fg3); font-variant-numeric: tabular-nums; }
-.known-file li .a2-badge { margin-right: 6px; }
-.hud-offline { position: absolute; top: 62px; left: 50%; translate: -50% 0; z-index: 25; margin: 0; padding: 6px 12px; border-radius: 10px; font-size: 13px;
+.hud-offline { position: absolute; top: 58px; left: 50%; translate: -50% 0; z-index: 25; margin: 0; padding: 6px 12px; border-radius: 10px; font-size: 13px;
   background: var(--warn-soft); color: var(--warn-text); border: 1px solid color-mix(in oklab, var(--warn) 40%, transparent); }
 .hud-offline a { color: inherit; }
 .espace-note { position: absolute; left: 16px; bottom: 18px; z-index: 20; margin: 0; font-size: 12.5px; color: var(--fg3); max-width: 300px; }
 
 /* The notifications routed to this tab: over the graph, at the top right. */
-.notices { position: absolute; top: 66px; right: 16px; z-index: 30; display: grid; gap: 8px; width: min(380px, calc(100vw - 32px)); }
+.notices { position: absolute; top: 58px; right: 16px; z-index: 30; display: grid; gap: 8px; width: min(380px, calc(100vw - 32px)); }
 .notice { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--glass); border: 1px solid var(--glass-line);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--lift); }
 .notice-text { flex: 1; color: var(--fg); text-decoration: none; font-size: 13.5px; }
@@ -761,7 +747,7 @@ a.notice-text:hover { text-decoration: underline; }
 .gallery { position: fixed; inset: 0; overflow: auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 12px; align-content: flex-start; }
 
 /* ---------- the list, on a small screen (graph/List.tsx) ---------- */
-.ls { position: absolute; inset: 0; overflow-y: auto; padding: 112px 12px 160px; }
+.ls { position: absolute; inset: 0; overflow-y: auto; padding: 60px 12px 160px; }
 .ls ul { list-style: none; margin: 0 auto; padding: 0; max-width: 560px; display: grid; gap: 2px; }
 .ls-row button { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--fg); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
 .ls-row button:hover { background: var(--fill); }
@@ -775,12 +761,11 @@ a.notice-text:hover { text-decoration: underline; }
 .ls-row em { font-style: normal; font-family: var(--mono); font-size: 11.5px; color: var(--fg2); white-space: nowrap; }
 .ls-row em.yours { color: var(--accent-text); }
 .ls-row em.runs { color: var(--run); }
-.ls-page { position: absolute; inset: 0; overflow-y: auto; padding: 104px 8px 150px; }
+.ls-page { position: absolute; inset: 0; overflow-y: auto; padding: 60px 8px 150px; }
 .ls-page .pg { max-height: none; }
 
 @media (max-width: 760px) {
-  .hud { height: auto; grid-template-columns: 1fr auto; padding: 6px; }
-  .hud-ticker { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; overflow-x: auto; }
+  .hud-ticker { left: 12px; right: 136px; max-width: none; translate: none; justify-content: flex-start; overflow-x: auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {

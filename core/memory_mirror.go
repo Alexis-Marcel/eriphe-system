@@ -36,7 +36,7 @@ import (
 // a page, a task) is marked.
 
 // knownSection is a part of what Eriphe knows: a group of the mirror's
-// files, and of the workspace's « Ce que je sais ».
+// files.
 type knownSection string
 
 const (
@@ -179,38 +179,38 @@ func fileSlug(s string) string {
 func (f knownFile) heading(lang string) string {
 	switch {
 	case f.Section == knownProfile:
-		return tr(lang, "espace.known.profile")
+		return tr(lang, "mirror.profile")
 	case f.Title != "":
 		return f.Title
 	case f.Section == knownPeople:
-		return tr(lang, "espace.known.people.unnamed")
+		return tr(lang, "mirror.people.unnamed")
 	}
-	return tr(lang, "espace.known.facts.general")
+	return tr(lang, "mirror.facts.general")
 }
 
 // markdown is a file of the mirror as written, in the user's language.
 func (f knownFile) markdown(lang string) string {
 	var b strings.Builder
 	title := f.heading(lang)
-	fmt.Fprintf(&b, "# %s\n\n%s\n", title, tr(lang, "espace.known.note"))
+	fmt.Fprintf(&b, "# %s\n\n%s\n", title, tr(lang, "mirror.note"))
 	group := ""
 	for i, l := range f.Lines {
 		switch {
 		case f.Section == knownProfile && (i == 0 || l.Group != group):
 			group = l.Group
-			fmt.Fprintf(&b, "\n## %s\n\n", tr(lang, "espace.known.group."+group))
+			fmt.Fprintf(&b, "\n## %s\n\n", tr(lang, "mirror.group."+group))
 		case i == 0:
 			b.WriteString("\n")
 		}
 		b.WriteString("- ")
 		switch {
 		case l.Group == kindSituation:
-			b.WriteString(fmt.Sprintf(tr(lang, "espace.known.until"), l.When) + " ")
+			b.WriteString(fmt.Sprintf(tr(lang, "mirror.until"), l.When) + " ")
 		case l.When != "":
 			b.WriteString(l.When + " ")
 		}
 		if l.External {
-			fmt.Fprintf(&b, "(%s) ", tr(lang, "espace.known.external"))
+			fmt.Fprintf(&b, "(%s) ", tr(lang, "mirror.external"))
 		}
 		fmt.Fprintf(&b, "%s ^m%d\n", l.Text, l.ID)
 	}

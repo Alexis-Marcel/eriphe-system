@@ -3034,13 +3034,6 @@ conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/
 - `GET /api/archives`: what the user archived, the latest first (`nodestore.Archives`): each node
   archived with no parent archived with it, a row as below with `archived` (when) and `with` (how
   many nodes below it went with it).
-- `GET /api/known`: « Ce que je sais », what Eriphe knows, read only (`web_known.go`): the files
-  of the [memory's mirror](#the-readable-mirror-memoire) in order, each `path`, `section`
-  (`profile`, `people`, `facts`, `decisions`, `journal`), `title` in the request's language and
-  `lines` (`id`, `group` in the profile, `when`, `text`, `external`). Drawn from `memory.db` with
-  recall's rules, it counts no use and taints no turn: it is the user's reading, never the brain's.
-  The head-up display opens it; there is no write route (to correct or forget, the user tells
-  Eriphe, or uses Settings → Mémoire).
 - A node's row (`graphNode`), in the page and the stream: `id`, `title` (empty when the node is
   external: a title that may be someone else's words is never shown), `parent`, `links`,
   `lifetime`, `state`, `created`, `updated`, `done`, `external`, `version`, `waits` (one of its
@@ -3128,10 +3121,11 @@ token in `X-CSRF-Token`:
 - `console/`: the one input. It talks to the page the console talks to (the last one opened or
   clicked), else to the home (`POST /messages` with `node`); Eriphe's newest line shows by the orb,
   the replies it suggests under it; the conversation of that node opens over it.
-- `hud/`: the way home and the path of the page the console talks to; the ticker of what waits for
-  the user and what runs, each a way to its page; « Archives · N », what the user archived, each
-  to reopen; the light or dark theme; the settings; the notices and a word when the stream is
-  down.
+- `hud/`: no bar, the graph takes the whole screen. At the top, the ticker of what waits for the
+  user and what runs, each a way to its page; in the top-right corner, three icons: Archives (its
+  count as a badge), what the user archived, each to reopen; the light or dark theme; the
+  settings. Under them, the notices and a word when the stream is down. A page shows its own
+  path; closing the last one brings the console back to the home.
 
 A link may open a page: `/espace?open=node-<id>`. The theme follows the system, light or dark,
 on the tokens of `espace.css`, until the user chooses one (`data-theme`).
@@ -4414,8 +4408,8 @@ once, and stays only in the nightly backups, which carry the mirror (`memoire-<d
 `memory-<day>.db`) for `backup_keep` days (14), as the database's copies already keep it. It is
 **not a node**: it is not in the graph's repository nor its index, and neither the brain's
 `node_read` and `node_find` nor a task's node tools reach it. The brain reads memory through
-`recall` only, which keeps the trust rules (an external memory read taints the turn). The
-workspace's « Ce que je sais » (`GET /api/known`) shows the same files, read only.
+`recall` only, which keeps the trust rules (an external memory read taints the turn). To
+read what Eriphe knows in the workspace, the user opens Settings → Mémoire.
 
 ### What Eriphe learned
 

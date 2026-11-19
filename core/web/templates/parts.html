@@ -312,15 +312,15 @@
 one looks back on is here too: the Journal and « À valider » (activity.html). Every page of the settings
 has it, the memory's too. A dot marks an entry that needs a look:
 an update (Devices), a tool in error (Tools), a key refused (Agents).
-On a wide screen it is the sidebar, under the way back to the conversation.
+On a wide screen it is the sidebar, under the way back to the workspace (/espace).
 On a phone it is the first level alone (/settings, View "index"): a grouped
 list that its ✕ closes; each page then has its way up to it (settings-up).
 The ways back follow the pages, never the browser's history. */}}
 {{define "settings-nav"}}
 <nav class="settings-nav" aria-label="{{t "settings.title"}}">
-  <a class="back to-chat" href="/conversation">{{template "i-back"}}{{t "nav.chat"}}</a>
+  <a class="back to-espace" href="/espace">{{template "i-back"}}{{t "nav.espace"}}</a>
   <div class="settings-head">
-    <a class="icon-btn settings-close" href="/" aria-label="{{t "settings.close"}}" title="{{t "settings.close"}}">{{template "i-x"}}</a>
+    <a class="icon-btn settings-close" href="/espace" aria-label="{{t "settings.close"}}" title="{{t "settings.close"}}">{{template "i-x"}}</a>
     <h1 class="settings-title">{{t "settings.title"}}</h1>
   </div>
   <div class="nav-group" role="group" aria-labelledby="sg-assistant">

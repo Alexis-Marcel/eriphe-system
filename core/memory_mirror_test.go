@@ -3,10 +3,8 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
-	"encoding/json"
 	"io"
 	"io/fs"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -271,44 +269,6 @@ func TestMirrorOutsideTheGraph(t *testing.T) {
 	}
 	if out := mustNodes(t, n.core, task.ID, "node_read", map[string]any{"id": node}); strings.Contains(fmtJSON(out), "zanzibar") {
 		t.Errorf("a task's own node holds the mirror: %v", out)
-	}
-}
-
-// « Ce que je sais » shows what the mirror holds, read only: no proposal,
-// no forgotten nor past memory, the external one marked, nothing written.
-func TestKnownView(t *testing.T) {
-	tw, _ := newMemoryWeb(t)
-	m := tw.c.mem
-	mustAdd(t, m, &Memory{Kind: kindPerson, About: "person:sam", Text: "Sam, un collègue."})
-	mustAdd(t, m, &Memory{Kind: kindFact, About: "project:site", Text: "Le serveur répond en 5xx.", SourceKind: srcTask, Trust: trustExternal})
-	mustAdd(t, m, &Memory{Kind: kindFact, Text: "Une proposition.", Status: memProposed, SourceKind: srcExtraction, Trust: trustFirstParty})
-	gone := mustAdd(t, m, &Memory{Kind: kindFact, Text: "Oublie ça."})
-	m.forget(gone.ID, "test", "")
-	mustAdd(t, m, &Memory{Kind: kindFact, Text: "Vrai autrefois.", ValidFrom: m.now().Add(-48 * time.Hour), ValidTo: m.now().Add(-time.Hour)})
-	used := func() int {
-		var n int
-		m.db.QueryRow(`SELECT COALESCE(SUM(use_count), 0) FROM memories`).Scan(&n)
-		return n
-	}
-	code, body, _ := tw.do("GET", "/api/known", nil, nil)
-	var got struct {
-		Files []knownView `json:"files"`
-	}
-	json.Unmarshal([]byte(body), &got)
-	if code != http.StatusOK || len(got.Files) != 2 || got.Files[0].Section != "people" || got.Files[1].Path != "faits/project-site.md" ||
-		!got.Files[1].Lines[0].External || got.Files[0].Lines[0].External {
-		t.Fatalf("known: %d %s", code, body)
-	}
-	for _, s := range []string{"Une proposition", "Oublie ça", "Vrai autrefois"} {
-		if strings.Contains(body, s) {
-			t.Errorf("%q shown", s)
-		}
-	}
-	if used() != 0 {
-		t.Error("reading the view counted a use")
-	}
-	if code, _, _ := tw.do("POST", "/api/known", nil, nil); code == http.StatusOK || code == http.StatusNoContent {
-		t.Errorf("a write to the view: %d", code)
 	}
 }
 

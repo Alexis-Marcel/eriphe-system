@@ -5,8 +5,9 @@ export type Cam = { k: number; x: number; y: number };
 export type Box = [number, number, number, number]; // left, top, right, bottom, in the world
 export type Size = { w: number; h: number };
 
-// The screen's free band, between the head-up display and the console.
-export const TOP = 78;
+// The screen's free band, between the ticker and the corner's icons at the
+// top and the console.
+export const TOP = 60;
 export const BOTTOM = 150;
 export const SIDE = 20;
 

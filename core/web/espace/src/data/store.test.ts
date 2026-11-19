@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode } from "./api";
 import {
-  applyDoc, applyExchange, applyMoved, applyNodes, applyNotes, applyProgress, applyShow, applySource, closePage, empty, home, NOTES_KEPT,
+  applyDoc, applyExchange, applyMoved, applyNodes, applyNotes, applyProgress, applyShow, applySource, closePage, empty, NOTES_KEPT,
   openPage, pathOf, placeAt, restore, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
 } from "./store";
 
@@ -40,7 +40,8 @@ describe("the store", () => {
     expect(s.talk).toBe("a1");
     s = openPage(s, "a2");
     expect(s.open).toEqual(["a2"]);
-    expect(home(s)).toMatchObject({ open: [], talk: null });
+    // closing the last one, the console talks to the home
+    expect(closePage(s, "a2")).toMatchObject({ open: [], talk: null });
     // a node that is not there opens nothing
     expect(openPage(s, "zz")).toBe(s);
   });

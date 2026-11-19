@@ -175,9 +175,9 @@ func TestLinksIntoTheConversation(t *testing.T) {
 	if code != http.StatusSeeOther || h.Get("Location") != "/conversation?task=t-9" {
 		t.Errorf("task page: %d %s", code, h.Get("Location"))
 	}
-	// The settings lead back to the conversation; closing them goes home.
+	// The settings lead back to the workspace, closing them too.
 	_, body, _ := tw.do("GET", "/settings/account", nil, nil)
-	for _, want := range []string{`<a class="back to-chat" href="/conversation">`, `class="icon-btn settings-close" href="/"`,
+	for _, want := range []string{`<a class="back to-espace" href="/espace">`, `class="icon-btn settings-close" href="/espace"`,
 		`id="tasks-btn" href="/conversation#tasks-panel"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("settings lack %s", want)
