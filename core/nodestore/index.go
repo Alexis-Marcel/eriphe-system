@@ -22,6 +22,16 @@ import (
 // it. A file at another version is refused, never changed.
 const schemaVersion = 1
 
+// refsSchema holds the [[links]] of the nodes' text: each name a node's
+// text links (its LinkKey) and the node it was resolved to, ” while no
+// node has that title. A link keeps the node it was resolved to when that
+// node's title changes.
+const refsSchema = `
+	CREATE TABLE node_refs (id TEXT NOT NULL, key TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', PRIMARY KEY (id, key));
+	CREATE INDEX node_refs_key ON node_refs (key, target);
+	CREATE INDEX node_refs_target ON node_refs (target);
+	CREATE INDEX nodes_title_key ON nodes (title_key);`
+
 const schema = `CREATE TABLE nodes (
 	  id TEXT PRIMARY KEY,
 	  file TEXT NOT NULL UNIQUE,         -- <slug>-<id>.md, frozen at creation
@@ -36,10 +46,11 @@ const schema = `CREATE TABLE nodes (
 	  external INTEGER NOT NULL DEFAULT 0,
 	  title_trusted INTEGER NOT NULL DEFAULT 0, -- external, its title is not someone else's words
 	  version INTEGER NOT NULL,          -- the last version's n
-	  blob TEXT NOT NULL);               -- the file's git hash, to tell a change made outside
+	  blob TEXT NOT NULL,                -- the file's git hash, to tell a change made outside
+	  title_key TEXT NOT NULL DEFAULT ''); -- its title as a [[link]] matches it (nodefile.LinkKey)
 	CREATE INDEX nodes_parent ON nodes (parent);
 	CREATE TABLE node_links (id TEXT NOT NULL, target TEXT NOT NULL, PRIMARY KEY (id, target));
-	CREATE INDEX node_links_target ON node_links (target);
+	CREATE INDEX node_links_target ON node_links (target);` + refsSchema + `
 	CREATE TABLE node_versions (
 	  id TEXT NOT NULL, n INTEGER NOT NULL,
 	  hash TEXT NOT NULL,                -- the commit that made it
@@ -92,6 +103,19 @@ func openIndex(path string) (db *sql.DB, fresh bool, err error) {
 				return nil, false, err
 			}
 		}
+		// An index made before the text's links lacks them: they are
+		// added, and every node is indexed again from its file (its blob
+		// forgotten, reconcile reads it again), its state and place kept.
+		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'node_refs'`).Scan(&n); err != nil {
+			db.Close()
+			return nil, false, err
+		}
+		if n == 0 {
+			if err := addRefs(db); err != nil {
+				db.Close()
+				return nil, false, err
+			}
+		}
 		return db, false, nil
 	case 0:
 	default:
@@ -119,24 +143,52 @@ func openIndex(path string) (db *sql.DB, fresh bool, err error) {
 	return db, true, nil
 }
 
+// addRefs adds the text's links to an index made before them, in one
+// transaction: a stop halfway leaves the index as it was.
+func addRefs(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{`ALTER TABLE nodes ADD COLUMN title_key TEXT NOT NULL DEFAULT ''`, refsSchema, `UPDATE nodes SET blob = ''`} {
+		if _, err := tx.Exec(q); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // execer is a transaction or the database.
 type execer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
+// querier is a transaction or the database, read as well.
+type querier interface {
+	execer
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
 // indexNode writes what the index keeps of a node's file: its row, links,
 // sources and words. The state and the version are kept when the row is
-// there; version is the n of its last version.
-func indexNode(tx execer, n *nodefile.Node, file string, raw []byte, version int, updated time.Time) error {
+// there; version is the n of its last version. Its text's [[links]] keep
+// the nodes they were resolved to; a new one waits for resolveRefs.
+func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version int, updated time.Time) error {
 	m := n.Meta
-	_, err := tx.Exec(`INSERT INTO nodes (id, file, title, parent, lifetime, created, updated, done, archived, external, title_trusted, version, blob)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := tx.Exec(`INSERT INTO nodes (id, file, title, parent, lifetime, created, updated, done, archived, external, title_trusted, version, blob, title_key)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET file = excluded.file, title = excluded.title, parent = excluded.parent,
 		  lifetime = excluded.lifetime, updated = excluded.updated, done = excluded.done, archived = excluded.archived,
-		  external = excluded.external, title_trusted = excluded.title_trusted, version = excluded.version, blob = excluded.blob`,
+		  external = excluded.external, title_trusted = excluded.title_trusted, version = excluded.version, blob = excluded.blob,
+		  title_key = excluded.title_key`,
 		m.ID, file, m.Title, m.Parent, string(m.Lifetime), m.Created.Unix(), updated.Unix(),
-		unixOr0(m.Done), unixOr0(m.Archived), m.External, m.External && m.TitleTrusted, version, blobHash(raw))
+		unixOr0(m.Done), unixOr0(m.Archived), m.External, m.External && m.TitleTrusted, version, blobHash(raw), nodefile.LinkKey(m.Title))
 	if err != nil {
+		return err
+	}
+	if err := indexRefs(tx, n); err != nil {
 		return err
 	}
 	for _, q := range []string{`DELETE FROM node_links WHERE id = ?`, `DELETE FROM node_sources WHERE id = ?`, `DELETE FROM node_fts WHERE id = ?`} {
@@ -161,10 +213,12 @@ func indexNode(tx execer, n *nodefile.Node, file string, raw []byte, version int
 	return err
 }
 
-// forget takes a node out of the index, its versions kept.
+// forget takes a node out of the index, its versions kept. The links to
+// it wait again for a node of their name (resolveRefs).
 func forget(tx execer, id string) error {
 	for _, q := range []string{`DELETE FROM nodes WHERE id = ?`, `DELETE FROM node_links WHERE id = ?`,
-		`DELETE FROM node_sources WHERE id = ?`, `DELETE FROM node_fts WHERE id = ?`} {
+		`DELETE FROM node_sources WHERE id = ?`, `DELETE FROM node_fts WHERE id = ?`,
+		`DELETE FROM node_refs WHERE id = ?`, `UPDATE node_refs SET target = '' WHERE target = ?`} {
 		if _, err := tx.Exec(q, id); err != nil {
 			return err
 		}

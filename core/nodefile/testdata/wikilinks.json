@@ -1,0 +1,20 @@
+[
+  {"why": "a plain link", "text": "Voir [[Choisir l'angle]].", "links": [{"name": "Choisir l'angle"}]},
+  {"why": "shown words", "text": "La [[Recherche sur le télétravail|recherche]] est faite.", "links": [{"name": "Recherche sur le télétravail", "shown": "recherche"}]},
+  {"why": "an escaped pipe works like one", "text": "[[L'article\\|le texte]]", "links": [{"name": "L'article", "shown": "le texte"}]},
+  {"why": "spaces trimmed", "text": "[[  Plan  | le plan ]]", "links": [{"name": "Plan", "shown": "le plan"}]},
+  {"why": "several, in order", "text": "- [[A]]\n- [[B]] et [[C]]", "links": [{"name": "A"}, {"name": "B"}, {"name": "C"}]},
+  {"why": "a code span is literal", "text": "Écrire `[[A]]` pour lier, comme [[B]].", "links": [{"name": "B"}]},
+  {"why": "a code span over two lines of a paragraph", "text": "a `x\n[[A]]` b", "links": []},
+  {"why": "a fenced block is literal", "text": "```\n[[A]]\n```\n\n[[B]]", "links": [{"name": "B"}]},
+  {"why": "a tilde fence too", "text": "~~~md\n[[A]]\n~~~\n[[B]]", "links": [{"name": "B"}]},
+  {"why": "an escape is only brackets", "text": "\\[[A]] and [[B]]", "links": [{"name": "B"}]},
+  {"why": "empty names nothing", "text": "[[]] [[ |x]] [[C]]", "links": [{"name": "C"}]},
+  {"why": "not across lines", "text": "[[A\nB]]", "links": []},
+  {"why": "no bracket inside", "text": "[[A [b] c]] [[[D]]]", "links": [{"name": "D"}]},
+  {"why": "headings and quotes", "text": "## Lié à [[A]]\n\n> voir [[B]]\n> et [[C|c]]", "links": [{"name": "A"}, {"name": "B"}, {"name": "C", "shown": "c"}]},
+  {"why": "in a table, a pipe inside a link splits no cell", "text": "| Sujet | Où |\n|---|---|\n| [[A|a]] | [[B]] |", "links": [{"name": "A", "shown": "a"}, {"name": "B"}]},
+  {"why": "a lone backtick stays a backtick", "text": "a ` b [[A]]", "links": [{"name": "A"}]},
+  {"why": "inside a markdown link's text", "text": "[voir [[A]]](https://example.org)", "links": [{"name": "A"}]},
+  {"why": "accents and case kept as written", "text": "[[Élan]] [[élan]]", "links": [{"name": "Élan"}, {"name": "élan"}]}
+]

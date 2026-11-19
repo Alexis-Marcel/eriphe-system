@@ -335,6 +335,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(write).toContainText("Trois études récentes", { timeout: 15_000 });
   await expect(write).toContainText("Choisir l'angle.");
   await expect(bubble("Choisir l'angle")).toBeVisible();
+  // Written before its node was open, the link to it links once it is.
+  await expect(write.locator("button.a2-wiki", { hasText: "Choisir l'angle" }).first()).toBeVisible();
 
   // 20. The angle is chosen by a button of its document: the choice is
   // written there, the article gets its first version, the main subject
@@ -363,6 +365,15 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(write).toContainText("L'angle des managers.");
   await expect(write).toContainText("version 2, avec sa conclusion");
   await expect(write).toContainText("Trois études récentes");
+
+  // 22. The main subject links its subjects in its text ([[title]]): the
+  // research, « Choisir l'angle », the article. A click opens one beside it.
+  const related = write.locator(".a2-markdown li button.a2-wiki");
+  await expect(related).toHaveText(["La recherche", "Choisir l'angle", "L'article"]);
+  await expect(related.first()).toHaveAttribute("title", "Recherche sur le télétravail");
+  await related.nth(1).click();
+  await expect(pageOf("Choisir l'angle")).toBeVisible();
+  await expect(write).toBeVisible();
 
   // End: home again, nothing waiting.
   await home(page);

@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -354,6 +356,38 @@ func TestNodePageGolden(t *testing.T) {
 	got, err := os.ReadFile(file)
 	if err != nil || !bytes.Equal(got, want) {
 		t.Errorf("%s is not the page eriphe-core sends (%v): run ERIPHE_UPDATE_ESPACE=1 go test -run TestNodePageGolden", file, err)
+	}
+}
+
+// A page gives the node each [[name]] of its text opens, by the name as
+// written: an archived one says so, one whose title may be someone else's
+// words is not named, a name no node has is not there, nor one in code.
+func TestNodePageRefs(t *testing.T) {
+	tw, _ := graphWeb(t)
+	c := tw.c
+	research := mustNode(t, c, nodestore.New{Title: "La recherche"})
+	old := mustNode(t, c, nodestore.New{Title: "Ancien plan"})
+	mail := mustNode(t, c, nodestore.New{Title: "Payez ici", External: true, Author: "task:t-1"})
+	if err := c.archiveNode(context.Background(), old, byUser); err != nil {
+		t.Fatal(err)
+	}
+	id := mustNode(t, c, nodestore.New{Title: "Écrire l'article",
+		Body: "Voir [[La recherche]] et [[la recherche|elle]], [[Ancien plan]], [[Payez ici|le mail]], [[Nulle part]], `[[Code]]`."})
+	p, err := tw.w.nodePageOf(id, 0, "fr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]pageRef{
+		"La recherche": {ID: research, Title: "La recherche"},
+		"la recherche": {ID: research, Title: "La recherche"},
+		"Ancien plan":  {ID: old, Title: "Ancien plan", Archived: true},
+		"Payez ici":    {ID: mail, External: true},
+	}
+	if !reflect.DeepEqual(p.Refs, want) {
+		t.Fatalf("refs %+v", p.Refs)
+	}
+	if !slices.Contains(p.Node.Links, research) || !slices.Contains(p.Node.Links, old) {
+		t.Errorf("the row's links %v", p.Node.Links)
 	}
 }
 

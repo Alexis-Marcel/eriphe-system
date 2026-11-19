@@ -719,9 +719,8 @@ whatever address it dials) and one client certificate per device.
 | `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) is not quoted |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
-| `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
-| `node_link` | link a node to another (its front matter's `links`), once; never to itself |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
 | `item_note` | note an item of a node's source: what the user should know and a state (`act`, `look`, `info`, `none`, `done`) |
 
@@ -936,7 +935,9 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   no card (`node_open`; `work` by default, `standing` for what the user follows continuously, never
   done), reads it (`node_read`: its version's `hash`), writes it on the version it read
   (`node_write`, `node_edit`, refused when stale: `ErrConflict`), sets its title, goal or `done`
-  (`node_set`), links it (`node_link`) and opens its page on the user's screen (`node_show`). Each
+  (`node_set`) and opens its page on the user's screen (`node_show`). It links nodes in their
+  text, `[[Title]]` ([links between nodes](../docs/node-format.md#links-between-nodes)): there is no
+  link tool; front-matter `links` are code's alone (a view decided from a card). Each
   checks the node exists (`no node <id>: node_find finds it`) and refuses an archived one
   (`ErrArchived`); a body carrying a block's marks, snapshot or external is refused
   (`nodefile`'s author API: those are code's). There is **no archive tool**: archiving is the
@@ -1061,7 +1062,9 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   creation: a new title changes the front matter, never the file's name.
 - **Index:** `nodes.db` next to it, outside the repository (SQLite, its schema version in `meta`, a
   file at another version is refused). Tables: `nodes` (file, title, parent, lifetime, state,
-  times, external, last version, the file's git hash), `node_links`, `node_versions` (n → commit
+  times, external, last version, the file's git hash, the title's link key), `node_links` (the front
+  matter's), `node_refs` (each `[[name]]` of a node's text and the node it was resolved to, kept
+  across renames; `''` while no node has it), `node_versions` (n → commit
   hash, author, time), `node_sources` (each block's live sources), `node_items` (notes on the items
   a source lists), `node_layout` (a node's place on the graph) and `node_fts` (FTS5 over the title,
   the goal, the text and the words the blocks show). History is never asked of git by path: a
@@ -3087,7 +3090,9 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   while the last version shows) and the user's marks at `/marks/<list>/<item>`; or its `error`
   when it does not read as a block. Its media go through eriphe-core (`/espace/media`, signed),
   those an external block's author wrote dropped unless a source gave them; a Link keeps to the
-  addresses a Link may open. The node's goal is never sent (it is in its file).
+  addresses a Link may open. The node's goal is never sent (it is in its file). `refs`: the node
+  each `[[name]]` of its text opens, by the name as written (`id`, `title`, none when it may be
+  someone else's words, `external`, `archived`); a name no node has is not there.
 - `GET /api/nodes/{id}/trace`: the trace's entries, oldest first (`at`, `author`: brain, user,
   `task:<id>`, eriphe, outside; `text`).
 - `GET /api/nodes/{id}/md[?version=n]`: the file as it is (`md`), its body as the user edits it
@@ -3151,8 +3156,8 @@ token in `X-CSRF-Token`:
   constellation around the centre (`constellation`): held loosely on an ellipse around (0, 0),
   evenly spaced, 300 px from one to the next plus 24 px for each bubble a subject holds on
   average, as wide as the screen's free band (1.7 times as high at most); in the order they were
-  made, except that a subject linked to one already placed (front-matter `links`, its own or its
-  bubbles') comes right after it, so related subjects sit side by side. A new subject takes its
+  made, except that a subject linked to one already placed (its `links`: its text's `[[links]]` and its front
+  matter's, its own or its bubbles') comes right after it, so related subjects sit side by side. A new subject takes its
   slot and the ring turns the way that moves the others least (they slide, a slot at most).
   Children are pulled to their parent, links are weak springs, every body is pulled faintly to the
   centre (none while a page is open), every bubble and its label a box that pushes the others

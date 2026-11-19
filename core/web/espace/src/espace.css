@@ -211,6 +211,14 @@ button, input, select, textarea { font: inherit; }
 .a2-markdown ul, .a2-markdown ol { padding-left: 1.3em; }
 .a2-markdown li + li { margin-top: 2px; }
 .a2-markdown a { color: var(--accent-text); text-underline-offset: 2px; }
+/* A link to another node ([[Title]]): opens it beside the page. One that
+   names no node is greyed; an archived one is struck through, and both
+   open nothing. */
+.a2-wiki { border: 0; background: none; padding: 0; font: inherit; color: var(--accent-text); cursor: pointer;
+  text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+.a2-wiki:hover { text-decoration-style: solid; }
+.a2-wiki.none { color: var(--fg3); cursor: default; text-decoration-color: var(--line-strong); }
+.a2-wiki.archived { color: var(--fg3); cursor: default; text-decoration: line-through; }
 .a2-markdown code { padding: 0 4px; border-radius: 4px; background: var(--fill); font: 12.5px var(--mono); }
 .a2-markdown pre { margin: 0.5em 0; padding: 8px 10px; border-radius: 8px; background: var(--fill); overflow-x: auto; }
 .a2-markdown pre code { padding: 0; background: none; white-space: pre; }

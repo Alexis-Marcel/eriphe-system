@@ -74,11 +74,6 @@ type brainNodeSetIn struct {
 	Done  *bool  `json:"done,omitempty" jsonschema:"true once its goal is reached (a decision is kept in memory); false when it comes back"`
 }
 
-type nodeLinkIn struct {
-	ID string `json:"id" jsonschema:"the node's id"`
-	To string `json:"to" jsonschema:"the node it is linked to: what relates to it on the graph, not a part of it (a part is a child)"`
-}
-
 type nodeShowIn struct {
 	ID string `json:"id" jsonschema:"the node to open on the user's screen"`
 }
@@ -117,8 +112,6 @@ func registerNodeTools(s *mcp.Server, c *core) {
 		})
 	tool(s, "node_set", "Change a node's title or goal, or set it done once its goal is reached (a decision is kept in memory), or not done when it comes back. Archiving is the user's alone.",
 		func(ctx context.Context, in brainNodeSetIn) (map[string]any, error) { return c.brainNodeSet(in) })
-	tool(s, "node_link", "Link a node to another that relates to it (the production view to the mail about it): the graph draws the link. A part of a node's work is its child (node_open with parent), not a link.",
-		func(ctx context.Context, in nodeLinkIn) (map[string]any, error) { return c.brainNodeLink(in) })
 	tool(s, "node_show", "Open a node's page on the user's screen, beside what is open: what they asked to see. Display only: it writes nothing.",
 		func(ctx context.Context, in nodeShowIn) (map[string]any, error) { return c.brainNodeShow(in) })
 	tool(s, "item_note", "Note one item a source of a node lists (a mail, an event), by the node, the source's name and the item's id: what the user should know of it and a state (act, look, info, none, done). The same item noted again replaces it; no note nor state takes it away. Written after reading external content, it is marked so.",
@@ -215,6 +208,7 @@ func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[strin
 		c.readNodeLater(context.WithoutCancel(ctx), id, nil) // its live blocks, at once (node_live.go)
 	}
 	out := map[string]any{"id": id, "title": d.Node.Meta.Title, "version": d.Version.N, "hash": d.Version.Hash}
+	c.noteWaitingLinks(out, d)
 	if parent != "" {
 		out["parent"] = parent
 	}
@@ -312,8 +306,8 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	if m.Parent != "" {
 		out["parent"] = m.Parent
 	}
-	if len(m.Links) > 0 {
-		out["links"] = m.Links
+	if len(sum.Links) > 0 {
+		out["links"] = sum.Links // its text's [[links]], resolved, and code's
 	}
 	if !m.Done.IsZero() {
 		out["done"] = m.Done.Local().Format("2006-01-02 15:04")
@@ -367,7 +361,36 @@ func (c *core) brainNodeWrite(id, expect string, fn func(*nodefile.Node) error) 
 	if len(d.Node.Blocks()) > 0 {
 		c.readNodeLater(context.Background(), sum.ID, nil) // a source new or changed, read at once (node_live.go)
 	}
-	return written(d), nil
+	out := written(d)
+	c.noteWaitingLinks(out, d)
+	return out, nil
+}
+
+// noteWaitingLinks tells the brain which [[links]] of a node it wrote
+// name no node yet: a typo, or a node still to open (it links once a node
+// has that title).
+func (c *core) noteWaitingLinks(out map[string]any, d *nodestore.Doc) {
+	var names []string
+	for _, l := range d.Node.WikiLinks() {
+		names = append(names, l.Name)
+	}
+	if len(names) == 0 {
+		return
+	}
+	found, err := c.nodes.Resolve(d.Node.Meta.ID, names)
+	if err != nil {
+		return
+	}
+	var waiting []string
+	for _, n := range names {
+		if _, ok := found[n]; !ok {
+			waiting = append(waiting, n)
+		}
+	}
+	if len(waiting) > 0 {
+		out["links_waiting"] = waiting
+		out["note"] = "These [[links]] name no node yet: each links once a node has that title (check the spelling: node_find)."
+	}
 }
 
 // brainNodeSet is node_set.
@@ -438,30 +461,6 @@ func (c *core) setNodeDone(sum nodestore.Summary, done bool, by string) (bool, e
 	c.nodeDoneDecision(sum.ID)
 	c.emitLogged(journalEvent{Kind: evNodeDone, Key: sum.ID, Source: "node", Payload: map[string]any{"node": sum.ID}})
 	return true, nil
-}
-
-// brainNodeLink is node_link.
-func (c *core) brainNodeLink(in nodeLinkIn) (map[string]any, error) {
-	sum, err := c.brainNode(in.ID)
-	if err != nil {
-		return nil, err
-	}
-	to, err := c.brainNode(in.To)
-	if err != nil {
-		return nil, err
-	}
-	if !sum.Archived.IsZero() {
-		return nil, fmt.Errorf("%s: %w", sum.ID, nodestore.ErrArchived)
-	}
-	changed, err := c.nodes.Link(sum.ID, to.ID, byBrain)
-	if err != nil {
-		return nil, err
-	}
-	c.turnNode(sum.ID)
-	if !changed {
-		return map[string]any{"note": "Linked already."}, nil
-	}
-	return map[string]any{"note": "Linked."}, nil
 }
 
 // brainNodeShow is node_show: the user's screen opens the node's page

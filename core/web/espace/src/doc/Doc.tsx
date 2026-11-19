@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createAdapter, type Adapter } from "../a2ui/adapter";
-import { Markdown } from "../a2ui/markdown";
+import { Markdown, type Wiki } from "../a2ui/markdown";
 import { SurfaceView } from "../a2ui/Surfaces";
 import { ask, mark, type NodePage } from "../data/api";
-import { sourceKey, store } from "../data/store";
+import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Cards } from "../page/Cards";
 import { blockOf, messages, pieces, sourceMessage, toGesture, type Piece } from "./blocks";
@@ -17,8 +17,26 @@ import { blockOf, messages, pieces, sourceMessage, toGesture, type Piece } from 
 // gestures (a button's ask, a Mark) go to eriphe-core, which reads them
 // again in the block it keeps (web_gestures.go); on an older version, or
 // from a block someone else's words may have written, nothing is sent.
-export function Doc({ page, latest, live }: { page: NodePage; latest: boolean; live: boolean }) {
+// A [[link]] of its text opens the node eriphe-core resolved it to
+// (page.refs) beside the page (onOpen), named as the graph names it now.
+export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: boolean; live: boolean; onOpen?: (id: string) => void }) {
   const { t, lang } = useWords();
+  const nodes = useGraph((s) => s.nodes);
+  const wiki = useMemo<Wiki>(() => {
+    const external = t("espace.external");
+    return {
+      find: (name) => {
+        const r = page.refs?.[name];
+        if (!r) return undefined;
+        const n = nodes[r.id];
+        const title = n ? n.title : r.title;
+        return { id: r.id, title: title || external, named: Boolean(title), archived: r.archived };
+      },
+      open: (id) => onOpen?.(id),
+      none: t("espace.wiki.none"),
+      archived: (title) => t("espace.wiki.archived", title),
+    };
+  }, [page, nodes, onOpen, t]);
   const [adapter] = useState<Adapter>(() => createAdapter(lang));
   useEffect(() => () => adapter.dispose(), [adapter]);
   const ps = useMemo(() => pieces(page), [page]);
@@ -59,7 +77,7 @@ export function Doc({ page, latest, live }: { page: NodePage; latest: boolean; l
   return (
     <div className="pg-doc">
       {ps.map((p: Piece, i) => {
-        if (p.kind === "text") return <Markdown key={i} text={p.text} newTab={t("espace.a2.newtab")} />;
+        if (p.kind === "text") return <Markdown key={i} text={p.text} newTab={t("espace.a2.newtab")} wiki={wiki} />;
         if (p.kind === "broken") return <p key={i} className="pg-broken" role="note">{t("espace.page.broken", p.name)}</p>;
         if (p.kind === "card")
           return p.found ? (

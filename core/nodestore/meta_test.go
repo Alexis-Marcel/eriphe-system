@@ -31,32 +31,6 @@ func TestSetDone(t *testing.T) {
 	}
 }
 
-func TestLink(t *testing.T) {
-	e := newEnv(t)
-	s, _ := e.open(t)
-	mustCreate(t, s, New{Title: "Mail from Sam", Body: "Triage."})
-	mustCreate(t, s, New{Title: "Production", Body: "Errors."})
-	if changed, err := s.Link("n1", "n2", "brain"); err != nil || !changed {
-		t.Fatalf("link: %v %v", changed, err)
-	}
-	if changed, _ := s.Link("n1", "n2", "brain"); changed {
-		t.Fatal("linked twice")
-	}
-	if _, err := s.Link("n1", "n9", "brain"); err == nil {
-		t.Fatal("a link to no node")
-	}
-	if _, err := s.Link("n1", "n1", "brain"); err == nil {
-		t.Fatal("a link to itself")
-	}
-	d, _ := s.Read("n1", 0)
-	if len(d.Node.Meta.Links) != 1 || d.Node.Meta.Links[0] != "n2" {
-		t.Fatalf("links: %v", d.Node.Meta.Links)
-	}
-	if g, err := s.Graph(); err != nil || len(g) != 2 || g[0].ID != "n1" || len(g[0].Links) != 1 || g[0].Links[0] != "n2" {
-		t.Fatalf("graph: %+v %v", g, err)
-	}
-}
-
 func TestInStatesAndRecent(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)

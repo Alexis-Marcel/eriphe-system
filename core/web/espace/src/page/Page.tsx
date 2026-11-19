@@ -125,7 +125,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
         )}
       </header>
       <div className="pg-body">
-        {tab === "doc" && (page ? <Doc page={page} latest={latest} live={live} /> : failed ? <p className="pg-empty">{t("espace.page.gone")}</p> : <Skeleton />)}
+        {tab === "doc" && (page ? <Doc page={page} latest={latest} live={live} onOpen={onOpen} /> : failed ? <p className="pg-empty">{t("espace.page.gone")}</p> : <Skeleton />)}
         {tab === "trace" && (trace ? <Trace entries={trace} /> : <Skeleton />)}
         {tab === "md" && (file ? <MdTab key={`${id}@${version}`} id={id} file={file} latest={latest} live={live} shift={shift} /> : <Skeleton />)}
       </div>

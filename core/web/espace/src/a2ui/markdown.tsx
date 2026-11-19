@@ -9,6 +9,15 @@ import type { ReactNode } from "react";
 // raw HTML stays text, as React writes any string. An image shows its alt
 // text (the catalog has none); a link opens only on the user's click, in a
 // new tab, and only to http(s) or mailto.
+//
+// A node's page reads its links to other nodes too, as Obsidian writes
+// them: [[Title]], or [[Title|shown words]], never inside code, \[[ only
+// brackets (core/nodefile/wikilink.go reads them the same way, both held
+// to core/nodefile/testdata/wikilinks.json). The page says which node each
+// opens (Wiki): a click opens it beside the page; one archived shows so
+// and opens nothing; a name no node has is greyed. The link's real target
+// is its tooltip and is in its accessible name, whatever words it shows.
+// Without a Wiki (the catalog's Markdown), [[...]] stays as written.
 
 export function safeHref(raw: string): string | null {
   const url = raw.trim();
@@ -31,7 +40,20 @@ type Inline =
   | { t: "code"; s: string }
   | { t: "em" | "strong"; c: Inline[] }
   | { t: "link"; href: string | null; c: Inline[] }
+  | { t: "wiki"; name: string; shown: string; raw: string }
   | Delim;
+
+// A node a [[link]] opens, as the page names it: title is its title, or
+// the word for someone else's words (named false); archived, it opens
+// nothing.
+export type WikiTarget = { id: string; title: string; named: boolean; archived?: boolean };
+export type Wiki = {
+  find: (name: string) => WikiTarget | undefined;
+  open: (id: string) => void;
+  none: string; // the tooltip of a name no node has
+  archived: (title: string) => string; // the tooltip of an archived one
+};
+export type WikiLink = { name: string; shown?: string };
 
 const PUNCT = /[\p{P}\p{S}]/u;
 const SPACE = /\s/u;
@@ -92,6 +114,28 @@ function linkAt(s: string, i: number): { text: string; dest: string; end: number
   return { text: s.slice(i + 1, j), dest, end: j + 1 + m[0].length };
 }
 
+// wikiEnd is where the [[...]] that opens at i ends (just past its ]]), or
+// -1: it closes on the same line, holds no bracket, and names something.
+function wikiEnd(s: string, i: number): number {
+  for (let j = i + 2; j + 1 < s.length; j++) {
+    const c = s[j];
+    if (c === "\n" || c === "[") return -1;
+    if (c === "]") return s[j + 1] === "]" && wikiParse(s.slice(i + 2, j)) ? j + 2 : -1;
+  }
+  return -1;
+}
+
+// wikiParse reads a link's inside, name|shown (\| as |); null when it
+// names nothing.
+function wikiParse(inner: string): WikiLink | null {
+  const s = inner.replace(/\\\|/g, "|");
+  const bar = s.indexOf("|");
+  const name = (bar < 0 ? s : s.slice(0, bar)).trim();
+  if (!name) return null;
+  const shown = bar < 0 ? "" : s.slice(bar + 1).trim();
+  return shown ? { name, shown } : { name };
+}
+
 // scan reads text into inline pieces, left to right; emphasis is paired
 // afterwards (emphasis).
 function scan(s: string): Inline[] {
@@ -105,6 +149,7 @@ function scan(s: string): Inline[] {
   for (let i = 0; i < s.length; ) {
     const c = s[i];
     let l: ReturnType<typeof linkAt>;
+    let w: number;
     if (c === "\\" && i + 1 < s.length && ESCAPABLE.test(s[i + 1])) {
       text += s[i + 1];
       i += 2;
@@ -122,6 +167,11 @@ function scan(s: string): Inline[] {
     } else if (c === "!" && s[i + 1] === "[" && (l = linkAt(s, i + 1))) {
       text += l.text;
       i = l.end;
+    } else if (c === "[" && s[i + 1] === "[" && (w = wikiEnd(s, i)) > 0) {
+      const raw = s.slice(i, w);
+      const p = wikiParse(raw.slice(2, -2))!;
+      push({ t: "wiki", name: p.name, shown: p.shown ?? "", raw });
+      i = w;
     } else if (c === "[" && (l = linkAt(s, i))) {
       push({ t: "link", href: safeHref(l.dest), c: emphasis(scan(l.text)) });
       i = l.end;
@@ -180,25 +230,60 @@ function textOfDelim(p: Inline): Inline {
   return p.t === "delim" ? { t: "text", s: p.ch.repeat(p.n) } : p;
 }
 
-function render(items: Inline[], newTab: string, key: string): ReactNode[] {
+// Ctx is what drawing inline pieces needs: the words after a link, the
+// page's links to nodes, and whether it draws inside a link (where a
+// [[link]] is only its words: no link in a link).
+type Ctx = { newTab: string; wiki?: Wiki; inLink?: boolean };
+
+function wikiPiece(p: Extract<Inline, { t: "wiki" }>, ctx: Ctx, k: string): ReactNode {
+  const { wiki } = ctx;
+  if (!wiki) return p.raw;
+  const to = wiki.find(p.name);
+  const words = p.shown || (to?.named ? to.title : p.name);
+  if (ctx.inLink) return words;
+  if (!to)
+    return (
+      <span key={k} className="a2-wiki none" title={wiki.none}>
+        {words}
+      </span>
+    );
+  // The real target, whatever the words: its tooltip, and its name to a
+  // screen reader when the words are others.
+  const label = words === to.title ? undefined : `${words} (${to.title})`;
+  if (to.archived)
+    return (
+      <span key={k} className="a2-wiki archived" title={wiki.archived(to.title)} aria-label={label && wiki.archived(label)}>
+        {words}
+      </span>
+    );
+  return (
+    <button key={k} type="button" className="a2-wiki" data-node={to.id} title={to.title} aria-label={label} onClick={() => wiki.open(to.id)}>
+      {words}
+    </button>
+  );
+}
+
+function render(items: Inline[], ctx: Ctx, key: string): ReactNode[] {
   return items.map((p, n) => {
     const k = `${key}.${n}`;
     switch (p.t) {
       case "code":
         return <code key={k}>{p.s}</code>;
       case "strong":
-        return <strong key={k}>{render(p.c, newTab, k)}</strong>;
+        return <strong key={k}>{render(p.c, ctx, k)}</strong>;
       case "em":
-        return <em key={k}>{render(p.c, newTab, k)}</em>;
+        return <em key={k}>{render(p.c, ctx, k)}</em>;
       case "link":
         return p.href ? (
           <a key={k} href={p.href} target="_blank" rel="noopener noreferrer">
-            {render(p.c, newTab, k)}
-            <span className="sr-only"> {newTab}</span>
+            {render(p.c, { ...ctx, inLink: true }, k)}
+            <span className="sr-only"> {ctx.newTab}</span>
           </a>
         ) : (
-          <span key={k}>{render(p.c, newTab, k)}</span>
+          <span key={k}>{render(p.c, ctx, k)}</span>
         );
+      case "wiki":
+        return wikiPiece(p, ctx, k);
       case "text":
         return p.s;
       default:
@@ -207,8 +292,15 @@ function render(items: Inline[], newTab: string, key: string): ReactNode[] {
   });
 }
 
-function inline(text: string, newTab: string, key = "i"): ReactNode[] {
-  return render(emphasis(scan(text)), newTab, key);
+function inline(text: string, ctx: Ctx, key = "i"): ReactNode[] {
+  return render(emphasis(scan(text)), ctx, key);
+}
+
+function collect(items: Inline[], out: WikiLink[]) {
+  for (const p of items) {
+    if (p.t === "wiki") out.push(p.shown ? { name: p.name, shown: p.shown } : { name: p.name });
+    else if (p.t === "em" || p.t === "strong" || p.t === "link") collect(p.c, out);
+  }
 }
 
 // ---- Blocks ----
@@ -225,7 +317,8 @@ type Block =
 
 // cells splits a table row on its pipes, as GFM does: a pipe splits the
 // row even inside a code span, unless it is escaped (\|), which leaves a
-// | in the cell, code span or not. The outer pipes are optional.
+// | in the cell, code span or not; nor one inside a [[name|shown]] link.
+// The outer pipes are optional.
 export function cells(line: string): string[] {
   let s = line.trim();
   if (s.startsWith("|")) s = s.slice(1);
@@ -241,6 +334,10 @@ export function cells(line: string): string[] {
     } else if (c === "\\" && i + 1 < s.length) {
       cell += c + s[i + 1];
       i++;
+    } else if (c === "[" && s[i + 1] === "[" && wikiEnd(s, i) > 0) {
+      const e = wikiEnd(s, i);
+      cell += s.slice(i, e);
+      i = e - 1;
     } else if (c === "|") {
       out.push(cell.trim());
       cell = "";
@@ -338,9 +435,33 @@ function blocks(src: string): Block[] {
 
 const alignClass = (a: Align) => (a ? `a2-md-${a}` : undefined);
 
+// inlineTexts are the pieces of text the blocks read inline.
+function inlineTexts(b: Block): string[] {
+  switch (b.kind) {
+    case "code":
+      return [];
+    case "ul":
+    case "ol":
+      return b.items;
+    case "table":
+      return [...b.head, ...b.rows.flat()];
+    default:
+      return [b.text];
+  }
+}
+
+// wikiLinks are the [[links]] of a text, in order, every one: those the
+// page draws (and eriphe-core indexes, core/nodefile/wikilink.go).
+export function wikiLinks(text: string): WikiLink[] {
+  const out: WikiLink[] = [];
+  for (const b of blocks(text)) for (const t of inlineTexts(b)) collect(emphasis(scan(t)), out);
+  return out;
+}
+
 // Markdown renders text; newTab is what a screen reader hears after a link
-// ("opens in a new tab").
-export function Markdown({ text, newTab }: { text: string; newTab: string }) {
+// ("opens in a new tab"); wiki, a node's page's links to other nodes.
+export function Markdown({ text, newTab, wiki }: { text: string; newTab: string; wiki?: Wiki }) {
+  const ctx: Ctx = { newTab, wiki };
   return (
     <div className="a2-markdown">
       {blocks(text).map((b, i) => {
@@ -349,7 +470,7 @@ export function Markdown({ text, newTab }: { text: string; newTab: string }) {
           case "h": {
             // Inside a block, headings sit under the page's own title.
             const H = (["h3", "h4", "h5", "h6", "h6", "h6"] as const)[b.level - 1];
-            return <H key={k}>{inline(b.text, newTab, k)}</H>;
+            return <H key={k}>{inline(b.text, ctx, k)}</H>;
           }
           case "code":
             return (
@@ -358,14 +479,14 @@ export function Markdown({ text, newTab }: { text: string; newTab: string }) {
               </pre>
             );
           case "quote":
-            return <blockquote key={k}>{inline(b.text, newTab, k)}</blockquote>;
+            return <blockquote key={k}>{inline(b.text, ctx, k)}</blockquote>;
           case "ul":
           case "ol": {
             const L = b.kind;
             return (
               <L key={k}>
                 {b.items.map((it, j) => (
-                  <li key={j}>{inline(it, newTab, `${k}.${j}`)}</li>
+                  <li key={j}>{inline(it, ctx, `${k}.${j}`)}</li>
                 ))}
               </L>
             );
@@ -379,7 +500,7 @@ export function Markdown({ text, newTab }: { text: string; newTab: string }) {
                     <tr>
                       {b.head.map((c, j) => (
                         <th key={j} className={alignClass(b.align[j])}>
-                          {inline(c, newTab, `${k}.h${j}`)}
+                          {inline(c, ctx, `${k}.h${j}`)}
                         </th>
                       ))}
                     </tr>
@@ -389,7 +510,7 @@ export function Markdown({ text, newTab }: { text: string; newTab: string }) {
                       <tr key={ri}>
                         {r.map((c, j) => (
                           <td key={j} className={alignClass(b.align[j])}>
-                            {inline(c, newTab, `${k}.${ri}.${j}`)}
+                            {inline(c, ctx, `${k}.${ri}.${j}`)}
                           </td>
                         ))}
                       </tr>
@@ -399,7 +520,7 @@ export function Markdown({ text, newTab }: { text: string; newTab: string }) {
               </div>
             );
           default:
-            return <p key={k}>{inline(b.text, newTab, k)}</p>;
+            return <p key={k}>{inline(b.text, ctx, k)}</p>;
         }
       })}
     </div>
