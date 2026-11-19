@@ -4,7 +4,7 @@ import { place, type GraphNode } from "../data/api";
 import { closePage, depthOf, openPage, placeAt, step, store, subtree, talkTo, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Page } from "../page/Page";
-import { boxAt, frameAll, framePages, type Box, type Cam } from "./camera";
+import { boxAt, edgeMark, frameAll, framePages, type Box, type Cam } from "./camera";
 import { edgePush, edgeStep, homesFor, leash, simulate, tether, TETHER, type Pin, type Pos, type Pt } from "./layout";
 import { codeOf, labelBox, radiusOf, titleOf, waits, weight } from "./model";
 
@@ -388,10 +388,6 @@ export function Graph({ live }: { live: boolean }) {
   );
 }
 
-// EDGE is how far from the screen's edges a mark stays; the console takes
-// the foot of the screen.
-const EDGE = 18, FOOT = 120;
-
 // Edges marks the nodes that wait for the user out of view: a small arrow
 // at the screen's edge, toward each; a click opens it.
 function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>]; size: { w: number; h: number }; marks: { id: string; title: string; at: Pt }[]; onOpen: (id: string) => void }) {
@@ -407,10 +403,8 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
   useMotionValueEvent(k, "change", again);
   useEffect(() => () => void (raf.current !== null && cancelAnimationFrame(raf.current)), []);
   const out = marks.flatMap((m) => {
-    const sx = x.get() + m.at[0] * k.get(), sy = y.get() + m.at[1] * k.get();
-    if (sx >= 0 && sx <= size.w && sy >= 0 && sy <= size.h - FOOT) return [];
-    const cx = Math.min(size.w - EDGE, Math.max(EDGE, sx)), cy = Math.min(size.h - FOOT, Math.max(EDGE, sy));
-    return [{ ...m, cx, cy, turn: Math.atan2(sy - cy, sx - cx) }];
+    const e = edgeMark(x.get() + m.at[0] * k.get(), y.get() + m.at[1] * k.get(), size);
+    return e ? [{ ...m, cx: e.x, cy: e.y, turn: e.turn }] : [];
   });
   return (
     <>

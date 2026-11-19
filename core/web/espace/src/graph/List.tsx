@@ -51,7 +51,7 @@ export function List({ live }: { live: boolean }) {
               <button type="button" onClick={() => step(store, openPage, x.id, false)}>
                 <i className={`dot${yours ? " yours" : x.state === "running" ? " run" : ""}`} />
                 <b>{titleOf(x, external)}</b>
-                {yours ? <em className="yours">{t("espace.ticker.waits")}</em> : x.state === "running" && x.line ? <em className="runs">{x.line}</em> : null}
+                {yours ? <em className="yours">{t("espace.waits")}</em> : x.state === "running" && x.line ? <em className="runs">{x.line}</em> : null}
               </button>
             </li>
           );

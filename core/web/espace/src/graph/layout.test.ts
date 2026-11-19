@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxAt, framePages, READABLE } from "./camera";
+import { boxAt, edgeMark, FOOT, framePages, READABLE } from "./camera";
 import {
   EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, homesFor, leash, ROOM, simulate, STEP, tether, TETHER,
   type LNode, type Pos, type Pt,
@@ -180,5 +180,24 @@ describe("the camera", () => {
     // the console on the home: the last page opened (the one Eriphe just showed)
     const home = framePages(far, null, [], size);
     expect(home.x + 2600 * home.k).toBeCloseTo(size.w / 2, 0);
+  });
+});
+
+describe("the edge marks", () => {
+  const size = { w: 1000, h: 800 };
+  it("mark no node in view", () => {
+    expect(edgeMark(500, 400, size)).toBeNull();
+  });
+  it("sit at the nearest edge, turned toward the node", () => {
+    const right = edgeMark(1400, 300, size)!;
+    expect([right.x, right.y, right.turn]).toEqual([982, 300, 0]);
+    const above = edgeMark(200, -500, size)!;
+    expect([above.x, above.y]).toEqual([200, 18]);
+    expect(above.turn).toBeCloseTo(-Math.PI / 2);
+  });
+  it("keep above the console", () => {
+    const low = edgeMark(500, 760, size)!;
+    expect(low.y).toBe(800 - FOOT);
+    expect(low.turn).toBeCloseTo(Math.PI / 2);
   });
 });

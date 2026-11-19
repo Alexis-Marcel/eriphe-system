@@ -1226,9 +1226,12 @@ composes each one from the catalog.
   node (its body as a task's blocks are: the actions' grammar, no ask after external content, no
   Link to a source's value; each source a catalog server's, an approved monitor, or the view's
   own), the monitor (`write_monitor`'s checks, its name free) and the skill (`write_skill`'s, its
-  name free, with `when`; code writes its `node:`, the id given beforehand). The card shows the
-  node's title and blocks with what each reads, what the monitor does, and when the skill runs,
-  with the repositories its steps may borrow; the view's `goal` is its why, where the brain recalls
+  name free, with `when`; code writes its `node:`, the id given beforehand). The card leads with a
+  summary code writes from what it checked (`viewSummary`: the page, how often the monitor looks,
+  what the skill does each time, its description, how it may tell the user, its urgent text), then,
+  under « Détails » (fields marked `detail`), the node's blocks with what each reads, what the
+  monitor does, and when the skill runs, with the repositories its steps may borrow, and its
+  instructions (marked `markdown`, drawn as Markdown); the view's `goal` is its why, where the brain recalls
   the choices the user made when it asked first (scope, what matters, when to tell: the prompt's
   « Ce qui tournera seul »). One yes makes the node (standing, by `user`), the
   monitor (on) and the skill (approved), in that order; one that fails takes back those before,
@@ -3134,8 +3137,10 @@ token in `X-CSRF-Token`:
   under it, depth first, in the order they were made; a tap opens its page alone over the list.
 - `page/`: a page in the graph, any number open: a click opens one alone, ⌘, Ctrl or shift with
   the click one more. Dragged by its head; its head says what it belongs to, its title, its date
-  or « En cours » on the title line, its versions, « Archiver », the cross that closes this page
-  only; the tabs Contenu, Trace and .md; at its foot the cards it waits on, answered by their
+  (`stamp`, in the browser's time: today the time alone, yesterday « hier, 13 h 13 », this year
+  the day, else with the year) or « En cours » on the title line, its versions, « Archiver », a
+  « ⋯ » menu with its Trace and its .md file (no tabs: the page shows its content), the cross that
+  closes this page only; at its foot the cards it waits on, scrolling on their own past a height, answered by their
   card's Oui or Non (`POST /cards/{id}/yes|no`), read again when a proposal moves, and the question before archiving (how many
   bubbles go with it). An older version shows as it was. The .md tab edits the node's body in
   CodeMirror (`page/Editor.tsx`, in a shadow root: CodeMirror styles a document with a `<style>`
@@ -3148,10 +3153,12 @@ token in `X-CSRF-Token`:
   Proposal only asks. A button's `ask` and a Mark go to eriphe-core (`.../ask`, `.../mark`) from the
   last version of a block that is not external; anything else stays in the page.
 - `console/`: the one input. It talks to the page the console talks to (the last one opened or
-  clicked), else to the home (`POST /messages` with `node`); Eriphe's newest line shows by the orb,
-  the replies it suggests under it; the conversation of that node opens over it.
-- `hud/`: no bar, the graph takes the whole screen. At the top, the ticker of what waits for the
-  user and what runs, each a way to its page; in the top-right corner, three icons: Archives (its
+  clicked), else to the home (`POST /messages` with `node`); on a panel of its own above the orb,
+  the user's last question in grey (one line, whole on a click, shown as soon as it is sent),
+  Eriphe's newest line and the replies it suggests; the conversation of that node opens over it.
+- `hud/`: no bar, the graph takes the whole screen; the bubbles say what waits for the user (a
+  breathing accent ring, « t'attend » under the name; out of view, an arrow at the screen's edge
+  that opens it) and what runs. In the top-right corner, three icons: Archives (its
   count as a badge), what the user archived, each to reopen; the light or dark theme; the
   settings. Under them, the notices and a word when the stream is down. A page shows its own
   path; closing the last one brings the console back to the home.
@@ -3354,7 +3361,9 @@ through `a2ui.Validate`).
   card): `GET /api/proposals/{ref}` (`web_proposals.go`) gives its kind, text, why, fields
   and state in the user's language, where it comes from (`node`, `from`) and what its Oui does
   (`yes`) when it is an [access or a start's card](#the-approval-card), and the card that answers it (404 when no card carries
-  it). Its header and buttons say what the card asks, by its kind: a memory « Garder en mémoire ? »
+  it). A `summary` (a view's) is what its yes makes, in plain sentences of code's, shown first; a
+  field marked `detail` is under a collapsed « Détails », one click away and never removed, and
+  one marked `markdown` (a skill's instructions) is drawn as Markdown in a box that scrolls. Its header and buttons say what the card asks, by its kind: a memory « Garder en mémoire ? »
   and an intention « Garder ce rappel ? », Garder / Oublier (kept or forgotten once answered: yes runs
   nothing); any other kind « Proposition », Oui / Non, its text saying what will be done. Its buttons answer the proposal's card (`POST /cards/{id}/yes|no`, the proposal read first: one no card
   carries, or no longer waiting, is not answered), then the proposal is read

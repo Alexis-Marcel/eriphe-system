@@ -5,8 +5,8 @@ export type Cam = { k: number; x: number; y: number };
 export type Box = [number, number, number, number]; // left, top, right, bottom, in the world
 export type Size = { w: number; h: number };
 
-// The screen's free band, between the ticker and the corner's icons at the
-// top and the console.
+// The screen's free band, between the corner's icons at the top and the
+// console.
 export const TOP = 60;
 export const BOTTOM = 150;
 export const SIDE = 20;
@@ -52,4 +52,18 @@ export function frameAll(points: Pt[], size: Size): Cam {
   if (points.length === 0) return { k: 1, x: size.w / 2, y: size.h / 2 };
   const bs: Box[] = points.map((p) => [p[0] - 90, p[1] - 60, p[0] + 90, p[1] + 90]);
   return fit(bs, size, 1.05, 0.25);
+}
+
+// EDGE is how far from the screen's edges an edge mark stays; FOOT, the
+// room the console takes at the foot.
+export const EDGE = 18;
+export const FOOT = 120;
+
+// edgeMark is where the mark of a node out of view sits on screen (the
+// node at sx, sy on screen): at the nearest edge, turned toward it
+// (radians); null when the node is in view.
+export function edgeMark(sx: number, sy: number, size: Size): { x: number; y: number; turn: number } | null {
+  if (sx >= 0 && sx <= size.w && sy >= 0 && sy <= size.h - FOOT) return null;
+  const x = Math.min(size.w - EDGE, Math.max(EDGE, sx)), y = Math.min(size.h - FOOT, Math.max(EDGE, sy));
+  return { x, y, turn: Math.atan2(sy - y, sx - x) };
 }

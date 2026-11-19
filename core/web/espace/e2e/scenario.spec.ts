@@ -220,6 +220,11 @@ test("the steps of the scenario", async ({ page, request }) => {
   await details.locator("summary").click();
   await expect(details.locator(".a2-proposal-md h3")).toHaveText("Trier les mails");
   await expect(details).not.toContainText("**chaque**");
+  // However long the card, the page keeps its body above its foot.
+  const body = (await watch.locator(".pg-body").boundingBox())!;
+  const foot = (await viewCard.boundingBox())!;
+  expect(body.height).toBeGreaterThan(80);
+  expect(body.y + body.height).toBeLessThanOrEqual(foot.y + 1);
   await details.locator(".a2-proposal-md").scrollIntoViewIfNeeded();
   await shot(page, "view-card-details", true);
   await viewCard.getByRole("button", { name: "Oui" }).click();
