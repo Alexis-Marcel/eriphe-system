@@ -56,11 +56,26 @@ func TestArchiveWithdrawsItsCards(t *testing.T) {
 	c.cardRaisedFor(nodeRef(other), beside)
 	c.cardRaisedFor(nodeRef(subject), shared)
 	c.cardRaisedFor(nodeRef(other), shared) // a live node still holds it
+	// A call the brain asked for in the subject: it waits by itself.
+	ask := c.newAccessAsk(accessQuestion{TaskID: "brain", Need: accessNeed{Server: "mail", Category: catSend},
+		Call: "mail__send []", Input: `{}`, source: nodeRef(subject)})
+	call := proposalRef(cardAccess, ask)
+	if !slices.Contains(c.cardNodes(call), subject) {
+		t.Fatalf("the call's card is not the subject's: %v", c.cardNodes(call))
+	}
+	var before, after int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&before)
 
 	if err := c.archiveNode(context.Background(), subject, byUser); err != nil {
 		t.Fatal(err)
 	}
 	c.syncCards() // a proposal still waiting would get a new card here
+	if x := cardOfRef(t, c, call); x.State != cardGone || c.proposalOf(cardAccess, ask).Pending {
+		t.Errorf("the call: card %s, still waits %v", x.State, c.proposalOf(cardAccess, ask).Pending)
+	}
+	if c.store.db.QueryRow(`SELECT COUNT(*) FROM messages`).Scan(&after); after != before {
+		t.Errorf("the withdrawn call told someone: %d messages, %d before", after, before)
+	}
 	for _, ref := range []string{mine, kids, about} {
 		x := cardOfRef(t, c, ref)
 		if x.State != cardGone || x.By != cardByArchive {

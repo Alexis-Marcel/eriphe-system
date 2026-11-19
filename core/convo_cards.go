@@ -94,7 +94,7 @@ type convoCard struct {
 	Created  time.Time
 	Attached time.Time
 	Decided  time.Time
-	By       string // web, a channel's id, text, or page (the fallback page)
+	By       string // web, a channel's id, text, page (the fallback page), or archive (withdrawCards)
 	About    string // what it is about: its proposal's, else its maker's (cardAbout)
 }
 
@@ -790,9 +790,8 @@ const cardByArchive = "archive"
 // archived (ids): archiving is setting the subject aside, so what it asked
 // goes with it. A card is theirs when linked to one of them (node_cards)
 // or about one (node:<id>); one a live node still holds stays. Each card
-// is gone, decided by the archive, and its proposal no longer waits: a
-// view is dropped, any other is answered no through its own approval,
-// without decideCard's words to the brain or a task. So no card comes
+// is gone, decided by the archive, and its proposal no longer waits
+// (withdrawProposal), without decideCard's words to the brain or a task. So no card comes
 // back, not even when the node is reopened; the brain may propose again,
 // and no longer reads it among what waits (pendingProposals). Called after
 // the archive, before the nodes are unlinked from their cards
@@ -852,8 +851,9 @@ func (c *core) withdrawCards(ctx context.Context, ids []string) {
 }
 
 // withdrawProposal makes a proposal wait no more, undecided by the user:
-// a view is dropped, a memory forgotten; another kind is answered no
-// through its own approval, which records it.
+// a view is dropped, a memory forgotten, the calls and access a card asks
+// for withdrawn (withdrawAsk); another kind is answered no through its own
+// approval, which only records it.
 func (c *core) withdrawProposal(ctx context.Context, kind string, id int64) error {
 	switch kind {
 	case cardViewKind:
@@ -861,6 +861,39 @@ func (c *core) withdrawProposal(ctx context.Context, kind string, id int64) erro
 		return err
 	case cardMemory:
 		return c.mem.forget(id, "owner", "withdrawn: its node was archived")
+	case cardAccess:
+		a, err := c.accessAskOf(id)
+		if err != nil {
+			return errCardDecided
+		}
+		c.withdrawAsk(ctx, a)
+		return nil
+	case cardCalls:
+		for _, a := range c.batchAsks(id) {
+			c.withdrawAsk(ctx, a)
+		}
+		return nil
+	case cardRunCalls:
+		for _, a := range c.runAsks(id) {
+			c.withdrawAsk(ctx, a)
+		}
+		return nil
 	}
 	return c.decideProposal(ctx, kind, id, false)
+}
+
+// withdrawAsk takes back a call or an access a card asks for, its node
+// archived: it waits no more, nothing runs, and nobody is told the user
+// refused (no word to the brain, no trace on the archived node). A task
+// that waits on the access is answered no, as on a no.
+func (c *core) withdrawAsk(ctx context.Context, a accessQuestion) {
+	res, err := c.store.db.Exec(`UPDATE access_asks SET state = ?, decided = ? WHERE id = ? AND state = ?`,
+		startRejected, time.Now().Unix(), a.ID, startProposed)
+	if n, _ := rowsOf(res, err); n != 1 {
+		return
+	}
+	log.Printf("access ask %d: withdrawn, its node archived", a.ID)
+	if a.Call == "" && len(a.Refs) == 0 {
+		c.settleWaiting(ctx, a, false)
+	}
 }
