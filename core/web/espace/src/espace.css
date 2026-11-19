@@ -627,7 +627,9 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 /* ---------- a page, open in the graph (page/) ---------- */
 .gr-page { position: absolute; z-index: 4; translate: -50% -50%; display: flex; flex-direction: column; }
 .gr-page > .pg { max-height: inherit; } /* the height the screen holds above the bar (Graph.tsx) */
-.pg { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; min-height: 0; max-height: 640px; overflow: hidden; position: relative;
+/* Its rows: the head, fixed; the body, which scrolls (its content and the
+   cards at its foot, one column); the question to archive, when asked. */
+.pg { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; max-height: 640px; overflow: hidden; position: relative;
   border-radius: var(--r); background: var(--card); border: 1px solid var(--line); box-shadow: var(--lift); transition: border-color 0.3s, box-shadow 0.3s; }
 .pg::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 70%, transparent), transparent); }
 .pg.talking { border-color: color-mix(in oklab, var(--accent) 55%, var(--line)); box-shadow: var(--lift), 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent); }
@@ -667,11 +669,18 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .pg-view { display: flex; align-items: center; gap: 10px; margin: 2px 0 0; font-size: 12.5px; color: var(--fg3); }
 .pg-view b { font-weight: 500; color: var(--fg2); }
 .pg-view .linkish { font-size: inherit; color: var(--accent-text); }
-.pg-body { overflow-y: auto; padding: 16px 20px 20px; scrollbar-width: thin; }
-/* The cards at the foot scroll on their own past a height: however long a
-   card (its Détails open), the body keeps its room and nothing overlaps. */
-.pg-foot { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--fill); max-height: min(340px, 50vh); overflow-y: auto; scrollbar-width: thin; }
-.ls-page .pg-foot { max-height: none; }
+/* The body is the page's one scroll: the wheel over a page scrolls it, not
+   the graph (Graph.tsx). In the graph it keeps its scroll to itself; on a
+   small screen the list scrolls the whole page (.ls-page). */
+.pg-body { overflow-y: auto; padding: 16px 20px 20px; scrollbar-width: thin; touch-action: pan-y; }
+.pg-body:focus { outline: none; }
+.pg-body:focus-visible { outline: 2px solid var(--link-on); outline-offset: -2px; }
+.gr-page .pg-body { overscroll-behavior: contain; }
+.ls-page .pg-body { overflow: visible; }
+/* The cards at the foot: a band across the page, the last thing its body
+   scrolls to. */
+.pg-foot { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--fill); }
+.pg-body > .pg-foot { margin: 20px -20px -20px; }
 .pg-doc { display: grid; gap: 14px; }
 .pg-doc .a2-markdown > :first-child { margin-top: 0; }
 .a2-block { display: flex; flex-direction: column; gap: 10px; }

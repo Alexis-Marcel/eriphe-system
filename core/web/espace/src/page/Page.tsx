@@ -14,7 +14,8 @@ import { useFile, usePage, useTrace } from "./usePage";
 // (what it belongs to, its title, its date or what is happening, its
 // versions, the way to archive it, a small « ⋯ » menu for what is rarely
 // wanted: its trace and its .md file, the button that closes it), its
-// content, and at its foot the cards it waits on. In the
+// content, and at its foot the cards it waits on: under its head, the
+// content and the cards scroll as one column, nothing cut off. In the
 // graph it is moved by its head, like a bubble. Archiving is the user's
 // alone, asked once more at the foot, with how many bubbles go with it.
 
@@ -124,10 +125,17 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
           </p>
         )}
       </header>
-      <div className="pg-body">
+      {/* The body scrolls as one, the cards at its foot with it; focused,
+          it takes the keyboard's arrows and pages. */}
+      <div className="pg-body" tabIndex={0}>
         {tab === "doc" && (page ? <Doc page={page} latest={latest} live={live} onOpen={onOpen} /> : failed ? <p className="pg-empty">{t("espace.page.gone")}</p> : <Skeleton />)}
         {tab === "trace" && (trace ? <Trace entries={trace} /> : <Skeleton />)}
         {tab === "md" && (file ? <MdTab key={`${id}@${version}`} id={id} file={file} latest={latest} live={live} shift={shift} /> : <Skeleton />)}
+        {page && page.cards.length > 0 && latest && (
+          <footer className="pg-foot">
+            <Cards surface={`${id}--cards`} refs={page.cards.map((c) => c.ref)} />
+          </footer>
+        )}
       </div>
       {asking && node && (
         <footer className="pg-foot pg-ask" role="alertdialog" aria-label={t("espace.page.archive.ask", titleOf(node, external))}>
@@ -145,11 +153,6 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               {t("espace.page.archive")}
             </button>
           </span>
-        </footer>
-      )}
-      {page && page.cards.length > 0 && latest && (
-        <footer className="pg-foot">
-          <Cards surface={`${id}--cards`} refs={page.cards.map((c) => c.ref)} />
         </footer>
       )}
     </article>

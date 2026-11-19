@@ -206,8 +206,19 @@ export function Graph({ live }: { live: boolean }) {
   useEffect(() => {
     const el = vp.current;
     if (!el) return;
+    // Over a page, the wheel scrolls the page's body, from its head too,
+    // and never moves the graph; a pinch there does nothing (the browser
+    // would zoom the whole screen).
     const wheel = (e: WheelEvent) => {
-      if ((e.target as HTMLElement).closest(".pg-body")) return;
+      const pg = (e.target as HTMLElement).closest(".pg");
+      if (pg) {
+        if (e.ctrlKey || e.metaKey) e.preventDefault();
+        else if (!(e.target as HTMLElement).closest(".pg-body")) {
+          e.preventDefault();
+          pg.querySelector(".pg-body")?.scrollBy({ top: e.deltaY, left: e.deltaX });
+        }
+        return;
+      }
       e.preventDefault();
       setManual(true);
       if (e.ctrlKey || e.metaKey) {
