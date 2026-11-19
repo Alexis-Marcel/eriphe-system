@@ -192,7 +192,7 @@ func (c *core) skillFields(m skillManifest, lang string) []cardField {
 			fs = append(fs, cardField{Name: tr(lang, "card.skill.node"), Value: title})
 		}
 	}
-	return append(fs, cardField{Name: tr(lang, "card.skill.instructions"), Value: truncate(m.Body, cardValueMax)})
+	return append(fs, cardField{Name: tr(lang, "card.skill.instructions"), Value: truncate(m.Body, cardValueMax), Detail: true, Markdown: true})
 }
 
 // decideSkill approves or rejects the version the card showed.

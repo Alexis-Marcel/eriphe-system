@@ -933,6 +933,23 @@ function decidedWord(state: string, keeps: boolean): string {
   return `espace.a2.proposal.${state}`;
 }
 
+// Fields are a proposal's fields, by name: a Markdown value (a skill's
+// instructions) drawn as Markdown, in a box that scrolls when long.
+function Fields({ fields }: { fields: NonNullable<ProposalView["fields"]> }) {
+  const { t } = useWords();
+  if (fields.length === 0) return null;
+  return (
+    <dl className="a2-proposal-fields">
+      {fields.map((f) => (
+        <div key={f.name} className={f.markdown ? "a2-proposal-md" : undefined}>
+          <dt>{f.name}</dt>
+          <dd>{f.markdown ? <MarkdownView text={f.value} newTab={t("espace.a2.newtab")} /> : f.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 // Proposal shows one proposal of Eriphe's, read from eriphe-core by its ref
 // (kind:id), and again when it moved; its Oui and Non send an "answer" action naming this surface,
 // this component and that proposal: eriphe-core decides it only if the
@@ -1032,15 +1049,19 @@ const Proposal = createComponentImplementation(
         {exec === "failed" && p.execWhy && <p className="a2-proposal-failed">{t(`espace.a2.proposal.why.${p.execWhy}`)}</p>}
         <p className="a2-proposal-text">{p.text}</p>
         {p.why && <p className="a2-proposal-why">{p.why}</p>}
-        {p.fields && p.fields.length > 0 && (
-          <dl className="a2-proposal-fields">
-            {p.fields.map((f) => (
-              <div key={f.name}>
-                <dt>{f.name}</dt>
-                <dd>{f.value}</dd>
-              </div>
+        {p.summary && p.summary.length > 0 && (
+          <ul className="a2-proposal-summary">
+            {p.summary.map((s) => (
+              <li key={s}>{s}</li>
             ))}
-          </dl>
+          </ul>
+        )}
+        <Fields fields={(p.fields ?? []).filter((f) => !f.detail)} />
+        {p.fields?.some((f) => f.detail) && (
+          <details className="a2-proposal-details">
+            <summary>{t("espace.a2.proposal.details")}</summary>
+            <Fields fields={p.fields.filter((f) => f.detail)} />
+          </details>
         )}
         {p.from && <p className="a2-proposal-from">{p.node ? <a href={`/espace?open=node-${p.node}`}>{p.from}</a> : p.from}</p>}
         {pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}

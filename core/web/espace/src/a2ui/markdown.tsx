@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 // A small Markdown reader for the catalog's Markdown component: headings,
-// paragraphs, lists, quotes, bold, italics, code and links, turned into
+// paragraphs, lists, quotes, fenced code, bold, italics, code and links, turned into
 // React elements. No HTML is ever parsed: raw HTML stays text, as React
 // writes any string. An image shows its alt text (the catalog has none); a
 // link opens only on the user's click, in a new tab, and only to http(s)
@@ -59,6 +59,7 @@ type Block =
   | { kind: "h"; level: number; text: string }
   | { kind: "p"; text: string }
   | { kind: "quote"; text: string }
+  | { kind: "code"; text: string }
   | { kind: "ul" | "ol"; items: string[] };
 
 function blocks(src: string): Block[] {
@@ -68,10 +69,19 @@ function blocks(src: string): Block[] {
     if (para.length) out.push({ kind: "p", text: para.join(" ") });
     para = [];
   };
+  let code: string[] | null = null; // the lines of a fenced block under way
   for (const raw of src.replace(/\r\n?/g, "\n").split("\n")) {
     const line = raw.trim();
     let m: RegExpExecArray | null;
-    if (!line) {
+    if (code) {
+      if (/^(```|~~~)/.test(line)) {
+        out.push({ kind: "code", text: code.join("\n") });
+        code = null;
+      } else code.push(raw);
+    } else if (/^(```|~~~)/.test(line)) {
+      flush();
+      code = [];
+    } else if (!line) {
       flush();
     } else if ((m = /^(#{1,6})\s+(.*)$/.exec(line))) {
       flush();
@@ -94,6 +104,7 @@ function blocks(src: string): Block[] {
     }
   }
   flush();
+  if (code) out.push({ kind: "code", text: code.join("\n") });
   return out;
 }
 
@@ -110,6 +121,12 @@ export function Markdown({ text, newTab }: { text: string; newTab: string }) {
             const H = (["h3", "h4", "h5", "h6", "h6", "h6"] as const)[b.level - 1];
             return <H key={k}>{inline(b.text, newTab, k)}</H>;
           }
+          case "code":
+            return (
+              <pre key={k}>
+                <code>{b.text}</code>
+              </pre>
+            );
           case "quote":
             return <blockquote key={k}>{inline(b.text, newTab, k)}</blockquote>;
           case "ul":

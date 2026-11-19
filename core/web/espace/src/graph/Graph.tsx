@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as PtrEvent } from "react";
-import { AnimatePresence, motion, useSpring } from "motion/react";
+import { AnimatePresence, motion, useMotionValueEvent, useSpring, type MotionValue } from "motion/react";
 import { place, type GraphNode } from "../data/api";
 import { closePage, depthOf, openPage, placeAt, step, store, subtree, talkTo, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Page } from "../page/Page";
-import { boxAt, frameAll, framePages, type Box, type Cam } from "./camera";
+import { boxAt, edgeMark, frameAll, framePages, type Box, type Cam } from "./camera";
 import { edgePush, edgeStep, homesFor, leash, simulate, tether, TETHER, type Pin, type Pos, type Pt } from "./layout";
 import { codeOf, labelBox, radiusOf, titleOf, waits, weight } from "./model";
 
@@ -16,7 +16,9 @@ import { codeOf, labelBox, radiusOf, titleOf, waits, weight } from "./model";
 // and eriphe-core keeps the place (a subject's spot, a bubble's offset
 // from its parent) for every screen.
 // The camera frames the open pages, else the whole graph; a drag or the
-// wheel moves it by hand, a double click gives it back.
+// wheel moves it by hand, a double click gives it back. A node that waits
+// for the user says it on its bubble (a ring that breathes, « t'attend »);
+// out of view, a small mark at the screen's edge points to it.
 
 const ease = [0.2, 0.7, 0.2, 1] as const;
 const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;
@@ -335,6 +337,7 @@ export function Graph({ live }: { live: boolean }) {
               dim={openIds.length > 0 && !lit.has(x.id)}
               held={held?.id === x.id}
               light={0.3 + 0.7 * Math.min(1, weight(x, nodes, now) / 0.85)}
+              waitsWord={t("espace.waits")}
               onGrab={(e) => grabNode(x.id, e)}
               onOpen={(beside) => openNode(x.id, beside)}
             />
@@ -375,14 +378,51 @@ export function Graph({ live }: { live: boolean }) {
             })}
         </AnimatePresence>
       </motion.div>
+      <Edges
+        cam={[camX, camY, camK]}
+        size={size}
+        marks={list.filter((x) => waits(x) && !openIds.includes(x.id) && pos[x.id]).map((x) => ({ id: x.id, title: titleOf(x, external), at: at(x.id) }))}
+        onOpen={(id) => openNode(id, false)}
+      />
     </div>
+  );
+}
+
+// Edges marks the nodes that wait for the user out of view: a small arrow
+// at the screen's edge, toward each; a click opens it.
+function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>]; size: { w: number; h: number }; marks: { id: string; title: string; at: Pt }[]; onOpen: (id: string) => void }) {
+  const { t } = useWords();
+  const [x, y, k] = cam;
+  const [, setTick] = useState(0);
+  const raf = useRef<number | null>(null);
+  const again = () => {
+    if (raf.current === null) raf.current = requestAnimationFrame(() => ((raf.current = null), setTick((n) => n + 1)));
+  };
+  useMotionValueEvent(x, "change", again);
+  useMotionValueEvent(y, "change", again);
+  useMotionValueEvent(k, "change", again);
+  useEffect(() => () => void (raf.current !== null && cancelAnimationFrame(raf.current)), []);
+  const out = marks.flatMap((m) => {
+    const e = edgeMark(x.get() + m.at[0] * k.get(), y.get() + m.at[1] * k.get(), size);
+    return e ? [{ ...m, cx: e.x, cy: e.y, turn: e.turn }] : [];
+  });
+  return (
+    <>
+      {out.map((m) => (
+        <button key={m.id} type="button" className="gr-edge" style={{ left: m.cx, top: m.cy }} aria-label={t("espace.edge", m.title)} title={t("espace.edge", m.title)} onClick={() => onOpen(m.id)}>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" style={{ rotate: `${m.turn}rad` }}>
+            <path d="M3 8h9M8.5 4.5 12 8l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      ))}
+    </>
   );
 }
 
 // Bubble is one node: its core (a click opens its page; with ⌘ or shift,
 // beside the others), a ring for what runs or waits, its label.
 function Bubble(p: {
-  x: GraphNode; title: string; d: number; r: number; at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number;
+  x: GraphNode; title: string; d: number; r: number; at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number; waitsWord: string;
   onGrab: (e: PtrEvent) => void; onOpen: (beside: boolean) => void;
 }) {
   const { x, d, r } = p;
@@ -422,6 +462,7 @@ function Bubble(p: {
       <span className="gr-label" style={{ marginTop: R + (d === 0 ? 14 : 8) }}>
         <b>{p.title}</b>
         {x.line && run && !p.dim && <em className="runs">{x.line}</em>}
+        {yours && !run && <em className="yours">{p.waitsWord}</em>}
       </span>
     </motion.div>
   );

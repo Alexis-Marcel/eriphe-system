@@ -14,14 +14,15 @@ day », « Mails »), drawn larger; the work done for it grows around it as smal
 of the first article », « Style of the articles »). A dashed line joins bubbles that relate to each
 other.
 
-How a bubble looks says what it is, never chosen by an AI: what waits for you is brighter and
-ringed, what is running turns and says where it is under its name (« 3 articles read »), what is
+How a bubble looks says what it is, never chosen by an AI: what waits for you is brighter, its ring
+breathes and « waiting for you » shows under its name (out of view, a small arrow at the edge of
+the screen points to it: click it to open it), what is running turns and says where it is under its name (« 3 articles read »), what is
 done or old fades. A bubble whose title could be someone else's words (a mail's subject, say) is
 named **Outside content**: its own words are never shown as a title.
 
-At the top, the way home, where you are, and the **ticker**: what waits for you and what runs, each
-a click away from its page. At the bottom, the **console**: the one field to write to Eriphe, with
-its orb, Eriphe's latest line above it and the replies it suggests.
+At the bottom, the **console**: the one field to write to Eriphe, with its orb, and above it, on a
+panel of its own, your last question in grey (click it to read it whole), Eriphe's latest line and
+the replies it suggests.
 
 ## Open a page
 
@@ -31,16 +32,19 @@ beside those already open. Each page closes on its own cross.
 
 A page shows:
 
-- what it belongs to, its title, and its date (or « Running » while it runs) on the title line;
-- **Content**: what Eriphe wrote there, text and live blocks (a list, a table, a chart…) whose
-  values keep up to date by themselves;
-- **Trace**: what was done for it, when and by whom (you, Eriphe, a task, Eriphe's code, outside);
-- **.md**: the page's text as it is stored, a plain text file versioned by git, which you can edit
+- what it belongs to, its title, and when it changed (« 1:13 pm », « yesterday, 1:13 pm », « Nov 19 »,
+  or « Running » while it runs) on the title line;
+- what Eriphe wrote there, text and live blocks (a list, a table, a chart…) whose values keep up
+  to date by themselves;
+- behind its **⋯** menu, rarely needed: its **Trace**, what was done for it, when and by whom (you,
+  Eriphe, a task, Eriphe's code, outside), and its **.md file**, the page's text as it is stored, a plain text file versioned by git, which you can edit
   there and **Save** (⌘S or Ctrl-S). If a newer version came while you were writing (Eriphe or a
   task wrote meanwhile), nothing is saved: the page shows that version, and you take it or keep
   your text to save it over;
 - its **versions** (v1, v2…): an older one shows as it was;
-- at its foot, the cards waiting for your answer;
+- at its foot, the cards waiting for your answer: what a yes makes in plain words first, the
+  technical details (sources, monitor, trigger, the skill's instructions) one click away under
+  **Details**;
 - **Archive**: see below.
 
 The console talks to the page you opened or clicked last: « Write to Eriphe about Plan of the first

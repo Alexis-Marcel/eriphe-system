@@ -230,6 +230,12 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				}}, nil
 			})
 	case "mail":
+		mcp.AddTool(s, &mcp.Tool{Name: "recus", Description: "Les mails reçus", Annotations: read},
+			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+				return nil, map[string]any{"messages": []any{
+					map[string]any{"id": "m1", "subject": "Facture d'octobre", "from": "facturation@example.org"},
+				}}, nil
+			})
 		mcp.AddTool(s, &mcp.Tool{Name: "envoyer", Description: "Envoie un mail"},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 				To   string `json:"to"`
@@ -575,9 +581,15 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 			"3. Je te préviens quand ? Par défaut au brief, jamais la nuit.\n4. Je prépare un brouillon pour ton oui, et je note le reste ?\n\n" +
 			"<suggestions>\nFais comme tu proposes\nToutes, et réveille-moi la nuit pour la prod\n</suggestions>"
 	case strings.Contains(said, "Fais comme tu proposes"):
-		// The card recalls the choices: the view's goal is its why.
+		// The card recalls the choices: the view's goal is its why. The whole
+		// view, as a real brain composes it: its node, the monitor that looks
+		// every 5 minutes and the skill that sorts each mail.
 		b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Toutes les boîtes ; ce qui demande une réponse ; prévenu au brief, jamais la nuit",
-			"body": "Les mails qui demandent une réponse.\n"})
+			"body":    "Les mails qui demandent une réponse.\n",
+			"monitor": map[string]any{"name": "mails-recus", "server": "mail", "tool": "recus", "cond": "new", "path": "messages", "id": "id", "every": "5m"},
+			"skill": map[string]any{"name": "mails-trier", "description": "Trie chaque mail reçu et prépare une réponse à ceux qui en demandent une.",
+				"when": "monitor.new key=mails-recus", "every": "15m", "model": "small", "tools": []string{"mail"},
+				"instructions": "# Trier les mails\n\nPour **chaque** mail reçu :\n\n1. Note-le dans la page.\n2. S'il demande une réponse, ouvre un node « Répondre à … » avec un brouillon.\n\nN'envoie rien : l'envoi attend le `oui`.\n"}})
 		return "Voici la vue : dis oui sur sa carte et elle s'ouvre."
 	case strings.Contains(said, "vue de l'agenda"):
 		// Proposed at the home with no subject opened: its card waits in

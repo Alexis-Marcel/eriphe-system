@@ -526,23 +526,23 @@ func (c *core) folderCardContext(ctx context.Context, tool string, input map[str
 	file := f.Name + "/" + cleanFolderPath(str("path"))
 	switch name {
 	case "update_file":
-		out := []cardField{{"file", file}}
+		out := []cardField{{Name: "file", Value: file}}
 		resp, err := c.folderFiles(ctx, f, folderFilesReq{Op: "read", Path: str("path")})
 		if err != nil || !resp.Text {
 			return out // its content is shown as it is
 		}
 		diff := lineDiff(string(resp.Content), str("content"), cardValueMax/80)
-		return append(out, cardField{"diff", diff})
+		return append(out, cardField{Name: "diff", Value: diff})
 	case "delete_file":
-		out := []cardField{{"file", file}}
+		out := []cardField{{Name: "file", Value: file}}
 		if resp, err := c.folderFiles(ctx, f, folderFilesReq{Op: "read", Path: str("path")}); err == nil {
-			out = append(out, cardField{"size", fmt.Sprintf("%d", resp.Size)}, cardField{"modified", resp.Modified.Format(time.RFC3339)})
+			out = append(out, cardField{Name: "size", Value: fmt.Sprintf("%d", resp.Size)}, cardField{Name: "modified", Value: resp.Modified.Format(time.RFC3339)})
 		}
 		return out
 	case "write_file":
-		return []cardField{{"file", file}}
+		return []cardField{{Name: "file", Value: file}}
 	case "move_file":
-		return []cardField{{"file", file}, {"to", f.Name + "/" + cleanFolderPath(str("to"))}}
+		return []cardField{{Name: "file", Value: file}, {Name: "to", Value: f.Name + "/" + cleanFolderPath(str("to"))}}
 	}
 	return nil
 }

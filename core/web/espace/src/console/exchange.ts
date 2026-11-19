@@ -24,9 +24,13 @@ export type Item = { kind: "line"; line: ExchangeLine } | { kind: "draft"; text:
 // present is the last exchange as the console shows it: the message sent,
 // alone until it lands, or the event's lines; the draft; whether Eriphe is
 // at work; the replies it suggests, under its answer only, when nothing
-// else is on its way; and Eriphe's line to show by the orb (aside): its
-// newest, or what it is writing.
-export function present(x: Exchange | null, sent: Sent | null): { items: Item[]; writing: boolean; replies: string[]; aside: string | null } {
+// else is on its way; Eriphe's line to show by the orb (aside): its
+// newest, or what it is writing; and the user's last question (asked),
+// shown above it: the one just sent at once, else the exchange's.
+export function present(
+  x: Exchange | null,
+  sent: Sent | null,
+): { items: Item[]; writing: boolean; replies: string[]; aside: string | null; asked: string | null } {
   const p = sent && !landed(x, sent) ? sent : null;
   const items: Item[] = p ? [{ kind: "line", line: { seq: -1, role: "user", text: p.text, time: "" } }] : (x?.lines ?? []).map((line) => ({ kind: "line", line }));
   const draft = x?.draft ?? "";
@@ -35,5 +39,6 @@ export function present(x: Exchange | null, sent: Sent | null): { items: Item[];
   const last = items.at(-1);
   const answered = !p && !draft && !writing && last?.kind === "line" && last.line.role === "brain" && !last.line.external;
   const aside = draft || (!p && last?.kind === "line" && last.line.role === "brain" ? (last.line.text ?? null) : null);
-  return { items, writing, replies: answered ? (x?.suggestions ?? []).slice(0, 3) : [], aside };
+  const asked = p ? p.text : ([...(x?.lines ?? [])].reverse().find((l) => l.role === "user")?.text ?? null);
+  return { items, writing, replies: answered ? (x?.suggestions ?? []).slice(0, 3) : [], aside, asked };
 }

@@ -61,9 +61,9 @@ func pullContext(input map[string]any, has func(string) bool, read func(tool str
 		if json.Unmarshal([]byte(text), &pull) != nil || pull.Title == "" {
 			return nil
 		}
-		out := []cardField{{"PR", truncate(fmt.Sprintf("#%v %s", number, pull.Title), 300)}}
+		out := []cardField{{Name: "PR", Value: truncate(fmt.Sprintf("#%v %s", number, pull.Title), 300)}}
 		if pull.Body != "" {
-			out = append(out, cardField{"description", truncate(pull.Body, cardDescriptionMax)})
+			out = append(out, cardField{Name: "description", Value: truncate(pull.Body, cardDescriptionMax)})
 		}
 		return out
 	}

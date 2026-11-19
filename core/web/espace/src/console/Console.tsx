@@ -27,7 +27,7 @@ export function Console({ boot }: { boot: api.Boot }) {
   const [draft, setDraft] = useState("");
   const [conv, setConv] = useState(false);
   const [failed, setFailed] = useState(false);
-  const { items, writing, replies, aside } = present(x, sent && sent.to === talk ? sent : null);
+  const { items, writing, replies, aside, asked } = present(x, sent && sent.to === talk ? sent : null);
   const cards = x?.cards ?? [];
   useEffect(() => {
     if (landed(x, sent)) setSent(null);
@@ -76,22 +76,34 @@ export function Console({ boot }: { boot: api.Boot }) {
 
       {!conv && (
         <div className="cs-aside" aria-live="polite">
-          <AnimatePresence mode="wait">
-            {aside && (
-              <motion.div key={`${talk}-${aside.slice(0, 40)}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.35 }}>
-                <div className="cs-said">
-                  <Markdown text={aside} newTab={t("espace.a2.newtab")} />
+          {(asked || aside || writing || replies.length > 0) && (
+            <div className="cs-panel">
+              {asked && <Asked key={asked} text={asked} />}
+              <AnimatePresence mode="wait">
+                {aside && (
+                  <motion.div key={`${talk}-${aside.slice(0, 40)}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.35 }}>
+                    <div className="cs-said">
+                      <Markdown text={aside} newTab={t("espace.a2.newtab")} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              {!aside && writing && (
+                <p className="cs-dots" role="status" aria-label={t("espace.exchange.writing")}>
+                  <i />
+                  <i />
+                  <i />
+                </p>
+              )}
+              {replies.length > 0 && (
+                <div className="cs-replies" role="group" aria-label={t("espace.exchange.replies")}>
+                  {replies.map((r) => (
+                    <button key={r} type="button" className="cs-reply" onClick={() => void say(r, "suggestion")}>
+                      {r}
+                    </button>
+                  ))}
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          {replies.length > 0 && (
-            <div className="cs-replies" role="group" aria-label={t("espace.exchange.replies")}>
-              {replies.map((r) => (
-                <button key={r} type="button" className="cs-reply" onClick={() => void say(r, "suggestion")}>
-                  {r}
-                </button>
-              ))}
+              )}
             </div>
           )}
           {cards.length > 0 && (
@@ -137,6 +149,20 @@ export function Console({ boot }: { boot: api.Boot }) {
         </span>
       </form>
     </div>
+  );
+}
+
+// Asked is the user's last question, above Eriphe's answer: one grey line,
+// cut with « … », its whole text on a click. The next question replaces it
+// (its key), folded again.
+export function Asked({ text }: { text: string }) {
+  const { t } = useWords();
+  const [whole, setWhole] = useState(false);
+  return (
+    <button type="button" className={`cs-asked${whole ? " whole" : ""}`} aria-expanded={whole} title={whole ? undefined : text} onClick={() => setWhole(!whole)}>
+      <span className="sr-only">{t("espace.exchange.asked")} </span>
+      {text}
+    </button>
   );
 }
 

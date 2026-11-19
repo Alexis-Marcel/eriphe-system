@@ -57,6 +57,28 @@ export function shortDate(lang: Lang, w: Wall, now = new Date()): string {
 // A date, short, with its time when it has one.
 export const when = (lang: Lang, w: Wall, now = new Date()) => (w.time ? `${shortDate(lang, w, now)}, ${time(lang, w)}` : shortDate(lang, w, now));
 
+// stamp says when something happened (an instant eriphe-core gives: a
+// page changed, a trace's entry, an archive), in the browser's time:
+// today its time alone (« 13 h 13 », « 1:13 pm »), yesterday « hier,
+// 13 h 13 », this year the day (« 19 nov. », « Nov 19 »), else with the
+// year (« 19 nov. 2025 », « Nov 19, 2025 »). The one way the workspace
+// dates what happened.
+export function stamp(lang: Lang, iso: unknown, now = new Date()): string {
+  if (typeof iso !== "string" || !iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const en = lang === "en";
+  const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((midnight(now) - midnight(d)) / 86_400_000);
+  const hm = en
+    ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).format(d).replace(/\s/g, " ").toLowerCase()
+    : `${d.getHours()} h ${String(d.getMinutes()).padStart(2, "0")}`;
+  if (days === 0) return hm;
+  if (days === 1) return `${en ? "yesterday" : "hier"}, ${hm}`;
+  const year = d.getFullYear() !== now.getFullYear() ? { year: "numeric" as const } : {};
+  return new Intl.DateTimeFormat(en ? "en-US" : "fr-FR", { day: "numeric", month: "short", ...year }).format(d);
+}
+
 // relative says an instant from now: "il y a 2 heures", "demain". Past a
 // week, the date.
 export function relative(lang: Lang, iso: unknown, now = Date.now()): string {

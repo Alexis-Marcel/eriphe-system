@@ -38,8 +38,9 @@ type happenedItem struct {
 
 type happenedPage struct {
 	Items    []happenedItem
-	Kind     string // "" for all
-	Range    string // last, day or week
+	Kind     string   // "" for all
+	Kinds    []string // its tabs: happenedKinds
+	Range    string   // last, day or week
 	From     time.Time
 	FromLast bool // since the user left
 	NoLast   bool // they were not away: the last 24 hours instead
@@ -56,7 +57,7 @@ var (
 
 func (w *web) handleActivity(rw http.ResponseWriter, r *http.Request, s *session) {
 	q := r.URL.Query()
-	v := happenedPage{Kind: q.Get("kind"), Range: q.Get("range"), Max: happenedPageMax}
+	v := happenedPage{Kind: q.Get("kind"), Kinds: happenedKinds, Range: q.Get("range"), Max: happenedPageMax}
 	if !containsStr(happenedKinds, v.Kind) {
 		v.Kind = ""
 	}

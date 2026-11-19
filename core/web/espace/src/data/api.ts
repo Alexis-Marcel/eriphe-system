@@ -279,7 +279,11 @@ export type ProposalView = {
   text: string;
   why?: string;
   tainted?: boolean;
-  fields?: { name: string; value: string }[];
+  // summary: what a yes makes, in plain sentences of code's (a view's);
+  // fields: its technical words, a detail one under Détails, a Markdown
+  // one (a skill's instructions) drawn as such.
+  summary?: string[];
+  fields?: { name: string; value: string; detail?: boolean; markdown?: boolean }[];
   // Where it comes from, in words, with its node; what its Oui does: facts
   // of eriphe-core's, never the model's words.
   node?: string;

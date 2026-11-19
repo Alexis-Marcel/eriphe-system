@@ -234,6 +234,7 @@ func (c *core) viewProposalOf(p proposal) proposal {
 	p.Pending, p.Tainted, p.Why = true, v.Tainted, v.Goal
 	p.text = func(lang string) string { return fmt.Sprintf(tr(lang, "card.view.new"), v.Title) }
 	p.fields = func(lang string) []cardField { return c.viewFields(v, lang) }
+	p.summary = func(lang string) []string { return viewSummary(v, lang) }
 	p.Fields = p.fields("fr")
 	return p
 }
@@ -274,7 +275,42 @@ func (c *core) viewFields(v viewProposal, lang string) []cardField {
 			fs = append(fs, f)
 		}
 	}
+	// The summary says it plainly; these are its technical words, all
+	// under Détails.
+	for i := range fs {
+		fs[i].Detail = true
+	}
 	return fs
+}
+
+// viewSummary is what a view's yes makes, in plain sentences of code's,
+// from what was checked: its page, how its monitor looks, what its skill
+// does each time and how it may tell the user.
+func viewSummary(v viewProposal, lang string) []string {
+	out := []string{fmt.Sprintf(tr(lang, "card.view.sum.page"), v.Title)}
+	if s := v.Spec; s != nil {
+		every := span(time.Duration(s.Every) * time.Minute)
+		switch {
+		case s.Way == wayListen:
+			out = append(out, tr(lang, "card.view.sum.listen"))
+		case s.Cond == condNew:
+			out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.new"), every))
+		default:
+			out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.changed"), every))
+		}
+	}
+	if m := v.manifest; m != nil {
+		if d := strings.TrimSpace(m.Description); d != "" {
+			out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.skill"), d))
+		}
+		if m.Trigger != nil {
+			out = append(out, tr(lang, "card.view.sum.tells"))
+			if m.Trigger.Urgent != "" {
+				out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.urgent"), m.Trigger.Urgent))
+			}
+		}
+	}
+	return out
 }
 
 // viewSourceText is what a block reads, in a word.

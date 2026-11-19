@@ -5,7 +5,8 @@ import { defineConfig, devices } from "@playwright/test";
 // core/espace_scenario_test.go), on 127.0.0.1 only. Never against a real
 // eriphe-core. It serves the bundle as built in ../static/espace: build it
 // first (npm run build), as CI does.
-const addr = "127.0.0.1:8897";
+// Another port when one is taken (another checkout playing it): ERIPHE_E2E_ADDR.
+const addr = process.env.ERIPHE_E2E_ADDR ?? "127.0.0.1:8897";
 
 export default defineConfig({
   testDir: "e2e",
