@@ -548,13 +548,18 @@ func (c *core) cardAgain(p proposal) {
 func (c *core) syncCards() {
 	c.foldCalls() // same-kind calls cards made before (call_fold.go)
 	for _, p := range c.pendingProposals() {
-		c.cardRaisedFor("", proposalRef(p.Kind, p.ID))
-		c.cardAgain(p)
-		res, err := c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)`,
-			proposalRef(p.Kind, p.ID), p.Kind, p.Text(c.userLang()), time.Now().Unix())
-		if n, _ := rowsOf(res, err); n > 0 {
-			c.proposalMoved(proposalRef(p.Kind, p.ID))
-		}
+		c.syncCard(p)
+	}
+}
+
+// syncCard gives a waiting proposal a waiting card, if it has none.
+func (c *core) syncCard(p proposal) {
+	c.cardRaisedFor("", proposalRef(p.Kind, p.ID))
+	c.cardAgain(p)
+	res, err := c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)`,
+		proposalRef(p.Kind, p.ID), p.Kind, p.Text(c.userLang()), time.Now().Unix())
+	if n, _ := rowsOf(res, err); n > 0 {
+		c.proposalMoved(proposalRef(p.Kind, p.ID))
 	}
 }
 
@@ -655,7 +660,7 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	}
 	c.attentionDone(cardItemRef(x.ID))
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ?`, x.State, x.Decided.Unix(), by, id)
-	c.keepCardText(x) // its words as decided (call_fold.go)
+	c.callsDecided(x) // its words as decided, what still waits on a new card (call_fold.go)
 	c.proposalMoved(x.Ref)
 	c.linkedCardMoved(x.Ref) // the nodes it is linked to (node_turn.go)
 	log.Printf("cards: %s %s by %s", x.Ref, x.State, by)

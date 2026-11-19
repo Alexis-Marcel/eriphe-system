@@ -100,14 +100,17 @@ func TestFoldKeepsApartWhatDiffers(t *testing.T) {
 	c.store.db.Exec(`UPDATE access_asks SET state = ? WHERE id = ?`, startApproved, decided)
 	b := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m5", "m6"), l("m5"), l("m6"))
 	tool := askOn(t, c, node, "mcp__monitor__send", map[string]any{"id": "m7", "body": "Merci"}, l("m7"))
+	// Kept before labels were: only the item it is on.
+	bare := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m8"), l("m8"))
+	c.store.db.Exec(`UPDATE access_asks SET labels = '' WHERE id = ?`, bare)
 	// Their cards, as an install made them before.
-	for _, id := range []int64{a, other, folder, b, tool} {
+	for _, id := range []int64{a, other, folder, b, tool, bare} {
 		c.cardNow(cardCalls, id, "", refNode+":"+node)
 	}
 	c.syncCards()
 
-	if batchOf(c, b) != a {
-		t.Errorf("the same move did not fold: %d on %d", b, batchOf(c, b))
+	if batchOf(c, b) != a || batchOf(c, bare) != a {
+		t.Errorf("the same move did not fold: %d on %d, %d on %d", b, batchOf(c, b), bare, batchOf(c, bare))
 	}
 	for _, id := range []int64{other, folder, decided, tool} {
 		if batchOf(c, id) != id {
@@ -122,13 +125,13 @@ func TestFoldKeepsApartWhatDiffers(t *testing.T) {
 		t.Errorf("the folded card is still linked: %v", ns)
 	}
 	p := c.proposalOf(cardCalls, a)
-	if got := p.Text("fr"); got != "Archiver 3 mails" {
+	if got := p.Text("fr"); got != "Archiver 4 mails" {
 		t.Errorf("text %q", got)
 	}
-	if got := p.acts("fr"); len(got) != 3 || got[2] != "Archiver 3 mails" {
+	if got := p.acts("fr"); len(got) != 4 || got[3] != "Archiver 4 mails" {
 		t.Errorf("acts %q", got)
 	}
-	if xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardCalls, a)); len(xs) != 1 || xs[0].Text != "Archiver 3 mails" {
+	if xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardCalls, a)); len(xs) != 1 || xs[0].Text != "Archiver 4 mails" {
 		t.Errorf("the card kept %+v", xs)
 	}
 	// Folded once: the next sync changes nothing.
@@ -223,4 +226,54 @@ func movedIDs(fm *fakeMonitor) []string {
 		}
 	}
 	return out
+}
+
+// A call folded in after the page drew the card is neither ticked nor
+// left: the yes decides the others, the card keeps the words of what it
+// decided, and the call waits on a new card of its own.
+func TestCallFoldedInAfterDrawnWaitsOn(t *testing.T) {
+	c, node, _ := mailView(t)
+	l := func(id string) itemLabel { return itemLabel{ID: id, Title: "Mail " + id} }
+	a := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m1"), l("m1"))
+	b := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m2"), l("m2"))
+	c.cardNow(cardCalls, a, "", refNode+":"+node)
+	c.syncCards()
+	xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardCalls, a))
+	if len(xs) != 1 {
+		t.Fatalf("cards %+v", xs)
+	}
+	card := xs[0].ID
+	// Drawn with a and b; then another mail's call folds in.
+	late := askOn(t, c, node, "mcp__monitor__move", moveMail("sam@example.org", "archive", "m3"), l("m3"))
+	c.syncCards()
+	if batchOf(c, late) != a {
+		t.Fatalf("the late call did not fold: %d", batchOf(c, late))
+	}
+	if _, err := c.decideCardChosen(context.Background(), card, []int64{a}, []int64{b}, "web"); err != nil {
+		t.Fatal(err)
+	}
+	if x, _ := c.accessAskOf(late); x.State != startProposed {
+		t.Errorf("the late call is %s", x.State)
+	}
+	old, err := c.card(card)
+	if err != nil || old.State != cardApproved || old.Text != "Archiver 1 mail · 1 laissé" || old.Ref == proposalRef(cardCalls, a) {
+		t.Errorf("the decided card %+v, %v", old, err)
+	}
+	xs, _ = c.cardsWhere(`ref = ? AND state = ?`, proposalRef(cardCalls, a), cardPending)
+	if len(xs) != 1 || xs[0].ID == card {
+		t.Fatalf("no new card for the late call: %+v", xs)
+	}
+	x, p := c.liveCard(xs[0])
+	if x.State != cardPending || p.Text("fr") != "Archiver 1 mail" {
+		t.Errorf("the new card %+v: %q", x, p.Text("fr"))
+	}
+	if ch := p.choices("fr"); len(ch) != 1 || ch[0].ID != late {
+		t.Errorf("the new card's calls %+v", ch)
+	}
+	if !slices.Contains(c.cardNodes(x.Ref), node) {
+		t.Errorf("the new card is not the view's: %v", c.cardNodes(x.Ref))
+	}
+	for i := 0; i < 200 && func() bool { s, _ := c.callState(a); return s != callDone }(); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
 }

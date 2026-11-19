@@ -124,6 +124,13 @@ func (c *core) callsProposal(p proposal) proposal {
 	if len(asks) > 1 {
 		return c.chosenCalls(p, asks)
 	}
+	// One call: no box to untick, but its id all the same, so that Oui
+	// names it, and never a call folded in after the card was drawn
+	// (call_fold.go).
+	p.choices = func(lang string) []proposalChoice {
+		a := asks[0]
+		return []proposalChoice{{ID: a.ID, Text: c.choiceText(a, lang), N: itemCount(a), State: a.State}}
+	}
 	// Its words read plainly (call_words.go); the exact calls under
 	// Détails.
 	p.text = func(lang string) string {

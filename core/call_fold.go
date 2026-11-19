@@ -41,19 +41,24 @@ var errNotOnCard = errors.New("a chosen call is not one this card keeps waiting"
 
 // foldKey is what a kept call does, but for the items it acts on: its
 // tool and its other arguments, and the name of its list of items; ""
-// when it has no such list, or more than one.
+// when it has no such list, or more than one. Its items are those kept
+// with it (its labels) and the item it is on (a call kept before labels
+// were has only that).
 func foldKey(a accessQuestion) (key, list string) {
-	if len(a.Labels) == 0 {
+	ids := map[string]bool{}
+	for _, l := range a.Labels {
+		ids[l.ID] = true
+	}
+	if a.Item != "" {
+		ids[a.Item] = true
+	}
+	if len(ids) == 0 {
 		return "", ""
 	}
 	name, _, _ := strings.Cut(a.Call, " ")
 	var input map[string]any
 	if json.Unmarshal([]byte(a.Input), &input) != nil {
 		return "", ""
-	}
-	ids := map[string]bool{}
-	for _, l := range a.Labels {
-		ids[l.ID] = true
 	}
 	for k, v := range input {
 		values, ok := v.([]any)
@@ -275,14 +280,32 @@ func (c *core) decideCardChosen(ctx context.Context, id int64, only, left []int6
 	})
 }
 
-// keepCardText keeps a decided calls card's words as they are now: shown
-// once its calls wait again on a new card.
-func (c *core) keepCardText(x convoCard) {
-	if x.Kind != cardCalls {
+// callsDecided keeps a decided calls card's words, those of its calls
+// decided: what it shows once set aside. A call folded in after the page
+// drew it, still waiting, gets a new card at once (syncCard).
+func (c *core) callsDecided(x convoCard) {
+	kind, id, _ := parseProposalRef(x.Ref)
+	if x.Kind != cardCalls || kind != cardCalls {
 		return
 	}
-	kind, id, _ := parseProposalRef(x.Ref)
-	c.store.db.Exec(`UPDATE convo_cards SET text = ? WHERE id = ?`, c.proposalOf(kind, id).Text(c.userLang()), x.ID)
+	var decided []accessQuestion
+	for _, a := range c.batchAsks(id) {
+		if a.State != startProposed {
+			decided = append(decided, a)
+		}
+	}
+	if len(decided) == 0 {
+		return
+	}
+	lang := c.userLang()
+	text, _ := c.callsWords(decided, lang)
+	if len(decided) > 1 && batchKind(decided) != "" {
+		text = c.callsDecidedText(decided, lang)
+	}
+	c.store.db.Exec(`UPDATE convo_cards SET text = ? WHERE id = ?`, text, x.ID)
+	if p := c.proposalOf(kind, id); p.Pending {
+		c.syncCard(p)
+	}
 }
 
 // callsDecidedText says a decided card of calls that do the same thing:

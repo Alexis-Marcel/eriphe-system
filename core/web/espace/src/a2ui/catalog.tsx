@@ -1012,9 +1012,9 @@ const Proposal = createComponentImplementation(
       const surfaceId = context.dataContext.surface?.id ?? "";
       // Bound inside a list (a row's card): where, so that only this row's answers.
       const at = context.dataContext.path && context.dataContext.path !== "/" ? { at: context.dataContext.path } : {};
-      // A choice names what the card shows: a call folded in since is in
-      // neither list, and waits on.
-      const chosen = yes && choosing ? { only: choices.filter((c) => !left.has(c.id)).map((c) => c.id), left: choices.filter((c) => left.has(c.id)).map((c) => c.id) } : {};
+      // A Oui names what the card shows, even one call: a call folded in
+      // since is in neither list, and waits on.
+      const chosen = yes && p.state === "pending" && choices.length > 0 ? { only: choices.filter((c) => !left.has(c.id)).map((c) => c.id), left: choices.filter((c) => left.has(c.id)).map((c) => c.id) } : {};
       const ok = await src.answer({ surfaceId, componentId: context.componentModel.id, ref: p.ref, yes, ...at, ...chosen }).catch(() => false);
       if (!ok) setFailed(true);
       const again = await src.read(ref).catch(() => null);
