@@ -120,7 +120,7 @@ describe("the layout", () => {
   it("keeps a dropped bubble exactly at its offset, wherever its subject goes", () => {
     const nodes = graph();
     const { homes, pos } = settle(nodes);
-    const rel: Pt = [-120, 90];
+    const rel: Pt = [-150, 110]; // clear of its subject's label: two bubbles dropped on each other part
     const spot: Pt = [pos.b[0] + 200, pos.b[1] + 100];
     const at = simulate(nodes, pos, homes, { b: { abs: spot }, b1: { rel } });
     expect(at.b1).toEqual([spot[0] + rel[0], spot[1] + rel[1]]);
@@ -202,6 +202,92 @@ describe("the layout", () => {
     const at = simulate(ns, open, homes, {}, { id: "b", at: open.a }, 24);
     expect(at.b).toEqual(open.a);
     expect(apart(at.a, box, at.b, box)).toBe(true);
+  });
+
+  // A subject and the standing view made from its card: two big bubbles,
+  // the view linked to the subject, laid out right on it.
+  describe("a big bubble made on another", () => {
+    const subject: LNode = { id: "s", links: [], r: 40, lw: 235, lh: 44 };
+    const view: LNode = { id: "v", links: ["s"], r: 35, lw: 151, lh: 44 };
+    const rest = graph();
+    const all = [...rest, subject, view];
+    const clear = (pos: Pos, nodes = all) => {
+      for (let i = 0; i < nodes.length; i++)
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j];
+          expect(dist(pos[a.id], pos[b.id]), `${a.id} on ${b.id}`).toBeGreaterThanOrEqual(a.r + b.r);
+          expect(overlap(a, pos[a.id], b, pos[b.id]), `${a.id}'s label on ${b.id}'s`).toBeLessThanOrEqual(0.5);
+        }
+    };
+    const born = () => {
+      const { homes, pos } = settle([...rest, subject]);
+      // the view seeded exactly on the subject, its home there too
+      const h = { ...homes, v: pos.s };
+      return { homes: h, pos: simulate(all, { ...pos, v: pos.s }, h) };
+    };
+
+    it("parts them: neither the bubbles nor their labels overlap", () => {
+      clear(born().pos);
+    });
+
+    it("keeps them apart after a page opens and closes", () => {
+      const { homes, pos } = born();
+      const box: Pt = [720, 520];
+      const open = simulate(all.map((n) => (n.id === "s" ? { ...n, box, opened: 0 } : n)), pos, homes);
+      clear(simulate(all, open, homes));
+    });
+
+    it("moves the other one when the user dropped one there", () => {
+      const { homes, pos } = born();
+      // the subject dropped where the view's home is: it stays, the view goes
+      const spot = homes.v;
+      const at = simulate(all, pos, homes, { s: { abs: spot } });
+      expect(at.s).toEqual(spot);
+      clear(at);
+      // the view dropped on the subject: it stays, the subject goes
+      const on: Pt = [at.s[0] + 20, at.s[1] + 10];
+      const again = simulate(all, at, homes, { v: { abs: on } });
+      expect(again.v).toEqual(on);
+      clear(again);
+    });
+
+    it("never gives a new subject a home on one the user dropped", () => {
+      const homes = homesFor(["a", "b"], {});
+      // a subject dropped right where the next home would be
+      const dropped = homesFor(["a", "b", "c"], homes).c;
+      const h = homesFor(["a", "b", "c"], homes, [dropped]);
+      expect(dist(h.c, dropped)).toBeGreaterThanOrEqual(ROOM);
+    });
+  });
+
+  it("parts every body by one collision: page and page, bubble and page, bubble and bubble", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const box: Pt = [640, 420];
+    // two pages opened one on the other, among the bubbles
+    const ns = nodes.map((n) => (n.id === "a" ? { ...n, box, opened: 0 } : n.id === "b" ? { ...n, box, opened: 1 } : n));
+    const at = simulate(ns, { ...pos, b: pos.a }, homes);
+    for (let i = 0; i < ns.length; i++)
+      for (let j = i + 1; j < ns.length; j++) expect(overlap(ns[i], at[ns[i].id], ns[j], at[ns[j].id]), `${ns[i].id} on ${ns[j].id}`).toBeLessThanOrEqual(0.5);
+  });
+
+  it("pushes the others out of the way of what is dragged, and lets them come back when it is gone", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    // a dragged right onto b: it stays under the pointer, b gives way
+    const on = simulate(nodes, pos, homes, {}, { id: "a", at: pos.b }, 24);
+    expect(on.a).toEqual(pos.b);
+    for (const n of nodes) if (n.id !== "a") expect(overlap(nodes[0], on.a, n, on[n.id]), `a on ${n.id}`).toBeLessThanOrEqual(0.5);
+    expect(dist(on.b, pos.b)).toBeGreaterThan(20);
+    // a step at a time, b is pushed softly, not thrown: never further than it must
+    expect(dist(on.b, pos.b)).toBeLessThan(400);
+    // dropped back home, b comes back to its place
+    const back = simulate(nodes, simulate(nodes, on, homes, {}, { id: "a", at: pos.a }, 24), homes);
+    expect(dist(back.b, pos.b)).toBeLessThan(40);
+    // dropped there, a stays and b keeps out of its way
+    const dropped = simulate(nodes, on, homes, { a: { abs: pos.b } });
+    expect(dropped.a).toEqual(pos.b);
+    for (const n of nodes) if (n.id !== "a") expect(overlap(nodes[0], dropped.a, n, dropped[n.id]), `a on ${n.id}`).toBeLessThanOrEqual(0.5);
   });
 
   it("tethers a bubble to its parent", () => {

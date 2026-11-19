@@ -255,6 +255,10 @@ test("the steps of the scenario", async ({ page, request }) => {
   // Answered, the card stays in the document and says so.
   await expect(viewCard.locator(".a2-proposal-kicker")).toContainText("Validé");
   await expect(viewCard.getByRole("button", { name: "Oui" })).toHaveCount(0);
+  // Its pages closed, the view's bubble, made on the subject, sits beside
+  // it: no two bubbles on each other.
+  await home(page);
+  await expectBubblesApart(page);
 
   // 15. A card no page holds (proposed at the home, no subject opened)
   // waits in the console, with its Oui; answered, it leaves it.
@@ -483,6 +487,25 @@ async function expectApart(page: Page, pages: Locator[]): Promise<void> {
     const seen = b.x + b.width > 0 && b.x < view.width;
     if (seen && b.x < bar.x + bar.width && bar.x < b.x + b.width) expect(b.y + b.height).toBeLessThanOrEqual(bar.y);
   }
+}
+
+// expectBubblesApart checks the graph once it settled: no two bubbles'
+// circles intersect.
+async function expectBubblesApart(page: Page): Promise<void> {
+  const overlaps = () =>
+    page.locator(".gr-node").evaluateAll((els) => {
+      const bs = els.map((el) => {
+        const e = el as HTMLElement;
+        const core = e.querySelector(".gr-core") as HTMLElement;
+        return { id: e.dataset.node, x: parseFloat(e.style.left), y: parseFloat(e.style.top), r: core.offsetWidth / 2 };
+      });
+      const out: string[] = [];
+      for (let i = 0; i < bs.length; i++)
+        for (let j = i + 1; j < bs.length; j++)
+          if (Math.hypot(bs[i].x - bs[j].x, bs[i].y - bs[j].y) < bs[i].r + bs[j].r) out.push(`${bs[i].id} on ${bs[j].id}`);
+      return out;
+    });
+  await expect.poll(overlaps).toEqual([]);
 }
 
 // settled is where a bubble is once it stopped moving.
