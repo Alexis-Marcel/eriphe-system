@@ -467,6 +467,8 @@ func (c *core) cardProposed(kind string, id int64) {
 	switch kind {
 	case cardRunCalls:
 		inherit, source = nil, "" // a skill's run: its own (cardAbout)
+	default:
+		c.turn.wrote() // what the turn says is about its card: the net leaves it in the exchange (node_net.go)
 	}
 	c.cardProposedBy(kind, id, inherit, source)
 }

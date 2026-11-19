@@ -558,6 +558,27 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		// On the user's word, the plan waits for them no more.
 		b.self("node_set", map[string]any{"id": node, "done": true})
 		return "C'est noté, le plan est fait."
+	case strings.Contains(said, "Garde un œil sur mes mails"):
+		// Asked at the home: its subject opens, the console in it, and the
+		// view is composed there (the prompt's « Les vues »).
+		out := b.self("node_open", map[string]any{"title": "Garder un œil sur mes mails", "goal": "Une vue des mails qui comptent",
+			"body": "## Ce qu'on suit\n\nLes mails qui demandent quelque chose, triés pour toi.\n\n## À décider\n\n- Tous les mails, ou ceux qui demandent une réponse ?\n"})
+		if id, _ := out["id"].(string); id != "" {
+			keep("watch", id)
+		}
+		return "Lesquels veux-tu suivre : tous, ou ceux qui demandent une réponse ?"
+	case strings.Contains(said, "demandent une réponse"):
+		b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Les mails qui demandent une réponse", "body": "Les mails qui demandent une réponse.\n"})
+		return "Voici la vue : dis oui sur sa carte et elle s'ouvre."
+	case strings.Contains(said, "vue de l'agenda"):
+		// Proposed at the home with no subject opened: its card waits in
+		// the console (web_console.go's unheldCards).
+		b.self("propose_view", map[string]any{"title": "Mon agenda", "body": "Les rendez-vous du jour.\n"})
+		return "Voici la vue de ton agenda : dis oui sur sa carte."
+	case strings.Contains(said, "à part"):
+		// On the side: opened in the background, the console stays.
+		b.self("node_open", map[string]any{"title": "Recherche sur les newsletters", "aside": true, "goal": "Les newsletters à garder"})
+		return "Je lance la recherche à part."
 	case strings.Contains(said, "archiver"):
 		return "C'est toi qui archives : « Archiver », en haut de sa page."
 	}

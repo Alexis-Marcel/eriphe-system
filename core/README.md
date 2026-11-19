@@ -716,7 +716,7 @@ whatever address it dials) and one client certificate per device.
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)) |
 | `catalog_read`, `sources_read` | read the catalog of a node's blocks and what a block may read |
-| `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)); written in a tainted turn, the node is external ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the console stays); written in a tainted turn, the node is external; by default it opens in front of the user (from the home, the console moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; an external node's title is not quoted |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields) |
@@ -965,15 +965,28 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   a proposal) is linked to it (`node_cards`), and the node waits for the user while one waits
   (`cardRaisedFor`, `linkedCardMoved`). `run_task` in a turn about a node is about it (its
   `about`); its own node is a child of `node` when given.
+- **A subject opened from the home** (`moveHomeTurn`): by default a node the brain opens
+  (`node_open` without `aside`) opens in front of the user. In a turn that answers the user at the
+  home (typed in the workspace: a channel's request keeps its exchange at the home), the turn moves
+  into it, or into the node it shows (`node_show`): the user's messages of the turn and what the brain wrote since get
+  the node's `node`, the rest of the answer goes there (`talk`), and the show asks the page to
+  move the console into it (`talk: true`): the exchange goes on in the subject's page, and the cards
+  raised next are linked to it. From a node, the new node is shown beside, the console where it
+  is; in a turn that answers no message of the user's (an event, a wake), nothing is shown. With
+  `aside` (the user asked for it on the side), nothing is shown and nothing moves: it rises when it
+  has something for the user.
 - **Code's safety net** (`node_net.go`, contract 5): at the turn's end, the turn's answer (its
   texts joined), past `netMinRunes` (600), when the brain wrote no node in the turn (`node_open`,
-  `node_write`, `node_edit`), is filed by code: in the node the turn answers in (whole in its
+  `node_write`, `node_edit`) and proposed nothing on a card (`cardProposed`: what it says is then
+  about the card, which waits under it), is filed by code: in the node the turn answers in (whole in its
   trace, and as its doc when it has none, never a standing node's), else in a new work node at
   the top titled from the user's request (its first line; a neutral « Réponse du … » when there is
-  none, or when it may not be the user's words or holds a secret), the answer its doc. The answer's
+  none, or when it may not be the user's words or holds a secret), the answer its doc; a turn that
+  answers the user at the home then moves into it, as for a subject the brain opened
+  (`moveHomeTurn`). The answer's
   messages say where (`messages.filed`, `filed` in the exchange's lines). Written in a tainted
   turn, the node is external. A refusal never loses the answer: it stays in the conversation.
-  Code opens no other node. The turn's answer is only what the brain wrote since it was last given
+  The turn's answer is only what the brain wrote since it was last given
   something (messages, events, due intentions; kept in kv `brain_turn`), and it is looked at once:
   a turn's end with nothing delivered (a restarted task's first turn) files nothing, and an older
   unfiled message never counts.
@@ -988,9 +1001,11 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   says that day, a segment `node:<id>`; an external node gives nothing) and keeps their decisions,
   facts and people.
 - **Showing a node** (`node_show.go`): `node_show` keeps the request (kv `node_show`: `node`, `by`,
-  `at`, `seq`, growing at each) and wakes who watches (`watchShown`); the graph page (#633) opens
-  the page beside the others, the console still talking where it talked (only the user's gesture
-  moves it). It writes nothing in the node.
+  `at`, `seq`, growing at each, and `talk` for a subject opened from the home) and wakes who
+  watches (`watchShown`); the graph page (#633) opens the page beside the others, the console
+  still talking where it talked (only the user's gesture moves it), except a show with `talk`
+  while the console talks to the home: it moves into that page. A view's yes shows its new node.
+  It writes nothing in the node.
 - **A call in the trace** (`proxy.go`, `traceBrainCall`): a call the brain made with the user's
   permission (a ticket, not a free read) is a line of the trace of the node it talks to (the page
   the user spoke from), else, from the home, of the node the turn is about (the last it named):
@@ -1216,7 +1231,9 @@ composes each one from the catalog.
   with the repositories its steps may borrow. One yes makes the node (standing, by `user`), the
   monitor (on) and the skill (approved), in that order; one that fails takes back those before,
   and the card waits still. No makes none. Written on a tainted turn, the card says so and the
-  node is external.
+  node is external. A monitor or skill name taken is refused with what to do: a monitor for the
+  same thing is read by its name (leave `monitor` out), never written again under another name.
+  The yes opens the view's node (`showNode`).
 
 ## Permission policy
 
@@ -3232,7 +3249,11 @@ queue: every message of the conversation belongs to a node or to the home, in it
   without `node`, the home's. Each line (`seq`, `role`, `time`, `text`, `external`) says `filed`:
   the node code filed it in. `GET /api/earlier` takes `node=<id>`. Eriphe's draft shows in
   the exchange its turn answers in only, and its work (`thinking`) there or under a message of the
-  user's still waiting. A message being sent shows only where it was written. A plain "oui"
+  user's still waiting. A message being sent shows only where it was written. Every exchange
+  carries the cards that wait and no node holds (`cards`, `unheldCards`: shown already, linked to
+  no live node, such as one proposed at the home before any subject): the console shows them with
+  their Oui and Non wherever it talks, so no card waits out of sight; a node's cards wait at the
+  foot of its page. A plain "oui"
   decides the card just above in its own node only (`resolveByText`).
 - **Suggested replies.** The brain may close an answer with up to 3 replies in its own words, one
   per line, in a block: `<suggestions>` … `</suggestions>`. Code cuts it where the text is stored
@@ -4182,7 +4203,10 @@ ref (which record: `intention:12`, `skill:<name>`).
   `mail:` and `event:` are refused. A ref (`card:12`, `task:t-…`, `intention:5`, `skill:<name>`)
   names one record, never a key.
 - **The names index** (`names.go`, core.db `names(name, target, seen)`): each key written is
-  noted (`noteAbout`), naming itself; a key is no node's alias (#632: nodes have no aliases).
+  noted (`noteAbout`), naming itself; a key is no node's alias (#632: nodes have no aliases). A
+  row that names another target is none of the code's: dropped when the store opens. What a turn
+  is named about, and a card's about, is only a live node or a key (`validAbout`): anything else
+  (a stale target, a node that is no more) is none.
 - **Named in a message** (`named`): a message of the user's names an entity by its key's words
   (project, person, client, tool, topic), compared by their stems, three letters at least; never
   `owner`, `home`, an id or Eriphe's own topics. A name inside a longer one named too gives way to

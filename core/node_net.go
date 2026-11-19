@@ -14,12 +14,17 @@ import (
 // nothing of its turn filed into a node is filed by code, so that no long
 // answer lives in the conversation alone. At its turn's end, the turn's
 // answer (its texts joined), past netMinRunes, when the brain wrote no
-// node in the turn (node_open, node_write, node_edit), goes:
+// node in the turn (node_open, node_write, node_edit) and proposed nothing
+// on a card (what it says is then about the card, which waits under it),
+// goes:
 //
 //   - into the node the turn answers in (talkNode): whole in its trace,
 //     and as its doc when it has none (never a standing node's);
 //   - else into a new work node, titled from the user's request (its
-//     first line), the answer as its doc.
+//     first line), the answer as its doc; a turn that answers the user at
+//     the home then moves into it, as one whose subject the brain opened
+//     does (moveHomeTurn): the node opens in front of the user, the
+//     console in it.
 //
 // The turn's answer is only what the brain wrote since it was given
 // something (a message, events, a due intention: brainTurn.answer), and it
@@ -64,6 +69,7 @@ func (c *core) fileTurnAnswer() {
 	id := c.fileInTalked(talk, answer, tainted)
 	if id == "" {
 		id = c.fileInNew(c.netTitle(from, to), answer, tainted)
+		c.moveHomeTurn(id) // from the home: the exchange goes on in it (node_turn.go)
 	}
 	if id == "" {
 		return

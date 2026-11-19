@@ -26,6 +26,12 @@ import (
 // latest answer brings the replies it suggested (brain_suggest.go), and
 // the node code filed it in, when it did (filed, node_net.go).
 //
+// A card no node holds (one proposed in a turn about no node, from the
+// home, or whose node is archived) would wait nowhere in the graph: every
+// exchange carries the ones the user was shown (cards: their refs), and
+// the console shows them with their Oui and Non, wherever it talks. A
+// card linked to a node waits at the foot of its page.
+//
 // The brain's text is its own, shown as Markdown by the page's renderer,
 // which makes no HTML of it, and marked when written in a turn that read
 // external content (markBrainMessage); an event's line (an external
@@ -61,6 +67,44 @@ type exchangeEvent struct {
 	Draft       string         `json:"draft,omitempty"`       // Eriphe's message being written
 	Thinking    bool           `json:"thinking,omitempty"`    // Eriphe is at work
 	Suggestions []string       `json:"suggestions,omitempty"` // the replies its last line suggests
+	Cards       []string       `json:"cards,omitempty"`       // the cards that wait and no node holds: their refs
+}
+
+// exchangeCardsMax is the most cards no node holds an exchange carries.
+const exchangeCardsMax = 20
+
+// unheldCards are the cards that wait for the user, shown already (with a
+// message, or in the turn under way), and that no node holds: linked to
+// none that is live. The oldest first.
+func (c *core) unheldCards() []string {
+	xs, err := c.cardsWhere(`state = ? AND kind != ? AND (seq > 0 OR turn = 1) ORDER BY id`, cardPending, cardDigest)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, x := range xs {
+		if x, _ = c.liveCard(x); x.State != cardPending || c.cardHeld(x.Ref) {
+			continue
+		}
+		out = append(out, x.Ref)
+	}
+	if len(out) > exchangeCardsMax {
+		out = out[len(out)-exchangeCardsMax:]
+	}
+	return out
+}
+
+// cardHeld tells a card linked to a live node: it waits on its page.
+func (c *core) cardHeld(ref string) bool {
+	if c.nodes == nil {
+		return false
+	}
+	for _, id := range c.cardNodes(ref) {
+		if sum, err := c.nodes.Get(id); err == nil && sum.Archived.IsZero() {
+			return true
+		}
+	}
+	return false
 }
 
 // exchangeFor is the workspace's exchange of a node ("": the home), with
@@ -83,6 +127,7 @@ func (w *web) exchangeFor(node, talk, draft string, thinking bool) (exchangeEven
 	if n := len(lines); n > 0 && lines[n-1].Role == roleBrain && !lines[n-1].External && x.Draft == "" {
 		x.Suggestions = w.c.store.suggestions(lines[n-1].Seq)
 	}
+	x.Cards = w.c.unheldCards()
 	return x, nil
 }
 

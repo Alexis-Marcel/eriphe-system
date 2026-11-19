@@ -90,7 +90,17 @@ Write to Eriphe, in the console or in the conversation:
 
 > Show me this week's unread mails.
 
-Eriphe writes it on a page, the subject's or a new bubble. What it writes there is of two kinds:
+Eriphe answers by **showing**: the subject's page opens in front of you with what you need to know,
+like a dashboard, and the conversation goes on there. Asked from the home, the console moves into
+that page; asked from a page, the new one opens beside it. Only a one-line answer ("done", the
+time, a figure) stays in the console.
+
+To have something done **on the side** ("run a research on this aside", "look at my mail and
+analyze it, but on the side"), say so: Eriphe opens its bubble without showing it (under the page
+you are on when it is the same subject, on its own otherwise), says in one line what it started,
+and the bubble rises when it has something for you.
+
+What it writes on a page is of two kinds:
 
 - **Live**: a block reads a tool directly, and Eriphe's core reads it again by itself, every few
   minutes and when the tool says something changed. No AI is involved after the block is written,
@@ -108,8 +118,10 @@ What you want to follow all the time ("keep an eye on my mail", "follow the prod
 "show me the pull requests to review") is a **view**: a standing bubble whose blocks Eriphe's core
 keeps up to date. It can come with a monitor that sees what arrives and a skill that works in the
 view when it does: the skill reads each new item, notes what you should know of it, and prepares
-what it asks of you (a draft and its card). Eriphe proposes the whole view on **one card**: its
-page, the monitor and the skill together, and nothing exists before your yes.
+what it asks of you (a draft and its card). Asked from the home, the subject opens first ("Keep an
+eye on my mail"): Eriphe asks there what to follow and explains what it proposes, then proposes the
+whole view on **one card**, at the foot of that page: its page, the monitor and the skill together,
+and nothing exists before your yes. Your yes opens the view.
 
 What you want to see once ("open the production for me") is not a view: Eriphe opens a bubble
 under the one you are talking about, with a live block, and shows it beside your page. If you want
@@ -139,7 +151,8 @@ forget one. There is no settings page for the workspace and no rule to maintain.
 
 - **A proposal runs only after your yes.** When Eriphe proposes something (an event to add, a reply
   to send, a new skill), it shows as a card with **Yes** and **No**, at the foot of its page and in
-  the conversation. A proposed appointment shows on a day's block as a ghost marked **Proposed**.
+  the conversation. A card that belongs to no page shows in the console, wherever you are, until
+  you answer it: no card waits out of sight. A proposed appointment shows on a day's block as a ghost marked **Proposed**.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows
   **Approved · running…**, then **done** or **failed** with why.
 - **Content from outside cannot act.** A block that may carry someone else's words is marked

@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type PointerEvent as PtrEvent } from "react";
-import { createAdapter } from "../a2ui/adapter";
-import { CATALOG } from "../a2ui/catalog";
+import { useState, type PointerEvent as PtrEvent } from "react";
 import { wall, when } from "../a2ui/format";
-import { SurfaceView } from "../a2ui/Surfaces";
-import { archive, label, type ProposalView, type TraceEntry } from "../data/api";
+import { archive, label, type TraceEntry } from "../data/api";
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
 import { useWords } from "../i18n";
+import { Cards } from "./Cards";
 import { MdTab } from "./MdTab";
 import { useFile, usePage, useTrace } from "./usePage";
 
@@ -147,7 +145,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
       )}
       {page && page.cards.length > 0 && latest && (
         <footer className="pg-foot">
-          <Cards id={id} cards={page.cards} />
+          <Cards surface={`${id}--cards`} refs={page.cards.map((c) => c.ref)} />
         </footer>
       )}
     </article>
@@ -183,31 +181,4 @@ function Trace({ entries }: { entries: TraceEntry[] }) {
       })}
     </ol>
   );
-}
-
-// Cards are the cards a node waits on, as the catalog's Proposal shows
-// them: code's own surface, each answered by its card's Oui or Non.
-function Cards({ id, cards }: { id: string; cards: ProposalView[] }) {
-  const { lang } = useWords();
-  const [adapter] = useState(() => createAdapter(lang));
-  useEffect(() => () => adapter.dispose(), [adapter]);
-  const refs = useMemo(() => cards.map((c) => c.ref), [cards]);
-  const surface = `${id}--cards`;
-  useEffect(() => {
-    adapter.applyMessages(adapter.surfaces().map((s) => ({ version: "1.0" as const, deleteSurface: { surfaceId: s.id } })));
-    adapter.applyMessages([
-      {
-        version: "1.0",
-        createSurface: {
-          surfaceId: surface,
-          catalogId: CATALOG.id,
-          components: [{ id: "root", component: "Column", children: refs.map((_, i) => `c${i}`) }, ...refs.map((ref, i) => ({ id: `c${i}`, component: "Proposal", proposalId: ref }))],
-          dataModel: {},
-          metadata: { extensions: { eriphe: { author: "core" } } },
-        },
-      },
-    ]);
-  }, [adapter, refs, surface]);
-  const s = useSyncExternalStore(adapter.subscribe, adapter.surfaces).find((x) => x.id === surface);
-  return s ? <SurfaceView surface={s} /> : null;
 }

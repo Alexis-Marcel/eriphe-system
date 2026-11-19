@@ -48,6 +48,7 @@ type brainNodeOpenIn struct {
 	Body     string     `json:"body,omitempty" jsonschema:"its first body: markdown text, and blocks in fences (eriphe:block <name>, a JSON object: components, data, sources; catalog_read gives the components)"`
 	Steps    []stepSpec `json:"steps,omitempty" jsonschema:"to cut its work in steps, each a child of it run by an agent: a key, a title, the keys of the steps it comes after, a self-contained prompt, an agent, resources and a contract. Eriphe starts each step once those it comes after are accepted and accepts it on its proof"`
 	Budget   int        `json:"budget_minutes,omitempty" jsonschema:"with steps: the minutes of running time the work may take, 60 by default"`
+	Aside    bool       `json:"aside,omitempty" jsonschema:"true only when the user asks for it on the side (« à part », « sur le côté », « en arrière-plan »): opened without being shown, the console stays where it is; it rises when it has something for the user. By default the node opens in front of the user"`
 }
 
 type nodeFindIn struct {
@@ -96,7 +97,7 @@ type settleIn struct {
 }
 
 func registerNodeTools(s *mcp.Server, c *core) {
-	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result (a research, a reply to write, a plan), or with lifetime standing what the user follows continuously (« Ma journée », a subject). With parent, a part of that node's work. Its body is markdown text and blocks; with steps, its work is cut in steps, each a child an agent runs, accepted by Eriphe on its proof. Find it first (node_find): the same thing has one node.",
+	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result (a research, a reply to write, a plan), or with lifetime standing what the user follows continuously (« Ma journée », a subject). With parent, a part of that node's work. Its body is markdown text and blocks; with steps, its work is cut in steps, each a child an agent runs, accepted by Eriphe on its proof. Find it first (node_find): the same thing has one node. It opens in front of the user: asked from the home, the console moves into it and the exchange goes on there; asked from a node, it opens beside it. With aside, only when the user asks for it on the side, it opens in the background.",
 		func(ctx context.Context, in brainNodeOpenIn) (map[string]any, error) { return c.brainNodeOpen(ctx, in) })
 	tool(s, "node_find", "Find nodes: by words of their title, goal, text or blocks; without words, those at work or waiting for the user, then the last changed. archived: the archived ones too. Each says its id, state (running, waiting, idle, done), parent and when it changed; the title of one that may hold someone else's words is not quoted (node_read reads it).",
 		func(ctx context.Context, in nodeFindIn) (map[string]any, error) { return c.brainNodeFind(in) })
@@ -207,6 +208,9 @@ func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[strin
 	}
 	c.turn.wrote()
 	c.turn.about(id)
+	if !in.Aside && !c.moveHomeTurn(id) && c.turnAnswersUser() { // a subject opened from the home: the exchange goes on in it (node_turn.go)
+		c.showNode(id, byBrain, false) // from a node: beside it, the console where it is
+	}
 	if len(d.Node.Blocks()) > 0 {
 		c.readNodeLater(context.WithoutCancel(ctx), id, nil) // its live blocks, at once (node_live.go)
 	}
@@ -468,7 +472,9 @@ func (c *core) brainNodeShow(in nodeShowIn) (map[string]any, error) {
 		return nil, fmt.Errorf("%s: %w: the user reopens it from the archives", sum.ID, nodestore.ErrArchived)
 	}
 	c.turnNode(sum.ID)
-	c.showNode(sum.ID, byBrain)
+	if !c.moveHomeTurn(sum.ID) { // asked at the home: the exchange goes on in it (node_turn.go)
+		c.showNode(sum.ID, byBrain, false)
+	}
 	return map[string]any{"note": "Shown on the user's screen."}, nil
 }
 

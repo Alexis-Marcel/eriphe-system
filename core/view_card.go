@@ -59,7 +59,7 @@ type proposeViewIn struct {
 }
 
 func registerViewTool(s *mcp.Server, c *core) {
-	tool(s, "propose_view", "Propose a view: what the user wants followed continuously (« surveille mes mails », « montre-moi les PR à relire ») is a standing node whose blocks code keeps fresh, the monitor that detects what comes, and the skill that works in the node when it does (notes each item, opens a child node for what needs work, its actions kept for the user's yes). All three are checked now and shown on one card; one yes creates them all, none is made before. Compose the node from the catalog's bricks; nothing is known of a view in advance.",
+	tool(s, "propose_view", "Propose a view: what the user wants followed continuously (« surveille mes mails », « montre-moi les PR à relire ») is a standing node whose blocks code keeps fresh, the monitor that detects what comes, and the skill that works in the node when it does (notes each item, opens a child node for what needs work, its actions kept for the user's yes). All three are checked now and shown on one card; one yes creates them all, none is made before. Compose the node from the catalog's bricks; nothing is known of a view in advance. A monitor or skill of the user's that does the same thing already (monitors, list_skills) is reused, not written again under another name: leave monitor out and let the blocks read it by its name.",
 		func(ctx context.Context, in proposeViewIn) (map[string]any, error) {
 			return c.proposeView(in, c.turnTaint())
 		})
@@ -369,6 +369,7 @@ func (c *core) decideView(id int64, approve bool) error {
 	}
 	_, err = c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ?`, viewApproved, id)
 	c.readNodeLater(context.Background(), v.Node, nil) // its blocks read at once (node_live.go)
+	c.showNode(v.Node, nodeByCode, false)              // the view opens in front of the user (node_show.go)
 	return err
 }
 
@@ -383,7 +384,7 @@ func (c *core) viewNew(v viewProposal) nodestore.New {
 func (c *core) viewFree(monitorName, skill string) error {
 	if monitorName != "" {
 		if _, err := c.monitorNamed(monitorName); err == nil {
-			return fmt.Errorf("the monitor: %q is taken: pick another name", monitorName)
+			return fmt.Errorf("the monitor: %q is taken: a monitor for the same thing is the user's already (monitors): leave monitor out and let the blocks read it by its name; else pick another name", monitorName)
 		}
 		var n int
 		c.store.db.QueryRow(`SELECT COUNT(*) FROM monitors`).Scan(&n)
@@ -393,7 +394,7 @@ func (c *core) viewFree(monitorName, skill string) error {
 	}
 	if skill != "" {
 		if k, err := c.store.skill(skill); err == nil && k != nil {
-			return fmt.Errorf("the skill: %q is taken: pick another name", skill)
+			return fmt.Errorf("the skill: %q is taken: a skill for the same thing is the user's already (list_skills): leave skill out and tell the user; else pick another name", skill)
 		}
 	}
 	return nil

@@ -66,7 +66,8 @@ func (t *brainTurn) talkNode() string {
 	return t.talk
 }
 
-// wrote notes that the brain wrote a node in this turn (node_net.go).
+// wrote notes that the brain's answer of this turn has its place: it
+// wrote a node, or proposed something on a card (node_net.go).
 func (t *brainTurn) wrote() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -99,7 +100,8 @@ func (t *brainTurn) takeAnswer() int {
 	return after
 }
 
-// wroteNode tells whether the brain wrote a node in this turn.
+// wroteNode tells whether the brain's answer of this turn has its place:
+// a node it wrote, or a card it proposed.
 func (t *brainTurn) wroteNode() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -134,6 +136,41 @@ func talkOf(msgs []Message) string {
 		}
 	}
 	return ""
+}
+
+// moveHomeTurn moves a turn that answers the user at the home, typed in the
+// workspace, into the node it opened or showed for its subject: the user's
+// messages of the turn and what the brain wrote since belong to that node, the rest of its answer goes
+// there (its cards with it), and the user's screen opens the node, the
+// console in it: the exchange goes on in the subject's page. A turn that
+// answers in a node already, or no message of the user's (an event, a
+// wake), or one said on a channel (its exchange is the home's, where the
+// channel's next words land), moves nothing, and a node shown beside one
+// the user talks to leaves the console where it is (node_show.go). True
+// when it moved.
+func (c *core) moveHomeTurn(id string) bool {
+	if id == "" || c.turn.talkNode() != "" || !c.turnAnswersUser() {
+		return false
+	}
+	from, to := c.turn.span()
+	var n int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE seq >= ? AND seq <= ? AND node = '' AND role = ? AND via = ''`, from, to, roleUser).Scan(&n)
+	if n == 0 {
+		return false
+	}
+	c.turn.answersIn(id) // first: what the brain writes from now on is the node's
+	c.store.db.Exec(`UPDATE messages SET node = ? WHERE seq >= ? AND seq <= ? AND node = '' AND role = ? AND via = ''`, id, from, to, roleUser)
+	c.store.db.Exec(`UPDATE messages SET node = ? WHERE seq > ? AND node = '' AND role IN (?, ?)`, id, to, roleBrain, roleError)
+	c.showNode(id, byBrain, true)
+	return true
+}
+
+// turnAnswersUser tells a turn that answers messages of the user's, not
+// events or a wake only: what it opens is shown to them.
+func (c *core) turnAnswersUser() bool {
+	c.turn.mu.Lock()
+	defer c.turn.mu.Unlock()
+	return c.turn.asked
 }
 
 // turnNode notes that the brain's turn named a node, by a tool of its own
