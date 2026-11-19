@@ -4,7 +4,7 @@ import { place, type GraphNode } from "../data/api";
 import { closePage, depthOf, openPage, placeAt, step, store, subtree, talkTo, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Page } from "../page/Page";
-import { boxAt, edgeMark, frameAll, framePages, type Box, type Cam } from "./camera";
+import { boxAt, edgeMark, frameAll, framePages, pageMax, type Box, type Cam } from "./camera";
 import { edgePush, edgeStep, homesFor, leash, simulate, tether, TETHER, type Pin, type Pos, type Pt } from "./layout";
 import { codeOf, labelBox, radiusOf, titleOf, waits, weight } from "./model";
 
@@ -49,10 +49,38 @@ export function Graph({ live }: { live: boolean }) {
   const now = Date.now();
   const rOf = (x: GraphNode) => radiusOf(x, nodes, now);
 
-  // A page takes the height of its content (measured), up to a screenful.
+  // The room the bar takes at the foot (its cards, when it shows some).
+  const foot = useFoot();
+  const band = { ...size, foot };
+
+  // A page takes the height of its content, measured whenever it changes
+  // (its document comes after it opened), up to what the screen holds
+  // above the bar.
   const [pageH, setPageH] = useState<Record<string, number>>({});
   const pageW = openIds.length > 1 ? PAGE_W_MANY : PAGE_W;
-  const boxOf = (id: string): Pt => [pageW, pageH[id] ?? PAGE_H];
+  const maxH = pageMax(band, PAGE_MAX);
+  const boxOf = (id: string): Pt => [pageW, Math.min(maxH, pageH[id] ?? PAGE_H)];
+  const sizers = useRef(new Map<string, (el: HTMLDivElement | null) => void>());
+  const sizer = (id: string) => {
+    let f = sizers.current.get(id);
+    if (!f) {
+      let ro: ResizeObserver | null = null;
+      f = (el) => {
+        ro?.disconnect();
+        ro = null;
+        if (!el) return;
+        const read = () => {
+          const h = Math.ceil(Math.max(240, el.offsetHeight) / 20) * 20;
+          setPageH((c) => (c[id] === h ? c : { ...c, [id]: h }));
+        };
+        read();
+        ro = new ResizeObserver(read);
+        ro.observe(el);
+      };
+      sizers.current.set(id, f);
+    }
+    return f;
+  };
 
   // The layout: the roots' homes (where they first found room), where the
   // user dropped what, the node held; laid out again when the graph or
@@ -86,6 +114,7 @@ export function Graph({ live }: { live: boolean }) {
       links: (x.links ?? []).filter((l) => ids.has(l)),
       ...labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x)),
       box: openIds.includes(x.id) ? boxOf(x.id) : undefined,
+      opened: openIds.includes(x.id) ? openIds.indexOf(x.id) : undefined,
     }));
     const p = simulate(lnodes, prev.current, homes.current, pins, held ?? undefined, held ? 24 : undefined);
     prev.current = { ...prev.current, ...p };
@@ -131,14 +160,26 @@ export function Graph({ live }: { live: boolean }) {
   const [manual, setManual] = useState(false);
   const openKey = openIds.join(",");
   useEffect(() => setManual(false), [openKey, talk]);
+  // The page in focus: the last one opened (Eriphe's show too), or the
+  // one the user turns to; framed whole when the pages do not all fit.
+  const [focus, setFocus] = useState<string | null>(talk);
+  const wasOpen = useRef<string[]>(openIds);
+  useEffect(() => {
+    const born = openIds.filter((id) => !wasOpen.current.includes(id));
+    wasOpen.current = openIds;
+    if (born.length) setFocus(born[born.length - 1]);
+  }, [openKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (talk) setFocus(talk);
+  }, [talk]);
   const target: Cam = (() => {
     const shown = openIds.filter((id) => pos[id]);
     if (shown.length) {
       const pages = shown.map((id) => ({ id, box: boxAt(pos[id], boxOf(id)) }));
       const near: Box[] = list.filter((x) => lit.has(x.id) && !shown.includes(x.id) && pos[x.id]).map((x) => [pos[x.id][0] - 110, pos[x.id][1] - 40, pos[x.id][0] + 110, pos[x.id][1] + 70]);
-      return framePages(pages, talk, near, size, size.w < 1200 ? 0.9 : 1);
+      return framePages(pages, focus, near, band, size.w < 1200 ? 0.9 : 1);
     }
-    return frameAll(list.map((x) => pos[x.id]).filter(Boolean), size);
+    return frameAll(list.map((x) => pos[x.id]).filter(Boolean), band);
   })();
   useEffect(() => {
     if (manual) return;
@@ -353,12 +394,8 @@ export function Graph({ live }: { live: boolean }) {
                 <motion.div
                   key={`page-${id}`}
                   className="gr-page"
-                  style={{ left: cx, top: cy, width: pageW, maxHeight: PAGE_MAX }}
-                  ref={(el: HTMLDivElement | null) => {
-                    if (!el) return;
-                    const h = Math.round(Math.max(240, Math.min(PAGE_MAX, el.offsetHeight)) / 20) * 20;
-                    if (pageH[id] !== h) queueMicrotask(() => setPageH((c) => (c[id] === h ? c : { ...c, [id]: h })));
-                  }}
+                  style={{ left: cx, top: cy, width: pageW, maxHeight: maxH }}
+                  ref={sizer(id)}
                   initial={{ opacity: 0, scale: 0.2 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.2 }}
@@ -386,6 +423,26 @@ export function Graph({ live }: { live: boolean }) {
       />
     </div>
   );
+}
+
+// useFoot is the room the bar takes at the screen's foot, from its top to
+// the bottom, with a margin: more than the usual when it shows cards.
+export function useFoot(): number {
+  const [foot, setFoot] = useState(0);
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>(".cs");
+    if (!el) return;
+    const read = () => setFoot(Math.round(innerHeight - el.getBoundingClientRect().top + 12));
+    read();
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    addEventListener("resize", read);
+    return () => {
+      ro.disconnect();
+      removeEventListener("resize", read);
+    };
+  }, []);
+  return foot;
 }
 
 // Edges marks the nodes that wait for the user out of view: a small arrow

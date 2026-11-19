@@ -12,8 +12,9 @@ export type Pt = [number, number];
 export type Pos = Record<string, Pt>;
 export type Pin = { abs?: Pt; rel?: Pt };
 // r: the bubble's radius; lw, lh: the size of the label under it, so
-// labels never sit on each other; box: an open page, drawn in the graph.
-export type LNode = { id: string; parent?: string; links: string[]; r: number; lw: number; lh: number; box?: Pt };
+// labels never sit on each other; box: an open page, drawn in the graph;
+// opened: its rank among the open pages, the later one giving way.
+export type LNode = { id: string; parent?: string; links: string[]; r: number; lw: number; lh: number; box?: Pt; opened?: number };
 
 // The user's reach when dragging (#633): a subject stays within STEP of
 // the nearest other subject, a bubble within TETHER of its parent; past it
@@ -183,8 +184,9 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
         // an open page barely moves: the small bubbles make room
         const k = a.box || b.box ? 0.5 : 0.25;
         const wa = a.box && !b.box ? 0 : b.box && !a.box ? 2 : 1, wb = 2 - wa;
-        // around an open page, bubbles step aside left or right: the screen is wide
-        if (ox < oy || a.box || b.box) {
+        // around an open page, bubbles step aside left or right (the screen is
+        // wide), up or down when that is far shorter (caught between two pages)
+        if (ox < oy || ((a.box || b.box) && ox < oy * 3)) {
           const sx = (p[b.id][0] >= p[a.id][0] ? 1 : -1) * ox * k;
           f[a.id][0] -= sx * wa;
           f[b.id][0] += sx * wb;
@@ -220,8 +222,10 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
     for (const x of nodes) {
       const a = anc[x.id];
       if (a) {
-        // while a page is open the roots give way, then come back to their home
-        const ka = opened && !x.box ? 0.012 : 0.08;
+        // while a page is open the roots give way, then come back to their
+        // home; an open page stays where it was laid, not pulled back over
+        // the page it stepped aside from
+        const ka = x.box ? 0 : opened ? 0.012 : 0.08;
         f[x.id][0] += (a[0] - p[x.id][0]) * ka;
         f[x.id][1] += (a[1] - p[x.id][1]) * ka;
       } else if (!x.parent || !byId.has(x.parent)) {
@@ -246,6 +250,7 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
       p[x.id][0] += v[x.id][0];
       p[x.id][1] += v[x.id][1];
     }
+    for (let i = 0; i < 8 && partPages(nodes, p, v, held?.id); i++);
   }
   // where the user dropped them, exactly
   if (!opened) {
@@ -260,7 +265,44 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
       p[x.id] = [p[x.parent][0] + rel[0], p[x.parent][1] + rel[1]];
     }
   }
+  // open pages never sit on each other, whatever pulled them
+  for (let i = 0; i < 64 && partPages(nodes, p, v, held?.id); i++);
   return p;
+}
+
+// partPages parts the open pages that overlap, as solid boxes: of two,
+// the one opened later steps aside (never the one held), sideways when it
+// can (the screen is wide), else down or up, just past the other's edge.
+// It tells whether it moved one.
+function partPages(nodes: LNode[], p: Pos, v: Pos, held?: string): boolean {
+  const boxes = nodes.filter((x) => x.box).sort((a, b) => (a.opened ?? 0) - (b.opened ?? 0));
+  let moved = false;
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      let a = boxes[i], b = boxes[j];
+      if (b.id === held) [a, b] = [b, a];
+      const [ha, ta, ba] = extent(a, p[a.id]), [hb, tb, bb] = extent(b, p[b.id]);
+      const dx = p[b.id][0] - p[a.id][0];
+      const ox = ha + hb - Math.abs(dx);
+      const oy = Math.min(ba, bb) - Math.max(ta, tb);
+      if (ox <= 0.5 || oy <= 0.5) continue;
+      moved = true;
+      // two opened together (no rank) part halfway each
+      const share = a.id !== held && (a.opened ?? 0) === (b.opened ?? 0) ? 0.5 : 0;
+      if (ox <= oy * 1.5) {
+        const s = (dx >= 0 ? 1 : -1) * ox;
+        p[b.id][0] += s * (1 - share);
+        p[a.id][0] -= s * share;
+        v[b.id][0] = v[a.id][0] = 0;
+      } else {
+        const s = ((tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1) * oy;
+        p[b.id][1] += s * (1 - share);
+        p[a.id][1] -= s * share;
+        v[b.id][1] = v[a.id][1] = 0;
+      }
+    }
+  }
+  return moved;
 }
 
 // edgeRest is how far from an open page's centre its bubble x rests, in

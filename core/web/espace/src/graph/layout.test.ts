@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxAt, edgeMark, FOOT, framePages, READABLE } from "./camera";
+import { BOTTOM, boxAt, edgeMark, FOOT, framePages, pageMax, READABLE, TOP } from "./camera";
 import {
   EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, homesFor, leash, ROOM, simulate, STEP, tether, TETHER,
   type LNode, type Pos, type Pt,
@@ -146,6 +146,64 @@ describe("the layout", () => {
     }
   });
 
+  // Two open pages' boxes, margins aside, apart?
+  const apart = (pa: Pt, sa: Pt, pb: Pt, sb: Pt) => Math.abs(pa[0] - pb[0]) >= (sa[0] + sb[0]) / 2 || Math.abs(pa[1] - pb[1]) >= (sa[1] + sb[1]) / 2;
+
+  it("parts a page opened on another: the new one steps aside, the first stays", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const tall: Pt = [620, 640];
+    // the subject's page open, then a new view's page born on its spot
+    const one = simulate(nodes.map((n) => (n.id === "a" ? { ...n, box: tall, opened: 0 } : n)), pos, homes);
+    const prev = { ...one, e: [...one.a] as Pt };
+    const two = nodes.map((n) => (n.id === "a" ? { ...n, box: tall, opened: 0 } : n.id === "e" ? { ...n, box: tall, opened: 1 } : n));
+    const at = simulate(two, prev, homes);
+    expect(apart(at.a, tall, at.e, tall)).toBe(true);
+    expect(dist(at.a, one.a)).toBeLessThan(40);
+    // laid out again, nothing jumps
+    const again = simulate(two, at, homes);
+    expect(dist(again.a, at.a)).toBeLessThan(20);
+    expect(dist(again.e, at.e)).toBeLessThan(20);
+  });
+
+  it("parts a page whose content grew after it was laid out", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const short: Pt = [620, 200], tall: Pt = [620, 640];
+    const open = (h: Pt) => nodes.map((n) => (n.id === "a" ? { ...n, box: tall, opened: 0 } : n.id === "b" ? { ...n, box: h, opened: 1 } : n));
+    const first = simulate(open(short), pos, homes);
+    // b's mail list comes: its box grows where it stands, over a's
+    const grown = simulate(open(tall), { ...first, b: [first.a[0] + 100, first.a[1] + 300] }, homes);
+    expect(apart(grown.a, tall, grown.b, tall)).toBe(true);
+  });
+
+  it("keeps three or four pages opened one after the other apart", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const box: Pt = [620, 640];
+    let prev = pos;
+    const order = ["a", "b", "c", "e"];
+    for (let k = 1; k <= order.length; k++) {
+      const opened = order.slice(0, k);
+      const ns = nodes.map((n) => (opened.includes(n.id) ? { ...n, box, opened: opened.indexOf(n.id) } : n));
+      // each new page born where the last one is (Eriphe showed it from there)
+      const seed = k > 1 ? { ...prev, [order[k - 1]]: [...prev[order[k - 2]]] as Pt } : prev;
+      prev = simulate(ns, seed, homes);
+      for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) expect(apart(prev[order[i]], box, prev[order[j]], box), `${order[i]} ${order[j]}`).toBe(true);
+    }
+  });
+
+  it("never moves the page held, the other gives way", () => {
+    const nodes = graph();
+    const { homes, pos } = settle(nodes);
+    const box: Pt = [620, 520];
+    const ns = nodes.map((n) => (n.id === "a" ? { ...n, box, opened: 0 } : n.id === "b" ? { ...n, box, opened: 1 } : n));
+    const open = simulate(ns, pos, homes);
+    const at = simulate(ns, open, homes, {}, { id: "b", at: open.a }, 24);
+    expect(at.b).toEqual(open.a);
+    expect(apart(at.a, box, at.b, box)).toBe(true);
+  });
+
   it("tethers a bubble to its parent", () => {
     expect(tether([100, 0], [0, 0], [TETHER, TETHER], true)).toEqual([100, 0]);
     expect(tether([500, 0], [0, 0], [TETHER, TETHER], true)[0]).toBeCloseTo(TETHER);
@@ -180,6 +238,26 @@ describe("the camera", () => {
     // the console on the home: the last page opened (the one Eriphe just showed)
     const home = framePages(far, null, [], size);
     expect(home.x + 2600 * home.k).toBeCloseTo(size.w / 2, 0);
+  });
+
+  it("frames a page shown beside whole on a laptop: its head on screen, its foot above the bar", () => {
+    const laptop = { w: 1180, h: 720 };
+    const h = pageMax(laptop, 640);
+    expect(h).toBe(720 - TOP - BOTTOM - 40);
+    const subject = { id: "s", box: boxAt([0, 0], [620, h]) };
+    const view = { id: "v", box: boxAt([620 + 48, 0], [620, h]) };
+    const cam = framePages([subject, view], "v", [], laptop, 0.9);
+    const top = cam.y + view.box[1] * cam.k, bottom = cam.y + view.box[3] * cam.k;
+    const left = cam.x + view.box[0] * cam.k, right = cam.x + view.box[2] * cam.k;
+    expect(top).toBeGreaterThanOrEqual(TOP);
+    expect(bottom).toBeLessThanOrEqual(laptop.h - BOTTOM);
+    expect(left).toBeGreaterThanOrEqual(0);
+    expect(right).toBeLessThanOrEqual(laptop.w);
+    // the bar grown with cards: the page stops above them
+    const tall = { ...laptop, foot: 320 };
+    const c2 = framePages([view], "v", [], tall, 0.9);
+    expect(c2.y + view.box[3] * c2.k).toBeLessThanOrEqual(laptop.h - 320);
+    expect(pageMax(tall, 640)).toBe(720 - TOP - 320 - 40);
   });
 });
 
