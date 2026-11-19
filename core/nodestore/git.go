@@ -14,9 +14,8 @@ import (
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/format/packfile"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/revlist"
 )
 
 // The graph's repository: go-git only, no git binary. Every write is one
@@ -228,45 +227,67 @@ func (s *Store) logVersions() ([]loggedVersion, error) {
 	return out, nil
 }
 
-// bundle writes the repository as a git bundle (v2): its branch, and a
-// pack of every object it reaches. `git clone <file>` reads it back. Just
-// after gc, the repository's one pack is that pack: it is copied as it is.
-func (s *Store) bundle(w io.Writer) error {
-	head, err := s.repo.Head()
-	if errors.Is(err, plumbing.ErrReferenceNotFound) {
-		return errEmptyRepo
-	}
+// ErrBroken is a repository that lacks objects its branch reaches: the
+// graph cannot be trusted, nor written on, until it is put back.
+var ErrBroken = errors.New("the repository is broken")
+
+// checkRepo reads every object every branch reaches: each commit and tree
+// read whole, each blob present. It names the first missing one.
+func checkRepo(r *git.Repository) error {
+	refs, err := r.References()
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "# v2 git bundle\n%s %s\n\n", head.Hash(), plumbing.NewBranchReferenceName(branch)); err != nil {
-		return err
-	}
-	packs, _ := filepath.Glob(filepath.Join(s.dir, ".git", "objects", "pack", "pack-*.pack"))
-	loose, _ := filepath.Glob(filepath.Join(s.dir, ".git", "objects", "??", "*"))
-	if len(packs) == 1 && len(loose) == 0 {
-		f, err := os.Open(packs[0])
-		if err != nil {
-			return err
+	seen := map[plumbing.Hash]bool{}
+	return refs.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Type() != plumbing.HashReference {
+			return nil
 		}
-		defer f.Close()
-		_, err = io.Copy(w, f)
-		return err
-	}
-	objs, err := revlist.Objects(s.repo.Storer, []plumbing.Hash{head.Hash()}, nil)
-	if err != nil {
-		return err
-	}
-	_, err = packfile.NewEncoder(w, s.repo.Storer, false).Encode(objs, 10)
-	return err
-}
-
-var errEmptyRepo = errors.New("the graph has no commit yet")
-
-// gc packs the repository's objects and drops those no commit reaches.
-func (s *Store) gc() error {
-	if err := s.repo.Prune(git.PruneOptions{Handler: s.repo.DeleteObject}); err != nil {
-		return err
-	}
-	return s.repo.RepackObjects(&git.RepackConfig{})
+		broken := func(what string, h plumbing.Hash, err error) error {
+			return fmt.Errorf("%w: %s reaches %s %s, which does not read (%v)", ErrBroken, ref.Name(), what, h, err)
+		}
+		var walkTree func(h plumbing.Hash) error
+		walkTree = func(h plumbing.Hash) error {
+			if seen[h] {
+				return nil
+			}
+			t, err := object.GetTree(r.Storer, h)
+			if err != nil {
+				return broken("tree", h, err)
+			}
+			for _, e := range t.Entries {
+				switch {
+				case e.Mode == filemode.Dir:
+					if err := walkTree(e.Hash); err != nil {
+						return err
+					}
+				case e.Mode.IsFile() && !seen[e.Hash]:
+					if err := r.Storer.HasEncodedObject(e.Hash); err != nil {
+						return broken("blob", e.Hash, err)
+					}
+					seen[e.Hash] = true
+				}
+			}
+			seen[h] = true
+			return nil
+		}
+		todo := []plumbing.Hash{ref.Hash()}
+		for len(todo) > 0 {
+			h := todo[len(todo)-1]
+			todo = todo[:len(todo)-1]
+			if seen[h] {
+				continue
+			}
+			c, err := object.GetCommit(r.Storer, h)
+			if err != nil {
+				return broken("commit", h, err)
+			}
+			if err := walkTree(c.TreeHash); err != nil {
+				return err
+			}
+			seen[h] = true
+			todo = append(todo, c.ParentHashes...)
+		}
+		return nil
+	})
 }

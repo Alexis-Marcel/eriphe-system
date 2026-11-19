@@ -108,7 +108,7 @@ type Store struct {
 	opts Options
 
 	// One write at a time: the repository's worktree is not shared. A
-	// read of the repository waits for a write (gc moves its objects).
+	// read of the repository waits for a write.
 	mu sync.RWMutex
 
 	watch func(Change) // Watch's
@@ -192,6 +192,9 @@ func Open(dir, index string, opts Options) (*Store, Report, error) {
 	repo, err := openRepo(dir)
 	if err != nil {
 		return nil, Report{}, fmt.Errorf("repository: %w", err)
+	}
+	if err := checkRepo(repo); err != nil {
+		return nil, Report{}, fmt.Errorf("repository %s: %w; put it back from a backup (nodes-<day>.bundle: git clone it) and keep the broken one aside", dir, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(index), 0o700); err != nil {
 		return nil, Report{}, err

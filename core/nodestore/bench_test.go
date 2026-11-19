@@ -65,7 +65,12 @@ func TestStoreBench(t *testing.T) {
 	if err := s.Backup(filepath.Join(t.TempDir(), "backups"), 1); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("repository %d MiB, %d MiB after the nightly backup and gc (%v)", before>>20, dirSize(filepath.Join(e.dir, ".git"))>>20, time.Since(start).Round(time.Millisecond))
+	t.Logf("repository %d MiB, nightly backup in %v", before>>20, time.Since(start).Round(time.Millisecond))
+	start = time.Now()
+	if err := checkRepo(s.repo); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("the check at start reads every object in %v", time.Since(start).Round(time.Millisecond))
 }
 
 func dirSize(dir string) int64 {
