@@ -713,34 +713,36 @@ a.notice-text:hover { text-decoration: underline; }
 .notice-close { border: 0; background: none; color: var(--fg3); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
 .notice-close:hover { color: var(--fg); }
 
-/* ---------- the console (console/) ---------- */
+/* ---------- the bar (console/) ---------- */
 .cs { position: absolute; z-index: 30; left: 50%; bottom: 16px; translate: -50% 0; width: min(620px, calc(100vw - 32px)); display: grid; justify-items: center; gap: 10px; pointer-events: none; }
 .cs > * { pointer-events: auto; }
 .cs-aside { display: grid; justify-items: center; gap: 8px; text-align: center; max-width: 100%; pointer-events: none; }
-.cs-panel { display: grid; justify-items: center; gap: 6px; max-width: min(580px, 100%); padding: 9px 16px 10px; border-radius: 14px; pointer-events: auto;
+.cs-panel { display: grid; justify-items: center; gap: 4px; max-width: min(580px, 100%); padding: 7px 16px 8px; border-radius: 14px; pointer-events: auto;
   border: 1px solid var(--glass-line); background: color-mix(in oklab, var(--card) 94%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: var(--lift); }
-.cs-said { max-width: 548px; max-height: 4.8em; overflow: hidden; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; color: var(--fg); }
-/* The user's last question, above the answer: one grey line, whole on a click. */
+/* Eriphe's line: one line, plain, gone after a few seconds (ACK_MS, exchange.ts). */
+.cs-said { margin: 0; max-width: 548px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14.5px; font-weight: 500; letter-spacing: -0.01em; color: var(--fg);
+  animation: cs-ack-in 0.35s ease, cs-ack-out 0.6s ease 5.4s forwards; }
+.cs-said.draft { animation: cs-ack-in 0.35s ease; color: var(--fg2); }
+.cs-external { display: inline-block; width: 6px; height: 6px; margin-left: 6px; vertical-align: middle; border-radius: 50%; background: var(--warn-text); }
+@keyframes cs-ack-in { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
+@keyframes cs-ack-out { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cs-said, .cs-said.draft { animation: none; } }
+/* The user's last question, above Eriphe's line: one grey line, whole on a click. */
 .cs-asked { max-width: 100%; border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; color: var(--fg3); cursor: pointer;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cs-asked:hover { color: var(--fg2); }
 .cs-asked.whole { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9em; overflow-y: auto; text-align: left; }
-.cs-said .a2-markdown > * { margin: 0; }
-.cs-cards { width: min(560px, 100%); max-height: 46vh; overflow: auto; pointer-events: auto; text-align: left; }
-.cs-conv .cs-cards { width: auto; max-height: 40%; padding: 0 12px 12px; }
-.cs-replies { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; pointer-events: auto; }
-.cs-reply { padding: 4px 12px; border-radius: 999px; border: 1px solid color-mix(in oklab, var(--accent) 45%, transparent); background: var(--glass); color: var(--accent-text); cursor: pointer; font-size: 12.5px; }
-.cs-reply:hover { background: var(--accent-soft); }
+/* The cards no node holds: the bar's one exception, compact, above it. */
+.cs-cards { width: min(560px, 100%); max-height: 40vh; overflow: auto; pointer-events: auto; text-align: left; }
 .cs-note { margin: 0; font-size: 12px; color: var(--fg3); }
 .cs-note a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
-.cs-bar { width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 5px 5px 6px; border-radius: 999px; border: 1px solid var(--glass-line); background: var(--glass);
+.cs-note.cs-error { color: var(--hot-text); font-size: 13px; }
+.cs-bar { width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 5px 5px 16px; border-radius: 999px; border: 1px solid var(--glass-line); background: var(--glass);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--lift); transition: border-color 0.2s, box-shadow 0.2s; }
 .cs-bar:focus-within { border-color: var(--link-on); }
 .cs-bar input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--fg); padding: 8px 4px; }
 .cs-bar input:focus-visible { outline: none; }
 .cs-bar input::placeholder { color: var(--fg3); }
-.cs-conv-btn { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--glass-line); background: none; color: var(--fg2); cursor: pointer; }
-.cs-conv-btn:hover, .cs-conv-btn[aria-pressed="true"] { color: var(--fg); border-color: var(--link-on); }
 .cs-orb { position: relative; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none;
   background: radial-gradient(circle at 35% 30%, color-mix(in oklab, var(--accent) 55%, #fff), var(--accent) 45%, color-mix(in oklab, var(--accent) 50%, #000) 100%);
   box-shadow: 0 0 22px -2px var(--accent), inset 0 0 10px rgb(255 255 255 / 0.25); }
@@ -751,28 +753,14 @@ a.notice-text:hover { text-decoration: underline; }
 .cs-wave i:nth-child(2) { animation-delay: 0.11s; } .cs-wave i:nth-child(3) { animation-delay: 0.22s; }
 .cs-wave i:nth-child(4) { animation-delay: 0.33s; } .cs-wave i:nth-child(5) { animation-delay: 0.44s; }
 @keyframes bar { from { height: 4px; } to { height: 17px; } }
-.cs-conv { width: 100%; max-height: min(52vh, 480px); display: grid; grid-template-rows: auto minmax(0, 1fr); border-radius: 16px; border: 1px solid var(--glass-line);
-  background: color-mix(in oklab, var(--card) 92%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); box-shadow: var(--lift); overflow: hidden; }
-.cs-conv header { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--glass-line); }
-.cs-conv header .micro { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs-conv header button { border: 0; background: none; color: var(--fg3); cursor: pointer; font-size: 12px; }
-.cs-lines { overflow-y: auto; padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 9px; scrollbar-width: thin; }
-.cs-earlier { align-self: center; border: 1px solid var(--line); background: var(--card); color: var(--fg2); border-radius: 999px; padding: 3px 12px; font-size: 12px; cursor: pointer; }
-.cs-msg { max-width: 88%; display: grid; gap: 2px; }
-.cs-msg p { margin: 0; }
-.cs-msg.you { align-self: flex-end; }
-.cs-msg.you p { padding: 6px 11px; border-radius: 12px 12px 4px 12px; background: var(--fill); border: 1px solid var(--line); }
-.cs-msg.eri { align-self: flex-start; }
-.cs-msg.eri .a2-markdown > :first-child { margin-top: 0; }
-.cs-msg.eri .a2-markdown > :last-child { margin-bottom: 0; }
-.cs-msg.draft { opacity: 0.75; }
-.cs-via { justify-self: end; font-size: 11px; color: var(--fg3); }
-.cs-external { font-size: 11.5px; color: var(--warn-text); }
-.cs-error { margin: 0; color: var(--hot-text); font-size: 13px; }
-.cs-error .linkish, .cs-error a { color: inherit; font-size: inherit; }
 .cs-dots { display: flex; gap: 4px; margin: 0; }
 .cs-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--fg3); animation: breathe 1s ease-in-out infinite; }
 .cs-dots i:nth-child(2) { animation-delay: 0.15s; } .cs-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+/* A card block: one of the node's cards, where its document places it;
+   one not found says so, with no Oui or Non. */
+.pg-card { margin: 12px 0; }
+.pg-card-missing { margin: 12px 0; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--line); color: var(--fg3); font-size: 13px; }
 
 .gallery { position: fixed; inset: 0; overflow: auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 12px; align-content: flex-start; }
 

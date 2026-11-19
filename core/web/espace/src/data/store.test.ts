@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { GraphNode } from "./api";
+import type { BarLine, GraphNode } from "./api";
 import {
   applyDoc, applyExchange, applyMoved, applyNodes, applyNotes, applyProgress, applyShow, applySource, closePage, empty, NOTES_KEPT,
   openPage, pathOf, placeAt, restore, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
@@ -84,16 +84,19 @@ describe("the store", () => {
   });
 
   it("keeps the cards no node holds with the exchange", () => {
-    const s = applyExchange(withGraph(), { lines: [], cards: ["view:1", 2 as unknown as string] });
+    const s = applyExchange(withGraph(), { cards: ["view:1", 2 as unknown as string] });
     expect(s.exchange?.cards).toEqual(["view:1"]);
   });
 
   it("keeps the exchange of the node the console talks to only", () => {
     let s = openPage(withGraph(), "a");
-    expect(applyExchange(s, { node: "b", lines: [] }).exchange).toBeNull();
-    s = applyExchange(s, { node: "a", lines: [{ seq: 3, role: "brain", text: "Oui.", time: "" }], suggestions: ["Vas-y", 3 as unknown as string] });
-    expect(s.exchange?.lines).toHaveLength(1);
-    expect(s.exchange?.suggestions).toEqual(["Vas-y"]);
+    expect(applyExchange(s, { node: "b" }).exchange).toBeNull();
+    s = applyExchange(s, { node: "a", asked: { seq: 2, text: "Et alors ?" }, said: { seq: 3, text: "Oui." } });
+    expect(s.exchange?.said?.text).toBe("Oui.");
+    expect(s.exchange?.asked?.seq).toBe(2);
+    // a line that is not one is dropped, never drawn
+    s = applyExchange(s, { node: "a", said: { seq: "x", text: 1 } as unknown as BarLine });
+    expect(s.exchange?.said).toBeUndefined();
     // talking to another node, it waits for that one's
     expect(talkTo(openPage(s, "b", true), "b").exchange).toBeNull();
   });

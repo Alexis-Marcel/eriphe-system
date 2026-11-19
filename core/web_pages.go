@@ -288,9 +288,7 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if r.PostFormValue("from") != viaSuggestion { // a click never decides a card (brain_suggest.go)
-		w.c.resolveByText(r.Context(), int(seq)) // a plain yes or no to the card just above (convo_cards.go)
-	}
+	w.c.resolveByText(r.Context(), int(seq)) // a plain yes or no to the card just above (convo_cards.go)
 	w.c.ping()
 	w.notify()
 	rw.WriteHeader(http.StatusNoContent)

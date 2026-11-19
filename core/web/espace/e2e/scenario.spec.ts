@@ -5,7 +5,10 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 // scripted brain, the real engine, cards, filing and stream. What the world
 // outside the user does (a monitor's mail, a task that finishes) is asked
 // of the test core at /e2e/. The page must say nothing to the console, and
-// break no rule of its Content-Security-Policy.
+// break no rule of its Content-Security-Policy. The bar is only a bar: the
+// user's last question and one line of Eriphe's, which goes; what Eriphe
+// says at length, its questions and their buttons are in the subject's
+// document.
 
 const password = "correct horse battery"; // testPassword, core/web_test.go
 const external = "Contenu extérieur"; // what the page names a node someone else's words wrote
@@ -27,6 +30,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   await page.goto("/espace");
 
   const said = page.locator(".cs-said");
+  // The bar's buttons: none but the fold of the last question (the cards
+  // no node holds aside).
+  const barButtons = page.locator(".cs-panel button:not(.cs-asked), .cs-bar button");
   const say = async (text: string) => {
     const input = page.locator(".cs-bar input");
     await input.fill(text);
@@ -40,13 +46,17 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(page.locator("article.pg")).toHaveCount(0);
 
   // 2. One call, no node opened; it is logged in « Ma journée »'s trace.
-  // The question stays, in grey, just above the answer.
+  // The question stays, in grey, just above Eriphe's line, which goes
+  // after a few seconds; the question stays. No button in the bar.
   await say("Allume la lumière du bureau.");
   await expect(said).toContainText("C'est allumé.");
   const asked = page.locator(".cs-asked");
   await expect(asked).toContainText("Allume la lumière du bureau.");
   expect((await asked.boundingBox())!.y).toBeLessThan((await said.boundingBox())!.y);
-  await shot(page, "console");
+  await shot(page, "bar");
+  await expect(barButtons).toHaveCount(0);
+  await expect(said).toHaveCount(0, { timeout: 10_000 });
+  await expect(asked).toContainText("Allume la lumière du bureau.");
   await expect(page.locator("article.pg")).toHaveCount(0);
   expect((await (await request.get("/e2e/tools")).json()).lit).toEqual(["bureau"]);
   await bubble("Ma journée").click();
@@ -102,9 +112,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   // a research child running.
   await say("Réponds que je regarde dans l'heure, ouvre-moi la prod, et lance en arrière-plan une recherche sur l'erreur.");
   await expect(said).toContainText("Le brouillon est prêt");
+  await shot(page, "bar-over-page");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", `Écris à Eriphe, sur ${external}`);
   await expect(mailPage).toContainText("Je regarde dans l'heure.");
-  await shot(page, "console-over-page");
   await expect(pageOf("Production")).toBeVisible();
   await expect(pageOf("Production")).toContainText("42");
   await expect(page.locator(".gr-node.running .gr-core[aria-label^=\"Recherche sur l'erreur\"]")).toBeVisible();
@@ -189,47 +199,53 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(archived).toContainText("avec 2 bulles");
   await page.locator(".hud-archives .hud-icon").click();
 
-  // 14. Asked at the home, a subject opens its page, the console in it;
-  // Eriphe asks there what matters first, each question with its default
-  // and replies to answer fast; the view it proposes then waits at the
-  // subject's foot, recalling the choices. Its yes makes the view, which
-  // opens.
+  // 14. Asked at the home, a subject opens its page, the bar in it;
+  // Eriphe asks there what matters first: its questions, each with its
+  // default, are in the subject's document, with the buttons that answer
+  // them; the bar has one line. The view it proposes then waits in the
+  // document, where Eriphe placed it, recalling the choices. Its yes makes
+  // the view, which opens.
   await home(page);
   await say("Garde un œil sur mes mails.");
   const watch = pageOf("Garder un œil sur mes mails");
   await expect(watch).toBeVisible();
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Garder un œil sur mes mails");
-  await expect(said).toContainText("quelques questions");
-  await expect(said).toContainText("Par défaut au brief, jamais la nuit");
-  await expect(said).not.toContainText("<suggestions>");
-  await expect(page.locator(".cs-reply")).toHaveCount(2);
+  await expect(said).toHaveText("J'ai écrit mes questions dans le sujet.");
+  await expect(watch).toContainText("Par défaut au brief, jamais la nuit");
+  await expect(barButtons).toHaveCount(0);
   await expect(watch.locator(".pg-foot")).toHaveCount(0);
-  await page.locator(".cs-reply", { hasText: "Fais comme tu proposes" }).click();
+  const defaults = watch.getByRole("button", { name: "Fais comme tu proposes" });
+  await expect(watch.getByRole("button", { name: "Toutes, et réveille-moi la nuit pour la prod" })).toBeVisible();
+  await defaults.click();
   await expect(said).toContainText("Voici la vue");
   await expect(page.locator(".cs-asked")).toContainText("Fais comme tu proposes");
+  // The document says where things stand: the questions and their
+  // buttons gone, the choices written, the card placed under them.
+  await expect(defaults).toHaveCount(0);
+  await expect(watch).not.toContainText("Par défaut au brief");
+  await expect(watch).toContainText("Ce qu'on a décidé");
   // The view's card says plainly what its yes makes; its technical words,
   // the skill's instructions drawn as Markdown, are one click away.
-  const viewCard = watch.locator(".pg-foot");
+  const viewCard = watch.locator(".pg-body .pg-card");
   await expect(viewCard).toContainText("Mes mails");
   await expect(viewCard).toContainText("prévenu au brief, jamais la nuit");
   await expect(viewCard.locator(".a2-proposal-summary")).toContainText("Une page « Mes mails »");
   await expect(viewCard.locator(".a2-proposal-summary")).toContainText("Regarde toutes les 5 min s'il y a du nouveau");
+  await expect(watch.locator(".pg-foot")).toHaveCount(0);
   const details = viewCard.locator("details.a2-proposal-details");
   await expect(details.locator(".a2-proposal-md")).toBeHidden();
   await shot(page, "view-card");
   await details.locator("summary").click();
   await expect(details.locator(".a2-proposal-md h3")).toHaveText("Trier les mails");
   await expect(details).not.toContainText("**chaque**");
-  // However long the card, the page keeps its body above its foot.
-  const body = (await watch.locator(".pg-body").boundingBox())!;
-  const foot = (await viewCard.boundingBox())!;
-  expect(body.height).toBeGreaterThan(80);
-  expect(body.y + body.height).toBeLessThanOrEqual(foot.y + 1);
   await details.locator(".a2-proposal-md").scrollIntoViewIfNeeded();
   await shot(page, "view-card-details", true);
   await viewCard.getByRole("button", { name: "Oui" }).click();
   await expect(bubble("Mes mails")).toBeVisible();
   await expect(pageOf("Mes mails")).toBeVisible();
+  // Answered, the card stays in the document and says so.
+  await expect(viewCard.locator(".a2-proposal-kicker")).toContainText("Validé");
+  await expect(viewCard.getByRole("button", { name: "Oui" })).toHaveCount(0);
 
   // 15. A card no page holds (proposed at the home, no subject opened)
   // waits in the console, with its Oui; answered, it leaves it.
@@ -250,6 +266,67 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(bubble("Recherche sur les newsletters")).toBeVisible();
   await expect(page.locator("article.pg")).toHaveCount(0);
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe");
+
+  // 17. Writing. Asked at the home, the main subject opens with its plan
+  // and its questions, their buttons in its document.
+  await home(page);
+  await say("Écris-moi un article sur le télétravail.");
+  const write = pageOf("Écrire l'article");
+  await expect(write).toBeVisible();
+  await expect(said).toHaveText("J'ouvre le sujet de l'article.");
+  await expect(write).toContainText("Ce qui reste à inventer");
+  await expect(write).toContainText("Par défaut, des salariés.");
+  await expect(barButtons).toHaveCount(0);
+  const articleDefaults = write.getByRole("button", { name: "Fais comme tu proposes" });
+  await articleDefaults.click();
+  await expect(said).toContainText("C'est noté");
+  await expect(articleDefaults).toHaveCount(0);
+  await expect(write).toContainText("Ce qu'on a décidé");
+  await expect(write).toContainText("Pour des salariés, 1 000 mots.");
+
+  // 18. A research on the side: its node is born on the graph, not
+  // opened, its task at work; the bar stays on the subject.
+  await say("Lance une recherche sur le côté.");
+  await expect(said).toHaveText("Je lance la recherche sur le côté.");
+  await expect(bubble("Recherche sur le télétravail")).toBeVisible();
+  await expect(pageOf("Recherche sur le télétravail")).toHaveCount(0);
+  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Écrire l'article");
+  await expect(page.locator(".gr-node.running .gr-core[aria-label^='Documentation sur le télétravail']")).toBeVisible();
+
+  // 19. The research done, Eriphe updates the main subject (its summary,
+  // what comes next) and opens « Choisir l'angle » on the side.
+  await request.post("/e2e/finish/docs");
+  await expect(write).toContainText("Trois études récentes", { timeout: 15_000 });
+  await expect(write).toContainText("Choisir l'angle.");
+  await expect(bubble("Choisir l'angle")).toBeVisible();
+
+  // 20. The angle is chosen by a button of its document: the choice is
+  // written there, the article gets its first version, the main subject
+  // says where things stand.
+  await home(page);
+  await bubble("Choisir l'angle").click();
+  const angle = pageOf("Choisir l'angle");
+  await expect(angle.getByRole("button", { name: "L'angle des salariés" })).toBeVisible();
+  await angle.getByRole("button", { name: "L'angle des managers" }).click();
+  await expect(said).toHaveText("J'ai écrit une première version de l'article.");
+  await expect(angle).toContainText("Ce qu'on a décidé");
+  await expect(angle.getByRole("button", { name: "L'angle des managers" })).toHaveCount(0);
+  await expect(bubble("L'article")).toBeVisible();
+
+  // 21. Said to the article: a new version; the main subject follows.
+  await home(page);
+  await bubble("L'article").click();
+  const article = pageOf("L'article");
+  await expect(article).toContainText("ce qui change pour les managers");
+  await say("Ajoute une conclusion.");
+  await expect(said).toHaveText("Conclusion ajoutée.");
+  await expect(article).toContainText("Le bureau devient un lieu de rencontre.");
+  await expect(article.locator(".pg-versions button")).toHaveText(["v2", "v1"]);
+  await home(page);
+  await bubble("Écrire l'article").click();
+  await expect(write).toContainText("L'angle des managers.");
+  await expect(write).toContainText("version 2, avec sa conclusion");
+  await expect(write).toContainText("Trois études récentes");
 
   // End: home again, nothing waiting.
   await home(page);

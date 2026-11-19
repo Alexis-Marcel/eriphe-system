@@ -325,7 +325,7 @@ func (c *core) brainRemember(in rememberIn) (map[string]any, error) {
 	}
 	out := map[string]any{"id": x.ID, "status": x.Status}
 	if x.Status == memProposed {
-		c.cardProposed(cardMemory, x.ID)
+		out["card"] = c.cardProposed(cardMemory, x.ID)
 		out["note"] = "Only proposed: " + d.Why + ". " + cardNote(c.conf().User)
 	}
 	if x.Pinned {

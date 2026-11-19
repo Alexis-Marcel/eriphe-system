@@ -409,7 +409,12 @@ func (sc *scenario) call(task, server, tool string, args map[string]any) (map[st
 func (sc *scenario) brainTurn(task, turn string) {
 	said, node := userLine(turn)
 	b := &brainPlay{sc: sc, task: task}
-	answer := sc.script(b, said, node)
+	var answer string
+	if said == "" {
+		answer = sc.event(b, turn) // no message of the user's: an event woke it
+	} else {
+		answer = sc.script(b, said, node)
+	}
 	evs := append(b.evs, EventRow{Type: "text", Data: map[string]any{"text": answer}}, EventRow{Type: "turn_end", Data: map[string]any{"subtype": "success"}})
 	sc.report(task, deviceReport{State: stateIdle, Events: sc.events(task, evs...)})
 }
@@ -565,45 +570,161 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		b.self("node_set", map[string]any{"id": node, "done": true})
 		return "C'est noté, le plan est fait."
 	case strings.Contains(said, "Garde un œil sur mes mails"):
-		// Asked at the home: its subject opens, the console in it, and the
-		// view is composed there (the prompt's « Les vues »). What will run
-		// alone is settled first: one message, the questions that change
-		// it, each with its default, and replies to answer fast.
+		// Asked at the home: its subject opens, the bar in it, and the view
+		// is composed there (the prompt's « Les vues »). What will run alone
+		// is settled first: the questions that change it, each with its
+		// default, in the subject's document, and the buttons that answer
+		// them; the answer is one line.
 		out := b.self("node_open", map[string]any{"title": "Garder un œil sur mes mails", "goal": "Une vue des mails qui comptent",
 			"body": "## Ce qu'on suit\n\nLes mails qui demandent quelque chose, triés pour toi.\n\n## À décider\n\n" +
-				"- Quelles boîtes : toutes, par défaut.\n- Ce qui compte : ce qui demande une réponse.\n" +
-				"- Te prévenir : au brief, jamais la nuit.\n- Préparer : un brouillon pour ton oui, le reste noté.\n"})
+				"1. Quelles boîtes ? Par défaut, toutes.\n2. Qui ou quoi compte surtout ? Par défaut, ce qui demande une réponse.\n" +
+				"3. Je te préviens quand ? Par défaut au brief, jamais la nuit.\n4. Je prépare un brouillon pour ton oui, et je note le reste.\n\n" +
+				askBlock("reponses", "Fais comme tu proposes", "Toutes, et réveille-moi la nuit pour la prod")})
 		if id, _ := out["id"].(string); id != "" {
 			keep("watch", id)
 		}
-		return "Avant de la mettre en place, quelques questions :\n\n" +
-			"1. Quelles boîtes ? Par défaut, toutes.\n2. Qui ou quoi compte surtout ? Par défaut, ce qui demande une réponse.\n" +
-			"3. Je te préviens quand ? Par défaut au brief, jamais la nuit.\n4. Je prépare un brouillon pour ton oui, et je note le reste ?\n\n" +
-			"<suggestions>\nFais comme tu proposes\nToutes, et réveille-moi la nuit pour la prod\n</suggestions>"
+		return "J'ai écrit mes questions dans le sujet."
+	case strings.Contains(said, "Fais comme tu proposes") && node == n("write"):
+		// The article's defaults: the questions go, the choices are written.
+		_, hash := b.read(node)
+		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": articleDoc("## Ce qu'on a décidé\n\n- Pour des salariés, 1 000 mots.\n", "", "Une recherche, puis l'angle.")})
+		return "C'est noté : pour des salariés, 1 000 mots."
 	case strings.Contains(said, "Fais comme tu proposes"):
 		// The card recalls the choices: the view's goal is its why. The whole
 		// view, as a real brain composes it: its node, the monitor that looks
-		// every 5 minutes and the skill that sorts each mail.
-		b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Toutes les boîtes ; ce qui demande une réponse ; prévenu au brief, jamais la nuit",
+		// every 5 minutes and the skill that sorts each mail. Its card is
+		// placed in the subject's document, under what was decided.
+		out := b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Toutes les boîtes ; ce qui demande une réponse ; prévenu au brief, jamais la nuit",
 			"body":    "Les mails qui demandent une réponse.\n",
 			"monitor": map[string]any{"name": "mails-recus", "server": "mail", "tool": "recus", "cond": "new", "path": "messages", "id": "id", "every": "5m"},
 			"skill": map[string]any{"name": "mails-trier", "description": "Trie chaque mail reçu et prépare une réponse à ceux qui en demandent une.",
 				"when": "monitor.new key=mails-recus", "every": "15m", "model": "small", "tools": []string{"mail"},
 				"instructions": "# Trier les mails\n\nPour **chaque** mail reçu :\n\n1. Note-le dans la page.\n2. S'il demande une réponse, ouvre un node « Répondre à … » avec un brouillon.\n\nN'envoie rien : l'envoi attend le `oui`.\n"}})
+		card, _ := out["card"].(string)
+		_, hash := b.read(node)
+		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": "## Ce qu'on suit\n\nLes mails qui demandent quelque chose, triés pour toi.\n\n" +
+			"## Ce qu'on a décidé\n\n- Toutes les boîtes ; ce qui demande une réponse.\n- Prévenu au brief, jamais la nuit.\n\n" +
+			"```eriphe:block vue\n{\"card\": \"" + card + "\"}\n```\n\n## Ensuite\n\nTon oui sur la carte crée la vue.\n"})
 		return "Voici la vue : dis oui sur sa carte et elle s'ouvre."
 	case strings.Contains(said, "vue de l'agenda"):
-		// Proposed at the home with no subject opened: its card waits in
-		// the console (web_console.go's unheldCards).
+		// Proposed at the home with no subject opened: its card waits
+		// above the bar (web_console.go's unheldCards).
 		b.self("propose_view", map[string]any{"title": "Mon agenda", "body": "Les rendez-vous du jour.\n"})
 		return "Voici la vue de ton agenda : dis oui sur sa carte."
 	case strings.Contains(said, "à part"):
-		// On the side: opened in the background, the console stays.
+		// On the side: opened in the background, the bar stays.
 		b.self("node_open", map[string]any{"title": "Recherche sur les newsletters", "aside": true, "goal": "Les newsletters à garder"})
 		return "Je lance la recherche à part."
 	case strings.Contains(said, "archiver"):
 		return "C'est toi qui archives : « Archiver », en haut de sa page."
+	case strings.Contains(said, "Écris-moi un article"):
+		// Asked at the home: the main subject opens with its plan and its
+		// questions, their buttons below.
+		out := b.self("node_open", map[string]any{"title": "Écrire l'article", "goal": "Un article sur le télétravail, publié",
+			"body": articleDoc("## À décider\n\n1. Pour qui ? Par défaut, des salariés.\n2. Quelle longueur ? Par défaut, 1 000 mots.\n\n"+
+				askBlock("reponses", "Fais comme tu proposes", "Écris-le pour des managers"), "", "Tes réponses, puis une recherche.")})
+		if id, _ := out["id"].(string); id != "" {
+			keep("write", id)
+		}
+		return "J'ouvre le sujet de l'article."
+	case strings.Contains(said, "recherche sur le côté"):
+		// On the side: a child of the subject, in the background, with the
+		// task that does the research.
+		out := b.self("node_open", map[string]any{"title": "Recherche sur le télétravail", "parent": node, "aside": true, "goal": "Ce que disent les études"})
+		if id, _ := out["id"].(string); id != "" {
+			keep("wresearch", id)
+			b.self("run_task", map[string]any{"title": "Documentation sur le télétravail", "prompt": "Lis les études récentes sur le télétravail et résume-les.", "node": id})
+		}
+		return "Je lance la recherche sur le côté."
+	case strings.Contains(said, "angle des managers"):
+		// Chosen in « Choisir l'angle »: the choice is written there, the
+		// deliverable gets its first version, and the main subject says
+		// where things stand.
+		_, hash := b.read(node)
+		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": "## Ce qu'on a décidé\n\nL'angle des managers : ce qui change pour eux.\n"})
+		out := b.self("node_open", map[string]any{"title": "L'article", "parent": n("write"), "aside": true,
+			"body": "# Télétravail : ce qui change pour les managers\n\nTrois études le disent : on travaille autant, autrement.\n"})
+		if id, _ := out["id"].(string); id != "" {
+			keep("deliverable", id)
+		}
+		_, hash = b.read(n("write"))
+		b.self("node_write", map[string]any{"id": n("write"), "expect": hash, "body": articleDoc(articleDecided+"- L'angle des managers.\n", articleResearch, "Relire « L'article », version 1.")})
+		return "J'ai écrit une première version de l'article."
+	case strings.Contains(said, "Ajoute une conclusion"):
+		body, hash := b.read(node)
+		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": body + "\n## Pour conclure\n\nLe bureau devient un lieu de rencontre.\n"})
+		_, hash = b.read(n("write"))
+		b.self("node_write", map[string]any{"id": n("write"), "expect": hash, "body": articleDoc(articleDecided+"- L'angle des managers.\n", articleResearch, "Relire « L'article », version 2, avec sa conclusion.")})
+		return "Conclusion ajoutée."
 	}
 	return "D'accord."
+}
+
+// event is the scripted brain's turn on an event: the research of the
+// article done, it updates the research's node and the main subject, and
+// opens « Choisir l'angle » on the side, its options and their buttons.
+// Any other event: nothing to say.
+func (sc *scenario) event(b *brainPlay, turn string) string {
+	if !strings.Contains(turn, "« Documentation sur le télétravail »") || !strings.Contains(turn, "a fini son tour") {
+		return "[rien]"
+	}
+	sc.mu.Lock()
+	research, write := sc.nodes["wresearch"], sc.nodes["write"]
+	sc.mu.Unlock()
+	_, hash := b.read(research)
+	b.self("node_write", map[string]any{"id": research, "expect": hash, "body": "## Ce qu'on a trouvé\n\n" + articleSummary + "\n"})
+	_, hash = b.read(write)
+	b.self("node_write", map[string]any{"id": write, "expect": hash, "body": articleDoc(articleDecided, articleResearch, "Choisir l'angle.")})
+	out := b.self("node_open", map[string]any{"title": "Choisir l'angle", "parent": write, "aside": true,
+		"body": "Deux angles tiennent, d'après la recherche.\n\n- Les managers : ce qui change pour eux.\n- Les salariés : comment s'organiser.\n\n" +
+			askBlock("angles", "L'angle des managers", "L'angle des salariés")})
+	if id, _ := out["id"].(string); id != "" {
+		sc.mu.Lock()
+		sc.nodes["angle"] = id
+		sc.mu.Unlock()
+	}
+	return "La recherche est faite : choisis l'angle."
+}
+
+// The article's subject, as the scripted brain writes it again at each
+// step: its plan, what was decided, what the research found, what comes
+// next.
+const (
+	articleSummary  = "Trois études récentes : on travaille autant, autrement ; les managers changent le plus."
+	articleDecided  = "## Ce qu'on a décidé\n\n- Pour des salariés, 1 000 mots.\n"
+	articleResearch = "## La recherche\n\n" + articleSummary + "\n"
+)
+
+func articleDoc(decided, research, next string) string {
+	parts := []string{"## Le plan\n\n1. Ce qui a changé\n2. Ce qui marche\n3. Ce qui reste à inventer\n", decided, research, "## Ensuite\n\n" + next + "\n"}
+	var out []string
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, strings.TrimRight(p, "\n")+"\n")
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// askBlock is a block of buttons that answer a question: each asks
+// Eriphe its own words, as the user's message in the node.
+func askBlock(name string, answers ...string) string {
+	comps := []any{map[string]any{"id": "root", "component": "Row", "children": func() []string {
+		var ids []string
+		for i := range answers {
+			ids = append(ids, fmt.Sprintf("r%d", i))
+		}
+		return ids
+	}()}}
+	for i, a := range answers {
+		c := map[string]any{"id": fmt.Sprintf("r%d", i), "component": "Button", "label": a, "action": map[string]any{"event": map[string]any{"name": "ask", "context": map[string]any{"text": a}}}}
+		if i == 0 {
+			c["variant"] = "primary"
+		}
+		comps = append(comps, c)
+	}
+	raw, _ := json.Marshal(map[string]any{"components": comps})
+	return "```eriphe:block " + name + "\n" + string(raw) + "\n```\n"
 }
 
 // The workers.
@@ -617,6 +738,8 @@ func workerRole(t *TaskRow) string {
 		return "plan"
 	case strings.Contains(t.Title, "Recherche"):
 		return "research"
+	case strings.Contains(t.Title, "Documentation"):
+		return "docs"
 	}
 	return "check"
 }
@@ -639,6 +762,11 @@ func (sc *scenario) work(id, role string) {
 		sc.done(id, "Le plan en trois titres.")
 	case "research":
 		sc.call(id, nodesServer, "progress", map[string]any{"text": "Journaux de la prod lus"})
+	case "docs":
+		sc.call(id, nodesServer, "progress", map[string]any{"text": "3 études lues"})
+		sc.waitFinish("docs")
+		sc.call(id, nodesServer, "node_append", map[string]any{"text": articleSummary})
+		sc.done(id, "Trois études lues et résumées.")
 	default:
 		sc.done(id, "Vérifié.")
 	}
@@ -719,4 +847,29 @@ func (sc *scenario) mail() (string, error) {
 	sc.mu.Unlock()
 	c.nodes.SetState(d.Node.Meta.ID, nodestore.Waiting)
 	return d.Node.Meta.ID, nil
+}
+
+// nodeAsks tells a node whose document has a button that asks Eriphe
+// (a block's ask): its questions come with their answers.
+func nodeAsks(c *core, id string) bool {
+	d, err := c.nodes.Read(id, 0)
+	if err != nil {
+		return false
+	}
+	for _, b := range d.Node.Blocks() {
+		var list []struct {
+			Action struct {
+				Event struct {
+					Name string `json:"name"`
+				} `json:"event"`
+			} `json:"action"`
+		}
+		json.Unmarshal(b.Components, &list)
+		for _, comp := range list {
+			if comp.Action.Event.Name == "ask" {
+				return true
+			}
+		}
+	}
+	return false
 }

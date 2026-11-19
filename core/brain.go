@@ -500,15 +500,13 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) (undecided string) {
 			// quietReply: its answer to a note that asks nothing of the
 			// user (a tool added…) stays out of the conversation.
 			// toolCallText: a tool call written as its answer is not one either.
-			// Its suggested replies are never part of its text (brain_suggest.go).
-			said, _ := e.Data["text"].(string)
-			if text, replies := splitSuggestions(said); toolCallText(text) {
+			text, _ := e.Data["text"].(string)
+			if toolCallText(text) {
 				c.brainToolCallText(text)
 			} else if strings.TrimSpace(text) != "" && !quietReply(text) {
 				seq, err := c.store.addNodeMessage(roleBrain, text, "", c.turn.talkNode(), true)
 				if err == nil {
 					c.markBrainMessage(int(seq))
-					c.suggestReplies(int(seq), replies)
 					c.attachTurnCards(int(seq))         // what it proposed in this turn (convo_cards.go)
 					c.notifyWake(int(seq), e.Seq, text) // the answer to a due intention reaches the phone
 				}

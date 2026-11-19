@@ -228,8 +228,8 @@ func TestArchiveCascadesFindFinds(t *testing.T) {
 	if sum, _ := c.nodes.Get(keep); !sum.Archived.IsZero() {
 		t.Error("a node beside it archived")
 	}
-	if ids := c.cardNodes("card:1"); len(ids) != 0 {
-		t.Errorf("an archived node still waits on %v", ids)
+	if c.cardHeld("card:1") || c.nodeCardWaits(kid) {
+		t.Errorf("an archived node still holds its card: %v", c.cardNodes("card:1"))
 	}
 	ids := func(out map[string]any) string {
 		raw := fmtJSON(out["nodes"])
@@ -295,14 +295,16 @@ func TestBrainPromptNodes(t *testing.T) {
 			t.Errorf("« Les nœuds » lacks %q", want)
 		}
 	}
-	for _, want := range []string{"demande-lui ce qui compte (voir « Ce qui tournera seul » dans « Les vues »)", "`<suggestions>`", "au plus 3", "sur un tour contaminé, eriphe-core n'en montre aucune",
+	for _, want := range []string{"demande-lui ce qui compte (voir « Ce qui tournera seul » dans « Les vues »)", "**Dans son espace, une ligne ; le reste dans le sujet.**", "**Tes questions et leurs boutons sont dans le document.**",
+		"« Fais comme tu proposes »", "Sur un tour contaminé, pas de bouton", "**Chaque échange réécrit le document.**", "« Ce qu'on a décidé »",
+		"`{\"card\": \"view:3\"}`", "rien de cela ne s'y applique",
 		"eriphe-core la range lui-même", "#N · nœud <id>]`", "## Où en sont les choses", "`node.done`"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the prompt lacks %q", want)
 		}
 	}
 	for _, gone := range []string{"_thread", "thread:", "workspace_arrange", "workspace_focus", "workspace_read", "`progress`",
-		"« Les fils »", "l'espace de {{user}}, tel que", "`note_item`", "`surface_write`"} {
+		"« Les fils »", "l'espace de {{user}}, tel que", "`note_item`", "`surface_write`", "suggestions", "suggérées", "console"} {
 		if strings.Contains(prompt, gone) {
 			t.Errorf("the prompt still says %q", gone)
 		}

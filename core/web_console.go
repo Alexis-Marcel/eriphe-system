@@ -1,73 +1,71 @@
 package main
 
 import (
-	"net/http"
-	"strconv"
+	"regexp"
 	"strings"
-	"time"
-
-	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 )
 
-// The workspace's view of the conversation (#455): not a second chat, the
-// last exchange only, in the console. What the user says updates a
-// node of the graph, so rereading the conversation is
-// rare: the user's last message and what Eriphe said after it, the message
-// being written, and whether Eriphe is at work. The workspace's stream
-// (/events, web_sse.go) sends it as JSON, its "exchange" event, when
-// it connects and whenever it changes: a reconnecting page gets it whole.
-// The lines before it come on request, a few at a time
-// (GET /api/earlier), back to the first.
+// The workspace's bar (#455, #663): not a chat. The subject's document is
+// the conversation; the bar under it is only a bar: the input, the user's
+// last message in grey, and one line of Eriphe's, the first line of its
+// last answer (its acknowledgement: the rest, if any, is in the subject,
+// written by the brain or filed by code, node_net.go), or of what it is
+// writing. No history, no buttons: Eriphe's questions and the buttons
+// that answer them are in the subject's document (a block's ask). The
+// workspace's stream (/events, web_sse.go) sends it as JSON, its
+// "exchange" event, when it connects and whenever it changes.
 //
-// The conversation per node (#632): the exchange is the one of the node
-// the console talks to (its lines belong to it, node_turn.go), named in
-// the stream's query (node) and in the event, the home's when none is.
-// Eriphe's draft and work show in the exchange its turn answers in; its
-// latest answer brings the replies it suggested (brain_suggest.go), and
-// the node code filed it in, when it did (filed, node_net.go).
+// The bar per node (#632): the exchange is the one of the node the bar
+// talks to (its lines belong to it, node_turn.go), named in the stream's
+// query (node) and in the event, the home's when none is. Eriphe's draft
+// and work show in the exchange its turn answers in.
 //
 // A card no node holds (one proposed in a turn about no node, from the
-// home, or whose node is archived) would wait nowhere in the graph: every
-// exchange carries the ones the user was shown (cards: their refs), and
-// the console shows them with their Oui and Non, wherever it talks. A
-// card linked to a node waits at the foot of its page.
+// home) would wait nowhere in the graph: every exchange carries the ones
+// the user was shown (cards: their refs), and the bar shows them above
+// it, with their Oui and Non, wherever it talks: the one exception to a
+// bar without buttons. A card linked to a node waits in its page.
 //
-// The brain's text is its own, shown as Markdown by the page's renderer,
-// which makes no HTML of it, and marked when written in a turn that read
-// external content (markBrainMessage); an event's line (an external
-// source's), the first run's messages and an error's raw text are never
-// sent.
+// Eriphe's line is plain text, cut here (ackLine): never its Markdown,
+// never more than a line; marked when written in a turn that read
+// external content (markBrainMessage). An event's line, the first run's
+// messages and an error's raw text are never sent.
 
 const (
-	exchangeReplies = 12   // Eriphe's last lines after the user's message
-	exchangeTextMax = 4000 // the page folds a long one; the conversation has it whole
-	exchangeEarlier = 10   // the lines before, per request
+	exchangeReplies = 12  // Eriphe's last lines after the user's message, read to find its last
+	askedMax        = 500 // the user's last message, as the bar folds it
+	ackRunes        = 140 // Eriphe's line in the bar
 )
 
-// exchangeLine is a message: the user's (with where they said it, when not
-// here or in the conversation), Eriphe's (External: written in a tainted
-// turn), or an error, without its text: the page says Eriphe could not
-// answer.
+// exchangeLine is a message as the store reads it for the bar: the
+// user's (with where they said it), Eriphe's (External: written in a
+// tainted turn), or an error, without its text.
 type exchangeLine struct {
-	Seq      int       `json:"seq"`
-	Role     string    `json:"role"` // user, brain or error
-	Text     string    `json:"text,omitempty"`
-	Via      string    `json:"via,omitempty"`
-	Time     time.Time `json:"time"`
-	External bool      `json:"external,omitempty"`
-	Filed    string    `json:"filed,omitempty"` // Eriphe's: the node code filed it in (node_net.go)
+	Seq      int
+	Role     string // user, brain or error
+	Text     string
+	Via      string
+	External bool
+	Filed    string // Eriphe's: the node code filed it in (node_net.go)
 }
 
-// exchangeEvent is the workspace's "exchange" event.
+// barLine is a line of the bar: its message's seq and its text.
+type barLine struct {
+	Seq      int    `json:"seq"`
+	Text     string `json:"text"`
+	External bool   `json:"external,omitempty"` // Eriphe's, written in a turn that read external content
+}
+
+// exchangeEvent is the workspace's "exchange" event: what the bar shows.
 type exchangeEvent struct {
-	Node        string         `json:"node,omitempty"`        // the node it belongs to; none: the home
-	Title       string         `json:"title,omitempty"`       // that node's title, unless it may be someone else's words
-	Lines       []exchangeLine `json:"lines"`                 // the last exchange
-	Earlier     bool           `json:"earlier,omitempty"`     // lines come before it
-	Draft       string         `json:"draft,omitempty"`       // Eriphe's message being written
-	Thinking    bool           `json:"thinking,omitempty"`    // Eriphe is at work
-	Suggestions []string       `json:"suggestions,omitempty"` // the replies its last line suggests
-	Cards       []string       `json:"cards,omitempty"`       // the cards that wait and no node holds: their refs
+	Node     string   `json:"node,omitempty"`     // the node it belongs to; none: the home
+	Title    string   `json:"title,omitempty"`    // that node's title, unless it may be someone else's words
+	Asked    *barLine `json:"asked,omitempty"`    // the user's last message
+	Said     *barLine `json:"said,omitempty"`     // Eriphe's line: the first line of its last answer after it
+	Failed   bool     `json:"failed,omitempty"`   // Eriphe could not answer: its last line is an error
+	Draft    string   `json:"draft,omitempty"`    // the first line of what Eriphe is writing
+	Thinking bool     `json:"thinking,omitempty"` // Eriphe is at work
+	Cards    []string `json:"cards,omitempty"`    // the cards that wait and no node holds: their refs
 }
 
 // exchangeCardsMax is the most cards no node holds an exchange carries.
@@ -111,67 +109,131 @@ func (c *core) cardHeld(ref string) bool {
 // Eriphe's draft and work when its turn answers there: talk is the node it
 // answers in.
 func (w *web) exchangeFor(node, talk, draft string, thinking bool) (exchangeEvent, error) {
-	lines, earlier, err := w.c.store.lastExchange(node)
+	lines, err := w.c.store.lastExchange(node)
 	if err != nil {
 		return exchangeEvent{}, err
 	}
-	x := exchangeEvent{Node: node, Lines: lines, Earlier: earlier}
+	x := exchangeEvent{Node: node}
 	if node != "" {
 		x.Title = w.c.cleanNodeTitle(node)
 	}
+	for _, l := range lines {
+		if l.Role == roleUser {
+			x.Asked = &barLine{Seq: l.Seq, Text: truncate(l.Text, askedMax)}
+		}
+	}
+	if n := len(lines); n > 0 {
+		switch last := lines[n-1]; last.Role {
+		case roleBrain:
+			if ack, _ := ackLine(last.Text); ack != "" {
+				x.Said = &barLine{Seq: last.Seq, Text: ack, External: last.External}
+			}
+		case roleError:
+			x.Failed = true
+		}
+	}
 	waiting := len(lines) > 0 && lines[len(lines)-1].Role == roleUser
 	if talk == node {
-		x.Draft = truncate(draft, exchangeTextMax)
+		x.Draft, _ = ackLine(draft)
 	}
 	x.Thinking = thinking && (talk == node || waiting)
-	if n := len(lines); n > 0 && lines[n-1].Role == roleBrain && !lines[n-1].External && x.Draft == "" {
-		x.Suggestions = w.c.store.suggestions(lines[n-1].Seq)
-	}
 	x.Cards = w.c.unheldCards()
 	return x, nil
 }
 
-// exchangeLines is the filter of the lines the page gets, with its
-// arguments (exchangeArgs): the user's (not the first run's), Eriphe's and
-// errors, never an event's, of one node.
-const exchangeLines = `node = ? AND (role IN (?, ?) OR (role = ? AND via != ?))`
-
-func exchangeArgs(node string, args ...any) []any {
-	return append(args, node, roleBrain, roleError, roleUser, firstRunVia)
+// ackLine is Eriphe's line in the bar: the first line of what it wrote
+// that says something, as plain text (no Markdown marks, a link's words
+// only), at most ackRunes: its first sentence when that fits, else cut at
+// a word with « … ». cut tells that the bar does not show all of it: more
+// lines, or a line cut.
+func ackLine(text string) (line string, cut bool) {
+	for _, l := range strings.Split(strings.TrimSpace(text), "\n") {
+		t := strings.TrimSpace(l)
+		if t == "" {
+			continue
+		}
+		if line != "" {
+			cut = true
+			break
+		}
+		if strings.HasPrefix(t, "```") || strings.HasPrefix(t, "|") || strings.Trim(t, "-*_= ") == "" {
+			cut = true // a fence, a table, a rule: not a line to say
+			continue
+		}
+		line = plainLine(t)
+	}
+	if len([]rune(line)) > ackRunes {
+		return shortLine(line), true
+	}
+	return line, cut
 }
 
-// exchangeOf is a message as the page gets it.
+var (
+	ackLinkRe   = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
+	ackLeadRe   = regexp.MustCompile(`^(?:[-*+>]|\d+[.)]|#{1,6})\s+`)
+	ackMarkRe   = regexp.MustCompile("\\*\\*|__|`|~~")
+	ackSpacesRe = regexp.MustCompile(`\s+`)
+)
+
+// plainLine is a line of Markdown as plain text.
+func plainLine(t string) string {
+	for {
+		u := ackLeadRe.ReplaceAllString(t, "")
+		if u == t {
+			break
+		}
+		t = u
+	}
+	t = ackLinkRe.ReplaceAllString(t, "$1")
+	t = ackMarkRe.ReplaceAllString(t, "")
+	return strings.TrimSpace(ackSpacesRe.ReplaceAllString(t, " "))
+}
+
+// shortLine is a line longer than ackRunes, made short: its first
+// sentence when that fits, else cut at a word.
+func shortLine(line string) string {
+	r := []rune(line)
+	for i := 20; i < ackRunes; i++ {
+		if (r[i] == '.' || r[i] == '?' || r[i] == '!') && r[i+1] == ' ' {
+			return string(r[:i+1])
+		}
+	}
+	head := string(r[:ackRunes])
+	if i := strings.LastIndex(head, " "); i > len(head)/2 {
+		head = head[:i]
+	}
+	return strings.TrimRight(head, " ,;:") + "…"
+}
+
+// exchangeOf is a message as the bar reads it.
 func (s *Store) exchangeOf(m Message) exchangeLine {
-	l := exchangeLine{Seq: m.Seq, Role: m.Role, Time: m.Time}
+	l := exchangeLine{Seq: m.Seq, Role: m.Role}
 	switch m.Role {
 	case roleUser:
-		l.Text = truncate(m.Text, exchangeTextMax)
-		l.Via = m.Via
+		l.Text, l.Via = m.Text, m.Via
 	case roleBrain:
-		l.Text = truncate(m.Text, exchangeTextMax)
+		l.Text, l.Filed = m.Text, m.Filed
 		l.External = strings.HasPrefix(s.get(taintKey(m.Seq)), "brain:")
-		l.Filed = m.Filed
 	}
 	return l
 }
 
 // lastExchange is a node's ("": the home's) last message of the user's
 // and Eriphe's lines after it (the last exchangeReplies); with no message
-// of the user's, Eriphe's last line. Earlier tells whether lines come
-// before. Empty when the node has none.
-func (s *Store) lastExchange(node string) (lines []exchangeLine, earlier bool, err error) {
+// of the user's, Eriphe's last line. Empty when the node has none.
+func (s *Store) lastExchange(node string) ([]exchangeLine, error) {
 	var from int
 	s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE node = ? AND role = ? AND via != ?`, node, roleUser, firstRunVia).Scan(&from)
 	if from == 0 {
 		s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE node = ? AND role IN (?, ?)`, node, roleBrain, roleError).Scan(&from)
 	}
+	lines := []exchangeLine{}
 	if from == 0 {
-		return []exchangeLine{}, false, nil
+		return lines, nil
 	}
-	lines = []exchangeLine{}
 	mine, err := s.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq = ? AND role = ?`, from, roleUser)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	for _, m := range mine {
 		lines = append(lines, s.exchangeOf(m))
@@ -180,60 +242,10 @@ func (s *Store) lastExchange(node string) (lines []exchangeLine, earlier bool, e
 	replies, err := s.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq >= ? AND node = ? AND role IN (?, ?) ORDER BY seq DESC LIMIT ?`,
 		from, node, roleBrain, roleError, exchangeReplies)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	for i := len(replies) - 1; i >= 0; i-- {
 		lines = append(lines, s.exchangeOf(replies[i]))
 	}
-	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM (SELECT 1 FROM messages WHERE seq < ? AND `+exchangeLines+` LIMIT 1)`, exchangeArgs(node, lines[0].Seq)...).Scan(&n)
-	return lines, n > 0, nil
-}
-
-// earlierLines are a node's ("": the home's) exchangeEarlier lines
-// before seq, oldest first, and whether more come before them.
-func (s *Store) earlierLines(before int, node string) ([]exchangeLine, bool, error) {
-	msgs, err := s.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq < ? AND `+exchangeLines+` ORDER BY seq DESC LIMIT ?`,
-		append(exchangeArgs(node, before), exchangeEarlier+1)...)
-	if err != nil {
-		return nil, false, err
-	}
-	more := len(msgs) > exchangeEarlier
-	if more {
-		msgs = msgs[:exchangeEarlier]
-	}
-	out := make([]exchangeLine, 0, len(msgs))
-	for i := len(msgs) - 1; i >= 0; i-- {
-		out = append(out, s.exchangeOf(msgs[i]))
-	}
-	return out, more, nil
-}
-
-// earlierView is the answer of GET /api/earlier.
-type earlierView struct {
-	Lines []exchangeLine `json:"lines"` // oldest first
-	More  bool           `json:"more"`  // lines come before them
-}
-
-// handleEarlier is GET /api/earlier?before=<seq>&node=<id>: the
-// lines of a node's exchange (none: the home's) before that one, for the
-// user who scrolls up the console.
-func (w *web) handleEarlier(rw http.ResponseWriter, r *http.Request, _ *session) {
-	before, err := strconv.Atoi(r.URL.Query().Get("before"))
-	if err != nil || before <= 0 {
-		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "before: a message's seq"})
-		return
-	}
-	node := r.URL.Query().Get("node")
-	if node != "" && !nodefile.IDOK(node) {
-		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "node: a node's id"})
-		return
-	}
-	lines, more, err := w.c.store.earlierLines(before, node)
-	if err != nil {
-		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "the conversation could not be read"})
-		return
-	}
-	rw.Header().Set("Cache-Control", "no-store")
-	writeJSON(rw, http.StatusOK, earlierView{Lines: lines, More: more})
+	return lines, nil
 }

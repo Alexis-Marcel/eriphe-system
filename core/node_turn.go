@@ -15,7 +15,7 @@ import (
 // the conversation belongs to a node, or to the home (""), in its node
 // column.
 //
-//   - A message of the user's belongs to the node the console talks to:
+//   - A message of the user's belongs to the node the bar talks to:
 //     the page sends it with the message (node), checked when it is
 //     written (nodeSaid). The brain reads it named (messageRef: « · nœud
 //     <id> »).
@@ -142,11 +142,11 @@ func talkOf(msgs []Message) string {
 // workspace, into the node it opened or showed for its subject: the user's
 // messages of the turn and what the brain wrote since belong to that node, the rest of its answer goes
 // there (its cards with it), and the user's screen opens the node, the
-// console in it: the exchange goes on in the subject's page. A turn that
+// bar in it: the exchange goes on in the subject's page. A turn that
 // answers in a node already, or no message of the user's (an event, a
 // wake), or one said on a channel (its exchange is the home's, where the
 // channel's next words land), moves nothing, and a node shown beside one
-// the user talks to leaves the console where it is (node_show.go). True
+// the user talks to leaves the bar where it is (node_show.go). True
 // when it moved.
 func (c *core) moveHomeTurn(id string) bool {
 	if id == "" || c.turn.talkNode() != "" || !c.turnAnswersUser() {
@@ -281,6 +281,17 @@ func (c *core) cardNodes(ref string) []string {
 		}
 	}
 	return out
+}
+
+// nodeHasCard tells a card linked to node id, waiting or not: one raised
+// for it, which a card block of its document may place (nodeGuard).
+func (c *core) nodeHasCard(id, ref string) bool {
+	if id == "" {
+		return false
+	}
+	var n int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM node_cards WHERE node = ? AND ref = ?`, id, ref).Scan(&n)
+	return n > 0
 }
 
 // nodeCardWaits tells a node one of whose linked cards waits for the

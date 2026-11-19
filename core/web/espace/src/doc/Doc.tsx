@@ -5,11 +5,13 @@ import { SurfaceView } from "../a2ui/Surfaces";
 import { ask, mark, type NodePage } from "../data/api";
 import { sourceKey, store } from "../data/store";
 import { useWords } from "../i18n";
+import { Cards } from "../page/Cards";
 import { blockOf, messages, pieces, sourceMessage, toGesture, type Piece } from "./blocks";
 
 // Doc draws a node's page: its text as Markdown, by the page's own
 // renderer, which makes no HTML of it; its blocks through the A2UI
-// renderer, a surface each, in an adapter of the page's own. While the
+// renderer, a surface each, in an adapter of the page's own; a card block
+// as the card it places, read from eriphe-core (Cards), or « not found ». While the
 // last version shows, a source's new value goes straight into its block
 // (the stream's "source"); an older version shows as it was. A block's
 // gestures (a button's ask, a Mark) go to eriphe-core, which reads them
@@ -59,6 +61,16 @@ export function Doc({ page, latest, live }: { page: NodePage; latest: boolean; l
       {ps.map((p: Piece, i) => {
         if (p.kind === "text") return <Markdown key={i} text={p.text} newTab={t("espace.a2.newtab")} />;
         if (p.kind === "broken") return <p key={i} className="pg-broken" role="note">{t("espace.page.broken", p.name)}</p>;
+        if (p.kind === "card")
+          return p.found ? (
+            <div key={p.surface} className="pg-card" data-card={p.ref}>
+              <Cards surface={p.surface} refs={[p.ref]} />
+            </div>
+          ) : (
+            <p key={p.surface} className="pg-card-missing" role="note">
+              {t("espace.card.missing")}
+            </p>
+          );
         const s = surfaces.find((x) => x.id === p.surface);
         return (
           <section key={p.surface} className="a2-block" data-surface={p.surface}>

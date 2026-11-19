@@ -55,8 +55,8 @@ func TestExplainErrors(t *testing.T) {
 	}
 }
 
-// The brain's failure reaches the workspace's console as an error line,
-// never its raw error, and the console offers "Try again" and the AI
+// The brain's failure reaches the workspace's bar as a failure, never its
+// raw error, and the bar offers "Try again" and the AI
 // account (web/espace, Console.tsx).
 func TestBrainErrorLine(t *testing.T) {
 	tw := newTestWeb(t)
@@ -67,8 +67,8 @@ func TestBrainErrorLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := len(x.Lines); n == 0 || x.Lines[n-1].Role != roleError || x.Lines[n-1].Text != "" {
-		t.Fatalf("exchange = %+v", x.Lines)
+	if !x.Failed || x.Said != nil || strings.Contains(fmtJSON(x), "ECONNREFUSED") {
+		t.Fatalf("exchange = %+v", x)
 	}
 	for lang, want := range map[string]string{"fr": "n'a pas pu répondre.", "en": "could not answer."} {
 		words := espaceWords(lang, "Atlas")

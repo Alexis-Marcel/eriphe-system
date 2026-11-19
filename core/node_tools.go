@@ -48,7 +48,7 @@ type brainNodeOpenIn struct {
 	Body     string     `json:"body,omitempty" jsonschema:"its first body: markdown text, and blocks in fences (eriphe:block <name>, a JSON object: components, data, sources; catalog_read gives the components)"`
 	Steps    []stepSpec `json:"steps,omitempty" jsonschema:"to cut its work in steps, each a child of it run by an agent: a key, a title, the keys of the steps it comes after, a self-contained prompt, an agent, resources and a contract. Eriphe starts each step once those it comes after are accepted and accepts it on its proof"`
 	Budget   int        `json:"budget_minutes,omitempty" jsonschema:"with steps: the minutes of running time the work may take, 60 by default"`
-	Aside    bool       `json:"aside,omitempty" jsonschema:"true only when the user asks for it on the side (« à part », « sur le côté », « en arrière-plan »): opened without being shown, the console stays where it is; it rises when it has something for the user. By default the node opens in front of the user"`
+	Aside    bool       `json:"aside,omitempty" jsonschema:"true only when the user asks for it on the side (« à part », « sur le côté », « en arrière-plan »): opened without being shown, the bar stays where it is; it rises when it has something for the user. By default the node opens in front of the user"`
 }
 
 type nodeFindIn struct {
@@ -97,7 +97,7 @@ type settleIn struct {
 }
 
 func registerNodeTools(s *mcp.Server, c *core) {
-	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result (a research, a reply to write, a plan), or with lifetime standing what the user follows continuously (« Ma journée », a subject). With parent, a part of that node's work. Its body is markdown text and blocks; with steps, its work is cut in steps, each a child an agent runs, accepted by Eriphe on its proof. Find it first (node_find): the same thing has one node. It opens in front of the user: asked from the home, the console moves into it and the exchange goes on there; asked from a node, it opens beside it. With aside, only when the user asks for it on the side, it opens in the background.",
+	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result (a research, a reply to write, a plan), or with lifetime standing what the user follows continuously (« Ma journée », a subject). With parent, a part of that node's work. Its body is markdown text and blocks; with steps, its work is cut in steps, each a child an agent runs, accepted by Eriphe on its proof. Find it first (node_find): the same thing has one node. It opens in front of the user: asked from the home, the bar moves into it and the exchange goes on there; asked from a node, it opens beside it. With aside, only when the user asks for it on the side, it opens in the background.",
 		func(ctx context.Context, in brainNodeOpenIn) (map[string]any, error) { return c.brainNodeOpen(ctx, in) })
 	tool(s, "node_find", "Find nodes: by words of their title, goal, text or blocks; without words, those at work or waiting for the user, then the last changed. archived: the archived ones too. Each says its id, state (running, waiting, idle, done), parent and when it changed; the title of one that may hold someone else's words is not quoted (node_read reads it).",
 		func(ctx context.Context, in nodeFindIn) (map[string]any, error) { return c.brainNodeFind(in) })
@@ -107,7 +107,7 @@ func registerNodeTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in brainNodeWriteIn) (map[string]any, error) {
 			return c.brainNodeWrite(in.ID, in.Expect, func(n *nodefile.Node) error { return n.AuthorBody(in.Body) })
 		})
-	tool(s, "node_edit", "Edit a node, made on the version whose hash is expect: write one block (block and value, before to place it), or replace a piece of its text found once (old, new).",
+	tool(s, "node_edit", "Edit a node, made on the version whose hash is expect: write one block (block and value, before to place it), or replace a piece of its text found once (old, new). A card block places one of the node's cards where it belongs in its text: its value is {\"card\": \"<ref>\"}, the ref a propose tool gave, and nothing else; code draws the card.",
 		func(ctx context.Context, in nodeEditIn) (map[string]any, error) {
 			fn, err := nodeEdit(in)
 			if err != nil {
@@ -209,7 +209,7 @@ func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[strin
 	c.turn.wrote()
 	c.turn.about(id)
 	if !in.Aside && !c.moveHomeTurn(id) && c.turnAnswersUser() { // a subject opened from the home: the exchange goes on in it (node_turn.go)
-		c.showNode(id, byBrain, false) // from a node: beside it, the console where it is
+		c.showNode(id, byBrain, false) // from a node: beside it, the bar where it is
 	}
 	if len(d.Node.Blocks()) > 0 {
 		c.readNodeLater(context.WithoutCancel(ctx), id, nil) // its live blocks, at once (node_live.go)
@@ -544,7 +544,9 @@ func (c *core) nodeDoneDecision(id string) {
 // archiveNode archives a node and every node under it, the user's
 // gesture alone: their tasks and their steps' work stop, their live
 // sources are read no more (nodeSourcesDue forgets them), and the cards
-// that wait on them are withdrawn (withdrawCards).
+// that wait on them are withdrawn (withdrawCards). Their cards stay
+// linked to them, gone: a card block of their documents says so
+// (web_graph.go), and an archived node holds no card (cardHeld).
 func (c *core) archiveNode(ctx context.Context, id, by string) error {
 	if c.nodes == nil {
 		return errNoGraph
@@ -576,6 +578,30 @@ func (c *core) archiveNode(ctx context.Context, id, by string) error {
 	return nil
 }
 
+// linkedNodeGone unlinks an archived node from the cards that still wait
+// (another live node holds them): it waits for them no more, even
+// reopened. Its withdrawn cards stay linked, gone: a card block of its
+// document says so (web_graph.go).
+func (c *core) linkedNodeGone(id string) {
+	rows, err := c.store.db.Query(`SELECT ref FROM node_cards WHERE node = ?`, id)
+	if err != nil {
+		return
+	}
+	var refs []string
+	for rows.Next() {
+		var ref string
+		if rows.Scan(&ref) == nil {
+			refs = append(refs, ref)
+		}
+	}
+	rows.Close()
+	for _, ref := range refs {
+		if c.cardState(ref) == cardPending {
+			c.store.db.Exec(`DELETE FROM node_cards WHERE node = ? AND ref = ?`, id, ref)
+		}
+	}
+}
+
 // nodeTasks are the tasks that work in a node.
 func (c *core) nodeTasks(id string) []string {
 	rows, err := c.store.db.Query(`SELECT task FROM task_nodes WHERE node = ?`, id)
@@ -591,10 +617,4 @@ func (c *core) nodeTasks(id string) []string {
 		}
 	}
 	return out
-}
-
-// linkedNodeGone forgets what an archived node waited for: its cards are
-// withdrawn already (withdrawCards), it waits no more.
-func (c *core) linkedNodeGone(id string) {
-	c.store.db.Exec(`DELETE FROM node_cards WHERE node = ?`, id)
 }

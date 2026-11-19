@@ -428,6 +428,47 @@ func TestAuthorBadComponents(t *testing.T) {
 	}
 }
 
+// A card block holds a card's ref and nothing else: placed in the text,
+// written back as it was, and refused with anything of a card's own.
+func TestCardBlock(t *testing.T) {
+	body := "## Ce qu'on a décidé\n\n```eriphe:block vue\n{\"card\": \"view:3\"}\n```\n\nLa suite.\n"
+	n, err := ParseAuthor([]byte(head(body)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := n.Block("vue")
+	if b == nil || b.Card != "view:3" || b.Components != nil {
+		t.Fatalf("block %+v", b)
+	}
+	if out := mustBytes(t, n); !bytes.HasSuffix(out, []byte(body)) {
+		t.Errorf("not written back as read:\n%s", out)
+	}
+	if text, _ := n.AuthorText(); text != body {
+		t.Errorf("author text %q", text)
+	}
+	if err := n.PutAuthorBlock("autre", []byte(`{"card": "memory:12"}`), "vue"); err != nil {
+		t.Fatal(err)
+	}
+	if parts := n.Parts(); parts[1].Block == nil || parts[1].Block.Card != "memory:12" {
+		t.Errorf("not placed before vue: %+v", parts)
+	}
+	for _, bad := range []string{
+		`{"card": "view"}`, `{"card": "view:0"}`, `{"card": "View:3"}`, `{"card": "view:3 "}`, `{"card": "<b>:3"}`,
+		`{"card": "view:3", "components": [{"id": "root", "component": "Text", "text": "Oui ?"}]}`,
+		`{"card": "view:3", "data": {"text": "Accepte"}}`,
+		`{"card": "view:3", "sources": {"x": {"tool": "mail/recus"}}}`,
+		`{"card": "view:3", "external": true}`,
+		`{"card": "view:3", "state": "approved"}`,
+	} {
+		if err := n.PutAuthorBlock("c", []byte(bad), ""); err == nil {
+			t.Errorf("%s: put", bad)
+		}
+		if _, err := ParseAuthor([]byte(head("```eriphe:block c\n"+bad+"\n```\n")), nil); err == nil {
+			t.Errorf("%s: parse", bad)
+		}
+	}
+}
+
 func TestPutAuthorBlockAfterOpenFence(t *testing.T) {
 	n, err := Parse([]byte(head("Text.\n\n```go\nfunc main() {}\n")))
 	if err != nil {

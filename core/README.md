@@ -714,12 +714,12 @@ whatever address it dials) and one client certificate per device.
 | `answer_task` | reply to the agent's question (a permission is never the brain's: it is refused); `release` asks the user on a card to release the tools it was lent [held back](#resources). For a task with a node, the reply goes to its node's trace (« Eriphe a répondu : … »), so the user can see and contradict it; display only |
 | `stop_task` | stop the agent |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
-| `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)) |
+| `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); returns the card's ref (`card`), to place in the subject's document |
 | `catalog_read`, `sources_read` | read the catalog of a node's blocks and what a block may read |
-| `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the console stays); written in a tainted turn, the node is external; by default it opens in front of the user (from the home, the console moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; an external node's title is not quoted |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
-| `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields) |
+| `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
 | `node_link` | link a node to another (its front matter's `links`), once; never to itself |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
@@ -945,7 +945,21 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   wait on them (`withdrawCards`: linked by `node_cards` or about `node:<id>`, unless a live node
   still holds one): each card is `gone`, its proposal waits no more (a view `dropped`, another
   kind answered no), and reopening the node brings none back; `node_find` `archived` finds them
-  again.
+  again. Its withdrawn cards stay linked to it, gone, so a card block of its document says
+  « Proposition retirée »; a card another live node still holds is unlinked from it
+  (`linkedNodeGone`).
+- **Card blocks** (#663). A block whose JSON is only `{"card": "<ref>"}` places one of the node's
+  cards in its document, where its author writes it (under « Ce qu'on a décidé », say).
+  `nodefile` reads it as a block of its own (`Block.Card`, `CardRe`: `kind:number`) and refuses
+  anything else in it (components, data, sources, marks: `validateCard`); it is written back as
+  read. On a write, `nodeGuard` refuses a card that is not one of the node's (`nodeHasCard`: linked
+  by `node_cards`, waiting or not) and any card block on a tainted turn; a new node (`node_open`,
+  a view's body) holds no card yet. The block never carries what the card says: the page
+  (`nodePageOf`, `placedCard`) draws the card from the records, as its Proposal (pending, decided,
+  `gone`), only for the node's own card and a block not external; anything else is sent without
+  it and the page says « Carte introuvable », with no Oui or Non. A placed card leaves the page's
+  foot (`cards`); an unplaced one waits there. The propose tools return the card's ref (`card`:
+  `cardProposed`), and `propose_view` says how to place it (`cardPlaceNote`).
 - **Done.** `node_set` `done` (`setNodeDone`) marks the front matter's `done` and the state
   `done` (`nodestore.SetDone`, a version of its own that never conflicts with an author's write),
   once: done again changes nothing. A node done now leaves one dated **decision memory** about it
@@ -958,7 +972,7 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   a title or goal it sets; `node_find`, the context pack, the about cards and events name an
   external node by its id, never quoting its title.
 - **The conversation per node.** Each message belongs to a node or to the home: the `messages.node`
-  column (`""`: the home). The user's message belongs to the node the console talks to: the page
+  column (`""`: the home). The user's message belongs to the node the bar talks to: the page
   sends it with the message (`node`, checked by `nodeSaid`: one of the graph's, not archived);
   the brain reads it as `[Sam HH:MM #N · nœud <id>]`. The brain's answer belongs to the node of
   what it answers (`talkOf`: the last user message's, else the last event of a node), an event of
@@ -973,21 +987,24 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   home (typed in the workspace: a channel's request keeps its exchange at the home), the turn moves
   into it, or into the node it shows (`node_show`): the user's messages of the turn and what the brain wrote since get
   the node's `node`, the rest of the answer goes there (`talk`), and the show asks the page to
-  move the console into it (`talk: true`): the exchange goes on in the subject's page, and the cards
-  raised next are linked to it. From a node, the new node is shown beside, the console where it
+  move the bar into it (`talk: true`): the exchange goes on in the subject's page, and the cards
+  raised next are linked to it. From a node, the new node is shown beside, the bar where it
   is; in a turn that answers no message of the user's (an event, a wake), nothing is shown. With
   `aside` (the user asked for it on the side), nothing is shown and nothing moves: it rises when it
   has something for the user.
 - **Code's safety net** (`node_net.go`, contract 5): at the turn's end, the turn's answer (its
-  texts joined), past `netMinRunes` (600), when the brain wrote no node in the turn (`node_open`,
+  texts joined), past `netMinRunes` (600), or, said in a node, any answer the workspace's bar does
+  not show whole (it shows its first line: `ackLine`, #663), when the brain wrote no node in the turn (`node_open`,
   `node_write`, `node_edit`) and proposed nothing on a card (`cardProposed`: what it says is then
   about the card, which waits under it), is filed by code: in the node the turn answers in (whole in its
   trace, and as its doc when it has none, never a standing node's), else in a new work node at
   the top titled from the user's request (its first line; a neutral « Réponse du … » when there is
-  none, or when it may not be the user's words or holds a secret), the answer its doc; a turn that
+  none, or when it may not be the user's words or holds a secret), the answer its doc, for one
+  past `netMinRunes` only (a shorter one at the home stays in the conversation, its first line in
+  the bar); a turn that
   answers the user at the home then moves into it, as for a subject the brain opened
   (`moveHomeTurn`). The answer's
-  messages say where (`messages.filed`, `filed` in the exchange's lines). Written in a tainted
+  messages say where (`messages.filed`). Written in a tainted
   turn, the node is external. A refusal never loses the answer: it stays in the conversation.
   The turn's answer is only what the brain wrote since it was last given
   something (messages, events, due intentions; kept in kv `brain_turn`), and it is looked at once:
@@ -1005,9 +1022,9 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   facts and people.
 - **Showing a node** (`node_show.go`): `node_show` keeps the request (kv `node_show`: `node`, `by`,
   `at`, `seq`, growing at each, and `talk` for a subject opened from the home) and wakes who
-  watches (`watchShown`); the graph page (#633) opens the page beside the others, the console
+  watches (`watchShown`); the graph page (#633) opens the page beside the others, the bar
   still talking where it talked (only the user's gesture moves it), except a show with `talk`
-  while the console talks to the home: it moves into that page. A view's yes shows its new node.
+  while the bar talks to the home: it moves into that page. A view's yes shows its new node.
   It writes nothing in the node.
 - **A call in the trace** (`proxy.go`, `traceBrainCall`): a call the brain made with the user's
   permission (a ticket, not a free read) is a line of the trace of the node it talks to (the page
@@ -2781,7 +2798,7 @@ answers 409 with the reason.
 
 Eriphe's own interface, served by eriphe-core on its own HTTPS listener. Its home page, and its
 only surface for talking to Eriphe, is the [graph workspace](#the-graph-workspace-the-home-page-)
-(`/`, also `/espace`): the nodes, the console, the cards. There is no conversation page and no top
+(`/`, also `/espace`): the nodes, the bar, the cards. There is no conversation page and no top
 bar: the settings, the memory and the other pages of the shell (`templates/layout.html`) open with
 their side menu, whose first entry leads back to the workspace. The assistant manages: what the
 brain can set itself (a notification rule, a memory, an intention) is asked of it in the workspace,
@@ -3045,7 +3062,7 @@ screen, in French, a node is « bulle » or « sujet », never « nœud ».
 
 **The routes** (`web_pages.go`). `GET /` and `GET /espace` open the workspace, the wizard
 (`/welcome`) before it while the brain has no agent (`needsWelcome`). A skipped wizard, or a brain
-with no AI to work for it, is told in the console: the boot's `setup` (`noai`, with a link to
+with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, with a link to
 `/welcome`; `nobrain`). What points at a message points at its node (`/espace?open=node-<id>`,
 `nodeAt`, `messageAt`; the home node is `/espace`); a permission points at
 `/settings/approve#a-perm-<task>-<id>` (`permissionAt`); a task at `/tasks/<id>`.
@@ -3108,7 +3125,7 @@ token in `X-CSRF-Token`:
   it and the archived parents it needs, in one commit).
 - `PUT /api/nodes/{id}/place` `{x, y}` and `DELETE`: where the user dropped a bubble, a subject's
   spot or a child's offset from its parent, in `node_layout` (no version).
-- `PUT /api/espace/view` `{open, talk, shown, theme}`: the pages open, the one the console talks
+- `PUT /api/espace/view` `{open, talk, shown, theme}`: the pages open, the one the bar talks
   to, the last of Eriphe's shows the page took (a page the user closed does not open again on the
   next visit), and the theme (`""` follows the system, `light`, `dark`), in the kv `espace_view`. The boot gives
   them back (`view`, `places`), on any of the user's screens, and the shell carries the theme
@@ -3117,10 +3134,10 @@ token in `X-CSRF-Token`:
 **The app** (`web/espace/src`):
 
 - `data/`: the requests (`api.ts`), the stream (`stream.ts`: one per page, opened again with the
-  node the console talks to) and the store (`store.ts`, Zustand): the graph as streamed, what is
+  node the bar talks to) and the store (`store.ts`, Zustand): the graph as streamed, what is
   open, the places and the theme, each event a pure step tested on its own. `keep.ts` sends what
   is open and the theme back to eriphe-core a moment after they change. `presence.ts` says the
-  user is there. A page Eriphe shows (`applyShow`) opens beside the others and leaves the console
+  user is there. A page Eriphe shows (`applyShow`) opens beside the others and leaves the bar
   where it was: only the user's click or ⌘-click moves it.
 - `graph/`: the layout (`layout.ts`, a small force simulation): roots held to their home (where
   they first found room, `homesFor`: a new subject never moves the others), children pulled to
@@ -3134,7 +3151,7 @@ token in `X-CSRF-Token`:
   needs the room, and eriphe-core keeps the place. Near the screen's edge the camera scrolls, driven by the dragged bubble's place
   on screen, not the pointer: a 110 px zone, after 200 ms, speeding up over 700 ms to 16 px a
   frame. The camera (`camera.ts`) frames every open page if they fit at a scale of 0.8 or more,
-  else the page the console talks to, the others open in place; with no page open, the whole
+  else the page the bar talks to, the others open in place; with no page open, the whole
   graph. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
   gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
   bigger, what waits for the user brighter, what runs a little, what is done or old quieter. Under
@@ -3156,23 +3173,29 @@ token in `X-CSRF-Token`:
   each block an A2UI surface (`<node>--<block>`) of the page's own adapter, a source's new value put
   at its place in the block's data. A block marked external is a tainted surface: there a
   Proposal only asks. A button's `ask` and a Mark go to eriphe-core (`.../ask`, `.../mark`) from the
-  last version of a block that is not external; anything else stays in the page.
-- `console/`: the one input. It talks to the page the console talks to (the last one opened or
-  clicked), else to the home (`POST /messages` with `node`); on a panel of its own above the orb,
-  the user's last question in grey (one line, whole on a click, shown as soon as it is sent),
-  Eriphe's newest line and the replies it suggests; the conversation of that node opens over it.
+  last version of a block that is not external; anything else stays in the page. A card block is
+  the card it places (`Cards`, read from eriphe-core), or « Carte introuvable » when the page sent
+  no card for it.
+- `console/`: the bar, the one input, and only a bar. It talks to the page the store's talk names
+  (the last one opened or clicked), else to the home (`POST /messages` with `node`); on a panel of
+  its own above the orb, the user's last question in grey (one line, whole on a click, shown as
+  soon as it is sent) and one line of Eriphe's (`said`, plain text), which fades after `ACK_MS`
+  (6 s, `useAck`: from when the page first met it, keyed by its node and seq, so a stream sent
+  again or a page met again does not replay it), or the first line of what it is writing. No
+  history, no buttons: Eriphe's questions and their `ask` buttons are in the subject's document.
+  The one exception: the cards no node holds, above it.
 - `hud/`: no bar, the graph takes the whole screen; the bubbles say what waits for the user (a
   breathing accent ring, « t'attend » under the name; out of view, an arrow at the screen's edge
   that opens it) and what runs. In the top-right corner, three icons: Archives (its
   count as a badge), what the user archived, each to reopen; the light or dark theme; the
   settings. Under them, the notices and a word when the stream is down. A page shows its own
-  path; closing the last one brings the console back to the home.
+  path; closing the last one brings the bar back to the home.
 
 A link may open a page: `/espace?open=node-<id>`. The theme follows the system, light or dark,
 on the tokens of `espace.css`, until the user chooses one (`data-theme`).
 
 **The scenario in a browser** (`web/espace/e2e`, `espace_scenario_test.go`). Playwright plays the
-epic's 13 steps against a whole eriphe-core on 127.0.0.1, signed in with the tests' password: faked
+epic's steps, and a writing scenario (an article, its research on the side, its angle chosen by a button, its versions), against a whole eriphe-core on 127.0.0.1, signed in with the tests' password: faked
 tools (`maison`, `agenda`, `mail`, `prod`, in memory) and a scripted brain. Nothing is faked inside
 the core: the brain and the workers are tasks on a fake device `pc`, which takes its assignments
 and reports as a device does, and plays canned calls through its MCP proxy (the brain's own tools,
@@ -3217,36 +3240,38 @@ routed to it comes as an in-app notice, by the stream's `notice` or the presence
 card at the top right for 15 s, its text a link when its URL is a path of the site (`hud/Hud.tsx`).
 A workspace left open in front is activity.
 
-**The last exchange** (`web_console.go`, `console/`). Not a second chat: what the user says
-updates a node's page, so the console keeps to the last exchange of the node it talks to: the user's last message and Eriphe's lines after it (`lastExchange`: the last 12,
-however many events came between; with no message of the user's, Eriphe's last line; an error as a
-line that says it, never its raw text; an event's line and the first run's messages never), the
-message Eriphe is writing (the draft, by the same rule as the conversation's) and whether it is at
-work (`brainState`). Eriphe's lines are each brain turn's answer only, what it writes after its
-last tool call: a note written before a tool call of the same turn is meant for no one and never
-copied, and a text stays the draft until its turn's next tool call or its end decides it
-(`answerText`, `brain.go`). A message the user sends shows alone at once, with Eriphe at work: it is the
-last exchange now. Eriphe's newest line is large while nothing follows it, the user's messages
-small bubbles; a link to the whole conversation by Eriphe's name. All of it is the stream's
-`exchange` event (JSON, `exchangeEvent`, each text cut at 4000 characters, `earlier` when lines
-come before it), sent when the stream opens and whenever it changes; Eriphe's text drawn by the
-app's Markdown renderer, never as HTML, a line written in a tainted turn (`markBrainMessage`)
-marked as such. In the conversation the console opens, **Messages d'avant** brings the lines before, 10 at a time
-(`GET /api/earlier?before=<seq>`, `{lines, more}`, the same filter); they stay, the view
-kept where it was, until the next exchange. The brain's memory and the stored messages are
-untouched: only what the console shows. The cards the user must answer are not repeated there:
-they are at the foot of their node's page, and the attention queue delivers the others.
+**The bar** (`web_console.go`, `console/`, #663). Not a chat: the subject's document is the
+conversation, and the bar under it is only a bar. Of the node it talks to (the home's when none),
+the stream's `exchange` event (JSON, `exchangeEvent`) carries the user's last message (`asked`:
+`seq`, `text`, cut at 500 characters), one line of Eriphe's (`said`: the first line of its last
+answer after it, `ackLine`: the first line that says something, as plain text without its
+Markdown marks, a link's words only, at most 140 characters, its first sentence when that fits,
+else cut at a word with « … »; `external` when written in a tainted turn, `markBrainMessage`),
+`failed` when its last line is an error (never its raw text), the first line of what Eriphe is
+writing (`draft`, by the same rule as the conversation's), whether it is at work (`thinking`,
+`brainState`) and the cards no node holds. Read from the store's last exchange (`lastExchange`:
+the user's last message and Eriphe's last 12 lines after it, however many events came between;
+an event's line and the first run's messages never). Eriphe's lines are each brain turn's answer
+only, what it writes after its last tool call: a note written before a tool call of the same turn
+is meant for no one and never copied, and a text stays the draft until its turn's next tool call
+or its end decides it (`answerText`, `brain.go`). The rest of a longer answer is in the subject:
+the brain writes it there, else the safety net files it. Sent when the stream opens and whenever
+it changes. There is no history to page back through, no suggested reply: the brain's questions
+and the buttons that answer them are `ask` buttons in the subject's document. The brain's memory
+and the stored messages are untouched: only what the bar shows. The cards the user must answer are
+in their node's page, and the attention queue delivers the others.
 
-**The conversation per node** (#613, #632, `node_turn.go`, `brain_suggest.go`). One brain, one
+**The conversation per node** (#613, #632, `node_turn.go`). One brain, one
 queue: every message of the conversation belongs to a node or to the home, in its `node` column
 (`""`: the home).
 
-- **A message said to a node belongs to it.** `handleSend` takes the node the console talks to
+- **A message said to a node belongs to it.** `handleSend` takes the node the bar talks to
   (`node`, checked by `nodeSaid`: one of the graph's, not archived; anything else is the home).
   The message is a turn like any other, the node named: the brain reads
   `[Sam 10:02 #12 · nœud <id>]` (its id only: a title may carry someone else's words, and the
   node's card gives the rest), and the turn is about it (`nodesDelivered`). A channel's, the CLI's,
-  the API's messages and a button's `ask` belong to the home.
+  the API's messages belong to the home; a block's `ask` button, to the block's node
+  (`handleNodeAsk`), as the user's message there, which never decides a card.
 - **The brain's answer belongs to the node of what it answers**, fixed at delivery (`talkOf`, kept
   in the turn as `talk`): the last message of the user's in the delivery, else the last event of a
   node; the home for anything else. The node the turn names later (a tool on another node) is for
@@ -3257,31 +3282,22 @@ queue: every message of the conversation belongs to a node or to the home, in it
   the brain's own notes and notifications to the home. A long answer code filed says where
   (`filed`, [the safety net](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)).
 - **The column.** The stream (`GET /events?node=<id>`) sends the `exchange` event of
-  the node the console talks to, with `node` and its `title` (none when the node is external);
-  without `node`, the home's. Each line (`seq`, `role`, `time`, `text`, `external`) says `filed`:
-  the node code filed it in. `GET /api/earlier` takes `node=<id>`. Eriphe's draft shows in
+  the node the bar talks to, with `node` and its `title` (none when the node is external);
+  without `node`, the home's. Eriphe's draft shows in
   the exchange its turn answers in only, and its work (`thinking`) there or under a message of the
   user's still waiting. A message being sent shows only where it was written. Every exchange
   carries the cards that wait and no node holds (`cards`, `unheldCards`: shown already, linked to
-  no live node, such as one proposed at the home before any subject): the console shows them with
-  their Oui and Non wherever it talks, so no card waits out of sight; a node's cards wait at the
-  foot of its page. A plain "oui"
+  no live node, such as one proposed at the home before any subject): the bar shows them above it
+  with their Oui and Non wherever it talks, so no card waits out of sight (the bar's only
+  buttons); a node's cards wait in its page. A plain "oui"
   decides the card just above in its own node only (`resolveByText`).
-- **Suggested replies.** The brain may close an answer with up to 3 replies in its own words, one
-  per line, in a block: `<suggestions>` … `</suggestions>`. Code cuts it where the text is stored
-  (`copyBrainOutput`) and where the draft is kept (`brainWrote`, prefix-safe: a marker being
-  written is never shown), so the workspace, the conversation, channels, the voice, push and the
-  memory never see it. From the marker on, nothing is text, even unclosed (it fails closed). A
-  reply over 80 characters, empty, repeated or holding `<`/`>` is dropped, never cut. They are kept
-  beside the message (`suggest_msg:<seq>`) only when its turn read no external content
-  (`suggestReplies`): a tainted turn offers none, whatever it wrote. A trailing block rather than a
-  tool: the answer is the text after the last tool call (`answerText`), so a tool after it would
-  make it a working note, and one before would suggest replies to an answer not written yet. The
-  `exchange` event carries them (`suggestions`) only for its last line, the brain's, clean, with no
-  draft; the page shows them as chips under it, hidden while a message is on its way or Eriphe
-  writes. A chip sends its sentence as the user's message, to the node the console talks to (`POST /messages`
-  with `from` `suggestion` and `node`), but it never decides a card (no
-  click does). It is no A2UI action: the click grammar is unchanged.
+- **Questions and their answers.** The brain writes its questions in the subject's document, each
+  with its default, and below them a block of `ask` buttons for the likely answers, one taking
+  every default (« Fais comme tu proposes »); a click sends the button's words, read again from
+  the block, as the user's message in that node. On a tainted turn no button is written
+  (`nodeGuard`). Each exchange rewrites the document: answered questions go, the choices are
+  written under « Ce qu'on a décidé », the next step shows; a child that moves on updates the
+  main subject too (the prompt's « Chaque échange réécrit le document »).
 
 **The fallback.** The shell (`templates/espace.html`) has no JavaScript of its own: under
 `#root`, until the app draws, a word, and a plain error with a link to try again, revealed by CSS
@@ -3290,7 +3306,7 @@ after 8 s (`.espace-fallback`) for a script that never loads or runs. The app sh
 an error while it draws shows the same (`FailSafe`, `Fallback.tsx`). An event stream down for more
 than 20 s (`streamDown`, `STREAM_GRACE`; the browser opens it again by itself, the page itself once
 it closed for good, after checking the session) shows a line saying so; the workspace stays as it
-was. A brain that could not answer is a line in the console (`exchange`'s error), with Réessayer
+was. A brain that could not answer is a line above the bar (`exchange`'s `failed`), with Réessayer
 (`POST /brain/retry`, 204) and a link to the agents' settings.
 
 **The look** (`espace.css`, `fonts.css`): neutral greys, light or dark as the system says

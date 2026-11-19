@@ -43,8 +43,7 @@ func (w *web) graphRoutes(mux *webMux) {
 	mux.Handle("GET /espace", w.auth(w.handleHome)) // web_pages.go: after the wizard
 	mux.Handle("GET /espace/boot", w.auth(w.handleEspaceBoot))
 	mux.Handle("GET /espace/catalog/v1.json", w.auth(w.handleEspaceCatalog))
-	mux.Handle("GET /espace/media", w.auth(w.handleMedia))  // web_media.go
-	mux.Handle("GET /api/earlier", w.auth(w.handleEarlier)) // web_console.go
+	mux.Handle("GET /espace/media", w.auth(w.handleMedia)) // web_media.go
 	mux.Handle("GET /api/nodes/{id}", w.auth(w.handleNodePage))
 	mux.Handle("GET /api/nodes/{id}/trace", w.auth(w.handleNodeTrace))
 	mux.Handle("GET /api/nodes/{id}/md", w.auth(w.handleNodeMD))
@@ -155,7 +154,8 @@ func (c *core) graphRows() ([]graphNode, error) {
 }
 
 // nodePage is a node's page: its row, the version shown and the others,
-// its body in parts, and its cards.
+// its body in parts, and its cards: those its document does not place
+// (a card block places one where its author wrote it).
 type nodePage struct {
 	Node     graphNode      `json:"node"`
 	Version  int            `json:"version"` // the version shown
@@ -186,13 +186,19 @@ type pagePart struct {
 // pageBlock is a block ready to draw: its components and its data, with
 // the sources' last values at /<name> and the user's marks at /marks; or,
 // when it does not read as a block, what is wrong (its raw JSON is the
-// file's, in the .md tab).
+// file's, in the .md tab). A card block gives its card's ref, and the
+// card as code reads it from its records (Proposal: what it says, what
+// its yes does, where it stands), only when it is one of the node's own
+// cards and the block is not external: else none, and the page says the
+// card is not found, with no Oui or Non.
 type pageBlock struct {
 	Name       string           `json:"name"`
 	External   bool             `json:"external,omitempty"`
 	Components []a2ui.Component `json:"components"`
 	Data       map[string]any   `json:"data"`
 	Error      string           `json:"error,omitempty"`
+	Card       string           `json:"card,omitempty"`
+	Proposal   *proposalView    `json:"proposal,omitempty"`
 }
 
 var errNoNode = errors.New("no such node")
@@ -244,10 +250,40 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 			continue
 		}
 		b := c.blockView(id, part.Block, reads)
+		if b.Card != "" && b.Error == "" {
+			b.Proposal = w.placedCard(id, part.Block, lang)
+		}
 		p.Parts = append(p.Parts, pagePart{Block: &b})
 	}
-	p.Cards = w.nodeCards(id, lang)
+	placed := map[string]bool{}
+	for _, part := range p.Parts {
+		if part.Block != nil && part.Block.Proposal != nil {
+			placed[part.Block.Proposal.Ref] = true
+		}
+	}
+	for _, v := range w.nodeCards(id, lang) {
+		if !placed[v.Ref] {
+			p.Cards = append(p.Cards, v)
+		}
+	}
 	return p, nil
+}
+
+// placedCard is the card a card block of node id places, as its records
+// say it now: pending, decided, or gone (withdrawn with its node, #662).
+// None for a ref that is not one of the node's cards, nor from a block
+// someone else's words may have written: such a block forges nothing.
+func (w *web) placedCard(id string, b *nodefile.Block, lang string) *proposalView {
+	if b.External || !w.c.nodeHasCard(id, b.Card) {
+		return nil
+	}
+	xs, err := w.c.cardsWhere(`ref = ?`, b.Card)
+	if err != nil || len(xs) == 0 {
+		return nil
+	}
+	x, p := w.c.liveCard(xs[0])
+	v := w.proposalView(x, p, lang)
+	return &v
 }
 
 // blockView is a block of node id ready to draw. Its media addresses go
@@ -263,6 +299,10 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 	v := pageBlock{Name: b.Name, External: b.External, Components: []a2ui.Component{}, Data: map[string]any{}}
 	if err := b.Validate(); err != nil {
 		v.Error = err.Error()
+		return v
+	}
+	if b.Card != "" {
+		v.Card = b.Card // the card itself: placedCard, by the page
 		return v
 	}
 	if b.Data != nil {

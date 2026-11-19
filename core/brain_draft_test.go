@@ -139,7 +139,7 @@ func TestBrainWorkingNoteNotShown(t *testing.T) {
 	if text, _, _ := c.draft.get(); text != "" {
 		t.Fatalf("draft after the turn = %q", text)
 	}
-	lines, _, err := c.store.lastExchange("")
+	lines, err := c.store.lastExchange("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,16 +218,16 @@ func TestWebDraftStream(t *testing.T) {
 		}
 	}
 
-	next(func(x exchangeEvent) bool { return len(x.Lines) > 0 })
+	next(func(x exchangeEvent) bool { return x.Asked != nil })
 	tw.c.draft.set("Writ", last)
 	tw.w.notify()
 	next(func(x exchangeEvent) bool { return x.Draft == "Writ" })
-	tw.c.draft.set("Writing **this**", last)
-	next(func(x exchangeEvent) bool { return x.Draft == "Writing **this**" })
+	tw.c.draft.set("Writing **this**\n\nand more", last)
+	next(func(x exchangeEvent) bool { return x.Draft == "Writing this" }) // its first line, plain
 	// What brainWrote does when the message lands.
 	seq, _ := tw.c.store.addMessage(roleBrain, "Written.", true)
 	tw.c.draft.set("", int(seq))
-	x := next(func(x exchangeEvent) bool { return x.Draft == "" && x.Lines[len(x.Lines)-1].Text == "Written." })
+	x := next(func(x exchangeEvent) bool { return x.Draft == "" && x.Said != nil && x.Said.Text == "Written." })
 	if x.Draft != "" {
 		t.Fatalf("a draft beside its message: %+v", x)
 	}

@@ -40,10 +40,18 @@ const (
 // fenceOpen starts a block's fence, its name after a space.
 const fenceOpen = "```eriphe:block"
 
+// CardRe is a card block's ref: a proposal's kind and its number
+// (view:3, memory:12). What the card says is never in the block: code
+// reads it from its records.
+var CardRe = regexp.MustCompile(`^[a-z][a-z_]{0,31}:[1-9][0-9]{0,17}$`)
+
 // Block is a named block of a node: components shown with their data and
-// live sources, and code's fields (snapshot, marks, external).
+// live sources, and code's fields (snapshot, marks, external). A card
+// block holds only the ref of one of the node's cards (Card): where its
+// author places it in the text; code draws the card from its records.
 type Block struct {
 	Name       string
+	Card       string            // a card block: the card's ref, and nothing else
 	Components json.RawMessage   // a flat list, one with id root
 	Data       json.RawMessage   // an object, nil when it has none
 	Sources    map[string]Source // live sources read by code, at /<name>
@@ -56,8 +64,9 @@ type Block struct {
 	has   has    // the code's fields it said, as read
 }
 
-// has tells which of code's fields a block said.
-type has struct{ snapshot, marks, external, completed bool }
+// has tells which of code's fields a block said, and whether it said a
+// card.
+type has struct{ snapshot, marks, external, completed, card bool }
 
 // Marks are the user's marks on what a block shows: by list, then by
 // item, "keep", "drop" or "done".
@@ -102,6 +111,7 @@ func blockErr(name string, problems ...string) error {
 // wire is a block's JSON as read: code's fields as pointers, to tell
 // those left out.
 type wire struct {
+	Card       string            `json:"card"`
 	Components json.RawMessage   `json:"components"`
 	Data       json.RawMessage   `json:"data"`
 	Sources    map[string]Source `json:"sources"`
@@ -122,21 +132,21 @@ func decodeBlock(name string, raw []byte, short bool) (*Block, error) {
 	if dec.More() {
 		return nil, blockErr(name, "one JSON object only")
 	}
-	b := &Block{Name: name, Components: w.Components, Sources: w.Sources}
+	b := &Block{Name: name, Card: w.Card, Components: w.Components, Sources: w.Sources}
 	if !isEmpty(w.Data) {
 		b.Data = w.Data
 	}
 	if !isEmpty(w.Snapshot) {
 		b.Snapshot = w.Snapshot
 	}
-	b.has = has{snapshot: w.Snapshot != nil, marks: w.Marks != nil, external: w.External != nil}
+	b.has = has{snapshot: w.Snapshot != nil, marks: w.Marks != nil, external: w.External != nil, card: w.Card != ""}
 	if w.Marks != nil && len(*w.Marks) > 0 {
 		b.Marks = *w.Marks
 	}
 	if w.External != nil {
 		b.External = *w.External
 	}
-	if short {
+	if short && b.Card == "" {
 		b.Components = completeShort(b.Components)
 	}
 	b.has.completed = !bytes.Equal(b.Components, w.Components)
@@ -212,6 +222,19 @@ func (b *Block) bytes() ([]byte, error) {
 func (b *Block) canonical() ([]byte, error) {
 	var out bytes.Buffer
 	out.WriteString(fenceOpen + " " + b.Name + "\n{")
+	if b.Card != "" {
+		ref, err := marshal(b.Card)
+		if err != nil {
+			return nil, blockErr(b.Name, "card: "+err.Error())
+		}
+		out.WriteString("\"card\": ")
+		out.Write(ref)
+		if b.External {
+			out.WriteString(",\n \"external\": true")
+		}
+		out.WriteString("}\n```\n")
+		return out.Bytes(), nil
+	}
 	var comps []json.RawMessage
 	if err := json.Unmarshal(b.Components, &comps); err != nil {
 		return nil, blockErr(b.Name, "components: a list of components")
@@ -375,6 +398,9 @@ func (b *Block) Validate() error {
 	if !BlockRe.MatchString(b.Name) {
 		return blockErr(b.Name, "a block's name is lowercase letters, digits and _, 32 at most")
 	}
+	if b.Card != "" || b.has.card {
+		return b.validateCard()
+	}
 	var problems []string
 	fail := func(f string, a ...any) { problems = append(problems, fmt.Sprintf(f, a...)) }
 	var data map[string]any
@@ -439,6 +465,23 @@ func (b *Block) Validate() error {
 		if bound.Link && !linksOK(valuesAt(data, at)) {
 			fail("/components%s: a Link opens a field that is already an http(s) address as a whole, and %s holds something else", bound.At, bound.Path)
 		}
+	}
+	if len(problems) > 0 {
+		return blockErr(b.Name, problems...)
+	}
+	return nil
+}
+
+// validateCard checks a card block: the ref of a card, and nothing else
+// (no components, data, sources nor marks: what the card says, what its
+// yes does and whether it waits are code's, read from its records).
+func (b *Block) validateCard() error {
+	var problems []string
+	if !CardRe.MatchString(b.Card) {
+		problems = append(problems, "card: the ref a propose tool gave (view:3, memory:12)")
+	}
+	if !isEmpty(b.Components) && string(bytes.TrimSpace(b.Components)) != "[]" || b.Data != nil || len(b.Sources) > 0 || b.Snapshot != nil || len(b.Marks) > 0 {
+		problems = append(problems, "a card block holds its card's ref only: {\"card\": \"view:3\"}; what the card says comes from it")
 	}
 	if len(problems) > 0 {
 		return blockErr(b.Name, problems...)

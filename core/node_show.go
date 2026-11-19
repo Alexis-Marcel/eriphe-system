@@ -10,8 +10,8 @@ import (
 // that connects later still gets it, and tells the pages that watch
 // (graph_feed.go's show event): the graph workspace opens the page. It
 // writes nothing in the node. A show opens the page beside what is open,
-// the console where it was; one that takes the console (talk: a subject
-// opened from the home, node_turn.go's moveHomeTurn) moves the console
+// the bar where it was; one that takes the bar (talk: a subject
+// opened from the home, node_turn.go's moveHomeTurn) moves the bar
 // into it too, when it talked to the home.
 
 const nodeShowKey = "node_show"
@@ -23,7 +23,7 @@ type nodeShown struct {
 	By   string    `json:"by"`
 	At   time.Time `json:"at"`
 	Seq  int64     `json:"seq"`
-	Talk bool      `json:"talk,omitempty"` // the console, at the home, moves into it
+	Talk bool      `json:"talk,omitempty"` // the bar, at the home, moves into it
 }
 
 // showNode asks the user's screen to open a node's page; talk: and to

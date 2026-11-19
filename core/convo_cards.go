@@ -468,8 +468,10 @@ var (
 // The cards.
 
 // cardProposed makes the card of a proposal the brain just made: it goes
-// with the brain's next message of this turn.
-func (c *core) cardProposed(kind string, id int64) {
+// with the brain's next message of this turn. It gives the card's ref,
+// which the brain's tool returns (card): a card block of the node's
+// document places it (nodefile's card block).
+func (c *core) cardProposed(kind string, id int64) string {
 	inherit, source := c.turnAbout, c.turnSource() // made in the brain's turn
 	switch kind {
 	case cardRunCalls:
@@ -478,6 +480,7 @@ func (c *core) cardProposed(kind string, id int64) {
 		c.turn.wrote() // what the turn says is about its card: the net leaves it in the exchange (node_net.go)
 	}
 	c.cardProposedBy(kind, id, inherit, source)
+	return proposalRef(kind, id)
 }
 
 // cardProposedBy is cardProposed for a proposal its maker's about
@@ -662,8 +665,17 @@ func (c *core) proposalDecided(kind string, id int64, approved bool) {
 
 // cardNote tells the brain where its proposal waits: on a card, with its message.
 func cardNote(user string) string {
-	return "A card with Oui / Non goes with your message in the conversation (and on the channel " + user + " writes from, if any): " +
-		"say what you propose in one natural sentence, never as a list of pending items; " + user + " answers on the card, never you."
+	return "A card with Oui / Non goes with your message in the conversation (and on the channel " + user + " writes from, if any), " +
+		"and waits in the page of the node of this turn: place it in its document with a card block (card, the ref above) where it belongs. " +
+		"Say what you propose in one natural sentence, never as a list of pending items; " + user + " answers on the card, never you."
+}
+
+// cardPlaceNote tells the brain how to place a card in the document of
+// the node it was proposed from: a card block, its ref and nothing else;
+// code draws the card, its Oui and Non, and where it stands.
+func cardPlaceNote(ref string) string {
+	return "Place its card in the subject's document where it belongs (under « Ce qu'on a décidé », say): node_edit with a block whose value is " +
+		`{"card": "` + ref + `"}` + " and nothing else; code draws the card from its records. Unplaced, it waits at the foot of the page."
 }
 
 // Free text: a plain "oui" or "non".
@@ -794,8 +806,7 @@ const cardByArchive = "archive"
 // (withdrawProposal), without decideCard's words to the brain or a task. So no card comes
 // back, not even when the node is reopened; the brain may propose again,
 // and no longer reads it among what waits (pendingProposals). Called after
-// the archive, before the nodes are unlinked from their cards
-// (linkedNodeGone).
+// the archive: the cards stay linked to their nodes, gone.
 func (c *core) withdrawCards(ctx context.Context, ids []string) {
 	refs := map[string]bool{}
 	for _, id := range ids {

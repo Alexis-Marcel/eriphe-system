@@ -12,8 +12,10 @@ import (
 
 // Code's safety net (#632, contract 5): a long answer of the brain's that
 // nothing of its turn filed into a node is filed by code, so that no long
-// answer lives in the conversation alone. At its turn's end, the turn's
-// answer (its texts joined), past netMinRunes, when the brain wrote no
+// answer lives in the conversation alone: the workspace's bar shows only
+// its first line (ackLine, web_console.go). At its turn's end, the turn's
+// answer (its texts joined), past netMinRunes, or said in a node any
+// answer the bar does not show whole (#663), when the brain wrote no
 // node in the turn (node_open, node_write, node_edit) and proposed nothing
 // on a card (what it says is then about the card, which waits under it),
 // goes:
@@ -24,7 +26,7 @@ import (
 //     first line), the answer as its doc; a turn that answers the user at
 //     the home then moves into it, as one whose subject the brain opened
 //     does (moveHomeTurn): the node opens in front of the user, the
-//     console in it.
+//     bar in it.
 //
 // The turn's answer is only what the brain wrote since it was given
 // something (a message, events, a due intention: brainTurn.answer), and it
@@ -62,12 +64,13 @@ func (c *core) fileTurnAnswer() {
 		seqs = append(seqs, m.Seq)
 	}
 	answer := strings.Join(parts, "\n\n")
-	if runeLen(answer) < netMinRunes {
+	long := runeLen(answer) >= netMinRunes
+	if _, cut := ackLine(answer); !long && (talk == "" || !cut) {
 		return
 	}
 	tainted := len(c.turnTaint()) > 0
 	id := c.fileInTalked(talk, answer, tainted)
-	if id == "" {
+	if id == "" && long {
 		id = c.fileInNew(c.netTitle(from, to), answer, tainted)
 		c.moveHomeTurn(id) // from the home: the exchange goes on in it (node_turn.go)
 	}

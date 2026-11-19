@@ -143,8 +143,8 @@ func (c *core) brainUnlearn(in unlearnIn) (map[string]any, error) {
 		if err := c.mem.setUndo(e.ID, undoProposed, strings.TrimSpace(in.Reason)); err != nil {
 			return nil, err
 		}
-		c.cardProposed(cardUnlearn, e.ID)
-		return map[string]any{"id": e.ID, "status": "proposed", "note": "Only proposed: " + why + ". " + cardNote(c.conf().User)}, nil
+		card := c.cardProposed(cardUnlearn, e.ID)
+		return map[string]any{"id": e.ID, "status": "proposed", "card": card, "note": "Only proposed: " + why + ". " + cardNote(c.conf().User)}, nil
 	}
 	r, err := c.unlearn(e.ID, "brain", strings.TrimSpace(in.Reason), []string{ref})
 	if err != nil {

@@ -60,7 +60,7 @@ type proposeViewIn struct {
 }
 
 func registerViewTool(s *mcp.Server, c *core) {
-	tool(s, "propose_view", "Propose a view: what the user wants followed continuously (« surveille mes mails », « montre-moi les PR à relire ») is a standing node whose blocks code keeps fresh, the monitor that detects what comes, and the skill that works in the node when it does (notes each item, opens a child node for what needs work, its actions kept for the user's yes). All three are checked now and shown on one card; one yes creates them all, none is made before. Compose the node from the catalog's bricks; nothing is known of a view in advance. A monitor or skill of the user's that does the same thing already (monitors, list_skills) is reused, not written again under another name: leave monitor out and let the blocks read it by its name. Ask first: what will act or notify on its own is proposed after one message, in the subject's node, with the few questions that change it (which accounts or sources, what matters, whether and when to tell the user, night included, what to prepare for their yes and what only to note), each with its default, and suggested replies; skip what the request or memory settles. The goal recalls the user's choices: the card shows it.",
+	tool(s, "propose_view", "Propose a view: what the user wants followed continuously (« surveille mes mails », « montre-moi les PR à relire ») is a standing node whose blocks code keeps fresh, the monitor that detects what comes, and the skill that works in the node when it does (notes each item, opens a child node for what needs work, its actions kept for the user's yes). All three are checked now and shown on one card; one yes creates them all, none is made before. Compose the node from the catalog's bricks; nothing is known of a view in advance. A monitor or skill of the user's that does the same thing already (monitors, list_skills) is reused, not written again under another name: leave monitor out and let the blocks read it by its name. Ask first: what will act or notify on its own is proposed after one message, in the subject's node, with the few questions that change it (which accounts or sources, what matters, whether and when to tell the user, night included, what to prepare for their yes and what only to note), each with its default, written in the subject's document with ask buttons for the likely answers (one takes every default); skip what the request or memory settles. The goal recalls the user's choices: the card shows it; place it in the subject's document with a card block (card, the ref this gives).",
 		func(ctx context.Context, in proposeViewIn) (map[string]any, error) {
 			return c.proposeView(in, c.turnTaint())
 		})
@@ -144,8 +144,9 @@ func (c *core) proposeView(in proposeViewIn, tainted []string) (map[string]any, 
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
-	c.cardProposed(cardViewKind, id)
-	return map[string]any{"result": "proposed; it waits for the user's yes on its card, then the node, its monitor and its skill are made at once", "node": v.Node}, nil
+	card := c.cardProposed(cardViewKind, id)
+	return map[string]any{"result": "proposed; it waits for the user's yes on its card, then the node, its monitor and its skill are made at once", "node": v.Node, "card": card,
+		"place": cardPlaceNote(card)}, nil
 }
 
 // viewSourceOK is the check of a view's sources: a catalog server's tool

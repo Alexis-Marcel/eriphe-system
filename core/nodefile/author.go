@@ -164,7 +164,7 @@ func (b *Block) keepCode(prev *Block) error {
 		}
 		b.Marks[list] = maps.Clone(items)
 	}
-	b.has = has{completed: b.has.completed}
+	b.has = has{completed: b.has.completed, card: b.has.card}
 	return nil
 }
 
