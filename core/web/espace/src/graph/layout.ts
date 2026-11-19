@@ -6,7 +6,10 @@
 // user dropped somewhere is pinned there like a magnet: a root keeps that
 // spot, a child keeps that offset from its parent. An open page is a box
 // node, its size the page's: the others make room around it, and come back
-// when it closes. Nothing here knows a node by its name.
+// when it closes. Every body, a bubble with its label or an open page, is
+// solid to every other by one collision (collide): one that comes pushes
+// the others softly out of its way, and in the end two never sit on each
+// other. Nothing here knows a node by its name.
 
 export type Pt = [number, number];
 export type Pos = Record<string, Pt>;
@@ -68,14 +71,15 @@ export function leash(raw: Pt, others: Near[], own: Pt | undefined, dropped: boo
 
 // homesFor gives each root without a home a free spot, in the order given
 // (the order the roots were made): around the others, on a widening
-// spiral, ROOM away from every home. The homes known stay where they are:
-// a new subject never moves the others.
-export function homesFor(roots: string[], known: Pos): Pos {
+// spiral, ROOM away from every home and every spot in taken (where the
+// user dropped a subject: it is there, not at its home). The homes known
+// stay where they are: a new subject never moves the others.
+export function homesFor(roots: string[], known: Pos, taken: Pt[] = []): Pos {
   const homes: Pos = { ...known };
-  const taken = () => Object.values(homes);
+  const others = () => [...Object.values(homes), ...taken];
   for (const id of roots) {
     if (homes[id]) continue;
-    const all = taken();
+    const all = others();
     if (all.length === 0) {
       homes[id] = [0, 0];
       continue;
@@ -126,11 +130,19 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
   const settled = Object.keys(prev).length > 0;
   const iters = iterations ?? (settled ? 160 : 320);
   if (held && p[held.id]) p[held.id] = [...held.at];
+  const pinned = (x: LNode) => !opened && !!(pins[x.id]?.abs || (pins[x.id]?.rel && x.parent && byId.has(x.parent)));
+  // who gives way when two bodies collide (rank): the one held never, then
+  // one the user dropped (unless a page needs the room), then the open
+  // pages, the first opened last, then the bubbles; of a rank, a new
+  // bubble before one already in place (share)
+  const rank = (x: LNode) => (held?.id === x.id ? HELD : pinned(x) ? 1 : x.box ? 2 + (x.opened ?? 0) : BUBBLE);
+  const share = (x: LNode) => (fresh.has(x.id) || !settled ? 2 : 1);
+  const bodies = (strength: number) => collide(nodes, p, v, rank, share, strength);
 
   for (let it = 0; it < iters; it++) {
     const f: Pos = {};
     nodes.forEach((x) => (f[x.id] = [0, 0]));
-    // repulsion and collision
+    // repulsion: everything pushes everything else away, gently
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i], b = nodes[j];
@@ -142,11 +154,9 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
           dy = 0.5 - hash(b.id + a.id);
           d = 0.5;
         }
-        const min = a.r + b.r + 46;
         // siblings, and a parent with its children, push harder: children spread all around
         const kin = (a.parent && a.parent === b.parent) || a.parent === b.id || b.parent === a.id;
-        let s = (kin ? 9000 : 1800) / (d * d);
-        if (d < min) s += (min - d) * 0.35;
+        const s = (kin ? 9000 : 1800) / (d * d);
         const ux = dx / d, uy = dy / d;
         f[a.id][0] -= ux * s;
         f[a.id][1] -= uy * s;
@@ -170,31 +180,6 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
       if (!par.box) {
         f[par.id][0] += (dx / d) * s * 0.25;
         f[par.id][1] += (dy / d) * s * 0.25;
-      }
-    }
-    // each node with its label is a box; boxes push each other apart
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const a = nodes[i], b = nodes[j];
-        const [ha, ta, ba] = extent(a, p[a.id]), [hb, tb, bb] = extent(b, p[b.id]);
-        const ox = ha + hb - Math.abs(p[b.id][0] - p[a.id][0]);
-        if (ox <= 0) continue;
-        const oy = Math.min(ba, bb) - Math.max(ta, tb);
-        if (oy <= 0) continue;
-        // an open page barely moves: the small bubbles make room
-        const k = a.box || b.box ? 0.5 : 0.25;
-        const wa = a.box && !b.box ? 0 : b.box && !a.box ? 2 : 1, wb = 2 - wa;
-        // around an open page, bubbles step aside left or right (the screen is
-        // wide), up or down when that is far shorter (caught between two pages)
-        if (ox < oy || ((a.box || b.box) && ox < oy * 3)) {
-          const sx = (p[b.id][0] >= p[a.id][0] ? 1 : -1) * ox * k;
-          f[a.id][0] -= sx * wa;
-          f[b.id][0] += sx * wb;
-        } else {
-          const sy = ((ta + ba) / 2 <= (tb + bb) / 2 ? 1 : -1) * oy * k;
-          f[a.id][1] -= sy * wa;
-          f[b.id][1] += sy * wb;
-        }
       }
     }
     // links: weak springs
@@ -237,7 +222,7 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
     for (const x of nodes) {
       if (held && x.id === held.id) continue;
       // a node the user dropped stays there, unless a page needs the room
-      if (!opened && (pins[x.id]?.abs || (pins[x.id]?.rel && x.parent && byId.has(x.parent)))) continue;
+      if (pinned(x)) continue;
       // known nodes move little, new ones find their place
       const mob = x.box ? 0.04 : fresh.has(x.id) || !settled ? 1 : 0.35;
       v[x.id][0] = (v[x.id][0] + f[x.id][0] * mob) * 0.55;
@@ -250,7 +235,9 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
       p[x.id][0] += v[x.id][0];
       p[x.id][1] += v[x.id][1];
     }
-    for (let i = 0; i < 8 && partPages(nodes, p, v, held?.id); i++);
+    // bodies that touch push each other apart softly, a part of the way
+    // at each step: the others give way as one comes, smoothly
+    bodies(SOFT);
   }
   // where the user dropped them, exactly
   if (!opened) {
@@ -265,40 +252,63 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
       p[x.id] = [p[x.parent][0] + rel[0], p[x.parent][1] + rel[1]];
     }
   }
-  // open pages never sit on each other, whatever pulled them
-  for (let i = 0; i < 64 && partPages(nodes, p, v, held?.id); i++);
+  // what barely moved stays where it was: laid out again, nothing creeps
+  for (const x of nodes) {
+    const was = prev[x.id];
+    if (was && held?.id !== x.id && !pinned(x) && Math.hypot(p[x.id][0] - was[0], p[x.id][1] - was[1]) < STILL) p[x.id] = [...was];
+  }
+  // and in the end no two bodies sit on each other, whatever pulled them
+  for (let i = 0; i < 64 && bodies(1); i++);
   return p;
 }
 
-// partPages parts the open pages that overlap, as solid boxes: of two,
-// the one opened later steps aside (never the one held), sideways when it
-// can (the screen is wide), else down or up, just past the other's edge.
-// It tells whether it moved one.
-function partPages(nodes: LNode[], p: Pos, v: Pos, held?: string): boolean {
-  const boxes = nodes.filter((x) => x.box).sort((a, b) => (a.opened ?? 0) - (b.opened ?? 0));
+// STILL is how far a node may be found from where it was and stay there.
+const STILL = 10;
+
+// SOFT is how much of their overlap two bodies that touch undo at each
+// step of the simulation: a soft push, finished over a few steps.
+const SOFT = 0.5;
+// HELD is the rank of the node held, BUBBLE a bubble's: below every open
+// page.
+const HELD = 0;
+const BUBBLE = 1e6;
+
+// collide is the graph's one collision: every body (a bubble with its
+// label under it, an open page with its margin: extent) is a solid box to
+// every other. Two that overlap part along the shorter way out, sideways
+// when it is not much longer (the screen is wide), by strength of their
+// overlap. Of the two, the one of higher rank steps aside alone; of the
+// same rank, each by its share (two opened together part halfway). A child
+// gives way to its parent, unless held: its parent is not pushed away by
+// it. A bubble held moves no page: it passes over it. It tells whether it
+// moved one.
+function collide(nodes: LNode[], p: Pos, v: Pos, rank: (x: LNode) => number, share: (x: LNode) => number, strength: number): boolean {
   let moved = false;
-  for (let i = 0; i < boxes.length; i++) {
-    for (let j = i + 1; j < boxes.length; j++) {
-      let a = boxes[i], b = boxes[j];
-      if (b.id === held) [a, b] = [b, a];
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j];
       const [ha, ta, ba] = extent(a, p[a.id]), [hb, tb, bb] = extent(b, p[b.id]);
       const dx = p[b.id][0] - p[a.id][0];
       const ox = ha + hb - Math.abs(dx);
       const oy = Math.min(ba, bb) - Math.max(ta, tb);
       if (ox <= 0.5 || oy <= 0.5) continue;
+      const ra = rank(a), rb = rank(b);
+      if ((ra === HELD && !a.box && b.box) || (rb === HELD && !b.box && a.box)) continue;
       moved = true;
-      // two opened together (no rank) part halfway each
-      const share = a.id !== held && (a.opened ?? 0) === (b.opened ?? 0) ? 0.5 : 0;
+      const sb =
+        b.parent === a.id && rb !== HELD ? 1 : a.parent === b.id && ra !== HELD ? 0 : ra === rb ? share(b) / (share(a) + share(b)) : rb > ra ? 1 : 0;
+      const sa = 1 - sb;
       if (ox <= oy * 1.5) {
-        const s = (dx >= 0 ? 1 : -1) * ox;
-        p[b.id][0] += s * (1 - share);
-        p[a.id][0] -= s * share;
-        v[b.id][0] = v[a.id][0] = 0;
+        // one right on the other: the way out comes from their names
+        const s = (Math.abs(dx) > 0.01 ? Math.sign(dx) : hash(a.id + b.id) < 0.5 ? 1 : -1) * (ox + 0.5) * strength;
+        p[a.id][0] -= s * sa;
+        p[b.id][0] += s * sb;
+        v[a.id][0] = v[b.id][0] = 0;
       } else {
-        const s = ((tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1) * oy;
-        p[b.id][1] += s * (1 - share);
-        p[a.id][1] -= s * share;
-        v[b.id][1] = v[a.id][1] = 0;
+        const s = ((tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1) * (oy + 0.5) * strength;
+        p[a.id][1] -= s * sa;
+        p[b.id][1] += s * sb;
+        v[a.id][1] = v[b.id][1] = 0;
       }
     }
   }

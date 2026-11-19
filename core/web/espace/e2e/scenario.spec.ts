@@ -255,6 +255,24 @@ test("the steps of the scenario", async ({ page, request }) => {
   // Answered, the card stays in the document and says so.
   await expect(viewCard.locator(".a2-proposal-kicker")).toContainText("Validé");
   await expect(viewCard.getByRole("button", { name: "Oui" })).toHaveCount(0);
+  // Its pages closed, the view's bubble, made on the subject, sits beside
+  // it: no two bubbles on each other. Dropped right on the subject, it stays
+  // there and the subject gives way.
+  await home(page);
+  await expectBubblesApart(page);
+  const mine = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Mes mails"]') });
+  await settled(mine);
+  const src = (await bubble("Mes mails").boundingBox())!, dst = (await bubble("Garder un œil sur mes mails").boundingBox())!;
+  const viewPlaced = page.waitForResponse((r) => r.url().endsWith("/place") && r.request().method() === "PUT");
+  await page.mouse.move(src.x + src.width / 2, src.y + src.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++)
+    await page.mouse.move(src.x + src.width / 2 + ((dst.x - src.x + (dst.width - src.width) / 2) * i) / 12, src.y + src.height / 2 + ((dst.y - src.y + (dst.height - src.height) / 2) * i) / 12);
+  await page.mouse.up();
+  expect((await viewPlaced).status()).toBe(204);
+  await settled(mine);
+  await expectBubblesApart(page);
+  await shot(page, "graph-apart");
 
   // 15. A card no page holds (proposed at the home, no subject opened)
   // waits in the console, with its Oui; answered, it leaves it.
@@ -483,6 +501,31 @@ async function expectApart(page: Page, pages: Locator[]): Promise<void> {
     const seen = b.x + b.width > 0 && b.x < view.width;
     if (seen && b.x < bar.x + bar.width && bar.x < b.x + b.width) expect(b.y + b.height).toBeLessThanOrEqual(bar.y);
   }
+}
+
+// expectBubblesApart checks the graph once it settled: no two bubbles'
+// circles intersect, nor two subjects' labels.
+async function expectBubblesApart(page: Page): Promise<void> {
+  const overlaps = () =>
+    page.locator(".gr-node").evaluateAll((els) => {
+      const bs = els.map((el) => {
+        const e = el as HTMLElement;
+        const core = e.querySelector(".gr-core") as HTMLElement;
+        return { id: e.dataset.node, x: parseFloat(e.style.left), y: parseFloat(e.style.top), r: core.offsetWidth / 2 };
+      });
+      const labels = els.filter((el) => el.classList.contains("d0")).map((el) => ({ id: (el as HTMLElement).dataset.node, b: el.querySelector(".gr-label b")!.getBoundingClientRect() }));
+      const out: string[] = [];
+      for (let i = 0; i < bs.length; i++)
+        for (let j = i + 1; j < bs.length; j++)
+          if (Math.hypot(bs[i].x - bs[j].x, bs[i].y - bs[j].y) < bs[i].r + bs[j].r) out.push(`${bs[i].id} on ${bs[j].id}`);
+      for (let i = 0; i < labels.length; i++)
+        for (let j = i + 1; j < labels.length; j++) {
+          const a = labels[i].b, b = labels[j].b;
+          if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) out.push(`${labels[i].id}'s label on ${labels[j].id}'s`);
+        }
+      return out;
+    });
+  await expect.poll(overlaps).toEqual([]);
 }
 
 // settled is where a bubble is once it stopped moving.

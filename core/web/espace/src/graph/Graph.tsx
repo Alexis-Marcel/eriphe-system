@@ -107,7 +107,8 @@ export function Graph({ live }: { live: boolean }) {
     "|" + openIds.map((id) => `${id}:${boxOf(id)[1]}`).join(",");
   const pos = useMemo(() => {
     const roots = list.filter((x) => !parentOf(x)).map((x) => x.id);
-    homes.current = homesFor(roots, homes.current);
+    // a subject the user dropped is where it was dropped, not at its home
+    homes.current = homesFor(roots, homes.current, Object.values(pins).flatMap((p) => (p.abs ? [p.abs] : [])));
     const lnodes = list.map((x) => ({
       id: x.id,
       parent: parentOf(x),
