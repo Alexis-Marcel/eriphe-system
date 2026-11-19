@@ -10,7 +10,9 @@ const addr = process.env.ERIPHE_E2E_ADDR ?? "127.0.0.1:8897";
 
 export default defineConfig({
   testDir: "e2e",
-  timeout: 120_000,
+  // The scenario walks some thirty steps in one test: about two minutes
+  // locally, more on a shared CI runner.
+  timeout: 300_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,
