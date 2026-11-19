@@ -44,8 +44,8 @@ A page shows:
   task wrote meanwhile), nothing is saved: the page shows that version, and you take it or keep
   your text to save it over;
 - its **versions** (v1, v2…): an older one shows as it was;
-- the cards waiting for your answer, where Eriphe placed them in the page (under « Ce qu'on a
-  décidé », say), else at its foot: what a yes makes in plain words first, the technical details
+- the cards waiting for your answer, where Eriphe placed them in the page (under « What we
+  decided », say), else at its foot: what a yes makes in plain words first, the technical details
   (sources, monitor, trigger, the skill's instructions) one click away under **Details**. A card in
   the page is drawn by Eriphe's code from its records, never from the page's words: once answered it
   says **Approved** or **Declined**, and **Proposal withdrawn** when it went with its archived page; a
@@ -107,8 +107,8 @@ that page; asked from a page, the new one opens beside it. Only a one-line answe
 time, a figure) stays in the bar.
 
 Each exchange rewrites the subject's page: the questions you answered go, what you chose is written
-under « Ce qu'on a décidé », and what comes next shows. When a part of it moves on in a bubble of its
-own (a research done, an angle chosen in « Choisir l'angle », a new version of the article), Eriphe
+under « What we decided », and what comes next shows. When a part of it moves on in a bubble of its
+own (a research done, an angle chosen in « Choose the angle », a new version of the article), Eriphe
 updates the main page too: its summary, its plan, what remains.
 
 To have something done **on the side** ("run a research on this aside", "look at my mail and
@@ -181,7 +181,7 @@ forget one. There is no settings page for the workspace and no rule to maintain.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows
   **Approved · running…**, then **done** or **failed** with why.
 - **Content from outside cannot act.** A block that may carry someone else's words is marked
-  « outside »: a proposal shown inside it has no Yes / No but says to answer it in the conversation.
+  « outside »: a proposal shown inside it has no Yes / No: its card waits at the foot of the page.
   A mail that says "click here to approve" cannot make anything happen.
 
 ## Where the conversation is

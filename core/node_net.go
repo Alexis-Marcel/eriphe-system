@@ -26,7 +26,7 @@ import (
 //     first line), the answer as its doc; a turn that answers the user at
 //     the home then moves into it, as one whose subject the brain opened
 //     does (moveHomeTurn): the node opens in front of the user, the
-//     console in it.
+//     bar in it.
 //
 // The turn's answer is only what the brain wrote since it was given
 // something (a message, events, a due intention: brainTurn.answer), and it
