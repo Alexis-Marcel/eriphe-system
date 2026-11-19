@@ -590,23 +590,6 @@ func (c *core) cardsTurnEnded() {
 	c.brainSeqOfTurn = 0
 }
 
-// cardsOf are the cards shown with these messages, by message.
-func (c *core) cardsOf(seqs []int) map[int][]convoCard {
-	out := map[int][]convoCard{}
-	if len(seqs) == 0 {
-		return out
-	}
-	lo, hi := slices.Min(seqs), slices.Max(seqs)
-	xs, err := c.cardsWhere(`seq >= ? AND seq <= ? ORDER BY id`, lo, hi)
-	if err != nil {
-		return out
-	}
-	for _, x := range xs {
-		out[x.Seq] = append(out[x.Seq], x)
-	}
-	return out
-}
-
 // liveCard reads a card's proposal and keeps its state: a proposal decided
 // elsewhere, or gone, is said so on its card.
 func (c *core) liveCard(x convoCard) (convoCard, proposal) {
@@ -689,24 +672,6 @@ func (c *core) cardDigest(from, to time.Time, kinds []string) {
 	ref := fmt.Sprintf("digest:%d:%d:%s", from.Unix(), to.Unix(), strings.Join(ks, ","))
 	c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, turn, state, text, created) VALUES (?, ?, 1, ?, ?, ?)
 		ON CONFLICT (ref) DO NOTHING`, ref, cardDigest, cardApproved, string(raw), time.Now().Unix())
-}
-
-// digestItems are the items a digest card shows: the conversation's own
-// messages are not repeated.
-func (c *core) digestItems(x convoCard) (digestSpec, []happening) {
-	var d digestSpec
-	if json.Unmarshal([]byte(x.Text), &d) != nil {
-		return d, nil
-	}
-	kinds := d.Kinds
-	if len(kinds) == 0 {
-		kinds = slices.DeleteFunc(slices.Clone(feedKinds), func(k string) bool { return k == feedMessage })
-	}
-	items, _, err := c.feed(time.Unix(d.From, 0), kinds, 60)
-	if err != nil {
-		return d, nil
-	}
-	return d, slices.DeleteFunc(items, func(h happening) bool { return h.At.Unix() > d.To })
 }
 
 // cardNote tells the brain where its proposal waits: on a card, with its message.
@@ -802,10 +767,10 @@ func (c *core) channelCardConfirm(seq int, lang string) (convoCard, string) {
 // channelCardNote tells the user, on their phone or computer, that what
 // came through a channel not trusted waits for their yes: the code's words,
 // never the card's.
-func channelCardNote(x convoCard) pushNote {
-	url := convoPath
+func (c *core) channelCardNote(x convoCard) pushNote {
+	url := nodeAt("")
 	if x.Seq > 0 {
-		url = convoAt(fmt.Sprintf("m%d", x.Seq))
+		url = c.messageAt(x.Seq)
 	}
 	n := waitingNote(tr("fr", "card.channel.note"), url, fmt.Sprintf("voice-card-%d", x.ID))
 	n.Body["en"] = assistantName() + " is waiting for your answer: " + tr("en", "card.channel.note")

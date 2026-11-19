@@ -26,6 +26,16 @@ type notifCard struct {
 	Open bool // the one a push opened
 }
 
+// MsgAt is where its message is read: its node's page, the graph for one
+// about no node.
+func (n notifCard) MsgAt() string {
+	node, ok := strings.CutPrefix(n.About, "node:")
+	if !ok {
+		node = ""
+	}
+	return nodeAt(node)
+}
+
 type notifyPage struct {
 	Recent, Held    []notifCard
 	Rules, Proposed []notifyRule

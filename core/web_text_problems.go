@@ -54,21 +54,12 @@ var problemStrings = map[string]map[string]string{
 		"problem.details":      "Détails",
 		"problem.retry":        "Réessayer",
 
-		"chat.error.title":      "{{name}} n'a pas pu répondre",
-		"chat.error.starttitle": "{{name}} n'arrive pas à démarrer",
-		"chat.error.retried":    "Nouvel essai demandé.",
-
 		"health.refused":       "Clé refusée",
 		"health.unverified":    "Non vérifiée",
 		"health.down":          "Indisponible",
 		"health.fix":           "Modifier la clé",
 		"providers.createdbad": "Le compte « %s » est ajouté, mais sa clé n'a pas passé le test. %s Ses agents sont marqués comme tels tant qu'elle ne marche pas.",
 		"providers.savedbad":   "Le compte « %s » est enregistré, mais sa clé n'a pas passé le test. %s",
-
-		"event.task.failed":  "La tâche « %s » a échoué.",
-		"event.task.stopped": "La tâche « %s » a été arrêtée.",
-		"event.task.lost":    "La tâche « %s » s'est interrompue : son appareil ne répond plus.",
-		"event.task.see":     "Voir",
 	},
 	"en": {
 		"problem.auth":     "The service refused the key or token: it is wrong, expired or revoked.",
@@ -111,20 +102,11 @@ var problemStrings = map[string]map[string]string{
 		"problem.details":      "Details",
 		"problem.retry":        "Try again",
 
-		"chat.error.title":      "{{name}} could not answer",
-		"chat.error.starttitle": "{{name}} cannot start",
-		"chat.error.retried":    "Trying again.",
-
 		"health.refused":       "Key refused",
 		"health.unverified":    "Not verified",
 		"health.down":          "Unavailable",
 		"health.fix":           "Change the key",
 		"providers.createdbad": "The account “%s” is added, but its key did not pass the test. %s Its agents are marked so until it works.",
 		"providers.savedbad":   "The account “%s” is saved, but its key did not pass the test. %s",
-
-		"event.task.failed":  "The task “%s” failed.",
-		"event.task.stopped": "The task “%s” was stopped.",
-		"event.task.lost":    "The task “%s” was interrupted: its device no longer answers.",
-		"event.task.see":     "See",
 	},
 }

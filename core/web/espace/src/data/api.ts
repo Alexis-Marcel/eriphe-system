@@ -14,7 +14,8 @@ import strings from "../strings.json";
 // - GET /api/archives: what the user archived;
 // and writes
 // - POST /messages: what the user says, to the node the console talks to;
-// - POST /cards/{id}/yes|no: a card's answer, as in the conversation;
+// - POST /cards/{id}/yes|no: a card's answer;
+// - POST /brain/retry: once more the turn Eriphe could not answer;
 // - the user's gestures (web_gestures.go): PUT /api/nodes/{id}/md (an edit,
 //   made on the version it was read at), POST .../mark and .../ask (a
 //   block's Mark and button), .../archive and .../reopen, PUT and DELETE
@@ -40,6 +41,9 @@ export type Boot = {
   live: boolean;
   view?: View;
   places?: Record<string, Place>;
+  // What Eriphe lacks to think: no AI yet (its wizard left for later), or
+  // no brain on this server; absent once it can.
+  setup?: "noai" | "nobrain";
 };
 
 const json = { Accept: "application/json" };
@@ -297,8 +301,13 @@ export async function dayProposals(date: string): Promise<ProposalView[]> {
 }
 
 // What a Proposal component answers: the proposal it shows. Its card's
-// Oui or Non decides it, as in the conversation.
+// Oui or Non decides it.
 export type Answer = { surfaceId: string; componentId: string; ref: string; yes: boolean; at?: string };
+
+// retryBrain gives Eriphe the turn that failed once more (brain_errors.go).
+export function retryBrain(): Promise<boolean> {
+  return post("/brain/retry");
+}
 
 // answerCard says yes or no to a card.
 export function answerCard(card: number, yes: boolean): Promise<boolean> {

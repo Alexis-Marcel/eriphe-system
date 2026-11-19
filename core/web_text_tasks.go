@@ -1,6 +1,6 @@
 package main
 
-// The words of a task's receipt (receipt.go) on its card and in its drawer.
+// The words of a task's receipt (receipt.go) on its card and on its page.
 
 func init() {
 	for lang, words := range taskStrings {

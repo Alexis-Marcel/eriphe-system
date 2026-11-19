@@ -199,7 +199,7 @@ func streamEvents(t *testing.T, tw *testWeb, query string) <-chan [2]string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
-	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events?a2ui=1"+query, nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events?"+query, nil)
 	resp, err := tw.hc.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /events: %v", err)

@@ -116,7 +116,7 @@ func TestWorkspaceStreamExchange(t *testing.T) {
 	seq, _ := tw.c.store.addMessage(roleUser, "quel temps demain ?", true)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events?a2ui=1", nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)
 	resp, err := tw.hc.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /events: %v", err)

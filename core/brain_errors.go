@@ -5,13 +5,13 @@ import (
 	"strconv"
 )
 
-// When the brain fails, the conversation says so with an error card
-// (parts.html, "brain-error"): a message of its own role, which the brain
-// never reads, holding the raw error that the card words (problems.go).
-// One card stands for a run of failures: a new one comes only after a
-// message of mine or a retry. While a card is open, the conversation does
-// not show the brain as thinking. "Try again" gives the brain the turn
-// that failed once more, and starts it again at once if it is down.
+// When the brain fails, the workspace's console says so (web_console.go,
+// an "error" line): a message of its own role, which the brain never
+// reads, holding the raw error, never sent to the page. One stands for a
+// run of failures: a new one comes only after a message of mine or a
+// retry. While one is open, the console does not show the brain as
+// thinking. "Try again" gives the brain the turn that failed once more, and
+// starts it again at once if it is down.
 
 const brainRetryKey = "brain_retry" // the last message's seq when "Try again" was asked
 

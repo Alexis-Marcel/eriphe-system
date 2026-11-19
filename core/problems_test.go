@@ -55,37 +55,29 @@ func TestExplainErrors(t *testing.T) {
 	}
 }
 
-// The brain's failure is an error card with its name, the cause, "Check the
-// AI account" and "Try again", the raw error folded in Details; never its
-// raw error as its message.
-func TestBrainErrorCard(t *testing.T) {
-	keepName(t)
+// The brain's failure reaches the workspace's console as an error line,
+// never its raw error, and the console offers "Try again" and the AI
+// account (web/espace, Console.tsx).
+func TestBrainErrorLine(t *testing.T) {
 	tw := newTestWeb(t)
-	setAssistantName("Atlas") // after the core, which sets its own
 	raw := "API Error: Connection refused — a firewall or proxy may be blocking it (ECONNREFUSED)"
-	m := Message{Seq: 7, Time: time.Now(), Role: roleError, Via: "turn", Text: raw}
-	for lang, wants := range map[string][]string{
-		"fr": {"Atlas n&#39;a pas pu répondre", "injoignable depuis l&#39;appareil où tourne Atlas", "Vérifier le compte IA",
-			`href="/settings/agents#prov-title"`, "Réessayer", `hx-post="/brain/retry"`, "<summary>Détails</summary>", "ECONNREFUSED"},
-		"en": {"Atlas could not answer", "cannot be reached from the device Atlas runs on", "Check the AI account", "Try again", "<summary>Details</summary>"},
-	} {
-		html, err := tw.w.fragment(lang, "home", "message", m)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, want := range wants {
-			if !strings.Contains(html, want) {
-				t.Errorf("%s card lacks %q: %s", lang, want, html)
-			}
-		}
-		if strings.Contains(html, `class="bubble"`) {
-			t.Errorf("%s: the error is shown as a message: %s", lang, html)
-		}
+	tw.c.store.addMessage(roleUser, "Bonjour", true)
+	tw.c.brainFailed(raw, "turn")
+	x, err := tw.w.exchangeFor("", "", "", false)
+	if err != nil {
+		t.Fatal(err)
 	}
-	m.Via, m.Text = "start", "exit status 1"
-	if html, _ := tw.w.fragment("fr", "home", "message", m); !strings.Contains(html, "Atlas n&#39;arrive pas à démarrer") ||
-		!strings.Contains(html, "Son agent s&#39;arrête dès le démarrage") {
-		t.Errorf("start card: %s", html)
+	if n := len(x.Lines); n == 0 || x.Lines[n-1].Role != roleError || x.Lines[n-1].Text != "" {
+		t.Fatalf("exchange = %+v", x.Lines)
+	}
+	for lang, want := range map[string]string{"fr": "n'a pas pu répondre.", "en": "could not answer."} {
+		words := espaceWords(lang, "Atlas")
+		if !strings.Contains(words["espace.exchange.error"], want) || words["espace.retry"] == "" || words["espace.exchange.account"] == "" {
+			t.Errorf("%s: %q", lang, words["espace.exchange.error"])
+		}
+		if strings.Contains(words["espace.exchange.error"], "conversation") {
+			t.Errorf("%s: the error still points to the conversation", lang)
+		}
 	}
 }
 
@@ -144,8 +136,8 @@ func TestBrainFailedTurn(t *testing.T) {
 	}
 
 	csrf := tw.setup()
-	if code, _, h := tw.post("/brain/retry", url.Values{}, csrf); code != 200 || h.Get("HX-Trigger") == "" {
-		t.Fatalf("retry: %d %v", code, h)
+	if code, _, _ := tw.post("/brain/retry", url.Values{}, csrf); code != http.StatusNoContent {
+		t.Fatalf("retry: %d", code)
 	}
 	und, _ := c.store.undelivered()
 	if len(und) != 1 || und[0].Text != "Trie mes factures" {
@@ -327,46 +319,6 @@ func TestProviderSavedWithRefusedKey(t *testing.T) {
 	tw.post("/settings/providers/openrouter/delete", url.Values{}, csrf)
 	if c.store.get(healthKey("openrouter")) != "" {
 		t.Error("a removed account keeps its state")
-	}
-}
-
-// The brain's notes do not show in the conversation: the catalog's, a
-// task's turn, a permission. A task that failed is one short line in
-// words, which opens its drawer.
-func TestConversationHidesNotes(t *testing.T) {
-	tw := newTestWeb(t)
-	tw.setup()
-	tw.c.store.insertTask(&TaskRow{ID: "t-ac14385a", Device: "pc", Agent: "small", Runtime: "claude-code",
-		Prompt: "Trie les factures\net fais un tableau", State: stateFailed})
-	for _, text := range []string{
-		"Catalogue : le compte « claude » a été ajouté depuis l'espace de travail, avec les agents haiku, opus. list_agents les montre.",
-		"La tâche t-ac14385a (appareil pc) a fini son tour. Son dernier message : fini",
-		"La tâche t-ac14385a (appareil pc) demande une permission (permission_id 1) : Bash {}",
-		"La tâche t-ac14385a (appareil pc) est maintenant failed.",
-	} {
-		tw.c.store.addMessage(roleEvent, text, false)
-	}
-	_, body, _ := tw.do("GET", convoPath, nil, nil)
-	for _, bad := range []string{"Catalogue", "list_agents", "est maintenant", "fini son tour", "permission_id"} {
-		if strings.Contains(body, bad) {
-			t.Errorf("the conversation shows %q", bad)
-		}
-	}
-	for _, want := range []string{"La tâche « Trie les factures » a échoué.", `hx-get="/tasks/t-ac14385a"`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the conversation lacks %q", want)
-		}
-	}
-	// The stream says the same.
-	last := tw.c.store.lastMessageSeq()
-	msgs, _ := tw.c.store.messagesAfter(last-1, 1)
-	tw.w.dress(msgs)
-	if html, _ := tw.w.fragment("en", "home", "message", msgs[0]); !strings.Contains(html, "The task “Trie les factures” failed.") {
-		t.Errorf("en notice: %s", html)
-	}
-	// The brain still reads them all.
-	if und, _ := tw.c.store.undelivered(); len(und) != 4 {
-		t.Errorf("undelivered = %d", len(und))
 	}
 }
 

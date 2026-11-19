@@ -5,12 +5,11 @@ import (
 	"testing"
 )
 
-// Every page of the settings renders inside the common layout: the same top
-// bar as the conversation (the name, Tâches, Réglages current) with no way
-// back in it, and the settings' own navigation in four groups with its entry
-// marked, under the way back to the conversation. The ways back follow the
-// pages: a page goes up to the list (/settings, seen on a phone), a sub-page
-// to its page, never to the browser's history.
+// Every page of the settings renders inside the common layout, with no top
+// bar: the settings' own navigation in four groups with its entry marked,
+// under the way back to the workspace. The ways back follow the pages: a
+// page goes up to the list (/settings, seen on a phone), a sub-page to its
+// page, never to the browser's history.
 func TestSettingsTabsHaveLayout(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -34,6 +33,9 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		{"/settings/access/app", "access", "/settings/access"},
 		{"/settings/notifications", "notifications", ""},
 		{"/settings/account", "account", ""},
+		{"/settings/journal", "journal", ""},
+		{"/settings/approve", "approve", ""},
+		{"/settings/learned", "learned", ""},
 	} {
 		code, body, _ := tw.do("GET", tc.path, nil, nil)
 		if code != 200 {
@@ -44,20 +46,20 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		if tc.tab == "memory" {
 			href = "/memory"
 		}
-		for _, want := range []string{`<header class="topbar">`, `<a class="brand" href="/"`,
-			`id="tasks-btn" href="/conversation#tasks-panel"`, `id="tasks-badge"`, `<a class="head-btn" href="/settings" aria-label="Réglages" title="Réglages" aria-current="page">`,
-			`<nav class="settings-nav"`, `<a class="back to-espace" href="/espace">`, `<a href="` + href + `" aria-current="page">`} {
+		for _, want := range []string{`<nav class="settings-nav"`, `<a class="back to-espace" href="/espace">`,
+			`<a class="icon-btn settings-close" href="/espace"`, `<a href="` + href + `" aria-current="page">`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("GET %s lacks %q", tc.path, want)
 			}
 		}
-		for _, gone := range []string{`class="tabbar"`, `class="topnav"`, `back-home`, `data-back`} {
+		for _, gone := range []string{`class="topbar"`, `class="brand"`, `head-btn`, `tasks-btn`, `id="conn"`, "/conversation",
+			`class="tabbar"`, `class="topnav"`, `back-home`, `data-back`} {
 			if strings.Contains(body, gone) {
 				t.Errorf("GET %s still has %q", tc.path, gone)
 			}
 		}
-		if n := strings.Count(body, `aria-current="page">`); n != 2 { // Réglages, and the entry
-			t.Errorf("GET %s: %d current links, want 2", tc.path, n)
+		if n := strings.Count(body, `aria-current="page">`); n != 1 { // the entry
+			t.Errorf("GET %s: %d current links, want 1", tc.path, n)
 		}
 		up := `<a class="back settings-up" href="/settings">`
 		if tc.up == "" {
@@ -76,7 +78,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 }
 
 // /settings is the list of the settings alone, the first level on a phone:
-// its ✕ goes back to the conversation and no entry is current. A wide screen
+// its ✕ goes back to the workspace and no entry is current. A wide screen
 // opens the first entry in its place (early.js), without a step in the
 // history. /settings/memory leads to the memory, with its query.
 func TestSettingsList(t *testing.T) {
@@ -96,8 +98,8 @@ func TestSettingsList(t *testing.T) {
 	if strings.Contains(body, `class="settings-body"`) {
 		t.Error("the list has a page beside it")
 	}
-	if n := strings.Count(body, `aria-current="page">`); n != 1 { // Réglages only
-		t.Errorf("%d current links, want 1", n)
+	if n := strings.Count(body, `aria-current="page">`); n != 0 {
+		t.Errorf("%d current links, want none", n)
 	}
 	early, err := webFS.ReadFile("web/static/early.js")
 	if err != nil {
@@ -155,25 +157,27 @@ func TestSettingsNavGroups(t *testing.T) {
 	}
 }
 
-// The conversation is the one main screen: Tâches opens its panel in place,
-// and the panel can be closed (the phone's sheet).
-func TestHomeHeader(t *testing.T) {
+// The pages eriphe-core renders have no top bar: the graph is the way
+// home, from the settings' own way back. Signing out is in My space.
+func TestNoTopBar(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
-	_, body, _ := tw.do("GET", convoPath, nil, nil)
-	for _, want := range []string{`<a class="brand" href="/"`, `id="tasks-btn" href="#tasks-panel" aria-controls="tasks-panel"`,
-		`<b class="badge" id="tasks-badge" hidden></b>`, `<a class="head-btn" href="/settings" aria-label="Réglages"`,
-		`<aside class="side" id="tasks-panel"`, `data-tasks-close`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("home lacks %q", want)
+	layout, err := webFS.ReadFile("web/templates/layout.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, gone := range []string{"topbar", "head-btn", "tasks-btn", `id="conn"`} {
+		if strings.Contains(string(layout), gone) {
+			t.Errorf("the layout still has %s", gone)
 		}
 	}
-	for _, gone := range []string{`class="tabbar"`, `class="topnav"`, `class="back-home"`, `aria-current="page"`} {
-		if strings.Contains(body, gone) {
-			t.Errorf("home still has %q", gone)
+	css, _ := webFS.ReadFile("web/static/app.css")
+	js, _ := webFS.ReadFile("web/static/app.js")
+	for _, gone := range []string{".topbar", "--topbar", ".head-btn", ".composer", "#tasks-panel"} {
+		if strings.Contains(string(css), gone) || strings.Contains(string(js), gone) {
+			t.Errorf("app.css or app.js still has %s", gone)
 		}
 	}
-	// Signing out is in My space now.
 	if _, body, _ := tw.do("GET", "/settings/account", nil, nil); !strings.Contains(body, `hx-post="/logout"`) {
 		t.Error("no way to sign out")
 	}
@@ -193,8 +197,8 @@ func TestSettingsNavAttention(t *testing.T) {
 }
 
 // Only main scrolls in the workspace: the document can never grow past the
-// window, whatever overflows inside it, so nothing can scroll the top bar and
-// the settings nav out of sight. Nothing uses scrollIntoView, which scrolls
+// window, whatever overflows inside it, so nothing can scroll the settings
+// nav out of sight. Nothing uses scrollIntoView, which scrolls
 // every ancestor that can scroll, the page included.
 func TestShellNeverScrolls(t *testing.T) {
 	tw := newTestWeb(t)

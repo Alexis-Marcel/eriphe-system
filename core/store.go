@@ -528,13 +528,6 @@ type Message struct {
 	Filed string `json:"filed,omitempty"`
 	// Attachments are the files of my message (attachments.go).
 	Attachments []Attachment `json:"attachments,omitempty"`
-	// Notice is what the workspace shows of an event: nil for the brain's
-	// own notes (web_notices.go).
-	Notice *eventNotice `json:"-"`
-	// Cards are the cards shown with a message of the brain's, and Why
-	// why it was sent when it was a notification (web_convo_cards.go).
-	Cards []cardView `json:"-"`
-	Why   *msgWhy    `json:"-"`
 }
 
 // messageCols are a message's columns, as queryMessages reads them.
@@ -581,6 +574,14 @@ func (s *Store) markDelivered(upTo int) error {
 
 func (s *Store) messagesAfter(after, limit int) ([]Message, error) {
 	return s.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq > ? ORDER BY seq LIMIT ?`, after, limit)
+}
+
+// messageNode is the node a message belongs to, "" for the home's or a
+// message that is not there.
+func (s *Store) messageNode(seq int) string {
+	var node string
+	s.db.QueryRow(`SELECT node FROM messages WHERE seq = ?`, seq).Scan(&node)
+	return node
 }
 
 // hasBrainMessage tells whether the brain has ever written in the conversation.

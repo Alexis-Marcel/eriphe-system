@@ -19,43 +19,24 @@ import (
 // The workspace's pages and actions. They call the same methods as the API
 // and the brain's tools: the workspace is one more way in, not a new path.
 
-const shownMessages = 150
-
-// homeData is the conversation page.
-type homeData struct {
-	Msgs    []Message
-	LastSeq int
-	More    bool // older messages are not shown
-	Pending pendingData
-	Tasks   tasksData
-}
-
-// pendingData is what waits for me at the end of the conversation: the
-// permissions the tasks ask for, and whether the brain is at work.
-type pendingData struct {
-	Perms    []permView
-	Brain    string // thinking, none, off or ""
-	Problems []string
-}
-
 type permView struct {
 	Task     taskCard
 	ID       string
 	Tool     string
 	Subject  string
 	UserOnly string
-	Where    string // an id prefix: the same request shows in the conversation and in its task
+	Where    string // an id prefix: the same request shows in « À valider » (a-) and on its task's page (t-)
 	Always   bool   // "always allow this action" is offered: a catalog tool's (access.go)
 }
 
+// tasksData is the tasks at work, as the journal shows them
+// (web_activity.go).
 type tasksData struct {
-	Nodes  []nodeRow // the nodes at work or waiting, above the tasks (nodeRows)
 	Active []taskCard
-	Done   []taskCard
 	Stats  *taskStats // how reliable they were lately; nil before any ended
 }
 
-// taskCard is a task as the side panel shows it.
+// taskCard is a task as its card and its page show it.
 type taskCard struct {
 	ID, Title, Prompt    string
 	Device, Agent        string
@@ -129,7 +110,7 @@ func (w *web) card(st *taskStatus) taskCard {
 		NeedsYou: w.needsUser(st), Receipt: st.Receipt, Contract: st.Contract, Usage: w.c.store.usageOf(t.ID)}
 }
 
-// tasksAndPerms reads the worker tasks for the side panel, and the
+// tasksAndPerms reads the worker tasks at work, for the journal, and the
 // permissions they wait for.
 func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 	var out tasksData
@@ -139,7 +120,7 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 		return out, nil, err
 	}
 	for _, t := range tasks {
-		if finished(t.State) && len(out.Done) >= 6 {
+		if finished(t.State) {
 			continue
 		}
 		st, err := w.c.status(t.ID, 200)
@@ -148,7 +129,6 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 		}
 		card := w.card(st)
 		if card.Finished {
-			out.Done = append(out.Done, card)
 			continue
 		}
 		out.Active = append(out.Active, card)
@@ -162,10 +142,6 @@ func (w *web) tasksAndPerms() (tasksData, []permView, error) {
 	}
 	// What needs me first, then what works, then what waits.
 	sort.SliceStable(out.Active, func(i, j int) bool { return cardRank(out.Active[i]) < cardRank(out.Active[j]) })
-	out.Nodes = w.nodeRows(6)
-	if st := w.c.store.stats(time.Now().AddDate(0, 0, -statsDays)); st.Finished > 0 || len(st.Spend) > 0 {
-		out.Stats = &st // task_stats.go
-	}
 	return out, perms, nil
 }
 
@@ -250,102 +226,37 @@ func (w *web) brainState() string {
 	return ""
 }
 
-func (w *web) pending(perms []permView) pendingData {
-	return pendingData{Perms: perms, Brain: w.brainState()}
+// nodeAt is a node's page in the graph workspace (web_graph.go), the one
+// surface of the web workspace: the graph itself for the home ("").
+func nodeAt(node string) string {
+	if node == "" {
+		return "/espace"
+	}
+	return "/espace?open=node-" + url.QueryEscape(node)
 }
 
-// convoPath is the conversation's address. The home page, /, is the
-// graph workspace (web_graph.go); the conversation stays here, for what it
-// shows best (the whole exchange, the tasks, the permissions) and as the
-// fallback when the workspace cannot load.
-const convoPath = "/conversation"
-
-// convoAt is an address in the conversation: a message (m12), a
-// permission (perm-…).
-func convoAt(hash string) string { return convoPath + "#" + hash }
-
-// The home page, per browser: the workspace, unless this browser chose the
-// conversation (Réglages → Mon espace, or the workspace's fallback when it
-// could not load).
-const (
-	homeCookie = "home"
-	homeConvo  = "conversation"
-	homeEspace = "espace"
-)
-
-// homeIsConvo tells whether this browser chose the conversation as its
-// home page.
-func homeIsConvo(r *http.Request) bool {
-	c, err := r.Cookie(homeCookie)
-	return err == nil && c.Value == homeConvo
+// messageAt is where a message of the conversation is read: the page of
+// the node it belongs to, the graph for the home's.
+func (c *core) messageAt(seq int) string {
+	return nodeAt(c.store.messageNode(seq))
 }
 
-// homeConvoNow tells whether / opens the conversation rather than the
-// workspace: for a browser that chose it, and while no AI composes the
-// workspace (no brain, or its wizard left for later), which the
-// conversation says, with the way to set one up.
-func (w *web) homeConvoNow(r *http.Request) bool {
-	b := w.c.conf().brain()
-	return homeIsConvo(r) || b == nil || b.Agent == ""
+// permissionAt is where a task's permission is answered: « À valider »
+// (web_activity.go), at its request.
+func permissionAt(task, id string) string {
+	return "/settings/approve#a-perm-" + task + "-" + id
 }
 
-// handleHome is GET /: the wizard while the brain has no agent, then the
-// workspace, or the conversation (homeConvoNow).
+// handleHome is GET / and GET /espace: the wizard while the brain has no
+// agent and it was not left for later (web_welcome.go), then the graph
+// workspace.
 func (w *web) handleHome(rw http.ResponseWriter, r *http.Request, s *session) {
-	if w.homeConvoNow(r) {
-		w.handleConvo(rw, r, s)
-		return
-	}
-	w.c.firstRun() // first_run.go: once, after the wizard
-	w.handleEspace(rw, r, s)
-}
-
-// handleHomeChoice is POST /settings/home: this browser's home page, the
-// workspace (espace) or the conversation. From the settings (htmx) the
-// page reloads; from the workspace's fallback (a plain form) it goes home.
-func (w *web) handleHomeChoice(rw http.ResponseWriter, r *http.Request, _ *session) {
-	c := &http.Cookie{Name: homeCookie, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode}
-	switch r.PostFormValue("home") {
-	case homeConvo:
-		c.Value, c.MaxAge = homeConvo, 400*24*3600
-	case homeEspace:
-		c.MaxAge = -1
-	default:
-		http.Error(rw, "espace or conversation", http.StatusBadRequest)
-		return
-	}
-	http.SetCookie(rw, c)
-	if r.Header.Get("HX-Request") != "" {
-		rw.Header().Set("HX-Refresh", "true")
-		rw.WriteHeader(http.StatusOK)
-		return
-	}
-	http.Redirect(rw, r, "/", http.StatusSeeOther)
-}
-
-// handleConvo is GET /conversation: the conversation, whatever the home
-// page.
-func (w *web) handleConvo(rw http.ResponseWriter, r *http.Request, s *session) {
 	if w.needsWelcome() {
 		http.Redirect(rw, r, "/welcome", http.StatusSeeOther)
 		return
 	}
 	w.c.firstRun() // first_run.go: once, after the wizard
-	last := w.c.store.lastMessageSeq()
-	msgs, err := w.c.store.messagesAfter(max(0, last-shownMessages), shownMessages)
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.dress(msgs)
-	w.dressCards(msgs, w.lang(r))
-	tasks, perms, err := w.tasksAndPerms()
-	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.render(rw, r, s, "home", "", page{Title: "nav.chat", Nav: "chat", Data: homeData{
-		Msgs: msgs, LastSeq: last, More: last > shownMessages, Pending: w.pending(perms), Tasks: tasks}})
+	w.handleEspace(rw, r, s)
 }
 
 // handleSend adds my message, and the files attached to it, to the
@@ -385,14 +296,15 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// handleBrainRetry is an error card's "Try again" (brain_errors.go).
+// handleBrainRetry is the console's "Try again" under Eriphe's error
+// (brain_errors.go).
 func (w *web) handleBrainRetry(rw http.ResponseWriter, r *http.Request, s *session) {
 	w.c.retryBrain()
 	w.notify()
-	w.toast(rw, tr(w.lang(r), "chat.error.retried"), true)
+	rw.WriteHeader(http.StatusNoContent)
 }
 
-// taskDetail is a task's drawer.
+// taskDetail is a task's page.
 type taskDetail struct {
 	Card    taskCard
 	Events  []EventRow
@@ -434,26 +346,21 @@ func (w *web) detail(id string) (*taskDetail, error) {
 	if p := w.pendingPermission(st); p != nil {
 		input, _ := p["input"].(map[string]any)
 		tool, pid := fmt.Sprint(p["tool_name"]), fmt.Sprint(p["id"])
-		d.Perm = &permView{Task: d.Card, ID: pid, Tool: tool, Subject: subject(tool, input), UserOnly: w.c.store.userOnly(id, pid), Where: "d-",
+		d.Perm = &permView{Task: d.Card, ID: pid, Tool: tool, Subject: subject(tool, input), UserOnly: w.c.store.userOnly(id, pid), Where: "t-",
 			Always: w.c.rememberable(tool, input)}
 	}
 	return d, nil
 }
 
+// handleTask is a task's page, in the settings beside the journal
+// (activity.html).
 func (w *web) handleTask(rw http.ResponseWriter, r *http.Request, s *session) {
-	if taskLink(rw, r) {
-		return
-	}
 	d, err := w.detail(r.PathValue("id"))
 	if err != nil {
 		taskError(rw, err)
 		return
 	}
-	block := "drawer"
-	if r.URL.Query().Get("part") == "body" {
-		block = "drawer-body"
-	}
-	w.render(rw, r, s, "home", block, page{Data: d})
+	w.render(rw, r, s, "settings", "", page{Title: "settings.journal", Nav: "settings", Tab: "journal", View: "task", Data: d})
 }
 
 // handleAnswer allows or denies the pending permission shown, as me.
@@ -881,12 +788,11 @@ func (s *Store) decisions(offset, limit int) ([]decisionRow, error) {
 // secrets. The workspace's address and its sign-in are on Access → Web
 // workspace (web_access_list.go).
 type accountPage struct {
-	Secrets   secretsView
-	HomeConvo bool // this browser opens the conversation first
+	Secrets secretsView
 }
 
 func (w *web) handleAccount(rw http.ResponseWriter, r *http.Request, s *session) {
-	v := accountPage{Secrets: w.secrets("", false), HomeConvo: homeIsConvo(r)}
+	v := accountPage{Secrets: w.secrets("", false)}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.account", Nav: "settings", Tab: "account", Data: v})
 }
 
@@ -902,26 +808,4 @@ func (w *web) handleLang(rw http.ResponseWriter, r *http.Request, s *session) {
 	w.c.noteUserLang(lang) // what Eriphe writes follows it (user_lang.go)
 	rw.Header().Set("HX-Refresh", "true")
 	rw.WriteHeader(http.StatusOK)
-}
-
-// The tasks panel: the nodes at work or waiting for the user, above the
-// tasks; each opens its page on the graph (/espace?open=node-<id>).
-
-// nodeRow is a node in the tasks panel: its title unless it may be
-// someone else's words.
-type nodeRow struct {
-	ID, Title, State string
-}
-
-func (w *web) nodeRows(n int) []nodeRow {
-	xs := w.c.activeNodes(n)
-	out := make([]nodeRow, 0, len(xs))
-	for _, x := range xs {
-		r := nodeRow{ID: x.ID, State: x.State}
-		if !x.External {
-			r.Title = x.Title
-		}
-		out = append(out, r)
-	}
-	return out
 }

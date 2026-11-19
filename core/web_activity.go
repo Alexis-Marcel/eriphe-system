@@ -46,6 +46,7 @@ type happenedPage struct {
 	More     bool
 	Max      int
 	Journal  journalView // the tool accesses, for that kind
+	Tasks    tasksData   // the tasks at work, above the feed of every kind
 }
 
 var (
@@ -81,6 +82,12 @@ func (w *web) handleActivity(rw http.ResponseWriter, r *http.Request, s *session
 	} else if err := w.fillFeed(&v, w.lang(r)); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if v.Kind == "" {
+		v.Tasks, _, _ = w.tasksAndPerms()
+		if st := w.c.store.stats(time.Now().AddDate(0, 0, -statsDays)); st.Finished > 0 || len(st.Spend) > 0 {
+			v.Tasks.Stats = &st // task_stats.go
+		}
 	}
 	w.render(rw, r, s, "settings", "", page{Title: "settings.journal", Nav: "settings", Tab: "journal", Data: v})
 }

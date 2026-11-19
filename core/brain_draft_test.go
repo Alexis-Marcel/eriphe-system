@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -159,8 +158,9 @@ func TestBrainWorkingNoteNotShown(t *testing.T) {
 	}
 }
 
-// The stream shows the draft as it grows, then the message that replaces
-// it, never both; a draft older than the messages a viewer has is stale.
+// The stream's exchange shows the draft as it grows, then the message that
+// replaces it, never both; a draft older than the messages a viewer has is
+// stale.
 func TestWebDraftStream(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -170,70 +170,65 @@ func TestWebDraftStream(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events?after="+strconv.Itoa(last), nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)
 	resp, err := tw.hc.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 
-	type event struct{ name, data string }
-	events := make(chan event, 100)
+	exchanges := make(chan exchangeEvent, 100)
 	go func() {
 		sc := bufio.NewScanner(resp.Body)
-		var e event
+		sc.Buffer(nil, 1<<20)
+		var name, data string
 		for sc.Scan() {
 			line := sc.Text()
 			if v, ok := strings.CutPrefix(line, "event: "); ok {
-				e.name = v
+				name = v
 			} else if v, ok := strings.CutPrefix(line, "data: "); ok {
-				e.data += v
-			} else if line == "" && e.name != "" {
-				events <- e
-				e = event{}
+				data += v
+			} else if line == "" && name != "" {
+				var x exchangeEvent
+				if name == "exchange" && json.Unmarshal([]byte(data), &x) == nil {
+					exchanges <- x
+				}
+				name, data = "", ""
 			}
 		}
-		close(events)
+		close(exchanges)
 	}()
-	next := func(name string) string {
+	next := func(ok func(exchangeEvent) bool) exchangeEvent {
 		t.Helper()
 		for {
 			select {
-			case e, ok := <-events:
-				if !ok {
-					t.Fatalf("the stream ended before a %s event", name)
+			case x, open := <-exchanges:
+				if !open {
+					t.Fatal("the stream ended")
 				}
-				if e.name == "draft" && strings.Contains(e.data, "stale") {
+				if strings.Contains(x.Draft, "stale") {
 					t.Fatal("the stream sent a stale draft")
 				}
-				if e.name == "message" && name == "draft" {
-					t.Fatalf("message while a draft was expected: %s", e.data)
-				}
-				if e.name == name {
-					return e.data
+				if ok(x) {
+					return x
 				}
 			case <-ctx.Done():
-				t.Fatalf("no %s event", name)
+				t.Fatal("no such exchange")
 			}
 		}
 	}
 
-	time.Sleep(100 * time.Millisecond)
+	next(func(x exchangeEvent) bool { return len(x.Lines) > 0 })
 	tw.c.draft.set("Writ", last)
-	if d := next("draft"); !strings.Contains(d, "Writ") || !strings.Contains(d, "msg-draft") {
-		t.Fatalf("draft = %s", d)
-	}
+	tw.w.notify()
+	next(func(x exchangeEvent) bool { return x.Draft == "Writ" })
 	tw.c.draft.set("Writing **this**", last)
-	if d := next("draft"); !strings.Contains(d, "<strong>this</strong>") {
-		t.Fatalf("draft = %s", d)
-	}
+	next(func(x exchangeEvent) bool { return x.Draft == "Writing **this**" })
 	// What brainWrote does when the message lands.
 	seq, _ := tw.c.store.addMessage(roleBrain, "Written.", true)
 	tw.c.draft.set("", int(seq))
-	if m := next("message"); !strings.Contains(m, "Written.") {
-		t.Fatalf("message = %s", m)
-	}
-	if d := next("draft"); d != "" {
-		t.Fatalf("draft after the message = %q", d)
+	x := next(func(x exchangeEvent) bool { return x.Draft == "" && x.Lines[len(x.Lines)-1].Text == "Written." })
+	if x.Draft != "" {
+		t.Fatalf("a draft beside its message: %+v", x)
 	}
 }

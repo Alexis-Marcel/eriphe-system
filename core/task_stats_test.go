@@ -125,9 +125,9 @@ func TestMoneyAndTokens(t *testing.T) {
 	}
 }
 
-// The side panel shows the measures and the cost by role and day; a
-// task's drawer its usage.
-func TestStatsOnPanel(t *testing.T) {
+// The journal shows the measures and the cost by role and day; a task's
+// page its usage.
+func TestStatsInJournal(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	statsFixture(t, tw.c)
@@ -136,17 +136,17 @@ func TestStatsOnPanel(t *testing.T) {
 		tw.c.store.db.Exec(`INSERT INTO card_pushes (at, about, place, chars, who, used) VALUES (?, 'project:site', ?, 500, 't-a', ?)`,
 			time.Now().Unix(), placeTask, used)
 	}
-	_, body, _ := tw.do("GET", convoPath, nil, nil)
+	_, body, _ := tw.do("GET", "/settings/journal", nil, nil)
 	for _, want := range []string{"Fiabilité des tâches · 30 jours", "Acceptées", "50 %", "2/4", "Du premier coup", "1/4",
 		`<dt>Fiches de nœud utilisées</dt><dd><strong>50 %</strong> <span class="muted small">1/2</span>`,
 		"Affirmations non étayées", "1 sans contrôle", "0,04 $", "2 k jetons", "contrôle 2", "compte 1", "passagers 1",
 		"Coût par rôle · 7 jours", ">worker</th>", "0,10 $"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("panel lacks %q", want)
+			t.Errorf("the journal lacks %q", want)
 		}
 	}
-	_, body, _ = tw.do("GET", "/tasks/t-b", nil, map[string]string{"HX-Request": "true"})
+	_, body, _ = tw.do("GET", "/tasks/t-b", nil, nil)
 	if !strings.Contains(body, "3 k jetons · 0,05 $") {
-		t.Error("the drawer has no usage")
+		t.Error("the task's page has no usage")
 	}
 }

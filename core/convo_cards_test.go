@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -53,20 +52,20 @@ func TestCardBoundToItsProposal(t *testing.T) {
 	if x.Seq != seq || x.State != cardPending {
 		t.Fatalf("card %+v, want on message %d", x, seq)
 	}
-	_, body, _ := tw.do("GET", convoPath, nil, nil)
-	for _, want := range []string{fmt.Sprintf(`id="card-%d"`, x.ID), fmt.Sprintf(`hx-post="/cards/%d/yes"`, x.ID),
-		fmt.Sprintf(`hx-post="/cards/%d/no"`, x.ID), "data-card-edit=", "facture → poids 2 au plus", `href="/settings/approve"`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the conversation lacks %q", want)
-		}
+	// The workspace reads it as its proposal (web_proposals.go).
+	if _, body, _ := tw.do("GET", "/api/proposals/"+x.Ref, nil, nil); !strings.Contains(body, "facture → poids 2 au plus") ||
+		!strings.Contains(body, fmt.Sprintf(`"card":%d`, x.ID)) {
+		t.Errorf("the proposal: %s", body)
 	}
 	h := map[string]string{"X-CSRF-Token": csrf}
 	if code, _, _ := tw.do("POST", fmt.Sprintf("/cards/%d/yes", x.ID), url.Values{}, nil); code != 403 {
 		t.Errorf("a card answered without the CSRF token: %d", code)
 	}
-	code, body, hd := tw.do("POST", fmt.Sprintf("/cards/%d/yes", x.ID), url.Values{}, h)
-	if code != 200 || !strings.Contains(body, "is-approved") || !strings.Contains(hd.Get("HX-Trigger"), "memory-changed") {
+	if code, body, _ := tw.do("POST", fmt.Sprintf("/cards/%d/yes", x.ID), url.Values{}, h); code != 200 {
 		t.Fatalf("yes: %d %q", code, body)
+	}
+	if got, _ := c.card(x.ID); got.State != cardApproved {
+		t.Fatalf("yes: the card is %s", got.State)
 	}
 	if rs, _ := c.notifyRules(ruleActive); len(rs) != 1 || rs[0].Match != "topic:facture" {
 		t.Fatalf("the rule is not in force: %+v", rs)
@@ -75,9 +74,11 @@ func TestCardBoundToItsProposal(t *testing.T) {
 		t.Fatal("a card decided another proposal")
 	}
 	// Decided once.
-	_, _, hd = tw.do("POST", fmt.Sprintf("/cards/%d/no", x.ID), url.Values{}, h)
-	if !strings.Contains(hd.Get("HX-Trigger"), "attend plus") {
-		t.Errorf("a decided card was decided again: %q", hd.Get("HX-Trigger"))
+	if code, _, _ := tw.do("POST", fmt.Sprintf("/cards/%d/no", x.ID), url.Values{}, h); code != 200 {
+		t.Errorf("a decided card answered again: %d", code)
+	}
+	if got, _ := c.card(x.ID); got.State != cardApproved {
+		t.Errorf("a decided card was decided again: %s", got.State)
 	}
 	if rs, _ := c.notifyRules(ruleActive); len(rs) != 1 {
 		t.Fatal("a second answer touched the rule in force")
@@ -86,8 +87,9 @@ func TestCardBoundToItsProposal(t *testing.T) {
 	c.cardProposed(cardRule, r2.ID)
 	brainSays(c, "Et les mails ?")
 	y := cardOf(t, c, cardRule, r2.ID)
-	if _, body, _ := tw.do("POST", fmt.Sprintf("/cards/%d/no", y.ID), url.Values{}, h); !strings.Contains(body, "is-rejected") {
-		t.Fatalf("no: %q", body)
+	tw.do("POST", fmt.Sprintf("/cards/%d/no", y.ID), url.Values{}, h)
+	if got, _ := c.card(y.ID); got.State != cardRejected {
+		t.Fatalf("no: the card is %s", got.State)
 	}
 	if _, err := c.notifyRule(r2.ID); err == nil {
 		t.Fatal("a rejected rule is still there")
@@ -375,31 +377,6 @@ func TestAPIMessageAnswersNoCard(t *testing.T) {
 	}
 }
 
-// A digest card follows the brain's read of since, with the items and
-// their links; a spontaneous message says why it was sent.
-func TestDigestAndWhy(t *testing.T) {
-	tw, _ := newMemoryWeb(t)
-	c := tw.c
-	c.store.insertTask(&TaskRow{ID: "t-9", Kind: "worker", Runtime: "claude-code", State: stateRunning, Prompt: "Range les factures"})
-	c.logTask("t-9", stateRunning, nil)
-	c.cardDigest(time.Now().Add(-time.Hour), time.Now().Add(time.Minute), nil)
-	brainSays(c, "Pendant ton absence, j'ai rangé les factures.")
-	n, err := c.notify(&notification{Text: "Le serveur répond lentement.", Why: "La veille du site a vu trois erreurs.", Ref: "project:site",
-		Source: notifyFromBrain}, notifyItem{Weight: 5})
-	if err != nil {
-		t.Fatal(err)
-	}
-	seq, _ := c.store.addMessage(roleBrain, n.Text, true)
-	c.store.db.Exec(`UPDATE notifications SET msg = ? WHERE id = ?`, seq, n.ID)
-	_, body, _ := tw.do("GET", convoPath, nil, nil)
-	for _, want := range []string{`class="pcard pdigest"`, "Range les factures", `hx-get="/tasks/t-9"`, `href="/settings/journal"`,
-		`class="msg-why"`, "Pourquoi ?", "La veille du site a vu trois erreurs.", "project:site"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("the conversation lacks %q", want)
-		}
-	}
-}
-
 // A card that came with the answer to a channel not trusted is never
 // answered there: the answer says it waits on the phone, with the code's
 // words, and a "oui" sent through it does not answer it.
@@ -413,7 +390,7 @@ func TestChannelCardConfirm(t *testing.T) {
 	if say != "Je te l'ai mis à confirmer sur ton téléphone." || x.Ref != cardOf(t, c, cardRule, r.ID).Ref {
 		t.Fatalf("say %q, card %+v", say, x)
 	}
-	if n := channelCardNote(x); strings.Contains(n.Body["fr"], "facture") || !strings.Contains(n.Body["fr"], "canal sans confiance") {
+	if n := c.channelCardNote(x); strings.Contains(n.Body["fr"], "facture") || !strings.Contains(n.Body["fr"], "canal sans confiance") {
 		t.Fatalf("note %q", n.Body["fr"])
 	}
 	yes, _ := c.store.addMessageVia(roleUser, "oui", "Home Assistant, Salon", false)

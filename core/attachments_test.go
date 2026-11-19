@@ -121,11 +121,7 @@ func TestUploadAttachments(t *testing.T) {
 		t.Fatal("stored content differs")
 	}
 
-	// The conversation shows them, and opens them.
-	_, page, _ := tw.do("GET", convoPath, nil, nil)
-	if !strings.Contains(page, `src="/attachments/`+a.ID+`"`) || !strings.Contains(page, "notes.md") {
-		t.Fatal("the conversation does not show the attachments")
-	}
+	// The workspace opens them.
 	code, got, h := tw.do("GET", "/attachments/"+a.ID, nil, nil)
 	if code != 200 || got != string(img) || h.Get("Content-Type") != "image/png" {
 		t.Fatalf("open: %d %s", code, h.Get("Content-Type"))

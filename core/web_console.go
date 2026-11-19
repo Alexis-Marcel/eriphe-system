@@ -14,10 +14,10 @@ import (
 // node of the graph, so rereading the conversation is
 // rare: the user's last message and what Eriphe said after it, the message
 // being written, and whether Eriphe is at work. The workspace's stream
-// (/events?a2ui=1, web_sse.go) sends it as JSON, its "exchange" event, when
+// (/events, web_sse.go) sends it as JSON, its "exchange" event, when
 // it connects and whenever it changes: a reconnecting page gets it whole.
 // The lines before it come on request, a few at a time
-// (GET /api/earlier); the conversation (convoPath) has them all.
+// (GET /api/earlier), back to the first.
 //
 // The conversation per node (#632): the exchange is the one of the node
 // the console talks to (its lines belong to it, node_turn.go), named in

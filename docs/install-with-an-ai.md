@@ -372,11 +372,10 @@ Guide them; do not ask them to tell you the code, the password or any key.
    - **API key**: they create a key in their provider's console and paste it into the workspace
      only.
 6. **The assistant starts** on the home machine (the install already connected it as a device).
-   The wizard's last button opens the conversation (`/conversation`); afterwards the home page is
-   the composed workspace, with a link back to the conversation. If the workspace does not open on
-   a device, the page offers the conversation, and Réglages → Mon espace → Page d'accueil (Settings
-   → My workspace → Home page) can make it that browser's home page.
-   The first time the conversation opens, the assistant writes first and offers a **short
+   The wizard's last button opens the workspace (`/`), the only surface: the person talks to the
+   assistant in its console. If they skipped the wizard, the console says no AI is set up yet, with
+   a link back to it (`/welcome`).
+   The first time the workspace opens, the assistant writes first and offers a **short
    interview** (who they are, what they expect, how to talk to them). They can answer or skip it;
    it can be done again later from the Memory page ("Faire l'interview").
 
@@ -497,7 +496,7 @@ For each other computer (or a second NAS):
 ## 8. Final check with the person
 
 - [ ] The workspace opens at `https://<address>:8443` and they can sign in.
-- [ ] The assistant answers a message in the conversation.
+- [ ] The assistant answers a message in the workspace's console.
 - [ ] Every device shows in Settings → Devices, connected.
 - [ ] The home machine does not sleep.
 - [ ] They know where the password is kept (their password manager), and that you never saw it.

@@ -74,16 +74,3 @@ func (w *web) handleAttachment(rw http.ResponseWriter, r *http.Request, s *sessi
 	h.Set("Cache-Control", "private, max-age=86400")
 	http.ServeContent(rw, r, "", time.Time{}, bytes.NewReader(data))
 }
-
-// The composer's limits, for the browser to check before sending.
-func (homeData) MaxFile() int  { return maxAttachmentSize }
-func (homeData) MaxFiles() int { return maxAttachments }
-
-// fileSize is an attachment's size, in my language.
-func fileSize(lang string, n int64) string {
-	s := humanSize(n)
-	if lang == "fr" {
-		s = strings.NewReplacer(".", ",", "MB", "Mo", "KB", "Ko", " B", " o").Replace(s)
-	}
-	return s
-}
