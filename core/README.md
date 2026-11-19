@@ -717,7 +717,7 @@ whatever address it dials) and one client certificate per device.
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); returns the card's ref (`card`), to place in the subject's document |
 | `catalog_read`, `sources_read` | read the catalog of a node's blocks and what a block may read |
 | `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
-| `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; an external node's title is not quoted |
+| `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) is not quoted |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
@@ -1391,12 +1391,20 @@ same call asked again is the same card. A brain's card says the action in words 
 parameters by name, the long ones folded, on a channel the user writes from too; never the raw call. A call on a pull request
 adds its title and the start of its description, read with the tool itself when the card is made.
 
+A skill run's calls cards (`calls`, `runcalls`) read plainly (`call_words.go`): a sentence of code's
+says what the yes does (« Archiver 2 mails », from the tool and its parameters for the usual mail
+actions, else the tool's name), the items it acts on follow by their title and detail as the node's
+sources list them (kept with the call), never a model's note; the exact call (`server/tool` and its
+parameters) is under Détails. Such a card, like a task's access, start or memory card, is linked to
+the node its run or task works in (`cardNodeOf`, `node_cards`) and is about it: it waits on that
+node's page, which stays waiting while it does, never above the bar.
+
 An access card and a start's card read alone (`card_origin.go`): wherever they are shown (the
 conversation, a `Proposal`, a channel) they say where they come from and what their Oui does,
 facts of eriphe-core's only, never words of the model's next to Oui and Non. The node is the one
 a calls card's calls belong to (the node whose item it acts on, else the node of the run that kept
 them, never one a model names), linked to its page (`/espace?open=node-<id>`); its title shows only
-when no outside content reached the node (not external), else it is said without. The task that asks is named when the
+when it is not someone else's words (`TitleExternal`: an external node's title shows when `title_trusted`, written before outside content reached it or vouched for by the user or a clean author), else it is said without. The task that asks is named when the
 card's text does not (a call of a task, a start), and only if it was not started on a tainted turn.
 What Oui does follows the answer's code: a grant lets the task act until it ends, a release gives
 it its held tools, a call runs once as shown (a step's, then its node's work goes on), a page or a search

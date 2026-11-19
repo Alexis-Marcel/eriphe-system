@@ -103,10 +103,10 @@ func callSentence(call, input, lang string) string {
 	var in map[string]any
 	json.Unmarshal([]byte(input), &in)
 	ids, isList := in["ids"].([]any)
-	if !isList {
+	if !isList || len(ids) == 0 {
 		return upperFirst(callVerb(call, lang))
 	}
-	n := max(len(ids), 1)
+	n := len(ids)
 	mails := fmt.Sprintf(tr(lang, "card.call.mails"), n)
 	if n == 1 {
 		mails = tr(lang, "card.call.mail")
@@ -121,7 +121,9 @@ func callSentence(call, input, lang string) string {
 			return fmt.Sprintf(tr(lang, "card.call.inbox"), mails)
 		case "":
 		default:
-			return fmt.Sprintf(tr(lang, "card.call.move"), mails, truncate(oneLine(to), 60))
+			// A folder of the call's own: its name stays in the
+			// card's lines (callsWords), the sentence says the move.
+			return fmt.Sprintf(tr(lang, "card.call.move"), mails)
 		}
 	case "trash":
 		if junk, _ := in["junk"].(bool); junk {
@@ -141,6 +143,26 @@ func callSentence(call, input, lang string) string {
 		}
 	}
 	return upperFirst(callVerb(call, lang))
+}
+
+// callFolder is the folder of its own a move on mails names, in a line;
+// "" for archive, inbox or another call.
+func callFolder(call, input, lang string) string {
+	name, _, _ := strings.Cut(call, " ")
+	if _, t, ok := splitToolName(name); !ok || t != "move" {
+		return ""
+	}
+	var in map[string]any
+	json.Unmarshal([]byte(input), &in)
+	to, _ := in["to"].(string)
+	if ids, _ := in["ids"].([]any); len(ids) == 0 {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(to)) {
+	case "", "archive", "inbox":
+		return ""
+	}
+	return fmt.Sprintf(tr(lang, "card.call.folder"), truncate(oneLine(to), 60))
 }
 
 // upperFirst is s with its first letter a capital.
@@ -176,6 +198,9 @@ func callDetail(a accessQuestion) cardField {
 func (c *core) callsWords(asks []accessQuestion, lang string) (sentence string, lines []string) {
 	if len(asks) == 1 {
 		a := asks[0]
+		if f := callFolder(a.Call, a.Input, lang); f != "" {
+			lines = append(lines, f)
+		}
 		for _, l := range c.labelsOf(a) {
 			if s := labelLine(l, lang); s != "" {
 				lines = append(lines, s)
@@ -187,6 +212,9 @@ func (c *core) callsWords(asks []accessQuestion, lang string) (sentence string, 
 	for _, a := range asks {
 		s := callSentence(a.Call, a.Input, lang)
 		said = append(said, s)
+		if f := callFolder(a.Call, a.Input, lang); f != "" {
+			s += " · " + f
+		}
 		var items []string
 		for _, l := range c.labelsOf(a) {
 			if x := labelLine(l, lang); x != "" {
