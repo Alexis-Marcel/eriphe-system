@@ -76,6 +76,29 @@ func (t *brainTurn) wrote() {
 	}
 }
 
+// answers sets where the turn's answer starts: the brain's messages past
+// seq, the last message when it was woken (node_net.go).
+func (t *brainTurn) answers(seq int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.answer = seq
+	t.save()
+}
+
+// takeAnswer gives where the turn's answer starts, once: at its end the
+// answer is looked at, and a later end with nothing delivered since (a
+// restarted task's first turn) has none. 0: no answer to file.
+func (t *brainTurn) takeAnswer() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	after := t.answer
+	if after != 0 {
+		t.answer = 0
+		t.save()
+	}
+	return after
+}
+
 // wroteNode tells whether the brain wrote a node in this turn.
 func (t *brainTurn) wroteNode() bool {
 	t.mu.Lock()

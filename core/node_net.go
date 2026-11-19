@@ -21,6 +21,10 @@ import (
 //   - else into a new work node, titled from the user's request (its
 //     first line), the answer as its doc.
 //
+// The turn's answer is only what the brain wrote since it was given
+// something (a message, events, a due intention: brainTurn.answer), and it
+// is looked at once: a turn's end with nothing delivered, such as a
+// restarted task's first, files nothing, and no older message ever counts.
 // The answer links to it (messages.filed). Written in a tainted turn, the
 // node is external. Code opens no other node: « Ma journée » is a
 // standing node the brain opens like any other. A refusal (a secret, the
@@ -35,13 +39,14 @@ const netTitleMax = 80
 
 // fileTurnAnswer is the safety net, at the end of the brain's turn.
 func (c *core) fileTurnAnswer() {
-	if c.nodes == nil || c.turn.wroteNode() {
+	after := c.turn.takeAnswer()
+	if c.nodes == nil || after == 0 || c.turn.wroteNode() {
 		return
 	}
 	from, to := c.turn.span()
 	talk := c.turn.talkNode()
 	msgs, err := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? AND seq > ? AND node = ? AND filed = '' ORDER BY seq`,
-		roleBrain, to, talk)
+		roleBrain, after, talk)
 	if err != nil || len(msgs) == 0 {
 		return
 	}

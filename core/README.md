@@ -973,7 +973,10 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   none, or when it may not be the user's words or holds a secret), the answer its doc. The answer's
   messages say where (`messages.filed`, `filed` in the exchange's lines). Written in a tainted
   turn, the node is external. A refusal never loses the answer: it stays in the conversation.
-  Code opens no other node.
+  Code opens no other node. The turn's answer is only what the brain wrote since it was last given
+  something (messages, events, due intentions; kept in kv `brain_turn`), and it is looked at once:
+  a turn's end with nothing delivered (a restarted task's first turn) files nothing, and an older
+  unfiled message never counts.
 - **The context pack and the cards.** A fresh session's pack lists the nodes running and waiting
   (`activeNodes`, the last changed first, at most 20), each with its card (`about_card.go`: the
   node's line, its state, title and its doc's first line, then its decisions, facts, people,
