@@ -85,6 +85,8 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 	}
 	if sum, err := c.nodes.Get(view); err != nil || sum.Lifetime != "standing" {
 		t.Fatalf("the view's node: %+v %v", sum, err)
+	} else if !slices.Equal(sum.Links, []string{subject}) {
+		t.Errorf("the view is not linked to the subject its card came from: %v", sum.Links)
 	}
 	if x, _ := c.lastShown(); x.Node != view || x.Talk {
 		t.Errorf("the view does not open beside: %+v", x)

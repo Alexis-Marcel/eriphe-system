@@ -117,6 +117,10 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(mailPage).toContainText("Je regarde dans l'heure.");
   await expect(pageOf("Production")).toBeVisible();
   await expect(pageOf("Production")).toContainText("42");
+  // A tall page, a table in it, beside the mail's: neither on the other,
+  // the new one whole on screen, none under the bar.
+  await expect(pageOf("Production").locator("table")).toBeVisible();
+  await expectApart(page, [mailPage, pageOf("Production")]);
   await expect(page.locator(".gr-node.running .gr-core[aria-label^=\"Recherche sur l'erreur\"]")).toBeVisible();
   const card = mailPage.locator(".pg-foot");
   await expect(card).toBeVisible();
@@ -293,6 +297,11 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(bubble("Recherche sur les newsletters")).toBeVisible();
   await expect(page.locator("article.pg")).toHaveCount(0);
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe");
+  // The subjects in a constellation around the centre, the whole graph in view.
+  await settled(page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Recherche sur les newsletters"]') }));
+  await expectBubblesApart(page);
+  if (process.env.SHOTS) await page.waitForTimeout(2000); // the camera at rest
+  await shot(page, "graph-home");
 
   // 17. Writing. Asked at the home, the main subject opens with its plan
   // and its questions, their buttons in its document.
@@ -446,10 +455,27 @@ async function menu(pg: Locator, name: string) {
 async function home(page: Page) {
   const pages = page.locator("article.pg");
   for (let n = await pages.count(); n > 0; n = await pages.count()) {
-    const framed = page.locator("article.pg.talking");
-    await ((await framed.count()) ? framed : pages).first().locator(".pg-x").click();
+    // once they are at rest (the layout and the camera ease them into
+    // place), the page the console talks to, else one the camera frames:
+    // its close button on screen
+    for (let i = 0; i < n; i++) await settledBox(pages.nth(i));
+    let x: Locator | null = null;
+    await expect
+      .poll(async () => {
+        const order = [page.locator("article.pg.talking"), ...Array.from({ length: n }, (_, i) => pages.nth(i))];
+        for (const pg of order) if ((await pg.count()) && (await inView(pg.first().locator(".pg-x")))) return !!(x = pg.first().locator(".pg-x"));
+        return false;
+      })
+      .toBe(true);
+    await x!.click();
     await expect(pages).toHaveCount(n - 1);
   }
+}
+
+// inView tells whether an element is whole inside the viewport.
+async function inView(el: Locator): Promise<boolean> {
+  const b = await el.boundingBox(), v = el.page().viewportSize()!;
+  return !!b && b.x >= 0 && b.y >= 0 && b.x + b.width <= v.width && b.y + b.height <= v.height;
 }
 
 // at is where a bubble is in the graph's own space.
@@ -478,29 +504,34 @@ async function settledBox(el: Locator): Promise<void> {
   }
 }
 
-// expectApart checks open pages: no two overlap, the last one opened is
-// whole on screen, its head in view, and none goes under the bar.
+// expectApart checks open pages, once they are at rest (the layout's
+// soft collision and the camera's spring ease them into place): no two
+// overlap, the last one opened is whole on screen, its head in view, and
+// none goes under the bar.
 async function expectApart(page: Page, pages: Locator[]): Promise<void> {
-  const view = page.viewportSize()!;
-  const bar = (await page.locator(".cs").boundingBox())!;
-  const boxes = await Promise.all(pages.map(async (p) => (await p.boundingBox())!));
-  for (let i = 0; i < boxes.length; i++) {
-    for (let j = i + 1; j < boxes.length; j++) {
-      const a = boxes[i], b = boxes[j];
-      const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
-      expect(apart, `pages ${i} and ${j} overlap`).toBe(true);
+  await expect(async () => {
+    for (const p of pages) await settledBox(p);
+    const view = page.viewportSize()!;
+    const bar = (await page.locator(".cs").boundingBox())!;
+    const boxes = await Promise.all(pages.map(async (p) => (await p.boundingBox())!));
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        const apart = a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+        expect(apart, `pages ${i} and ${j} overlap`).toBe(true);
+      }
     }
-  }
-  const last = boxes.at(-1)!;
-  const head = (await pages.at(-1)!.locator(".pg-head").boundingBox())!;
-  expect(head.y).toBeGreaterThanOrEqual(0);
-  expect(last.x).toBeGreaterThanOrEqual(0);
-  expect(last.x + last.width).toBeLessThanOrEqual(view.width);
-  // a page in view ends above the bar zone: its last line is not under it
-  for (const b of boxes) {
-    const seen = b.x + b.width > 0 && b.x < view.width;
-    if (seen && b.x < bar.x + bar.width && bar.x < b.x + b.width) expect(b.y + b.height).toBeLessThanOrEqual(bar.y);
-  }
+    const last = boxes.at(-1)!;
+    const head = (await pages.at(-1)!.locator(".pg-head").boundingBox())!;
+    expect(head.y).toBeGreaterThanOrEqual(0);
+    expect(last.x).toBeGreaterThanOrEqual(0);
+    expect(last.x + last.width).toBeLessThanOrEqual(view.width);
+    // a page in view ends above the bar zone: its last line is not under it
+    for (const b of boxes) {
+      const seen = b.x + b.width > 0 && b.x < view.width;
+      if (seen && b.x < bar.x + bar.width && bar.x < b.x + b.width) expect(b.y + b.height, "a page under the bar").toBeLessThanOrEqual(bar.y + 0.5);
+    }
+  }).toPass({ timeout: 15_000 });
 }
 
 // expectBubblesApart checks the graph once it settled: no two bubbles'

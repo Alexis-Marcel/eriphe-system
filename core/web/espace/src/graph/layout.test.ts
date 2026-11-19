@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BOTTOM, boxAt, edgeMark, FOOT, framePages, pageMax, READABLE, TOP } from "./camera";
 import {
-  EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, homesFor, leash, ROOM, simulate, STEP, tether, TETHER,
+  bornBeside, constellation, EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, leash, simulate, SPACE, STEP, tether, TETHER, WIDE,
   type LNode, type Pos, type Pt,
 } from "./layout";
 
@@ -20,8 +20,7 @@ function graph(): LNode[] {
 }
 
 function settle(nodes: LNode[], prev: Pos = {}, pins = {}) {
-  const roots = nodes.filter((n) => !n.parent).map((n) => n.id);
-  const homes = homesFor(roots, {});
+  const homes = constellation(nodes);
   return { homes, pos: simulate(nodes, prev, homes, pins) };
 }
 
@@ -33,14 +32,6 @@ function overlap(a: LNode, pa: Pt, b: LNode, pb: Pt): number {
 }
 
 describe("the layout", () => {
-  it("gives each new subject room, and never moves the homes it gave", () => {
-    const h1 = homesFor(["a", "b", "c"], {});
-    for (const [x, y] of [["a", "b"], ["a", "c"], ["b", "c"]]) expect(dist(h1[x], h1[y])).toBeGreaterThanOrEqual(ROOM);
-    const h2 = homesFor(["a", "b", "c", "d", "e"], h1);
-    for (const id of ["a", "b", "c"]) expect(h2[id]).toEqual(h1[id]);
-    expect(Math.min(...["a", "b", "c", "d"].map((id) => dist(h2.e, h2[id])))).toBeGreaterThanOrEqual(ROOM);
-  });
-
   it("keeps bubbles and their labels from sitting on each other", () => {
     const nodes = graph();
     const { pos } = settle(nodes);
@@ -80,9 +71,10 @@ describe("the layout", () => {
       // nothing is left on the page
       expect(overlap(page, open.a, n, open[n.id]), `${n.id} on the page`).toBeLessThan(6);
       // what was not in its way did not move
-      if (overlap(page, pos.a, n, pos[n.id]) === 0 && dist(pos[n.id], pos.a) > 700) expect(dist(open[n.id], pos[n.id]), n.id).toBeLessThan(40);
+      // (a subject near it steps aside with its bubbles, all together)
+      if (overlap(page, pos.a, n, pos[n.id]) === 0 && dist(pos[n.id], pos.a) > 900) expect(dist(open[n.id], pos[n.id]), n.id).toBeLessThan(40);
     }
-    // closed, the subjects go back home
+    // closed, the subjects go back to their spot
     const closed = simulate(nodes, open, homes);
     for (const id of ["b", "c", "d"]) expect(dist(closed[id], pos[id]), id).toBeLessThan(40);
   });
@@ -220,10 +212,10 @@ describe("the layout", () => {
         }
     };
     const born = () => {
-      const { homes, pos } = settle([...rest, subject]);
-      // the view seeded exactly on the subject, its home there too
-      const h = { ...homes, v: pos.s };
-      return { homes: h, pos: simulate(all, { ...pos, v: pos.s }, h) };
+      const { pos } = settle([...rest, subject]);
+      // the view seeded exactly on the subject, its spot in the constellation beside it
+      const homes = constellation(all);
+      return { homes, pos: simulate(all, { ...pos, v: pos.s }, homes) };
     };
 
     it("parts them: neither the bubbles nor their labels overlap", () => {
@@ -239,7 +231,7 @@ describe("the layout", () => {
 
     it("moves the other one when the user dropped one there", () => {
       const { homes, pos } = born();
-      // the subject dropped where the view's home is: it stays, the view goes
+      // the subject dropped where the view's spot is: it stays, the view goes
       const spot = homes.v;
       const at = simulate(all, pos, homes, { s: { abs: spot } });
       expect(at.s).toEqual(spot);
@@ -251,13 +243,6 @@ describe("the layout", () => {
       clear(again);
     });
 
-    it("never gives a new subject a home on one the user dropped", () => {
-      const homes = homesFor(["a", "b"], {});
-      // a subject dropped right where the next home would be
-      const dropped = homesFor(["a", "b", "c"], homes).c;
-      const h = homesFor(["a", "b", "c"], homes, [dropped]);
-      expect(dist(h.c, dropped)).toBeGreaterThanOrEqual(ROOM);
-    });
   });
 
   it("parts every body by one collision: page and page, bubble and page, bubble and bubble", () => {
@@ -281,7 +266,7 @@ describe("the layout", () => {
     expect(dist(on.b, pos.b)).toBeGreaterThan(20);
     // a step at a time, b is pushed softly, not thrown: never further than it must
     expect(dist(on.b, pos.b)).toBeLessThan(400);
-    // dropped back home, b comes back to its place
+    // dropped back where it was, b comes back to its place
     const back = simulate(nodes, simulate(nodes, on, homes, {}, { id: "a", at: pos.a }, 24), homes);
     expect(dist(back.b, pos.b)).toBeLessThan(40);
     // dropped there, a stays and b keeps out of its way
@@ -334,6 +319,152 @@ describe("the layout", () => {
     expect(edgeStep(1, 1000 + EDGE_DELAY, 1000)).toBe(-0);
     expect(edgeStep(1, 1000 + EDGE_DELAY + EDGE_RAMP / 2, 1000)).toBeCloseTo(-EDGE_SPEED / 2);
     expect(edgeStep(-1, 1000 + EDGE_DELAY + EDGE_RAMP * 3, 1000)).toBeCloseTo(EDGE_SPEED);
+  });
+});
+
+describe("the constellation", () => {
+  const roots = (n: number) => Array.from({ length: n }, (_, i) => bubble(`r${i}`));
+  const centre = (ps: Pt[]): Pt => [ps.reduce((a, p) => a + p[0], 0) / ps.length, ps.reduce((a, p) => a + p[1], 0) / ps.length];
+  const withKids = (n: number, kids = 3) => {
+    const nodes: LNode[] = [];
+    for (const r of roots(n)) {
+      nodes.push(r);
+      for (let i = 0; i < kids; i++) nodes.push(bubble(`${r.id}.${i}`, r.id));
+    }
+    return nodes;
+  };
+
+  it("holds one subject at the centre, two side by side", () => {
+    expect(constellation(roots(1))).toEqual({ r0: [0, 0] });
+    const two = constellation(roots(2));
+    expect(two.r0[1]).toBeCloseTo(0);
+    expect(two.r1[1]).toBeCloseTo(0);
+    expect(two.r0[0]).toBeCloseTo(-two.r1[0]);
+  });
+
+  it("spaces three subjects evenly around the centre, the ellipse no bigger than they need", () => {
+    const at = constellation(roots(3));
+    const ps = Object.values(at);
+    const c = centre(ps);
+    expect(Math.hypot(c[0], c[1])).toBeLessThan(1);
+    // evenly: the same angle between each and the next, on the unstretched ellipse
+    const angles = ps.map(([x, y]) => Math.atan2(y, x / WIDE)).sort((a, b) => a - b);
+    const gaps = angles.map((a, i) => (i ? a - angles[i - 1] : a + 2 * Math.PI - angles[angles.length - 1]));
+    for (const g of gaps) expect(g).toBeCloseTo((2 * Math.PI) / 3);
+    for (const p of ps) expect(Math.abs(p[0])).toBeLessThanOrEqual(SPACE * WIDE);
+    for (const p of ps) expect(Math.abs(p[1])).toBeLessThanOrEqual(SPACE);
+  });
+
+  it("lays out a few subjects with their bubbles compactly around the centre, nothing on anything", () => {
+    for (const n of [2, 3, 4, 5]) {
+      const nodes = withKids(n);
+      const { homes, pos } = settle(nodes);
+      const rs = roots(n).map((r) => pos[r.id]);
+      // no empty middle: the subjects' centre is the graph's, and none is far
+      const c = centre(rs);
+      expect(Math.hypot(c[0], c[1]), `${n}: centre`).toBeLessThan(60);
+      const reach = Math.max(...Object.values(homes).map((h) => Math.hypot(h[0], h[1])));
+      for (const r of roots(n)) expect(Math.hypot(pos[r.id][0], pos[r.id][1]), `${n}: ${r.id}`).toBeLessThan(reach + 120);
+      // the whole graph fits a screen or so
+      const xs = Object.values(pos).map((p) => p[0]), ys = Object.values(pos).map((p) => p[1]);
+      expect(Math.max(...xs) - Math.min(...xs), `${n}: width`).toBeLessThan(1900);
+      expect(Math.max(...ys) - Math.min(...ys), `${n}: height`).toBeLessThan(1100);
+      for (let i = 0; i < nodes.length; i++)
+        for (let j = i + 1; j < nodes.length; j++) expect(overlap(nodes[i], pos[nodes[i].id], nodes[j], pos[nodes[j].id]), `${n}: ${nodes[i].id} on ${nodes[j].id}`).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it("slides the others only a little when a subject comes, linked to one of them or not", () => {
+    for (const n of [2, 3, 4, 5, 6]) {
+      const before = constellation(roots(n));
+      const comers = [bubble("new"), ...roots(n).map((r) => bubble("new", undefined, [r.id]))];
+      for (const c of comers) {
+        const after = constellation([...roots(n), c]);
+        for (const id of Object.keys(before)) expect(dist(before[id], after[id]), `${n} + ${c.links}: ${id}`).toBeLessThan(SPACE * 0.75);
+      }
+    }
+    // laid out, the graph follows its spots
+    const nodes = withKids(3);
+    const { pos } = settle(nodes);
+    const more = [...nodes, bubble("r3")];
+    const at = simulate(more, pos, constellation(more));
+    for (const r of roots(3)) expect(dist(at[r.id], pos[r.id]), r.id).toBeLessThan(SPACE * 0.75);
+  });
+
+  it("puts linked subjects side by side, whenever they were made", () => {
+    const nodes = [...roots(5), bubble("v", undefined, ["r1"])];
+    const at = constellation(nodes);
+    // v's nearest subject is r1, its neighbour on the ellipse
+    const near = (id: string) => Object.keys(at).filter((o) => o !== id).sort((a, b) => dist(at[id], at[a]) - dist(at[id], at[b]))[0];
+    expect(near("v")).toBe("r1");
+    // a link from a bubble counts for its subject
+    const kids = [...roots(5), bubble("r4.0", "r4", ["r1"])];
+    const k = constellation(kids);
+    const others = ["r0", "r2", "r3"].map((id) => dist(k.r4, k[id]));
+    expect(dist(k.r4, k.r1)).toBeLessThanOrEqual(Math.min(...others) + 1);
+  });
+
+  it("keeps a subject the user dropped where it was dropped, the others on their ellipse", () => {
+    const nodes = withKids(4);
+    const { homes, pos } = settle(nodes);
+    const spot: Pt = [pos.r0[0] - 200, pos.r0[1] + 150];
+    const at = simulate(nodes, pos, homes, { r0: { abs: spot } });
+    expect(at.r0).toEqual(spot);
+    for (const id of ["r1", "r2", "r3"]) expect(dist(at[id], pos[id]), id).toBeLessThan(60);
+  });
+
+  it("does not move a subject's spot for an open page, and gives every subject its spot back when it closes", () => {
+    const nodes = withKids(4);
+    const { homes, pos } = settle(nodes);
+    const opened = nodes.map((n) => (n.id === "r0" ? { ...n, box: [700, 520] as Pt, opened: 0 } : n));
+    expect(constellation(opened)).toEqual(homes);
+    const open = simulate(opened, pos, homes);
+    const page = opened.find((n) => n.id === "r0")!;
+    for (const n of nodes) if (n.id !== "r0") expect(overlap(page, open.r0, n, open[n.id]), `${n.id} on the page`).toBeLessThan(6);
+    const closed = simulate(nodes, open, homes);
+    for (const r of roots(4)) expect(dist(closed[r.id], pos[r.id]), r.id).toBeLessThan(40);
+  });
+
+  it("opens a page that would cover the open one right beside it, at its height, and one clear of it where it is", () => {
+    const from: Pt = [100, 50], box: Pt = [620, 400];
+    expect(bornBeside([300, -100], box, from, [620, 600])).toEqual([100 + 620 + 48, 50]);
+    expect(bornBeside([1200, 0], box, from, [620, 600])).toEqual([1200, 0]);
+    // laid out, it stays beside: neither moves over the other
+    const nodes = withKids(3);
+    const { homes, pos } = settle(nodes);
+    const at = { ...pos, r1: bornBeside(pos.r1, box, pos.r0, box) };
+    const open = simulate(nodes.map((n) => (n.id === "r0" ? { ...n, box, opened: 0 } : n.id === "r1" ? { ...n, box, opened: 1 } : n)), at, homes);
+    expect(Math.abs(open.r1[1] - open.r0[1])).toBeLessThan(30);
+    expect(Math.abs(open.r1[0] - open.r0[0])).toBeGreaterThanOrEqual(620);
+  });
+
+  it("does not drift as the graph is laid out again and again, and nothing sits on anything", () => {
+    for (const n of [2, 3, 4, 5])
+      for (const kids of [0, 3, 6]) {
+        const nodes = withKids(n, kids);
+        const { homes, pos } = settle(nodes);
+        let at = pos;
+        for (let i = 0; i < 6; i++) at = simulate(nodes, at, homes);
+        for (const x of nodes) expect(dist(at[x.id], pos[x.id]), `${n}×${kids}: ${x.id}`).toBeLessThan(1);
+        for (let i = 0; i < nodes.length; i++)
+          for (let j = i + 1; j < nodes.length; j++) expect(overlap(nodes[i], at[nodes[i].id], nodes[j], at[nodes[j].id]), `${n}×${kids}: ${nodes[i].id} on ${nodes[j].id}`).toBeLessThanOrEqual(0.5);
+      }
+  });
+
+  it("keeps an open page clear and gives the subjects their spot back, whichever opens", () => {
+    for (const n of [2, 3, 4, 5])
+      for (const kids of [0, 3]) {
+        const nodes = withKids(n, kids);
+        const { homes, pos } = settle(nodes);
+        for (const r of roots(n)) {
+          const ns = nodes.map((x) => (x.id === r.id ? { ...x, box: [700, 560] as Pt, opened: 0 } : x));
+          const open = simulate(ns, pos, homes);
+          const page = ns.find((x) => x.id === r.id)!;
+          for (const x of ns) if (x.id !== r.id) expect(overlap(page, open[r.id], x, open[x.id]), `${n}×${kids} ${r.id}: ${x.id} on the page`).toBeLessThan(6);
+          const closed = simulate(nodes, open, homes);
+          for (const q of roots(n)) expect(dist(closed[q.id], pos[q.id]), `${n}×${kids} ${r.id}: ${q.id}`).toBeLessThan(50);
+        }
+      }
   });
 });
 

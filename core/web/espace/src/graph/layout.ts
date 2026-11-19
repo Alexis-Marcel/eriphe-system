@@ -1,7 +1,8 @@
-// The graph's layout: a small force simulation. Roots are held to their
-// home (where they first found room, or where the user dropped them),
-// children pulled to their parent, links as weak springs, everything
-// pushing everything else away. Seeded from the previous positions, so a
+// The graph's layout: a small force simulation, a constellation. Roots are
+// held loosely on an ellipse around the centre (constellation), or where
+// the user dropped them, children pulled to their parent, links as weak
+// springs, everything pushing everything else away and pulled faintly to
+// the centre. Seeded from the previous positions, so a
 // new node grows out of its parent and the rest barely moves. A node the
 // user dropped somewhere is pinned there like a magnet: a root keeps that
 // spot, a child keeps that offset from its parent. An open page is a box
@@ -27,8 +28,13 @@ export const STEP = 380;
 export const TETHER = 300;
 export const RUBBER = 0.3;
 
-// ROOM is the space a new root needs from the others' homes.
-export const ROOM = 300;
+// The constellation: the subjects sit on an ellipse around the centre,
+// evenly spaced, SPACE apart from one to the next (and BUSY more for each
+// bubble a subject holds, on average), the ellipse WIDE times
+// as wide as high at most (the screen's shape), held there loosely.
+export const SPACE = 300;
+export const BUSY = 24;
+export const WIDE = 1.7;
 
 export function hash(s: string): number {
   let h = 2166136261;
@@ -69,50 +75,95 @@ export function leash(raw: Pt, others: Near[], own: Pt | undefined, dropped: boo
   return [best.q[0] + (raw[0] - best.q[0]) * f, best.q[1] + (raw[1] - best.q[1]) * f];
 }
 
-// homesFor gives each root without a home a free spot, in the order given
-// (the order the roots were made): around the others, on a widening
-// spiral, ROOM away from every home and every spot in taken (where the
-// user dropped a subject: it is there, not at its home). The homes known
-// stay where they are: a new subject never moves the others.
-export function homesFor(roots: string[], known: Pos, taken: Pt[] = []): Pos {
-  const homes: Pos = { ...known };
-  const others = () => [...Object.values(homes), ...taken];
-  for (const id of roots) {
-    if (homes[id]) continue;
-    const all = others();
-    if (all.length === 0) {
-      homes[id] = [0, 0];
-      continue;
+// constellation is where each subject (a root) is held: on an ellipse
+// around (0, 0), evenly spaced, the ellipse growing with their number and
+// shaped like the screen (aspect, its width over its height). Their order
+// is the order given (the order they were made), except that a subject
+// linked to one already placed (a link of theirs or of their bubbles)
+// comes right after it: related subjects sit side by side. A new subject
+// takes its slot and the others only slide a little: the ring turns the
+// way that keeps the ones already there nearest where they were. Nothing open changes it: an open page pushes the
+// others aside for a while, not their place.
+export function constellation(nodes: LNode[], aspect = WIDE): Pos {
+  const byId = new Map(nodes.map((x) => [x.id, x]));
+  const rootOf = (id: string): string => {
+    let x = byId.get(id);
+    for (let i = 0; x?.parent && byId.has(x.parent) && i < 64; i++) x = byId.get(x.parent);
+    return x?.id ?? id;
+  };
+  const ties = new Map<string, Set<string>>();
+  for (const x of nodes)
+    for (const l of x.links) {
+      if (!byId.has(l)) continue;
+      const a = rootOf(x.id), b = rootOf(l);
+      if (a === b) continue;
+      if (!ties.has(a)) ties.set(a, new Set());
+      if (!ties.has(b)) ties.set(b, new Set());
+      ties.get(a)!.add(b);
+      ties.get(b)!.add(a);
     }
-    const cx = all.reduce((a, p) => a + p[0], 0) / all.length, cy = all.reduce((a, p) => a + p[1], 0) / all.length;
-    const turn = hash(id) * Math.PI * 2;
-    let spot: Pt | null = null;
-    for (let i = 1; i < 4000 && !spot; i++) {
-      const a = turn + i * 2.39996; // the golden angle: spread all around
-      const d = 120 * Math.sqrt(i);
-      const p: Pt = [cx + Math.cos(a) * d * 1.45, cy + Math.sin(a) * d * 0.85];
-      if (all.every((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) >= ROOM)) spot = p;
-    }
-    homes[id] = spot ?? [cx + all.length * ROOM, cy];
+  // the subjects come one by one, in the order given: each takes its slot
+  // (after the last one it is linked to, else at the end of the ring), the
+  // slots even again, the ring turned the way that moves the ones already
+  // there least
+  const order: string[] = [];
+  let turn: Record<string, number> = {};
+  for (const x of nodes) {
+    if (x.parent && byId.has(x.parent)) continue;
+    let near = -1;
+    order.forEach((o, i) => ties.get(x.id)?.has(o) && (near = i));
+    order.splice(near < 0 ? order.length : near + 1, 0, x.id);
+    const k = order.length;
+    let sin = 0, cos = 0;
+    order.forEach((id, i) => {
+      if (turn[id] === undefined) return;
+      const d = turn[id] - (2 * Math.PI * i) / k;
+      sin += Math.sin(d);
+      cos += Math.cos(d);
+    });
+    // the first one starts on the left: two sit side by side
+    const phi = k === 1 ? Math.PI : Math.atan2(sin, cos);
+    turn = Object.fromEntries(order.map((id, i) => [id, phi + (2 * Math.PI * i) / k]));
   }
-  return homes;
+  const out: Pos = {};
+  const m = order.length;
+  if (m === 1) out[order[0]] = [0, 0];
+  if (m < 2) return out;
+  // neighbours SPACE apart on a circle, more as the subjects hold more
+  // bubbles (BUSY for each, on average, up to 8), stretched sideways to
+  // the screen
+  const busy = Math.min(8, (nodes.length - m) / m);
+  const r = (SPACE + BUSY * busy) / (2 * Math.sin(Math.PI / m));
+  const e = Math.max(1, Math.min(WIDE, aspect));
+  for (const id of order) out[id] = [Math.cos(turn[id]) * r * e, Math.sin(turn[id]) * r];
+  return out;
 }
 
-// simulate places the nodes. prev: where they were; homes: the roots'
-// homes (homesFor); pins: where the user dropped them; held: the node
-// being dragged, kept under the pointer.
-export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<string, Pin> = {}, held?: { id: string; at: Pt }, iterations?: number): Pos {
+// bornBeside is where a page opened while another is open (from, its
+// size fromBox) is born: where its bubble was (at), unless it would cover
+// that page; then right beside it, at the same height, so that the camera
+// framing the new one keeps the other above the bar too.
+export function bornBeside(at: Pt, box: Pt, from: Pt, fromBox: Pt): Pt {
+  const gap = 48; // their two margins
+  const apart = Math.abs(at[0] - from[0]) >= (box[0] + fromBox[0]) / 2 + gap || Math.abs(at[1] - from[1]) >= (box[1] + fromBox[1]) / 2 + gap;
+  return apart ? at : [from[0] + (box[0] + fromBox[0]) / 2 + gap, from[1]];
+}
+
+// simulate places the nodes. prev: where they were; spots: where the
+// roots are held (constellation); pins: where the user dropped them;
+// held: the node being dragged, kept under the pointer.
+export function simulate(nodes: LNode[], prev: Pos, spots: Pos, pins: Record<string, Pin> = {}, held?: { id: string; at: Pt }, iterations?: number): Pos {
   const byId = new Map(nodes.map((x) => [x.id, x]));
   const anc: Pos = {};
   for (const x of nodes) {
     if (x.parent && byId.has(x.parent)) continue;
-    const a = pins[x.id]?.abs ?? homes[x.id];
+    const a = pins[x.id]?.abs ?? spots[x.id];
     if (a) anc[x.id] = a;
   }
   const opened = nodes.some((x) => x.box);
   const p: Pos = {};
   const v: Pos = {};
-  // seed: the previous spot, else the home, else beside the parent
+  // seed: the previous spot, else its own, else beside the parent
   const place = (x: LNode, depth = 0): Pt => {
     if (p[x.id]) return p[x.id];
     if (prev[x.id]) return (p[x.id] = [...prev[x.id]]);
@@ -182,6 +233,28 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
         f[par.id][1] += (dy / d) * s * 0.25;
       }
     }
+    // an open page presses on the bubbles near it, and on their parent with
+    // them: a subject's bubbles caught between it and the page step aside
+    // all together, the subject leading
+    for (const pg of nodes) {
+      if (!pg.box) continue;
+      const [ha, ta, ba] = extent(pg, p[pg.id]);
+      for (const x of nodes) {
+        if (x.box || x.parent === pg.id || held?.id === x.id) continue;
+        const [hb, tb, bb] = extent(x, p[x.id]);
+        const dx = p[x.id][0] - p[pg.id][0];
+        const ox = ha + hb + PRESS - Math.abs(dx), oy = Math.min(ba, bb) + PRESS - Math.max(ta, tb);
+        if (ox <= 0 || oy <= 0) continue;
+        const push: Pt = ox <= oy * 1.5 ? [(dx >= 0 ? 1 : -1) * ox * 0.1, 0] : [0, ((tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1) * oy * 0.1];
+        f[x.id][0] += push[0];
+        f[x.id][1] += push[1];
+        const par = x.parent && byId.get(x.parent);
+        if (par && !par.box) {
+          f[par.id][0] += push[0] * 0.6;
+          f[par.id][1] += push[1] * 0.6;
+        }
+      }
+    }
     // links: weak springs
     for (const x of nodes) {
       for (const l of x.links) {
@@ -203,20 +276,21 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
       f[x.id][0] += (p[par.id][0] + rel[0] - p[x.id][0]) * 0.12;
       f[x.id][1] += (p[par.id][1] + rel[1] - p[x.id][1]) * 0.12;
     }
-    // roots held to their homes; a faint pull to the centre for the others
+    // roots held to their spot in the constellation (or where the user
+    // dropped them); and every body pulled faintly to the centre, so that
+    // nothing drifts off into a corner
     for (const x of nodes) {
+      if (x.box) continue; // an open page stays where it was laid, not pulled back over the page it stepped aside from
       const a = anc[x.id];
       if (a) {
-        // while a page is open the roots give way, then come back to their
-        // home; an open page stays where it was laid, not pulled back over
-        // the page it stepped aside from
-        const ka = x.box ? 0 : opened ? 0.012 : 0.08;
+        // while a page is open the roots give way, then come back to their spot
+        const ka = opened ? 0.012 : 0.08;
         f[x.id][0] += (a[0] - p[x.id][0]) * ka;
         f[x.id][1] += (a[1] - p[x.id][1]) * ka;
-      } else if (!x.parent || !byId.has(x.parent)) {
-        f[x.id][0] -= p[x.id][0] * 0.002;
-        f[x.id][1] -= p[x.id][1] * 0.002;
       }
+      if (opened) continue; // while a page is open, the room it needs comes first
+      f[x.id][0] -= p[x.id][0] * GRAVITY;
+      f[x.id][1] -= p[x.id][1] * GRAVITY;
     }
     const cool = 1 - it / iters;
     for (const x of nodes) {
@@ -259,8 +333,27 @@ export function simulate(nodes: LNode[], prev: Pos, homes: Pos, pins: Record<str
   }
   // and in the end no two bodies sit on each other, whatever pulled them
   for (let i = 0; i < 64 && bodies(1); i++);
+  // laid out from nothing, it settles again as from where it is, until it
+  // is at rest (SETTLE times at most): the next layout then moves nothing
+  if (!settled && nodes.length && !held && iterations === undefined) {
+    let at = p;
+    for (let i = 0; i < SETTLE; i++) {
+      const next = simulate(nodes, at, spots, pins);
+      const still = nodes.every((x) => Math.hypot(next[x.id][0] - at[x.id][0], next[x.id][1] - at[x.id][1]) < 1);
+      at = next;
+      if (still) break;
+    }
+    return at;
+  }
   return p;
 }
+
+// SETTLE is how many times at most a graph laid out from nothing settles
+// again before it is shown.
+const SETTLE = 8;
+
+// GRAVITY is how hard every body is pulled to the centre: faintly.
+const GRAVITY = 0.003;
 
 // STILL is how far a node may be found from where it was and stay there.
 const STILL = 10;
@@ -268,6 +361,8 @@ const STILL = 10;
 // SOFT is how much of their overlap two bodies that touch undo at each
 // step of the simulation: a soft push, finished over a few steps.
 const SOFT = 0.5;
+// PRESS is how far past its margin an open page presses on the bubbles.
+const PRESS = 40;
 // HELD is the rank of the node held, BUBBLE a bubble's: below every open
 // page.
 const HELD = 0;
@@ -298,7 +393,15 @@ function collide(nodes: LNode[], p: Pos, v: Pos, rank: (x: LNode) => number, sha
       const sb =
         b.parent === a.id && rb !== HELD ? 1 : a.parent === b.id && ra !== HELD ? 0 : ra === rb ? share(b) / (share(a) + share(b)) : rb > ra ? 1 : 0;
       const sa = 1 - sb;
-      if (ox <= oy * 1.5) {
+      // a bubble that gives way alone goes out by the shortest way that
+      // does not lead onto an open page
+      const out = sb === 1 && !b.box ? wayOut(b, a, nodes, p) : sa === 1 && !a.box ? wayOut(a, b, nodes, p) : null;
+      if (out) {
+        const x = sb === 1 ? b : a;
+        p[x.id][0] += out[0] * strength;
+        p[x.id][1] += out[1] * strength;
+        v[x.id][0] = v[x.id][1] = 0;
+      } else if (ox <= oy * 1.5) {
         // one right on the other: the way out comes from their names
         const s = (Math.abs(dx) > 0.01 ? Math.sign(dx) : hash(a.id + b.id) < 0.5 ? 1 : -1) * (ox + 0.5) * strength;
         p[a.id][0] -= s * sa;
@@ -313,6 +416,35 @@ function collide(nodes: LNode[], p: Pos, v: Pos, rank: (x: LNode) => number, sha
     }
   }
   return moved;
+}
+
+// wayOut is how a bubble x on the body pg (a page or a bubble) steps off
+// it: the shortest of the four ways (sideways a little preferred, the
+// screen is wide) that does not put it on an open page; null when each
+// does.
+function wayOut(x: LNode, pg: LNode, nodes: LNode[], p: Pos): Pt | null {
+  const [hp, tp, bp] = extent(pg, p[pg.id]), [hx, tx, bx] = extent(x, p[x.id]);
+  const cx = p[x.id][0], px = p[pg.id][0];
+  const ways: Pt[] = [
+    [px + hp + hx - cx + 0.5, 0],
+    [px - hp - hx - cx - 0.5, 0],
+    [0, bp - tx + 0.5],
+    [0, tp - bx - 0.5],
+  ];
+  let best: Pt | null = null, cost = Infinity;
+  for (const w of ways) {
+    const c = Math.abs(w[0]) / 1.5 + Math.abs(w[1]);
+    if (c >= cost) continue;
+    const at: Pt = [cx + w[0], p[x.id][1] + w[1]];
+    const [h2, t2, b2] = extent(x, at);
+    const onOther = nodes.some((o) => {
+      if (!o.box || o.id === pg.id) return false;
+      const [ho, to, bo] = extent(o, p[o.id]);
+      return ho + h2 - Math.abs(at[0] - p[o.id][0]) > 0.5 && Math.min(b2, bo) - Math.max(t2, to) > 0.5;
+    });
+    if (!onOther) (best = w), (cost = c);
+  }
+  return best;
 }
 
 // edgeRest is how far from an open page's centre its bubble x rests, in
