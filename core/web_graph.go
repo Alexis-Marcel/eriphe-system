@@ -123,7 +123,7 @@ type graphNode struct {
 func (c *core) graphRow(sum nodestore.Summary) graphNode {
 	g := graphNode{ID: sum.ID, Parent: sum.Parent, Links: sum.Links, Lifetime: string(sum.Lifetime), State: sum.State,
 		Created: sum.Created, Updated: sum.Updated, External: sum.External, Version: sum.Version}
-	if !sum.External {
+	if !sum.TitleExternal() {
 		g.Title = sum.Title
 	}
 	if !sum.Done.IsZero() {

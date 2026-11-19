@@ -113,6 +113,18 @@ func (m *fakeMonitor) server() *mcp.Server {
 			m.sent = append(m.sent, map[string]any{"tool": "send", "id": in.ID, "body": in.Body})
 			return nil, map[string]any{"ok": true}, nil
 		})
+	// move files messages by their ids, as the mail server's move does.
+	mcp.AddTool(s, &mcp.Tool{Name: "move"},
+		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+			Account string   `json:"account,omitempty"`
+			IDs     []string `json:"ids"`
+			To      string   `json:"to"`
+		}) (*mcp.CallToolResult, map[string]any, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			m.sent = append(m.sent, map[string]any{"tool": "move", "ids": in.IDs, "to": in.To})
+			return nil, map[string]any{"moved": len(in.IDs)}, nil
+		})
 	mcp.AddTool(s, &mcp.Tool{Name: "respond"},
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 			ID     string `json:"id"`

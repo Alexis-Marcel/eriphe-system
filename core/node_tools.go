@@ -244,7 +244,7 @@ type nodeFound struct {
 func (c *core) foundNode(x nodestore.Summary) nodeFound {
 	f := nodeFound{ID: x.ID, State: x.State, Lifetime: string(x.Lifetime), Parent: x.Parent, Changed: x.Updated.Local().Format("2006-01-02 15:04"),
 		Done: !x.Done.IsZero(), Archived: !x.Archived.IsZero(), External: x.External}
-	if !x.External {
+	if !x.TitleExternal() {
 		f.Title = x.Title
 	}
 	return f
@@ -398,6 +398,9 @@ func (c *core) brainNodeSet(in brainNodeSetIn) (map[string]any, error) {
 		d, err := c.nodes.Change(id, cur.Version.Hash, byBrain, func(n *nodefile.Node) error {
 			if title != "" {
 				n.Meta.Title = title
+				if !tainted {
+					n.VouchTitle() // a turn that read nothing outside stands for it
+				}
 			}
 			if goal != "" {
 				n.Meta.Goal = goal

@@ -61,6 +61,10 @@ type Meta struct {
 	Done     time.Time // zero while not done
 	Archived time.Time // zero while not archived
 	External bool      // code's: the node holds someone else's words
+	// TitleTrusted is code's: on an external node, its title is not
+	// someone else's words (written by the user, or by an author not
+	// tainted, and unchanged since); never said on a node not external.
+	TitleTrusted bool
 	// Extra are the fields this package does not know, kept in their
 	// order and written back as they were.
 	Extra []Field
@@ -73,7 +77,7 @@ type Field struct {
 }
 
 // known are the front matter's fields, in the order they are written.
-var known = []string{"id", "title", "parent", "links", "after", "lifetime", "goal", "created", "done", "archived", "external"}
+var known = []string{"id", "title", "parent", "links", "after", "lifetime", "goal", "created", "done", "archived", "external", "title_trusted"}
 
 // Node is a node's file, parsed.
 type Node struct {
@@ -84,6 +88,8 @@ type Node struct {
 	rawFront   []byte // the front matter as read, fences included
 	canonFront []byte // its canonical form when read
 	hasExt     bool   // the front matter said external (author writes)
+	hasTrust   bool   // the front matter said title_trusted (author writes)
+	vouched    bool   // its writer stands for the title it wrote (VouchTitle)
 }
 
 // segment is a piece of the body: text as it is, or a block.
@@ -165,7 +171,7 @@ func parse(raw []byte, short bool) (*Node, error) {
 		return nil, err
 	}
 	n := &Node{rawFront: front}
-	if n.Meta, n.hasExt, err = decodeMeta(yml); err != nil {
+	if n.Meta, n.hasExt, n.hasTrust, err = decodeMeta(yml); err != nil {
 		return nil, err
 	}
 	if n.canonFront, err = encodeMeta(n.Meta); err != nil {
@@ -301,25 +307,25 @@ func cutLine(b []byte) (line, rest []byte, ok bool) {
 // trimEOL is a line without its end and trailing blanks.
 func trimEOL(line []byte) string { return strings.TrimRight(string(line), " \t\r\n") }
 
-// decodeMeta reads the front matter's YAML; ext tells whether it says
-// external.
-func decodeMeta(yml []byte) (m Meta, ext bool, err error) {
+// decodeMeta reads the front matter's YAML; ext and trust tell whether it
+// says external and title_trusted.
+func decodeMeta(yml []byte) (m Meta, ext, trust bool, err error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(yml, &doc); err != nil {
-		return m, false, fmt.Errorf("front matter: %w", err)
+		return m, false, false, fmt.Errorf("front matter: %w", err)
 	}
 	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
-		return m, false, errors.New("front matter: a mapping of fields (id, title, …)")
+		return m, false, false, errors.New("front matter: a mapping of fields (id, title, …)")
 	}
 	top := doc.Content[0]
 	seen := map[string]bool{}
 	for i := 0; i+1 < len(top.Content); i += 2 {
 		k, v := top.Content[i], top.Content[i+1]
 		if k.Kind != yaml.ScalarNode {
-			return m, false, fmt.Errorf("front matter: line %d: a field's name is plain text", k.Line)
+			return m, false, false, fmt.Errorf("front matter: line %d: a field's name is plain text", k.Line)
 		}
 		if seen[k.Value] {
-			return m, false, fmt.Errorf("front matter: %s is there twice", k.Value)
+			return m, false, false, fmt.Errorf("front matter: %s is there twice", k.Value)
 		}
 		seen[k.Value] = true
 		var err error
@@ -347,14 +353,17 @@ func decodeMeta(yml []byte) (m Meta, ext bool, err error) {
 		case "external":
 			ext = true
 			err = v.Decode(&m.External)
+		case "title_trusted":
+			trust = true
+			err = v.Decode(&m.TitleTrusted)
 		default:
 			m.Extra = append(m.Extra, Field{Key: k.Value, Value: v})
 		}
 		if err != nil {
-			return m, false, fmt.Errorf("front matter: %s: %w", k.Value, err)
+			return m, false, false, fmt.Errorf("front matter: %s: %w", k.Value, err)
 		}
 	}
-	return m, ext, nil
+	return m, ext, trust, nil
 }
 
 // encodeMeta is the front matter's canonical YAML: the known fields in
@@ -401,6 +410,10 @@ func encodeMeta(m Meta) ([]byte, error) {
 			v = nonZero(m.Archived)
 		case "external":
 			if m.External {
+				v = true
+			}
+		case "title_trusted":
+			if m.External && m.TitleTrusted {
 				v = true
 			}
 		}

@@ -14,9 +14,15 @@
 //     write carries the hash of the version it was made on (expect): a
 //     stale one is refused (ErrConflict), never written over.
 //   - An author's write goes through nodefile's author API: code's fields
-//     (marks, snapshots, external) are kept, and a write that changes
+//     (marks, snapshots, external, title_trusted) are kept, and a write that changes
 //     them is refused. Secrets are refused by the filter the store is
 //     given (Options.Refuse).
+//   - The title of an external node may be someone else's words, unless
+//     it is trusted (title_trusted): written while the node was not
+//     external, or by a writer that vouched for it (nodefile's
+//     VouchTitle: the user, an author not tainted). Each write settles
+//     it (settleTitle): fail-closed, a title written on an external node
+//     by a writer that did not vouch is not trusted.
 //   - At start, the files are compared to the index: a file changed
 //     outside Eriphe is committed as a version of its own (author
 //     "outside"), reindexed and reported.
@@ -172,9 +178,16 @@ type Summary struct {
 	Done     time.Time
 	Archived time.Time
 	External bool
-	Version  int
-	Links    []string // the nodes it links to
+	// TitleTrusted: external, its title is not someone else's words
+	// (nodefile's Meta.TitleTrusted).
+	TitleTrusted bool
+	Version      int
+	Links        []string // the nodes it links to
 }
+
+// TitleExternal tells whether its title may be someone else's words: an
+// external node's, not trusted.
+func (x Summary) TitleExternal() bool { return x.External && !x.TitleTrusted }
 
 // Open opens the store: the repository in dir, the index at index (kept
 // outside dir). The index is made from the files when it is missing; the
@@ -280,7 +293,10 @@ type New struct {
 	Goal     string
 	Body     string // the author's: text and blocks, short forms accepted
 	External bool   // code's: it holds someone else's words, and so do its blocks
-	Author   string
+	// TitleTrusted: its maker stands for its title even when External
+	// (the user approved it on a card that showed it).
+	TitleTrusted bool
+	Author       string
 }
 
 // Create makes a node: its file, its first version.
@@ -369,6 +385,9 @@ func (s *Store) prepare(nw New) (*nodefile.Node, error) {
 		for _, b := range n.Blocks() {
 			n.SetBlockExternal(b.Name, true)
 		}
+	}
+	if nw.TitleTrusted {
+		n.VouchTitle()
 	}
 	return n, nil
 }
@@ -478,6 +497,11 @@ func (s *Store) save(n *nodefile.Node, file string, prev *Doc, author, op string
 	if len(n.Blocks()) > MaxBlocks {
 		return nil, fmt.Errorf("a node holds %d blocks at most, this one would hold %d", MaxBlocks, len(n.Blocks()))
 	}
+	var was *nodefile.Node
+	if prev != nil {
+		was = prev.Node
+	}
+	settleTitle(n, was)
 	raw, err := n.Bytes()
 	if err != nil {
 		return nil, err
@@ -508,6 +532,25 @@ func (s *Store) save(n *nodefile.Node, file string, prev *Doc, author, op string
 		state = prev.State
 	}
 	return &Doc{Node: n, Raw: raw, File: file, Version: v, Last: num, State: state}, nil
+}
+
+// settleTitle sets whether a node's title is trusted, as it is written
+// over prev (nil for a new node): never said of a node not external; a
+// title its writer vouched for is trusted; one unchanged keeps what it
+// was (trusted when written before the node was external); any other,
+// written on an external node, may be someone else's words.
+func settleTitle(n, prev *nodefile.Node) {
+	m := &n.Meta
+	switch {
+	case !m.External:
+		m.TitleTrusted = false
+	case n.TitleVouched():
+		m.TitleTrusted = true
+	case prev != nil && prev.Meta.Title == m.Title:
+		m.TitleTrusted = !prev.Meta.External || prev.Meta.TitleTrusted
+	default:
+		m.TitleTrusted = false
+	}
 }
 
 // indexed is a node version to index.
@@ -799,7 +842,7 @@ func (s *Store) summary(id string) (Summary, error) {
 
 func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.lifetime, n.state, n.created, n.updated,
-		n.done, n.archived, n.external, n.version,
+		n.done, n.archived, n.external, n.title_trusted, n.version,
 		(SELECT group_concat(l.target, ' ') FROM node_links l WHERE l.id = n.id) FROM nodes n `+where, args...)
 	if err != nil {
 		return nil, err
@@ -811,7 +854,7 @@ func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 		var created, updated, done, archived int64
 		var links sql.NullString
 		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Parent, &x.Lifetime, &x.State, &created, &updated,
-			&done, &archived, &x.External, &x.Version, &links); err != nil {
+			&done, &archived, &x.External, &x.TitleTrusted, &x.Version, &links); err != nil {
 			return nil, err
 		}
 		x.Links = strings.Fields(links.String)

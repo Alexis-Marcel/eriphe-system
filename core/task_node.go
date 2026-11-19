@@ -161,6 +161,9 @@ func (c *core) taskNodeState(task, state string) {
 	default:
 		return
 	}
+	if to == nodestore.Idle && c.nodeCardWaits(id) {
+		to = nodestore.Waiting // a card of its waits for the user (node_turn.go)
+	}
 	if err := c.nodes.SetState(id, to); err != nil {
 		log.Printf("task %s: node %s: %v", task, id, err)
 	}

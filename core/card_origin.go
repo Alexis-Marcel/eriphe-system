@@ -13,8 +13,8 @@ import (
 //   - the node is the one a calls card's calls belong to (item_cards.go):
 //     the node whose item it acts on, else the node of the run that kept
 //     them, never one a model names;
-//   - a node's title is shown only when no outside content reached it
-//     (not external), else it is said without; a task's title only when
+//   - a node's title is shown only when it is not someone else's words
+//     (TitleExternal), else it is said without; a task's title only when
 //     it was not started on a tainted turn (taskTaintKey);
 //   - what Oui does follows what decideAccess or decideTaskStart do.
 //
@@ -49,14 +49,14 @@ func (o originParts) from(lang string) string {
 	return strings.Join(parts, " · ")
 }
 
-// cleanNodeTitle is a node's title when no outside content reached it,
+// cleanNodeTitle is a node's title when it is not someone else's words,
 // "" otherwise or when there is no such node.
 func (c *core) cleanNodeTitle(id string) string {
 	if c.nodes == nil {
 		return ""
 	}
 	sum, err := c.nodes.Get(id)
-	if err != nil || sum.External {
+	if err != nil || sum.TitleExternal() {
 		return ""
 	}
 	return sum.Title
