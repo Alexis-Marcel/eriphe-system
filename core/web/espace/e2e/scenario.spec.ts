@@ -108,7 +108,7 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
   await expect(page.locator(".gr-node.waiting .gr-core[aria-label^='Plan du premier article']")).toBeVisible({ timeout: 30_000 });
 
   // 10. Back on Substack: what happened while away.
-  await page.locator(".hud-brand").click();
+  await home(page);
   await bubble("Substack").click();
   await expect(pageOf("Substack")).toBeVisible();
   await expect(page.locator(".gr-node.done .gr-core[aria-label^='Premier article']")).toBeVisible();
@@ -168,25 +168,16 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
   await expect(page.locator(`[data-node="${mail}"]`)).toHaveCount(0);
   await expect(page.locator(".gr-core[aria-label^=\"Recherche sur l'erreur\"]")).toHaveCount(0);
   await expect(page.locator('.gr-core[aria-label="Production"]')).toHaveCount(0);
-  await page.locator(".hud-archives .hud-btn").click();
+  await expect(page.locator(".hud-archives .hud-count")).toHaveText("1");
+  await page.locator(".hud-archives .hud-icon").click();
   const archived = page.locator(".hud-arch li");
   await expect(archived).toHaveCount(1);
   await expect(archived).toContainText(external);
   await expect(archived).toContainText("avec 2 bulles");
-  await page.locator(".hud-archives .hud-btn").click();
-
-  // What Eriphe knows, read only: what it knew before, the one read in a
-  // mail marked, and the plan done left a decision.
-  await page.locator(".hud-known .hud-btn").click();
-  const knows = page.locator(".hud-panel.known");
-  await expect(knows.locator(".known-file", { hasText: "sam" })).toContainText("Sam s'occupe de l'app de production.");
-  await expect(knows.locator("li", { hasText: "La prod a été migrée" }).locator(".a2-badge-external")).toHaveText("extérieur");
-  await expect(knows.locator("section", { hasText: "Décisions" })).toBeVisible();
-  await expect(knows.locator("button, input, textarea")).toHaveCount(0);
-  await page.locator(".hud-known .hud-btn").click();
+  await page.locator(".hud-archives .hud-icon").click();
 
   // End: home again, nothing waiting.
-  await page.locator(".hud-brand").click();
+  await home(page);
   await expect(page.locator("article.pg")).toHaveCount(0);
   await expect(page.locator(".tick.yours")).toHaveCount(0);
 
@@ -206,7 +197,7 @@ test("the workspace as the user left it", async ({ page }) => {
   await page.goto("/espace");
 
   // Home: no page open, the whole graph in view.
-  await page.locator(".hud-brand").click();
+  await home(page);
   await expect(page.locator("article.pg")).toHaveCount(0);
   await expect.poll(async () => (await (await page.request.get("/espace/boot")).json()).view.open).toEqual([]);
   const node = page.locator(".gr-node", { has: page.locator('.gr-core[aria-label="Mails"]') });
@@ -250,6 +241,17 @@ test("the workspace as the user left it", async ({ page }) => {
   expect(problems).toEqual([]);
 });
 
+// home closes every page open, one by one, the one the camera frames (the
+// console talks to it) first: the console then talks to the home.
+async function home(page: Page) {
+  const pages = page.locator("article.pg");
+  for (let n = await pages.count(); n > 0; n = await pages.count()) {
+    const framed = page.locator("article.pg.talking");
+    await ((await framed.count()) ? framed : pages).first().locator(".pg-x").click();
+    await expect(pages).toHaveCount(n - 1);
+  }
+}
+
 // at is where a bubble is in the graph's own space.
 async function at(node: Locator): Promise<[number, number]> {
   return node.evaluate((el) => [parseFloat((el as HTMLElement).style.left), parseFloat((el as HTMLElement).style.top)]);
@@ -258,7 +260,7 @@ async function at(node: Locator): Promise<[number, number]> {
 // openMail opens the mail's page alone, from its bubble with the whole graph
 // in view: the console talks to it.
 async function openMail(page: Page, id: string) {
-  await page.locator(".hud-brand").click();
+  await home(page);
   await expect(page.locator("article.pg")).toHaveCount(0);
   await page.locator(`[data-node="${id}"] .gr-core`).click();
   await expect(page.locator(`article.pg[aria-label="${external}"]`)).toBeVisible();
@@ -288,7 +290,7 @@ test("the workspace on a small screen", async ({ page }) => {
   await page.waitForURL((u) => u.pathname !== "/login");
   await page.goto("/espace");
 
-  await page.locator(".hud-brand").click();
+  await home(page);
   await expect(page.locator(".gr-node")).toHaveCount(0);
   const rows = page.locator(".ls-row");
   await expect(rows.filter({ hasText: "Substack" })).toBeVisible();

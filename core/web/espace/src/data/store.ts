@@ -187,11 +187,6 @@ export function talkTo(s: State, id: string | null): State {
   return { ...s, talk: id, exchange: null };
 }
 
-// home closes every page: the console talks to the home.
-export function home(s: State): State {
-  return s.open.length || s.talk ? { ...s, open: [], talk: null, exchange: s.talk ? null : s.exchange } : s;
-}
-
 export type Store = StoreApi<State>;
 
 export function makeStore(init: Partial<State> = {}): Store {

@@ -76,7 +76,7 @@ export function App({ boot }: { boot: Boot }) {
       <MotionConfig reducedMotion="user">
         <div className="espace">
           {narrow ? <List live={boot.live} /> : <Graph live={boot.live} />}
-          <Hud name={boot.name} live={boot.live} />
+          <Hud live={boot.live} />
           <Console boot={boot} />
           <Sample live={boot.live} />
         </div>

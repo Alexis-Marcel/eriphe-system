@@ -545,7 +545,7 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
 .nav-group > a[aria-current] { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
 .nav-group > a > .i:first-child { width: 24px; height: 24px; padding: 4px; border-radius: 7px; background: var(--tint, var(--mark-bg)); color: #fff; stroke-width: 2; }
 .nav-group > a .chev { display: none; }
-.settings-nav .to-chat { margin-left: 4px; }
+.settings-nav .to-espace { margin-left: 4px; }
 .settings-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; align-content: start; width: 100%; max-width: 920px; margin: 0 auto; padding: 32px 40px 64px; }
 /* A section is space and a line, not a box; a card is for an object (a tile, a tool). */
 .settings-body .panel:not(details) { padding: 0 0 28px; background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
@@ -558,7 +558,7 @@ body.bare { min-height: 100vh; min-height: 100dvh; }
    entry instead (early.js); this is its fallback without JavaScript. */
 .settings.is-index { grid-template-columns: minmax(0, 600px); justify-content: center; padding: 32px 24px 64px; }
 .is-index .settings-nav { position: static; height: auto; overflow: visible; padding: 0; gap: 24px; background: none; border: 0; }
-.is-index .to-chat { display: none; }
+.is-index .to-espace { display: none; }
 .is-index .settings-head { gap: 2px; }
 .is-index .settings-close { display: inline-grid; width: 44px; height: 44px; margin-left: -10px; color: var(--text); }
 .is-index .settings-title { margin: 0; font-size: 1.6rem; }

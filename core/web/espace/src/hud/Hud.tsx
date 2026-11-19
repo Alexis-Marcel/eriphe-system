@@ -1,71 +1,66 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { wall, when } from "../a2ui/format";
 import { Icon } from "../a2ui/icons";
-import { archives, known, knownSections, reopen, type ArchivedNode, type KnownFile } from "../data/api";
+import { archives, reopen, type ArchivedNode } from "../data/api";
 import { localURL } from "../data/presence";
-import { dropNote, home, openPage, pathOf, setTheme, step, store, useGraph } from "../data/store";
+import { dropNote, openPage, setTheme, step, store, useGraph } from "../data/store";
 import { STREAM_GRACE } from "../data/stream";
 import { titleOf, waits } from "../graph/model";
 import { useWords } from "../i18n";
 
-// The head-up display (#633): the way home and the path of the page the
-// console talks to; the ticker of what waits for the user and what runs,
-// each a way to its page; what Eriphe knows, read only; what the user
-// archived, to reopen; the light or
-// dark theme; the way to the settings. Under it, the notifications routed
-// to this tab, and a word when the stream is down.
+// The head-up display (#633), with no bar: the graph takes the whole
+// screen. Over it, at the top, the ticker of what waits for the user and
+// what runs, each a way to its page; in the top-right corner, three icons:
+// what the user archived, to reopen; the light or dark theme; the way to
+// the settings. Under them, the notifications routed to this tab, and a
+// word when the stream is down.
 
 const spring = { type: "spring", stiffness: 300, damping: 32 } as const;
 const TICKS = 5;
 
-export function Hud({ name, live }: { name: string; live: boolean }) {
+export function Hud({ live }: { live: boolean }) {
   const { t } = useWords();
   const nodes = useGraph((s) => s.nodes);
-  const talk = useGraph((s) => s.talk);
   const external = t("espace.external");
   const all = Object.values(nodes);
   const ticks = [...all.filter(waits), ...all.filter((x) => x.state === "running" && !waits(x))].slice(0, TICKS);
-  const path = talk ? pathOf(nodes, talk) : [];
   return (
     <>
-      <header className="hud">
-        <nav className="hud-left" aria-label={t("espace.path")}>
-          <button type="button" className="hud-brand" onClick={() => step(store, home)}>
-            {name}
-          </button>
-          {path.map((id, i) => (
-            <span key={id} className="hud-crumb">
-              <i aria-hidden="true">›</i>
-              {i === path.length - 1 ? <b>{titleOf(nodes[id], external)}</b> : <button type="button" onClick={() => step(store, openPage, id, false)}>{titleOf(nodes[id], external)}</button>}
-            </span>
+      <div className="hud-ticker" aria-label={t("espace.ticker")}>
+        <AnimatePresence initial={false}>
+          {ticks.map((x) => (
+            <motion.div key={x.id} layout initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={spring}>
+              <button type="button" className={`tick ${waits(x) ? "yours" : "runs"}`} onClick={() => step(store, openPage, x.id, true)}>
+                <i className={`dot ${waits(x) ? "yours" : "run"}`} />
+                <b>{trim(titleOf(x, external))}</b>
+                <span>· {waits(x) ? t("espace.ticker.waits") : (x.line ?? t("espace.ticker.runs"))}</span>
+              </button>
+            </motion.div>
           ))}
-        </nav>
-        <div className="hud-ticker" aria-label={t("espace.ticker")}>
-          <AnimatePresence initial={false}>
-            {ticks.map((x) => (
-              <motion.div key={x.id} layout initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={spring}>
-                <button type="button" className={`tick ${waits(x) ? "yours" : "runs"}`} onClick={() => step(store, openPage, x.id, true)}>
-                  <i className={`dot ${waits(x) ? "yours" : "run"}`} />
-                  <b>{trim(titleOf(x, external))}</b>
-                  <span>· {waits(x) ? t("espace.ticker.waits") : (x.line ?? t("espace.ticker.runs"))}</span>
-                </button>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-        <div className="hud-right">
-          {live && <Known />}
-          {live && <Archives />}
-          <Theme />
-          <a className="hud-icon" href="/settings" aria-label={t("espace.settings")} title={t("espace.settings")}>
-            <Icon name="settings" />
-          </a>
-        </div>
-      </header>
+        </AnimatePresence>
+      </div>
+      <div className="hud-corner">
+        {live && <Archives />}
+        <Theme />
+        <a className="hud-icon" href="/settings" aria-label={t("espace.settings")} title={t("espace.settings")}>
+          <Icon name="settings" />
+        </a>
+      </div>
       {live && <Offline />}
       <Notices />
     </>
+  );
+}
+
+// Glyph draws one of the corner's own icons, in the catalog's stroke
+// (.a2-icon): the catalog's set (a2ui/icons.tsx) is what Eriphe may draw in
+// a page, these are the workspace's.
+function Glyph({ children }: { children: ReactNode }) {
+  return (
+    <svg className="a2-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {children}
+    </svg>
   );
 }
 
@@ -77,7 +72,16 @@ function Theme() {
   const dark = theme ? theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   return (
     <button type="button" className="hud-icon" aria-label={t("espace.theme")} title={t("espace.theme")} aria-pressed={dark} onClick={() => step(store, setTheme, dark ? "light" : "dark")}>
-      <span aria-hidden="true">{dark ? "☀" : "☾"}</span>
+      <Glyph>
+        {dark ? (
+          <>
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+          </>
+        ) : (
+          <path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10Z" />
+        )}
+      </Glyph>
     </button>
   );
 }
@@ -108,11 +112,21 @@ function Archives() {
       const off = store.subscribe(() => show() && off());
     });
   const n = list?.length ?? 0;
+  const label = n ? t("espace.archives.n", n) : t("espace.archives");
   const external = t("espace.external");
   return (
     <div className="hud-archives">
-      <button type="button" className={`hud-btn${open ? " on" : ""}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {n ? t("espace.archives.n", n) : t("espace.archives")}
+      <button type="button" className={`hud-icon${open ? " on" : ""}`} aria-expanded={open} aria-label={label} title={label} onClick={() => setOpen((o) => !o)}>
+        <Glyph>
+          <path d="M3.5 5h17v4h-17z" />
+          <path d="M5 9v10h14V9" />
+          <path d="M10 13h4" />
+        </Glyph>
+        {n > 0 && (
+          <b className="hud-count" aria-hidden="true">
+            {n > 99 ? "99+" : n}
+          </b>
+        )}
       </button>
       <AnimatePresence>
         {open && (
@@ -144,85 +158,6 @@ function Archives() {
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-// Known shows what Eriphe knows, read only, drawn from its memory with
-// recall's rules: by section, each file of the mirror a group; a memory
-// read in someone else's content is marked. Read again at each opening.
-function Known() {
-  const { t } = useWords();
-  const [open, setOpen] = useState(false);
-  const [files, setFiles] = useState<KnownFile[] | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    let on = true;
-    known().then(
-      (xs) => on && setFiles(xs),
-      () => on && setFiles([]),
-    );
-    return () => {
-      on = false;
-    };
-  }, [open]);
-  const sections = knownSections(files ?? []);
-  return (
-    <div className="hud-known">
-      <button type="button" className={`hud-btn${open ? " on" : ""}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {t("espace.known")}
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div className="hud-panel known" role="region" aria-label={t("espace.known")} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.2 }}>
-            {files === null ? null : files.length === 0 ? (
-              <p className="hud-muted">{t("espace.known.none")}</p>
-            ) : (
-              <div className="known-body">
-                {sections.map((s) => (
-                  <section key={s.section}>
-                    <h3>{t(`espace.known.${s.section}`)}</h3>
-                    {s.files.map((f) => (
-                      <KnownGroup key={f.path} file={f} />
-                    ))}
-                  </section>
-                ))}
-              </div>
-            )}
-            <p className="hud-muted">{t("espace.known.readonly")}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function KnownGroup({ file }: { file: KnownFile }) {
-  const { t } = useWords();
-  let group = "";
-  return (
-    <details className="known-file" open={file.section === "profile"}>
-      <summary>
-        {file.title} <em>{file.lines.length}</em>
-      </summary>
-      <ul>
-        {file.lines.map((l) => {
-          const head = file.section === "profile" && l.group && l.group !== group ? l.group : "";
-          if (head) group = head;
-          return (
-            <li key={l.id} data-memory={l.id}>
-              {head && <h4>{t(`espace.known.group.${head}`)}</h4>}
-              {l.when && <time>{l.group === "situation" ? t("espace.known.until", l.when) : l.when}</time>}
-              {l.external && (
-                <span className="a2-badge a2-badge-external" title={t("espace.known.external.title")}>
-                  {t("espace.known.external")}
-                </span>
-              )}
-              <span>{l.text}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </details>
   );
 }
 

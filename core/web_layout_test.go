@@ -46,7 +46,7 @@ func TestSettingsTabsHaveLayout(t *testing.T) {
 		}
 		for _, want := range []string{`<header class="topbar">`, `<a class="brand" href="/"`,
 			`id="tasks-btn" href="/conversation#tasks-panel"`, `id="tasks-badge"`, `<a class="head-btn" href="/settings" aria-label="Réglages" title="Réglages" aria-current="page">`,
-			`<nav class="settings-nav"`, `<a class="back to-chat" href="/conversation">`, `<a href="` + href + `" aria-current="page">`} {
+			`<nav class="settings-nav"`, `<a class="back to-espace" href="/espace">`, `<a href="` + href + `" aria-current="page">`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("GET %s lacks %q", tc.path, want)
 			}
@@ -87,7 +87,7 @@ func TestSettingsList(t *testing.T) {
 		t.Fatalf("GET /settings: %d", code)
 	}
 	for _, want := range []string{`<div class="settings is-index">`, `<nav class="settings-nav"`,
-		`<a class="icon-btn settings-close" href="/" aria-label="Fermer les réglages"`, `<h1 class="settings-title">Réglages</h1>`,
+		`<a class="icon-btn settings-close" href="/espace" aria-label="Fermer les réglages"`, `<h1 class="settings-title">Réglages</h1>`,
 		`<a href="/memory" >`, `<a href="/settings/account" >`, `class="i chev"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the list lacks %q", want)
