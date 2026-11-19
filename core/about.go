@@ -90,16 +90,16 @@ func (c *core) sourceAbout(source string) string {
 
 // cardAbout sets a card's about once: its proposal's (a memory's, an
 // intention's, a node's, a skill run's), else what its maker inherits
-// (nil: none).
+// (nil: none); only a live node or a key (validAbout).
 func (c *core) cardAbout(kind string, id int64, inherit func() string) {
 	s := c.proposalAbout(kind, id)
 	if s == "" && inherit != nil {
 		s = inherit()
 	}
-	if s == "" {
-		return
+	if s = c.validAbout(c.store.noteAbout(s)); s == "" {
+		return // a node or an entity there is, or none
 	}
-	c.store.db.Exec(`UPDATE convo_cards SET about = ? WHERE ref = ? AND about = ''`, c.store.noteAbout(s), proposalRef(kind, id))
+	c.store.db.Exec(`UPDATE convo_cards SET about = ? WHERE ref = ? AND about = ''`, s, proposalRef(kind, id))
 }
 
 // proposalAbout is what a card proposes is about, if anything.

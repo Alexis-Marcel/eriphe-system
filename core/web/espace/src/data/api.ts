@@ -227,7 +227,8 @@ export type ExchangeLine = { seq: number; role: "user" | "brain" | "error"; text
 
 // The "exchange" event: the last exchange of the node the console talks to
 // (node), or the home's; whether lines come before it, the message Eriphe
-// is writing, whether it is at work, the replies its last line suggests.
+// is writing, whether it is at work, the replies its last line suggests,
+// the cards no node holds.
 export type Exchange = {
   node?: string;
   title?: string;
@@ -236,6 +237,9 @@ export type Exchange = {
   draft?: string;
   thinking?: boolean;
   suggestions?: string[];
+  // The cards that wait and no node holds (their refs): the console shows
+  // them, wherever it talks, so that none waits out of sight.
+  cards?: string[];
 };
 
 export type Earlier = { lines: ExchangeLine[]; more: boolean };

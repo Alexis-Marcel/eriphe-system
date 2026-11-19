@@ -11,7 +11,9 @@ import (
 // node:<id>, or an entity of the memory, a key kind:slug (pr:owner/repo#12,
 // project:site, topic:<monitor>, person:lina), the user (owner), the home;
 // the entities' keys are in one index, names(name, target), in core.db,
-// each naming itself. The code finds in the user's messages the entities
+// each naming itself: a row that names another target is none of the
+// code's, dropped when the store opens, and an about kept is a node or a
+// key (validAbout), never anything else. The code finds in the user's messages the entities
 // they name (named), by the words of their keys.
 
 const namesSchema = `CREATE TABLE IF NOT EXISTS names (
@@ -20,7 +22,8 @@ const namesSchema = `CREATE TABLE IF NOT EXISTS names (
   seen   INTEGER NOT NULL,  -- when it was last written
   PRIMARY KEY (name, target));
 CREATE UNIQUE INDEX IF NOT EXISTS names_key ON names (name) WHERE instr(name, ':') > 0 OR name IN ('owner', 'home');
-CREATE INDEX IF NOT EXISTS names_target ON names (target);`
+CREATE INDEX IF NOT EXISTS names_target ON names (target);
+DELETE FROM names WHERE name != target;`
 
 func init() { extraSchema = append(extraSchema, namesSchema) }
 
@@ -65,6 +68,25 @@ func (s *Store) noteAbout(about string) string {
 	}
 	s.db.Exec(`UPDATE names SET seen = MAX(seen, ?) WHERE name = ?`, now, about)
 	return t
+}
+
+// validAbout is an about as a record may keep it: a live node
+// (node:<id>) or a key as aliasKey writes it; "" for anything else, such
+// as a ref of a record that is no more.
+func (c *core) validAbout(s string) string {
+	k, err := aboutKey(s)
+	if err != nil || k != s {
+		return ""
+	}
+	if id, ok := strings.CutPrefix(k, refNode+":"); ok {
+		if c.nodes == nil {
+			return ""
+		}
+		if sum, err := c.nodes.Get(id); err != nil || !sum.Archived.IsZero() {
+			return ""
+		}
+	}
+	return k
 }
 
 // aboutIs is what an about given by someone is kept under, noted as seen:
@@ -222,7 +244,7 @@ func (c *core) named(text string) []string {
 		inside := slices.ContainsFunc(hits, func(o hit) bool {
 			return o.target != h.target && len(o.name) > len(h.name) && namedIn(setOf(o.name), h.name)
 		})
-		if t := c.store.resolveAbout(h.target); !inside && len(out) < namedMax && !slices.Contains(out, t) {
+		if t := c.validAbout(c.store.resolveAbout(h.target)); t != "" && !inside && len(out) < namedMax && !slices.Contains(out, t) {
 			out = append(out, t)
 		}
 	}

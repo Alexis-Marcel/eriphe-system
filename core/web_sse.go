@@ -223,6 +223,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			flusher.Flush()
 			quiet = time.Now()
 		case <-proposalsMoved:
+			exchangeStale = true // the cards it carries may have moved
 			sendProposals()
 			flusher.Flush()
 			quiet = time.Now()

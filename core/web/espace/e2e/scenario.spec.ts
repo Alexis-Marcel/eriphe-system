@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-// The epic's acceptance scenario (#625), its 13 steps played in the
+// The epic's acceptance scenario (#625), its steps played in the
 // workspace against the test core of TestEspaceScenario: faked tools, a
 // scripted brain, the real engine, cards, filing and stream. What the world
 // outside the user does (a monitor's mail, a task that finishes) is asked
@@ -12,7 +12,7 @@ const external = "Contenu extérieur"; // what the page names a node someone els
 
 test.describe.configure({ mode: "serial" });
 
-test("the 13 steps of the scenario", async ({ page, request }) => {
+test("the steps of the scenario", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
@@ -175,6 +175,32 @@ test("the 13 steps of the scenario", async ({ page, request }) => {
   await expect(archived).toContainText(external);
   await expect(archived).toContainText("avec 2 bulles");
   await page.locator(".hud-archives .hud-icon").click();
+
+  // 14. Asked at the home, a subject opens its page, the console in it;
+  // Eriphe asks there, and the view it proposes waits at the subject's
+  // foot. Its yes makes the view, which opens.
+  await home(page);
+  await say("Garde un œil sur mes mails.");
+  const watch = pageOf("Garder un œil sur mes mails");
+  await expect(watch).toBeVisible();
+  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Garder un œil sur mes mails");
+  await expect(said).toContainText("Lesquels veux-tu suivre");
+  await say("Ceux qui demandent une réponse.");
+  await expect(said).toContainText("Voici la vue");
+  const viewCard = watch.locator(".pg-foot");
+  await expect(viewCard).toContainText("Mes mails");
+  await viewCard.getByRole("button", { name: "Oui" }).click();
+  await expect(bubble("Mes mails")).toBeVisible();
+  await expect(pageOf("Mes mails")).toBeVisible();
+
+  // 15. Asked on the side: its node is born on the graph, not opened, and
+  // the console stays at the home.
+  await home(page);
+  await say("Lance une recherche à part sur les newsletters.");
+  await expect(said).toContainText("Je lance la recherche à part.");
+  await expect(bubble("Recherche sur les newsletters")).toBeVisible();
+  await expect(page.locator("article.pg")).toHaveCount(0);
+  await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe");
 
   // End: home again, nothing waiting.
   await home(page);

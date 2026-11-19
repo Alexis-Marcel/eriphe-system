@@ -46,12 +46,13 @@ func lastBrainMessage(t *testing.T, c *core) Message {
 }
 
 // A long answer no node holds, said at home, goes in a new node titled
-// from the user's request, the answer as its doc; the answer links to it.
+// from the user's request, the answer as its doc; the answer links to it,
+// and the exchange moves into it: it opens, the console in it.
 func TestNetFilesLongAnswerInNewNode(t *testing.T) {
 	c, answer := netCore(t, "Compare les devis du garage\net dis-moi lequel prendre", "")
 	answer(longAnswer)
 	m := lastBrainMessage(t, c)
-	if m.Filed == "" || m.Node != "" {
+	if m.Filed == "" || m.Node != m.Filed {
 		t.Fatalf("message %+v", m)
 	}
 	d, err := c.nodes.Read(m.Filed, 0)
@@ -61,9 +62,12 @@ func TestNetFilesLongAnswerInNewNode(t *testing.T) {
 	if d.Node.Meta.Title != "Compare les devis du garage" || !strings.HasPrefix(d.Node.Text(), "Voici le comparatif") || d.Node.Meta.External {
 		t.Fatalf("node %+v: %q", d.Node.Meta, d.Node.Text())
 	}
-	lines, _, _ := c.store.lastExchange("")
-	if len(lines) == 0 || lines[len(lines)-1].Filed != m.Filed {
-		t.Errorf("the exchange does not say where it was filed: %+v", lines)
+	lines, _, _ := c.store.lastExchange(m.Filed)
+	if len(lines) != 2 || lines[0].Role != roleUser || lines[1].Filed != m.Filed {
+		t.Errorf("the exchange did not move into its node: %+v", lines)
+	}
+	if x, ok := c.lastShown(); !ok || x.Node != m.Filed || !x.Talk {
+		t.Errorf("the node is not opened with the console: %+v", x)
 	}
 }
 

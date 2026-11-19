@@ -283,7 +283,7 @@ func TestGraphStream(t *testing.T) {
 		t.Errorf("source: %s", got)
 	}
 
-	c.showNode(id, byBrain)
+	c.showNode(id, byBrain, false)
 	if got := next(t, evs, "show"); !strings.Contains(got, `"node":"`+id+`"`) {
 		t.Errorf("show: %s", got)
 	}

@@ -89,6 +89,7 @@ var espaceStrings = map[string]map[string]string{
 		"espace.exchange.earlier":  "Messages d'avant",
 		"espace.exchange.external": "Écrit après avoir lu un contenu extérieur",
 		"espace.exchange.replies":  "Réponses suggérées",
+		"espace.exchange.cards":    "Ce qui attend ta réponse",
 		"espace.notices":           "Notifications",
 		"espace.notice.close":      "Fermer",
 
@@ -228,6 +229,7 @@ var espaceStrings = map[string]map[string]string{
 		"espace.exchange.earlier":  "Earlier messages",
 		"espace.exchange.external": "Written after reading external content",
 		"espace.exchange.replies":  "Suggested replies",
+		"espace.exchange.cards":    "Waiting for your answer",
 		"espace.notices":           "Notifications",
 		"espace.notice.close":      "Dismiss",
 

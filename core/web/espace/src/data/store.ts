@@ -14,7 +14,7 @@ import type { Exchange, GraphNode, Moved, Note, Place, Theme, View } from "./api
 // the store only holds the result.
 
 export type Progress = { text: string; at: string };
-export type Shown = { node: string; by?: string; at?: string; seq: number };
+export type Shown = { node: string; by?: string; at?: string; seq: number; talk?: boolean };
 
 export type State = {
   nodes: Record<string, GraphNode>;
@@ -127,13 +127,17 @@ export const SHOW_FRESH = 60_000;
 // The "show" event: Eriphe opens a node's page for the user, beside what is
 // open. The console still talks to whom it talked to: only the user's own
 // gesture (a click on a page or a bubble) moves it, so Eriphe's answer stays
-// where it was asked. Each show once.
+// where it was asked. One exception: a subject Eriphe opened for what the
+// user asked at the home (talk) takes the console with it, when it still
+// talks to the home: the exchange goes on in that page. Each show once.
 export function applyShow(s: State, ev: Shown, now = Date.now()): State {
   if (!ev || typeof ev.node !== "string" || !(ev.seq > s.shown)) return s;
   const first = s.shown === 0;
   const seen = { ...s, shown: ev.seq };
   if (first && ev.at && now - Date.parse(ev.at) > SHOW_FRESH) return seen;
-  if (!s.nodes[ev.node] || s.open.includes(ev.node)) return seen;
+  if (!s.nodes[ev.node]) return seen;
+  if (ev.talk && s.talk === null) return openPage(seen, ev.node, true);
+  if (s.open.includes(ev.node)) return seen;
   return { ...seen, open: [...s.open, ev.node] };
 }
 
@@ -143,7 +147,8 @@ export function applyExchange(s: State, x: Exchange): State {
   if (!x || !Array.isArray(x.lines)) return s;
   if ((x.node ?? null) !== s.talk) return s;
   const suggestions = Array.isArray(x.suggestions) ? x.suggestions.filter((t) => typeof t === "string") : undefined;
-  return { ...s, exchange: { ...x, suggestions } };
+  const cards = Array.isArray(x.cards) ? x.cards.filter((t) => typeof t === "string") : undefined;
+  return { ...s, exchange: { ...x, suggestions, cards } };
 }
 
 // NOTES_KEPT is how many notices show at once.

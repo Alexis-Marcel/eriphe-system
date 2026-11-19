@@ -9,7 +9,10 @@ import (
 // beside what is open. Code keeps the request (kv node_show), so a page
 // that connects later still gets it, and tells the pages that watch
 // (graph_feed.go's show event): the graph workspace opens the page. It
-// writes nothing in the node.
+// writes nothing in the node. A show opens the page beside what is open,
+// the console where it was; one that takes the console (talk: a subject
+// opened from the home, node_turn.go's moveHomeTurn) moves the console
+// into it too, when it talked to the home.
 
 const nodeShowKey = "node_show"
 
@@ -20,12 +23,14 @@ type nodeShown struct {
 	By   string    `json:"by"`
 	At   time.Time `json:"at"`
 	Seq  int64     `json:"seq"`
+	Talk bool      `json:"talk,omitempty"` // the console, at the home, moves into it
 }
 
-// showNode asks the user's screen to open a node's page.
-func (c *core) showNode(id, by string) {
+// showNode asks the user's screen to open a node's page; talk: and to
+// talk to it, from the home.
+func (c *core) showNode(id, by string, talk bool) {
 	last, _ := c.lastShown()
-	x := nodeShown{Node: id, By: by, At: time.Now(), Seq: last.Seq + 1}
+	x := nodeShown{Node: id, By: by, At: time.Now(), Seq: last.Seq + 1, Talk: talk}
 	if raw, err := json.Marshal(x); err == nil {
 		c.store.set(nodeShowKey, string(raw))
 	}

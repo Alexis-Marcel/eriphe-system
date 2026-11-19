@@ -5,6 +5,7 @@ import { sampleEarlier } from "../a2ui/fixtures";
 import * as api from "../data/api";
 import { useGraph } from "../data/store";
 import { titleOf } from "../graph/model";
+import { Cards } from "../page/Cards";
 import { useWords } from "../i18n";
 import { landed, lastSeq, present, type Sent } from "./exchange";
 
@@ -12,7 +13,9 @@ import { landed, lastSeq, present, type Sent } from "./exchange";
 // the console talks to (the store's talk), else to the home; Eriphe's
 // newest line shows by the orb, the replies it suggests under it. The
 // conversation of that node opens over it, its lines before on request; the
-// whole conversation is at /conversation.
+// whole conversation is at /conversation. The cards no node holds (one
+// proposed at the home, before any subject) show with it, open or not, so
+// that none waits out of sight.
 
 const spring = { type: "spring", stiffness: 300, damping: 32 } as const;
 
@@ -26,6 +29,7 @@ export function Console({ boot }: { boot: api.Boot }) {
   const [conv, setConv] = useState(false);
   const [failed, setFailed] = useState(false);
   const { items, writing, replies, aside } = present(x, sent && sent.to === talk ? sent : null);
+  const cards = x?.cards ?? [];
   useEffect(() => {
     if (landed(x, sent)) setSent(null);
   }, [x, sent]);
@@ -63,6 +67,11 @@ export function Console({ boot }: { boot: api.Boot }) {
               </button>
             </header>
             <Lines live={boot.live} talk={talk} x={x} items={items} writing={writing} />
+            {cards.length > 0 && (
+              <div className="cs-cards" aria-label={t("espace.exchange.cards")}>
+                <Cards surface="console--cards" refs={cards} />
+              </div>
+            )}
           </motion.section>
         )}
       </AnimatePresence>
@@ -85,6 +94,11 @@ export function Console({ boot }: { boot: api.Boot }) {
                   {r}
                 </button>
               ))}
+            </div>
+          )}
+          {cards.length > 0 && (
+            <div className="cs-cards" aria-label={t("espace.exchange.cards")}>
+              <Cards surface="console--cards" refs={cards} />
             </div>
           )}
         </div>

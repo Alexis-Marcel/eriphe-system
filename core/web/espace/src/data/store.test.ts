@@ -74,6 +74,20 @@ describe("the store", () => {
     expect(applyShow(s, { node: "b", seq: 4, at: new Date(now).toISOString() }, now)).toBe(s);
   });
 
+  it("moves the console into a subject opened from the home, never from a page", () => {
+    const now = Date.parse("2026-11-18T12:00:00Z");
+    const at = new Date(now).toISOString();
+    const h = applyShow(withGraph(), { node: "b", seq: 1, at, talk: true }, now);
+    expect(h).toMatchObject({ open: ["b"], talk: "b" });
+    const s = applyShow(openPage(withGraph(), "a"), { node: "b", seq: 1, at, talk: true }, now);
+    expect(s).toMatchObject({ open: ["a", "b"], talk: "a" });
+  });
+
+  it("keeps the cards no node holds with the exchange", () => {
+    const s = applyExchange(withGraph(), { lines: [], cards: ["view:1", 2 as unknown as string] });
+    expect(s.exchange?.cards).toEqual(["view:1"]);
+  });
+
   it("keeps the exchange of the node the console talks to only", () => {
     let s = openPage(withGraph(), "a");
     expect(applyExchange(s, { node: "b", lines: [] }).exchange).toBeNull();
