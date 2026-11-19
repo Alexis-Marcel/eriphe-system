@@ -212,6 +212,8 @@ button, input, select, textarea { font: inherit; }
 .a2-markdown li + li { margin-top: 2px; }
 .a2-markdown a { color: var(--accent-text); text-underline-offset: 2px; }
 .a2-markdown code { padding: 0 4px; border-radius: 4px; background: var(--fill); font: 12.5px var(--mono); }
+.a2-markdown pre { margin: 0.5em 0; padding: 8px 10px; border-radius: 8px; background: var(--fill); overflow-x: auto; }
+.a2-markdown pre code { padding: 0; background: none; white-space: pre; }
 .a2-markdown blockquote { padding-left: 10px; border-left: 2px solid var(--line-strong); color: var(--fg2); }
 
 /* Image: only through eriphe-core; otherwise, what it shows in words. */
@@ -435,9 +437,20 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-badge .a2-icon { width: 12px; height: 12px; }
 .a2-badge-external { color: var(--warn-text); background: var(--warn-soft); }
 .a2-proposal-fields { margin: 4px 0 0; display: grid; gap: 2px; font-size: 13px; }
-.a2-proposal-fields div { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: 8px; }
+.a2-proposal-fields > div { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: 8px; }
 .a2-proposal-fields dt { color: var(--fg3); }
-.a2-proposal-fields dd { margin: 0; }
+.a2-proposal-fields dd { margin: 0; overflow-wrap: anywhere; }
+.a2-proposal-summary { margin: 2px 0 0; padding-left: 18px; display: grid; gap: 2px; font-size: 13.5px; color: var(--fg); }
+.a2-proposal-details { margin-top: 4px; font-size: 13px; }
+.a2-proposal-details > summary { cursor: pointer; color: var(--fg3); width: fit-content; }
+.a2-proposal-details > summary:hover { color: var(--fg); }
+.a2-proposal-details[open] > summary { margin-bottom: 4px; }
+/* A Markdown value (a skill's instructions): drawn, under its name, in a box
+   that scrolls when long. */
+.a2-proposal-fields > .a2-proposal-md { grid-template-columns: 1fr; gap: 2px; }
+.a2-proposal-md dd { max-height: 220px; overflow-y: auto; padding: 6px 10px; border-radius: 8px; background: var(--fill); border: 1px solid var(--line); scrollbar-width: thin; }
+.a2-proposal-md .a2-markdown > :first-child { margin-top: 0; }
+.a2-proposal-md .a2-markdown > :last-child { margin-bottom: 0; }
 .a2-proposal-actions { display: flex; gap: 8px; margin-top: 8px; }
 /* The answer on its way: the button pressed says so at once. */
 .a2-button.is-busy { opacity: 1; cursor: progress; }
@@ -573,7 +586,9 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .gr-ring { pointer-events: none; overflow: visible; }
 .gr-orbit { fill: none; stroke: var(--link); stroke-width: 1; stroke-dasharray: 1 6; vector-effect: non-scaling-stroke; }
 .gr-ring-run { fill: none; stroke: var(--run); stroke-width: 2; stroke-dasharray: 6 5; animation: spin 6s linear infinite; transform-origin: 0 0; }
-.gr-ring-yours { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.gr-ring-yours { fill: none; stroke: var(--accent); stroke-width: 2.5; transform-origin: 0 0; animation: wait-pulse 2.4s ease-in-out infinite; }
+@keyframes wait-pulse { 0%, 100% { opacity: 1; scale: 1; } 50% { opacity: 0.45; scale: 1.12; } }
+.gr-node.yours .gr-core { box-shadow: 0 0 0 2px var(--accent), 0 0 26px -2px color-mix(in oklab, var(--accent) 60%, transparent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .gr-label { top: auto !important; translate: -50% 0 !important; display: grid; justify-items: center; gap: 1px; white-space: nowrap; text-align: center; pointer-events: none;
   text-shadow: 0 0 10px var(--bg), 0 0 4px var(--bg), 0 0 2px var(--bg); }
@@ -582,10 +597,15 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .gr-node.external .gr-label b { color: var(--warn-text); font-weight: 500; }
 .gr-label em { font-style: normal; font-size: 12px; color: var(--fg2); }
 .gr-label em.runs { color: var(--run); }
+.gr-label em.yours { color: var(--accent-text); font-weight: 500; }
+/* A node that waits, out of view: a mark at the screen's edge, toward it. */
+.gr-edge { position: absolute; z-index: 15; translate: -50% -50%; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 999px; cursor: pointer;
+  color: var(--accent-text); background: var(--card); border: 1.5px solid var(--accent); box-shadow: var(--lift), 0 0 14px -2px color-mix(in oklab, var(--accent) 55%, transparent); animation: halo 2.4s ease-in-out infinite; }
+.gr-edge:hover { background: var(--fill); }
 
 /* ---------- a page, open in the graph (page/) ---------- */
 .gr-page { position: absolute; z-index: 4; translate: -50% -50%; display: flex; flex-direction: column; }
-.pg { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; max-height: 640px; overflow: hidden; position: relative;
+.pg { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; min-height: 0; max-height: 640px; overflow: hidden; position: relative;
   border-radius: var(--r); background: var(--card); border: 1px solid var(--line); box-shadow: var(--lift); transition: border-color 0.3s, box-shadow 0.3s; }
 .pg::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 70%, transparent), transparent); }
 .pg.talking { border-color: color-mix(in oklab, var(--accent) 55%, var(--line)); box-shadow: var(--lift), 0 0 0 1px color-mix(in oklab, var(--accent) 35%, transparent); }
@@ -598,7 +618,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .pg-badge.warn { color: var(--warn-text); border-color: color-mix(in oklab, var(--warn) 50%, transparent); }
 .pg-title { display: flex; align-items: center; gap: 12px; }
 .pg-title h2 { flex: 1; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; }
-.pg-when { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.06em; color: var(--fg3); white-space: nowrap; text-transform: uppercase; }
+.pg-when { font-size: 12.5px; color: var(--fg3); white-space: nowrap; }
 .pg-live { display: inline-flex; align-items: center; gap: 6px; color: var(--run); }
 .pg-versions { display: inline-flex; gap: 2px; font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 2px 4px; }
 .pg-versions button { border: 0; background: none; padding: 1px 5px; border-radius: 5px; color: var(--fg3); cursor: pointer; font: inherit; }
@@ -614,11 +634,22 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .pg-ask-btns { display: flex; gap: 8px; flex: none; }
 .pg-old { margin: 0; font-size: 12.5px; color: var(--warn-text); }
 .pg-old .linkish { color: inherit; }
-.pg-tabs { display: flex; gap: 2px; margin-top: 4px; }
-.pg-tabs button { border: 0; background: none; font-size: 12.5px; padding: 3px 10px; border-radius: 7px; color: var(--fg3); cursor: pointer; }
-.pg-tabs button[aria-selected="true"] { background: var(--fill); color: var(--fg); font-weight: 500; }
+/* The « ⋯ » menu: the trace and the .md file, rarely wanted. */
+.pg-more { position: relative; display: inline-flex; }
+.pg-more-btn { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--fg3); cursor: pointer; }
+.pg-more-btn:hover, .pg-more-btn[aria-expanded="true"] { background: var(--fill); color: var(--fg); border-color: var(--line); }
+.pg-menu { position: fixed; z-index: 40; min-width: 150px; display: grid; padding: 4px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); box-shadow: var(--lift); }
+.pg-menu button { border: 0; background: none; text-align: left; padding: 6px 10px; border-radius: 7px; font-size: 13px; color: var(--fg2); cursor: pointer; }
+.pg-menu button:hover { background: var(--fill); color: var(--fg); }
+.pg-menu button[aria-checked="true"] { color: var(--fg); font-weight: 500; }
+.pg-view { display: flex; align-items: center; gap: 10px; margin: 2px 0 0; font-size: 12.5px; color: var(--fg3); }
+.pg-view b { font-weight: 500; color: var(--fg2); }
+.pg-view .linkish { font-size: inherit; color: var(--accent-text); }
 .pg-body { overflow-y: auto; padding: 16px 20px 20px; scrollbar-width: thin; }
-.pg-foot { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--fill); }
+/* The cards at the foot scroll on their own past a height: however long a
+   card (its Détails open), the body keeps its room and nothing overlaps. */
+.pg-foot { border-top: 1px solid var(--line); padding: 10px 12px; background: var(--fill); max-height: min(340px, 50vh); overflow-y: auto; scrollbar-width: thin; }
+.ls-page .pg-foot { max-height: none; }
 .pg-doc { display: grid; gap: 14px; }
 .pg-doc .a2-markdown > :first-child { margin-top: 0; }
 .a2-block { display: flex; flex-direction: column; gap: 10px; }
@@ -649,17 +680,8 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 @keyframes shim { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
 /* ---------- the head-up display (hud/) ---------- */
-/* No bar: the graph takes the whole screen. The ticker floats at the top,
-   the corner's three icons at the top right. */
-.hud-ticker { position: absolute; top: 14px; left: 50%; translate: -50% 0; z-index: 20; max-width: calc(100vw - 340px); display: flex; align-items: center; justify-content: center; gap: 6px; overflow: hidden; pointer-events: none; }
-.hud-ticker > * { pointer-events: auto; }
-.tick { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--glass-line); background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); cursor: pointer; white-space: nowrap; font-size: 12.5px; color: var(--fg); }
-.tick:hover { border-color: var(--link-on); }
-.tick b { font-weight: 600; }
-.tick span { color: var(--fg2); font-family: var(--mono); font-size: 11.5px; }
-.tick.yours { border-color: color-mix(in oklab, var(--accent) 50%, transparent); }
-.tick.yours span { color: var(--accent-text); }
-.tick.runs span { color: var(--run); }
+/* No bar: the graph takes the whole screen, the corner's three icons at
+   the top right. */
 .hud-corner { position: absolute; top: 12px; right: 14px; z-index: 20; display: flex; align-items: center; gap: 4px; }
 .hud-icon { position: relative; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 999px; color: var(--fg2);
   border: 1px solid transparent; background: color-mix(in oklab, var(--glass) 70%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
@@ -695,8 +717,14 @@ a.notice-text:hover { text-decoration: underline; }
 .cs { position: absolute; z-index: 30; left: 50%; bottom: 16px; translate: -50% 0; width: min(620px, calc(100vw - 32px)); display: grid; justify-items: center; gap: 10px; pointer-events: none; }
 .cs > * { pointer-events: auto; }
 .cs-aside { display: grid; justify-items: center; gap: 8px; text-align: center; max-width: 100%; pointer-events: none; }
-.cs-said { max-width: 560px; max-height: 4.8em; overflow: hidden; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; color: var(--fg);
-  text-shadow: 0 0 18px var(--bg), 0 0 6px var(--bg); }
+.cs-panel { display: grid; justify-items: center; gap: 6px; max-width: min(580px, 100%); padding: 9px 16px 10px; border-radius: 14px; pointer-events: auto;
+  border: 1px solid var(--glass-line); background: color-mix(in oklab, var(--card) 94%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: var(--lift); }
+.cs-said { max-width: 548px; max-height: 4.8em; overflow: hidden; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; color: var(--fg); }
+/* The user's last question, above the answer: one grey line, whole on a click. */
+.cs-asked { max-width: 100%; border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; color: var(--fg3); cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-asked:hover { color: var(--fg2); }
+.cs-asked.whole { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9em; overflow-y: auto; text-align: left; }
 .cs-said .a2-markdown > * { margin: 0; }
 .cs-cards { width: min(560px, 100%); max-height: 46vh; overflow: auto; pointer-events: auto; text-align: left; }
 .cs-conv .cs-cards { width: auto; max-height: 40%; padding: 0 12px 12px; }
@@ -765,12 +793,12 @@ a.notice-text:hover { text-decoration: underline; }
 .ls-row em.runs { color: var(--run); }
 .ls-page { position: absolute; inset: 0; overflow-y: auto; padding: 60px 8px 150px; }
 .ls-page .pg { max-height: none; }
-
 @media (max-width: 760px) {
-  .hud-ticker { left: 12px; right: 136px; max-width: none; translate: none; justify-content: flex-start; overflow-x: auto; }
+  .pg-title { flex-wrap: wrap; row-gap: 6px; }
+  .pg-title h2 { flex-basis: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .a2-shimmer, .a2-button.is-busy::after, .dot.run, .gr-halo, .gr-ring-run, .cs-orb-glow, .cs-wave i, .cs-dots i, .pg-skel i { animation: none; }
+  .a2-shimmer, .a2-button.is-busy::after, .dot.run, .gr-halo, .gr-ring-run, .gr-ring-yours, .gr-edge, .cs-orb-glow, .cs-wave i, .cs-dots i, .pg-skel i { animation: none; }
   .btn, .a2-option span, .gr-core, .gr-link, .pg { transition: none; }
 }

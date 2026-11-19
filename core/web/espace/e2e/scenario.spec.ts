@@ -40,14 +40,24 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(page.locator("article.pg")).toHaveCount(0);
 
   // 2. One call, no node opened; it is logged in « Ma journée »'s trace.
+  // The question stays, in grey, just above the answer.
   await say("Allume la lumière du bureau.");
   await expect(said).toContainText("C'est allumé.");
+  const asked = page.locator(".cs-asked");
+  await expect(asked).toContainText("Allume la lumière du bureau.");
+  expect((await asked.boundingBox())!.y).toBeLessThan((await said.boundingBox())!.y);
+  await shot(page, "console");
   await expect(page.locator("article.pg")).toHaveCount(0);
   expect((await (await request.get("/e2e/tools")).json()).lit).toEqual(["bureau"]);
   await bubble("Ma journée").click();
-  await pageOf("Ma journée").getByRole("tab", { name: "Trace" }).click();
+  // The trace is behind the page's « ⋯ » menu: no tabs.
+  await expect(pageOf("Ma journée").getByRole("tab")).toHaveCount(0);
+  await pageOf("Ma journée").getByRole("button", { name: "Plus" }).click();
+  await shot(page, "page-menu", false);
+  await page.getByRole("menuitemcheckbox", { name: "Trace" }).click();
   await expect(pageOf("Ma journée").locator(".pg-trace")).toContainText("Appel : maison/allumer.");
-  await pageOf("Ma journée").getByRole("tab", { name: "Contenu" }).click();
+  await pageOf("Ma journée").getByRole("button", { name: "← Contenu" }).click();
+  await expect(pageOf("Ma journée").locator(".pg-trace")).toHaveCount(0);
   await pageOf("Ma journée").getByRole("button", { name: "Fermer cette page" }).click();
 
   // 3. The user opens the standing subject « Substack ».
@@ -73,15 +83,17 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(pageOf("Ma journée")).toContainText("Dentiste");
   await expect(page.locator(".gr-node")).toHaveCount(before);
 
-  // 6. A monitor opens a node: an urgent mail. It waits for the user, and
-  // its title, someone else's words, never shows.
+  // 6. A monitor opens a node: an urgent mail. Its bubble says it waits
+  // for the user, and its title, someone else's words, never shows.
   const mail = (await (await request.post("/e2e/mail")).json()).id as string;
-  const tick = page.locator(".tick.yours", { hasText: external });
-  await expect(tick).toBeVisible();
+  const waiting = page.locator(`.gr-node.yours[data-node="${mail}"]`);
+  await expect(waiting).toHaveCount(1);
+  await expect(waiting.locator(".gr-label em.yours")).toHaveText("t'attend");
+  await shot(page, "waiting");
   await expect(page.getByText("Urgent : la prod renvoie des 500")).toHaveCount(0);
 
   // 7. The mail node opens with its triage and its draft.
-  await tick.click();
+  await openMail(page, mail);
   const mailPage = page.locator(`article.pg[aria-label="${external}"]`);
   await expect(mailPage).toContainText("Tri");
   await expect(mailPage).toContainText("À écrire.");
@@ -92,6 +104,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(said).toContainText("Le brouillon est prêt");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", `Écris à Eriphe, sur ${external}`);
   await expect(mailPage).toContainText("Je regarde dans l'heure.");
+  await shot(page, "console-over-page");
   await expect(pageOf("Production")).toBeVisible();
   await expect(pageOf("Production")).toContainText("42");
   await expect(page.locator(".gr-node.running .gr-core[aria-label^=\"Recherche sur l'erreur\"]")).toBeVisible();
@@ -122,7 +135,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   // step's empty creation is not one.
   const v = plan.locator(".pg-versions button");
   await expect(v).toHaveCount(0);
-  await expect(page.locator(".tick.yours", { hasText: "Plan du premier" })).toBeVisible();
+  await expect(page.locator(".gr-node.yours .gr-core[aria-label^='Plan du premier article']")).toHaveCount(1);
 
   // 12. Said to the open plan page: a new version, the older one still
   // readable.
@@ -139,7 +152,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(plan).not.toContainText("Pourquoi ce métier");
 
   // The user edits the plan in its .md tab: saved on the version read.
-  await plan.getByRole("tab", { name: ".md" }).click();
+  await menu(plan, "Fichier .md");
   const editor = plan.locator(".cm-content");
   await expect(editor).toContainText("Ce qui vient");
   await editor.click();
@@ -147,7 +160,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await page.keyboard.type("4. Et après\n");
   await plan.getByRole("button", { name: "Enregistrer" }).click();
   await expect(plan.locator(".pg-md-state")).toContainText("Enregistré");
-  await plan.getByRole("tab", { name: "Contenu" }).click();
+  await plan.getByRole("button", { name: "← Contenu" }).click();
   await expect(plan).toContainText("Et après");
   // The user says the plan suits them: Eriphe, on their word, marks it done.
   await plan.locator(".pg-head").click({ position: { x: 10, y: 10 } });
@@ -193,9 +206,22 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(watch.locator(".pg-foot")).toHaveCount(0);
   await page.locator(".cs-reply", { hasText: "Fais comme tu proposes" }).click();
   await expect(said).toContainText("Voici la vue");
+  await expect(page.locator(".cs-asked")).toContainText("Fais comme tu proposes");
+  // The view's card says plainly what its yes makes; its technical words,
+  // the skill's instructions drawn as Markdown, are one click away.
   const viewCard = watch.locator(".pg-foot");
   await expect(viewCard).toContainText("Mes mails");
   await expect(viewCard).toContainText("prévenu au brief, jamais la nuit");
+  await expect(viewCard.locator(".a2-proposal-summary")).toContainText("Une page « Mes mails »");
+  await expect(viewCard.locator(".a2-proposal-summary")).toContainText("Regarde toutes les 5 min s'il y a du nouveau");
+  const details = viewCard.locator("details.a2-proposal-details");
+  await expect(details.locator(".a2-proposal-md")).toBeHidden();
+  await shot(page, "view-card");
+  await details.locator("summary").click();
+  await expect(details.locator(".a2-proposal-md h3")).toHaveText("Trier les mails");
+  await expect(details).not.toContainText("**chaque**");
+  await details.locator(".a2-proposal-md").scrollIntoViewIfNeeded();
+  await shot(page, "view-card-details", true);
   await viewCard.getByRole("button", { name: "Oui" }).click();
   await expect(bubble("Mes mails")).toBeVisible();
   await expect(pageOf("Mes mails")).toBeVisible();
@@ -223,7 +249,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   // End: home again, nothing waiting.
   await home(page);
   await expect(page.locator("article.pg")).toHaveCount(0);
-  await expect(page.locator(".tick.yours")).toHaveCount(0);
+  await expect(page.locator(".gr-node.yours")).toHaveCount(0);
 
   expect(problems).toEqual([]);
 });
@@ -284,6 +310,27 @@ test("the workspace as the user left it", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   expect(problems).toEqual([]);
 });
+
+// shot saves a screenshot when SHOTS names a folder (a look by hand), in
+// light and in dark.
+async function shot(page: Page, name: string, both = true) {
+  const dir = process.env.SHOTS;
+  if (!dir) return;
+  await page.screenshot({ path: `${dir}/${name}-light.png` });
+  if (!both) return;
+  // The theme set on the page alone: the user's choice is not touched.
+  const set = (theme: string) => page.evaluate((th) => (document.documentElement.dataset.theme = th), theme);
+  const was = await page.locator("html").getAttribute("data-theme");
+  await set("dark");
+  await page.screenshot({ path: `${dir}/${name}-dark.png` });
+  await set(was ?? "light");
+}
+
+// menu picks an entry of a page's « ⋯ » menu.
+async function menu(pg: Locator, name: string) {
+  await pg.getByRole("button", { name: "Plus" }).click();
+  await pg.page().getByRole("menuitemcheckbox", { name }).click();
+}
 
 // home closes every page open, one by one, the one the camera frames (the
 // console talks to it) first: the console then talks to the home.
@@ -352,6 +399,7 @@ test("the workspace on a small screen", async ({ page }) => {
   const day = page.locator('article.pg[aria-label="Ma journée"]');
   await expect(day).toBeVisible();
   await expect(day).toContainText("Point produit");
+  await shot(page, "phone-page");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Ma journée");
   await day.getByRole("button", { name: "Fermer cette page" }).click();
   await expect(page.locator("article.pg")).toHaveCount(0);

@@ -499,6 +499,11 @@ func (c *core) accessProposal(p proposal) proposal {
 type cardField struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
+	// Detail: shown under the card's Détails, one click away, never
+	// hidden (what a yes enables stays on the card); Markdown: the value
+	// is Markdown (a skill's instructions), drawn as such.
+	Detail   bool `json:"detail,omitempty"`
+	Markdown bool `json:"markdown,omitempty"`
 }
 
 // cardValueMax is as much of a value as a card keeps.
@@ -513,7 +518,7 @@ func callFields(input map[string]any) []cardField {
 			raw, _ := json.Marshal(input[name])
 			value = string(raw)
 		}
-		out = append(out, cardField{name, truncate(value, cardValueMax)})
+		out = append(out, cardField{Name: name, Value: truncate(value, cardValueMax)})
 	}
 	return out
 }

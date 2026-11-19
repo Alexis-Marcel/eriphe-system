@@ -358,6 +358,43 @@ describe("the catalog's components", () => {
     expect(sent).toEqual([{ surfaceId: "t", componentId: "card", ref: "calls:5", yes: true, at: "/rows/1/cards/0" }]);
   });
 
+  it("lead a view's card with what its yes makes, its technical words one click away", async () => {
+    const view = {
+      ref: "view:1",
+      card: 4,
+      kind: "view",
+      state: "pending",
+      text: "Créer la vue « Mes mails » ?",
+      why: "Les mails qui demandent une réponse",
+      summary: ["Une page « Mes mails » dans ton graphe, tenue à jour", "Regarde toutes les 5 min s'il y a du nouveau"],
+      fields: [
+        { name: "Moniteur mails-recus", value: "toutes les 5 min, regarde mail.recus", detail: true },
+        { name: "mails-trier · Consignes", value: "# Trier les mails\n\nPour **chaque** mail :\n\n1. Note-le.\n2. Prépare une réponse.\n\n```\nnode_open titre=Répondre\n```", detail: true, markdown: true },
+        { name: "Dépôts", value: "sam/site" },
+      ],
+    };
+    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "view:1" }]), { read: async () => view, answer: async () => true });
+    await act(async () => {});
+    expect(text(".a2-proposal-why")).toBe("Les mails qui demandent une réponse");
+    expect($$(".a2-proposal-summary li").map((li) => li.textContent)).toEqual(view.summary);
+    // A field that is no detail stays in sight; the others under Détails, closed.
+    const details = $("details.a2-proposal-details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    expect(text("details.a2-proposal-details > summary")).toBe("Détails");
+    expect($$(".a2-proposal > .a2-proposal-fields dt").map((d) => d.textContent)).toEqual(["Dépôts"]);
+    expect([...details.querySelectorAll("dt")].map((d) => d.textContent)).toEqual(["Moniteur mails-recus", "mails-trier · Consignes"]);
+    // The instructions are drawn as Markdown, never shown raw.
+    const md = details.querySelector(".a2-proposal-md dd")!;
+    expect(md.querySelector("h3")?.textContent).toBe("Trier les mails");
+    expect(md.querySelector("strong")?.textContent).toBe("chaque");
+    expect(md.querySelectorAll("ol li")).toHaveLength(2);
+    expect(md.querySelector("pre code")?.textContent).toBe("node_open titre=Répondre");
+    expect(md.textContent).not.toContain("**");
+    // Its Oui stays out of the disclosure.
+    expect(details.querySelector(".a2-proposal-actions")).toBeNull();
+    expect($(".a2-proposal-actions")).not.toBeNull();
+  });
+
   it("show a day's dated proposals as ghosts, and what they overlap", async () => {
     const src = sampleProposals("fr");
     await mount("fr", galleryFixtures("fr"), src);

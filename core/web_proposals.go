@@ -21,6 +21,7 @@ type proposalView struct {
 	Text    string      `json:"text"`
 	Why     string      `json:"why,omitempty"`
 	Tainted bool        `json:"tainted,omitempty"`
+	Summary []string    `json:"summary,omitempty"` // what a yes makes, in plain sentences
 	Fields  []cardField `json:"fields,omitempty"`
 	Node    string      `json:"node,omitempty"`    // the node it belongs to (card_origin.go)
 	From    string      `json:"from,omitempty"`    // the node and the task that ask, in words
@@ -37,6 +38,7 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 	if t := p.Text(lang); t != "" {
 		v.Text = t
 	}
+	v.Summary = p.SummaryIn(lang)
 	v.Fields = p.FieldsIn(lang)
 	o := p.Origin(lang)
 	v.Node, v.From, v.Yes = o.Node, o.From, o.Yes

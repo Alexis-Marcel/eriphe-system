@@ -1,5 +1,6 @@
-import { useState, type PointerEvent as PtrEvent } from "react";
-import { wall, when } from "../a2ui/format";
+import { useEffect, useRef, useState, type PointerEvent as PtrEvent } from "react";
+import { createPortal } from "react-dom";
+import { stamp } from "../a2ui/format";
 import { archive, label, type TraceEntry } from "../data/api";
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
@@ -11,8 +12,9 @@ import { useFile, usePage, useTrace } from "./usePage";
 
 // A node's page, drawn in the graph where its bubble was (#633): its head
 // (what it belongs to, its title, its date or what is happening, its
-// versions, the way to archive it, the button that closes it), the tabs
-// Content, Trace and .md, and at its foot the cards it waits on. In the
+// versions, the way to archive it, a small « ⋯ » menu for what is rarely
+// wanted: its trace and its .md file, the button that closes it), its
+// content, and at its foot the cards it waits on. In the
 // graph it is moved by its head, like a bubble. Archiving is the user's
 // alone, asked once more at the foot, with how many bubbles go with it.
 
@@ -45,7 +47,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
   const path = pathOf(nodes, id);
   const kicker = path.length > 1 ? titleOf(nodes[path[0]], external) : null;
   const running = node?.state === "running";
-  const at = wall(node?.updated);
+  const at = stamp(lang, node?.updated);
   const shift = page?.shift ?? 0;
   const gone = (n: number) => (n === 0 ? "" : n === 1 ? t("espace.page.archive.one") : t("espace.page.archive.many", n));
 
@@ -82,9 +84,9 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
                 <i className="dot run" />
                 {t("espace.page.running")}
               </span>
-            ) : at ? (
-              when(lang, at)
-            ) : null}
+            ) : (
+              at
+            )}
           </span>
           {(page?.versions.length ?? 0) > 1 && (
             <span className="pg-versions" role="group" aria-label={t("espace.page.versions")}>
@@ -100,6 +102,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               {t("espace.page.archive")}
             </button>
           )}
+          <More tab={tab} onTab={setTab} />
           <button type="button" className="pg-x" onClick={onClose} aria-label={t("espace.page.close")}>
             ✕
           </button>
@@ -112,13 +115,14 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
             </button>
           </p>
         )}
-        <nav className="pg-tabs" role="tablist">
-          {(["doc", "trace", "md"] as const).map((k) => (
-            <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
-              {t(`espace.page.${k}`)}
+        {tab !== "doc" && (
+          <p className="pg-view">
+            <b>{t(`espace.page.${tab}`)}</b>
+            <button type="button" className="linkish" onClick={() => setTab("doc")}>
+              ← {t("espace.page.doc")}
             </button>
-          ))}
-        </nav>
+          </p>
+        )}
       </header>
       <div className="pg-body">
         {tab === "doc" && (page ? <Doc page={page} latest={latest} live={live} /> : failed ? <p className="pg-empty">{t("espace.page.gone")}</p> : <Skeleton />)}
@@ -152,6 +156,57 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
   );
 }
 
+// More is the page's small menu: its trace and its .md file, rarely
+// wanted, a click away; Escape or a click outside closes it. It is drawn
+// over everything (the page clips what overflows it), under its button.
+function More({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+  const { t } = useWords();
+  const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
+  const box = useRef<HTMLSpanElement>(null);
+  const list = useRef<HTMLSpanElement>(null);
+  const toggle = () => {
+    const r = box.current?.getBoundingClientRect();
+    setOpen(open || !r ? null : { top: r.bottom + 4, right: innerWidth - r.right });
+  };
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => !box.current?.contains(e.target as Node) && !list.current?.contains(e.target as Node) && setOpen(null);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(null);
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  const pick = (k: Tab) => {
+    onTab(tab === k ? "doc" : k);
+    setOpen(null);
+  };
+  return (
+    <span className="pg-more" ref={box}>
+      <button type="button" className="pg-more-btn" aria-haspopup="menu" aria-expanded={!!open} aria-label={t("espace.page.more")} title={t("espace.page.more")} onClick={toggle}>
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.6" fill="currentColor" />
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+          <circle cx="19" cy="12" r="1.6" fill="currentColor" />
+        </svg>
+      </button>
+      {open &&
+        createPortal(
+          <span className="pg-menu" role="menu" ref={list} style={{ top: open.top, right: open.right }}>
+            {(["trace", "md"] as const).map((k) => (
+              <button key={k} type="button" role="menuitemcheckbox" aria-checked={tab === k} onClick={() => pick(k)}>
+                {t(`espace.page.${k}`)}
+              </button>
+            ))}
+          </span>,
+          document.body,
+        )}
+    </span>
+  );
+}
+
 function Skeleton() {
   return (
     <div className="pg-skel" aria-busy="true">
@@ -169,11 +224,10 @@ function Trace({ entries }: { entries: TraceEntry[] }) {
   return (
     <ol className="pg-trace">
       {entries.map((e, i) => {
-        const w = wall(e.at);
         const who = e.author.startsWith("task:") ? "task" : e.author;
         return (
           <li key={i} className={`who-${who}`}>
-            <time dateTime={e.at}>{w ? when(lang, w) : ""}</time>
+            <time dateTime={e.at}>{stamp(lang, e.at)}</time>
             <span className="pg-who">{t(`espace.who.${["brain", "user", "task", "eriphe", "outside"].includes(who) ? who : "eriphe"}`)}</span>
             <p>{e.text}</p>
           </li>

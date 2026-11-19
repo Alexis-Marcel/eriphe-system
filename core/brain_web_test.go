@@ -84,7 +84,7 @@ func TestBrainWebFetch(t *testing.T) {
 		t.Fatalf("the brain is held, or reads: %v %v", ok, allow)
 	}
 	x := accessCard(t, c, "read this page")
-	if _, p := c.liveCard(x); !slices.Contains(p.Fields, cardField{"url", "https://attacker.example/?q=secret"}) {
+	if _, p := c.liveCard(x); !slices.Contains(p.Fields, cardField{Name: "url", Value: "https://attacker.example/?q=secret"}) {
 		t.Fatalf("the card does not say the page: %+v", p.Fields)
 	}
 	// Refused on the card: still nothing goes through.

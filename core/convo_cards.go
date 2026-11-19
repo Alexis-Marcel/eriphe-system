@@ -157,6 +157,7 @@ type proposal struct {
 	Extracted bool        // from the memory's extraction, not from a turn of the brain's
 	text      func(lang string) string
 	fields    func(lang string) []cardField // Fields in the user's language, when they have words of ours
+	summary   func(lang string) []string    // what a yes makes, in plain sentences of code's, before the fields
 	origin    func(lang string) cardOrigin  // where it comes from and what its Oui does (card_origin.go)
 }
 
@@ -175,6 +176,15 @@ func (p proposal) FieldsIn(lang string) []cardField {
 		return p.fields(lang)
 	}
 	return p.Fields
+}
+
+// SummaryIn is what a yes makes, in plain sentences, with the words of
+// lang: none for most kinds, whose text and fields say it.
+func (p proposal) SummaryIn(lang string) []string {
+	if p.summary == nil {
+		return nil
+	}
+	return p.summary(lang)
 }
 
 // Text is what it proposes, in a line, with the words of lang.

@@ -154,6 +154,25 @@ func TestMailViewOneYes(t *testing.T) {
 	if !strings.Contains(v.Text("fr"), "Mes mails") {
 		t.Errorf("text %q", v.Text("fr"))
 	}
+	// The card leads with what the yes makes, in plain words; its
+	// technical words are all under Détails, the instructions as Markdown.
+	said := strings.Join(v.SummaryIn("fr"), "\n")
+	for _, want := range []string{"Une page « Mes mails »", "toutes les 1 min s'il y a du nouveau", "À chaque fois : Trie les mails reçus.", "Te prévient de ce qui compte"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the summary lacks %q:\n%s", want, said)
+		}
+	}
+	if en := strings.Join(v.SummaryIn("en"), "\n"); !strings.Contains(en, "Checks every 1 min for anything new") {
+		t.Errorf("the English summary:\n%s", en)
+	}
+	for _, f := range v.FieldsIn("fr") {
+		if !f.Detail {
+			t.Errorf("field %q is not under Détails", f.Name)
+		}
+		if f.Markdown != strings.HasSuffix(f.Name, "Consignes") {
+			t.Errorf("field %q: markdown %v", f.Name, f.Markdown)
+		}
+	}
 
 	// One yes: the three.
 	if err := c.decideProposal(context.Background(), cardViewKind, v.ID, true); err != nil {
@@ -586,5 +605,25 @@ func TestViewCardWords(t *testing.T) {
 		if v.State != cardPending {
 			t.Errorf("%s: state %s", lang, v.State)
 		}
+	}
+}
+
+// A view's summary says each way it may run and tell: an incoming
+// address, an urgent text, no skill at all.
+func TestViewSummary(t *testing.T) {
+	listen := viewProposal{Title: "Ma prod", Spec: &monitorSpec{Way: wayListen},
+		manifest: &skillManifest{Description: "Regarde l'alerte.", Trigger: &skillTrigger{Urgent: "Prod en panne"}}}
+	got := strings.Join(viewSummary(listen, "fr"), "\n")
+	for _, want := range []string{"Une page « Ma prod »", "dès qu'un événement arrive", "À chaque fois : Regarde l'alerte.", "à toute heure avec « Prod en panne »"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("lacks %q:\n%s", want, got)
+		}
+	}
+	changed := viewProposal{Title: "PR", Spec: &monitorSpec{Every: 60, Cond: condChanged}}
+	if got := viewSummary(changed, "en"); len(got) != 2 || got[1] != "Checks every 1 h whether something changed" {
+		t.Errorf("summary %q", got)
+	}
+	if got := viewSummary(viewProposal{Title: "Seule"}, "fr"); len(got) != 1 {
+		t.Errorf("a view alone: %q", got)
 	}
 }

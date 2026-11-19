@@ -1,45 +1,25 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { wall, when } from "../a2ui/format";
+import { stamp } from "../a2ui/format";
 import { Icon } from "../a2ui/icons";
 import { archives, reopen, type ArchivedNode } from "../data/api";
 import { localURL } from "../data/presence";
 import { dropNote, openPage, setTheme, step, store, useGraph } from "../data/store";
 import { STREAM_GRACE } from "../data/stream";
-import { titleOf, waits } from "../graph/model";
+import { titleOf } from "../graph/model";
 import { useWords } from "../i18n";
 
 // The head-up display (#633), with no bar: the graph takes the whole
-// screen. Over it, at the top, the ticker of what waits for the user and
-// what runs, each a way to its page; in the top-right corner, three icons:
+// screen, and its bubbles say what waits for the user and what runs. In
+// the top-right corner, three icons:
 // what the user archived, to reopen; the light or dark theme; the way to
 // the settings. Under them, the notifications routed to this tab, and a
 // word when the stream is down.
 
-const spring = { type: "spring", stiffness: 300, damping: 32 } as const;
-const TICKS = 5;
-
 export function Hud({ live }: { live: boolean }) {
   const { t } = useWords();
-  const nodes = useGraph((s) => s.nodes);
-  const external = t("espace.external");
-  const all = Object.values(nodes);
-  const ticks = [...all.filter(waits), ...all.filter((x) => x.state === "running" && !waits(x))].slice(0, TICKS);
   return (
     <>
-      <div className="hud-ticker" aria-label={t("espace.ticker")}>
-        <AnimatePresence initial={false}>
-          {ticks.map((x) => (
-            <motion.div key={x.id} layout initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={spring}>
-              <button type="button" className={`tick ${waits(x) ? "yours" : "runs"}`} onClick={() => step(store, openPage, x.id, true)}>
-                <i className={`dot ${waits(x) ? "yours" : "run"}`} />
-                <b>{trim(titleOf(x, external))}</b>
-                <span>· {waits(x) ? t("espace.ticker.waits") : (x.line ?? t("espace.ticker.runs"))}</span>
-              </button>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
       <div className="hud-corner">
         {live && <Archives />}
         <Theme />
@@ -136,13 +116,13 @@ function Archives() {
             ) : (
               <ul className="hud-arch">
                 {list!.map((x) => {
-                  const at = wall(x.archived);
+                  const at = stamp(lang, x.archived);
                   return (
                     <li key={x.id}>
                       <span>
                         <b>{titleOf(x, external)}</b>
                         <em>
-                          {at ? t("espace.archives.at", when(lang, at)) : ""}
+                          {at ? t("espace.archives.at", at) : ""}
                           {x.with ? ` · ${x.with === 1 ? t("espace.archives.with1") : t("espace.archives.with", x.with)}` : ""}
                         </em>
                       </span>
@@ -161,7 +141,6 @@ function Archives() {
   );
 }
 
-const trim = (s: string) => (s.length > 22 ? s.slice(0, 21) + "…" : s);
 
 // Offline says the stream is down, once it has been for a while.
 function Offline() {
