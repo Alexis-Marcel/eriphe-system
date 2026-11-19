@@ -103,12 +103,32 @@ func (c *core) callsProposal(p proposal) proposal {
 			p.Why = "Skill « " + r.Skill + " »"
 		}
 	}
+	// While it waits, the calls that wait: one decided before them (its
+	// card came again) is on its old card.
+	if p.Pending {
+		var waiting []accessQuestion
+		for _, a := range asks {
+			if c.askWaits(a) {
+				waiting = append(waiting, a)
+			}
+		}
+		asks = waiting
+	}
 	items := asksItems(asks)
+	var fs []cardField
+	for _, a := range asks {
+		fs = append(fs, callDetail(a))
+	}
+	p.Fields = fs
+	p.origin = func(lang string) cardOrigin { return c.callsOrigin(first, items, len(asks), lang) }
+	if len(asks) > 1 {
+		return c.chosenCalls(p, asks)
+	}
 	// Its words read plainly (call_words.go); the exact calls under
 	// Détails.
 	p.text = func(lang string) string {
 		text, _ := c.callsWords(asks, lang)
-		if len(items) > 1 && len(asks) == 1 {
+		if len(items) > 1 {
 			return fmt.Sprintf(tr(lang, "card.calls.items"), text, len(items))
 		}
 		return text
@@ -117,12 +137,57 @@ func (c *core) callsProposal(p proposal) proposal {
 		_, lines := c.callsWords(asks, lang)
 		return lines
 	}
-	var fs []cardField
+	return p
+}
+
+// chosenCalls are the words of a card of several calls, each a line the
+// user may leave out (call_fold.go): for calls that do the same thing to
+// other items, the action once, for how many, and each call's items; for
+// others, each call's sentence.
+func (c *core) chosenCalls(p proposal, asks []accessQuestion) proposal {
+	same := batchKind(asks) != ""
+	total := 0
 	for _, a := range asks {
-		fs = append(fs, callDetail(a))
+		total += itemCount(a)
 	}
-	p.Fields = fs
-	p.origin = func(lang string) cardOrigin { return c.callsOrigin(first, items, len(asks), lang) }
+	p.choices = func(lang string) []proposalChoice {
+		_, lines := c.callsWords(asks, lang)
+		var out []proposalChoice
+		for i, a := range asks {
+			text := lines[i]
+			if same {
+				text = c.choiceText(a, lang)
+			}
+			out = append(out, proposalChoice{ID: a.ID, Text: text, N: itemCount(a), State: a.State})
+		}
+		return out
+	}
+	if !same {
+		p.text = func(lang string) string {
+			text, _ := c.callsWords(asks, lang)
+			return text
+		}
+		return p
+	}
+	p.text = func(lang string) string {
+		if p.Pending {
+			return kindSentence(asks[0], total, lang)
+		}
+		return c.callsDecidedText(asks, lang)
+	}
+	p.summary = func(lang string) []string {
+		if f := callFolder(asks[0].Call, asks[0].Input, lang); f != "" {
+			return []string{f}
+		}
+		return nil
+	}
+	p.acts = func(lang string) []string {
+		out := make([]string, total)
+		for k := range out {
+			out[k] = kindSentence(asks[0], k+1, lang)
+		}
+		return out
+	}
 	return p
 }
 

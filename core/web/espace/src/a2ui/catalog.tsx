@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createComponentImplementation, type ReactComponentImplementation } from "@a2ui/react";
 import { Catalog, CommonSchemas, type ComponentContext } from "@a2ui/web_core/v1_0";
 import { z } from "zod";
@@ -10,7 +10,7 @@ import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { Pickable, usePicks } from "./picks";
-import { useMoved, useProposals, type ProposalView } from "./proposals";
+import { HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
 // eriphe-core owns the catalog (its JSON Schema, which validates what a
@@ -961,17 +961,23 @@ function Fields({ fields }: { fields: NonNullable<ProposalView["fields"]> }) {
 // this component and that proposal: eriphe-core decides it only if the
 // surface shows it and it still waits, as its card in the conversation. A
 // surface showing external content can only ask: there, no Oui or Non, the
-// proposal is answered in the conversation.
+// proposal is answered in the conversation. A card of several calls lists
+// each with a box, all ticked: Oui runs those ticked, refuses the others,
+// and says what it does for them. On its own node's page (HomeNode: the
+// page's node, code's, never a block's), where it comes from and what Oui
+// does in general go under Détails.
 const Proposal = createComponentImplementation(
   { name: "Proposal", schema: z.object({ proposalId: CommonSchemas.DynamicString, compact: z.boolean().optional() }) },
   ({ props, context }) => {
     const { t } = useWords();
+    const homeNode = useContext(HomeNode);
     const src = useProposals();
     const ref = str(props.proposalId);
     const [whole, setWhole] = useState(false); // a compact one opened
     const [p, setP] = useState<ProposalView | null | undefined>(undefined);
     const [busy, setBusy] = useState<"yes" | "no" | null>(null); // the answer on its way
     const [failed, setFailed] = useState(false);
+    const [left, setLeft] = useState<ReadonlySet<number>>(() => new Set()); // the calls unticked
     useEffect(() => {
       let live = true;
       setP(undefined);
@@ -996,6 +1002,9 @@ const Proposal = createComponentImplementation(
         live = false;
       };
     }, [src, ref, moved]);
+    const choices = p?.choices ?? [];
+    const choosing = p?.state === "pending" && choices.length > 1;
+    const count = choices.filter((c) => !left.has(c.id)).reduce((n, c) => n + c.n, 0);
     const answer = async (yes: boolean) => {
       if (!p || busy) return;
       setBusy(yes ? "yes" : "no");
@@ -1003,7 +1012,10 @@ const Proposal = createComponentImplementation(
       const surfaceId = context.dataContext.surface?.id ?? "";
       // Bound inside a list (a row's card): where, so that only this row's answers.
       const at = context.dataContext.path && context.dataContext.path !== "/" ? { at: context.dataContext.path } : {};
-      const ok = await src.answer({ surfaceId, componentId: context.componentModel.id, ref: p.ref, yes, ...at }).catch(() => false);
+      // A choice names what the card shows: a call folded in since is in
+      // neither list, and waits on.
+      const chosen = yes && choosing ? { only: choices.filter((c) => !left.has(c.id)).map((c) => c.id), left: choices.filter((c) => left.has(c.id)).map((c) => c.id) } : {};
+      const ok = await src.answer({ surfaceId, componentId: context.componentModel.id, ref: p.ref, yes, ...at, ...chosen }).catch(() => false);
       if (!ok) setFailed(true);
       const again = await src.read(ref).catch(() => null);
       setP(again ?? { ...p, state: ok ? (yes ? "approved" : "rejected") : p.state });
@@ -1023,6 +1035,14 @@ const Proposal = createComponentImplementation(
       : exec
         ? t(`espace.a2.proposal.${exec === "failed" ? "execfailed" : exec}`)
         : t(decidedWord(p.state, Boolean(keeps)));
+    // On its own node's page, where it comes from (its node, its skill)
+    // and what Oui does in general are under Détails: the page says it.
+    const home = Boolean(homeNode && p.node === homeNode);
+    const aside = home && (p.kind === "calls" || p.kind === "runcalls") ? p.why : undefined;
+    const why = aside ? undefined : p.why;
+    const from = p.from && (p.node ? <a href={`/espace?open=node-${p.node}`}>{p.from}</a> : p.from);
+    const yesWord = choosing && p.acts && count > 0 ? p.acts[Math.min(count, p.acts.length) - 1] : t(keeps ? "espace.a2.keep" : "espace.a2.yes");
+    const details = Boolean(p.fields?.some((f) => f.detail) || (home && (aside || p.from || (pending && p.yes))));
     const icon = pending ? "star" : exec === "failed" || p.state !== "approved" ? "close" : exec === "running" ? "clock" : "check";
     // Compact and decided: one line, opened in place by a click.
     if (props.compact && !pending && !whole) {
@@ -1054,7 +1074,7 @@ const Proposal = createComponentImplementation(
         </p>
         {exec === "failed" && p.execWhy && <p className="a2-proposal-failed">{t(`espace.a2.proposal.why.${p.execWhy}`)}</p>}
         <p className="a2-proposal-text">{p.text}</p>
-        {p.why && <p className="a2-proposal-why">{p.why}</p>}
+        {why && <p className="a2-proposal-why">{why}</p>}
         {p.summary && p.summary.length > 0 && (
           <ul className="a2-proposal-summary">
             {p.summary.map((s) => (
@@ -1062,20 +1082,61 @@ const Proposal = createComponentImplementation(
             ))}
           </ul>
         )}
+        {choices.length > 1 && (
+          <ul className="a2-proposal-choices" aria-label={t("espace.a2.proposal.choices")}>
+            {choices.map((c) =>
+              choosing ? (
+                <li key={c.id}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={!left.has(c.id)}
+                      disabled={!!busy || elsewhere}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setLeft((was) => {
+                          const next = new Set(was);
+                          if (on) next.delete(c.id);
+                          else next.add(c.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span>{c.text}</span>
+                  </label>
+                </li>
+              ) : (
+                <li key={c.id} className={c.state === "rejected" ? "is-left" : undefined}>
+                  <span>{c.text}</span>
+                  {c.state === "rejected" && <small>{t("espace.a2.proposal.left")}</small>}
+                </li>
+              ),
+            )}
+          </ul>
+        )}
         <Fields fields={(p.fields ?? []).filter((f) => !f.detail)} />
-        {p.fields?.some((f) => f.detail) && (
+        {details && (
           <details className="a2-proposal-details">
             <summary>{t("espace.a2.proposal.details")}</summary>
-            <Fields fields={p.fields.filter((f) => f.detail)} />
+            {aside && <p className="a2-proposal-why">{aside}</p>}
+            {home && from && <p className="a2-proposal-from">{from}</p>}
+            {home && pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
+            <Fields fields={(p.fields ?? []).filter((f) => f.detail)} />
           </details>
         )}
-        {p.from && <p className="a2-proposal-from">{p.node ? <a href={`/espace?open=node-${p.node}`}>{p.from}</a> : p.from}</p>}
-        {pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
+        {!home && from && <p className="a2-proposal-from">{from}</p>}
+        {!home && pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
         {pending && elsewhere && <p className="a2-proposal-why a2-proposal-inchat">{t("espace.a2.proposal.inchat")}</p>}
         {pending && !elsewhere && (
           <div className="a2-proposal-actions">
-            <button type="button" className={`btn a2-button a2-button-primary${busy === "yes" ? " is-busy" : ""}`} disabled={!!busy} aria-busy={busy === "yes"} onClick={() => answer(true)}>
-              {t(keeps ? "espace.a2.keep" : "espace.a2.yes")}
+            <button
+              type="button"
+              className={`btn a2-button a2-button-primary${busy === "yes" ? " is-busy" : ""}`}
+              disabled={!!busy || (choosing && count === 0)}
+              aria-busy={busy === "yes"}
+              onClick={() => answer(true)}
+            >
+              {yesWord}
             </button>
             <button type="button" className={`btn a2-button${busy === "no" ? " is-busy" : ""}`} disabled={!!busy} aria-busy={busy === "no"} onClick={() => answer(false)}>
               {t(keeps ? "espace.a2.forget" : "espace.a2.no")}

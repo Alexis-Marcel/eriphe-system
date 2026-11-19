@@ -462,6 +462,12 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-proposal-fields dt { color: var(--fg3); }
 .a2-proposal-fields dd { margin: 0; overflow-wrap: anywhere; }
 .a2-proposal-summary { margin: 2px 0 0; padding-left: 18px; display: grid; gap: 2px; font-size: 13.5px; color: var(--fg); }
+/* A card of several calls: each a line the user may untick. */
+.a2-proposal-choices { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 2px; font-size: 13.5px; color: var(--fg); }
+.a2-proposal-choices label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
+.a2-proposal-choices input { margin: 0; flex: none; }
+.a2-proposal-choices li.is-left > span { color: var(--fg3); text-decoration: line-through; }
+.a2-proposal-choices li > small { margin-left: 8px; color: var(--fg3); }
 .a2-proposal-details { margin-top: 4px; font-size: 13px; }
 .a2-proposal-details > summary { cursor: pointer; color: var(--fg3); width: fit-content; }
 .a2-proposal-details > summary:hover { color: var(--fg); }
