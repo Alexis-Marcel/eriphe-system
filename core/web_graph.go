@@ -164,6 +164,20 @@ type nodePage struct {
 	Shift    int            `json:"shift,omitempty"` // 1 when its creation was empty: the user's v1 is its version 2
 	Parts    []pagePart     `json:"parts"`
 	Cards    []proposalView `json:"cards"`
+	// Refs: the node each [[name]] of its text opens, by the name as
+	// written; a name no node has is not there (the page greys it).
+	Refs map[string]pageRef `json:"refs"`
+}
+
+// pageRef is the node a [[link]] of a page opens: its id, its title as
+// the graph gives it ("" when it may be someone else's words: the page
+// then says what it is, never the link's words), and whether it is
+// archived (it shows so, and opens nothing).
+type pageRef struct {
+	ID       string `json:"id"`
+	Title    string `json:"title,omitempty"`
+	External bool   `json:"external,omitempty"`
+	Archived bool   `json:"archived,omitempty"`
 }
 
 // pageVersion is a version of a node: its number, who made it, when.
@@ -217,7 +231,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 	if err != nil {
 		return nodePage{}, errNoNode
 	}
-	p := nodePage{Node: c.graphRow(sum), Version: d.Version.N, Versions: []pageVersion{}, Parts: []pagePart{}, Cards: []proposalView{}}
+	p := nodePage{Node: c.graphRow(sum), Version: d.Version.N, Versions: []pageVersion{}, Parts: []pagePart{}, Cards: []proposalView{}, Refs: map[string]pageRef{}}
 	if !sum.Archived.IsZero() {
 		a := sum.Archived
 		p.Archived = &a
@@ -255,6 +269,18 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 		p.Parts = append(p.Parts, pagePart{Block: &b})
 	}
+	// Every way the text writes a name is a key of its own.
+	var names []string
+	for _, part := range d.Node.Parts() {
+		for _, l := range nodefile.WikiLinks(part.Text) {
+			names = append(names, l.Name)
+		}
+	}
+	if found, err := c.nodes.Resolve(id, names); err == nil {
+		for name, x := range found {
+			p.Refs[name] = pageRef{ID: x.ID, Title: cleanRefTitle(x), External: x.External, Archived: !x.Archived.IsZero()}
+		}
+	}
 	placed := map[string]bool{}
 	for _, part := range p.Parts {
 		if part.Block != nil && part.Block.Proposal != nil {
@@ -267,6 +293,15 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 	}
 	return p, nil
+}
+
+// cleanRefTitle is a link's target's title, "" when it may be someone
+// else's words.
+func cleanRefTitle(x nodestore.Summary) string {
+	if x.TitleExternal() {
+		return ""
+	}
+	return x.Title
 }
 
 // placedCard is the card a card block of node id places, as its records

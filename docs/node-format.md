@@ -64,7 +64,7 @@ The titles proposed for the first article:
 | `id` | text | The node's id: lowercase letters and digits, 32 at most, no dash. Required. |
 | `title` | text | Its title for the user: one line, 120 characters at most. Required. |
 | `parent` | id | The node it belongs to; none for a node at the top. |
-| `links` | list of ids | Written by code (Eriphe's `node_link`, the user's gestures): the nodes it links to; no duplicate, never itself. An author's write keeps them. |
+| `links` | list of ids | Written by code only (a view created from a card links the subjects the card was raised in): the nodes it links to; no duplicate, never itself. An author's write keeps them. An author links nodes in the text instead ([Links between nodes](#links-between-nodes)). |
 | `after` | list of ids | Written by code only, at a step's creation: the sibling steps it waits for (no duplicate, never itself). Absent for a node that is no step. |
 | `lifetime` | `work` or `standing` | Work ends when it is done; a standing node (the day, the mails) stays. Required. |
 | `goal` | text | What the node is for. Never shown to the user. |
@@ -81,6 +81,27 @@ not kept. A field given twice, or YAML that does not parse, is an error.
 
 The node's state (`running`, `waiting`, `idle`, `done`) is not in the file: it is code's, in the
 graph's index.
+
+## Links between nodes
+
+A node's text links other nodes by their title, as in Obsidian: `[[Title]]`, or `[[Title|shown
+words]]` to show other words (`\|` works like `|`, which a table row needs). Inside a code span or
+a fenced block it is only text, and `\[[` is only brackets; a block's words hold no link. The page
+draws each one as a link that opens that node beside it; a name no node has is greyed, an archived
+node shows as archived and opens nothing. Whatever words it shows, its tooltip and accessible name
+say the real target's title (or that it is someone else's words, for an external one).
+
+A name matches a title whatever its case, accents, typographic apostrophes or runs of spaces; a
+node not archived comes first, then the oldest. The index resolves a name once and keeps the node
+it found: the link holds when that node's title changes, and a node that takes the old title later
+does not take it. A name no node has yet links as soon as a node gets that title. Documents are
+never rewritten on a rename (that would make versions of other nodes, stale every `expect` on them,
+and could not touch archived ones). The limit: the index is the only place that keeps a resolution,
+so an index rebuilt from the files resolves the names again by the titles of the day, and a link
+written with a title since changed then waits.
+
+A node's links, the graph's edges, are its text's links (resolved) and its front matter's `links`
+(code's), together.
 
 ## Body and blocks
 

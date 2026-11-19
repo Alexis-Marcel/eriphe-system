@@ -649,13 +649,13 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 			keep("deliverable", id)
 		}
 		_, hash = b.read(n("write"))
-		b.self("node_write", map[string]any{"id": n("write"), "expect": hash, "body": articleDoc(articleDecided+"- L'angle des managers.\n", articleResearch, "Relire « L'article », version 1.")})
+		b.self("node_write", map[string]any{"id": n("write"), "expect": hash, "body": articleDoc(articleDecided+"- L'angle des managers.\n", articleResearch, "Relire [[L'article]], version 1.", articleLinked...)})
 		return "J'ai écrit une première version de l'article."
 	case strings.Contains(said, "Ajoute une conclusion"):
 		body, hash := b.read(node)
 		b.self("node_write", map[string]any{"id": node, "expect": hash, "body": body + "\n## Pour conclure\n\nLe bureau devient un lieu de rencontre.\n"})
 		_, hash = b.read(n("write"))
-		b.self("node_write", map[string]any{"id": n("write"), "expect": hash, "body": articleDoc(articleDecided+"- L'angle des managers.\n", articleResearch, "Relire « L'article », version 2, avec sa conclusion.")})
+		b.self("node_write", map[string]any{"id": n("write"), "expect": hash, "body": articleDoc(articleDecided+"- L'angle des managers.\n", articleResearch, "Relire [[L'article]], version 2, avec sa conclusion.", articleLinked...)})
 		return "Conclusion ajoutée."
 	}
 	return "D'accord."
@@ -675,7 +675,7 @@ func (sc *scenario) event(b *brainPlay, turn string) string {
 	_, hash := b.read(research)
 	b.self("node_write", map[string]any{"id": research, "expect": hash, "body": "## Ce qu'on a trouvé\n\n" + articleSummary + "\n"})
 	_, hash = b.read(write)
-	b.self("node_write", map[string]any{"id": write, "expect": hash, "body": articleDoc(articleDecided, articleResearch, "Choisir l'angle.")})
+	b.self("node_write", map[string]any{"id": write, "expect": hash, "body": articleDoc(articleDecided, articleResearch, "[[Choisir l'angle]].", articleLinked[:2]...)})
 	out := b.self("node_open", map[string]any{"title": "Choisir l'angle", "parent": write, "aside": true,
 		"body": "Deux angles tiennent, d'après la recherche.\n\n- Les managers : ce qui change pour eux.\n- Les salariés : comment s'organiser.\n\n" +
 			askBlock("angles", "L'angle des managers", "L'angle des salariés")})
@@ -689,15 +689,22 @@ func (sc *scenario) event(b *brainPlay, turn string) string {
 
 // The article's subject, as the scripted brain writes it again at each
 // step: its plan, what was decided, what the research found, what comes
-// next.
+// next, and its subjects linked in its text ([[title]]), as the prompt
+// asks: the graph draws them, the page opens them.
 const (
 	articleSummary  = "Trois études récentes : on travaille autant, autrement ; les managers changent le plus."
 	articleDecided  = "## Ce qu'on a décidé\n\n- Pour des salariés, 1 000 mots.\n"
 	articleResearch = "## La recherche\n\n" + articleSummary + "\n"
 )
 
-func articleDoc(decided, research, next string) string {
-	parts := []string{"## Le plan\n\n1. Ce qui a changé\n2. Ce qui marche\n3. Ce qui reste à inventer\n", decided, research, "## Ensuite\n\n" + next + "\n"}
+var articleLinked = []string{"[[Recherche sur le télétravail|La recherche]]", "[[Choisir l'angle]]", "[[L'article]]"}
+
+func articleDoc(decided, research, next string, linked ...string) string {
+	related := ""
+	if len(linked) > 0 {
+		related = "## Les sujets liés\n\n- " + strings.Join(linked, "\n- ") + "\n"
+	}
+	parts := []string{"## Le plan\n\n1. Ce qui a changé\n2. Ce qui marche\n3. Ce qui reste à inventer\n", decided, research, "## Ensuite\n\n" + next + "\n", related}
 	var out []string
 	for _, p := range parts {
 		if p != "" {

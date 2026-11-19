@@ -143,7 +143,12 @@ export type NodePage = {
   shift?: number;
   parts: PagePart[];
   cards: ProposalView[];
+  refs?: Record<string, PageRef>;
 };
+// The node a [[link]] of a page's text opens, by the name as written
+// (pageRef, web_graph.go): its title, none when it may be someone else's
+// words; archived, it opens nothing. A name no node has is not there.
+export type PageRef = { id: string; title?: string; external?: boolean; archived?: boolean };
 export type PageVersion = { n: number; author: string; at: string };
 export type PagePart = { text?: string; block?: PageBlock };
 // A block ready to draw: its components and its data, the sources' last

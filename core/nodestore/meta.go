@@ -1,9 +1,6 @@
 package nodestore
 
 import (
-	"errors"
-	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -11,7 +8,7 @@ import (
 )
 
 // What code changes of a node's front matter, outside an author's body:
-// done, and its links. Each is a version of its own, made on the last
+// done. It is a version of its own, made on the last
 // one: it never conflicts with an author's write.
 
 // SetDone marks a node done now, or not done any more: its front
@@ -46,32 +43,6 @@ func (s *Store) SetDone(id string, done bool, author string) (bool, error) {
 	}
 	s.changed(ChangedState, id)
 	return true, nil
-}
-
-// Link links a node to another: to joins its links. It tells whether it
-// changed: a link there already is not added again.
-func (s *Store) Link(id, to, author string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	to = strings.TrimSpace(to)
-	if to == id {
-		return false, errors.New("a node is not linked to itself")
-	}
-	if _, err := s.summary(to); err != nil {
-		return false, fmt.Errorf("link %s: %w", to, err)
-	}
-	cur, err := s.read(id, 0)
-	if err != nil {
-		return false, err
-	}
-	if slices.Contains(cur.Node.Meta.Links, to) {
-		return false, nil
-	}
-	_, err = s.change(id, cur.Version.Hash, author, "link", func(n *nodefile.Node) error {
-		n.Meta.Links = append(n.Meta.Links, to)
-		return nil
-	})
-	return err == nil, err
 }
 
 // InStates are the nodes in one of states, archived ones left out, the

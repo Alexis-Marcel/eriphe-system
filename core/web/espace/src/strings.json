@@ -131,6 +131,8 @@
     "espace.who.outside": "outside",
     "espace.who.task": "task",
     "espace.who.user": "you",
+    "espace.wiki.archived": "%s (archived)",
+    "espace.wiki.none": "No subject has this name",
     "nav.espace": "Workspace"
   },
   "fr": {
@@ -265,6 +267,8 @@
     "espace.who.outside": "extérieur",
     "espace.who.task": "task",
     "espace.who.user": "toi",
+    "espace.wiki.archived": "%s (archivé)",
+    "espace.wiki.none": "Aucun sujet ne porte ce nom",
     "nav.espace": "Espace"
   }
 }

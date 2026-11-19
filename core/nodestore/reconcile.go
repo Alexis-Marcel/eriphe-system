@@ -179,6 +179,10 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 				return rep, err
 			}
 		}
+		// Once every node is there, whatever the files' order.
+		if _, err := resolveRefs(tx); err != nil {
+			return rep, err
+		}
 		if err := tx.Commit(); err != nil {
 			return rep, err
 		}

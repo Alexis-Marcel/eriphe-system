@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -70,7 +71,6 @@ func TestBrainNodeTools(t *testing.T) {
 		"node_write": {"id": "nothere", "body": "x", "expect": "x"},
 		"node_set":   {"id": "nothere", "title": "x"},
 		"node_show":  {"id": "nothere"},
-		"node_link":  {"id": "nothere", "to": id},
 	} {
 		if _, msg := brainNodes(t, c, name, args); !strings.Contains(msg, "no node nothere") {
 			t.Errorf("%s of a missing node: %q", name, msg)
@@ -111,10 +111,43 @@ func TestBrainNodeTools(t *testing.T) {
 	}
 }
 
+// Links between nodes are written in their text: node_link is gone; a
+// [[name]] no node has yet is told to the brain, and links once a node
+// has it; node_read lists the links.
+func TestBrainNodeTextLinks(t *testing.T) {
+	c := graphCore(t)
+	tools, err := connectServer(t, newMCPServer(c)).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range tools.Tools {
+		if tl.Name == "node_link" {
+			t.Fatal("node_link is still a tool")
+		}
+	}
+	research := mustBrainNodes(t, c, "node_open", map[string]any{"title": "La recherche"})["id"].(string)
+	out := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Écrire l'article",
+		"body": "Voir [[La recherche]], puis [[Choisir l'angle]]. Écrire `[[Rien]]` pour lier."})
+	write := out["id"].(string)
+	if w, _ := out["links_waiting"].([]any); len(w) != 1 || w[0] != "Choisir l'angle" {
+		t.Fatalf("waiting links: %v", out)
+	}
+	angle := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Choisir l'angle", "parent": write, "aside": true})["id"].(string)
+	read := mustBrainNodes(t, c, "node_read", map[string]any{"id": write})
+	links, _ := read["links"].([]any)
+	if len(links) != 2 || !slices.Contains(links, any(research)) || !slices.Contains(links, any(angle)) {
+		t.Fatalf("links: %v", read["links"])
+	}
+	w := mustBrainNodes(t, c, "node_write", map[string]any{"id": write, "expect": read["hash"], "body": "Voir [[la recherche]]."})
+	if _, ok := w["links_waiting"]; ok {
+		t.Errorf("no link waits: %v", w)
+	}
+}
+
 // node_set changes a title and a goal; done leaves one decision memory,
 // source node:<id>, however often it is set; a standing node is never
-// done. node_link links two nodes once; node_show asks the screen.
-func TestBrainNodeSetLinkShow(t *testing.T) {
+// done. node_show asks the screen.
+func TestBrainNodeSetShow(t *testing.T) {
 	c := graphCore(t)
 	m, _ := testMemory(t)
 	c.useMemory(m)
@@ -155,15 +188,6 @@ func TestBrainNodeSetLinkShow(t *testing.T) {
 	day := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Ma journée", "lifetime": "standing"})["id"].(string)
 	if _, msg := brainNodes(t, c, "node_set", map[string]any{"id": day, "done": true}); !strings.Contains(msg, "standing") {
 		t.Errorf("a standing node done: %q", msg)
-	}
-	if out := mustBrainNodes(t, c, "node_link", map[string]any{"id": id, "to": other}); out["note"] != "Linked." {
-		t.Errorf("link: %v", out)
-	}
-	if out := mustBrainNodes(t, c, "node_link", map[string]any{"id": id, "to": other}); out["note"] != "Linked already." {
-		t.Errorf("link again: %v", out)
-	}
-	if _, msg := brainNodes(t, c, "node_link", map[string]any{"id": id, "to": id}); msg == "" {
-		t.Error("a node linked to itself")
 	}
 	before, _ := c.lastShown()
 	_, seq, _, ch := c.graphAfter(0)
@@ -276,7 +300,8 @@ func TestBrainPromptNodes(t *testing.T) {
 	section := prompt[start:end]
 	for _, want := range []string{
 		"**Quand en ouvrir un.**", "`node_find`", "`node_open`", "reste du texte, sans nœud", "`node_write` avec `expect`", "`node_edit`",
-		"`node_set` `done`", "son **but** est atteint", "Tu n'archives jamais un nœud", "`node_link`", "`node_show`",
+		"`node_set` `done`", "son **but** est atteint", "Tu n'archives jamais un nœud", "`node_show`",
+		"**Les liens sont dans le texte**", "`[[Titre]]`", "[[Choisir l'angle]]",
 		"propose sa fusion", "seulement la vérification, rien d'autre",
 		"**Un travail en étapes.**", "`node_open` avec `steps`", "`[nœud <id> « titre »] …`", "`node_settle`", "sans te réveiller",
 		"`item_note`", "une recherche", "aucune question de toi-même", "`[rien]`",

@@ -182,7 +182,7 @@ type Summary struct {
 	// (nodefile's Meta.TitleTrusted).
 	TitleTrusted bool
 	Version      int
-	Links        []string // the nodes it links to
+	Links        []string // the nodes it links to: its text's [[links]], resolved, and its front matter's
 }
 
 // TitleExternal tells whether its title may be someone else's words: an
@@ -583,7 +583,16 @@ func (s *Store) indexVersions(now time.Time, xs []indexed) error {
 	if err := setIndexed(tx, xs[len(xs)-1].v.Hash); err != nil {
 		return err
 	}
-	return tx.Commit()
+	// A node that got a title others' text links: their links resolve.
+	linked, err := resolveRefs(tx)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.changed(ChangedDoc, linked...)
+	return nil
 }
 
 // setIndexed keeps the last commit the index holds (meta.head): a start
@@ -843,7 +852,8 @@ func (s *Store) summary(id string) (Summary, error) {
 func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.lifetime, n.state, n.created, n.updated,
 		n.done, n.archived, n.external, n.title_trusted, n.version,
-		(SELECT group_concat(l.target, ' ') FROM node_links l WHERE l.id = n.id) FROM nodes n `+where, args...)
+		(SELECT group_concat(t, ' ') FROM (SELECT l.target AS t FROM node_links l WHERE l.id = n.id
+		  UNION SELECT r.target FROM node_refs r WHERE r.id = n.id AND r.target != '' AND r.target != n.id)) FROM nodes n `+where, args...)
 	if err != nil {
 		return nil, err
 	}
