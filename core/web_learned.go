@@ -72,7 +72,7 @@ func (w *web) handleLearned(rw http.ResponseWriter, r *http.Request, s *session)
 				row.Version = shortSHA(orStr(e.Version, e.PrevVersion))
 			}
 			for _, ref := range e.Evidence {
-				row.Links = append(row.Links, learnedLink{Ref: ref, Href: learnedHref(ref)})
+				row.Links = append(row.Links, learnedLink{Ref: ref, Href: w.c.learnedHref(ref)})
 			}
 			v.Rows = append(v.Rows, row)
 		}
@@ -81,11 +81,12 @@ func (w *web) handleLearned(rw http.ResponseWriter, r *http.Request, s *session)
 }
 
 // learnedHref is where a piece of evidence is seen in the workspace.
-func learnedHref(ref string) string {
+func (c *core) learnedHref(ref string) string {
 	kind, id, _ := strings.Cut(ref, ":")
 	switch kind {
 	case "msg":
-		return convoAt("m" + id)
+		seq, _ := strconv.Atoi(id)
+		return c.messageAt(seq)
 	case "learned":
 		return "/settings/learned#learned-" + id
 	}

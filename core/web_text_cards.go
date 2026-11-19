@@ -1,6 +1,6 @@
 package main
 
-// The words of the conversation's cards (convo.html, convo_cards.go), and
+// The words of the cards (convo_cards.go: on a channel, in the workspace), and
 // of the Journal and « À valider » in the settings (activity.html).
 
 func init() {
@@ -52,21 +52,12 @@ var cardStrings = map[string]map[string]string{
 		"taskstart.repo.send":             "Pour pousser sur la branche par défaut de %s, ou un tag, il me faut ton accord.",
 		"card.yes":                        "Oui",
 		"card.no":                         "Non",
-		"card.edit":                       "Modifier",
-		"card.edit.hint":                  "Pour « %s » : ",
-		"card.more":                       "Plus",
-		"card.allwaiting":                 "Tout ce qui attend ton accord",
-		"card.tainted.hint":               "Demandé par un canal sans confiance ou après un contenu extérieur (un mail, une page, le compte rendu d'une tâche) : vérifie ce qui va être fait.",
 		"card.state.approved":             "Validé",
 		"card.state.rejected":             "Refusé",
 		"card.state.gone":                 "N'est plus d'actualité",
 		"card.did.approved":               "C'est validé.",
 		"card.did.rejected":               "C'est refusé.",
 		"card.already":                    "Cette proposition n'attend plus de réponse.",
-		"digest.line":                     "%d chose(s) depuis le %s",
-		"digest.none":                     "Rien de particulier depuis le %s",
-		"digest.journal":                  "Tout le journal",
-		"chat.why":                        "Pourquoi ?",
 		"card.channel.change":             "Pour changer quelque chose, réponds-moi ici.",
 		"card.from.node":                  "Dans « %s »",
 		"card.from.noden":                 "Dans un node",
@@ -88,8 +79,8 @@ var cardStrings = map[string]map[string]string{
 		"card.channel.confirm":            "Je te l'ai mis à confirmer sur ton téléphone.",
 		"card.channel.note":               "une demande arrivée par un canal sans confiance attend ton accord.",
 		"settings.journal":                "Journal",
-		"journal.pagelead":                "La boîte noire : tout ce qui s'est passé, et chaque accès aux outils. {{name}} te le raconte dans la conversation ; ici, tu peux tout relire.",
-		"approve.pagelead":                "{{name}} te demande ton accord dans la conversation ; tout ce qui attend encore est aussi ici. Rien n'entre en vigueur sans toi.",
+		"journal.pagelead":                "La boîte noire : tout ce qui s'est passé, et chaque accès aux outils. {{name}} te le raconte dans l'espace ; ici, tu peux tout relire.",
+		"approve.pagelead":                "{{name}} te demande ton accord dans l'espace ; tout ce qui attend encore est aussi ici. Rien n'entre en vigueur sans toi.",
 	},
 	"en": {
 		"card.kind.memory":                "To remember",
@@ -131,21 +122,12 @@ var cardStrings = map[string]map[string]string{
 		"taskstart.repo.send":             "To push to the default branch of %s, or a tag, I need your approval.",
 		"card.yes":                        "Yes",
 		"card.no":                         "No",
-		"card.edit":                       "Change",
-		"card.edit.hint":                  "About “%s”: ",
-		"card.more":                       "More",
-		"card.allwaiting":                 "Everything waiting for your approval",
-		"card.tainted.hint":               "Asked through an untrusted channel or after external content (a mail, a page, a task's report): check what is about to be done.",
 		"card.state.approved":             "Approved",
 		"card.state.rejected":             "Declined",
 		"card.state.gone":                 "No longer current",
 		"card.did.approved":               "Approved.",
 		"card.did.rejected":               "Declined.",
 		"card.already":                    "This proposal no longer waits for an answer.",
-		"digest.line":                     "%d thing(s) since %s",
-		"digest.none":                     "Nothing in particular since %s",
-		"digest.journal":                  "The whole journal",
-		"chat.why":                        "Why?",
 		"card.channel.change":             "To change something, just reply here.",
 		"card.from.node":                  "In “%s”",
 		"card.from.noden":                 "In a node",
@@ -167,7 +149,7 @@ var cardStrings = map[string]map[string]string{
 		"card.channel.confirm":            "I've left it for you to confirm on your phone.",
 		"card.channel.note":               "a request that came through an untrusted channel waits for your yes.",
 		"settings.journal":                "Journal",
-		"journal.pagelead":                "The black box: everything that happened, and every tool access. {{name}} tells you in the conversation; here you can read it all again.",
-		"approve.pagelead":                "{{name}} asks for your approval in the conversation; whatever still waits is here too. Nothing is in force without you.",
+		"journal.pagelead":                "The black box: everything that happened, and every tool access. {{name}} tells you in the workspace; here you can read it all again.",
+		"approve.pagelead":                "{{name}} asks for your approval in the workspace; whatever still waits is here too. Nothing is in force without you.",
 	},
 }

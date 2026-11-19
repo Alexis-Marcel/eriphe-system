@@ -9,37 +9,39 @@ import (
 	"time"
 )
 
-// handleEvents streams what changes to an open page, as Server-Sent
-// Events of ready-made HTML: "message" (new messages, to append), "draft"
-// (the brain's message being written, empty once it has landed), "tasks"
-// (the side panel), "pending" (the requests at the end of the
-// conversation) and "cards" (cards that changed), each sent only when it
-// differs from the last one.
+// handleEvents streams what changes to the graph workspace (web_graph.go),
+// as Server-Sent Events of JSON, each sent only when it differs from the
+// last one:
 //
-// Asked with a2ui=1 (the graph workspace, the home page), it sends none of
-// that HTML but JSON:
 //   - "node": the graph's rows (graphEvNode, web_graph.go), all of them at
 //     once (reset) and when the stream fell behind, then those that
 //     changed, and the ids of those that left the graph (gone: archived);
+//
 //   - "doc": a node's new version ({id, version}), or its trace that grew
 //     ({id, trace: true}): a page shown reads it again;
+//
 //   - "progress": a task's line of where its node's work is
 //     ({node, text, at});
+//
 //   - "source": a live block's new value ({node, block, name, value}), at
 //     /<name> of the block's data, as the page draws it;
+//
 //   - "show": the brain asks to open a node's page ({node, by, at, seq}),
 //     the last request at once, then each new one;
+//
 //   - "exchange": the conversation's last exchange of the node the console
 //     talks to (its id in the node query; exchangeEvent, web_console.go),
 //     at once and whenever it changes;
+//
 //   - "proposals": the refs of the proposals whose card was made or
 //     decided since, all of them first (proposalsEvent, card_moves.go),
 //     for what shows them to read them again.
 //
+//   - "notice": the notifications routed to its tab (its id in the tab
+//     query, as the tab tells its presence, web_push.go).
+//
 // Every event carries the last message's seq as its id, so a reconnecting
-// browser picks up where it left. Both send "notice": the notifications
-// routed to their tab (its id in the tab query, as the tab tells its
-// presence, web_push.go), JSON.
+// browser picks up where it left.
 func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) {
 	flusher, ok := rw.(http.Flusher)
 	if !ok {
@@ -47,10 +49,6 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		return
 	}
 	after, _ := strconv.Atoi(r.Header.Get("Last-Event-ID"))
-	if after == 0 {
-		after, _ = strconv.Atoi(r.URL.Query().Get("after"))
-	}
-	lang := w.lang(r)
 	tab := r.URL.Query().Get("tab") // the tab's id, as it tells its presence (web_push.go)
 	if len(tab) > 64 {
 		tab = ""
@@ -80,37 +78,30 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		}
 		proposalsSeq, proposalsMoved = seq, ch
 	}
-	// The graph, for the workspace: its rows, then what changes.
-	var graphSeq int64
-	var graphNext <-chan struct{} // nil when not asked: never ready
-	workspace := r.URL.Query().Get("a2ui") == "1"
+	// The graph: its rows, then what changes.
 	talked := w.c.nodeSaid(r.URL.Query().Get("node")) // the node the console talks to: its exchange
-	if workspace {
-		// The workspace, the home page, does not show the conversation's
-		// messages: its stream starts after the last one, not with them all,
-		// and its "exchange" event says the last exchange.
-		if after == 0 {
-			after = int(w.c.store.lastMessageSeq())
-		}
-		graphSeq, graphNext = w.sendGraph(rw, after)
-		if x, ok := w.c.lastShown(); ok {
-			if raw, err := json.Marshal(x); err == nil {
-				writeEvent(rw, "show", after, string(raw))
-			}
-		}
-		sendProposals()
-		flusher.Flush()
+	// The workspace does not show the conversation's messages: its stream
+	// starts after the last one, not with them all, and its "exchange"
+	// event says the last exchange.
+	if after == 0 {
+		after = int(w.c.store.lastMessageSeq())
 	}
+	graphSeq, graphNext := w.sendGraph(rw, after)
+	if x, ok := w.c.lastShown(); ok {
+		if raw, err := json.Marshal(x); err == nil {
+			writeEvent(rw, "show", after, string(raw))
+		}
+	}
+	sendProposals()
+	flusher.Flush()
 
-	var lastTasks, lastPending, lastDraft string
-	lastCards := map[int64]string{}
-	// The workspace's exchange: made again when a message, the draft or
-	// Eriphe's state changed, sent when it differs.
+	// The exchange: made again when a message, the draft or Eriphe's state
+	// changed, sent when it differs.
 	var lastExchange, exchangeDraft string
 	thinking, exchangeThinking, exchangeStale := false, false, true
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
-	quiet, panelsAt, woken := time.Now(), time.Time{}, true
+	quiet, stateAt, woken := time.Now(), time.Time{}, true
 	for {
 		sent := false
 		// The draft is read before the messages: if one of them replaced it,
@@ -118,74 +109,19 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		draft, at, drafted := w.c.draft.get()
 		msgs, err := w.c.store.messagesAfter(after, 100)
 		fresh := err == nil && len(msgs) > 0
-		switch {
-		case fresh && workspace:
+		if fresh {
 			after = msgs[len(msgs)-1].Seq
 			exchangeStale = true
-		case fresh:
-			var b strings.Builder
-			w.dress(msgs)
-			w.dressCards(msgs, lang)
-			for _, m := range msgs {
-				html, err := w.fragment(lang, "home", "message", m)
-				if err != nil {
-					return
-				}
-				b.WriteString(html)
-				after = m.Seq
-			}
-			writeEvent(rw, "message", after, b.String())
-			sent = true
 		}
 		if at < after {
 			draft = ""
 		}
-		if !workspace {
-			if html, err := w.fragment(lang, "home", "draft", draft); err == nil && html != lastDraft {
-				writeEvent(rw, "draft", after, html)
-				lastDraft, sent = html, true
-			}
-		}
-		// The panels cost more: every other second, or at once when woken.
-		// The workspace has none: Eriphe's state is all it reads of them.
-		panels := woken || fresh || time.Since(panelsAt) > 1500*time.Millisecond
-		if panels {
-			panelsAt, woken = time.Now(), false
-		}
-		if panels && workspace {
+		// Eriphe's state costs more: every other second, or at once when woken.
+		if woken || fresh || time.Since(stateAt) > 1500*time.Millisecond {
+			stateAt, woken = time.Now(), false
 			thinking = w.brainState() == "thinking"
-		} else if panels {
-			tasks, perms, err := w.tasksAndPerms()
-			if err == nil {
-				if html, err := w.fragment(lang, "home", "tasks", tasks); err == nil && html != lastTasks {
-					writeEvent(rw, "tasks", after, html)
-					lastTasks, sent = html, true
-				}
-				if html, err := w.fragment(lang, "home", "pending", w.pending(perms)); err == nil && html != lastPending {
-					writeEvent(rw, "pending", after, html)
-					lastPending, sent = html, true
-				}
-			}
-			// The cards: attached to a message already shown, or decided
-			// (here, on a channel, in words): each sent again when it changed.
-			var b strings.Builder
-			for _, x := range w.liveCards() {
-				if x.Seq > after {
-					continue // its message comes with it
-				}
-				html, err := w.fragment(lang, "home", "card", w.cardView(x, lang))
-				if err != nil || lastCards[x.ID] == html {
-					continue
-				}
-				lastCards[x.ID] = html
-				b.WriteString(html)
-			}
-			if b.Len() > 0 {
-				writeEvent(rw, "cards", after, b.String())
-				sent = true
-			}
 		}
-		if workspace && (exchangeStale || draft != exchangeDraft || thinking != exchangeThinking) {
+		if exchangeStale || draft != exchangeDraft || thinking != exchangeThinking {
 			// The exchange of the node the console talks to (node_turn.go).
 			if x, err := w.exchangeFor(talked, w.c.turn.talkNode(), draft, thinking); err == nil {
 				exchangeStale, exchangeDraft, exchangeThinking = false, draft, thinking
@@ -216,7 +152,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			return
 		case <-tick.C:
 		case <-w.waker():
-			woken = true // the next round refreshes the panels
+			woken = true // the next round reads Eriphe's state again
 		case <-drafted:
 		case <-graphNext:
 			graphSeq, graphNext = w.sendGraphChanges(rw, after, graphSeq)

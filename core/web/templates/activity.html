@@ -1,15 +1,42 @@
 {{/* Settings → Journal and « À valider » (web_activity.go): the black box
-     and the fallback. What happens is told in the conversation, and what
-     waits for the user is asked there, on cards (convo.html); these pages
-     are for looking back: the feed of what happened, by period and kind
-     (the tool accesses are the decisions' journal), and every proposal
-     still waiting. A proposal's buttons call its own page's actions; the
-     list then reloads itself (memory-changed). */}}
+     and the fallback. What happens is told in the workspace, and what
+     waits for the user is asked there, on its nodes' cards; these pages
+     are for looking back: the tasks at work, the feed of what happened, by
+     period and kind (the tool accesses are the decisions' journal), and
+     every proposal and permission still waiting. A proposal's buttons call
+     its own page's actions; the list then reloads itself (memory-changed). */}}
 {{define "journal-page"}}{{with .Data}}
 <div class="activity" id="activity">
   <header class="page-head"><h2>{{t "settings.journal"}}</h2><p>{{t "journal.pagelead"}}</p></header>
+  {{if not .Kind}}{{template "journal-tasks" .Tasks}}{{end}}
   {{template "feed" .}}
 </div>
+{{end}}{{end}}
+
+{{/* The tasks at work, each to its page, and how reliable they were lately. */}}
+{{define "journal-tasks"}}{{if or .Active .Stats}}
+<section class="journal-tasks" aria-labelledby="jt-title">
+  <h3 class="section-label" id="jt-title">{{t "tasks.title"}}{{if .Active}} <span class="count">{{len .Active}}</span>{{end}}</h3>
+  {{if .Active}}<ul class="cards">{{range .Active}}<li>{{template "taskcard" .}}</li>{{end}}</ul>{{end}}
+  {{with .Stats}}{{template "task-stats" .}}{{end}}
+</section>
+{{end}}{{end}}
+
+{{/* A task's page (GET /tasks/{id}): where it runs, its receipt, its
+     activity, the permission it waits on; an idle task is answered here, a
+     running one stopped. Notifications and the settings link to it. */}}
+{{define "task-page"}}{{with .Data}}
+<header class="page-head">
+  <a class="back" href="/settings/journal">{{template "i-back"}}{{t "settings.journal"}}</a>
+  <div class="task-title">
+    <span class="chip chip-{{.Card.State}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "state.%s" .Card.State)}}</span>
+    <h2>{{.Card.Title}}</h2>
+  </div>
+</header>
+{{/* The page follows its task: every 5 s while it works (no field to lose
+     then), and after an action of its own (memory-changed). */}}
+<div class="task-page" id="task-page" hx-get="/tasks/{{.Card.ID}}" hx-select="#task-page" hx-target="this" hx-swap="outerHTML"
+  hx-trigger="{{if or (eq .Card.State "running") (eq .Card.State "pending")}}every 5s, {{end}}memory-changed from:body">{{template "task-body" $}}</div>
 {{end}}{{end}}
 
 {{define "approve-page"}}{{with .Data}}

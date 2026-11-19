@@ -196,7 +196,7 @@ func TestProposalsEvent(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
-	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events?a2ui=1", nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)
 	resp, err := tw.hc.Do(req)
 	if err != nil {
 		t.Fatal(err)

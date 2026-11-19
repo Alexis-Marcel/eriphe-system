@@ -156,7 +156,7 @@ func (w *web) parse() error {
 }
 
 // sharedTemplates are the files of definitions every page has, not pages.
-var sharedTemplates = []string{"parts", "catalog", "tools", "apps", "connections", "places", "agents", "remote", "folders", "push", "skills", "cards", "convo", "activity", "learned", "access", "bot", "monitors"}
+var sharedTemplates = []string{"parts", "catalog", "tools", "apps", "connections", "places", "agents", "remote", "folders", "push", "skills", "cards", "activity", "learned", "access", "bot", "monitors"}
 
 // notify wakes the event streams at once, rather than at their next tick.
 func (w *web) notify() {
@@ -193,9 +193,7 @@ func (w *web) routes() http.Handler {
 	mux.HandleFunc("GET /auth/callback", w.handleSSOCallback)
 	mux.Handle("POST /lang", w.auth(w.handleLang))
 
-	mux.Handle("GET /{$}", w.auth(w.handleHome)) // the workspace, or the conversation (web_pages.go)
-	mux.Handle("GET "+convoPath, w.auth(w.handleConvo))
-	mux.Handle("POST /settings/home", w.auth(w.handleHomeChoice))
+	mux.Handle("GET /{$}", w.auth(w.handleHome)) // the graph workspace, after the wizard (web_pages.go)
 	mux.Handle("GET /events", w.auth(w.handleEvents))
 	// A message carries its attachments: the body may hold them all, and a little more.
 	mux.Handle("POST /messages", http.MaxBytesHandler(w.auth(w.handleSend), maxAttachments*maxAttachmentSize+1<<20))
@@ -376,7 +374,7 @@ func (w *web) headers(next http.Handler) http.Handler {
 type page struct {
 	Lang    string
 	Title   string
-	Nav     string // chat or settings
+	Nav     string // "settings": a page of the shell (layout.html); "" a bare one
 	Tab     string // the settings tab
 	View    string // a form within the tab
 	CSRF    string

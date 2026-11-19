@@ -104,7 +104,7 @@ func (c *core) accessGranted(taskID string, n accessNeed) bool {
 	return len(accounts) > 0
 }
 
-// accessGrants are what a task was granted, for its drawer.
+// accessGrants are what a task was granted, for its page.
 func (s *Store) accessGrants(taskID string) []accessNeed {
 	rows, err := s.db.Query(`SELECT server, category, account FROM access_grants WHERE task_id = ? ORDER BY time, server, category, account`, taskID)
 	if err != nil {

@@ -332,11 +332,10 @@ func TestWebPagesRender(t *testing.T) {
 	v.set("github", "secret-value-123")
 
 	pages := map[string][]string{
-		"/": {"Fix the &lt;b&gt;form&lt;/b&gt;", "<strong>small</strong>", "Cette décision te revient", "npm publish",
-			`name="permission" value="p-1"`, "PR #7", "acme/site", "fix-form", "Attend ta réponse", "Terminées récemment"},
-		"/tasks/t-run":      {"go test ./...", "Arrêter la tâche", "PR #7"},
+		"/settings/journal": {"PR #7", "acme/site", "fix-form", "Attend ta réponse", `href="/tasks/t-run"`, `href="/tasks/t-perm"`},
+		"/tasks/t-run":      {"go test ./...", "Arrêter la tâche", "PR #7", `<a class="back" href="/settings/journal">`, `hx-trigger="every 5s, memory-changed from:body"`},
 		"/tasks/t-idle":     {"Répondre à l&#39;agent", "Shall I send it?"},
-		"/tasks/t-perm":     {"d-perm-t-perm-p-1"},
+		"/tasks/t-perm":     {"t-perm-t-perm-p-1", "Cette décision te revient", "npm publish", `name="permission" value="p-1"`},
 		"/settings/devices": {"box", "En ligne", "Hors ligne", "16 Go", "gpu", `eriphe-device 0.1.0-dev <small class="mono">7654321</small>`},
 		"/settings/agents":  {"small", "quick things", "Par défaut", "Prêt"},
 		"/settings/tools":   {"github", "Home Assistant", "/settings/tools/new?preset=mail"},
@@ -351,8 +350,12 @@ func TestWebPagesRender(t *testing.T) {
 		"/settings/providers/new":                             {"kind=claude-subscription", "kind=chatgpt-subscription"},
 		"/settings/providers/new?kind=claude-subscription":    {`name="key"`, "claude setup-token", `name="preset"`},
 		"/settings/journal?kind=access":                       {"git push origin main", "Règle", "Refusé"},
-		"/settings/approve":                                   {"a-perm-t-perm-p-1", "Permissions"},
+		"/settings/approve":                                   {"a-perm-t-perm-p-1", "Permissions", "Cette décision te revient", "npm publish", `href="/tasks/t-perm"`},
 		"/settings/account":                                   {"Français", "English", "eriphe-core " + version, "Clés et mots de passe enregistrés", "providers.p.secret"},
+	}
+	// A task that waits on the user is not polled: its reply would be lost.
+	if _, body, _ := tw.do("GET", "/tasks/t-idle", nil, nil); !strings.Contains(body, `hx-trigger="memory-changed from:body"`) {
+		t.Error("the idle task's page does not follow its actions, or is polled")
 	}
 	for path, wants := range pages {
 		code, body, _ := tw.do("GET", path, nil, nil)
@@ -373,7 +376,7 @@ func TestWebPagesRender(t *testing.T) {
 	// English.
 	u, _ := url.Parse(tw.srv.URL)
 	tw.hc.Jar.SetCookies(u, []*http.Cookie{{Name: "lang", Value: "en", Path: "/"}})
-	if _, body, _ := tw.do("GET", convoPath, nil, nil); !strings.Contains(body, "This decision is yours") || !strings.Contains(body, `lang="en"`) {
+	if _, body, _ := tw.do("GET", "/settings/approve", nil, nil); !strings.Contains(body, "This decision is yours") || !strings.Contains(body, `lang="en"`) {
 		t.Error("the English page is not in English")
 	}
 }
@@ -523,7 +526,7 @@ func TestWebAnswerAsUser(t *testing.T) {
 	if len(rows) == 0 || rows[0].By != byUser || rows[0].Decision != decideDeny || rows[0].Subject != "npm publish" {
 		t.Fatalf("decisions = %+v", rows)
 	}
-	if _, body, _ := tw.do("GET", convoPath, nil, nil); strings.Contains(body, `value="p-1"`) {
+	if _, body, _ := tw.do("GET", "/settings/approve", nil, nil); strings.Contains(body, `value="p-1"`) {
 		t.Fatal("an answered permission is still shown")
 	}
 	// The brain could not have answered it: only the user may.
@@ -544,6 +547,9 @@ func TestWebAnswerAsUser(t *testing.T) {
 	}
 }
 
+// The stream follows the workspace: a reconnecting browser resumes after
+// the last message it had (the events' id), and a new answer comes as the
+// exchange, JSON.
 func TestWebEventsStream(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -555,7 +561,8 @@ func TestWebEventsStream(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events?after="+strconv.Itoa(last), nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)
+	req.Header.Set("Last-Event-ID", strconv.Itoa(last))
 	resp, err := tw.hc.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -565,52 +572,51 @@ func TestWebEventsStream(t *testing.T) {
 		t.Fatalf("content type %q", ct)
 	}
 	sc := bufio.NewScanner(resp.Body)
-	event, sawTasks := "", false
+	sc.Buffer(nil, 1<<20)
+	event, asked := "", false
 	for sc.Scan() {
 		line := sc.Text()
 		if v, ok := strings.CutPrefix(line, "event: "); ok {
 			event = v
-			if v == "tasks" && !sawTasks {
-				// The stream is under way, its panels sent: the answer comes.
-				tw.c.store.addMessage(roleBrain, "a new **answer**", true)
-				tw.w.notify()
+			if v == "message" || v == "tasks" || v == "pending" {
+				t.Fatalf("the stream sends the conversation's HTML: %s", v)
 			}
-			sawTasks = sawTasks || v == "tasks"
 		}
-		if event == "message" && strings.HasPrefix(line, "data: ") {
-			if strings.Contains(line, "before") {
-				t.Fatal("the stream sent a message seen already")
-			}
-			if strings.Contains(line, "<strong>answer</strong>") {
-				if !sawTasks {
-					t.Error("no tasks panel before the message")
-				}
-				return
-			}
+		data, ok := strings.CutPrefix(line, "data: ")
+		if !ok || event != "exchange" {
+			continue
+		}
+		if !asked {
+			// The stream is under way: the answer comes.
+			tw.c.store.addMessage(roleBrain, "a new **answer**", true)
+			tw.w.notify()
+			asked = true
+			continue
+		}
+		if strings.Contains(data, `"text":"a new **answer**"`) {
+			return
 		}
 	}
-	t.Fatalf("no message event: %v", sc.Err())
+	t.Fatalf("no exchange with the answer: %v", sc.Err())
 }
 
 // A card made outside a brain turn comes with its message on the event
-// stream, and in the attention queue, no user message needed.
+// stream (the exchange, its proposal moved), and in the attention queue, no
+// user message needed.
 func TestWebAttention(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events?after="+strconv.Itoa(tw.c.store.lastMessageSeq()), nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)
 	resp, err := tw.hc.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	// The stream reads the messages after the one it was given: no wait
-	// for it to be under way.
-	tw.c.store.insertTask(&TaskRow{ID: "t-held", Kind: "worker", Title: "Fix the menu", State: statePending, Desired: desiredHeld})
-	tw.c.holdTask(&TaskRow{ID: "t-held", Title: "Fix the menu"}, []startNeed{{Server: "nas", Category: "use"}}, nil, false)
 	sc := bufio.NewScanner(resp.Body)
-	event, sawText, sawCard := "", false, false
+	sc.Buffer(nil, 1<<20)
+	event, held, sawText, sawCard := "", false, false, false
 	for sc.Scan() {
 		line := sc.Text()
 		if v, ok := strings.CutPrefix(line, "event: "); ok {
@@ -620,10 +626,17 @@ func TestWebAttention(t *testing.T) {
 		if !ok {
 			continue
 		}
+		if !held {
+			// The stream is under way: the task is held, its card made.
+			tw.c.store.insertTask(&TaskRow{ID: "t-held", Kind: "worker", Title: "Fix the menu", State: statePending, Desired: desiredHeld})
+			tw.c.holdTask(&TaskRow{ID: "t-held", Title: "Fix the menu"}, []startNeed{{Server: "nas", Category: "use"}}, nil, false)
+			held = true
+		}
 		switch event {
-		case "message":
+		case "exchange":
 			sawText = sawText || strings.Contains(data, "Fix the menu")
-			sawCard = sawCard || strings.Contains(data, `id="card-`)
+		case "proposals":
+			sawCard = sawCard || strings.Contains(data, `"refs":["`)
 		}
 		if sawText && sawCard {
 			break
@@ -815,23 +828,6 @@ func TestWebConnectPaste(t *testing.T) {
 		"url": {loopback + "?code=" + code + "&state=" + url.QueryEscape(state)}}, csrf)
 	if !strings.Contains(body, "Connecté : 1 outils") {
 		t.Fatalf("callback: %s", body)
-	}
-}
-
-// Without a name in the configuration, the conversation greets the user
-// without the brain's placeholder for them.
-func TestHelloWithoutName(t *testing.T) {
-	for user, want := range map[string]string{"Sam": "<h1>Bonjour Sam</h1>", unnamedUser: "<h1>Bonjour</h1>"} {
-		s, err := openStore(filepath.Join(t.TempDir(), "core.db"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		tw := newTestWebFor(t, newCore(&Config{User: user, Listen: "127.0.0.1:8800"}, s))
-		tw.setup()
-		_, body, _ := tw.do("GET", convoPath, nil, map[string]string{"Accept-Language": "fr"})
-		if !strings.Contains(body, want) {
-			t.Errorf("user %q: no %q in the conversation", user, want)
-		}
 	}
 }
 

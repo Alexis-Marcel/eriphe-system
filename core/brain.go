@@ -26,6 +26,9 @@ const (
 
 const brainStartPrompt = "Tu démarres. Lis tes consignes, ne fais rien d'autre pour l'instant et réponds seulement « Prêt. »."
 
+// taskEndedEvent is the brain's note of a task that ended (notifyBrain).
+const taskEndedEvent = "La tâche %s (appareil %s) est maintenant %s."
+
 // notifyBrain queues an event for the brain when a worker task changes state
 // in a way that may need it.
 func (c *core) notifyBrain(id, state string) {

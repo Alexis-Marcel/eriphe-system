@@ -11,8 +11,8 @@ import (
 
 // shownAtOnce checks that a card made outside a brain turn is in the
 // conversation already, with no user message: under a message of its own
-// written as the brain's, among the cards the event stream keeps up to
-// date, and in the attention queue with its weight.
+// written as the brain's, pending, and in the attention queue with its
+// weight.
 func shownAtOnce(t *testing.T, c *core, x convoCard, weight int) {
 	t.Helper()
 	if x.Seq <= 0 || x.State != cardPending {
@@ -25,12 +25,8 @@ func shownAtOnce(t *testing.T, c *core, x convoCard, weight int) {
 	if msgs, _ := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ?`, roleUser); len(msgs) != 0 {
 		t.Fatalf("a user message: %+v", msgs)
 	}
-	w, err := newWeb(c, WebConfig{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !slices.ContainsFunc(w.liveCards(), func(y convoCard) bool { return y.ID == x.ID }) {
-		t.Fatalf("card %d not among the live cards", x.ID)
+	if xs, _ := c.cardsWhere(`state = ?`, cardPending); !slices.ContainsFunc(xs, func(y convoCard) bool { return y.ID == x.ID }) {
+		t.Fatalf("card %d not among the pending cards", x.ID)
 	}
 	if got := attentionOf(c, cardItemRef(x.ID)); got == nil || got.Weight != weight {
 		t.Fatalf("attention item %+v, want weight %d", got, weight)

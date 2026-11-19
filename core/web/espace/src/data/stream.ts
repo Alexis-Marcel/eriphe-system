@@ -3,7 +3,7 @@ import {
   applyDoc, applyExchange, applyMoved, applyNodes, applyNotes, applyProgress, applyShow, applySource, step, type Store,
 } from "./store";
 
-// The workspace's event stream, /events?a2ui=1 (web_sse.go): one per page,
+// The workspace's event stream, /events (web_sse.go): one per page,
 // with the page's tab id and the node the console talks to (node). Its
 // events feed the store: "node", "doc", "progress", "source", "show",
 // "exchange", "proposals" and "notice". When the console talks to another
@@ -11,7 +11,7 @@ import {
 // exchange, and the graph again, whole.
 
 export function streamURL(talk: string | null): string {
-  return `/events?a2ui=1&tab=${tab}${talk ? `&node=${encodeURIComponent(talk)}` : ""}`;
+  return `/events?tab=${tab}${talk ? `&node=${encodeURIComponent(talk)}` : ""}`;
 }
 
 // STREAM_GRACE is how long the stream may stay down before the page says

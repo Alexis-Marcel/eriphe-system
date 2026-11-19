@@ -12,10 +12,9 @@ import { landed, lastSeq, present, type Sent } from "./exchange";
 // The console (#633): the one input of the workspace. It talks to the page
 // the console talks to (the store's talk), else to the home; Eriphe's
 // newest line shows by the orb, the replies it suggests under it. The
-// conversation of that node opens over it, its lines before on request; the
-// whole conversation is at /conversation. The cards no node holds (one
-// proposed at the home, before any subject) show with it, open or not, so
-// that none waits out of sight.
+// conversation of that node opens over it, its lines before on request.
+// The cards no node holds (one proposed at the home, before any subject)
+// show with it, open or not, so that none waits out of sight.
 
 const spring = { type: "spring", stiffness: 300, damping: 32 } as const;
 
@@ -61,7 +60,6 @@ export function Console({ boot }: { boot: api.Boot }) {
           <motion.section className="cs-conv" initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }} transition={spring}>
             <header>
               <span className="micro">{place ?? t("espace.home")}</span>
-              <a href="/conversation">{t("espace.exchange.all")}</a>
               <button type="button" onClick={() => setConv(false)} aria-label={t("espace.page.close")}>
                 ✕
               </button>
@@ -104,6 +102,16 @@ export function Console({ boot }: { boot: api.Boot }) {
         </div>
       )}
       {!boot.live && <p className="cs-note">{t("espace.sent.sample")}</p>}
+      {boot.setup === "noai" && (
+        <p className="cs-note" role="status">
+          {t("espace.noai")} <a href="/welcome">{t("espace.noai.link")}</a>
+        </p>
+      )}
+      {boot.setup === "nobrain" && (
+        <p className="cs-note" role="status">
+          {t("espace.nobrain")}
+        </p>
+      )}
       {failed && <p className="cs-note" role="alert">{t("espace.error")}</p>}
 
       <form className={`cs-bar${writing ? " writing" : ""}`} onSubmit={onSubmit}>
@@ -154,7 +162,7 @@ function Lines({ live, talk, x, items, writing }: { live: boolean; talk: string 
       const got = live ? await api.earlier(first, talk ?? undefined) : sampleEarlier(lang, first);
       setBefore({ key, lines: [...got.lines, ...mine.lines], more: got.more && got.lines.length > 0 });
     } catch {
-      /* the conversation has them */
+      /* not this time: the button stays */
     } finally {
       setBusy(false);
     }
@@ -183,7 +191,17 @@ function Lines({ live, talk, x, items, writing }: { live: boolean; talk: string 
 
 function Line({ line, draft }: { line: api.ExchangeLine; draft?: boolean }) {
   const { t } = useWords();
-  if (line.role === "error") return <p className="cs-error" role="alert">{t("espace.exchange.error")}</p>;
+  if (line.role === "error")
+    return (
+      <p className="cs-error" role="alert">
+        {t("espace.exchange.error")}{" "}
+        <button type="button" className="linkish" onClick={() => void api.retryBrain().catch(() => false)}>
+          {t("espace.retry")}
+        </button>
+        {" · "}
+        <a href="/settings/agents">{t("espace.exchange.account")}</a>
+      </p>
+    );
   if (line.role === "user")
     return (
       <div className="cs-msg you">

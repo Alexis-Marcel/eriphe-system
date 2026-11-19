@@ -55,8 +55,7 @@ built-in instructions are in French.
   mails), each a page with live blocks, a trace and its versions, kept as markdown files in git; you
   shape it by talking to Eriphe in one console; a list on a phone
   ([docs/workspace.md](docs/workspace.md), [the node format](docs/node-format.md)).
-- **Conversation** at `/conversation`, one click from the workspace, with attachments, and from the
-  terminal (`eriphe`).
+- **The terminal** (`eriphe`): the same conversation as the workspace's console, from a shell.
 - **Memory**: people, facts, preferences and a nightly journal, kept by eriphe-core in SQLite and
   recalled by the brain, with a readable copy in markdown (`/data/memoire/`); what it learns from
   outside content is only proposed until you approve it.

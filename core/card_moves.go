@@ -248,7 +248,7 @@ func (s proposalSpan) view() spanView {
 // waitingCards are the cards that wait, with their proposals, newest
 // first: the one an author just caused is not cut off by a backlog.
 func (c *core) waitingCards() []pendingCard {
-	xs, err := c.cardsWhere(`state = ? AND kind != ? ORDER BY id DESC`, cardPending, cardDigest)
+	xs, err := c.cardsWhere(`state = ? ORDER BY id DESC`, cardPending)
 	if err != nil {
 		return nil
 	}

@@ -1,13 +1,9 @@
 {{define "logo"}}<img class="logo" src="/static/icon.svg" alt="" width="30" height="30">{{end}}
 
 {{define "i-chat"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.2 3.3c-.5.4-1.3 0-1.3-.6V17.0A2.5 2.5 0 0 1 4 14.5z"/></svg>{{end}}
-{{define "i-tasks"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/></svg>{{end}}
-{{define "i-espace"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="9" height="9" rx="2"/><rect x="15" y="4" width="5" height="5" rx="1.5"/><rect x="4" y="15" width="5" height="5" rx="1.5"/><rect x="11" y="15" width="9" height="5" rx="1.5"/></svg>{{end}}
 {{define "i-settings"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>{{end}}
 {{define "i-logout"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg>{{end}}
 {{define "i-send"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>{{end}}
-{{define "i-clip"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5l-8.1 8.1a5 5 0 01-7.1-7.1l8.5-8.5a3.3 3.3 0 014.7 4.7l-8.5 8.5a1.7 1.7 0 01-2.4-2.4l7.8-7.8"/></svg>{{end}}
-{{define "i-file"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>{{end}}
 {{define "i-check"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{{end}}
 {{define "i-memory"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 4.5a3 3 0 0 0-3 3 3 3 0 0 0-2 5.2A3 3 0 0 0 7 17.5a2.5 2.5 0 0 0 5 .5V6.5a2 2 0 0 0-2.5-2zM14.5 4.5a3 3 0 0 1 3 3 3 3 0 0 1 2 5.2 3 3 0 0 1-2.5 4.8 2.5 2.5 0 0 1-5 .5"/><path d="M12 9.5h2M12 13.5h2.5"/></svg>{{end}}
 {{define "i-x"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>{{end}}
@@ -32,48 +28,8 @@
 {{define "i-chevron"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>{{end}}
 {{define "i-back"}}<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>{{end}}
 
-{{define "message"}}{{if eq .Role "event"}}{{with .Notice}}
-<div class="msg msg-event" id="m{{$.Seq}}"><span class="dot"></span><p>{{tf .Key .Title}} <a href="/tasks/{{.Task}}" hx-get="/tasks/{{.Task}}" hx-target="#drawer" hx-swap="innerHTML">{{t "event.task.see"}}</a></p><time datetime="{{iso $.Time}}">{{clock $.Time}}</time></div>
-{{end}}{{else if eq .Role "error"}}{{template "brain-error" .}}
-{{else if .Hidden}}
-{{else if eq .Role "user"}}
-<div class="msg msg-user" id="m{{.Seq}}">{{if .Attachments}}<div class="msg-body">{{template "attachments" .Attachments}}{{if .Text}}<div class="bubble">{{md .Text}}</div>{{end}}</div>{{else}}<div class="bubble">{{md .Text}}</div>{{end}}<time datetime="{{iso .Time}}">{{if .Via}}<span class="via" title="{{t "chat.via"}}">{{.Via}} · </span>{{end}}{{clock .Time}}</time></div>
-{{else}}
-<div class="msg msg-brain" id="m{{.Seq}}"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="msg-body"><span class="sr-only">{{t "chat.eriphe"}} :</span><div class="bubble">{{md .Text}}</div>{{template "msg-why" .Why}}{{template "cards" .Cards}}<time datetime="{{iso .Time}}">{{clock .Time}}</time></div></div>
-{{end}}{{end}}
-
 {{/* An error, one way everywhere (problems.go): the sentence, what to do, and the raw text folded in Details. . is a problem. */}}
 {{define "problem"}}<div class="problem{{if .Soft}} problem-soft{{end}}"><p class="problem-text">{{.Text}}{{if .Href}} <a href="{{.Href}}">{{.Action}}</a>{{end}}</p>{{if .Detail}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short .Detail 1200}}</code></details>{{end}}</div>{{end}}
-
-{{/* The assistant could not answer, or cannot start: an error card, never its raw error as its message. */}}
-{{define "brain-error"}}{{$p := problem "brain" .Text}}{{if eq .Via "start"}}{{$p = problem "brain-start" .Text}}{{end}}
-<section class="msg msg-error" id="m{{.Seq}}" role="alert" aria-labelledby="m{{.Seq}}-t">
-  <span class="err-icon" aria-hidden="true">{{template "i-x"}}</span>
-  <div class="msg-body">
-    <h3 id="m{{.Seq}}-t">{{if eq .Via "start"}}{{t "chat.error.starttitle"}}{{else}}{{t "chat.error.title"}}{{end}}</h3>
-    <p class="problem-text">{{$p.Text}}</p>
-    <div class="actions">
-      <a class="btn btn-soft sm" href="{{$p.Href}}">{{template "i-key"}}{{$p.Action}}</a>
-      <form hx-post="/brain/retry" hx-swap="none" hx-disabled-elt="find button" class="inline"><button class="btn btn-primary sm" type="submit">{{t "problem.retry"}}</button></form>
-    </div>
-    {{if $p.Detail}}<details class="problem-details"><summary>{{t "problem.details"}}</summary><code>{{short $p.Detail 1200}}</code></details>{{end}}
-    <time datetime="{{iso .Time}}">{{clock .Time}}</time>
-  </div>
-</section>
-{{end}}
-
-{{/* The brain's message being written: nothing at all without one, for :empty. */}}
-{{define "draft"}}{{if .}}<div class="msg msg-brain msg-draft"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="msg-body"><div class="bubble">{{md .}}</div></div></div>{{end}}{{end}}
-
-{{define "attachments"}}<div class="atts">{{range .}}{{if .IsImage}}<a class="att att-image" href="/attachments/{{.ID}}" target="_blank" rel="noopener" title="{{.Name}}"><img src="/attachments/{{.ID}}" alt="{{.Name}}" loading="lazy"></a>{{else}}<a class="att" href="/attachments/{{.ID}}" target="_blank" rel="noopener" title="{{t "chat.file.open"}} {{.Name}}"><span class="att-icon" aria-hidden="true">{{template "i-file"}}</span><span class="att-name">{{.Name}}</span><span class="att-size">{{filesize .Size}}</span></a>{{end}}{{end}}</div>{{end}}
-
-{{define "pending"}}
-{{range .Perms}}{{template "permission" .}}{{end}}
-{{if eq .Brain "thinking"}}<div class="msg msg-brain thinking"><span class="avatar" aria-hidden="true">{{template "logo"}}</span><div class="bubble"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="sr-only">{{t "chat.thinking"}}</span></div></div>
-{{else if eq .Brain "none"}}<p class="notice">{{t "chat.nobrain"}}</p>
-{{else if eq .Brain "noai"}}<p class="notice">{{t "chat.noai"}} <a href="/welcome">{{t "chat.noai.link"}}</a></p>
-{{else if eq .Brain "off"}}<p class="notice">{{t "chat.brainoff"}}</p>{{end}}
-{{end}}
 
 {{define "permission"}}{{$id := printf "%sperm-%s-%s" .Where .Task.ID .ID}}
 <section class="perm{{if .UserOnly}} perm-yours{{end}}" id="{{$id}}" aria-labelledby="{{$id}}-t">
@@ -84,7 +40,7 @@
       <p class="perm-who">{{.Task.Agent}}{{if .Task.Device}} · {{.Task.Device}}{{end}} {{t "perm.wants"}} <strong>{{.Tool}}</strong>{{if .UserOnly}} — {{.UserOnly}}{{end}}</p>
     </div>
   </header>
-  {{if not .Where}}<p class="perm-task"><a href="/tasks/{{.Task.ID}}" hx-get="/tasks/{{.Task.ID}}" hx-target="#drawer" hx-swap="innerHTML">{{.Task.Title}}</a></p>{{end}}
+  {{if ne .Where "t-"}}<p class="perm-task"><a href="/tasks/{{.Task.ID}}">{{.Task.Title}}</a></p>{{end}}
   <pre class="perm-subject"><code>{{short .Subject 1200}}</code></pre>
   <form class="perm-form" hx-post="/tasks/{{.Task.ID}}/answer" hx-disabled-elt="find button">
     <input type="hidden" name="permission" value="{{.ID}}">
@@ -103,15 +59,6 @@
     </div>
   </form>
 </section>
-{{end}}
-
-{{define "tasks"}}
-{{template "side-nodes" .Nodes}}
-<div class="side-head"><h2>{{t "tasks.title"}}</h2>{{if .Active}}<span class="count" data-count="{{len .Active}}">{{len .Active}}</span>{{end}}</div>
-{{if .Active}}<ul class="cards">{{range .Active}}<li>{{template "taskcard" .}}</li>{{end}}</ul>
-{{else}}<div class="empty-side"><span class="empty-art" aria-hidden="true">{{template "i-tasks"}}</span><p>{{t "tasks.none"}}</p></div>{{end}}
-{{if .Done}}<details class="done"><summary>{{t "tasks.done"}} <span class="count">{{len .Done}}</span></summary><ul class="cards">{{range .Done}}<li>{{template "taskcard" .}}</li>{{end}}</ul></details>{{end}}
-{{with .Stats}}{{template "task-stats" .}}{{end}}
 {{end}}
 
 {{define "task-stats"}}{{/* how reliable the tasks were lately (task_stats.go) */}}
@@ -139,7 +86,7 @@
     <span class="chip chip-{{.State}}"><span class="pulse" aria-hidden="true"></span>{{if .NeedsYou}}{{t "tasks.needsyou"}}{{else}}{{t (printf "state.%s" .State)}}{{end}}</span>
     <time datetime="{{iso .Updated}}">{{ago .Updated}}</time>
   </div>
-  <h3><a href="/tasks/{{.ID}}" hx-get="/tasks/{{.ID}}" hx-target="#drawer" hx-swap="innerHTML" class="stretched">{{.Title}}</a></h3>
+  <h3><a href="/tasks/{{.ID}}" class="stretched">{{.Title}}</a></h3>
   <dl class="meta">
     {{if .Repo}}<div><dt class="sr-only">{{t "task.repo"}}</dt><dd class="mono">{{.Repo}}{{if .Branch}}<span class="branch">{{template "i-branch"}}{{.Branch}}</span>{{end}}</dd></div>{{end}}
     <div><dt class="sr-only">{{t "task.device"}}</dt><dd>{{template "i-server"}}{{if .Device}}{{.Device}}{{else}}{{t "tasks.waitdevice"}}{{end}}</dd></div>
@@ -169,7 +116,7 @@
 </section>
 {{end}}
 
-{{define "receipt"}}{{/* a task's checked receipt, in its drawer (receipt.go) */}}
+{{define "receipt"}}{{/* a task's checked receipt, on its page (receipt.go) */}}
 <section class="receipt" aria-labelledby="rc-title">
 <h3 class="section-label" id="rc-title">{{t "receipt.title"}}</h3>
 {{if .Given}}
@@ -197,22 +144,7 @@
 </section>
 {{end}}
 
-{{define "drawer"}}
-<div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title" data-task="{{.Data.Card.ID}}">
-  <header class="drawer-head">
-    <button class="icon-btn" type="button" data-close aria-label="{{t "task.close"}}">{{template "i-back"}}</button>
-    <div class="drawer-title">
-      <span class="chip chip-{{.Data.Card.State}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "state.%s" .Data.Card.State)}}</span>
-      <h2 id="drawer-title">{{.Data.Card.Title}}</h2>
-    </div>
-  </header>
-  <div class="drawer-scroll" id="drawer-body" hx-get="/tasks/{{.Data.Card.ID}}?part=body" hx-trigger="refresh" hx-swap="innerHTML">
-    {{template "drawer-body" .}}
-  </div>
-</div>
-{{end}}
-
-{{define "drawer-body"}}{{with .Data}}
+{{define "task-body"}}{{with .Data}}
 <dl class="facts">
   <div><dt>{{t "task.device"}}</dt><dd>{{if .Card.Device}}{{.Card.Device}}{{else}}{{t "tasks.waitdevice"}}{{end}}</dd></div>
   <div><dt>{{t "task.agent"}}</dt><dd>{{.Card.Agent}}</dd></div>
@@ -362,22 +294,8 @@ to the page it belongs to (its .back). */}}
 {{define "attn-dot"}}<b class="attn-dot" title="{{t "settings.attn"}}"><span class="sr-only">{{t "settings.attn"}}</span></b>{{end}}
 
 {{/* What the brain sets when asked (a rule, a watch): the page says how to
-ask it, in the conversation, rather than a form. */}}
-{{define "ask"}}<p class="ask">{{template "i-chat"}}<span>{{t .}}</span> <a href="/conversation">{{t "ask.go"}}</a></p>{{end}}
+ask it, in the workspace's console, rather than a form. */}}
+{{define "ask"}}<p class="ask">{{template "i-chat"}}<span>{{t .}}</span> <a href="/espace">{{t "ask.go"}}</a></p>{{end}}
 
 {{/* One mark per step, in the plan's order, coloured by its status. */}}
 
-{{/* The nodes at work or waiting for the user, on top of the tasks panel (parts.html). */}}
-{{define "side-nodes"}}{{if .}}
-<section class="side-node" aria-labelledby="side-node-t">
-  <div class="side-sub"><h3 id="side-node-t">{{t "nodes.title"}}</h3></div>
-  <ul class="cards">{{range .}}<li>
-    <article class="card node-card{{if eq .State "waiting"}} needs-you{{end}}">
-      <div class="card-top">
-        <span class="chip chip-node-{{.State}}"><span class="pulse" aria-hidden="true"></span>{{t (printf "node.state.%s" .State)}}</span>
-      </div>
-      <h3><a class="stretched" href="/espace?open=node-{{.ID}}">{{if .Title}}{{.Title}}{{else}}{{t "node.untitled"}}{{end}}</a></h3>
-    </article>
-  </li>{{end}}</ul>
-</section>
-{{end}}{{end}}

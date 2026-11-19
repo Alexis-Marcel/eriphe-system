@@ -820,7 +820,7 @@ twice", is no unsupported claim of the receipt, and does not stop the task. The 
 the brain hears that the contract is misconfigured, with the device's exact reason. It fixes it with
 `answer_task` and `checks` (all of them, checked like at the start; `reply` optional): the
 contract and the task's spec are updated, and the new checks go to the device with the next turn,
-after which they run. The drawer shows such a check as "could not run".
+after which they run. The task's page shows such a check as "could not run".
 
 ### Retries and budgets (`task_retry.go`)
 
@@ -842,7 +842,7 @@ and `tokens` (input, output and cache writes from the turns' `usage`, where the 
 it) at the end of a turn; a turn whose receipt says `done` is not stopped (the brain closes the
 task), and `answer_task` refuses a new turn once the turns are spent. A task eriphe-core stops
 keeps why (`stop_reason`): the brain hears it with the last receipt when the device reports it
-stopped, and the drawer says so; a retry on its way shows its time. A task whose agent or container
+stopped, and the task's page says so; a retry on its way shows its time. A task whose agent or container
 failed is told to the brain with its class: worth starting again once, or not. Each failure's class
 is kept in `task_harness` for the measures. The brain's prompt no longer counts retries itself.
 
@@ -861,7 +861,7 @@ tokens, OpenCode and other ACP agents nothing yet). Claude Code's `cost_usd` is 
 so far (carried over a resumed session), so it is never summed: a cost comes from the tokens at the
 task's model list price (`task_cost.go`: Opus, Sonnet and Haiku, found in the model's name; another
 model has no known cost). The amounts are list-price equivalents, quota with a subscription. A
-task's drawer shows its tokens (cache reads aside) and cost. The side panel of tasks shows a few measures over the last 30 days of finished
+task's page shows its tokens (cache reads aside) and cost. Settings › Journal shows a few measures over the last 30 days of finished
 worker tasks, read from what eriphe-core keeps (no service of their own):
 
 - **accepted**: the last receipt says `done`, no check failed, no unsupported claim;
@@ -2769,27 +2769,27 @@ answers 409 with the reason.
 
 ## Workspace (`web`)
 
-Eriphe's own interface, served by eriphe-core on its own HTTPS listener. Its home page is the
-[graph workspace](#the-graph-workspace-the-home-page-) (`/`); the conversation, at
-`/conversation`, has Eriphe in the middle, its tasks on the side as live cards (machine, agent, repository and branch,
-state, the pull request or document the agent mentioned), the permissions waiting for an answer
-inline in the conversation (Yes / No, with an optional reason for the agent), and the settings. The assistant manages: what the brain can set itself
-(a notification rule, a memory, an intention) is asked of it in the conversation, and its pages show
-the state, say why, and undo, with a line saying how to ask rather than a form.
-The conversation's header has three buttons, Espace (the
-[graph workspace](#the-graph-workspace-the-home-page-), also behind Eriphe's name), Tâches (a badge counts the
-running tasks, and turns urgent when one waits for the user) and Réglages. On a wide screen Tâches
-hides or shows the side panel; on a phone it opens the tasks as a sheet over the conversation
-(closed by its button, Escape or the browser's back), and from any other page it comes back to
-the conversation on its tasks (`/conversation#tasks-panel`).
+Eriphe's own interface, served by eriphe-core on its own HTTPS listener. Its home page, and its
+only surface for talking to Eriphe, is the [graph workspace](#the-graph-workspace-the-home-page-)
+(`/`, also `/espace`): the nodes, the console, the cards. There is no conversation page and no top
+bar: the settings, the memory and the other pages of the shell (`templates/layout.html`) open with
+their side menu, whose first entry leads back to the workspace. The assistant manages: what the
+brain can set itself (a notification rule, a memory, an intention) is asked of it in the workspace,
+and its pages show the state, say why, and undo, with a line saying how to ask rather than a form.
+The worker tasks at work are listed in Settings › Journal (`/settings/journal`, the « Tous » kind),
+above the reliability of the last 30 days; a task's page (`GET /tasks/{id}`) is a page of the
+settings, under the journal, with its trace, its receipt, its access grants, Stop, the reply
+to an idle agent and the answer to the permission it waits for; it reloads every 5 s while the
+task works, and after each of its actions (`memory-changed`).
 
-**Conversation first** (`convo_cards.go`, `web_convo_cards.go`, `templates/convo.html`). What waits
+**Cards** (`convo_cards.go`, `web_convo_cards.go`). What waits
 for the user's approval is asked where they talk to the assistant: every proposal (a memory, an
 intention, a notification rule, a setting, a presence mapping, the start of a task that
 needs something of theirs: [asked at launch](#github-in-a-task)) is a card bound by the code
-to that one proposal, under the brain's message of the turn that made it (or its last message of
-the turn), with Oui, Non (the proposal's own approve and reject) and Modifier (the composer is
-prefilled, and the brain proposes again). The event stream keeps cards up to date (`cards`:
+to that one proposal, filed with the brain's message of the turn that made it (or its last message of
+the turn), with Oui and Non (the proposal's own approve and reject), shown in the workspace
+[in the blocks it concerns](#proposals-in-the-blocks-they-concern-card_movesgo); to change one, the
+user tells the brain, which proposes again. The event stream keeps cards up to date (`proposals`:
 approved, declined, no longer current). The memory's extraction makes no card: what it is not
 sure of waits in À valider and expires (see [Memory](#memory)). Other proposals (a skill's run, a
 turn that said nothing) are queued and enter the attention queue at their card's weight
@@ -2833,9 +2833,7 @@ after a recent message of the brain's written in a clean turn that shows exactly
 whose proposal is not drawn from external content; anything else is the brain's to read, or the
 buttons'. The brain has no tool that decides a card. On a channel the user writes from (Telegram), a card follows the reply or the
 notification it goes with, with Oui / Non buttons answered from the linked account only (none in
-"alerts only"); a channel the user did not trust never answers a card: it says the card waits on the phone, where a notice goes. A read of `since` adds a
-foldable digest card (the items, with links to the tasks) to the brain's next message, and a
-spontaneous message (a notification) has a "Pourquoi ?" with its why and about.
+"alerts only"); a channel the user did not trust never answers a card: it says the card waits on the phone, where a notice goes. 
 
 The **Journal** (`/settings/journal`, `web_activity.go`) is the black box: the feed the brain reads
 with `since` (below), by kind (tasks, notifications, intentions,
@@ -2849,8 +2847,8 @@ valider with a discreet count), not of the main navigation.
 The settings come in four groups: Assistant (the memory, "Ce que Jarvis sait de toi", still at
 `/memory`, the agents, the skills), Connexions (tools, folders), Appareils & accès
 (devices, access, notifications) and Mon espace (account, the Journal, À valider); an entry is marked
-when it needs a look (an update, a tool in error, a refused key). On a phone the settings say the
-way back, "‹ Conversation".
+when it needs a look (an update, a tool in error, a refused key). The menu's first entry is the
+way back to the workspace (« ‹ Espace »); there is no top bar.
 **Access** (`/settings/access`, `web_access_list.go`, `access.html`) lists every way into the
 assistant, one row each as the tools are listed: the web workspace and the mobile app always, then
 each adapter once set up (Telegram, its bot), then the API accesses. Each row says who speaks through it, what it
@@ -3035,12 +3033,12 @@ it, its links; an open node is its page, drawn right where its bubble was. Nothi
 screen planned in code: what shows is the graph eriphe-core streams and what the user opens. On
 screen, in French, a node is « bulle » or « sujet », never « nœud ».
 
-**The routes** (`web_pages.go`). `GET /` opens the workspace, the wizard before it while the brain
-has no agent (`needsWelcome`). It opens the conversation instead (`homeConvoNow`) while no AI
-works for it, and for a browser that chose it: `POST /settings/home` with `home` `conversation`
-or `espace` keeps the choice in an `HttpOnly` cookie (`home`) for 400 days. The conversation stays
-at `GET /conversation` (`convoPath`); `GET /espace` always opens the workspace. What points into the
-conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/`.
+**The routes** (`web_pages.go`). `GET /` and `GET /espace` open the workspace, the wizard
+(`/welcome`) before it while the brain has no agent (`needsWelcome`). A skipped wizard, or a brain
+with no AI to work for it, is told in the console: the boot's `setup` (`noai`, with a link to
+`/welcome`; `nobrain`). What points at a message points at its node (`/espace?open=node-<id>`,
+`nodeAt`, `messageAt`; the home node is `/espace`); a permission points at
+`/settings/approve#a-perm-<task>-<id>` (`permissionAt`); a task at `/tasks/<id>`.
 
 **What the page reads** (`web_graph.go`), with a session:
 
@@ -3068,7 +3066,7 @@ conversation names it (`/conversation#m12`, `convoAt`); what means home stays `/
   `lifetime`, `state`, `created`, `updated`, `done`, `external`, `version`, `waits` (one of its
   cards waits for the user) and, while it runs, `line`: its task's last word of where it is.
 
-**The stream** (`/events?a2ui=1&tab=<tab>&node=<id>`, `web_sse.go`). JSON events, the graph's from
+**The stream** (`/events?tab=<tab>&node=<id>`, `web_sse.go`). JSON events, the graph's from
 `graph_feed.go`, which the node store tells of each change (`nodestore.Watch`):
 
 - `node`: all the rows at once (`reset`) and when the stream fell behind the feed's last 512
@@ -3196,8 +3194,8 @@ ERIPHE_LIVE_NODES=1 ERIPHE_LIVE_NODES_RUNS=3 go test -run TestNodesBenchLive -ti
 
 `ERIPHE_LIVE_NODES_MODEL` picks the model (`sonnet` by default), `ERIPHE_LIVE_NODES_CLI` the command.
 
-**A full home** (#455). The workspace does what the conversation's page does to say the user is
-there (`data/presence.ts`, as `static/app.js`): it tells eriphe-core when it comes in front or leaves
+**A full home** (#455). The workspace says the user is
+there (`data/presence.ts`): it tells eriphe-core when it comes in front or leaves
 (`POST /presence`, visible and focused, `tab`, `front`, `sub` its push subscription's id, the CSRF
 token in the form and the header; every 20 s while in front; a beacon as it closes) and registers
 the service worker (`/sw.js`). Its tab id is also in its stream's query (`tab`), so a notification
@@ -3244,7 +3242,7 @@ queue: every message of the conversation belongs to a node or to the home, in it
   stopped, a task's start declined or access decided) belongs to it; the catalog's, a machine's and
   the brain's own notes and notifications to the home. A long answer code filed says where
   (`filed`, [the safety net](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)).
-- **The column.** The stream (`GET /events?a2ui=1&node=<id>`) sends the `exchange` event of
+- **The column.** The stream (`GET /events?node=<id>`) sends the `exchange` event of
   the node the console talks to, with `node` and its `title` (none when the node is external);
   without `node`, the home's. Each line (`seq`, `role`, `time`, `text`, `external`) says `filed`:
   the node code filed it in. `GET /api/earlier` takes `node=<id>`. Eriphe's draft shows in
@@ -3271,16 +3269,15 @@ queue: every message of the conversation belongs to a node or to the home, in it
   with `from` `suggestion` and `node`), but it never decides a card (no
   click does). It is no A2UI action: the click grammar is unchanged.
 
-**The fallback.** The conversation is where the user lands when the workspace cannot open. The
-shell (`templates/espace.html`) has no JavaScript of its own: without JavaScript a `<noscript>`
-refresh sends the page to `/conversation`; under `#root`, until the app draws, a word, and the way
-to the conversation (a link, and the form that makes it this browser's home page), revealed by CSS
+**The fallback.** The shell (`templates/espace.html`) has no JavaScript of its own: under
+`#root`, until the app draws, a word, and a plain error with a link to try again, revealed by CSS
 after 8 s (`.espace-fallback`) for a script that never loads or runs. The app shows it at once
 (`.failed`) when its boot fails (`main.tsx`: a boot it cannot read is an error, never made-up data);
 an error while it draws shows the same (`FailSafe`, `Fallback.tsx`). An event stream down for more
 than 20 s (`streamDown`, `STREAM_GRACE`; the browser opens it again by itself, the page itself once
-it closed for good, after checking the session) shows a line with the link to the conversation;
-the workspace stays as it was.
+it closed for good, after checking the session) shows a line saying so; the workspace stays as it
+was. A brain that could not answer is a line in the console (`exchange`'s error), with Réessayer
+(`POST /brain/retry`, 204) and a link to the agents' settings.
 
 **The look** (`espace.css`, `fonts.css`): neutral greys, light or dark as the system says
 (`prefers-color-scheme`; the shell's `color-scheme` and `theme-color` follow it), pages as flat
@@ -3722,7 +3719,7 @@ trusts, either:
 included), `display: standalone`, `start_url` and `scope` `/`; the pages add the Apple touch icon
 and meta tags. Installed, it draws under the status bar and around the notch, and keeps its bars
 out of the safe areas; fields are 16 px at least on a phone (Safari zooms into smaller ones); the
-composer stays above the keyboard (Chrome resizes the page for it, `interactive-widget`; on iOS the
+console stays above the keyboard (Chrome resizes the page for it, `interactive-widget`; on iOS the
 page follows the visible viewport). The service worker (`/sw.js`,
 served with the static files' version so that each update brings a fresh cache) keeps the static
 files only: versioned ones cache first, the others network first; a page is always fetched, and
@@ -3742,8 +3739,8 @@ the language the device used:
 
 | When | Text | A tap opens |
 |---|---|---|
-| a worker task finished its turn, or failed (or was lost) | « Tâche finie : <title> », « La tâche « <title> » a échoué » | the conversation with that task's drawer (`/?task=<id>`) |
-| a permission waits for the user (one that is theirs, or any while the assistant is away), or the assistant ended a message on a question | « <Name> attend ta réponse : <tool and command, or the question> » | the conversation, at that permission or message |
+| a worker task finished its turn, or failed (or was lost) | « Tâche finie : <title> », « La tâche « <title> » a échoué » | that task's page (`/tasks/<id>`) |
+| a permission waits for the user (one that is theirs, or any while the assistant is away), or the assistant ended a message on a question | « <Name> attend ta réponse : <tool and command, or the question> » | the permission in À valider (`/settings/approve#a-perm-<task>-<id>`), or the message's node (`/espace?open=node-<id>`) |
 | the brain tells something on its own (`notify`), or answers a due intention, and the decision below says now at weight 5 | its text, with 👍 / 👎 / « pas maintenant » buttons where the platform shows them | that notification in Settings → Notifications, with why |
 
 Each is pushed once, and not at all while a workspace tab is visible and focused: every open tab

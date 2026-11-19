@@ -156,7 +156,7 @@ func (c *core) handleChannelIn(w http.ResponseWriter, r *http.Request) {
 			}
 			if c.store.get(channelCardKey(x.ID)) == "" {
 				c.store.set(channelCardKey(x.ID), "1")
-				c.tell(channelCardNote(x))
+				c.tell(c.channelCardNote(x))
 			}
 		}
 	}

@@ -113,7 +113,7 @@ func TestWebWelcomeFlow(t *testing.T) {
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "pc", Agent: "sonnet", Runtime: "claude-code", State: stateIdle})
 	setBrainTask(c.core, "b-1")
 	_, body, _ = tw.do("GET", "/welcome/status", nil, nil)
-	if !strings.Contains(body, "Jarvis est prêt") || !strings.Contains(body, `href="/conversation"`) || strings.Contains(body, "hx-trigger") {
+	if !strings.Contains(body, "Jarvis est prêt") || !strings.Contains(body, `<a class="btn btn-primary wide" href="/">`) || strings.Contains(body, "hx-trigger") {
 		t.Fatalf("ready: %s", body)
 	}
 }
@@ -181,15 +181,19 @@ func TestWebWelcomeKeepsEriphe(t *testing.T) {
 	}
 }
 
-// The wizard can wait: the conversation opens after "Later".
+// The wizard can wait: the workspace opens after "Later".
 func TestWebWelcomeSkip(t *testing.T) {
 	tw, _, csrf := catalogWeb(t, func(cfg *Config) { noAgents(cfg); cfg.Brain = &BrainConfig{} })
 	if code, _, h := tw.do("POST", "/welcome/skip", url.Values{"csrf": {csrf}}, nil); code != http.StatusSeeOther || h.Get("Location") != "/" {
 		t.Fatalf("skip: %d %s", code, h.Get("Location"))
 	}
-	// It says the assistant has no AI yet, and leads back to the wizard.
-	if code, body, _ := tw.do("GET", convoPath, nil, nil); code != http.StatusOK || !strings.Contains(body, "pas encore d&#39;IA") || !strings.Contains(body, `href="/welcome"`) {
+	// The workspace opens; its console says the assistant has no AI yet,
+	// and leads back to the wizard (web/espace, boot.setup).
+	if code, body, _ := tw.do("GET", "/", nil, nil); code != http.StatusOK || !strings.Contains(body, espaceShell) {
 		t.Fatalf("after skip: %d", code)
+	}
+	if _, body, _ := tw.do("GET", "/espace/boot", nil, nil); !strings.Contains(body, `"setup":"noai"`) || !strings.Contains(body, "pas encore d'IA") {
+		t.Fatalf("after skip, the boot: %s", body)
 	}
 	if code, _, _ := tw.do("GET", "/welcome", nil, nil); code != http.StatusOK {
 		t.Fatalf("the wizard after skip: %d", code)

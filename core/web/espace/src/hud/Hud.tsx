@@ -176,7 +176,7 @@ function Offline() {
   if (up || !late) return null;
   return (
     <p className="hud-offline" role="status">
-      {t("espace.offline")} <a href="/conversation">{t("espace.convo")}</a>
+      {t("espace.offline")}
     </p>
   );
 }

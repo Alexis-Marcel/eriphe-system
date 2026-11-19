@@ -34,16 +34,8 @@ func TestAccessCardNamesItsTask(t *testing.T) {
 	if !strings.Contains(v.Text, "Trie les mails") {
 		t.Errorf("the text does not name the task: %q", v.Text)
 	}
-	cv := w.cardView(x, "fr")
-	if !strings.HasPrefix(cv.Yes, "Sur Oui, la tâche peut modifier") {
-		t.Errorf("card %+v", cv)
-	}
-	html, err := w.fragment("fr", "home", "card", cv)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(html, "Sur Oui, la tâche peut modifier") {
-		t.Errorf("card html %s", html)
+	if fr := w.proposalView(x, p, "fr"); !strings.HasPrefix(fr.Yes, "Sur Oui, la tâche peut modifier") {
+		t.Errorf("card %+v", fr)
 	}
 	if text := cardText(x, p, "en"); !strings.Contains(text, "On Yes, the task may change") {
 		t.Errorf("channel %q", text)
@@ -54,14 +46,14 @@ func TestAccessCardNamesItsTask(t *testing.T) {
 	if o := p.Origin("en"); o.From != "task “Trie les mails”" || o.Yes != "On Yes, this call runs once, exactly as shown." {
 		t.Errorf("call %+v", o)
 	}
-	// Decided, the card no longer says what Oui would do.
+	// Decided, the card still says where it came from.
 	if _, err := c.decideCard(context.Background(), x.ID, false, "web"); err != nil {
 		t.Fatal(err)
 	}
 	x, _ = c.card(x.ID)
-	html, _ = w.fragment("en", "home", "card", w.cardView(x, "en"))
-	if strings.Contains(html, "On Yes") || !strings.Contains(html, "task “Trie les mails”") {
-		t.Errorf("decided card html %s", html)
+	x, p = c.liveCard(x)
+	if v := w.proposalView(x, p, "en"); v.State != cardRejected || v.From != "task “Trie les mails”" {
+		t.Errorf("decided card %+v", v)
 	}
 }
 
@@ -76,13 +68,6 @@ func TestAccessCardOfNoNode(t *testing.T) {
 	v := w.proposalView(x, p, "en")
 	if v.Node != "" || v.From != "" || v.Yes != "On Yes, the task may send in mail until it ends." {
 		t.Errorf("proposal %+v", v)
-	}
-	html, err := w.fragment("en", "home", "card", w.cardView(x, "en"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(html, "pcard-from") || !strings.Contains(html, "On Yes, the task may send in mail") {
-		t.Errorf("card html %s", html)
 	}
 	// A card of another kind says nothing of it.
 	if o := (proposal{Kind: cardRule}).Origin("en"); o != (cardOrigin{}) {

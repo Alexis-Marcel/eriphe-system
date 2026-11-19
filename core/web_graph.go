@@ -14,8 +14,8 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
-// The graph workspace (#633), Eriphe's home page (/, and always at
-// /espace; the conversation is at /conversation, web_pages.go): the graph
+// The graph workspace (#633), the one surface of the web workspace (/ and
+// /espace, once the wizard is over, web_pages.go): the graph
 // of nodes, their pages opened inside it, and one console. It is a React
 // app (web/espace), built into web/static/espace and embedded with the
 // other static files; eriphe-core serves it from a small HTML shell
@@ -40,7 +40,7 @@ import (
 // a node's goal is the brain's, never shown.
 
 func (w *web) graphRoutes(mux *webMux) {
-	mux.Handle("GET /espace", w.auth(w.handleEspace))
+	mux.Handle("GET /espace", w.auth(w.handleHome)) // web_pages.go: after the wizard
 	mux.Handle("GET /espace/boot", w.auth(w.handleEspaceBoot))
 	mux.Handle("GET /espace/catalog/v1.json", w.auth(w.handleEspaceCatalog))
 	mux.Handle("GET /espace/media", w.auth(w.handleMedia))  // web_media.go
@@ -65,16 +65,32 @@ type espaceBoot struct {
 	Strings map[string]string  `json:"strings"`
 	View    espaceView         `json:"view"`   // the pages open, the display settings (web_gestures.go)
 	Places  map[string]placeIn `json:"places"` // where the user dropped bubbles
+	// Setup says Eriphe cannot think yet: "noai" while its wizard was left
+	// for later (web_welcome.go), "nobrain" with no brain in the
+	// configuration; "" once it can. The console says it, and the way to
+	// the wizard.
+	Setup string `json:"setup,omitempty"`
 }
 
 func (w *web) handleEspaceBoot(rw http.ResponseWriter, r *http.Request, s *session) {
 	lang := w.lang(r)
 	w.c.noteUserLang(lang) // Eriphe's lines follow it
 	b := espaceBoot{Lang: lang, Name: assistantName(), CSRF: s.CSRF, Strings: espaceWords(lang, assistantName()),
-		View: w.c.view(), Places: w.c.dropped()}
+		View: w.c.view(), Places: w.c.dropped(), Setup: w.setupState()}
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(rw).Encode(b)
+}
+
+// setupState is what Eriphe lacks to think, for the boot: "" when nothing.
+func (w *web) setupState() string {
+	switch w.brainState() {
+	case "none":
+		return "nobrain"
+	case "noai":
+		return "noai"
+	}
+	return ""
 }
 
 // handleEspaceCatalog is GET /espace/catalog/v1.json: the catalog of the

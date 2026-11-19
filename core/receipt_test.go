@@ -327,19 +327,19 @@ func TestReceiptOnCard(t *testing.T) {
 	tw.c.store.insertTask(&TaskRow{ID: "t-1", Device: "pc", Agent: "small", Runtime: "claude-code", Prompt: "Fix it", State: stateIdle})
 	tw.c.store.addEvents("t-1", []EventRow{ev(1, "text", map[string]any{"text": doneReceipt}), ev(2, "turn_end", map[string]any{"subtype": "success"}),
 		ev(3, "check", map[string]any{"name": "tests", "ok": false, "exit_code": 2, "output": "FAIL here"})})
-	_, body, _ := tw.do("GET", "/tasks/t-1", nil, map[string]string{"HX-Request": "true"})
+	_, body, _ := tw.do("GET", "/tasks/t-1", nil, nil)
 	for _, want := range []string{"Compte rendu", "Vérifié par Eriphe", "Non vérifié", "the page loads", "affirmé, sans contrôle",
 		"échoué (code 2)", "FAIL here", "Affirmation non étayée", "La tâche se dit finie, mais le contrôle tests a échoué.", "merge the PR"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("drawer lacks %q", want)
+			t.Errorf("the task's page lacks %q", want)
 		}
 	}
 	if strings.Contains(body, `&#34;receipt&#34;`) || strings.Contains(body, "needs_approval") {
-		t.Error("the drawer shows the raw receipt")
+		t.Error("the task's page shows the raw receipt")
 	}
-	_, body, _ = tw.do("GET", convoPath, nil, nil)
+	_, body, _ = tw.do("GET", "/settings/journal", nil, nil)
 	if !strings.Contains(body, `rc rc-done`) || !strings.Contains(body, "non vérifié(s)") {
-		t.Error("the card has no receipt line")
+		t.Error("the journal's card has no receipt line")
 	}
 	if s := (mismatch{Kind: mmUnreported, N: 3}).Text("en"); s != "3 file(s) changed in the repository are not in the report." {
 		t.Errorf("english %q", s)

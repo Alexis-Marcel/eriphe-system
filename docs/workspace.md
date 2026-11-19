@@ -86,7 +86,7 @@ done) is kept by Eriphe's code; neither works on an older version, nor in a bloc
 
 ## Ask for something
 
-Write to Eriphe, in the console or in the conversation:
+Write to Eriphe, in the console:
 
 > Show me this week's unread mails.
 
@@ -151,26 +151,28 @@ forget one. There is no settings page for the workspace and no rule to maintain.
 
 - **A proposal runs only after your yes.** When Eriphe proposes something (an event to add, a reply
   to send, a new skill), it shows as a card with **Yes** and **No**, at the foot of its page and in
-  the conversation. A card that belongs to no page shows in the console, wherever you are, until
+  the console. A card that belongs to no page shows in the console, wherever you are, until
   you answer it: no card waits out of sight. A proposed appointment shows on a day's block as a ghost marked **Proposed**.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows
   **Approved · running…**, then **done** or **failed** with why.
 - **Content from outside cannot act.** A block that may carry someone else's words is marked
-  « outside »: a proposal shown inside it has no Yes / No but says to answer it in the conversation.
+  « outside »: a proposal shown inside it has no Yes / No but says to answer it in the console.
   A mail that says "click here to approve" cannot make anything happen.
 
 ## Where the conversation is
 
-The conversation with Eriphe stays, with its history, the tasks and Settings, at `/conversation`.
-The console shows only the last exchange of the page it talks to; its speech-bubble button opens
-that page's conversation, **Earlier messages** brings a few more lines at a time, and **The whole
-conversation** has the rest.
+The workspace is the only place to talk to Eriphe on the web: there is no separate conversation
+page. The console shows only the last exchange of the page it talks to; its speech-bubble button
+opens that page's conversation, and **Earlier messages** brings a few more lines at a time. The
+tasks at work, and how reliable they were lately, are in Settings → Journal; each task has its own
+page there, with its trace, **Stop**, and the answer it waits for. The settings and the memory have
+no top bar: **Workspace**, at the top of their menu, leads back.
 
 While the workspace is open in front of you, Eriphe knows you are there: a notification shows as a
 small notice in the page rather than on your phone. If the workspace cannot open on a device (an
-old browser, a script blocked, Eriphe out of reach for a while), the page offers the conversation
-instead, and **Always open the conversation here** (Settings → My workspace → Home page gives the
-workspace its place back).
+old browser, a script blocked, Eriphe out of reach for a while), the page says so with a link to
+try again. If Eriphe cannot answer, the console says so, with **Try again** and a link to Settings →
+Agents.
 
 ## Where the work runs: devices
 

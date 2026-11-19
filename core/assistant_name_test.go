@@ -137,10 +137,10 @@ func TestAssistantNameWords(t *testing.T) {
 	for _, c := range []struct{ lang, key, want string }{
 		{"fr", "devices.sees", "Ce que Jarvis voit ici"},
 		{"fr", "devices.can", "Ce que Jarvis peut faire ici"},
-		{"fr", "tasks.label", "Tâches de Jarvis"},
-		{"fr", "chat.placeholder", "Écris à Jarvis…"},
+		{"fr", "agents.brain", "Cerveau de Jarvis"},
+		{"fr", "espace.input", "Écris à Jarvis"},
 		{"en", "devices.sees", "What Jarvis sees here"},
-		{"en", "tasks.label", "Jarvis's tasks"},
+		{"en", "agents.brain", "Jarvis's brain"},
 	} {
 		if got := tr(c.lang, c.key); got != c.want {
 			t.Errorf("%s %s = %q, want %q", c.lang, c.key, got, c.want)
@@ -150,7 +150,7 @@ func TestAssistantNameWords(t *testing.T) {
 		t.Errorf("the Google app is renamed: %q", got)
 	}
 	setAssistantName("Alfred")
-	if got := tr("fr", "tasks.label"); got != "Tâches d'Alfred" {
+	if got := tr("fr", "agents.brain"); got != "Cerveau d'Alfred" {
 		t.Errorf("elided = %q", got)
 	}
 	if got := withName("fr", "Que {{name}} ou l'aide {{name}}", "Ulysse"); got != "Qu'Ulysse ou l'aide Ulysse" {
@@ -174,11 +174,15 @@ func TestWebAssistantName(t *testing.T) {
 	if _, _, h := tw.post("/settings/assistants/eriphe", url.Values{"display_name": {"<b>"}}, csrf); h.Get("HX-Redirect") != "" {
 		t.Fatal("a bad name saved")
 	}
-	_, body, _ := tw.do("GET", convoPath, nil, nil)
-	for _, want := range []string{"Écris à Jarvis…", "<title>Conversation · Jarvis</title>", `content="Jarvis"`, "<span>Jarvis</span>"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("conversation lacks %q: %s", want, truncate(body, 400))
-		}
+	_, body, _ := tw.do("GET", "/espace", nil, nil)
+	if !strings.Contains(body, "<title>Jarvis</title>") {
+		t.Fatalf("the workspace is not named: %s", truncate(body, 400))
+	}
+	if _, body, _ = tw.do("GET", "/settings/agents", nil, nil); !strings.Contains(body, `content="Jarvis"`) || !strings.Contains(body, "· Jarvis</title>") {
+		t.Fatalf("the settings are not named: %s", truncate(body, 400))
+	}
+	if _, body, _ = tw.do("GET", "/espace/boot", nil, nil); !strings.Contains(body, `"name":"Jarvis"`) || !strings.Contains(body, "Écris à Jarvis") {
+		t.Fatalf("the workspace's words: %s", truncate(body, 400))
 	}
 	// The installed app is called so too.
 	code, raw, h := tw.do("GET", "/manifest.webmanifest", nil, nil)
@@ -188,8 +192,8 @@ func TestWebAssistantName(t *testing.T) {
 		t.Fatalf("manifest: %d %s", code, raw)
 	}
 	tw.do("POST", "/lang", url.Values{"csrf": {csrf}, "lang": {"en"}}, nil)
-	if _, body, _ = tw.do("GET", convoPath, nil, nil); !strings.Contains(body, "Write to Jarvis…") {
-		t.Fatalf("conversation in English: %s", truncate(body, 400))
+	if _, body, _ = tw.do("GET", "/espace/boot", nil, nil); !strings.Contains(body, "Write to Jarvis") {
+		t.Fatalf("the workspace in English: %s", truncate(body, 400))
 	}
 }
 

@@ -1,10 +1,11 @@
-// Eriphe's workspace: the little the server cannot do. htmx sends the
-// forms and actions; this file adds the CSRF header, follows the event
-// stream, and handles the composer, the task drawer, toasts and copying.
+// The settings and the other pages eriphe-core renders (the graph
+// workspace is its own app, web/espace): the little the server cannot do.
+// htmx sends the forms and actions; this file adds the CSRF header, and
+// handles the drawer, toasts and copying.
 
 // This tab's id: it tells eriphe-core whether it is in front of the user,
-// and gets the notifications routed to it (route.go), by the event stream
-// or the answer to its presence.
+// and gets the notifications routed to it (route.go), by the answer to its
+// presence.
 const eripheTab = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 // eripheLocalURL tells whether a url is a path of this site, as localURL
@@ -128,7 +129,7 @@ function eripheInApp(notes) {
     if (perm) perm.classList.add("answered");
   });
 
-  // The composer: Enter sends, Shift+Enter is a new line; it grows as you type.
+  // A text area grows as you type.
   function autosize(ta) {
     if (!ta) return;
     ta.style.height = "auto";
@@ -137,266 +138,9 @@ function eripheInApp(notes) {
   document.addEventListener("input", (e) => {
     if (e.target.matches("textarea")) autosize(e.target);
   });
-  document.addEventListener("keydown", (e) => {
-    const ta = e.target;
-    if (ta.id === "text" && e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-      e.preventDefault();
-      if (ta.value.trim() || hasFiles()) ta.form.requestSubmit();
-    }
-    if (e.key === "Escape" && document.body.classList.contains("drawer-open")) closeDrawer();
-  });
-  document.addEventListener("click", (e) => {
-    const ex = e.target.closest("[data-example]");
-    if (ex) {
-      const ta = $("#text");
-      ta.value = ex.textContent.trim();
-      autosize(ta);
-      ta.focus();
-    }
-  });
 
-  // Attachments: picked (the camera or the photo library on a phone),
-  // dropped on the conversation, or pasted; shown as chips until sent.
-  const fileInput = () => $("#files");
-  let picked = []; // the input's own list is replaced by each pick
-  const hasFiles = () => picked.length > 0;
-  function setFiles(list) {
-    const input = fileInput();
-    if (!input) return;
-    const max = +input.dataset.max, many = +input.dataset.many;
-    const dt = new DataTransfer();
-    for (const f of list) {
-      if (f.size > max) { toast(input.dataset.toobig.replace("%s", f.name), "error"); continue; }
-      if (dt.files.length >= many) { toast(input.dataset.toomany, "error"); break; }
-      dt.items.add(f);
-    }
-    input.files = dt.files;
-    picked = Array.from(dt.files);
-    chips();
-  }
-  function chips() {
-    const input = fileInput(), box = $("#composer-files");
-    if (!input || !box) return;
-    $$("img", box).forEach((img) => URL.revokeObjectURL(img.src));
-    box.textContent = "";
-    Array.from(input.files).forEach((f, i) => {
-      const chip = document.createElement("span");
-      chip.className = "file-chip";
-      if (f.type.startsWith("image/")) {
-        const img = document.createElement("img");
-        img.src = URL.createObjectURL(f);
-        img.alt = "";
-        chip.appendChild(img);
-      } else {
-        const icon = document.createElement("span");
-        icon.className = "att-icon";
-        icon.innerHTML = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/></svg>';
-        chip.appendChild(icon);
-      }
-      const name = document.createElement("span");
-      name.textContent = f.name;
-      chip.appendChild(name);
-      const rm = document.createElement("button");
-      rm.type = "button";
-      rm.setAttribute("aria-label", input.dataset.remove + " " + f.name);
-      rm.innerHTML = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-      rm.addEventListener("click", () => setFiles(picked.filter((_, j) => j !== i)));
-      chip.appendChild(rm);
-      box.appendChild(chip);
-    });
-    box.hidden = !input.files.length;
-  }
-  document.addEventListener("change", (e) => {
-    if (e.target.id === "files") setFiles([...picked, ...Array.from(e.target.files)]);
-  });
-  document.addEventListener("reset", (e) => {
-    if (e.target.id === "composer") setTimeout(() => { picked = []; chips(); });
-  });
-  document.addEventListener("paste", (e) => {
-    if (e.target.id !== "text" || !e.clipboardData || !e.clipboardData.files.length) return;
-    e.preventDefault();
-    setFiles([...picked, ...Array.from(e.clipboardData.files)]);
-  });
-  let dragDepth = 0;
-  const dropZone = () => $(".chat");
-  const dragsFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types).includes("Files");
-  document.addEventListener("dragenter", (e) => {
-    const zone = dropZone();
-    if (!zone || !fileInput() || !dragsFiles(e)) return;
-    dragDepth++;
-    zone.classList.add("dropping");
-  });
-  document.addEventListener("dragleave", (e) => {
-    const zone = dropZone();
-    if (!zone || !dragsFiles(e)) return;
-    if (--dragDepth <= 0) { dragDepth = 0; zone.classList.remove("dropping"); }
-  });
-  document.addEventListener("dragover", (e) => {
-    if (dropZone() && fileInput() && dragsFiles(e)) e.preventDefault();
-  });
-  document.addEventListener("drop", (e) => {
-    const zone = dropZone();
-    if (!zone || !fileInput() || !dragsFiles(e)) return;
-    e.preventDefault();
-    dragDepth = 0;
-    zone.classList.remove("dropping");
-    setFiles([...picked, ...Array.from(e.dataTransfer.files)]);
-    $("#text").focus();
-  });
-
-  // The conversation scrolls to the newest message, unless you scrolled up to read.
-  const scroller = () => $("#chat-scroll");
-  function nearBottom() {
-    const s = scroller();
-    return !s || s.scrollHeight - s.scrollTop - s.clientHeight < 160;
-  }
-  function toBottom(smooth) {
-    const s = scroller();
-    if (s) s.scrollTo({ top: s.scrollHeight, behavior: smooth ? "smooth" : "auto" });
-  }
-
-  // Replace a region's content, keeping what you were typing in it.
-  function replaceKeeping(el, html) {
-    const typed = {};
-    $$("input[id], textarea[id]", el).forEach((i) => { if (i.value) typed[i.id] = i.value; });
-    const focused = document.activeElement && el.contains(document.activeElement) ? document.activeElement.id : "";
-    el.innerHTML = html;
-    Object.entries(typed).forEach(([id, v]) => { const i = document.getElementById(id); if (i) i.value = v; });
-    if (focused) { const f = document.getElementById(focused); if (f) f.focus(); }
-    htmx.process(el);
-  }
-
-  // A card of the conversation (convo.html), in its message's place.
-  function placeCard(n) {
-    if (!n.id) return;
-    const old = document.getElementById(n.id);
-    if (old) {
-      if (old.outerHTML === n.outerHTML) return;
-      if (old.open) n.open = true; // a digest the user unfolded stays open
-      if (old.contains(document.activeElement)) return; // not under a finger
-      old.replaceWith(n);
-    } else {
-      const body = $("#m" + n.dataset.msg + " .msg-body");
-      if (!body) return;
-      let box = $(".pcards", body);
-      if (!box) {
-        box = document.createElement("div");
-        box.className = "pcards";
-        body.insertBefore(box, $(":scope > time", body));
-      }
-      box.appendChild(n);
-    }
-    htmx.process(n);
-  }
-
-  // A card's "Modifier": the composer says what it is about; the user
-  // finishes the sentence, and the assistant proposes again.
-  document.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-card-edit]");
-    const ta = $("#text");
-    if (!b || !ta) return;
-    ta.value = b.dataset.cardEdit;
-    autosize(ta);
-    ta.focus();
-    ta.setSelectionRange(ta.value.length, ta.value.length);
-  });
-
-  // The event stream: new messages, the tasks panel, the pending requests.
-  function connect() {
-    const box = $("#messages");
-    if (!box || !window.EventSource) return;
-    const es = new EventSource("/events?after=" + (box.dataset.last || 0) + "&tab=" + encodeURIComponent(eripheTab));
-    es.addEventListener("notice", (e) => { try { eripheInApp(JSON.parse(e.data)); } catch (err) { /* not for us */ } });
-    const conn = $("#conn");
-    let failures = 0;
-    es.onopen = () => { failures = 0; if (conn) conn.hidden = true; };
-    es.onerror = () => {
-      failures++;
-      if (conn && failures > 1) conn.hidden = false;
-      // A stream refused for good (session ended): back to the login page.
-      if (es.readyState === EventSource.CLOSED) {
-        fetch("/", { redirect: "manual", credentials: "same-origin" }).then((r) => {
-          if (r.type === "opaqueredirect") location.href = "/login";
-          else setTimeout(connect, 3000);
-        }).catch(() => setTimeout(connect, 5000));
-      }
-    };
-    es.addEventListener("message", (e) => {
-      const stick = nearBottom();
-      const tpl = document.createElement("template");
-      tpl.innerHTML = e.data;
-      let mine = false;
-      const draft = $("#draft");
-      Array.from(tpl.content.children).forEach((n) => {
-        if (n.id && document.getElementById(n.id)) return;
-        if (n.classList.contains("msg-user")) mine = true;
-        // The brain's message replaces its draft, in the same frame.
-        if (n.classList.contains("msg-brain") && draft && draft.firstElementChild) {
-          n.classList.add("settled");
-          draft.textContent = "";
-        }
-        box.appendChild(n);
-        htmx.process(n); // an error card's "Try again", a task line's link
-      });
-      box.dataset.last = e.lastEventId || box.dataset.last;
-      const hello = $("#hello");
-      if (hello && box.children.length) hello.remove();
-      if (stick || mine) toBottom(true);
-    });
-    // The draft grows in place: only its text changes, so it does not rise again.
-    es.addEventListener("draft", (e) => {
-      const el = $("#draft");
-      if (!el) return;
-      const stick = nearBottom();
-      const tpl = document.createElement("template");
-      tpl.innerHTML = e.data;
-      const next = tpl.content.querySelector(".bubble");
-      const bubble = el.querySelector(".bubble");
-      if (next && bubble) bubble.innerHTML = next.innerHTML;
-      else el.replaceChildren(...tpl.content.children);
-      const hello = $("#hello");
-      if (hello && next) hello.remove();
-      if (stick) toBottom(false);
-    });
-    es.addEventListener("tasks", (e) => {
-      const el = $("#tasks");
-      if (!el) return;
-      el.innerHTML = e.data;
-      htmx.process(el);
-      badge();
-      refreshDrawer();
-    });
-    // A card changed (decided here, on a channel or in words), or was
-    // attached to a message already shown: put it in place, by its id.
-    es.addEventListener("cards", (e) => {
-      const stick = nearBottom();
-      const tpl = document.createElement("template");
-      tpl.innerHTML = e.data;
-      Array.from(tpl.content.children).forEach((n) => placeCard(n));
-      if (stick) toBottom(true);
-    });
-    es.addEventListener("pending", (e) => {
-      const el = $("#pending");
-      if (!el) return;
-      const stick = nearBottom();
-      replaceKeeping(el, e.data);
-      if (stick) toBottom(true);
-      badge();
-    });
-  }
-
-  // The Tâches button's badge: active tasks, highlighted when one needs you.
-  function badge() {
-    const b = $("#tasks-badge");
-    if (!b) return;
-    const n = $$("#tasks > ul.cards > li").length;
-    const urgent = $$("#pending .perm").length > 0;
-    b.hidden = n === 0 && !urgent;
-    b.textContent = urgent ? "!" : String(n);
-    b.classList.toggle("urgent", urgent);
-  }
-
-  // The task drawer opens over the workspace; its body follows the task.
+  // The drawer (a folder's grid, places.html and folders.html) opens over
+  // the page, and closes with its button, a click beside it or Escape.
   function openDrawer() {
     document.body.classList.add("drawer-open");
     const close = $("#drawer [data-close]");
@@ -407,18 +151,14 @@ function eripheInApp(notes) {
     const d = $("#drawer");
     if (d) setTimeout(() => { if (!document.body.classList.contains("drawer-open")) d.innerHTML = ""; }, 250);
   }
-  function refreshDrawer() {
-    const body = $("#drawer-body");
-    if (!body || !document.body.classList.contains("drawer-open")) return;
-    const active = document.activeElement;
-    if (active && body.contains(active) && (active.value || "").length) return; // you are typing
-    htmx.trigger(body, "refresh");
-  }
   document.addEventListener("htmx:afterSwap", (e) => {
     if (e.detail.target.id === "drawer") openDrawer();
   });
   document.addEventListener("click", (e) => {
     if (e.target.closest("[data-close]") || e.target.id === "drawer") closeDrawer();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && document.body.classList.contains("drawer-open")) closeDrawer();
   });
 
   // Copy buttons.
@@ -434,119 +174,17 @@ function eripheInApp(notes) {
     });
   });
 
-  // Tâches, in the header. On a phone the tasks are a sheet over the
-  // conversation: it slides in, and closes with its button, Escape or the
-  // browser's back. On a wide screen they are the side panel, which the
-  // button hides or shows again (this browser remembers it). From another
-  // page, the button comes back to the conversation on its tasks.
-  const phone = () => matchMedia("(max-width: 860px)").matches;
-  const sideKey = "eriphe.tasks.hidden";
-  let sheetEntry = false; // opening the sheet added a step to the history
-  function tasksState() {
-    const ws = $(".workspace"), btn = $("#tasks-btn");
-    if (!ws || !btn) return;
-    const open = phone() ? ws.dataset.view === "tasks" : !ws.classList.contains("side-off");
-    btn.setAttribute("aria-expanded", String(open));
-  }
-  function openSheet(push) {
-    const ws = $(".workspace");
-    ws.dataset.view = "tasks";
-    if (push) {
-      history.pushState(null, "", "#tasks-panel");
-      sheetEntry = true;
-    }
-    tasksState();
-    $("#tasks-panel").focus({ preventScroll: true });
-  }
-  function sheetClosed() {
-    $(".workspace").dataset.view = "chat";
-    tasksState();
-    $("#tasks-btn").focus({ preventScroll: true });
-  }
-  function closeSheet() {
-    if (sheetEntry) return history.back(); // popstate closes it
-    if (location.hash === "#tasks-panel") history.replaceState(null, "", location.pathname + location.search);
-    sheetClosed();
-  }
-  function showSide(show) {
-    $(".workspace").classList.toggle("side-off", !show);
-    try { show ? localStorage.removeItem(sideKey) : localStorage.setItem(sideKey, "1"); } catch (_) { /* private mode */ }
-    tasksState();
-    if (show) $("#tasks-panel").focus({ preventScroll: true });
-  }
-  document.addEventListener("click", (e) => {
-    const ws = $(".workspace");
-    if (!ws) return;
-    if (e.target.closest("#tasks-btn")) {
-      e.preventDefault();
-      if (!phone()) return showSide(ws.classList.contains("side-off"));
-      return ws.dataset.view === "tasks" ? closeSheet() : openSheet(true);
-    }
-    // its button, or the shade around it
-    if (e.target.closest("[data-tasks-close]") || (e.target === ws && ws.dataset.view === "tasks")) closeSheet();
-  });
-  // Before the drawer's own Escape: the drawer, over the sheet, closes first.
-  document.addEventListener("keydown", (e) => {
-    const ws = $(".workspace");
-    if (e.key !== "Escape" || !ws || ws.dataset.view !== "tasks" || !phone()) return;
-    if (document.body.classList.contains("drawer-open") || $("dialog[open]")) return;
-    closeSheet();
-  }, true);
-  window.addEventListener("popstate", () => {
-    const ws = $(".workspace");
-    if (!ws || !phone()) return;
-    if (location.hash === "#tasks-panel") {
-      sheetEntry = true;
-      openSheet(false);
-    } else if (ws.dataset.view === "tasks") {
-      sheetEntry = false;
-      sheetClosed();
-    }
-  });
-  if ($(".workspace")) {
-    let hidden = false;
-    try { hidden = localStorage.getItem(sideKey) === "1"; } catch (_) { /* private mode */ }
-    if (location.hash === "#tasks-panel") {
-      if (phone()) openSheet(false);
-      else showSide(true);
-    } else if (hidden) {
-      $(".workspace").classList.add("side-off");
-    }
-    tasksState();
-    // A phone turned, a window widened: the button says what it now does.
-    matchMedia("(max-width: 860px)").addEventListener("change", () => {
-      if (!phone()) $(".workspace").dataset.view = "chat";
-      tasksState();
-    });
-  }
-
-  // An address can point into the conversation: a task's drawer (?task=,
-  // from a notification), a permission or a message (#perm-…, #m12).
+  // A permission a notification points to (« À valider », #a-perm-…): lit
+  // for a moment.
   function pointed() {
-    const task = new URLSearchParams(location.search).get("task");
-    if (task && $("#drawer")) {
-      htmx.ajax("GET", "/tasks/" + encodeURIComponent(task), { target: "#drawer", swap: "innerHTML" });
-      history.replaceState(null, "", location.pathname + location.hash);
-    }
     const id = decodeURIComponent(location.hash.slice(1));
-    const el = id && /^(perm-|m\d)/.test(id) && document.getElementById(id);
-    if (el) {
-      // The conversation scrolls to it on its own, never the page.
-      const s = scroller();
-      if (s && s.contains(el)) {
-        const r = el.getBoundingClientRect(), b = s.getBoundingClientRect();
-        s.scrollTop += r.top - b.top - Math.max(0, (b.height - r.height) / 2);
-      }
-      el.classList.add("pointed");
-      setTimeout(() => el.classList.remove("pointed"), 2400);
-    }
+    const el = id && id.startsWith("a-perm-") && document.getElementById(id);
+    if (!el) return;
+    el.classList.add("pointed");
+    setTimeout(() => el.classList.remove("pointed"), 2400);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    toBottom(false);
-    autosize($("#text"));
-    badge();
-    connect();
     pointed();
     if ("serviceWorker" in navigator && window.isSecureContext) {
       window.eripheWorker = navigator.serviceWorker.register("/sw.js").catch(() => null);
@@ -965,7 +603,7 @@ function lit(name) {
 
   // The keyboard. Chrome on Android shrinks the page for it (the viewport's
   // interactive-widget); Safari on iOS lays it over the page instead: the
-  // page follows the visible part, so the composer stays above the
+  // page follows the visible part, so the field typed in stays above the
   // keyboard.
   const vv = window.visualViewport;
   if (vv && document.documentElement.classList.contains("shell")) {
@@ -978,9 +616,6 @@ function lit(name) {
       if (kb) {
         root.style.setProperty("--app-h", vv.height + "px");
         if (window.scrollY) window.scrollTo(0, 0);
-        // Writing in the composer: the newest messages stay in sight.
-        const s = document.getElementById("chat-scroll");
-        if (s && document.activeElement && document.activeElement.id === "text") s.scrollTop = s.scrollHeight;
       } else {
         root.style.removeProperty("--app-h");
       }
@@ -994,7 +629,7 @@ function lit(name) {
   // front or leaves, and every 20 s while it is in front, with its
   // browser's push subscription, so that eriphe-core knows on which device
   // the user is (route.go). The answer may carry a notification routed to
-  // this tab, on a page without the event stream.
+  // this tab.
   if (document.body && document.body.classList.contains("shell") && csrf()) {
     const tab = eripheTab;
     let last = null, at = 0, sub = "";
