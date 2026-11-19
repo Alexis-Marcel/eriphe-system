@@ -1249,6 +1249,20 @@ composes each one from the catalog.
   one item of a source of the run's node, on the call's own server, is kept on that item
   (`access_asks.node`, `source`, `item`): one card per item (kind `calls`), answered alone. A call
   on no item stays on the run's card. The card names its node, unless the node is external.
+- **Same-kind calls wait as one card** (`call_fold.go`): calls cards that wait untouched in the
+  same node, whose calls do the same thing to other items (same server and tool, same arguments
+  but one list whose values are ids of the items the call acts on, as its node's sources list
+  them), fold into the oldest: « Archiver 5 mails », not five cards. A different account or
+  destination, another tool, a card decided or one whose call runs never folds. Folded when a run
+  ends and at each card sync (cards made before fold there; the folded cards go, from their node
+  too). The card keeps each call as kept, its own `access_asks` row: Oui runs each exactly as
+  shown and records each decision. Each call is a line with a box, all ticked; the yes button says
+  what goes (« Archiver 4 mails »). `POST /cards/{id}/yes` then carries `only` (the calls ticked)
+  and `left` (unticked), by id: both must be calls of the card that wait, or nothing is decided;
+  `only` run, `left` are refused, and a call folded in after the page drew the card waits on, on
+  a card of its own. Decided, the card says what was left (« Archiver 4 mails · 1 laissé »). Non
+  refuses every call. On its own node's page, a card's origin, its skill and what Oui does in
+  general are under Détails; the « extérieur » badge stays.
 - **One card** (`view_card.go`, kind `view`, table `view_proposals`): `propose_view` checks the
   node (its body as a task's blocks are: the actions' grammar, no ask after external content, no
   Link to a source's value; each source a catalog server's, an approved monitor, or the view's

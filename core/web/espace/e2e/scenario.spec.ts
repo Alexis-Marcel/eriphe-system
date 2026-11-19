@@ -278,6 +278,34 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expectBubblesApart(page);
   await shot(page, "graph-apart");
 
+  // 14b. The view's skill, woken once per mail, proposed to archive
+  // three: they wait as one card on the view's page, « Archiver 3 mails »,
+  // each mail a line ticked, still « extérieur », where it comes from
+  // under Détails. The user leaves one out: Oui archives the two others,
+  // and the card says one was left.
+  await home(page);
+  await bubble("Mes mails").click();
+  const view = pageOf("Mes mails");
+  await expect(view).toBeVisible();
+  expect((await request.post("/e2e/proposals")).status()).toBe(204);
+  const batch = view.locator(".pg-foot .a2-proposal");
+  await expect(batch).toHaveCount(1);
+  await expect(batch.locator(".a2-proposal-text")).toHaveText("Archiver 3 mails");
+  const ticks = batch.locator(".a2-proposal-choices input[type=checkbox]");
+  await expect(ticks).toHaveCount(3);
+  await expect(batch.locator(".a2-proposal-choices")).toContainText("« La lettre de la semaine » · news@example.org");
+  await expect(batch.locator(".a2-badge-external")).toBeVisible();
+  await expect(batch.locator(":scope > .a2-proposal-from, :scope > .a2-proposal-yes, :scope > .a2-proposal-why")).toHaveCount(0);
+  await ticks.nth(1).uncheck();
+  await batch.getByRole("button", { name: "Archiver 2 mails" }).click();
+  await expect(batch.locator(".a2-proposal-text")).toHaveText("Archiver 2 mails · 1 laissé");
+  await expect(batch.locator(".a2-proposal-choices li.is-left")).toHaveText("« La lettre de la semaine » · news@example.orglaissé");
+  // Each call as kept, one mail each; the one left out never moved.
+  await expect
+    .poll(async () => ((await (await request.get("/e2e/tools")).json()).moved as string[][]).filter((ids) => ids.some((id) => /^n\d$/.test(id))).sort())
+    .toEqual([["n1"], ["n3"]]);
+  await shot(page, "chosen-calls");
+
   // 15. A card no page holds (proposed at the home, no subject opened)
   // waits in the console, with its Oui; answered, it leaves it.
   await home(page);
