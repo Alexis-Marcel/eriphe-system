@@ -3356,7 +3356,9 @@ through `a2ui.Validate`).
   frame at the root, a quiet box inside), Tabs (the WAI-ARIA pattern: one tab stop, arrows,
   Home, End; hidden panels stay bound), Divider.
 - *Content*: Text (a `title` is a heading), Markdown (a small reader in `markdown.tsx` that
-  makes React elements: raw HTML stays text, images show their alt text, links only to
+  makes React elements, along CommonMark and GFM: GitHub tables, in a box that scrolls when
+  wider than the page; code spans literal, an underscore inside a word never emphasis, a lone
+  backtick only a backtick; raw HTML stays text, images show their alt text, links only to
   http(s) or mailto, `rel="noopener noreferrer"`, in a new tab on the user's click), Image
   (loaded only from `/espace/media?…`, the proxy of core; any other address shows its alt
   text: a model's URL is never fetched by the page), Icon (a fixed set of inline SVG,

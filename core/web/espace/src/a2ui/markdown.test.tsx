@@ -121,6 +121,13 @@ describe("inline Markdown", () => {
     expect(p.querySelectorAll("em, strong, a")).toHaveLength(0);
   });
 
+  it("pairs no emphasis across a code span", () => {
+    const p = draw("un *mot `code*` fin* et _a `b_` c_").querySelector("p")!;
+    expect(texts(p.querySelectorAll("code"))).toEqual(["code*", "b_"]);
+    expect(p.querySelector("code")!.closest("em, strong")?.textContent).toBe("mot code* fin");
+    expect(p.querySelectorAll("code em, code strong")).toHaveLength(0);
+  });
+
   it("leaves an unclosed backtick as a backtick", () => {
     const md = draw("Puis *ça*, `ici` et un ` seul.\n\nLa suite _reste_ du texte.\n\n- un `point\n- deux");
     const [p1, p2] = [...md.querySelectorAll("p")];
