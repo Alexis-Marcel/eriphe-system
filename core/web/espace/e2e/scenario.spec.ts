@@ -177,18 +177,25 @@ test("the steps of the scenario", async ({ page, request }) => {
   await page.locator(".hud-archives .hud-icon").click();
 
   // 14. Asked at the home, a subject opens its page, the console in it;
-  // Eriphe asks there, and the view it proposes waits at the subject's
-  // foot. Its yes makes the view, which opens.
+  // Eriphe asks there what matters first, each question with its default
+  // and replies to answer fast; the view it proposes then waits at the
+  // subject's foot, recalling the choices. Its yes makes the view, which
+  // opens.
   await home(page);
   await say("Garde un œil sur mes mails.");
   const watch = pageOf("Garder un œil sur mes mails");
   await expect(watch).toBeVisible();
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Garder un œil sur mes mails");
-  await expect(said).toContainText("Lesquels veux-tu suivre");
-  await say("Ceux qui demandent une réponse.");
+  await expect(said).toContainText("quelques questions");
+  await expect(said).toContainText("Par défaut au brief, jamais la nuit");
+  await expect(said).not.toContainText("<suggestions>");
+  await expect(page.locator(".cs-reply")).toHaveCount(2);
+  await expect(watch.locator(".pg-foot")).toHaveCount(0);
+  await page.locator(".cs-reply", { hasText: "Fais comme tu proposes" }).click();
   await expect(said).toContainText("Voici la vue");
   const viewCard = watch.locator(".pg-foot");
   await expect(viewCard).toContainText("Mes mails");
+  await expect(viewCard).toContainText("prévenu au brief, jamais la nuit");
   await viewCard.getByRole("button", { name: "Oui" }).click();
   await expect(bubble("Mes mails")).toBeVisible();
   await expect(pageOf("Mes mails")).toBeVisible();

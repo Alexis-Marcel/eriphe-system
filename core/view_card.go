@@ -52,14 +52,14 @@ func init() { extraSchema = append(extraSchema, viewProposalsSchema) }
 
 type proposeViewIn struct {
 	Title   string          `json:"title" jsonschema:"the standing node's title, in the user's words: Mes mails"`
-	Goal    string          `json:"goal,omitempty" jsonschema:"what the view is for, for you and the skill's runs"`
+	Goal    string          `json:"goal,omitempty" jsonschema:"what the view is for and the user's choices (what it covers, what matters, when to tell): the card shows it, and the skill's runs read it"`
 	Body    string          `json:"body" jsonschema:"the node's text and blocks (catalog_read): a block's sources are read by code, without a model, and kept fresh (a tool with fixed arguments, a server's resource, or the monitor by its name), items: says where its items are"`
 	Monitor *writeMonitorIn `json:"monitor,omitempty" jsonschema:"the monitor that detects what comes (write_monitor's fields): a block may read it by its name"`
 	Skill   *writeSkillIn   `json:"skill,omitempty" jsonschema:"the skill that works in the node when the monitor tells (write_skill's fields, node left out: code names the node): its when keys on the monitor's name"`
 }
 
 func registerViewTool(s *mcp.Server, c *core) {
-	tool(s, "propose_view", "Propose a view: what the user wants followed continuously (« surveille mes mails », « montre-moi les PR à relire ») is a standing node whose blocks code keeps fresh, the monitor that detects what comes, and the skill that works in the node when it does (notes each item, opens a child node for what needs work, its actions kept for the user's yes). All three are checked now and shown on one card; one yes creates them all, none is made before. Compose the node from the catalog's bricks; nothing is known of a view in advance. A monitor or skill of the user's that does the same thing already (monitors, list_skills) is reused, not written again under another name: leave monitor out and let the blocks read it by its name.",
+	tool(s, "propose_view", "Propose a view: what the user wants followed continuously (« surveille mes mails », « montre-moi les PR à relire ») is a standing node whose blocks code keeps fresh, the monitor that detects what comes, and the skill that works in the node when it does (notes each item, opens a child node for what needs work, its actions kept for the user's yes). All three are checked now and shown on one card; one yes creates them all, none is made before. Compose the node from the catalog's bricks; nothing is known of a view in advance. A monitor or skill of the user's that does the same thing already (monitors, list_skills) is reused, not written again under another name: leave monitor out and let the blocks read it by its name. Ask first: what will act or notify on its own is proposed after one message, in the subject's node, with the few questions that change it (which accounts or sources, what matters, whether and when to tell the user, night included, what to prepare for their yes and what only to note), each with its default, and suggested replies; skip what the request or memory settles. The goal recalls the user's choices: the card shows it.",
 		func(ctx context.Context, in proposeViewIn) (map[string]any, error) {
 			return c.proposeView(in, c.turnTaint())
 		})

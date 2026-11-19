@@ -1228,7 +1228,9 @@ composes each one from the catalog.
   own), the monitor (`write_monitor`'s checks, its name free) and the skill (`write_skill`'s, its
   name free, with `when`; code writes its `node:`, the id given beforehand). The card shows the
   node's title and blocks with what each reads, what the monitor does, and when the skill runs,
-  with the repositories its steps may borrow. One yes makes the node (standing, by `user`), the
+  with the repositories its steps may borrow; the view's `goal` is its why, where the brain recalls
+  the choices the user made when it asked first (scope, what matters, when to tell: the prompt's
+  « Ce qui tournera seul »). One yes makes the node (standing, by `user`), the
   monitor (on) and the skill (approved), in that order; one that fails takes back those before,
   and the card waits still. No makes none. Written on a tainted turn, the card says so and the
   node is external. A monitor or skill name taken is refused with what to do: a monitor for the

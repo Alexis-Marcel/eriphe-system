@@ -119,9 +119,15 @@ What you want to follow all the time ("keep an eye on my mail", "follow the prod
 keeps up to date. It can come with a monitor that sees what arrives and a skill that works in the
 view when it does: the skill reads each new item, notes what you should know of it, and prepares
 what it asks of you (a draft and its card). Asked from the home, the subject opens first ("Keep an
-eye on my mail"): Eriphe asks there what to follow and explains what it proposes, then proposes the
-whole view on **one card**, at the foot of that page: its page, the monitor and the skill together,
-and nothing exists before your yes. Your yes opens the view.
+eye on my mail"), and Eriphe asks there before setting up anything that will run on its own: one
+message with the few questions that change it (which accounts, which senders or kinds of mail
+matter, whether and when to tell you, at night included, what to prepare for your yes and what
+only to note), each with what it will do if you say nothing, and suggested replies to answer in
+one click ("Do as you propose"). It skips what you already said or what it remembers, and asks
+once (twice only if an answer opens something essential). Then it proposes the whole view on **one
+card**, at the foot of that page: its page, the monitor and the skill together, the card recalling
+your choices, and nothing exists before your yes. Your yes opens the view. What you said matters
+to you is remembered as a preference; when to tell you is a notification rule.
 
 What you want to see once ("open the production for me") is not a view: Eriphe opens a bubble
 under the one you are talking about, with a live block, and shows it beside your page. If you want
@@ -136,7 +142,9 @@ Say it with a time or an event:
 > Keep an eye on my mail.
 
 Eriphe writes a **skill** for it: a short set of instructions with its trigger, which works on its
-own bubble each time it runs. You see it on a card, in plain words, and **nothing runs before you
+own bubble each time it runs. As for a view, it first asks in one message what changes it (what it
+covers, what matters, whether and when to tell you, what to prepare), with a default for each, unless
+you already said. You see it on a card, recalling your choices, in plain words, and **nothing runs before you
 say yes**. Then it is in Settings → Skills with its runs; to change it or stop it, ask, or do it
 there.
 

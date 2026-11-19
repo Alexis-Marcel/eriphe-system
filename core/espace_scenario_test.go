@@ -560,15 +560,24 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		return "C'est noté, le plan est fait."
 	case strings.Contains(said, "Garde un œil sur mes mails"):
 		// Asked at the home: its subject opens, the console in it, and the
-		// view is composed there (the prompt's « Les vues »).
+		// view is composed there (the prompt's « Les vues »). What will run
+		// alone is settled first: one message, the questions that change
+		// it, each with its default, and replies to answer fast.
 		out := b.self("node_open", map[string]any{"title": "Garder un œil sur mes mails", "goal": "Une vue des mails qui comptent",
-			"body": "## Ce qu'on suit\n\nLes mails qui demandent quelque chose, triés pour toi.\n\n## À décider\n\n- Tous les mails, ou ceux qui demandent une réponse ?\n"})
+			"body": "## Ce qu'on suit\n\nLes mails qui demandent quelque chose, triés pour toi.\n\n## À décider\n\n" +
+				"- Quelles boîtes : toutes, par défaut.\n- Ce qui compte : ce qui demande une réponse.\n" +
+				"- Te prévenir : au brief, jamais la nuit.\n- Préparer : un brouillon pour ton oui, le reste noté.\n"})
 		if id, _ := out["id"].(string); id != "" {
 			keep("watch", id)
 		}
-		return "Lesquels veux-tu suivre : tous, ou ceux qui demandent une réponse ?"
-	case strings.Contains(said, "demandent une réponse"):
-		b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Les mails qui demandent une réponse", "body": "Les mails qui demandent une réponse.\n"})
+		return "Avant de la mettre en place, quelques questions :\n\n" +
+			"1. Quelles boîtes ? Par défaut, toutes.\n2. Qui ou quoi compte surtout ? Par défaut, ce qui demande une réponse.\n" +
+			"3. Je te préviens quand ? Par défaut au brief, jamais la nuit.\n4. Je prépare un brouillon pour ton oui, et je note le reste ?\n\n" +
+			"<suggestions>\nFais comme tu proposes\nToutes, et réveille-moi la nuit pour la prod\n</suggestions>"
+	case strings.Contains(said, "Fais comme tu proposes"):
+		// The card recalls the choices: the view's goal is its why.
+		b.self("propose_view", map[string]any{"title": "Mes mails", "goal": "Toutes les boîtes ; ce qui demande une réponse ; prévenu au brief, jamais la nuit",
+			"body": "Les mails qui demandent une réponse.\n"})
 		return "Voici la vue : dis oui sur sa carte et elle s'ouvre."
 	case strings.Contains(said, "vue de l'agenda"):
 		// Proposed at the home with no subject opened: its card waits in
