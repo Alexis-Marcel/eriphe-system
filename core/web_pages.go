@@ -415,7 +415,7 @@ func (w *web) handleReply(rw http.ResponseWriter, r *http.Request, s *session) {
 		return
 	}
 	w.notify()
-	w.toast(rw, tr(w.lang(r), "task.sent"), true)
+	w.changed(rw, tr(w.lang(r), "task.sent"))
 }
 
 func (w *web) handleStop(rw http.ResponseWriter, r *http.Request, s *session) {
@@ -424,7 +424,15 @@ func (w *web) handleStop(rw http.ResponseWriter, r *http.Request, s *session) {
 		return
 	}
 	w.notify()
-	w.toast(rw, tr(w.lang(r), "task.stopping"), true)
+	w.changed(rw, tr(w.lang(r), "task.stopping"))
+}
+
+// changed answers an htmx action that worked: its message, and the pages
+// that follow what it changed (memory-changed) reload their part.
+func (w *web) changed(rw http.ResponseWriter, msg string) {
+	rw.Header().Set("HX-Trigger", hxTrigger(msg, true, true))
+	rw.Header().Set("HX-Reswap", "none")
+	rw.WriteHeader(http.StatusOK)
 }
 
 // toast answers an htmx action with a short message the page shows.

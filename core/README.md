@@ -2778,8 +2778,9 @@ brain can set itself (a notification rule, a memory, an intention) is asked of i
 and its pages show the state, say why, and undo, with a line saying how to ask rather than a form.
 The worker tasks at work are listed in Settings › Journal (`/settings/journal`, the « Tous » kind),
 above the reliability of the last 30 days; a task's page (`GET /tasks/{id}`) is a page of the
-settings, under the journal, with its live trace, its receipt, its access grants, Stop, the reply
-to an idle agent and the answer to the permission it waits for.
+settings, under the journal, with its trace, its receipt, its access grants, Stop, the reply
+to an idle agent and the answer to the permission it waits for; it reloads every 5 s while the
+task works, and after each of its actions (`memory-changed`).
 
 **Cards** (`convo_cards.go`, `web_convo_cards.go`). What waits
 for the user's approval is asked where they talk to the assistant: every proposal (a memory, an

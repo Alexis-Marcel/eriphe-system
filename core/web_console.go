@@ -77,7 +77,7 @@ const exchangeCardsMax = 20
 // message, or in the turn under way), and that no node holds: linked to
 // none that is live. The oldest first.
 func (c *core) unheldCards() []string {
-	xs, err := c.cardsWhere(`state = ? AND kind != ? AND (seq > 0 OR turn = 1) ORDER BY id`, cardPending, cardDigest)
+	xs, err := c.cardsWhere(`state = ? AND (seq > 0 OR turn = 1) ORDER BY id`, cardPending)
 	if err != nil {
 		return nil
 	}

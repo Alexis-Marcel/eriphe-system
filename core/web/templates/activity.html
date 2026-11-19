@@ -33,7 +33,10 @@
     <h2>{{.Card.Title}}</h2>
   </div>
 </header>
-<div class="task-page">{{template "task-body" $}}</div>
+{{/* The page follows its task: every 5 s while it works (no field to lose
+     then), and after an action of its own (memory-changed). */}}
+<div class="task-page" id="task-page" hx-get="/tasks/{{.Card.ID}}" hx-select="#task-page" hx-target="this" hx-swap="outerHTML"
+  hx-trigger="{{if or (eq .Card.State "running") (eq .Card.State "pending")}}every 5s, {{end}}memory-changed from:body">{{template "task-body" $}}</div>
 {{end}}{{end}}
 
 {{define "approve-page"}}{{with .Data}}
