@@ -133,6 +133,77 @@ func TestNetTaintedTurn(t *testing.T) {
 	}
 }
 
+// unfiledBrain is the brain's messages no node holds.
+func unfiledBrain(t *testing.T, c *core) []Message {
+	t.Helper()
+	msgs, err := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? AND filed = '' ORDER BY seq`, roleBrain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return msgs
+}
+
+// A turn's end with no turn files nothing: after an upgrade, the brain's
+// task restarts (its tools changed) with no message delivered, its turn
+// state empty or kept from before; the older answers left unfiled, long
+// or short, are never gathered into a node.
+func TestNetFilesNothingWithoutATurn(t *testing.T) {
+	for _, kept := range []string{"", `{"from":3,"to":3}`} {
+		c, report, _ := brainReports(t)
+		openGraph(t, c)
+		for i := 0; i < 5; i++ {
+			c.store.addUserMessage("Une question", nil, "")
+			c.store.addNodeMessage(roleBrain, longAnswer, "", "", true)
+			c.store.addNodeMessage(roleBrain, "Fait.", "", "", true)
+		}
+		c.turn.load(kept, true) // eriphe-core restarted with the turn it kept, or none
+		report("t-brain", deviceReport{State: stateIdle, Events: []EventRow{
+			{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": longAnswer}},
+			{Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success", "result": longAnswer}}}})
+		c.brainStarted(Assistant{}, nil, false) // then the task restarts: its first turn has no message either
+		report("t-brain", deviceReport{State: stateIdle, Events: []EventRow{
+			{Seq: 3, Time: time.Now(), Type: "text", Data: map[string]any{"text": longAnswer}},
+			{Seq: 4, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success", "result": longAnswer}}}})
+		if all, _ := c.nodes.Recent(true, 10); len(all) != 0 {
+			t.Errorf("kept %q: a node opened: %+v", kept, all)
+		}
+		if n := len(unfiledBrain(t, c)); n != 12 {
+			t.Errorf("kept %q: %d brain messages unfiled, want 12", kept, n)
+		}
+	}
+}
+
+// A turn files its own answer only: the older unfiled answers stay in the
+// conversation, and a second end with nothing delivered files nothing.
+func TestNetFilesOnlyTheTurnsAnswer(t *testing.T) {
+	c, report, _ := brainReports(t)
+	openGraph(t, c)
+	old, _ := c.store.addNodeMessage(roleBrain, longAnswer, "", "", true)
+	seq, _ := c.store.addUserMessage("Compare les devis", nil, "")
+	c.turn.start(int(seq), int(seq), 0)
+	own := "Mon comparatif.\n\n" + longAnswer
+	report("t-brain", deviceReport{State: stateIdle, Events: []EventRow{
+		{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": own}},
+		{Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success", "result": own}}}})
+	m := lastBrainMessage(t, c)
+	if m.Filed == "" {
+		t.Fatalf("the turn's answer not filed: %+v", m)
+	}
+	d, _ := c.nodes.Read(m.Filed, 0)
+	if !strings.HasPrefix(d.Node.Text(), "Mon comparatif.") || strings.Count(d.Node.Text(), "Voici le comparatif") != 1 {
+		t.Errorf("node doc %q", d.Node.Text())
+	}
+	if left := unfiledBrain(t, c); len(left) != 1 || left[0].Seq != int(old) {
+		t.Errorf("unfiled %+v", left)
+	}
+	c.store.addNodeMessage(roleBrain, longAnswer, "", "", true) // written past the turn's end
+	report("t-brain", deviceReport{State: stateIdle, Events: []EventRow{
+		{Seq: 3, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success"}}}})
+	if all, _ := c.nodes.Recent(true, 10); len(all) != 1 {
+		t.Errorf("%d nodes after an end with no turn", len(all))
+	}
+}
+
 // The nightly extraction reads what the day wrote in the nodes' traces, a
 // segment a node, about it; a node that may hold someone else's words
 // gives nothing, nor what another day wrote.

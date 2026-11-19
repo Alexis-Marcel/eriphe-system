@@ -203,6 +203,7 @@ type brainTurn struct {
 	node      string               // the node the turn is about: the last one it named (node_turn.go)
 	talk      string               // the node its answer belongs to, "" for the home (node_turn.go)
 	filed     bool                 // the brain wrote a node in this turn: its answer needs no filing (node_net.go)
+	answer    int                  // its answer is the brain's messages past this seq; 0: no answer to file (node_net.go)
 	namedRefs []string             // the entities my messages of the turn name (names.go)
 	keep      func(brainTurnState) // stores it, so a restart of eriphe-core does not forget it
 }
@@ -216,6 +217,7 @@ type brainTurnState struct {
 	Node     string   `json:"node,omitempty"`
 	Talk     string   `json:"talk,omitempty"`
 	Filed    bool     `json:"filed,omitempty"`
+	Answer   int      `json:"answer,omitempty"`
 	Named    []string `json:"named,omitempty"`
 }
 
@@ -243,13 +245,13 @@ func (t *brainTurn) load(raw string, brainRuns bool) {
 		}
 		return
 	}
-	t.from, t.to, t.eventSeq, t.tainted, t.node, t.talk, t.filed, t.namedRefs = st.From, st.To, st.EventSeq, st.Tainted, st.Node, st.Talk, st.Filed, st.Named
+	t.from, t.to, t.eventSeq, t.tainted, t.node, t.talk, t.filed, t.namedRefs, t.answer = st.From, st.To, st.EventSeq, st.Tainted, st.Node, st.Talk, st.Filed, st.Named, st.Answer
 }
 
 // save is called with t.mu held.
 func (t *brainTurn) save() {
 	if t.keep != nil {
-		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...), t.node, t.talk, t.filed, append([]string(nil), t.namedRefs...)})
+		t.keep(brainTurnState{t.from, t.to, t.eventSeq, append([]string(nil), t.tainted...), t.node, t.talk, t.filed, t.answer, append([]string(nil), t.namedRefs...)})
 	}
 }
 
@@ -257,6 +259,7 @@ func (t *brainTurn) start(from, to, eventSeq int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.from, t.to, t.eventSeq, t.tainted, t.node, t.talk, t.filed, t.namedRefs = from, to, eventSeq, nil, "", "", false, nil
+	t.answer = to // what it writes past the messages delivered answers them; none delivered, nothing to file
 	t.save()
 }
 
@@ -272,6 +275,7 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 	}
 	t.to, t.eventSeq = max(t.to, to), eventSeq
 	t.filed = false // a new answer: the net looks at it alone (node_net.go)
+	t.answer = to   // past what it was just given; given nothing, nothing to file
 	for _, why := range carried {
 		if !containsStr(t.tainted, why) {
 			t.tainted = append(t.tainted, why)

@@ -74,9 +74,10 @@ func (c *core) deliverIntentions(ctx context.Context, a Assistant, t *TaskRow) (
 	p.Due = due
 	text := c.turnHead(time.Now()) + "\n\n" + p.render(c.conf().User) + "\n" + fmt.Sprintf(wakeInstructions, c.conf().User)
 	c.turn.goOn(0, 0, t.LastSeq, c.turnTaint())
-	c.turn.about("")     // about no node until it names one (node_turn.go)
-	c.turn.answersIn("") // its answer is the home's (node_turn.go)
-	c.turn.name(nil)     // nor about what my last message named (names.go)
+	c.turn.answers(c.store.lastMessageSeq()) // what it says now answers the due intentions (node_net.go)
+	c.turn.about("")                         // about no node until it names one (node_turn.go)
+	c.turn.answersIn("")                     // its answer is the home's (node_turn.go)
+	c.turn.name(nil)                         // nor about what my last message named (names.go)
 	var ids []string
 	for _, x := range due {
 		ids = append(ids, fmt.Sprintf("%d", x.ID))
