@@ -493,16 +493,12 @@ func TestBackup(t *testing.T) {
 			t.Fatalf("v%d: %q", v.N, text)
 		}
 	}
-	// Packed: no loose object left, and the store still reads.
-	loose, _ := filepath.Glob(filepath.Join(e.dir, ".git", "objects", "??", "*"))
-	if len(loose) != 0 {
-		t.Fatalf("%d loose objects after gc", len(loose))
-	}
+	// The store still reads and writes.
 	if old, err := s.Read("n1", 1); err != nil || old.Node.Text() != "One." {
-		t.Fatalf("after gc: %v", err)
+		t.Fatalf("after the backup: %v", err)
 	}
 	if _, err := s.Write("n1", "Three.", vs[1].Hash, "brain"); err != nil {
-		t.Fatalf("a write after gc: %v", err)
+		t.Fatalf("a write after the backup: %v", err)
 	}
 }
 
@@ -532,7 +528,7 @@ func TestSlug(t *testing.T) {
 func decodeBundle(t *testing.T, raw []byte) *memory.Storage {
 	t.Helper()
 	head, pack, ok := strings.Cut(string(raw), "\n\n")
-	if !ok || len(strings.Split(head, "\n")) != 2 {
+	if !ok || len(strings.Split(head, "\n")) != 3 {
 		t.Fatalf("bundle header: %q", head)
 	}
 	st := memory.NewStorage()

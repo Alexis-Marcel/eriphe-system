@@ -1067,12 +1067,21 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   the versions from one walk of the log; when it is behind the repository (`meta.head` is not the
   last commit: a copy put back, a stop between a commit and its indexing), the versions are read
   again from the log. The state, the layout and the item notes are not in the files: a rebuilt
-  index starts them over.
+  index starts them over. First, every object the branch reaches is read (each commit and tree,
+  each blob present): a repository that lacks one does not open, and the log names the ref and the
+  missing object (`nodes: repository …: the repository is broken: refs/heads/main reaches blob …`);
+  the graph stays off until the repository is put back from a bundle.
 - **Nightly**, at the memory's hour (`memory.extract_at`), into its backup folder
-  (`memory.backup_dir`, `memory.backup_keep` days): the repository is packed (`gc`), then
-  `nodes-<day>.bundle` (a git bundle: `git clone` reads it) and `nodes-<day>.db` (a copy of the
-  index). Writes wait meanwhile; a start after the hour finds the night's copy and does not make
-  another.
+  (`memory.backup_dir`, `memory.backup_keep` days): `nodes-<day>.bundle` (a git bundle of `main`
+  and `HEAD`: `git clone` reads it and checks it out) and `nodes-<day>.db` (a copy of the index).
+  The repository is only read: no gc, no repack, no object removed (go-git's repack deleted the
+  loose objects before its new pack was checked, and a failed repack lost the history). The
+  bundle is packed from the objects as they are, written aside, read back whole (every object
+  inflates, the checksum holds, every object of the branch is in it) and only then takes its name;
+  older copies are dropped only once the night's are made. A failed backup is logged and leaves
+  the repository and the earlier copies as they were. Objects stay loose: to compact the
+  repository, stop Eriphe and run `git gc` in it. Writes wait meanwhile; a start after the hour
+  finds the night's copy and does not make another.
 
 ## A task's node (`task_node.go`, `task_nodes.go`)
 
