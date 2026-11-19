@@ -3192,7 +3192,8 @@ token in `X-CSRF-Token`:
   (`stamp`, in the browser's time: today the time alone, yesterday « hier, 13 h 13 », this year
   the day, else with the year) or « En cours » on the title line, its versions, « Archiver », a
   « ⋯ » menu with its Trace and its .md file (no tabs: the page shows its content), the cross that
-  closes this page only; at its foot the cards it waits on, scrolling on their own past a height, answered by their
+  closes this page only; under its head, its content and at its foot the cards it waits on scroll
+  as one column (the wheel over a page scrolls it, never the graph; focused, the keyboard too), answered by their
   card's Oui or Non (`POST /cards/{id}/yes|no`), read again when a proposal moves, and the question before archiving (how many
   bubbles go with it). An older version shows as it was. The .md tab edits the node's body in
   CodeMirror (`page/Editor.tsx`, in a shadow root: CodeMirror styles a document with a `<style>`
