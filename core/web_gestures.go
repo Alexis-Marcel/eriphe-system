@@ -251,6 +251,7 @@ func (w *web) handleNodeArchive(rw http.ResponseWriter, r *http.Request, _ *sess
 		return
 	}
 	w.c.dropFromView(sum.ID)
+	w.notify() // its cards are withdrawn
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -271,7 +272,7 @@ func (w *web) handleNodeReopen(rw http.ResponseWriter, r *http.Request, _ *sessi
 // reopenNode brings an archived node back to the graph, with what was
 // archived with it and its archived parents: the user's alone. What the
 // archive stopped stays stopped (its tasks, its steps' work), and its
-// cards are no longer its own: it comes back as a page to read.
+// cards stay withdrawn: it comes back as a page to read.
 func (c *core) reopenNode(id, by string) error {
 	if c.nodes == nil {
 		return errNoGraph

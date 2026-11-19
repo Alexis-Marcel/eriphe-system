@@ -31,6 +31,7 @@ const (
 	viewProposed = "proposed"
 	viewApproved = "approved"
 	viewRejected = "rejected"
+	viewDropped  = "dropped" // withdrawn undecided: its subject was archived (withdrawCards)
 )
 
 const viewProposalsSchema = `CREATE TABLE IF NOT EXISTS view_proposals (
@@ -230,6 +231,8 @@ func (c *core) viewProposalOf(p proposal) proposal {
 	case viewRejected:
 		p.Outcome = cardRejected
 		return p
+	case viewDropped:
+		return p // gone
 	}
 	p.Pending, p.Tainted, p.Why = true, v.Tainted, v.Goal
 	p.text = func(lang string) string { return fmt.Sprintf(tr(lang, "card.view.new"), v.Title) }
@@ -301,7 +304,11 @@ func viewSummary(v viewProposal, lang string) []string {
 	}
 	if m := v.manifest; m != nil {
 		if d := strings.TrimSpace(m.Description); d != "" {
-			out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.skill"), d))
+			if timeLed(d) {
+				out = append(out, d) // it says when already: « À chaque … »
+			} else {
+				out = append(out, fmt.Sprintf(tr(lang, "card.view.sum.skill"), d))
+			}
 		}
 		if m.Trigger != nil {
 			out = append(out, tr(lang, "card.view.sum.tells"))
@@ -311,6 +318,24 @@ func viewSummary(v viewProposal, lang string) []string {
 		}
 	}
 	return out
+}
+
+// timeLeads are how a sentence that says when it runs starts, in French
+// or English: the skill's description is the brain's words, in the
+// user's language whatever the card's.
+var timeLeads = []string{"à chaque", "a chaque", "chaque ", "quand ", "lorsqu", "dès ", "des qu", "à la ", "à l'", "à l’",
+	"each ", "every ", "when", "on each", "on every", "as soon", "after each", "after every"}
+
+// timeLed tells a description that starts by saying when it runs: the
+// card's « À chaque fois : » would say it twice.
+func timeLed(d string) bool {
+	d = strings.ToLower(d)
+	for _, lead := range timeLeads {
+		if strings.HasPrefix(d, lead) {
+			return true
+		}
+	}
+	return false
 }
 
 // viewSourceText is what a block reads, in a word.

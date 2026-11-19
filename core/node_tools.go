@@ -543,7 +543,8 @@ func (c *core) nodeDoneDecision(id string) {
 
 // archiveNode archives a node and every node under it, the user's
 // gesture alone: their tasks and their steps' work stop, their live
-// sources are read no more (nodeSourcesDue forgets them).
+// sources are read no more (nodeSourcesDue forgets them), and the cards
+// that wait on them are withdrawn (withdrawCards).
 func (c *core) archiveNode(ctx context.Context, id, by string) error {
 	if c.nodes == nil {
 		return errNoGraph
@@ -568,6 +569,7 @@ func (c *core) archiveNode(ctx context.Context, id, by string) error {
 	if err := c.nodes.Archive(id, by); err != nil {
 		return err
 	}
+	c.withdrawCards(ctx, ids)
 	for _, nid := range ids {
 		c.linkedNodeGone(nid)
 	}
@@ -591,8 +593,8 @@ func (c *core) nodeTasks(id string) []string {
 	return out
 }
 
-// linkedNodeGone forgets what an archived node waited for: its cards stay
-// where they are, it waits no more.
+// linkedNodeGone forgets what an archived node waited for: its cards are
+// withdrawn already (withdrawCards), it waits no more.
 func (c *core) linkedNodeGone(id string) {
 	c.store.db.Exec(`DELETE FROM node_cards WHERE node = ?`, id)
 }

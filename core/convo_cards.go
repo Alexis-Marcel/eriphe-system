@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -778,4 +779,88 @@ func (c *core) cardAnswerLine(seq int) string {
 	}
 	return fmt.Sprintf("\n(eriphe-core : cette réponse a %s la proposition %s, « %s ». C'est déjà fait : ne la refais pas, confirme en quelques mots.)",
 		verb, parts[1], packQuote(parts[2]))
+}
+
+// Withdrawn with their subject.
+
+// cardByArchive is who decided a card withdrawn with its node.
+const cardByArchive = "archive"
+
+// withdrawCards withdraws the cards that wait on nodes the user just
+// archived (ids): archiving is setting the subject aside, so what it asked
+// goes with it. A card is theirs when linked to one of them (node_cards)
+// or about one (node:<id>); one a live node still holds stays. Each card
+// is gone, decided by the archive, and its proposal no longer waits: a
+// view is dropped, any other is answered no through its own approval,
+// without decideCard's words to the brain or a task. So no card comes
+// back, not even when the node is reopened; the brain may propose again,
+// and no longer reads it among what waits (pendingProposals). Called after
+// the archive, before the nodes are unlinked from their cards
+// (linkedNodeGone).
+func (c *core) withdrawCards(ctx context.Context, ids []string) {
+	refs := map[string]bool{}
+	for _, id := range ids {
+		for _, q := range []struct{ query, arg string }{
+			{`SELECT ref FROM node_cards WHERE node = ?`, id},
+			{`SELECT ref FROM convo_cards WHERE about = ? AND state = 'pending'`, refNode + ":" + id},
+		} {
+			rows, err := c.store.db.Query(q.query, q.arg)
+			if err != nil {
+				continue
+			}
+			for rows.Next() {
+				var ref string
+				if rows.Scan(&ref) == nil {
+					refs[ref] = true
+				}
+			}
+			rows.Close()
+		}
+	}
+	if len(refs) == 0 {
+		return
+	}
+	cardMu.Lock()
+	defer cardMu.Unlock()
+	moved := false
+	for _, ref := range slices.Sorted(maps.Keys(refs)) {
+		kind, pid, ok := parseProposalRef(ref)
+		if !ok || c.cardHeld(ref) {
+			continue
+		}
+		xs, _ := c.cardsWhere(`ref = ? AND state = ?`, ref, cardPending)
+		for _, x := range xs {
+			c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ? AND state = ?`,
+				cardGone, time.Now().Unix(), cardByArchive, x.ID, cardPending)
+			c.attentionDone(cardItemRef(x.ID))
+		}
+		pending := c.proposalOf(kind, pid).Pending
+		if pending {
+			if err := c.withdrawProposal(ctx, kind, pid); err != nil && !errors.Is(err, errCardDecided) {
+				log.Printf("cards: %s: withdrawn with its node: %v", ref, err)
+			}
+		}
+		if len(xs) > 0 || pending {
+			c.proposalMoved(ref)
+			log.Printf("cards: %s gone with its archived node", ref)
+			moved = true
+		}
+	}
+	if moved {
+		c.bump()
+	}
+}
+
+// withdrawProposal makes a proposal wait no more, undecided by the user:
+// a view is dropped, a memory forgotten; another kind is answered no
+// through its own approval, which records it.
+func (c *core) withdrawProposal(ctx context.Context, kind string, id int64) error {
+	switch kind {
+	case cardViewKind:
+		_, err := c.store.db.Exec(`UPDATE view_proposals SET state = ? WHERE id = ? AND state = ?`, viewDropped, id, viewProposed)
+		return err
+	case cardMemory:
+		return c.mem.forget(id, "owner", "withdrawn: its node was archived")
+	}
+	return c.decideProposal(ctx, kind, id, false)
 }
