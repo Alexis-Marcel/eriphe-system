@@ -726,7 +726,7 @@ whatever address it dials) and one client certificate per device.
 | `item_note` | note an item of a node's source: what the user should know and a state (`act`, `look`, `info`, `none`, `done`) |
 
 The brain has no archive tool: only the user archives a node (`archiveNode`, by `user` alone), which
-archives every node under it, stops their tasks and their steps' work, and unlinks their cards;
+archives every node under it, stops their tasks and their steps' work, and withdraws their cards;
 `node_find` with `archived` finds them again.
 
 The scheduler takes the requested device if it is online and fits. Otherwise it works in two passes,
@@ -941,8 +941,11 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   (`ErrArchived`); a body carrying a block's marks, snapshot or external is refused
   (`nodefile`'s author API: those are code's). There is **no archive tool**: archiving is the
   user's gesture (`archiveNode`, `by` `user` alone): it archives the node and every node under it
-  (`nodestore.Below`), stops their tasks and their steps' work, and unlinks their cards
-  (`node_cards`); `node_find` `archived` finds them again.
+  (`nodestore.Below`), stops their tasks and their steps' work, and withdraws the cards that
+  wait on them (`withdrawCards`: linked by `node_cards` or about `node:<id>`, unless a live node
+  still holds one): each card is `gone`, its proposal waits no more (a view `dropped`, another
+  kind answered no), and reopening the node brings none back; `node_find` `archived` finds them
+  again.
 - **Done.** `node_set` `done` (`setNodeDone`) marks the front matter's `done` and the state
   `done` (`nodestore.SetDone`, a version of its own that never conflicts with an author's write),
   once: done again changes nothing. A node done now leaves one dated **decision memory** about it
@@ -1228,14 +1231,16 @@ composes each one from the catalog.
   own), the monitor (`write_monitor`'s checks, its name free) and the skill (`write_skill`'s, its
   name free, with `when`; code writes its `node:`, the id given beforehand). The card leads with a
   summary code writes from what it checked (`viewSummary`: the page, how often the monitor looks,
-  what the skill does each time, its description, how it may tell the user, its urgent text), then,
+  what the skill does each time, its description, alone when it says already when it runs
+(« À chaque … », "Each …"), how it may tell the user, its urgent text), then,
   under « Détails » (fields marked `detail`), the node's blocks with what each reads, what the
   monitor does, and when the skill runs, with the repositories its steps may borrow, and its
   instructions (marked `markdown`, drawn as Markdown); the view's `goal` is its why, where the brain recalls
   the choices the user made when it asked first (scope, what matters, when to tell: the prompt's
   « Ce qui tournera seul »). One yes makes the node (standing, by `user`), the
   monitor (on) and the skill (approved), in that order; one that fails takes back those before,
-  and the card waits still. No makes none. Written on a tainted turn, the card says so and the
+  and the card waits still. No makes none; archiving the node it waits on drops it (`dropped`,
+  its card `gone`). Written on a tainted turn, the card says so and the
   node is external. A monitor or skill name taken is refused with what to do: a monitor for the
   same thing is read by its name (leave `monitor` out), never written again under another name.
   The yes opens the view's node (`showNode`).
