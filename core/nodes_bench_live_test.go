@@ -58,7 +58,10 @@ import (
 //     settled;
 //   - views only shown: a standing node the brain opened itself rather
 //     than proposing it (propose_view's card), or the reply to the mail
-//     not proposed on a card (no « Envoyer ? »).
+//     not proposed on a card (no « Envoyer ? »);
+//   - set up unasked: a view or a skill proposed in the turn that asks
+//     for a mail watch, before the brain asked what matters (the prompt's
+//     « Ce qui tournera seul »).
 //
 // The test fails when a run loses a reply or duplicates a node (#634's
 // bar); every number is logged, run by run.
@@ -101,6 +104,7 @@ type benchScore struct {
 	reopened, sameTitle           []string // duplicate nodes
 	stuck                         []string // stuck steps
 	selfView, unproposed          []string // views only shown
+	unasked                       []string // set up to run alone before asking
 	notes                         []string // what is worth reading, no fault
 	turns                         int
 	cost                          float64
@@ -118,9 +122,9 @@ func (s benchScore) String() string {
 		return fmt.Sprintf("%d %q", len(xs), xs)
 	}
 	return fmt.Sprintf("lost replies %d (net filed %s, unanswered %s, unfiled %s); duplicate nodes %d (reopened %s, same title %s); "+
-		"stuck steps %s; views only shown %d (self-made %s, unproposed %s); brain turns %d, $%.2f, %s; notes %q",
+		"stuck steps %s; views only shown %d (self-made %s, unproposed %s); set up unasked %s; brain turns %d, $%.2f, %s; notes %q",
 		s.lost(), list(s.netFiled), list(s.unanswered), list(s.unfiled), s.duplicates(), list(s.reopened), list(s.sameTitle),
-		list(s.stuck), len(s.selfView)+len(s.unproposed), list(s.selfView), list(s.unproposed), s.turns, s.cost, s.took.Round(time.Second), s.notes)
+		list(s.stuck), len(s.selfView)+len(s.unproposed), list(s.selfView), list(s.unproposed), list(s.unasked), s.turns, s.cost, s.took.Round(time.Second), s.notes)
 }
 
 // playNodesBench plays the scenario once, on a core of its own.
@@ -210,6 +214,25 @@ func playNodesBench(t *testing.T, cli, model string) benchScore {
 	if sum, _ := sc.c.nodes.Get(mail); !sum.Archived.IsZero() {
 		b.note("the mail was archived by someone else than the user")
 	}
+	// 14. Setting up a mail watch asks before proposing: the first turn
+	// opens the subject and asks, its replies suggested; the answer
+	// brings the card.
+	pending := b.setups()
+	b.say("Tu peux garder un œil sur mes mails, m'aider à les gérer et me proposer des actions à faire.", "", turnWork)
+	if n := b.setups() - pending; n > 0 {
+		b.s.unasked = append(b.s.unasked, fmt.Sprintf("mail watch: %d proposed before asking", n))
+	} else if asked, ok := b.lastAnswer(); !ok || asked.Node == "" {
+		b.note("mail watch: the question is in no subject")
+	} else {
+		if len(b.sc.c.store.suggestions(asked.Seq)) == 0 {
+			b.note("mail watch: the questions suggest no reply")
+		}
+		b.say("Fais comme tu proposes.", asked.Node, turnNoNode)
+		if b.setups() == pending {
+			b.note("mail watch: nothing proposed after the answers")
+		}
+	}
+
 	b.end(work) // before the archive: the whole graph is scored
 	if err := sc.c.archiveNode(ctx, mail, byUser); err != nil {
 		b.note("archive: " + err.Error())
@@ -315,6 +338,22 @@ func (b *bench) viewMade(id string) bool {
 	var n int
 	b.sc.c.store.db.QueryRow(`SELECT COUNT(*) FROM view_proposals WHERE node = ? AND state = ?`, id, viewApproved).Scan(&n)
 	return n > 0
+}
+
+// setups counts what waits to run alone: views and skills proposed.
+func (b *bench) setups() int {
+	var n int
+	b.sc.c.store.db.QueryRow(`SELECT (SELECT COUNT(*) FROM view_proposals WHERE state = ?) + (SELECT COUNT(*) FROM skills WHERE pending != '')`, viewProposed).Scan(&n)
+	return n
+}
+
+// lastAnswer is the brain's last message.
+func (b *bench) lastAnswer() (Message, bool) {
+	msgs, _ := b.sc.c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? ORDER BY seq DESC LIMIT 1`, roleBrain)
+	if len(msgs) == 0 {
+		return Message{}, false
+	}
+	return msgs[0], true
 }
 
 // shows tells a live block reads tool (a node's, or a view proposed).

@@ -262,7 +262,8 @@ func fmtJSON(v any) string {
 }
 
 // The prompt says when to open a node, how to write it, that only the
-// user archives, how a wake turn goes and how long answers are filed;
+// user archives, how a wake turn goes and how long answers are filed,
+// what it asks before setting up what runs alone;
 // it names no tool that is gone.
 func TestBrainPromptNodes(t *testing.T) {
 	raw, _ := os.ReadFile("brain-prompt.md")
@@ -286,12 +287,15 @@ func TestBrainPromptNodes(t *testing.T) {
 		"**une action simple**", "**une question**", "**un travail**", "le nœud permanent de sa journée s'il en a un, jamais dans un nouveau nœud",
 		"découpe-le toi-même", "une nouvelle version du même nœud",
 		"**Une vue est le travail fait d'avance de son assistant**", "Tu ne crées jamais une vue toi-même",
+		"**Ce qui tournera seul se règle d'abord avec lui.**", "chacune avec ce que tu feras s'il ne dit rien",
+		"dont une qui prend tous tes choix par défaut", "Une seule série de questions", "une vue qui ne fait que montrer n'a rien à régler",
+		"le `goal` d'une vue, la `description` d'un skill", "jamais un souvenir",
 	} {
 		if !strings.Contains(section, want) {
 			t.Errorf("« Les nœuds » lacks %q", want)
 		}
 	}
-	for _, want := range []string{"`<suggestions>`", "au plus 3", "sur un tour contaminé, eriphe-core n'en montre aucune",
+	for _, want := range []string{"demande-lui ce qui compte (voir « Ce qui tournera seul » dans « Les vues »)", "`<suggestions>`", "au plus 3", "sur un tour contaminé, eriphe-core n'en montre aucune",
 		"eriphe-core la range lui-même", "#N · nœud <id>]`", "## Où en sont les choses", "`node.done`"} {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the prompt lacks %q", want)
