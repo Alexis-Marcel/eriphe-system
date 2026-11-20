@@ -48,11 +48,12 @@ test("an answer given at home stays readable until you move on", async ({ page, 
   const orb = page.locator("button.orb");
 
   // Three sentences at the home: held whole by the orb, its Markdown, out
-  // of the bar.
+  // in the space; on a graph too full to hold it without covering a
+  // bubble (the scenario's, all of them), in a line above the bar.
   await say("Tu as accès à mes films normalement ?");
   await expect(answer).toContainText("Tu peux mettre la recherche et la consultation en accès libre dans Réglages → Outils → films.");
   await expect(answer.locator("strong")).toHaveText("Seerr");
-  await expect(orb).not.toHaveClass(/docked/);
+  await expect(page.locator("button.orb:not(.docked), .orb-line")).toHaveCount(1);
   await expect(page.locator("article.pg")).toHaveCount(0);
   // Long after a line would have gone, it is still there.
   await page.waitForTimeout(10_000);
