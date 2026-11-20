@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { PickAction, PickItem, PickList } from "../data/api";
+import type { Opened, PickAction, PickItem, PickList } from "../data/api";
+import { Opener, type OpenState } from "./opener";
 import { useWords } from "../i18n";
 
 // The Lists of a source's items eriphe-core tells the page of
@@ -32,6 +33,10 @@ export type Picks = {
   list(surface: string, component: string): PickList | undefined;
   run?: (surface: string, list: PickList, action: PickAction, ids: string[]) => Promise<{ ok: boolean; text: string }>;
   kept: Map<string, Kept>;
+  // Reading an item in full, on a List whose source opens its items
+  // (item_open.go), and what the page read, by surface, List and item.
+  open?: (surface: string, list: PickList, item: string, yes: boolean) => Promise<Opened>;
+  opened?: Map<string, OpenState>;
 };
 
 type Kept = { picked: string[]; result: Result | null; asking?: Asking | null };
@@ -60,6 +65,17 @@ export function allText(a: PickAction, n: number): string {
 export function itemLine(it: PickItem): string {
   const title = it.title || it.id;
   return it.detail ? `${title} · ${it.detail}` : title;
+}
+
+// openable is a row as a List draws it: one that opens in place when its
+// source opens its items and the page may read them (opener.tsx).
+export function openable(surface: string, list: PickList, picks: Picks, node: ReactNode, item: PickItem | undefined): ReactNode {
+  if (!list.open || !picks.open || !item) return node;
+  return (
+    <Opener surface={surface} list={list} picks={picks} item={item}>
+      {node}
+    </Opener>
+  );
 }
 
 // MAX_IDS is the most items one click acts on (actionsMaxIDs): a list of
@@ -210,7 +226,7 @@ export function Pickable({ surface, list, picks, rows, direction }: { surface: s
               {it && (
                 <input type="checkbox" className="a2-pick" checked={on} onChange={() => toggle(it.id)} aria-label={t("espace.act.pick", it.title || it.id)} />
               )}
-              <div className="a2-pickrow">{row.node}</div>
+              <div className="a2-pickrow">{openable(surface, list, picks, row.node, it)}</div>
             </li>
           );
         })}

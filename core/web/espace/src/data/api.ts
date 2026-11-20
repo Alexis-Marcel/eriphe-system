@@ -182,7 +182,30 @@ export type PageBlock = {
 // only, never the source's others.
 export type PickItem = { n: number; id: string; title?: string; detail?: string };
 export type PickAction = { name: string; one: string; many: string; all?: string; tool: string; args?: string[]; hint?: string; hintExternal?: boolean; confirm?: boolean };
-export type PickList = { component: string; source: string; filtered?: boolean; items: PickItem[]; actions: PickAction[] };
+export type PickList = { component: string; source: string; filtered?: boolean; open?: boolean; items: PickItem[]; actions: PickAction[] };
+
+// What opening an item read (item_open.go): its common fields and the
+// whole as JSON, external when its server is not trusted, with the item's
+// note; or the call it asks a yes for (ask); or why not (error).
+export type Opened = {
+  ask?: { tool: string; args: string[] };
+  title?: string;
+  from?: string;
+  date?: string;
+  body?: string;
+  raw?: string;
+  external?: boolean;
+  note?: { group?: string; note?: string; external?: boolean };
+  error?: string;
+};
+
+// openItem reads an item of a block's source in full, the user's gesture;
+// yes once they saw the call it asked for.
+export async function openItem(id: string, block: string, source: string, item: string, yes: boolean): Promise<Opened> {
+  const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, { block, source, item, yes });
+  if (r.status === 200 && r.data) return r.data;
+  return { error: r.data?.error ?? String(r.status) };
+}
 
 export type TraceEntry = { at: string; author: string; text: string };
 // A node's file as it is (md), its body as the user edits it (body), the

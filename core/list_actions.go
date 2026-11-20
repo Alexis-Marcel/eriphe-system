@@ -64,6 +64,7 @@ type pageList struct {
 	Component string       `json:"component"`
 	Source    string       `json:"source"`
 	Filtered  bool         `json:"filtered,omitempty"`
+	Open      bool         `json:"open,omitempty"` // its rows open in place (item_open.go)
 	Items     []listItem   `json:"items"`
 	Actions   []listAction `json:"actions"`
 }
@@ -406,8 +407,10 @@ func (c *core) blockLists(b *nodefile.Block, data map[string]any, lang string, o
 				acts = append(acts, c.listAction(an, a, b.External, lang))
 			}
 		}
-		if len(acts) > 0 || f != nil {
-			out = append(out, pageList{Component: id, Source: name, Filtered: f != nil, Items: sourceRows(name, b.Sources[name], data[name], f), Actions: acts})
+		src := b.Sources[name]
+		open := src.Items != nil && src.Items.Open != nil
+		if len(acts) > 0 || f != nil || open {
+			out = append(out, pageList{Component: id, Source: name, Filtered: f != nil, Open: open, Items: sourceRows(name, src, data[name], f), Actions: acts})
 		}
 	}
 	return out

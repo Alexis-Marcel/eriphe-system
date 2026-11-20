@@ -55,6 +55,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/actions", sc.handleActions)
 	mux.HandleFunc("POST /e2e/review", sc.handleReview)
 	mux.HandleFunc("POST /e2e/sections", sc.handleSections)
+	mux.HandleFunc("POST /e2e/open", sc.handleOpen)
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
 	mux.HandleFunc("POST /e2e/catalog", sc.handleCatalog)
 	mux.Handle("/", sc.web.w.routes())
@@ -215,6 +216,7 @@ type scenarioTools struct {
 	sent    []string
 	moved   [][]string // ranger: the ids of each call (selection.spec.ts)
 	deleted [][]string // supprimer: the ids of each call (sections.spec.ts)
+	read    []string   // lire: the id of each call (open.spec.ts)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
 	veille *mcp.Server
@@ -312,6 +314,24 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 					}
 				}
 				return nil, map[string]any{"messages": msgs}, nil
+			})
+		// lus lists two mails, lire reads one in full (open.spec.ts).
+		mcp.AddTool(s, &mcp.Tool{Name: "lus", Description: "Les mails à lire", Annotations: read},
+			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+				return nil, map[string]any{"messages": []any{
+					map[string]any{"id": "l1", "subject": "Ordre du jour", "from": "sam@example.org"},
+					map[string]any{"id": "l2", "subject": "Photos du week-end", "from": "lou@example.org"},
+				}}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "lire", Description: "Lit un mail en entier", Annotations: read},
+			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+				ID string `json:"id"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.read = append(f.read, in.ID)
+				return nil, map[string]any{"subject": "Ordre du jour", "from": "Sam <sam@example.org>", "date": "2026-11-20T09:00:00Z",
+					"body": "Bonjour,\nvoici l'ordre du jour de " + in.ID + "."}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Supprime des mails"},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
@@ -937,7 +957,7 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f := sc.tools
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved), "deleted": slices.Clone(f.deleted)})
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved), "deleted": slices.Clone(f.deleted), "read": slices.Clone(f.read)})
 }
 
 // handleCatalog is POST /e2e/catalog: the tools' catalog changed, an
@@ -1091,6 +1111,34 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+	c.readNode(sc.ctx, id, nil, time.Now())
+	c.showNode(id, byBrain, false)
+	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// handleOpen is POST /e2e/open: a view of two mails whose rows open in
+// place, each read in full by mail/lire (open.spec.ts), l1 noted in a
+// group; written by the brain as any author, read once, and shown.
+func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
+	c := sc.c
+	d, err := c.nodes.Create(nodestore.New{Title: "Mails à lire", Lifetime: nodefile.Standing, Author: byBrain, Body: "Les mails.\n"})
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id := d.Node.Meta.ID
+	body := "Les mails.\n\n```eriphe:block lus\n" + `{"components": [
+  {"id": "root", "component": "List", "children": {"path": "/lus/messages", "componentId": "row"}},
+  {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
+ "sources": {"lus": {"tool": "mail/lus", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lire", "id": "id"}}}}}` + "\n```\n"
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := c.nodes.NoteItem(id, nodestore.Item{Source: "lus", Item: "l1", Group: "À traiter", Note: "Sam attend ton avis", Author: byBrain}); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)

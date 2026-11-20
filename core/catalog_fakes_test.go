@@ -30,6 +30,7 @@ type fakeMonitor struct {
 	silenced []string         // silence: the uids it was called on
 	invites  []map[string]any // monitor://invitations: invitations, each id, title
 	sent     []map[string]any // send and respond: what they were called with
+	opened   []string         // message and letter: tool:id of each call
 }
 
 func (m *fakeMonitor) server() *mcp.Server {
@@ -136,6 +137,27 @@ func (m *fakeMonitor) server() *mcp.Server {
 			m.sent = append(m.sent, map[string]any{"tool": "respond", "id": in.ID, "answer": in.Answer, "start": in.Start})
 			return nil, map[string]any{"ok": true}, nil
 		})
+	// message reads one received message in full, by its id; letter the
+	// same, reaching the open web (no openWorldHint): an item opened.
+	readOne := func(name string) func(context.Context, *mcp.CallToolRequest, struct {
+		ID string `json:"id"`
+	}) (*mcp.CallToolResult, map[string]any, error) {
+		return func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+			ID string `json:"id"`
+		}) (*mcp.CallToolResult, map[string]any, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			m.opened = append(m.opened, name+":"+in.ID)
+			for _, g := range m.got {
+				if g["id"] == in.ID {
+					return nil, map[string]any{"message": map[string]any{"subject": g["subject"], "from": g["from"], "date": "2026-11-04T09:00:00Z", "body": "Le texte de " + in.ID}}, nil
+				}
+			}
+			return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "no such message"}}}, nil, nil
+		}
+	}
+	mcp.AddTool(s, &mcp.Tool{Name: "message", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}}, readOne("message"))
+	mcp.AddTool(s, &mcp.Tool{Name: "letter", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, readOne("letter"))
 	// page reads the open web: no openWorldHint.
 	mcp.AddTool(s, &mcp.Tool{Name: "page", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
 		func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {

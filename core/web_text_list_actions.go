@@ -67,6 +67,21 @@ var listActionStrings = map[string]map[string]string{
 		"espace.act.ask":     "Cet appel sera lancé :",
 		"espace.act.running": "En cours…",
 		"espace.act.error":   "Impossible de joindre {{name}} : rien n'a été fait.",
+
+		"open.none":  "Cette liste n'ouvre pas ses éléments.",
+		"open.stale": "Cet élément n'est plus dans la liste.",
+
+		"espace.open.show":    "Ouvrir « %s »",
+		"espace.open.loading": "Lecture…",
+		"espace.open.ask":     "Lire cet élément lancera cet appel :",
+		"espace.open.yes":     "Lire",
+		"espace.open.close":   "Fermer",
+		"espace.open.group":   "Classé « %s »",
+		"espace.open.note":    "Note",
+		"espace.open.from":    "De",
+		"espace.open.date":    "Date",
+		"espace.open.details": "Détails",
+		"espace.open.error":   "Impossible de joindre {{name}}.",
 	},
 	"en": {
 		"act.one":               "1 item",
@@ -119,5 +134,20 @@ var listActionStrings = map[string]map[string]string{
 		"espace.act.ask":     "This call will run:",
 		"espace.act.running": "Running…",
 		"espace.act.error":   "Cannot reach {{name}}: nothing was done.",
+
+		"open.none":  "This list does not open its items.",
+		"open.stale": "This item is no longer in the list.",
+
+		"espace.open.show":    "Open “%s”",
+		"espace.open.loading": "Reading…",
+		"espace.open.ask":     "Reading this item will run this call:",
+		"espace.open.yes":     "Read",
+		"espace.open.close":   "Close",
+		"espace.open.group":   "Filed under “%s”",
+		"espace.open.note":    "Note",
+		"espace.open.from":    "From",
+		"espace.open.date":    "Date",
+		"espace.open.details": "Details",
+		"espace.open.error":   "Cannot reach {{name}}.",
 	},
 }

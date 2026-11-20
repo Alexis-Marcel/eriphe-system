@@ -877,6 +877,28 @@ a.notice-text:hover { text-decoration: underline; }
 .a2-pick { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--accent); cursor: pointer; opacity: 0; transition: opacity 120ms; }
 .a2-pickall { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 12px; color: var(--fg3); cursor: pointer; opacity: 0; transition: opacity 120ms; }
 .a2-pickall .a2-pick { margin: 0; }
+/* A row that opens in place (opener.tsx): the row, its disclosure, what it read below it. */
+.a2-openhead { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
+.a2-openmain { flex: 1; min-width: 0; }
+.a2-openbtn { flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: var(--r-sm); background: none; color: var(--fg3); font: inherit; font-size: 12px; cursor: pointer; }
+.a2-openbtn:hover, .a2-openrow.open .a2-openbtn { background: var(--fill); color: var(--fg); }
+.a2-opened { position: relative; margin: 6px 0 4px; padding: 10px 34px 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--fill); font-size: 13px; cursor: auto; }
+.a2-openclose { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; padding: 0; border: none; border-radius: var(--r-sm); background: none; color: var(--fg3); cursor: pointer; }
+.a2-openclose:hover { background: var(--card); color: var(--fg); }
+.a2-openbody { display: flex; flex-direction: column; gap: 6px; }
+.a2-opennote { margin: 0; color: var(--fg2); font-size: 12px; }
+.a2-opentitle { margin: 0; font-weight: 600; }
+.a2-openmeta { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font-size: 12px; color: var(--fg2); }
+.a2-openmeta dd { margin: 0; }
+.a2-opentext { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; }
+.a2-openraw summary { cursor: pointer; font-size: 12px; color: var(--fg3); }
+.a2-openraw pre { margin: 4px 0 0; max-height: 240px; overflow: auto; font-family: var(--mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.a2-openwait, .a2-openfail { margin: 0; font-size: 12px; color: var(--fg3); }
+.a2-openfail { color: var(--hot-text); }
+.a2-openask { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.a2-openask p, .a2-openask dl { margin: 0; }
+.a2-openask dt, .a2-openask dd { font-family: var(--mono); font-size: 12px; }
+.a2-openask dd { margin: 0 0 0 12px; color: var(--fg2); }
 /* The head: « tout sélectionner », and an action on all the rows (« Supprimer les 12 »), always seen. */
 .a2-pickhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .a2-pickwhole { padding: 2px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: none; color: var(--fg2); font: inherit; font-size: 12px; cursor: pointer; }
