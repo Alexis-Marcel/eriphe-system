@@ -1176,11 +1176,13 @@ func (sc *scenario) handleMail(rw http.ResponseWriter, r *http.Request) {
 }
 
 // mail is what the mails' skill does with the urgent mail: a node, under
-// the mails, sorted, with a draft, waiting for the user.
+// the mails, sorted, with a draft, waiting for the user; opened by the
+// skill's run, as its task's node_open records it (taskOrigin).
 func (sc *scenario) mail() (string, error) {
 	c := sc.c
 	d, err := c.nodes.Create(nodestore.New{Title: "Urgent : la prod renvoie des 500", Parent: sc.nodes["mails"], External: true, Author: "skill:mails",
-		Body: "**Tri** : urgent. Sam (sam@example.org) écrit que l'app de production renvoie des erreurs 500 depuis 10 h.\n\n**Brouillon** : À écrire.\n"})
+		OpenedBy: &nodefile.Origin{By: nodefile.OpenedSkill, Skill: "mails-trier", On: "monitor:mails-recus", Node: sc.nodes["mails"]},
+		Body:     "**Tri** : urgent. Sam (sam@example.org) écrit que l'app de production renvoie des erreurs 500 depuis 10 h.\n\n**Brouillon** : À écrire.\n"})
 	if err != nil {
 		return "", err
 	}

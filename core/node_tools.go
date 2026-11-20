@@ -196,7 +196,7 @@ func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[strin
 		}
 	}
 	d, err := c.nodes.Create(nodestore.New{Title: title, Parent: parent, Lifetime: lifetime, Goal: strings.TrimSpace(in.Goal),
-		Body: in.Body, External: tainted, Author: byBrain})
+		Body: in.Body, External: tainted, OpenedBy: c.turnOrigin(), Author: byBrain})
 	if err != nil {
 		return nil, err
 	}

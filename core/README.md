@@ -3134,7 +3134,16 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   skills run on, `what` from their spec), the `skills` that work in it (`what`: what starts them, at
   most how often) and when it last changed (`updated`). The workspace shows it in the page's ⋯
   menu, « Ce qui le fait vivre »; a permanent subject has a small ∞ by its date (« Sujet
-  permanent ») and a satellite slowly orbiting its bubble (still with `prefers-reduced-motion`). A block (`pageBlock`) is ready to draw: its `name`, its A2UI `components`, its
+  permanent ») and a satellite slowly orbiting its bubble (still with `prefers-reduced-motion`).
+  Every page says who wanted its node (`origin`, `node_origin.go`): code records it in the node's
+  `opened_by` when it makes it ([node format](../docs/node-format.md)), from what it knows: the
+  brain in a turn that answers the user (their message), in a turn of events only (an event); the
+  user's yes on a view's card; a skill's run (the skill, what started it); a task or a step (who
+  wanted their work); code, for one of Eriphe's own places (« Outils à revoir », no sign). `origin.text` is the sentence the ⋯ menu shows under « D'où il vient »
+  (« Ouvert à ta demande : « <the first line of their message> » », « Ouvert par le skill X, après
+  ce qu'a vu la surveillance « m », sans demande de ta part », « Ouvert après un événement, sans
+  demande de ta part », « Origine inconnue » for a node made before); `origin.unasked` tells a node
+  a skill or an event opened. A block (`pageBlock`) is ready to draw: its `name`, its A2UI `components`, its
   `data` with each source's last value at `/<name>` (the version's snapshot, then the latest read
   while the last version shows) and the user's marks at `/marks/<list>/<item>`; or its `error`
   when it does not read as a block. Its media go through eriphe-core (`/espace/media`, signed),
@@ -3164,7 +3173,10 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   title may be someone else's words, written on an external node and not `title_trusted`: the
   workspace shows it as it is, in amber with a ⚠ saying « Titre écrit après une lecture
   extérieure », on the bubble, the page's header, the list, the archives and a [[link]] to it;
-  never replaced, and code never acts on a title), `parent`, `links`,
+  never replaced, and code never acts on a title), `unasked` (a skill or an event opened it, not
+  the user: a small « ↯ » after its title on its bubble and in its page's header, its tooltip
+  « Tu ne l'as pas demandé : un skill ou un événement l'a ouvert. »; the user's own
+  nodes, and those whose origin is not known, have none), `parent`, `links`,
   `lifetime`, `state`, `created`, `updated`, `done`, `external`, `version`, `waits` (one of its
   cards waits for the user) and, while it runs, `line`: its task's last word of where it is.
 

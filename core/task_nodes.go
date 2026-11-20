@@ -228,7 +228,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 				}
 			}
 			d, err := c.nodes.Create(nodestore.New{Title: strings.TrimSpace(in.Title), Goal: in.Goal, Body: in.Body, Parent: w.node,
-				External: tainted != "", Author: w.author})
+				External: tainted != "", OpenedBy: c.taskOrigin(w.task, w.node), Author: w.author})
 			if err != nil {
 				return nil, err
 			}

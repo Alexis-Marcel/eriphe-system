@@ -184,9 +184,16 @@ type Summary struct {
 	// TitleTrusted: external, its title is not someone else's words
 	// (nodefile's Meta.TitleTrusted).
 	TitleTrusted bool
-	Version      int
-	Links        []string // the nodes it links to: its text's [[links]], resolved, and its front matter's
+	// OpenedBy is who wanted it (nodefile's Meta.OpenedBy.By): "" when
+	// not known.
+	OpenedBy string
+	Version  int
+	Links    []string // the nodes it links to: its text's [[links]], resolved, and its front matter's
 }
+
+// Unasked tells a node the user did not ask for: opened by a skill or
+// after an event (nodefile.Origin.Unasked).
+func (x Summary) Unasked() bool { return nodefile.UnaskedBy(x.OpenedBy) }
 
 // TitleExternal tells whether its title may be someone else's words: an
 // external node's, not trusted.
@@ -299,7 +306,9 @@ type New struct {
 	// TitleTrusted: its maker stands for its title even when External
 	// (the user approved it on a card that showed it).
 	TitleTrusted bool
-	Author       string
+	// OpenedBy: who opened it, as code knows it (nodefile.Origin).
+	OpenedBy *nodefile.Origin
+	Author   string
 }
 
 // Create makes a node: its file, its first version.
@@ -376,7 +385,7 @@ func (s *Store) prepare(nw New) (*nodefile.Node, error) {
 	now := s.opts.Now().Truncate(time.Second)
 	n, err := nodefile.New(nodefile.Meta{
 		ID: id, Title: strings.TrimSpace(nw.Title), Parent: nw.Parent, Links: nw.Links, After: nw.After,
-		Lifetime: nw.Lifetime, Goal: nw.Goal, Created: now, External: nw.External,
+		Lifetime: nw.Lifetime, Goal: nw.Goal, Created: now, External: nw.External, OpenedBy: nw.OpenedBy,
 	}, "")
 	if err != nil {
 		return nil, err
@@ -854,7 +863,7 @@ func (s *Store) summary(id string) (Summary, error) {
 
 func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.lifetime, n.state, n.created, n.updated,
-		n.done, n.archived, n.external, n.title_trusted, n.version,
+		n.done, n.archived, n.external, n.title_trusted, n.opened_by, n.version,
 		(SELECT group_concat(t, ' ') FROM (SELECT l.target AS t FROM node_links l WHERE l.id = n.id
 		  UNION SELECT r.target FROM node_refs r WHERE r.id = n.id AND r.target != '' AND r.target != n.id)) FROM nodes n `+where, args...)
 	if err != nil {
@@ -867,7 +876,7 @@ func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 		var created, updated, done, archived int64
 		var links sql.NullString
 		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Parent, &x.Lifetime, &x.State, &created, &updated,
-			&done, &archived, &x.External, &x.TitleTrusted, &x.Version, &links); err != nil {
+			&done, &archived, &x.External, &x.TitleTrusted, &x.OpenedBy, &x.Version, &links); err != nil {
 			return nil, err
 		}
 		x.Links = strings.Fields(links.String)

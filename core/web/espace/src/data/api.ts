@@ -122,6 +122,8 @@ export type GraphNode = {
   id: string;
   title?: string;
   titleExternal?: boolean;
+  // unasked: a skill or an event opened it, not the user (a sign says so)
+  unasked?: boolean;
   parent?: string;
   links?: string[];
   lifetime: "work" | "standing";
@@ -148,10 +150,13 @@ export type NodePage = {
   cards: ProposalView[];
   refs?: Record<string, PageRef>;
   alive?: PageAlive;
+  // origin: who wanted it, as eriphe-core recorded it
+  origin?: PageOrigin;
 };
 // What keeps a permanent subject alive (pageAlive, node_alive.go): its
 // sources, monitors and skills, each named, what it does in code's words.
 export type AliveLine = { name: string; what: string };
+export type PageOrigin = { unasked?: boolean; text: string };
 export type PageAlive = { sources?: AliveLine[]; monitors?: AliveLine[]; skills?: AliveLine[]; updated: string };
 // The node a [[link]] of a page's text opens, by the name as written
 // (pageRef, web_graph.go): its title, titleExternal when it may be someone

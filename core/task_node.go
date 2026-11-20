@@ -96,8 +96,21 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest, held bool) error {
 	if goal == "" {
 		goal, _, _ = strings.Cut(strings.TrimSpace(r.Prompt), "\n")
 	}
+	origin := r.origin
+	switch {
+	case origin != nil:
+	case r.byBrain:
+		origin = c.turnOrigin()
+	default:
+		origin = c.workOrigin(strings.TrimSpace(r.Node), "")
+	}
+	if origin != nil {
+		cp := *origin
+		cp.Task, cp.Node = t.ID, strings.TrimSpace(r.Node)
+		origin = &cp
+	}
 	nw := nodestore.New{Title: truncate(oneLine(title), nodefile.TitleMax-1), Parent: strings.TrimSpace(r.Node),
-		Goal: truncate(oneLine(goal), taskNodeGoalMax), External: len(r.taint) > 0, Author: c.taskAuthor(t.ID)}
+		Goal: truncate(oneLine(goal), taskNodeGoalMax), External: len(r.taint) > 0, OpenedBy: origin, Author: c.taskAuthor(t.ID)}
 	// A title or a goal the filter refuses (« Renouvelle le token: expiré »)
 	// does not stop the task: its node goes without the goal, then with a
 	// neutral title.

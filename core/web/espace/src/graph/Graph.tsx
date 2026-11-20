@@ -7,7 +7,7 @@ import { Page } from "../page/Page";
 import { BOTTOM, boxAt, edgeMark, frameAll, framePages, pageMax, TOP, type Box, type Cam } from "./camera";
 import { bornBeside, constellation, edgePush, edgeStep, leash, simulate, tether, TETHER, type Pin, type Pos, type Pt } from "./layout";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
-import { ExtMark } from "./Title";
+import { ExtMark, UnaskedMark } from "./Title";
 
 // The graph (#633): every node a bubble, a subject bigger than its own,
 // their links; an open node is its page, drawn right where its bubble was,
@@ -516,7 +516,7 @@ function Bubble(p: {
   const R = r + (d === 0 ? 12 : 6);
   const opacity = p.open ? 0 : p.dim ? (d === 0 ? 0.42 : 0.28) : x.state === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
-  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.state, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.titleExternal && "title-ext"]
+  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.state, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.titleExternal && "title-ext", x.unasked && "unasked"]
     .filter(Boolean)
     .join(" ");
   return (
@@ -556,6 +556,7 @@ function Bubble(p: {
         <b>
           {p.title}
           {x.titleExternal && <ExtMark />}
+          {x.unasked && <UnaskedMark />}
         </b>
         {x.line && run && !p.dim && <em className="runs">{x.line}</em>}
         {yours && !run && <em className="yours">{p.waitsWord}</em>}

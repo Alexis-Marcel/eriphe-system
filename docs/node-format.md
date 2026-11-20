@@ -73,6 +73,7 @@ The titles proposed for the first article:
 | `archived` | timestamp | When the user archived it; absent while not archived. |
 | `external` | `true` | Written by code only: the node holds someone else's words. Absent otherwise. |
 | `title_trusted` | `true` | Written by code only, on an external node: its title is not someone else's words (written before the node was external, or by a writer that vouched for it: the user approving it on a card, an author that read nothing external). Absent otherwise: the title of an external node is then shown marked, in amber with a ⚠ (« Titre écrit après une lecture extérieure »), never replaced; code never acts on a title. |
+| `opened_by` | a mapping | Written by code only, when it makes the node: who wanted it. `by` is `user` (a message of theirs, `msg` its number; or their yes on a card, `card`), `skill` (a skill's run: `skill` its name, `trigger` what started it: `monitor:<name>`, `alert:<hook>` or `schedule`) `event` (a turn of Eriphe's on events only: a wake, an intention, a monitor's event) or `eriphe` (one of Eriphe's own places, made by code: « Outils à revoir »). A node a task or a step opened says who wanted that work, with the `task` and the `node` it was opened for. Absent on a node made before it was recorded: its origin is unknown. The workspace says it in the page's ⋯ menu, and marks a node the user did not ask for (`skill`, `event`) with « ↯ ». |
 
 Any other field is kept with its value. While the front matter does not change, it keeps its bytes,
 comments included. When code writes it again (a new title, say), the known fields come first in the
@@ -240,7 +241,7 @@ nothing the brain reads; the page keeps it for its session.
 
 ### Code's fields
 
-`snapshot`, `marks` and `external`, and the front matter's `after`, `external` and `title_trusted`, are written by code only:
+`snapshot`, `marks` and `external`, and the front matter's `after`, `external`, `title_trusted` and `opened_by`, are written by code only:
 
 - An author (the brain, a task, the user in Eriphe's editor) may leave them out: code keeps them as
   the version written over has them.
