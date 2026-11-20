@@ -77,11 +77,13 @@ async function oneLine(pg: Locator, name = title) {
   const box = await still(pg);
   const tx = pg.locator(".pg-title-tx");
   await expect(tx).toHaveAttribute("title", name);
-  const line = await tx.evaluate((e) => [e.getBoundingClientRect().height, parseFloat(getComputedStyle(e).lineHeight)]);
+  const line = await tx.evaluate((e) => [e.offsetHeight, parseFloat(getComputedStyle(e).lineHeight)]);
   expect(line[0]).toBeLessThanOrEqual(line[1] + 2);
   const t = (await tx.boundingBox())!;
-  // cut short, never to nothing
-  expect(t.width).toBeGreaterThan(Math.min(60, name.length * 8));
+  // whole, or cut short but never to nothing (in the layout's pixels: the
+  // graph's camera may scale the page)
+  const [w, full] = await tx.evaluate((e) => [e.offsetWidth, e.scrollWidth]);
+  expect(w).toBeGreaterThanOrEqual(Math.min(full, 60));
   for (const sign of await pg.locator(".pg-title h2 .pg-badge.warn, .pg-title .pg-standing").all()) {
     const b = (await sign.boundingBox())!;
     expect(Math.abs(b.y + b.height / 2 - (t.y + t.height / 2))).toBeLessThan(t.height / 2);
@@ -199,7 +201,7 @@ test("a page with 17 versions, on a phone", async ({ page, request }) => {
   // The title on its own line, cut short; the chip and the rest under it,
   // inside the page.
   const tx = pg.locator(".pg-title-tx");
-  const line = await tx.evaluate((e) => [e.getBoundingClientRect().height, parseFloat(getComputedStyle(e).lineHeight)]);
+  const line = await tx.evaluate((e) => [e.offsetHeight, parseFloat(getComputedStyle(e).lineHeight)]);
   expect(line[0]).toBeLessThanOrEqual(line[1] + 2);
   for (const b of await pg.locator(".pg-title > *").all()) {
     const x = (await b.boundingBox())!;
