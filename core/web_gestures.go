@@ -292,7 +292,7 @@ type archivedNode struct {
 }
 
 // handleArchives is GET /api/archives: what the user archived, the latest
-// first. A title that may be someone else's words is not given.
+// first. A title that may be someone else's words is given marked (titleExternal).
 func (w *web) handleArchives(rw http.ResponseWriter, r *http.Request, _ *session) {
 	out := []archivedNode{}
 	if w.c.nodes != nil {

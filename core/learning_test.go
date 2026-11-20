@@ -373,3 +373,16 @@ func TestLearnedInHeartbeat(t *testing.T) {
 		t.Fatalf("feed: %+v %v", items, err)
 	}
 }
+
+// An unlearn card quotes what it would undo, one drawn from external
+// content too, marked so: never replaced.
+func TestLearnedSummaryMarksExternal(t *testing.T) {
+	e := &learnEntry{Kind: kindFact, Text: "Le domaine est example.org", Trust: trustExternal}
+	if got := learnedSummary(e, "fr"); !strings.Contains(got, "Le domaine est example.org") || !strings.Contains(got, "(tiré d'un contenu extérieur)") {
+		t.Errorf("external: %q", got)
+	}
+	e.Trust = trustOwner
+	if got := learnedSummary(e, "fr"); strings.Contains(got, "extérieur") {
+		t.Errorf("own: %q", got)
+	}
+}

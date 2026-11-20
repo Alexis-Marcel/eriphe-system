@@ -920,7 +920,11 @@ func (c *core) stopStepTask(ctx context.Context, task string) {
 // wakeForWork wakes the brain for an exception of a work: an event of
 // the conversation, taint what its words make the turn that reads it.
 func (c *core) wakeForWork(parent, text string, taint []string) {
-	line := c.nodeHead(parent) + " " + text
+	head, t := c.nodeHead(parent)
+	line := head + " " + text
+	if t != "" {
+		taint = append(slices.Clone(taint), t)
+	}
 	seq, err := c.store.addNodeMessage(roleEvent, line, "", parent, true)
 	if err != nil {
 		return

@@ -43,13 +43,15 @@ type listItem struct {
 // listAction is one of a block's actions as its button shows it: the
 // words are code's, One for one item, Many with {n} for how many.
 type listAction struct {
-	Name    string   `json:"name"`
-	One     string   `json:"one"`
-	Many    string   `json:"many"`
-	Tool    string   `json:"tool"`           // server/tool
-	Args    []string `json:"args,omitempty"` // the fixed args, a line each, for the confirm
-	Hint    string   `json:"hint,omitempty"` // the author's label; never on an external block
-	Confirm bool     `json:"confirm,omitempty"`
+	Name string   `json:"name"`
+	One  string   `json:"one"`
+	Many string   `json:"many"`
+	Tool string   `json:"tool"`           // server/tool
+	Args []string `json:"args,omitempty"` // the fixed args, a line each, for the confirm
+	Hint string   `json:"hint,omitempty"` // the author's label
+	// HintExternal: the hint is on an external block, someone else's words may have written it: shown marked
+	HintExternal bool `json:"hintExternal,omitempty"`
+	Confirm      bool `json:"confirm,omitempty"`
 }
 
 // pageList is a List of a block the user may pick items in: the List's
@@ -378,11 +380,8 @@ func (c *core) blockLists(b *nodefile.Block, data map[string]any, lang string) [
 func (c *core) listAction(name string, a nodefile.Action, external bool, lang string) listAction {
 	_, t := c.actionTool(a.Tool)
 	one, many := actionWords(t, a.Tool, a.Args, lang)
-	la := listAction{Name: name, One: one, Many: many, Tool: buttonText(a.Tool, 80), Args: argLines(a.Args, lang, 0), Confirm: destructive(t)}
-	if !external {
-		la.Hint = buttonText(a.Label, nodefile.ActionLabelMax)
-	}
-	return la
+	return listAction{Name: name, One: one, Many: many, Tool: buttonText(a.Tool, 80), Args: argLines(a.Args, lang, 0), Confirm: destructive(t),
+		Hint: buttonText(a.Label, nodefile.ActionLabelMax), HintExternal: external && a.Label != ""}
 }
 
 // blockSourceRows are the rows of a source of a node's block, as the

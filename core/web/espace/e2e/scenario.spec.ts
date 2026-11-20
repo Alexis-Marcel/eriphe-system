@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
 
 // The epic's acceptance scenario (#625), its steps played in the
 // workspace against the test core of TestEspaceScenario: faked tools, a
@@ -11,7 +11,10 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 // document.
 
 const password = "correct horse battery"; // testPassword, core/web_test.go
-const external = "Contenu extérieur"; // what the page names a node someone else's words wrote
+// A node someone else's words titled (the urgent mail): its title is shown
+// as it is, marked with ⚠, never replaced.
+const mailTitle = "Urgent : la prod renvoie des 500";
+const external = `${mailTitle} ⚠`; // how a page and the bar name it
 
 test.describe.configure({ mode: "serial" });
 
@@ -94,19 +97,35 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(page.locator(".gr-node")).toHaveCount(before);
 
   // 6. A monitor opens a node: an urgent mail. Its bubble says it waits
-  // for the user, and its title, someone else's words, never shows.
+  // for the user, and its title, someone else's words, shows as it is,
+  // in amber with its ⚠: never replaced, never passing for a trusted one.
   const mail = (await (await request.post("/e2e/mail")).json()).id as string;
   const waiting = page.locator(`.gr-node.yours[data-node="${mail}"]`);
   await expect(waiting).toHaveCount(1);
   await expect(waiting.locator(".gr-label em.yours")).toHaveText("t'attend");
   await shot(page, "waiting");
-  await expect(page.getByText("Urgent : la prod renvoie des 500")).toHaveCount(0);
+  await expect(waiting).toHaveClass(/title-ext/);
+  await expect(waiting.locator(".gr-label b")).toContainText(mailTitle);
+  await expect(waiting.locator(".gr-label .ext-mark")).toHaveAttribute("title", "Titre écrit après une lecture extérieure");
+  await expect(waiting.locator(".gr-core")).toHaveAttribute("aria-label", external);
+  await expect(page.getByText("Contenu extérieur")).toHaveCount(0);
 
   // 7. The mail node opens with its triage and its draft.
   await openMail(page, mail);
   const mailPage = page.locator(`article.pg[aria-label="${external}"]`);
   await expect(mailPage).toContainText("Tri");
   await expect(mailPage).toContainText("À écrire.");
+  // Its header: the title in amber with its ⚠, the « extérieur » badge on
+  // the same line, no line of its own.
+  const head = mailPage.locator(".pg-title h2");
+  await expect(head.locator(".title-ext")).toContainText(mailTitle);
+  await expect(head.locator(".ext-mark")).toBeVisible();
+  await expect(head.locator(".pg-badge.warn")).toHaveText("extérieur");
+  await expect(mailPage.locator(".pg-kicker .pg-badge.warn")).toHaveCount(0);
+  const [titleBox, badgeBox] = [await head.locator(".title-ext").boundingBox(), await head.locator(".pg-badge.warn").boundingBox()];
+  expect(Math.abs(titleBox!.y + titleBox!.height / 2 - (badgeBox!.y + badgeBox!.height / 2))).toBeLessThan(10);
+  await settledBox(mailPage);
+  await shot(page, "untrusted-title");
 
   // 8. A draft with its « Envoyer ? » card, the production view beside it,
   // a research child running.
@@ -199,7 +218,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   await page.locator(".hud-archives .hud-icon").click();
   const archived = page.locator(".hud-arch li");
   await expect(archived).toHaveCount(1);
-  await expect(archived).toContainText(external);
+  await expect(archived).toContainText(mailTitle);
+  await expect(archived.locator(".ext-mark")).toBeVisible();
   await expect(archived).toContainText("avec 2 bulles");
   await page.locator(".hud-archives .hud-icon").click();
 
@@ -456,13 +476,20 @@ test("the workspace as the user left it", async ({ page }) => {
   await expect(core).toBeVisible();
   await settled(node);
   const from = await at(node);
-  const box = (await core.boundingBox())!;
-  const placed = page.waitForResponse((r) => r.url().endsWith("/place") && r.request().method() === "PUT");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width / 2 + i * 12, box.y + box.height / 2 + i * 6);
-  await page.mouse.up();
-  expect((await placed).status()).toBe(204);
+  // A drag the graph took for something else (a bubble still easing under
+  // the pointer) places nothing: dragged again, at most three times.
+  let placed: Response | null = null;
+  for (let tries = 0; !placed && tries < 3; tries++) {
+    await settled(node);
+    const box = (await core.boundingBox())!;
+    const put = page.waitForResponse((r) => r.url().endsWith("/place") && r.request().method() === "PUT", { timeout: 5_000 }).catch(() => null);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width / 2 + i * 12, box.y + box.height / 2 + i * 6);
+    await page.mouse.up();
+    placed = await put;
+  }
+  expect(placed?.status()).toBe(204);
   await expect.poll(async () => (await at(node))[0]).not.toBeCloseTo(from[0], 0);
   const dropped = await settled(node);
 
@@ -523,13 +550,16 @@ async function home(page: Page) {
     // its close button on screen
     for (let i = 0; i < n; i++) await settledBox(pages.nth(i));
     let x: Locator | null = null;
+    let left = false; // a page that was fading out when counted is gone
     await expect
       .poll(async () => {
+        if ((await pages.count()) < n) return (left = true);
         const order = [page.locator("article.pg.talking"), ...Array.from({ length: n }, (_, i) => pages.nth(i))];
         for (const pg of order) if ((await pg.count()) && (await inView(pg.first().locator(".pg-x")))) return !!(x = pg.first().locator(".pg-x"));
         return false;
       })
       .toBe(true);
+    if (left) continue;
     await x!.click();
     await expect(pages).toHaveCount(n - 1);
   }
@@ -556,12 +586,15 @@ async function openMail(page: Page, id: string) {
 }
 
 // settledBox waits until a page stopped moving (the camera and its spring
-// at rest).
+// at rest); one that left meanwhile (a page still fading out when it was
+// counted) is settled.
 async function settledBox(el: Locator): Promise<void> {
-  let last = await el.boundingBox();
+  const box = () => el.boundingBox({ timeout: 2_000 }).catch(() => null);
+  let last = await box();
   for (let i = 0; i < 40; i++) {
+    if (!(await el.count())) return;
     await el.page().waitForTimeout(150);
-    const now = await el.boundingBox();
+    const now = await box();
     if (last && now && Math.abs(now.x - last.x) + Math.abs(now.y - last.y) + Math.abs(now.width - last.width) < 0.5) return;
     last = now;
   }
@@ -654,8 +687,12 @@ test("the workspace on a small screen", async ({ page }) => {
   const titles = await rows.locator("b").allTextContents();
   expect(titles.indexOf("Premier article")).toBeGreaterThan(titles.indexOf("Substack"));
   expect(titles.indexOf("Plan du premier article")).toBeGreaterThan(titles.indexOf("Premier article"));
-  // the archived mail is not there; its title never was
-  await expect(page.getByText("Urgent : la prod renvoie des 500")).toHaveCount(0);
+  // the archived mail is not there: in the archives, its title marked
+  await expect(rows.filter({ hasText: mailTitle })).toHaveCount(0);
+  await page.locator(".hud-archives .hud-icon").click();
+  await expect(page.locator(".hud-arch li").filter({ hasText: mailTitle }).locator(".ext-mark")).toBeVisible();
+  await shot(page, "phone-archives");
+  await page.locator(".hud-archives .hud-icon").click();
 
   // nor the prod's page, its child
   await expect(rows.filter({ hasText: "Production" })).toHaveCount(0);

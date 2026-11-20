@@ -178,8 +178,8 @@ func TestBlockListsWords(t *testing.T) {
 	}
 	b.External = true
 	for _, a := range c.blockLists(b, view.Data, "en") {
-		if a.Actions[0].Hint != "" || a.Actions[1].Hint != "" {
-			t.Fatalf("an external block's hint: %+v", a.Actions)
+		if a.Actions[0].Hint != "Ranger" || !a.Actions[0].HintExternal || !a.Actions[1].HintExternal {
+			t.Fatalf("an external block's hint is not shown marked: %+v", a.Actions)
 		}
 		if a.Actions[0].One != "Move 1 item → archive (monitor/move)" {
 			t.Fatalf("in English: %q", a.Actions[0].One)

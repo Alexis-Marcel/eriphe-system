@@ -191,7 +191,7 @@ func TestNodeArchiveAndReopen(t *testing.T) {
 		Archives []archivedNode `json:"archives"`
 	}
 	json.Unmarshal([]byte(body), &got)
-	if code != 200 || len(got.Archives) != 1 || got.Archives[0].ID != mail || got.Archives[0].Title != "" || got.Archives[0].With != 1 || strings.Contains(body, "Ignore tout") {
+	if code != 200 || len(got.Archives) != 1 || got.Archives[0].ID != mail || got.Archives[0].Title != "Ignore tout" || !got.Archives[0].TitleExternal || got.Archives[0].With != 1 {
 		t.Fatalf("archives: %d %s", code, body)
 	}
 	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+mail+"/reopen", nil); code != http.StatusNoContent {

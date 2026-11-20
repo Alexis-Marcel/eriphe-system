@@ -6,7 +6,8 @@ import { useWords } from "../i18n";
 import { Page } from "../page/Page";
 import { BOTTOM, boxAt, edgeMark, frameAll, framePages, pageMax, TOP, type Box, type Cam } from "./camera";
 import { bornBeside, constellation, edgePush, edgeStep, leash, simulate, tether, TETHER, type Pin, type Pos, type Pt } from "./layout";
-import { codeOf, labelBox, radiusOf, titleOf, waits, weight } from "./model";
+import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
+import { ExtMark } from "./Title";
 
 // The graph (#633): every node a bubble, a subject bigger than its own,
 // their links; an open node is its page, drawn right where its bubble was,
@@ -394,7 +395,8 @@ export function Graph({ live }: { live: boolean }) {
             <Bubble
               key={x.id}
               x={x}
-              title={titleOf(x, external)}
+              title={plainTitle(x, external)}
+              said={titleOf(x, external)}
               d={d}
               r={rOf(x)}
               at={at(x.id)}
@@ -504,7 +506,7 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
 // Bubble is one node: its core (a click opens its page; with ⌘ or shift,
 // beside the others), a ring for what runs or waits, its label.
 function Bubble(p: {
-  x: GraphNode; title: string; d: number; r: number; at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number; waitsWord: string;
+  x: GraphNode; title: string; said: string; d: number; r: number; at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number; waitsWord: string;
   onGrab: (e: PtrEvent) => void; onOpen: (beside: boolean) => void;
 }) {
   const { x, d, r } = p;
@@ -513,7 +515,7 @@ function Bubble(p: {
   const R = r + (d === 0 ? 12 : 6);
   const opacity = p.open ? 0 : p.dim ? (d === 0 ? 0.42 : 0.28) : x.state === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
-  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.state, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external"]
+  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.state, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.titleExternal && "title-ext"]
     .filter(Boolean)
     .join(" ");
   return (
@@ -537,12 +539,15 @@ function Bubble(p: {
         style={{ width: r * 2, height: r * 2 }}
         onPointerDown={p.onGrab}
         onClick={(e) => p.onOpen(e.metaKey || e.ctrlKey || e.shiftKey)}
-        aria-label={x.line && run ? `${p.title} : ${x.line}` : p.title}
+        aria-label={x.line && run ? `${p.said} : ${x.line}` : p.said}
       >
         {d === 0 ? <span className="gr-code">{codeOf(p.title)}</span> : x.state === "done" ? <span className="gr-glyph">✓</span> : null}
       </button>
       <span className="gr-label" style={{ marginTop: R + (d === 0 ? 14 : 8) }}>
-        <b>{p.title}</b>
+        <b>
+          {p.title}
+          {x.titleExternal && <ExtMark />}
+        </b>
         {x.line && run && !p.dim && <em className="runs">{x.line}</em>}
         {yours && !run && <em className="yours">{p.waitsWord}</em>}
       </span>

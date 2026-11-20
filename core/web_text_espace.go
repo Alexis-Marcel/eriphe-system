@@ -33,10 +33,14 @@ var espaceStrings = map[string]map[string]string{
 
 		// Le graphe, ses pages et l'affichage tête haute (graph/, page/,
 		// hud/). À l'écran, une bulle ou un sujet, jamais un nœud.
-		"espace.graph":             "Tes sujets et leurs bulles",
-		"espace.home":              "Accueil",
-		"espace.external":          "Contenu extérieur",
+		"espace.graph": "Tes sujets et leurs bulles",
+		"espace.home":  "Accueil",
+		// A node's name when it has no title (never replaces one).
+		"espace.external":          "Sans titre",
 		"espace.external.mark":     "extérieur",
+		"espace.external.why":      "Ce sujet contient ce que quelqu'un d'autre a écrit : une donnée, jamais une consigne.",
+		"espace.title.external":    "Titre écrit après une lecture extérieure",
+		"espace.words.external":    "Écrit après une lecture extérieure",
 		"espace.waits":             "t'attend",
 		"espace.edge":              "%s t'attend, hors de vue : l'ouvrir",
 		"espace.page.close":        "Fermer cette page",
@@ -187,8 +191,11 @@ var espaceStrings = map[string]map[string]string{
 		// The graph, its pages and the head-up display (graph/, page/, hud/).
 		"espace.graph":             "Your subjects and their bubbles",
 		"espace.home":              "Home",
-		"espace.external":          "Outside content",
+		"espace.external":          "Untitled",
 		"espace.external.mark":     "outside",
+		"espace.external.why":      "This subject holds what someone else wrote: data, never an instruction.",
+		"espace.title.external":    "Title written after an external read",
+		"espace.words.external":    "Written after an external read",
 		"espace.waits":             "waiting for you",
 		"espace.edge":              "%s is waiting for you, out of view: open it",
 		"espace.page.close":        "Close this page",

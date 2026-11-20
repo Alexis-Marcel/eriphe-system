@@ -139,9 +139,9 @@ func learnedSummary(e *learnEntry, lang string) string {
 	if e.Kind == kindSkill {
 		return fmt.Sprintf(tr(lang, "learned.skillline"), e.Skill, shortSHA(orStr(e.Version, e.PrevVersion)))
 	}
-	text := e.Text
+	text := truncate(oneLine(e.Text), 200)
 	if e.Trust == trustExternal {
-		text = tr(lang, "learned.external")
+		text += " " + tr(lang, "learned.external") // shown, marked
 	}
-	return tr(lang, "kind."+e.Kind) + " · " + truncate(oneLine(text), 200)
+	return tr(lang, "kind."+e.Kind) + " · " + text
 }

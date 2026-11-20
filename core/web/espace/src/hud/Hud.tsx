@@ -6,7 +6,7 @@ import { archives, reopen, type ArchivedNode } from "../data/api";
 import { localURL } from "../data/presence";
 import { dropNote, openPage, setTheme, step, store, useGraph } from "../data/store";
 import { STREAM_GRACE } from "../data/stream";
-import { titleOf } from "../graph/model";
+import { NodeTitle } from "../graph/Title";
 import { useWords } from "../i18n";
 
 // The head-up display (#633), with no bar: the graph takes the whole
@@ -120,7 +120,9 @@ function Archives() {
                   return (
                     <li key={x.id}>
                       <span>
-                        <b>{titleOf(x, external)}</b>
+                        <b>
+                          <NodeTitle x={x} fallback={external} />
+                        </b>
                         <em>
                           {at ? t("espace.archives.at", at) : ""}
                           {x.with ? ` · ${x.with === 1 ? t("espace.archives.with1") : t("espace.archives.with", x.with)}` : ""}

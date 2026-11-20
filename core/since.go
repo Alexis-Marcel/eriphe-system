@@ -68,6 +68,9 @@ type happening struct {
 	Args  []any  // the summary's details, written by code; a trKey is translated
 	Text  string // what it quotes: a prompt, a notification, an intention, a message
 	Trust string
+	// Unquoted are the Args when an external item is not quoted (a node's
+	// title someone else's words may have written); nil: Args.
+	Unquoted []any
 }
 
 // trKey is an argument of a summary that is itself a text to translate.
@@ -75,8 +78,12 @@ type trKey string
 
 // summary words the item in lang; an external text is quoted only if quote.
 func (h happening) summary(lang string, quote bool) string {
-	args := make([]any, len(h.Args))
-	for i, a := range h.Args {
+	src := h.Args
+	if h.Trust == feedExternal && !quote && h.Unquoted != nil {
+		src = h.Unquoted
+	}
+	args := make([]any, len(src))
+	for i, a := range src {
 		if k, ok := a.(trKey); ok {
 			a = tr(lang, string(k))
 		}
@@ -128,12 +135,12 @@ func nodeHappenings(c *core, from time.Time, limit int) ([]happening, error) {
 		if !x.Archived.IsZero() {
 			event = "archived"
 		}
-		h := happening{At: x.Updated, Kind: feedNode, Event: event, Ref: nodeRef(x.ID), Args: []any{x.ID, trKey("since.node.unquoted")}, Trust: feedOwn}
+		h := happening{At: x.Updated, Kind: feedNode, Event: event, Ref: nodeRef(x.ID), Args: []any{x.ID, "« " + packQuote(x.Title) + " »"},
+			Text: feedText(c.nodeFirstLine(x.ID)), Trust: feedOwn}
 		if x.External {
-			h.Trust = feedExternal
-		} else {
-			h.Args[1] = "« " + packQuote(x.Title) + " »"
-			h.Text = feedText(c.nodeFirstLine(x.ID))
+			// Quoted where it is quoted (the user's page, include_external),
+			// marked external; named only otherwise.
+			h.Trust, h.Unquoted = feedExternal, []any{x.ID, trKey("since.node.unquoted")}
 		}
 		out = append(out, h)
 	}

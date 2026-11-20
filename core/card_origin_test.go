@@ -75,16 +75,20 @@ func TestAccessCardOfNoNode(t *testing.T) {
 	}
 }
 
-// A task started on a tainted turn is not named: its title may be
-// someone else's words.
-func TestCardOriginNeverQuotesATaintedTitle(t *testing.T) {
+// A task started on a tainted turn is named, marked: its title may be
+// someone else's words, never passing for a trusted one.
+func TestCardOriginMarksATaintedTitle(t *testing.T) {
 	c := startCore(t)
 	waitingTask(c, "t-1")
 	c.store.set(taskTaintKey("t-1"), "external:mail")
 	id := c.newAccessAsk(accessQuestion{TaskID: "t-1", Permission: "p-1", Need: accessNeed{"github", catChange, ""}, Call: "github__merge_pull_request []", Input: `{}`})
 	_, p := c.liveCard(cardOf(t, c, cardAccess, id))
-	if o := p.Origin("en"); o.From != "" {
-		t.Errorf("a tainted title is quoted: %+v", o)
+	if o := p.Origin("en"); !o.External || !strings.HasPrefix(o.From, "task “") || !strings.HasSuffix(o.From, " ⚠ (written after an external read)”") {
+		t.Errorf("a tainted title is not marked: %+v", o)
+	}
+	c.store.set(taskTaintKey("t-1"), "")
+	if o := p.Origin("en"); o.External || strings.Contains(o.From, "⚠") || o.From == "" {
+		t.Errorf("a clean title is marked: %+v", o)
 	}
 }
 

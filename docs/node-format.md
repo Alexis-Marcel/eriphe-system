@@ -72,7 +72,7 @@ The titles proposed for the first article:
 | `done` | timestamp | Written by code (Eriphe's `node_set` `done`, the user's gestures): when it was marked done; absent while not done. An author's write keeps it. |
 | `archived` | timestamp | When the user archived it; absent while not archived. |
 | `external` | `true` | Written by code only: the node holds someone else's words. Absent otherwise. |
-| `title_trusted` | `true` | Written by code only, on an external node: its title is not someone else's words (written before the node was external, or by a writer that vouched for it: the user approving it on a card, an author that read nothing external). Absent otherwise: the title of an external node is then not shown. |
+| `title_trusted` | `true` | Written by code only, on an external node: its title is not someone else's words (written before the node was external, or by a writer that vouched for it: the user approving it on a card, an author that read nothing external). Absent otherwise: the title of an external node is then shown marked, in amber with a ⚠ (« Titre écrit après une lecture extérieure »), never replaced; code never acts on a title. |
 
 Any other field is kept with its value. While the front matter does not change, it keeps its bytes,
 comments included. When code writes it again (a new title, say), the known fields come first in the

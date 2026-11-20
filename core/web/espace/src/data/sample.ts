@@ -17,7 +17,7 @@ const nodes: GraphNode[] = [
   row("style", "Style des articles", { parent: "sub", state: "running", line: "3 articles lus" }),
   row("day", "Ma journée", { lifetime: "standing", created: at(700) }),
   row("mails", "Mails", { lifetime: "standing", created: at(650), links: ["sub"] }),
-  row("ext", "", { parent: "mails", external: true }),
+  row("ext", "Virement urgent à valider", { parent: "mails", external: true, titleExternal: true }),
 ];
 
 const page = (id: string): NodePage | null => {

@@ -46,12 +46,15 @@ type Inline =
 // A node a [[link]] opens, as the page names it: title is its title, or
 // the word for someone else's words (named false); archived, it opens
 // nothing.
-export type WikiTarget = { id: string; title: string; named: boolean; archived?: boolean };
+// A target's title is shown as it is; external: it may be someone else's
+// words, marked so (⚠, and Wiki.external in its tooltip and name).
+export type WikiTarget = { id: string; title: string; named: boolean; external?: boolean; archived?: boolean };
 export type Wiki = {
   find: (name: string) => WikiTarget | undefined;
   open: (id: string) => void;
   none: string; // the tooltip of a name no node has
   archived: (title: string) => string; // the tooltip of an archived one
+  external?: string; // what the mark of a title someone else's words may have written says
 };
 export type WikiLink = { name: string; shown?: string };
 
@@ -248,17 +251,22 @@ function wikiPiece(p: Extract<Inline, { t: "wiki" }>, ctx: Ctx, k: string): Reac
       </span>
     );
   // The real target, whatever the words: its tooltip, and its name to a
-  // screen reader when the words are others.
-  const label = words === to.title ? undefined : `${words} (${to.title})`;
+  // screen reader when the words are others; marked when its title may be
+  // someone else's words.
+  const target = to.external ? `${to.title} ⚠ ${wiki.external ?? ""}`.trim() : to.title;
+  const label = words === to.title && !to.external ? undefined : words === to.title ? target : `${words} (${target})`;
+  const cls = to.external ? " ext" : "";
   if (to.archived)
     return (
-      <span key={k} className="a2-wiki archived" title={wiki.archived(to.title)} aria-label={label && wiki.archived(label)}>
+      <span key={k} className={`a2-wiki archived${cls}`} title={wiki.archived(target)} aria-label={label && wiki.archived(label)}>
         {words}
+        {to.external && <span aria-hidden="true"> ⚠</span>}
       </span>
     );
   return (
-    <button key={k} type="button" className="a2-wiki" data-node={to.id} title={to.title} aria-label={label} onClick={() => wiki.open(to.id)}>
+    <button key={k} type="button" className={`a2-wiki${cls}`} data-node={to.id} title={target} aria-label={label} onClick={() => wiki.open(to.id)}>
       {words}
+      {to.external && <span aria-hidden="true"> ⚠</span>}
     </button>
   );
 }

@@ -214,24 +214,25 @@ func asksItems(asks []accessQuestion) []string {
 func (c *core) callsOrigin(first accessQuestion, items []string, calls int, lang string) cardOrigin {
 	o := originParts{node: first.Node}
 	if o.node != "" {
-		o.title = c.cleanNodeTitle(o.node)
+		o.title, o.titleExt = c.titleOfNode(o.node)
 	}
-	from := o.from(lang)
-	// The item by its id and its source only when neither may be someone
-	// else's words: a source of a trusted server, calls kept clean; else
-	// code's words alone.
-	named := first.Tainted == "" && c.trustedItemSource(first.Node, first.Source)
+	from, ext := o.from(lang)
+	// The item by its id and its source, always: marked when either may
+	// be someone else's words (not a source of a trusted server, or calls
+	// kept on a tainted turn).
+	itemExt := first.Tainted != "" || !c.trustedItemSource(first.Node, first.Source)
 	var item string
 	switch {
-	case len(items) > 1 && named:
-		item = fmt.Sprintf(tr(lang, "card.from.items"), len(items), truncate(first.Source, 60))
+	case len(items) > 1 && first.Source != "":
+		item = fmt.Sprintf(tr(lang, "card.from.items"), len(items), markedWords(first.Source, itemExt, lang))
 	case len(items) > 1:
 		item = fmt.Sprintf(tr(lang, "card.from.itemsn"), len(items))
-	case named:
-		item = fmt.Sprintf(tr(lang, "card.from.item"), truncate(oneLine(first.Item), 80), truncate(first.Source, 60))
+	case first.Item != "" && first.Source != "":
+		item = fmt.Sprintf(tr(lang, "card.from.item"), truncate(oneLine(first.Item), 80), markedWords(first.Source, itemExt, lang))
 	default:
 		item = tr(lang, "card.from.itemn")
 	}
+	ext = ext || itemExt && first.Source != ""
 	if from != "" {
 		from += " · "
 	}
@@ -239,7 +240,7 @@ func (c *core) callsOrigin(first accessQuestion, items []string, calls int, lang
 	if calls > 1 {
 		yes = fmt.Sprintf(tr(lang, "card.yes.calls"), calls)
 	}
-	return cardOrigin{Node: first.Node, From: from + item, Yes: yes}
+	return cardOrigin{Node: first.Node, From: from + item, Yes: yes, External: ext}
 }
 
 // trustedItemSource tells whether a node's source is read from a server

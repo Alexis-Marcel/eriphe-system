@@ -33,12 +33,14 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
         const r = page.refs?.[name];
         if (!r) return undefined;
         const n = nodes[r.id];
-        const title = n ? n.title : r.title;
-        return { id: r.id, title: title || external, named: Boolean(title), archived: r.archived };
+        const title = (n ? n.title : r.title) || external;
+        const marked = n ? n.titleExternal : r.titleExternal;
+        return { id: r.id, title, named: true, external: Boolean(marked), archived: r.archived };
       },
       open: (id) => onOpen?.(id),
       none: t("espace.wiki.none"),
       archived: (title) => t("espace.wiki.archived", title),
+      external: t("espace.title.external"),
     };
   }, [page, nodes, onOpen, t]);
   const [adapter] = useState<Adapter>(() => createAdapter(lang));
@@ -121,8 +123,12 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
             );
           const s = surfaces.find((x) => x.id === p.surface);
           return (
-            <section key={p.surface} className="a2-block" data-surface={p.surface}>
-              {p.block.external && <span className="a2-text-mark">{t("espace.external.mark")}</span>}
+            <section key={p.surface} className={`a2-block${p.block.external ? " ext" : ""}`} data-surface={p.surface}>
+              {p.block.external && (
+                <span className="a2-block-mark" title={t("espace.external.why")}>
+                  {t("espace.external.mark")}
+                </span>
+              )}
               {s && <SurfaceView surface={s} />}
             </section>
           );

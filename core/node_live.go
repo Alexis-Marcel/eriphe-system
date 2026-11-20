@@ -479,9 +479,9 @@ func (c *core) monitorRaise(m *monitor, kind string, p map[string]any) {
 	}
 	for _, id := range c.nodesFollowing(m.Name) {
 		lang := c.userLang()
-		title := c.cleanNodeTitle(id) // "" when the node may hold someone else's words: its id then
-		c.attend(attentionItem{Ref: nodeRef(id), Weight: weightBlocksATask, Why: fmt.Sprintf(tr(lang, key), m.Name, cmp.Or(title, id)),
-			Source: "monitor:" + m.Name, tainted: !c.trustsServer(m.Spec.Server) || title == ""})
+		title, ext := c.titleOfNode(id) // shown, marked when it may be someone else's words; its id when none
+		c.attend(attentionItem{Ref: nodeRef(id), Weight: weightBlocksATask, Why: fmt.Sprintf(tr(lang, key), m.Name, cmp.Or(markedTitle(title, ext, lang), id)),
+			Source: "monitor:" + m.Name, tainted: !c.trustsServer(m.Spec.Server) || ext})
 	}
 }
 

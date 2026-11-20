@@ -22,7 +22,8 @@
 //     external, or by a writer that vouched for it (nodefile's
 //     VouchTitle: the user, an author not tainted). Each write settles
 //     it (settleTitle): fail-closed, a title written on an external node
-//     by a writer that did not vouch is not trusted.
+//     by a writer that did not vouch is not trusted. Not trusted, it is
+//     shown as it is and marked so (TitleExternal), never replaced.
 //   - At start, the files are compared to the index: a file changed
 //     outside Eriphe is committed as a version of its own (author
 //     "outside"), reindexed and reported.
