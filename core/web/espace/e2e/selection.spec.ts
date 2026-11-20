@@ -42,7 +42,10 @@ test("pick two rows and archive them", async ({ page, request }) => {
   await button.click();
 
   await expect(pg.locator(".a2-pickdone")).toHaveText("2 déplacés");
-  await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).moved).toEqual([["b1", "b3"]]);
+  // The mailbox's moves only: the scenario, on the same test core, moves mails of its own.
+  await expect
+    .poll(async () => ((await (await request.get("/e2e/tools")).json()).moved as string[][]).filter((ids) => ids.some((id) => /^b\d$/.test(id))))
+    .toEqual([["b1", "b3"]]);
   // The source read again: what was moved left the list.
   await expect(rows).toHaveCount(2);
   await expect(bar).toHaveCount(0);
