@@ -115,7 +115,7 @@ type graphNode struct {
 	Done     *time.Time `json:"done,omitempty"`
 	External bool       `json:"external,omitempty"`
 	Version  int        `json:"version"`
-	Waits    bool       `json:"waits,omitempty"` // one of its cards waits for the user
+	Waits    bool       `json:"waits,omitempty"` // one of its cards waits for the user, or a source marked attention lists items (node_attention.go)
 	Line     string     `json:"line,omitempty"`  // while it runs: its task's last word of where it is
 }
 

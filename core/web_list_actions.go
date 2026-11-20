@@ -23,7 +23,8 @@ import (
 //   - The ids must be items the source lists now (its last read, else its
 //     snapshot): none is guessed, and the tool gets each as the source
 //     gave it.
-//   - The tool's access policy holds: never is refused; on approval, the
+//   - The tool's access policy holds: never is refused (but a tool only the
+//     user's gesture runs, catalogFacts.gesture, which the click runs); on approval, the
 //     click is the user's yes, given on the exact call the page showed;
 //     free runs. Each is kept in the decisions' journal, by the user, and
 //     in the node's trace, in code's words (never the items' titles,
