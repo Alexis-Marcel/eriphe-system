@@ -105,7 +105,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
           ? (surface, list, action, ids) => act(page.node.id, surface.slice(page.node.id.length + 2), list.component, action.name, page.version, ids)
           : undefined,
       kept,
-      open: latest && live ? (surface, list, item, yes) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item, yes) : undefined,
+      open: latest && live ? (surface, list, item, yes, tool) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item, yes, tool) : undefined,
       opened,
     };
   }, [latest, live, page, rows, kept, opened]);

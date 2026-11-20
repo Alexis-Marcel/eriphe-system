@@ -67,6 +67,7 @@ func TestItemOpenChecked(t *testing.T) {
 		"is not a read":              `{"tool": "monitor/send", "id": "id"}`,
 		"not a tool of the source's": `{"tool": "github/get_issue", "id": "id"}`,
 		"items' open is":             `{"tool": "message", "id": "id"}`,
+		"requires more than id":      `{"tool": "monitor/thread", "id": "id"}`,
 	} {
 		if err := write(open); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v, want %q", open, err, want)
@@ -131,7 +132,14 @@ func TestItemOpenPolicy(t *testing.T) {
 	if got := openedNow(fm); len(got) != 0 {
 		t.Fatalf("it ran before the yes: %v", got)
 	}
-	code, out = gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2", Yes: true})
+	// A yes for another call than the one shown: nothing runs.
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2", Yes: true, Tool: "monitor/message"}); code != http.StatusConflict {
+		t.Fatalf("a yes for another call: %d", code)
+	}
+	if got := openedNow(fm); len(got) != 0 {
+		t.Fatalf("it ran on a yes for another call: %v", got)
+	}
+	code, out = gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2", Yes: true, Tool: "monitor/letter"})
 	if code != http.StatusOK || out["body"] != "Le texte de m2" {
 		t.Fatalf("on the yes: %d %v", code, out)
 	}
@@ -142,7 +150,7 @@ func TestItemOpenPolicy(t *testing.T) {
 
 	c.pool.sync(setServer(c, "monitor", func(s *Server) { s.Exceptions = map[string]string{"letter": gridNever} }))
 	waitStatus(t, c.pool.get("monitor"), statusReady)
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2", Yes: true}); code != http.StatusForbidden {
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2", Yes: true, Tool: "monitor/letter"}); code != http.StatusForbidden {
 		t.Fatalf("never: %d", code)
 	}
 	if got := openedNow(fm); len(got) != 1 {

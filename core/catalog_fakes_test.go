@@ -158,6 +158,15 @@ func (m *fakeMonitor) server() *mcp.Server {
 	}
 	mcp.AddTool(s, &mcp.Tool{Name: "message", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}}, readOne("message"))
 	mcp.AddTool(s, &mcp.Tool{Name: "letter", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}}, readOne("letter"))
+	// thread reads a message by its id and its folder, both required: no
+	// item is opened by its id alone with it.
+	mcp.AddTool(s, &mcp.Tool{Name: "thread", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: closedWorld}},
+		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+			ID     string `json:"id"`
+			Folder string `json:"folder"`
+		}) (*mcp.CallToolResult, map[string]any, error) {
+			return nil, map[string]any{"id": in.ID}, nil
+		})
 	// page reads the open web: no openWorldHint.
 	mcp.AddTool(s, &mcp.Tool{Name: "page", Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
 		func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, map[string]any, error) {

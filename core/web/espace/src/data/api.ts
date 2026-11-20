@@ -200,9 +200,9 @@ export type Opened = {
 };
 
 // openItem reads an item of a block's source in full, the user's gesture;
-// yes once they saw the call it asked for.
-export async function openItem(id: string, block: string, source: string, item: string, yes: boolean): Promise<Opened> {
-  const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, { block, source, item, yes });
+// yes once they saw the call it asked for, with that call's tool.
+export async function openItem(id: string, block: string, source: string, item: string, yes: boolean, tool?: string): Promise<Opened> {
+  const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, { block, source, item, yes, tool: tool ?? "" });
   if (r.status === 200 && r.data) return r.data;
   return { error: r.data?.error ?? String(r.status) };
 }

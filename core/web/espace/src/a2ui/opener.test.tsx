@@ -38,7 +38,7 @@ const messages = [
 let el: HTMLDivElement;
 let root: Root;
 let adapter: Adapter;
-let reads: { item: string; yes: boolean }[];
+let reads: { item: string; yes: boolean; tool?: string }[];
 let answer: (item: string, yes: boolean) => Opened;
 
 async function mount(actions: PickAction[] = []) {
@@ -56,8 +56,8 @@ async function mount(actions: PickAction[] = []) {
     list: (s, c) => (s === surface && c === "root" ? list : undefined),
     kept: new Map(),
     run: async () => ({ ok: true, text: "" }),
-    open: async (_s, _l, item, yes) => {
-      reads.push({ item, yes });
+    open: async (_s, _l, item, yes, tool) => {
+      reads.push({ item, yes, tool });
       return answer(item, yes);
     },
     opened: new Map<string, OpenState>(),
@@ -145,9 +145,35 @@ describe("an item opened in place", () => {
     await click(ask.querySelector("button")!);
     expect(reads).toEqual([
       { item: "m1", yes: false },
-      { item: "m1", yes: true },
+      { item: "m1", yes: true, tool: "mail/get" },
     ]);
     expect(el.querySelector(".a2-opentext")?.textContent).toBe("Le texte");
+  });
+
+  it("takes up a read under way when the page draws its blocks again meanwhile", async () => {
+    let done: (o: Opened) => void = () => undefined;
+    const later = new Promise<Opened>((r) => (done = r));
+    await mount();
+    const answerNow = answer;
+    answer = () => later as unknown as Opened;
+    await click(disclosures()[0]);
+    expect(el.querySelector(".a2-openwait")).not.toBeNull();
+    await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: surface } }]));
+    await act(async () => adapter.applyMessages(messages));
+    await act(async () => done(answerNow("m1", false)));
+    expect(el.querySelector(".a2-opentitle")?.textContent).toBe("Facture");
+    expect(reads).toHaveLength(1);
+  });
+
+  it("sends the yes with the call it was asked for", async () => {
+    answer = (_item, yes) => (yes ? { body: "ok" } : { ask: { tool: "mail/get", args: [] } });
+    await mount();
+    await click(disclosures()[0]);
+    await click(el.querySelector(".a2-openask button")!);
+    expect(reads).toEqual([
+      { item: "m1", yes: false, tool: undefined },
+      { item: "m1", yes: true, tool: "mail/get" },
+    ]);
   });
 
   it("stays open when the page draws its blocks again", async () => {

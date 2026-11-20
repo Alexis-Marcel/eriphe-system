@@ -16,7 +16,9 @@ import type { Picks } from "./picks";
 // a button or a link of the row does not open it.
 
 // OpenState is a row's: open or not, and what was read.
-export type OpenState = { open: boolean; read?: Opened; loading?: boolean };
+// pending is the read under way, kept with it: a row drawn again while it
+// reads (the page read again) takes it up.
+export type OpenState = { open: boolean; read?: Opened; loading?: boolean; pending?: Promise<Opened> };
 
 const INTERACTIVE = "button, a, input, label, select, textarea, [role=button]";
 
@@ -27,11 +29,29 @@ export function Opener({ surface, list, picks, item, children }: { surface: stri
   useEffect(() => void picks.opened?.set(key, st), [picks.opened, key, st]);
   const panel = useId();
 
-  const read = async (yes: boolean) => {
-    setSt((s) => ({ ...s, open: true, loading: true }));
-    const r = await (picks.open?.(surface, list, item.id, yes) ?? Promise.resolve<Opened>({ error: t("espace.open.error") })).catch(() => ({ error: t("espace.open.error") }));
-    const next = { open: true, read: r, loading: false };
-    picks.opened?.set(key, next); // kept at once: the page may have drawn the list again meanwhile
+  // A read under way, from this row or the one drawn before it: its
+  // answer, when it comes, is the row's, kept at once (the page may have
+  // drawn the list again meanwhile).
+  const pending = st.loading ? st.pending : undefined;
+  useEffect(() => {
+    if (!pending) return;
+    let here = true;
+    void pending.then((r) => {
+      const next = { open: true, read: r, loading: false };
+      picks.opened?.set(key, next);
+      if (here) setSt(next);
+    });
+    return () => {
+      here = false;
+    };
+  }, [pending, picks.opened, key]);
+
+  const read = (yes: boolean) => {
+    const p = (picks.open?.(surface, list, item.id, yes, yes ? st.read?.ask?.tool : undefined) ?? Promise.resolve<Opened>({ error: t("espace.open.error") })).catch(() => ({
+      error: t("espace.open.error"),
+    }));
+    const next = { ...st, open: true, loading: true, pending: p };
+    picks.opened?.set(key, next);
     setSt(next);
   };
   const toggle = () => {

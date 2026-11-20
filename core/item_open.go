@@ -89,6 +89,7 @@ type itemOpenIn struct {
 	Source string `json:"source"`
 	Item   string `json:"item"`
 	Yes    bool   `json:"yes"`
+	Tool   string `json:"tool"` // with yes: the tool of the call the user saw
 }
 
 // openNote is the item's note, as its row's: its group and note, and
@@ -177,6 +178,9 @@ func (c *core) openItem(ctx context.Context, id string, in itemOpenIn, lang stri
 		return openOut{}, http.StatusForbidden, tr(lang, "act.never")
 	}
 	ahead := c.freeAhead(name, input)
+	if !ahead && in.Yes && in.Tool != buttonText(o.Tool, 80) {
+		return openOut{}, http.StatusConflict, tr(lang, "act.changed") // the yes was for another call
+	}
 	if !ahead && !in.Yes {
 		return openOut{Ask: &openAsk{Tool: buttonText(o.Tool, 80), Args: argLines(input, lang, 0)}}, http.StatusOK, ""
 	}

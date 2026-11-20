@@ -35,7 +35,7 @@ export type Picks = {
   kept: Map<string, Kept>;
   // Reading an item in full, on a List whose source opens its items
   // (item_open.go), and what the page read, by surface, List and item.
-  open?: (surface: string, list: PickList, item: string, yes: boolean) => Promise<Opened>;
+  open?: (surface: string, list: PickList, item: string, yes: boolean, tool?: string) => Promise<Opened>;
   opened?: Map<string, OpenState>;
 };
 
