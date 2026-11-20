@@ -452,6 +452,9 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 			if err := sourceOK(b.Sources[src]); err != nil {
 				problems = append(problems, fmt.Sprintf("block %s: source %s: %v", name, src, err))
 			}
+			if err := c.openOK(b.Sources[src]); err != nil {
+				problems = append(problems, fmt.Sprintf("block %s: source %s: %v", name, src, err))
+			}
 		}
 		for _, act := range slices.Sorted(maps.Keys(b.Actions)) {
 			if err := c.actionOK(b.Actions[act]); err != nil {

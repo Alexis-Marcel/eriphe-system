@@ -3,7 +3,7 @@ import { createAdapter, type Adapter } from "../a2ui/adapter";
 import { Markdown, type Wiki } from "../a2ui/markdown";
 import { PicksContext, type Picks } from "../a2ui/picks";
 import { SurfaceView } from "../a2ui/Surfaces";
-import { act, ask, mark, type NodePage, type PickItem } from "../data/api";
+import { act, ask, mark, openItem, type NodePage, type PickItem } from "../data/api";
 import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Cards } from "../page/Cards";
@@ -94,6 +94,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
     });
   }, [latest, page]);
   const [kept] = useState<Picks["kept"]>(() => new Map());
+  const [opened] = useState<NonNullable<Picks["opened"]>>(() => new Map());
   const picks = useMemo<Picks>(() => {
     const lists = pickLists(page, (block, component) => (latest ? rows[sourceKey(page.node.id, block, component)] : undefined));
     return {
@@ -104,8 +105,10 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
           ? (surface, list, action, ids) => act(page.node.id, surface.slice(page.node.id.length + 2), list.component, action.name, page.version, ids)
           : undefined,
       kept,
+      open: latest && live ? (surface, list, item, yes, tool) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item, yes, tool) : undefined,
+      opened,
     };
-  }, [latest, live, page, rows, kept]);
+  }, [latest, live, page, rows, kept, opened]);
 
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   if (ps.length === 0) return <p className="pg-empty">{t("espace.page.empty")}</p>;

@@ -146,7 +146,7 @@ A source is one of:
 
 `every` is 1 to 1440 minutes (code's default when absent). A tool or a resource that lists things
 may say where its items are: `"items": {"path": "messages", "id": "id", "title": "subject",
-"detail": "from"}`. A source's name is lowercase letters, digits, `_` and `-`, 40 at most; it is not
+"detail": "from"}`, and how one is read in full (`open`, [Reading an item](#reading-an-item)). A source's name is lowercase letters, digits, `_` and `-`, 40 at most; it is not
 also a key of `data`, and `marks` is no source's or data key's name, nor `at` a source's (the
 snapshot's time). A source with `items` may say `"attention": true`: while it lists items, its
 node waits for the user (its bubble says « t'attend », as for a card); when it lists none, the
@@ -220,6 +220,23 @@ per section whose template's path filters the source's items by a field:
   `emptyText`. An action with `list` shows on its section only.
 
 A group is one line of 40 characters at most, without `[ ] / = !`.
+
+### Reading an item
+
+A source's `items` may say how one item is read in full: `"open": {"tool": "<server>/<tool>", "id":
+"<param>"}`, a read tool of the source's own server and its parameter that takes an item's id
+(nothing else required). Code checks it against the catalog when an author writes it.
+
+A row of a `List` bound to that source opens below itself on a click (or its disclosure button; a
+click on its box, a button or a link of the row does not), and closes the same way or by its ✕.
+Code reads the open again in the block as stored, checks that the id is one the source lists now,
+and calls the tool with it, as the source gave it, under the tool's access policy: never is
+refused; a free read that does not reach the open web runs; any other shows the call first, inline,
+and runs on the user's yes, given on the tool shown (logged as such). The click that opens is not the yes. The page shows
+what the tool said as text, never as HTML: its common fields (title or subject, from, date, body,
+text or content), the whole as JSON under « Détails », « extérieur » when the server is not trusted,
+and the item's note (« Classé « À supprimer » : … »). Nothing is written: no version, no trace,
+nothing the brain reads; the page keeps it for its session.
 
 ### Code's fields
 

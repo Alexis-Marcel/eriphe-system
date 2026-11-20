@@ -9,7 +9,7 @@ import { Day as DayView, cleanEvents, type Ghost } from "./day";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
-import { Pickable, useList, type Row } from "./picks";
+import { openable, Pickable, useList, type Row } from "./picks";
 import { HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
@@ -95,7 +95,8 @@ const List = createComponentImplementation(
   ({ props, buildChild, context }) => {
     // A list of a source's items eriphe-core told of (picks.tsx): one
     // that filters them shows only the rows it kept (a section); one some
-    // action of its block acts on lets the user pick rows in it.
+    // action of its block acts on lets the user pick rows in it; one whose
+    // source opens its items opens a row in place (opener.tsx).
     const surface = context.dataContext.surface?.id;
     const told = useList(surface, context.componentModel.id);
     let rows: Row[] = kids(props.children, buildChild).map((node, n) => ({ n, node }));
@@ -105,10 +106,11 @@ const List = createComponentImplementation(
     }
     if (!rows.length) return props.emptyText ? <p className="a2-empty">{props.emptyText}</p> : null;
     if (told?.pickable && surface) return <Pickable surface={surface} list={told.list} picks={told.picks} rows={rows} direction={props.direction ?? "vertical"} />;
+    const byN = new Map((told?.list.items ?? []).map((it) => [it.n, it]));
     return (
       <ul className={`a2-list a2-list-${props.direction ?? "vertical"}`}>
         {rows.map((r) => (
-          <li key={r.n}>{r.node}</li>
+          <li key={r.n}>{told && surface ? openable(surface, told.list, told.picks, r.node, byN.get(r.n)) : r.node}</li>
         ))}
       </ul>
     );

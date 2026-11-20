@@ -108,12 +108,29 @@ var ActionRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 // ActionLabelMax is the most runes of an action's label.
 const ActionLabelMax = 60
 
-// Items says where a listing source's items are and what each shows.
+// Items says where a listing source's items are and what each shows, and
+// how one is read in full (Open), if it may be.
 type Items struct {
-	Path   string `json:"path,omitempty"`
-	ID     string `json:"id"`
-	Title  string `json:"title,omitempty"`
-	Detail string `json:"detail,omitempty"`
+	Path   string    `json:"path,omitempty"`
+	ID     string    `json:"id"`
+	Title  string    `json:"title,omitempty"`
+	Detail string    `json:"detail,omitempty"`
+	Open   *ItemOpen `json:"open,omitempty"`
+}
+
+// ItemOpen is how one item of a source is read in full, when the user
+// opens its row: a read tool of the source's own server, and its
+// parameter that takes the item's id. What the tool takes is checked
+// against the catalog when an author writes it (the core's nodeGuard).
+type ItemOpen struct {
+	Tool string `json:"tool"`
+	ID   string `json:"id"`
+}
+
+// toolNameOK tells whether a tool's name is <server>/<tool>.
+func toolNameOK(name string) bool {
+	server, tool, ok := strings.Cut(name, "/")
+	return ok && server != "" && tool != "" && !strings.Contains(tool, "/")
 }
 
 // BlockError is what is wrong with a block, by its name.
@@ -554,6 +571,8 @@ func (s Source) check(name string) string {
 		return "source " + name + ": items needs id, each item's id"
 	case s.Attention && s.Items == nil:
 		return "source " + name + ": attention needs items: the node waits while there are some"
+	case s.Items != nil && s.Items.Open != nil && (s.Items.Open.ID == "" || !toolNameOK(s.Items.Open.Tool)):
+		return "source " + name + ": items' open is {\"tool\": \"<server>/<tool>\", \"id\": \"<its parameter that takes an item's id>\"}"
 	}
 	return ""
 }

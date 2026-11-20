@@ -122,9 +122,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(head.locator(".ext-mark")).toBeVisible();
   await expect(head.locator(".pg-badge.warn")).toHaveText("extérieur");
   await expect(mailPage.locator(".pg-kicker .pg-badge.warn")).toHaveCount(0);
+  await settledBox(mailPage); // measured at rest, not while the page opens
   const [titleBox, badgeBox] = [await head.locator(".title-ext").boundingBox(), await head.locator(".pg-badge.warn").boundingBox()];
   expect(Math.abs(titleBox!.y + titleBox!.height / 2 - (badgeBox!.y + badgeBox!.height / 2))).toBeLessThan(10);
-  await settledBox(mailPage);
   await shot(page, "untrusted-title");
 
   // 8. A draft with its « Envoyer ? » card, the production view beside it,

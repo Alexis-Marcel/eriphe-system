@@ -3136,8 +3136,8 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   addresses a Link may open. Each item of a source with `items` carries its note's fields
   (`_note`, `_state`, `_group`, `_external` when the note may carry someone else's words;
   `list_sections.go`). `lists` (`list_actions.go`): each List bound as a whole to the items of a
-  source that filters them (`filtered`: the page shows only its rows, code filters) or that an
-  action acts on (`component`, `source`), its rows (`items`: `n`, its place in the source's list,
+  source that filters them (`filtered`: the page shows only its rows, code filters), that an
+  action acts on, or whose source opens its items (`open`, `item_open.go`) (`component`, `source`), its rows (`items`: `n`, its place in the source's list,
   `id`, `title`, `detail`) and the actions' buttons (`actions`: `name`, `one`, `many` and `all`
   with `{n}`, the words code builds from the tool and its fixed args, `tool`, `args` a line each,
   `hint` the author's label (`hintExternal` on an external block: shown marked, in amber with a ⚠),
@@ -3205,6 +3205,16 @@ token in `X-CSRF-Token`:
   node's trace in code's words (never the items' titles); no turn. Then the source is read again;
   `200` `{text, done}` says in a line what was done (« 2 déplacés »), any other answer `{error}`,
   why not (`502` with the tool's error, as plain text, when it failed: for the call as a whole).
+- `POST /api/nodes/{id}/open` `{block, source, item, yes, tool}`: an item opened in place
+  (`item_open.go`), the user's gesture. The source's `items.open` is read again in the stored block
+  (`409` when it has none); the item must be one the source lists now (`400`). The tool (a read of
+  the source's own server, checked at write) is called with the item's id as the source gave it,
+  under its policy: never (or a call that must name its account) is `403`; a free read that does
+  not reach the open web runs; any other answers `{ask: {tool, args}}` and runs on a second click
+  with `yes` and that `tool` (`409` when the open changed since), logged by the user. `200` `{title, from, date, body, raw, external, note: {group, note,
+  external}}`: its common fields picked generically, the whole as JSON, `external` for a server not
+  trusted; `502` when the tool failed. Nothing is kept: no version, no trace, no journal of what it
+  said.
 - `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
   below it stops, and the cascade leaves the graph; `reopenNode`: back with what was archived with
   it and the archived parents it needs, in one commit).
