@@ -42,7 +42,7 @@ export function App({ boot }: { boot: Boot }) {
       store.setState({ exchange: sampleExchange(lang) });
       return;
     }
-    step(store, restore, boot.view, boot.places);
+    step(store, restore, boot.view);
     const stop = connect(store);
     const kept = keep(store);
     const quiet = startPresence({ tab, csrf: () => boot.csrf, onNotes: (ns) => step(store, applyNotes, ns) });

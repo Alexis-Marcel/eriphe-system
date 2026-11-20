@@ -73,14 +73,19 @@ brings the list back. The bar is the same.
 ## Move things
 
 Drag the background to look around, scroll or use two fingers to move, hold ⌘ or Ctrl with the
-wheel to zoom; a double click gives the view back to Eriphe. Drag a bubble, or a page by its head,
-and drop it: it stays there. A subject stays within reach of the others and a bubble near its subject:
-dragged too far it lags behind, and dropped there it comes back to the edge. Bring a bubble to the
-edge of the screen and the view follows.
+wheel to zoom; a double click gives the view back to Eriphe. The graph is alive: subjects push each
+other apart, a bubble stays close to its subject and linked subjects close to each other, those
+linked to nothing on the edge. Drag a bubble, or a page by its head: it passes over everything, and
+what is linked to it follows, less and less the further the link; nothing else moves. Drop it: it
+stays exactly there, and what was under it steps aside. A subject dragged far out in the void lags
+behind and, dropped there, comes back to the edge; a bubble stays near its subject. Bring a bubble to
+the edge of the screen and the view follows. A page that opens pushes bubbles aside; closed, they
+go back where they were.
 
-Your Eriphe keeps where you dropped things, the pages you left open and your light or dark choice
-(the sun or moon at the top; until you choose, the workspace follows your system): they come back
-the next time, on any of your screens.
+Where things are holds while the workspace is open, not after: a reload lays the graph out afresh.
+Your Eriphe keeps the pages you left open and your light or dark choice (the sun or moon at the top;
+until you choose, the workspace follows your system): they come back the next time, on any of your
+screens.
 
 ## Archive and reopen
 

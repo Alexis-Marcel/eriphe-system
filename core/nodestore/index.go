@@ -14,9 +14,9 @@ import (
 
 // The index, nodes.db: what must be fast, kept from the files. It is
 // rebuilt from them (and from the log, for the versions) when it is lost.
-// The node's state, its place on the graph and the notes on its items are
-// code's and the workspace's, not the files': a rebuilt index starts them
-// over (idle, no place, no note).
+// The node's state and the notes on its items are code's and the
+// workspace's, not the files': a rebuilt index starts them over (idle, no
+// note).
 
 // schemaVersion is the schema nodes.db is at; meta.schema_version says
 // it. A file at another version is refused, never changed.
@@ -67,9 +67,6 @@ const schema = `CREATE TABLE nodes (
 	  grp TEXT NOT NULL DEFAULT '',      -- its group: the section a view shows it in
 	  author TEXT NOT NULL, tainted TEXT NOT NULL DEFAULT '', noted INTEGER NOT NULL,
 	  PRIMARY KEY (id, source, item));
-	CREATE TABLE node_layout (
-	  id TEXT PRIMARY KEY, x REAL NOT NULL, y REAL NOT NULL,
-	  pinned INTEGER NOT NULL DEFAULT 0);
 	CREATE VIRTUAL TABLE node_fts USING fts5(id UNINDEXED, title, body,
 	  tokenize='unicode61 remove_diacritics 2');`
 
@@ -131,7 +128,7 @@ func openIndex(path string) (db *sql.DB, fresh bool, err error) {
 		}
 		// An index made before the text's links lacks them: they are
 		// added, and every node is indexed again from its file (its blob
-		// forgotten, reconcile reads it again), its state and place kept.
+		// forgotten, reconcile reads it again), its state kept.
 		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'node_refs'`).Scan(&n); err != nil {
 			db.Close()
 			return nil, false, err
@@ -141,6 +138,12 @@ func openIndex(path string) (db *sql.DB, fresh bool, err error) {
 				db.Close()
 				return nil, false, err
 			}
+		}
+		// An index made when the graph kept where bubbles were dropped
+		// has their table: nothing reads it any more.
+		if _, err := db.Exec(`DROP TABLE IF EXISTS node_layout`); err != nil {
+			db.Close()
+			return nil, false, err
 		}
 		return db, false, nil
 	case 0:

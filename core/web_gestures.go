@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"math"
 	"net/http"
 	"slices"
 	"strings"
@@ -26,9 +25,9 @@ import (
 //     user's alone (archiveNode, reopenNode);
 //   - an edit of a node's text in its .md tab, made on the version it was
 //     read at (a newer one is a conflict, never overwritten);
-//   - where a bubble was dropped (node_layout: no version), the pages open
-//     and the display settings (kv espace_view): the workspace as the user
-//     left it, on any of their screens.
+//   - the pages open and the display settings (kv espace_view): the
+//     workspace as the user left it, on any of their screens. Where the
+//     bubbles are is not kept: the graph lays itself out afresh.
 //
 // Every route is the workspace's session, its CSRF token in X-CSRF-Token.
 
@@ -38,8 +37,6 @@ func (w *web) gestureRoutes(mux *webMux) {
 	mux.Handle("POST /api/nodes/{id}/ask", w.auth(w.handleNodeAsk))
 	mux.Handle("POST /api/nodes/{id}/archive", w.auth(w.handleNodeArchive))
 	mux.Handle("POST /api/nodes/{id}/reopen", w.auth(w.handleNodeReopen))
-	mux.Handle("PUT /api/nodes/{id}/place", w.auth(w.handleNodePlace))
-	mux.Handle("DELETE /api/nodes/{id}/place", w.auth(w.handleNodePlace))
 	mux.Handle("GET /api/archives", w.auth(w.handleArchives))
 	mux.Handle("PUT /api/espace/view", w.auth(w.handleEspaceView))
 }
@@ -311,47 +308,6 @@ func (w *web) handleArchives(rw http.ResponseWriter, r *http.Request, _ *session
 	writeJSON(rw, http.StatusOK, map[string]any{"archives": out})
 }
 
-// Where things are.
-
-// placeIn is where a bubble was dropped: a root's spot, a child's offset
-// from its parent, in the graph's units.
-type placeIn struct {
-	X float64 `json:"x"`
-	Y float64 `json:"y"`
-}
-
-// placeMax bounds a place: far beyond any screen, never a number JSON
-// cannot carry back.
-const placeMax = 1e6
-
-// handleNodePlace is PUT /api/nodes/{id}/place (where the user dropped a
-// bubble) and DELETE (the layout places it again). No version, no turn.
-// 204; 400 for a place out of bounds; 404.
-func (w *web) handleNodePlace(rw http.ResponseWriter, r *http.Request, _ *session) {
-	sum, ok := w.gestureNode(rw, r)
-	if !ok {
-		return
-	}
-	if r.Method == http.MethodDelete {
-		w.c.nodes.Unplace(sum.ID)
-		rw.WriteHeader(http.StatusNoContent)
-		return
-	}
-	var in placeIn
-	if !gestureBody(rw, r, 1<<10, &in) {
-		return
-	}
-	if math.IsNaN(in.X) || math.IsNaN(in.Y) || math.Abs(in.X) > placeMax || math.Abs(in.Y) > placeMax {
-		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "a place out of bounds"})
-		return
-	}
-	if err := w.c.nodes.SetPlace(sum.ID, nodestore.Place{X: in.X, Y: in.Y}); err != nil {
-		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	rw.WriteHeader(http.StatusNoContent)
-}
-
 // espaceView is the workspace as the user left it: the pages open, the one
 // the console talked to, the last of Eriphe's shows it took (so that a page
 // the user closed does not open again with the next visit) and the display
@@ -428,20 +384,4 @@ func (w *web) handleEspaceView(rw http.ResponseWriter, r *http.Request, _ *sessi
 		log.Printf("espace: view: %v", err)
 	}
 	rw.WriteHeader(http.StatusNoContent)
-}
-
-// dropped are where the user dropped the bubbles still on the graph.
-func (c *core) dropped() map[string]placeIn {
-	out := map[string]placeIn{}
-	if c.nodes == nil {
-		return out
-	}
-	ps, err := c.nodes.Places()
-	if err != nil {
-		log.Printf("espace: places: %v", err)
-	}
-	for id, p := range ps {
-		out[id] = placeIn{X: p.X, Y: p.Y}
-	}
-	return out
 }

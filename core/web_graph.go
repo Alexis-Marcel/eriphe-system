@@ -60,12 +60,11 @@ func (w *web) handleEspace(rw http.ResponseWriter, r *http.Request, s *session) 
 
 // espaceBoot is what the app needs before its first paint.
 type espaceBoot struct {
-	Lang    string             `json:"lang"`
-	Name    string             `json:"name"`
-	CSRF    string             `json:"csrf"`
-	Strings map[string]string  `json:"strings"`
-	View    espaceView         `json:"view"`   // the pages open, the display settings (web_gestures.go)
-	Places  map[string]placeIn `json:"places"` // where the user dropped bubbles
+	Lang    string            `json:"lang"`
+	Name    string            `json:"name"`
+	CSRF    string            `json:"csrf"`
+	Strings map[string]string `json:"strings"`
+	View    espaceView        `json:"view"` // the pages open, the display settings (web_gestures.go)
 	// Setup says Eriphe cannot think yet: "noai" while its wizard was left
 	// for later (web_welcome.go), "nobrain" with no brain in the
 	// configuration; "" once it can. The console says it, and the way to
@@ -77,7 +76,7 @@ func (w *web) handleEspaceBoot(rw http.ResponseWriter, r *http.Request, s *sessi
 	lang := w.lang(r)
 	w.c.noteUserLang(lang) // Eriphe's lines follow it
 	b := espaceBoot{Lang: lang, Name: assistantName(), CSRF: s.CSRF, Strings: espaceWords(lang, assistantName()),
-		View: w.c.view(), Places: w.c.dropped(), Setup: w.setupState()}
+		View: w.c.view(), Setup: w.setupState()}
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(rw).Encode(b)

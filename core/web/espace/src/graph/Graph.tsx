@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as PtrEvent } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PtrEvent } from "react";
 import { AnimatePresence, motion, useMotionValueEvent, useSpring, type MotionValue } from "motion/react";
-import { place, type GraphNode } from "../data/api";
-import { closePage, depthOf, openPage, placeAt, step, store, subtree, talkTo, useGraph } from "../data/store";
+import type { GraphNode } from "../data/api";
+import { closePage, depthOf, openPage, step, store, subtree, talkTo, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Page } from "../page/Page";
-import { BOTTOM, boxAt, edgeMark, frameAll, framePages, pageMax, TOP, type Box, type Cam } from "./camera";
-import { bornBeside, constellation, edgePush, edgeStep, leash, simulate, tether, TETHER, type Pin, type Pos, type Pt } from "./layout";
+import { boxAt, edgeMark, frameAll, framePages, pageMax, type Box, type Cam } from "./camera";
+import { edgePush, edgeStep, Sim, type Pos, type Pt } from "./layout";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
 import { ExtMark, UnaskedMark } from "./Title";
 
@@ -13,9 +13,9 @@ import { ExtMark, UnaskedMark } from "./Title";
 // their links; an open node is its page, drawn right where its bubble was,
 // the others making room around it (layout.ts). Any number of pages open
 // (a ⌘- or shift-click opens one more); the console talks to one of them.
-// The user drags a bubble, or a page by its head: it stays where dropped,
-// and eriphe-core keeps the place (a subject's spot, a bubble's offset
-// from its parent) for every screen.
+// The user drags a bubble, or a page by its head: what is linked to it
+// follows, it stays where dropped and what is there steps aside, for the
+// session: nothing is kept, a reload lays the graph out afresh.
 // The camera frames the open pages, else the whole graph; a drag or the
 // wheel moves it by hand, a double click gives it back. A node that waits
 // for the user says it on its bubble (a ring that breathes, « t'attend »);
@@ -23,6 +23,10 @@ import { ExtMark, UnaskedMark } from "./Title";
 
 const ease = [0.2, 0.7, 0.2, 1] as const;
 const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;
+
+// sim is the graph's simulation, one for the page's life: it outlives the
+// graph's switch to the phone's list and back.
+const sim = new Sim();
 
 type Grab = { id: string; sx: number; sy: number; px: number; py: number; ox: number; oy: number; moved: boolean; raw?: Pt; edgeSince?: number };
 
@@ -40,8 +44,8 @@ export function Graph({ live }: { live: boolean }) {
     return () => removeEventListener("resize", on);
   }, []);
 
-  // The nodes in the order they were made: a new subject takes its slot
-  // in the constellation after the others.
+  // The nodes in a stable order (the order they were made): the layout is
+  // the same for the same graph.
   const list = useMemo(() => Object.values(nodes).sort((a, b) => a.created.localeCompare(b.created) || a.id.localeCompare(b.id)), [nodes]);
   const ids = useMemo(() => new Set(list.map((x) => x.id)), [list]);
   const parentOf = (x: GraphNode) => (x.parent && ids.has(x.parent) ? x.parent : undefined);
@@ -83,90 +87,66 @@ export function Graph({ live }: { live: boolean }) {
     return f;
   };
 
-  // The layout: the subjects in a constellation around the centre, shaped
-  // like the screen, where the user dropped what, the node held; laid out
-  // again when the graph or what is open changes, and live while a node is
-  // dragged.
-  const prev = useRef<Pos>({});
-  // Laid out again only when a place or what it is relative to changes,
-  // not at each event of the stream.
-  const places = useGraph((s) => s.places);
-  const pinKey = Object.entries(places)
-    .map(([id, p]) => (nodes[id] ? `${id}:${parentOf(nodes[id]) ?? ""}:${p.x}:${p.y}` : ""))
-    .join(",");
-  const pins = useMemo(() => {
-    const out: Record<string, Pin> = {};
-    for (const [id, p] of Object.entries(places)) {
-      const x = nodes[id];
-      if (x) out[id] = parentOf(x) ? { rel: [p.x, p.y] } : { abs: [p.x, p.y] };
-    }
-    return out;
-  }, [pinKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [held, setHeld] = useState<{ id: string; at: Pt } | null>(null);
+  // The layout: a living force graph (layout.ts), one simulation for the
+  // page's life (sim, below), told the graph and what is open whenever
+  // they change, ticked a frame at a time while something moves. Nothing
+  // of it is kept: a reload lays the graph out afresh.
+  const [held, setHeld] = useState<string | null>(null);
   const layoutKey =
     list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.state}`).join(",") +
-    "|" + openIds.map((id) => `${id}:${boxOf(id)[1]}`).join(",");
-  // the free band's shape, by tenths (not the bar's cards, which come and
-  // go): the constellation is as wide
-  const aspect = Math.round((size.w / Math.max(200, size.h - TOP - BOTTOM)) * 10) / 10;
-  // The pages open at the last layout: one opened since is born beside
-  // the page the console talks to (or the last one opened), not over it.
-  const laidOpen = useRef<string[]>([]);
-  const pos = useMemo(() => {
-    const lnodes = list.map((x) => ({
-      id: x.id,
-      parent: parentOf(x),
-      links: (x.links ?? []).filter((l) => ids.has(l)),
-      ...labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x)),
-      box: openIds.includes(x.id) ? boxOf(x.id) : undefined,
-      opened: openIds.includes(x.id) ? openIds.indexOf(x.id) : undefined,
-    }));
-    const spots = constellation(lnodes, aspect);
-    for (const id of openIds) {
-      const par = nodes[id] && parentOf(nodes[id]);
-      const at = prev.current[id] ?? spots[id] ?? (par ? prev.current[par] : undefined);
-      if (laidOpen.current.includes(id) || !at) continue;
-      const before = laidOpen.current.filter((o) => openIds.includes(o) && prev.current[o]);
-      const from = talk && before.includes(talk) ? talk : before.at(-1);
-      if (from) prev.current[id] = bornBeside(at, boxOf(id), prev.current[from], boxOf(from));
-    }
-    laidOpen.current = openIds;
-    const p = simulate(lnodes, prev.current, spots, pins, held ?? undefined, held ? 24 : undefined);
-    prev.current = { ...prev.current, ...p };
-    return p;
-  }, [layoutKey, pins, held, aspect]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Positions ease towards the layout's, frame by frame.
-  const smooth = useRef<Pos>({});
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      smooth.current = { ...pos };
-      setTick((n) => n + 1);
+    "|" + openIds.map((id) => `${id}:${boxOf(id)[0]}x${boxOf(id)[1]}`).join(",");
+  const [, setFrame] = useState(0);
+  const raf = useRef<number | null>(null);
+  // rest: where the bodies were when the graph last came to rest (or
+  // what is open changed): the camera frames that, not each frame.
+  const rest = useRef<Pos>({});
+  const reduced = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
+  const wake = () => {
+    if (reduced && !sim.heldId()) {
+      sim.settle();
+      rest.current = sim.positions();
+      setFrame((n) => n + 1);
       return;
     }
-    let raf = 0, last = 0, still = 0;
-    const loop = (ms: number) => {
-      const a = Math.min(1, ((ms - (last || ms - 16)) / 1000) * 6);
-      last = ms;
-      let moving = false;
-      for (const [k, [tx, ty]] of Object.entries(pos)) {
-        const c = smooth.current[k] ?? [tx, ty];
-        const n: Pt = [c[0] + (tx - c[0]) * a, c[1] + (ty - c[1]) * a];
-        if (Math.abs(n[0] - tx) + Math.abs(n[1] - ty) > 0.3) moving = true;
-        smooth.current[k] = n;
-      }
-      setTick((n) => n + 1);
-      still = moving ? 0 : still + 1;
-      if (still < 3) raf = requestAnimationFrame(loop);
+    if (raf.current !== null) return;
+    const loop = () => {
+      if (!sim.asleep()) sim.tick();
+      const still = sim.asleep();
+      if (still) rest.current = sim.positions();
+      setFrame((n) => n + 1);
+      raf.current = still ? null : requestAnimationFrame(loop);
     };
-    // A new node grows out of its parent.
-    for (const x of list) if (!smooth.current[x.id] && x.parent && smooth.current[x.parent]) smooth.current[x.id] = [...smooth.current[x.parent]];
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [pos]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (held) smooth.current[held.id] = held.at;
-  const at = (id: string): Pt => smooth.current[id] ?? pos[id] ?? [0, 0];
+    raf.current = requestAnimationFrame(loop);
+  };
+  // Unmounted (the switch to the phone's list, a remount): the loop stops
+  // and what was held is let go; mounted again, the next change wakes it.
+  useEffect(
+    () => () => {
+      if (raf.current !== null) cancelAnimationFrame(raf.current);
+      raf.current = null;
+      sim.drop();
+    },
+    [],
+  );
+  // A page opened goes beside the one the console talked to before it.
+  const talkWas = useRef(talk);
+  useEffect(() => void (talkWas.current = talk), [talk]);
+  useLayoutEffect(() => {
+    sim.sync(
+      list.map((x) => ({
+        id: x.id,
+        parent: parentOf(x),
+        links: (x.links ?? []).filter((l) => ids.has(l) && l !== x.id),
+        ...labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x)),
+        box: openIds.includes(x.id) ? boxOf(x.id) : undefined,
+      })),
+      talkWas.current,
+    );
+    rest.current = sim.positions();
+    wake();
+  }, [layoutKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pos = sim.positions();
+  const at = (id: string): Pt => pos[id] ?? [0, 0];
 
   /* ---------- the camera ---------- */
   const camX = useSpring(size.w / 2, { stiffness: 70, damping: 20 });
@@ -188,13 +168,14 @@ export function Graph({ live }: { live: boolean }) {
     if (talk) setFocus(talk);
   }, [talk]);
   const target: Cam = (() => {
-    const shown = openIds.filter((id) => pos[id]);
+    const rp = rest.current;
+    const shown = openIds.filter((id) => rp[id]);
     if (shown.length) {
-      const pages = shown.map((id) => ({ id, box: boxAt(pos[id], boxOf(id)) }));
-      const near: Box[] = list.filter((x) => lit.has(x.id) && !shown.includes(x.id) && pos[x.id]).map((x) => [pos[x.id][0] - 110, pos[x.id][1] - 40, pos[x.id][0] + 110, pos[x.id][1] + 70]);
+      const pages = shown.map((id) => ({ id, box: boxAt(rp[id], boxOf(id)) }));
+      const near: Box[] = list.filter((x) => lit.has(x.id) && !shown.includes(x.id) && rp[x.id]).map((x) => [rp[x.id][0] - 110, rp[x.id][1] - 40, rp[x.id][0] + 110, rp[x.id][1] + 70]);
       return framePages(pages, focus, near, band, size.w < 1200 ? 0.9 : 1);
     }
-    return frameAll(list.map((x) => pos[x.id]).filter(Boolean), band);
+    return frameAll(list.map((x) => rp[x.id]).filter(Boolean), band);
   })();
   useEffect(() => {
     if (manual) return;
@@ -250,7 +231,7 @@ export function Graph({ live }: { live: boolean }) {
   const grabNode = (id: string, e: PtrEvent) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    const [wx, wy] = at(id);
+    const [wx, wy] = sim.at(id) ?? [0, 0];
     const k = camK.get();
     grab.current = { id, sx: e.clientX, sy: e.clientY, px: e.clientX, py: e.clientY, ox: wx - (e.clientX - camX.get()) / k, oy: wy - (e.clientY - camY.get()) / k, moved: false };
     try {
@@ -259,28 +240,18 @@ export function Graph({ live }: { live: boolean }) {
       /* a pointer already gone */
     }
   };
-  // A bubble stays near its parent; a subject within a step of the nearest
-  // other subject (an open page counts with its size).
-  const parentAt = (id: string) => {
-    const x = nodes[id];
-    return x && parentOf(x) ? at(x.parent!) : null;
-  };
-  const keepNear = (id: string, raw: Pt, dropped: boolean): Pt => {
-    const par = parentAt(id);
-    if (par) return tether(raw, par, [TETHER, TETHER], dropped);
-    const own = new Set(subtree(nodes, id));
-    const others = list.filter((x) => !own.has(x.id) && !parentOf(x)).map((x) => ({ at: at(x.id), box: openIds.includes(x.id) ? boxOf(x.id) : undefined }));
-    return leash(raw, others, openIds.includes(id) ? boxOf(id) : undefined, dropped);
-  };
+  // The body held follows the pointer, within reach (the simulation's
+  // leash): a subject not too far out in the void, a bubble near its
+  // parent.
   const placeHeld = () => {
     const g = grab.current;
     if (!g) return;
     const k = camK.get();
     const raw: Pt = [(g.px - camX.get()) / k + g.ox, (g.py - camY.get()) / k + g.oy];
     g.raw = raw;
-    const p = keepNear(g.id, raw, false);
-    smooth.current[g.id] = p;
-    setHeld({ id: g.id, at: p });
+    sim.hold(g.id, raw);
+    if (held !== g.id) setHeld(g.id);
+    wake();
   };
   // Near the screen's edge the camera scrolls: it is the bubble reaching
   // the edge that counts, not the pointer.
@@ -290,7 +261,7 @@ export function Graph({ live }: { live: boolean }) {
       edgeRaf.current = null;
       return;
     }
-    const p = smooth.current[g.id], k = camK.get();
+    const p = sim.at(g.id), k = camK.get();
     const sx = p ? camX.get() + p[0] * k : g.px, sy = p ? camY.get() + p[1] * k : g.py;
     const r = el.getBoundingClientRect();
     const ex = edgePush(sx, r.left, r.right), ey = edgePush(sy, r.top, r.bottom);
@@ -332,14 +303,10 @@ export function Graph({ live }: { live: boolean }) {
     if (edgeRaf.current) cancelAnimationFrame(edgeRaf.current);
     edgeRaf.current = null;
     if (!g?.moved || !g.raw) return;
-    // Dropped: it keeps this place, a subject as a spot, a bubble as an
-    // offset from its parent.
-    const p = keepNear(g.id, g.raw, true);
-    const par = parentAt(g.id);
-    prev.current[g.id] = p;
-    const kept = par ? { x: p[0] - par[0], y: p[1] - par[1] } : { x: p[0], y: p[1] };
-    step(store, placeAt, g.id, kept);
-    if (live) void place(g.id, kept).catch(() => undefined);
+    // Dropped: it stays there (nothing remembers it), what is under it
+    // steps aside, what followed it settles.
+    sim.drop();
+    wake();
     setHeld(null);
     dragged.current = true;
     setTimeout(() => (dragged.current = false), 0);
@@ -403,7 +370,7 @@ export function Graph({ live }: { live: boolean }) {
               open={openIds.includes(x.id)}
               focus={x.id === talk}
               dim={openIds.length > 0 && !lit.has(x.id)}
-              held={held?.id === x.id}
+              held={held === x.id}
               light={0.3 + 0.7 * Math.min(1, weight(x, nodes, now) / 0.85)}
               waitsWord={t("espace.waits")}
               standingWord={t("espace.standing.short")}
@@ -422,14 +389,14 @@ export function Graph({ live }: { live: boolean }) {
                 <motion.div
                   key={`page-${id}`}
                   className="gr-page"
-                  style={{ left: cx, top: cy, width: pageW, maxHeight: maxH }}
+                  style={{ left: cx, top: cy, width: pageW, maxHeight: maxH, zIndex: held === id ? 5 : undefined }}
                   ref={sizer(id)}
                   initial={{ opacity: 0, scale: 0.2 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                  animate={{ opacity: held === id ? 0.5 : 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.2 }}
                   transition={{ type: "spring", stiffness: 200, damping: 26 }}
                 >
-                  <Page
+                  <StillPage
                     id={id}
                     live={live}
                     talking={openIds.length > 1 && id === talk}
@@ -452,6 +419,11 @@ export function Graph({ live }: { live: boolean }) {
     </div>
   );
 }
+
+// StillPage is a page drawn again only when what it shows changes, not at
+// each frame the graph moves: its handlers name their node, and read the
+// graph when they run.
+const StillPage = memo(Page, (a, b) => a.id === b.id && a.live === b.live && a.talking === b.talking);
 
 // useFoot is the room the bar takes at the screen's foot, from its top to
 // the bottom, with a margin: more than the usual when it shows cards.
@@ -522,10 +494,10 @@ function Bubble(p: {
   return (
     <motion.div
       className={cls}
-      style={{ left: p.at[0], top: p.at[1], pointerEvents: p.open ? "none" : undefined, zIndex: p.held ? 5 : undefined }}
+      style={{ left: p.at[0], top: p.at[1], pointerEvents: p.open ? "none" : undefined, zIndex: p.held ? 6 : undefined }}
       initial={{ opacity: 0, scale: 0.3 }}
-      animate={{ opacity, scale: p.held ? 1.08 : 1 }}
-      transition={{ duration: 0.6, ease }}
+      animate={{ opacity: p.held ? 0.5 : opacity, scale: p.held ? 1.08 : 1 }}
+      transition={{ duration: p.held ? 0.15 : 0.6, ease }}
       data-node={x.id}
     >
       {yours && <span className="gr-halo" style={{ width: r * 5, height: r * 5 }} />}

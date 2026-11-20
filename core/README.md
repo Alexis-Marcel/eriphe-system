@@ -1071,7 +1071,7 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   matter's), `node_refs` (each `[[name]]` of a node's text and the node it was resolved to, kept
   across renames; `''` while no node has it), `node_versions` (n → commit
   hash, author, time), `node_sources` (each block's live sources), `node_items` (notes on the items
-  a source lists), `node_layout` (a node's place on the graph) and `node_fts` (FTS5 over the title,
+  a source lists) and `node_fts` (FTS5 over the title,
   the goal, the text and the words the blocks show). History is never asked of git by path: a
   version's commit is in `node_versions`.
 - **Writes:** each is one commit by its author (`brain`, `task:<id>`, `user`…), whose message names
@@ -3236,52 +3236,52 @@ token in `X-CSRF-Token`:
 - `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
   below it stops, and the cascade leaves the graph; `reopenNode`: back with what was archived with
   it and the archived parents it needs, in one commit).
-- `PUT /api/nodes/{id}/place` `{x, y}` and `DELETE`: where the user dropped a bubble, a subject's
-  spot or a child's offset from its parent, in `node_layout` (no version).
 - `PUT /api/espace/view` `{open, talk, shown, theme}`: the pages open, the one the bar talks
   to, the last of Eriphe's shows the page took (a page the user closed does not open again on the
   next visit), and the theme (`""` follows the system, `light`, `dark`), in the kv `espace_view`. The boot gives
-  them back (`view`, `places`), on any of the user's screens, and the shell carries the theme
+  them back (`view`), on any of the user's screens; where the bubbles are is not kept, and the shell carries the theme
   (`data-theme`) before the app draws.
 
 **The app** (`web/espace/src`):
 
 - `data/`: the requests (`api.ts`), the stream (`stream.ts`: one per page, opened again with the
   node the bar talks to) and the store (`store.ts`, Zustand): the graph as streamed, what is
-  open, the places and the theme, each event a pure step tested on its own. `keep.ts` sends what
+  open and the theme, each event a pure step tested on its own. `keep.ts` sends what
   is open and the theme back to eriphe-core a moment after they change. `presence.ts` says the
   user is there. A page Eriphe shows (`applyShow`) opens beside the others and leaves the bar
   where it was: only the user's click or ⌘-click moves it.
-- `graph/`: the layout (`layout.ts`, a small force simulation): the subjects form a
-  constellation around the centre (`constellation`): held loosely on an ellipse around (0, 0),
-  evenly spaced, 300 px from one to the next plus 24 px for each bubble a subject holds on
-  average, as wide as the screen's free band (1.7 times as high at most); in the order they were
-  made, except that a subject linked to one already placed (its `links`: its text's `[[links]]` and its front
-  matter's, its own or its bubbles') comes right after it, so related subjects sit side by side. A new subject takes its
-  slot and the ring turns the way that moves the others least (they slide, a slot at most).
-  Children are pulled to their parent, links are weak springs, every body is pulled faintly to the
-  centre (none while a page is open), every bubble and its label a box that pushes the others
-  away; a graph laid out from nothing settles again until it is at rest, so the next layout moves
-  nothing. An open page is a box node of its measured size (measured again whenever its content
-  changes, at most what the screen holds above the bar): it presses on the bubbles near it and on
-  their subject with them, the others make room around it and nothing far moves; it never moves a
-  subject's spot: closed, the constellation comes back. Open pages are solid boxes to each
-  other: of two that overlap (one born on the other, one that grew), the later opened steps
-  aside, sideways when it can, never the one held, and an open page is not pulled back to its
-  spot. A page opened while another is open that would cover it is born right beside it, at its
-  height (`bornBeside`); a bubble that gives way steps off by the shortest way that does not lead
-  onto an open page. A standing view made from a subject's card is linked to that subject
-  (`decideView`), so it sits beside it. The user drags a bubble anywhere it
-  stays reachable: a subject within a step (380 px) of the nearest other subject, measured from the
-  edge of an open page, a bubble within 300 px of its parent; past it the bubble lags behind by a
-  rubber band (0.3), and dropped there it comes back to the edge. A dropped bubble stays exactly
-  where dropped (a subject as a spot, a bubble as an offset from its parent), unless an open page
-  needs the room, and eriphe-core keeps the place. Near the screen's edge the camera scrolls, driven by the dragged bubble's place
+- `graph/`: the layout (`layout.ts`, `Sim`): a living force graph, like Obsidian's, one
+  simulation for the page's life, ticked a frame at a time while something moves. Every bubble
+  pushes every other away (many-body, strength / distance, no cutoff), all are pulled to the centre,
+  a bubble and its parent and two subjects a link joins (`links`: the text's `[[links]]` and the
+  front matter's) are held close by short strong springs, and a bubble never rests on a link it is
+  not part of: the graph is a compact disc, the subjects linked to nothing on its rim. Every body, a
+  bubble with its label or an open page of its measured size (measured again whenever its content
+  changes, at most what the screen holds above the bar), is a solid box to every other (`collide`).
+  Nothing is kept and nothing orders the subjects: a reload lays the graph out afresh. What the
+  user arranges holds for the session because the energy is local: the first layout runs on a
+  global energy and is settled before it is shown; afterwards only what changes is warm: a new node
+  (and its siblings near it), the bubbles of a page that opens or closes, what a drag carries; the
+  rest moves only to make room, and the whole graph is never warmed again. A page opens where its
+  bubble was, or right beside the page the console talks to (else the last opened) when it would
+  cover it, at its height (`bornBeside`); what it pushes aside, and what that pushes, goes back
+  where it stood when it closes. A standing view made from a subject's card is linked to that
+  subject (`decideView`), so it sits beside it. The user drags a bubble, or a page by its head: it
+  is translucent and passes over everything; what is linked to it follows on its springs, one link
+  away strongly (0.8), two weakly (0.25), beyond still, passing over what is not theirs; nothing
+  else moves. Dropped, it stays exactly there and wins every collision: what is under it steps
+  aside by the smallest move; its followers settle on their springs around where it was dropped
+  (pulled there, not to the centre), passing over the others, warm at their drag energy (0.3 at
+  most), until they are back on their springs (150 ticks at most), then giving way to the bodies in
+  place. A subject dragged more than 420 px past the
+  disc's edge lags behind the pointer (a 0.3 rubber band), and dropped there comes back to the edge
+  on that side; a bubble stays within 300 px of its parent (of its page's edge). Near the screen's edge the camera scrolls, driven by the dragged bubble's place
   on screen, not the pointer: a 110 px zone, after 200 ms, speeding up over 700 ms to 16 px a
   frame. The camera (`camera.ts`) frames every open page if they fit at a scale of 0.8 or more,
   else the page in focus (the last one opened, Eriphe's show too, or the one the user turned
   to), whole, its head on screen and its foot above the bar's zone, the others open in place;
-  with no page open, the whole graph. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
+  with no page open, the whole graph, as it is when the graph comes to rest (or what is open
+  changes), not at each frame. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
   gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
   bigger, what waits for the user brighter, what runs a little, what is done or old quieter. Under
   760 px wide the graph is a list (`graph/List.tsx`, `listOrder`): each subject, then its bubbles

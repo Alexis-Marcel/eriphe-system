@@ -16,9 +16,8 @@ import strings from "../strings.json";
 // - POST /brain/retry: once more the turn Eriphe could not answer;
 // - the user's gestures (web_gestures.go): PUT /api/nodes/{id}/md (an edit,
 //   made on the version it was read at), POST .../mark and .../ask (a
-//   block's Mark and button), .../archive and .../reopen, PUT and DELETE
-//   .../place (where a bubble was dropped), PUT /api/espace/view (the pages
-//   open, the display settings);
+//   block's Mark and button), .../archive and .../reopen, PUT /api/espace/view (the pages open, the
+//   display settings);
 // - POST /api/nodes/{id}/act: an action on the items picked in a list
 //   (web_list_actions.go);
 // - POST /presence: whether this tab is in front of the user (presence.ts).
@@ -31,7 +30,6 @@ import strings from "../strings.json";
 // taken, the theme ("" follows the system).
 export type Theme = "" | "light" | "dark";
 export type View = { open: string[]; talk?: string; shown?: number; theme?: Theme };
-export type Place = { x: number; y: number };
 
 export type Boot = {
   lang: Lang;
@@ -40,7 +38,6 @@ export type Boot = {
   strings: Record<string, string>;
   live: boolean;
   view?: View;
-  places?: Record<string, Place>;
   // What Eriphe lacks to think: no AI yet (its wizard left for later), or
   // no brain on this server; absent once it can.
   setup?: "noai" | "nobrain";
@@ -284,12 +281,6 @@ export type ArchivedNode = GraphNode & { archived: string; with: number };
 
 export async function archives(): Promise<ArchivedNode[]> {
   return (await getJSON<{ archives: ArchivedNode[] }>("/api/archives"))?.archives ?? [];
-}
-
-// place keeps where a bubble was dropped (null: the layout places it).
-export async function place(id: string, p: Place | null): Promise<boolean> {
-  const r = await sendJSON(p ? "PUT" : "DELETE", `${nodePath(id)}/place`, p ?? undefined);
-  return r.status === 204;
 }
 
 // putView keeps what is open; keepalive, as the page leaves.

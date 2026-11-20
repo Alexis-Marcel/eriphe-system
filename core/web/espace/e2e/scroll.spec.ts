@@ -61,7 +61,6 @@ async function fake(page: Page, answered: number[]) {
     return route.fulfill({ status: 204 });
   });
   await page.route("**/api/espace/view", (route) => route.fulfill({ status: 204 }));
-  await page.route(/\/api\/nodes\/[^/]+\/place$/, (route) => route.fulfill({ status: 204 }));
 }
 
 async function signIn(page: Page) {
