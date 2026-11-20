@@ -10,10 +10,11 @@ import { useWords } from "../i18n";
 import { Cards } from "./Cards";
 import { MdTab } from "./MdTab";
 import { useFile, usePage, useTrace } from "./usePage";
+import { Versions } from "./Versions";
 
 // A node's page, drawn in the graph where its bubble was (#633): its head
 // (what it belongs to, its title, its date or what is happening, its
-// versions, the way to archive it, a small « ⋯ » menu for what is rarely
+// versions folded into one chip (Versions), the way to archive it, a small « ⋯ » menu for what is rarely
 // wanted: its trace and its .md file, the button that closes it), its
 // content, and at its foot the cards it waits on: under its head, the
 // content and the cards scroll as one column, nothing cut off. In the
@@ -78,12 +79,15 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
           </div>
         )}
         <div className="pg-title">
-          {/* Its title, then, on the same line, the small badge of a node
-              someone else's words reached (its title marked when they
-              may have written it), and the sign of a node the user did
-              not ask for. */}
+          {/* Its title, on one line, cut short (whole in its tooltip) so
+              that nothing beside it pushes it onto two; then, on the same
+              line, the small badge of a node someone else's words reached
+              (its title marked when they may have written it), and the
+              sign of a node the user did not ask for. */}
           <h2>
-            <NodeTitle x={node} fallback={external} />
+            <span className="pg-title-tx" title={node?.title || external}>
+              <NodeTitle x={node} fallback={external} />
+            </span>
             {node?.external && (
               <em className="pg-badge warn" title={t("espace.external.why")}>
                 {t("espace.external.mark")}
@@ -106,15 +110,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               at
             )}
           </span>
-          {(page?.versions.length ?? 0) > 1 && (
-            <span className="pg-versions" role="group" aria-label={t("espace.page.versions")}>
-              {[...page!.versions].reverse().map((v) => (
-                <button key={v.n} type="button" className={shown === v.n ? "on" : ""} aria-pressed={shown === v.n} onClick={() => setVersion(v.n === last ? 0 : v.n)}>
-                  v{label(v.n, shift)}
-                </button>
-              ))}
-            </span>
-          )}
+          {page && <Versions versions={page.versions} shown={shown} last={last} shift={shift} onPick={(n) => setVersion(n === last ? 0 : n)} />}
           {live && !page?.archived && (
             <button type="button" className="pg-archive" onClick={() => setAsking(true)}>
               {t("espace.page.archive")}

@@ -635,7 +635,6 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .gr-label .ext-mark { pointer-events: auto; }
 .title-ext { display: inline-flex; align-items: baseline; max-width: 100%; min-width: 0; vertical-align: bottom; }
 .title-tx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pg-title h2 .title-tx { white-space: normal; }
 .title-ext .ext-mark { flex: none; }
 .gr-label em { font-style: normal; font-size: 12px; color: var(--fg2); }
 .gr-label em.runs { color: var(--run); }
@@ -664,20 +663,40 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 /* Beside the title, on its line: a compact badge, never a line of its own. */
 .pg-title h2 .pg-badge { display: inline-block; margin-left: 10px; vertical-align: 0.25em; font-family: var(--mono); font-size: 9.5px; font-weight: 500; line-height: 15px;
   letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: help; }
-.pg-title { display: flex; align-items: center; gap: 12px; }
-.pg-title h2 { flex: 1; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; }
-.pg-when { font-size: 12.5px; color: var(--fg3); white-space: nowrap; }
-/* A permanent subject: a small sign beside its date. */
+/* The title row: the title takes what the rest leaves, on one line, cut
+   short with « … » (whole in its tooltip); its badges stay beside it. */
+.pg-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pg-title > * { flex: none; }
+.pg-title h2 { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; }
+.pg-title h2 > * { flex: none; }
+.pg-title h2 > .pg-title-tx { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-title-tx > .title-ext { display: flex; }
+.pg-when { margin-left: auto; font-size: 12.5px; color: var(--fg3); white-space: nowrap; }
+/* A permanent subject: a small sign beside its title. */
 /* A node the user did not ask for (a skill or an event opened it): a
    small ↯ after its title on a bubble, a compact pill in its header. */
 .unasked-mark { display: inline-block; margin-left: 0.3em; font-size: 0.8em; font-weight: 600; color: var(--fg3); cursor: help; text-shadow: none; }
 .gr-label .unasked-mark { pointer-events: auto; }
 .pg-title h2 .unasked-mark { margin-left: 8px; padding: 0 5px; vertical-align: 0.25em; border: 1px dashed var(--line-strong); border-radius: 5px; font-size: 10.5px; font-weight: 600; line-height: 15px; color: var(--fg2); white-space: nowrap; }
-.pg-standing { font-size: 15px; line-height: 1; color: var(--accent-text); cursor: help; margin-right: -6px; }
+.pg-standing { font-size: 15px; line-height: 1; color: var(--accent-text); cursor: help; margin-left: -4px; }
 .pg-live { display: inline-flex; align-items: center; gap: 6px; color: var(--run); }
-.pg-versions { display: inline-flex; gap: 2px; font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 2px 4px; }
-.pg-versions button { border: 0; background: none; padding: 1px 5px; border-radius: 5px; color: var(--fg3); cursor: pointer; font: inherit; }
-.pg-versions button.on { color: var(--fg); background: var(--fill); }
+/* Its versions: one chip, the version shown (amber when not the last),
+   opening a short list under it, the newest first (page/Versions.tsx). */
+.pg-vchip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 7px 0 8px; border-radius: 7px; border: 1px solid var(--line); background: none;
+  font-family: var(--mono); font-size: 12px; color: var(--fg2); cursor: pointer; white-space: nowrap; }
+.pg-vchip svg { color: var(--fg3); }
+.pg-vchip:hover, .pg-vchip[aria-expanded="true"] { background: var(--fill); color: var(--fg); }
+.pg-vchip.old { color: var(--warn-text); border-color: color-mix(in oklab, var(--warn) 50%, transparent); background: var(--warn-soft); }
+.pg-vlist { position: fixed; z-index: 40; width: min(230px, calc(100vw - 16px)); max-height: min(320px, 60vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; display: grid; align-content: start; padding: 4px;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--card); box-shadow: var(--lift); }
+.pg-vlist button { display: grid; grid-template-columns: 3.4em minmax(0, 1fr) auto; align-items: baseline; column-gap: 8px; border: 0; background: none; text-align: left; padding: 6px 10px; border-radius: 7px;
+  font-size: 12.5px; color: var(--fg2); cursor: pointer; }
+.pg-vlist button:hover, .pg-vlist button:focus-visible { background: var(--fill); color: var(--fg); outline: none; }
+.pg-vlist button[aria-selected="true"] { background: var(--fill-strong); color: var(--fg); }
+.pg-vlist b { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.pg-vwho { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-vlist time { font-size: 11.5px; color: var(--fg3); white-space: nowrap; }
+.pg-vlist em { grid-column: 2 / -1; font-style: normal; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
 .pg-x { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; border: 1px solid var(--line); background: none; color: var(--fg2); font-size: 11px; cursor: pointer; }
 .pg-x:hover { background: var(--fill); }
 .pg-archive { border: 1px solid var(--line); background: none; padding: 3px 9px; border-radius: 7px; font-size: 12px; color: var(--fg3); cursor: pointer; }
