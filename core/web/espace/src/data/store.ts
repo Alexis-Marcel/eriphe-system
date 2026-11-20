@@ -154,7 +154,8 @@ export function applyExchange(s: State, x: Exchange): State {
   if ((x.node ?? null) !== s.talk) return s;
   const line = (l: unknown) => (l && typeof l === "object" && typeof (l as BarLine).seq === "number" && typeof (l as BarLine).text === "string" ? (l as BarLine) : undefined);
   const cards = Array.isArray(x.cards) ? x.cards.filter((t) => typeof t === "string") : undefined;
-  return { ...s, exchange: { ...x, asked: line(x.asked), said: line(x.said), draft: typeof x.draft === "string" ? x.draft : undefined, cards } };
+  const waiting = Array.isArray(x.waiting) ? x.waiting.filter((w) => !!line(w)) : undefined;
+  return { ...s, exchange: { ...x, asked: line(x.asked), said: line(x.said), draft: typeof x.draft === "string" ? x.draft : undefined, cards, waiting } };
 }
 
 // NOTES_KEPT is how many notices show at once.

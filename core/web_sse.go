@@ -97,7 +97,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 
 	// The exchange: made again when a message, the draft or Eriphe's state
 	// changed, sent when it differs.
-	var lastExchange, exchangeDraft string
+	var lastExchange, exchangeDraft, exchangeWaiting string
 	thinking, exchangeThinking, exchangeStale := false, false, true
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
@@ -120,6 +120,11 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		if woken || fresh || time.Since(stateAt) > 1500*time.Millisecond {
 			stateAt, woken = time.Now(), false
 			thinking = w.brainState() == "thinking"
+		}
+		// What waits for Eriphe: a delivery or a withdrawal adds no message
+		// (messages_waiting.go).
+		if k := w.c.waitingKey(thinking); k != exchangeWaiting {
+			exchangeWaiting, exchangeStale = k, true
 		}
 		if exchangeStale || draft != exchangeDraft || thinking != exchangeThinking {
 			// The exchange of the node the console talks to (node_turn.go).

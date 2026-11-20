@@ -4,7 +4,7 @@ import { useGraph } from "../data/store";
 import { titleOf } from "../graph/model";
 import { Cards } from "../page/Cards";
 import { useWords } from "../i18n";
-import { landed, lastSeq, present, useAck, type Sent } from "./exchange";
+import { landed, lastSeq, present, useAck, waitingShown, type Sent } from "./exchange";
 
 // The bar (#633, #663): the one input of the workspace, and only a bar.
 // The subject's document is the conversation: what Eriphe has to say at
@@ -14,7 +14,9 @@ import { landed, lastSeq, present, useAck, type Sent } from "./exchange";
 // the first of its answer, which goes after a few seconds. No history, no
 // buttons, but one exception: the cards no node holds (one proposed at the
 // home, before any subject) show above it, so that none waits out of
-// sight.
+// sight. And the user's messages that wait for Eriphe, sent while it
+// works: each in grey with a clock, the node it was said to when another,
+// and a ✕ that withdraws it while Eriphe has not read it.
 
 export function Console({ boot }: { boot: api.Boot }) {
   const { t } = useWords();
@@ -27,9 +29,29 @@ export function Console({ boot }: { boot: api.Boot }) {
   const { asked, said, writing, line, failed: unanswered } = present(x, sent && sent.to === talk ? sent : null);
   const shown = useAck(said ? `${talk ?? ""}#${said.seq}` : null);
   const cards = x?.cards ?? [];
+  const [gone, setGone] = useState<ReadonlySet<number>>(new Set());
+  const [taken, setTaken] = useState(false);
+  const { shown: waiting, more } = waitingShown(x, gone);
   useEffect(() => {
     if (landed(x, sent)) setSent(null);
   }, [x, sent]);
+  useEffect(() => {
+    if (!taken) return;
+    const t = setTimeout(() => setTaken(false), 4000);
+    return () => clearTimeout(t);
+  }, [taken]);
+  const withdraw = async (seq: number) => {
+    setGone((g) => new Set(g).add(seq));
+    const r = await api.withdraw(seq);
+    if (r === "ok") return;
+    setGone((g) => {
+      const n = new Set(g);
+      n.delete(seq);
+      return n;
+    });
+    if (r === "taken") setTaken(true);
+    else setFailed(true);
+  };
 
   const place = talk ? titleOf(node, t("espace.external")) : null;
   const say = async (text: string) => {
@@ -61,6 +83,23 @@ export function Console({ boot }: { boot: api.Boot }) {
           <div className="cs-cards" aria-label={t("espace.exchange.cards")}>
             <Cards surface="console--cards" refs={cards} />
           </div>
+        )}
+        {waiting.length > 0 && (
+          <ol className="cs-waiting" aria-label={t("espace.exchange.waiting")}>
+            {more > 0 && <li className="cs-wait-more">{t("espace.exchange.waiting.more", more)}</li>}
+            {waiting.map((w) => (
+              <li key={w.seq} className="cs-wait">
+                <Clock label={t("espace.exchange.waiting.one")} />
+                <span className="cs-wait-text" title={w.text}>
+                  {w.text}
+                </span>
+                {(w.node ?? null) !== talk && <span className="cs-wait-node">{w.node ? w.title || t("espace.external") : t("espace.home")}</span>}
+                <button type="button" className="cs-wait-x" aria-label={t("espace.exchange.withdraw")} title={t("espace.exchange.withdraw")} onClick={() => void withdraw(w.seq)}>
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ol>
         )}
         {(asked || ack || writing) && (
           <div className="cs-panel">
@@ -109,6 +148,11 @@ export function Console({ boot }: { boot: api.Boot }) {
         </p>
       )}
       {failed && <p className="cs-note" role="alert">{t("espace.error")}</p>}
+      {taken && (
+        <p className="cs-note" role="status">
+          {t("espace.exchange.taken")}
+        </p>
+      )}
 
       <form className={`cs-bar${writing ? " writing" : ""}`} onSubmit={onSubmit}>
         <input
@@ -142,5 +186,15 @@ export function Asked({ text }: { text: string }) {
       <span className="sr-only">{t("espace.exchange.asked")} </span>
       {text}
     </button>
+  );
+}
+
+// Clock is the small clock of a message that waits.
+function Clock({ label }: { label: string }) {
+  return (
+    <svg className="cs-wait-clock" viewBox="0 0 16 16" width="12" height="12" role="img" aria-label={label}>
+      <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8 4.5V8l2.25 1.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

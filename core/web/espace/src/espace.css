@@ -769,6 +769,19 @@ a.notice-text:hover { text-decoration: underline; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cs-asked:hover { color: var(--fg2); }
 .cs-asked.whole { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9em; overflow-y: auto; text-align: left; }
+/* The user's messages that wait for Eriphe: grey, a clock each, the newest
+   few (WAITING_SHOWN, exchange.ts), a ✕ that withdraws one. */
+.cs-waiting { list-style: none; margin: 0; padding: 0; display: grid; justify-items: center; gap: 2px; max-width: min(580px, 100%); pointer-events: auto; }
+.cs-wait { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 4px 2px 10px; border-radius: 999px; font-size: 12.5px; color: var(--fg3);
+  background: color-mix(in oklab, var(--card) 80%, transparent); animation: cs-ack-in 0.25s ease; }
+.cs-wait-clock { flex: none; opacity: 0.8; }
+.cs-wait-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-wait-node { flex: none; max-width: 14ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; border-radius: 999px; font-size: 11px; color: var(--fg2); border: 1px solid var(--line); }
+.cs-wait-x { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 50%; background: none; color: var(--fg3); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; }
+.cs-wait-x:hover, .cs-wait-x:focus-visible { color: var(--fg); background: var(--fill); }
+.cs-wait-more { font-size: 11.5px; color: var(--fg3); }
+@media (pointer: coarse) { .cs-wait-x { width: 32px; height: 32px; font-size: 13px; } }
+@media (prefers-reduced-motion: reduce) { .cs-wait { animation: none; } }
 /* The cards no node holds: the bar's one exception, compact, above it. */
 .cs-cards { width: min(560px, 100%); max-height: 40vh; overflow: auto; pointer-events: auto; text-align: left; }
 .cs-note { margin: 0; font-size: 12px; color: var(--fg3); }

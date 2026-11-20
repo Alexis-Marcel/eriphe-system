@@ -197,6 +197,7 @@ func (w *web) routes() http.Handler {
 	mux.Handle("GET /events", w.auth(w.handleEvents))
 	// A message carries its attachments: the body may hold them all, and a little more.
 	mux.Handle("POST /messages", http.MaxBytesHandler(w.auth(w.handleSend), maxAttachments*maxAttachmentSize+1<<20))
+	mux.Handle("DELETE /messages/{seq}", w.auth(w.handleWithdraw)) // a message that waits, withdrawn (messages_waiting.go)
 	mux.Handle("GET /attachments/{id}", w.auth(w.handleAttachment))
 	mux.Handle("GET /tasks/{id}", w.auth(w.handleTask))
 	mux.Handle("POST /brain/retry", w.auth(w.handleBrainRetry))

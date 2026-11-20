@@ -66,6 +66,9 @@ type exchangeEvent struct {
 	Draft    string   `json:"draft,omitempty"`    // the first line of what Eriphe is writing
 	Thinking bool     `json:"thinking,omitempty"` // Eriphe is at work
 	Cards    []string `json:"cards,omitempty"`    // the cards that wait and no node holds: their refs
+	// Waiting are the user's messages that wait for Eriphe, whatever node
+	// they were said to, oldest first (messages_waiting.go).
+	Waiting []waitingLine `json:"waiting,omitempty"`
 }
 
 // exchangeCardsMax is the most cards no node holds an exchange carries.
@@ -138,6 +141,7 @@ func (w *web) exchangeFor(node, talk, draft string, thinking bool) (exchangeEven
 	}
 	x.Thinking = thinking && (talk == node || waiting)
 	x.Cards = w.c.unheldCards()
+	x.Waiting = w.c.waiting(thinking)
 	return x, nil
 }
 
@@ -219,11 +223,14 @@ func (s *Store) exchangeOf(m Message) exchangeLine {
 }
 
 // lastExchange is a node's ("": the home's) last message of the user's
-// and Eriphe's lines after it (the last exchangeReplies); with no message
-// of the user's, Eriphe's last line. Empty when the node has none.
+// that Eriphe was given and Eriphe's lines after it (the last
+// exchangeReplies); with no such message of the user's, Eriphe's last
+// line. Empty when the node has none. A message that waits for Eriphe is
+// not in it: the bar shows it waiting (messages_waiting.go), and what
+// Eriphe answers meanwhile is to the message before.
 func (s *Store) lastExchange(node string) ([]exchangeLine, error) {
 	var from int
-	s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE node = ? AND role = ? AND via != ?`, node, roleUser, firstRunVia).Scan(&from)
+	s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE node = ? AND role = ? AND via != ? AND delivered = 1`, node, roleUser, firstRunVia).Scan(&from)
 	if from == 0 {
 		s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE node = ? AND role IN (?, ?)`, node, roleBrain, roleError).Scan(&from)
 	}

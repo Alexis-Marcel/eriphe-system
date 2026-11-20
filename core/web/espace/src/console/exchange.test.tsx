@@ -7,7 +7,7 @@ import { store } from "../data/store";
 import { makeT, WordsContext } from "../i18n";
 import strings from "../strings.json";
 import { Asked, Console } from "./Console";
-import { ACK_MS, present } from "./exchange";
+import { ACK_MS, landed, lastSeq, present } from "./exchange";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -26,6 +26,16 @@ describe("the bar's last question", () => {
     expect(p.asked).toBe("Garde un œil sur mes mails.");
     expect(p.said?.text).toBe("J'ouvre le sujet.");
     expect(present(answered, { text: "Ceux qui demandent une réponse.", after: 4, to: null }).asked).toBe("Ceux qui demandent une réponse.");
+  });
+
+  it("lands when eriphe-core keeps it waiting, and the question read stays", () => {
+    const busy: Exchange = { asked: { seq: 5, text: "Prends ton temps." }, thinking: true };
+    const sent = { text: "Et pour le budget ?", after: lastSeq(busy), to: null };
+    expect(landed(busy, sent)).toBe(false);
+    const waiting: Exchange = { ...busy, waiting: [{ seq: 6, text: "Et pour le budget ?" }] };
+    expect(landed(waiting, sent)).toBe(true);
+    expect(present(waiting, null).asked).toBe("Prends ton temps.");
+    expect(lastSeq(waiting)).toBe(6);
   });
 
   it("is none before any question", () => {
@@ -89,6 +99,53 @@ describe("the bar", () => {
     await exchange({ asked: { seq: 20, text: "Et la suite ?" }, thinking: true });
     expect(el.querySelector(".cs-said")).toBeNull();
     expect(el.querySelector(".cs-dots")).not.toBeNull();
+  });
+
+  it("shows the messages that wait for Eriphe, a clock each, and withdraws one", async () => {
+    const calls: string[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method} ${url}`);
+      return new Response(null, { status: url.endsWith("/43") ? 409 : 204 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const waiting = [
+      { seq: 41, text: "Et pour le budget ?" },
+      { seq: 42, text: "Et le planning ?", node: "k3x9m2p7qa", title: "Substack" },
+      { seq: 43, text: "Et les devis ?" },
+    ];
+    await exchange({ asked: { seq: 40, text: "Prends ton temps." }, thinking: true, waiting });
+    await draw();
+    const lines = () => [...el.querySelectorAll(".cs-wait")];
+    expect(lines().map((l) => l.querySelector(".cs-wait-text")?.textContent)).toEqual(["Et pour le budget ?", "Et le planning ?", "Et les devis ?"]);
+    expect(lines().every((l) => l.querySelector(".cs-wait-clock"))).toBe(true);
+    // The node it was said to, when not the one the bar talks to.
+    expect(lines().map((l) => l.querySelector(".cs-wait-node")?.textContent ?? null)).toEqual([null, "Substack", null]);
+    // The last question Eriphe read stays below, in grey.
+    expect(el.querySelector(".cs-asked")?.textContent).toContain("Prends ton temps.");
+
+    await act(async () => (lines()[1].querySelector(".cs-wait-x") as HTMLButtonElement).click());
+    expect(calls).toEqual(["DELETE /messages/42"]);
+    expect(lines().map((l) => l.querySelector(".cs-wait-text")?.textContent)).toEqual(["Et pour le budget ?", "Et les devis ?"]);
+
+    // Eriphe read it already: it stays, and the bar says so.
+    await act(async () => (lines()[1].querySelector(".cs-wait-x") as HTMLButtonElement).click());
+    expect(calls[1]).toBe("DELETE /messages/43");
+    expect(lines()).toHaveLength(2);
+    expect(el.querySelector('.cs-note[role="status"]')?.textContent).toContain("déjà lu");
+
+    // Delivered: no clock any more, the bar as before.
+    await exchange({ asked: { seq: 43, text: "Et les devis ?" }, thinking: true });
+    expect(el.querySelector(".cs-waiting")).toBeNull();
+    expect(el.querySelector(".cs-asked")?.textContent).toContain("Et les devis ?");
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the newest three that wait, and counts the others", async () => {
+    const waiting = [1, 2, 3, 4, 5].map((n) => ({ seq: 50 + n, text: `Message ${n}` }));
+    await exchange({ thinking: true, waiting });
+    await draw();
+    expect([...el.querySelectorAll(".cs-wait-text")].map((l) => l.textContent)).toEqual(["Message 3", "Message 4", "Message 5"]);
+    expect(el.querySelector(".cs-wait-more")?.textContent).toBe("+2 en attente");
   });
 
   it("says when Eriphe could not answer, without its error", async () => {

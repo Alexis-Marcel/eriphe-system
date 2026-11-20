@@ -1,23 +1,38 @@
 import { useEffect, useState } from "react";
-import type { BarLine, Exchange } from "../data/api";
+import type { BarLine, Exchange, Waiting } from "../data/api";
 
 // What the bar shows (the stream's "exchange", web_console.go): not a
 // chat, the user's last message and one line of Eriphe's, of the node it
 // talks to, the home's when none. What the user just said shows at once,
-// until eriphe-core has it.
+// until eriphe-core has it. Above them, the user's messages that wait for
+// Eriphe, each with a clock (messages_waiting.go): the last question is
+// the last one Eriphe read.
 
 // Sent is a message the user just wrote: after is the exchange's last seq
 // when it was sent, to the node the bar talked to then.
 export type Sent = { text: string; after: number; to: string | null };
 
 export function lastSeq(x: Exchange | null): number {
-  return Math.max(x?.asked?.seq ?? 0, x?.said?.seq ?? 0);
+  return Math.max(x?.asked?.seq ?? 0, x?.said?.seq ?? 0, ...(x?.waiting ?? []).map((w) => w.seq));
 }
 
 // landed tells whether the message sent is in the exchange: a message of
-// the user's newer than the exchange was when it was sent.
+// the user's newer than the exchange was when it was sent, read by Eriphe
+// or waiting for it.
 export function landed(x: Exchange | null, sent: Sent | null): boolean {
-  return !!sent && (x?.asked?.seq ?? 0) > sent.after;
+  return !!sent && ((x?.asked?.seq ?? 0) > sent.after || (x?.waiting ?? []).some((w) => w.seq > sent.after));
+}
+
+// WAITING_SHOWN is how many waiting messages the bar shows, the newest:
+// the others are counted.
+export const WAITING_SHOWN = 3;
+
+// waitingShown is what the bar shows of the messages that wait, but those
+// the user withdrew (gone): the newest WAITING_SHOWN, and how many more.
+export function waitingShown(x: Exchange | null, gone: ReadonlySet<number>): { shown: Waiting[]; more: number } {
+  const all = (x?.waiting ?? []).filter((w) => !gone.has(w.seq));
+  const shown = all.slice(-WAITING_SHOWN);
+  return { shown, more: all.length - shown.length };
 }
 
 // present is the exchange as the bar shows it: the user's last question

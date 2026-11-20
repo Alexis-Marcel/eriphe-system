@@ -261,6 +261,11 @@ export async function putView(v: View, keepalive = false): Promise<boolean> {
 // text, plain; external: Eriphe's, written after reading external content.
 export type BarLine = { seq: number; text: string; external?: boolean };
 
+// A message of the user's that waits for Eriphe (waitingLine,
+// messages_waiting.go): sent, not yet read; node: the node it was said
+// to, with its title; none: the home.
+export type Waiting = { seq: number; text: string; node?: string; title?: string };
+
 // The "exchange" event: what the bar shows of the node it talks to (node),
 // or of the home: the user's last message (asked), Eriphe's line (said:
 // the first line of its last answer, the rest in the subject), whether it
@@ -277,6 +282,9 @@ export type Exchange = {
   // The cards that wait and no node holds (their refs): the bar shows
   // them, wherever it talks, so that none waits out of sight.
   cards?: string[];
+  // The user's messages that wait for Eriphe, whatever node they were
+  // said to, oldest first.
+  waiting?: Waiting[];
 };
 
 // send writes to Eriphe, said to a node (it belongs to it) or to the home.
@@ -284,6 +292,14 @@ export function send(text: string, node?: string | null): Promise<boolean> {
   const body = new URLSearchParams({ text, from: "workspace" });
   if (node) body.set("node", node);
   return post("/messages", body);
+}
+
+// withdraw takes back a message that waits for Eriphe: taken when Eriphe
+// had read it already.
+export async function withdraw(seq: number): Promise<"ok" | "taken" | "error"> {
+  const r = await sendJSON("DELETE", `/messages/${seq}`).catch(() => null);
+  if (r?.status === 204 || r?.status === 404) return "ok"; // 404: gone already
+  return r?.status === 409 ? "taken" : "error";
 }
 
 // A notification routed to this tab (inApp, route_send.go): shown in the
