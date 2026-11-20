@@ -42,26 +42,50 @@ export function fit(bs: Box[], size: Size, max = 1, min = 0.3): Cam {
 
 export const boxAt = (at: Pt, [w, h]: Pt): Box => [at[0] - w / 2, at[1] - h / 2, at[0] + w / 2, at[1] + h / 2];
 
+// ALL is the smallest scale at which the camera frames the whole graph
+// with the open pages.
+export const ALL = 0.72;
+
 // framePages frames the open pages: all of them if they fit at READABLE or
 // more, else the one in focus (the last one opened, or the one the user
 // last turned to), else the last one opened (pages in the order they
-// opened); the bubbles around them too (near) while the pages stay
-// readable.
-export function framePages(pages: { id: string; box: Box }[], focus: string | null, near: Box[], size: Size, max = 1): Cam {
+// opened); with the whole graph (all) while the pages stay readable, else
+// the bubbles around them (near). The room left on screen goes to the
+// rest of the graph: the view slides toward it (slide), so that no bubble
+// is cut at an edge while there is room at the other.
+export function framePages(pages: { id: string; box: Box }[], focus: string | null, near: Box[], size: Size, max = 1, all: Box[] = []): Cam {
   let boxes = pages.map((p) => p.box);
   if (boxes.length > 1 && fitK(boxes, size) < READABLE) {
     const t = pages.find((p) => p.id === focus) ?? pages[pages.length - 1];
     boxes = [t.box];
   }
-  if (near.length && fitK([...boxes, ...near], size) >= 0.72) boxes = [...boxes, ...near];
-  return fit(boxes, size, max);
+  if (all.length && fitK([...boxes, ...all], size) >= ALL) boxes = [...boxes, ...all];
+  else if (near.length && fitK([...boxes, ...near], size) >= ALL) boxes = [...boxes, ...near];
+  return slide(fit(boxes, size, max), boxes, [...boxes, ...all], size);
 }
 
-// frameAll frames the whole graph, the home's view.
-export function frameAll(points: Pt[], size: Size): Cam {
-  if (points.length === 0) return { k: 1, x: size.w / 2, y: size.h / 2 };
-  const bs: Box[] = points.map((p) => [p[0] - 90, p[1] - 60, p[0] + 90, p[1] + 90]);
-  return fit(bs, size, 1.05, 0.25);
+// slide moves the camera, at its scale, toward the middle of the whole
+// graph (all), as far as the boxes it frames (keep) stay whole in the free
+// band.
+export function slide(cam: Cam, keep: Box[], all: Box[], size: Size): Cam {
+  if (!keep.length || !all.length) return cam;
+  const { k } = cam;
+  const band = (lo: number, hi: number, k0: number, k1: number, a0: number, a1: number, at: number) => {
+    const min = lo - k0 * k, max = hi - k1 * k; // the offsets that keep the kept boxes whole
+    if (min > max) return at;
+    return Math.max(min, Math.min(max, (lo + hi) / 2 - ((a0 + a1) / 2) * k));
+  };
+  const span = (bs: Box[], i: number, j: number, m: number): Pt => [Math.min(...bs.map((b) => b[i])) - m, Math.max(...bs.map((b) => b[j])) + m];
+  const [kx0, kx1] = span(keep, 0, 2, 30), [ky0, ky1] = span(keep, 1, 3, 20);
+  const [ax0, ax1] = span(all, 0, 2, 30), [ay0, ay1] = span(all, 1, 3, 20);
+  return { k, x: band(SIDE, size.w - SIDE, kx0, kx1, ax0, ax1, cam.x), y: band(TOP, size.h - footOf(size), ky0, ky1, ay0, ay1, cam.y) };
+}
+
+// frameAll frames the whole graph, the home's view: each body whole, a
+// bubble with its label under it.
+export function frameAll(boxes: Box[], size: Size): Cam {
+  if (boxes.length === 0) return { k: 1, x: size.w / 2, y: size.h / 2 };
+  return fit(boxes, size, 1.05, 0.25);
 }
 
 // EDGE is how far from the screen's edges an edge mark stays; FOOT, the

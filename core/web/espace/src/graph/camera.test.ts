@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOTTOM, boxAt, edgeMark, FOOT, framePages, pageMax, READABLE, TOP } from "./camera";
+import { ALL, BOTTOM, boxAt, edgeMark, FOOT, frameAll, framePages, pageMax, READABLE, SIDE, slide, TOP, type Box, type Cam } from "./camera";
 
 describe("the camera", () => {
   const size = { w: 1440, h: 900 };
@@ -38,6 +38,49 @@ describe("the camera", () => {
     const c2 = framePages([view], "v", [], tall, 0.9);
     expect(c2.y + view.box[3] * c2.k).toBeLessThanOrEqual(laptop.h - 320);
     expect(pageMax(tall, 640)).toBe(720 - TOP - 320 - 40);
+  });
+});
+
+describe("the camera and the whole graph", () => {
+  const size = { w: 1440, h: 900 };
+  const onScreen = (cam: Cam, b: Box) => [cam.x + b[0] * cam.k, cam.y + b[1] * cam.k, cam.x + b[2] * cam.k, cam.y + b[3] * cam.k];
+  const whole = (cam: Cam, b: Box) => {
+    const [l, t, r, bt] = onScreen(cam, b);
+    return l >= 0 && r <= size.w && t >= 0 && bt <= size.h;
+  };
+
+  it("frames every bubble whole at home, its long label too", () => {
+    const boxes: Box[] = [
+      [-500, -40, -200, 80], // a label 300 wide on the left
+      [200, -60, 300, 60],
+      [-60, 200, 60, 320],
+    ];
+    const cam = frameAll(boxes, size);
+    for (const b of boxes) expect(whole(cam, b)).toBe(true);
+  });
+
+  it("frames the pages with the whole graph when it fits", () => {
+    const page = { id: "p", box: boxAt([0, 0], [700, 520]) };
+    const graph: Box[] = [[-700, -50, -480, 60], [420, 100, 600, 200]];
+    const cam = framePages([page], "p", [], size, 1, graph);
+    expect(cam.k).toBeGreaterThanOrEqual(ALL);
+    for (const b of [page.box, ...graph]) expect(whole(cam, b)).toBe(true);
+  });
+
+  it("slides toward the rest of the graph when it does not fit, the page whole", () => {
+    const page = { id: "p", box: boxAt([0, 0], [700, 520]) };
+    const far: Box[] = [[-1600, -50, -1400, 60], [-1300, 80, -1100, 180]];
+    const cam = framePages([page], "p", [], size, 1, far);
+    expect(whole(cam, page.box)).toBe(true);
+    const alone = framePages([page], "p", [], size, 1);
+    // the page is no longer in the middle: the room is on the graph's side
+    expect(cam.x).toBeGreaterThan(alone.x + 100);
+    expect(onScreen(cam, page.box)[2]).toBeGreaterThan(size.w - SIDE - 40);
+  });
+
+  it("leaves the camera alone when what it frames takes the whole screen", () => {
+    const cam = { k: 1, x: 100, y: 50 };
+    expect(slide(cam, [[0, 0, 3000, 3000]], [[-500, 0, 0, 10]], size)).toEqual(cam);
   });
 });
 

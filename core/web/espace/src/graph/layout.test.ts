@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bornBeside, EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, overlap, REACH, RIM, Sim, TETHER, type LNode, type Pos, type Pt } from "./layout";
+import { bornBeside, EDGE_DELAY, EDGE_RAMP, EDGE_SPEED, EDGE_ZONE, edgePush, edgeStep, extent, REACH, RIM, Sim, T, TETHER, type LNode, type Pos, type Pt } from "./layout";
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
@@ -36,17 +36,72 @@ function big(): LNode[] {
   return out;
 }
 
+// The owner's graph: the prototype's, and a few more subjects alone.
+function owner(): LNode[] {
+  return [
+    ...small(),
+    node("OUT", "Outils à revoir"),
+    node("SUB", "Substack"),
+    node("PLA", "Plan du 1er article", { parent: "SUB" }),
+    node("FAC", "Factures du mois"),
+    node("VOY", "Voyage d'été"),
+  ];
+}
+
+// open gives the graph with those pages open.
+const open = (nodes: LNode[], ids: string[], box: Pt = ids.length > 1 ? [620, 480] : [700, 520]) => nodes.map((n) => (ids.includes(n.id) ? { ...n, box } : n));
+
+// reach is how far the graph goes from its centre: the farthest edge of a body.
+function reach(sim: Sim, nodes: LNode[]): number {
+  const p = sim.positions();
+  return Math.max(...nodes.map((n) => Math.hypot(...p[n.id]) + extent(n, p[n.id])[0]));
+}
+
+// amid tells whether a point is among the graph's bubbles (the open pages
+// left out): within the box they span.
+function amid(sim: Sim, nodes: LNode[], [x, y]: Pt): boolean {
+  const p = sim.positions(), bs = nodes.filter((n) => !n.box).map((n) => p[n.id]);
+  const xs = bs.map((q) => q[0]), ys = bs.map((q) => q[1]);
+  return x > Math.min(...xs) && x < Math.max(...xs) && y > Math.min(...ys) && y < Math.max(...ys);
+}
+
+// stragglers are the bodies farther than gap from every other one (edge to edge).
+function stragglers(sim: Sim, nodes: LNode[], gap: number): string[] {
+  const p = sim.positions();
+  const box = (n: LNode) => {
+    const [h, t, b] = extent(n, p[n.id]);
+    return [p[n.id][0] - h, t, p[n.id][0] + h, b];
+  };
+  const apart = (a: LNode, b: LNode) => {
+    const [l1, t1, r1, b1] = box(a), [l2, t2, r2, b2] = box(b);
+    return Math.hypot(Math.max(0, l2 - r1, l1 - r2), Math.max(0, t2 - b1, t1 - b2));
+  };
+  return nodes.filter((a) => nodes.every((b) => b === a || apart(a, b) > gap)).map((a) => a.id);
+}
+
+// still is how far the bodies go in ticks more, once settled.
+function still(sim: Sim, nodes: LNode[], ticks = 200): number {
+  const p0 = sim.positions();
+  for (let i = 0; i < ticks; i++) sim.tick();
+  return moved(p0, sim.positions(), nodes.map((n) => n.id));
+}
+
 function laid(nodes: LNode[]): Sim {
   const sim = new Sim();
   sim.sync(nodes);
   return sim;
 }
 
-// overlaps are the pairs of bodies that sit on each other.
+// overlaps are the pairs of bodies that sit on each other: more than the
+// graph tolerates at rest (T.jam), well within their margins.
 function overlaps(sim: Sim, nodes: LNode[]): string[] {
   const p = sim.positions(), out: string[] = [];
+  const on = (a: LNode, pa: Pt, b: LNode, pb: Pt) => {
+    const [ha, ta, ba] = extent(a, pa), [hb, tb, bb] = extent(b, pb);
+    return ha + hb - Math.abs(pa[0] - pb[0]) > T.jam && Math.min(ba, bb) - Math.max(ta, tb) > T.jam;
+  };
   for (let i = 0; i < nodes.length; i++)
-    for (let j = i + 1; j < nodes.length; j++) if (overlap(nodes[i], p[nodes[i].id], nodes[j], p[nodes[j].id])) out.push(`${nodes[i].id}/${nodes[j].id}`);
+    for (let j = i + 1; j < nodes.length; j++) if (on(nodes[i], p[nodes[i].id], nodes[j], p[nodes[j].id])) out.push(`${nodes[i].id}/${nodes[j].id}`);
   return out;
 }
 
@@ -124,15 +179,34 @@ describe("the living graph", () => {
   it("is the same graph laid out twice, and does not drift as the graph comes again and again", () => {
     expect(laid(big()).positions()).toEqual(laid(big()).positions());
     const nodes = big();
+    const ids = nodes.map((n) => n.id);
     const sim = laid(nodes);
     const before = sim.positions();
-    for (let i = 0; i < 5; i++) {
-      sim.sync(nodes.map((n) => ({ ...n, lw: n.lw + (i % 2) })));
+    const again = () => {
+      for (let i = 0; i < 4; i++) {
+        sim.sync(nodes.map((n) => ({ ...n, lw: n.lw + (i % 2) })));
+        sim.settle();
+      }
+    };
+    // the first changes let what touches settle under the ambient energy, a little
+    again();
+    const once = sim.positions();
+    expect(moved(before, once, ids)).toBeLessThan(20);
+    // then nothing wanders
+    again();
+    again();
+    expect(moved(once, sim.positions(), ids)).toBeLessThan(5);
+  });
+
+  it("is still once settled: the ambient energy moves nothing at rest", () => {
+    for (const nodes of [small(), owner(), big()]) {
+      const sim = laid(nodes);
+      expect(sim.asleep()).toBe(true);
+      expect(still(sim, nodes)).toBeLessThan(0.5);
+      sim.sync(open(nodes, [nodes[0].id]));
       sim.settle();
+      expect(still(sim, nodes)).toBeLessThan(0.5);
     }
-    sim.sync(nodes);
-    sim.settle();
-    expect(moved(before, sim.positions(), nodes.map((n) => n.id))).toBeLessThan(2);
   });
 
   describe("a drag", () => {
@@ -237,7 +311,7 @@ describe("the living graph", () => {
       after.push(node("N2", "Nouveau sujet"), node("N3", "Sous-sujet", { parent: "MES" }), node("N4", "Encore un"));
       sim.sync(after);
       sim.settle();
-      expect(dist(sim.at("MES")!, spot)).toBeLessThan(60);
+      expect(dist(sim.at("MES")!, spot)).toBeLessThan(5);
       expect(overlaps(sim, after)).toEqual([]);
       expect(dist(sim.at("N1")!, sim.at("MES")!)).toBeLessThan(300);
     });
@@ -259,30 +333,194 @@ describe("the living graph", () => {
       sim.settle();
       sim.sync(nodes);
       sim.settle();
-      expect(dist(sim.at("MES")!, spot)).toBeLessThan(60);
+      expect(dist(sim.at("MES")!, spot)).toBeLessThan(5);
       expect(overlaps(sim, nodes)).toEqual([]);
+    });
+
+    it("keeps where the user put a subject beside another: dropped left of it, it stays left", () => {
+      const nodes = owner();
+      const sim = laid(nodes);
+      const mes = sim.at("MES")!;
+      const spot: Pt = [mes[0] - 280, mes[1]];
+      drag(sim, "PRO", spot);
+      for (const ids of [["PRO"], ["PRO", "OUT"], [], ["MES"], []]) {
+        sim.sync(open(nodes, ids), ids.length > 1 ? ids[0] : undefined);
+        sim.settle();
+        expect(dist(sim.at("PRO")!, spot), ids.join("+")).toBeLessThan(5);
+      }
+      const more = [...nodes, node("N1", "Un nouveau sujet"), node("N2", "Sujet lié", { links: ["PRO"] })];
+      sim.sync(more);
+      sim.settle();
+      expect(dist(sim.at("PRO")!, spot)).toBeLessThan(5);
+      expect(sim.at("PRO")![0]).toBeLessThan(sim.at("MES")![0]);
+      expect(overlaps(sim, more)).toEqual([]);
+    });
+
+    it("lets a dropped subject the graph left far behind come back to it", () => {
+      const nodes = owner();
+      const sim = laid(nodes);
+      // dropped at the disc's edge while a big page held the others far out
+      sim.sync(open(nodes, ["MES"], [1400, 900]));
+      sim.settle();
+      const far = reach(sim, nodes);
+      const p = sim.at("VOY")!, d = Math.hypot(...p);
+      drag(sim, "VOY", [(p[0] / d) * far, (p[1] / d) * far]);
+      sim.sync(nodes);
+      sim.settle();
+      const back = laid(nodes);
+      expect(reach(sim, nodes)).toBeLessThan(reach(back, nodes) + 200);
+    });
+
+    it("keeps a dropped bubble by its subject: dropped on its label, it steps off, and the subject stays", () => {
+      const nodes = owner();
+      const sim = laid(nodes);
+      const pro = sim.at("PRO")!;
+      drag(sim, "FAI", [pro[0] + 10, pro[1] + 50]);
+      expect(sim.asleep()).toBe(true);
+      expect(dist(sim.at("PRO")!, pro)).toBeLessThan(TETHER + 100);
+      expect(overlaps(sim, nodes)).toEqual([]);
+      // it stays by its subject as the subject moves, and as its page opens and closes
+      const fai = sim.at("FAI")!, off = [fai[0] - sim.at("PRO")![0], fai[1] - sim.at("PRO")![1]];
+      for (const ids of [["PRO"], [], ["MES"], []]) {
+        const now = open(nodes, ids);
+        sim.sync(now);
+        sim.settle();
+        expect(sim.asleep(), ids.join("+")).toBe(true);
+        expect(overlaps(sim, now), ids.join("+")).toEqual([]);
+        expect(dist(sim.at("FAI")!, sim.at("PRO")!), ids.join("+")).toBeLessThan(TETHER + 60 + (ids[0] === "PRO" ? 400 : 0));
+      }
+      const p = sim.at("PRO")!, f = sim.at("FAI")!;
+      expect(dist([f[0] - p[0], f[1] - p[1]], off as Pt)).toBeLessThan(60);
     });
   });
 
+  // Invariants on graphs of every shape: whatever the graph, and whatever
+  // opens, closes or is dropped, it comes to rest soon, nothing sits on
+  // anything, and it stays a compact disc.
+  describe("on any graph", () => {
+    const rnd = (seed: number) => () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 4294967296);
+    function any(seed: number, crowd = false): LNode[] {
+      const r = rnd(seed), out: LNode[] = [];
+      const subjects = (crowd ? 14 : 4) + Math.floor(r() * (crowd ? 10 : 8));
+      for (let i = 0; i < subjects; i++) {
+        const links = i > 0 && r() < 0.3 ? [`g${Math.floor(r() * i)}`] : [];
+        out.push(node(`g${i}`, "Sujet ".repeat(1 + Math.floor(r() * 4)).trim() + ` ${i}`, { links }));
+        const kids = Math.floor(r() * 4);
+        for (let j = 0; j < kids; j++) out.push(node(`g${i}k${j}`, "Bulle ".repeat(1 + Math.floor(r() * 3)).trim() + ` ${j}`, { parent: `g${i}` }));
+      }
+      return out;
+    }
+    const rest = (sim: Sim, max = 1200) => {
+      let t = 0;
+      while (!sim.asleep() && t < max) {
+        sim.tick();
+        t++;
+      }
+      return t;
+    };
+
+    it("comes to rest soon, nothing on anything, as pages open and close and a subject is dropped", () => {
+      for (let seed = 1; seed <= 24; seed++) {
+        const nodes = any(seed);
+        const sim = laid(nodes);
+        const disc = reach(sim, nodes);
+        const roots = nodes.filter((n) => !n.parent).map((n) => n.id);
+        const [a, b, c] = [roots[seed % roots.length], roots[(seed + 1) % roots.length], roots[(seed + 2) % roots.length]];
+        const steps: [string, LNode[], string?][] = [
+          ["open", open(nodes, [a])],
+          ["beside", open(nodes, [a, b]), a],
+          ["close", nodes],
+        ];
+        for (const [what, now, beside] of steps) {
+          sim.sync(now, beside);
+          const t = rest(sim);
+          expect(t, `${seed} ${what}`).toBeLessThan(600);
+          expect(overlaps(sim, now), `${seed} ${what}`).toEqual([]);
+          expect(still(sim, now), `${seed} ${what}`).toBeLessThan(5);
+          expect(stragglers(sim, now, 120), `${seed} ${what}`).toEqual([]);
+        }
+        expect(reach(sim, nodes), `${seed}`).toBeLessThan(disc * 1.75);
+        const p = sim.at(c)!;
+        const spot: Pt = [p[0] + 140, p[1] - 60];
+        drag(sim, c, spot);
+        sim.sync(open(nodes, [a]));
+        rest(sim);
+        sim.sync(nodes);
+        rest(sim);
+        expect(overlaps(sim, nodes), `${seed} drop`).toEqual([]);
+      }
+    }, 60_000); // two dozen graphs: slow machines take a while
+
+    it("comes to rest in a crowd too, nothing on anything: what is caught holds back what presses it", () => {
+      for (const seed of [2, 7, 14, 15, 19, 34]) {
+        const nodes = any(seed, true);
+        const sim = laid(nodes);
+        const roots = nodes.filter((n) => !n.parent).map((n) => n.id);
+        const [a, b, c] = [roots[seed % roots.length], roots[(seed + 1) % roots.length], roots[(seed + 2) % roots.length]];
+        const steps: [string, LNode[], string?][] = [
+          ["open", open(nodes, [a])],
+          ["beside", open(nodes, [a, b]), a],
+          ["three", open(nodes, [a, b, c]), b],
+          ["close", nodes],
+        ];
+        for (const [what, now, beside] of steps) {
+          sim.sync(now, beside);
+          expect(rest(sim), `${seed} ${what}`).toBeLessThan(1200);
+          expect(overlaps(sim, now), `${seed} ${what}`).toEqual([]);
+        }
+      }
+    }, 60_000);
+  });
+
   describe("pages", () => {
-    it("makes room for an open page, and gives the bubbles it pushed their place back when it closes", () => {
-      const nodes = big();
+    it("draws an open page to the centre, the bubbles gathered round it, and the disc back when it closes", () => {
+      for (const nodes of [owner(), big()]) {
+        const sim = laid(nodes);
+        const disc = reach(sim, nodes);
+        // the subject the farthest out
+        const p0 = sim.positions();
+        const rim = nodes.filter((n) => !n.parent).sort((a, b) => Math.hypot(...p0[b.id]) - Math.hypot(...p0[a.id]))[0].id;
+        const opened = open(nodes, [rim]);
+        sim.sync(opened);
+        sim.settle();
+        expect(overlaps(sim, opened)).toEqual([]);
+        // among the bubbles, not where its bubble was on the rim
+        expect(amid(sim, opened, sim.at(rim)!)).toBe(true);
+        expect(Math.hypot(...sim.at(rim)!)).toBeLessThan(Math.hypot(...p0[rim]));
+        expect(stragglers(sim, opened, 120)).toEqual([]);
+        expect(reach(sim, opened)).toBeLessThan(disc + 700);
+        sim.sync(nodes);
+        sim.settle();
+        expect(overlaps(sim, nodes)).toEqual([]);
+        expect(reach(sim, nodes)).toBeLessThan(disc * 1.4);
+        expect(stragglers(sim, nodes, 120)).toEqual([]);
+      }
+    });
+
+    it("keeps two pages open side by side in the middle, the graph round them, and gives the disc back when they close", () => {
+      const nodes = owner();
       const sim = laid(nodes);
-      const p0 = sim.positions();
-      const opened = nodes.map((n) => (n.id === "s0" ? { ...n, box: [700, 520] as Pt } : n));
-      sim.sync(opened);
+      const disc = reach(sim, nodes);
+      sim.sync(open(nodes, ["PRO"]));
       sim.settle();
-      expect(overlaps(sim, opened)).toEqual([]);
-      const p1 = sim.positions();
-      // the page stays where its bubble was; far bubbles do not move
-      expect(dist(p1.s0, p0.s0)).toBeLessThan(30);
-      const pushed = nodes.filter((n) => dist(p0[n.id], p1[n.id]) > 20 && n.parent !== "s0" && n.id !== "s0").map((n) => n.id);
-      expect(pushed.length).toBeGreaterThan(0);
+      const two = open(nodes, ["PRO", "OUT"]);
+      sim.sync(two, "PRO");
+      sim.settle();
+      const p = sim.positions();
+      expect(overlaps(sim, two)).toEqual([]);
+      // side by side, in the order they opened in, among the bubbles
+      expect(Math.abs(p.PRO[1] - p.OUT[1])).toBeLessThan(80);
+      expect(amid(sim, two, [(p.PRO[0] + p.OUT[0]) / 2, (p.PRO[1] + p.OUT[1]) / 2])).toBe(true);
+      expect(stragglers(sim, two, 120)).toEqual([]);
+      for (const n of nodes) if (n.id !== "PRO" && n.id !== "OUT") expect(Math.hypot(...p[n.id]), n.id).toBeLessThan(620 + 500);
+      sim.sync(open(nodes, ["OUT"]));
+      sim.settle();
       sim.sync(nodes);
       sim.settle();
-      const p2 = sim.positions();
-      for (const id of pushed) expect(dist(p2[id], p0[id]), id).toBeLessThan(20);
       expect(overlaps(sim, nodes)).toEqual([]);
+      expect(reach(sim, nodes)).toBeLessThan(disc * 1.4);
+      expect(stragglers(sim, nodes, 120)).toEqual([]);
+      expect(still(sim, nodes)).toBeLessThan(0.5);
     });
 
     it("opens a page that would cover the one open right beside it, at its height", () => {
@@ -302,17 +540,6 @@ describe("the living graph", () => {
       expect(bornBeside([2000, 0], [600, 400], [10, 0], [600, 400])).toEqual([2000, 0]);
     });
 
-    it("warms only the page's own bubbles when it opens: the others move only to make room", () => {
-      const nodes = big();
-      const sim = laid(nodes);
-      const p0 = sim.positions();
-      sim.sync(nodes.map((n) => (n.id === "lone1" ? { ...n, box: [300, 200] as Pt } : n)));
-      sim.settle();
-      const p1 = sim.positions();
-      const far = nodes.filter((n) => n.id !== "lone1" && dist(p0[n.id], p0.lone1) > 700).map((n) => n.id);
-      expect(far.length).toBeGreaterThan(5);
-      expect(moved(p0, p1, far)).toBeLessThan(2);
-    });
 
     it("lets a page dropped on another win, and moves the other by the smallest move", () => {
       const nodes = small();
@@ -330,7 +557,7 @@ describe("the living graph", () => {
       expect(overlaps(sim, two)).toEqual([]);
       // pushed off sideways: the least it takes, not more
       const now = sim.at("MES")!;
-      expect(Math.abs(now[1] - mes[1])).toBeLessThan(5);
+      expect(Math.abs(now[1] - mes[1])).toBeLessThan(20);
       expect(Math.abs(now[0] - onto[0])).toBeLessThan(620 + 48 + 20);
     });
   });

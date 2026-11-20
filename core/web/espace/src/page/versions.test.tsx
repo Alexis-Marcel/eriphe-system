@@ -134,4 +134,19 @@ describe("a page's versions", () => {
     draw([]);
     expect(chips()).toHaveLength(0);
   });
+  it("opens the list above the chip when the chip is low on the screen, kept on it", () => {
+    draw(many(17));
+    const at = (top: number) => (chip().getBoundingClientRect = () => ({ top, bottom: top + 24, left: 400, right: 460, width: 60, height: 24, x: 400, y: top, toJSON: () => ({}) }) as DOMRect);
+    const h = innerHeight;
+    at(40);
+    act(() => chip().click());
+    expect(list()!.style.top).toBe("68px");
+    expect(list()!.style.bottom).toBe("");
+    act(() => chip().click());
+    at(h - 100);
+    act(() => chip().click());
+    expect(list()!.style.top).toBe("");
+    expect(list()!.style.bottom).toBe("104px");
+    expect(parseFloat(list()!.style.maxHeight)).toBeLessThanOrEqual(h - 100 - 12);
+  });
 });

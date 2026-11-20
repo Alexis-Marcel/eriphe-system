@@ -17,7 +17,7 @@ const LIST_W = 230; // the list's width (.pg-vlist, espace.css)
 // v1 »: the last a refresh of its sources, the first the user's).
 export function Versions({ versions, shown, last, shift = 0, onPick }: { versions: PageVersion[]; shown: number; last: number; shift?: number; onPick: (n: number) => void }) {
   const { t, lang } = useWords();
-  const [open, setOpen] = useState<{ top: number; left: number } | null>(null);
+  const [open, setOpen] = useState<{ top?: number; bottom?: number; left: number; maxHeight: number } | null>(null);
   const chip = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const close = (focus: boolean) => {
@@ -26,9 +26,13 @@ export function Versions({ versions, shown, last, shift = 0, onPick }: { version
   };
   const toggle = () => {
     const r = chip.current?.getBoundingClientRect();
-    // Under it, its right edge on the chip's, kept on the screen.
+    // Under it, its right edge on the chip's, kept on the screen: above it
+    // when there is more room there (the chip low on the screen).
     const w = Math.min(LIST_W, innerWidth - 16);
-    setOpen(open || !r ? null : { top: r.bottom + 4, left: Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) });
+    if (open || !r) return setOpen(null);
+    const left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8));
+    const below = innerHeight - r.bottom - 12, above = r.top - 12, h = Math.min(320, innerHeight * 0.6);
+    setOpen(below >= h || below >= above ? { top: r.bottom + 4, left, maxHeight: Math.min(h, below) } : { bottom: innerHeight - r.top + 4, left, maxHeight: Math.min(h, above) });
   };
   useEffect(() => {
     if (!open) return;
@@ -94,7 +98,7 @@ export function Versions({ versions, shown, last, shift = 0, onPick }: { version
             role="listbox"
             aria-label={t("espace.page.versions")}
             ref={list}
-            style={{ top: open.top, left: open.left }}
+            style={open}
             onKeyDown={keys}
             onPointerDown={(e) => e.stopPropagation()}
           >
