@@ -6,8 +6,10 @@ import { Words } from "./Words";
 
 // Line is the orb on the phone, where the graph is a list: no gliding, a
 // simple line above the bar, the subject it is about named first (a tap
-// opens it), then what the orb would say beside it.
-export function Line() {
+// opens it), then what the orb would say beside it. On a wide screen, when
+// the space has no free spot for the orb, the same line, the orb itself
+// resting in the bar (no mini).
+export function Line({ mini = true }: { mini?: boolean }) {
   const { t } = useWords();
   const nodes = useGraph((s) => s.nodes);
   const { show, dismiss } = useOrb();
@@ -15,7 +17,7 @@ export function Line() {
   const open = (id: string) => step(store, openPage, id, false);
   return (
     <div className={`orb-line ${show.mode}`}>
-      <span className={`orb-mini${show.mode === "work" ? " working" : ""}`} aria-hidden="true" />
+      {mini && <span className={`orb-mini${show.mode === "work" ? " working" : ""}`} aria-hidden="true" />}
       {show.node && (
         <button type="button" className="orb-on" onClick={() => open(show.node!)}>
           {t("espace.orb.on", titleOf(nodes[show.node], t("espace.external")))}

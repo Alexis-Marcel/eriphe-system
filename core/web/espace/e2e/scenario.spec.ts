@@ -33,8 +33,10 @@ test("the steps of the scenario", async ({ page, request }) => {
   await page.waitForURL((u) => u.pathname !== "/login");
   await page.goto("/espace");
 
-  // Eriphe's words: its orb's, out in the space.
-  const said = page.locator(".orb-say.on .orb-text");
+  // Eriphe's words: its orb's, out in the space (or, with no free spot
+  // there, a line above the bar).
+  const words = page.locator(".orb-say.on, .orb-line");
+  const said = words.locator(".orb-text");
   const orb = page.locator("button.orb");
   // The bar's buttons: none (the cards no node holds aside).
   const barButtons = page.locator(".cs-bar button");
@@ -57,7 +59,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await say("Allume la lumière du bureau.");
   await expect(said).toContainText("C'est allumé.");
   await expect(orb).not.toHaveClass(/docked/);
-  await expect(page.locator(".orb-say.on")).toHaveClass(/answer/);
+  await expect(words).toHaveClass(/answer/);
   await orbClear(page);
   await shot(page, "orb-home");
   await expect(barButtons).toHaveCount(0);
@@ -112,7 +114,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   // Unasked, it began to wait: once the last answer has had its while,
   // the orb goes beside it and says so, its title marked as someone
   // else's words.
-  await expect(page.locator(".orb-say.on.said")).toContainText(`${external} t'attend.`, { timeout: 30_000 });
+  await expect(words).toHaveClass(/said/, { timeout: 30_000 });
+  await expect(words).toContainText(`${external} t'attend.`, { timeout: 30_000 });
   await orbBeside(page, waiting.locator(".gr-core"), waiting.locator(".gr-label"));
   await shot(page, "orb-announce");
   await shot(page, "waiting");
@@ -169,7 +172,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   // Its send waits for the user's yes: the orb beside the mail's page,
   // pointing at the card, with what it did.
   await expect(said).toContainText("Le brouillon est prêt");
-  await expect(page.locator(".orb-say.on")).toHaveClass(/wait/);
+  await expect(words).toHaveClass(/wait/);
   await orbBeside(page, mailPage);
   await shot(page, "orb-wait");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", `Écris à Eriphe, sur ${external}`);
@@ -300,7 +303,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await defaults.click();
   // The view's card waits for the user's yes: the orb points at it.
   await expect(said).toContainText("Voici la vue");
-  await expect(page.locator(".orb-say.on")).toHaveClass(/wait/);
+  await expect(words).toHaveClass(/wait/);
   await orbBeside(page, watch);
   // The document says where things stand: the questions and their
   // buttons gone, the choices written, the card placed under them.
@@ -822,9 +825,11 @@ async function orbClear(page: Page): Promise<void> {
 // orbBeside checks that the orb, out of the bar, is beside what it talks
 // about (a page, a bubble and its title: their boxes as one), close to it
 // (on a side, else, when the screen is crowded, the nearest free spot
-// around it), and covers nothing.
+// around it), and covers nothing. When nothing is free out there, it stays
+// in the bar, its words a line above it: it covers nothing either.
 async function orbBeside(page: Page, ...what: Locator[]): Promise<void> {
   const orb = page.locator("button.orb");
+  if (await page.locator(".orb-line").isVisible()) return;
   await expect(orb).not.toHaveClass(/docked/);
   await expect
     .poll(async () => {

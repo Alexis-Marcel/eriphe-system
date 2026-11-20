@@ -42,8 +42,9 @@ test("an answer given at home stays readable until you move on", async ({ page, 
     await input.fill(text);
     await input.press("Enter");
   };
-  const answer = page.locator(".orb-say.on .orb-answer");
-  const said = page.locator(".orb-say.on .orb-text");
+  const words = page.locator(".orb-say.on, .orb-line");
+  const answer = words.locator(".orb-answer");
+  const said = words.locator(".orb-text");
   const orb = page.locator("button.orb");
 
   // Three sentences at the home: held whole by the orb, its Markdown, out
@@ -70,7 +71,7 @@ test("an answer given at home stays readable until you move on", async ({ page, 
   await expect(answer).toContainText("Réglages → Outils → films.");
 
   // Closed: the event's words come, then go; the answer does not come back.
-  await page.locator(".orb-say.on").getByRole("button", { name: "Fermer" }).click();
+  await words.getByRole("button", { name: "Fermer" }).click();
   await expect(answer).toHaveCount(0);
   await expect(said).toContainText("Un outil de plus : films.");
   await expect(said).toHaveCount(0, { timeout: 15_000 });
@@ -122,7 +123,7 @@ test("a card raised for a question about something else is in front at once", as
   await expect(substack.locator(".pg-foot")).toHaveCount(0);
   await loose.getByRole("button", { name: "Non" }).click();
   await expect(page.locator(".cs-cards")).toHaveCount(0);
-  await expect(page.locator(".orb-say.on .orb-text")).toContainText("Tu me donnes ton accord pour l'envoyer ?");
+  await expect(page.locator(".orb-say.on .orb-text, .orb-line .orb-text")).toContainText("Tu me donnes ton accord pour l'envoyer ?");
   expect((await (await request.get("/e2e/tools")).json()).sent ?? []).not.toContain("lou@example.org: Je serai en retard.");
   expect(problems).toEqual([]);
 });

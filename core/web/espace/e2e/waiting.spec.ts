@@ -64,7 +64,7 @@ test("messages wait with a clock, and one is withdrawn", async ({ page, request 
     expect((await request.post("/e2e/finish/hold")).ok()).toBe(true);
     await expect.poll(async () => (await turns()).slice(before + 1)).toEqual([["Et pour le budget ?"]]);
     await expect(page.locator(".cs-waiting")).toHaveCount(0);
-    await expect(page.locator(".orb-say.on .orb-text")).toContainText("D'accord.");
+    await expect(page.locator(".orb-say.on .orb-text, .orb-line .orb-text")).toContainText("D'accord.");
     expect(problems).toEqual([]);
   } finally {
     await request.post("/e2e/finish/hold"); // never leave the brain held

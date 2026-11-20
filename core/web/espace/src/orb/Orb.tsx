@@ -6,7 +6,7 @@ import { extent, type LNode, type Pos, type Pt } from "../graph/layout";
 import { titleOf } from "../graph/model";
 import { useWords } from "../i18n";
 import { glide, homePoint, placeBeside, placeHome, type Placed, type Rect, type Side } from "./model";
-import { useOrb } from "./useOrb";
+import { setCrowded, useOrb } from "./useOrb";
 import { Words } from "./Words";
 
 // Orb is Eriphe in the graph: a small blue orb. It rests in the bar (its
@@ -49,11 +49,11 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
       return { l: cx + (p[0] - h) * k, t: cy + top * k, r: cx + (p[0] + h) * k, b: cy + bot * k };
     };
     const dock = document.querySelector(".cs-dock")?.getBoundingClientRect();
-    const docked = show.mode === "rest";
-    let to: Pt;
+    const rest: Pt = dock ? [dock.left + dock.width / 2, dock.top + dock.height / 2] : [innerWidth / 2, innerHeight - 40];
+    let docked = show.mode === "rest";
+    let to: Pt = rest;
     let placed: Placed | null = null;
     if (docked) {
-      to = dock ? [dock.left + dock.width / 2, dock.top + dock.height / 2] : [innerWidth / 2, innerHeight - 40];
       s.side = undefined;
       s.home = undefined;
     } else {
@@ -78,11 +78,19 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
         placed = placeBeside(rect(target, at[target.id]), words, obstacles, screen, s.side, anchor);
       } else {
         placed = placeHome(words, obstacles, screen, s.home);
-        s.home = homePoint(placed, words);
+        s.home = placed ? homePoint(placed, words) : undefined;
       }
-      s.side = placed.side;
-      to = placed.orb;
+      // No free spot: it covers nothing, it stays in the bar and its
+      // words show as a line above it.
+      if (placed) {
+        s.side = placed.side;
+        to = placed.orb;
+      } else {
+        s.side = undefined;
+        docked = true;
+      }
     }
+    setCrowded(show.mode !== "rest" && !placed);
     const cur = s.cur ? glide(s.cur, to, reduced) : to;
     const moved = !s.cur || cur[0] !== s.cur[0] || cur[1] !== s.cur[1];
     s.cur = cur;

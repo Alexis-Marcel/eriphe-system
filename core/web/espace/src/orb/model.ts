@@ -189,9 +189,9 @@ function cost(box: Rect, obstacles: Rect[], screen: Rect): number {
 // anchor: the height it points at, its middle by default): the first side
 // where it covers nothing and stays on screen, the side it had (prev)
 // first, so that it does not hop while things move around it; when none
-// is free, the free spot nearest around it; when there is none, the side
-// that covers least, kept on the screen.
-export function placeBeside(target: Rect, words: [number, number], obstacles: Rect[], screen: Rect, prev?: Side | "home", anchor?: number): Placed {
+// is free, the free spot nearest around it; null when there is none: the
+// orb never covers a title, a page or the bar, it stays in the bar.
+export function placeBeside(target: Rect, words: [number, number], obstacles: Rect[], screen: Rect, prev?: Side | "home", anchor?: number): Placed | null {
   const ay = Math.max(target.t, Math.min(target.b, anchor ?? target.t + Math.min(target.b - target.t, 2 * ORB) / 2));
   const cx = (target.l + target.r) / 2;
   const h = Math.max(ORB, words[1]);
@@ -212,16 +212,9 @@ export function placeBeside(target: Rect, words: [number, number], obstacles: Re
     }
   };
   const order = prev && prev !== "home" && prev !== "around" ? [prev, ...SIDES.filter((s) => s !== prev)] : SIDES;
-  let best: { box: Rect; placed: Placed; side: Beside } | null = null;
-  let low = Infinity;
   for (const side of order) {
     const b = at(side);
-    const c = cost(b.box, obstacles, screen);
-    if (c === 0) return { ...b.placed, side };
-    if (c < low) {
-      low = c;
-      best = { ...b, side };
-    }
+    if (cost(b.box, obstacles, screen) === 0) return { ...b.placed, side };
   }
   // No side free: the free spot nearest to it, around it, its words
   // opening away from it.
@@ -237,22 +230,13 @@ export function placeBeside(target: Rect, words: [number, number], obstacles: Re
       return { ...b.placed, side: "around" };
     }
   }
-  // Nowhere free: the least bad, brought back on the screen.
-  const { box, placed, side } = best!;
-  const dx = Math.max(screen.l - box.l, Math.min(0, screen.r - box.r)), dy = Math.max(screen.t - box.t, Math.min(0, screen.b - box.b));
-  return shift({ ...placed, side }, dx, dy);
+  return null;
 }
-
-const shift = (p: Placed, dx: number, dy: number): Placed => ({
-  ...p,
-  orb: [p.orb[0] + dx, p.orb[1] + dy],
-  words: p.words && { l: p.words.l + dx, t: p.words.t + dy, r: p.words.r + dx, b: p.words.b + dy },
-});
 
 // placeHome is where the orb goes at the home: the free spot nearest the
 // middle of the screen's free band (the one it had, prev, while it stays
-// free).
-export function placeHome(words: [number, number], obstacles: Rect[], screen: Rect, prev?: [number, number]): Placed {
+// free); null when there is none.
+export function placeHome(words: [number, number], obstacles: Rect[], screen: Rect, prev?: [number, number]): Placed | null {
   const total = ORB + (words[0] > 0 ? GAP + words[0] : 0);
   const h = Math.max(ORB, words[1]);
   const at = (cx: number, cy: number) => bodyAt(cx - total / 2, cy - h / 2, words, 1);
@@ -261,20 +245,16 @@ export function placeHome(words: [number, number], obstacles: Rect[], screen: Re
     if (cost(b.box, obstacles, screen) === 0) return b.placed;
   }
   const cx = (screen.l + screen.r) / 2, cy = (screen.t + screen.b) / 2;
-  let best = at(cx, cy), low = cost(best.box, obstacles, screen);
-  for (let r = 40; r < 1600 && low > 0; r += 40) {
+  const first = at(cx, cy);
+  if (cost(first.box, obstacles, screen) === 0) return first.placed;
+  for (let r = 40; r < 1600; r += 40) {
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * Math.PI * 2;
       const b = at(cx + Math.cos(a) * r * 1.4, cy + Math.sin(a) * r);
-      const c = cost(b.box, obstacles, screen);
-      if (c < low) {
-        low = c;
-        best = b;
-        if (c === 0) break;
-      }
+      if (cost(b.box, obstacles, screen) === 0) return b.placed;
     }
   }
-  return best.placed;
+  return null;
 }
 
 // homePoint is the point placeHome placed it from, to keep it there

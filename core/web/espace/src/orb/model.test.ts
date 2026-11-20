@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, OrbFeed } from "../data/api";
-import { ANSWER_MS, close, expires, glide, homePoint, ORB, orbShow, placeBeside, placeHome, SAID_MS, type Closed, type Mind, type Rect } from "./model";
+import { ANSWER_MS, close, expires, glide, homePoint, ORB, orbShow, placeBeside as besideOrNone, placeHome as homeOrNone, SAID_MS, type Closed, type Mind, type Rect } from "./model";
+
+// Where it goes when there is a free spot (the cases below have one).
+const placeBeside = (...a: Parameters<typeof besideOrNone>) => besideOrNone(...a)!;
+const placeHome = (...a: Parameters<typeof homeOrNone>) => homeOrNone(...a)!;
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
   id, title: id.toUpperCase(), lifetime: "work", state: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
@@ -129,6 +133,13 @@ describe("where the orb goes", () => {
     const p = placeBeside(sub, words, [sub, left, right, title, bar], screen);
     for (const o of [sub, left, right, title, bar]) expect(overlaps(box(p), o)).toBe(false);
     expect(box(p).t).toBeGreaterThanOrEqual(screen.t);
+  });
+
+  it("covers nothing even when the screen is full: then it has no place out there", () => {
+    const full: Rect = { l: 0, t: 0, r: 1440, b: 900 }; // one page over all
+    const sub: Rect = { l: 600, t: 300, r: 700, b: 400 };
+    expect(besideOrNone(sub, words, [sub, full], screen)).toBeNull();
+    expect(homeOrNone(words, [full], screen)).toBeNull();
   });
 
   it("stays where it was put at the home, frame after frame", () => {

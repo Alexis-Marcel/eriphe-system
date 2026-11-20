@@ -14,8 +14,17 @@ const met = new Map<string, number>();
 let closed: Closed | null = null;
 const users = new Set<() => void>(); // every component that shows the orb, drawn again when it changes
 const bump = () => users.forEach((f) => f());
+let crowded = false; // no free spot for it out in the space: it says it from the bar
 
-export function useOrb(): { show: Show; dismiss: () => void } {
+// setCrowded says whether the orb found no free spot (Orb.tsx): its
+// words then show as a line above the bar, as on a phone.
+export function setCrowded(v: boolean): void {
+  if (v === crowded) return;
+  crowded = v;
+  bump();
+}
+
+export function useOrb(): { show: Show; dismiss: () => void; crowded: boolean } {
   const feed = useGraph((s) => s.orb);
   const sent = useGraph((s) => s.sent);
   const nodes = useGraph((s) => s.nodes);
@@ -56,7 +65,7 @@ export function useOrb(): { show: Show; dismiss: () => void } {
     if (was.current === null && talk !== null && show.mode === "answer" && show.pinned) dismiss();
     was.current = talk;
   }, [talk]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { show, dismiss };
+  return { show, dismiss, crowded };
 }
 
 // orbText is what the orb says, as plain words: for the screen reader
@@ -81,4 +90,5 @@ export function orbText(s: Show, t: T, nodes: Record<string, GraphNode>): string
 export function resetOrb(): void {
   met.clear();
   closed = null;
+  crowded = false;
 }

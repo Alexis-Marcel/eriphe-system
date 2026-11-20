@@ -35,7 +35,7 @@ export function Bar({ boot, narrow }: { boot: api.Boot; narrow: boolean }) {
   const node = useGraph((s) => (s.talk ? s.nodes[s.talk] : undefined));
   const nodes = useGraph((s) => s.nodes);
   const x = useGraph((s) => s.orb);
-  const { show } = useOrb();
+  const { show, crowded } = useOrb();
   const [draft, setDraft] = useState("");
   const [failed, setFailed] = useState(false);
   const cards = x?.cards ?? [];
@@ -110,7 +110,7 @@ export function Bar({ boot, narrow }: { boot: api.Boot; narrow: boolean }) {
             ))}
           </ol>
         )}
-        {narrow && <Line />}
+        {(narrow || crowded) && <Line mini={narrow} />}
       </div>
       {!boot.live && <p className="cs-note">{t("espace.sent.sample")}</p>}
       {boot.setup === "noai" && (

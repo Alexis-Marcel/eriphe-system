@@ -292,7 +292,7 @@ var espaceStrings = map[string]map[string]string{
 		"espace.orb.account":    "Check its AI account",
 		"espace.orb.external":   "Written after reading external content",
 		"espace.orb.more":       "See more",
-		"espace.orb.close":      "Close",
+		"espace.orb.close":      "Dismiss",
 		"espace.orb.wait":       "I need your yes here.",
 		"espace.orb.show":       "Show",
 		"espace.orb.waits":      "%s is waiting for you.",

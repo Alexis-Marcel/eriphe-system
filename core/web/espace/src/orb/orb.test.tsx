@@ -135,6 +135,26 @@ describe("the orb", () => {
     expect(say()?.querySelector(".orb-ext")?.getAttribute("title")).toBe("Écrit après avoir lu un contenu extérieur");
   });
 
+  it("stays in the bar and says it in a line above it when the space has no free spot", async () => {
+    // one bubble so big it fills the screen: nowhere to go without covering it
+    const huge: LNode[] = [{ id: "sub", links: [], r: 4000, lw: 120, lh: 44 }];
+    await act(async () =>
+      root.render(
+        <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
+          <Orb bodies={huge} at={at} cam={[motionValue(300), motionValue(300), motionValue(1)]} onOpen={() => undefined} />
+          <Bar boot={boot} narrow={false} />
+        </WordsContext.Provider>,
+      ),
+    );
+    await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." } });
+    expect(orb().classList.contains("docked")).toBe(true);
+    expect(say()?.classList.contains("on")).toBe(false);
+    const line = el.querySelector(".orb-line")!;
+    expect(line.textContent).toContain("C'est fait.");
+    expect(line.querySelector(".orb-on")?.textContent).toBe("Sur Substack");
+    expect(line.querySelector(".orb-mini")).toBeNull();
+  });
+
   it("glides to its place, or goes at once when less motion is asked", async () => {
     const place = async () => {
       await draw();
