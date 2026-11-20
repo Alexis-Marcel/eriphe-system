@@ -130,7 +130,7 @@ func (c *core) graphRow(sum nodestore.Summary) graphNode {
 		d := sum.Done
 		g.Done = &d
 	}
-	g.Waits = c.nodeCardWaits(sum.ID)
+	g.Waits = c.nodeCardWaits(sum.ID) || c.nodeAttention(sum.ID)
 	if p, ok := c.progressOf(sum.ID); ok && sum.State == nodestore.Running {
 		g.Line = p.Text
 	}

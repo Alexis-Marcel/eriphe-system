@@ -162,10 +162,13 @@ func (c *core) runAction(ctx context.Context, id string, in nodeActIn, lang stri
 	switch {
 	case f.noAccount:
 		return actFail(http.StatusForbidden, tr(lang, "act.account"))
-	case f.value == gridNever:
+	case f.value == gridNever && !f.gesture:
 		return actFail(http.StatusForbidden, tr(lang, "act.never"))
 	}
 	reason := "geste de l'utilisateur sur une liste"
+	if f.gesture {
+		reason = "geste de l'utilisateur sur une liste : un outil que seul son geste lance"
+	}
 	if f.value == gridApproval {
 		reason = "geste de l'utilisateur sur une liste : son clic vaut son oui"
 	}
@@ -176,7 +179,7 @@ func (c *core) runAction(ctx context.Context, id string, in nodeActIn, lang stri
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), actTimeout)
 	defer cancel()
-	out, _, code, why := c.catalogCall(ctx, name, string(raw), func(input map[string]any) {
+	out, _, code, why := c.catalogCall(ctx, name, string(raw), true, func(input map[string]any) {
 		c.store.logDecision("", "", name, input, decideAllow, byUser, reason)
 	})
 	note := "Sur la liste du bloc « " + in.Block + " », " + c.conf().User + " a lancé : " + said

@@ -297,6 +297,13 @@ func (c *core) monitorWhy(s monitorSpec) string {
 // server lists. A live block's source is held to the same (source_reads.go).
 func (c *core) sourceWhy(s monitorSpec) string {
 	u := c.pool.get(s.Server)
+	if u != nil && u.provided != nil && u.provided.codeReads && s.Resource == "" {
+		// A server Eriphe provides for code's own reads, lent to no agent.
+		if name := claudeToolName(s.Server, s.Tool); !c.pool.readOnly(name) || !c.freeAhead(name, s.Args) {
+			return fmt.Sprintf("%s.%s is not a free read", s.Server, s.Tool)
+		}
+		return ""
+	}
 	if !slices.Contains(c.catalogNames(), s.Server) || u == nil {
 		return fmt.Sprintf("%s is not a server of the catalog", s.Server)
 	}

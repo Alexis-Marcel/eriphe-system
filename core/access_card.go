@@ -375,7 +375,7 @@ func (c *core) trackedCall(ctx context.Context, a accessQuestion, name string) (
 // to tell the brain, the server when its words are in it, and why it
 // failed (a callWhy, never the tool's words), "" when it ran.
 func (c *core) approvedCall(ctx context.Context, a accessQuestion, name string) (string, string, string) {
-	out, server, code, why := c.catalogCall(ctx, name, a.Input, func(input map[string]any) {
+	out, server, code, why := c.catalogCall(ctx, name, a.Input, false, func(input map[string]any) {
 		c.store.logDecision(a.TaskID, a.Permission, name, input, decideAllow, byUser, "accordé sur la carte")
 	})
 	if code != "" {
@@ -386,11 +386,12 @@ func (c *core) approvedCall(ctx context.Context, a accessQuestion, name string) 
 }
 
 // catalogCall runs a call of a catalog tool kept as JSON, if it is still
-// allowed at all; allowed records the decision just before it runs. It
-// returns the tool's result (its words: external unless its server is
-// trusted) and its server or, when it did not run, a callWhy and why in
-// words (never the tool's own).
-func (c *core) catalogCall(ctx context.Context, name, raw string, allowed func(map[string]any)) (out, server, code, why string) {
+// allowed at all (gesture: the user's own click, which alone runs a tool
+// only their gesture runs, catalogFacts.gesture); allowed records the
+// decision just before it runs. It returns the tool's result (its words:
+// external unless its server is trusted) and its server or, when it did
+// not run, a callWhy and why in words (never the tool's own).
+func (c *core) catalogCall(ctx context.Context, name, raw string, gesture bool, allowed func(map[string]any)) (out, server, code, why string) {
 	server, tool, ok := splitToolName(name)
 	var input map[string]any
 	if !ok || json.Unmarshal([]byte(raw), &input) != nil {
@@ -400,7 +401,7 @@ func (c *core) catalogCall(ctx context.Context, name, raw string, allowed func(m
 	if u == nil {
 		return "", "", callWhyGone, "cet outil n'est plus là"
 	}
-	if f := c.pool.facts(name, input); f.noAccount || f.value == gridNever {
+	if f := c.pool.facts(name, input); f.noAccount || f.value == gridNever && !(gesture && f.gesture) {
 		return "", "", callWhyNotAllowed, "cet outil n'est plus permis"
 	}
 	t := u.toolByClaudeName(tool)

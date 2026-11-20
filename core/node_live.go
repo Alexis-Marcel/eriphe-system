@@ -315,6 +315,7 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 			c.graphSaid(graphEvent{Kind: graphEvSource, Node: node, Block: r.Block, Name: r.Name})
 		}
 	}
+	c.noteAttention(node, reads) // node_attention.go
 	c.fileSnapshots(node, reads, now)
 }
 

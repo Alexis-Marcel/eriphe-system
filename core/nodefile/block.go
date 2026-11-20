@@ -83,6 +83,9 @@ type Source struct {
 	Monitor  string         `json:"monitor,omitempty"`
 	Items    *Items         `json:"items,omitempty"`
 	Every    int            `json:"every,omitempty"` // minutes between two reads, 1 to 1440; 0: the default
+	// Attention: while it lists items, its node waits for the user (its
+	// bubble says so), as for a card; empty, the node rests.
+	Attention bool `json:"attention,omitempty"`
 }
 
 // Action is what the user may run on the items of a source they pick in
@@ -548,6 +551,8 @@ func (s Source) check(name string) string {
 		return "source " + name + ": every is 1 to 1440 minutes"
 	case s.Items != nil && s.Items.ID == "":
 		return "source " + name + ": items needs id, each item's id"
+	case s.Attention && s.Items == nil:
+		return "source " + name + ": attention needs items: the node waits while there are some"
 	}
 	return ""
 }
