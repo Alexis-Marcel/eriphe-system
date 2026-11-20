@@ -54,6 +54,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("GET /e2e/turns", sc.handleTurns)
 	mux.HandleFunc("POST /e2e/actions", sc.handleActions)
 	mux.HandleFunc("POST /e2e/review", sc.handleReview)
+	mux.HandleFunc("POST /e2e/sections", sc.handleSections)
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
 	mux.HandleFunc("POST /e2e/catalog", sc.handleCatalog)
 	mux.Handle("/", sc.web.w.routes())
@@ -209,10 +210,11 @@ func (sc *scenario) seed() {
 // scenarioTools are the faked tools: the house's lights, the calendar,
 // the mail and the production app's errors.
 type scenarioTools struct {
-	mu    sync.Mutex
-	lit   []string
-	sent  []string
-	moved [][]string // ranger: the ids of each call (selection.spec.ts)
+	mu      sync.Mutex
+	lit     []string
+	sent    []string
+	moved   [][]string // ranger: the ids of each call (selection.spec.ts)
+	deleted [][]string // supprimer: the ids of each call (sections.spec.ts)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
 	veille *mcp.Server
@@ -225,6 +227,16 @@ func guetter(desc string) *mcp.Tool {
 
 func guetterRun(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
 	return nil, map[string]any{"news": []any{}}, nil
+}
+
+// tri is the mailbox the view in sections shows (sections.spec.ts),
+// noted into two groups: what supprimer deleted leaves it.
+var tri = []map[string]any{
+	{"id": "s1", "subject": "Soldes d'hiver", "from": "promo@example.org"},
+	{"id": "s2", "subject": "Compte rendu du comité", "from": "sam@example.org"},
+	{"id": "s3", "subject": "Votre colis est en route", "from": "colis@example.org"},
+	{"id": "s4", "subject": "Lettre du dimanche", "from": "news@example.org"},
+	{"id": "s5", "subject": "Planning de mars", "from": "lou@example.org"},
 }
 
 // boite is the mailbox the list with actions shows (selection.spec.ts):
@@ -282,6 +294,33 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 					}
 				}
 				return nil, map[string]any{"messages": msgs}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "tri", Description: "Les mails à trier", Annotations: read},
+			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				gone := map[string]bool{}
+				for _, ids := range f.deleted {
+					for _, id := range ids {
+						gone[id] = true
+					}
+				}
+				msgs := []any{}
+				for _, m := range tri {
+					if !gone[m["id"].(string)] {
+						msgs = append(msgs, m)
+					}
+				}
+				return nil, map[string]any{"messages": msgs}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "delete", Description: "Supprime des mails"},
+			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+				IDs []string `json:"ids"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.deleted = append(f.deleted, slices.Clone(in.IDs))
+				return nil, map[string]any{"deleted": len(in.IDs)}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "move", Description: "Range des mails dans un dossier"},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
@@ -898,7 +937,7 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f := sc.tools
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved)})
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved), "deleted": slices.Clone(f.deleted)})
 }
 
 // handleCatalog is POST /e2e/catalog: the tools' catalog changed, an
@@ -1019,6 +1058,42 @@ func (sc *scenario) handleReview(rw http.ResponseWriter, r *http.Request) {
 	}
 	c.live.wg.Wait()
 	c.readNode(sc.ctx, id, []string{reviewSource}, time.Now())
+	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// handleSections is POST /e2e/sections: a view of the mails to sort in
+// two sections, its items noted into two groups as a skill would, with an
+// action that deletes on the first (sections.spec.ts), written by the
+// brain as any author, read once, and shown.
+func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
+	c := sc.c
+	d, err := c.nodes.Create(nodestore.New{Title: "Mails en sections", Lifetime: nodefile.Standing, Author: byBrain, Body: "Les mails, triés.\n"})
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id := d.Node.Meta.ID
+	body := "Les mails, triés.\n\n```eriphe:block tri\n" + `{"components": [
+  {"id": "root", "component": "Column", "children": ["c1", "c2"]},
+  {"id": "c1", "component": "Card", "title": "À supprimer", "child": "drop"},
+  {"id": "drop", "component": "List", "children": {"path": "/tri/messages[_group=À supprimer]", "componentId": "row"}, "emptyText": "Rien à supprimer"},
+  {"id": "c2", "component": "Card", "title": "Pour info", "child": "info"},
+  {"id": "info", "component": "List", "children": {"path": "/tri/messages[_group=Pour info]", "componentId": "row"}},
+  {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
+ "sources": {"tri": {"tool": "mail/tri", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}},
+ "actions": {"drop": {"tool": "mail/delete", "items": "ids", "source": "tri", "list": "drop"}}}` + "\n```\n"
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for item, group := range map[string]string{"s1": "À supprimer", "s2": "Pour info", "s3": "À supprimer", "s4": "À supprimer", "s5": "Pour info"} {
+		if err := c.nodes.NoteItem(id, nodestore.Item{Source: "tri", Item: item, Group: group, Author: byBrain}); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	c.readNode(sc.ctx, id, nil, time.Now())
+	c.showNode(id, byBrain, false)
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
 }
 

@@ -165,6 +165,130 @@ describe("picking items in a list", () => {
   });
 });
 
+// A view in sections: two Lists of the same source, each filtered by
+// eriphe-core (its rows), the first with an action that throws away.
+const del: PickAction = {
+  name: "del",
+  one: "Supprimer 1 élément (mail/delete)",
+  many: "Supprimer {n} éléments (mail/delete)",
+  all: "Supprimer les {n} (mail/delete)",
+  tool: "mail/delete",
+  confirm: true,
+};
+const drop: PickList = {
+  component: "drop",
+  source: "inbox",
+  filtered: true,
+  items: [
+    { n: 0, id: "m1", title: "Facture", detail: "Sam" },
+    { n: 2, id: "m3", title: "Lettre" },
+  ],
+  actions: [del],
+};
+const info: PickList = { component: "info", source: "inbox", filtered: true, items: [{ n: 1, id: "m2", title: "Relance" }], actions: [] };
+const sections = [
+  {
+    version: "1.0" as const,
+    createSurface: {
+      surfaceId: surface,
+      catalogId: CATALOG.id,
+      components: [
+        { id: "root", component: "Column", children: ["drop", "info"] },
+        { id: "drop", component: "List", children: { path: "/inbox/messages", componentId: "row" } },
+        { id: "info", component: "List", children: { path: "/inbox/messages", componentId: "row" }, emptyText: "Rien" },
+        { id: "row", component: "Text", text: { "@path": "subject" } },
+      ],
+      dataModel: { inbox: { messages: [{ id: "m1", subject: "Facture" }, { id: "m2", subject: "Relance" }, { id: "m3", subject: "Lettre" }] } },
+    },
+  },
+];
+
+describe("a view in sections", () => {
+  let lists: Record<string, PickList>;
+  const mountSections = async (live = true) => {
+    const picks: Picks = {
+      list: (s, c) => (s === surface ? lists[c] : undefined),
+      kept: new Map(),
+      run: live
+        ? async (_s, l, a, ids) => {
+            runs.push({ action: `${l.component}:${a.name}`, ids });
+            return answer;
+          }
+        : undefined,
+    };
+    adapter = createAdapter("fr");
+    root = createRoot(el);
+    await act(async () =>
+      root.render(
+        <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
+          <PicksContext.Provider value={picks}>
+            <Surfaces adapter={adapter} />
+          </PicksContext.Provider>
+        </WordsContext.Provider>,
+      ),
+    );
+    await act(async () => adapter.applyMessages(sections));
+  };
+  const section = (i: number) => el.querySelectorAll(".a2-column > *")[i] as HTMLElement;
+  const texts = (e: Element) => [...e.querySelectorAll(".a2-text")].map((x) => x.textContent);
+  beforeEach(() => {
+    lists = { drop, info };
+  });
+
+  it("shows in each List only the rows eriphe-core kept, and keeps the picks", async () => {
+    await mountSections();
+    expect(texts(section(0))).toEqual(["Facture", "Lettre"]);
+    expect(texts(section(1))).toEqual(["Relance"]);
+    // Only the section with an action is picked in.
+    expect(section(0).querySelectorAll(".a2-pickable .a2-pick")).toHaveLength(2);
+    expect(section(1).querySelectorAll(".a2-pick")).toHaveLength(0);
+    await click(section(0).querySelectorAll<HTMLInputElement>(".a2-pickable .a2-pick")[1]);
+    expect(bar()?.textContent).toContain("1 sélectionné(s)");
+    await click(buttons()[0]);
+    expect(el.querySelector(".a2-pickask")?.textContent).toContain("Lettre");
+    expect(el.querySelector(".a2-pickask")?.textContent).not.toContain("Facture");
+  });
+
+  it("acts on all a section's rows in one click, confirming the very items, and sends those", async () => {
+    await mountSections();
+    const whole = [...el.querySelectorAll<HTMLButtonElement>(".a2-pickwhole")];
+    expect(whole.map((b) => b.textContent)).toEqual(["Supprimer les 2 (mail/delete)"]);
+    await click(whole[0]);
+    expect(runs).toEqual([]);
+    const ask = el.querySelector(".a2-pickask")!;
+    expect([...ask.querySelectorAll("li")].map((li) => li.textContent)).toEqual(["Facture · Sam", "Lettre"]);
+    // A mail comes in the section while the confirm is open: not taken.
+    lists = { drop: { ...drop, items: [...drop.items, { n: 3, id: "m4", title: "Nouveau" }] }, info };
+    await act(async () => adapter.applyMessages([{ version: "1.0", updateDataModel: { surfaceId: surface, path: "/inbox/messages/3", value: { id: "m4", subject: "Nouveau" } } }]));
+    await click([...ask.querySelectorAll("button")].find((b) => b.textContent === "Lancer"));
+    expect(runs).toEqual([{ action: "drop:del", ids: ["m1", "m3"] }]);
+  });
+
+  it("keeps the confirm open when the page draws its blocks again", async () => {
+    await mountSections();
+    await click(el.querySelector(".a2-pickwhole")!);
+    await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: surface } }]));
+    await act(async () => adapter.applyMessages(sections));
+    const ask = el.querySelector(".a2-pickask")!;
+    expect([...ask.querySelectorAll("li")].map((li) => li.textContent)).toEqual(["Facture · Sam", "Lettre"]);
+    await click([...ask.querySelectorAll("button")].find((b) => b.textContent === "Lancer"));
+    expect(runs).toEqual([{ action: "drop:del", ids: ["m1", "m3"] }]);
+  });
+
+  it("shows the filtered rows on an older version, with nothing to pick", async () => {
+    await mountSections(false);
+    expect(texts(section(0))).toEqual(["Facture", "Lettre"]);
+    expect(el.querySelectorAll(".a2-pick")).toHaveLength(0);
+    expect(el.querySelector(".a2-pickwhole")).toBeNull();
+  });
+
+  it("says its empty text when the filter keeps nothing", async () => {
+    lists = { drop, info: { ...info, items: [] } };
+    await mountSections();
+    expect(el.querySelector(".a2-empty")?.textContent).toBe("Rien");
+  });
+});
+
 describe("buttonText", () => {
   it("is code's words, one or many", () => {
     expect(buttonText(archive, 1)).toBe("Déplacer 1 élément → archive (mail/move)");
@@ -173,7 +297,7 @@ describe("buttonText", () => {
 });
 
 describe("pickLists", () => {
-  it("takes the page's lists, their rows the stream's latest", () => {
+  it("takes the page's lists, their rows the stream's latest, by List", () => {
     const page = {
       node: { id: "n1" },
       version: 3,
@@ -182,7 +306,7 @@ describe("pickLists", () => {
       parts: [{ block: { name: "mails", components: [], data: {}, lists: [list] } }, { block: { name: "other", components: [], data: {} } }],
     } as unknown as NodePage;
     const fresh = [{ n: 0, id: "m9", title: "Nouveau" }];
-    const got = pickLists(page, (block, source) => (block === "mails" && source === "inbox" ? fresh : undefined));
+    const got = pickLists(page, (block, component) => (block === "mails" && component === "root" ? fresh : undefined));
     expect([...got.keys()]).toEqual([surface]);
     expect(got.get(surface)?.[0].items).toEqual(fresh);
     expect(pickLists(page, () => undefined).get(surface)?.[0].items).toHaveLength(3);

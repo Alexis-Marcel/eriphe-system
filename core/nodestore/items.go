@@ -14,29 +14,37 @@ import (
 // ItemNoteMax is the most runes of an item's note.
 const ItemNoteMax = 400
 
+// ItemGroupMax is the most runes of an item's group.
+const ItemGroupMax = 40
+
 // ItemStates are an item's states: what the user should do of it.
 var ItemStates = []string{"act", "look", "info", "none", "done"}
 
-// Item is an item's note.
+// Item is an item's note. Its state is one of ItemStates, what the user
+// should do of it (code reads it: attention, the runs); its group is a
+// short label the noter chooses (« À supprimer »): the section a view
+// shows it in, a List filtering on it ([_group=À supprimer]).
 type Item struct {
 	Source  string
 	Item    string
 	Note    string
 	State   string
+	Group   string
 	Author  string
 	Tainted string // why it may carry someone else's words; "" when it does not
 }
 
 // NoteItem keeps an item's note: the same item noted again replaces it;
-// no note nor state takes it away. The node's source must be one of its
-// blocks' sources.
+// no note, state nor group takes it away. The node's source must be one
+// of its blocks' sources. A group is one line without [ ] / = ! (a List's
+// filter names it), ItemGroupMax runes at most.
 func (s *Store) NoteItem(id string, it Item) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if strings.TrimSpace(it.Author) == "" {
 		return errors.New("a write has an author")
 	}
-	it.Note, it.State = strings.TrimSpace(it.Note), strings.TrimSpace(it.State)
+	it.Note, it.State, it.Group = strings.TrimSpace(it.Note), strings.TrimSpace(it.State), strings.TrimSpace(it.Group)
 	switch {
 	case strings.TrimSpace(it.Item) == "":
 		return errors.New("an item is named by its id")
@@ -44,8 +52,10 @@ func (s *Store) NoteItem(id string, it Item) error {
 		return fmt.Errorf("a note is %d characters at most", ItemNoteMax)
 	case it.State != "" && !slices.Contains(ItemStates, it.State):
 		return fmt.Errorf("an item's state is one of %s", strings.Join(ItemStates, ", "))
+	case len([]rune(it.Group)) > ItemGroupMax || strings.ContainsAny(it.Group, "\n\r\t[]/=!"):
+		return fmt.Errorf("a group is one line of %d characters at most, without [ ] / = ! (a list's filter names it)", ItemGroupMax)
 	}
-	if err := s.refuse(it.Note); err != nil {
+	if err := s.refuse(it.Note, it.Group); err != nil {
 		return err
 	}
 	cur, err := s.read(id, 0)
@@ -69,21 +79,21 @@ func (s *Store) NoteItem(id string, it Item) error {
 		}
 		return fmt.Errorf("%s has no source %q (its sources: %s)", id, it.Source, strings.Join(names, ", "))
 	}
-	if it.Note == "" && it.State == "" {
+	if it.Note == "" && it.State == "" && it.Group == "" {
 		_, err = s.db.Exec(`DELETE FROM node_items WHERE id = ? AND source = ? AND item = ?`, id, it.Source, it.Item)
 	} else {
-		_, err = s.db.Exec(`INSERT OR REPLACE INTO node_items (id, source, item, note, state, author, tainted, noted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			id, it.Source, it.Item, it.Note, it.State, it.Author, it.Tainted, s.opts.Now().Unix())
+		_, err = s.db.Exec(`INSERT OR REPLACE INTO node_items (id, source, item, note, state, grp, author, tainted, noted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, it.Source, it.Item, it.Note, it.State, it.Group, it.Author, it.Tainted, s.opts.Now().Unix())
 	}
-	if err == nil {
-		s.changed(ChangedState, id)
+	if err == nil && s.watch != nil {
+		s.watch(Change{ID: id, What: ChangedItems, Source: it.Source})
 	}
 	return err
 }
 
 // Items are a node's item notes, by source then item.
 func (s *Store) Items(id string) ([]Item, error) {
-	rows, err := s.db.Query(`SELECT source, item, note, state, author, tainted FROM node_items WHERE id = ? ORDER BY source, item`, id)
+	rows, err := s.db.Query(`SELECT source, item, note, state, grp, author, tainted FROM node_items WHERE id = ? ORDER BY source, item`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +101,7 @@ func (s *Store) Items(id string) ([]Item, error) {
 	var out []Item
 	for rows.Next() {
 		var it Item
-		if err := rows.Scan(&it.Source, &it.Item, &it.Note, &it.State, &it.Author, &it.Tainted); err != nil {
+		if err := rows.Scan(&it.Source, &it.Item, &it.Note, &it.State, &it.Group, &it.Author, &it.Tainted); err != nil {
 			return nil, err
 		}
 		out = append(out, it)

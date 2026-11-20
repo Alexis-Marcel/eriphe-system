@@ -167,19 +167,22 @@ export type PageBlock = {
   error?: string;
   card?: string;
   proposal?: ProposalView;
-  // the Lists the user may pick items in, and the actions on them
-  // (list_actions.go)
+  // the Lists bound to a source's items the page must know: those that
+  // filter them, those the user may pick items in, and the actions on
+  // them (list_actions.go, list_sections.go)
   lists?: PickList[];
 };
 
-// A row the user may pick: its place in its source's list (n), its id,
-// what it shows. An action's words are code's: one for one item, many
-// with {n}; hint is the author's label, hintExternal on an external block
-// (shown marked: someone else's words may have written it);
-// confirm: a tool that throws away, asked once more with its exact call.
+// A row of such a List: its place in its source's list (n), its id, what
+// it shows. An action's words are code's: one for one item, many with
+// {n}, all with {n} for all the rows of the list; hint is the author's
+// label, hintExternal on an external block (shown marked: someone else's
+// words may have written it); confirm: a tool that throws away,
+// asked once more with its exact call. A filtered List shows its rows
+// only, never the source's others.
 export type PickItem = { n: number; id: string; title?: string; detail?: string };
-export type PickAction = { name: string; one: string; many: string; tool: string; args?: string[]; hint?: string; hintExternal?: boolean; confirm?: boolean };
-export type PickList = { component: string; source: string; items: PickItem[]; actions: PickAction[] };
+export type PickAction = { name: string; one: string; many: string; all?: string; tool: string; args?: string[]; hint?: string; hintExternal?: boolean; confirm?: boolean };
+export type PickList = { component: string; source: string; filtered?: boolean; items: PickItem[]; actions: PickAction[] };
 
 export type TraceEntry = { at: string; author: string; text: string };
 // A node's file as it is (md), its body as the user edits it (body), the
@@ -223,11 +226,12 @@ export async function ask(id: string, block: string, component: string): Promise
   return (await sendJSON("POST", `${nodePath(id)}/ask`, { block, component })).status === 204;
 }
 
-// act runs one of a block's actions on the items picked: the user's own
+// act runs one of a block's actions on the items picked in one of its
+// Lists (its component id), or all those it showed: the user's own
 // gesture (web_list_actions.go). ok, with the line that says what was
 // done, or why not.
-export async function act(id: string, block: string, action: string, version: number, ids: string[]): Promise<{ ok: boolean; text: string }> {
-  const r = await sendJSON<{ text?: string; error?: string }>("POST", `${nodePath(id)}/act`, { block, action, version, ids });
+export async function act(id: string, block: string, list: string, action: string, version: number, ids: string[]): Promise<{ ok: boolean; text: string }> {
+  const r = await sendJSON<{ text?: string; error?: string }>("POST", `${nodePath(id)}/act`, { block, list, action, version, ids });
   return { ok: r.status === 200, text: r.data?.text ?? r.data?.error ?? "" };
 }
 

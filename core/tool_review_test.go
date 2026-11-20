@@ -129,7 +129,7 @@ func TestToolReviewActs(t *testing.T) {
 	ids := reviewIDs(t, c, id)
 	act := func(action string, picked ...string) (int, map[string]any) {
 		d, _ := c.nodes.Read(id, 0)
-		return gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "tools", Action: action, Version: d.Version.N, IDs: picked})
+		return gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "tools", List: "root", Action: action, Version: d.Version.N, IDs: picked})
 	}
 	if code, out := act("accept", ids["status"]); code != http.StatusOK || out["text"] != "1 accepté" {
 		t.Fatalf("accept: %d %v", code, out)
@@ -259,7 +259,7 @@ func TestToolReviewActOnItsOwnList(t *testing.T) {
 	_ = fm
 	waitStatus(t, tw.c.pool.get(reviewServer), statusReady)
 	d, _ := tw.c.nodes.Read(id, 0)
-	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", Action: "accept", Version: d.Version.N, IDs: []string{"m1"}})
+	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "accept", Version: d.Version.N, IDs: []string{"m1"}})
 	if code != http.StatusForbidden {
 		t.Fatalf("act on another list: %d %v", code, out)
 	}

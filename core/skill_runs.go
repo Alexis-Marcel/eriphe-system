@@ -469,7 +469,7 @@ func skillRunPrompt(sk triggeredSkill, standing string, events []journalEvent, n
 	var b strings.Builder
 	fmt.Fprintf(&b, "Skill « %s » : %s\n\n%s\n\n", sk.Name, sk.Manifest.Description, sk.Manifest.Body)
 	if standing != "" {
-		fmt.Fprintf(&b, "[tu travailles dans le node permanent « %s », celui de l'utilisateur : lis-le (node_read), note chaque élément de ses sources (item_note), "+
+		fmt.Fprintf(&b, "[tu travailles dans le node permanent « %s », celui de l'utilisateur : lis-le (node_read), note chaque élément de ses sources (item_note ; avec son group quand une List du node filtre sur _group : l'un de ses groupes), "+
 			"et ouvre un enfant (node_open) pour ce qui demande un travail, un brouillon par exemple ; ce que tu ferais qui change quelque chose attend son oui sur une carte]\n\n", standing)
 	}
 	if s := skillCanText(sk.Trigger); s != "" {

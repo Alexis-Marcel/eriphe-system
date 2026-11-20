@@ -877,6 +877,12 @@ a.notice-text:hover { text-decoration: underline; }
 .a2-pick { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--accent); cursor: pointer; opacity: 0; transition: opacity 120ms; }
 .a2-pickall { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 12px; color: var(--fg3); cursor: pointer; opacity: 0; transition: opacity 120ms; }
 .a2-pickall .a2-pick { margin: 0; }
+/* The head: « tout sélectionner », and an action on all the rows (« Supprimer les 12 »), always seen. */
+.a2-pickhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.a2-pickwhole { padding: 2px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: none; color: var(--fg2); font: inherit; font-size: 12px; cursor: pointer; }
+.a2-pickall + .a2-pickwhole { margin-left: auto; }
+.a2-pickwhole:hover { background: var(--fill); color: var(--fg); }
+.a2-pickwhole:disabled { opacity: 0.5; cursor: default; }
 .a2-picks:hover .a2-pick, .a2-picks:hover .a2-pickall, .a2-picks.picking .a2-pick, .a2-picks.picking .a2-pickall,
 .a2-pick:focus-visible, .a2-pickall:focus-within { opacity: 1; }
 @media (hover: none) { .a2-pick, .a2-pickall { opacity: 1; } }

@@ -25,8 +25,9 @@ export type State = {
   progress: Record<string, Progress>;
   // the sources' last values, by node, block and name
   sources: Record<string, unknown>;
-  // the rows a List picks in, of the sources an action acts on, by node,
-  // block and name (list_actions.go)
+  // the rows of the Lists the page must know (those that filter a
+  // source's items, those the user picks in), by node, block and the
+  // List's component id (list_actions.go, list_sections.go)
   rows: Record<string, PickItem[]>;
   open: string[];
   talk: string | null;
@@ -117,12 +118,15 @@ export function applyProgress(s: State, ev: ProgressEvent): State {
   return { ...s, progress: { ...s.progress, [ev.node]: { text: ev.text, at: ev.at } } };
 }
 
-export type SourceEvent = { node: string; block: string; name: string; value: unknown; items?: PickItem[] };
+export type SourceEvent = { node: string; block: string; name: string; value: unknown; lists?: { component: string; items: PickItem[] }[] };
 
 export function applySource(s: State, ev: SourceEvent): State {
   if (!ev || typeof ev.node !== "string" || typeof ev.block !== "string" || typeof ev.name !== "string") return s;
   const key = sourceKey(ev.node, ev.block, ev.name);
-  const rows = Array.isArray(ev.items) ? { ...s.rows, [key]: ev.items } : s.rows;
+  let rows = s.rows;
+  for (const l of Array.isArray(ev.lists) ? ev.lists : []) {
+    if (l && typeof l.component === "string" && Array.isArray(l.items)) rows = { ...rows, [sourceKey(ev.node, ev.block, l.component)]: l.items };
+  }
   return { ...s, sources: { ...s.sources, [key]: ev.value }, rows };
 }
 

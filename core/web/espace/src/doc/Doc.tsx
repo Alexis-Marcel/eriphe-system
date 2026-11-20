@@ -20,7 +20,8 @@ import { blockOf, messages, pickLists, pieces, sourceMessage, toGesture, type Pi
 // from a block someone else's words may have written, nothing is sent.
 // A [[link]] of its text opens the node eriphe-core resolved it to
 // (page.refs) beside the page (onOpen), named as the graph names it now.
-// On the last version, live, a List of a source's items an action acts on
+// A List that filters a source's items shows the rows eriphe-core kept
+// (list_sections.go). On the last version, live, a List of a source's items an action acts on
 // lets the user pick rows and run the action (a2ui/picks.tsx): its rows
 // follow the source's, the click goes to eriphe-core.
 export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: boolean; live: boolean; onOpen?: (id: string) => void }) {
@@ -93,12 +94,15 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
     });
   }, [latest, page]);
   const [kept] = useState<Picks["kept"]>(() => new Map());
-  const picks = useMemo<Picks | null>(() => {
-    if (!latest || !live) return null;
-    const lists = pickLists(page, (block, source) => rows[sourceKey(page.node.id, block, source)]);
+  const picks = useMemo<Picks>(() => {
+    const lists = pickLists(page, (block, component) => (latest ? rows[sourceKey(page.node.id, block, component)] : undefined));
     return {
       list: (surface, component) => lists.get(surface)?.find((l) => l.component === component),
-      run: (surface, _list, action, ids) => act(page.node.id, surface.slice(page.node.id.length + 2), action.name, page.version, ids),
+      // Only on the last version, live: an older one shows its rows.
+      run:
+        latest && live
+          ? (surface, list, action, ids) => act(page.node.id, surface.slice(page.node.id.length + 2), list.component, action.name, page.version, ids)
+          : undefined,
       kept,
     };
   }, [latest, live, page, rows, kept]);

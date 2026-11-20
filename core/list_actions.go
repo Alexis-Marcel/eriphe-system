@@ -41,11 +41,13 @@ type listItem struct {
 }
 
 // listAction is one of a block's actions as its button shows it: the
-// words are code's, One for one item, Many with {n} for how many.
+// words are code's, One for one item, Many with {n} for how many, All
+// with {n} for all the rows of the list.
 type listAction struct {
 	Name string   `json:"name"`
 	One  string   `json:"one"`
 	Many string   `json:"many"`
+	All  string   `json:"all"`
 	Tool string   `json:"tool"`           // server/tool
 	Args []string `json:"args,omitempty"` // the fixed args, a line each, for the confirm
 	Hint string   `json:"hint,omitempty"` // the author's label
@@ -54,11 +56,14 @@ type listAction struct {
 	Confirm      bool `json:"confirm,omitempty"`
 }
 
-// pageList is a List of a block the user may pick items in: the List's
-// component id, its source, its rows, and the actions on them.
+// pageList is a List of a block bound to a source's items: the List's
+// component id, its source, its rows, and the actions on them. Filtered:
+// the List filters its source's items (list_sections.go), and shows only
+// the rows given, never the others.
 type pageList struct {
 	Component string       `json:"component"`
 	Source    string       `json:"source"`
+	Filtered  bool         `json:"filtered,omitempty"`
 	Items     []listItem   `json:"items"`
 	Actions   []listAction `json:"actions"`
 }
@@ -190,8 +195,22 @@ func destructive(t *mcp.Tool) bool {
 // A verb of its own for the usual tools (move, trash, archive, delete,
 // mark…), else the tool's title, else its name.
 func actionWords(t *mcp.Tool, toolName string, args map[string]any, lang string) (one, many string) {
+	verb, tail := actionVerb(t, toolName, args, lang)
+	return fmt.Sprintf(verb, tr(lang, "act.one")) + tail, fmt.Sprintf(verb, tr(lang, "act.many")) + tail
+}
+
+// actionAllWords are what an action's button says for all the rows of a
+// list ({n} for how many): « Supprimer les {n} ».
+func actionAllWords(t *mcp.Tool, toolName string, args map[string]any, lang string) string {
+	verb, tail := actionVerb(t, toolName, args, lang)
+	return fmt.Sprintf(verb, tr(lang, "act.all")) + tail
+}
+
+// actionVerb is an action's verb, with a %s for what it acts on, and
+// what follows it: its fixed args and its tool.
+func actionVerb(t *mcp.Tool, toolName string, args map[string]any, lang string) (verb, tail string) {
 	_, short, _ := strings.Cut(toolName, "/")
-	verb := tr(lang, "act.verb."+short)
+	verb = tr(lang, "act.verb."+short)
 	if verb == "act.verb."+short {
 		title := ""
 		if t != nil {
@@ -203,12 +222,12 @@ func actionWords(t *mcp.Tool, toolName string, args map[string]any, lang string)
 			verb = fmt.Sprintf(tr(lang, "act.verb.other"), buttonText(short, 40), "%s")
 		}
 	}
-	tail := ""
+	tail = ""
 	if a := argsText(args, lang); a != "" {
 		tail = " → " + a
 	}
 	tail += " (" + buttonText(toolName, 80) + ")"
-	return fmt.Sprintf(verb, tr(lang, "act.one")) + tail, fmt.Sprintf(verb, tr(lang, "act.many")) + tail
+	return verb, tail
 }
 
 func annotationTitle(t *mcp.Tool) string {
@@ -266,10 +285,11 @@ func argValue(v any, lang string) string {
 	return string(raw)
 }
 
-// itemIDs are the ids of a source's items as the user picks them, each
-// with its value as the source gives it (a number stays a number for
-// the tool), in the source's order (sourceItems' reading).
-func itemIDs(src nodefile.Source, value any) (map[string]any, []string) {
+// itemIDs are the ids of a source's items as the user picks them, those
+// the filter keeps (nil: all), each with its value as the source gives it
+// (a number stays a number for the tool), in the source's order
+// (sourceItems' reading: an id given twice is its first item's).
+func itemIDs(src nodefile.Source, value any, f *itemFilter) (map[string]any, []string) {
 	if src.Items == nil || value == nil {
 		return nil, nil
 	}
@@ -279,6 +299,7 @@ func itemIDs(src nodefile.Source, value any) (map[string]any, []string) {
 		return nil, nil
 	}
 	ids := map[string]any{}
+	seen := map[string]bool{}
 	var order []string
 	for _, it := range items {
 		v, err := extract(it, src.Items.ID)
@@ -286,7 +307,11 @@ func itemIDs(src nodefile.Source, value any) (map[string]any, []string) {
 			continue
 		}
 		id := truncate(valueText(v), 200)
-		if _, seen := ids[id]; id == "" || seen {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		if !f.keeps(it) {
 			continue
 		}
 		ids[id] = v
@@ -320,12 +345,21 @@ func escapeToken(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "~", "~0"), "/", "~1")
 }
 
-// sourceRows are a source's rows as a List the user picks in shows them.
-func sourceRows(name string, src nodefile.Source, value any) []listItem {
+// sourceRows are a source's rows as a List shows them, those its filter
+// keeps (nil: all), each with its place in the source's list.
+func sourceRows(name string, src nodefile.Source, value any, f *itemFilter) []listItem {
 	out := []listItem{}
+	var raw []any
+	if f != nil && src.Items != nil && value != nil {
+		list, _ := extract(value, src.Items.Path)
+		raw, _ = list.([]any)
+	}
 	for _, it := range sourceItems(name, src, value, 0) {
 		r := listItem{}
 		r.N, _ = it["n"].(int)
+		if f != nil && (r.N >= len(raw) || !f.keeps(raw[r.N])) {
+			continue
+		}
 		r.ID, _ = it["id"].(string)
 		if t, _ := it["title"].(string); t != r.ID {
 			r.Title = t
@@ -336,14 +370,13 @@ func sourceRows(name string, src nodefile.Source, value any) []listItem {
 	return out
 }
 
-// blockLists are the Lists of a block the user may pick items in: each
-// bound as a whole to the items of a source some action acts on, with its
-// rows (from data, the block's data as the page gets it) and the actions'
-// buttons.
-func (c *core) blockLists(b *nodefile.Block, data map[string]any, lang string) []pageList {
-	if len(b.Actions) == 0 {
-		return nil
-	}
+// blockLists are the Lists of a block bound as a whole to a source's
+// items that the page must know: those that filter them (it shows only
+// their rows) and those some action acts on (the user picks rows), each
+// with its rows (from data, the block's data as the page gets it, the
+// items' notes on them) and the actions' buttons. With only, those of
+// these sources alone.
+func (c *core) blockLists(b *nodefile.Block, data map[string]any, lang string, only ...string) []pageList {
 	var comps []map[string]any
 	json.Unmarshal(b.Components, &comps)
 	var out []pageList
@@ -357,20 +390,24 @@ func (c *core) blockLists(b *nodefile.Block, data map[string]any, lang string) [
 		if id == "" || path == "" {
 			continue
 		}
-		for _, name := range slices.Sorted(maps.Keys(b.Sources)) {
-			src := b.Sources[name]
-			if listPath(name, src) != path {
-				continue
+		name, f, err := listBinding(path, b.Sources)
+		if err != nil && strings.Contains(path, "[") && len(only) == 0 {
+			// A filter that does not read (a file written by hand): the
+			// page shows none of the source's items, never all of them.
+			out = append(out, pageList{Component: id, Filtered: true, Items: []listItem{}, Actions: []listAction{}})
+			continue
+		}
+		if err != nil || len(only) > 0 && !slices.Contains(only, name) {
+			continue
+		}
+		acts := []listAction{}
+		for _, an := range slices.Sorted(maps.Keys(b.Actions)) {
+			if a := b.Actions[an]; a.Source == name && (a.List == "" || a.List == id) {
+				acts = append(acts, c.listAction(an, a, b.External, lang))
 			}
-			var acts []listAction
-			for _, an := range slices.Sorted(maps.Keys(b.Actions)) {
-				if a := b.Actions[an]; a.Source == name {
-					acts = append(acts, c.listAction(an, a, b.External, lang))
-				}
-			}
-			if len(acts) > 0 {
-				out = append(out, pageList{Component: id, Source: name, Items: sourceRows(name, src, data[name]), Actions: acts})
-			}
+		}
+		if len(acts) > 0 || f != nil {
+			out = append(out, pageList{Component: id, Source: name, Filtered: f != nil, Items: sourceRows(name, b.Sources[name], data[name], f), Actions: acts})
 		}
 	}
 	return out
@@ -380,28 +417,6 @@ func (c *core) blockLists(b *nodefile.Block, data map[string]any, lang string) [
 func (c *core) listAction(name string, a nodefile.Action, external bool, lang string) listAction {
 	_, t := c.actionTool(a.Tool)
 	one, many := actionWords(t, a.Tool, a.Args, lang)
-	return listAction{Name: name, One: one, Many: many, Tool: buttonText(a.Tool, 80), Args: argLines(a.Args, lang, 0), Confirm: destructive(t),
+	return listAction{Name: name, One: one, Many: many, All: actionAllWords(t, a.Tool, a.Args, lang), Tool: buttonText(a.Tool, 80), Args: argLines(a.Args, lang, 0), Confirm: destructive(t),
 		Hint: buttonText(a.Label, nodefile.ActionLabelMax), HintExternal: external && a.Label != ""}
-}
-
-// blockSourceRows are the rows of a source of a node's block, as the
-// "source" event sends them with its value: nil when no action acts on
-// it.
-func (c *core) blockSourceRows(id, block, name string, value any) []listItem {
-	if c.nodes == nil {
-		return nil
-	}
-	d, err := c.nodes.Read(id, 0)
-	if err != nil {
-		return nil
-	}
-	b := d.Node.Block(block)
-	if b == nil {
-		return nil
-	}
-	src, ok := b.Sources[name]
-	if !ok || !slices.ContainsFunc(slices.Collect(maps.Values(b.Actions)), func(a nodefile.Action) bool { return a.Source == name }) {
-		return nil
-	}
-	return sourceRows(name, src, value)
 }

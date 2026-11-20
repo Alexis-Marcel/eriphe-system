@@ -91,7 +91,7 @@ func TestNodeActRunsThePicked(t *testing.T) {
 	tw, csrf, fm, id := actionsWeb(t, archiveAction)
 	c := tw.c
 	d, _ := c.nodes.Read(id, 0)
-	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", Action: "archive", Version: d.Version.N, IDs: []string{"m1", "m3"}})
+	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "archive", Version: d.Version.N, IDs: []string{"m1", "m3"}})
 	if code != http.StatusOK || out["text"] != "2 déplacés" {
 		t.Fatalf("act: %d %v", code, out)
 	}
@@ -109,13 +109,13 @@ func TestNodeActRunsThePicked(t *testing.T) {
 	}
 
 	// Ids the source does not list, an action the block has not: nothing runs.
-	if code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", Action: "archive", IDs: []string{"m1", "m9"}}); code != http.StatusBadRequest || !strings.Contains(out["error"].(string), "1 élément") {
+	if code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "archive", IDs: []string{"m1", "m9"}}); code != http.StatusBadRequest || !strings.Contains(out["error"].(string), "1 élément") {
 		t.Fatalf("an id not listed: %d %v", code, out)
 	}
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", Action: "trash", IDs: []string{"m1"}}); code != http.StatusConflict {
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "trash", IDs: []string{"m1"}}); code != http.StatusConflict {
 		t.Fatalf("an action not in the block: %d", code)
 	}
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", Action: "archive"}); code != http.StatusBadRequest {
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "archive"}); code != http.StatusBadRequest {
 		t.Fatalf("no ids: %d", code)
 	}
 	if n := len(sentNow(fm)); n != 1 {
@@ -130,7 +130,7 @@ func TestNodeActRunsThePicked(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", Action: "archive", Version: shown, IDs: []string{"m2"}}); code != http.StatusConflict {
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "archive", Version: shown, IDs: []string{"m2"}}); code != http.StatusConflict {
 		t.Fatalf("a changed action: %d", code)
 	}
 	if n := len(sentNow(fm)); n != 1 {
@@ -142,7 +142,7 @@ func TestNodeActRunsThePicked(t *testing.T) {
 func TestNodeActNever(t *testing.T) {
 	tw, csrf, fm, id := actionsWeb(t, archiveAction)
 	setLevel(t, tw.c, "monitor", accessReadOnly)
-	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", Action: "archive", IDs: []string{"m1"}})
+	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "archive", IDs: []string{"m1"}})
 	if code != http.StatusForbidden || !strings.Contains(out["error"].(string), "jamais permis") {
 		t.Fatalf("never: %d %v", code, out)
 	}

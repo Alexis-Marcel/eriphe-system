@@ -19,6 +19,7 @@ var listActionStrings = map[string]map[string]string{
 	"fr": {
 		"act.one":               "1 élément",
 		"act.many":              "{n} éléments",
+		"act.all":               "les {n}",
 		"act.verb.other":        "Utiliser « %s » sur %s",
 		"act.verb.move":         "Déplacer %s",
 		"act.verb.archive":      "Archiver %s",
@@ -70,6 +71,7 @@ var listActionStrings = map[string]map[string]string{
 	"en": {
 		"act.one":               "1 item",
 		"act.many":              "{n} items",
+		"act.all":               "all {n}",
 		"act.verb.other":        "Use “%s” on %s",
 		"act.verb.move":         "Move %s",
 		"act.verb.archive":      "Archive %s",

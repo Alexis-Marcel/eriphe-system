@@ -57,17 +57,18 @@ export function sourceMessage(node: string, block: string, name: string, value: 
   return { version: "1.0", updateDataModel: { surfaceId: surfaceOf(node, block), path: `/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`, value } };
 }
 
-// pickLists are the Lists the user may pick items in, by their block's
-// surface (list_actions.go): none from a block that is not drawn. Each
-// one's rows are the source's latest (rows, as the stream sent them),
-// else the page's.
-export function pickLists(page: NodePage, rows: (block: string, source: string) => PickItem[] | undefined): Map<string, PickList[]> {
+// pickLists are the Lists bound to a source's items the page must know
+// (those that filter them, those the user may pick items in), by their
+// block's surface (list_actions.go, list_sections.go): none from a block
+// that is not drawn. Each one's rows are its latest (rows, by the List's
+// component, as the stream sent them), else the page's.
+export function pickLists(page: NodePage, rows: (block: string, component: string) => PickItem[] | undefined): Map<string, PickList[]> {
   const out = new Map<string, PickList[]>();
   for (const p of pieces(page)) {
     if (p.kind !== "block" || !Array.isArray(p.block.lists) || !p.block.lists.length) continue;
     out.set(
       p.surface,
-      p.block.lists.map((l) => ({ ...l, items: rows(p.block.name, l.source) ?? l.items ?? [] })),
+      p.block.lists.map((l) => ({ ...l, items: rows(p.block.name, l.component) ?? l.items ?? [] })),
     );
   }
   return out;
