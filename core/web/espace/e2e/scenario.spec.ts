@@ -812,7 +812,7 @@ async function orbClear(page: Page): Promise<void> {
           const seen = (e: Element) => Number(getComputedStyle(e.closest(".gr-node") ?? e).opacity) > 0.05;
           const theirs = [...document.querySelectorAll(".gr-core, .gr-label b, .gr-page, .cs-bar")].filter(seen).map(r);
           const hit = (a: DOMRect, b: DOMRect) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-          return mine.flatMap((m) => theirs.filter((t) => hit(m, t)).map((t) => `${Math.round(t.left)},${Math.round(t.top)}`));
+          return mine.flatMap((m) => theirs.filter((t) => hit(m, t)).map((t) => `${Math.round(t.left)},${Math.round(t.top)},${Math.round(t.right)},${Math.round(t.bottom)} by ${Math.round(m.left)},${Math.round(m.top)},${Math.round(m.right)},${Math.round(m.bottom)}`));
         }),
       { message: "the orb covers something" },
     )
@@ -820,8 +820,9 @@ async function orbClear(page: Page): Promise<void> {
 }
 
 // orbBeside checks that the orb, out of the bar, is beside what it talks
-// about (a page, a bubble and its title: their boxes as one), close to it,
-// and covers nothing.
+// about (a page, a bubble and its title: their boxes as one), close to it
+// (on a side, else, when the screen is crowded, the nearest free spot
+// around it), and covers nothing.
 async function orbBeside(page: Page, ...what: Locator[]): Promise<void> {
   const orb = page.locator("button.orb");
   await expect(orb).not.toHaveClass(/docked/);
@@ -836,6 +837,6 @@ async function orbBeside(page: Page, ...what: Locator[]): Promise<void> {
       const dy = Math.max(t - (o.y + o.height), 0, o.y - b);
       return Math.round(Math.hypot(dx, dy));
     }, { message: "the orb is not beside it" })
-    .toBeLessThan(80);
+    .toBeLessThan(200);
   await orbClear(page);
 }

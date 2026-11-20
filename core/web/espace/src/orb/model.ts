@@ -277,12 +277,12 @@ export function placeHome(words: [number, number], obstacles: Rect[], screen: Re
   return best.placed;
 }
 
-// homePoint is the middle of a placement's body, to keep it (placeHome's prev).
+// homePoint is the point placeHome placed it from, to keep it there
+// (placeHome's prev): placeHome(prev) gives back the same place.
 export const homePoint = (p: Placed, words: [number, number]): [number, number] => {
   const total = ORB + (words[0] > 0 ? GAP + words[0] : 0);
   const l = p.dir === 1 ? p.orb[0] - ORB / 2 : p.orb[0] + ORB / 2 - total;
-  const top = p.words ? Math.min(p.words.t, p.orb[1] - ORB / 2) : p.orb[1] - ORB / 2;
-  return [l + total / 2, top + Math.max(ORB, words[1]) / 2];
+  return [l + total / 2, p.orb[1] - ORB / 2 + Math.max(ORB, words[1]) / 2];
 };
 
 // glide is the orb's next point on its way to `to`: a share of the way

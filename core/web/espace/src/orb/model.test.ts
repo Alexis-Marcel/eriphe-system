@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, OrbFeed } from "../data/api";
-import { ANSWER_MS, close, expires, glide, ORB, orbShow, placeBeside, placeHome, SAID_MS, type Closed, type Mind, type Rect } from "./model";
+import { ANSWER_MS, close, expires, glide, homePoint, ORB, orbShow, placeBeside, placeHome, SAID_MS, type Closed, type Mind, type Rect } from "./model";
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
   id, title: id.toUpperCase(), lifetime: "work", state: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
@@ -129,6 +129,15 @@ describe("where the orb goes", () => {
     const p = placeBeside(sub, words, [sub, left, right, title, bar], screen);
     for (const o of [sub, left, right, title, bar]) expect(overlaps(box(p), o)).toBe(false);
     expect(box(p).t).toBeGreaterThanOrEqual(screen.t);
+  });
+
+  it("stays where it was put at the home, frame after frame", () => {
+    for (const w of [[240, 44], [360, 57], [0, 0]] as [number, number][]) {
+      const first = placeHome(w, [bar], screen);
+      let p = first;
+      for (let i = 0; i < 50; i++) p = placeHome(w, [bar], screen, homePoint(p, w));
+      expect(p.orb).toEqual(first.orb);
+    }
   });
 
   it("finds the free spot nearest around it when no side is free", () => {
