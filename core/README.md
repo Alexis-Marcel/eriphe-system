@@ -3252,7 +3252,8 @@ token in `X-CSRF-Token`:
   (6 s, `useAck`: from when the page first met it, keyed by its node and seq, so a stream sent
   again or a page met again does not replay it), or the first line of what it is writing. No
   history, no buttons: Eriphe's questions and their `ask` buttons are in the subject's document.
-  The one exception: the cards no node holds, above it.
+  The one exception: the cards no node holds, above it. Above the panel, the messages that wait
+  for Eriphe, a clock and a ✕ each (**The messages that wait**, below).
 - `hud/`: no bar, the graph takes the whole screen; the bubbles say what waits for the user (a
   breathing accent ring, « t'attend » under the name; out of view, an arrow at the screen's edge
   that opens it) and what runs. In the top-right corner, three icons: Archives (its
@@ -3318,9 +3319,10 @@ Markdown marks, a link's words only, at most 140 characters, its first sentence 
 else cut at a word with « … »; `external` when written in a tainted turn, `markBrainMessage`),
 `failed` when its last line is an error (never its raw text), the first line of what Eriphe is
 writing (`draft`, by the same rule as the conversation's), whether it is at work (`thinking`,
-`brainState`) and the cards no node holds. Read from the store's last exchange (`lastExchange`:
-the user's last message and Eriphe's last 12 lines after it, however many events came between;
-an event's line and the first run's messages never). Eriphe's lines are each brain turn's answer
+`brainState`), the cards no node holds and the messages that wait (`waiting`, below). Read from
+the store's last exchange (`lastExchange`: the user's last message Eriphe was given and Eriphe's
+last 12 lines after it, however many events came between; an event's line and the first run's
+messages never). Eriphe's lines are each brain turn's answer
 only, what it writes after its last tool call: a note written before a tool call of the same turn
 is meant for no one and never copied, and a text stays the draft until its turn's next tool call
 or its end decides it (`answerText`, `brain.go`). The rest of a longer answer is in the subject:
@@ -3329,6 +3331,23 @@ it changes. There is no history to page back through, no suggested reply: the br
 and the buttons that answer them are `ask` buttons in the subject's document. The brain's memory
 and the stored messages are untouched: only what the bar shows. The cards the user must answer are
 in their node's page, and the attention queue delivers the others.
+
+**The messages that wait** (`messages_waiting.go`). A message the user writes while Eriphe works
+is stored undelivered; the brain's next idle hands it everything that waits, in one turn
+(`deliverConversation`). Until then the bar shows it: every exchange carries the user's
+undelivered messages, whatever node they were said to, oldest first (`waiting`: `seq`, `text` cut
+at 500 characters, `node` and its clean `title`; the first run's never). While Eriphe is not at
+work, a message younger than 2 s is left out (an idle brain takes it at once: no clock that only
+blinks). The bar shows the newest three, each in grey with a small clock and the node it was said
+to when not the one it talks to, then « +N en attente »; below them, the last question Eriphe read
+stays. The stream rebuilds the exchange when what waits changes (`waitingKey`, each round: a
+delivery or a withdrawal adds no message). The ✕ on one is `DELETE /messages/{seq}` (CSRF token):
+the message and its attachments are deleted at once, so the brain never reads it and the
+conversation keeps no trace of it (the log keeps a line); `204`, `409` once Eriphe has it (or once
+its plain yes or no decided a card, `resolveByText`), `404` when there is no such message of the
+user's. The withdrawal and the delivery hold the same lock (`core.delivering`), the delivery from
+what it reads to its mark: a message is either in the turn or withdrawn, never both. On a `409` the
+bar says it was too late.
 
 **The conversation per node** (#613, #632, `node_turn.go`). One brain, one
 queue: every message of the conversation belongs to a node or to the home, in its `node` column

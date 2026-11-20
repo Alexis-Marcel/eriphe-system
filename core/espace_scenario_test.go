@@ -51,6 +51,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/mail", sc.handleMail)
 	mux.HandleFunc("POST /e2e/finish/{key}", sc.handleFinish)
 	mux.HandleFunc("GET /e2e/tools", sc.handleTools)
+	mux.HandleFunc("GET /e2e/turns", sc.handleTurns)
 	mux.HandleFunc("POST /e2e/actions", sc.handleActions)
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
 	mux.Handle("/", sc.web.w.routes())
@@ -81,6 +82,7 @@ type scenario struct {
 	inbox  map[string]int    // each task's last inbox item handled
 	tasks  map[string]string // each worker task's role: style, plan, research, check
 	finish map[string]chan struct{}
+	turns  [][]string // the user's lines of each of the brain's turns (waiting.spec.ts)
 
 	// live, for the nodes' bench (nodes_bench_live_test.go): the brain is
 	// a real model, started by eriphe-core as on an install, and the
@@ -448,6 +450,15 @@ func (sc *scenario) call(task, server, tool string, args map[string]any) (map[st
 // the canned calls, then its answer ends the turn, as the agent's would.
 func (sc *scenario) brainTurn(task, turn string) {
 	said, node := userLine(turn)
+	if said != "" {
+		var lines []string
+		for _, m := range userLineRe.FindAllStringSubmatch(turn, -1) {
+			lines = append(lines, m[2])
+		}
+		sc.mu.Lock()
+		sc.turns = append(sc.turns, lines)
+		sc.mu.Unlock()
+	}
 	b := &brainPlay{sc: sc, task: task}
 	var answer string
 	if said == "" {
@@ -555,6 +566,11 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 	}
 	day := n("day")
 	switch {
+	case strings.Contains(said, "Prends ton temps"):
+		// Eriphe at work until the page releases it (POST /e2e/finish/hold):
+		// what the user says meanwhile waits (waiting.spec.ts).
+		sc.waitFinish("hold")
+		return "Me voilà."
 	case strings.Contains(said, "lumière"):
 		// The day is what the turn is about: the call goes into its trace.
 		b.read(day)
@@ -849,6 +865,14 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved)})
+}
+
+// handleTurns is GET /e2e/turns: the user's lines of each of the brain's
+// turns, in order.
+func (sc *scenario) handleTurns(rw http.ResponseWriter, r *http.Request) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	writeJSON(rw, http.StatusOK, map[string]any{"turns": slices.Clone(sc.turns)})
 }
 
 // handleProposals is POST /e2e/proposals: the view « Mes mails »'s

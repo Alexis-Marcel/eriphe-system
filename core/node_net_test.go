@@ -21,6 +21,7 @@ func netCore(t *testing.T, ask, node string) (*core, func(answer string)) {
 		t.Fatal(err)
 	}
 	c.turn.start(int(seq), int(seq), 0)
+	c.store.markDelivered(int(seq)) // the brain has it: its turn is under way
 	c.turn.answersIn(node)
 	n := 0
 	return c, func(answer string) {
@@ -279,7 +280,7 @@ func TestStoreAddsMessagesNode(t *testing.T) {
 	}
 	for _, q := range []string{`CREATE TABLE messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL,
 		role TEXT NOT NULL, text TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, via TEXT NOT NULL DEFAULT '',
-		thread INTEGER NOT NULL DEFAULT 0)`, `INSERT INTO messages (time, role, text, thread) VALUES (1, 'user', 'Bonjour', 3)`} {
+		thread INTEGER NOT NULL DEFAULT 0)`, `INSERT INTO messages (time, role, text, delivered, thread) VALUES (1, 'user', 'Bonjour', 1, 3)`} {
 		if _, err := db.Exec(q); err != nil {
 			t.Fatal(err)
 		}

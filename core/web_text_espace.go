@@ -85,14 +85,19 @@ var espaceStrings = map[string]map[string]string{
 
 		// La console : la conversation de la page à qui elle parle, et les
 		// notifications de l'onglet (console/, hud/).
-		"espace.exchange.writing":  "{{name}} écrit…",
-		"espace.exchange.error":    "{{name}} n'a pas pu répondre.",
-		"espace.exchange.account":  "Vérifier son compte IA",
-		"espace.exchange.external": "Écrit après avoir lu un contenu extérieur",
-		"espace.exchange.asked":    "Ta question :",
-		"espace.exchange.cards":    "Ce qui attend ta réponse",
-		"espace.notices":           "Notifications",
-		"espace.notice.close":      "Fermer",
+		"espace.exchange.writing":      "{{name}} écrit…",
+		"espace.exchange.waiting":      "Ce qui attend {{name}}",
+		"espace.exchange.waiting.one":  "Attend que {{name}} le lise",
+		"espace.exchange.waiting.more": "+%d en attente",
+		"espace.exchange.withdraw":     "Retirer ce message",
+		"espace.exchange.taken":        "Trop tard : {{name}} l'avait déjà lu.",
+		"espace.exchange.error":        "{{name}} n'a pas pu répondre.",
+		"espace.exchange.account":      "Vérifier son compte IA",
+		"espace.exchange.external":     "Écrit après avoir lu un contenu extérieur",
+		"espace.exchange.asked":        "Ta question :",
+		"espace.exchange.cards":        "Ce qui attend ta réponse",
+		"espace.notices":               "Notifications",
+		"espace.notice.close":          "Fermer",
 
 		// Les composants du catalogue (web/espace/src/a2ui).
 		"espace.a2.preparing":               "En préparation",
@@ -230,14 +235,19 @@ var espaceStrings = map[string]map[string]string{
 
 		// The console: the conversation of the page it talks to, and the
 		// tab's notifications (console/, hud/).
-		"espace.exchange.writing":  "{{name}} is writing…",
-		"espace.exchange.error":    "{{name}} could not answer.",
-		"espace.exchange.account":  "Check its AI account",
-		"espace.exchange.external": "Written after reading external content",
-		"espace.exchange.asked":    "Your question:",
-		"espace.exchange.cards":    "Waiting for your answer",
-		"espace.notices":           "Notifications",
-		"espace.notice.close":      "Dismiss",
+		"espace.exchange.writing":      "{{name}} is writing…",
+		"espace.exchange.waiting":      "Waiting for {{name}}",
+		"espace.exchange.waiting.one":  "Waits for {{name}} to read it",
+		"espace.exchange.waiting.more": "+%d waiting",
+		"espace.exchange.withdraw":     "Withdraw this message",
+		"espace.exchange.taken":        "Too late: {{name}} had already read it.",
+		"espace.exchange.error":        "{{name}} could not answer.",
+		"espace.exchange.account":      "Check its AI account",
+		"espace.exchange.external":     "Written after reading external content",
+		"espace.exchange.asked":        "Your question:",
+		"espace.exchange.cards":        "Waiting for your answer",
+		"espace.notices":               "Notifications",
+		"espace.notice.close":          "Dismiss",
 
 		// The catalog's components (web/espace/src/a2ui).
 		"espace.a2.preparing":               "In preparation",

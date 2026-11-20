@@ -45,6 +45,10 @@ type core struct {
 	nodes *nodestore.Store // the graph's nodes (nodes.go); nil if they could not open
 
 	relayMu sync.Mutex // one copy of the brain's output at a time (relayBrainOutput)
+	// delivering: one delivery of the conversation at a time, and a
+	// message withdrawn only between two (messages_waiting.go).
+	delivering  sync.Mutex
+	deliverRead func() // tests only: called while a delivery holds what it read
 	// brainSeqOfTurn is the brain's last message of its current turn, for
 	// the cards it proposes after it (convo_cards.go); held by relayMu.
 	brainSeqOfTurn int

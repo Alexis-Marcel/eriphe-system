@@ -1,0 +1,62 @@
+import { expect, test } from "@playwright/test";
+
+// The messages that wait for Eriphe (messages_waiting.go), against the
+// test core of TestEspaceScenario: the scripted brain is held at work by
+// « Prends ton temps » until /e2e/finish/hold; what the user says
+// meanwhile shows above the bar with a clock, and one is withdrawn before
+// Eriphe reads it. /e2e/turns tells what each of its turns was given.
+// This file runs last, on the same test core.
+
+const password = "correct horse battery"; // testPassword, core/web_test.go
+
+test("messages wait with a clock, and one is withdrawn", async ({ page, request }) => {
+  const problems: string[] = [];
+  page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
+  page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
+  try {
+    await page.goto("/login");
+    await page.locator('input[name="password"]').fill(password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL((u) => u.pathname !== "/login");
+    await page.goto("/espace");
+    const input = page.locator(".cs-bar input");
+    await expect(input).toBeVisible();
+    const say = async (text: string) => {
+      await input.fill(text);
+      await input.press("Enter");
+    };
+    const turns = async () => ((await (await request.get("/e2e/turns")).json()).turns as string[][]) ?? [];
+    const before = (await turns()).length;
+
+    // Eriphe at work.
+    await say("Prends ton temps.");
+    await expect.poll(async () => (await turns()).length).toBe(before + 1);
+    await expect(page.locator(".cs-asked")).toContainText("Prends ton temps.");
+
+    // Two messages meanwhile: both wait, in order, a clock each.
+    await say("Et pour le budget ?");
+    await say("Et pour le planning ?");
+    const waits = page.locator(".cs-wait");
+    await expect(waits).toHaveCount(2);
+    await expect(waits.locator(".cs-wait-text")).toHaveText(["Et pour le budget ?", "Et pour le planning ?"]);
+    await expect(waits.locator(".cs-wait-clock")).toHaveCount(2);
+    // The question Eriphe is on stays below them.
+    await expect(page.locator(".cs-asked")).toContainText("Prends ton temps.");
+
+    // The second withdrawn.
+    await waits.nth(1).getByRole("button", { name: "Retirer ce message" }).click();
+    await expect(waits).toHaveCount(1);
+    await expect(waits.locator(".cs-wait-text")).toHaveText(["Et pour le budget ?"]);
+    await page.waitForTimeout(1500); // a stream round: it does not come back
+    await expect(waits).toHaveCount(1);
+
+    // Eriphe free again: it reads the first only, and the clock goes.
+    expect((await request.post("/e2e/finish/hold")).ok()).toBe(true);
+    await expect.poll(async () => (await turns()).slice(before + 1)).toEqual([["Et pour le budget ?"]]);
+    await expect(page.locator(".cs-waiting")).toHaveCount(0);
+    await expect(page.locator(".cs-asked")).toContainText("Et pour le budget ?");
+    expect(problems).toEqual([]);
+  } finally {
+    await request.post("/e2e/finish/hold"); // never leave the brain held
+  }
+});

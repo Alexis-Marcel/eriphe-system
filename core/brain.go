@@ -260,11 +260,18 @@ func (c *core) messageRef(m Message) string {
 }
 
 // deliverConversation gives an idle assistant what waits in the
-// conversation: my messages and the events, in one turn.
+// conversation: my messages and the events, in one turn. It holds
+// c.delivering from what it reads to its mark: a message withdrawn
+// meanwhile would be in the turn (messages_waiting.go).
 func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow) (bool, error) {
+	c.delivering.Lock()
+	defer c.delivering.Unlock()
 	msgs, err := c.store.undelivered()
 	if err != nil || len(msgs) == 0 {
 		return false, err
+	}
+	if c.deliverRead != nil {
+		c.deliverRead() // a test's withdrawal, tried between the read and the mark
 	}
 	parts := []string{c.turnHead(time.Now())} // the time and the user's state (user_state.go)
 	for _, m := range msgs {
