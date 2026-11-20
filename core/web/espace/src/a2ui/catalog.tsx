@@ -11,7 +11,7 @@ import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
 import { allText, AskPanel, BatchContext, buttonText, MAX_IDS, openable, Pickable, RowItem, useList, type Asking, type Result, type Row } from "./picks";
 import type { PickAction, PickItem } from "../data/api";
-import { HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
+import { answerOne, HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
 // eriphe-core owns the catalog (its JSON Schema, which validates what a
@@ -1137,13 +1137,8 @@ function InlineProposal({ refText, context }: { refText: string; context: Compon
     if (busy) return;
     setBusy(true);
     setFailed(false);
-    const choices = p.choices ?? [];
-    const only = yes && choices.length > 0 ? { only: choices.map((c) => c.id), left: [] } : {};
-    const ok = await src
-      .answer({ surfaceId: context.dataContext.surface?.id ?? "", componentId: context.componentModel.id, ref: p.ref, yes, ...(base ? { at: base } : {}), ...only })
-      .catch(() => false);
+    const { ok, again } = await answerOne(src, refText, p, yes, { surfaceId: context.dataContext.surface?.id ?? "", componentId: context.componentModel.id, ...(base ? { at: base } : {}) });
     if (!ok) setFailed(true);
-    const again = await src.read(refText).catch(() => null);
     setP(again ?? p);
     setBusy(false);
   };
@@ -1280,12 +1275,11 @@ function ProposalFull({ props, context }: { props: { proposalId?: unknown; compa
         <p className="a2-proposal-kicker" role={exec ? "status" : undefined}>
           <IconView name={icon} />
           {kicker}
-          {/* Drawn from external content: a small badge, the whole sentence for a screen reader and on hover. */}
+          {/* Drawn from external content: a small amber sign, no word; its
+              whole sentence on hover and for a screen reader. */}
           {p.tainted && (
-            <span className="a2-badge a2-badge-external" title={t("espace.a2.proposal.tainted")}>
+            <span className="a2-taint" role="img" title={t("espace.a2.proposal.tainted")} aria-label={t("espace.a2.proposal.tainted")}>
               <IconView name="warning" />
-              <span aria-hidden="true">{t("espace.a2.proposal.external")}</span>
-              <span className="sr-only">{t("espace.a2.proposal.tainted")}</span>
             </span>
           )}
         </p>

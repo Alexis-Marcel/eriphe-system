@@ -64,6 +64,15 @@ export function framePages(pages: { id: string; box: Box }[], focus: string | nu
   return slide(fit(boxes, size, max), boxes, [...boxes, ...all], size);
 }
 
+// frameAlone frames one page alone, at scale 1 at most: an enlarged page,
+// whole and readable, with nothing pulled in that would shrink it.
+export const frameAlone = (box: Box, size: Size): Cam => fit([box], size, 1);
+
+// bigBox is an enlarged page's size on this screen: most of it, above
+// the bar, a margin left on each side where the graph shows, framed
+// whole at scale 1 (frameAlone).
+export const bigBox = (size: Size, least: number): Pt => [Math.round(Math.max(least, Math.min(1500, size.w - 2 * SIDE - 200))), pageMax(size, 4000)];
+
 // slide moves the camera, at its scale, toward the middle of the whole
 // graph (all), as far as the boxes it frames (keep) stay whole in the free
 // band.

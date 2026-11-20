@@ -31,9 +31,17 @@ export type PageProps = {
   onClose: () => void;
   onGrab?: (e: PtrEvent) => void;
   onOpen: (id: string) => void;
+  // In the graph, like a window: big, enlarged to most of the screen; a
+  // toggle (its button, a double click on its head) and a corner to drag
+  // (or its arrows, from the keyboard) to give it a size. The phone's
+  // list gives none: it takes the screen.
+  big?: boolean;
+  onBig?: () => void;
+  onResize?: (e: PtrEvent) => void;
+  onResizeBy?: (dw: number, dh: number) => void;
 };
 
-export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: PageProps) {
+export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, onBig, onResize, onResizeBy }: PageProps) {
   const { t, lang } = useWords();
   const nodes = useGraph((s) => s.nodes);
   const node = nodes[id];
@@ -72,6 +80,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
             onGrab(e);
           })
         }
+        onDoubleClick={onBig && ((e) => !(e.target as HTMLElement).closest("button, input, a, select") && onBig())}
       >
         {(kicker || page?.archived) && (
           <div className="pg-kicker">
@@ -89,12 +98,14 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               that nothing beside it pushes it onto two; then, on the same
               line, the small badge of a node someone else's words reached
               (its title marked when they may have written it), and the
-              sign of a node the user did not ask for. */}
+              sign of a node the user did not ask for. That badge is the
+              page's one word for it: inside, a block only has its quiet
+              edge (Doc.tsx). */}
           <h2>
             <span className="pg-title-tx" title={node?.title || external}>
               <NodeTitle x={node} fallback={external} />
             </span>
-            {node?.external && (
+            {(node?.external || page?.parts.some((x) => x.block?.external)) && (
               <em className="pg-badge warn" title={t("espace.external.why")}>
                 {t("espace.external.mark")}
               </em>
@@ -123,6 +134,13 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
             </button>
           )}
           <More tab={tab} onTab={setTab} alive={page?.alive} origin={page?.origin} settled={settled} />
+          {onBig && (
+            <button type="button" className="pg-big" aria-pressed={!!big} onClick={onBig} title={t(big ? "espace.page.small" : "espace.page.big")} aria-label={t(big ? "espace.page.small" : "espace.page.big")}>
+              <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                <path d={big ? "M6.5 2.5v4h-4M9.5 13.5v-4h4" : "M2.5 6.5v-4h4M13.5 9.5v4h-4"} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
           <button type="button" className="pg-x" onClick={onClose} aria-label={t("espace.page.close")}>
             ✕
           </button>
@@ -173,6 +191,29 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
             </button>
           </span>
         </footer>
+      )}
+      {onResize && (
+        <button
+          type="button"
+          className="pg-resize"
+          aria-label={t("espace.page.resize")}
+          title={t("espace.page.resize")}
+          onPointerDown={(e) => {
+            onTalk();
+            onResize(e);
+          }}
+          onKeyDown={(e) => {
+            const step = e.shiftKey ? 120 : 40;
+            const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+            if (!d || !onResizeBy) return;
+            e.preventDefault();
+            onResizeBy(d[0], d[1]);
+          }}
+        >
+          <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+            <path d="M11 4 4 11M11 8 8 11" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+        </button>
       )}
     </article>
   );

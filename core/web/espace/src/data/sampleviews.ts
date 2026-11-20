@@ -154,6 +154,10 @@ mail(
   "Le bureau sera fermé le 24 décembre.",
 );
 
+// The replies the skill drafted: what the cards send on Oui.
+const sam = "Bonjour Sam,\n\nMerci pour le devis. 4 200 € posé me va, et lundi 7 décembre aussi.\nJe te confirme par écrit, peux-tu m'envoyer le bon à signer ?\n\nBonne soirée";
+const alex = "Salut Alex,\n\nOui, je le relis demain matin et je te fais mes retours avant midi.\n\nÀ mardi";
+
 const mailCards: SampleView["cards"] = [
   {
     ref: "calls:41",
@@ -163,8 +167,13 @@ const mailCards: SampleView["cards"] = [
     state: "pending",
     tainted: true,
     node: "mails",
-    text: "Envoyer le brouillon de réponse à « Devis terrasse » · Sam",
-    fields: [{ name: "mail/send_message", value: '{"account": "perso", "draft_id": "d-17", "reply_to": "m1"}', detail: true }],
+    text: "Envoyer la réponse à Sam · compte perso",
+    // What a calls card would read once it shows what it sends (NOTES: a
+    // long argument out of Détails, named by the tool's schema).
+    fields: [
+      { name: "Ta réponse, prête", value: sam },
+      { name: "mail/send_message", value: `account : perso\nreply_to : m1\nbody : ${sam.slice(0, 60)}…`, detail: true },
+    ],
   },
   {
     ref: "calls:42",
@@ -175,7 +184,11 @@ const mailCards: SampleView["cards"] = [
     tainted: true,
     node: "mails",
     text: "Créer l'événement « Dentiste » jeudi 26 novembre, 10 h 30 – 11 h 15",
-    fields: [{ name: "calendar/create_event", value: '{"title": "Dentiste", "start": "2026-11-26T10:30:00+01:00", "end": "2026-11-26T11:15:00+01:00"}', detail: true }],
+    fields: [
+      { name: "Agenda", value: "Perso" },
+      { name: "Lieu", value: "Cabinet dentaire" },
+      { name: "calendar/create_event", value: "title : Dentiste\nstart : 2026-11-26T10:30:00+01:00\nend : 2026-11-26T11:15:00+01:00", detail: true },
+    ],
   },
   {
     ref: "calls:43",
@@ -185,8 +198,11 @@ const mailCards: SampleView["cards"] = [
     state: "pending",
     tainted: true,
     node: "mails",
-    text: "Envoyer le brouillon de réponse à « Relecture du plan » · Alex",
-    fields: [{ name: "mail/send_message", value: '{"account": "travail", "draft_id": "d-18", "reply_to": "m3"}', detail: true }],
+    text: "Envoyer la réponse à Alex · compte travail",
+    fields: [
+      { name: "Ta réponse, prête", value: alex },
+      { name: "mail/send_message", value: `account : travail\nreply_to : m3\nbody : ${alex.slice(0, 60)}…`, detail: true },
+    ],
   },
   // already decided: the menu's « Déjà décidé », never the page's foot
   { ref: "runcalls:30", card: 30, kind: "runcalls", state: "approved", exec: "done", node: "mails", text: "Archiver 12 mails" },

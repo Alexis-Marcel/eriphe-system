@@ -22,7 +22,17 @@ const trash: PickAction = { name: "jeter", one: "Mettre 1 élément à la corbei
 const surface = "n1--mails";
 
 const views: ProposalView[] = [
-  { ref: "calls:1", card: 1, state: "pending", text: "Envoyer la réponse à Sam" },
+  {
+    ref: "calls:1",
+    card: 1,
+    state: "pending",
+    text: "Envoyer la réponse à Sam",
+    fields: [
+      { name: "Ta réponse, prête", value: "Bonjour Sam,\n\nMerci, ça me va.\n\n<b>À bientôt</b>" },
+      { name: "Compte", value: "perso" },
+      { name: "mail/send_message", value: "account : perso\nreply_to : m1", detail: true },
+    ],
+  },
   { ref: "calls:2", card: 2, state: "pending", text: "Autre chose" },
 ];
 const answered: string[] = [];
@@ -47,6 +57,7 @@ async function mount(tainted: boolean) {
     component: "todo",
     source: "mails",
     filtered: true,
+    open: true,
     items: [
       { n: 0, id: "m1", title: "Devis", card: "calls:1" },
       { n: 1, id: "m2", title: "Autre" },
@@ -71,6 +82,8 @@ async function mount(tainted: boolean) {
       runs.push(ids);
       return { ok: true, text: `${ids.length} mis à la corbeille` };
     },
+    open: async () => ({ title: "Devis", from: "Sam <sam@example.org>", body: "Le devis.", raw: "{}" }),
+    opened: new Map(),
   };
   const adapter = createAdapter("fr");
   root = createRoot(el);
@@ -160,5 +173,25 @@ describe("a batch", () => {
     expect(act1().textContent).toBe("Mettre les 2 à la corbeille");
     await act(async () => act1().click());
     expect(runs).toEqual([["t1", "t3"]]);
+  });
+});
+
+describe("an item opened with its card", () => {
+  it("shows what its Oui makes, as text, its Oui there, the row's own keeping quiet, and one « détails »", async () => {
+    await mount(false);
+    await act(async () => el.querySelector<HTMLButtonElement>(".a2-openbtn")!.click());
+    await act(async () => new Promise((r) => setTimeout(r, 0)));
+    const box = el.querySelector(".a2-onyes")!;
+    expect(box.querySelector(".a2-onyes-what")?.textContent).toBe("Sur OuiEnvoyer la réponse à Sam");
+    expect(box.querySelector(".a2-onyes-content figcaption")?.textContent).toBe("Ta réponse, prête");
+    expect(box.querySelector(".a2-onyes-text")?.textContent).toContain("<b>À bientôt</b>"); // text, never HTML
+    expect(box.querySelector("b")).toBeNull();
+    expect(box.querySelector(".a2-onyes-facts")?.textContent).toBe("Compteperso");
+    expect(box.textContent).not.toContain("account : perso"); // the call is under « détails »
+    const opened = el.querySelector(".a2-opened")!;
+    expect([...opened.querySelectorAll("summary")].map((s) => s.textContent)).toEqual(["détails"]);
+    expect([...opened.querySelectorAll(".a2-read-more h5")].map((h) => h.textContent)).toEqual(["Ce que Oui lance", "L'élément, tel que lu"]);
+    await act(async () => box.querySelector<HTMLButtonElement>(".a2-inline-yes")!.click());
+    expect(answered).toEqual(["calls:1"]);
   });
 });

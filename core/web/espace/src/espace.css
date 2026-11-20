@@ -458,6 +458,10 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 }
 .a2-badge .a2-icon { width: 12px; height: 12px; }
 .a2-badge-external { color: var(--warn-text); background: var(--warn-soft); }
+/* A card drawn from external content: a small amber sign beside its
+   kicker, its sentence on hover. */
+.a2-taint { display: inline-grid; place-items: center; margin-left: auto; color: color-mix(in oklab, var(--warn) 80%, var(--fg3)); cursor: help; }
+.a2-taint .a2-icon { width: 13px; height: 13px; }
 .a2-proposal-fields { margin: 4px 0 0; display: grid; gap: 2px; font-size: 13px; }
 .a2-proposal-fields > div { display: grid; grid-template-columns: minmax(80px, auto) 1fr; gap: 8px; }
 .a2-proposal-fields dt { color: var(--fg3); }
@@ -648,6 +652,17 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 /* ---------- a page, open in the graph (page/) ---------- */
 .gr-page { position: absolute; z-index: 4; translate: -50% -50%; display: flex; flex-direction: column; }
 .gr-page > .pg { max-height: inherit; } /* the height the screen holds above the bar (Graph.tsx) */
+/* A page given a size (dragged by its corner, or enlarged): that size,
+   its body scrolling within; for the session only. */
+.gr-page.sized > .pg { height: 100%; max-height: none; }
+.gr-page.sized { transition: width 0.28s cubic-bezier(0.2, 0.7, 0.2, 1), height 0.28s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.gr-page.sizing { transition: none; }
+.pg-big { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; border: 1px solid transparent; background: none; color: var(--fg3); cursor: pointer; }
+.pg-big:hover, .pg-big[aria-pressed="true"] { background: var(--fill); color: var(--fg); }
+.pg-resize { position: absolute; right: 2px; bottom: 2px; z-index: 3; width: 18px; height: 18px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 5px;
+  background: none; color: var(--fg3); opacity: 0.45; cursor: nwse-resize; touch-action: none; transition: opacity 0.15s; }
+.pg:hover .pg-resize, .pg-resize:focus-visible { opacity: 1; }
+.gr-viewport.resizing, .gr-viewport.resizing * { cursor: nwse-resize !important; user-select: none; }
 /* Its rows: the head, fixed; the body, which scrolls (its content and the
    cards at its foot, one column); the question to archive, when asked. */
 .pg { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; max-height: 640px; overflow: hidden; position: relative;
@@ -747,11 +762,12 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .pg-doc { display: grid; gap: 14px; }
 .pg-doc .a2-markdown > :first-child { margin-top: 0; }
 .a2-block { display: flex; flex-direction: column; gap: 10px; }
-/* A block someone else's words reached: edged in amber, its small badge
-   at its top right, on the edge above it, never a row of its own. */
-.a2-block.ext { position: relative; padding-left: 12px; border-left: 2px solid color-mix(in oklab, var(--warn) 55%, transparent); }
-.a2-block-mark { position: absolute; top: -9px; right: 0; z-index: 1; padding: 0 7px; border-radius: 999px; font-size: 10.5px; font-weight: 500; line-height: 16px;
-  color: var(--warn-text); background: var(--warn-soft); cursor: help; }
+/* A block someone else's words reached: a thin amber edge, a small dot at
+   its top whose words say why (on hover, and to a screen reader). The
+   page's head says it once in words; nothing inside repeats it. */
+.a2-block.ext { position: relative; padding-left: 12px; border-left: 1.5px solid color-mix(in oklab, var(--warn) 38%, transparent); }
+.a2-block-mark { position: absolute; top: 0; left: -8px; z-index: 1; width: 14px; height: 14px; cursor: help; }
+.a2-block-mark::before { content: ""; position: absolute; left: 3.5px; top: 3.5px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px var(--card); }
 .pg-empty, .pg-broken { margin: 0; color: var(--fg3); }
 .pg-broken { color: var(--warn-text); }
 /* The .md tab: the editor (CodeMirror's, in a shadow root: its look is
@@ -937,18 +953,31 @@ a.notice-text:hover { text-decoration: underline; }
 .a2-openmain { flex: 1; min-width: 0; }
 .a2-openbtn { flex: none; width: 22px; height: 22px; padding: 0; border: none; border-radius: var(--r-sm); background: none; color: var(--fg3); font: inherit; font-size: 12px; cursor: pointer; }
 .a2-openbtn:hover, .a2-openrow.open .a2-openbtn { background: var(--fill); color: var(--fg); }
-.a2-opened { position: relative; margin: 6px 0 4px; padding: 10px 34px 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--fill); font-size: 13px; cursor: auto; }
-.a2-openclose { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; padding: 0; border: none; border-radius: var(--r-sm); background: none; color: var(--fg3); cursor: pointer; }
-.a2-openclose:hover { background: var(--card); color: var(--fg); }
-.a2-openbody { display: flex; flex-direction: column; gap: 6px; }
-.a2-opennote { margin: 0; color: var(--fg2); font-size: 12px; }
-.a2-opentitle { margin: 0; font-weight: 600; }
-.a2-openmeta { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font-size: 12px; color: var(--fg2); }
-.a2-openmeta dd { margin: 0; }
-.a2-opentext { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; }
-.a2-openraw summary { cursor: pointer; font-size: 12px; color: var(--fg3); }
-.a2-openraw pre { margin: 4px 0 0; max-height: 240px; overflow: auto; font-family: var(--mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* An item opened in place reads as a letter: a quiet sheet under its row. */
+.a2-opened { position: relative; margin: 4px 0 10px; padding: 16px 20px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--fg) 5%, transparent); font-size: 13.5px; cursor: auto; }
+.a2-openclose { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; padding: 0; border: none; border-radius: 999px; background: none; color: var(--fg3); cursor: pointer; }
+.a2-openclose:hover { background: var(--fill); color: var(--fg); }
 .a2-openwait, .a2-openfail { margin: 0; font-size: 12px; color: var(--fg3); }
+.a2-read { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.a2-read-head { display: flex; align-items: baseline; gap: 10px; padding-right: 28px; font-size: 12.5px; color: var(--fg2); }
+.a2-read-from { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--fg); }
+.a2-read-addr { margin-left: 6px; font-weight: 400; color: var(--fg3); opacity: 0; transition: opacity 160ms; }
+.a2-read-head:hover .a2-read-addr { opacity: 1; }
+@media (hover: none) { .a2-read-addr { opacity: 1; } }
+.a2-read-date { flex: none; margin-left: auto; color: var(--fg3); font-variant-numeric: tabular-nums; }
+.a2-read-title { margin: -2px 0 0; font-size: 16px; font-weight: 600; line-height: 1.35; letter-spacing: -0.01em; color: var(--fg); }
+.a2-read-note { margin: 0; font-size: 12.5px; color: var(--fg3); }
+.a2-read-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; line-height: 1.6; color: var(--fg); }
+/* One discreet « détails » at the foot: the exact call, the item as read. */
+.a2-read-more { margin-top: 2px; }
+.a2-read-more summary { display: inline-block; list-style: none; cursor: pointer; font-size: 11.5px; color: var(--fg3); }
+.a2-read-more summary::-webkit-details-marker { display: none; }
+.a2-read-more summary:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+.a2-read-more[open] summary { margin-bottom: 6px; }
+.a2-read-more section { display: grid; gap: 4px; margin-top: 6px; }
+.a2-read-more h5 { margin: 0; font-size: 11px; font-weight: 500; color: var(--fg3); }
+.a2-read-more pre { margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto; border-radius: 8px; background: var(--fill); font-family: var(--mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg2); }
 .a2-openfail { color: var(--hot-text); }
 .a2-openask { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .a2-openask p, .a2-openask dl { margin: 0; }
@@ -1009,11 +1038,28 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 .a2-list-vertical > li:has(.a2-inline-state) { animation: a2-settle 600ms 500ms ease-in forwards; }
 @keyframes a2-settle { to { opacity: 0.35; } }
 
-/* What its Oui does, above an item opened in place. */
-.a2-onyes { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; padding: 0 0 10px; border-bottom: 1px solid var(--line); }
-.a2-onyes p { margin: 0; }
-.a2-onyes b { font-weight: 600; margin-right: 4px; }
-.a2-onyes-line { color: var(--fg2); font-size: 12px; }
+/* What its Oui does, under an item opened in place: a calm box, what it
+   makes as it will be, its Oui there. The row's own Oui keeps quiet while
+   the item is open: one yes per item. */
+.a2-onyes { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; padding: 12px 14px; border-radius: 10px;
+  background: color-mix(in oklab, var(--accent) 5%, var(--card)); border: 1px solid color-mix(in oklab, var(--accent) 18%, var(--line)); }
+.a2-onyes-what { margin: 0; font-size: 13.5px; font-weight: 500; line-height: 1.45; color: var(--fg); }
+.a2-onyes-kicker { display: block; margin-bottom: 2px; font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
+.a2-onyes-facts { display: grid; gap: 2px; margin: 0; font-size: 12.5px; }
+.a2-onyes-facts > div { display: flex; gap: 8px; }
+.a2-onyes-facts dt { color: var(--fg3); }
+.a2-onyes-facts dd { margin: 0; color: var(--fg); }
+.a2-onyes-content { margin: 0; display: grid; gap: 4px; }
+.a2-onyes-content figcaption { font-size: 11.5px; color: var(--fg3); }
+.a2-onyes-text { padding: 10px 12px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; line-height: 1.6; color: var(--fg); }
+.a2-onyes-acts { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.a2-onyes .a2-onyes-no { opacity: 1; }
+/* Nothing more to show than what it does: its Oui on the same line. */
+.a2-onyes.bare { flex-direction: row; align-items: center; }
+.a2-onyes.bare .a2-onyes-what { flex: 1; min-width: 0; }
+.a2-onyes-state { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 12.5px; color: var(--fg3); }
+.a2-onyes-state .a2-icon { width: 13px; height: 13px; flex: none; }
+.a2-openrow.open > .a2-openhead .a2-inline { visibility: hidden; }
 
 /* A batch: one line, how many and the action on all; opened, its rows. */
 .a2-batch .a2-fold-head { gap: 10px; padding: 9px 12px; border-style: dashed; color: var(--fg2); }

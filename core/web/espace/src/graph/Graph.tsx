@@ -5,7 +5,7 @@ import { closePage, depthOf, openPage, step, store, subtree, talkTo, useGraph } 
 import { useWords } from "../i18n";
 import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
-import { boxAt, edgeMark, frameAll, framePages, pageMax, type Box, type Cam } from "./camera";
+import { bigBox, boxAt, edgeMark, frameAll, frameAlone, framePages, pageMax, type Box, type Cam } from "./camera";
 import { edgePush, edgeStep, extent, Sim, type Pos, type Pt } from "./layout";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
 import { ExtMark, UnaskedMark } from "./Title";
@@ -28,6 +28,16 @@ const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;
 // sim is the graph's simulation, one for the page's life: it outlives the
 // graph's switch to the phone's list and back.
 const sim = new Sim();
+
+// sizes: the pages the user gave a size, like windows: enlarged ("big",
+// its size worked out from the screen's), or dragged by the corner (its
+// width and height, in the graph's units). For the session, like where
+// a bubble was dropped: kept beside sim (the switch to the phone's list
+// and back keeps it), never saved, a reload gives each page its own.
+const sizes = new Map<string, Pt | "big">();
+const MIN_W = 420, MIN_H = 240;
+
+type Sizing = { id: string; sx: number; sy: number; w0: number; h0: number; c0: Pt; moved: boolean };
 
 type Grab = { id: string; sx: number; sy: number; px: number; py: number; ox: number; oy: number; moved: boolean; raw?: Pt; edgeSince?: number };
 
@@ -65,7 +75,20 @@ export function Graph({ live }: { live: boolean }) {
   const [pageH, setPageH] = useState<Record<string, number>>({});
   const pageW = openIds.length > 1 ? PAGE_W_MANY : PAGE_W;
   const maxH = pageMax(band, PAGE_MAX);
-  const boxOf = (id: string): Pt => [pageW, Math.min(maxH, pageH[id] ?? PAGE_H)];
+  const big = bigBox(band, pageW);
+  const [, setSized] = useState(0);
+  // A page's box: enlarged, most of the screen; given a size, that size
+  // within the screen's; else its width and its content's height.
+  const boxOf = (id: string): Pt => {
+    const s = sizes.get(id);
+    if (s === "big") return big;
+    if (s) return [Math.round(Math.min(big[0], Math.max(MIN_W, s[0]))), Math.round(Math.min(big[1], Math.max(MIN_H, s[1])))];
+    return [pageW, Math.min(maxH, pageH[id] ?? PAGE_H)];
+  };
+  // The pages are drawn again only when what they show changes
+  // (StillPage): their gestures read the boxes of now through this.
+  const boxNow = useRef(boxOf);
+  boxNow.current = boxOf;
   const sizers = useRef(new Map<string, (el: HTMLDivElement | null) => void>());
   const sizer = (id: string) => {
     let f = sizers.current.get(id);
@@ -178,6 +201,8 @@ export function Graph({ live }: { live: boolean }) {
     const shown = openIds.filter((id) => rp[id]);
     const bubbles = list.filter((x) => rp[x.id] && !shown.includes(x.id));
     const all = bubbles.map((x) => bubbleBox(x, rp[x.id]));
+    // An enlarged page in focus is framed alone and whole, at scale 1.
+    if (focus && shown.includes(focus) && sizes.get(focus) === "big") return frameAlone(boxAt(rp[focus], boxOf(focus)), band);
     if (shown.length) {
       const pages = shown.map((id) => ({ id, box: boxAt(rp[id], boxOf(id)) }));
       const near = bubbles.filter((x) => lit.has(x.id)).map((x) => bubbleBox(x, rp[x.id]));
@@ -229,6 +254,8 @@ export function Graph({ live }: { live: boolean }) {
   /* ---------- dragging: the view, a bubble, a page by its head ---------- */
   const pan = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null);
   const grab = useRef<Grab | null>(null);
+  const sizing = useRef<Sizing | null>(null);
+  const [resizing, setResizing] = useState<string | null>(null);
   const edgeRaf = useRef<number | null>(null);
   const dragged = useRef(false); // swallows the click that ends a drag
   const onDown = (e: PtrEvent) => {
@@ -285,7 +312,65 @@ export function Graph({ live }: { live: boolean }) {
     } else g.edgeSince = undefined;
     edgeRaf.current = requestAnimationFrame(edgeTick);
   };
+  // A page's corner dragged: it takes the size the pointer gives (its top
+  // left corner stays where it was: the page held, its centre moving by
+  // half what it grew), the camera still meanwhile; let go, what is
+  // under it steps aside and the camera frames it again.
+  const startResize = (id: string, e: PtrEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const [w0, h0] = boxNow.current(id);
+    sizing.current = { id, sx: e.clientX, sy: e.clientY, w0, h0, c0: sim.at(id) ?? [0, 0], moved: false };
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      /* a pointer already gone */
+    }
+  };
+  const moveResize = (e: PtrEvent) => {
+    const z = sizing.current;
+    if (!z) return;
+    if (!z.moved) {
+      if (Math.abs(e.clientX - z.sx) + Math.abs(e.clientY - z.sy) < 3) return;
+      z.moved = true;
+      setManual(true);
+      setResizing(z.id);
+    }
+    const k = camK.get();
+    const w = Math.min(big[0], Math.max(MIN_W, z.w0 + (e.clientX - z.sx) / k));
+    const h = Math.min(big[1], Math.max(MIN_H, z.h0 + (e.clientY - z.sy) / k));
+    sizes.set(z.id, [w, h]);
+    sim.hold(z.id, [z.c0[0] + (w - z.w0) / 2, z.c0[1] + (h - z.h0) / 2]);
+    setSized((n) => n + 1);
+    wake();
+  };
+  const endResize = () => {
+    const z = sizing.current;
+    sizing.current = null;
+    if (!z?.moved) return;
+    sim.drop();
+    wake();
+    setResizing(null);
+    setManual(false);
+  };
+  // From the keyboard: its arrows, a step at a time.
+  const resizeBy = (id: string, dw: number, dh: number) => {
+    const [w, h] = boxNow.current(id);
+    sizes.set(id, [w + dw, h + dh]);
+    setSized((n) => n + 1);
+    setManual(false);
+  };
+  const toggleBig = (id: string) => {
+    if (sizes.get(id) === "big") sizes.delete(id);
+    else sizes.set(id, "big");
+    setSized((n) => n + 1);
+    setFocus(id);
+    setManual(false);
+  };
+
   const onMove = (e: PtrEvent) => {
+    if (sizing.current) return moveResize(e);
     const g = grab.current;
     if (g) {
       if (!g.moved && Math.abs(e.clientX - g.sx) + Math.abs(e.clientY - g.sy) < 5) return;
@@ -305,6 +390,7 @@ export function Graph({ live }: { live: boolean }) {
     camY.jump(d.cy + e.clientY - d.y);
   };
   const onUp = () => {
+    if (sizing.current) return endResize();
     const g = grab.current;
     grab.current = null;
     pan.current = null;
@@ -328,7 +414,7 @@ export function Graph({ live }: { live: boolean }) {
 
   return (
     <div
-      className={`gr-viewport${held ? " holding" : ""}`}
+      className={`gr-viewport${held ? " holding" : ""}${resizing ? " resizing" : ""}`}
       ref={vp}
       role="application"
       aria-label={t("espace.graph")}
@@ -393,15 +479,17 @@ export function Graph({ live }: { live: boolean }) {
             .filter((id) => pos[id])
             .map((id) => {
               const [cx, cy] = at(id);
+              const sized = sizes.has(id);
+              const [bw, bh] = boxOf(id);
               return (
                 <motion.div
                   key={`page-${id}`}
-                  className="gr-page"
+                  className={`gr-page${sized ? " sized" : ""}${resizing === id ? " sizing" : ""}`}
                   data-page={id}
-                  style={{ left: cx, top: cy, width: pageW, maxHeight: maxH, zIndex: held === id ? 5 : undefined }}
+                  style={{ left: cx, top: cy, width: bw, height: sized ? bh : undefined, maxHeight: sized ? bh : maxH, zIndex: held === id || resizing === id ? 5 : undefined }}
                   ref={sizer(id)}
                   initial={{ opacity: 0, scale: 0.2 }}
-                  animate={{ opacity: held === id ? 0.5 : 1, scale: 1 }}
+                  animate={{ opacity: held === id && resizing !== id ? 0.5 : 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.2 }}
                   transition={{ type: "spring", stiffness: 200, damping: 26 }}
                 >
@@ -413,6 +501,10 @@ export function Graph({ live }: { live: boolean }) {
                     onClose={() => step(store, closePage, id)}
                     onGrab={(e) => grabNode(id, e)}
                     onOpen={(p) => openNode(p, true)}
+                    big={sizes.get(id) === "big"}
+                    onBig={() => toggleBig(id)}
+                    onResize={(e) => startResize(id, e)}
+                    onResizeBy={(dw, dh) => resizeBy(id, dw, dh)}
                   />
                 </motion.div>
               );
@@ -433,7 +525,7 @@ export function Graph({ live }: { live: boolean }) {
 // StillPage is a page drawn again only when what it shows changes, not at
 // each frame the graph moves: its handlers name their node, and read the
 // graph when they run.
-const StillPage = memo(Page, (a, b) => a.id === b.id && a.live === b.live && a.talking === b.talking);
+const StillPage = memo(Page, (a, b) => a.id === b.id && a.live === b.live && a.talking === b.talking && a.big === b.big);
 
 // useFoot is the room the bar takes at the screen's foot, from its top to
 // the bottom, with a margin: more than the usual when it shows cards.

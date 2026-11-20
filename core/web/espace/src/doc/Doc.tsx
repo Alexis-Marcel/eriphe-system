@@ -137,11 +137,10 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
           const s = surfaces.find((x) => x.id === p.surface);
           return (
             <section key={p.surface} className={`a2-block${p.block.external ? " ext" : ""}`} data-surface={p.surface}>
-              {p.block.external && (
-                <span className="a2-block-mark" title={t("espace.external.why")}>
-                  {t("espace.external.mark")}
-                </span>
-              )}
+              {/* Someone else's words: the page's head says it once, in
+                  words; the block only says where, quietly (a thin edge, a
+                  small dot on it whose words say why). */}
+              {p.block.external && <span className="a2-block-mark" role="img" title={t("espace.external.why")} aria-label={t("espace.external.why")} />}
               {s && <SurfaceView surface={s} />}
             </section>
           );

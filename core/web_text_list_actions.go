@@ -78,11 +78,11 @@ var listActionStrings = map[string]map[string]string{
 		"espace.open.close":   "Fermer",
 		"espace.open.group":   "Classé « %s »",
 		"espace.open.note":    "Note",
-		"espace.open.from":    "De",
-		"espace.open.date":    "Date",
-		"espace.open.details": "Détails",
 		"espace.open.error":   "Impossible de joindre {{name}}.",
 		"espace.open.onyes":   "Sur Oui",
+		"espace.open.more":    "détails",
+		"espace.open.call":    "Ce que Oui lance",
+		"espace.open.raw":     "L'élément, tel que lu",
 
 		"espace.batch.keep":  "Décocher « %s » : le garder",
 		"espace.batch.kept":  "%d gardé(s)",
@@ -95,6 +95,9 @@ var listActionStrings = map[string]map[string]string{
 		"espace.row.rejected": "Écarté",
 
 		"espace.page.settled": "Déjà décidé",
+		"espace.page.big":     "Agrandir",
+		"espace.page.small":   "Revenir à sa taille",
+		"espace.page.resize":  "Redimensionner : glisser, ou flèches du clavier",
 	},
 	"en": {
 		"act.one":               "1 item",
@@ -158,11 +161,11 @@ var listActionStrings = map[string]map[string]string{
 		"espace.open.close":   "Close",
 		"espace.open.group":   "Filed under “%s”",
 		"espace.open.note":    "Note",
-		"espace.open.from":    "From",
-		"espace.open.date":    "Date",
-		"espace.open.details": "Details",
 		"espace.open.error":   "Cannot reach {{name}}.",
 		"espace.open.onyes":   "On Yes",
+		"espace.open.more":    "details",
+		"espace.open.call":    "What Yes runs",
+		"espace.open.raw":     "The item, as read",
 
 		"espace.batch.keep":  "Untick “%s”: keep it",
 		"espace.batch.kept":  "%d kept",
@@ -175,5 +178,8 @@ var listActionStrings = map[string]map[string]string{
 		"espace.row.rejected": "Set aside",
 
 		"espace.page.settled": "Already decided",
+		"espace.page.big":     "Enlarge",
+		"espace.page.small":   "Back to its size",
+		"espace.page.resize":  "Resize: drag, or use the arrow keys",
 	},
 }
