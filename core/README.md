@@ -3320,8 +3320,9 @@ token in `X-CSRF-Token`:
   else it rests. It glides beside the subject that is about (`placeBeside`: its bubble, or its
   page when open, as drawn): the first side of six where it and its words cover no bubble, no
   title, no page, not the bar nor the corner's icons, keeping the side it had while it stays free;
-  when none is, the free spot nearest around it; at the home, a free spot near the screen's middle
-  (`placeHome`). It is no body of the simulation: it reads where the bodies are each frame and
+  when none is, the free spot nearest around it (`NEAR`, 120 px further at most); at the home, a
+  free spot near the screen's middle (`placeHome`). When there is none, it covers nothing: it stays
+  in the bar and its words are a line above it, as on a phone (`setCrowded`). It is no body of the simulation: it reads where the bodies are each frame and
   follows its subject. Its words show once it is there, open away from the subject, in a few
   lines (`fewLines` on eriphe-core's side) with « Voir plus », which opens the subject's page:
   the orb never says what the page holds. For a waiting card it sits at the card's height and its
