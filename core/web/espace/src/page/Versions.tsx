@@ -43,7 +43,9 @@ export function Versions({ versions, shown, last, shift = 0, onPick }: { version
   if (versions.length < 2) return null;
   const old = shown !== last;
   const newest = [...versions].reverse();
-  const who = (author: string) => t(author === "user" ? "espace.who.user" : "espace.who.brain");
+  // Who made it: the user, a file changed outside, else Eriphe (its brain,
+  // a task, its code).
+  const who = (author: string) => t(author === "user" || author === "outside" ? `espace.who.${author}` : "espace.who.brain");
   const keys = (e: KeyEv) => {
     const all = [...(list.current?.querySelectorAll<HTMLElement>("[role='option']") ?? [])];
     const i = all.indexOf(document.activeElement as HTMLElement);

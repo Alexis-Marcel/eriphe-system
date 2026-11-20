@@ -4,13 +4,15 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 // that opens their list; the title stays on one line, cut short, its
 // « extérieur » badge beside it, nothing past the page's edge. Played on
 // the scenario's test core (TestEspaceScenario), signed in as there, on a
-// fresh urgent mail (POST /e2e/mail: an external node a skill opened);
-// its page is given 17 versions here, and nothing is written back.
+// fresh urgent mail (POST /e2e/mail: an external node a skill opened, the
+// one thing this file adds to the core), and on the standing « Mails »;
+// their pages are given 17 versions here, and the view is not written.
 
 const password = "correct horse battery"; // testPassword, core/web_test.go
 const title = "Urgent : la prod renvoie des 500";
+const faked = [title, "Mails"];
 
-// fake gives the urgent mails' pages 17 versions, each its own text,
+// fake gives those pages 17 versions, each its own text,
 // and keeps the view in the test.
 async function fake(page: Page, asked: number[]) {
   await page.route("**/espace/boot", async (route) => {
@@ -27,7 +29,7 @@ async function fake(page: Page, asked: number[]) {
     url.search = "";
     const r = await route.fetch({ url: url.toString() });
     const p = await r.json();
-    if (p.node?.title !== title) return route.continue();
+    if (!faked.includes(p.node?.title)) return route.continue();
     asked.push(n);
     p.version = n;
     p.shift = 0;
@@ -71,16 +73,21 @@ async function still(el: Locator) {
 
 // oneLine checks the head: the title on one line, its badge on that line,
 // every control of the title's row inside the page.
-async function oneLine(pg: Locator) {
+async function oneLine(pg: Locator, name = title) {
   const box = await still(pg);
   const tx = pg.locator(".pg-title-tx");
-  await expect(tx).toHaveAttribute("title", title);
+  await expect(tx).toHaveAttribute("title", name);
   const line = await tx.evaluate((e) => [e.getBoundingClientRect().height, parseFloat(getComputedStyle(e).lineHeight)]);
   expect(line[0]).toBeLessThanOrEqual(line[1] + 2);
   const t = (await tx.boundingBox())!;
-  const badge = (await pg.locator(".pg-title h2 .pg-badge.warn").boundingBox())!;
-  expect(Math.abs(badge.y + badge.height / 2 - (t.y + t.height / 2))).toBeLessThan(t.height / 2);
-  expect(badge.x).toBeGreaterThan(t.x);
+  // cut short, never to nothing
+  expect(t.width).toBeGreaterThan(Math.min(60, name.length * 8));
+  for (const sign of await pg.locator(".pg-title h2 .pg-badge.warn, .pg-title .pg-standing").all()) {
+    const b = (await sign.boundingBox())!;
+    expect(Math.abs(b.y + b.height / 2 - (t.y + t.height / 2))).toBeLessThan(t.height / 2);
+    expect(b.x).toBeGreaterThan(t.x);
+    expect(b.x - (t.x + t.width)).toBeLessThan(48); // beside it, not pushed away
+  }
   for (const b of await pg.locator(".pg-title > *").all()) {
     const x = (await b.boundingBox())!;
     expect(x.x + x.width).toBeLessThanOrEqual(box.x + box.width);
@@ -123,6 +130,10 @@ test.describe("a page with 17 versions", () => {
     expect(lb.y + lb.height).toBeLessThanOrEqual(760);
     expect(lb.x).toBeGreaterThanOrEqual(0);
     await shots(page, "versions-open");
+    // The wheel over it scrolls it.
+    await page.mouse.move(lb.x + lb.width / 2, lb.y + lb.height / 2);
+    await page.mouse.wheel(0, 300);
+    await expect.poll(() => list.evaluate((e) => e.scrollTop)).toBeGreaterThan(0);
 
     // Escape closes it, the focus back on the chip.
     await page.keyboard.press("Escape");
@@ -151,6 +162,28 @@ test.describe("a page with 17 versions", () => {
     await expect(chip).toHaveText("v17");
     await expect(chip).not.toHaveClass(/old/);
   });
+});
+
+test("pages with 17 versions, two open on a narrow screen", async ({ page, request }) => {
+  const id = (await (await request.post("/e2e/mail")).json()).id as string;
+  await page.setViewportSize({ width: 800, height: 760 });
+  await fake(page, []);
+  await signIn(page);
+  await page.goto("/espace");
+  await page.locator(`[data-node="${id}"] .gr-core`).click();
+  const mail = page.locator("article.pg").filter({ has: page.locator(".pg-title-tx", { hasText: title }) });
+  await expect(mail).toContainText("Le texte de la version 17.");
+  // « Mails », standing, opened beside it: its ∞ by its title.
+  await page.locator('.gr-node:not(.external) .gr-core[aria-label^="Mails"]').first().click({ modifiers: ["Meta"] });
+  const mails = page.locator("article.pg").filter({ has: page.locator(".pg-title-tx", { hasText: /^Mails$/ }) });
+  await expect(mails).toContainText("Le texte de la version 17.");
+  await expect(mails.locator(".pg-standing")).toBeVisible();
+  await expect(page.locator("article.pg")).toHaveCount(2);
+  for (const [pg, name] of [[mail, title], [mails, "Mails"]] as const) {
+    await expect(pg.locator(".pg-vchip")).toHaveText("v17");
+    await oneLine(pg, name);
+  }
+  await shots(page, "versions-narrow");
 });
 
 test("a page with 17 versions, on a phone", async ({ page, request }) => {

@@ -80,6 +80,9 @@ describe("a page's versions", () => {
     expect(o[0].querySelector("time")?.textContent).not.toBe("");
     expect(o[0].getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(o[0]);
+    // A file changed outside is not Eriphe's; a task's and code's are.
+    draw([...many(3), { n: 4, author: "outside", at: "" }, { n: 5, author: "task:t1", at: "" }, { n: 6, author: "eriphe", at: "" }]);
+    expect(options().map((b) => b.querySelector(".pg-vwho")?.textContent)).toEqual(["Eriphe", "Eriphe", "extérieur", "Eriphe", "toi", "Eriphe"]);
   });
 
   it("shows v5 when chosen, the chip marked as not the last", () => {

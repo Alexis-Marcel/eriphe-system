@@ -667,18 +667,18 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
    short with « … » (whole in its tooltip); its badges stay beside it. */
 .pg-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .pg-title > * { flex: none; }
-.pg-title h2 { flex: 1 1 0; min-width: 0; display: flex; align-items: center; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; }
+.pg-title h2 { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; }
 .pg-title h2 > * { flex: none; }
 .pg-title h2 > .pg-title-tx { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pg-title-tx > .title-ext { display: flex; }
-.pg-when { font-size: 12.5px; color: var(--fg3); white-space: nowrap; }
-/* A permanent subject: a small sign beside its date. */
+.pg-when { margin-left: auto; font-size: 12.5px; color: var(--fg3); white-space: nowrap; }
+/* A permanent subject: a small sign beside its title. */
 /* A node the user did not ask for (a skill or an event opened it): a
    small ↯ after its title on a bubble, a compact pill in its header. */
 .unasked-mark { display: inline-block; margin-left: 0.3em; font-size: 0.8em; font-weight: 600; color: var(--fg3); cursor: help; text-shadow: none; }
 .gr-label .unasked-mark { pointer-events: auto; }
 .pg-title h2 .unasked-mark { margin-left: 8px; padding: 0 5px; vertical-align: 0.25em; border: 1px dashed var(--line-strong); border-radius: 5px; font-size: 10.5px; font-weight: 600; line-height: 15px; color: var(--fg2); white-space: nowrap; }
-.pg-standing { font-size: 15px; line-height: 1; color: var(--accent-text); cursor: help; margin-right: -6px; }
+.pg-standing { font-size: 15px; line-height: 1; color: var(--accent-text); cursor: help; margin-left: -4px; }
 .pg-live { display: inline-flex; align-items: center; gap: 6px; color: var(--run); }
 /* Its versions: one chip, the version shown (amber when not the last),
    opening a short list under it, the newest first (page/Versions.tsx). */
