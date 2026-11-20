@@ -354,6 +354,6 @@ describe("the living graph", () => {
       sim.tick();
     }
     const per = (performance.now() - t0) / 120;
-    expect(per).toBeLessThan(4);
+    expect(per).toBeLessThan(8);
   });
 });

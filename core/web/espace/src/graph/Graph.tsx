@@ -118,7 +118,16 @@ export function Graph({ live }: { live: boolean }) {
     };
     raf.current = requestAnimationFrame(loop);
   };
-  useEffect(() => () => void (raf.current !== null && cancelAnimationFrame(raf.current)), []);
+  // Unmounted (the switch to the phone's list, a remount): the loop stops
+  // and what was held is let go; mounted again, the next change wakes it.
+  useEffect(
+    () => () => {
+      if (raf.current !== null) cancelAnimationFrame(raf.current);
+      raf.current = null;
+      sim.drop();
+    },
+    [],
+  );
   // A page opened goes beside the one the console talked to before it.
   const talkWas = useRef(talk);
   useEffect(() => void (talkWas.current = talk), [talk]);

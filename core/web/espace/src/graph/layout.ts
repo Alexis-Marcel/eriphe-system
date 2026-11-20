@@ -48,7 +48,7 @@ export const T = {
   cool: 0.97, // a body's own warmth kept from one tick to the next
   fresh: 120, // a node is new (gives way first) for this many ticks
   pass: 150, // a follower of a drop passes over the others until it is back on its springs, this many ticks at most
-  passWarm: 0.3, // ... warm at least this meanwhile
+  passWarm: 0.3, // ... warm at least this meanwhile (its drag energy when lower)
   passNear: 60, // ... back: none of its links stretched more than this
 };
 
@@ -131,7 +131,7 @@ export class Sim {
   private pin: { id: string; at: Pt; clear: number; ticks: number } | null = null; // the body just dropped
   private trail = new Set<string>(); // the followers of the last drop, giving way while they settle
   private anchor: Pt = [0, 0]; // where the last drop was: its followers gather around it
-  private passing = new Map<string, number>(); // the followers still coming round, the ticks they have left
+  private passing = new Map<string, { n: number; e: number }>(); // the followers still coming round: the ticks they have left, their warmth
   private openSeq = 0;
 
   // sync tells the simulation the graph as it is now: the nodes in a
@@ -228,7 +228,7 @@ export class Sim {
           this.warmUp(k.id, HOP2);
           this.trail.add(k.id);
         }
-    this.passing = new Map([...this.trail].map((id) => [id, T.pass]));
+    this.passing = new Map([...this.trail].map((id) => [id, { n: T.pass, e: Math.min(T.passWarm, this.heat.get(id) ?? 0) }]));
     this.group = new Map();
     this.lastMove = Infinity;
   }
@@ -236,12 +236,6 @@ export class Sim {
   // heldId is the body held, if any.
   heldId(): string | null {
     return this.held?.id ?? null;
-  }
-
-  // reach is where a body dragged to raw is kept (leash).
-  reach(id: string, raw: Pt): Pt {
-    const x = this.byId.get(id);
-    return x ? this.leash(x, raw, false) : raw;
   }
 
   // asleep tells whether nothing moves any more: no need to tick.
@@ -415,12 +409,12 @@ export class Sim {
       if (this.pin.clear > 20 || ++this.pin.ticks > 300) this.pin = null;
     }
     // a follower comes round what is in its way, warm, until it is back on its springs
-    for (const [id, n] of this.passing) {
+    for (const [id, p] of this.passing) {
       const x = this.byId.get(id);
-      if (!x || n <= 1 || this.stretch(x) < T.passNear) this.passing.delete(id);
+      if (!x || p.n <= 1 || this.stretch(x) < T.passNear) this.passing.delete(id);
       else {
-        this.passing.set(id, n - 1);
-        this.warmUp(id, T.passWarm);
+        p.n--;
+        this.warmUp(id, p.e);
       }
     }
     if (!this.pin && !held && this.trail.size && ![...this.trail].some((id) => this.heat.has(id))) this.trail = new Set();

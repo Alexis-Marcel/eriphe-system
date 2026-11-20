@@ -3270,8 +3270,10 @@ token in `X-CSRF-Token`:
   is translucent and passes over everything; what is linked to it follows on its springs, one link
   away strongly (0.8), two weakly (0.25), beyond still, passing over what is not theirs; nothing
   else moves. Dropped, it stays exactly there and wins every collision: what is under it steps
-  aside by the smallest move; its followers settle, passing over the others a little longer to come
-  round to it, then giving way to the bodies in place. A subject dragged more than 420 px past the
+  aside by the smallest move; its followers settle on their springs around where it was dropped
+  (pulled there, not to the centre), passing over the others, warm at their drag energy (0.3 at
+  most), until they are back on their springs (150 ticks at most), then giving way to the bodies in
+  place. A subject dragged more than 420 px past the
   disc's edge lags behind the pointer (a 0.3 rubber band), and dropped there comes back to the edge
   on that side; a bubble stays within 300 px of its parent (of its page's edge). Near the screen's edge the camera scrolls, driven by the dragged bubble's place
   on screen, not the pointer: a 110 px zone, after 200 ms, speeding up over 700 ms to 16 px a
