@@ -272,15 +272,20 @@ func (c *core) nodeSaid(id string) string {
 	return ""
 }
 
-// nodeHead is how an event names a node: its id and, unless what it says
-// may be someone else's words, its title.
-func (c *core) nodeHead(id string) string {
+// nodeHead is how an event names a node: its id and its title, marked
+// « titre extérieur » when it may be someone else's words; taint is then
+// what quoting it makes the turn that reads the event (nodeRef), as
+// node_read does.
+func (c *core) nodeHead(id string) (head, taint string) {
 	if c.nodes != nil {
-		if sum, err := c.nodes.Get(id); err == nil && !sum.TitleExternal() {
-			return fmt.Sprintf("[nœud %s « %s »]", id, sum.Title)
+		if sum, err := c.nodes.Get(id); err == nil {
+			if sum.TitleExternal() {
+				return fmt.Sprintf("[nœud %s, titre extérieur « %s »]", id, packQuote(sum.Title)), nodeRef(id)
+			}
+			return fmt.Sprintf("[nœud %s « %s »]", id, sum.Title), ""
 		}
 	}
-	return fmt.Sprintf("[nœud %s]", id)
+	return fmt.Sprintf("[nœud %s]", id), ""
 }
 
 // The cards of a node: those raised in a turn about it, and those of its
@@ -455,7 +460,13 @@ func (c *core) callToBrain(a accessQuestion, text, taint string) {
 	node := ""
 	if ids := c.cardNodes(proposalRef(cardAccess, a.ID)); len(ids) > 0 {
 		node = ids[0]
-		text = c.nodeHead(node) + " " + text
+		head, t := c.nodeHead(node)
+		text = head + " " + text
+		if t != "" && taint == "" {
+			taint = t
+		} else if t != "" {
+			taint += ", " + t
+		}
 	}
 	seq, err := c.store.addNodeMessage(roleEvent, text, "", node, true)
 	if err != nil {

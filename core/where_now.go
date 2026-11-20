@@ -72,7 +72,7 @@ func (c *core) whereNow(now time.Time) map[string]any {
 	var waiting []nodeFound
 	for _, x := range c.activeNodes(packNodes) {
 		if x.State == nodestore.Waiting {
-			waiting = append(waiting, c.foundNode(x))
+			waiting = append(waiting, c.foundNode(x, false))
 		}
 	}
 	if len(waiting) > 0 {

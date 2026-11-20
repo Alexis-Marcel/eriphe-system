@@ -38,7 +38,9 @@ test("pick two rows and archive them", async ({ page, request }) => {
   await expect(bar).toContainText("2 sélectionné(s)");
   const button = bar.locator(".a2-pickact");
   await expect(button).toHaveCount(1);
-  await expect(button).toHaveText("Déplacer 2 éléments → archive (mail/move)"); // code's words, no label
+  // code's words; the author's label of an external block beside them, marked
+  await expect(button).toHaveText("Déplacer 2 éléments → archive (mail/move)Ranger ⚠");
+  await expect(button.locator(".a2-pickhint.ext")).toHaveAttribute("title", "Écrit après une lecture extérieure");
   await button.click();
 
   await expect(pg.locator(".a2-pickdone")).toHaveText("2 déplacés");

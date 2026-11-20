@@ -5,6 +5,7 @@ import { archive, label, type TraceEntry } from "../data/api";
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
+import { NodeTitle } from "../graph/Title";
 import { useWords } from "../i18n";
 import { Cards } from "./Cards";
 import { MdTab } from "./MdTab";
@@ -65,20 +66,29 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
           })
         }
       >
-        {(kicker || node?.external || page?.archived) && (
+        {(kicker || page?.archived) && (
           <div className="pg-kicker">
             {kicker && path.slice(0, -1).map((p, i) => (
               <button key={p} type="button" className="pg-crumb" onClick={() => onOpen(p)}>
                 {i > 0 && "› "}
-                {titleOf(nodes[p], external)}
+                <NodeTitle x={nodes[p]} fallback={external} />
               </button>
             ))}
-            {node?.external && <em className="pg-badge warn">{t("espace.external.mark")}</em>}
             {page?.archived && <em className="pg-badge">{t("espace.page.archived")}</em>}
           </div>
         )}
         <div className="pg-title">
-          <h2>{titleOf(node, external)}</h2>
+          {/* Its title, then, on the same line, the small badge of a node
+              someone else's words reached (its title marked when they
+              may have written it). */}
+          <h2>
+            <NodeTitle x={node} fallback={external} />
+            {node?.external && (
+              <em className="pg-badge warn" title={t("espace.external.why")}>
+                {t("espace.external.mark")}
+              </em>
+            )}
+          </h2>
           <span className="pg-when">
             {running ? (
               <span className="pg-live">

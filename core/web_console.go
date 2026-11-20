@@ -68,7 +68,7 @@ type barLine struct {
 // exchangeEvent is the workspace's "exchange" event: what the bar shows.
 type exchangeEvent struct {
 	Node     string   `json:"node,omitempty"`     // the node it belongs to; none: the home
-	Title    string   `json:"title,omitempty"`    // that node's title, unless it may be someone else's words
+	Title    string   `json:"title,omitempty"`    // that node's title, followed by ⚠ when it may be someone else's words
 	Asked    *barLine `json:"asked,omitempty"`    // the user's last message
 	Said     *barLine `json:"said,omitempty"`     // Eriphe's line: the first line of its last answer after it
 	Failed   bool     `json:"failed,omitempty"`   // Eriphe could not answer: its last line is an error
@@ -128,7 +128,7 @@ func (w *web) exchangeFor(node, talk, draft string, thinking bool) (exchangeEven
 	}
 	x := exchangeEvent{Node: node}
 	if node != "" {
-		x.Title = w.c.cleanNodeTitle(node)
+		x.Title = w.c.shownNodeTitle(node)
 	}
 	for _, l := range lines {
 		if l.Role == roleUser {

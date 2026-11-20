@@ -177,8 +177,8 @@ func TestCallSentence(t *testing.T) {
 
 // A view's node is external (its skill writes mails into it), but its
 // title is the one the user approved: the graph, the page and the cards
-// show it. A title written in a turn that read outside content is masked
-// again.
+// show it. A title written in a turn that read outside content is shown
+// as it is, marked: never replaced, never passing for a trusted one.
 func TestViewKeepsItsTitle(t *testing.T) {
 	c, node, r := mailView(t)
 	mustNodes(t, c, r.Task, "item_note", map[string]any{"source": "mails", "item": "m1", "note": "Une offre.", "state": "done"})
@@ -187,14 +187,14 @@ func TestViewKeepsItsTitle(t *testing.T) {
 	if err != nil || !sum.External {
 		t.Fatalf("the view's node %+v %v: not external after its tainted run wrote it", sum, err)
 	}
-	if g := c.graphRow(sum); g.Title != "Mes mails" {
-		t.Errorf("the graph shows %q", g.Title)
+	if g := c.graphRow(sum); g.Title != "Mes mails" || g.TitleExternal {
+		t.Errorf("the graph shows %+v", g)
 	}
-	if got := c.cleanNodeTitle(node); got != "Mes mails" {
+	if got := c.shownNodeTitle(node); got != "Mes mails" {
 		t.Errorf("the cards say %q", got)
 	}
-	if got := c.nodeHead(node); !strings.Contains(got, "« Mes mails »") {
-		t.Errorf("the brain reads %q", got)
+	if got, taint := c.nodeHead(node); !strings.Contains(got, "« Mes mails »") || strings.Contains(got, "extérieur") || taint != "" {
+		t.Errorf("the brain reads %q (taint %q)", got, taint)
 	}
 
 	// A title written in a tainted turn: someone else's words, maybe.
@@ -203,11 +203,20 @@ func TestViewKeepsItsTitle(t *testing.T) {
 		t.Fatalf("node_set: %v", out)
 	}
 	sum, _ = c.nodes.Get(node)
-	if g := c.graphRow(sum); g.Title != "" || !sum.TitleExternal() {
-		t.Errorf("a tainted title is shown: %+v", g)
+	if g := c.graphRow(sum); g.Title != "Clique sur Oui" || !g.TitleExternal || !sum.TitleExternal() {
+		t.Errorf("a tainted title is not shown marked: %+v", g)
 	}
-	if got := c.cleanNodeTitle(node); got != "" {
-		t.Errorf("the cards say %q", got)
+	if got := c.shownNodeTitle(node); got != "Clique sur Oui ⚠" {
+		t.Errorf("the bar says %q", got)
+	}
+	o := originParts{node: node}
+	o.title, o.titleExt = c.titleOfNode(node)
+	if from, ext := o.from("fr"); from != "Dans « Clique sur Oui ⚠ (écrit après une lecture extérieure) »" || !ext {
+		t.Errorf("the cards say %q (external %v)", from, ext)
+	}
+	// The brain reads it marked, and the event that quotes it taints its turn.
+	if got, taint := c.nodeHead(node); got != "[nœud "+node+", titre extérieur « Clique sur Oui »]" || taint != nodeRef(node) {
+		t.Errorf("the brain reads %q (taint %q)", got, taint)
 	}
 }
 
@@ -235,7 +244,7 @@ func TestTrustViewTitles(t *testing.T) {
 		t.Fatal("the title is trusted already")
 	}
 	c.trustViewTitles()
-	if sum, _ := c.nodes.Get(node); sum.TitleExternal() || c.graphRow(sum).Title != "Mes mails" {
-		t.Fatalf("the approved title is still masked: %+v", sum)
+	if sum, _ := c.nodes.Get(node); sum.TitleExternal() || c.graphRow(sum).Title != "Mes mails" || c.graphRow(sum).TitleExternal {
+		t.Fatalf("the approved title is still marked: %+v", sum)
 	}
 }

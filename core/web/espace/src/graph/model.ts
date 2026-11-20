@@ -26,9 +26,17 @@ export function radiusOf(x: GraphNode, nodes: Record<string, GraphNode>, now = D
 // waits tells whether a node waits for the user: a card of its, or its state.
 export const waits = (x: GraphNode) => !!x.waits || x.state === "waiting";
 
-// titleOf is a node's name on screen: its title, or what it is when its
-// title may be someone else's words (eriphe-core sends none then).
-export const titleOf = (x: GraphNode | undefined, external: string) => (x?.title ? x.title : external);
+// titleOf is a node's name as plain words (a label, a sentence): its
+// title, marked with ⚠ when it may be someone else's words, never
+// replaced; fallback only when it has none. On screen, NodeTitle
+// (Title.tsx) draws the mark.
+export const titleOf = (x: GraphNode | undefined, fallback: string) => {
+  const title = x?.title || fallback;
+  return x?.titleExternal ? `${title} ⚠` : title;
+};
+
+// plainTitle is a node's title alone, for what measures or shortens it.
+export const plainTitle = (x: GraphNode | undefined, fallback: string) => x?.title || fallback;
 
 // codeOf is the short word inside a subject's bubble.
 export const codeOf = (title: string) => title.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 3).toUpperCase() || "·";

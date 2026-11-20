@@ -31,7 +31,7 @@ const targets: Record<string, WikiTarget> = {
   "Choisir l'angle": { id: "n2", title: "Choisir l'angle", named: true },
   "Recherche sur le télétravail": { id: "n3", title: "Recherche sur le télétravail", named: true },
   "Ancien plan": { id: "n4", title: "Ancien plan", named: true, archived: true },
-  "Payez ici": { id: "n5", title: "Contenu extérieur", named: false },
+  "Payez ici": { id: "n5", title: "Virement urgent", named: true, external: true },
   "plan": { id: "n6", title: "Plan du premier article", named: true }, // renamed since it was written
 };
 
@@ -40,6 +40,7 @@ const wikiWith = (open: (id: string) => void): Wiki => ({
   open,
   none: "Aucun sujet ne porte ce nom",
   archived: (t) => `${t} (archivé)`,
+  external: "Titre écrit après une lecture extérieure",
 });
 
 function draw(text: string, wiki?: Wiki): HTMLElement {
@@ -74,9 +75,15 @@ describe("drawing [[links]]", () => {
   it("never lets the words of someone else's link pass for its target", () => {
     const md = draw("[[Payez ici|Votre banque]] et [[Payez ici]]", wikiWith(() => {}));
     const bs = [...md.querySelectorAll("button.a2-wiki")];
-    expect(bs.map((b) => b.textContent)).toEqual(["Votre banque", "Payez ici"]);
-    expect(bs.map((b) => b.getAttribute("title"))).toEqual(["Contenu extérieur", "Contenu extérieur"]);
-    expect(bs[0].getAttribute("aria-label")).toBe("Votre banque (Contenu extérieur)");
+    // A target whose title may be someone else's words: its title shown as
+    // it is, marked (amber, ⚠, the words of why), never replaced.
+    expect(bs.map((b) => b.textContent)).toEqual(["Votre banque ⚠", "Virement urgent ⚠"]);
+    expect(bs.every((b) => b.classList.contains("ext"))).toBe(true);
+    const marked = "Virement urgent ⚠ Titre écrit après une lecture extérieure";
+    expect(bs.map((b) => b.getAttribute("title"))).toEqual([marked, marked]);
+    expect(bs[0].getAttribute("aria-label")).toBe(`Votre banque (${marked})`);
+    expect(bs[1].getAttribute("aria-label")).toBe(marked);
+    expect(md.textContent).not.toContain("Contenu extérieur");
   });
 
   it("is only text inside code, or as written without a page's links", () => {

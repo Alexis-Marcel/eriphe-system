@@ -622,6 +622,15 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .gr-label b { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
 .gr-node.d1 .gr-label b, .gr-node.d2 .gr-label b { font-size: 12.5px; font-weight: 500; }
 .gr-node.external .gr-label b { color: var(--warn-text); font-weight: 500; }
+/* A title written after an external read: shown as it is, in the external
+   amber, with a small ⚠ whose words say why (graph/Title.tsx). */
+.title-ext, .gr-node.title-ext .gr-label b { color: var(--warn-text); }
+.ext-mark { display: inline-block; margin-left: 0.3em; font-size: 0.8em; font-weight: 600; color: var(--warn); cursor: help; text-shadow: none; }
+.gr-label .ext-mark { pointer-events: auto; }
+.title-ext { display: inline-flex; align-items: baseline; max-width: 100%; min-width: 0; vertical-align: bottom; }
+.title-tx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-title h2 .title-tx { white-space: normal; }
+.title-ext .ext-mark { flex: none; }
 .gr-label em { font-style: normal; font-size: 12px; color: var(--fg2); }
 .gr-label em.runs { color: var(--run); }
 .gr-label em.yours { color: var(--accent-text); font-weight: 500; }
@@ -646,6 +655,9 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .pg-crumb:hover { color: var(--fg); }
 .pg-badge { font-style: normal; padding: 0 6px; border-radius: 5px; border: 1px solid var(--line-strong); font-size: 9.5px; }
 .pg-badge.warn { color: var(--warn-text); border-color: color-mix(in oklab, var(--warn) 50%, transparent); }
+/* Beside the title, on its line: a compact badge, never a line of its own. */
+.pg-title h2 .pg-badge { display: inline-block; margin-left: 10px; vertical-align: 0.25em; font-family: var(--mono); font-size: 9.5px; font-weight: 500; line-height: 15px;
+  letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; cursor: help; }
 .pg-title { display: flex; align-items: center; gap: 12px; }
 .pg-title h2 { flex: 1; margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; }
 .pg-when { font-size: 12.5px; color: var(--fg3); white-space: nowrap; }
@@ -690,6 +702,11 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .pg-doc { display: grid; gap: 14px; }
 .pg-doc .a2-markdown > :first-child { margin-top: 0; }
 .a2-block { display: flex; flex-direction: column; gap: 10px; }
+/* A block someone else's words reached: edged in amber, its small badge
+   at its top right, on the edge above it, never a row of its own. */
+.a2-block.ext { position: relative; padding-left: 12px; border-left: 2px solid color-mix(in oklab, var(--warn) 55%, transparent); }
+.a2-block-mark { position: absolute; top: -9px; right: 0; z-index: 1; padding: 0 7px; border-radius: 999px; font-size: 10.5px; font-weight: 500; line-height: 16px;
+  color: var(--warn-text); background: var(--warn-soft); cursor: help; }
 .pg-empty, .pg-broken { margin: 0; color: var(--fg3); }
 .pg-broken { color: var(--warn-text); }
 /* The .md tab: the editor (CodeMirror's, in a shadow root: its look is
@@ -870,6 +887,7 @@ a.notice-text:hover { text-decoration: underline; }
 .a2-pickact:hover { background: var(--fill); }
 .a2-pickact:disabled { opacity: 0.5; cursor: default; }
 .a2-pickhint { color: var(--fg3); font-size: 11px; }
+.a2-pickhint.ext, .a2-wiki.ext, .a2-from-ext { color: var(--warn-text); }
 .a2-pickask { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--fill); font-size: 13px; }
 .a2-pickask p { margin: 0; color: var(--fg2); }
 .a2-pickask dl { margin: 0; }

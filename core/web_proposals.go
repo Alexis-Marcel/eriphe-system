@@ -23,12 +23,13 @@ type proposalView struct {
 	Tainted bool        `json:"tainted,omitempty"`
 	Summary []string    `json:"summary,omitempty"` // what a yes makes, in plain sentences
 	Fields  []cardField `json:"fields,omitempty"`
-	Node    string      `json:"node,omitempty"`    // the node it belongs to (card_origin.go)
-	From    string      `json:"from,omitempty"`    // the node and the task that ask, in words
-	Yes     string      `json:"yes,omitempty"`     // what Oui does, in words
-	When    []spanView  `json:"when,omitempty"`    // when it takes place, if it has a time
-	Exec    string      `json:"exec,omitempty"`    // approved, its call: running, done or failed (access_card.go)
-	ExecWhy string      `json:"execWhy,omitempty"` // failed: notkept, gone, notallowed or error
+	Node    string      `json:"node,omitempty"`         // the node it belongs to (card_origin.go)
+	From    string      `json:"from,omitempty"`         // the node and the task that ask, in words
+	FromExt bool        `json:"fromExternal,omitempty"` // From quotes words that may be someone else's, marked
+	Yes     string      `json:"yes,omitempty"`          // what Oui does, in words
+	When    []spanView  `json:"when,omitempty"`         // when it takes place, if it has a time
+	Exec    string      `json:"exec,omitempty"`         // approved, its call: running, done or failed (access_card.go)
+	ExecWhy string      `json:"execWhy,omitempty"`      // failed: notkept, gone, notallowed or error
 	// A calls card of several calls: each one the user may leave out, and
 	// what Oui says for 1, 2… items chosen (call_fold.go).
 	Choices []proposalChoice `json:"choices,omitempty"`
@@ -45,7 +46,7 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 	v.Summary = p.SummaryIn(lang)
 	v.Fields = p.FieldsIn(lang)
 	o := p.Origin(lang)
-	v.Node, v.From, v.Yes = o.Node, o.From, o.Yes
+	v.Node, v.From, v.Yes, v.FromExt = o.Node, o.From, o.Yes, o.External
 	if p.choices != nil {
 		v.Choices = p.choices(lang)
 	}

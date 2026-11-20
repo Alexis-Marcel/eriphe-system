@@ -36,8 +36,10 @@ import (
 //
 // What the user does there is in web_gestures.go.
 //
-// A title that may be someone else's words is never sent (cleanNodeTitle);
-// a node's goal is the brain's, never shown.
+// A title that may be someone else's words (written on an external node,
+// not trusted) is sent as it is with title_external, and the page marks it
+// so: it never looks like a trusted one, and nothing acts on it. A node's
+// goal is the brain's, never shown.
 
 func (w *web) graphRoutes(mux *webMux) {
 	mux.Handle("GET /espace", w.auth(w.handleHome)) // web_pages.go: after the wizard
@@ -104,28 +106,27 @@ func (w *web) handleEspaceCatalog(rw http.ResponseWriter, r *http.Request, _ *se
 
 // graphNode is a node's row as the page gets it: what the graph draws.
 type graphNode struct {
-	ID       string     `json:"id"`
-	Title    string     `json:"title,omitempty"` // "" when it may be someone else's words
-	Parent   string     `json:"parent,omitempty"`
-	Links    []string   `json:"links,omitempty"`
-	Lifetime string     `json:"lifetime"`
-	State    string     `json:"state"`
-	Created  time.Time  `json:"created"`
-	Updated  time.Time  `json:"updated"`
-	Done     *time.Time `json:"done,omitempty"`
-	External bool       `json:"external,omitempty"`
-	Version  int        `json:"version"`
-	Waits    bool       `json:"waits,omitempty"` // one of its cards waits for the user, or a source marked attention lists items (node_attention.go)
-	Line     string     `json:"line,omitempty"`  // while it runs: its task's last word of where it is
+	ID    string `json:"id"`
+	Title string `json:"title,omitempty"`
+	// TitleExternal: its title may be someone else's words, shown marked
+	TitleExternal bool       `json:"titleExternal,omitempty"`
+	Parent        string     `json:"parent,omitempty"`
+	Links         []string   `json:"links,omitempty"`
+	Lifetime      string     `json:"lifetime"`
+	State         string     `json:"state"`
+	Created       time.Time  `json:"created"`
+	Updated       time.Time  `json:"updated"`
+	Done          *time.Time `json:"done,omitempty"`
+	External      bool       `json:"external,omitempty"`
+	Version       int        `json:"version"`
+	Waits         bool       `json:"waits,omitempty"` // one of its cards waits for the user, or a source marked attention lists items (node_attention.go)
+	Line          string     `json:"line,omitempty"`  // while it runs: its task's last word of where it is
 }
 
 // graphRow is a node's row.
 func (c *core) graphRow(sum nodestore.Summary) graphNode {
-	g := graphNode{ID: sum.ID, Parent: sum.Parent, Links: sum.Links, Lifetime: string(sum.Lifetime), State: sum.State,
+	g := graphNode{ID: sum.ID, Title: sum.Title, TitleExternal: sum.TitleExternal(), Parent: sum.Parent, Links: sum.Links, Lifetime: string(sum.Lifetime), State: sum.State,
 		Created: sum.Created, Updated: sum.Updated, External: sum.External, Version: sum.Version}
-	if !sum.TitleExternal() {
-		g.Title = sum.Title
-	}
 	if !sum.Done.IsZero() {
 		d := sum.Done
 		g.Done = &d
@@ -170,14 +171,15 @@ type nodePage struct {
 }
 
 // pageRef is the node a [[link]] of a page opens: its id, its title as
-// the graph gives it ("" when it may be someone else's words: the page
-// then says what it is, never the link's words), and whether it is
-// archived (it shows so, and opens nothing).
+// the graph gives it (titleExternal when it may be someone else's words:
+// the page marks it so, never passing it for a trusted one), and whether
+// it is archived (it shows so, and opens nothing).
 type pageRef struct {
-	ID       string `json:"id"`
-	Title    string `json:"title,omitempty"`
-	External bool   `json:"external,omitempty"`
-	Archived bool   `json:"archived,omitempty"`
+	ID            string `json:"id"`
+	Title         string `json:"title,omitempty"`
+	TitleExternal bool   `json:"titleExternal,omitempty"` // its title may be someone else's words
+	External      bool   `json:"external,omitempty"`
+	Archived      bool   `json:"archived,omitempty"`
 }
 
 // pageVersion is a version of a node: its number, who made it, when.
@@ -284,7 +286,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 	}
 	if found, err := c.nodes.Resolve(id, names); err == nil {
 		for name, x := range found {
-			p.Refs[name] = pageRef{ID: x.ID, Title: cleanRefTitle(x), External: x.External, Archived: !x.Archived.IsZero()}
+			p.Refs[name] = pageRef{ID: x.ID, Title: x.Title, TitleExternal: x.TitleExternal(), External: x.External, Archived: !x.Archived.IsZero()}
 		}
 	}
 	placed := map[string]bool{}
@@ -299,15 +301,6 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 	}
 	return p, nil
-}
-
-// cleanRefTitle is a link's target's title, "" when it may be someone
-// else's words.
-func cleanRefTitle(x nodestore.Summary) string {
-	if x.TitleExternal() {
-		return ""
-	}
-	return x.Title
 }
 
 // placedCard is the card a card block of node id places, as its records

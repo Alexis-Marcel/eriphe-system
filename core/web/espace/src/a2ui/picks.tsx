@@ -107,7 +107,12 @@ export function Pickable({ surface, list, picks, rows, direction }: { surface: s
           {list.actions.map((a) => (
             <button key={a.name} type="button" className="a2-pickact" disabled={running} onClick={() => press(a)} data-action={a.name}>
               {buttonText(a, picked.length)}
-              {a.hint && <small className="a2-pickhint">{a.hint}</small>}
+              {a.hint && (
+                <small className={`a2-pickhint${a.hintExternal ? " ext" : ""}`} title={a.hintExternal ? t("espace.words.external") : undefined}>
+                  {a.hint}
+                  {a.hintExternal && <span aria-label={t("espace.words.external")}> ⚠</span>}
+                </small>
+              )}
             </button>
           ))}
         </div>

@@ -717,7 +717,7 @@ whatever address it dials) and one client certificate per device.
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); returns the card's ref (`card`), to place in the subject's document |
 | `catalog_read`, `sources_read` | read the catalog of a node's blocks and what a block may read |
 | `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
-| `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) is not quoted |
+| `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
@@ -1016,7 +1016,7 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   (`activeNodes`, the last changed first, at most 20), each with its card (`about_card.go`: the
   node's line, its state, title and its doc's first line, then its decisions, facts, people,
   intentions, cards and preferences); a turn about a node gets its card when the session does not
-  hold it as it is. `since` lists the nodes changed (kind `node`: where each stands now, its title and its doc's first line, an external one's not quoted), and `where_now` the nodes that wait for the user (`nodes_waiting`). The tasks panel lists the nodes
+  hold it as it is. `since` lists the nodes changed (kind `node`: where each stands now, its title and its doc's first line; an external one's quoted only with `include_external`, the activity page quoting it marked « Contenu extérieur »), and `where_now` the nodes that wait for the user (`nodes_waiting`). The tasks panel lists the nodes
   running and waiting above the tasks (`/espace?open=node-<id>`).
 - **Memory.** Where a matter stands is its node's doc, never a memory: the `progress` kind is
   gone. The nightly extraction reads the day's node traces (`nodeSegments`: what each node's trace
@@ -1448,9 +1448,9 @@ An access card and a start's card read alone (`card_origin.go`): wherever they a
 conversation, a `Proposal`, a channel) they say where they come from and what their Oui does,
 facts of eriphe-core's only, never words of the model's next to Oui and Non. The node is the one
 a calls card's calls belong to (the node whose item it acts on, else the node of the run that kept
-them, never one a model names), linked to its page (`/espace?open=node-<id>`); its title shows only
-when it is not someone else's words (`TitleExternal`: an external node's title shows when `title_trusted`, written before outside content reached it or vouched for by the user or a clean author), else it is said without. The task that asks is named when the
-card's text does not (a call of a task, a start), and only if it was not started on a tainted turn.
+them, never one a model names), linked to its page (`/espace?open=node-<id>`); its title always
+shows: one that may be someone else's words (`TitleExternal`: an external node's title not `title_trusted`, i.e. not written before outside content reached it nor vouched for by the user or a clean author) is followed by « ⚠ (écrit après une lecture extérieure) » and the card's `fromExternal` draws its line in amber: shown, never replaced, never passing for a trusted one. The task that asks is named when the
+card's text does not (a call of a task, a start), marked the same way when it was started on a tainted turn; a calls card names its item and source, marked when the source is not a trusted server's or the calls were kept on a tainted turn.
 What Oui does follows the answer's code: a grant lets the task act until it ends, a release gives
 it its held tools, a call runs once as shown (a step's, then its node's work goes on), a page or a search
 is allowed once, a start starts the task. A task's card is shown:
@@ -3136,7 +3136,7 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   of a source an action acts on (`component`, `source`), its rows (`items`: `n`, its place in the
   source's list, `id`, `title`, `detail`) and the actions' buttons (`actions`: `name`, `one` and
   `many` with `{n}`, the words code builds from the tool and its fixed args, `tool`, `args` a line
-  each, `hint` the author's label but on an external block, `confirm` for a tool that looks
+  each, `hint` the author's label (`hintExternal` on an external block: shown marked, in amber with a ⚠), `confirm` for a tool that looks
   destructive). The node's goal is never sent (it is in its file). `refs`: the node
   each `[[name]]` of its text opens, by the name as written (`id`, `title`, none when it may be
   someone else's words, `external`, `archived`); a name no node has is not there.
@@ -3148,8 +3148,11 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
 - `GET /api/archives`: what the user archived, the latest first (`nodestore.Archives`): each node
   archived with no parent archived with it, a row as below with `archived` (when) and `with` (how
   many nodes below it went with it).
-- A node's row (`graphNode`), in the page and the stream: `id`, `title` (empty when the node is
-  external: a title that may be someone else's words is never shown), `parent`, `links`,
+- A node's row (`graphNode`), in the page and the stream: `id`, `title`, `titleExternal` (its
+  title may be someone else's words, written on an external node and not `title_trusted`: the
+  workspace shows it as it is, in amber with a ⚠ saying « Titre écrit après une lecture
+  extérieure », on the bubble, the page's header, the list, the archives and a [[link]] to it;
+  never replaced, and code never acts on a title), `parent`, `links`,
   `lifetime`, `state`, `created`, `updated`, `done`, `external`, `version`, `waits` (one of its
   cards waits for the user) and, while it runs, `line`: its task's last word of where it is.
 

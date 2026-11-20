@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { closePage, depthOf, openPage, step, store, talkTo, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Page } from "../page/Page";
-import { listOrder, titleOf, waits } from "./model";
+import { listOrder, waits } from "./model";
+import { NodeTitle } from "./Title";
 
 // The workspace on a small screen (#633): the graph as a simple list, each
 // subject and its bubbles under it, in the order they were made; a tap
@@ -56,7 +57,9 @@ export function List({ live }: { live: boolean }) {
             <li key={x.id} className={`ls-row d${Math.min(d, 3)} ${x.state}${x.external ? " external" : ""}`}>
               <button type="button" onClick={() => step(store, openPage, x.id, false)}>
                 <i className={`dot${yours ? " yours" : x.state === "running" ? " run" : ""}`} />
-                <b>{titleOf(x, external)}</b>
+                <b>
+                  <NodeTitle x={x} fallback={external} />
+                </b>
                 {yours ? <em className="yours">{t("espace.waits")}</em> : x.state === "running" && x.line ? <em className="runs">{x.line}</em> : null}
               </button>
             </li>

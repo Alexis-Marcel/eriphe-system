@@ -114,13 +114,14 @@ async function sendJSON<T>(method: string, path: string, body?: unknown, keepali
 
 const nodePath = (id: string) => `/api/nodes/${encodeURIComponent(id)}`;
 
-// A node as the graph shows it (graphNode, web_graph.go). title is empty
-// when it may be someone else's words (an external node's): the page names
-// it by what it is, never by them. line: while it runs, its task's last
-// word of where it is.
+// A node as the graph shows it (graphNode, web_graph.go). titleExternal:
+// its title may be someone else's words (written after an external read):
+// shown as it is, always marked (graph/Title.tsx). line: while it runs,
+// its task's last word of where it is.
 export type GraphNode = {
   id: string;
   title?: string;
+  titleExternal?: boolean;
   parent?: string;
   links?: string[];
   lifetime: "work" | "standing";
@@ -148,9 +149,10 @@ export type NodePage = {
   refs?: Record<string, PageRef>;
 };
 // The node a [[link]] of a page's text opens, by the name as written
-// (pageRef, web_graph.go): its title, none when it may be someone else's
-// words; archived, it opens nothing. A name no node has is not there.
-export type PageRef = { id: string; title?: string; external?: boolean; archived?: boolean };
+// (pageRef, web_graph.go): its title, titleExternal when it may be someone
+// else's words (shown marked); archived, it opens nothing. A name no node
+// has is not there.
+export type PageRef = { id: string; title?: string; titleExternal?: boolean; external?: boolean; archived?: boolean };
 export type PageVersion = { n: number; author: string; at: string };
 export type PagePart = { text?: string; block?: PageBlock };
 // A block ready to draw: its components and its data, the sources' last
@@ -172,10 +174,11 @@ export type PageBlock = {
 
 // A row the user may pick: its place in its source's list (n), its id,
 // what it shows. An action's words are code's: one for one item, many
-// with {n}; hint is the author's label, never on an external block;
+// with {n}; hint is the author's label, hintExternal on an external block
+// (shown marked: someone else's words may have written it);
 // confirm: a tool that throws away, asked once more with its exact call.
 export type PickItem = { n: number; id: string; title?: string; detail?: string };
-export type PickAction = { name: string; one: string; many: string; tool: string; args?: string[]; hint?: string; confirm?: boolean };
+export type PickAction = { name: string; one: string; many: string; tool: string; args?: string[]; hint?: string; hintExternal?: boolean; confirm?: boolean };
 export type PickList = { component: string; source: string; items: PickItem[]; actions: PickAction[] };
 
 export type TraceEntry = { at: string; author: string; text: string };
@@ -330,6 +333,7 @@ export type ProposalView = {
   // of eriphe-core's, never the model's words.
   node?: string;
   from?: string;
+  fromExternal?: boolean; // from quotes words that may be someone else's, marked
   yes?: string;
   when?: Span[];
   exec?: "running" | "done" | "failed";

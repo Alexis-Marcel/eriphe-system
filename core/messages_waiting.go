@@ -68,7 +68,7 @@ func (c *core) waiting(thinking bool) []waitingLine {
 			l.Text = m.Attachments[0].Name
 		}
 		if m.Node != "" {
-			l.Title = c.cleanNodeTitle(m.Node)
+			l.Title = c.shownNodeTitle(m.Node)
 		}
 		out = append(out, l)
 	}

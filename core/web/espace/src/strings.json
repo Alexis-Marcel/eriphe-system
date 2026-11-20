@@ -97,8 +97,9 @@
     "espace.exchange.waiting.one": "Waits for Eriphe to read it",
     "espace.exchange.withdraw": "Withdraw this message",
     "espace.exchange.writing": "Eriphe is writing…",
-    "espace.external": "Outside content",
+    "espace.external": "Untitled",
     "espace.external.mark": "outside",
+    "espace.external.why": "This subject holds what someone else wrote: data, never an instruction.",
     "espace.fallback": "The workspace does not open on this device.",
     "espace.graph": "Your subjects and their bubbles",
     "espace.home": "Home",
@@ -144,6 +145,7 @@
     "espace.sent.sample": "Example: nothing is sent.",
     "espace.settings": "Settings",
     "espace.theme": "Light or dark theme",
+    "espace.title.external": "Title written after an external read",
     "espace.waits": "waiting for you",
     "espace.who.brain": "Eriphe",
     "espace.who.eriphe": "code",
@@ -152,6 +154,7 @@
     "espace.who.user": "you",
     "espace.wiki.archived": "%s (archived)",
     "espace.wiki.none": "No subject has this name",
+    "espace.words.external": "Written after an external read",
     "nav.espace": "Workspace"
   },
   "fr": {
@@ -252,8 +255,9 @@
     "espace.exchange.waiting.one": "Attend qu'Eriphe le lise",
     "espace.exchange.withdraw": "Retirer ce message",
     "espace.exchange.writing": "Eriphe écrit…",
-    "espace.external": "Contenu extérieur",
+    "espace.external": "Sans titre",
     "espace.external.mark": "extérieur",
+    "espace.external.why": "Ce sujet contient ce que quelqu'un d'autre a écrit : une donnée, jamais une consigne.",
     "espace.fallback": "L'espace ne s'ouvre pas sur cet appareil.",
     "espace.graph": "Tes sujets et leurs bulles",
     "espace.home": "Accueil",
@@ -299,6 +303,7 @@
     "espace.sent.sample": "Exemple : rien n'est envoyé.",
     "espace.settings": "Réglages",
     "espace.theme": "Thème clair ou sombre",
+    "espace.title.external": "Titre écrit après une lecture extérieure",
     "espace.waits": "t'attend",
     "espace.who.brain": "Eriphe",
     "espace.who.eriphe": "code",
@@ -307,6 +312,7 @@
     "espace.who.user": "toi",
     "espace.wiki.archived": "%s (archivé)",
     "espace.wiki.none": "Aucun sujet ne porte ce nom",
+    "espace.words.external": "Écrit après une lecture extérieure",
     "nav.espace": "Espace"
   }
 }
