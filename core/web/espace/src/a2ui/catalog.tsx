@@ -9,6 +9,7 @@ import { Day as DayView, cleanEvents, type Ghost } from "./day";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
+import { Pickable, usePicks } from "./picks";
 import { useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
@@ -91,9 +92,14 @@ const List = createComponentImplementation(
       emptyText: CommonSchemas.DynamicString.optional(),
     }),
   },
-  ({ props, buildChild }) => {
+  ({ props, buildChild, context }) => {
     const items = kids(props.children, buildChild);
+    // A list of a source's items some action of its block acts on: the
+    // user may pick rows in it (picks.tsx).
+    const surface = context.dataContext.surface?.id;
+    const pick = usePicks(surface, context.componentModel.id);
     if (!items.length) return props.emptyText ? <p className="a2-empty">{props.emptyText}</p> : null;
+    if (pick && surface) return <Pickable surface={surface} list={pick.list} picks={pick.picks} rows={items} direction={props.direction ?? "vertical"} />;
     return (
       <ul className={`a2-list a2-list-${props.direction ?? "vertical"}`}>
         {items.map((item, i) => (

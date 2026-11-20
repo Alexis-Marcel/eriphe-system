@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
@@ -55,6 +56,7 @@ type Block struct {
 	Components json.RawMessage   // a flat list, one with id root
 	Data       json.RawMessage   // an object, nil when it has none
 	Sources    map[string]Source // live sources read by code, at /<name>
+	Actions    map[string]Action // what the user may run on the items of a source, by name
 	Snapshot   json.RawMessage   // code's: the sources' last good values, an object
 	Marks      Marks             // code's: the user's marks
 	External   bool              // code's: it may show someone else's words
@@ -82,6 +84,25 @@ type Source struct {
 	Items    *Items         `json:"items,omitempty"`
 	Every    int            `json:"every,omitempty"` // minutes between two reads, 1 to 1440; 0: the default
 }
+
+// Action is what the user may run on the items of a source they pick in
+// a list: a tool with fixed args, the ids they picked in its Items
+// parameter. The author names it (Label, a hint only); what its button
+// says is code's, from the tool and its args. The click is the user's own
+// gesture (the core's web_list_actions.go).
+type Action struct {
+	Label  string         `json:"label,omitempty"`
+	Tool   string         `json:"tool"`
+	Args   map[string]any `json:"args,omitempty"`
+	Items  string         `json:"items"`
+	Source string         `json:"source"`
+}
+
+// ActionRe is an action's name.
+var ActionRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
+
+// ActionLabelMax is the most runes of an action's label.
+const ActionLabelMax = 60
 
 // Items says where a listing source's items are and what each shows.
 type Items struct {
@@ -115,6 +136,7 @@ type wire struct {
 	Components json.RawMessage   `json:"components"`
 	Data       json.RawMessage   `json:"data"`
 	Sources    map[string]Source `json:"sources"`
+	Actions    map[string]Action `json:"actions"`
 	Snapshot   json.RawMessage   `json:"snapshot"`
 	Marks      *Marks            `json:"marks"`
 	External   *bool             `json:"external"`
@@ -132,7 +154,7 @@ func decodeBlock(name string, raw []byte, short bool) (*Block, error) {
 	if dec.More() {
 		return nil, blockErr(name, "one JSON object only")
 	}
-	b := &Block{Name: name, Card: w.Card, Components: w.Components, Sources: w.Sources}
+	b := &Block{Name: name, Card: w.Card, Components: w.Components, Sources: w.Sources, Actions: w.Actions}
 	if !isEmpty(w.Data) {
 		b.Data = w.Data
 	}
@@ -280,6 +302,11 @@ func (b *Block) canonical() ([]byte, error) {
 			return nil, err
 		}
 	}
+	if len(b.Actions) > 0 {
+		if err := field("actions", b.Actions); err != nil {
+			return nil, err
+		}
+	}
 	if b.Snapshot != nil {
 		if err := field("snapshot", b.Snapshot); err != nil {
 			return nil, err
@@ -420,6 +447,11 @@ func (b *Block) Validate() error {
 			fail("%s", err)
 		}
 	}
+	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
+		for _, err := range b.Actions[name].check(name, b.Sources) {
+			fail("%s", err)
+		}
+	}
 	if b.Snapshot != nil {
 		var snap map[string]json.RawMessage
 		if json.Unmarshal(b.Snapshot, &snap) != nil {
@@ -480,7 +512,7 @@ func (b *Block) validateCard() error {
 	if !CardRe.MatchString(b.Card) {
 		problems = append(problems, "card: the ref a propose tool gave (view:3, memory:12)")
 	}
-	if !isEmpty(b.Components) && string(bytes.TrimSpace(b.Components)) != "[]" || b.Data != nil || len(b.Sources) > 0 || b.Snapshot != nil || len(b.Marks) > 0 {
+	if !isEmpty(b.Components) && string(bytes.TrimSpace(b.Components)) != "[]" || b.Data != nil || len(b.Sources) > 0 || len(b.Actions) > 0 || b.Snapshot != nil || len(b.Marks) > 0 {
 		problems = append(problems, "a card block holds its card's ref only: {\"card\": \"view:3\"}; what the card says comes from it")
 	}
 	if len(problems) > 0 {
@@ -518,6 +550,34 @@ func (s Source) check(name string) string {
 		return "source " + name + ": items needs id, each item's id"
 	}
 	return ""
+}
+
+// check is what is wrong with an action, its shape alone: what its tool
+// takes is checked against the catalog when an author writes it (the
+// core's nodeGuard).
+func (a Action) check(name string, sources map[string]Source) []string {
+	var out []string
+	at := "action " + name + ": "
+	if !ActionRe.MatchString(name) {
+		out = append(out, fmt.Sprintf("action %q: a name is lowercase letters, digits, _ and -, 40 at most", name))
+	}
+	if server, tool, ok := strings.Cut(a.Tool, "/"); !ok || server == "" || tool == "" || strings.Contains(tool, "/") {
+		out = append(out, at+"tool is <server>/<tool>, as a source's")
+	}
+	if strings.TrimSpace(a.Items) == "" {
+		out = append(out, at+"items names the tool's parameter that takes the ids the user picks")
+	} else if _, ok := a.Args[a.Items]; ok {
+		out = append(out, at+"args has no "+a.Items+": the ids the user picks go there")
+	}
+	if src, ok := sources[a.Source]; !ok {
+		out = append(out, at+"source names one of the block's sources, the list it acts on")
+	} else if src.Items == nil {
+		out = append(out, at+"its source "+a.Source+" says no items (path, id): the user picks items by their id")
+	}
+	if utf8.RuneCountInString(a.Label) > ActionLabelMax || strings.ContainsAny(a.Label, "\n\r") {
+		out = append(out, fmt.Sprintf("%slabel is one line, %d characters at most", at, ActionLabelMax))
+	}
+	return out
 }
 
 // checkMark is what is wrong with a mark; "" when nothing.

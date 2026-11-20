@@ -452,6 +452,11 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 				problems = append(problems, fmt.Sprintf("block %s: source %s: %v", name, src, err))
 			}
 		}
+		for _, act := range slices.Sorted(maps.Keys(b.Actions)) {
+			if err := c.actionOK(b.Actions[act]); err != nil {
+				problems = append(problems, fmt.Sprintf("block %s: action %s: %v", name, act, err))
+			}
+		}
 		outside[name] = c.untrustedSources(b)
 	}
 	if len(problems) > 0 {
@@ -517,12 +522,12 @@ func nodeExternal(n *nodefile.Node) bool {
 }
 
 // blockSig is what an author writes of a block, in one form: its
-// components, data and sources.
+// components, data, sources and actions.
 func blockSig(b *nodefile.Block) string {
 	var comps, data any
 	json.Unmarshal(b.Components, &comps)
 	json.Unmarshal(b.Data, &data)
-	raw, _ := json.Marshal([]any{comps, data, b.Sources})
+	raw, _ := json.Marshal([]any{comps, data, b.Sources, b.Actions})
 	return string(raw)
 }
 
