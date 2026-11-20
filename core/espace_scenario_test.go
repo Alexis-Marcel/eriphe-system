@@ -52,6 +52,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/finish/{key}", sc.handleFinish)
 	mux.HandleFunc("GET /e2e/tools", sc.handleTools)
 	mux.HandleFunc("POST /e2e/actions", sc.handleActions)
+	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
 	mux.Handle("/", sc.web.w.routes())
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -848,6 +849,45 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved)})
+}
+
+// handleProposals is POST /e2e/proposals: the view « Mes mails »'s
+// skill, woken once per mail, proposed to archive three, one card each,
+// as an install made them before they folded: the next sync folds them
+// into one (call_fold.go).
+func (sc *scenario) handleProposals(rw http.ResponseWriter, r *http.Request) {
+	c := sc.c
+	found, _ := c.nodes.Find("Mes mails", false, 10)
+	node := ""
+	for _, s := range found {
+		if s.Title == "Mes mails" {
+			node = s.ID
+		}
+	}
+	if node == "" {
+		http.Error(rw, "no view « Mes mails »", http.StatusNotFound)
+		return
+	}
+	for _, m := range []itemLabel{
+		{ID: "n1", Title: "Offre : Data Engineer", Detail: "emplois@example.org"},
+		{ID: "n2", Title: "La lettre de la semaine", Detail: "news@example.org"},
+		{ID: "n3", Title: "Soldes d'hiver", Detail: "promo@example.org"},
+	} {
+		raw, _ := json.Marshal(map[string]any{"ids": []string{m.ID}, "to": "archive"})
+		labels, _ := json.Marshal([]itemLabel{m})
+		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, tainted, created, node, item, labels)
+			VALUES ('t-brain', 'mail', 'change', 'mcp__mail__move []', ?, 'external:mail', ?, ?, ?, ?)`, string(raw), time.Now().Unix(), node, m.ID, string(labels))
+		id, err := rowsID(res, err)
+		if err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, id, id)
+		c.cardNow(cardCalls, id, "", refNode+":"+node)
+	}
+	c.syncCards()
+	c.bump()
+	rw.WriteHeader(http.StatusNoContent)
 }
 
 // handleActions is POST /e2e/actions: a node whose block lists the

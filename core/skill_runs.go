@@ -645,9 +645,17 @@ func (c *core) tellRun(r *skillRun, text string, rc *receipt) {
 		state = skillRunSilent
 	}
 	c.endRun(r.ID, state, note)
-	// Its calls on items: a card each, its item's (item_cards.go).
+	// Its calls on items: a card each, its item's (item_cards.go), or
+	// the card of its node that does the same to other items (call_fold.go).
+	folded, shown := c.foldCalls(), map[int64]bool{}
 	for _, batch := range itemCards {
-		c.cardNow(cardCalls, batch, "", "task:"+r.Task)
+		if to, ok := folded[batch]; ok {
+			batch = to
+		}
+		if !shown[batch] {
+			shown[batch] = true
+			c.cardNow(cardCalls, batch, "", "task:"+r.Task)
+		}
 	}
 	source, tainted := "skill:"+r.Skill, c.taskResultTaint(r.Task) != ""
 	if weight == weightInterrupts {

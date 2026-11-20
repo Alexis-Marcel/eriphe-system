@@ -1,13 +1,15 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createAdapter } from "../a2ui/adapter";
 import { CATALOG } from "../a2ui/catalog";
+import { HomeNode } from "../a2ui/proposals";
 import { SurfaceView } from "../a2ui/Surfaces";
 import { useWords } from "../i18n";
 
 // Cards are cards that wait for the user, as the catalog's Proposal shows
 // them: code's own surface, each answered by its card's Oui or Non. A
-// node's page shows those it waits on; the console, those no node holds.
-export function Cards({ surface, refs }: { surface: string; refs: string[] }) {
+// node's page shows those it waits on (home: that node); the console,
+// those no node holds.
+export function Cards({ surface, refs, home }: { surface: string; refs: string[]; home?: string }) {
   const { lang } = useWords();
   const [adapter] = useState(() => createAdapter(lang));
   useEffect(() => () => adapter.dispose(), [adapter]);
@@ -29,5 +31,9 @@ export function Cards({ surface, refs }: { surface: string; refs: string[] }) {
     ]);
   }, [adapter, key, surface]);
   const s = useSyncExternalStore(adapter.subscribe, adapter.surfaces).find((x) => x.id === surface);
-  return s ? <SurfaceView surface={s} /> : null;
+  return s ? (
+    <HomeNode.Provider value={home}>
+      <SurfaceView surface={s} />
+    </HomeNode.Provider>
+  ) : null;
 }

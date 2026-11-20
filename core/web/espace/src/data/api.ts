@@ -314,7 +314,14 @@ export type ProposalView = {
   when?: Span[];
   exec?: "running" | "done" | "failed";
   execWhy?: string;
+  // A card of several calls: each one the user may leave out (its id,
+  // what it acts on, how many items, where it stands), and what Oui says
+  // for 1, 2… items chosen (call_fold.go).
+  choices?: Choice[];
+  acts?: string[];
 };
+
+export type Choice = { id: number; text: string; n: number; state: string };
 
 export type Span = { start: string; end?: string; allDay?: boolean };
 
@@ -328,16 +335,20 @@ export async function dayProposals(date: string): Promise<ProposalView[]> {
 
 // What a Proposal component answers: the proposal it shows. Its card's
 // Oui or Non decides it.
-export type Answer = { surfaceId: string; componentId: string; ref: string; yes: boolean; at?: string };
+// A Oui with a choice names the calls ticked (only) and those unticked
+// (left): only those are decided.
+export type Answer = { surfaceId: string; componentId: string; ref: string; yes: boolean; at?: string; only?: number[]; left?: number[] };
 
 // retryBrain gives Eriphe the turn that failed once more (brain_errors.go).
 export function retryBrain(): Promise<boolean> {
   return post("/brain/retry");
 }
 
-// answerCard says yes or no to a card.
-export function answerCard(card: number, yes: boolean): Promise<boolean> {
-  return post(`/cards/${card}/${yes ? "yes" : "no"}`);
+// answerCard says yes or no to a card; a yes with a choice, to the
+// calls ticked (only), the others (left) refused.
+export function answerCard(card: number, yes: boolean, only?: number[], left?: number[]): Promise<boolean> {
+  if (!yes || !only) return post(`/cards/${card}/${yes ? "yes" : "no"}`);
+  return post(`/cards/${card}/yes`, new URLSearchParams({ only: only.join(","), left: (left ?? []).join(",") }));
 }
 
 // answerProposal answers the card of the proposal a block shows, read again
@@ -345,7 +356,7 @@ export function answerCard(card: number, yes: boolean): Promise<boolean> {
 export async function answerProposal(a: Answer): Promise<boolean> {
   const p = await proposal(a.ref);
   if (!p || p.state !== "pending" || !p.card) return false;
-  return answerCard(p.card, a.yes);
+  return answerCard(p.card, a.yes, a.only, a.left);
 }
 
 // What moved: the refs of the proposals made or decided, or all of them.

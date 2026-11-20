@@ -27,6 +27,10 @@ export const coreProposals: Proposals = { read: proposal, answer: answerProposal
 export const ProposalsContext = createContext<Proposals>(coreProposals);
 export const useProposals = () => useContext(ProposalsContext);
 
+// HomeNode is the node whose page shows the cards (page/Cards.tsx): a card
+// of that node needs not say where it comes from. Code's, never a block's.
+export const HomeNode = createContext<string | undefined>(undefined);
+
 // useMoved is a count that grows each time one of these proposals moved
 // (any, when refs is null): a component reads again when it changes.
 export function useMoved(src: Proposals, refs: string[] | null): number {

@@ -112,7 +112,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
           if (p.kind === "card")
             return p.found ? (
               <div key={p.surface} className="pg-card" data-card={p.ref}>
-                <Cards surface={p.surface} refs={[p.ref]} />
+                <Cards surface={p.surface} refs={[p.ref]} home={page.node.id} />
               </div>
             ) : (
               <p key={p.surface} className="pg-card-missing" role="note">

@@ -157,9 +157,11 @@ type proposal struct {
 	Fields    []cardField // the parameters of a call to approve
 	Extracted bool        // from the memory's extraction, not from a turn of the brain's
 	text      func(lang string) string
-	fields    func(lang string) []cardField // Fields in the user's language, when they have words of ours
-	summary   func(lang string) []string    // what a yes makes, in plain sentences of code's, before the fields
-	origin    func(lang string) cardOrigin  // where it comes from and what its Oui does (card_origin.go)
+	fields    func(lang string) []cardField      // Fields in the user's language, when they have words of ours
+	summary   func(lang string) []string         // what a yes makes, in plain sentences of code's, before the fields
+	origin    func(lang string) cardOrigin       // where it comes from and what its Oui does (card_origin.go)
+	choices   func(lang string) []proposalChoice // a calls card's calls the user may leave out (call_fold.go)
+	acts      func(lang string) []string         // what its Oui says for 1, 2… items chosen
 }
 
 // Origin is where it comes from and what its Oui does, with the words of
@@ -544,14 +546,20 @@ func (c *core) cardAgain(p proposal) {
 // queued, linked to the node it belongs to (one raised before it was
 // linked waits there too).
 func (c *core) syncCards() {
+	c.foldCalls() // same-kind calls cards made before (call_fold.go)
 	for _, p := range c.pendingProposals() {
-		c.cardRaisedFor("", proposalRef(p.Kind, p.ID))
-		c.cardAgain(p)
-		res, err := c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)`,
-			proposalRef(p.Kind, p.ID), p.Kind, p.Text(c.userLang()), time.Now().Unix())
-		if n, _ := rowsOf(res, err); n > 0 {
-			c.proposalMoved(proposalRef(p.Kind, p.ID))
-		}
+		c.syncCard(p)
+	}
+}
+
+// syncCard gives a waiting proposal a waiting card, if it has none.
+func (c *core) syncCard(p proposal) {
+	c.cardRaisedFor("", proposalRef(p.Kind, p.ID))
+	c.cardAgain(p)
+	res, err := c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, text, created) VALUES (?, ?, ?, ?)`,
+		proposalRef(p.Kind, p.ID), p.Kind, p.Text(c.userLang()), time.Now().Unix())
+	if n, _ := rowsOf(res, err); n > 0 {
+		c.proposalMoved(proposalRef(p.Kind, p.ID))
 	}
 }
 
@@ -620,6 +628,13 @@ func (c *core) liveCard(x convoCard) (convoCard, proposal) {
 
 // decideCard is a card's Oui or Non: its proposal's own approval.
 func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string) (convoCard, error) {
+	return c.decideCardWith(ctx, id, approve, by, func(kind string, pid int64) error {
+		return c.decideProposal(ctx, kind, pid, approve)
+	})
+}
+
+// decideCardWith is decideCard, its proposal decided by decide.
+func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by string, decide func(kind string, pid int64) error) (convoCard, error) {
 	cardMu.Lock()
 	defer cardMu.Unlock()
 	x, err := c.card(id)
@@ -630,7 +645,7 @@ func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string
 		return x, errCardDecided
 	}
 	kind, pid, _ := parseProposalRef(x.Ref)
-	if err := c.decideProposal(ctx, kind, pid, approve); err != nil {
+	if err := decide(kind, pid); err != nil {
 		return x, err
 	}
 	if kind == cardTaskStart && !approve && by != "text" {
@@ -645,6 +660,7 @@ func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string
 	}
 	c.attentionDone(cardItemRef(x.ID))
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ?`, x.State, x.Decided.Unix(), by, id)
+	c.callsDecided(x) // its words as decided, what still waits on a new card (call_fold.go)
 	c.proposalMoved(x.Ref)
 	c.linkedCardMoved(x.Ref) // the nodes it is linked to (node_turn.go)
 	log.Printf("cards: %s %s by %s", x.Ref, x.State, by)

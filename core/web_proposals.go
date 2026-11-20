@@ -29,7 +29,11 @@ type proposalView struct {
 	When    []spanView  `json:"when,omitempty"`    // when it takes place, if it has a time
 	Exec    string      `json:"exec,omitempty"`    // approved, its call: running, done or failed (access_card.go)
 	ExecWhy string      `json:"execWhy,omitempty"` // failed: notkept, gone, notallowed or error
-	Created time.Time   `json:"created"`
+	// A calls card of several calls: each one the user may leave out, and
+	// what Oui says for 1, 2… items chosen (call_fold.go).
+	Choices []proposalChoice `json:"choices,omitempty"`
+	Acts    []string         `json:"acts,omitempty"`
+	Created time.Time        `json:"created"`
 }
 
 // view is a card and its proposal as the workspace shows them, in lang.
@@ -42,6 +46,12 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 	v.Fields = p.FieldsIn(lang)
 	o := p.Origin(lang)
 	v.Node, v.From, v.Yes = o.Node, o.From, o.Yes
+	if p.choices != nil {
+		v.Choices = p.choices(lang)
+	}
+	if p.acts != nil && x.State == cardPending {
+		v.Acts = p.acts(lang)
+	}
 	switch {
 	case p.Kind == cardAccess && x.State == cardApproved:
 		v.Exec, v.ExecWhy = w.c.callState(p.ID)

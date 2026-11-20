@@ -278,6 +278,58 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expectBubblesApart(page);
   await shot(page, "graph-apart");
 
+  // 14b. The view's skill, woken once per mail, proposed to archive
+  // three: they wait as one card on the view's page, worded as a list
+  // action is (« Déplacer 3 éléments → archive »), each mail a line
+  // ticked, still « extérieur », where it comes from
+  // under Détails. The user leaves one out: Oui archives the two others,
+  // and the card says one was left.
+  await home(page);
+  await bubble("Mes mails").click();
+  const view = pageOf("Mes mails");
+  await expect(view).toBeVisible();
+  expect((await request.post("/e2e/proposals")).status()).toBe(204);
+  const batch = view.locator(".pg-foot .a2-proposal");
+  await expect(batch).toHaveCount(1);
+  await expect(batch.locator(".a2-proposal-text")).toHaveText("Déplacer 3 éléments → archive (mail/move)");
+  const ticks = batch.locator(".a2-proposal-choices input[type=checkbox]");
+  await expect(ticks).toHaveCount(3);
+  await expect(batch.locator(".a2-proposal-choices")).toContainText("« La lettre de la semaine » · news@example.org");
+  await expect(batch.locator(".a2-badge-external")).toBeVisible();
+  await expect(batch.locator(":scope > .a2-proposal-from, :scope > .a2-proposal-yes, :scope > .a2-proposal-why")).toHaveCount(0);
+  // Oui is the strong button, in the ink, in either theme; Non the quiet one.
+  const [oui, non] = [batch.locator(".a2-proposal-actions .a2-button-primary"), batch.getByRole("button", { name: "Non" })];
+  const bg = (b: Locator) => b.evaluate((el) => getComputedStyle(el).backgroundColor);
+  // A theme's colour, as the page computes it.
+  const token = (name: string) =>
+    page.evaluate((n) => {
+      const d = document.createElement("i");
+      d.style.color = `var(${n})`;
+      document.body.append(d);
+      const v = getComputedStyle(d).color;
+      d.remove();
+      return v;
+    }, name);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((th) => (document.documentElement.dataset.theme = th), theme);
+    const [fg, card] = [await token("--fg"), await token("--card")];
+    expect(fg).not.toBe(card);
+    await expect.poll(() => bg(oui)).toBe(fg);
+    await expect.poll(() => bg(non)).toBe(card);
+  }
+  await page.evaluate(() => (document.documentElement.dataset.theme = "light"));
+  await settledBox(view);
+  await shot(page, "chosen-calls-pending");
+  await ticks.nth(1).uncheck();
+  await batch.getByRole("button", { name: "Déplacer 2 éléments → archive (mail/move)" }).click();
+  await expect(batch.locator(".a2-proposal-text")).toHaveText("2 déplacés, 1 laissé");
+  await expect(batch.locator(".a2-proposal-choices li.is-left")).toHaveText("« La lettre de la semaine » · news@example.orglaissé");
+  // Each call as kept, one mail each; the one left out never moved.
+  await expect
+    .poll(async () => ((await (await request.get("/e2e/tools")).json()).moved as string[][]).filter((ids) => ids.some((id) => /^n\d$/.test(id))).sort())
+    .toEqual([["n1"], ["n3"]]);
+  await shot(page, "chosen-calls");
+
   // 15. A card no page holds (proposed at the home, no subject opened)
   // waits in the console, with its Oui; answered, it leaves it.
   await home(page);

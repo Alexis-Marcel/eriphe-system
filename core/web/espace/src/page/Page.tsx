@@ -133,7 +133,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
         {tab === "md" && (file ? <MdTab key={`${id}@${version}`} id={id} file={file} latest={latest} live={live} shift={shift} /> : <Skeleton />)}
         {page && page.cards.length > 0 && latest && (
           <footer className="pg-foot">
-            <Cards surface={`${id}--cards`} refs={page.cards.map((c) => c.ref)} />
+            <Cards surface={`${id}--cards`} refs={page.cards.map((c) => c.ref)} home={id} />
           </footer>
         )}
       </div>

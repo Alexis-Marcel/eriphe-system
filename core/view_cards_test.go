@@ -17,6 +17,13 @@ import (
 // node and the run.
 func mailView(t *testing.T) (*core, string, *skillRun) {
 	t.Helper()
+	c, _, node, r := mailViewOf(t)
+	return c, node, r
+}
+
+// mailViewOf is mailView with its faked server.
+func mailViewOf(t *testing.T) (*core, *fakeMonitor, string, *skillRun) {
+	t.Helper()
 	c, fm, now := viewCore(t)
 	mails := map[string]any{"resource": "monitor", "uri": "monitor://received", "items": map[string]any{"path": "messages", "id": "id", "title": "subject", "detail": "from"}}
 	out, isErr := callBrainTool(t, c, "propose_view", map[string]any{
@@ -52,7 +59,7 @@ func mailView(t *testing.T) (*core, string, *skillRun) {
 		t.Fatalf("runs %+v", rs)
 	}
 	c.readNode(context.Background(), node, []string{"mails"}, time.Now())
-	return c, node, rs[0]
+	return c, fm, node, rs[0]
 }
 
 // keep has the run call a tool: kept for its card.
