@@ -7,21 +7,27 @@
 // around the centre, the subjects linked to nothing on its rim.
 //
 // Nothing is remembered: no place is kept, nothing orders the subjects.
-// What the user arranges holds for the session because the energy is
-// local. The first layout runs on a global energy (alpha) and is settled
-// before it is shown; afterwards only what changes is warm: a new node
-// (and a little around it), the bubbles of a page that opens or closes,
-// what a drag carries. Everything else is cold and moves only to make
-// room (collision), never by the forces. The whole graph is never warmed
-// again.
+// Like Obsidian's graph, it never goes cold: every body always keeps a
+// little energy (ambient), so the centre pull, the repulsion, the springs
+// and the collision always act and the graph is always a compact disc,
+// pages open or not. The first layout runs on a global energy (alpha) and
+// is settled before it is shown; a page that opens or closes warms the
+// whole graph a while (stir), a new node is warm, and so is what a drag
+// carries. The open pages glide to the middle of the graph, side by side
+// in the order they stand in; the bubbles gather round them, and come
+// back when they close. Once nothing moves over a window of ticks the
+// graph is at rest and ticks no more until something changes: friction
+// and a little stiction keep it still, never trembling.
 //
 // A drag (hold, drop): the held body passes over everything; the bodies
 // linked to it follow on their springs, with an energy that falls with
 // the links between them (HOP1, HOP2, beyond still), passing over what is
-// not theirs; nothing else moves. Dropped, it stays exactly there and wins
-// every collision: what is under it steps aside by the smallest move;
-// its followers settle on their springs, giving way to the bodies in
-// place. Nothing here knows a node by its name.
+// not theirs; nothing else moves. Dropped, it stays exactly there for the
+// session (a bubble by its subject) and wins every collision: what is
+// under it steps aside by the smallest move; its followers settle on
+// their springs, giving way to the bodies in place. A subject the graph
+// left far behind (loose past the disc's edge) is let go. Nothing here
+// knows a node by its name.
 
 export type Pt = [number, number];
 export type Pos = Record<string, Pt>;
@@ -50,6 +56,17 @@ export const T = {
   pass: 150, // a follower of a drop passes over the others until it is back on its springs, this many ticks at most
   passWarm: 0.3, // ... warm at least this meanwhile (its drag energy when lower)
   passNear: 60, // ... back: none of its links stretched more than this
+  ambient: 0.05, // the energy every body always has, at least: the graph is always drawn to its centre
+  still: 2, // the graph is at rest when no body moved more than this ...
+  calm: 24, // ... over this many ticks (contacts tremble a little under the forces, in place)
+  stick: 0.25, // a body on the ambient energy alone that would move less than this a tick stays still: no creeping
+  stir: 0.4, // a page that opens or closes warms the whole graph this much, cooling like the first layout
+  stirDecay: 0.012, // ... cooling by this share a tick
+  awake: 420, // the graph rests at the latest this many ticks after it last changed
+  pageGlide: 0.08, // an open page glides to its place in the middle: the share of the way each tick
+  pageWarm: 0.3, // a page opening is this warm: it comes to the centre soon
+  jam: 4, // the graph does not rest while two bodies sit on each other more than this (within their margins: never visible)
+  loose: 200, // a dropped subject this far past the disc's edge is let go
 };
 
 // The user's reach when dragging: a subject dragged past REACH beyond the
@@ -107,11 +124,16 @@ function edgeRest([w, h]: Pt, ux: number, uy: number, x: LNode): number {
 }
 
 // A body of the simulation: a node, where it is and how fast it goes.
-// was: where it stood before an open page pushed it (a subject's spot, a
-// bubble's offset from its parent), to go back there when the page
-// closes; rel: a bubble's offset from its subject when the subject's page
-// opened, given back when it closes.
-type Body = LNode & { x: number; y: number; vx: number; vy: number; born: number; opened?: number; was?: Pt; rel?: Pt };
+type Body = LNode & { x: number; y: number; vx: number; vy: number; born: number; opened?: number };
+
+// Contact is two bodies that touch, or nearly: n, the way from a to b;
+// gap, the room between them; sb, the share of the meeting b takes (1: b
+// gives way, 0: a does, 0.5: both) as they move.
+type Contact = { a: Body; b: Body; n: Pt; gap: number; sb: number };
+
+// Fix is a body the user dropped: where it stays (from its parent when it
+// is a bubble), and when it was dropped (the last one wins).
+type Fix = { at: Pt; of?: string; seq: number };
 
 // HELD is the rank of the body held: it never gives way.
 const HELD = 0;
@@ -123,22 +145,29 @@ export class Sim {
   private list: Body[] = [];
   private byId = new Map<string, Body>();
   private alpha = 0;
+  private stir = 0; // the energy a page opening or closing gives the whole graph, cooling back to the ambient one
+  private woke = 0; // the tick the graph last changed at
+  private jammed = false; // the collision left bodies on each other at the last tick: not at rest
   private ticks = 0;
-  private lastMove = Infinity;
-  private heat = new Map<string, number>(); // a body's own energy, cooling
+  private calm = false; // at rest: nothing moved over the last window
+  private mark: { at: Pt[]; tick: number } | null = null; // where the bodies were when the window began
+  private heat = new Map<string, number>(); // a body's own energy, above the ambient one, cooling
   private held: { id: string; at: Pt } | null = null;
   private group = new Map<string, number>(); // the held body's followers, their energy
-  private pin: { id: string; at: Pt; clear: number; ticks: number } | null = null; // the body just dropped
+  private fixed = new Map<string, Fix>(); // the bodies the user dropped
+  private fixSeq = 0;
   private trail = new Set<string>(); // the followers of the last drop, giving way while they settle
   private anchor: Pt = [0, 0]; // where the last drop was: its followers gather around it
   private passing = new Map<string, { n: number; e: number }>(); // the followers still coming round: the ticks they have left, their warmth
   private openSeq = 0;
+  private contacts: Contact[] = []; // the bodies that touched at the last tick
 
   // sync tells the simulation the graph as it is now: the nodes in a
   // stable order, the open ones with their page's size. beside is the page
   // a page opened now goes beside (the one the console talks to), else the
   // last one opened. The first graph is laid out on a global energy and
-  // settled at once; later, only what changed is warmed.
+  // settled at once; later, what changed is warmed, and every change wakes
+  // the graph: the ambient energy does the rest.
   sync(nodes: LNode[], beside?: string | null): void {
     const want = new Map(nodes.map((n) => [n.id, n]));
     // gone
@@ -156,17 +185,17 @@ export class Sim {
         fresh.push(b);
       } else if (b.r !== n.r || b.lw !== n.lw || b.lh !== n.lh || b.parent !== n.parent || b.links.join() !== n.links.join()) {
         Object.assign(b, { parent: n.parent, links: n.links, r: n.r, lw: n.lw, lh: n.lh });
-        this.lastMove = Infinity; // only collisions sort it out: nothing is warmed
+        this.wake();
       }
       next.push(b);
     }
     this.list = next;
     for (const b of this.list) if (b.parent && !this.byId.has(b.parent)) b.parent = undefined;
+    for (const [id, f] of this.fixed) if (f.of && this.byId.get(id)?.parent !== f.of) this.fixed.delete(id);
     if (first) this.seedAll();
     else for (const b of fresh.sort((a, c) => this.depth(a) - this.depth(c))) this.seed(b);
     if (first) {
       this.alpha = 1;
-      this.lastMove = Infinity;
       this.settle();
     }
     // the pages: those closed first (a click that opens one alone closes
@@ -177,7 +206,7 @@ export class Sim {
       if (b.box && box && (b.box[0] !== box[0] || b.box[1] !== box[1])) {
         b.box = box;
         for (const k of this.below(b)) this.warmUp(k.id, 0.3);
-        this.lastMove = Infinity;
+        this.wake();
       }
     }
     for (const n of nodes) {
@@ -195,7 +224,7 @@ export class Sim {
     if (!x) return;
     if (this.held?.id !== id) {
       this.group = this.neighbourhood(id);
-      if (this.pin?.id === id) this.pin = null;
+      this.fixed.delete(id);
       this.trail = new Set();
       this.passing = new Map();
     }
@@ -203,24 +232,25 @@ export class Sim {
     this.held = { id, at: p };
     [x.x, x.y] = p;
     x.vx = x.vy = 0;
-    this.lastMove = Infinity;
+    this.wake();
   }
 
   // drop lets go of the body held: it stays where it is (back at the
-  // disc's edge if it was out in the void), wins every collision until
-  // nothing sits on it, and forgets where a page had pushed it from. Its
-  // followers settle on their springs, giving way to the bodies in place.
+  // disc's edge if it was out in the void) for the session, and wins every
+  // collision (the last dropped first). Its followers settle on their
+  // springs, giving way to the bodies in place.
   drop(): void {
     const h = this.held;
     if (!h) return;
     this.held = null;
     const x = this.byId.get(h.id);
     if (!x) return;
-    this.pin = { id: x.id, at: this.leash(x, [x.x, x.y], true), clear: 0, ticks: 0 };
-    x.was = x.rel = undefined;
+    const at = this.leash(x, [x.x, x.y], true);
+    const p = x.parent ? this.byId.get(x.parent) : undefined;
+    this.fixed.set(x.id, p ? { at: [at[0] - p.x, at[1] - p.y], of: p.id, seq: ++this.fixSeq } : { at, seq: ++this.fixSeq });
     for (const [id, e] of this.group) this.warmUp(id, e);
     this.trail = new Set(this.group.keys());
-    this.anchor = this.pin.at;
+    this.anchor = at;
     // the bubbles of the followers that stayed still come back to them
     for (const id of [...this.trail])
       for (const k of this.below(this.byId.get(id)!))
@@ -230,7 +260,7 @@ export class Sim {
         }
     this.passing = new Map([...this.trail].map((id) => [id, { n: T.pass, e: Math.min(T.passWarm, this.heat.get(id) ?? 0) }]));
     this.group = new Map();
-    this.lastMove = Infinity;
+    this.wake();
   }
 
   // heldId is the body held, if any.
@@ -238,14 +268,15 @@ export class Sim {
     return this.held?.id ?? null;
   }
 
-  // asleep tells whether nothing moves any more: no need to tick.
+  // asleep tells whether nothing moves any more: no need to tick until
+  // something changes (sync, hold, drop wake it).
   asleep(): boolean {
-    return this.alpha === 0 && this.lastMove < 0.05 && !this.held && !this.pin && this.heat.size === 0 && this.passing.size === 0;
+    return (this.calm || this.ticks - this.woke > T.awake) && !this.jammed && !this.held && this.heat.size === 0 && this.passing.size === 0 && this.alpha === 0 && this.stir === 0;
   }
 
   // settle ticks until the graph is at rest (max ticks at most): the
   // first layout, and every change when the user asks for less motion.
-  settle(max = 2000): void {
+  settle(max = 3000): void {
     for (let i = 0; i < max && !this.asleep(); i++) this.tick();
   }
 
@@ -264,17 +295,24 @@ export class Sim {
 
   /* ---------- the simulation ---------- */
 
+  // tick moves the graph one frame on; a graph at rest does not move
+  // until something changes.
   tick(): void {
+    if (this.asleep()) return;
     this.ticks++;
     const held = this.held ? this.byId.get(this.held.id) : undefined;
     if (held) [held.x, held.y] = this.held!.at;
     this.alpha += (0 - this.alpha) * T.decay;
     if (this.alpha < T.alphaMin) this.alpha = 0;
-    const before = this.list.map((x) => [x.x, x.y]);
+    // the stir cools like the first layout, down to the ambient energy
+    this.stir -= this.stir * T.stirDecay;
+    if (this.stir < T.ambient) this.stir = 0;
+    this.loosen();
     const group = this.group;
-    const free = (x: Body) => !x.box && held !== x && this.pin?.id !== x.id && (!held || group.has(x.id));
-    // each body's energy: the global one (the first layout) or its own; during a drag, its hop's
-    const E = new Map(this.list.map((x) => [x.id, held ? (group.get(x.id) ?? 0) : Math.max(this.alpha, this.heat.get(x.id) ?? 0)]));
+    const free = (x: Body) => !x.box && held !== x && !this.pinned(x) && (!held || group.has(x.id));
+    // each body's energy: the ambient one at least, the first layout's,
+    // or its own; during a drag, its hop's (nothing else moves)
+    const E = new Map(this.list.map((x) => [x.id, held ? (group.get(x.id) ?? 0) : Math.max(T.ambient, this.alpha, this.stir, this.heat.get(x.id) ?? 0)]));
     const e = (x: Body) => E.get(x.id) ?? 0;
     const L = this.list;
     // many-body: every bubble pushes every other away, no cutoff (pages make room by collision)
@@ -318,7 +356,7 @@ export class Sim {
       if (p) {
         const dx = x.x - p.x, dy = x.y - p.y, d = Math.max(0.01, Math.hypot(dx, dy));
         const rest = p.box ? edgeRest(p.box, dx / d, dy / d, x) : p.r + x.r + T.childGap;
-        spring(p, x, rest, T.childK, 0.15);
+        spring(p, x, rest, T.childK, p.box ? 0 : 0.15);
       }
       for (const l of x.links) {
         const o = this.byId.get(l);
@@ -351,12 +389,12 @@ export class Sim {
             c.vy += (ny / n) * f * e(c);
           }
           if (free(a)) {
-            a.vx -= (nx / n) * f * 0.25 * e(a);
-            a.vy -= (ny / n) * f * 0.25 * e(a);
+            a.vx -= (nx / n) * f * 0.5 * e(a);
+            a.vy -= (ny / n) * f * 0.5 * e(a);
           }
           if (free(b)) {
-            b.vx -= (nx / n) * f * 0.25 * e(b);
-            b.vy -= (ny / n) * f * 0.25 * e(b);
+            b.vx -= (nx / n) * f * 0.5 * e(b);
+            b.vy -= (ny / n) * f * 0.5 * e(b);
           }
         }
       }
@@ -366,8 +404,9 @@ export class Sim {
       if (h < 0.005 || !this.byId.has(id)) this.heat.delete(id);
       else this.heat.set(id, h * T.cool);
     }
-    // the pull to the centre: the graph stays a compact disc (none during a
-    // drag; what followed one gathers around where it was dropped)
+    // the pull to the centre: the graph stays a compact disc (none during
+    // a drag; what followed one gathers around where it was dropped while
+    // it settles)
     if (!held)
       for (const x of L) {
         if (!free(x)) continue;
@@ -377,13 +416,42 @@ export class Sim {
       }
     // move
     const cap = 40;
+    // a body on the ambient energy alone, all but still, is still
+    const stuck = (x: Body) => !held && !this.alpha && e(x) <= T.ambient && Math.hypot(x.vx, x.vy) < T.stick;
     for (const x of L) {
-      if (!free(x)) {
+      if (!free(x)) x.vx = x.vy = 0;
+      x.vx *= T.friction;
+      x.vy *= T.friction;
+      if (stuck(x)) x.vx = x.vy = 0;
+    }
+    // what touches meets without going into each other: the one that
+    // gives way is carried, two of a rank go on together (after the first
+    // layout: no trembling against what holds a body back)
+    if (!held && !this.alpha)
+      for (let k = 0; k < 4; k++)
+        for (const { a, b, n, sb, gap } of this.contacts) {
+        const fa = free(a), fb = free(b);
+        if (!fa && !fb) continue;
+        // two pages side by side go together: they stay as they were opened
+        if (a.box && b.box && fa && fb) {
+          a.vx = b.vx = (a.vx + b.vx) / 2;
+          a.vy = b.vy = (a.vy + b.vy) / 2;
+          continue;
+        }
+        const over = a.vx * n[0] + a.vy * n[1] - (b.vx * n[0] + b.vy * n[1]) - gap;
+        if (over <= 0) continue;
+        const share = !fa ? 1 : !fb ? 0 : sb;
+        a.vx -= over * (1 - share) * n[0];
+        a.vy -= over * (1 - share) * n[1];
+        b.vx += over * share * n[0];
+        b.vy += over * share * n[1];
+      }
+    for (const x of L) {
+      if (!free(x)) continue;
+      if (stuck(x)) {
         x.vx = x.vy = 0;
         continue;
       }
-      x.vx *= T.friction;
-      x.vy *= T.friction;
       const sp = Math.hypot(x.vx, x.vy);
       if (sp > cap) {
         x.vx *= cap / sp;
@@ -392,21 +460,29 @@ export class Sim {
       x.x += x.vx;
       x.y += x.vy;
     }
-    // the body just dropped glides to its spot (it is there already,
-    // unless it came back from the void)
-    const pin = this.pin ? this.byId.get(this.pin.id) : undefined;
-    if (pin) {
-      pin.x += (this.pin!.at[0] - pin.x) * T.glide;
-      pin.y += (this.pin!.at[1] - pin.y) * T.glide;
+    // a body the user dropped glides to its spot (it is there already,
+    // unless it came back from the void, or its parent moved)
+    for (const [id] of this.fixed) {
+      const x = this.byId.get(id)!, to = this.fixAt(id)!;
+      if (!this.pinned(x)) continue;
+      x.x += (to[0] - x.x) * T.glide;
+      x.y += (to[1] - x.y) * T.glide;
     }
-    // collision last: nothing overlaps, softly
-    this.collide(T.soft);
-    if (pin && this.pin) {
-      const near = Math.hypot(this.pin.at[0] - pin.x, this.pin.at[1] - pin.y) < 1;
-      const under = new Set(this.below(pin).map((k) => k.id));
-      const hit = L.some((o) => o !== pin && !under.has(o.id) && overlap(pin, [pin.x, pin.y], o, [o.x, o.y]));
-      this.pin.clear = near && !hit ? this.pin.clear + 1 : 0;
-      if (this.pin.clear > 20 || ++this.pin.ticks > 300) this.pin = null;
+    // the open pages glide to the middle of the graph, side by side
+    if (!held) for (const [x, to] of this.row()) {
+      x.x += (to[0] - x.x) * T.pageGlide;
+      x.y += (to[1] - x.y) * T.pageGlide;
+    }
+    // collision last: nothing overlaps, softly while the first layout is
+    // hot, at once afterwards (again while a shove put one body on another)
+    let k = 0;
+    while (k < 4 && this.collide(this.alpha ? T.soft : 1) > 0.5) k++;
+    this.jammed = k === 4 && this.collide(0) > T.jam;
+    // the forces still press what is in a crowd on each other a while
+    // after the last change: the collision alone settles it, to rest
+    if (this.jammed && !held && this.ticks - this.woke > T.awake) {
+      for (let i = 0; i < 64 && this.collide(1) > 0.5; i++);
+      this.jammed = this.collide(0) > T.jam;
     }
     // a follower comes round what is in its way, warm, until it is back on its springs
     for (const [id, p] of this.passing) {
@@ -417,20 +493,86 @@ export class Sim {
         this.warmUp(id, p.e);
       }
     }
-    if (!this.pin && !held && this.trail.size && ![...this.trail].some((id) => this.heat.has(id))) this.trail = new Set();
-    let mv = 0;
-    L.forEach((x, i) => (mv = Math.max(mv, Math.hypot(x.x - before[i][0], x.y - before[i][1]))));
-    this.lastMove = mv;
+    if (!held && this.trail.size && ![...this.trail].some((id) => this.heat.has(id))) this.trail = new Set();
+    // at rest: no body went anywhere over a window of ticks
+    if (!this.mark || this.mark.at.length !== L.length) this.mark = { at: L.map((x) => [x.x, x.y]), tick: this.ticks };
+    else if (this.ticks - this.mark.tick >= T.calm) {
+      let mv = 0;
+      L.forEach((x, i) => (mv = Math.max(mv, Math.hypot(x.x - this.mark!.at[i][0], x.y - this.mark!.at[i][1]))));
+      this.calm = mv < T.still;
+      this.mark = { at: L.map((x) => [x.x, x.y]), tick: this.ticks };
+    }
+  }
+
+  // row is where the open pages go: side by side, in the order they stand
+  // in from left to right, at the centre of the graph; around the one the
+  // user dropped, if any (it stays where it was dropped).
+  private row(): [Body, Pt][] {
+    const pages = this.list.filter((x) => x.box).sort((a, b) => a.x - b.x);
+    if (!pages.length) return [];
+    const gap = 48; // their two margins
+    const at: number[] = [];
+    let w = 0;
+    for (const x of pages) {
+      at.push(w + x.box![0] / 2);
+      w += x.box![0] + gap;
+    }
+    const anchor = pages.findIndex((x) => this.fixed.has(x.id));
+    const [ox, oy] = anchor >= 0 ? [pages[anchor].x - at[anchor], pages[anchor].y] : [-(w - gap) / 2, 0];
+    return pages.filter((x) => !this.fixed.has(x.id)).map((x) => [x, [ox + at[pages.indexOf(x)], oy]]);
+  }
+
+  // wake tells the graph something changed: it moves again until it is
+  // at rest.
+  private wake(): void {
+    this.calm = false;
+    this.woke = this.ticks;
+    this.mark = null;
+  }
+
+  // pinned tells whether a body stays where the user dropped it now: a
+  // bubble dropped by its subject lives on its springs while the
+  // subject's page is open, and goes back to its spot when it closes.
+  private pinned(x: Body): boolean {
+    const f = this.fixed.get(x.id);
+    return !!f && !(f.of && this.byId.get(f.of)?.box);
+  }
+
+  // fixAt is where a body the user dropped stays.
+  private fixAt(id: string): Pt | undefined {
+    const f = this.fixed.get(id);
+    if (!f) return undefined;
+    const p = f.of ? this.byId.get(f.of) : undefined;
+    return p ? [p.x + f.at[0], p.y + f.at[1]] : f.at;
+  }
+
+  // loosen lets go of a subject the user dropped that the graph has left
+  // far behind (the others came closer to the centre since): the centre
+  // pulls it back like any other.
+  private loosen(): void {
+    for (const [id, f] of this.fixed) {
+      if (f.of) continue;
+      const rs = this.list.filter((o) => o.id !== id && !o.parent);
+      if (!rs.length) continue;
+      const c: Pt = [rs.reduce((s, o) => s + o.x, 0) / rs.length, rs.reduce((s, o) => s + o.y, 0) / rs.length];
+      let R = 0;
+      for (const o of rs) R = Math.max(R, Math.hypot(o.x - c[0], o.y - c[1]) + extent(o, [o.x, o.y])[0]);
+      if (Math.hypot(f.at[0] - c[0], f.at[1] - c[1]) > R + RIM + T.loose) {
+        this.fixed.delete(id);
+        this.warmUp(id, 0.3);
+      }
+    }
   }
 
   // rank is who gives way when two bodies collide: the higher. The one
-  // held never; the one just dropped wins; then the open pages; then the
-  // bubbles at rest; a bubble that moves on its own warmth (a follower of
-  // the last drop, the bubbles of a page that opened) gives way to them, a
-  // new bubble first of all.
+  // held never; then those the user dropped, the last one first; then the
+  // open pages; then the bubbles at rest; a bubble that moves on its own
+  // warmth (a follower of the last drop, the bubbles of a page that
+  // opened) gives way to them, a new bubble first of all.
   private rank(x: Body): number {
     if (this.held?.id === x.id) return HELD;
-    if (this.pin?.id === x.id) return 1;
+    const f = this.fixed.get(x.id);
+    if (f) return 2 - f.seq / (this.fixSeq + 1);
     if (x.box) return 10;
     if (this.ticks - x.born < T.fresh) return 2000;
     return this.trail.has(x.id) || this.heat.has(x.id) ? 1500 : 1000;
@@ -441,71 +583,81 @@ export class Sim {
   // to every other. Of two that overlap, the one of higher rank steps
   // aside alone (a bubble by the shortest way that leads onto nothing
   // else), of the same rank each by half; a bubble gives way to its
-  // parent. What is held passes over everything, its followers over what
-  // is not theirs, and nothing else moves during a drag. A bubble an open
-  // page pushes remembers where it stood.
-  private collide(strength: number): void {
+  // parent, unless the user dropped it. What is held passes over
+  // everything, its followers over what is not theirs, and nothing else
+  // moves during a drag.
+  private collide(strength: number): number {
+    let most = 0;
     const L = this.list;
     const held = this.held;
+    this.contacts = [];
     for (let i = 0; i < L.length; i++)
       for (let j = i + 1; j < L.length; j++) {
         const a = L[i], b = L[j];
         const [ha, ta, ba] = extent(a, [a.x, a.y]), [hb, tb, bb] = extent(b, [b.x, b.y]);
         const dx = b.x - a.x;
         const ox = ha + hb - Math.abs(dx), oy = Math.min(ba, bb) - Math.max(ta, tb);
-        if (ox <= 0.5 || oy <= 0.5) continue;
+        if (ox <= -12 || oy <= -12) continue;
         const ra = this.rank(a), rb = this.rank(b);
         if (ra === HELD || rb === HELD) continue;
         if (held && !(this.group.has(a.id) && this.group.has(b.id))) continue;
+        const fa = this.fixed.has(a.id), fb = this.fixed.has(b.id);
         // a follower of a drop passes over the others until it is back on its springs
-        if ((this.passing.has(a.id) && !this.trail.has(b.id)) || (this.passing.has(b.id) && !this.trail.has(a.id))) if (this.pin?.id !== a.id && this.pin?.id !== b.id) continue;
-        const sb = b.parent === a.id ? 1 : a.parent === b.id ? 0 : ra === rb ? 0.5 : rb > ra ? 1 : 0;
+        if ((this.passing.has(a.id) && !this.trail.has(b.id)) || (this.passing.has(b.id) && !this.trail.has(a.id))) if (!fa && !fb) continue;
+        const sb = b.parent === a.id ? 1 : a.parent === b.id ? 0 : fa !== fb ? (fa ? 1 : 0) : ra === rb ? 0.5 : rb > ra ? 1 : 0;
         const sa = 1 - sb;
+        // touching: they press on each other
+        // a page is heavier than a bubble, not unmovable: what is caught
+        // between it and the others holds it back
+        const sv = !a.box === !b.box || fa || fb ? sb : a.box ? 0.9 : 0.1;
+        this.contacts.push({ a, b, sb: sv, gap: Math.max(0, -Math.min(ox, oy)), n: ox <= oy ? [Math.abs(dx) > 0.01 ? Math.sign(dx) : 1, 0] : [0, (tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1] });
+        if (ox <= 0.01 || oy <= 0.01) continue;
+        most = Math.max(most, Math.min(ox, oy));
         const out = sb === 1 && !b.box && !this.trail.has(b.id) ? this.wayOut(b, a) : sa === 1 && !a.box && !this.trail.has(a.id) ? this.wayOut(a, b) : null;
-        if (out) {
-          const [x, by] = sb === 1 ? [b, a] : [a, b];
-          this.remember(x, by);
-          this.shove(x, out[0] * strength, out[1] * strength);
+        // a body just touching steps aside the least way, even onto another
+        if (out && Math.min(ox, oy) > 2) {
+          this.shove(sb === 1 ? b : a, out[0] * strength, out[1] * strength);
           continue;
         }
-        if (sb > 0) this.remember(b, a);
-        if (sa > 0) this.remember(a, b);
         // a page dropped on another moves it by the smallest move; else
         // sideways when it is not much longer (the screen is wide)
-        const least = this.pin && (this.pin.id === a.id || this.pin.id === b.id) && (a.box || b.box);
+        const least = (fa || fb) && (a.box || b.box);
+        // a bubble with no way off a page or its parent, caught between it
+        // and the others, holds it back: they share the move
+        const caught = !out && !fa && !fb && (!a.box !== !b.box || a.parent === b.id || b.parent === a.id);
+        const qb = caught ? 0.5 : sb, qa = 1 - qb;
         if (least ? ox <= oy : ox <= oy * 1.5) {
-          const s = (Math.abs(dx) > 0.01 ? Math.sign(dx) : hash(a.id + b.id) < 0.5 ? 1 : -1) * (ox + 0.5) * strength;
-          this.shove(a, -s * sa, 0);
-          this.shove(b, s * sb, 0);
+          const s = (Math.abs(dx) > 0.01 ? Math.sign(dx) : hash(a.id + b.id) < 0.5 ? 1 : -1) * (ox + 0.02) * strength;
+          this.shove(a, -s * qa, 0);
+          this.shove(b, s * qb, 0);
         } else {
-          const s = ((tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1) * (oy + 0.5) * strength;
-          this.shove(a, 0, -s * sa);
-          this.shove(b, 0, s * sb);
+          const s = ((tb + bb) / 2 >= (ta + ba) / 2 ? 1 : -1) * (oy + 0.02) * strength;
+          this.shove(a, 0, -s * qa);
+          this.shove(b, 0, s * qb);
         }
       }
-  }
-
-  // remember keeps where a bubble stood when it is pushed while a page is
-  // open (by the page, or by what the page pushed), unless it is the
-  // page's own: a subject's spot, a bubble's offset from its parent.
-  private remember(x: Body, by: Body): void {
-    if (x.box || x.was || x.rel || !(by.box || by.was || by.rel) || !this.list.some((o) => o.box)) return;
-    const p = x.parent ? this.byId.get(x.parent) : undefined;
-    x.was = p ? [x.x - p.x, x.y - p.y] : [x.x, x.y];
+    return most;
   }
 
   // shove moves a body and what is under it (during a drag, only what
-  // follows: the rest stays still).
+  // follows: the rest stays still). A body the user dropped that is
+  // shoved (by one dropped after it) stays where it is shoved.
   private shove(x: Body, dx: number, dy: number): void {
     if (!dx && !dy) return;
     x.x += dx;
     x.y += dy;
     x.vx = x.vy = 0;
+    this.fixMove(x, dx, dy);
     for (const k of this.below(x)) {
       if (this.held && (this.held.id === k.id || !this.group.has(k.id))) continue;
       k.x += dx;
       k.y += dy;
     }
+  }
+
+  private fixMove(x: Body, dx: number, dy: number): void {
+    const f = this.fixed.get(x.id);
+    if (f && this.pinned(x)) f.at = [f.at[0] + dx, f.at[1] + dy];
   }
 
   // wayOut is how a bubble x on the body pg steps off it: the shortest of
@@ -514,10 +666,10 @@ export class Sim {
   private wayOut(x: Body, pg: Body): Pt | null {
     const [hp, tp, bp] = extent(pg, [pg.x, pg.y]), [hx, tx, bx] = extent(x, [x.x, x.y]);
     const ways: Pt[] = [
-      [pg.x + hp + hx - x.x + 0.5, 0],
-      [pg.x - hp - hx - x.x - 0.5, 0],
-      [0, bp - tx + 0.5],
-      [0, tp - bx - 0.5],
+      [pg.x + hp + hx - x.x + 0.02, 0],
+      [pg.x - hp - hx - x.x - 0.02, 0],
+      [0, bp - tx + 0.02],
+      [0, tp - bx - 0.02],
     ];
     const mine = new Set(this.below(x).map((k) => k.id));
     let best: Pt | null = null, cost = Infinity;
@@ -536,45 +688,34 @@ export class Sim {
   /* ---------- pages ---------- */
 
   // open draws a node's page where its bubble was, beside the page from
-  // (or the last opened) when it would cover it. Its bubbles keep their
-  // offsets, to come back the same way, and only they are warmed.
+  // (or the last opened) when it would cover it. It then glides to its
+  // place in the middle of the graph (row), a solid box the bubbles gather
+  // around; it and its bubbles are warmed, to get there soon.
   private open(x: Body, box: Pt, beside?: string): void {
     const open = this.list.filter((o) => o.box && o !== x);
     const from = (beside && open.find((o) => o.id === beside)) || open.sort((a, b) => (b.opened ?? 0) - (a.opened ?? 0))[0];
-    const p = x.parent ? this.byId.get(x.parent) : undefined;
-    x.was ??= p ? [x.x - p.x, x.y - p.y] : [x.x, x.y];
-    for (const k of this.below(x)) k.rel = [k.x - x.x, k.y - x.y];
-    if (from) [x.x, x.y] = bornBeside([x.x, x.y], box, [from.x, from.y], from.box!);
+    if (from) {
+      const [nx, ny] = bornBeside([x.x, x.y], box, [from.x, from.y], from.box!);
+      if (!this.fixed.get(x.id)?.of) this.fixMove(x, nx - x.x, ny - x.y);
+      [x.x, x.y] = [nx, ny];
+    }
     x.box = box;
     x.opened = ++this.openSeq;
     x.vx = x.vy = 0;
+    this.stir = Math.max(this.stir, T.stir);
+    this.warmUp(x.id, T.pageWarm);
     for (const k of this.below(x)) this.warmUp(k.id, 0.5);
-    this.lastMove = Infinity;
+    this.wake();
   }
 
-  // close puts a page back to a bubble: the bubbles pages had pushed go
-  // back where they stood (where no open page covers that spot any more),
-  // its own bubbles around it as they were; collision sorts out the rest.
+  // close puts a page back to a bubble, its bubbles warmed to come back
+  // round it; the centre draws in what the page had pushed away.
   private close(x: Body): void {
     x.box = undefined;
     x.opened = undefined;
-    const byDepth = [...this.list].sort((a, b) => this.depth(a) - this.depth(b));
-    for (const y of byDepth) {
-      if (!y.was || y.box) continue;
-      const p = y.parent ? this.byId.get(y.parent) : undefined;
-      const to: Pt = p ? [p.x + y.was[0], p.y + y.was[1]] : y.was;
-      if (this.list.some((o) => o.box && overlap(y, to, o, [o.x, o.y]))) continue;
-      this.shove(y, to[0] - y.x, to[1] - y.y);
-      y.was = undefined;
-    }
-    for (const k of this.below(x))
-      if (k.rel) {
-        this.shove(k, x.x + k.rel[0] - k.x, x.y + k.rel[1] - k.y);
-        k.rel = undefined;
-      }
+    this.stir = Math.max(this.stir, T.stir);
     for (const k of this.below(x)) this.warmUp(k.id, 0.5);
-    if (!this.list.some((o) => o.box)) for (const y of this.list) y.was = undefined;
-    this.lastMove = Infinity;
+    this.wake();
   }
 
   /* ---------- seeds ---------- */
@@ -739,7 +880,7 @@ export class Sim {
 
   private warmUp(id: string, h: number): void {
     this.heat.set(id, Math.max(this.heat.get(id) ?? 0, h));
-    this.lastMove = Infinity;
+    this.wake();
   }
 
   private forget(id: string): void {
@@ -752,7 +893,8 @@ export class Sim {
       this.held = null;
       this.group = new Map();
     }
-    if (this.pin?.id === id) this.pin = null;
+    this.fixed.delete(id);
+    for (const [k, f] of this.fixed) if (f.of === id) this.fixed.delete(k);
   }
 }
 

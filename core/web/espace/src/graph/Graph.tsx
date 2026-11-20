@@ -6,7 +6,7 @@ import { useWords } from "../i18n";
 import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { boxAt, edgeMark, frameAll, framePages, pageMax, type Box, type Cam } from "./camera";
-import { edgePush, edgeStep, Sim, type Pos, type Pt } from "./layout";
+import { edgePush, edgeStep, extent, Sim, type Pos, type Pt } from "./layout";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
 import { ExtMark, UnaskedMark } from "./Title";
 
@@ -99,8 +99,10 @@ export function Graph({ live }: { live: boolean }) {
   const [, setFrame] = useState(0);
   const raf = useRef<number | null>(null);
   // rest: where the bodies were when the graph last came to rest (or
-  // what is open changed): the camera frames that, not each frame.
+  // what is open changed, and every few frames while it moves, nothing
+  // held): the camera frames that, not each frame.
   const rest = useRef<Pos>({});
+  const frames = useRef(0);
   const reduced = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
   const wake = () => {
     if (reduced && !sim.heldId()) {
@@ -113,7 +115,7 @@ export function Graph({ live }: { live: boolean }) {
     const loop = () => {
       if (!sim.asleep()) sim.tick();
       const still = sim.asleep();
-      if (still) rest.current = sim.positions();
+      if (still || (!sim.heldId() && ++frames.current % 15 === 0)) rest.current = sim.positions();
       setFrame((n) => n + 1);
       raf.current = still ? null : requestAnimationFrame(loop);
     };
@@ -166,15 +168,22 @@ export function Graph({ live }: { live: boolean }) {
   useEffect(() => {
     if (talk) setFocus(talk);
   }, [talk]);
+  // A bubble's box: the bubble and its label under it, whole.
+  const bubbleBox = (x: GraphNode, at: Pt): Box => {
+    const [h, top, bottom] = extent({ id: x.id, links: [], ...labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x)) }, at);
+    return [at[0] - h, top, at[0] + h, bottom];
+  };
   const target: Cam = (() => {
     const rp = rest.current;
     const shown = openIds.filter((id) => rp[id]);
+    const bubbles = list.filter((x) => rp[x.id] && !shown.includes(x.id));
+    const all = bubbles.map((x) => bubbleBox(x, rp[x.id]));
     if (shown.length) {
       const pages = shown.map((id) => ({ id, box: boxAt(rp[id], boxOf(id)) }));
-      const near: Box[] = list.filter((x) => lit.has(x.id) && !shown.includes(x.id) && rp[x.id]).map((x) => [rp[x.id][0] - 110, rp[x.id][1] - 40, rp[x.id][0] + 110, rp[x.id][1] + 70]);
-      return framePages(pages, focus, near, band, size.w < 1200 ? 0.9 : 1);
+      const near = bubbles.filter((x) => lit.has(x.id)).map((x) => bubbleBox(x, rp[x.id]));
+      return framePages(pages, focus, near, band, size.w < 1200 ? 0.9 : 1, all);
     }
-    return frameAll(list.map((x) => rp[x.id]).filter(Boolean), band);
+    return frameAll(all, band);
   })();
   useEffect(() => {
     if (manual) return;
@@ -268,6 +277,7 @@ export function Graph({ live }: { live: boolean }) {
       g.edgeSince ??= ms;
       const dx = edgeStep(ex, ms, g.edgeSince), dy = edgeStep(ey, ms, g.edgeSince);
       if (dx || dy) {
+        setManual(true);
         camX.jump(camX.get() + dx);
         camY.jump(camY.get() + dy);
         placeHeld();
@@ -281,7 +291,6 @@ export function Graph({ live }: { live: boolean }) {
       if (!g.moved && Math.abs(e.clientX - g.sx) + Math.abs(e.clientY - g.sy) < 5) return;
       if (!g.moved) {
         g.moved = true;
-        setManual(true);
         edgeRaf.current = requestAnimationFrame(edgeTick);
       }
       g.px = e.clientX;

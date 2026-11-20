@@ -3257,19 +3257,32 @@ token in `X-CSRF-Token`:
   not part of: the graph is a compact disc, the subjects linked to nothing on its rim. Every body, a
   bubble with its label or an open page of its measured size (measured again whenever its content
   changes, at most what the screen holds above the bar), is a solid box to every other (`collide`).
-  Nothing is kept and nothing orders the subjects: a reload lays the graph out afresh. What the
-  user arranges holds for the session because the energy is local: the first layout runs on a
-  global energy and is settled before it is shown; afterwards only what changes is warm: a new node
-  (and its siblings near it), the bubbles of a page that opens or closes, what a drag carries; the
-  rest moves only to make room, and the whole graph is never warmed again. A page opens where its
-  bubble was, or right beside the page the bar talks to (else the last opened) when it would
-  cover it, at its height (`bornBeside`); what it pushes aside, and what that pushes, goes back
-  where it stood when it closes. A standing view made from a subject's card is linked to that
+  Nothing is kept and nothing orders the subjects: a reload lays the graph out afresh. Like
+  Obsidian's graph it never goes cold: every body keeps a little energy (`ambient`, 0.05), so the
+  centre pull, the repulsion, the springs and the collision always act and the graph is always a
+  compact disc, pages open or not. The first layout runs on a global energy and is settled before
+  it is shown; a page that opens or closes warms the whole graph a while (`stir`, 0.4, cooling by
+  1.2 % a tick), a new node is warm (its siblings near it too), and so is what a drag carries. Once
+  no body moved more than 2 px over 24 ticks (or 420 ticks after the last change, if nothing sits
+  on anything), the graph is at rest and is not ticked until something changes: friction, a little
+  stiction (a body on the ambient energy alone that would move less than 0.25 px a tick stays
+  still) and contacts that carry what they press on keep it still, never trembling. It never rests
+  with two bodies on each other (more than 4 px, within their margins): the collision runs again
+  while a shove put one body on another, a bubble with no way off a page or its parent, caught
+  between it and the others, holds it back (they share the move), and a crowd the forces still
+  press is settled by the collision alone before it rests. A page opens
+  where its bubble was, or right beside the page the bar talks to (else the last opened) when
+  it would cover it, at its height (`bornBeside`); then the open pages glide to the middle of the
+  graph, side by side in the order they stand in (`row`), solid boxes the bubbles gather around;
+  what they pushed comes back when they close. A standing view made from a subject's card is linked to that
   subject (`decideView`), so it sits beside it. The user drags a bubble, or a page by its head: it
   is translucent and passes over everything; what is linked to it follows on its springs, one link
   away strongly (0.8), two weakly (0.25), beyond still, passing over what is not theirs; nothing
-  else moves. Dropped, it stays exactly there and wins every collision: what is under it steps
-  aside by the smallest move; its followers settle on their springs around where it was dropped
+  else moves. Dropped, it stays exactly there for the session (a bubble at its place by its
+  subject; while the subject's page is open it lives on its springs, and goes back when it
+  closes) and wins every collision, the last dropped first: what is under it steps aside by the
+  smallest move; a subject the graph has left more than 200 px past the disc's edge is let go. Its
+  followers settle on their springs around where it was dropped
   (pulled there, not to the centre), passing over the others, warm at their drag energy (0.3 at
   most), until they are back on their springs (150 ticks at most), then giving way to the bodies in
   place. A subject dragged more than 420 px past the
@@ -3279,8 +3292,12 @@ token in `X-CSRF-Token`:
   frame. The camera (`camera.ts`) frames every open page if they fit at a scale of 0.8 or more,
   else the page in focus (the last one opened, Eriphe's show too, or the one the user turned
   to), whole, its head on screen and its foot above the bar's zone, the others open in place;
-  with no page open, the whole graph, as it is when the graph comes to rest (or what is open
-  changes), not at each frame. A drag or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
+  and the whole graph with them when all of it fits at a scale of 0.72 or more, else it slides,
+  within what keeps the pages framed, toward the rest of the graph, so that no bubble is cut at
+  the screen's edge while there is room; with no page open, the whole graph, labels included. It
+  frames what the graph is when it comes to rest (or what is open changes), and while the graph
+  moves every quarter of a second, not at each frame. Dragging a bubble leaves it framing unless
+  the drag scrolls it at the edge. A drag of the background or the wheel moves it by hand, ⌘ or Ctrl with the wheel zooms, a double click
   gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
   bigger, what waits for the user brighter, what runs a little, what is done or old quieter. Under
   760 px wide the graph is a list (`graph/List.tsx`, `listOrder`): each subject, then its bubbles
