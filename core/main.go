@@ -99,6 +99,9 @@ func main() {
 	}
 	c.run(context.Background())
 	c.pool.run(context.Background())
+	if _, err := c.ensureToolReview(); err != nil { // « Outils à revoir » (tool_review.go)
+		log.Printf("tools review: %v", err)
+	}
 
 	server := newMCPServer(c)
 	c.self = server

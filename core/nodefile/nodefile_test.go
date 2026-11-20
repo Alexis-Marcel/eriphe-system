@@ -262,6 +262,7 @@ func TestErrors(t *testing.T) {
 		{"two kinds", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"s": {"tool": "a/b", "monitor": "m"}}}`), "one of tool, resource or monitor", "plan"},
 		{"source name", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"Bad Name": {"tool": "a/b"}}}`), "a name is lowercase", "plan"},
 		{"every", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"s": {"tool": "a/b", "every": 2000}}}`), "every is 1 to 1440", "plan"},
+		{"attention without items", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"s": {"tool": "a/b", "attention": true}}}`), "attention needs items", "plan"},
 		{"bad mark", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "marks": {"l": {"i": "maybe"}}}`), "keep, drop or done", "plan"},
 		{"bad snapshot", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "snapshot": [1]}`), "snapshot: an object", "plan"},
 		{"short form in a file", block("plan", `{"components": {"component": "Text", "text": "Hi"}}`), "", "plan"},

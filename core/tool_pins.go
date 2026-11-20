@@ -2,10 +2,10 @@ package main
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"slices"
 	"strings"
@@ -19,16 +19,25 @@ import (
 // it could hide instructions in a description, or turn a send into a read.
 // The first listing of a server pins each tool's definition, adding the
 // server being the user's yes; a tool listed later with another definition,
-// or a new tool, is held: not lent, not shown, until the user accepts the
-// server's tools again on its page (approveTools). Eriphe's own servers are
-// not pinned: those it provides make their tools in this process, and those
-// shipped with it (shipped) change with its updates.
+// or a new tool, is held: not lent, not shown, until the user accepts it,
+// one change at a time in « Outils à revoir » (tool_review.go), or the
+// server's tools at once on its page (approveTools). Each pin keeps the
+// definition it was made of, for a change to show what was before.
+// Eriphe's own servers are not pinned: those it provides make their tools
+// in this process, and those shipped with it (shipped) change with its
+// updates.
 
 const toolPinsSchema = `CREATE TABLE IF NOT EXISTS tool_pins (
   server TEXT NOT NULL, tool TEXT NOT NULL, hash TEXT NOT NULL,
+  def TEXT NOT NULL DEFAULT '', -- the definition pinned, JSON
   PRIMARY KEY (server, tool));`
 
-func init() { extraSchema = append(extraSchema, toolPinsSchema) }
+func init() {
+	extraSchema = append(extraSchema, toolPinsSchema)
+	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
+		return addColumn(db, "tool_pins", "def", `TEXT NOT NULL DEFAULT ''`)
+	})
+}
 
 // eripheImages is where Eriphe's own images are published: a server run
 // from one of them (eriphe-mail, eriphe-calendar, eriphe-files,
@@ -57,46 +66,103 @@ func toolHash(t *mcp.Tool) string {
 	return hex.EncodeToString(h[:])
 }
 
-// toolPins are a server's pinned definitions, by tool name.
-func (s *Store) toolPins(server string) (map[string]string, error) {
-	rows, err := s.db.Query(`SELECT tool, hash FROM tool_pins WHERE server = ?`, server)
+// toolPin is a pinned definition: its hash, and the tool as it was (nil
+// for a pin made before definitions were kept).
+type toolPin struct {
+	Hash string
+	Def  *mcp.Tool
+}
+
+// toolPinDefs are a server's pins, by tool name.
+func (s *Store) toolPinDefs(server string) (map[string]toolPin, error) {
+	rows, err := s.db.Query(`SELECT tool, hash, def FROM tool_pins WHERE server = ?`, server)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]string{}
+	out := map[string]toolPin{}
 	for rows.Next() {
-		var tool, hash string
-		if err := rows.Scan(&tool, &hash); err != nil {
+		var tool, hash, def string
+		if err := rows.Scan(&tool, &hash, &def); err != nil {
 			return nil, err
 		}
-		out[tool] = hash
+		p := toolPin{Hash: hash}
+		if def != "" {
+			var t mcp.Tool
+			if json.Unmarshal([]byte(def), &t) == nil {
+				p.Def = &t
+			}
+		}
+		out[tool] = p
 	}
 	return out, rows.Err()
 }
 
-// pinTools pins the definitions of a server's tools, in place of its pins.
+// toolPins are a server's pinned definitions' hashes, by tool name.
+func (s *Store) toolPins(server string) (map[string]string, error) {
+	pins, err := s.toolPinDefs(server)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for name, p := range pins {
+		out[name] = p.Hash
+	}
+	return out, nil
+}
+
+// pinTools pins the definitions of a server's tools, in place of its pins
+// and of the changes refused of it.
 func (s *Store) pinTools(server string, tools []*mcp.Tool) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM tool_pins WHERE server = ?`, server); err != nil {
-		return err
+	for _, q := range []string{`DELETE FROM tool_pins WHERE server = ?`, `DELETE FROM tool_refusals WHERE server = ?`} {
+		if _, err := tx.Exec(q, server); err != nil {
+			return err
+		}
 	}
 	for _, t := range tools {
-		if _, err := tx.Exec(`INSERT INTO tool_pins (server, tool, hash) VALUES (?, ?, ?)`, server, t.Name, toolHash(t)); err != nil {
+		if _, err := tx.Exec(`INSERT INTO tool_pins (server, tool, hash, def) VALUES (?, ?, ?, ?)`, server, t.Name, toolHash(t), toolDef(t)); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
 }
 
-// forgetPins drops a server's pins: its next listing pins it again.
-func (s *Store) forgetPins(server string) error {
-	_, err := s.db.Exec(`DELETE FROM tool_pins WHERE server = ?`, server)
+// pinTool pins one tool's definition, in place of its pin.
+func (s *Store) pinTool(server string, t *mcp.Tool) error {
+	_, err := s.db.Exec(`INSERT INTO tool_pins (server, tool, hash, def) VALUES (?, ?, ?, ?)
+		ON CONFLICT (server, tool) DO UPDATE SET hash = excluded.hash, def = excluded.def`, server, t.Name, toolHash(t), toolDef(t))
 	return err
+}
+
+// unpinTool drops one tool's pin: a tool its server no longer lists.
+func (s *Store) unpinTool(server, tool string) error {
+	_, err := s.db.Exec(`DELETE FROM tool_pins WHERE server = ? AND tool = ?`, server, tool)
+	return err
+}
+
+// toolDef is a tool's definition as a pin keeps it.
+func toolDef(t *mcp.Tool) string {
+	raw, err := json.Marshal(t)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+// forgetPins drops a server's pins, and the changes refused of it: its
+// next listing pins it again.
+func (s *Store) forgetPins(server string) error {
+	for _, q := range []string{`DELETE FROM tool_pins WHERE server = ?`, `DELETE FROM tool_refusals WHERE server = ?`} {
+		if _, err := s.db.Exec(q, server); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // pinned splits the tools a server lists: those whose definition is the
@@ -125,17 +191,13 @@ func (p *pool) pinned(u *upstream, tools []*mcp.Tool) (kept, held []*mcp.Tool) {
 		}
 	}
 	if len(held) > 0 {
-		names := toolNames(held)
-		if !slices.Equal(names, u.heldTools()) && p.toolsHeld != nil {
-			go p.toolsHeld(u.name, len(held))
-		}
-		log.Printf("server %s: tools changed since the user added it, held until accepted: %s", u.name, strings.Join(names, ", "))
+		log.Printf("server %s: tools changed since the user added it, held until accepted: %s", u.name, strings.Join(toolNames(held), ", "))
 	}
 	return kept, held
 }
 
 // errHeldTool refuses a call of a held tool, however it was asked.
-var errHeldTool = errors.New("this tool changed since the user added its server: it is not used until they accept it on the tool's page in Eriphe")
+var errHeldTool = errors.New("this tool changed since the user added its server: it is not used until they accept it in Eriphe")
 
 // heldTools are the tools of a server held for a definition the user has
 // not accepted.
@@ -161,9 +223,11 @@ func toolNames(tools []*mcp.Tool) []string {
 }
 
 // approveTools accepts the definitions of a server's tools the user was
-// shown: those lent and those held, as last listed. A tool the server
+// shown: those lent and those held, as last listed, refused ones too (the
+// user's yes for the server as a whole, on its page). A tool the server
 // changed again since stays held.
 func (c *core) approveTools(name string) error {
+	defer c.toolsMoved(name)
 	u := c.pool.get(name)
 	if u == nil {
 		return c.store.forgetPins(name)
@@ -176,12 +240,15 @@ func (c *core) approveTools(name string) error {
 	return nil
 }
 
-// toolsHeld tells the brain that a server's tools are held, for it to tell
-// the user: their names are the server's, so only their count is said.
-func (c *core) toolsHeld(server string, n int) {
-	if c.conf().brain() == nil {
-		return
+// listingSig fingerprints what a server lists, lent and held: when it
+// changes, what waits for the user's review may have changed.
+func listingSig(tools, held []*mcp.Tool) string {
+	var b strings.Builder
+	for _, t := range tools {
+		b.WriteString("+" + toolHash(t))
 	}
-	c.store.addMessage(roleEvent, fmt.Sprintf("Catalogue : %d outil(s) de « %s » ont changé ou sont apparus depuis que l'utilisateur l'a ajouté. Eriphe les retient : ils ne sont pas utilisés tant qu'il ne les accepte pas sur la page de l'outil (Réglages → Outils → %s). Dis-le-lui.", n, server, server), false)
-	c.ping()
+	for _, t := range held {
+		b.WriteString("?" + toolHash(t))
+	}
+	return b.String()
 }

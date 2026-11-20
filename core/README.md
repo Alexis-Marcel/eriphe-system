@@ -1395,12 +1395,32 @@ its writes and its reads of the open web go through the policy, so the turn's ta
 **Tool definitions are pinned.** The first listing of a catalog server pins each tool's definition
 (its name, title, description, schemas and annotations): adding the server is the user's yes. A
 tool listed later with another definition, or a new tool, is held: not lent, not shown to any agent,
-not sorted by the grid, refused if called by name, until the user accepts them on the server's page
-("Accepter ces outils", `POST /settings/tools/{name}/approve`), which shows each held tool's
-category and description and pins those definitions: one the server changed again since stays
-held. The brain is told how many tools are held (an event; their names are the server's, so they
-are not quoted), to tell the user. A server cannot reword a description or turn a send into a read
-behind the user's back. Removing the server forgets its pins. Eriphe's own servers are not pinned:
+not sorted by the grid, refused if called by name, until the user accepts it. A pin keeps the
+definition it was made of, so a change shows what was before.
+
+The changes wait like any other item, in **« Outils à revoir »**, a standing node code makes at
+start when there is none (again if it was archived; `tool_review.go`). Its block lists
+`eriphe-catalog/catalog_changes` (each change: `id`, server, tool, kind `new`, `changed` or
+`removed` — a pinned tool its connected server no longer lists —, the description, category and
+parameters before and now) and declares two list actions, `catalog_accept` and `catalog_refuse`,
+on the ids picked. The user picks changes and clicks « Accepter » or « Refuser » (code's words):
+accepted, the tool is pinned with exactly the definition shown (a change's id carries its hash; a
+tool changed again is a new change, and an id no longer waiting does nothing); a dropped tool's
+pin is forgotten. Refused, the change no longer waits: the tool stays held (or its pin stays); a
+later definition is a new change. The source is marked `attention`: the node waits for the user
+(its bubble says « t'attend ») while changes are listed, and rests when none are. It is read again
+whenever what a server lists changes, after each click, and every 5 minutes. The block reads a
+server not trusted: it is external. No message tells the brain.
+
+`eriphe-catalog` is a server Eriphe provides in the pool, lent to no agent (no grant may name it):
+`catalog_changes` is a free read that only code calls (a block's source); `catalog_accept` and
+`catalog_refuse` are `never` to every agent, the brain, a task or a skill, whatever was allowed
+before, and run only through the user's own gesture: a list action's click
+(`POST /api/nodes/{id}/act`, logged in the journal as the user's, with « un outil que seul son
+geste lance »). The server's page in Réglages keeps "Accepter ces outils"
+(`POST /settings/tools/{name}/approve`): it accepts all the server's held tools at once, refused
+ones included. A server cannot reword a description or turn a send into a read behind the user's
+back. Removing the server forgets its pins and its refusals. Eriphe's own servers are not pinned:
 those it provides (folders) and those shipped with it (run from its images: mail, calendar, files,
 Signal), whose tools change with Eriphe's updates, which the user already chooses (`tool_pins.go`).
 

@@ -46,8 +46,8 @@ func TestChangedToolIsHeldUntilAccepted(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	told := make(chan int, 4)
-	c.pool.toolsHeld = func(server string, n int) { told <- n }
+	told := make(chan []string, 8)
+	c.pool.toolsListed = func(server string) { told <- c.pool.get(server).heldTools() }
 	c.pool.run(ctx)
 	u := c.pool.get("web")
 	waitStatus(t, u, statusReady)
@@ -74,10 +74,21 @@ func TestChangedToolIsHeldUntilAccepted(t *testing.T) {
 	if held := u.heldTools(); !slices.Equal(held, []string{"fetch", "send"}) {
 		t.Errorf("held: %v", held)
 	}
-	select {
-	case <-told: // the brain is told, to tell the user
-	case <-time.After(5 * time.Second):
-		t.Error("not told")
+	// What waits for review is read again once the held tools are set
+	// (tool_review.go): never before.
+	for deadline := time.After(5 * time.Second); ; {
+		select {
+		case held := <-told:
+			if len(held) < 2 {
+				continue // the first listing, or the change half seen
+			}
+		case <-deadline:
+			t.Fatal("not told")
+		}
+		break
+	}
+	if msgs, _ := c.store.messagesAfter(0, 10); len(msgs) != 0 {
+		t.Errorf("the brain is told: %+v", msgs)
 	}
 	if u.tool("fetch") != nil {
 		t.Error("a held tool is listed")

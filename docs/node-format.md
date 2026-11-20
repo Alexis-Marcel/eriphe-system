@@ -148,7 +148,9 @@ A source is one of:
 may say where its items are: `"items": {"path": "messages", "id": "id", "title": "subject",
 "detail": "from"}`. A source's name is lowercase letters, digits, `_` and `-`, 40 at most; it is not
 also a key of `data`, and `marks` is no source's or data key's name, nor `at` a source's (the
-snapshot's time).
+snapshot's time). A source with `items` may say `"attention": true`: while it lists items, its
+node waits for the user (its bubble says « t'attend », as for a card); when it lists none, the
+node rests.
 
 Code reads the sources without a model, as the brain's free reads are: a source new or changed at
 once, then every `every` minutes, a resource at its update, a monitor at each of its looks. A read
@@ -185,7 +187,9 @@ before it runs.
 
 The click is the user's own gesture: code reads the action again in the block as stored, checks
 that every id picked is one the source lists, and runs one call, with the tool's access policy
-(never: refused; on approval: the click is the yes, logged as such; free: runs). The node's trace
+(never: refused, but for a tool only the user's gesture runs, such as `eriphe-catalog`'s
+`catalog_accept` and `catalog_refuse`, never to any agent and run by the click alone; on
+approval: the click is the yes, logged as such; free: runs). The node's trace
 says it in code's words. The source is then read again.
 
 ### Code's fields

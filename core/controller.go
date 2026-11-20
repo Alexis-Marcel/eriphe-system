@@ -77,6 +77,7 @@ type core struct {
 	routeMu     sync.Mutex             // one escalation pass at a time (route_send.go)
 	props       proposalFeed           // the proposals that moved, for the workspace (card_moves.go)
 	live        nodeLive               // the live blocks being read (node_live.go)
+	attention   sync.Map               // node id → whether a source of its marked attention lists items (node_attention.go)
 	graph       graphFeed              // what changes on the graph, for the workspace (graph_feed.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)
@@ -127,9 +128,10 @@ func newCore(cfg *Config, store *Store) *core {
 	c.pool.connRefused = c.connectionRefused
 	c.pool.authHold = c.connectionHold // an account to connect again (connections.go)
 	c.pool.resourceUpdated = c.nodeResourceUpdated
-	c.pool.toolsHeld = c.toolsHeld
+	c.pool.toolsListed = c.toolsMoved
 	c.pool.trusted = c.trustsServer
 	c.provideFolders() // the user's folders, a tool like any other (folder_tools.go)
+	c.provideReview()  // the changes of the catalog's tools, to review (tool_review.go)
 	// Local servers are services, reached on their device.
 	c.pool.dialLocal = func(ctx context.Context, name string, _ json.RawMessage) (mcp.Transport, error) {
 		return c.dialService(ctx, name)

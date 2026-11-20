@@ -53,8 +53,9 @@ type pool struct {
 	// resourceUpdated is told when a server says one of the resources
 	// followed changed (pool_follow.go); it must return fast.
 	resourceUpdated func(server, uri string)
-	// toolsHeld is told when a server's held tools change (tool_pins.go).
-	toolsHeld func(server string, n int)
+	// toolsListed is told when what a server lists, lent or held, changed
+	// (tool_pins.go listingSig); it must return fast.
+	toolsListed func(server string)
 	// trusted tells a server the user trusts (tool_trust.go): its reads of
 	// the open web are free like its others (access.go).
 	trusted func(server string) bool
@@ -100,6 +101,9 @@ type providedUpstream struct {
 	// offered tells whether it has anything to offer now: lent to the
 	// brain and read for blocks' sources only then.
 	offered func() bool
+	// codeReads: lent to no agent (offered says no), its free reads are
+	// still blocks' sources, read by code (tool_review.go).
+	codeReads bool
 }
 
 // provide adds a server Eriphe provides, which the catalog never removes.
@@ -404,8 +408,10 @@ func (u *upstream) open(ctx context.Context) (*mcp.ClientSession, error) {
 	}
 	tools, held := u.p.pinned(u, tools) // tool_pins.go
 	u.mu.Lock()
+	was := listingSig(u.tools, u.unaccepted)
 	u.session, u.tools, u.unaccepted, u.resources, u.status, u.err = sess, tools, held, nil, statusReady, ""
 	u.mu.Unlock()
+	u.listed(was, tools, held)
 	go u.refreshResources()
 	go u.resubscribe()
 	return sess, nil
@@ -476,10 +482,22 @@ func (u *upstream) refreshTools() {
 	}
 	tools, held := u.p.pinned(u, tools)
 	u.mu.Lock()
-	if u.session == sess {
-		u.tools, u.unaccepted = tools, held
+	if u.session != sess {
+		u.mu.Unlock()
+		return
 	}
+	was := listingSig(u.tools, u.unaccepted)
+	u.tools, u.unaccepted = tools, held
 	u.mu.Unlock()
+	u.listed(was, tools, held)
+}
+
+// listed tells toolsListed, once the server's tools are set, when they
+// are not what they were.
+func (u *upstream) listed(was string, tools, held []*mcp.Tool) {
+	if listingSig(tools, held) != was && u.p.toolsListed != nil {
+		u.p.toolsListed(u.name)
+	}
 }
 
 // snapshot is the server's state at one moment.

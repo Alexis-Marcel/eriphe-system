@@ -115,7 +115,7 @@ type graphNode struct {
 	Done     *time.Time `json:"done,omitempty"`
 	External bool       `json:"external,omitempty"`
 	Version  int        `json:"version"`
-	Waits    bool       `json:"waits,omitempty"` // one of its cards waits for the user
+	Waits    bool       `json:"waits,omitempty"` // one of its cards waits for the user, or a source marked attention lists items (node_attention.go)
 	Line     string     `json:"line,omitempty"`  // while it runs: its task's last word of where it is
 }
 
@@ -130,7 +130,7 @@ func (c *core) graphRow(sum nodestore.Summary) graphNode {
 		d := sum.Done
 		g.Done = &d
 	}
-	g.Waits = c.nodeCardWaits(sum.ID)
+	g.Waits = c.nodeCardWaits(sum.ID) || c.nodeAttention(sum.ID)
 	if p, ok := c.progressOf(sum.ID); ok && sum.State == nodestore.Running {
 		g.Line = p.Text
 	}
