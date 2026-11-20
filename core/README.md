@@ -3128,7 +3128,13 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   listed but the last; nor an empty creation, a step opened for its task to write: `shift` 1, the
   page numbering the versions from the first with something in it), its body as parts in order (`parts`: Markdown `text`, or a `block`), and
   the cards it waits on (`cards`, as the [proposals](#proposals-in-the-blocks-they-concern-card_movesgo)
-  show them). A block (`pageBlock`) is ready to draw: its `name`, its A2UI `components`, its
+  show them). A standing node's page says what keeps it alive (`alive`, `node_alive.go`), from
+  what code knows, never a model's words: the `sources` its blocks read (`name`, `what`: the tool
+  or resource and how often), the `monitors` that watch for it (those its blocks read and those its
+  skills run on, `what` from their spec), the `skills` that work in it (`what`: what starts them, at
+  most how often) and when it last changed (`updated`). The workspace shows it in the page's ⋯
+  menu, « Ce qui le fait vivre »; a permanent subject has a small ∞ by its date (« Sujet
+  permanent ») and a satellite slowly orbiting its bubble (still with `prefers-reduced-motion`). A block (`pageBlock`) is ready to draw: its `name`, its A2UI `components`, its
   `data` with each source's last value at `/<name>` (the version's snapshot, then the latest read
   while the last version shows) and the user's marks at `/marks/<list>/<item>`; or its `error`
   when it does not read as a block. Its media go through eriphe-core (`/espace/media`, signed),

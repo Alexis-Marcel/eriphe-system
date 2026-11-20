@@ -406,6 +406,7 @@ export function Graph({ live }: { live: boolean }) {
               held={held?.id === x.id}
               light={0.3 + 0.7 * Math.min(1, weight(x, nodes, now) / 0.85)}
               waitsWord={t("espace.waits")}
+              standingWord={t("espace.standing.short")}
               onGrab={(e) => grabNode(x.id, e)}
               onOpen={(beside) => openNode(x.id, beside)}
             />
@@ -506,7 +507,7 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
 // Bubble is one node: its core (a click opens its page; with ⌘ or shift,
 // beside the others), a ring for what runs or waits, its label.
 function Bubble(p: {
-  x: GraphNode; title: string; said: string; d: number; r: number; at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number; waitsWord: string;
+  x: GraphNode; title: string; said: string; d: number; r: number; at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number; waitsWord: string; standingWord: string;
   onGrab: (e: PtrEvent) => void; onOpen: (beside: boolean) => void;
 }) {
   const { x, d, r } = p;
@@ -528,6 +529,13 @@ function Bubble(p: {
       data-node={x.id}
     >
       {yours && <span className="gr-halo" style={{ width: r * 5, height: r * 5 }} />}
+      {/* A permanent subject: a small satellite orbits it, slowly (still
+          when the user asks for less motion). */}
+      {x.lifetime === "standing" && (
+        <span className="gr-sat" style={{ width: (R + 3) * 2, height: (R + 3) * 2 }} aria-hidden="true">
+          <i />
+        </span>
+      )}
       <svg className="gr-ring" width={ring * 2 + 16} height={ring * 2 + 16} viewBox={`${-ring - 8} ${-ring - 8} ${ring * 2 + 16} ${ring * 2 + 16}`} aria-hidden="true">
         {d === 0 && <circle r={R + 7} className="gr-orbit" />}
         {run && <circle r={R} className="gr-ring-run" />}
@@ -539,6 +547,7 @@ function Bubble(p: {
         style={{ width: r * 2, height: r * 2 }}
         onPointerDown={p.onGrab}
         onClick={(e) => p.onOpen(e.metaKey || e.ctrlKey || e.shiftKey)}
+        title={x.lifetime === "standing" ? p.standingWord : undefined}
         aria-label={x.line && run ? `${p.said} : ${x.line}` : p.said}
       >
         {d === 0 ? <span className="gr-code">{codeOf(p.title)}</span> : x.state === "done" ? <span className="gr-glyph">✓</span> : null}
