@@ -722,6 +722,7 @@ whatever address it dials) and one client certificate per device.
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
+| `turn_home` | the user's message, said in a node's bar, is not about that node: the turn is about no node from then on, as at the home (`turnHome`, node_turn.go). What it raises waits above the bar (a card it raised already is unlinked from that node), and nothing of it is filed there; its lines stay in that node's bar, where the user reads them. At the home, or on events only, it does nothing |
 | `item_note` | note an item of a node's source: what the user should know and a state (`act`, `look`, `info`, `none`, `done`) |
 
 The brain has no archive tool: only the user archives a node (`archiveNode`, by `user` alone), which
@@ -3262,7 +3263,10 @@ token in `X-CSRF-Token`:
   (✕: its seq kept in `localStorage`, `eriphe.espace.answer.closed`, so a reload shows it again
   only when not closed). What an event or a wake made Eriphe say later (a turn with no message of
   the user's: the catalog changed…) is `said`, a line under it that fades, never in its place; an
-  answer of one line (« c'est fait ») is its line, and fades as any. Above the panel, the messages that wait
+  answer of one line (« c'est fait ») is its line, and fades as any. A card raised by a turn
+  that answers the user's message is never out of sight: one no node holds waits above the bar,
+  and one linked to a node opens that node's page beside what is open, as `node_show` does
+  (`showTurnCards`, node_turn.go, when the card is attached to the turn's message or its end). Above the panel, the messages that wait
   for Eriphe, a clock and a ✕ each (**The messages that wait**, below).
 - `hud/`: no bar, the graph takes the whole screen; the bubbles say what waits for the user (a
   breathing accent ring, « t'attend » under the name; out of view, an arrow at the screen's edge

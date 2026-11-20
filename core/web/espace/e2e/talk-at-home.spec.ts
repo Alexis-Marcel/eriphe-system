@@ -7,7 +7,8 @@ import { expect, test, type Page } from "@playwright/test";
 // Played on the scenario's test core (TestEspaceScenario), after the
 // other files (its name sorts last): the scripted brain answers « mes
 // films » in three sentences, and /e2e/catalog brings an event of the
-// home's.
+// home's. And a question said in a subject's bar about something else:
+// the card it needs is in front at once.
 
 const password = "correct horse battery"; // testPassword, core/web_test.go
 
@@ -85,5 +86,44 @@ test("an answer given at home stays readable until you move on", async ({ page, 
   await atHome(page);
   await expect(asked).toContainText("Et mes films, tu y as accès ?");
   await expect(answer).toHaveCount(0);
+  expect(problems).toEqual([]);
+});
+
+// Said in a subject's bar, about something else, a question that needs a
+// card: the brain answers as at the home (turn_home), and the card waits
+// above the bar at once, in front of the user, not in that subject.
+test("a card raised for a question about something else is in front at once", async ({ page, request }) => {
+  const problems: string[] = [];
+  page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
+  page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
+  await page.route("**/espace/boot", async (route) => {
+    const r = await route.fetch();
+    const b = await r.json();
+    if (b.view) b.view.open = [];
+    delete b.view?.talk;
+    await route.fulfill({ response: r, json: b });
+  });
+  await page.goto("/login");
+  await page.locator('input[name="password"]').fill(password);
+  await page.locator('button[type="submit"]').click();
+  await page.waitForURL((u) => u.pathname !== "/login");
+  await atHome(page);
+
+  await page.locator('.gr-node:not(.external) .gr-core[aria-label^="Substack"]').click();
+  const substack = page.locator('article.pg[aria-label="Substack"]');
+  await expect(substack).toBeVisible();
+  const input = page.locator(".cs-bar input");
+  await expect(input).toHaveAttribute("aria-label", "Écris à Eriphe, sur Substack");
+  await input.fill("Dis à Lou que je serai en retard.");
+  await input.press("Enter");
+
+  // No click: the card is above the bar, not at Substack's foot.
+  const loose = page.locator(".cs-aside .cs-cards");
+  await expect(loose.getByRole("button", { name: "Non" })).toBeVisible();
+  await expect(substack.locator(".pg-foot")).toHaveCount(0);
+  await loose.getByRole("button", { name: "Non" }).click();
+  await expect(page.locator(".cs-cards")).toHaveCount(0);
+  await expect(page.locator(".cs-said")).toContainText("Tu me donnes ton accord pour l'envoyer ?");
+  expect((await (await request.get("/e2e/tools")).json()).sent ?? []).not.toContain("lou@example.org: Je serai en retard.");
   expect(problems).toEqual([]);
 });

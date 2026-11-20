@@ -65,14 +65,20 @@ func (c *core) fileTurnAnswer() {
 	}
 	answer := strings.Join(parts, "\n\n")
 	long := runeLen(answer) >= netMinRunes
-	if _, cut := ackLine(answer); !long && (talk == "" || !cut) {
+	home := c.turn.answersAtHome() // said in a node, about something else (turn_home): as at the home
+	if _, cut := ackLine(answer); !long && (talk == "" || home || !cut) {
 		return
 	}
 	tainted := len(c.turnTaint()) > 0
-	id := c.fileInTalked(talk, answer, tainted)
+	id := ""
+	if !home {
+		id = c.fileInTalked(talk, answer, tainted)
+	}
 	if id == "" && long {
 		id = c.fileInNew(c.netTitle(from, to), answer, tainted)
-		c.moveHomeTurn(id) // from the home: the exchange goes on in it (node_turn.go)
+		if !c.moveHomeTurn(id) && home && id != "" { // from the home: the exchange goes on in it (node_turn.go)
+			c.showNode(id, byBrain, false)
+		}
 	}
 	if id == "" {
 		return

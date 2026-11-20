@@ -673,9 +673,16 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		// On the side: opened in the background, the bar stays.
 		b.self("node_open", map[string]any{"title": "Recherche sur les newsletters", "aside": true, "goal": "Les newsletters à garder"})
 		return "Je lance la recherche à part."
+	case strings.Contains(said, "en retard"):
+		// Said in a subject's bar, about something else: the turn answers as
+		// at the home (turn_home), and the card its send needs waits above
+		// the bar, in front of the user (talk-at-home.spec.ts).
+		b.self("turn_home", map[string]any{})
+		b.catalog("mail", "envoyer", map[string]any{"to": "lou@example.org", "body": "Je serai en retard."}, false)
+		return "Tu me donnes ton accord pour l'envoyer ?"
 	case strings.Contains(said, "mes films"):
 		// A short answer to a simple question, more than a line: it stays at
-		// the home, held whole above the bar (home.spec.ts).
+		// the home, held whole above the bar (talk-at-home.spec.ts).
 		return homeFilms
 	case strings.Contains(said, "archiver"):
 		return "C'est toi qui archives : « Archiver », en haut de sa page."
@@ -877,7 +884,7 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 
 // handleCatalog is POST /e2e/catalog: the tools' catalog changed, an
 // event of the home's, as catalog.go writes it; the brain's turn on it
-// says a line (home.spec.ts).
+// says a line (talk-at-home.spec.ts).
 func (sc *scenario) handleCatalog(rw http.ResponseWriter, r *http.Request) {
 	if _, err := sc.c.store.addMessage(roleEvent, catalogEvent, false); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
