@@ -25,16 +25,16 @@ import { useWords } from "../i18n";
 // Picks is what a page gives its Lists: the list a List component of a
 // surface is, if eriphe-core told of it, and how to run an action on it
 // (none on an older version, or offline). kept holds what is picked in
-// each list and the line of the last click, by surface and List: the page
+// each list, the confirm open and the line of the last click, by surface and List: the page
 // read again (a new version, a source's snapshot) draws its blocks again,
-// and the user's pick stays.
+// and the user's pick and confirm stay.
 export type Picks = {
   list(surface: string, component: string): PickList | undefined;
   run?: (surface: string, list: PickList, action: PickAction, ids: string[]) => Promise<{ ok: boolean; text: string }>;
   kept: Map<string, Kept>;
 };
 
-type Kept = { picked: string[]; result: Result | null };
+type Kept = { picked: string[]; result: Result | null; asking?: Asking | null };
 
 export const PicksContext = createContext<Picks | null>(null);
 
@@ -81,10 +81,10 @@ export function Pickable({ surface, list, picks, rows, direction }: { surface: s
   const { t } = useWords();
   const key = `${surface}\u0000${list.component}`;
   const [picked, setPicked] = useState<string[]>(() => picks.kept.get(key)?.picked ?? []);
-  const [asking, setAsking] = useState<Asking | null>(null);
+  const [asking, setAsking] = useState<Asking | null>(() => picks.kept.get(key)?.asking ?? null);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<Result | null>(() => picks.kept.get(key)?.result ?? null);
-  useEffect(() => void picks.kept.set(key, { picked, result }), [picks.kept, key, picked, result]);
+  useEffect(() => void picks.kept.set(key, { picked, result, asking }), [picks.kept, key, picked, result, asking]);
   const byN = useMemo(() => new Map(list.items.map((it) => [it.n, it])), [list.items]);
   const ids = useMemo(() => new Set(list.items.map((it) => it.id)), [list.items]);
 
@@ -114,7 +114,7 @@ export function Pickable({ surface, list, picks, rows, direction }: { surface: s
     const r = await (picks.run?.(surface, list, a, ran) ?? Promise.resolve({ ok: false, text: t("espace.act.error") })).catch(() => ({ ok: false, text: t("espace.act.error") }));
     const left = r.ok ? picked.filter((id) => !ran.includes(id)) : picked;
     // Kept at once: the page may have drawn the list again meanwhile.
-    picks.kept.set(key, { picked: left, result: r });
+    picks.kept.set(key, { picked: left, result: r, asking: null });
     setRunning(false);
     setResult(r);
     if (r.ok) setPicked(left);

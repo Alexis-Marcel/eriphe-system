@@ -264,6 +264,17 @@ describe("a view in sections", () => {
     expect(runs).toEqual([{ action: "drop:del", ids: ["m1", "m3"] }]);
   });
 
+  it("keeps the confirm open when the page draws its blocks again", async () => {
+    await mountSections();
+    await click(el.querySelector(".a2-pickwhole")!);
+    await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: surface } }]));
+    await act(async () => adapter.applyMessages(sections));
+    const ask = el.querySelector(".a2-pickask")!;
+    expect([...ask.querySelectorAll("li")].map((li) => li.textContent)).toEqual(["Facture · Sam", "Lettre"]);
+    await click([...ask.querySelectorAll("button")].find((b) => b.textContent === "Lancer"));
+    expect(runs).toEqual([{ action: "drop:del", ids: ["m1", "m3"] }]);
+  });
+
   it("shows the filtered rows on an older version, with nothing to pick", async () => {
     await mountSections(false);
     expect(texts(section(0))).toEqual(["Facture", "Lettre"]);
