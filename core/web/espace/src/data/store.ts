@@ -1,11 +1,11 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { BarLine, Exchange, GraphNode, Moved, Note, PickItem, Theme, View } from "./api";
+import type { GraphNode, Moved, Note, OrbFeed, OrbWords, PickItem, Theme, View, Waiting } from "./api";
 
 // The workspace's state: the graph as eriphe-core streams it (stream.ts),
 // and what the user has open. The graph is core's: the page never changes a
 // node by itself, it shows what the stream says. What is open is the
-// page's: the pages open in the graph, and the one the console talks to
+// page's: the pages open in the graph, and the one the bar talks to
 // (talk), the home when none; and the theme. eriphe-core keeps those too (web_gestures.go): the boot gives
 // them back (restore), on any of the user's screens.
 //
@@ -31,7 +31,9 @@ export type State = {
   open: string[];
   talk: string | null;
   shown: number; // the last show applied
-  exchange: Exchange | null;
+  orb: OrbFeed | null; // what Eriphe's orb shows (orb/)
+  sent: Sent | null; // what the user just sent, until eriphe-core has it
+  call: { id: string; n: number } | null; // the last node that began to wait for the user, the n-th (the orb says it)
   notes: Note[];
   moved: Moved & { n: number }; // the proposals that moved last, n growing each time
   live: boolean; // the stream is open
@@ -48,7 +50,9 @@ export const empty = (): State => ({
   open: [],
   talk: null,
   shown: 0,
-  exchange: null,
+  orb: null,
+  sent: null,
+  call: null,
   notes: [],
   moved: { n: 0, refs: [] },
   live: false,
@@ -56,7 +60,7 @@ export const empty = (): State => ({
 });
 
 // restore is the workspace as the user left it: its pages open (kept when
-// their nodes come), the one the console talked to, the last show taken
+// their nodes come), the one the bar talked to, the last show taken
 // (one the user saw is not shown again), the theme.
 export function restore(s: State, v: View | undefined): State {
   const open = Array.isArray(v?.open) ? v.open.filter((id) => typeof id === "string") : [];
@@ -85,9 +89,22 @@ export function applyNodes(s: State, ev: NodeEvent): State {
   for (const n of ev.nodes ?? []) if (n && typeof n.id === "string") nodes[n.id] = n;
   for (const id of ev.gone ?? []) delete nodes[id];
   const open = s.open.filter((id) => nodes[id]);
-  // The page the console talked to left: it talks to the last one open.
+  // The page the bar talked to left: it talks to the last one open.
   const talk = s.talk === null || open.includes(s.talk) ? s.talk : (open.at(-1) ?? null);
-  return { ...s, nodes, open, talk };
+  const began = newlyWaiting(s.nodes, nodes, ev.reset);
+  const call = began.length ? { id: began[began.length - 1], n: (s.call?.n ?? 0) + 1 } : s.call;
+  return { ...s, nodes, open, talk, call };
+}
+
+// newlyWaiting are the nodes that began to wait for the user (a card of
+// theirs, their state) from one graph to the next: none in the first
+// graph, nor in a whole graph sent again (reset: the stream came back).
+export function newlyWaiting(before: Record<string, GraphNode>, after: Record<string, GraphNode>, reset?: boolean): string[] {
+  const waits = (x: GraphNode | undefined) => !!x && (!!x.waits || x.state === "waiting");
+  if (reset || Object.keys(before).length === 0) return [];
+  return Object.values(after)
+    .filter((x) => waits(x) && !waits(before[x.id]))
+    .map((x) => x.id);
 }
 
 // The "doc" event: a new version ({id, version}) or a trace that grew
@@ -124,10 +141,10 @@ export function applySource(s: State, ev: SourceEvent): State {
 export const SHOW_FRESH = 60_000;
 
 // The "show" event: Eriphe opens a node's page for the user, beside what is
-// open. The console still talks to whom it talked to: only the user's own
+// open. The bar still talks to whom it talked to: only the user's own
 // gesture (a click on a page or a bubble) moves it, so Eriphe's answer stays
 // where it was asked. One exception: a subject Eriphe opened for what the
-// user asked at the home (talk) takes the console with it, when it still
+// user asked at the home (talk) takes the bar with it, when it still
 // talks to the home: the exchange goes on in that page. Each show once.
 export function applyShow(s: State, ev: Shown, now = Date.now()): State {
   if (!ev || typeof ev.node !== "string" || !(ev.seq > s.shown)) return s;
@@ -140,15 +157,40 @@ export function applyShow(s: State, ev: Shown, now = Date.now()): State {
   return { ...seen, open: [...s.open, ev.node] };
 }
 
-// The "exchange" event: the exchange of the node the console talks to; one
-// of another (the stream not yet moved) is not shown.
-export function applyExchange(s: State, x: Exchange): State {
+// Sent is a message the user just wrote: after is the orb's asked seq
+// when it was sent, to the node the bar talked to then.
+export type Sent = { text: string; after: number; to: string | null };
+
+// The "orb" event: what Eriphe's orb shows, whatever page the bar talks
+// to (orb/). What is not what it says it is is dropped, never drawn.
+export function applyOrb(s: State, x: OrbFeed): State {
   if (!x || typeof x !== "object") return s;
-  if ((x.node ?? null) !== s.talk) return s;
-  const line = (l: unknown) => (l && typeof l === "object" && typeof (l as BarLine).seq === "number" && typeof (l as BarLine).text === "string" ? (l as BarLine) : undefined);
+  const words = (w: unknown) => (w && typeof w === "object" && typeof (w as OrbWords).seq === "number" && typeof (w as OrbWords).text === "string" ? (w as OrbWords) : undefined);
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const work = x.work && typeof x.work === "object" ? { node: str(x.work.node), draft: str(x.work.draft) } : undefined;
+  const failed = x.failed && typeof x.failed.seq === "number" ? { seq: x.failed.seq, node: str(x.failed.node) } : undefined;
+  const wait = x.wait && typeof x.wait.card === "number" && typeof x.wait.node === "string" ? x.wait : undefined;
   const cards = Array.isArray(x.cards) ? x.cards.filter((t) => typeof t === "string") : undefined;
-  const waiting = Array.isArray(x.waiting) ? x.waiting.filter((w) => !!line(w)) : undefined;
-  return { ...s, exchange: { ...x, asked: line(x.asked), said: line(x.said), draft: typeof x.draft === "string" ? x.draft : undefined, cards, waiting } };
+  const waiting = Array.isArray(x.waiting) ? x.waiting.filter((w): w is Waiting => !!words(w)) : undefined;
+  const orb: OrbFeed = { asked: typeof x.asked === "number" ? x.asked : undefined, work, answer: words(x.answer), said: words(x.said), failed, wait, cards, waiting };
+  return { ...s, orb, sent: landed(orb, s.sent) ? null : s.sent };
+}
+
+// landed tells whether the message sent is in the orb's feed: a message
+// of the user's newer than the feed was when it was sent, read by Eriphe
+// or waiting for it.
+export function landed(x: OrbFeed | null, sent: Sent | null): boolean {
+  return !!sent && ((x?.asked ?? 0) > sent.after || (x?.waiting ?? []).some((w) => w.seq > sent.after));
+}
+
+// lastSeq is the newest message of the user's the feed knows.
+export function lastSeq(x: OrbFeed | null): number {
+  return Math.max(x?.asked ?? 0, ...(x?.waiting ?? []).map((w) => w.seq));
+}
+
+// send notes the message the user just sent (null: it could not go).
+export function setSent(s: State, sent: Sent | null): State {
+  return { ...s, sent };
 }
 
 // NOTES_KEPT is how many notices show at once.
@@ -170,26 +212,26 @@ export function applyMoved(s: State, m: Moved): State {
 }
 
 // openPage opens a node's page: alone, or beside those open (a ⌘-click,
-// Eriphe's show). The console then talks to it.
+// Eriphe's show). The bar then talks to it.
 export function openPage(s: State, id: string, beside = false): State {
   if (!s.nodes[id]) return s;
   const open = beside ? (s.open.includes(id) ? s.open : [...s.open, id]) : [id];
-  return { ...s, open, talk: id, exchange: s.talk === id ? s.exchange : null };
+  return { ...s, open, talk: id };
 }
 
-// closePage closes one page; the console talks to the one it talked to if
+// closePage closes one page; the bar talks to the one it talked to if
 // it is still open (the home too), else to the last one open, else to the
 // home.
 export function closePage(s: State, id: string): State {
   const open = s.open.filter((x) => x !== id);
   const talk = s.talk === null || (s.talk !== id && open.includes(s.talk)) ? s.talk : (open.at(-1) ?? null);
-  return { ...s, open, talk, exchange: talk === s.talk ? s.exchange : null };
+  return { ...s, open, talk };
 }
 
-// talkTo makes an open page the one the console talks to.
+// talkTo makes an open page the one the bar talks to.
 export function talkTo(s: State, id: string | null): State {
   if (id === s.talk || (id !== null && !s.open.includes(id))) return s;
-  return { ...s, talk: id, exchange: null };
+  return { ...s, talk: id };
 }
 
 export type Store = StoreApi<State>;

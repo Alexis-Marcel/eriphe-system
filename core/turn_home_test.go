@@ -37,7 +37,7 @@ func TestTurnHomeCardWaitsAboveTheBar(t *testing.T) {
 		t.Errorf("the card waits in the unrelated node: %v", nodes)
 	}
 	w := &web{c: c}
-	if ex, _ := w.exchangeFor(id, "", "", false); !slices.Equal(ex.Cards, []string{ref}) {
+	if ex, _ := w.orbFor("", false); !slices.Equal(ex.Cards, []string{ref}) {
 		t.Errorf("the card is not above the bar: %v", ex.Cards)
 	}
 	if m := lastBrainMessage(t, c); m.Filed != "" {

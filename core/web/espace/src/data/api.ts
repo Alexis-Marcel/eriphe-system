@@ -11,7 +11,7 @@ import strings from "../strings.json";
 //   day (web_proposals.go);
 // - GET /api/archives: what the user archived;
 // and writes
-// - POST /messages: what the user says, to the node the console talks to;
+// - POST /messages: what the user says, to the node the bar talks to;
 // - POST /cards/{id}/yes|no: a card's answer;
 // - POST /brain/retry: once more the turn Eriphe could not answer;
 // - the user's gestures (web_gestures.go): PUT /api/nodes/{id}/md (an edit,
@@ -26,7 +26,7 @@ import strings from "../strings.json";
 // goes to the sign-in.
 
 // The workspace as the user left it (espaceView, web_gestures.go): the
-// pages open, the one the console talked to, the last of Eriphe's shows
+// pages open, the one the bar talked to, the last of Eriphe's shows
 // taken, the theme ("" follows the system).
 export type Theme = "" | "light" | "dark";
 export type View = { open: string[]; talk?: string; shown?: number; theme?: Theme };
@@ -288,34 +288,31 @@ export async function putView(v: View, keepalive = false): Promise<boolean> {
   return (await sendJSON("PUT", "/api/espace/view", v, keepalive)).status === 204;
 }
 
-// A line of the bar (barLine, web_console.go): its message's seq and its
-// text, plain; external: Eriphe's, written after reading external content.
-export type BarLine = { seq: number; text: string; external?: boolean };
-
 // A message of the user's that waits for Eriphe (waitingLine,
 // messages_waiting.go): sent, not yet read; node: the node it was said
 // to, with its title; none: the home.
 export type Waiting = { seq: number; text: string; node?: string; title?: string };
 
-// The "exchange" event: what the bar shows of the node it talks to (node),
-// or of the home: the user's last message (asked), Eriphe's line (said:
-// the first line of its last answer, the rest in the subject), whether it
-// could not answer (failed), the first line of what it is writing, whether
-// it is at work, the cards no node holds.
-export type Exchange = {
-  node?: string;
-  title?: string;
-  asked?: BarLine;
-  said?: BarLine;
-  // At the home, Eriphe's whole answer to the user's last message, as
-  // Markdown, when more than a line: no subject holds it, the bar does,
-  // until the user moves on. said is then a later line, never this one.
-  answer?: BarLine;
-  failed?: boolean;
-  draft?: string;
-  thinking?: boolean;
-  // The cards that wait and no node holds (their refs): the bar shows
-  // them, wherever it talks, so that none waits out of sight.
+// Eriphe's words where they belong (orbWords, web_orb.go): node, none for
+// the home; a few plain lines (more: the subject's page says the rest),
+// or at the home an answer of more than a line, whole, as Markdown
+// (whole); external: written after reading external content.
+export type OrbWords = { seq: number; node?: string; text: string; more?: boolean; whole?: boolean; external?: boolean };
+
+// The "orb" event (orbEvent, web_orb.go): what Eriphe's orb shows,
+// whatever page the bar talks to. asked: the seq of the user's last
+// message Eriphe read; work: Eriphe is at work, on that node (none: the
+// home), and what it is writing; answer: its answer to that message;
+// said: its later words that answer none (an event's); failed: it could
+// not answer; wait: the newest card that waits for the user's yes in a
+// node; cards: those no node holds, shown above the bar.
+export type OrbFeed = {
+  asked?: number;
+  work?: { node?: string; draft?: string };
+  answer?: OrbWords;
+  said?: OrbWords;
+  failed?: { seq: number; node?: string };
+  wait?: { card: number; node: string };
   cards?: string[];
   // The user's messages that wait for Eriphe, whatever node they were
   // said to, oldest first.

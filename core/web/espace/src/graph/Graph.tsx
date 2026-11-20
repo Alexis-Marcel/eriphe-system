@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useMotionValueEvent, useSpring, type MotionVal
 import type { GraphNode } from "../data/api";
 import { closePage, depthOf, openPage, step, store, subtree, talkTo, useGraph } from "../data/store";
 import { useWords } from "../i18n";
+import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { boxAt, edgeMark, frameAll, framePages, pageMax, type Box, type Cam } from "./camera";
 import { edgePush, edgeStep, Sim, type Pos, type Pt } from "./layout";
@@ -12,7 +13,7 @@ import { ExtMark, UnaskedMark } from "./Title";
 // The graph (#633): every node a bubble, a subject bigger than its own,
 // their links; an open node is its page, drawn right where its bubble was,
 // the others making room around it (layout.ts). Any number of pages open
-// (a ⌘- or shift-click opens one more); the console talks to one of them.
+// (a ⌘- or shift-click opens one more); the bar talks to one of them.
 // The user drags a bubble, or a page by its head: what is linked to it
 // follows, it stays where dropped and what is there steps aside, for the
 // session: nothing is kept, a reload lays the graph out afresh.
@@ -128,20 +129,18 @@ export function Graph({ live }: { live: boolean }) {
     },
     [],
   );
-  // A page opened goes beside the one the console talked to before it.
+  // A page opened goes beside the one the bar talked to before it.
   const talkWas = useRef(talk);
   useEffect(() => void (talkWas.current = talk), [talk]);
+  const bodies = list.map((x) => ({
+    id: x.id,
+    parent: parentOf(x),
+    links: (x.links ?? []).filter((l) => ids.has(l) && l !== x.id),
+    ...labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x)),
+    box: openIds.includes(x.id) ? boxOf(x.id) : undefined,
+  }));
   useLayoutEffect(() => {
-    sim.sync(
-      list.map((x) => ({
-        id: x.id,
-        parent: parentOf(x),
-        links: (x.links ?? []).filter((l) => ids.has(l) && l !== x.id),
-        ...labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x)),
-        box: openIds.includes(x.id) ? boxOf(x.id) : undefined,
-      })),
-      talkWas.current,
-    );
+    sim.sync(bodies, talkWas.current);
     rest.current = sim.positions();
     wake();
   }, [layoutKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -389,6 +388,7 @@ export function Graph({ live }: { live: boolean }) {
                 <motion.div
                   key={`page-${id}`}
                   className="gr-page"
+                  data-page={id}
                   style={{ left: cx, top: cy, width: pageW, maxHeight: maxH, zIndex: held === id ? 5 : undefined }}
                   ref={sizer(id)}
                   initial={{ opacity: 0, scale: 0.2 }}
@@ -416,6 +416,7 @@ export function Graph({ live }: { live: boolean }) {
         marks={list.filter((x) => waits(x) && !openIds.includes(x.id) && pos[x.id]).map((x) => ({ id: x.id, title: titleOf(x, external), at: at(x.id) }))}
         onOpen={(id) => openNode(id, false)}
       />
+      <Orb bodies={bodies} at={pos} cam={[camX, camY, camK]} onOpen={(id) => openNode(id, true)} />
     </div>
   );
 }

@@ -139,12 +139,12 @@ func TestBrainWorkingNoteNotShown(t *testing.T) {
 	if text, _, _ := c.draft.get(); text != "" {
 		t.Fatalf("draft after the turn = %q", text)
 	}
-	lines, err := c.store.lastExchange("")
+	x, err := (&web{c: c}).orbFor("", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lines) != 1 || lines[0].Text != "The garage can take the car on Tuesday." {
-		t.Fatalf("exchange = %+v", lines)
+	if x.Said == nil || x.Said.Text != "The garage can take the car on Tuesday." {
+		t.Fatalf("orb = %+v", x)
 	}
 
 	// A note and its tool call in one report, a turn that ends on a tool
@@ -158,7 +158,7 @@ func TestBrainWorkingNoteNotShown(t *testing.T) {
 	}
 }
 
-// The stream's exchange shows the draft as it grows, then the message that
+// The stream's orb shows the draft as it grows, then the message that
 // replaces it, never both; a draft older than the messages a viewer has is
 // stale.
 func TestWebDraftStream(t *testing.T) {
@@ -177,7 +177,7 @@ func TestWebDraftStream(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	exchanges := make(chan exchangeEvent, 100)
+	orbs := make(chan orbEvent, 100)
 	go func() {
 		sc := bufio.NewScanner(resp.Body)
 		sc.Buffer(nil, 1<<20)
@@ -189,46 +189,46 @@ func TestWebDraftStream(t *testing.T) {
 			} else if v, ok := strings.CutPrefix(line, "data: "); ok {
 				data += v
 			} else if line == "" && name != "" {
-				var x exchangeEvent
-				if name == "exchange" && json.Unmarshal([]byte(data), &x) == nil {
-					exchanges <- x
+				var x orbEvent
+				if name == "orb" && json.Unmarshal([]byte(data), &x) == nil {
+					orbs <- x
 				}
 				name, data = "", ""
 			}
 		}
-		close(exchanges)
+		close(orbs)
 	}()
-	next := func(ok func(exchangeEvent) bool) exchangeEvent {
+	next := func(ok func(orbEvent) bool) orbEvent {
 		t.Helper()
 		for {
 			select {
-			case x, open := <-exchanges:
+			case x, open := <-orbs:
 				if !open {
 					t.Fatal("the stream ended")
 				}
-				if strings.Contains(x.Draft, "stale") {
+				if x.Work != nil && strings.Contains(x.Work.Draft, "stale") {
 					t.Fatal("the stream sent a stale draft")
 				}
 				if ok(x) {
 					return x
 				}
 			case <-ctx.Done():
-				t.Fatal("no such exchange")
+				t.Fatal("no such orb event")
 			}
 		}
 	}
 
-	next(func(x exchangeEvent) bool { return x.Asked != nil })
+	next(func(x orbEvent) bool { return x.Asked > 0 })
 	tw.c.draft.set("Writ", last)
 	tw.w.notify()
-	next(func(x exchangeEvent) bool { return x.Draft == "Writ" })
+	next(func(x orbEvent) bool { return x.Work != nil && x.Work.Draft == "Writ" })
 	tw.c.draft.set("Writing **this**\n\nand more", last)
-	next(func(x exchangeEvent) bool { return x.Draft == "Writing this" }) // its first line, plain
+	next(func(x orbEvent) bool { return x.Work != nil && x.Work.Draft == "Writing this" }) // its first line, plain
 	// What brainWrote does when the message lands.
 	seq, _ := tw.c.store.addMessage(roleBrain, "Written.", true)
 	tw.c.draft.set("", int(seq))
-	x := next(func(x exchangeEvent) bool { return x.Draft == "" && x.Said != nil && x.Said.Text == "Written." })
-	if x.Draft != "" {
+	x := next(func(x orbEvent) bool { return x.Work == nil && x.Said != nil && x.Said.Text == "Written." })
+	if x.Work != nil {
 		t.Fatalf("a draft beside its message: %+v", x)
 	}
 }

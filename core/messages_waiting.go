@@ -14,7 +14,7 @@ import (
 // while the brain is at work is kept, undelivered, and the brain's next
 // idle hands it everything that waits, in one turn (deliverConversation,
 // brain.go). Until then it is the user's still: the workspace's bar shows
-// each above it, with a clock (exchangeEvent's waiting), and the user may
+// each above it, with a clock (orbEvent's waiting), and the user may
 // withdraw one. A message withdrawn is deleted, its attachments with it:
 // the brain never reads it, and the conversation it sees keeps no trace of
 // it; the log keeps a line.

@@ -55,27 +55,27 @@ func TestExplainErrors(t *testing.T) {
 	}
 }
 
-// The brain's failure reaches the workspace's bar as a failure, never its
-// raw error, and the bar offers "Try again" and the AI
-// account (web/espace, Console.tsx).
+// The brain's failure reaches the workspace's orb as a failure, where the
+// turn belonged, never its raw error, and the orb offers "Try again" and
+// the AI account (web/espace, orb/Orb.tsx).
 func TestBrainErrorLine(t *testing.T) {
 	tw := newTestWeb(t)
 	raw := "API Error: Connection refused — a firewall or proxy may be blocking it (ECONNREFUSED)"
 	tw.c.store.addMessage(roleUser, "Bonjour", true)
 	tw.c.brainFailed(raw, "turn")
-	x, err := tw.w.exchangeFor("", "", "", false)
+	x, err := tw.w.orbFor("", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !x.Failed || x.Said != nil || strings.Contains(fmtJSON(x), "ECONNREFUSED") {
-		t.Fatalf("exchange = %+v", x)
+	if x.Failed == nil || x.Failed.Node != "" || x.Said != nil || strings.Contains(fmtJSON(x), "ECONNREFUSED") {
+		t.Fatalf("orb = %+v", x)
 	}
 	for lang, want := range map[string]string{"fr": "n'a pas pu répondre.", "en": "could not answer."} {
 		words := espaceWords(lang, "Atlas")
-		if !strings.Contains(words["espace.exchange.error"], want) || words["espace.retry"] == "" || words["espace.exchange.account"] == "" {
-			t.Errorf("%s: %q", lang, words["espace.exchange.error"])
+		if !strings.Contains(words["espace.orb.failed"], want) || words["espace.retry"] == "" || words["espace.orb.account"] == "" {
+			t.Errorf("%s: %q", lang, words["espace.orb.failed"])
 		}
-		if strings.Contains(words["espace.exchange.error"], "conversation") {
+		if strings.Contains(words["espace.orb.failed"], "conversation") {
 			t.Errorf("%s: the error still points to the conversation", lang)
 		}
 	}

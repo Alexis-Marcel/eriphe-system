@@ -54,8 +54,8 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 	if x, ok := c.lastShown(); !ok || x.Node != subject || !x.Talk {
 		t.Errorf("the subject is not opened with the console: %+v", x)
 	}
-	if lines, _ := c.store.lastExchange(subject); len(lines) != 2 || lines[0].Role != roleUser {
-		t.Errorf("the subject's exchange: %+v", lines)
+	if x, _ := (&web{c: c}).orbFor("", false); x.Answer == nil || x.Answer.Node != subject {
+		t.Errorf("the orb does not speak beside the subject: %+v", x.Answer)
 	}
 
 	// The user answers in the subject; the view is proposed there.
@@ -77,8 +77,8 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 		t.Fatalf("the view's card does not wait on its subject: %v", c.cardNodes(ref))
 	}
 	w := &web{c: c}
-	if x, _ := w.exchangeFor("", "", "", false); len(x.Cards) != 0 {
-		t.Errorf("a card its subject holds is in the console too: %v", x.Cards)
+	if x, _ := w.orbFor("", false); len(x.Cards) != 0 || x.Wait == nil || x.Wait.Node != subject {
+		t.Errorf("a card its subject holds is above the bar too, or the orb does not point at it: %v %+v", x.Cards, x.Wait)
 	}
 	if _, err := c.decideCard(context.Background(), cardOfRef(t, c, ref).ID, true, "web"); err != nil {
 		t.Fatal(err)
@@ -94,9 +94,9 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 }
 
 // The incident: a view proposed at the home, its subject never opened.
-// Its card waits in the console, wherever it talks, until it is decided,
+// Its card waits above the bar, wherever it talks, until it is decided,
 // and the long answer about it is no new node.
-func TestHomeCardShowsInTheConsole(t *testing.T) {
+func TestHomeCardShowsAboveTheBar(t *testing.T) {
 	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
 	if _, err := c.proposeView(proposeViewIn{Title: "Mes mails", Body: "Les mails.\n"}, nil); err != nil {
 		t.Fatal(err)
@@ -111,20 +111,14 @@ func TestHomeCardShowsInTheConsole(t *testing.T) {
 	if x.Seq != m.Seq || len(c.cardNodes(ref)) != 0 {
 		t.Fatalf("card %+v, nodes %v", x, c.cardNodes(ref))
 	}
-	other, err := c.nodes.Create(nodestore.New{Title: "Garage", Author: byBrain})
-	if err != nil {
-		t.Fatal(err)
-	}
 	w := &web{c: c}
-	for _, node := range []string{"", other.Node.Meta.ID} {
-		if ex, _ := w.exchangeFor(node, "", "", false); !slices.Equal(ex.Cards, []string{ref}) {
-			t.Errorf("exchange of %q: cards %v", node, ex.Cards)
-		}
+	if ex, _ := w.orbFor("", false); !slices.Equal(ex.Cards, []string{ref}) || ex.Wait != nil {
+		t.Errorf("orb: cards %v, wait %+v", ex.Cards, ex.Wait)
 	}
 	if _, err := c.decideCard(context.Background(), x.ID, false, "web"); err != nil {
 		t.Fatal(err)
 	}
-	if ex, _ := w.exchangeFor("", "", "", false); len(ex.Cards) != 0 {
+	if ex, _ := w.orbFor("", false); len(ex.Cards) != 0 {
 		t.Errorf("a decided card still waits: %v", ex.Cards)
 	}
 }

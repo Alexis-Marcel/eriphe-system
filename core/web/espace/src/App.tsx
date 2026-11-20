@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { MotionConfig } from "motion/react";
 import { createAdapter } from "./a2ui/adapter";
-import { galleryFixtures, sampleExchange, sampleProposals } from "./a2ui/fixtures";
+import { galleryFixtures, sampleOrb, sampleProposals } from "./a2ui/fixtures";
 import { coreProposals, ProposalsContext } from "./a2ui/proposals";
 import { Surfaces } from "./a2ui/Surfaces";
-import { Console } from "./console/Console";
 import { tab, type Boot } from "./data/api";
 import { startPresence } from "./data/presence";
 import { sample } from "./data/sample";
@@ -14,10 +13,11 @@ import { connect } from "./data/stream";
 import { Graph } from "./graph/Graph";
 import { List, useNarrow } from "./graph/List";
 import { Hud } from "./hud/Hud";
+import { Bar } from "./orb/Bar";
 import { useWords } from "./i18n";
 
 // The workspace, Eriphe's home page (#633): the graph of nodes, the pages
-// open in it, the head-up display over it and the one console under it; on
+// open in it, Eriphe's orb, the head-up display over it and the bar under it; on
 // a small screen, the graph as a list (graph/List.tsx).
 // Nothing here is a screen planned in code: what shows is the graph
 // eriphe-core streams, and what the user opens. With no eriphe-core
@@ -39,7 +39,7 @@ export function App({ boot }: { boot: Boot }) {
     if (gallery) return;
     if (!boot.live) {
       step(store, applyNodes, { reset: true, nodes: sample.nodes });
-      store.setState({ exchange: sampleExchange(lang) });
+      store.setState({ orb: sampleOrb(lang) });
       return;
     }
     step(store, restore, boot.view);
@@ -77,7 +77,7 @@ export function App({ boot }: { boot: Boot }) {
         <div className="espace">
           {narrow ? <List live={boot.live} /> : <Graph live={boot.live} />}
           <Hud live={boot.live} />
-          <Console boot={boot} />
+          <Bar boot={boot} narrow={narrow} />
           <Sample live={boot.live} />
         </div>
       </MotionConfig>

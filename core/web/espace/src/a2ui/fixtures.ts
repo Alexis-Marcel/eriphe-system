@@ -1,4 +1,4 @@
-import type { Exchange } from "../data/api";
+import type { OrbFeed } from "../data/api";
 import type { Lang } from "../i18n";
 import type { Message } from "./adapter";
 import { CATALOG } from "./catalog";
@@ -148,12 +148,12 @@ export function queueViews(lang: Lang): ProposalView[] {
   return queue[lang].map((q, i) => ({ ref: `card:${20 + i}`, card: 20 + i, state: "pending", ...q }));
 }
 
-// sampleExchange is the dev server's bar: the user's last message and
-// the first line of Eriphe's answer, the rest in the subject.
-export function sampleExchange(lang: Lang): Exchange {
+// sampleOrb is the dev server's orb: Eriphe's answer beside a subject of
+// the made-up graph, a few lines, the rest in its page.
+export function sampleOrb(lang: Lang): OrbFeed {
   const en = lang === "en";
   return {
-    asked: { seq: 11, text: en ? "add a contact form after all" : "ajoute plutôt un formulaire de contact finalement" },
-    said: { seq: 12, text: en ? "All right: a contact form rather than a mailto link." : "D'accord : un formulaire de contact plutôt qu'un lien mailto." },
+    asked: 11,
+    answer: { seq: 12, node: "sub", text: en ? "All right: a contact form rather than a mailto link." : "D'accord : un formulaire de contact plutôt qu'un lien mailto.", more: true },
   };
 }

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { BarLine, GraphNode } from "./api";
+import type { GraphNode, OrbWords } from "./api";
 import {
-  applyDoc, applyExchange, applyMoved, applyNodes, applyNotes, applyProgress, applyShow, applySource, closePage, empty, NOTES_KEPT,
-  openPage, pathOf, restore, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
+  applyDoc, applyMoved, applyNodes, applyNotes, applyOrb, applyProgress, applyShow, applySource, closePage, empty, NOTES_KEPT,
+  landed, openPage, pathOf, restore, setSent, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
 } from "./store";
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
@@ -83,22 +83,27 @@ describe("the store", () => {
     expect(s).toMatchObject({ open: ["a", "b"], talk: "a" });
   });
 
-  it("keeps the cards no node holds with the exchange", () => {
-    const s = applyExchange(withGraph(), { cards: ["view:1", 2 as unknown as string] });
-    expect(s.exchange?.cards).toEqual(["view:1"]);
+  it("keeps what the orb shows, whatever page the bar talks to", () => {
+    let s = openPage(withGraph(), "a");
+    s = applyOrb(s, { asked: 2, answer: { seq: 3, node: "b", text: "Oui." }, cards: ["view:1", 2 as unknown as string], wait: { card: 4, node: "b" } });
+    expect(s.orb?.answer).toEqual({ seq: 3, node: "b", text: "Oui." });
+    expect(s.orb?.cards).toEqual(["view:1"]);
+    expect(s.orb?.wait).toEqual({ card: 4, node: "b" });
+    // words that are not words are dropped, never drawn
+    s = applyOrb(s, { said: { seq: "x", text: 1 } as unknown as OrbWords, work: { node: 3 as unknown as string } });
+    expect(s.orb?.said).toBeUndefined();
+    expect(s.orb?.work).toEqual({ node: undefined, draft: undefined });
+    // talking to another page keeps it
+    expect(talkTo(openPage(s, "b", true), "b").orb).toBe(s.orb);
   });
 
-  it("keeps the exchange of the node the console talks to only", () => {
-    let s = openPage(withGraph(), "a");
-    expect(applyExchange(s, { node: "b" }).exchange).toBeNull();
-    s = applyExchange(s, { node: "a", asked: { seq: 2, text: "Et alors ?" }, said: { seq: 3, text: "Oui." } });
-    expect(s.exchange?.said?.text).toBe("Oui.");
-    expect(s.exchange?.asked?.seq).toBe(2);
-    // a line that is not one is dropped, never drawn
-    s = applyExchange(s, { node: "a", said: { seq: "x", text: 1 } as unknown as BarLine });
-    expect(s.exchange?.said).toBeUndefined();
-    // talking to another node, it waits for that one's
-    expect(talkTo(openPage(s, "b", true), "b").exchange).toBeNull();
+  it("holds the message sent until eriphe-core has it", () => {
+    let s = applyOrb(withGraph(), { asked: 5 });
+    s = setSent(s, { text: "Et alors ?", after: 5, to: null });
+    expect(applyOrb(s, { asked: 5 }).sent).not.toBeNull();
+    expect(applyOrb(s, { asked: 5, waiting: [{ seq: 6, text: "Et alors ?" }] }).sent).toBeNull();
+    expect(applyOrb(s, { asked: 6 }).sent).toBeNull();
+    expect(landed(null, null)).toBe(false);
   });
 
   it("counts what changed: versions, traces, progress, sources, proposals, notices", () => {
