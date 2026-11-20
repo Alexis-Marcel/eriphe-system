@@ -16,7 +16,7 @@ import (
 
 // The graph workspace (#633), the one surface of the web workspace (/ and
 // /espace, once the wizard is over, web_pages.go): the graph
-// of nodes, their pages opened inside it, and one console. It is a React
+// of nodes, their pages opened inside it, Eriphe's orb and the bar. It is a React
 // app (web/espace), built into web/static/espace and embedded with the
 // other static files; eriphe-core serves it from a small HTML shell
 // (templates/espace.html). The app gets its words, the CSRF token and the
@@ -67,7 +67,7 @@ type espaceBoot struct {
 	View    espaceView        `json:"view"` // the pages open, the display settings (web_gestures.go)
 	// Setup says Eriphe cannot think yet: "noai" while its wizard was left
 	// for later (web_welcome.go), "nobrain" with no brain in the
-	// configuration; "" once it can. The console says it, and the way to
+	// configuration; "" once it can. The bar says it, and the way to
 	// the wizard.
 	Setup string `json:"setup,omitempty"`
 }

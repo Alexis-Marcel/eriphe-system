@@ -29,9 +29,10 @@ import (
 //   - "show": the brain asks to open a node's page ({node, by, at, seq}),
 //     the last request at once, then each new one;
 //
-//   - "exchange": the conversation's last exchange of the node the console
-//     talks to (its id in the node query; exchangeEvent, web_console.go),
-//     at once and whenever it changes;
+//   - "orb": what Eriphe's orb shows, whatever page the bar talks to: its
+//     work, its last words and where they belong, the cards and the
+//     messages that wait (orbEvent, web_orb.go), at once and whenever it
+//     changes;
 //
 //   - "proposals": the refs of the proposals whose card was made or
 //     decided since, all of them first (proposalsEvent, card_moves.go),
@@ -79,10 +80,9 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		proposalsSeq, proposalsMoved = seq, ch
 	}
 	// The graph: its rows, then what changes.
-	talked := w.c.nodeSaid(r.URL.Query().Get("node")) // the node the console talks to: its exchange
 	// The workspace does not show the conversation's messages: its stream
-	// starts after the last one, not with them all, and its "exchange"
-	// event says the last exchange.
+	// starts after the last one, not with them all, and its "orb" event
+	// says what the orb shows of them.
 	if after == 0 {
 		after = int(w.c.store.lastMessageSeq())
 	}
@@ -95,10 +95,10 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 	sendProposals()
 	flusher.Flush()
 
-	// The exchange: made again when a message, the draft or Eriphe's state
+	// The orb: made again when a message, the draft or Eriphe's state
 	// changed, sent when it differs.
-	var lastExchange, exchangeDraft, exchangeWaiting string
-	thinking, exchangeThinking, exchangeStale := false, false, true
+	var lastOrb, orbDraft, orbWaiting string
+	thinking, orbThinking, orbStale := false, false, true
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	quiet, stateAt, woken := time.Now(), time.Time{}, true
@@ -111,7 +111,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		fresh := err == nil && len(msgs) > 0
 		if fresh {
 			after = msgs[len(msgs)-1].Seq
-			exchangeStale = true
+			orbStale = true
 		}
 		if at < after {
 			draft = ""
@@ -123,17 +123,16 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 		}
 		// What waits for Eriphe: a delivery or a withdrawal adds no message
 		// (messages_waiting.go).
-		if k := w.c.waitingKey(thinking); k != exchangeWaiting {
-			exchangeWaiting, exchangeStale = k, true
+		if k := w.c.waitingKey(thinking); k != orbWaiting {
+			orbWaiting, orbStale = k, true
 		}
-		if exchangeStale || draft != exchangeDraft || thinking != exchangeThinking {
-			// The exchange of the node the console talks to (node_turn.go).
-			if x, err := w.exchangeFor(talked, w.c.turn.talkNode(), draft, thinking); err == nil {
-				exchangeStale, exchangeDraft, exchangeThinking = false, draft, thinking
+		if orbStale || draft != orbDraft || thinking != orbThinking {
+			if x, err := w.orbFor(draft, thinking); err == nil {
+				orbStale, orbDraft, orbThinking = false, draft, thinking
 				raw, _ := json.Marshal(x)
-				if string(raw) != lastExchange {
-					writeEvent(rw, "exchange", after, string(raw))
-					lastExchange, sent = string(raw), true
+				if string(raw) != lastOrb {
+					writeEvent(rw, "orb", after, string(raw))
+					lastOrb, sent = string(raw), true
 				}
 			}
 		}
@@ -164,7 +163,7 @@ func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) 
 			flusher.Flush()
 			quiet = time.Now()
 		case <-proposalsMoved:
-			exchangeStale = true // the cards it carries may have moved
+			orbStale = true // the cards it carries may have moved
 			sendProposals()
 			flusher.Flush()
 			quiet = time.Now()

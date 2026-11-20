@@ -514,7 +514,7 @@ func (c *core) copyBrainOutput(a Assistant, t *TaskRow) (undecided string) {
 				seq, err := c.store.addNodeMessage(roleBrain, text, "", c.turn.talkNode(), true)
 				if err == nil {
 					c.markBrainMessage(int(seq))
-					c.markAnswer(int(seq))              // the answer to the user's message, not an event's line (web_console.go)
+					c.markAnswer(int(seq))              // the answer to the user's message, not an event's line (web_orb.go)
 					c.attachTurnCards(int(seq))         // what it proposed in this turn (convo_cards.go)
 					c.notifyWake(int(seq), e.Seq, text) // the answer to a due intention reaches the phone
 				}

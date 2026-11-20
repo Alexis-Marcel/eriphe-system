@@ -20,11 +20,34 @@ the screen points to it: click it to open it), what is running turns and says wh
 done or old fades. A bubble whose title could be someone else's words (a mail's subject, say) is
 named **Outside content**: its own words are never shown as a title.
 
-At the bottom, the **bar**: the one field to write to Eriphe, with its orb, and above it, on a
-panel of its own, your last question in grey (click it to read it whole) and one line of Eriphe's,
-the first of its answer, which fades after a few seconds. The bar is only a bar: no history, no
-buttons. The conversation is the subject's page: what Eriphe has to say at length, its questions and
-the buttons that answer them are written there.
+At the bottom, the **bar**: the one field to write to Eriphe. The bar is only a bar: no history,
+no buttons. The conversation is the subject's page: what Eriphe has to say at length, its questions
+and the buttons that answer them are written there.
+
+## Eriphe's orb
+
+Eriphe is the small blue orb resting in the bar. When it works or has something to tell you, it
+leaves the bar and goes **beside the subject** it is about, its bubble or its open page, where it
+covers nothing (no bubble, no title, no page, not the bar), and follows it if it moves. When the
+screen is too full for that, it stays in the bar and says it in a line above it:
+
+- **at work**, it pulses, with the first words of what it is writing;
+- **when it is done**, it says in a few lines what it did; **See more** opens the subject's page,
+  where the rest is: the orb never repeats the page. After a few seconds it goes back to the bar;
+  its ✕ sends it back sooner;
+- **when a card waits for your yes**, it sits beside that page, at the card's height, and **Show**
+  brings the card into view;
+- **when something starts waiting for you** without you asking (a mail a monitor found), it goes to
+  its bubble and says so;
+- **an answer about no subject** (« do you have access to my films? ») shows at the home, whole,
+  in a free spot, and stays until you write again, open a subject or close it;
+- **if Eriphe could not answer**, it says so, with **Try again** and a link to Settings → Agents.
+
+Words Eriphe wrote after reading outside content carry a small amber dot, and a title that may be
+someone else's words shows as it is, marked « outside ». Click the orb to open the subject it is
+beside. With reduced motion set on your system, it goes at once instead of gliding; a screen reader
+reads what it says. On a phone it does not move: its words show as a line above the bar, naming
+the subject (« On Plan of the first article »).
 
 ## Open a page
 
@@ -58,8 +81,7 @@ home. The camera frames every open page when they fit readably, otherwise the on
 to; the others stay open where they are.
 
 A link may open a page directly: `/espace?open=node-<id>`. When Eriphe wants to show you something,
-it opens its page beside yours; the bar stays where you were, its line under your question: only
-your own click moves it.
+it opens its page beside yours; the bar stays where you were: only your own click moves it.
 
 When a work Eriphe ran ends, what it made for you (its last step, « Plan of the first article »)
 waits for you, the work around it done. It stops waiting when you say it suits you (« Ce plan me
@@ -108,8 +130,8 @@ Write to Eriphe, in the bar:
 
 Eriphe answers by **showing**: the subject's page opens in front of you with what you need to know,
 like a dashboard, and the conversation goes on there. Asked from the home, the bar moves into
-that page; asked from a page, the new one opens beside it. Only a one-line answer ("done", the
-time, a figure) stays in the bar.
+that page; asked from a page, the new one opens beside it. Only a short answer ("done", the time,
+a figure) stays with the orb.
 
 Each exchange rewrites the subject's page: the questions you answered go, what you chose is written
 under « What we decided », and what comes next shows. When a part of it moves on in a bubble of its
@@ -200,7 +222,7 @@ no top bar: **Workspace**, at the top of their menu, leads back.
 While the workspace is open in front of you, Eriphe knows you are there: a notification shows as a
 small notice in the page rather than on your phone. If the workspace cannot open on a device (an
 old browser, a script blocked, Eriphe out of reach for a while), the page says so with a link to
-try again. If Eriphe cannot answer, the bar says so, with **Try again** and a link to Settings →
+try again. If Eriphe cannot answer, its orb says so, with **Try again** and a link to Settings →
 Agents.
 
 ## Where the work runs: devices

@@ -309,7 +309,7 @@ func (w *web) handleArchives(rw http.ResponseWriter, r *http.Request, _ *session
 }
 
 // espaceView is the workspace as the user left it: the pages open, the one
-// the console talked to, the last of Eriphe's shows it took (so that a page
+// the bar talked to, the last of Eriphe's shows it took (so that a page
 // the user closed does not open again with the next visit) and the display
 // settings.
 type espaceView struct {

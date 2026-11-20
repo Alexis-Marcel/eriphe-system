@@ -187,7 +187,7 @@ func TestWebWelcomeSkip(t *testing.T) {
 	if code, _, h := tw.do("POST", "/welcome/skip", url.Values{"csrf": {csrf}}, nil); code != http.StatusSeeOther || h.Get("Location") != "/" {
 		t.Fatalf("skip: %d %s", code, h.Get("Location"))
 	}
-	// The workspace opens; its console says the assistant has no AI yet,
+	// The workspace opens; its bar says the assistant has no AI yet,
 	// and leads back to the wizard (web/espace, boot.setup).
 	if code, body, _ := tw.do("GET", "/", nil, nil); code != http.StatusOK || !strings.Contains(body, espaceShell) {
 		t.Fatalf("after skip: %d", code)

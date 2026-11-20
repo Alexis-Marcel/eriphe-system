@@ -12,10 +12,11 @@ import (
 
 // Code's safety net (#632, contract 5): a long answer of the brain's that
 // nothing of its turn filed into a node is filed by code, so that no long
-// answer lives in the conversation alone: the workspace's bar shows only
-// its first line (ackLine, web_console.go). At its turn's end, the turn's
-// answer (its texts joined), past netMinRunes, or said in a node any
-// answer the bar does not show whole (#663), when the brain wrote no
+// answer lives in the conversation alone: beside a subject, the
+// workspace's orb says only its first lines (fewLines, web_orb.go). At
+// its turn's end, the turn's answer (its texts joined), past netMinRunes,
+// or said in a node any answer longer than its first line (ackLine,
+// #663), when the brain wrote no
 // node in the turn (node_open, node_write, node_edit) and proposed nothing
 // on a card (what it says is then about the card, which waits under it),
 // goes:

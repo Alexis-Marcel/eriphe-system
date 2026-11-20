@@ -995,15 +995,15 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   `aside` (the user asked for it on the side), nothing is shown and nothing moves: it rises when it
   has something for the user.
 - **Code's safety net** (`node_net.go`, contract 5): at the turn's end, the turn's answer (its
-  texts joined), past `netMinRunes` (600), or, said in a node, any answer the workspace's bar does
-  not show whole (it shows its first line: `ackLine`, #663), when the brain wrote no node in the turn (`node_open`,
+  texts joined), past `netMinRunes` (600), or, said in a node, any answer longer than its first
+  line (`ackLine`, #663; beside a subject the orb says only its first lines), when the brain wrote no node in the turn (`node_open`,
   `node_write`, `node_edit`) and proposed nothing on a card (`cardProposed`: what it says is then
   about the card, which waits under it), is filed by code: in the node the turn answers in (whole in its
   trace, and as its doc when it has none, never a standing node's), else in a new work node at
   the top titled from the user's request (its first line; a neutral « Réponse du … » when there is
   none, or when it may not be the user's words or holds a secret), the answer its doc, for one
-  past `netMinRunes` only (a shorter one at the home stays in the conversation, held whole above
-  the bar: `answer`, below); a turn that
+  past `netMinRunes` only (a shorter one at the home stays in the conversation, held whole by
+  the orb: `answer`, below); a turn that
   answers the user at the home then moves into it, as for a subject the brain opened
   (`moveHomeTurn`). The answer's
   messages say where (`messages.filed`). Written in a tainted
@@ -3195,7 +3195,7 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   them);
 - `show`: Eriphe asks to open a node's page (`{node, by, at, seq}`), the last one at once, then each
   new one; the page opens it beside what is open, once (an old one, over a minute, is not news);
-- `exchange` (below), `proposals` and `notice`.
+- `orb` (below), `proposals` and `notice`.
 
 **The user's gestures** (`web_gestures.go`), kept by eriphe-core, each with the session's CSRF
 token in `X-CSRF-Token`:
@@ -3244,8 +3244,7 @@ token in `X-CSRF-Token`:
 
 **The app** (`web/espace/src`):
 
-- `data/`: the requests (`api.ts`), the stream (`stream.ts`: one per page, opened again with the
-  node the bar talks to) and the store (`store.ts`, Zustand): the graph as streamed, what is
+- `data/`: the requests (`api.ts`), the stream (`stream.ts`: one per page) and the store (`store.ts`, Zustand): the graph as streamed, what is
   open and the theme, each event a pure step tested on its own. `keep.ts` sends what
   is open and the theme back to eriphe-core a moment after they change. `presence.ts` says the
   user is there. A page Eriphe shows (`applyShow`) opens beside the others and leaves the bar
@@ -3263,7 +3262,7 @@ token in `X-CSRF-Token`:
   global energy and is settled before it is shown; afterwards only what changes is warm: a new node
   (and its siblings near it), the bubbles of a page that opens or closes, what a drag carries; the
   rest moves only to make room, and the whole graph is never warmed again. A page opens where its
-  bubble was, or right beside the page the console talks to (else the last opened) when it would
+  bubble was, or right beside the page the bar talks to (else the last opened) when it would
   cover it, at its height (`bornBeside`); what it pushes aside, and what that pushes, goes back
   where it stood when it closes. A standing view made from a subject's card is linked to that
   subject (`decideView`), so it sits beside it. The user drags a bubble, or a page by its head: it
@@ -3307,28 +3306,41 @@ token in `X-CSRF-Token`:
   last version of a block that is not external; anything else stays in the page. A card block is
   the card it places (`Cards`, read from eriphe-core), or « Carte introuvable » when the page sent
   no card for it.
-- `console/`: the bar, the one input, and only a bar. It talks to the page the store's talk names
-  (the last one opened or clicked), else to the home (`POST /messages` with `node`); on a panel of
-  its own above the orb, the user's last question in grey (one line, whole on a click, shown as
-  soon as it is sent) and one line of Eriphe's (`said`, plain text), which fades after `ACK_MS`
-  (6 s, `useAck`: from when the page first met it, keyed by its node and seq, so a stream sent
-  again or a page met again does not replay it), or the first line of what it is writing. No
-  history, no buttons: Eriphe's questions and their `ask` buttons are in the subject's document.
-  The one exception: the cards no node holds, above it. **An answer given at the home** (no
-  subject opened) that is more than its line has no subject to hold it: the exchange carries it
-  whole (`answer`, Markdown: the brain's messages written in a turn that answered the user's last
-  home message, `markAnswer`, kv `answer_msg:<seq>`, filed nowhere, joined, at most `answerMax`),
-  and the panel shows it under the question, wrapped, scrolling past 40 % of the screen, with a
-  ✕. It does not fade: it stays until the user writes again (any message newer than it, read or
-  not, and eriphe-core sends it no more), opens a subject (the bar talks to a node), or closes it
-  (✕: its seq kept in `localStorage`, `eriphe.espace.answer.closed`, so a reload shows it again
-  only when not closed). What an event or a wake made Eriphe say later (a turn with no message of
-  the user's: the catalog changed…) is `said`, a line under it that fades, never in its place; an
-  answer of one line (« c'est fait ») is its line, and fades as any. A card raised by a turn
-  that answers the user's message is never out of sight: one no node holds waits above the bar,
-  and one linked to a node opens that node's page beside what is open, as `node_show` does
-  (`showTurnCards`, node_turn.go, when the card is attached to the turn's message or its end). Above the panel, the messages that wait
-  for Eriphe, a clock and a ✕ each (**The messages that wait**, below).
+- `orb/`: Eriphe in the graph, a small blue orb (`Orb.tsx`), and the bar under it (`Bar.tsx`). The
+  bar is the one input, and only a bar: it talks to the page the store's talk names (the last one
+  opened or clicked), else to the home (`POST /messages` with `node`). No history, no buttons:
+  Eriphe's questions and their `ask` buttons are in the subject's document. Above it, the cards no
+  node holds (its only buttons) and the messages that wait for Eriphe, a clock and a ✕ each (**The
+  messages that wait**, below). The orb rests in the bar (`.cs-dock`). What it shows comes from the
+  stream's `orb` event and what the user just sent (`model.ts`, `orbShow`, pure, in this order):
+  at work (`work`, from the moment the user sends: the first line of what it writes, or dots);
+  a turn that failed (`failed`: Réessayer, the agents' settings); a card that waits for the user's
+  yes (`wait`); an answer to the user's message (`answer`); what an event made it say (`said`); a
+  node that began to wait for the user, unasked (`call`, from the graph's stream: « X t'attend. »);
+  else it rests. It glides beside the subject that is about (`placeBeside`: its bubble, or its
+  page when open, as drawn): the first side of six where it and its words cover no bubble, no
+  title, no page, not the bar nor the corner's icons, keeping the side it had while it stays free;
+  when none is, the free spot nearest around it (`NEAR`, 120 px further at most); at the home, a
+  free spot near the screen's middle (`placeHome`). When there is none, it covers nothing: it stays
+  in the bar and its words are a line above it, as on a phone (`setCrowded`). It is no body of the simulation: it reads where the bodies are each frame and
+  follows its subject. Its words show once it is there, open away from the subject, in a few
+  lines (`fewLines` on eriphe-core's side) with « Voir plus », which opens the subject's page:
+  the orb never says what the page holds. For a waiting card it sits at the card's height and its
+  « Voir » scrolls the card into view. An answer or a line goes after a while (15 s, 9 s for an
+  event's, from when the page first showed it); its ✕ closes it sooner; both are remembered
+  (`localStorage`, `eriphe.espace.orb.closed`), so a reload does not replay them. **An answer
+  given at the home** (no subject opened) that is more than its lines has no subject to hold it:
+  the orb holds it whole (`whole`, Markdown, scrolling past 40 % of the screen) until the user
+  writes again, opens a subject, or closes it; what an event made Eriphe say meanwhile waits
+  behind it. Words written after reading external content carry the « extérieur » dot, and a
+  title that may be someone else's words shows as it is, marked: never replaced. With less motion
+  asked (`prefers-reduced-motion`), it goes at once and does not pulse. A screen reader hears
+  its words (an `aria-live` region); the orb is a button that opens its subject. Under 760 px
+  wide, it does not glide: its words are a line above the bar, « Sur X » naming the subject. A
+  card raised by a turn that answers the user's message is never out of sight: one no node holds
+  waits above the bar, and one linked to a node opens that node's page beside what is open, as
+  `node_show` does (`showTurnCards`, node_turn.go, when the card is attached to the turn's message
+  or its end).
 - `hud/`: no bar, the graph takes the whole screen; the bubbles say what waits for the user (a
   breathing accent ring, « t'attend » under the name; out of view, an arrow at the screen's edge
   that opens it) and what runs. In the top-right corner, three icons: Archives (its
@@ -3385,37 +3397,54 @@ routed to it comes as an in-app notice, by the stream's `notice` or the presence
 card at the top right for 15 s, its text a link when its URL is a path of the site (`hud/Hud.tsx`).
 A workspace left open in front is activity.
 
-**The bar** (`web_console.go`, `console/`, #663). Not a chat: the subject's document is the
-conversation, and the bar under it is only a bar. Of the node it talks to (the home's when none),
-the stream's `exchange` event (JSON, `exchangeEvent`) carries the user's last message (`asked`:
-`seq`, `text`, cut at 500 characters), one line of Eriphe's (`said`: the first line of its last
-answer after it, `ackLine`: the first line that says something, as plain text without its
-Markdown marks, a link's words only, at most 140 characters, its first sentence when that fits,
-else cut at a word with « … »; `external` when written in a tainted turn, `markBrainMessage`),
-`failed` when its last line is an error (never its raw text), the first line of what Eriphe is
-writing (`draft`, by the same rule as the conversation's), whether it is at work (`thinking`,
-`brainState`), the cards no node holds and the messages that wait (`waiting`, below). Read from
-the store's last exchange (`lastExchange`: the user's last message Eriphe was given and Eriphe's
-last 12 lines after it, however many events came between; an event's line and the first run's
-messages never). Eriphe's lines are each brain turn's answer
-only, what it writes after its last tool call: a note written before a tool call of the same turn
-is meant for no one and never copied, and a text stays the draft until its turn's next tool call
-or its end decides it (`answerText`, `brain.go`). The rest of a longer answer is in the subject:
-the brain writes it there, else the safety net files it. Sent when the stream opens and whenever
-it changes. There is no history to page back through, no suggested reply: the brain's questions
-and the buttons that answer them are `ask` buttons in the subject's document. The brain's memory
-and the stored messages are untouched: only what the bar shows. The cards the user must answer are
-in their node's page, and the attention queue delivers the others.
+**The orb** (`web_orb.go`, `orb/`, #663). Not a chat: the subject's document is the
+conversation, the bar under it is only a bar, and Eriphe speaks with its orb, beside the subject
+its words belong to. One stream event for the whole workspace, whichever page the bar talks to,
+so that nothing Eriphe says is lost on a page the user is not looking at: `orb` (JSON,
+`orbEvent`, `orbFor`), sent when the stream opens and whenever it changes:
+
+- `asked`: the seq of the user's last message Eriphe was given (`lastAsked`);
+- `work` when Eriphe is at work (`brainState`) or writing: `node`, the node its turn answers in
+  (`workNode`: the turn's talk, none at the home), and `draft`, the first line of what it writes
+  (`ackLine`: the first line that says something, as plain text without its Markdown marks, a
+  link's words only, at most 140 characters, its first sentence when that fits, else cut at a
+  word with « … »);
+- `answer`: Eriphe's words written since that message in a turn that answered it, and `said`:
+  those an event, a wake or a node's task made it say (a turn with no message of the user's). Each
+  is `{seq, node, text, more, whole, external}`: `node` where its messages belong (`placeOf`: the
+  node of the message, else the one its answer was filed in, none for the home); `text`, its last
+  messages there joined, said in a few lines (`fewLines`: at most 3 lines and 280 characters, no
+  code, table or rule), `more` when that cut it (the rest is in the node: the brain writes it
+  there, else the safety net files it); at the home, an answer cut is sent whole instead
+  (`whole`, Markdown, at most `answerMax`: the brain's messages of a turn that answered the
+  user's home message, `markAnswer`, kv `answer_msg:<seq>`, filed nowhere); `external` when
+  written in a tainted turn (`markBrainMessage`). An answer the user wrote past is no longer sent;
+- `failed`: the turn's last line is an error (`{seq, node}`, never its raw text);
+- `wait`: the newest card that waits for the user's yes in a live node, shown since the user's
+  last message read or in the turn under way (`newestWait`, `{card, node}`): the orb goes beside
+  that node and points at it. An older one waits in its page, its bubble says so;
+- `cards`: the cards that wait and no node holds (`unheldCards`: shown already, linked to no live
+  node, such as one proposed at the home before any subject), shown above the bar with their Oui
+  and Non wherever it talks, so no card waits out of sight;
+- `waiting`: the messages that wait (below).
+
+Eriphe's lines are each brain turn's answer only, what it writes after its last tool call: a note
+written before a tool call of the same turn is meant for no one and never copied, and a text stays
+the draft until its turn's next tool call or its end decides it (`answerText`, `brain.go`). The
+first run's messages are never shown. There is no history to page back through, no suggested
+reply: the brain's questions and the buttons that answer them are `ask` buttons in the subject's
+document. The brain's memory and the stored messages are untouched: only what the orb shows. The
+cards the user must answer are in their node's page, and the attention queue delivers the others.
 
 **The messages that wait** (`messages_waiting.go`). A message the user writes while Eriphe works
 is stored undelivered; the brain's next idle hands it everything that waits, in one turn
-(`deliverConversation`). Until then the bar shows it: every exchange carries the user's
+(`deliverConversation`). Until then the bar shows it: every `orb` event carries the user's
 undelivered messages, whatever node they were said to, oldest first (`waiting`: `seq`, `text` cut
 at 500 characters, `node` and its clean `title`; the first run's never). While Eriphe is not at
 work, a message younger than 2 s is left out (an idle brain takes it at once: no clock that only
 blinks). The bar shows the newest three, each in grey with a small clock and the node it was said
-to when not the one it talks to, then « +N en attente »; below them, the last question Eriphe read
-stays. The stream rebuilds the exchange when what waits changes (`waitingKey`, each round: a
+to when not the one it talks to, then « +N en attente ». The stream rebuilds the event when what
+waits changes (`waitingKey`, each round: a
 delivery or a withdrawal adds no message). The ✕ on one is `DELETE /messages/{seq}` (CSRF token):
 the message and its attachments are deleted at once, so the brain never reads it and the
 conversation keeps no trace of it (the log keeps a line); `204`, `409` once Eriphe has it (or once
@@ -3444,16 +3473,9 @@ queue: every message of the conversation belongs to a node or to the home, in it
   stopped, a task's start declined or access decided) belongs to it; the catalog's, a machine's and
   the brain's own notes and notifications to the home. A long answer code filed says where
   (`filed`, [the safety net](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)).
-- **The column.** The stream (`GET /events?node=<id>`) sends the `exchange` event of
-  the node the bar talks to, with `node` and its `title` (none when the node is external);
-  without `node`, the home's. Eriphe's draft shows in
-  the exchange its turn answers in only, and its work (`thinking`) there or under a message of the
-  user's still waiting. A message being sent shows only where it was written. Every exchange
-  carries the cards that wait and no node holds (`cards`, `unheldCards`: shown already, linked to
-  no live node, such as one proposed at the home before any subject): the bar shows them above it
-  with their Oui and Non wherever it talks, so no card waits out of sight (the bar's only
-  buttons); a node's cards wait in its page. A plain "oui"
-  decides the card just above in its own node only (`resolveByText`).
+- **Where it shows.** The stream (`GET /events`) is the same whichever page the bar talks to:
+  the `orb` event says, for each of Eriphe's words, the node they belong to, and the orb goes
+  there. A plain "oui" decides the card just above in its own node only (`resolveByText`).
 - **Questions and their answers.** The brain writes its questions in the subject's document, each
   with its default, and below them a block of `ask` buttons for the likely answers, one taking
   every default (« Fais comme tu proposes »); a click sends the button's words, read again from
@@ -3469,8 +3491,8 @@ after 8 s (`.espace-fallback`) for a script that never loads or runs. The app sh
 an error while it draws shows the same (`FailSafe`, `Fallback.tsx`). An event stream down for more
 than 20 s (`streamDown`, `STREAM_GRACE`; the browser opens it again by itself, the page itself once
 it closed for good, after checking the session) shows a line saying so; the workspace stays as it
-was. A brain that could not answer is a line above the bar (`exchange`'s `failed`), with Réessayer
-(`POST /brain/retry`, 204) and a link to the agents' settings.
+was. A brain that could not answer says so with its orb (the `orb` event's `failed`), with
+Réessayer (`POST /brain/retry`, 204) and a link to the agents' settings.
 
 **The look** (`espace.css`, `fonts.css`): neutral greys, light or dark as the system says
 (`prefers-color-scheme`; the shell's `color-scheme` and `theme-color` follow it), pages as flat

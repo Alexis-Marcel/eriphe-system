@@ -294,7 +294,7 @@ func (w *web) handleSend(rw http.ResponseWriter, r *http.Request, s *session) {
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// handleBrainRetry is the console's "Try again" under Eriphe's error
+// handleBrainRetry is the orb's "Try again" beside Eriphe's error
 // (brain_errors.go).
 func (w *web) handleBrainRetry(rw http.ResponseWriter, r *http.Request, s *session) {
 	w.c.retryBrain()

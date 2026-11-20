@@ -47,7 +47,7 @@ func waitingSeqs(ls []waitingLine) []int {
 	return out
 }
 
-// The messages that wait for Eriphe are in the bar's exchange, in order,
+// The messages that wait for Eriphe are in the orb's event, in order,
 // with their node; one withdrawn never reaches the brain; once delivered,
 // none waits and one cannot be withdrawn any more.
 func TestWaitingMessagesWithdrawn(t *testing.T) {
@@ -58,11 +58,11 @@ func TestWaitingMessagesWithdrawn(t *testing.T) {
 	second, _ := c.store.addUserMessage("Et pour le planning ?", nil, node)
 	third, _ := c.store.addUserMessage("Et les devis ?", nil, "")
 
-	x, err := tw.w.exchangeFor("", "", "", true)
+	x, err := tw.w.orbFor("", true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(waitingSeqs(x.Waiting), []int{int(first), int(second), int(third)}) || x.Asked != nil {
+	if !slices.Equal(waitingSeqs(x.Waiting), []int{int(first), int(second), int(third)}) || x.Asked != 0 {
 		t.Fatalf("waiting while Eriphe works: %+v", x)
 	}
 	if w := x.Waiting[1]; w.Text != "Et pour le planning ?" || w.Node != node || w.Title == "" {
@@ -72,7 +72,7 @@ func TestWaitingMessagesWithdrawn(t *testing.T) {
 		t.Errorf("the first, said at the home: %+v", x.Waiting[0])
 	}
 	// Eriphe idle: a message just sent is taken at once, not shown waiting.
-	if x, _ = tw.w.exchangeFor("", "", "", false); len(x.Waiting) != 0 {
+	if x, _ = tw.w.orbFor("", false); len(x.Waiting) != 0 {
 		t.Errorf("a fresh message shown waiting while Eriphe is idle: %+v", x.Waiting)
 	}
 
@@ -90,7 +90,7 @@ func TestWaitingMessagesWithdrawn(t *testing.T) {
 	if code := withdraw(second); code != http.StatusNotFound {
 		t.Errorf("withdrawn twice: %d", code)
 	}
-	if x, _ = tw.w.exchangeFor("", "", "", true); !slices.Equal(waitingSeqs(x.Waiting), []int{int(first), int(third)}) {
+	if x, _ = tw.w.orbFor("", true); !slices.Equal(waitingSeqs(x.Waiting), []int{int(first), int(third)}) {
 		t.Errorf("after the withdrawal: %+v", x.Waiting)
 	}
 
@@ -104,7 +104,7 @@ func TestWaitingMessagesWithdrawn(t *testing.T) {
 			t.Errorf("the withdrawn message is still in the conversation: %+v", m)
 		}
 	}
-	if x, _ = tw.w.exchangeFor("", "", "", true); len(x.Waiting) != 0 || x.Asked == nil || x.Asked.Seq != int(third) {
+	if x, _ = tw.w.orbFor("", true); len(x.Waiting) != 0 || x.Asked != int(third) {
 		t.Errorf("delivered: %+v", x)
 	}
 	if code := withdraw(first); code != http.StatusConflict {

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -84,7 +85,7 @@ func TestHomeOpensTheWorkspace(t *testing.T) {
 
 // Before the wizard, / and /espace lead to it; once it is left for later,
 // the workspace opens and its boot says Eriphe has no AI yet, for the
-// console to say it with the way to the wizard. With no brain at all, the
+// bar to say it with the way to the wizard. With no brain at all, the
 // boot says that.
 func TestHomeWithoutAI(t *testing.T) {
 	boot := func(tw *testWeb) espaceBoot {
@@ -193,7 +194,8 @@ func TestLinksIntoTheGraph(t *testing.T) {
 }
 
 // The workspace's stream does not carry the conversation's past messages:
-// it starts after the last one, with the last exchange as JSON, never HTML.
+// it starts after the last one, with the orb's event as JSON (the last
+// one's seq, never its text), never HTML.
 func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 	tw, _ := homeWeb(t)
 	for range 3 {
@@ -201,9 +203,11 @@ func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := tw.c.store.addMessage(roleUser, "le dernier", true); err != nil {
+	last, err := tw.c.store.addMessage(roleUser, "le dernier", true)
+	if err != nil {
 		t.Fatal(err)
 	}
+	asked := fmt.Sprintf(`"asked":%d`, last)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)
@@ -217,7 +221,7 @@ func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 	sc.Buffer(nil, 1<<20)
 	for sc.Scan() {
 		b.WriteString(sc.Text() + "\n")
-		if strings.Contains(sc.Text(), `"text":"le dernier"`) {
+		if strings.Contains(sc.Text(), asked) {
 			time.AfterFunc(200*time.Millisecond, cancel)
 		}
 	}
@@ -227,7 +231,7 @@ func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 			t.Errorf("the stream carries %q:\n%s", gone, got)
 		}
 	}
-	if !strings.Contains(got, "event: node") || !strings.Contains(got, `"text":"le dernier"`) {
+	if !strings.Contains(got, "event: node") || !strings.Contains(got, asked) || strings.Contains(got, "le dernier") {
 		t.Errorf("the workspace's stream:\n%s", got)
 	}
 }

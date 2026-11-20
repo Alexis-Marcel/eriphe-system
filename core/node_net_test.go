@@ -48,7 +48,7 @@ func lastBrainMessage(t *testing.T, c *core) Message {
 
 // A long answer no node holds, said at home, goes in a new node titled
 // from the user's request, the answer as its doc; the answer links to it,
-// and the exchange moves into it: it opens, the console in it.
+// and the exchange moves into it: it opens, the bar in it.
 func TestNetFilesLongAnswerInNewNode(t *testing.T) {
 	c, answer := netCore(t, "Compare les devis du garage\net dis-moi lequel prendre", "")
 	answer(longAnswer)
@@ -63,12 +63,11 @@ func TestNetFilesLongAnswerInNewNode(t *testing.T) {
 	if d.Node.Meta.Title != "Compare les devis du garage" || !strings.HasPrefix(d.Node.Text(), "Voici le comparatif") || d.Node.Meta.External {
 		t.Fatalf("node %+v: %q", d.Node.Meta, d.Node.Text())
 	}
-	lines, _ := c.store.lastExchange(m.Filed)
-	if len(lines) != 2 || lines[0].Role != roleUser || lines[1].Filed != m.Filed {
-		t.Errorf("the exchange did not move into its node: %+v", lines)
+	if x, _ := (&web{c: c}).orbFor("", false); x.Answer == nil || x.Answer.Node != m.Filed || !x.Answer.More {
+		t.Errorf("the orb does not speak beside the node it went into: %+v", x.Answer)
 	}
 	if x, ok := c.lastShown(); !ok || x.Node != m.Filed || !x.Talk {
-		t.Errorf("the node is not opened with the console: %+v", x)
+		t.Errorf("the node is not opened with the bar: %+v", x)
 	}
 }
 
@@ -291,9 +290,9 @@ func TestStoreAddsMessagesNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.db.Close()
-	lines, err := s.lastExchange("")
-	if err != nil || len(lines) != 1 || lines[0].Text != "Bonjour" {
-		t.Fatalf("exchange %+v %v", lines, err)
+	msgs, err := s.queryMessages(`SELECT ` + messageCols + ` FROM messages WHERE node = ''`)
+	if err != nil || len(msgs) != 1 || msgs[0].Text != "Bonjour" {
+		t.Fatalf("the home's messages %+v %v", msgs, err)
 	}
 	if _, err := s.addNodeMessage(roleBrain, "Salut", "", "k3x9m2p7qa", true); err != nil {
 		t.Fatal(err)

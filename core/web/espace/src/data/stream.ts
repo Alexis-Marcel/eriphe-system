@@ -1,18 +1,13 @@
 import { signedOut, tab } from "./api";
 import {
-  applyDoc, applyExchange, applyMoved, applyNodes, applyNotes, applyProgress, applyShow, applySource, step, type Store,
+  applyDoc, applyMoved, applyNodes, applyNotes, applyOrb, applyProgress, applyShow, applySource, step, type Store,
 } from "./store";
 
-// The workspace's event stream, /events (web_sse.go): one per page,
-// with the page's tab id and the node the console talks to (node). Its
-// events feed the store: "node", "doc", "progress", "source", "show",
-// "exchange", "proposals" and "notice". When the console talks to another
-// node, the stream opens again for it: eriphe-core sends that node's
-// exchange, and the graph again, whole.
+// The workspace's event stream, /events (web_sse.go): one per page, with
+// the page's tab id. Its events feed the store: "node", "doc",
+// "progress", "source", "show", "orb", "proposals" and "notice".
 
-export function streamURL(talk: string | null): string {
-  return `/events?tab=${tab}${talk ? `&node=${encodeURIComponent(talk)}` : ""}`;
-}
+export const streamURL = () => `/events?tab=${tab}`;
 
 // STREAM_GRACE is how long the stream may stay down before the page says
 // so: a restart of eriphe-core or a phone waking takes less.
@@ -28,10 +23,9 @@ const parse: Parse<never> = (d) => {
 };
 
 // connect follows the stream into the store until the returned function is
-// called; it opens it again when the console talks to another node.
+// called.
 export function connect(store: Store): () => void {
   let es: EventSource | null = null;
-  let talk = store.getState().talk;
   let retry: ReturnType<typeof setTimeout> | null = null;
   let stopped = false;
 
@@ -45,7 +39,7 @@ export function connect(store: Store): () => void {
     es?.close();
     if (retry) clearTimeout(retry);
     retry = null;
-    const me = new EventSource(streamURL(talk));
+    const me = new EventSource(streamURL());
     es = me;
     me.onopen = () => store.setState({ live: true });
     me.onerror = () => {
@@ -63,20 +57,14 @@ export function connect(store: Store): () => void {
     on("progress", (v) => step(store, applyProgress, v));
     on("source", (v) => step(store, applySource, v));
     on("show", (v) => step(store, applyShow, v, Date.now()));
-    on("exchange", (v) => step(store, applyExchange, v));
+    on("orb", (v) => step(store, applyOrb, v));
     on("proposals", (v) => step(store, applyMoved, v));
     on("notice", (v) => step(store, applyNotes, v));
   };
 
-  const unsub = store.subscribe((s) => {
-    if (s.talk === talk) return;
-    talk = s.talk;
-    open();
-  });
   open();
   return () => {
     stopped = true;
-    unsub();
     es?.close();
     es = null;
     if (retry) clearTimeout(retry);
