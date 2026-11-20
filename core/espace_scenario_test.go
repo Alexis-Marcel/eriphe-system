@@ -216,7 +216,7 @@ type scenarioTools struct {
 	sent    []string
 	moved   [][]string // ranger: the ids of each call (selection.spec.ts)
 	deleted [][]string // supprimer: the ids of each call (sections.spec.ts)
-	read    []string   // lire: the id of each call (open.spec.ts)
+	read    []string   // lire: the id of each call (sources-open.spec.ts)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
 	veille *mcp.Server
@@ -315,7 +315,7 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				}
 				return nil, map[string]any{"messages": msgs}, nil
 			})
-		// lus lists two mails, lire reads one in full (open.spec.ts).
+		// lus lists two mails, lire reads one in full (sources-open.spec.ts).
 		mcp.AddTool(s, &mcp.Tool{Name: "lus", Description: "Les mails à lire", Annotations: read},
 			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
 				return nil, map[string]any{"messages": []any{
@@ -1118,7 +1118,7 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 }
 
 // handleOpen is POST /e2e/open: a view of two mails whose rows open in
-// place, each read in full by mail/lire (open.spec.ts), l1 noted in a
+// place, each read in full by mail/lire (sources-open.spec.ts), l1 noted in a
 // group; written by the brain as any author, read once, and shown.
 func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
