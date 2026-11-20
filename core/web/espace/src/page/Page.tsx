@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type PointerEvent as PtrEvent } from "react";
 import { createPortal } from "react-dom";
 import { stamp } from "../a2ui/format";
-import { archive, label, type PageAlive, type TraceEntry } from "../data/api";
+import { archive, label, type PageAlive, type PageOrigin, type TraceEntry } from "../data/api";
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
-import { NodeTitle } from "../graph/Title";
+import { NodeTitle, UnaskedMark } from "../graph/Title";
 import { useWords } from "../i18n";
 import { Cards } from "./Cards";
 import { MdTab } from "./MdTab";
@@ -80,7 +80,8 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
         <div className="pg-title">
           {/* Its title, then, on the same line, the small badge of a node
               someone else's words reached (its title marked when they
-              may have written it). */}
+              may have written it), and the sign of a node the user did
+              not ask for. */}
           <h2>
             <NodeTitle x={node} fallback={external} />
             {node?.external && (
@@ -88,6 +89,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
                 {t("espace.external.mark")}
               </em>
             )}
+            {node?.unasked && <UnaskedMark />}
           </h2>
           {node?.lifetime === "standing" && (
             <span className="pg-standing" role="img" aria-label={t("espace.standing")} title={t("espace.standing")}>
@@ -118,7 +120,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               {t("espace.page.archive")}
             </button>
           )}
-          <More tab={tab} onTab={setTab} alive={page?.alive} />
+          <More tab={tab} onTab={setTab} alive={page?.alive} origin={page?.origin} />
           <button type="button" className="pg-x" onClick={onClose} aria-label={t("espace.page.close")}>
             ✕
           </button>
@@ -177,8 +179,9 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
 // More is the page's small menu: its trace and its .md file, rarely
 // wanted, a click away; Escape or a click outside closes it. It is drawn
 // over everything (the page clips what overflows it), under its button.
-// A permanent subject's menu also says what keeps it alive (alive).
-function More({ tab, onTab, alive }: { tab: Tab; onTab: (t: Tab) => void; alive?: PageAlive }) {
+// It says where the node comes from (origin), and a permanent subject's
+// what keeps it alive (alive).
+function More({ tab, onTab, alive, origin }: { tab: Tab; onTab: (t: Tab) => void; alive?: PageAlive; origin?: PageOrigin }) {
   const { t } = useWords();
   const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
   const box = useRef<HTMLSpanElement>(null);
@@ -219,11 +222,27 @@ function More({ tab, onTab, alive }: { tab: Tab; onTab: (t: Tab) => void; alive?
                 {t(`espace.page.${k}`)}
               </button>
             ))}
+            {origin && <Origin origin={origin} />}
             {alive && <Alive alive={alive} />}
           </span>,
           document.body,
         )}
     </span>
+  );
+}
+
+// Origin is who wanted the node, as eriphe-core recorded it when it made
+// it: the user (their words quoted), a skill, an event, or not known.
+export function Origin({ origin }: { origin: PageOrigin }) {
+  const { t } = useWords();
+  return (
+    <section className={origin.unasked ? "pg-origin unasked" : "pg-origin"} role="group" aria-label={t("espace.origin")}>
+      <h3>{t("espace.origin")}</h3>
+      <p>
+        {origin.unasked && <span aria-hidden="true">↯ </span>}
+        {origin.text}
+      </p>
+    </section>
   );
 }
 

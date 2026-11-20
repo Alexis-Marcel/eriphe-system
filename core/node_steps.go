@@ -630,7 +630,7 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 			goal, _, _ = strings.Cut(strings.TrimSpace(sp.Prompt), "\n")
 		}
 		d, err := c.nodes.Create(nodestore.New{Title: sp.Title, Parent: parent, After: after, Goal: truncate(oneLine(goal), taskNodeGoalMax),
-			External: len(by.tainted) > 0, Author: by.author})
+			External: len(by.tainted) > 0, OpenedBy: c.workOrigin(parent, by.task), Author: by.author})
 		if err != nil {
 			return ids, fmt.Errorf("step %s: %w", sp.Key, err)
 		}

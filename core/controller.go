@@ -16,6 +16,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -320,6 +321,9 @@ type runRequest struct {
 	// skill's run in its standing node (skill_runs.go), not in a node of
 	// its own.
 	inNode string
+	// origin: who wanted it, when its starter knows (a skill's run);
+	// else the brain's turn, or the node it works for (node_origin.go).
+	origin *nodefile.Origin
 	// byBrain: the brain started it in its turn (run_task), so the start's
 	// card goes with its message; any other start shows its card at once
 	// (task_start.go).

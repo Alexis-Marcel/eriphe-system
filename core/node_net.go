@@ -120,7 +120,7 @@ func (c *core) fileInTalked(id, answer string, tainted bool) string {
 // as its doc (in its trace when the doc refuses it). It gives the node,
 // "" when the store refused it.
 func (c *core) fileInNew(title, answer string, tainted bool) string {
-	nw := nodestore.New{Title: title, Body: answer, External: tainted, Author: byBrain}
+	nw := nodestore.New{Title: title, Body: answer, External: tainted, OpenedBy: c.turnOrigin(), Author: byBrain}
 	d, err := c.nodes.Create(nw)
 	if err != nil {
 		nw.Body = "" // a block that does not hold, the size: the answer goes in its trace

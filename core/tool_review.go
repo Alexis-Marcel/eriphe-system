@@ -342,7 +342,7 @@ func (c *core) ensureToolReview() (string, error) {
 	}
 	lang := c.userLang()
 	d, err := c.nodes.Create(nodestore.New{Title: tr(lang, "review.title"), Lifetime: nodefile.Standing, Body: reviewBody(lang),
-		TitleTrusted: true, Author: nodeByCode})
+		TitleTrusted: true, OpenedBy: &nodefile.Origin{By: nodefile.OpenedEriphe}, Author: nodeByCode})
 	if err != nil {
 		return "", err
 	}

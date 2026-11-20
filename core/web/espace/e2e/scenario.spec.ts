@@ -109,6 +109,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(waiting.locator(".gr-label .ext-mark")).toHaveAttribute("title", "Titre écrit après une lecture extérieure");
   await expect(waiting.locator(".gr-core")).toHaveAttribute("aria-label", external);
   await expect(page.getByText("Contenu extérieur")).toHaveCount(0);
+  // A skill opened it, not the user: a small ↯ says so on its bubble.
+  await expect(waiting).toHaveClass(/unasked/);
+  await expect(waiting.locator(".gr-label .unasked-mark")).toHaveAttribute("title", "Tu ne l'as pas demandé : un skill ou un événement l'a ouvert.");
 
   // 7. The mail node opens with its triage and its draft.
   await openMail(page, mail);
@@ -133,7 +136,20 @@ test("the steps of the scenario", async ({ page, request }) => {
     expect(mid).toBeLessThan(titleBox.y + titleBox.height);
   };
   await onTitleLine(".pg-badge.warn");
+  // Not asked for: a small ↯ beside the badge, saying so, and its ⋯ menu
+  // says which skill opened it, and after what.
+  const unasked = head.locator(".unasked-mark");
+  await expect(unasked).toHaveText("↯");
+  await expect(unasked).toHaveAttribute("title", "Tu ne l'as pas demandé : un skill ou un événement l'a ouvert.");
+  await onTitleLine(".unasked-mark");
   await shot(page, "untrusted-title");
+  await mailPage.getByRole("button", { name: "Plus" }).click();
+  await expect(page.locator(".pg-menu .pg-origin.unasked p")).toHaveText(
+    "↯ Ouvert par le skill mails-trier, après ce qu'a vu la surveillance « mails-recus », sans demande de ta part.",
+  );
+  await shot(page, "origin-skill");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".pg-menu")).toHaveCount(0);
 
   // 8. A draft with its « Envoyer ? » card, the production view beside it,
   // a research child running.
@@ -243,6 +259,17 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(watch).toBeVisible();
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Garder un œil sur mes mails");
   await expect(said).toHaveText("J'ai écrit mes questions dans le sujet.");
+  // The user asked for it: no sign, and its ⋯ menu quotes their words.
+  await expect(watch.locator(".unasked-mark")).toHaveCount(0);
+  await expect(page.locator(".gr-node.unasked", { has: page.locator('.gr-core[aria-label^="Garder un œil sur mes mails"]') })).toHaveCount(0);
+  await watch.getByRole("button", { name: "Plus" }).click();
+  const origin = page.locator(".pg-menu .pg-origin");
+  await expect(origin.locator("h3")).toHaveText("D'où il vient");
+  await expect(origin.locator("p")).toHaveText("Ouvert à ta demande : « Garde un œil sur mes mails. »");
+  await expect(origin).not.toHaveClass(/unasked/);
+  await shot(page, "origin-asked");
+  await page.keyboard.press("Escape");
+  await expect(origin).toHaveCount(0);
   await expect(watch).toContainText("Par défaut au brief, jamais la nuit");
   await expect(barButtons).toHaveCount(0);
   await expect(watch.locator(".pg-foot")).toHaveCount(0);
@@ -328,6 +355,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(alive.locator(".pg-alive-monitors li")).toContainText("mails-recus");
   await expect(alive.locator(".pg-alive-skills li")).toHaveText("mails-trier lancé quand la surveillance « mails-recus » voit quelque chose, au plus une fois toutes les 15 min");
   await expect(alive.locator(".pg-alive-at")).toContainText("Mis à jour");
+  await expect(page.locator(".pg-menu .pg-origin p")).toHaveText("Ouvert à ta demande : tu as dit oui à sa carte.");
   await shot(page, "alive-menu");
   await page.keyboard.press("Escape");
   await expect(alive).toHaveCount(0);
@@ -719,6 +747,9 @@ test("the workspace on a small screen", async ({ page }) => {
 
   // nor the prod's page, its child
   await expect(rows.filter({ hasText: "Production" })).toHaveCount(0);
+  // a subject the user asked for: no ↯ in its row
+  await expect(rows.filter({ hasText: "Garder un œil sur mes mails" })).toHaveCount(1);
+  await expect(rows.filter({ hasText: "Garder un œil sur mes mails" }).locator(".unasked-mark")).toHaveCount(0);
 
   await rows.filter({ hasText: "Ma journée" }).locator("button").click();
   const day = page.locator('article.pg[aria-label="Ma journée"]');

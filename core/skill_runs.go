@@ -382,7 +382,7 @@ func (c *core) startSkillRun(ctx context.Context, sk triggeredSkill, key string,
 	}
 	// It notes items in its node (item_note): as the user wants to see them.
 	r := runRequest{Title: "Skill " + sk.Name, Prompt: skillRunPrompt(sk, standing, events, now, c.seePreferences()), Agent: sk.Trigger.Model, About: alias,
-		askStart: false, approvedInAdvance: true, cleanStart: !external, inNode: sk.Trigger.Node}
+		askStart: false, approvedInAdvance: true, cleanStart: !external, inNode: sk.Trigger.Node, origin: skillOrigin(sk.Name, events)}
 	for _, t := range sk.Trigger.Tools {
 		r.Resources = append(r.Resources, ResourceRef{Kind: "tool", Ref: t})
 	}

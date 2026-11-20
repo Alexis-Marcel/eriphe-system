@@ -65,10 +65,46 @@ type Meta struct {
 	// someone else's words (written by the user, or by an author not
 	// tainted, and unchanged since); never said on a node not external.
 	TitleTrusted bool
+	// OpenedBy is code's: who opened the node, as code knew it when it
+	// made it; nil for a node made before it was recorded (unknown).
+	OpenedBy *Origin
 	// Extra are the fields this package does not know, kept in their
 	// order and written back as they were.
 	Extra []Field
 }
+
+// Origin is who opened a node (opened_by), from what code knew, never
+// from a model's words. A node a task or a step opened says who wanted
+// that work: its maker's origin, with the task and the node it works for.
+type Origin struct {
+	// By is who wanted it: OpenedUser (a message of theirs, or their yes
+	// on a card), OpenedSkill (a skill's run), OpenedEvent (a turn of
+	// events only: a wake, an intention, a monitor's event), OpenedEriphe
+	// (one of Eriphe's own places, made by code: « Outils à revoir »).
+	By    string `yaml:"by"`
+	Msg   int    `yaml:"msg,omitempty"`     // user: the seq of the message the turn answered
+	Card  string `yaml:"card,omitempty"`    // user: the card whose yes made it (view:3)
+	Skill string `yaml:"skill,omitempty"`   // skill: its name
+	On    string `yaml:"trigger,omitempty"` // skill: what started its run (monitor:<name>, alert:<hook>, schedule)
+	Task  string `yaml:"task,omitempty"`    // the task that opened it, if one did
+	Node  string `yaml:"node,omitempty"`    // the node it was opened for: a task's, a step's parent
+}
+
+// Who wanted a node.
+const (
+	OpenedUser   = "user"
+	OpenedSkill  = "skill"
+	OpenedEvent  = "event"
+	OpenedEriphe = "eriphe"
+)
+
+// Unasked tells a node the user did not ask for: opened by a skill or
+// after an event. An unknown origin (nil) is not said either way, nor is
+// one of Eriphe's own places.
+func (o *Origin) Unasked() bool { return o != nil && UnaskedBy(o.By) }
+
+// UnaskedBy tells a by of a node the user did not ask for.
+func UnaskedBy(by string) bool { return by == OpenedSkill || by == OpenedEvent }
 
 // Field is a front-matter field this package does not know.
 type Field struct {
@@ -77,7 +113,7 @@ type Field struct {
 }
 
 // known are the front matter's fields, in the order they are written.
-var known = []string{"id", "title", "parent", "links", "after", "lifetime", "goal", "created", "done", "archived", "external", "title_trusted"}
+var known = []string{"id", "title", "parent", "links", "after", "lifetime", "goal", "created", "done", "archived", "external", "title_trusted", "opened_by"}
 
 // Node is a node's file, parsed.
 type Node struct {
@@ -89,6 +125,7 @@ type Node struct {
 	canonFront []byte // its canonical form when read
 	hasExt     bool   // the front matter said external (author writes)
 	hasTrust   bool   // the front matter said title_trusted (author writes)
+	hasOpened  bool   // the front matter said opened_by (author writes)
 	vouched    bool   // its writer stands for the title it wrote (VouchTitle)
 }
 
@@ -174,6 +211,7 @@ func parse(raw []byte, short bool) (*Node, error) {
 	if n.Meta, n.hasExt, n.hasTrust, err = decodeMeta(yml); err != nil {
 		return nil, err
 	}
+	n.hasOpened = n.Meta.OpenedBy != nil
 	if n.canonFront, err = encodeMeta(n.Meta); err != nil {
 		return nil, err
 	}
@@ -356,6 +394,9 @@ func decodeMeta(yml []byte) (m Meta, ext, trust bool, err error) {
 		case "title_trusted":
 			trust = true
 			err = v.Decode(&m.TitleTrusted)
+		case "opened_by":
+			m.OpenedBy = &Origin{}
+			err = v.Decode(m.OpenedBy)
 		default:
 			m.Extra = append(m.Extra, Field{Key: k.Value, Value: v})
 		}
@@ -415,6 +456,10 @@ func encodeMeta(m Meta) ([]byte, error) {
 		case "title_trusted":
 			if m.External && m.TitleTrusted {
 				v = true
+			}
+		case "opened_by":
+			if m.OpenedBy != nil {
+				v = m.OpenedBy
 			}
 		}
 		if v == nil {

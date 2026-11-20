@@ -382,6 +382,7 @@ func (c *core) decideView(id int64, approve bool) error {
 		return err
 	}
 	nw := c.viewNew(v)
+	nw.OpenedBy = &nodefile.Origin{By: nodefile.OpenedUser, Card: fmt.Sprintf("view:%d", id)} // their yes on its card
 	// linked to the subjects its card was raised in: on the graph it sits
 	// beside them
 	for _, n := range c.cardNodes(proposalRef(cardViewKind, id)) {

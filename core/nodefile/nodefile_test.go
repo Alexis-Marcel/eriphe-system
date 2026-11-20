@@ -612,3 +612,47 @@ func TestParts(t *testing.T) {
 		t.Fatalf("parts: %+v", ps)
 	}
 }
+
+// opened_by is code's: an author's whole write leaves it out (kept), or
+// writes it alike; changed, emptied or added, the write is refused. It
+// reads and writes back as it was.
+func TestOpenedByIsCodes(t *testing.T) {
+	meta := Meta{ID: "a1", Title: "Alerte", Lifetime: Work, Created: time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC),
+		OpenedBy: &Origin{By: OpenedSkill, Skill: "tri", On: "monitor:mails", Task: "t3"}}
+	prev, err := New(meta, "Le disque.\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := string(mustBytes(t, prev))
+	if !strings.Contains(raw, "opened_by:\n  by: skill\n  skill: tri\n  trigger: monitor:mails\n  task: t3\n") {
+		t.Fatalf("written:\n%s", raw)
+	}
+	again, err := Parse([]byte(raw))
+	if err != nil || again.Meta.OpenedBy == nil || *again.Meta.OpenedBy != *meta.OpenedBy {
+		t.Fatalf("read back %+v %v", again.Meta.OpenedBy, err)
+	}
+	if b, _ := again.AuthorBytes(); strings.Contains(string(b), "opened_by") {
+		t.Errorf("an author's bytes say it:\n%s", b)
+	}
+	for name, w := range map[string]string{
+		"changed": strings.Replace(raw, "by: skill", "by: user", 1),
+		"emptied": strings.Replace(raw, "  by: skill\n  skill: tri\n  trigger: monitor:mails\n  task: t3\n", "  by: \"\"\n", 1),
+	} {
+		if _, err := ParseAuthor([]byte(w), prev); !errors.Is(err, ErrCodeField) {
+			t.Errorf("%s: not refused: %v", name, err)
+		}
+	}
+	if _, err := ParseAuthor([]byte(raw), nil); !errors.Is(err, ErrCodeField) {
+		t.Errorf("a new node said it: %v", err)
+	}
+	none, _ := New(Meta{ID: "a2", Title: "Avant", Lifetime: Work, Created: meta.Created}, "")
+	if _, err := ParseAuthor([]byte(strings.Replace(raw, "id: a1", "id: a2", 1)), none); !errors.Is(err, ErrCodeField) {
+		t.Errorf("added on a node without one: %v", err)
+	}
+	for name, w := range map[string]string{"alike": raw, "left out": strings.Replace(raw, "opened_by:\n  by: skill\n  skill: tri\n  trigger: monitor:mails\n  task: t3\n", "", 1)} {
+		n, err := ParseAuthor([]byte(w), prev)
+		if err != nil || n.Meta.OpenedBy == nil || *n.Meta.OpenedBy != *meta.OpenedBy {
+			t.Errorf("%s: %+v %v", name, n, err)
+		}
+	}
+}

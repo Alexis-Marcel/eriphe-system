@@ -119,14 +119,15 @@ type graphNode struct {
 	Done          *time.Time `json:"done,omitempty"`
 	External      bool       `json:"external,omitempty"`
 	Version       int        `json:"version"`
-	Waits         bool       `json:"waits,omitempty"` // one of its cards waits for the user, or a source marked attention lists items (node_attention.go)
-	Line          string     `json:"line,omitempty"`  // while it runs: its task's last word of where it is
+	Waits         bool       `json:"waits,omitempty"`   // one of its cards waits for the user, or a source marked attention lists items (node_attention.go)
+	Line          string     `json:"line,omitempty"`    // while it runs: its task's last word of where it is
+	Unasked       bool       `json:"unasked,omitempty"` // a skill or an event opened it, not the user (node_origin.go)
 }
 
 // graphRow is a node's row.
 func (c *core) graphRow(sum nodestore.Summary) graphNode {
 	g := graphNode{ID: sum.ID, Title: sum.Title, TitleExternal: sum.TitleExternal(), Parent: sum.Parent, Links: sum.Links, Lifetime: string(sum.Lifetime), State: sum.State,
-		Created: sum.Created, Updated: sum.Updated, External: sum.External, Version: sum.Version}
+		Created: sum.Created, Updated: sum.Updated, External: sum.External, Version: sum.Version, Unasked: sum.Unasked()}
 	if !sum.Done.IsZero() {
 		d := sum.Done
 		g.Done = &d
@@ -170,6 +171,8 @@ type nodePage struct {
 	Refs map[string]pageRef `json:"refs"`
 	// Alive: a standing node's sources, monitors and skills (node_alive.go).
 	Alive *pageAlive `json:"alive,omitempty"`
+	// Origin: who wanted it, as code recorded it (node_origin.go).
+	Origin pageOrigin `json:"origin"`
 }
 
 // pageRef is the node a [[link]] of a page opens: its id, its title as
@@ -244,6 +247,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		p.Archived = &a
 	}
 	p.Alive = c.nodeAlive(sum, lang)
+	p.Origin = c.nodeOriginLine(d.Node.Meta.OpenedBy, lang)
 	if vs, err := c.nodes.Versions(id); err == nil {
 		if len(vs) > 1 && vs[0].N == 1 && d.Version.N != 1 {
 			if first, err := c.nodes.Read(id, 1); err == nil && strings.TrimSpace(nodeBody(first.Raw)) == "" {

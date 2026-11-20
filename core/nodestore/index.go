@@ -45,6 +45,7 @@ const schema = `CREATE TABLE nodes (
 	  archived INTEGER NOT NULL DEFAULT 0,
 	  external INTEGER NOT NULL DEFAULT 0,
 	  title_trusted INTEGER NOT NULL DEFAULT 0, -- external, its title is not someone else's words
+	  opened_by TEXT NOT NULL DEFAULT '', -- who wanted it (its opened_by's by), '' unknown
 	  version INTEGER NOT NULL,          -- the last version's n
 	  blob TEXT NOT NULL,                -- the file's git hash, to tell a change made outside
 	  title_key TEXT NOT NULL DEFAULT ''); -- its title as a [[link]] matches it (nodefile.LinkKey)
@@ -112,6 +113,18 @@ func openIndex(path string) (db *sql.DB, fresh bool, err error) {
 		}
 		if n == 0 {
 			if _, err := db.Exec(`ALTER TABLE node_items ADD COLUMN grp TEXT NOT NULL DEFAULT ''`); err != nil {
+				db.Close()
+				return nil, false, err
+			}
+		}
+		// An index made before opened_by lacks it: no file said it then
+		// ('', unknown, its default).
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('nodes') WHERE name = 'opened_by'`).Scan(&n); err != nil {
+			db.Close()
+			return nil, false, err
+		}
+		if n == 0 {
+			if _, err := db.Exec(`ALTER TABLE nodes ADD COLUMN opened_by TEXT NOT NULL DEFAULT ''`); err != nil {
 				db.Close()
 				return nil, false, err
 			}
@@ -190,14 +203,18 @@ type querier interface {
 // the nodes they were resolved to; a new one waits for resolveRefs.
 func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version int, updated time.Time) error {
 	m := n.Meta
-	_, err := tx.Exec(`INSERT INTO nodes (id, file, title, parent, lifetime, created, updated, done, archived, external, title_trusted, version, blob, title_key)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	by := ""
+	if m.OpenedBy != nil {
+		by = m.OpenedBy.By
+	}
+	_, err := tx.Exec(`INSERT INTO nodes (id, file, title, parent, lifetime, created, updated, done, archived, external, title_trusted, opened_by, version, blob, title_key)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET file = excluded.file, title = excluded.title, parent = excluded.parent,
 		  lifetime = excluded.lifetime, updated = excluded.updated, done = excluded.done, archived = excluded.archived,
-		  external = excluded.external, title_trusted = excluded.title_trusted, version = excluded.version, blob = excluded.blob,
+		  external = excluded.external, title_trusted = excluded.title_trusted, opened_by = excluded.opened_by, version = excluded.version, blob = excluded.blob,
 		  title_key = excluded.title_key`,
 		m.ID, file, m.Title, m.Parent, string(m.Lifetime), m.Created.Unix(), updated.Unix(),
-		unixOr0(m.Done), unixOr0(m.Archived), m.External, m.External && m.TitleTrusted, version, blobHash(raw), nodefile.LinkKey(m.Title))
+		unixOr0(m.Done), unixOr0(m.Archived), m.External, m.External && m.TitleTrusted, by, version, blobHash(raw), nodefile.LinkKey(m.Title))
 	if err != nil {
 		return err
 	}
