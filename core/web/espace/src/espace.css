@@ -822,3 +822,33 @@ a.notice-text:hover { text-decoration: underline; }
   .a2-shimmer, .a2-button.is-busy::after, .dot.run, .gr-halo, .gr-ring-run, .gr-ring-yours, .gr-edge, .cs-orb-glow, .cs-wave i, .cs-dots i, .pg-skel i { animation: none; }
   .btn, .a2-option span, .gr-core, .gr-link, .pg { transition: none; }
 }
+
+/* Picking items in a list, and the actions on them (a2ui/picks.tsx): the
+   boxes show on hover, once something is picked, and always on a touch
+   screen; the bar only once something is picked. */
+.a2-picks { position: relative; display: flex; flex-direction: column; gap: 6px; }
+.a2-pickable > li { display: flex; align-items: flex-start; gap: 8px; }
+.a2-pickrow { flex: 1; min-width: 0; }
+.a2-pick { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--accent); cursor: pointer; opacity: 0; transition: opacity 120ms; }
+.a2-pickall { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 12px; color: var(--fg3); cursor: pointer; opacity: 0; transition: opacity 120ms; }
+.a2-pickall .a2-pick { margin: 0; }
+.a2-picks:hover .a2-pick, .a2-picks:hover .a2-pickall, .a2-picks.picking .a2-pick, .a2-picks.picking .a2-pickall,
+.a2-pick:focus-visible, .a2-pickall:focus-within { opacity: 1; }
+@media (hover: none) { .a2-pick, .a2-pickall { opacity: 1; } }
+.a2-pickable > li.picked { background: color-mix(in oklab, var(--accent) 7%, transparent); border-radius: var(--r-sm); }
+.a2-pickbar { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); box-shadow: var(--shadow); }
+.a2-pickcount { font-size: 12px; color: var(--fg3); margin-right: 4px; }
+.a2-pickact { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: none; color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; }
+.a2-pickact:hover { background: var(--fill); }
+.a2-pickact:disabled { opacity: 0.5; cursor: default; }
+.a2-pickhint { color: var(--fg3); font-size: 11px; }
+.a2-pickask { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--fill); font-size: 13px; }
+.a2-pickask p { margin: 0; color: var(--fg2); }
+.a2-pickask dl { margin: 0; }
+.a2-pickask dt { font-family: var(--mono); font-size: 12px; }
+.a2-pickask dd { margin: 0 0 0 12px; font-family: var(--mono); font-size: 12px; color: var(--fg2); }
+.a2-pickask ul { margin: 0; padding-left: 18px; color: var(--fg2); }
+.a2-pickask-btns { display: flex; gap: 6px; justify-content: flex-end; }
+.a2-pickdone { margin: 0; font-size: 12px; color: var(--ok-text); }
+.a2-pickdone.failed { color: var(--hot-text); }
+@media (prefers-reduced-motion: reduce) { .a2-pick, .a2-pickall { transition: none; } }

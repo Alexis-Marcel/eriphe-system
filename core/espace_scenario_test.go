@@ -51,6 +51,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/mail", sc.handleMail)
 	mux.HandleFunc("POST /e2e/finish/{key}", sc.handleFinish)
 	mux.HandleFunc("GET /e2e/tools", sc.handleTools)
+	mux.HandleFunc("POST /e2e/actions", sc.handleActions)
 	mux.Handle("/", sc.web.w.routes())
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -202,9 +203,19 @@ func (sc *scenario) seed() {
 // scenarioTools are the faked tools: the house's lights, the calendar,
 // the mail and the production app's errors.
 type scenarioTools struct {
-	mu   sync.Mutex
-	lit  []string
-	sent []string
+	mu    sync.Mutex
+	lit   []string
+	sent  []string
+	moved [][]string // ranger: the ids of each call (selection.spec.ts)
+}
+
+// boite is the mailbox the list with actions shows (selection.spec.ts):
+// what ranger moved leaves it.
+var boite = []map[string]any{
+	{"id": "b1", "subject": "Facture d'octobre", "from": "facturation@example.org"},
+	{"id": "b2", "subject": "Lettre d'information", "from": "news@example.org"},
+	{"id": "b3", "subject": "Réunion de lundi", "from": "sam@example.org"},
+	{"id": "b4", "subject": "Promotion de la semaine", "from": "promo@example.org"},
 }
 
 func (f *scenarioTools) server(name string) *mcp.Server {
@@ -235,6 +246,34 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				return nil, map[string]any{"messages": []any{
 					map[string]any{"id": "m1", "subject": "Facture d'octobre", "from": "facturation@example.org"},
 				}}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "boite", Description: "La boîte de réception", Annotations: read},
+			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				gone := map[string]bool{}
+				for _, ids := range f.moved {
+					for _, id := range ids {
+						gone[id] = true
+					}
+				}
+				msgs := []any{}
+				for _, m := range boite {
+					if !gone[m["id"].(string)] {
+						msgs = append(msgs, m)
+					}
+				}
+				return nil, map[string]any{"messages": msgs}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "move", Description: "Range des mails dans un dossier"},
+			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+				IDs []string `json:"ids"`
+				To  string   `json:"to"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.moved = append(f.moved, slices.Clone(in.IDs))
+				return nil, map[string]any{"moved": len(in.IDs)}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "envoyer", Description: "Envoie un mail"},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
@@ -808,7 +847,33 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f := sc.tools
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent)})
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved)})
+}
+
+// handleActions is POST /e2e/actions: a node whose block lists the
+// mailbox with an action that archives what the user picks
+// (selection.spec.ts), written by the brain as any author, read once, and
+// shown.
+func (sc *scenario) handleActions(rw http.ResponseWriter, r *http.Request) {
+	c := sc.c
+	d, err := c.nodes.Create(nodestore.New{Title: "Tri de la boîte", Lifetime: nodefile.Standing, Author: byBrain, Body: "La boîte, à trier.\n"})
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id := d.Node.Meta.ID
+	body := "La boîte, à trier.\n\n```eriphe:block boite\n" + `{"components": [
+  {"id": "root", "component": "List", "children": {"path": "/boite/messages", "componentId": "row"}},
+  {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
+ "sources": {"boite": {"tool": "mail/boite", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}},
+ "actions": {"archive": {"label": "Ranger", "tool": "mail/move", "args": {"to": "archive"}, "items": "ids", "source": "boite"}}}` + "\n```\n"
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	c.readNode(sc.ctx, id, nil, time.Now())
+	c.showNode(id, byBrain, false)
+	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
 }
 
 // handleFinish is POST /e2e/finish/{key}: the worker so named finishes.

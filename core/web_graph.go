@@ -213,6 +213,9 @@ type pageBlock struct {
 	Error      string           `json:"error,omitempty"`
 	Card       string           `json:"card,omitempty"`
 	Proposal   *proposalView    `json:"proposal,omitempty"`
+	// Lists: the Lists the user may pick items in, and the actions on
+	// them (list_actions.go).
+	Lists []pageList `json:"lists,omitempty"`
 }
 
 var errNoNode = errors.New("no such node")
@@ -264,6 +267,9 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 			continue
 		}
 		b := c.blockView(id, part.Block, reads)
+		if b.Error == "" && b.Card == "" {
+			b.Lists = c.blockLists(part.Block, b.Data, lang)
+		}
 		if b.Card != "" && b.Error == "" {
 			b.Proposal = w.placedCard(id, part.Block, lang)
 		}

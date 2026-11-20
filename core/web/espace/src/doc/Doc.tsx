@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createAdapter, type Adapter } from "../a2ui/adapter";
 import { Markdown, type Wiki } from "../a2ui/markdown";
+import { PicksContext, type Picks } from "../a2ui/picks";
 import { SurfaceView } from "../a2ui/Surfaces";
-import { ask, mark, type NodePage } from "../data/api";
+import { act, ask, mark, type NodePage, type PickItem } from "../data/api";
 import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Cards } from "../page/Cards";
-import { blockOf, messages, pieces, sourceMessage, toGesture, type Piece } from "./blocks";
+import { blockOf, messages, pickLists, pieces, sourceMessage, toGesture, type Piece } from "./blocks";
 
 // Doc draws a node's page: its text as Markdown, by the page's own
 // renderer, which makes no HTML of it; its blocks through the A2UI
@@ -19,6 +20,9 @@ import { blockOf, messages, pieces, sourceMessage, toGesture, type Piece } from 
 // from a block someone else's words may have written, nothing is sent.
 // A [[link]] of its text opens the node eriphe-core resolved it to
 // (page.refs) beside the page (onOpen), named as the graph names it now.
+// On the last version, live, a List of a source's items an action acts on
+// lets the user pick rows and run the action (a2ui/picks.tsx): its rows
+// follow the source's, the click goes to eriphe-core.
 export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: boolean; live: boolean; onOpen?: (id: string) => void }) {
   const { t, lang } = useWords();
   const nodes = useGraph((s) => s.nodes);
@@ -72,31 +76,58 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
     });
   }, [adapter, latest, live, page]);
 
+  // The rows of the lists to pick in, as the stream sends them after the
+  // page was read; the page's own until then.
+  const [rows, setRows] = useState<Record<string, PickItem[]>>({});
+  useEffect(() => {
+    setRows({});
+    if (!latest) return;
+    const id = page.node.id;
+    return store.subscribe((s, before) => {
+      if (s.rows === before.rows) return;
+      const mine: Record<string, PickItem[]> = {};
+      for (const [k, v] of Object.entries(s.rows)) if (before.rows[k] !== v && k.startsWith(id + "\u0000")) mine[k] = v;
+      if (Object.keys(mine).length) setRows((r) => ({ ...r, ...mine }));
+    });
+  }, [latest, page]);
+  const [kept] = useState<Picks["kept"]>(() => new Map());
+  const picks = useMemo<Picks | null>(() => {
+    if (!latest || !live) return null;
+    const lists = pickLists(page, (block, source) => rows[sourceKey(page.node.id, block, source)]);
+    return {
+      list: (surface, component) => lists.get(surface)?.find((l) => l.component === component),
+      run: (surface, _list, action, ids) => act(page.node.id, surface.slice(page.node.id.length + 2), action.name, page.version, ids),
+      kept,
+    };
+  }, [latest, live, page, rows, kept]);
+
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   if (ps.length === 0) return <p className="pg-empty">{t("espace.page.empty")}</p>;
   return (
-    <div className="pg-doc">
-      {ps.map((p: Piece, i) => {
-        if (p.kind === "text") return <Markdown key={i} text={p.text} newTab={t("espace.a2.newtab")} wiki={wiki} />;
-        if (p.kind === "broken") return <p key={i} className="pg-broken" role="note">{t("espace.page.broken", p.name)}</p>;
-        if (p.kind === "card")
-          return p.found ? (
-            <div key={p.surface} className="pg-card" data-card={p.ref}>
-              <Cards surface={p.surface} refs={[p.ref]} />
-            </div>
-          ) : (
-            <p key={p.surface} className="pg-card-missing" role="note">
-              {t("espace.card.missing")}
-            </p>
+    <PicksContext.Provider value={picks}>
+      <div className="pg-doc">
+        {ps.map((p: Piece, i) => {
+          if (p.kind === "text") return <Markdown key={i} text={p.text} newTab={t("espace.a2.newtab")} wiki={wiki} />;
+          if (p.kind === "broken") return <p key={i} className="pg-broken" role="note">{t("espace.page.broken", p.name)}</p>;
+          if (p.kind === "card")
+            return p.found ? (
+              <div key={p.surface} className="pg-card" data-card={p.ref}>
+                <Cards surface={p.surface} refs={[p.ref]} />
+              </div>
+            ) : (
+              <p key={p.surface} className="pg-card-missing" role="note">
+                {t("espace.card.missing")}
+              </p>
+            );
+          const s = surfaces.find((x) => x.id === p.surface);
+          return (
+            <section key={p.surface} className="a2-block" data-surface={p.surface}>
+              {p.block.external && <span className="a2-text-mark">{t("espace.external.mark")}</span>}
+              {s && <SurfaceView surface={s} />}
+            </section>
           );
-        const s = surfaces.find((x) => x.id === p.surface);
-        return (
-          <section key={p.surface} className="a2-block" data-surface={p.surface}>
-            {p.block.external && <span className="a2-text-mark">{t("espace.external.mark")}</span>}
-            {s && <SurfaceView surface={s} />}
-          </section>
-        );
-      })}
-    </div>
+        })}
+      </div>
+    </PicksContext.Provider>
   );
 }

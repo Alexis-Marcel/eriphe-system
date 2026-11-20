@@ -239,7 +239,11 @@ func (w *web) sendGraphChanges(rw http.ResponseWriter, after int, seq int64) (in
 			if !ok {
 				continue
 			}
-			data = map[string]any{"node": ev.Node, "block": ev.Block, "name": ev.Name, "value": v}
+			m := map[string]any{"node": ev.Node, "block": ev.Block, "name": ev.Name, "value": v}
+			if rows := w.c.blockSourceRows(ev.Node, ev.Block, ev.Name, v); rows != nil {
+				m["items"] = rows // the rows a List picks in (list_actions.go)
+			}
+			data = m
 		case graphEvShow:
 			x, ok := w.c.lastShown()
 			if !ok {

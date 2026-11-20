@@ -1,6 +1,6 @@
 import type { Action, Message } from "../a2ui/adapter";
 import { CATALOG } from "../a2ui/catalog";
-import type { NodePage, PageBlock } from "../data/api";
+import type { NodePage, PageBlock, PickItem, PickList } from "../data/api";
 
 // A node's page as the page draws it (web_graph.go's nodePage): its text
 // as Markdown, its blocks as A2UI surfaces, one per block, through the
@@ -55,6 +55,22 @@ export function messages(page: NodePage): Message[] {
 // sourceMessage puts a source's new value where the block reads it.
 export function sourceMessage(node: string, block: string, name: string, value: unknown): Message {
   return { version: "1.0", updateDataModel: { surfaceId: surfaceOf(node, block), path: `/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`, value } };
+}
+
+// pickLists are the Lists the user may pick items in, by their block's
+// surface (list_actions.go): none from a block that is not drawn. Each
+// one's rows are the source's latest (rows, as the stream sent them),
+// else the page's.
+export function pickLists(page: NodePage, rows: (block: string, source: string) => PickItem[] | undefined): Map<string, PickList[]> {
+  const out = new Map<string, PickList[]>();
+  for (const p of pieces(page)) {
+    if (p.kind !== "block" || !Array.isArray(p.block.lists) || !p.block.lists.length) continue;
+    out.set(
+      p.surface,
+      p.block.lists.map((l) => ({ ...l, items: rows(p.block.name, l.source) ?? l.items ?? [] })),
+    );
+  }
+  return out;
 }
 
 // blockOf is a block of the page, by its name.

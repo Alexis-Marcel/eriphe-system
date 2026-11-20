@@ -1041,7 +1041,9 @@ body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
 - **Lossless:** a file parsed then written gives the same bytes; what changes through the API is
   written again in its canonical form, the rest keeps its bytes.
 - **Each block checked alone**: the catalog (`a2ui`), its links, and its
-  bindings against its own data, its sources (`/<name>`) and the user's marks (`/marks/<list>/<item>`).
+  bindings against its own data, its sources (`/<name>`) and the user's marks (`/marks/<list>/<item>`),
+  and the shape of its `actions` (a name, a `server/tool`, the parameter that takes the ids, not
+  among the fixed `args`, a source of the block with `items`).
   A bad block is a `BlockError` that names it.
 - **Code's fields** (a block's `snapshot`, `marks` and `external`, the node's `after` and `external`) are set by
   code (`SetMark`, `SetSnapshot`, `SetBlockExternal`, `Meta.External`). An author's write goes
@@ -1050,7 +1052,9 @@ body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
   in its short form (one component, no root); it is completed.
 
 The checks that need the core (actions, offers, a Proposal after external content, a bound Link's
-value, taint) are the tools' that write nodes.
+value, taint) are the tools' that write nodes. A block's `actions` are checked against the catalog
+there (`actionOK`, from `nodeGuard`, whoever writes): the tool is there, its `items` parameter is a
+list, and the fixed `args` hold against its input schema with that parameter left out.
 
 ## Node store (`nodestore/`, `nodes.go`)
 
@@ -3090,7 +3094,12 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   while the last version shows) and the user's marks at `/marks/<list>/<item>`; or its `error`
   when it does not read as a block. Its media go through eriphe-core (`/espace/media`, signed),
   those an external block's author wrote dropped unless a source gave them; a Link keeps to the
-  addresses a Link may open. The node's goal is never sent (it is in its file). `refs`: the node
+  addresses a Link may open. `lists` (`list_actions.go`): each List bound as a whole to the items
+  of a source an action acts on (`component`, `source`), its rows (`items`: `n`, its place in the
+  source's list, `id`, `title`, `detail`) and the actions' buttons (`actions`: `name`, `one` and
+  `many` with `{n}`, the words code builds from the tool and its fixed args, `tool`, `args` a line
+  each, `hint` the author's label but on an external block, `confirm` for a tool that looks
+  destructive). The node's goal is never sent (it is in its file). `refs`: the node
   each `[[name]]` of its text opens, by the name as written (`id`, `title`, none when it may be
   someone else's words, `external`, `archived`); a name no node has is not there.
 - `GET /api/nodes/{id}/trace`: the trace's entries, oldest first (`at`, `author`: brain, user,
@@ -3115,7 +3124,8 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   reads it again;
 - `progress`: a task's line (`{node, text, at}`), from its `progress` tool, only when the task read
   nothing external (a tainted line stays in the trace, never under the bubble);
-- `source`: a live block's new value (`{node, block, name, value}`), sent when its read changed;
+- `source`: a live block's new value (`{node, block, name, value}`), sent when its read changed,
+  with its rows (`items`, as `lists` gives them) when an action acts on it;
 - `show`: Eriphe asks to open a node's page (`{node, by, at, seq}`), the last one at once, then each
   new one; the page opens it beside what is open, once (an old one, over a minute, is not news);
 - `exchange` (below), `proposals` and `notice`.
@@ -3133,6 +3143,17 @@ token in `X-CSRF-Token`:
 - `POST /api/nodes/{id}/ask` `{block, component}`: a block's button. Its words are read again in
   the stored block (`a2ui.AskText`), never taken from the page, and become the user's message to
   that node; a block written after reading external content asks nothing (`403`).
+- `POST /api/nodes/{id}/act` `{block, action, version, ids}`: one of a block's actions on the items
+  the user picked (`web_list_actions.go`), the user's own gesture. The action is read again in the
+  stored block, the same at the version the page showed (`version`) as at the last (`409`
+  otherwise); every id must be one the source lists now (its last read, else its snapshot: `400`,
+  nothing run), sent to the tool as the source gave it; 200 items at most. The tool's policy
+  holds: never (or a call that must name its account) is `403`; on approval the click is the
+  user's yes; free runs. One call with the fixed `args` and the ids in its `items` parameter, kept
+  in the decisions' journal (`by` user, the reason saying the click counted as the yes) and in the
+  node's trace in code's words (never the items' titles); no turn. Then the source is read again;
+  `200` `{text, done}` says in a line what was done (« 2 déplacés »), any other answer `{error}`,
+  why not (`502` with the tool's error, as plain text, when it failed: for the call as a whole).
 - `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
   below it stops, and the cascade leaves the graph; `reopenNode`: back with what was archived with
   it and the archived parents it needs, in one commit).

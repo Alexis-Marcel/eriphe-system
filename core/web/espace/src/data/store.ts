@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { BarLine, Exchange, GraphNode, Moved, Note, Place, Theme, View } from "./api";
+import type { BarLine, Exchange, GraphNode, Moved, Note, PickItem, Place, Theme, View } from "./api";
 
 // The workspace's state: the graph as eriphe-core streams it (stream.ts),
 // and what the user has open. The graph is core's: the page never changes a
@@ -25,6 +25,9 @@ export type State = {
   progress: Record<string, Progress>;
   // the sources' last values, by node, block and name
   sources: Record<string, unknown>;
+  // the rows a List picks in, of the sources an action acts on, by node,
+  // block and name (list_actions.go)
+  rows: Record<string, PickItem[]>;
   open: string[];
   talk: string | null;
   shown: number; // the last show applied
@@ -42,6 +45,7 @@ export const empty = (): State => ({
   traces: {},
   progress: {},
   sources: {},
+  rows: {},
   open: [],
   talk: null,
   shown: 0,
@@ -113,11 +117,13 @@ export function applyProgress(s: State, ev: ProgressEvent): State {
   return { ...s, progress: { ...s.progress, [ev.node]: { text: ev.text, at: ev.at } } };
 }
 
-export type SourceEvent = { node: string; block: string; name: string; value: unknown };
+export type SourceEvent = { node: string; block: string; name: string; value: unknown; items?: PickItem[] };
 
 export function applySource(s: State, ev: SourceEvent): State {
   if (!ev || typeof ev.node !== "string" || typeof ev.block !== "string" || typeof ev.name !== "string") return s;
-  return { ...s, sources: { ...s.sources, [sourceKey(ev.node, ev.block, ev.name)]: ev.value } };
+  const key = sourceKey(ev.node, ev.block, ev.name);
+  const rows = Array.isArray(ev.items) ? { ...s.rows, [key]: ev.items } : s.rows;
+  return { ...s, sources: { ...s.sources, [key]: ev.value }, rows };
 }
 
 // SHOW_FRESH is how old a show may be and still open a page when the stream

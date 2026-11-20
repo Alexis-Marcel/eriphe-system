@@ -19,6 +19,8 @@ import strings from "../strings.json";
 //   block's Mark and button), .../archive and .../reopen, PUT and DELETE
 //   .../place (where a bubble was dropped), PUT /api/espace/view (the pages
 //   open, the display settings);
+// - POST /api/nodes/{id}/act: an action on the items picked in a list
+//   (web_list_actions.go);
 // - POST /presence: whether this tab is in front of the user (presence.ts).
 // No control of the page keeps a rule or a preference: the user says it to
 // Eriphe, who remembers it. A request without a session gets 401: the page
@@ -163,7 +165,18 @@ export type PageBlock = {
   error?: string;
   card?: string;
   proposal?: ProposalView;
+  // the Lists the user may pick items in, and the actions on them
+  // (list_actions.go)
+  lists?: PickList[];
 };
+
+// A row the user may pick: its place in its source's list (n), its id,
+// what it shows. An action's words are code's: one for one item, many
+// with {n}; hint is the author's label, never on an external block;
+// confirm: a tool that throws away, asked once more with its exact call.
+export type PickItem = { n: number; id: string; title?: string; detail?: string };
+export type PickAction = { name: string; one: string; many: string; tool: string; args?: string[]; hint?: string; confirm?: boolean };
+export type PickList = { component: string; source: string; items: PickItem[]; actions: PickAction[] };
 
 export type TraceEntry = { at: string; author: string; text: string };
 // A node's file as it is (md), its body as the user edits it (body), the
@@ -205,6 +218,14 @@ export async function mark(id: string, block: string, list: string, item: string
 // ask sends a block's button: eriphe-core reads its words in the block.
 export async function ask(id: string, block: string, component: string): Promise<boolean> {
   return (await sendJSON("POST", `${nodePath(id)}/ask`, { block, component })).status === 204;
+}
+
+// act runs one of a block's actions on the items picked: the user's own
+// gesture (web_list_actions.go). ok, with the line that says what was
+// done, or why not.
+export async function act(id: string, block: string, action: string, version: number, ids: string[]): Promise<{ ok: boolean; text: string }> {
+  const r = await sendJSON<{ text?: string; error?: string }>("POST", `${nodePath(id)}/act`, { block, action, version, ids });
+  return { ok: r.status === 200, text: r.data?.text ?? r.data?.error ?? "" };
 }
 
 export async function archive(id: string): Promise<boolean> {

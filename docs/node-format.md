@@ -119,6 +119,7 @@ The body is markdown. A **block** is a fenced section that starts with a line
 | `components` | the author | A flat list of components of Eriphe's catalog (`core/a2ui/catalog_v1.json`), one with id `root`. |
 | `data` | the author | An object: the values its components read. |
 | `sources` | the author | Live sources read by code, by name: each one's value is at `/<name>`. |
+| `actions` | the author | What the user may run on the items of a source they pick in a list, by name ([Actions](#actions)). |
 | `snapshot` | code | The sources' last good values by name, with `at` (when they were read), so that the file reads well offline. |
 | `marks` | code | The user's marks: by list, then by item, `keep`, `drop` or `done`. |
 | `external` | code | `true` when the block was written after reading external content, or binds a source of a server that is not trusted. |
@@ -155,6 +156,37 @@ that fails keeps the last good value. A value that changed is written into the b
 with `at`, in a version by `eriphe`, once a quarter of an hour at most per block; a block that
 reads a server that is not trusted is marked `external`. An author's write made on a version older
 than code's snapshot is not stale: it applies over it, the snapshot kept.
+
+### Actions
+
+A block may declare what the user can run on the items of one of its sources, by name:
+
+```json
+"actions": {"archive": {"label": "Ranger", "tool": "mail/move", "args": {"to": "archive"},
+                        "items": "ids", "source": "inbox"}}
+```
+
+- `tool`: a catalog tool, `<server>/<tool>`, as a source's; `args`: its fixed arguments;
+- `items`: the tool's parameter that takes the ids the user picks, a list; never among `args`;
+- `source`: one of the block's sources, with an `items` descriptor (the ids are its items' `id`);
+- `label`: the author's name for it, one line, 60 characters at most: only a hint.
+
+A name is lowercase letters, digits, `_` and `-`, 40 at most. When an author writes it, code checks
+it against the catalog: the tool is there, `items` is one of its parameters that takes a list, and
+`args` hold against its input schema with that parameter left out.
+
+A `List` bound as a whole to that source's items (its template's `path` is `/<source>/<items.path>`,
+a path of plain fields) lets the user pick rows: a box on each, « tout sélectionner », and, once
+something is picked, the actions over the list. What a button says is code's, built from the tool
+and its fixed args (« Déplacer 2 éléments → archive (mail/move) »); the `label` shows beside it,
+never on an `external` block. A tool that looks destructive (it says so, or `trash`, `delete`,
+`remove` in its name or description) shows its exact call (the tool, its args, the items picked)
+before it runs.
+
+The click is the user's own gesture: code reads the action again in the block as stored, checks
+that every id picked is one the source lists, and runs one call, with the tool's access policy
+(never: refused; on approval: the click is the yes, logged as such; free: runs). The node's trace
+says it in code's words. The source is then read again.
 
 ### Code's fields
 
