@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -38,6 +39,25 @@ func askOn(t *testing.T, c *core, node, tool string, input map[string]any, label
 	return id
 }
 
+// moveWords is what a folded card of moves to the archive says, as a list
+// action's button would (actionWords): for how many.
+func moveWords(n string) string {
+	return "Déplacer " + n + " → account : sam@example.org, to : archive (monitor/move)"
+}
+
+// waitTraced waits until the node's trace tells n decided moves: a call
+// run on a yes is traced after its card says it is done.
+func waitTraced(t *testing.T, c *core, node string, n int) {
+	t.Helper()
+	for i := 0; i < 300; i++ {
+		if raw, _ := c.nodes.Trace(node); strings.Count(string(raw), "mcp__monitor__move") >= n {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("the node's trace lacks %d moves", n)
+}
+
 // batchOf is the card a call is on.
 func batchOf(c *core, id int64) int64 {
 	a, _ := c.accessAskOf(id)
@@ -45,7 +65,7 @@ func batchOf(c *core, id int64) int64 {
 }
 
 // The skill, woken once per mail, proposes to archive each: one card
-// « Archiver 2 mails » in the view, each mail a line the user may leave
+// « Déplacer 2 éléments → … » in the view, each mail a line the user may leave
 // out, Oui saying how many go.
 func TestSameKindCallsWaitAsOneCard(t *testing.T) {
 	c, node, r := mailView(t)
@@ -58,7 +78,7 @@ func TestSameKindCallsWaitAsOneCard(t *testing.T) {
 		t.Fatalf("cards %+v", calls)
 	}
 	p := calls[0]
-	if got := p.Text("fr"); got != "Archiver 2 mails" {
+	if got := p.Text("fr"); got != moveWords("2 éléments") {
 		t.Errorf("text %q", got)
 	}
 	var lines []string
@@ -71,7 +91,7 @@ func TestSameKindCallsWaitAsOneCard(t *testing.T) {
 	if !slices.Equal(lines, []string{"« STAGE – Data Engineer » · Emplois Example", "« Votre lettre de la semaine » · news@example.org"}) {
 		t.Errorf("choices %q", lines)
 	}
-	if got := p.acts("fr"); !slices.Equal(got, []string{"Archiver 1 mail", "Archiver 2 mails"}) {
+	if got := p.acts("fr"); !slices.Equal(got, []string{moveWords("1 élément"), moveWords("2 éléments")}) {
 		t.Errorf("acts %q", got)
 	}
 	if len(p.Fields) != 2 || !p.Fields[0].Detail || !p.Fields[1].Detail {
@@ -125,13 +145,13 @@ func TestFoldKeepsApartWhatDiffers(t *testing.T) {
 		t.Errorf("the folded card is still linked: %v", ns)
 	}
 	p := c.proposalOf(cardCalls, a)
-	if got := p.Text("fr"); got != "Archiver 4 mails" {
+	if got := p.Text("fr"); got != moveWords("4 éléments") {
 		t.Errorf("text %q", got)
 	}
-	if got := p.acts("fr"); len(got) != 4 || got[3] != "Archiver 4 mails" {
+	if got := p.acts("fr"); len(got) != 4 || got[3] != moveWords("4 éléments") {
 		t.Errorf("acts %q", got)
 	}
-	if xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardCalls, a)); len(xs) != 1 || xs[0].Text != "Archiver 4 mails" {
+	if xs, _ := c.cardsWhere(`ref = ?`, proposalRef(cardCalls, a)); len(xs) != 1 || xs[0].Text != moveWords("4 éléments") {
 		t.Errorf("the card kept %+v", xs)
 	}
 	// Folded once: the next sync changes nothing.
@@ -204,15 +224,16 @@ func TestChosenCallsRunAlone(t *testing.T) {
 	if p.Pending || p.Outcome != cardApproved {
 		t.Errorf("the card %+v", p)
 	}
-	if got := p.Text("fr"); got != "Archiver 2 mails · 1 laissé" {
+	if got := p.Text("fr"); got != "2 déplacés, 1 laissé" {
 		t.Errorf("decided text %q", got)
 	}
-	if x, _ := c.card(card); x.State != cardApproved || x.Text != "Archiver 2 mails · 1 laissé" {
+	if x, _ := c.card(card); x.State != cardApproved || x.Text != moveWords("2 éléments")+", 1 laissé" {
 		t.Errorf("the card %+v", x)
 	}
 	if code, _ := yes(url.Values{"only": {"x"}}); code != http.StatusBadRequest {
 		t.Errorf("a bad id: %d", code)
 	}
+	waitTraced(t, c, node, 3)
 }
 
 // movedIDs are the mails the fake server moved.
@@ -256,7 +277,7 @@ func TestCallFoldedInAfterDrawnWaitsOn(t *testing.T) {
 		t.Errorf("the late call is %s", x.State)
 	}
 	old, err := c.card(card)
-	if err != nil || old.State != cardApproved || old.Text != "Archiver 1 mail · 1 laissé" || old.Ref == proposalRef(cardCalls, a) {
+	if err != nil || old.State != cardApproved || old.Text != moveWords("1 élément")+", 1 laissé" || old.Ref == proposalRef(cardCalls, a) {
 		t.Errorf("the decided card %+v, %v", old, err)
 	}
 	xs, _ = c.cardsWhere(`ref = ? AND state = ?`, proposalRef(cardCalls, a), cardPending)
@@ -273,7 +294,5 @@ func TestCallFoldedInAfterDrawnWaitsOn(t *testing.T) {
 	if !slices.Contains(c.cardNodes(x.Ref), node) {
 		t.Errorf("the new card is not the view's: %v", c.cardNodes(x.Ref))
 	}
-	for i := 0; i < 200 && func() bool { s, _ := c.callState(a); return s != callDone }(); i++ {
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitTraced(t, c, node, 2)
 }

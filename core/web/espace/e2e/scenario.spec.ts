@@ -279,8 +279,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   await shot(page, "graph-apart");
 
   // 14b. The view's skill, woken once per mail, proposed to archive
-  // three: they wait as one card on the view's page, « Archiver 3 mails »,
-  // each mail a line ticked, still « extérieur », where it comes from
+  // three: they wait as one card on the view's page, worded as a list
+  // action is (« Déplacer 3 éléments → archive »), each mail a line
+  // ticked, still « extérieur », where it comes from
   // under Détails. The user leaves one out: Oui archives the two others,
   // and the card says one was left.
   await home(page);
@@ -290,7 +291,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   expect((await request.post("/e2e/proposals")).status()).toBe(204);
   const batch = view.locator(".pg-foot .a2-proposal");
   await expect(batch).toHaveCount(1);
-  await expect(batch.locator(".a2-proposal-text")).toHaveText("Archiver 3 mails");
+  await expect(batch.locator(".a2-proposal-text")).toHaveText("Déplacer 3 éléments → archive (mail/move)");
   const ticks = batch.locator(".a2-proposal-choices input[type=checkbox]");
   await expect(ticks).toHaveCount(3);
   await expect(batch.locator(".a2-proposal-choices")).toContainText("« La lettre de la semaine » · news@example.org");
@@ -320,8 +321,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   await settledBox(view);
   await shot(page, "chosen-calls-pending");
   await ticks.nth(1).uncheck();
-  await batch.getByRole("button", { name: "Archiver 2 mails" }).click();
-  await expect(batch.locator(".a2-proposal-text")).toHaveText("Archiver 2 mails · 1 laissé");
+  await batch.getByRole("button", { name: "Déplacer 2 éléments → archive (mail/move)" }).click();
+  await expect(batch.locator(".a2-proposal-text")).toHaveText("2 déplacés, 1 laissé");
   await expect(batch.locator(".a2-proposal-choices li.is-left")).toHaveText("« La lettre de la semaine » · news@example.orglaissé");
   // Each call as kept, one mail each; the one left out never moved.
   await expect

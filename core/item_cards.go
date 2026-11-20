@@ -178,9 +178,9 @@ func (c *core) chosenCalls(p proposal, asks []accessQuestion) proposal {
 	}
 	p.text = func(lang string) string {
 		if p.Pending {
-			return kindSentence(asks[0], total, lang)
+			return c.kindSentence(asks[0], total, lang)
 		}
-		return c.callsDecidedText(asks, lang)
+		return c.callsDecidedText(asks, lang, true)
 	}
 	p.summary = func(lang string) []string {
 		if f := callFolder(asks[0].Call, asks[0].Input, lang); f != "" {
@@ -191,7 +191,7 @@ func (c *core) chosenCalls(p proposal, asks []accessQuestion) proposal {
 	p.acts = func(lang string) []string {
 		out := make([]string, total)
 		for k := range out {
-			out[k] = kindSentence(asks[0], k+1, lang)
+			out[k] = c.kindSentence(asks[0], k+1, lang)
 		}
 		return out
 	}

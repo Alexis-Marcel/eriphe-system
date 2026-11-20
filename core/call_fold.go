@@ -201,32 +201,24 @@ func (c *core) choiceText(a accessQuestion, lang string) string {
 	return strings.Join(items, ", ")
 }
 
-// kindSentence says what a call does to n items: its sentence with n
-// items in its list; with how many, when the sentence does not say it.
-func kindSentence(a accessQuestion, n int, lang string) string {
+// kindSentence says what calls that do the same thing do to n items, as a
+// list action's button says it (actionWords, list_actions.go): the
+// tool's verb and its other arguments, for how many.
+func (c *core) kindSentence(a accessQuestion, n int, lang string) string {
 	_, list := foldKey(a)
 	if list == "" {
 		return callSentence(a.Call, a.Input, lang)
 	}
-	with := func(k int) string {
-		var input map[string]any
-		json.Unmarshal([]byte(a.Input), &input)
-		values := make([]any, k)
-		for i := range values {
-			values[i] = fmt.Sprint(i)
-		}
-		input[list] = values
-		raw, _ := json.Marshal(input)
-		return callSentence(a.Call, string(raw), lang)
+	var args map[string]any
+	json.Unmarshal([]byte(a.Input), &args)
+	delete(args, list)
+	tool := callTool(a.Call)
+	_, t := c.actionTool(tool)
+	one, many := actionWords(t, tool, args, lang)
+	if n == 1 {
+		return one
 	}
-	s := with(n)
-	if with(1) == with(2) { // a sentence that does not count
-		if n == 1 {
-			return s
-		}
-		return fmt.Sprintf(tr(lang, "card.calls.items"), s, n)
-	}
-	return s
+	return strings.ReplaceAll(many, "{n}", fmt.Sprint(n))
 }
 
 // decideCallsChosen is Oui on a calls card with the user's choice: the
@@ -300,7 +292,7 @@ func (c *core) callsDecided(x convoCard) {
 	lang := c.userLang()
 	text, _ := c.callsWords(decided, lang)
 	if len(decided) > 1 && batchKind(decided) != "" {
-		text = c.callsDecidedText(decided, lang)
+		text = c.callsDecidedText(decided, lang, false)
 	}
 	c.store.db.Exec(`UPDATE convo_cards SET text = ? WHERE id = ?`, text, x.ID)
 	if p := c.proposalOf(kind, id); p.Pending {
@@ -309,8 +301,9 @@ func (c *core) callsDecided(x convoCard) {
 }
 
 // callsDecidedText says a decided card of calls that do the same thing:
-// what went, and how many were left.
-func (c *core) callsDecidedText(asks []accessQuestion, lang string) string {
+// what went, and how many were left. Live (read now), once its calls ran,
+// as a list action says it is done; kept on the card, what it decided.
+func (c *core) callsDecidedText(asks []accessQuestion, lang string, live bool) string {
 	done, left := 0, 0
 	for _, a := range asks {
 		switch a.State {
@@ -321,15 +314,19 @@ func (c *core) callsDecidedText(asks []accessQuestion, lang string) string {
 		}
 	}
 	if done == 0 {
-		return kindSentence(asks[0], left, lang)
+		return c.kindSentence(asks[0], left, lang)
 	}
-	s := kindSentence(asks[0], done, lang)
+	// Done, as a list action says it (doneText); until then, what it does.
+	s := c.kindSentence(asks[0], done, lang)
+	if state, _ := c.callsExec(asks[0].Batch); live && state == callDone {
+		s = doneText(callTool(asks[0].Call), done, lang)
+	}
 	if left > 0 {
 		key := "card.calls.left"
 		if left > 1 {
 			key = "card.calls.leftn"
 		}
-		s += " · " + fmt.Sprintf(tr(lang, key), left)
+		s += ", " + fmt.Sprintf(tr(lang, key), left)
 	}
 	return s
 }
