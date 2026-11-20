@@ -149,8 +149,9 @@ export const GAP = 10;
 export const AWAY = 14;
 export const CLEAR = 6;
 
-export type Side = "right" | "left" | "below" | "below-left" | "above" | "above-left";
-const SIDES: Side[] = ["right", "left", "below", "below-left", "above", "above-left"];
+export type Side = "right" | "left" | "below" | "below-left" | "above" | "above-left" | "around";
+type Beside = Exclude<Side, "around">;
+const SIDES: Beside[] = ["right", "left", "below", "below-left", "above", "above-left"];
 
 // Placed is where the orb is drawn: its centre, its words' box (none when
 // it says nothing), the side taken; dir: its words open to the right (1)
@@ -188,12 +189,13 @@ function cost(box: Rect, obstacles: Rect[], screen: Rect): number {
 // anchor: the height it points at, its middle by default): the first side
 // where it covers nothing and stays on screen, the side it had (prev)
 // first, so that it does not hop while things move around it; when none
-// is free, the side that covers least, kept on the screen.
+// is free, the free spot nearest around it; when there is none, the side
+// that covers least, kept on the screen.
 export function placeBeside(target: Rect, words: [number, number], obstacles: Rect[], screen: Rect, prev?: Side | "home", anchor?: number): Placed {
   const ay = Math.max(target.t, Math.min(target.b, anchor ?? target.t + Math.min(target.b - target.t, 2 * ORB) / 2));
   const cx = (target.l + target.r) / 2;
   const h = Math.max(ORB, words[1]);
-  const at = (side: Side) => {
+  const at = (side: Beside) => {
     switch (side) {
       case "right":
         return bodyAt(target.r + AWAY, ay - ORB / 2, words, 1);
@@ -209,8 +211,8 @@ export function placeBeside(target: Rect, words: [number, number], obstacles: Re
         return bodyAt(cx + ORB / 2, target.t - AWAY - h, words, -1);
     }
   };
-  const order = prev && prev !== "home" ? [prev, ...SIDES.filter((s) => s !== prev)] : SIDES;
-  let best: { box: Rect; placed: Placed; side: Side } | null = null;
+  const order = prev && prev !== "home" && prev !== "around" ? [prev, ...SIDES.filter((s) => s !== prev)] : SIDES;
+  let best: { box: Rect; placed: Placed; side: Beside } | null = null;
   let low = Infinity;
   for (const side of order) {
     const b = at(side);
@@ -219,6 +221,20 @@ export function placeBeside(target: Rect, words: [number, number], obstacles: Re
     if (c < low) {
       low = c;
       best = { ...b, side };
+    }
+  }
+  // No side free: the free spot nearest to it, around it, its words
+  // opening away from it.
+  const tx = (target.l + target.r) / 2, ty = (target.t + target.b) / 2;
+  const far = (target.r - target.l) / 2 + AWAY, deep = (target.b - target.t) / 2 + AWAY;
+  for (let r = 0; r < 600; r += 30) {
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const [x, y] = [tx + Math.cos(a) * (far + r), ty + Math.sin(a) * (deep + r)];
+      const dir = Math.cos(a) < 0 ? -1 : 1;
+      const b = bodyAt(dir === 1 ? x : x + ORB, y - ORB / 2, words, dir);
+      if (hits(b.box, target, AWAY - CLEAR) || cost(b.box, obstacles, screen) > 0) continue;
+      return { ...b.placed, side: "around" };
     }
   }
   // Nowhere free: the least bad, brought back on the screen.

@@ -146,7 +146,7 @@ func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 	if line, _ := ackLine(draft); thinking || line != "" {
 		x.Work = &orbWork{Node: c.workNode(), Draft: line}
 	}
-	x.Wait = c.newestWait()
+	x.Wait = c.newestWait(from)
 	x.Cards = c.unheldCards()
 	x.Waiting = c.waiting(thinking)
 	return x, nil
@@ -211,13 +211,15 @@ func (c *core) workNode() string {
 	return c.turn.talkNode()
 }
 
-// newestWait is the newest card shown to the user that waits for its yes
-// in a live node; nil when none does.
-func (c *core) newestWait() *orbWait {
+// newestWait is the newest card that waits for the user's yes in a live
+// node, shown since the user's last message read (after: its seq) or in
+// the turn under way; nil when none does. An older card waits in its page,
+// its bubble says so: the user moved on from it.
+func (c *core) newestWait(after int) *orbWait {
 	if c.nodes == nil {
 		return nil
 	}
-	xs, err := c.cardsWhere(`state = ? AND (seq > 0 OR turn = 1) ORDER BY id DESC LIMIT 20`, cardPending)
+	xs, err := c.cardsWhere(`state = ? AND (seq > ? OR turn = 1) ORDER BY id DESC LIMIT 20`, cardPending, after)
 	if err != nil {
 		return nil
 	}

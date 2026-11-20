@@ -10,7 +10,7 @@ import (
 )
 
 // A subject asked at the home opens its node, and its cards live there
-// (node_turn.go's moveHomeTurn, web_console.go's unheldCards).
+// (node_turn.go's moveHomeTurn, web_orb.go's unheldCards).
 
 // messageAt is the message seq.
 func messageAt(t *testing.T, c *core, seq int) Message {
@@ -34,7 +34,7 @@ func cardOfRef(t *testing.T, c *core, ref string) convoCard {
 
 // At the home, « keep an eye on my mails » opens its subject: the user's
 // message and the brain's answer belong to it, the page opens with the
-// console in it; the view proposed there is the subject's card, at the
+// bar in it; the view proposed there is the subject's card, at the
 // foot of its page; its yes makes the standing node and opens it.
 func TestHomeSubjectTakesTheExchange(t *testing.T) {
 	c, answer := netCore(t, "Tu peux garder un œil sur mes mails ?", "")
@@ -52,7 +52,7 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 		t.Errorf("the answer: %+v", m)
 	}
 	if x, ok := c.lastShown(); !ok || x.Node != subject || !x.Talk {
-		t.Errorf("the subject is not opened with the console: %+v", x)
+		t.Errorf("the subject is not opened with the bar: %+v", x)
 	}
 	if x, _ := (&web{c: c}).orbFor("", false); x.Answer == nil || x.Answer.Node != subject {
 		t.Errorf("the orb does not speak beside the subject: %+v", x.Answer)
@@ -143,7 +143,7 @@ func TestAsideNodeStaysInTheBackground(t *testing.T) {
 	}
 }
 
-// Opened from a node, a node shows beside it: the console stays.
+// Opened from a node, a node shows beside it: the bar stays.
 func TestNodeOpenFromANodeShowsBeside(t *testing.T) {
 	c, _, _ := brainReports(t)
 	openGraph(t, c)
@@ -205,7 +205,7 @@ func TestStaleNameNeverAnAbout(t *testing.T) {
 }
 
 // A wake after the user's turn, or a request said on a channel, never
-// moves the home's exchange nor takes the console.
+// moves the home's exchange nor takes the bar.
 func TestHomeMovesOnlyTheUsersWorkspaceTurn(t *testing.T) {
 	c, _ := netCore(t, "Compare les devis du garage", "")
 	asked := c.turn.answer

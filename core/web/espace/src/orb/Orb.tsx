@@ -38,7 +38,13 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
     const o = orb.current, w = say.current;
     if (!o || !w) return true;
     const [cx, cy, k] = [cam[0].get(), cam[1].get(), cam[2].get()];
+    // An open page as drawn (its height is its content's, not the room
+    // the layout keeps for it); a bubble and its title as the layout has them.
+    const pages = new Map<string, DOMRect>();
+    for (const e of document.querySelectorAll<HTMLElement>("[data-page]")) pages.set(e.dataset.page!, e.getBoundingClientRect());
     const rect = (b: LNode, p: Pt): Rect => {
+      const d = b.box ? pages.get(b.id) : undefined;
+      if (d && d.width > 0) return { l: d.left, t: d.top, r: d.right, b: d.bottom };
       const [h, top, bot] = extent(b, p);
       return { l: cx + (p[0] - h) * k, t: cy + top * k, r: cx + (p[0] + h) * k, b: cy + bot * k };
     };

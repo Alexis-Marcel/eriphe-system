@@ -144,6 +144,13 @@ func TestOrbWait(t *testing.T) {
 	if x.Wait == nil || x.Wait.Node != subject || len(x.Cards) != 0 {
 		t.Fatalf("wait %+v, cards %v", x.Wait, x.Cards)
 	}
+	// The user writes again: the card waits in its page, the orb moves on.
+	next, _ := c.store.addUserMessage("Et ensuite ?", nil, "")
+	c.store.markDelivered(int(next))
+	if x, _ := w.orbFor("", false); x.Wait != nil {
+		t.Errorf("the orb still points at a card the user moved on from: %+v", x.Wait)
+	}
+	c.store.db.Exec(`DELETE FROM messages WHERE seq = ?`, next)
 	if _, err := c.decideCard(context.Background(), x.Wait.Card, true, "web"); err != nil {
 		t.Fatal(err)
 	}

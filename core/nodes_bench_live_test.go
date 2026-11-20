@@ -261,7 +261,7 @@ type bench struct {
 
 func (b *bench) note(s string) { b.s.notes = append(b.s.notes, s) }
 
-// say is the user's message, said to node ("" for home) as the console
+// say is the user's message, said to node ("" for home) as the bar
 // sends it; it returns once the brain and what it started are quiet.
 func (b *bench) say(text, node, may string) {
 	c := b.sc.c

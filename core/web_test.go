@@ -548,8 +548,8 @@ func TestWebAnswerAsUser(t *testing.T) {
 }
 
 // The stream follows the workspace: a reconnecting browser resumes after
-// the last message it had (the events' id), and a new answer comes as the
-// exchange, JSON.
+// the last message it had (the events' id), and a new answer comes in the
+// orb's event, JSON.
 func TestWebEventsStream(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -583,7 +583,7 @@ func TestWebEventsStream(t *testing.T) {
 			}
 		}
 		data, ok := strings.CutPrefix(line, "data: ")
-		if !ok || event != "exchange" {
+		if !ok || event != "orb" {
 			continue
 		}
 		if !asked {
@@ -597,11 +597,11 @@ func TestWebEventsStream(t *testing.T) {
 			return
 		}
 	}
-	t.Fatalf("no exchange with the answer: %v", sc.Err())
+	t.Fatalf("no orb event with the answer: %v", sc.Err())
 }
 
 // A card made outside a brain turn comes with its message on the event
-// stream (the exchange, its proposal moved), and in the attention queue, no
+// stream (the orb's words, its proposal moved), and in the attention queue, no
 // user message needed.
 func TestWebAttention(t *testing.T) {
 	tw := newTestWeb(t)
@@ -633,7 +633,7 @@ func TestWebAttention(t *testing.T) {
 			held = true
 		}
 		switch event {
-		case "exchange":
+		case "orb":
 			sawText = sawText || strings.Contains(data, "Fix the menu")
 		case "proposals":
 			sawCard = sawCard || strings.Contains(data, `"refs":["`)

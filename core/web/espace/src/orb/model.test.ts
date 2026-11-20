@@ -131,6 +131,19 @@ describe("where the orb goes", () => {
     expect(box(p).t).toBeGreaterThanOrEqual(screen.t);
   });
 
+  it("finds the free spot nearest around it when no side is free", () => {
+    // Two pages side by side, the screen's edge at the left: no side of
+    // the first is free, but further down, among the bubbles, there is room.
+    const mail: Rect = { l: 76, t: 104, r: 696, b: 516 };
+    const prod: Rect = { l: 744, t: 0, r: 1364, b: 630 };
+    const bubbles: Rect[] = [{ l: 269, t: 552, r: 339, b: 621 }, { l: 198, t: 693, r: 267, b: 810 }, { l: 366, t: 683, r: 442, b: 800 }];
+    const all = [mail, prod, ...bubbles, bar];
+    const p = placeBeside(mail, [360, 58], all, screen);
+    expect(p.side).toBe("around");
+    for (const o of all) expect(overlaps(box(p), o)).toBe(false);
+    expect(box(p).t - mail.b).toBeLessThan(200);
+  });
+
   it("keeps its side while it stays free, so that it does not hop", () => {
     const sub: Rect = { l: 600, t: 300, r: 700, b: 400 };
     expect(placeBeside(sub, words, [sub], screen, "below").side).toBe("below");

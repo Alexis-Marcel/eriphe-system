@@ -48,7 +48,7 @@ func lastBrainMessage(t *testing.T, c *core) Message {
 
 // A long answer no node holds, said at home, goes in a new node titled
 // from the user's request, the answer as its doc; the answer links to it,
-// and the exchange moves into it: it opens, the console in it.
+// and the exchange moves into it: it opens, the bar in it.
 func TestNetFilesLongAnswerInNewNode(t *testing.T) {
 	c, answer := netCore(t, "Compare les devis du garage\net dis-moi lequel prendre", "")
 	answer(longAnswer)
@@ -67,7 +67,7 @@ func TestNetFilesLongAnswerInNewNode(t *testing.T) {
 		t.Errorf("the orb does not speak beside the node it went into: %+v", x.Answer)
 	}
 	if x, ok := c.lastShown(); !ok || x.Node != m.Filed || !x.Talk {
-		t.Errorf("the node is not opened with the console: %+v", x)
+		t.Errorf("the node is not opened with the bar: %+v", x)
 	}
 }
 

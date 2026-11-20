@@ -5,9 +5,10 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 // scripted brain, the real engine, cards, filing and stream. What the world
 // outside the user does (a monitor's mail, a task that finishes) is asked
 // of the test core at /e2e/. The page must say nothing to the console, and
-// break no rule of its Content-Security-Policy. The bar is only a bar: the
-// user's last question and one line of Eriphe's, which goes; what Eriphe
-// says at length, its questions and their buttons are in the subject's
+// break no rule of its Content-Security-Policy. The bar is only a bar:
+// Eriphe answers with its orb, beside the subject its words belong to, or
+// at the home when they belong to none, in a few lines; what Eriphe says
+// at length, its questions and their buttons are in the subject's
 // document.
 
 const password = "correct horse battery"; // testPassword, core/web_test.go
@@ -32,10 +33,11 @@ test("the steps of the scenario", async ({ page, request }) => {
   await page.waitForURL((u) => u.pathname !== "/login");
   await page.goto("/espace");
 
-  const said = page.locator(".cs-said");
-  // The bar's buttons: none but the fold of the last question (the cards
-  // no node holds aside).
-  const barButtons = page.locator(".cs-panel button:not(.cs-asked), .cs-bar button");
+  // Eriphe's words: its orb's, out in the space.
+  const said = page.locator(".orb-say.on .orb-text");
+  const orb = page.locator("button.orb");
+  // The bar's buttons: none (the cards no node holds aside).
+  const barButtons = page.locator(".cs-bar button");
   const say = async (text: string) => {
     const input = page.locator(".cs-bar input");
     await input.fill(text);
@@ -49,17 +51,18 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(page.locator("article.pg")).toHaveCount(0);
 
   // 2. One call, no node opened; it is logged in « Ma journée »'s trace.
-  // The question stays, in grey, just above Eriphe's line, which goes
-  // after a few seconds; the question stays. No button in the bar.
+  // A turn about no subject: the orb leaves the bar and answers at the
+  // home, on a free spot, clear of every bubble, title and the bar; after
+  // a while it goes back to the bar. No button in the bar.
   await say("Allume la lumière du bureau.");
   await expect(said).toContainText("C'est allumé.");
-  const asked = page.locator(".cs-asked");
-  await expect(asked).toContainText("Allume la lumière du bureau.");
-  expect((await asked.boundingBox())!.y).toBeLessThan((await said.boundingBox())!.y);
-  await shot(page, "bar");
+  await expect(orb).not.toHaveClass(/docked/);
+  await expect(page.locator(".orb-say.on")).toHaveClass(/answer/);
+  await orbClear(page);
+  await shot(page, "orb-home");
   await expect(barButtons).toHaveCount(0);
-  await expect(said).toHaveCount(0, { timeout: 10_000 });
-  await expect(asked).toContainText("Allume la lumière du bureau.");
+  await expect(orb).toHaveClass(/docked/, { timeout: 25_000 });
+  await expect(said).toHaveCount(0);
   await expect(page.locator("article.pg")).toHaveCount(0);
   expect((await (await request.get("/e2e/tools")).json()).lit).toEqual(["bureau"]);
   await bubble("Ma journée").click();
@@ -79,7 +82,10 @@ test("the steps of the scenario", async ({ page, request }) => {
 
   // 4. Two steps are born: Style runs, Plan comes after it.
   await say("Analyse le style des articles qui marchent, puis propose-moi un plan du premier article.");
+  // A turn on a subject: the orb beside its page, with what it did.
   await expect(said).toContainText("Je lance l'analyse du style");
+  await orbBeside(page, pageOf("Substack"));
+  await shot(page, "orb-subject");
   await expect(bubble("Style des articles")).toBeVisible();
   await expect(bubble("Plan du premier article")).toBeVisible();
   await expect(page.locator(".gr-node.running .gr-core[aria-label^='Style des articles']")).toBeVisible();
@@ -87,8 +93,8 @@ test("the steps of the scenario", async ({ page, request }) => {
 
   // 5. The answer goes into « Ma journée », not into a new node.
   const before = await page.locator(".gr-node").count();
-  // Eriphe shows the page beside; the console still talks to Substack, its
-  // short answer under the question.
+  // Eriphe shows the page beside; the bar still talks to Substack, the
+  // orb says its short answer beside it.
   await say("Qu'est-ce que j'ai de prévu aujourd'hui ?");
   await expect(said).toContainText("Deux rendez-vous");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Substack");
@@ -103,6 +109,12 @@ test("the steps of the scenario", async ({ page, request }) => {
   const waiting = page.locator(`.gr-node.yours[data-node="${mail}"]`);
   await expect(waiting).toHaveCount(1);
   await expect(waiting.locator(".gr-label em.yours")).toHaveText("t'attend");
+  // Unasked, it began to wait: once the last answer has had its while,
+  // the orb goes beside it and says so, its title marked as someone
+  // else's words.
+  await expect(page.locator(".orb-say.on.said")).toContainText(`${external} t'attend.`, { timeout: 30_000 });
+  await orbBeside(page, waiting.locator(".gr-core"), waiting.locator(".gr-label"));
+  await shot(page, "orb-announce");
   await shot(page, "waiting");
   await expect(waiting).toHaveClass(/title-ext/);
   await expect(waiting.locator(".gr-label b")).toContainText(mailTitle);
@@ -154,8 +166,12 @@ test("the steps of the scenario", async ({ page, request }) => {
   // 8. A draft with its « Envoyer ? » card, the production view beside it,
   // a research child running.
   await say("Réponds que je regarde dans l'heure, ouvre-moi la prod, et lance en arrière-plan une recherche sur l'erreur.");
+  // Its send waits for the user's yes: the orb beside the mail's page,
+  // pointing at the card, with what it did.
   await expect(said).toContainText("Le brouillon est prêt");
-  await shot(page, "bar-over-page");
+  await expect(page.locator(".orb-say.on")).toHaveClass(/wait/);
+  await orbBeside(page, mailPage);
+  await shot(page, "orb-wait");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", `Écris à Eriphe, sur ${external}`);
   await expect(mailPage).toContainText("Je regarde dans l'heure.");
   await expect(pageOf("Production")).toBeVisible();
@@ -282,8 +298,10 @@ test("the steps of the scenario", async ({ page, request }) => {
   const defaults = watch.getByRole("button", { name: "Fais comme tu proposes" });
   await expect(watch.getByRole("button", { name: "Toutes, et réveille-moi la nuit pour la prod" })).toBeVisible();
   await defaults.click();
+  // The view's card waits for the user's yes: the orb points at it.
   await expect(said).toContainText("Voici la vue");
-  await expect(page.locator(".cs-asked")).toContainText("Fais comme tu proposes");
+  await expect(page.locator(".orb-say.on")).toHaveClass(/wait/);
+  await orbBeside(page, watch);
   // The document says where things stand: the questions and their
   // buttons gone, the choices written, the card placed under them.
   await expect(defaults).toHaveCount(0);
@@ -406,7 +424,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await shot(page, "chosen-calls");
 
   // 15. A card no page holds (proposed at the home, no subject opened)
-  // waits in the console, with its Oui; answered, it leaves it.
+  // waits above the bar, with its Oui; answered, it leaves it.
   await home(page);
   await say("Propose-moi une vue de l'agenda.");
   await expect(said).toContainText("Voici la vue de ton agenda");
@@ -417,7 +435,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(bubble("Mon agenda")).toBeVisible();
 
   // 16. Asked on the side: its node is born on the graph, not opened, and
-  // the console stays at the home.
+  // the bar stays at the home.
   await home(page);
   await say("Lance une recherche à part sur les newsletters.");
   await expect(said).toContainText("Je lance la recherche à part.");
@@ -591,12 +609,12 @@ async function menu(pg: Locator, name: string) {
 }
 
 // home closes every page open, one by one, the one the camera frames (the
-// console talks to it) first: the console then talks to the home.
+// bar talks to it) first: the bar then talks to the home.
 async function home(page: Page) {
   const pages = page.locator("article.pg");
   for (let n = await pages.count(); n > 0; n = await pages.count()) {
     // once they are at rest (the layout and the camera ease them into
-    // place), the page the console talks to, else one the camera frames:
+    // place), the page the bar talks to, else one the camera frames:
     // its close button on screen
     for (let i = 0; i < n; i++) await settledBox(pages.nth(i));
     let x: Locator | null = null;
@@ -627,7 +645,7 @@ async function at(node: Locator): Promise<[number, number]> {
 }
 
 // openMail opens the mail's page alone, from its bubble with the whole graph
-// in view: the console talks to it.
+// in view: the bar talks to it.
 async function openMail(page: Page, id: string) {
   await home(page);
   await expect(page.locator("article.pg")).toHaveCount(0);
@@ -768,8 +786,56 @@ test("the workspace on a small screen", async ({ page }) => {
   await expect(day.locator(".pg-standing")).toBeVisible(); // a permanent subject, on a phone too
   await shot(page, "phone-page");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Ma journée");
+  // The orb on the phone: no gliding, a line above the bar, its subject named.
+  await page.locator(".cs-bar input").fill("Merci.");
+  await page.locator(".cs-bar input").press("Enter");
+  const line = page.locator(".orb-line");
+  await expect(line).toContainText("D'accord.");
+  await expect(line.locator(".orb-on")).toHaveText("Sur Ma journée");
+  await expect(page.locator("button.orb")).toHaveCount(0);
+  await shot(page, "orb-phone");
   await day.getByRole("button", { name: "Fermer cette page" }).click();
   await expect(page.locator("article.pg")).toHaveCount(0);
   await expect(rows.first()).toBeVisible();
   expect(problems).toEqual([]);
 });
+
+// orbClear checks that Eriphe's orb and its words cover nothing: no
+// bubble, no title, no page, not the bar.
+async function orbClear(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const r = (e: Element) => e.getBoundingClientRect();
+          const mine = [document.querySelector("button.orb:not(.docked)"), document.querySelector(".orb-say.on")].filter(Boolean).map((e) => r(e!));
+          const seen = (e: Element) => Number(getComputedStyle(e.closest(".gr-node") ?? e).opacity) > 0.05;
+          const theirs = [...document.querySelectorAll(".gr-core, .gr-label b, .gr-page, .cs-bar")].filter(seen).map(r);
+          const hit = (a: DOMRect, b: DOMRect) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+          return mine.flatMap((m) => theirs.filter((t) => hit(m, t)).map((t) => `${Math.round(t.left)},${Math.round(t.top)}`));
+        }),
+      { message: "the orb covers something" },
+    )
+    .toEqual([]);
+}
+
+// orbBeside checks that the orb, out of the bar, is beside what it talks
+// about (a page, a bubble and its title: their boxes as one), close to it,
+// and covers nothing.
+async function orbBeside(page: Page, ...what: Locator[]): Promise<void> {
+  const orb = page.locator("button.orb");
+  await expect(orb).not.toHaveClass(/docked/);
+  await expect
+    .poll(async () => {
+      const o = await orb.boundingBox();
+      const boxes = await Promise.all(what.map((w) => w.boundingBox()));
+      if (!o || boxes.some((b) => !b)) return Infinity;
+      const l = Math.min(...boxes.map((b) => b!.x)), r = Math.max(...boxes.map((b) => b!.x + b!.width));
+      const t = Math.min(...boxes.map((b) => b!.y)), b = Math.max(...boxes.map((b) => b!.y + b!.height));
+      const dx = Math.max(l - (o.x + o.width), 0, o.x - r);
+      const dy = Math.max(t - (o.y + o.height), 0, o.y - b);
+      return Math.round(Math.hypot(dx, dy));
+    }, { message: "the orb is not beside it" })
+    .toBeLessThan(80);
+  await orbClear(page);
+}

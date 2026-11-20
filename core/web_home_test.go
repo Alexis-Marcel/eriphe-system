@@ -84,7 +84,7 @@ func TestHomeOpensTheWorkspace(t *testing.T) {
 
 // Before the wizard, / and /espace lead to it; once it is left for later,
 // the workspace opens and its boot says Eriphe has no AI yet, for the
-// console to say it with the way to the wizard. With no brain at all, the
+// bar to say it with the way to the wizard. With no brain at all, the
 // boot says that.
 func TestHomeWithoutAI(t *testing.T) {
 	boot := func(tw *testWeb) espaceBoot {
@@ -193,7 +193,7 @@ func TestLinksIntoTheGraph(t *testing.T) {
 }
 
 // The workspace's stream does not carry the conversation's past messages:
-// it starts after the last one, with the last exchange as JSON, never HTML.
+// it starts after the last one, with the orb's event as JSON, never HTML.
 func TestWorkspaceStreamSkipsThePast(t *testing.T) {
 	tw, _ := homeWeb(t)
 	for range 3 {

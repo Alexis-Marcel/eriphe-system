@@ -97,11 +97,11 @@ func TestArchiveWithdrawsItsCards(t *testing.T) {
 	unheld := c.unheldCards()
 	for _, ref := range []string{mine, kids, about} {
 		if slices.Contains(unheld, ref) {
-			t.Errorf("%s falls into the console: %v", ref, unheld)
+			t.Errorf("%s falls above the bar: %v", ref, unheld)
 		}
 	}
 	if !slices.Contains(unheld, home) || slices.Contains(unheld, beside) {
-		t.Errorf("the console's cards: %v", unheld)
+		t.Errorf("the cards above the bar: %v", unheld)
 	}
 
 	// Reopened, the subject comes back as a page: its cards stay gone.

@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 // An answer given at the home, no subject opened, more than a line: the
-// bar holds it whole, under the question, and it does not go; a line an
-// event made Eriphe say later shows under it and goes, without taking its
-// place; a reload shows it again; a new message, or its ✕, moves on.
+// orb holds it whole, out in the space, and it does not go; words an event
+// made Eriphe say later wait behind it, never take its place; a reload
+// shows it again; a new message, or its ✕, moves on.
 // Played on the scenario's test core (TestEspaceScenario), after the
 // other files (its name sorts last): the scripted brain answers « mes
 // films » in three sentences, and /e2e/catalog brings an event of the
@@ -42,56 +42,55 @@ test("an answer given at home stays readable until you move on", async ({ page, 
     await input.fill(text);
     await input.press("Enter");
   };
-  const answer = page.locator(".cs-answer");
-  const said = page.locator(".cs-said");
-  const asked = page.locator(".cs-asked");
+  const answer = page.locator(".orb-say.on .orb-answer");
+  const said = page.locator(".orb-say.on .orb-text");
+  const orb = page.locator("button.orb");
 
-  // Three sentences at the home: held whole, its Markdown, under the question.
+  // Three sentences at the home: held whole by the orb, its Markdown, out
+  // of the bar.
   await say("Tu as accès à mes films normalement ?");
   await expect(answer).toContainText("Tu peux mettre la recherche et la consultation en accès libre dans Réglages → Outils → films.");
   await expect(answer.locator("strong")).toHaveText("Seerr");
-  await expect(asked).toContainText("Tu as accès à mes films normalement ?");
-  expect((await asked.boundingBox())!.y).toBeLessThan((await answer.boundingBox())!.y);
+  await expect(orb).not.toHaveClass(/docked/);
   await expect(page.locator("article.pg")).toHaveCount(0);
   // Long after a line would have gone, it is still there.
   await page.waitForTimeout(10_000);
   await expect(answer).toBeVisible();
   await expect(answer).toContainText("chaque recherche te demande ton accord");
 
-  // An event alone (the catalog changed): its line shows and goes, the answer stays.
+  // An event alone (the catalog changed): its words wait behind the
+  // answer, which stays.
   expect((await request.post("/e2e/catalog")).ok()).toBe(true);
-  await expect(said).toContainText("Un outil de plus : films.");
+  await page.waitForTimeout(3000);
   await expect(answer).toContainText("Réglages → Outils → films.");
-  await expect(said).toHaveCount(0, { timeout: 10_000 });
-  await expect(answer).toContainText("Réglages → Outils → films.");
+  await expect(said).toHaveCount(0);
 
   // A reload shows it again.
   await atHome(page);
   await expect(answer).toContainText("Réglages → Outils → films.");
-  await expect(asked).toContainText("Tu as accès à mes films normalement ?");
 
-  // A new message moves on from it.
-  await say("Merci.");
+  // Closed: the event's words come, then go; the answer does not come back.
+  await page.locator(".orb-say.on").getByRole("button", { name: "Fermer" }).click();
   await expect(answer).toHaveCount(0);
-  await expect(asked).toContainText("Merci.");
-  await expect(said).toContainText("D'accord.");
+  await expect(said).toContainText("Un outil de plus : films.");
+  await expect(said).toHaveCount(0, { timeout: 15_000 });
+  await expect(orb).toHaveClass(/docked/);
+  await atHome(page);
   await expect(answer).toHaveCount(0);
 
-  // Asked again, then closed: gone, and a reload does not bring it back.
+  // Asked again; a new message moves on from it.
   await say("Et mes films, tu y as accès ?");
   await expect(answer).toContainText("Réglages → Outils → films.");
-  await answer.getByRole("button", { name: "Fermer cette réponse" }).click();
+  await say("Merci.");
   await expect(answer).toHaveCount(0);
-  await expect(asked).toContainText("Et mes films, tu y as accès ?");
-  await atHome(page);
-  await expect(asked).toContainText("Et mes films, tu y as accès ?");
-  await expect(answer).toHaveCount(0);
+  await expect(said).toContainText("D'accord.");
   expect(problems).toEqual([]);
 });
 
 // Said in a subject's bar, about something else, a question that needs a
 // card: the brain answers as at the home (turn_home), and the card waits
-// above the bar at once, in front of the user, not in that subject.
+// above the bar at once, in front of the user, not in that subject; the
+// orb says why beside the subject it was asked in.
 test("a card raised for a question about something else is in front at once", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
@@ -123,7 +122,7 @@ test("a card raised for a question about something else is in front at once", as
   await expect(substack.locator(".pg-foot")).toHaveCount(0);
   await loose.getByRole("button", { name: "Non" }).click();
   await expect(page.locator(".cs-cards")).toHaveCount(0);
-  await expect(page.locator(".cs-said")).toContainText("Tu me donnes ton accord pour l'envoyer ?");
+  await expect(page.locator(".orb-say.on .orb-text")).toContainText("Tu me donnes ton accord pour l'envoyer ?");
   expect((await (await request.get("/e2e/tools")).json()).sent ?? []).not.toContain("lou@example.org: Je serai en retard.");
   expect(problems).toEqual([]);
 });
