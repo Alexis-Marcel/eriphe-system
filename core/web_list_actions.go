@@ -16,13 +16,17 @@ import (
 // The click on one of a block's actions (list_actions.go): the user's own
 // gesture, on the items they picked in a list.
 //
-//   - The action is read again in the block as stored, never taken from
-//     the page: it must be the same at the version the page showed and at
-//     the last one (code's own versions, a source's snapshot, come in
-//     between and change nothing of it).
+//   - The action and the List it was made in are read again in the block
+//     as stored, never taken from the page: each must be the same at the
+//     version the page showed and at the last one (code's own versions, a
+//     source's snapshot, come in between and change nothing of them); the
+//     action shows on that List.
 //   - The ids must be items the source lists now (its last read, else its
-//     snapshot): none is guessed, and the tool gets each as the source
-//     gave it.
+//     snapshot) that the List's filter keeps now, its items' notes as
+//     they are: none is guessed, the set is never made larger (a mail come
+//     since the page showed the list is not in it), and the tool gets each
+//     id as the source gave it. One id that is not is enough for nothing
+//     to run.
 //   - The tool's access policy holds: never is refused (but a tool only the
 //     user's gesture runs, catalogFacts.gesture, which the click runs); on approval, the
 //     click is the user's yes, given on the exact call the page showed;
@@ -41,10 +45,13 @@ func (w *web) listActionRoutes(mux *webMux) {
 	mux.Handle("POST /api/nodes/{id}/act", w.auth(w.handleNodeAct))
 }
 
-// nodeActIn is a click on an action: the block, the action's name, the
-// node's version the page showed, and the ids picked.
+// nodeActIn is a click on an action: the block, the List it was made in
+// (its component id), the action's name, the node's version the page
+// showed, and the ids picked (or all the List showed: the page sends
+// them, the very ones it showed).
 type nodeActIn struct {
 	Block   string   `json:"block"`
+	List    string   `json:"list"`
 	Action  string   `json:"action"`
 	Version int      `json:"version"`
 	IDs     []string `json:"ids"`
@@ -110,17 +117,24 @@ func (c *core) runAction(ctx context.Context, id string, in nodeActIn, lang stri
 	if !ok {
 		return actFail(http.StatusConflict, tr(lang, "act.changed"))
 	}
+	path := listTemplate(b, in.List)
 	if in.Version > 0 && in.Version != last.Version.N {
 		shown, err := c.nodes.Read(id, in.Version)
 		var was *nodefile.Block
 		if err == nil {
 			was = shown.Node.Block(in.Block)
 		}
-		if was == nil || !reflect.DeepEqual(was.Actions[in.Action], a) {
+		if was == nil || !reflect.DeepEqual(was.Actions[in.Action], a) || listTemplate(was, in.List) != path {
 			return actFail(http.StatusConflict, tr(lang, "act.changed"))
 		}
 	}
 	if b.Validate() != nil {
+		return actFail(http.StatusConflict, tr(lang, "act.changed"))
+	}
+	// The List the click was made in: one of the action's source's items,
+	// the action shown on it; its filter as stored.
+	source, filter, err := listBinding(path, b.Sources)
+	if err != nil || source != a.Source || a.List != "" && a.List != in.List {
 		return actFail(http.StatusConflict, tr(lang, "act.changed"))
 	}
 	if len(in.IDs) == 0 {
@@ -129,7 +143,9 @@ func (c *core) runAction(ctx context.Context, id string, in nodeActIn, lang stri
 	if len(in.IDs) > actionsMaxIDs {
 		return actFail(http.StatusBadRequest, fmt.Sprintf(tr(lang, "act.toomany"), actionsMaxIDs))
 	}
-	listed, _ := itemIDs(b.Sources[a.Source], c.sourceNow(id, b, a.Source))
+	value := c.sourceNow(id, b, a.Source)
+	noteItems(b.Sources[a.Source], value, c.itemNotes(id, a.Source)) // its notes now, for the filter
+	listed, _ := itemIDs(b.Sources[a.Source], value, filter)
 	var ids []any
 	seen := map[string]bool{}
 	missing := 0

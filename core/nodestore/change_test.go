@@ -84,8 +84,22 @@ func TestNoteItem(t *testing.T) {
 			t.Errorf("noted: %s %+v", bad.id, bad.it)
 		}
 	}
-	if err := s.NoteItem("n1", Item{Source: "inbox", Item: "m1", Author: "brain"}); err != nil {
+	// A group alone is a note: the section a view shows the item in.
+	if err := s.NoteItem("n1", Item{Source: "inbox", Item: "m2", Group: "  À supprimer ", Author: "brain"}); err != nil {
 		t.Fatal(err)
+	}
+	if items, _ := s.Items("n1"); len(items) != 2 || items[1].Group != "À supprimer" || items[1].Note != "" {
+		t.Fatalf("grouped: %+v", items)
+	}
+	for _, g := range []string{strings.Repeat("x", ItemGroupMax+1), "a]b", "a/b", "a=b", "a!b", "two\nlines", "ghp_x"} {
+		if err := s.NoteItem("n1", Item{Source: "inbox", Item: "m2", Group: g, Author: "brain"}); err == nil {
+			t.Errorf("group %q kept", g)
+		}
+	}
+	for _, m := range []string{"m1", "m2"} {
+		if err := s.NoteItem("n1", Item{Source: "inbox", Item: m, Author: "brain"}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if items, _ := s.Items("n1"); len(items) != 0 {
 		t.Fatalf("not taken away: %+v", items)
@@ -303,5 +317,19 @@ func TestTitleTrust(t *testing.T) {
 	s, _ = e.open(t)
 	if sum, err := s.Get(view); err != nil || !sum.TitleExternal() || sum.Title != "Mes mails" {
 		t.Fatalf("an old index: %+v %v", sum, err)
+	}
+
+	// An index made before the items' groups gets them, none grouped.
+	s.Close()
+	if db, err = sql.Open("sqlite", e.index); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE node_items DROP COLUMN grp`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	s, _ = e.open(t)
+	if _, err := s.Items(view); err != nil {
+		t.Fatalf("an old index's items: %v", err)
 	}
 }

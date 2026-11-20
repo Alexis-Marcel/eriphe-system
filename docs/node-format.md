@@ -171,26 +171,55 @@ A block may declare what the user can run on the items of one of its sources, by
 - `tool`: a catalog tool, `<server>/<tool>`, as a source's; `args`: its fixed arguments;
 - `items`: the tool's parameter that takes the ids the user picks, a list; never among `args`;
 - `source`: one of the block's sources, with an `items` descriptor (the ids are its items' `id`);
-- `label`: the author's name for it, one line, 60 characters at most: only a hint.
+- `label`: the author's name for it, one line, 60 characters at most: only a hint;
+- `list` (optional): the id of the one `List` of the block it shows on, a List of that source's
+  items; without it, it shows on every List of them.
 
 A name is lowercase letters, digits, `_` and `-`, 40 at most. When an author writes it, code checks
 it against the catalog: the tool is there, `items` is one of its parameters that takes a list, and
 `args` hold against its input schema with that parameter left out.
 
 A `List` bound as a whole to that source's items (its template's `path` is `/<source>/<items.path>`,
-a path of plain fields) lets the user pick rows: a box on each, « tout sélectionner », and, once
-something is picked, the actions over the list. What a button says is code's, built from the tool
-and its fixed args (« Déplacer 2 éléments → archive (mail/move) »); the `label` shows beside it,
-never on an `external` block. A tool that looks destructive (it says so, or `trash`, `delete`,
-`remove` in its name or description) shows its exact call (the tool, its args, the items picked)
-before it runs.
+a path of plain fields, with or without a [filter](#sections)) lets the user pick rows: a box on
+each, « tout sélectionner », a button per action on all its rows (« Supprimer les 12 », up to 200
+rows), and, once something is picked, the actions over the picked rows. What a button says is
+code's, built from the tool and its fixed args (« Déplacer 2 éléments → archive (mail/move) »); the
+`label` shows beside it, never on an `external` block. A tool that looks destructive (it says so,
+or `trash`, `delete`, `remove` in its name or description) shows its exact call (the tool, its
+args, and the very items it will take, title · detail) before it runs.
 
-The click is the user's own gesture: code reads the action again in the block as stored, checks
-that every id picked is one the source lists, and runs one call, with the tool's access policy
-(never: refused, but for a tool only the user's gesture runs, such as `eriphe-catalog`'s
-`catalog_accept` and `catalog_refuse`, never to any agent and run by the click alone; on
-approval: the click is the yes, logged as such; free: runs). The node's trace
-says it in code's words. The source is then read again.
+The click is the user's own gesture, on the ids the page showed (frozen when the button is pressed,
+whatever the list shows meanwhile): code reads the action and the List the click was made in again
+in the block as stored (each the same as at the version the page showed), checks that every id is
+one the source lists now and that the List's filter keeps now, and runs one call on those ids, never
+more (a mail come since the page showed the list is not in it; one id that is not enough for nothing
+to run), with the tool's access policy (never: refused, but for a tool only the user's gesture runs,
+such as `eriphe-catalog`'s `catalog_accept` and `catalog_refuse`, never to any agent and run by
+the click alone; on approval: the click is the yes, logged as
+such; free: runs). The node's trace says it in code's words. The source is then read again.
+
+### Sections
+
+A view may show a source's items in sections (« À traiter », « À supprimer », « Pour info »): its
+author notes each item with a `group` (`item_note`), a short label it chooses, and writes one `List`
+per section whose template's path filters the source's items by a field:
+
+```json
+{"id": "drop", "component": "List", "children": {"path": "/mails/messages[_group=À supprimer]", "componentId": "row"}}
+```
+
+- The filter is one `[field=value]` or `[field!=value]`, after the source's items as their `items`
+  path says them, on a `List` only; checked when an author writes the block. A field the item has
+  not reads as empty: `[_group=]` keeps the items in no group.
+- Each item of a source with `items` carries, in the block's data (never in its file), its note's
+  fields: `_note`, `_state` and `_group` (empty when it has none), and `_external: true` when the
+  note was written after reading external content. A component may show them (`{"@path":
+  "_note"}`); they follow the notes live.
+- Code filters, never the page: the page draws the List bound to the source's items as a whole and
+  shows only the rows code kept, in the source's order; a List whose filter keeps nothing shows its
+  `emptyText`. An action with `list` shows on its section only.
+
+A group is one line of 40 characters at most, without `[ ] / = !`.
 
 ### Code's fields
 

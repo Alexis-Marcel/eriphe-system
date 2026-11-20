@@ -723,7 +723,7 @@ whatever address it dials) and one client certificate per device.
 | `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
 | `turn_home` | the user's message, said in a node's bar, is not about that node: the turn is about no node from then on, as at the home (`turnHome`, node_turn.go). What it raises waits above the bar (a card it raised already is unlinked from that node), and nothing of it is filed there; its lines stay in that node's bar, where the user reads them. At the home, or on events only, it does nothing |
-| `item_note` | note an item of a node's source: what the user should know and a state (`act`, `look`, `info`, `none`, `done`) |
+| `item_note` | note an item of a node's source: what the user should know, a state (`act`, `look`, `info`, `none`, `done`) and a group, the section a view shows it in (`À supprimer`; a List filters on `_group`) |
 
 The brain has no archive tool: only the user archives a node (`archiveNode`, by `user` alone), which
 archives every node under it, stops their tasks and their steps' work, and withdraws their cards;
@@ -1245,7 +1245,8 @@ composes each one from the catalog.
   read it in the attention queue (`node:<id>`, in code's words), tainted when its server is not
   trusted.
 - **Item notes** (`node_items.go`): a listing source's `items` (`path`, `id`, `title`, `detail`)
-  give its items; a task notes one (`item_note`) in `node_items`.
+  give its items; a task notes one (`item_note`: note, state, group) in `node_items`; a note that
+  changes sends the source again to the pages that show it ([sections](../docs/node-format.md#sections)).
 - **Calls on an item** (`item_cards.go`): a skill run's call kept for the user that names exactly
   one item of a source of the run's node, on the call's own server, is kept on that item
   (`access_asks.node`, `source`, `item`): one card per item (kind `calls`), answered alone. A call
@@ -3132,12 +3133,17 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   while the last version shows) and the user's marks at `/marks/<list>/<item>`; or its `error`
   when it does not read as a block. Its media go through eriphe-core (`/espace/media`, signed),
   those an external block's author wrote dropped unless a source gave them; a Link keeps to the
-  addresses a Link may open. `lists` (`list_actions.go`): each List bound as a whole to the items
-  of a source an action acts on (`component`, `source`), its rows (`items`: `n`, its place in the
-  source's list, `id`, `title`, `detail`) and the actions' buttons (`actions`: `name`, `one` and
-  `many` with `{n}`, the words code builds from the tool and its fixed args, `tool`, `args` a line
-  each, `hint` the author's label (`hintExternal` on an external block: shown marked, in amber with a ⚠), `confirm` for a tool that looks
-  destructive). The node's goal is never sent (it is in its file). `refs`: the node
+  addresses a Link may open. Each item of a source with `items` carries its note's fields
+  (`_note`, `_state`, `_group`, `_external` when the note may carry someone else's words;
+  `list_sections.go`). `lists` (`list_actions.go`): each List bound as a whole to the items of a
+  source that filters them (`filtered`: the page shows only its rows, code filters) or that an
+  action acts on (`component`, `source`), its rows (`items`: `n`, its place in the source's list,
+  `id`, `title`, `detail`) and the actions' buttons (`actions`: `name`, `one`, `many` and `all`
+  with `{n}`, the words code builds from the tool and its fixed args, `tool`, `args` a line each,
+  `hint` the author's label (`hintExternal` on an external block: shown marked, in amber with a ⚠),
+  `confirm` for a tool that looks
+  destructive); a filtered List's template path reaches the page without its filter. The node's
+  goal is never sent (it is in its file). `refs`: the node
   each `[[name]]` of its text opens, by the name as written (`id`, `title`, none when it may be
   someone else's words, `external`, `archived`); a name no node has is not there.
 - `GET /api/nodes/{id}/trace`: the trace's entries, oldest first (`at`, `author`: brain, user,
@@ -3165,8 +3171,10 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   reads it again;
 - `progress`: a task's line (`{node, text, at}`), from its `progress` tool, only when the task read
   nothing external (a tainted line stays in the trace, never under the bubble);
-- `source`: a live block's new value (`{node, block, name, value}`), sent when its read changed,
-  with its rows (`items`, as `lists` gives them) when an action acts on it;
+- `source`: a live block's new value (`{node, block, name, value}`, its items' notes on them),
+  sent when its read changed or the notes on its items did (to each block that reads it), with the
+  rows of its Lists the page knows (`lists`: `{component, items}`, as the page's `lists` gives
+  them);
 - `show`: Eriphe asks to open a node's page (`{node, by, at, seq}`), the last one at once, then each
   new one; the page opens it beside what is open, once (an old one, over a minute, is not news);
 - `exchange` (below), `proposals` and `notice`.
@@ -3184,11 +3192,13 @@ token in `X-CSRF-Token`:
 - `POST /api/nodes/{id}/ask` `{block, component}`: a block's button. Its words are read again in
   the stored block (`a2ui.AskText`), never taken from the page, and become the user's message to
   that node; a block written after reading external content asks nothing (`403`).
-- `POST /api/nodes/{id}/act` `{block, action, version, ids}`: one of a block's actions on the items
-  the user picked (`web_list_actions.go`), the user's own gesture. The action is read again in the
-  stored block, the same at the version the page showed (`version`) as at the last (`409`
-  otherwise); every id must be one the source lists now (its last read, else its snapshot: `400`,
-  nothing run), sent to the tool as the source gave it; 200 items at most. The tool's policy
+- `POST /api/nodes/{id}/act` `{block, list, action, version, ids}`: one of a block's actions on the
+  items the user picked in a List (`list`, its component id), or all the rows it showed
+  (`web_list_actions.go`), the user's own gesture. The action and the List are read again in the
+  stored block, the same at the version the page showed (`version`) as at the last, the action
+  shown on that List (`409` otherwise); every id must be one the source lists now (its last read,
+  else its snapshot) that the List's filter keeps with the items' notes now (`400`, nothing run:
+  the set is never made larger), sent to the tool as the source gave it; 200 items at most. The tool's policy
   holds: never (or a call that must name its account) is `403`; on approval the click is the
   user's yes; free runs. One call with the fixed `args` and the ids in its `items` parameter, kept
   in the decisions' journal (`by` user, the reason saying the click counted as the yes) and in the

@@ -119,7 +119,7 @@ func registerNodeTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in nodeShowIn) (map[string]any, error) { return c.brainNodeShow(in) })
 	tool(s, "turn_home", "The user's message, said in a node's bar, is not about that node: from now on this turn is about no node, as one said at the home. Call it first, before anything else of the turn. What you raise then waits above the bar, not in that node, and nothing of the turn is filed in it; open or find its own subject (node_open, node_find) if it needs one.",
 		func(ctx context.Context, in struct{}) (map[string]any, error) { return c.turnHome() })
-	tool(s, "item_note", "Note one item a source of a node lists (a mail, an event), by the node, the source's name and the item's id: what the user should know of it and a state (act, look, info, none, done). The same item noted again replaces it; no note nor state takes it away. Written after reading external content, it is marked so.",
+	tool(s, "item_note", "Note one item a source of a node lists (a mail, an event), by the node, the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a group, the section a view shows it in (À supprimer, Pour info). The same item noted again replaces it; no note, state nor group takes it away. Written after reading external content, it is marked so.",
 		func(ctx context.Context, in brainItemNoteIn) (map[string]any, error) { return c.brainItemNote(in) })
 	tool(s, "node_settle", "Decide on an exception of a work cut in steps, when you are woken for one ([nœud <id> « title »]); Eriphe accepts a proven step and starts the next ones by itself. On a step: accept one whose proof failed but whose work holds (never one whose checks failed), retry it saying what to fix (at most 2), drop it (with the steps that come after it), or replan (drop it and those after it, and open the steps you give in their place). On the work (no step): accept gives it more time when its budget is spent, or holds it done when the final check does not hold; retry runs the final check again; replan adds the steps you give; drop stops it.",
 		func(ctx context.Context, in settleIn) (map[string]any, error) {
@@ -347,7 +347,7 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 			if it.Tainted != "" {
 				c.turn.taint(it.Tainted)
 			}
-			list = append(list, map[string]string{"source": it.Source, "item": it.Item, "note": it.Note, "state": it.State})
+			list = append(list, map[string]string{"source": it.Source, "item": it.Item, "note": it.Note, "state": it.State, "group": it.Group})
 		}
 		out["items"] = list
 	}
@@ -513,7 +513,7 @@ func (c *core) brainItemNote(in brainItemNoteIn) (map[string]any, error) {
 		tainted = "brain:" + strings.Join(taint, ", ")
 	}
 	err = c.nodes.NoteItem(sum.ID, nodestore.Item{Source: strings.TrimSpace(in.Source), Item: strings.TrimSpace(in.Item),
-		Note: in.Note, State: in.State, Author: byBrain, Tainted: tainted})
+		Note: in.Note, State: in.State, Group: in.Group, Author: byBrain, Tainted: tainted})
 	if err != nil {
 		return nil, err
 	}

@@ -110,6 +110,9 @@ describe("the store", () => {
     expect(s.progress.a1.text).toBe("1/2");
     s = applySource(s, { node: "a", block: "b", name: "n", value: { x: 1 } });
     expect(s.sources[sourceKey("a", "b", "n")]).toEqual({ x: 1 });
+    // the rows of its Lists, by the List's component
+    s = applySource(s, { node: "a", block: "b", name: "n", value: {}, lists: [{ component: "drop", items: [{ n: 2, id: "m3" }] }] });
+    expect(s.rows[sourceKey("a", "b", "drop")]).toEqual([{ n: 2, id: "m3" }]);
     s = applyMoved(s, { refs: ["card:1"] });
     expect(s.moved).toMatchObject({ n: 1, refs: ["card:1"] });
     expect(applyMoved(s, { refs: [] })).toBe(s);

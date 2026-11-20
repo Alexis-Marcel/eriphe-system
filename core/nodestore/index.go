@@ -63,6 +63,7 @@ const schema = `CREATE TABLE nodes (
 	CREATE TABLE node_items (
 	  id TEXT NOT NULL, source TEXT NOT NULL, item TEXT NOT NULL,
 	  note TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT '',
+	  grp TEXT NOT NULL DEFAULT '',      -- its group: the section a view shows it in
 	  author TEXT NOT NULL, tainted TEXT NOT NULL DEFAULT '', noted INTEGER NOT NULL,
 	  PRIMARY KEY (id, source, item));
 	CREATE TABLE node_layout (
@@ -99,6 +100,18 @@ func openIndex(path string) (db *sql.DB, fresh bool, err error) {
 		}
 		if n == 0 {
 			if _, err := db.Exec(`ALTER TABLE nodes ADD COLUMN title_trusted INTEGER NOT NULL DEFAULT 0`); err != nil {
+				db.Close()
+				return nil, false, err
+			}
+		}
+		// An index made before the items' groups lacks them: none was
+		// grouped then.
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('node_items') WHERE name = 'grp'`).Scan(&n); err != nil {
+			db.Close()
+			return nil, false, err
+		}
+		if n == 0 {
+			if _, err := db.Exec(`ALTER TABLE node_items ADD COLUMN grp TEXT NOT NULL DEFAULT ''`); err != nil {
 				db.Close()
 				return nil, false, err
 			}

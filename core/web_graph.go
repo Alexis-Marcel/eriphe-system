@@ -357,6 +357,9 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 			}
 		}
 	}
+	// The items' notes on them (list_sections.go): the values are this
+	// view's own, read for it.
+	c.noteSources(id, b, v.Data)
 	marks := map[string]any{}
 	for list, items := range b.Marks {
 		m := map[string]any{}
@@ -381,6 +384,7 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 			}
 		}
 	}
+	unfilterLists(list) // code filters, the page shows the rows it gets (list_sections.go)
 	raw, _ := json.Marshal(list)
 	json.Unmarshal(raw, &v.Components)
 	if v.Components == nil {
@@ -388,6 +392,9 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 	}
 	for _, bound := range a2ui.Eriphe().BoundPaths(b.Components) {
 		at := tokens(bound.Path)
+		if _, ok := b.Sources[at0(at)]; ok {
+			at = unfiltered(at) // under a List that filters: each item of the source's
+		}
 		if bound.Link {
 			rewriteAt(v.Data, at, linkOrDrop)
 		}
@@ -401,27 +408,48 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 	return v
 }
 
-// sourceValue is the value at /<name> of a block as the page draws it:
-// what a "source" event sends. false when the node, the block or the
-// source is no more.
-func (c *core) sourceValue(id, block, name string) (any, bool) {
+// sourceEvents are what "source" events send of a block's source: its
+// node, block and name, its value at /<name> as the page draws it (its
+// items' notes on them), and the rows of the Lists the page must know
+// that show it (blockLists: those that filter it, those the user picks
+// in). block "": each block of the node that reads a source so named (its
+// items' notes changed). None when the node or the source is no more.
+func (c *core) sourceEvents(id, block, name string) []map[string]any {
 	if c.nodes == nil {
-		return nil, false
+		return nil
 	}
 	d, err := c.nodes.Read(id, 0)
 	if err != nil {
-		return nil, false
+		return nil
 	}
-	b := d.Node.Block(block)
-	if b == nil {
-		return nil, false
+	var out []map[string]any
+	var reads []nodeRead
+	for _, b := range d.Node.Blocks() {
+		if block != "" && b.Name != block {
+			continue
+		}
+		if _, ok := b.Sources[name]; !ok {
+			continue
+		}
+		if reads == nil {
+			reads = c.nodeReads(id)
+		}
+		v := c.blockView(id, b, reads)
+		val, ok := v.Data[name]
+		if !ok || v.Error != "" {
+			continue
+		}
+		ev := map[string]any{"node": id, "block": b.Name, "name": name, "value": val}
+		if lists := c.blockLists(b, v.Data, "fr", name); len(lists) > 0 {
+			rows := make([]map[string]any, 0, len(lists))
+			for _, l := range lists {
+				rows = append(rows, map[string]any{"component": l.Component, "items": l.Items})
+			}
+			ev["lists"] = rows
+		}
+		out = append(out, ev)
 	}
-	if _, ok := b.Sources[name]; !ok {
-		return nil, false
-	}
-	v := c.blockView(id, b, c.nodeReads(id))
-	val, ok := v.Data[name]
-	return val, ok
+	return out
 }
 
 // nodeCards are the cards a node waits on, or did: those linked to it

@@ -98,13 +98,15 @@ type Options struct {
 const (
 	ChangedDoc   = "doc"   // a new version of its file
 	ChangedTrace = "trace" // its trace grew
-	ChangedState = "state" // its state, or its items' notes, in the index only
+	ChangedState = "state" // its state, in the index only
+	ChangedItems = "items" // the notes on the items of one of its sources (Source), in the index only
 )
 
 // Change is a node that changed, and what of it.
 type Change struct {
-	ID   string
-	What string // ChangedDoc, ChangedTrace or ChangedState
+	ID     string
+	What   string // ChangedDoc, ChangedTrace, ChangedState or ChangedItems
+	Source string // ChangedItems: the source whose items' notes changed
 }
 
 // Store is the graph's nodes.

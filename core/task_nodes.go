@@ -103,8 +103,9 @@ type nodeOpenIn struct {
 type itemNoteIn struct {
 	Source string `json:"source" jsonschema:"the name of a source one of your node's blocks reads, which lists items"`
 	Item   string `json:"item" jsonschema:"the item's id, as the source gives it"`
-	Note   string `json:"note,omitempty" jsonschema:"what the user should know of it and do of it, a short sentence in their language, no ids; empty with no state takes the note away"`
+	Note   string `json:"note,omitempty" jsonschema:"what the user should know of it and do of it, a short sentence in their language, no ids; empty with no state nor group takes the note away"`
 	State  string `json:"state,omitempty" jsonschema:"act, look, info, none or done"`
+	Group  string `json:"group,omitempty" jsonschema:"the section a view shows it in, a short label of your choice in the user's language (À supprimer, Pour info), 40 characters at most, without [ ] / = !; a List of the view filters on it ([_group=À supprimer])"`
 }
 
 type progressIn struct {
@@ -162,7 +163,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 					if it.Tainted != "" {
 						c.taskRead(w.task, it.Tainted)
 					}
-					list = append(list, map[string]string{"source": it.Source, "item": it.Item, "note": it.Note, "state": it.State})
+					list = append(list, map[string]string{"source": it.Source, "item": it.Item, "note": it.Note, "state": it.State, "group": it.Group})
 				}
 				out["items"] = list
 			}
@@ -245,10 +246,10 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			}
 			return out, nil
 		})
-	tool(s, "item_note", "Note one item a source of your node lists (a mail, an event), by the source's name and the item's id: what the user should know of it and a state (act, look, info, none, done). The same item noted again replaces it; no note nor state takes it away. Written after reading external content, it is marked so.",
+	tool(s, "item_note", "Note one item a source of your node lists (a mail, an event), by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a group, the section a view shows it in (À supprimer, Pour info). The same item noted again replaces it; no note, state nor group takes it away. Written after reading external content, it is marked so.",
 		func(ctx context.Context, in itemNoteIn) (map[string]any, error) {
 			err := c.nodes.NoteItem(w.node, nodestore.Item{Source: strings.TrimSpace(in.Source), Item: strings.TrimSpace(in.Item),
-				Note: in.Note, State: in.State, Author: w.author, Tainted: c.writeTaint(w.task)})
+				Note: in.Note, State: in.State, Group: in.Group, Author: w.author, Tainted: c.writeTaint(w.task)})
 			if err != nil {
 				return nil, err
 			}
@@ -456,6 +457,9 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 			if err := c.actionOK(b.Actions[act]); err != nil {
 				problems = append(problems, fmt.Sprintf("block %s: action %s: %v", name, act, err))
 			}
+		}
+		for _, p := range listsOK(b) {
+			problems = append(problems, fmt.Sprintf("block %s: %s", name, p))
 		}
 		outside[name] = c.untrustedSources(b)
 	}

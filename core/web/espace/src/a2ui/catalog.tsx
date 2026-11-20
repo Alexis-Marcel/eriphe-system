@@ -9,7 +9,7 @@ import { Day as DayView, cleanEvents, type Ghost } from "./day";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
-import { Pickable, usePicks } from "./picks";
+import { Pickable, useList, type Row } from "./picks";
 import { HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
@@ -93,17 +93,22 @@ const List = createComponentImplementation(
     }),
   },
   ({ props, buildChild, context }) => {
-    const items = kids(props.children, buildChild);
-    // A list of a source's items some action of its block acts on: the
-    // user may pick rows in it (picks.tsx).
+    // A list of a source's items eriphe-core told of (picks.tsx): one
+    // that filters them shows only the rows it kept (a section); one some
+    // action of its block acts on lets the user pick rows in it.
     const surface = context.dataContext.surface?.id;
-    const pick = usePicks(surface, context.componentModel.id);
-    if (!items.length) return props.emptyText ? <p className="a2-empty">{props.emptyText}</p> : null;
-    if (pick && surface) return <Pickable surface={surface} list={pick.list} picks={pick.picks} rows={items} direction={props.direction ?? "vertical"} />;
+    const told = useList(surface, context.componentModel.id);
+    let rows: Row[] = kids(props.children, buildChild).map((node, n) => ({ n, node }));
+    if (told?.list.filtered) {
+      const kept = new Set(told.list.items.map((it) => it.n));
+      rows = rows.filter((r) => kept.has(r.n));
+    }
+    if (!rows.length) return props.emptyText ? <p className="a2-empty">{props.emptyText}</p> : null;
+    if (told?.pickable && surface) return <Pickable surface={surface} list={told.list} picks={told.picks} rows={rows} direction={props.direction ?? "vertical"} />;
     return (
       <ul className={`a2-list a2-list-${props.direction ?? "vertical"}`}>
-        {items.map((item, i) => (
-          <li key={i}>{item}</li>
+        {rows.map((r) => (
+          <li key={r.n}>{r.node}</li>
         ))}
       </ul>
     );

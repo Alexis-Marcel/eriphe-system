@@ -99,6 +99,7 @@ type Action struct {
 	Args   map[string]any `json:"args,omitempty"`
 	Items  string         `json:"items"`
 	Source string         `json:"source"`
+	List   string         `json:"list,omitempty"` // the List it shows on, by its component id; "": every List of its source
 }
 
 // ActionRe is an action's name.

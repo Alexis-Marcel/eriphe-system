@@ -621,6 +621,7 @@ func valueText(v any) string {
 //	items.0.name               an item of a list by its index
 //	rules.*.name               every item of a list, then a field of each
 //	rules[state=firing].name   the items whose field has that value
+//	rules[state!=ok].name      the items whose field has another
 //
 // Once a path went over a list (* or a filter) its value is a list, sorted
 // so that the same items in another order are no change. Empty: the whole.
@@ -630,12 +631,13 @@ type pathStep struct {
 	all    bool   // *
 	field  string // a filter's field
 	equals string // and its value
+	not    bool   // !=: the items whose field has another value
 }
 
 func parsePath(path string) ([]pathStep, error) {
 	path = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(path), "$"), ".")
 	var steps []pathStep
-	bad := fmt.Errorf("path %q: fields joined by dots, * for every item, [field=value] to keep some", path)
+	bad := fmt.Errorf("path %q: fields joined by dots, * for every item, [field=value] or [field!=value] to keep some", path)
 	for path != "" {
 		var seg string
 		if path[0] == '[' {
@@ -660,7 +662,11 @@ func parsePath(path string) ([]pathStep, error) {
 			if !ok || strings.TrimSpace(f) == "" {
 				return nil, bad
 			}
-			steps = append(steps, pathStep{field: strings.TrimSpace(f), equals: strings.TrimSpace(v)})
+			f, not := strings.CutSuffix(strings.TrimSpace(f), "!")
+			if strings.TrimSpace(f) == "" {
+				return nil, bad
+			}
+			steps = append(steps, pathStep{field: strings.TrimSpace(f), equals: strings.TrimSpace(v), not: not})
 		case seg == "":
 			return nil, bad
 		default:
@@ -691,7 +697,7 @@ func extract(v any, path string) (any, error) {
 					items = l
 				}
 				for _, it := range items {
-					if o, ok := it.(map[string]any); ok && valueText(o[st.field]) == st.equals {
+					if o, ok := it.(map[string]any); ok && (valueText(o[st.field]) == st.equals) != st.not {
 						next = append(next, it)
 					}
 				}
@@ -943,7 +949,7 @@ type writeMonitorIn struct {
 	Args     map[string]any `json:"args,omitempty" jsonschema:"the tool's fixed arguments"`
 	Every    string         `json:"every,omitempty" jsonschema:"how often it looks: 1m to 1d (2m, 15m, 1h); 5m if empty"`
 	Cond     string         `json:"cond,omitempty" jsonschema:"changed (default): an event when the value at path changes; new: one event per item of the list at path not seen before; cross: an event when the number at path goes past above or below, and when it comes back (holds true or false)"`
-	Path     string         `json:"path,omitempty" jsonschema:"what it compares in the result: fields joined by dots, * for every item of a list, [field=value] to keep some (data.rules[state=firing].name); the whole result if empty"`
+	Path     string         `json:"path,omitempty" jsonschema:"what it compares in the result: fields joined by dots, * for every item of a list, [field=value] or [field!=value] to keep some (data.rules[state=firing].name); the whole result if empty"`
 	ID       string         `json:"id,omitempty" jsonschema:"with new: the field of an item that tells it from another (id, uid)"`
 	Above    *float64       `json:"above,omitempty" jsonschema:"with cross: the limit the number goes above (90 for a CPU at 90 %)"`
 	Below    *float64       `json:"below,omitempty" jsonschema:"with cross: the limit the number goes below (200 for a price under 200)"`
