@@ -115,7 +115,7 @@ func TestTextLinkResolution(t *testing.T) {
 
 // An index rebuilt from the files resolves the links by the titles of the
 // day, whatever the order the files are read in; an index made before the
-// links is filled with them, its places kept.
+// links is filled with them.
 func TestTextLinksRebuilt(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
@@ -131,9 +131,6 @@ func TestTextLinksRebuilt(t *testing.T) {
 		t.Fatalf("rebuilt %v", got)
 	}
 	// An index of before: no node_refs, no title_key.
-	if err := s2.SetPlace("n1", Place{X: 1, Y: 2}); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := s2.db.Exec(`DROP TABLE node_refs; DROP INDEX nodes_title_key; ALTER TABLE nodes DROP COLUMN title_key`); err != nil {
 		t.Fatal(err)
 	}
@@ -141,8 +138,5 @@ func TestTextLinksRebuilt(t *testing.T) {
 	s3, _ := e.open(t)
 	if got := linksOf(t, s3, "n1"); !slices.Equal(got, []string{"n2", "n3"}) {
 		t.Fatalf("an old index %v", got)
-	}
-	if ps, _ := s3.Places(); ps["n1"].X != 1 {
-		t.Fatalf("the place is lost: %+v", ps)
 	}
 }

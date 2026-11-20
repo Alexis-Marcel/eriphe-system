@@ -59,33 +59,3 @@ func TestArchivesAndReopen(t *testing.T) {
 		t.Fatalf("graph: %d nodes", len(xs))
 	}
 }
-
-// A node's place is the user's, kept in the index alone: no version, and
-// an archived node's place is not given.
-func TestPlaces(t *testing.T) {
-	e := newEnv(t)
-	s, _ := e.open(t)
-	mustCreate(t, s, New{Title: "Substack", Body: "Newsletter."})
-	mustCreate(t, s, New{Title: "Plan", Parent: "n1", Body: "Titles."})
-	if err := s.SetPlace("n1", Place{X: 640, Y: -20}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetPlace("n2", Place{X: 120, Y: 40}); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetPlace("n9", Place{}); err == nil {
-		t.Fatal("a place for a node there is not")
-	}
-	got, err := s.Places()
-	if err != nil || len(got) != 2 || got["n1"] != (Place{X: 640, Y: -20}) {
-		t.Fatalf("places: %v %v", got, err)
-	}
-	if d := mustRead(t, s, "n1"); d.Version.N != 1 {
-		t.Fatalf("a place made a version: v%d", d.Version.N)
-	}
-	s.Unplace("n2")
-	s.Archive("n1", "user")
-	if got, _ := s.Places(); len(got) != 0 {
-		t.Fatalf("places after unplace and archive: %v", got)
-	}
-}

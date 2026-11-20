@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BarLine, GraphNode } from "./api";
 import {
   applyDoc, applyExchange, applyMoved, applyNodes, applyNotes, applyProgress, applyShow, applySource, closePage, empty, NOTES_KEPT,
-  openPage, pathOf, placeAt, restore, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
+  openPage, pathOf, restore, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
 } from "./store";
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
@@ -126,9 +126,9 @@ describe("the store", () => {
     expect(subtree(s.nodes, "a").sort()).toEqual(["a", "a1", "a2"]);
   });
 
-  it("comes back as the user left it: its pages once their nodes come, the places, the theme", () => {
-    let s = restore(empty(), { open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark" }, { a: { x: 10, y: -4 } });
-    expect(s).toMatchObject({ open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark", places: { a: { x: 10, y: -4 } } });
+  it("comes back as the user left it: its pages once their nodes come, the theme", () => {
+    let s = restore(empty(), { open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark" });
+    expect(s).toMatchObject({ open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark" });
     s = applyNodes(s, { reset: true, nodes: [node("a"), node("a1", { parent: "a" }), node("b")] });
     expect(s.open).toEqual(["a1", "b"]);
     expect(s.talk).toBe("a1");
@@ -136,15 +136,12 @@ describe("the store", () => {
     // A show the user already took, given again as the stream opens, opens nothing.
     expect(applyShow(s, { node: "a", seq: 4, at: new Date().toISOString() }).open).toEqual(["a1", "b"]);
     // What eriphe-core kept that is not a view reads as nothing.
-    expect(restore(empty(), { open: [3 as unknown as string], talk: "x", theme: "pink" as never }, undefined)).toMatchObject({ open: [], talk: null, theme: "", places: {} });
-    expect(restore(empty(), { open: ["a"] }, undefined).talk).toBeNull();
+    expect(restore(empty(), { open: [3 as unknown as string], talk: "x", theme: "pink" as never })).toMatchObject({ open: [], talk: null, theme: "" });
+    expect(restore(empty(), { open: ["a"] }).talk).toBeNull();
   });
 
-  it("keeps where a bubble was dropped, forgets it, and the theme chosen", () => {
-    let s = placeAt(empty(), "a", { x: 1, y: 2 });
-    expect(s.places).toEqual({ a: { x: 1, y: 2 } });
-    s = placeAt(s, "a", null);
-    expect(s.places).toEqual({});
+  it("keeps the theme chosen", () => {
+    const s = empty();
     const t = setTheme(s, "light");
     expect(t.theme).toBe("light");
     expect(setTheme(t, "light")).toBe(t);

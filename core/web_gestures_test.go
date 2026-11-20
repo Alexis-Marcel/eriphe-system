@@ -205,17 +205,15 @@ func TestNodeArchiveAndReopen(t *testing.T) {
 	}
 }
 
-// Where the user drops a bubble, and the display settings, are kept for
-// every screen: the boot gives them, the shell carries the theme.
+// The pages open and the display settings are kept for every screen: the
+// boot gives them, the shell carries the theme. Where the bubbles are is
+// not kept.
 func TestEspaceViewKept(t *testing.T) {
 	tw, csrf := graphWeb(t)
 	c := tw.c
 	id := mustNode(t, c, nodestore.New{Title: "Substack", Body: "La newsletter."})
-	if code, _ := gesture(t, tw, csrf, "PUT", "/api/nodes/"+id+"/place", placeIn{X: 900, Y: -40}); code != http.StatusNoContent {
-		t.Fatalf("place: %d", code)
-	}
-	if code, _ := gesture(t, tw, csrf, "PUT", "/api/nodes/"+id+"/place", map[string]any{"x": 1e9, "y": 0}); code != http.StatusBadRequest {
-		t.Fatalf("a place out of bounds: %d", code)
+	if code, _ := gesture(t, tw, csrf, "PUT", "/api/nodes/"+id+"/place", map[string]any{"x": 900, "y": -40}); code == http.StatusNoContent {
+		t.Fatal("a bubble's place was kept")
 	}
 	for _, bad := range []any{espaceView{Theme: "pink"}, espaceView{Open: []string{"../x"}}} {
 		if code, _ := gesture(t, tw, csrf, "PUT", "/api/espace/view", bad); code != http.StatusBadRequest {
@@ -226,14 +224,10 @@ func TestEspaceViewKept(t *testing.T) {
 	_, body, _ := tw.do("GET", "/espace/boot", nil, nil)
 	var boot espaceBoot
 	json.Unmarshal([]byte(body), &boot)
-	if boot.Places[id] != (placeIn{X: 900, Y: -40}) || len(boot.View.Open) != 1 || boot.View.Talk != id || boot.View.Theme != "light" {
-		t.Fatalf("boot: %+v %+v", boot.Places, boot.View)
+	if len(boot.View.Open) != 1 || boot.View.Talk != id || boot.View.Theme != "light" || strings.Contains(body, `"places"`) {
+		t.Fatalf("boot: %s", body)
 	}
 	if _, page, _ := tw.do("GET", "/espace", nil, nil); !strings.Contains(page, `data-theme="light"`) || !strings.Contains(page, `name="color-scheme" content="light"`) {
 		t.Fatal("the shell does not carry the theme")
-	}
-	gesture(t, tw, csrf, "DELETE", "/api/nodes/"+id+"/place", nil)
-	if len(c.dropped()) != 0 {
-		t.Fatal("the place was kept")
 	}
 }
