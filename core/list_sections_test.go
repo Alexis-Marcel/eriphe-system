@@ -184,6 +184,14 @@ func TestListSectionsMedia(t *testing.T) {
 	if !strings.HasPrefix(got, mediaPath+"?") {
 		t.Fatalf("an image under a filtered List: %q", got)
 	}
+
+	// A filter that does not read (a file written by hand): the page
+	// shows none of the items, never all of them.
+	b.Components = json.RawMessage(strings.Replace(string(b.Components), "messages[_group=x]", "other[_group=x]", 1))
+	lists := c.blockLists(b, v.Data, "fr")
+	if len(lists) != 1 || !lists[0].Filtered || len(lists[0].Items) != 0 {
+		t.Fatalf("a filter that does not read: %+v", lists)
+	}
 }
 
 // The click on a section's action runs on exactly the ids the page sent,

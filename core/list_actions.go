@@ -391,6 +391,12 @@ func (c *core) blockLists(b *nodefile.Block, data map[string]any, lang string, o
 			continue
 		}
 		name, f, err := listBinding(path, b.Sources)
+		if err != nil && strings.Contains(path, "[") && len(only) == 0 {
+			// A filter that does not read (a file written by hand): the
+			// page shows none of the source's items, never all of them.
+			out = append(out, pageList{Component: id, Filtered: true, Items: []listItem{}, Actions: []listAction{}})
+			continue
+		}
 		if err != nil || len(only) > 0 && !slices.Contains(only, name) {
 			continue
 		}
