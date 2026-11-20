@@ -136,6 +136,60 @@ func TestBarExchange(t *testing.T) {
 	}
 }
 
+// An answer given at the home, more than a line, is held whole until the
+// user writes again; a line an event made Eriphe say later never takes its
+// place; an answer of one line is only its line.
+func TestHomeAnswer(t *testing.T) {
+	tw := newTestWeb(t)
+	c, st := tw.c, tw.c.store
+	asked, _ := st.addMessage(roleUser, "Tu as accès à mes films ?", true)
+	c.turn.start(int(asked), int(asked), 0)
+	whole := "Oui, je suis branché sur **Seerr** : je peux chercher un film, voir ce qui est demandé et en demander un. " +
+		"Pour l'instant, chaque recherche te demande ton accord. Tu peux la mettre en accès libre dans Réglages → Outils → films."
+	said, _ := st.addMessage(roleBrain, whole, true)
+	c.markAnswer(int(said))
+	x, err := tw.w.exchangeFor("", "", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x.Answer == nil || x.Answer.Seq != int(said) || x.Answer.Text != whole || x.Said != nil || x.Asked == nil || x.Asked.Seq != int(asked) {
+		t.Fatalf("the answer is not held whole: answer %+v, said %+v", x.Answer, x.Said)
+	}
+	// Written in a tainted turn: marked.
+	st.set(taintKey(int(said)), "brain:task:t-1")
+	if x, _ = tw.w.exchangeFor("", "", "", false); x.Answer == nil || !x.Answer.External {
+		t.Errorf("a tainted answer is not marked: %+v", x.Answer)
+	}
+
+	// An event alone, later: its line shows, the answer stays.
+	ev, _ := st.addMessage(roleEvent, "Le catalogue d'outils a changé.", true)
+	c.turn.goOn(int(ev), int(ev), 0, nil)
+	line, _ := st.addMessage(roleBrain, "Un outil de plus : films.", true)
+	c.markAnswer(int(line))
+	x, _ = tw.w.exchangeFor("", "", "", false)
+	if x.Answer == nil || x.Answer.Seq != int(said) || x.Said == nil || x.Said.Seq != int(line) {
+		t.Fatalf("an event's line took the answer's place: answer %+v, said %+v", x.Answer, x.Said)
+	}
+	// Nor is it held in a node's bar.
+	if x, _ = tw.w.exchangeFor("n-1", "", "", false); x.Answer != nil {
+		t.Errorf("a node's bar holds the home's answer: %+v", x.Answer)
+	}
+
+	// The user writes again, not yet read: the answer is gone.
+	next, _ := st.addMessage(roleUser, "Allume la lumière.", false)
+	if x, _ = tw.w.exchangeFor("", "", "", false); x.Answer != nil {
+		t.Errorf("the answer outlived a new message: %+v", x.Answer)
+	}
+	// Read, and answered in one line: that line goes as any, nothing is held.
+	st.db.Exec(`UPDATE messages SET delivered = 1 WHERE seq = ?`, next)
+	c.turn.start(int(next), int(next), 0)
+	done, _ := st.addMessage(roleBrain, "C'est allumé.", true)
+	c.markAnswer(int(done))
+	if x, _ = tw.w.exchangeFor("", "", "", false); x.Answer != nil || x.Said == nil || x.Said.Text != "C'est allumé." {
+		t.Errorf("a one-line answer: answer %+v, said %+v", x.Answer, x.Said)
+	}
+}
+
 // The workspace's stream sends the exchange when it opens, then again as
 // Eriphe writes (the draft) and once its reply lands, as JSON.
 func TestWorkspaceStreamExchange(t *testing.T) {

@@ -165,6 +165,72 @@ func (c *core) moveHomeTurn(id string) bool {
 	return true
 }
 
+// atHome makes the turn about no node, its answer as at the home's
+// (turn_home): the message said in a node is about something else.
+func (t *brainTurn) atHome() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.node, t.home = "", true
+	t.save()
+}
+
+// answersAtHome tells a turn turn_home made about no node.
+func (t *brainTurn) answersAtHome() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.home
+}
+
+// turnHome is turn_home: the user's message, said in a node's bar, is
+// not about that node. The turn is about none from now: what it raises
+// waits above the bar (unheldCards), a card it raised already for that
+// node is no longer its, and nothing of it is filed there (node_net.go).
+// Its lines stay in that node's bar, where the user reads them.
+func (c *core) turnHome() (map[string]any, error) {
+	talk := c.turn.talkNode()
+	if !c.turnAnswersUser() || talk == "" {
+		return map[string]any{"note": "Nothing to do: this turn is not about a node the user wrote in."}, nil
+	}
+	c.turn.atHome()
+	xs, _ := c.cardsWhere(`seq = 0 AND turn = 1`)
+	for _, x := range xs {
+		c.store.db.Exec(`DELETE FROM node_cards WHERE node = ? AND ref = ?`, talk, x.Ref)
+	}
+	if c.nodes != nil {
+		if sum, err := c.nodes.Get(talk); err == nil && sum.State == nodestore.Waiting && !c.nodeCardWaits(talk) {
+			if _, ok := c.work(talk); !ok {
+				c.nodes.SetState(talk, nodestore.Idle)
+			}
+		}
+	}
+	return map[string]any{"note": "This turn is about no node now, as at the home."}, nil
+}
+
+// showTurnCards opens the page of the node a card raised in a turn that
+// answers the user waits in, beside what is open: what the user must
+// answer is in front of them at once, never in a page they do not see.
+// A card no node holds waits above the bar already.
+func (c *core) showTurnCards(xs []convoCard) {
+	if !c.turnAnswersUser() || c.nodes == nil {
+		return
+	}
+	shown := map[string]bool{}
+	for _, x := range xs {
+		if x.State != cardPending {
+			continue
+		}
+		for _, id := range c.cardNodes(x.Ref) {
+			if sum, err := c.nodes.Get(id); err == nil && sum.Archived.IsZero() {
+				if !shown[id] {
+					shown[id] = true
+					c.showNode(id, byBrain, false)
+				}
+				break
+			}
+		}
+	}
+}
+
 // turnAnswersUser tells a turn that answers messages of the user's, not
 // events or a wake only: what it opens is shown to them.
 func (c *core) turnAnswersUser() bool {

@@ -569,6 +569,8 @@ func (c *core) attachTurnCards(seq int) {
 	if seq <= 0 {
 		return
 	}
+	raised, _ := c.cardsWhere(`seq = 0 AND turn = 1`) // by the turn itself, not a task's taken back
+	c.showTurnCards(raised)                           // its node's page in front (node_turn.go)
 	c.claimBlockingCards()
 	xs, _ := c.cardsWhere(`seq = 0 AND turn = 1`)
 	c.store.db.Exec(`UPDATE convo_cards SET seq = ?, turn = 0, attached = ? WHERE seq = 0 AND turn = 1`, seq, time.Now().Unix())

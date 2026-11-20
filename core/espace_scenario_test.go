@@ -54,6 +54,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("GET /e2e/turns", sc.handleTurns)
 	mux.HandleFunc("POST /e2e/actions", sc.handleActions)
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
+	mux.HandleFunc("POST /e2e/catalog", sc.handleCatalog)
 	mux.Handle("/", sc.web.w.routes())
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -672,6 +673,17 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		// On the side: opened in the background, the bar stays.
 		b.self("node_open", map[string]any{"title": "Recherche sur les newsletters", "aside": true, "goal": "Les newsletters à garder"})
 		return "Je lance la recherche à part."
+	case strings.Contains(said, "en retard"):
+		// Said in a subject's bar, about something else: the turn answers as
+		// at the home (turn_home), and the card its send needs waits above
+		// the bar, in front of the user (talk-at-home.spec.ts).
+		b.self("turn_home", map[string]any{})
+		b.catalog("mail", "envoyer", map[string]any{"to": "lou@example.org", "body": "Je serai en retard."}, false)
+		return "Tu me donnes ton accord pour l'envoyer ?"
+	case strings.Contains(said, "mes films"):
+		// A short answer to a simple question, more than a line: it stays at
+		// the home, held whole above the bar (talk-at-home.spec.ts).
+		return homeFilms
 	case strings.Contains(said, "archiver"):
 		return "C'est toi qui archives : « Archiver », en haut de sa page."
 	case strings.Contains(said, "Écris-moi un article"):
@@ -720,8 +732,11 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 // event is the scripted brain's turn on an event: the research of the
 // article done, it updates the research's node and the main subject, and
 // opens « Choisir l'angle » on the side, its options and their buttons.
-// Any other event: nothing to say.
+// The catalog changed: a line. Any other event: nothing to say.
 func (sc *scenario) event(b *brainPlay, turn string) string {
+	if strings.Contains(turn, catalogEvent) {
+		return "Un outil de plus : films."
+	}
 	if !strings.Contains(turn, "« Documentation sur le télétravail »") || !strings.Contains(turn, "a fini son tour") {
 		return "[rien]"
 	}
@@ -866,6 +881,26 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved)})
 }
+
+// handleCatalog is POST /e2e/catalog: the tools' catalog changed, an
+// event of the home's, as catalog.go writes it; the brain's turn on it
+// says a line (talk-at-home.spec.ts).
+func (sc *scenario) handleCatalog(rw http.ResponseWriter, r *http.Request) {
+	if _, err := sc.c.store.addMessage(roleEvent, catalogEvent, false); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	sc.c.ping()
+	rw.WriteHeader(http.StatusNoContent)
+}
+
+// homeFilms is the scripted brain's answer to « tu as accès à mes films ? ».
+const homeFilms = "Oui, je suis branché sur **Seerr** : je peux chercher un film, voir ce qui est déjà demandé et en demander un pour toi. " +
+	"Pour l'instant, chaque recherche te demande ton accord avant de partir. " +
+	"Tu peux mettre la recherche et la consultation en accès libre dans Réglages → Outils → films."
+
+// catalogEvent is the event of /e2e/catalog.
+const catalogEvent = "Le catalogue d'outils a changé : un outil « films » de plus."
 
 // handleTurns is GET /e2e/turns: the user's lines of each of the brain's
 // turns, in order.

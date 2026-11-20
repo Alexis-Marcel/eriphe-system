@@ -722,6 +722,7 @@ whatever address it dials) and one client certificate per device.
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
+| `turn_home` | the user's message, said in a node's bar, is not about that node: the turn is about no node from then on, as at the home (`turnHome`, node_turn.go). What it raises waits above the bar (a card it raised already is unlinked from that node), and nothing of it is filed there; its lines stay in that node's bar, where the user reads them. At the home, or on events only, it does nothing |
 | `item_note` | note an item of a node's source: what the user should know and a state (`act`, `look`, `info`, `none`, `done`) |
 
 The brain has no archive tool: only the user archives a node (`archiveNode`, by `user` alone), which
@@ -1001,8 +1002,8 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   trace, and as its doc when it has none, never a standing node's), else in a new work node at
   the top titled from the user's request (its first line; a neutral « Réponse du … » when there is
   none, or when it may not be the user's words or holds a secret), the answer its doc, for one
-  past `netMinRunes` only (a shorter one at the home stays in the conversation, its first line in
-  the bar); a turn that
+  past `netMinRunes` only (a shorter one at the home stays in the conversation, held whole above
+  the bar: `answer`, below); a turn that
   answers the user at the home then moves into it, as for a subject the brain opened
   (`moveHomeTurn`). The answer's
   messages say where (`messages.filed`). Written in a tainted
@@ -3252,7 +3253,20 @@ token in `X-CSRF-Token`:
   (6 s, `useAck`: from when the page first met it, keyed by its node and seq, so a stream sent
   again or a page met again does not replay it), or the first line of what it is writing. No
   history, no buttons: Eriphe's questions and their `ask` buttons are in the subject's document.
-  The one exception: the cards no node holds, above it. Above the panel, the messages that wait
+  The one exception: the cards no node holds, above it. **An answer given at the home** (no
+  subject opened) that is more than its line has no subject to hold it: the exchange carries it
+  whole (`answer`, Markdown: the brain's messages written in a turn that answered the user's last
+  home message, `markAnswer`, kv `answer_msg:<seq>`, filed nowhere, joined, at most `answerMax`),
+  and the panel shows it under the question, wrapped, scrolling past 40 % of the screen, with a
+  ✕. It does not fade: it stays until the user writes again (any message newer than it, read or
+  not, and eriphe-core sends it no more), opens a subject (the bar talks to a node), or closes it
+  (✕: its seq kept in `localStorage`, `eriphe.espace.answer.closed`, so a reload shows it again
+  only when not closed). What an event or a wake made Eriphe say later (a turn with no message of
+  the user's: the catalog changed…) is `said`, a line under it that fades, never in its place; an
+  answer of one line (« c'est fait ») is its line, and fades as any. A card raised by a turn
+  that answers the user's message is never out of sight: one no node holds waits above the bar,
+  and one linked to a node opens that node's page beside what is open, as `node_show` does
+  (`showTurnCards`, node_turn.go, when the card is attached to the turn's message or its end). Above the panel, the messages that wait
   for Eriphe, a clock and a ✕ each (**The messages that wait**, below).
 - `hud/`: no bar, the graph takes the whole screen; the bubbles say what waits for the user (a
   breathing accent ring, « t'attend » under the name; out of view, an arrow at the screen's edge

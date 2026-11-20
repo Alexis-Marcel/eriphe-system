@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Markdown } from "../a2ui/markdown";
 import * as api from "../data/api";
 import { useGraph } from "../data/store";
 import { titleOf } from "../graph/model";
 import { Cards } from "../page/Cards";
 import { useWords } from "../i18n";
-import { landed, lastSeq, present, useAck, waitingShown, type Sent } from "./exchange";
+import { closeAnswer, closedAnswer, landed, lastSeq, present, useAck, waitingShown, type Sent } from "./exchange";
 
 // The bar (#633, #663): the one input of the workspace, and only a bar.
 // The subject's document is the conversation: what Eriphe has to say at
@@ -14,7 +15,10 @@ import { landed, lastSeq, present, useAck, waitingShown, type Sent } from "./exc
 // the first of its answer, which goes after a few seconds. No history, no
 // buttons, but one exception: the cards no node holds (one proposed at the
 // home, before any subject) show above it, so that none waits out of
-// sight. And the user's messages that wait for Eriphe, sent while it
+// sight. An answer given at the home, more than a line, has no subject
+// to hold it: the bar holds it whole, under the question, until the user
+// writes again, opens a subject or closes it (✕); a line an event made
+// Eriphe say later shows under it and goes. And the user's messages that wait for Eriphe, sent while it
 // works: each in grey with a clock, the node it was said to when another,
 // and a ✕ that withdraws it while Eriphe has not read it.
 
@@ -26,8 +30,23 @@ export function Console({ boot }: { boot: api.Boot }) {
   const [sent, setSent] = useState<Sent | null>(null);
   const [draft, setDraft] = useState("");
   const [failed, setFailed] = useState(false);
-  const { asked, said, writing, line, failed: unanswered } = present(x, sent && sent.to === talk ? sent : null);
+  const { asked, answer: held, said, writing, line, failed: unanswered } = present(x, sent && sent.to === talk ? sent : null);
   const shown = useAck(said ? `${talk ?? ""}#${said.seq}` : null);
+  const [closed, setClosed] = useState(closedAnswer);
+  const answer = held && held.seq > closed ? held : null;
+  const close = (seq: number) => {
+    closeAnswer(seq);
+    setClosed((c) => Math.max(c, seq));
+  };
+  // Opening a subject moves on from the answer given at the home.
+  const holding = useRef(0);
+  if (talk === null) holding.current = answer?.seq ?? 0;
+  useEffect(() => {
+    if (talk !== null && holding.current) {
+      close(holding.current);
+      holding.current = 0;
+    }
+  }, [talk]);
   const cards = x?.cards ?? [];
   const [gone, setGone] = useState<ReadonlySet<number>>(new Set());
   const [taken, setTaken] = useState(false);
@@ -101,9 +120,20 @@ export function Console({ boot }: { boot: api.Boot }) {
             ))}
           </ol>
         )}
-        {(asked || ack || writing) && (
+        {(asked || answer || ack || writing) && (
           <div className="cs-panel">
             {asked && <Asked key={asked} text={asked} />}
+            {answer && (
+              <section key={answer.seq} className="cs-answer" aria-label={t("espace.exchange.answer")}>
+                <div className="cs-answer-text">
+                  <Markdown text={answer.text} newTab={t("espace.a2.newtab")} />
+                  {answer.external && <span className="cs-external" title={t("espace.exchange.external")} aria-label={t("espace.exchange.external")} />}
+                </div>
+                <button type="button" className="cs-answer-x" aria-label={t("espace.exchange.dismiss")} title={t("espace.exchange.dismiss")} onClick={() => close(answer.seq)}>
+                  ✕
+                </button>
+              </section>
+            )}
             {ack && (
               <p key={typeof ack === "string" ? "draft" : ack.seq} className={`cs-said${typeof ack === "string" ? " draft" : ""}`}>
                 {typeof ack === "string" ? ack : ack.text}

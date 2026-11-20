@@ -760,6 +760,15 @@ a.notice-text:hover { text-decoration: underline; }
 .cs-said { margin: 0; max-width: 548px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14.5px; font-weight: 500; letter-spacing: -0.01em; color: var(--fg);
   animation: cs-ack-in 0.35s ease, cs-ack-out 0.6s ease 5.4s forwards; }
 .cs-said.draft { animation: cs-ack-in 0.35s ease; color: var(--fg2); }
+/* An answer given at the home, whole: it wraps, scrolls when tall, and stays until the user moves on. */
+.cs-answer { position: relative; width: min(548px, 100%); animation: cs-ack-in 0.35s ease; }
+.cs-answer-text { max-height: min(40vh, 320px); overflow-y: auto; padding-right: 24px; text-align: left; overflow-wrap: anywhere; color: var(--fg); }
+.cs-answer-text .a2-markdown { font-size: 14.5px; }
+.cs-answer-x { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 50%; background: none;
+  color: var(--fg3); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; }
+.cs-answer-x:hover, .cs-answer-x:focus-visible { color: var(--fg); background: var(--fill); }
+@media (pointer: coarse) { .cs-answer-x { width: 32px; height: 32px; font-size: 13px; } }
+@media (prefers-reduced-motion: reduce) { .cs-answer { animation: none; } }
 .cs-external { display: inline-block; width: 6px; height: 6px; margin-left: 6px; vertical-align: middle; border-radius: 50%; background: var(--warn-text); }
 @keyframes cs-ack-in { from { opacity: 0; translate: 0 4px; } to { opacity: 1; translate: 0 0; } }
 @keyframes cs-ack-out { to { opacity: 0; } }
