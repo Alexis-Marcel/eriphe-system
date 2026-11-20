@@ -232,7 +232,7 @@ click on its box, a button or a link of the row does not), and closes the same w
 Code reads the open again in the block as stored, checks that the id is one the source lists now,
 and calls the tool with it, as the source gave it, under the tool's access policy: never is
 refused; a free read that does not reach the open web runs; any other shows the call first, inline,
-and runs on the user's yes (logged as such). The click that opens is not the yes. The page shows
+and runs on the user's yes, given on the tool shown (logged as such). The click that opens is not the yes. The page shows
 what the tool said as text, never as HTML: its common fields (title or subject, from, date, body,
 text or content), the whole as JSON under « Détails », « extérieur » when the server is not trusted,
 and the item's note (« Classé « À supprimer » : … »). Nothing is written: no version, no trace,

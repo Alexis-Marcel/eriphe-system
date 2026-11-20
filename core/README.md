@@ -3205,13 +3205,13 @@ token in `X-CSRF-Token`:
   node's trace in code's words (never the items' titles); no turn. Then the source is read again;
   `200` `{text, done}` says in a line what was done (« 2 déplacés »), any other answer `{error}`,
   why not (`502` with the tool's error, as plain text, when it failed: for the call as a whole).
-- `POST /api/nodes/{id}/open` `{block, source, item, yes}`: an item opened in place
+- `POST /api/nodes/{id}/open` `{block, source, item, yes, tool}`: an item opened in place
   (`item_open.go`), the user's gesture. The source's `items.open` is read again in the stored block
   (`409` when it has none); the item must be one the source lists now (`400`). The tool (a read of
   the source's own server, checked at write) is called with the item's id as the source gave it,
   under its policy: never (or a call that must name its account) is `403`; a free read that does
   not reach the open web runs; any other answers `{ask: {tool, args}}` and runs on a second click
-  with `yes`, logged by the user. `200` `{title, from, date, body, raw, external, note: {group, note,
+  with `yes` and that `tool` (`409` when the open changed since), logged by the user. `200` `{title, from, date, body, raw, external, note: {group, note,
   external}}`: its common fields picked generically, the whole as JSON, `external` for a server not
   trusted; `502` when the tool failed. Nothing is kept: no version, no trace, no journal of what it
   said.
