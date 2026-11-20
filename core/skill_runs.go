@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,7 +158,8 @@ func (c *core) queueSkillEvent(e journalEvent) {
 	}
 	queued := false
 	for _, sk := range c.triggeredSkills() {
-		if !sk.Trigger.matches(e) {
+		gesture := e.Kind == evNodeGesture && e.Key == nodeRef(sk.Trigger.Node)
+		if !gesture && !sk.Trigger.matches(e) {
 			continue
 		}
 		if _, err := c.store.db.Exec(`INSERT INTO skill_queue (skill, event, key, at) VALUES (?, ?, ?, ?)`,
@@ -170,6 +172,22 @@ func (c *core) queueSkillEvent(e journalEvent) {
 	if queued && c.skillRuns.kick != nil {
 		c.skillRuns.wake()
 	}
+}
+
+// gestureQuiet is how long the user's gestures in a node gather before
+// its skill runs on them: one run for a few clicks in a row.
+const gestureQuiet = 10 * time.Second
+
+// wakeNodeSkills tells the skills that work in a node that the user acted
+// there (what: a card decided, an action run on a list): the node's view
+// changed by their hand, its skill runs again (key node:<id>, once the
+// gestures pause) and writes its bilan again. Only the user's gestures
+// wake it, never a run's own doing; nothing of the items is in it.
+func (c *core) wakeNodeSkills(node, what string) {
+	if node == "" || !slices.ContainsFunc(c.triggeredSkills(), func(sk triggeredSkill) bool { return sk.Trigger.Node == node }) {
+		return
+	}
+	c.emitLogged(journalEvent{Kind: evNodeGesture, Key: nodeRef(node), Source: byUser, Payload: map[string]any{"node": node, "gesture": what}})
 }
 
 type queuedEvent struct {
@@ -222,6 +240,9 @@ func (c *core) tickSkills(ctx context.Context, now time.Time) {
 		for _, key := range keys {
 			if c.openRun(sk.Name, key) != nil {
 				continue // they wait for its task (skillTaskChanged)
+			}
+			if es := byKey[key]; strings.HasPrefix(key, "node:") && now.Before(es[len(es)-1].At.Add(gestureQuiet)) {
+				continue // the user's gestures in its node: one run once they pause
 			}
 			c.startSkillRun(ctx, sk, key, byKey[key], now)
 		}
@@ -485,6 +506,9 @@ func skillRunPrompt(sk triggeredSkill, standing string, events []journalEvent, n
 	if len(events) == 0 {
 		fmt.Fprintf(&b, "[déclenchement : horaire « %s », %s]\n", sk.Trigger.At, now.Format("2006-01-02 15:04"))
 		return b.String()
+	}
+	if slices.ContainsFunc(events, func(e journalEvent) bool { return e.Kind == evNodeGesture }) {
+		b.WriteString("[l'utilisateur vient d'agir dans ce nœud (une carte décidée, une action sur une liste) : relis-le (node_read), réécris son bilan en tête du document (node_edit sur ce passage) d'après ce qui reste, et note de nouveau les éléments dont ta proposition a été écartée ; rien d'autre]\n\n")
 	}
 	b.WriteString(eventsText(events))
 	return b.String()

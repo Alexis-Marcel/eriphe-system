@@ -363,7 +363,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   // action is (« Déplacer 3 éléments → archive »), each mail a line
   // ticked, still « extérieur », where it comes from
   // under Détails. The user leaves one out: Oui archives the two others,
-  // and the card says one was left.
+  // the card, settled, leaves the page's foot.
   await home(page);
   await bubble("Mes mails").click();
   const view = pageOf("Mes mails");
@@ -387,7 +387,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   expect((await request.post("/e2e/proposals")).status()).toBe(204);
   const batch = view.locator(".pg-foot .a2-proposal");
   await expect(batch).toHaveCount(1);
-  await expect(batch.locator(".a2-proposal-text")).toHaveText("Déplacer 3 éléments → archive (mail/move)");
+  await expect(batch.locator(".a2-proposal-text")).toHaveText("Déplacer 3 éléments → archive");
   const ticks = batch.locator(".a2-proposal-choices input[type=checkbox]");
   await expect(ticks).toHaveCount(3);
   await expect(batch.locator(".a2-proposal-choices")).toContainText("« La lettre de la semaine » · news@example.org");
@@ -417,9 +417,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   await settledBox(view);
   await shot(page, "chosen-calls-pending");
   await ticks.nth(1).uncheck();
-  await batch.getByRole("button", { name: "Déplacer 2 éléments → archive (mail/move)" }).click();
-  await expect(batch.locator(".a2-proposal-text")).toHaveText("2 déplacés, 1 laissé");
-  await expect(batch.locator(".a2-proposal-choices li.is-left")).toHaveText("« La lettre de la semaine » · news@example.orglaissé");
+  await batch.getByRole("button", { name: "Déplacer 2 éléments → archive" }).click();
+  // Decided and done, it asks nothing more: it leaves the page's foot.
+  await expect(batch).toHaveCount(0);
   // Each call as kept, one mail each; the one left out never moved.
   await expect
     .poll(async () => ((await (await request.get("/e2e/tools")).json()).moved as string[][]).filter((ids) => ids.some((id) => /^n\d$/.test(id))).sort())

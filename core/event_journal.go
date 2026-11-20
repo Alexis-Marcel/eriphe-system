@@ -41,6 +41,7 @@ const (
 	evTaskEnded    = "task.ended"
 	evNodeDone     = "node.done"
 	evUserReturned = "user.returned"
+	evNodeGesture  = "node.gesture" // the user acted in a node (skill_runs.go: wakeNodeSkills)
 )
 
 const (

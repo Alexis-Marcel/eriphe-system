@@ -170,7 +170,7 @@ func TestBlockListsWords(t *testing.T) {
 		t.Fatalf("row: %+v", it)
 	}
 	a := lists[0].Actions[0]
-	if a.Name != "archive" || a.One != "Déplacer 1 élément → archive (monitor/move)" || a.Many != "Déplacer {n} éléments → archive (monitor/move)" || a.Hint != "Ranger" || a.Confirm {
+	if a.Name != "archive" || a.One != "Déplacer 1 élément → archive" || a.Many != "Déplacer les {n} → archive" || a.All != "Tout déplacer → archive" || a.Hint != "Ranger" || a.Confirm {
 		t.Fatalf("archive: %+v", a)
 	}
 	if a.Tool != "monitor/move" || !slices.Equal(a.Args, []string{"to : archive"}) {
@@ -181,7 +181,7 @@ func TestBlockListsWords(t *testing.T) {
 		if a.Actions[0].Hint != "Ranger" || !a.Actions[0].HintExternal || !a.Actions[1].HintExternal {
 			t.Fatalf("an external block's hint is not shown marked: %+v", a.Actions)
 		}
-		if a.Actions[0].One != "Move 1 item → archive (monitor/move)" {
+		if a.Actions[0].One != "Move 1 item → archive" {
 			t.Fatalf("in English: %q", a.Actions[0].One)
 		}
 	}

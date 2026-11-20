@@ -516,6 +516,9 @@ func (c *core) cardNow(kind string, id int64, text, source string) {
 	}
 	ref := proposalRef(kind, id)
 	c.cardRaisedFor(source, ref) // a node's: linked to it (node_turn.go)
+	if kind == cardCalls {
+		c.itemCardMoved(id) // its item's row (item_cards.go)
+	}
 	var shown int
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM convo_cards WHERE ref = ? AND seq > 0 AND state = ?`, ref, cardPending).Scan(&shown)
 	if shown > 0 {
@@ -665,6 +668,9 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	c.callsDecided(x) // its words as decided, what still waits on a new card (call_fold.go)
 	c.proposalMoved(x.Ref)
 	c.linkedCardMoved(x.Ref) // the nodes it is linked to (node_turn.go)
+	if kind == cardCalls {
+		c.itemCardMoved(pid) // its item's row (item_cards.go)
+	}
 	log.Printf("cards: %s %s by %s", x.Ref, x.State, by)
 	return x, nil
 }

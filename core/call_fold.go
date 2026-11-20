@@ -196,7 +196,8 @@ func (c *core) choiceText(a accessQuestion, lang string) string {
 		}
 	}
 	if len(items) == 0 {
-		return callSentence(a.Call, a.Input, lang)
+		s, _ := c.callText(a, lang)
+		return s
 	}
 	return strings.Join(items, ", ")
 }
@@ -207,7 +208,8 @@ func (c *core) choiceText(a accessQuestion, lang string) string {
 func (c *core) kindSentence(a accessQuestion, n int, lang string) string {
 	_, list := foldKey(a)
 	if list == "" {
-		return callSentence(a.Call, a.Input, lang)
+		s, _ := c.callText(a, lang)
+		return s
 	}
 	var args map[string]any
 	json.Unmarshal([]byte(a.Input), &args)

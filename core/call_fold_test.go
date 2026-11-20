@@ -42,7 +42,7 @@ func askOn(t *testing.T, c *core, node, tool string, input map[string]any, label
 // moveWords is what a folded card of moves to the archive says, as a list
 // action's button would (actionWords): for how many.
 func moveWords(n string) string {
-	return "Déplacer " + n + " → account : sam@example.org, to : archive (monitor/move)"
+	return "Déplacer " + n + " → account : sam@example.org, to : archive"
 }
 
 // waitTraced waits until the node's trace tells n decided moves: a call

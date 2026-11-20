@@ -79,7 +79,7 @@ func TestListSectionsChecked(t *testing.T) {
 	good := sectionsBlock(dropAction)
 	for want, body := range map[string]string{
 		"a filter follows a source's items": strings.Replace(good, "/received/messages[_group=À", "/received/other[_group=À", 1),
-		"a filter is one":                   strings.Replace(good, "[_group=À supprimer]", "[_group]", 1),
+		"a filter is [field=value]":         strings.Replace(good, "[_group=À supprimer]", "[_group]", 1),
 		"only a List filters":               strings.Replace(good, `"id": "drop", "component": "List"`, `"id": "drop", "component": "Grid"`, 1),
 		"is not a List of the source":       strings.Replace(good, `"list": "drop"`, `"list": "row"`, 1),
 	} {
@@ -137,7 +137,7 @@ func TestListSectionsRows(t *testing.T) {
 		}
 		return out
 	}
-	if drop.Component != "drop" || !drop.Filtered || !slices.Equal(ns(drop), []int{0, 2}) || len(drop.Actions) != 1 || drop.Actions[0].All != "Déplacer les {n} → trash (monitor/move)" {
+	if drop.Component != "drop" || !drop.Filtered || !slices.Equal(ns(drop), []int{0, 2}) || len(drop.Actions) != 1 || drop.Actions[0].All != "Tout déplacer → trash" {
 		t.Fatalf("drop: %+v", drop)
 	}
 	if info.Component != "info" || !info.Filtered || !slices.Equal(ns(info), []int{1, 3}) || len(info.Actions) != 0 {

@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 // TestEspaceScenario: a node whose block lists five faked mails
 // (mail/tri), noted into two groups, in two Lists that filter them by
 // their group, and an action that deletes (mail/delete) on the first.
-// « Supprimer les 3 » asks once more, naming the three, and the faked
+// « Tout supprimer » asks once more, naming the three, and the faked
 // server gets exactly those. Seeded at /e2e/sections, on its own node.
 
 const password = "correct horse battery"; // testPassword, core/web_test.go
@@ -33,7 +33,7 @@ test("a section's action runs on exactly the rows it showed", async ({ page, req
   await expect(info.locator(".a2-pickwhole")).toHaveCount(0); // no action of its own
 
   const whole = drop.locator(".a2-pickwhole");
-  await expect(whole).toHaveText("Supprimer les 3 (mail/delete)");
+  await expect(whole).toHaveText("Tout supprimer");
   await whole.click();
   const ask = drop.locator(".a2-pickask");
   await expect(ask).toBeVisible();

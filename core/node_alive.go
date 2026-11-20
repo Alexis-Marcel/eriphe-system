@@ -18,14 +18,19 @@ import (
 // its blocks read and those its skills run on) and what each watches,
 // the skills that work in it and what starts them, and when it last
 // changed. Names are the identifiers the user approved (a view's card
-// showed them); what each does is said by code from its spec.
+// showed them); what each does is said by code from its spec. A view's
+// choices come first (« Ce qu'on a décidé »): the goal its card showed
+// and the user approved, as it was approved (view_card.go), shown as
+// text, marked when someone else's words may have written it.
 
 // pageAlive is what keeps a standing node alive, as its page says it.
 type pageAlive struct {
-	Sources  []aliveLine `json:"sources,omitempty"`
-	Monitors []aliveLine `json:"monitors,omitempty"`
-	Skills   []aliveLine `json:"skills,omitempty"`
-	Updated  time.Time   `json:"updated"`
+	Decided         string      `json:"decided,omitempty"`
+	DecidedExternal bool        `json:"decidedExternal,omitempty"`
+	Sources         []aliveLine `json:"sources,omitempty"`
+	Monitors        []aliveLine `json:"monitors,omitempty"`
+	Skills          []aliveLine `json:"skills,omitempty"`
+	Updated         time.Time   `json:"updated"`
 }
 
 // aliveLine is one of them: its name, and what it does in code's words.
@@ -41,6 +46,10 @@ func (c *core) nodeAlive(sum nodestore.Summary, lang string) *pageAlive {
 		return nil
 	}
 	a := &pageAlive{Updated: sum.Updated}
+	var tainted string
+	if c.store.db.QueryRow(`SELECT goal, tainted FROM view_proposals WHERE node = ? AND state = ? ORDER BY id DESC LIMIT 1`, sum.ID, viewApproved).Scan(&a.Decided, &tainted) == nil {
+		a.DecidedExternal = tainted != ""
+	}
 	var watched []string
 	watch := func(name string) {
 		if name != "" && !slices.Contains(watched, name) {

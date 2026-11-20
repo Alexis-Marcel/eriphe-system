@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"sync"
+	"time"
 )
 
 // Cards bound to a node's items (#575, #631): an action on one item a
@@ -115,11 +117,21 @@ func (c *core) callsProposal(p proposal) proposal {
 		asks = waiting
 	}
 	items := asksItems(asks)
-	var fs []cardField
-	for _, a := range asks {
-		fs = append(fs, callDetail(a))
+	// What each call sends that is to read (a reply, a message) shows on
+	// the card, named as its tool names it; its exact call, the rest,
+	// under Détails. A name met twice says which call it is of.
+	var shown, details []cardField
+	for i, a := range asks {
+		fs, names := c.callShown(a, c.userLang())
+		for _, f := range fs {
+			if slices.ContainsFunc(shown, func(g cardField) bool { return g.Name == f.Name }) {
+				f.Name = fmt.Sprintf("%s (%d)", f.Name, i+1)
+			}
+			shown = append(shown, f)
+		}
+		details = append(details, callDetail(a, names))
 	}
-	p.Fields = fs
+	p.Fields = append(shown, details...)
 	p.origin = func(lang string) cardOrigin { return c.callsOrigin(first, items, len(asks), lang) }
 	if len(asks) > 1 {
 		return c.chosenCalls(p, asks)
@@ -287,6 +299,115 @@ func (c *core) callsExec(batch int64) (string, string) {
 	}
 	return state, why
 }
+
+// callsAsk tells whether a calls card still asks something of the user:
+// one of its calls waits for a yes, or one it said yes to is not done
+// (about to run, running, or failed).
+func (c *core) callsAsk(batch int64) bool {
+	for _, a := range c.batchAsks(batch) {
+		if c.askWaits(a) {
+			return true
+		}
+		if s, _ := c.callState(a.ID); a.State == startApproved && s != callDone {
+			return true
+		}
+	}
+	return false
+}
+
+// itemCardsKept is how long after its yes a card on an item may still be
+// running or failed on its row: an older one asks nothing more there.
+const itemCardsKept = 7 * 24 * time.Hour
+
+// itemCards are the cards on a node's items of one of its sources that
+// still ask something (callsAsk), by item: its newest. Each item of the
+// source carries it (_card, list_sections.go) and the page's List tells
+// it (pageList's items' card): code's, never the block's data.
+func (c *core) itemCards(node, source string) map[string]string {
+	out := map[string]string{}
+	if node == "" || source == "" {
+		return out
+	}
+	rows, err := c.store.db.Query(`SELECT item, batch FROM access_asks WHERE node = ? AND source = ? AND item != '' AND batch != 0
+		AND (state = ? OR state = ? AND decided >= ?) ORDER BY batch DESC`, node, source, startProposed, startApproved, time.Now().Add(-itemCardsKept).Unix())
+	if err != nil {
+		return out
+	}
+	type pair struct {
+		item  string
+		batch int64
+	}
+	var ps []pair
+	for rows.Next() {
+		var p pair
+		if rows.Scan(&p.item, &p.batch) == nil {
+			ps = append(ps, p)
+		}
+	}
+	rows.Close() // one connection: each is read after
+	seen := map[int64]bool{}
+	for _, p := range ps {
+		if _, ok := out[p.item]; ok || seen[p.batch] {
+			continue
+		}
+		seen[p.batch] = true
+		if c.callsAsk(p.batch) {
+			out[p.item] = proposalRef(cardCalls, p.batch)
+		}
+	}
+	return out
+}
+
+// itemCardMoved is a calls card on an item that was made, decided, or
+// whose yes ran: the page is told its item's source again (its _card),
+// and once it asks nothing more, the item is settled, once. Its yes ran:
+// code notes the item done, its note and group kept (code's state, until
+// a skill notes it again), so that a List that keeps what is not done
+// lets it go. Either way, the view's skill is woken (wakeNodeSkills): it
+// writes its bilan again.
+func (c *core) itemCardMoved(batch int64) {
+	asks := c.batchAsks(batch)
+	i := slices.IndexFunc(asks, func(a accessQuestion) bool { return a.Item != "" && a.Node != "" })
+	if i < 0 || c.nodes == nil {
+		return
+	}
+	a := asks[i]
+	c.graphSaid(graphEvent{Kind: graphEvSource, Node: a.Node, Name: a.Source})
+	if c.callsAsk(batch) {
+		return
+	}
+	for _, x := range asks {
+		if x.State == startProposed {
+			return // not decided: one folded away, or a run still open
+		}
+	}
+	key := fmt.Sprintf("item_card_settled:%d", batch)
+	itemSettleMu.Lock()
+	settled := c.store.get(key) != ""
+	if !settled {
+		c.store.set(key, "1")
+	}
+	itemSettleMu.Unlock()
+	if settled {
+		return // its decision and its call's end may both come here
+	}
+	if slices.ContainsFunc(asks, func(x accessQuestion) bool { return x.State == startApproved }) {
+		n := c.itemNotes(a.Node, a.Source)[a.Item]
+		if n.State != itemDone {
+			n.Source, n.Item, n.State, n.Author = a.Source, a.Item, itemDone, nodeByCode
+			if err := c.nodes.NoteItem(a.Node, n); err != nil {
+				log.Printf("item card %d: %s: %v", batch, a.Node, err)
+			}
+		}
+	}
+	c.wakeNodeSkills(a.Node, "card")
+}
+
+// itemDone is the state of an item whose matter is over (item_note's done).
+const itemDone = "done"
+
+// itemSettleMu makes an item's card settle once.
+var itemSettleMu sync.Mutex
 
 // itemCallDone keeps how a call on an item went in its node's trace,
 // once decided: not a run's (its note keeps it), and the brain is not

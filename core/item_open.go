@@ -169,7 +169,7 @@ func (c *core) openItem(ctx context.Context, id string, in itemOpenIn, lang stri
 	}
 	u, t := c.actionTool(o.Tool)
 	name := claudeToolName(u.name, t.Name)
-	input := map[string]any{o.ID: v}
+	input := map[string]any{o.ID: v.ID}
 	f := c.pool.facts(name, input)
 	switch {
 	case f.noAccount:
