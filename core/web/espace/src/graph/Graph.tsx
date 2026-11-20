@@ -44,8 +44,8 @@ export function Graph({ live }: { live: boolean }) {
     return () => removeEventListener("resize", on);
   }, []);
 
-  // The nodes in the order they were made: a new subject takes its slot
-  // in the constellation after the others.
+  // The nodes in a stable order (the order they were made): the layout is
+  // the same for the same graph.
   const list = useMemo(() => Object.values(nodes).sort((a, b) => a.created.localeCompare(b.created) || a.id.localeCompare(b.id)), [nodes]);
   const ids = useMemo(() => new Set(list.map((x) => x.id)), [list]);
   const parentOf = (x: GraphNode) => (x.parent && ids.has(x.parent) ? x.parent : undefined);
@@ -119,6 +119,9 @@ export function Graph({ live }: { live: boolean }) {
     raf.current = requestAnimationFrame(loop);
   };
   useEffect(() => () => void (raf.current !== null && cancelAnimationFrame(raf.current)), []);
+  // A page opened goes beside the one the console talked to before it.
+  const talkWas = useRef(talk);
+  useEffect(() => void (talkWas.current = talk), [talk]);
   useLayoutEffect(() => {
     sim.sync(
       list.map((x) => ({
@@ -128,7 +131,7 @@ export function Graph({ live }: { live: boolean }) {
         ...labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x)),
         box: openIds.includes(x.id) ? boxOf(x.id) : undefined,
       })),
-      talk,
+      talkWas.current,
     );
     rest.current = sim.positions();
     wake();

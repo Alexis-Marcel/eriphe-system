@@ -47,7 +47,9 @@ export const T = {
   soft: 0.5, // collision: the share of an overlap undone each tick
   cool: 0.97, // a body's own warmth kept from one tick to the next
   fresh: 120, // a node is new (gives way first) for this many ticks
-  pass: 40, // the followers of a drop still pass over the others for this many ticks
+  pass: 150, // a follower of a drop passes over the others until it is back on its springs, this many ticks at most
+  passWarm: 0.3, // ... warm at least this meanwhile
+  passNear: 60, // ... back: none of its links stretched more than this
 };
 
 // The user's reach when dragging: a subject dragged past REACH beyond the
@@ -128,7 +130,8 @@ export class Sim {
   private group = new Map<string, number>(); // the held body's followers, their energy
   private pin: { id: string; at: Pt; clear: number; ticks: number } | null = null; // the body just dropped
   private trail = new Set<string>(); // the followers of the last drop, giving way while they settle
-  private pass = 0; // ticks the followers still pass over the others
+  private anchor: Pt = [0, 0]; // where the last drop was: its followers gather around it
+  private passing = new Map<string, number>(); // the followers still coming round, the ticks they have left
   private openSeq = 0;
 
   // sync tells the simulation the graph as it is now: the nodes in a
@@ -194,7 +197,7 @@ export class Sim {
       this.group = this.neighbourhood(id);
       if (this.pin?.id === id) this.pin = null;
       this.trail = new Set();
-      this.pass = 0;
+      this.passing = new Map();
     }
     const p = this.leash(x, at, false);
     this.held = { id, at: p };
@@ -217,6 +220,7 @@ export class Sim {
     x.was = x.rel = undefined;
     for (const [id, e] of this.group) this.warmUp(id, e);
     this.trail = new Set(this.group.keys());
+    this.anchor = this.pin.at;
     // the bubbles of the followers that stayed still come back to them
     for (const id of [...this.trail])
       for (const k of this.below(this.byId.get(id)!))
@@ -224,7 +228,7 @@ export class Sim {
           this.warmUp(k.id, HOP2);
           this.trail.add(k.id);
         }
-    this.pass = this.trail.size ? T.pass : 0;
+    this.passing = new Map([...this.trail].map((id) => [id, T.pass]));
     this.group = new Map();
     this.lastMove = Infinity;
   }
@@ -242,7 +246,7 @@ export class Sim {
 
   // asleep tells whether nothing moves any more: no need to tick.
   asleep(): boolean {
-    return this.alpha === 0 && this.lastMove < 0.05 && !this.held && !this.pin && this.heat.size === 0 && this.pass === 0;
+    return this.alpha === 0 && this.lastMove < 0.05 && !this.held && !this.pin && this.heat.size === 0 && this.passing.size === 0;
   }
 
   // settle ticks until the graph is at rest (max ticks at most): the
@@ -368,12 +372,14 @@ export class Sim {
       if (h < 0.005 || !this.byId.has(id)) this.heat.delete(id);
       else this.heat.set(id, h * T.cool);
     }
-    // the pull to the centre: the graph stays a compact disc (none during a drag)
+    // the pull to the centre: the graph stays a compact disc (none during a
+    // drag; what followed one gathers around where it was dropped)
     if (!held)
       for (const x of L) {
         if (!free(x)) continue;
-        x.vx -= x.x * T.gravity * e(x);
-        x.vy -= x.y * T.gravity * e(x);
+        const [cx, cy] = this.trail.has(x.id) ? this.anchor : [0, 0];
+        x.vx -= (x.x - cx) * T.gravity * e(x);
+        x.vy -= (x.y - cy) * T.gravity * e(x);
       }
     // move
     const cap = 40;
@@ -408,7 +414,15 @@ export class Sim {
       this.pin.clear = near && !hit ? this.pin.clear + 1 : 0;
       if (this.pin.clear > 20 || ++this.pin.ticks > 300) this.pin = null;
     }
-    if (this.pass > 0) this.pass--;
+    // a follower comes round what is in its way, warm, until it is back on its springs
+    for (const [id, n] of this.passing) {
+      const x = this.byId.get(id);
+      if (!x || n <= 1 || this.stretch(x) < T.passNear) this.passing.delete(id);
+      else {
+        this.passing.set(id, n - 1);
+        this.warmUp(id, T.passWarm);
+      }
+    }
     if (!this.pin && !held && this.trail.size && ![...this.trail].some((id) => this.heat.has(id))) this.trail = new Set();
     let mv = 0;
     L.forEach((x, i) => (mv = Math.max(mv, Math.hypot(x.x - before[i][0], x.y - before[i][1]))));
@@ -449,11 +463,11 @@ export class Sim {
         const ra = this.rank(a), rb = this.rank(b);
         if (ra === HELD || rb === HELD) continue;
         if (held && !(this.group.has(a.id) && this.group.has(b.id))) continue;
-        // the followers of a drop pass over the others a little longer: they come round to it
-        if (this.pass > 0 && this.trail.has(a.id) !== this.trail.has(b.id) && this.pin?.id !== a.id && this.pin?.id !== b.id) continue;
+        // a follower of a drop passes over the others until it is back on its springs
+        if ((this.passing.has(a.id) && !this.trail.has(b.id)) || (this.passing.has(b.id) && !this.trail.has(a.id))) if (this.pin?.id !== a.id && this.pin?.id !== b.id) continue;
         const sb = b.parent === a.id ? 1 : a.parent === b.id ? 0 : ra === rb ? 0.5 : rb > ra ? 1 : 0;
         const sa = 1 - sb;
-        const out = sb === 1 && !b.box ? this.wayOut(b, a) : sa === 1 && !a.box ? this.wayOut(a, b) : null;
+        const out = sb === 1 && !b.box && !this.trail.has(b.id) ? this.wayOut(b, a) : sa === 1 && !a.box && !this.trail.has(a.id) ? this.wayOut(a, b) : null;
         if (out) {
           const [x, by] = sb === 1 ? [b, a] : [a, b];
           this.remember(x, by);
@@ -684,6 +698,20 @@ export class Sim {
     return out;
   }
 
+  // stretch is how much more than at rest the most stretched of a body's
+  // links is long.
+  private stretch(x: Body): number {
+    let most = 0;
+    for (const o of this.list) {
+      if (o === x || o.box || x.box) continue;
+      const kin = o.id === x.parent || o.parent === x.id;
+      if (!kin && !x.links.includes(o.id) && !o.links.includes(x.id)) continue;
+      const rest = kin ? x.r + o.r + T.childGap : extent(x, [0, 0])[0] + extent(o, [0, 0])[0] + T.linkGap;
+      most = Math.max(most, Math.hypot(o.x - x.x, o.y - x.y) - rest);
+    }
+    return most;
+  }
+
   // ends are the bodies a body's links lead to: its parent, its text links.
   private ends(a: Body): Body[] {
     const out: Body[] = [];
@@ -724,6 +752,7 @@ export class Sim {
     this.byId.delete(id);
     this.heat.delete(id);
     this.trail.delete(id);
+    this.passing.delete(id);
     this.group.delete(id);
     if (this.held?.id === id) {
       this.held = null;

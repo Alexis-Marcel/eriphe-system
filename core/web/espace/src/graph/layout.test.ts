@@ -177,12 +177,16 @@ describe("the living graph", () => {
       const nodes = big();
       const sim = laid(nodes);
       const p0 = sim.positions();
-      // s4 dragged across the graph, to the other side of s0
-      const to: Pt = [-p0.s4[0] * 0.9, -p0.s4[1] * 0.9];
-      drag(sim, "s4", to);
+      // s4 dragged across the graph, to the other side of it; then s3
+      // (linked to s2, whose bubbles are two links away)
+      for (const id of ["s4", "s3"]) {
+        const to: Pt = [-p0[id][0] * 1.3, -p0[id][1] * 1.3];
+        drag(sim, id, to);
+        expect(dist(sim.at(id)!, to)).toBeLessThan(1);
+      }
       const p = sim.positions();
-      expect(dist(p.s4, to)).toBeLessThan(1);
-      for (let j = 0; j < 3; j++) expect(dist(p.s4, p[`s4c${j}`]), `s4c${j}`).toBeLessThan(220);
+      for (const s of ["s4", "s3", "s2"]) for (let j = 0; j < 3; j++) expect(dist(p[s], p[`${s}c${j}`]), `${s}c${j}`).toBeLessThan(220);
+      expect(dist(p.s3, p.s2)).toBeLessThan(320);
       expect(overlaps(sim, nodes)).toEqual([]);
     });
 

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page, type Response } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 // The epic's acceptance scenario (#625), its steps played in the
 // workspace against the test core of TestEspaceScenario: faked tools, a
@@ -315,21 +315,19 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(viewCard.locator(".a2-proposal-kicker")).toContainText("Validé");
   await expect(viewCard.getByRole("button", { name: "Oui" })).toHaveCount(0);
   // Its pages closed, the view's bubble, made on the subject, sits beside
-  // it: no two bubbles on each other. Dropped right on the subject, it stays
-  // there and the subject gives way.
+  // it: no two bubbles on each other. Dropped right on the view, the
+  // subject stays there and the view gives way.
   await home(page);
   await expectBubblesApart(page);
   const mine = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Mes mails"]') });
+  const watching = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Garder un œil sur mes mails"]') });
   await settled(mine);
-  const src = (await bubble("Mes mails").boundingBox())!, dst = (await bubble("Garder un œil sur mes mails").boundingBox())!;
-  const viewPlaced = page.waitForResponse((r) => r.url().endsWith("/place") && r.request().method() === "PUT");
-  await page.mouse.move(src.x + src.width / 2, src.y + src.height / 2);
-  await page.mouse.down();
-  for (let i = 1; i <= 12; i++)
-    await page.mouse.move(src.x + src.width / 2 + ((dst.x - src.x + (dst.width - src.width) / 2) * i) / 12, src.y + src.height / 2 + ((dst.y - src.y + (dst.height - src.height) / 2) * i) / 12);
-  await page.mouse.up();
-  expect((await viewPlaced).status()).toBe(204);
-  await settled(mine);
+  const onView = await settled(watching);
+  await dragOnto(page, bubble("Mes mails"), bubble("Garder un œil sur mes mails"));
+  const dropped = await settled(mine);
+  expect(Math.hypot(dropped[0] - onView[0], dropped[1] - onView[1])).toBeLessThan(40);
+  const aside = await settled(watching);
+  expect(Math.hypot(aside[0] - onView[0], aside[1] - onView[1])).toBeGreaterThan(10);
   await expectBubblesApart(page);
   await shot(page, "graph-apart");
 
@@ -420,7 +418,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(bubble("Recherche sur les newsletters")).toBeVisible();
   await expect(page.locator("article.pg")).toHaveCount(0);
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe");
-  // The subjects in a constellation around the centre, the whole graph in view.
+  // The subjects in a compact disc around the centre, the whole graph in view.
   await settled(page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Recherche sur les newsletters"]') }));
   await expectBubblesApart(page);
   if (process.env.SHOTS) await page.waitForTimeout(2000); // the camera at rest
@@ -506,8 +504,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   expect(problems).toEqual([]);
 });
 
-// What the workspace keeps for the user: a bubble where it was dropped, the
-// pages open, the theme, on the next visit.
+// What the workspace keeps for the user: the pages open and the theme, on
+// the next visit; a bubble dropped holds where it was dropped for the
+// session, and is not kept.
 test("the workspace as the user left it", async ({ page }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
@@ -525,35 +524,29 @@ test("the workspace as the user left it", async ({ page }) => {
   const node = page.locator(".gr-node", { has: page.locator('.gr-core[aria-label="Mails"]') });
   const core = node.locator(".gr-core");
   await expect(core).toBeVisible();
-  await settled(node);
-  const from = await at(node);
-  // A drag the graph took for something else (a bubble still easing under
-  // the pointer) places nothing: dragged again, at most three times.
-  let placed: Response | null = null;
-  for (let tries = 0; !placed && tries < 3; tries++) {
-    await settled(node);
-    const box = (await core.boundingBox())!;
-    const put = page.waitForResponse((r) => r.url().endsWith("/place") && r.request().method() === "PUT", { timeout: 5_000 }).catch(() => null);
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + box.width / 2 + i * 12, box.y + box.height / 2 + i * 6);
-    await page.mouse.up();
-    placed = await put;
-  }
-  expect(placed?.status()).toBe(204);
+  const from = await settled(node);
+  // Dragged, it stays where it is let go: nothing is sent, nothing kept.
+  const sent: string[] = [];
+  page.on("request", (r) => r.method() !== "GET" && r.url().includes("/api/nodes/") && sent.push(r.url()));
+  const box = (await core.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(box.x + box.width / 2 + i * 12, box.y + box.height / 2 + i * 6);
+  await page.mouse.up();
   await expect.poll(async () => (await at(node))[0]).not.toBeCloseTo(from[0], 0);
   const dropped = await settled(node);
+  expect(sent).toEqual([]);
+  await expectBubblesApart(page);
 
-  // eriphe-core keeps the place where it was dropped; with no page open,
-  // the subject is exactly there on the next visit.
-  const id = (await node.getAttribute("data-node"))!;
-  const kept = (await (await page.request.get("/espace/boot")).json()).places[id] as { x: number; y: number };
-  expect(Math.hypot(kept.x - dropped[0], kept.y - dropped[1])).toBeLessThan(2);
-  await page.reload();
-  await expect(core).toBeVisible();
-  await expect.poll(async () => Math.hypot((await at(node))[0] - kept.x, (await at(node))[1] - kept.y)).toBeLessThan(0.5);
+  // The arrangement holds for the session: a page opened and closed
+  // pushes it aside for a while, then it is back where it was dropped.
+  await page.locator('.gr-core[aria-label="Substack"]').click();
+  await expect(page.locator('article.pg[aria-label="Substack"]')).toBeVisible();
+  await home(page);
+  await expect.poll(async () => Math.hypot((await settled(node))[0] - dropped[0], (await at(node))[1] - dropped[1])).toBeLessThan(60);
 
-  // The page open and the theme come back too.
+  // The page open and the theme come back on the next visit; where the
+  // bubbles were is not kept: the graph lays itself out afresh.
   await page.locator('.gr-core[aria-label="Substack"]').click();
   await expect(page.locator('article.pg[aria-label="Substack"]')).toBeVisible();
   const view = page.waitForResponse((r) => r.url().endsWith("/api/espace/view") && r.request().method() === "PUT");
@@ -704,6 +697,17 @@ async function expectBubblesApart(page: Page): Promise<void> {
       return out;
     });
   await expect.poll(overlaps).toEqual([]);
+}
+
+// dragOnto drags a bubble by the pointer, in small steps, and lets it go
+// right on another.
+async function dragOnto(page: Page, what: Locator, onto: Locator): Promise<void> {
+  const a = (await what.boundingBox())!, b = (await onto.boundingBox())!;
+  const from = [a.x + a.width / 2, a.y + a.height / 2], to = [b.x + b.width / 2, b.y + b.height / 2];
+  await page.mouse.move(from[0], from[1]);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) await page.mouse.move(from[0] + ((to[0] - from[0]) * i) / 12, from[1] + ((to[1] - from[1]) * i) / 12);
+  await page.mouse.up();
 }
 
 // settled is where a bubble is once it stopped moving.
