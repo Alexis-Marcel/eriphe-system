@@ -1001,8 +1001,8 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   trace, and as its doc when it has none, never a standing node's), else in a new work node at
   the top titled from the user's request (its first line; a neutral « Réponse du … » when there is
   none, or when it may not be the user's words or holds a secret), the answer its doc, for one
-  past `netMinRunes` only (a shorter one at the home stays in the conversation, its first line in
-  the bar); a turn that
+  past `netMinRunes` only (a shorter one at the home stays in the conversation, held whole above
+  the bar: `answer`, below); a turn that
   answers the user at the home then moves into it, as for a subject the brain opened
   (`moveHomeTurn`). The answer's
   messages say where (`messages.filed`). Written in a tainted
@@ -3252,7 +3252,17 @@ token in `X-CSRF-Token`:
   (6 s, `useAck`: from when the page first met it, keyed by its node and seq, so a stream sent
   again or a page met again does not replay it), or the first line of what it is writing. No
   history, no buttons: Eriphe's questions and their `ask` buttons are in the subject's document.
-  The one exception: the cards no node holds, above it. Above the panel, the messages that wait
+  The one exception: the cards no node holds, above it. **An answer given at the home** (no
+  subject opened) that is more than its line has no subject to hold it: the exchange carries it
+  whole (`answer`, Markdown: the brain's messages written in a turn that answered the user's last
+  home message, `markAnswer`, kv `answer_msg:<seq>`, filed nowhere, joined, at most `answerMax`),
+  and the panel shows it under the question, wrapped, scrolling past 40 % of the screen, with a
+  ✕. It does not fade: it stays until the user writes again (any message newer than it, read or
+  not, and eriphe-core sends it no more), opens a subject (the bar talks to a node), or closes it
+  (✕: its seq kept in `localStorage`, `eriphe.espace.answer.closed`, so a reload shows it again
+  only when not closed). What an event or a wake made Eriphe say later (a turn with no message of
+  the user's: the catalog changed…) is `said`, a line under it that fades, never in its place; an
+  answer of one line (« c'est fait ») is its line, and fades as any. Above the panel, the messages that wait
   for Eriphe, a clock and a ✕ each (**The messages that wait**, below).
 - `hud/`: no bar, the graph takes the whole screen; the bubbles say what waits for the user (a
   breathing accent ring, « t'attend » under the name; out of view, an arrow at the screen's edge

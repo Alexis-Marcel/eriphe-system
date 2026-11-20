@@ -148,6 +148,56 @@ describe("the bar", () => {
     expect(el.querySelector(".cs-wait-more")?.textContent).toBe("+2 en attente");
   });
 
+  const films =
+    "Oui, je suis branché sur **Seerr** : je peux chercher un film et en demander un. Chaque recherche te demande ton accord. Tu peux la mettre en accès libre dans Réglages → Outils → films.";
+  const home: Exchange = { asked: { seq: 40, text: "Tu as accès à mes films ?" }, answer: { seq: 41, text: films } };
+
+  it("holds an answer given at the home whole, under the question, until it is closed", async () => {
+    localStorage.clear();
+    await exchange(home);
+    await draw();
+    const answer = () => el.querySelector(".cs-answer");
+    expect(answer()?.textContent).toContain("Tu peux la mettre en accès libre dans Réglages → Outils → films.");
+    expect(answer()?.querySelector("strong")?.textContent).toBe("Seerr"); // its Markdown
+    expect(el.querySelector(".cs-said")).toBeNull(); // no line besides
+    const asked = el.querySelector(".cs-asked")!;
+    expect(asked.compareDocumentPosition(answer()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // It does not go.
+    await act(async () => vi.advanceTimersByTime(ACK_MS * 5));
+    expect(answer()).not.toBeNull();
+    // A line an event made Eriphe say later shows under it, and goes; the answer stays.
+    await exchange({ ...home, said: { seq: 43, text: "Un outil de plus : films." } });
+    expect(el.querySelector(".cs-said")?.textContent).toBe("Un outil de plus : films.");
+    expect(answer()).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(ACK_MS + 100));
+    expect(el.querySelector(".cs-said")).toBeNull();
+    expect(answer()?.textContent).toContain("Seerr");
+    // ✕ closes it, and it does not come back, not even on a reload.
+    await act(async () => (answer()!.querySelector("button.cs-answer-x") as HTMLButtonElement).click());
+    expect(answer()).toBeNull();
+    expect(el.querySelector(".cs-asked")?.textContent).toContain("Tu as accès à mes films ?");
+    await exchange({ ...home });
+    expect(answer()).toBeNull();
+    act(() => root.unmount());
+    root = createRoot(el);
+    await draw();
+    expect(answer()).toBeNull();
+    // The next answer is held again.
+    await exchange({ asked: { seq: 50, text: "Et mes séries ?" }, answer: { seq: 51, text: "Aussi, par Sonarr.\n\nLa même chose vaut pour elles." } });
+    expect(answer()?.textContent).toContain("La même chose vaut pour elles.");
+  });
+
+  it("lets the answer go when the user writes again or opens a subject", async () => {
+    localStorage.clear();
+    expect(present(home, { text: "Et mes séries ?", after: 41, to: null }).answer).toBeNull();
+    await exchange(home);
+    await draw();
+    expect(el.querySelector(".cs-answer")).not.toBeNull();
+    await act(async () => store.setState({ talk: "n-1", exchange: { node: "n-1" } }));
+    await act(async () => store.setState({ talk: null, exchange: home }));
+    expect(el.querySelector(".cs-answer")).toBeNull();
+  });
+
   it("says when Eriphe could not answer, without its error", async () => {
     await exchange({ asked: { seq: 30, text: "Bonjour" }, failed: true });
     await draw();

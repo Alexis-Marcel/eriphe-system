@@ -276,6 +276,10 @@ export type Exchange = {
   title?: string;
   asked?: BarLine;
   said?: BarLine;
+  // At the home, Eriphe's whole answer to the user's last message, as
+  // Markdown, when more than a line: no subject holds it, the bar does,
+  // until the user moves on. said is then a later line, never this one.
+  answer?: BarLine;
   failed?: boolean;
   draft?: string;
   thinking?: boolean;

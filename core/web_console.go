@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -30,11 +31,19 @@ import (
 // never more than a line; marked when written in a turn that read
 // external content (markBrainMessage). An event's line, the first run's
 // messages and an error's raw text are never sent.
+//
+// An answer given at the home is the one exception to the line: no
+// subject holds it, so the bar holds it whole (answer), as Markdown,
+// until the user moves on. Only the answer to the user's own message
+// (markAnswer: written in a turn that read one) is: what an event or a
+// wake made Eriphe say later is a line (said) that never takes its place.
+// An answer of one line is its line, and goes as any.
 
 const (
-	exchangeReplies = 12  // Eriphe's last lines after the user's message, read to find its last
-	askedMax        = 500 // the user's last message, as the bar folds it
-	ackRunes        = 140 // Eriphe's line in the bar
+	exchangeReplies = 12   // Eriphe's last lines after the user's message, read to find its last
+	askedMax        = 500  // the user's last message, as the bar folds it
+	ackRunes        = 140  // Eriphe's line in the bar
+	answerMax       = 2000 // an answer given at the home, as the bar holds it (node_net.go files one of netMinRunes)
 )
 
 // exchangeLine is a message as the store reads it for the bar: the
@@ -63,6 +72,7 @@ type exchangeEvent struct {
 	Asked    *barLine `json:"asked,omitempty"`    // the user's last message
 	Said     *barLine `json:"said,omitempty"`     // Eriphe's line: the first line of its last answer after it
 	Failed   bool     `json:"failed,omitempty"`   // Eriphe could not answer: its last line is an error
+	Answer   *barLine `json:"answer,omitempty"`   // at the home, Eriphe's whole answer to the user's last message, Markdown, when more than a line
 	Draft    string   `json:"draft,omitempty"`    // the first line of what Eriphe is writing
 	Thinking bool     `json:"thinking,omitempty"` // Eriphe is at work
 	Cards    []string `json:"cards,omitempty"`    // the cards that wait and no node holds: their refs
@@ -133,6 +143,14 @@ func (w *web) exchangeFor(node, talk, draft string, thinking bool) (exchangeEven
 			}
 		case roleError:
 			x.Failed = true
+		}
+	}
+	if node == "" {
+		if x.Answer, err = w.c.store.homeAnswer(); err != nil {
+			return exchangeEvent{}, err
+		}
+		if x.Answer != nil && x.Said != nil && x.Said.Seq <= x.Answer.Seq {
+			x.Said = nil // its line is the answer, held whole
 		}
 	}
 	waiting := len(lines) > 0 && lines[len(lines)-1].Role == roleUser
@@ -255,4 +273,53 @@ func (s *Store) lastExchange(node string) ([]exchangeLine, error) {
 		lines = append(lines, s.exchangeOf(replies[i]))
 	}
 	return lines, nil
+}
+
+// answerKey marks a message of Eriphe's written in a turn that answers
+// messages of the user's (markAnswer).
+func answerKey(seq int) string { return fmt.Sprintf("answer_msg:%d", seq) }
+
+// markAnswer marks a message the brain just wrote when its turn answers
+// the user, not events or a wake only: the bar holds it at the home.
+func (c *core) markAnswer(seq int) {
+	if c.turnAnswersUser() {
+		c.store.set(answerKey(seq), "1")
+	}
+}
+
+// homeAnswer is Eriphe's whole answer to the user's last message read at
+// the home: its messages written in a turn that answered it (markAnswer),
+// filed in no node, joined, as Markdown. Nil when the bar's line says all
+// of it (a line: it goes as any), when there is none, or when the user
+// wrote since, wherever and read or not: a new message moves on from it.
+func (s *Store) homeAnswer() (*barLine, error) {
+	var from, since int
+	s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE node = '' AND role = ? AND via != ? AND delivered = 1`, roleUser, firstRunVia).Scan(&from)
+	if from == 0 {
+		return nil, nil
+	}
+	s.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE role = ? AND seq > ?`, roleUser, from).Scan(&since)
+	if since > 0 {
+		return nil, nil
+	}
+	msgs, err := s.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq > ? AND node = '' AND role = ? AND filed = '' ORDER BY seq`, from, roleBrain)
+	if err != nil {
+		return nil, err
+	}
+	var parts []string
+	var a barLine
+	for _, m := range msgs {
+		if s.get(answerKey(m.Seq)) == "" {
+			continue
+		}
+		parts = append(parts, strings.TrimSpace(m.Text))
+		a.Seq = m.Seq
+		a.External = a.External || s.exchangeOf(m).External
+	}
+	a.Text = strings.Join(parts, "\n\n")
+	if _, cut := ackLine(a.Text); !cut {
+		return nil, nil
+	}
+	a.Text = truncate(a.Text, answerMax)
+	return &a, nil
 }
