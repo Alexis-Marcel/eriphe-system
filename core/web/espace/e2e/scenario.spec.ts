@@ -122,9 +122,17 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(head.locator(".ext-mark")).toBeVisible();
   await expect(head.locator(".pg-badge.warn")).toHaveText("extérieur");
   await expect(mailPage.locator(".pg-kicker .pg-badge.warn")).toHaveCount(0);
-  await settledBox(mailPage); // measured at rest, not while the page opens
-  const [titleBox, badgeBox] = [await head.locator(".title-ext").boundingBox(), await head.locator(".pg-badge.warn").boundingBox()];
-  expect(Math.abs(titleBox!.y + titleBox!.height / 2 - (badgeBox!.y + badgeBox!.height / 2))).toBeLessThan(10);
+  // Measured once the page has settled; on the title's line means the
+  // badge's middle is within the title's height (fonts differ by system).
+  await settledBox(mailPage);
+  const titleBox = (await head.locator(".title-ext").boundingBox())!;
+  const onTitleLine = async (sel: string) => {
+    const b = (await head.locator(sel).boundingBox())!;
+    const mid = b.y + b.height / 2;
+    expect(mid).toBeGreaterThan(titleBox.y);
+    expect(mid).toBeLessThan(titleBox.y + titleBox.height);
+  };
+  await onTitleLine(".pg-badge.warn");
   await shot(page, "untrusted-title");
 
   // 8. A draft with its « Envoyer ? » card, the production view beside it,
@@ -308,6 +316,21 @@ test("the steps of the scenario", async ({ page, request }) => {
   await bubble("Mes mails").click();
   const view = pageOf("Mes mails");
   await expect(view).toBeVisible();
+  // A permanent subject shows it: a small sign by its date, a satellite
+  // orbiting its bubble; its ⋯ menu says what keeps it alive, in code's
+  // words: the monitor that watches, the skill it starts.
+  await expect(view.locator(".pg-title .pg-standing")).toHaveAttribute("title", "Sujet permanent");
+  await expect(page.locator(".gr-node.standing", { has: page.locator('.gr-core[aria-label="Mes mails"]') }).locator(".gr-sat")).toHaveCount(1);
+  await expect(page.locator(".gr-node:not(.standing) .gr-sat")).toHaveCount(0);
+  await view.getByRole("button", { name: "Plus" }).click();
+  const alive = page.locator(".pg-menu .pg-alive");
+  await expect(alive.locator("h3")).toHaveText("Ce qui le fait vivre");
+  await expect(alive.locator(".pg-alive-monitors li")).toContainText("mails-recus");
+  await expect(alive.locator(".pg-alive-skills li")).toHaveText("mails-trier lancé quand la surveillance « mails-recus » voit quelque chose, au plus une fois toutes les 15 min");
+  await expect(alive.locator(".pg-alive-at")).toContainText("Mis à jour");
+  await shot(page, "alive-menu");
+  await page.keyboard.press("Escape");
+  await expect(alive).toHaveCount(0);
   expect((await request.post("/e2e/proposals")).status()).toBe(204);
   const batch = view.locator(".pg-foot .a2-proposal");
   await expect(batch).toHaveCount(1);
@@ -701,6 +724,7 @@ test("the workspace on a small screen", async ({ page }) => {
   const day = page.locator('article.pg[aria-label="Ma journée"]');
   await expect(day).toBeVisible();
   await expect(day).toContainText("Point produit");
+  await expect(day.locator(".pg-standing")).toBeVisible(); // a permanent subject, on a phone too
   await shot(page, "phone-page");
   await expect(page.locator(".cs-bar input")).toHaveAttribute("aria-label", "Écris à Eriphe, sur Ma journée");
   await day.getByRole("button", { name: "Fermer cette page" }).click();

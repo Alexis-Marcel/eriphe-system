@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as PtrEvent } from "react";
 import { createPortal } from "react-dom";
 import { stamp } from "../a2ui/format";
-import { archive, label, type TraceEntry } from "../data/api";
+import { archive, label, type PageAlive, type TraceEntry } from "../data/api";
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
@@ -89,6 +89,11 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               </em>
             )}
           </h2>
+          {node?.lifetime === "standing" && (
+            <span className="pg-standing" role="img" aria-label={t("espace.standing")} title={t("espace.standing")}>
+              ∞
+            </span>
+          )}
           <span className="pg-when">
             {running ? (
               <span className="pg-live">
@@ -113,7 +118,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               {t("espace.page.archive")}
             </button>
           )}
-          <More tab={tab} onTab={setTab} />
+          <More tab={tab} onTab={setTab} alive={page?.alive} />
           <button type="button" className="pg-x" onClick={onClose} aria-label={t("espace.page.close")}>
             ✕
           </button>
@@ -172,7 +177,8 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
 // More is the page's small menu: its trace and its .md file, rarely
 // wanted, a click away; Escape or a click outside closes it. It is drawn
 // over everything (the page clips what overflows it), under its button.
-function More({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+// A permanent subject's menu also says what keeps it alive (alive).
+function More({ tab, onTab, alive }: { tab: Tab; onTab: (t: Tab) => void; alive?: PageAlive }) {
   const { t } = useWords();
   const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
   const box = useRef<HTMLSpanElement>(null);
@@ -213,10 +219,38 @@ function More({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
                 {t(`espace.page.${k}`)}
               </button>
             ))}
+            {alive && <Alive alive={alive} />}
           </span>,
           document.body,
         )}
     </span>
+  );
+}
+
+// Alive is what keeps a permanent subject alive, as eriphe-core says it:
+// its sources, monitors and skills, each by its name and what it does,
+// and when it last changed.
+export function Alive({ alive }: { alive: PageAlive }) {
+  const { t, lang } = useWords();
+  const groups = (["sources", "monitors", "skills"] as const).filter((k) => alive[k]?.length);
+  return (
+    <section className="pg-alive" role="group" aria-label={t("espace.alive")}>
+      <h3>{t("espace.alive")}</h3>
+      {groups.length === 0 && <p className="pg-alive-none">{t("espace.alive.none")}</p>}
+      {groups.map((k) => (
+        <div key={k} className={`pg-alive-${k}`}>
+          <h4>{t(`espace.alive.${k}`)}</h4>
+          <ul>
+            {alive[k]!.map((l) => (
+              <li key={l.name}>
+                <b>{l.name}</b> <span>{l.what}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <p className="pg-alive-at">{t("espace.alive.updated", stamp(lang, alive.updated))}</p>
+    </section>
   );
 }
 

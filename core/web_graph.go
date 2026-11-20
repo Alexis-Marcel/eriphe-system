@@ -168,6 +168,8 @@ type nodePage struct {
 	// Refs: the node each [[name]] of its text opens, by the name as
 	// written; a name no node has is not there (the page greys it).
 	Refs map[string]pageRef `json:"refs"`
+	// Alive: a standing node's sources, monitors and skills (node_alive.go).
+	Alive *pageAlive `json:"alive,omitempty"`
 }
 
 // pageRef is the node a [[link]] of a page opens: its id, its title as
@@ -241,6 +243,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		a := sum.Archived
 		p.Archived = &a
 	}
+	p.Alive = c.nodeAlive(sum, lang)
 	if vs, err := c.nodes.Versions(id); err == nil {
 		if len(vs) > 1 && vs[0].N == 1 && d.Version.N != 1 {
 			if first, err := c.nodes.Read(id, 1); err == nil && strings.TrimSpace(nodeBody(first.Raw)) == "" {

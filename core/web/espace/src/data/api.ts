@@ -147,7 +147,12 @@ export type NodePage = {
   parts: PagePart[];
   cards: ProposalView[];
   refs?: Record<string, PageRef>;
+  alive?: PageAlive;
 };
+// What keeps a permanent subject alive (pageAlive, node_alive.go): its
+// sources, monitors and skills, each named, what it does in code's words.
+export type AliveLine = { name: string; what: string };
+export type PageAlive = { sources?: AliveLine[]; monitors?: AliveLine[]; skills?: AliveLine[]; updated: string };
 // The node a [[link]] of a page's text opens, by the name as written
 // (pageRef, web_graph.go): its title, titleExternal when it may be someone
 // else's words (shown marked); archived, it opens nothing. A name no node
