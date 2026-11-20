@@ -1,9 +1,15 @@
 import golden from "../doc/page.golden.json";
 import type { GraphNode, NodeFile, NodePage, TraceEntry } from "./api";
+import { samplePage, setViews } from "./samplecore";
+import { sampleViews } from "./sampleviews";
 
 // The dev server's made-up graph, when no eriphe-core is behind: a few
 // subjects and their bubbles, each page the shape eriphe-core sends
-// (page.golden.json). No real name, address or tool in it.
+// (page.golden.json); the views (« Mes mails », « Alertes de la prod »)
+// written as Eriphe writes them and drawn by a make-believe core
+// (samplecore.ts, sampleviews.ts). No real name, address or tool in it.
+
+setViews(sampleViews);
 
 const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 
@@ -16,7 +22,8 @@ const nodes: GraphNode[] = [
   row("plan", "Plan du 1er article", { parent: "sub", version: 2, waits: true }),
   row("style", "Style des articles", { parent: "sub", state: "running", line: "3 articles lus" }),
   row("day", "Ma journée", { lifetime: "standing", created: at(700) }),
-  row("mails", "Mails", { lifetime: "standing", created: at(650), links: ["sub"] }),
+  row("mails", "Mes mails", { lifetime: "standing", created: at(650), links: ["sub"], waits: true, external: true, version: 9 }),
+  row("prod", "Alertes de la prod", { lifetime: "standing", created: at(640), waits: true, version: 4 }),
   row("ext", "Virement urgent à valider", { parent: "mails", external: true, titleExternal: true }),
 ];
 
@@ -24,12 +31,28 @@ const page = (id: string): NodePage | null => {
   const n = nodes.find((x) => x.id === id);
   if (!n) return null;
   const base = golden as unknown as NodePage;
+  const versions = Array.from({ length: n.version }, (_, i) => ({ n: i + 1, author: i ? "user" : "brain", at: at(60 - i * 10) }));
+  const view = samplePage(id);
+  if (view)
+    return {
+      ...base,
+      node: n,
+      version: n.version,
+      versions,
+      parts: view.parts,
+      cards: view.cards,
+      alive: {
+        sources: [{ name: id, what: id === "mails" ? "lit mail/search_messages toutes les 5 min" : "lit alerts/list_alerts toutes les 5 min" }],
+        skills: [{ name: id === "mails" ? "trier-mes-mails" : "suivre-la-prod", what: "note chaque élément, prépare ce qu'il propose, écrit le bilan" }],
+        updated: at(4),
+      },
+    };
   const block = base.parts.find((p) => p.block)!.block!;
   return {
     ...base,
     node: n,
     version: n.version,
-    versions: Array.from({ length: n.version }, (_, i) => ({ n: i + 1, author: i ? "user" : "brain", at: at(60 - i * 10) })),
+    versions,
     parts: [{ text: `# ${n.title || "…"}\n\nUn exemple : ces données sont fictives.\n\n` }, { block: { ...block, external: n.external } }],
     cards: [],
   };

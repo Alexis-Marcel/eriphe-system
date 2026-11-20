@@ -976,8 +976,67 @@ a.notice-text:hover { text-decoration: underline; }
 .a2-pickask dl { margin: 0; }
 .a2-pickask dt { font-family: var(--mono); font-size: 12px; }
 .a2-pickask dd { margin: 0 0 0 12px; font-family: var(--mono); font-size: 12px; color: var(--fg2); }
-.a2-pickask ul { margin: 0; padding-left: 18px; color: var(--fg2); }
+.a2-pickask ul { margin: 0; padding-left: 18px; color: var(--fg2); max-height: 150px; overflow-y: auto; scrollbar-width: thin; }
 .a2-pickask-btns { display: flex; gap: 6px; justify-content: flex-end; }
 .a2-pickdone { margin: 0; font-size: 12px; color: var(--ok-text); }
 .a2-pickdone.failed { color: var(--hot-text); }
 @media (prefers-reduced-motion: reduce) { .a2-pick, .a2-pickall { transition: none; } }
+
+/* --- A page's opening, items that propose, batches -------------------------
+   A page's text opens with what matters (the prompt: « commence par ce qui
+   compte »): its first paragraph is its lead, a size above the rest. */
+.pg-doc > .a2-markdown:first-child > p:first-child { font-size: 16.5px; line-height: 1.5; letter-spacing: -0.01em; color: var(--fg); }
+.pg-doc > .a2-markdown:first-child > p:first-child + p { color: var(--fg2); font-size: 13.5px; }
+
+/* An item that proposes: one line, the item and its one Oui, no frame of
+   its own; the rows of the list are what separates them. */
+.a2-row:has(> .a2-inline) { flex-wrap: nowrap; gap: 10px; }
+.a2-row:has(> .a2-inline) > .a2-item, .a2-row:has(> .a2-inline-state) > .a2-item, .a2-openmain > .a2-row > .a2-item { padding: 6px 2px; border-color: transparent; background: none; }
+.a2-inline { flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.a2-inline-yes { min-width: 52px; padding: 5px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; }
+.a2-inline-no { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--fg3); cursor: pointer; opacity: 0; transition: opacity 120ms; }
+.a2-inline-no .a2-icon { width: 13px; height: 13px; }
+.a2-inline-no:hover { background: var(--fill); color: var(--fg); }
+li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
+@media (hover: none) { .a2-inline-no { opacity: 1; } }
+.a2-inline-ext { display: inline-grid; place-items: center; color: var(--warn-text); }
+.a2-inline-ext .a2-icon { width: 13px; height: 13px; }
+.a2-block.ext .a2-inline-ext { display: none; } /* the block's own mark says it */
+.a2-inline-state { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--fg3); }
+.a2-inline-state .a2-icon { width: 13px; height: 13px; }
+.a2-inline-approved:not(.a2-inline-failed) { color: var(--ok-text); }
+.a2-inline-failed { color: var(--hot-text); }
+.a2-list-vertical > li:has(.a2-inline-state) { animation: a2-settle 600ms 500ms ease-in forwards; }
+@keyframes a2-settle { to { opacity: 0.35; } }
+
+/* What its Oui does, above an item opened in place. */
+.a2-onyes { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; padding: 0 0 10px; border-bottom: 1px solid var(--line); }
+.a2-onyes p { margin: 0; }
+.a2-onyes b { font-weight: 600; margin-right: 4px; }
+.a2-onyes-line { color: var(--fg2); font-size: 12px; }
+
+/* A batch: one line, how many and the action on all; opened, its rows. */
+.a2-batch .a2-fold-head { gap: 10px; padding: 9px 12px; border-style: dashed; color: var(--fg2); }
+.a2-batch.a2-fold-open .a2-fold-head { border-style: solid; }
+.a2-batch .a2-fold-chev { margin-left: 0; order: -1; font-size: 11px; }
+.a2-batch .a2-fold-label { color: var(--fg); }
+.a2-batch-kept { font-size: 12px; color: var(--fg3); }
+.a2-batch-act { padding: 6px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.a2-batch-act:hover { border-color: color-mix(in oklab, var(--hot) 50%, var(--line-strong)); color: var(--hot-text); }
+.a2-batch-act:disabled { opacity: 0.5; cursor: default; }
+.a2-batch .a2-fold-body { max-height: 320px; overflow-y: auto; scrollbar-width: thin; padding: 2px 4px; }
+.a2-batchrows .a2-pick { opacity: 1; }
+.a2-batchrows > li.left { opacity: 0.55; }
+.a2-batchrows > li.picked { background: none; }
+.a2-batch-done { display: flex; align-items: center; gap: 6px; margin: 0; padding: 6px 2px; font-size: 13px; color: var(--ok-text); }
+.a2-batch-done .a2-icon { width: 14px; height: 14px; }
+
+/* What is already decided, in the page's « ⋯ » menu. */
+.pg-settled { margin: 4px 0 0; padding: 8px 10px 6px; border-top: 1px solid var(--line); max-width: min(340px, 86vw); display: grid; gap: 6px; }
+.pg-settled h3 { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--fg); }
+.pg-settled ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pg-settled li { display: flex; gap: 8px; font-size: 12.5px; }
+.pg-settled-word { flex: none; color: var(--ok-text); }
+.pg-settled li.no .pg-settled-word { color: var(--fg3); }
+.pg-settled-text { color: var(--fg2); }
+@media (prefers-reduced-motion: reduce) { .a2-inline-no { transition: none; } .a2-list-vertical > li:has(.a2-inline-state) { animation: none; } }

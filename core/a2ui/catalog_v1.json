@@ -156,7 +156,8 @@
         "label": {"$ref": "common_types.json#/$defs/DynamicString"},
         "child": {"$ref": "common_types.json#/$defs/Child"},
         "aside": {"$ref": "common_types.json#/$defs/Child", "description": "Sur sa ligne, au bout, ouverte ou non : une action sur tout ce qu'elle résume (« Archiver les 2 »)."},
-        "open": {"$ref": "common_types.json#/$defs/DynamicBoolean", "description": "Ouverte d'abord (non par défaut)."}
+        "open": {"$ref": "common_types.json#/$defs/DynamicBoolean", "description": "Ouverte d'abord (non par défaut)."},
+        "list": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$", "description": "Un lot : l'id de la List qu'elle replie, liée aux éléments d'une source avec une action. Sa ligne dit `{n}` (le nombre de lignes) dans `label` et porte l'action sur toutes ses lignes, cochées d'avance ; dépliée, on décoche ce qu'on garde. Vide, elle disparaît."}
       },
       "required": ["component", "label", "child"]
     },
@@ -380,7 +381,8 @@
       "properties": {
         "component": {"const": "Proposal"},
         "proposalId": {"$ref": "common_types.json#/$defs/DynamicString", "description": "La référence de la proposition, type:numéro."},
-        "compact": {"type": "boolean", "default": false, "description": "Une fois décidée, une ligne qui se déplie au clic ; tant qu'elle attend, entière."}
+        "compact": {"type": "boolean", "default": false, "description": "Une fois décidée, une ligne qui se déplie au clic ; tant qu'elle attend, entière."},
+        "inline": {"type": "boolean", "default": false, "description": "Sur la ligne d'un élément : seulement son bouton Oui (Non au survol), ce que fait le oui se lit en ouvrant la ligne ; liée au champ `_card` de l'élément (`{\"@path\": \"_card\"}`), rien quand aucune carte n'attend sur lui."}
       },
       "required": ["component", "proposalId"],
       "examples": [

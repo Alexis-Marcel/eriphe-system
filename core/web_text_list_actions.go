@@ -82,6 +82,19 @@ var listActionStrings = map[string]map[string]string{
 		"espace.open.date":    "Date",
 		"espace.open.details": "Détails",
 		"espace.open.error":   "Impossible de joindre {{name}}.",
+		"espace.open.onyes":   "Sur Oui",
+
+		"espace.batch.keep":  "Décocher « %s » : le garder",
+		"espace.batch.kept":  "%d gardé(s)",
+		"espace.batch.label": "Le lot",
+
+		"espace.row.no":       "Non, pas ça",
+		"espace.row.done":     "Fait",
+		"espace.row.running":  "En cours…",
+		"espace.row.failed":   "N'a pas pu se faire",
+		"espace.row.rejected": "Écarté",
+
+		"espace.page.settled": "Déjà décidé",
 	},
 	"en": {
 		"act.one":               "1 item",
@@ -149,5 +162,18 @@ var listActionStrings = map[string]map[string]string{
 		"espace.open.date":    "Date",
 		"espace.open.details": "Details",
 		"espace.open.error":   "Cannot reach {{name}}.",
+		"espace.open.onyes":   "On Yes",
+
+		"espace.batch.keep":  "Untick “%s”: keep it",
+		"espace.batch.kept":  "%d kept",
+		"espace.batch.label": "The batch",
+
+		"espace.row.no":       "No, not that",
+		"espace.row.done":     "Done",
+		"espace.row.running":  "Running…",
+		"espace.row.failed":   "Could not be done",
+		"espace.row.rejected": "Set aside",
+
+		"espace.page.settled": "Already decided",
 	},
 }

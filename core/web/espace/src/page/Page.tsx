@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as PtrEvent } from "react";
 import { createPortal } from "react-dom";
 import { stamp } from "../a2ui/format";
-import { archive, label, type PageAlive, type PageOrigin, type TraceEntry } from "../data/api";
+import { archive, label, type PageAlive, type PageOrigin, type ProposalView, type TraceEntry } from "../data/api";
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
@@ -52,6 +52,12 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
   const running = node?.state === "running";
   const at = stamp(lang, node?.updated);
   const shift = page?.shift ?? 0;
+  // At its foot, only the cards that still ask something: one that waits,
+  // or whose yes runs or failed. What is settled leaves the page: it is
+  // in the « ⋯ » menu (Déjà décidé), and in the trace.
+  const cards = page?.cards ?? [];
+  const waiting = cards.filter(stillAsks);
+  const settled = cards.filter((c) => !stillAsks(c));
   const gone = (n: number) => (n === 0 ? "" : n === 1 ? t("espace.page.archive.one") : t("espace.page.archive.many", n));
 
   return (
@@ -116,7 +122,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               {t("espace.page.archive")}
             </button>
           )}
-          <More tab={tab} onTab={setTab} alive={page?.alive} origin={page?.origin} />
+          <More tab={tab} onTab={setTab} alive={page?.alive} origin={page?.origin} settled={settled} />
           <button type="button" className="pg-x" onClick={onClose} aria-label={t("espace.page.close")}>
             ✕
           </button>
@@ -144,9 +150,9 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
         {tab === "doc" && (page ? <Doc page={page} latest={latest} live={live} onOpen={onOpen} /> : failed ? <p className="pg-empty">{t("espace.page.gone")}</p> : <Skeleton />)}
         {tab === "trace" && (trace ? <Trace entries={trace} /> : <Skeleton />)}
         {tab === "md" && (file ? <MdTab key={`${id}@${version}`} id={id} file={file} latest={latest} live={live} shift={shift} /> : <Skeleton />)}
-        {page && page.cards.length > 0 && latest && (
+        {waiting.length > 0 && latest && (
           <footer className="pg-foot">
-            <Cards surface={`${id}--cards`} refs={page.cards.map((c) => c.ref)} home={id} />
+            <Cards surface={`${id}--cards`} refs={waiting.map((c) => c.ref)} home={id} />
           </footer>
         )}
       </div>
@@ -177,7 +183,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
 // over everything (the page clips what overflows it), under its button.
 // It says where the node comes from (origin), and a permanent subject's
 // what keeps it alive (alive).
-function More({ tab, onTab, alive, origin }: { tab: Tab; onTab: (t: Tab) => void; alive?: PageAlive; origin?: PageOrigin }) {
+function More({ tab, onTab, alive, origin, settled = [] }: { tab: Tab; onTab: (t: Tab) => void; alive?: PageAlive; origin?: PageOrigin; settled?: ProposalView[] }) {
   const { t } = useWords();
   const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
   const box = useRef<HTMLSpanElement>(null);
@@ -218,12 +224,36 @@ function More({ tab, onTab, alive, origin }: { tab: Tab; onTab: (t: Tab) => void
                 {t(`espace.page.${k}`)}
               </button>
             ))}
+            {settled.length > 0 && <Settled cards={settled} />}
             {origin && <Origin origin={origin} />}
             {alive && <Alive alive={alive} />}
           </span>,
           document.body,
         )}
     </span>
+  );
+}
+
+// stillAsks tells whether a card still asks something of the user on its
+// page: it waits, or its yes runs or failed.
+export const stillAsks = (c: ProposalView) => c.state === "pending" || (c.state === "approved" && (c.exec === "running" || c.exec === "failed"));
+
+// Settled are the cards of the node already decided, the last first: a
+// line each, what it was and how it went.
+export function Settled({ cards }: { cards: ProposalView[] }) {
+  const { t } = useWords();
+  return (
+    <section className="pg-settled" role="group" aria-label={t("espace.page.settled")}>
+      <h3>{t("espace.page.settled")}</h3>
+      <ul>
+        {cards.map((c) => (
+          <li key={c.ref} className={c.state === "approved" ? "yes" : "no"}>
+            <span className="pg-settled-word">{t(c.state === "approved" ? "espace.row.done" : "espace.row.rejected")}</span>
+            <span className="pg-settled-text">{c.text}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

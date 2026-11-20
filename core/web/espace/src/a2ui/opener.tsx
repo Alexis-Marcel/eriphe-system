@@ -2,6 +2,7 @@ import { useEffect, useId, useState, type MouseEvent, type ReactNode } from "rea
 import type { Opened, PickItem, PickList } from "../data/api";
 import { useWords } from "../i18n";
 import type { Picks } from "./picks";
+import { useMoved, useProposals, type ProposalView } from "./proposals";
 
 // An item opened in place (item_open.go): a row of a List whose source
 // says how one item is read in full opens below itself on a click, or on
@@ -84,8 +85,51 @@ export function Opener({ surface, list, picks, item, children }: { surface: stri
           <button type="button" className="a2-openclose" aria-label={t("espace.open.close")} onClick={() => setSt((s) => ({ ...s, open: false }))}>
             ✕
           </button>
+          {item.card && <OnYes card={item.card} />}
           <OpenedView st={st} onYes={() => void read(true)} />
         </div>
+      )}
+    </div>
+  );
+}
+
+// OnYes is, above an opened item, the card that waits on it: what its Oui
+// does in code's words, and its exact calls under Détails. Gone once
+// decided: the line says where it stands.
+function OnYes({ card }: { card: string }) {
+  const { t } = useWords();
+  const src = useProposals();
+  const [p, setP] = useState<ProposalView | null>(null);
+  const moved = useMoved(src, [card]);
+  useEffect(() => {
+    let live = true;
+    src.read(card).then(
+      (v) => live && setP(v),
+      () => live && setP(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [src, card, moved]);
+  if (!p || p.state !== "pending") return null;
+  const exact = (p.fields ?? []).filter((f) => f.detail);
+  return (
+    <div className="a2-onyes">
+      <p>
+        <b>{t("espace.open.onyes")}</b> {p.text}
+      </p>
+      {(p.fields ?? [])
+        .filter((f) => !f.detail)
+        .map((f) => (
+          <p key={f.name} className="a2-onyes-line">
+            {f.value}
+          </p>
+        ))}
+      {exact.length > 0 && (
+        <details className="a2-openraw">
+          <summary>{t("espace.open.details")}</summary>
+          <pre>{exact.map((f) => `${f.name}\n${f.value}`).join("\n\n")}</pre>
+        </details>
       )}
     </div>
   );

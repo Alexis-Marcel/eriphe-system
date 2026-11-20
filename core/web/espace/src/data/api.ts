@@ -187,7 +187,9 @@ export type PageBlock = {
 // words may have written it); confirm: a tool that throws away,
 // asked once more with its exact call. A filtered List shows its rows
 // only, never the source's others.
-export type PickItem = { n: number; id: string; title?: string; detail?: string };
+// card: the ref of the card that waits on this item (item_cards.go), shown
+// when the row is opened: what its Oui does, in code's words.
+export type PickItem = { n: number; id: string; title?: string; detail?: string; card?: string };
 export type PickAction = { name: string; one: string; many: string; all?: string; tool: string; args?: string[]; hint?: string; hintExternal?: boolean; confirm?: boolean };
 export type PickList = { component: string; source: string; filtered?: boolean; open?: boolean; items: PickItem[]; actions: PickAction[] };
 

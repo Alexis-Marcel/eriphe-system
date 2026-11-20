@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { createAdapter, type Adapter } from "../a2ui/adapter";
+import { useAdapter } from "../a2ui/adapter";
 import { Markdown, type Wiki } from "../a2ui/markdown";
 import { PicksContext, type Picks } from "../a2ui/picks";
 import { SurfaceView } from "../a2ui/Surfaces";
 import { act, ask, mark, openItem, type NodePage, type PickItem } from "../data/api";
+import { sampleAct, sampleOpen } from "../data/samplecore";
 import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Cards } from "../page/Cards";
@@ -44,8 +45,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
       external: t("espace.title.external"),
     };
   }, [page, nodes, onOpen, t]);
-  const [adapter] = useState<Adapter>(() => createAdapter(lang));
-  useEffect(() => () => adapter.dispose(), [adapter]);
+  const adapter = useAdapter(lang);
   const ps = useMemo(() => pieces(page), [page]);
 
   // The page read again (a new version, another one asked): its blocks
@@ -100,12 +100,18 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
     return {
       list: (surface, component) => lists.get(surface)?.find((l) => l.component === component),
       // Only on the last version, live: an older one shows its rows.
-      run:
-        latest && live
+      // On the dev server, the sample's make-believe core (samplecore.ts).
+      run: !latest
+        ? undefined
+        : live
           ? (surface, list, action, ids) => act(page.node.id, surface.slice(page.node.id.length + 2), list.component, action.name, page.version, ids)
-          : undefined,
+          : (surface, list, action, ids) => sampleAct(page.node.id, surface.slice(page.node.id.length + 2), list.component, action.name, ids),
       kept,
-      open: latest && live ? (surface, list, item, yes, tool) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item, yes, tool) : undefined,
+      open: !latest
+        ? undefined
+        : live
+          ? (surface, list, item, yes, tool) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item, yes, tool)
+          : (_surface, _list, item) => sampleOpen(page.node.id, item),
       opened,
     };
   }, [latest, live, page, rows, kept, opened]);

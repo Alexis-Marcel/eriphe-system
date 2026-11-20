@@ -9,7 +9,8 @@ import { Day as DayView, cleanEvents, type Ghost } from "./day";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
-import { openable, Pickable, useList, type Row } from "./picks";
+import { allText, AskPanel, BatchContext, buttonText, MAX_IDS, openable, Pickable, useList, type Asking, type Result, type Row } from "./picks";
+import type { PickAction, PickItem } from "../data/api";
 import { HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
@@ -233,37 +234,147 @@ const Fold = createComponentImplementation(
       child: CommonSchemas.Child,
       aside: CommonSchemas.Child.optional(),
       open: CommonSchemas.DynamicBoolean.optional(),
+      list: z.string().optional(),
     }),
   },
-  ({ props, buildChild }) => {
-    const { t } = useWords();
-    const id = useId();
-    const [open, setOpen] = useState(props.open === true);
-    const toggle = (
-      <button type="button" className="a2-fold-head" aria-expanded={open} aria-controls={id} title={t(open ? "espace.a2.fold.close" : "espace.a2.fold.open")} onClick={() => setOpen(!open)}>
-        <span className="a2-fold-label">{str(props.label)}</span>
-        <span className="a2-fold-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
-      </button>
-    );
-    return (
-      <div className={`a2-fold${open ? " a2-fold-open" : ""}`}>
-        {props.aside ? (
-          <div className="a2-fold-line">
-            {toggle}
-            <div className="a2-fold-aside">{buildChild(props.aside)}</div>
-          </div>
-        ) : (
-          toggle
+  ({ props, buildChild, context }) => {
+    // A batch: the List it names, as eriphe-core told of it (picks.tsx).
+    const surface = context.dataContext.surface?.id;
+    const told = useList(surface, props.list ?? "");
+    if (props.list && told && surface) return <BatchFold surface={surface} told={told} label={str(props.label)} open={props.open === true} child={props.child ? buildChild(props.child) : null} />;
+    return <FoldView label={str(props.label).replace("{n}", "")} open={props.open === true} aside={props.aside ? buildChild(props.aside) : null} child={props.child ? buildChild(props.child) : null} />;
+  },
+);
+
+function FoldView({ label, open: first, aside, child }: { label: string; open: boolean; aside: ReactNode; child: ReactNode }) {
+  // A plain Fold: its line, its aside, its child once opened.
+  const { t } = useWords();
+  const id = useId();
+  const [open, setOpen] = useState(first);
+  const toggle = (
+    <button type="button" className="a2-fold-head" aria-expanded={open} aria-controls={id} title={t(open ? "espace.a2.fold.close" : "espace.a2.fold.open")} onClick={() => setOpen(!open)}>
+      <span className="a2-fold-label">{label}</span>
+      <span className="a2-fold-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
+    </button>
+  );
+  return (
+    <div className={`a2-fold${open ? " a2-fold-open" : ""}`}>
+      {aside ? (
+        <div className="a2-fold-line">
+          {toggle}
+          <div className="a2-fold-aside">{aside}</div>
+        </div>
+      ) : (
+        toggle
+      )}
+      {open && (
+        <div id={id} className="a2-fold-body">
+          {child}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// BatchFold is a Fold that names a List of a source's items with actions:
+// its line says how many rows the List has ({n} in its label) and
+// carries the List's actions on all of them, ticked beforehand (code's
+// words: « Tout mettre à la corbeille », then « Mettre les 36 à la
+// corbeille » once two are unticked); opened, the List shows each row
+// with its box (BatchRows). A tool that throws away asks once more, on
+// the line. Done, the line says what was done; empty, nothing shows:
+// what is settled leaves the page. What is left unticked, the confirm
+// and the last result stay while the page is drawn again (picks.kept).
+function BatchFold({ surface, told, label, open: first, child }: { surface: string; told: NonNullable<ReturnType<typeof useList>>; label: string; open: boolean; child: ReactNode }) {
+  const { t } = useWords();
+  const { list, picks } = told;
+  const id = useId();
+  const key = `${surface}\u0000${list.component}\u0000batch`;
+  const kept = picks.kept.get(key);
+  const [open, setOpen] = useState(first);
+  const [left, setLeft] = useState<ReadonlySet<string>>(() => new Set(kept?.picked ?? []));
+  const [asking, setAsking] = useState<Asking | null>(kept?.asking ?? null);
+  const [result, setResult] = useState<Result | null>(kept?.result ?? null);
+  const [running, setRunning] = useState(false);
+  useEffect(() => void picks.kept.set(key, { picked: [...left], result, asking }), [picks.kept, key, left, result, asking]);
+  const items = list.items;
+  const chosen = items.filter((it) => !left.has(it.id));
+  const toggle = (itemId: string) => {
+    setResult(null);
+    setAsking(null);
+    setLeft((was) => {
+      const next = new Set(was);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+  const run = async (a: PickAction, its: PickItem[]) => {
+    setAsking(null);
+    setRunning(true);
+    const r = await (picks.run?.(surface, list, a, its.map((it) => it.id)) ?? Promise.resolve({ ok: false, text: t("espace.act.error") })).catch(() => ({ ok: false, text: t("espace.act.error") }));
+    picks.kept.set(key, { picked: [...left], result: r, asking: null });
+    setRunning(false);
+    setResult(r);
+    if (r.ok) setOpen(false);
+  };
+  const words = (a: PickAction) => (chosen.length === items.length ? allText(a, items.length) : buttonText(a, chosen.length));
+  const press = (a: PickAction) => {
+    setResult(null);
+    if (a.confirm) setAsking({ action: a, items: chosen, label: words(a) });
+    else void run(a, chosen);
+  };
+  // Settled: nothing left but what the user kept. The line of what was
+  // done (and how many kept), or nothing.
+  if (!chosen.length && (result?.ok || !items.length)) {
+    return result?.ok ? (
+      <p className="a2-batch-done" role="status">
+        <IconView name="check" />
+        {result.text}
+        {left.size > 0 && <span className="a2-batch-kept">· {t("espace.batch.kept", items.length)}</span>}
+      </p>
+    ) : null;
+  }
+  const whole = chosen.length > 0 && chosen.length <= MAX_IDS;
+  return (
+    <BatchContext.Provider value={{ list: list.component, left, toggle }}>
+      <div className={`a2-fold a2-batch${open ? " a2-fold-open" : ""}`}>
+        <div className="a2-fold-line">
+          <button type="button" className="a2-fold-head" aria-expanded={open} aria-controls={id} title={t(open ? "espace.a2.fold.close" : "espace.a2.fold.open")} onClick={() => setOpen(!open)}>
+            <span className="a2-fold-chev" aria-hidden="true">{open ? "▾" : "▸"}</span>
+            <span className="a2-fold-label">{label.replace("{n}", String(items.length))}</span>
+            {left.size > 0 && <span className="a2-batch-kept">{t("espace.batch.kept", left.size)}</span>}
+          </button>
+          {picks.run && chosen.length > 0 && (
+            <div className="a2-fold-aside">
+              {list.actions.map((a) => (
+                <button key={a.name} type="button" className="a2-batch-act" disabled={running || !whole} onClick={() => press(a)} data-action={a.name}>
+                  {words(a)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {asking && <AskPanel asking={asking} onCancel={() => setAsking(null)} onRun={() => void run(asking.action, asking.items)} />}
+        {running && (
+          <p className="a2-pickdone" role="status">
+            {t("espace.act.running")}
+          </p>
+        )}
+        {!running && result && !result.ok && (
+          <p className="a2-pickdone failed" role="status">
+            {result.text}
+          </p>
         )}
         {open && (
           <div id={id} className="a2-fold-body">
-            {props.child ? buildChild(props.child) : null}
+            {child}
           </div>
         )}
       </div>
-    );
-  },
-);
+    </BatchContext.Provider>
+  );
+}
 
 // --- Content ------------------------------------------------------------
 
@@ -784,7 +895,8 @@ const Item = createComponentImplementation(
   ({ props }) => {
     const { t, lang } = useWords();
     const level = LEVELS.includes(str(props.level)) ? str(props.level) : "normal";
-    const detail = str(props.detail), note = str(props.note), mark = str(props.mark);
+    // A sender as people read it ("Sam <sam@example.org>" is Sam), as Message does.
+    const detail = str(props.detail) && nameOf(str(props.detail)), note = str(props.note), mark = str(props.mark);
     const due = wall(str(props.due));
     return (
       <div className={`a2-item a2-item-${level}`}>
@@ -974,8 +1086,102 @@ function Fields({ fields }: { fields: NonNullable<ProposalView["fields"]> }) {
 // page's node, code's, never a block's), where it comes from and what Oui
 // does in general go under Détails.
 const Proposal = createComponentImplementation(
-  { name: "Proposal", schema: z.object({ proposalId: CommonSchemas.DynamicString, compact: z.boolean().optional() }) },
+  { name: "Proposal", schema: z.object({ proposalId: CommonSchemas.DynamicString, compact: z.boolean().optional(), inline: z.boolean().optional() }) },
   ({ props, context }) => {
+    // On an item's line: its one Oui (InlineProposal).
+    if (props.inline) return <InlineProposal refText={str(props.proposalId)} context={context} />;
+    return <ProposalFull props={props} context={context} />;
+  },
+);
+
+// InlineProposal is a card that waits on an item, on the item's line: one
+// Oui, a discreet Non on hover, what the Oui does in code's words in its
+// tooltip and, the line opened, above the item (opener.tsx). No card on
+// the item (an empty ref): nothing. Decided, a short word of where it
+// stands, until the item leaves the list. In a block someone else's words
+// may have written, it answers only the card code put on that very item
+// (its `_card`, which code writes, never an author): the ref cannot be
+// steered to another card.
+function InlineProposal({ refText, context }: { refText: string; context: ComponentContext }) {
+  const { t } = useWords();
+  const src = useProposals();
+  const base = context.dataContext.path && context.dataContext.path !== "/" ? context.dataContext.path : null;
+  const own = useDataAt(context, base ? `${base}/_card` : null);
+  const [p, setP] = useState<ProposalView | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!refText) return;
+    let live = true;
+    src.read(refText).then(
+      (v) => live && setP(v),
+      () => live && setP(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [src, refText]);
+  const moved = useMoved(src, refText ? [refText] : []);
+  useEffect(() => {
+    if (!moved || !refText) return;
+    let live = true;
+    src.read(refText).then((v) => live && setP(v), () => {});
+    return () => {
+      live = false;
+    };
+  }, [src, refText, moved]);
+  if (!refText || !p) return null;
+  const answerable = !onlyAsks(context.dataContext.surface) || (typeof own === "string" && own === refText);
+  const answer = async (yes: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setFailed(false);
+    const choices = p.choices ?? [];
+    const only = yes && choices.length > 0 ? { only: choices.map((c) => c.id), left: [] } : {};
+    const ok = await src
+      .answer({ surfaceId: context.dataContext.surface?.id ?? "", componentId: context.componentModel.id, ref: p.ref, yes, ...(base ? { at: base } : {}), ...only })
+      .catch(() => false);
+    if (!ok) setFailed(true);
+    const again = await src.read(refText).catch(() => null);
+    setP(again ?? p);
+    setBusy(false);
+  };
+  if (p.state !== "pending") {
+    const word = p.state === "approved" ? (p.exec === "running" ? "espace.row.running" : p.exec === "failed" ? "espace.row.failed" : "espace.row.done") : "espace.row.rejected";
+    return (
+      <span className={`a2-inline-state a2-inline-${p.state}${p.exec ? " a2-inline-" + p.exec : ""}`} role="status">
+        <IconView name={p.state === "approved" && p.exec !== "failed" ? (p.exec === "running" ? "clock" : "check") : "close"} />
+        {t(word)}
+      </span>
+    );
+  }
+  if (!answerable) return null;
+  const yesWord = p.acts?.[0] && (p.choices?.length ?? 0) > 1 ? p.acts[Math.min(p.choices!.length, p.acts.length) - 1] : t("espace.a2.yes");
+  return (
+    <span className="a2-inline" aria-label={p.text}>
+      {p.tainted && (
+        <span className="a2-inline-ext" title={t("espace.a2.proposal.tainted")}>
+          <IconView name="warning" />
+          <span className="sr-only">{t("espace.a2.proposal.tainted")}</span>
+        </span>
+      )}
+      <button type="button" className="a2-inline-no" disabled={busy} title={t("espace.row.no")} aria-label={t("espace.row.no")} onClick={() => answer(false)}>
+        <IconView name="close" />
+      </button>
+      <button type="button" className={`btn a2-button a2-button-primary a2-inline-yes${busy ? " is-busy" : ""}`} disabled={busy} title={p.text} aria-busy={busy} onClick={() => answer(true)}>
+        {yesWord}
+      </button>
+      {failed && (
+        <span className="a2-proposal-failed" role="alert">
+          {t("espace.a2.proposal.failed")}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function ProposalFull({ props, context }: { props: { proposalId?: unknown; compact?: boolean }; context: ComponentContext }) {
+  {
     const { t } = useWords();
     const homeNode = useContext(HomeNode);
     const src = useProposals();
@@ -1156,8 +1362,8 @@ const Proposal = createComponentImplementation(
         {failed && <p className="a2-proposal-failed" role="alert">{t("espace.a2.proposal.failed")}</p>}
       </section>
     );
-  },
-);
+  }
+}
 
 const ALERT_ICON = { info: "info", success: "check", warning: "warning", error: "error" } as const;
 
