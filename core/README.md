@@ -1260,7 +1260,10 @@ composes each one from the catalog.
   what goes (« Archiver 4 mails »). `POST /cards/{id}/yes` then carries `only` (the calls ticked)
   and `left` (unticked), by id: both must be calls of the card that wait, or nothing is decided;
   `only` run, `left` are refused, and a call folded in after the page drew the card waits on, on
-  a card of its own. Decided, the card says what was left (« Archiver 4 mails · 1 laissé »). Non
+  a new card at once (the decided one keeps the words of what it decided). The workspace sends
+  `only` on every calls card's Oui, one call included. A calls card has no Oui by plain text; a
+  channel's Oui button carries no choice and decides every call that waits, so a call folded in
+  after the channel's message would go with it. Decided, the card says what was left (« Archiver 4 mails · 1 laissé »). Non
   refuses every call. On its own node's page, a card's origin, its skill and what Oui does in
   general are under Détails; the « extérieur » badge stays.
 - **One card** (`view_card.go`, kind `view`, table `view_proposals`): `propose_view` checks the

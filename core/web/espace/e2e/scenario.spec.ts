@@ -296,6 +296,29 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(batch.locator(".a2-proposal-choices")).toContainText("« La lettre de la semaine » · news@example.org");
   await expect(batch.locator(".a2-badge-external")).toBeVisible();
   await expect(batch.locator(":scope > .a2-proposal-from, :scope > .a2-proposal-yes, :scope > .a2-proposal-why")).toHaveCount(0);
+  // Oui is the strong button, in the ink, in either theme; Non the quiet one.
+  const [oui, non] = [batch.locator(".a2-proposal-actions .a2-button-primary"), batch.getByRole("button", { name: "Non" })];
+  const bg = (b: Locator) => b.evaluate((el) => getComputedStyle(el).backgroundColor);
+  // A theme's colour, as the page computes it.
+  const token = (name: string) =>
+    page.evaluate((n) => {
+      const d = document.createElement("i");
+      d.style.color = `var(${n})`;
+      document.body.append(d);
+      const v = getComputedStyle(d).color;
+      d.remove();
+      return v;
+    }, name);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((th) => (document.documentElement.dataset.theme = th), theme);
+    const [fg, card] = [await token("--fg"), await token("--card")];
+    expect(fg).not.toBe(card);
+    await expect.poll(() => bg(oui)).toBe(fg);
+    await expect.poll(() => bg(non)).toBe(card);
+  }
+  await page.evaluate(() => (document.documentElement.dataset.theme = "light"));
+  await settledBox(view);
+  await shot(page, "chosen-calls-pending");
   await ticks.nth(1).uncheck();
   await batch.getByRole("button", { name: "Archiver 2 mails" }).click();
   await expect(batch.locator(".a2-proposal-text")).toHaveText("Archiver 2 mails · 1 laissé");
