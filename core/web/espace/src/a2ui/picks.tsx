@@ -77,14 +77,22 @@ export function itemLine(it: PickItem): string {
 
 // openable is a row as a List draws it: one that opens in place when its
 // source opens its items and the page may read them (opener.tsx).
+// The row also tells what it draws which item it is, as eriphe-core
+// listed it (RowItem): its card, code's, never the block's data.
 export function openable(surface: string, list: PickList, picks: Picks, node: ReactNode, item: PickItem | undefined): ReactNode {
-  if (!list.open || !picks.open || !item) return node;
-  return (
+  if (!item) return node;
+  const inner = !list.open || !picks.open ? node : (
     <Opener surface={surface} list={list} picks={picks} item={item}>
       {node}
     </Opener>
   );
+  return <RowItem.Provider value={item}>{inner}</RowItem.Provider>;
 }
+
+// RowItem is the item a row of a List of a source's items draws, as
+// eriphe-core told of it (its id, its card): out of the block's data, so
+// that no author can write it.
+export const RowItem = createContext<PickItem | undefined>(undefined);
 
 // MAX_IDS is the most items one click acts on (actionsMaxIDs): a list of
 // more has no button for all its rows.

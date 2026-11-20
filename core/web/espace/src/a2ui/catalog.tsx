@@ -9,7 +9,7 @@ import { Day as DayView, cleanEvents, type Ghost } from "./day";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
-import { allText, AskPanel, BatchContext, buttonText, MAX_IDS, openable, Pickable, useList, type Asking, type Result, type Row } from "./picks";
+import { allText, AskPanel, BatchContext, buttonText, MAX_IDS, openable, Pickable, RowItem, useList, type Asking, type Result, type Row } from "./picks";
 import type { PickAction, PickItem } from "../data/api";
 import { HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
 
@@ -242,7 +242,7 @@ const Fold = createComponentImplementation(
     const surface = context.dataContext.surface?.id;
     const told = useList(surface, props.list ?? "");
     if (props.list && told && surface) return <BatchFold surface={surface} told={told} label={str(props.label)} open={props.open === true} child={props.child ? buildChild(props.child) : null} />;
-    return <FoldView label={str(props.label).replace("{n}", "")} open={props.open === true} aside={props.aside ? buildChild(props.aside) : null} child={props.child ? buildChild(props.child) : null} />;
+    return <FoldView label={str(props.label).replace(/\{n\}\s*/, "")} open={props.open === true} aside={props.aside ? buildChild(props.aside) : null} child={props.child ? buildChild(props.child) : null} />;
   },
 );
 
@@ -896,7 +896,7 @@ const Item = createComponentImplementation(
     const { t, lang } = useWords();
     const level = LEVELS.includes(str(props.level)) ? str(props.level) : "normal";
     // A sender as people read it ("Sam <sam@example.org>" is Sam), as Message does.
-    const detail = str(props.detail) && nameOf(str(props.detail)), note = str(props.note), mark = str(props.mark);
+    const detail = /<[^<>@\s]+@[^<>\s]+>$/.test(str(props.detail)) ? nameOf(str(props.detail)) : str(props.detail), note = str(props.note), mark = str(props.mark);
     const due = wall(str(props.due));
     return (
       <div className={`a2-item a2-item-${level}`}>
@@ -1099,14 +1099,15 @@ const Proposal = createComponentImplementation(
 // tooltip and, the line opened, above the item (opener.tsx). No card on
 // the item (an empty ref): nothing. Decided, a short word of where it
 // stands, until the item leaves the list. In a block someone else's words
-// may have written, it answers only the card code put on that very item
-// (its `_card`, which code writes, never an author): the ref cannot be
+// may have written, it answers only the card eriphe-core told the page
+// waits on the very row it is drawn in (RowItem, from the block's lists,
+// never from its data, which an author may write): the ref cannot be
 // steered to another card.
 function InlineProposal({ refText, context }: { refText: string; context: ComponentContext }) {
   const { t } = useWords();
   const src = useProposals();
+  const row = useContext(RowItem);
   const base = context.dataContext.path && context.dataContext.path !== "/" ? context.dataContext.path : null;
-  const own = useDataAt(context, base ? `${base}/_card` : null);
   const [p, setP] = useState<ProposalView | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -1131,7 +1132,7 @@ function InlineProposal({ refText, context }: { refText: string; context: Compon
     };
   }, [src, refText, moved]);
   if (!refText || !p) return null;
-  const answerable = !onlyAsks(context.dataContext.surface) || (typeof own === "string" && own === refText);
+  const answerable = !onlyAsks(context.dataContext.surface) || (!!row?.card && row.card === refText);
   const answer = async (yes: boolean) => {
     if (busy) return;
     setBusy(true);
