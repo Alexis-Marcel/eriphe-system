@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -174,6 +175,16 @@ func TestToolReviewActs(t *testing.T) {
 	if len(u.heldTools()) != 0 {
 		t.Errorf("held after the page's yes: %v", u.heldTools())
 	}
+	// Through it all, nothing was said to the brain (it is configured).
+	if c.conf().brain() == nil {
+		t.Fatal("no brain: the check below proves nothing")
+	}
+	msgs, _ := c.store.messagesAfter(0, 50)
+	for _, m := range msgs {
+		if strings.Contains(m.Text, "monitor") || strings.Contains(m.Text, "outil") {
+			t.Errorf("the brain is told: %+v", m)
+		}
+	}
 }
 
 // Only the user's gesture accepts or refuses: the brain, a task, an
@@ -222,10 +233,37 @@ func TestToolReviewNeverForAgents(t *testing.T) {
 	if _, err := c.conf().checkGrant([]string{reviewServer}); err == nil {
 		t.Error("a grant names it")
 	}
-	if why := c.sourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_changes"}); why != "" {
+	if why := c.blockSourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_changes"}); why != "" {
 		t.Errorf("not a source: %s", why)
 	}
-	if why := c.sourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_accept"}); why == "" {
+	if why := c.blockSourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_accept"}); why == "" {
 		t.Error("catalog_accept is a source")
+	}
+	// Code's read only: no monitor looks at it, no author writes it.
+	if why := c.sourceWhy(monitorSpec{Way: wayPoll, Server: reviewServer, Tool: "catalog_changes"}); why == "" {
+		t.Error("a monitor may look at the changes")
+	}
+	id := mustNode(t, c, nodestore.New{Title: "Ailleurs", Lifetime: nodefile.Standing, Body: "x\n"})
+	_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
+		return n.AuthorBody("x\n\n" + listBlock("b", "ch", map[string]any{"tool": reviewServer + "/catalog_changes", "items": map[string]any{"path": "changes", "id": "id"}}))
+	})
+	if err == nil {
+		t.Error("the brain writes a block reading the changes")
+	}
+}
+
+// A tool only the user's gesture runs acts on its own server's list: an
+// action that hands it another source's ids is refused, nothing done.
+func TestToolReviewActOnItsOwnList(t *testing.T) {
+	tw, csrf, fm, id := actionsWeb(t, `{"accept": {"tool": "eriphe-catalog/catalog_accept", "items": "ids", "source": "received"}}`)
+	_ = fm
+	waitStatus(t, tw.c.pool.get(reviewServer), statusReady)
+	d, _ := tw.c.nodes.Read(id, 0)
+	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", Action: "accept", Version: d.Version.N, IDs: []string{"m1"}})
+	if code != http.StatusForbidden {
+		t.Fatalf("act on another list: %d %v", code, out)
+	}
+	if rows, _ := tw.c.store.decisions(0, 5); len(rows) != 0 {
+		t.Errorf("journal: %+v", rows)
 	}
 }

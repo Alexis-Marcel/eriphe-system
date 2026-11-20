@@ -165,6 +165,10 @@ func (c *core) runAction(ctx context.Context, id string, in nodeActIn, lang stri
 		return actFail(http.StatusForbidden, tr(lang, "act.account"))
 	case f.value == gridNever && !f.gesture:
 		return actFail(http.StatusForbidden, tr(lang, "act.never"))
+	case f.gesture && !strings.HasPrefix(b.Sources[a.Source].Tool, u.name+"/"):
+		// A tool only the user's gesture runs acts on what its own server
+		// listed and the user saw, never on another source's ids.
+		return actFail(http.StatusForbidden, tr(lang, "act.never"))
 	}
 	reason := "geste de l'utilisateur sur une liste"
 	if f.gesture {

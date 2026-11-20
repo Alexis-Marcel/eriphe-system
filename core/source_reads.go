@@ -86,7 +86,7 @@ func (c *core) readSources(ctx context.Context, srcs map[string]sourceCall, only
 
 func (c *core) readOne(ctx context.Context, s sourceCall) sourceRead {
 	spec := s.spec()
-	if why := c.sourceWhy(spec); why != "" {
+	if why := c.blockSourceWhy(spec); why != "" {
 		return sourceRead{why: why}
 	}
 	v, err := c.readSource(ctx, spec, sourceTimeout)
@@ -97,6 +97,21 @@ func (c *core) readOne(ctx context.Context, s sourceCall) sourceRead {
 		return sourceRead{err: fmt.Sprintf("%s gave %d KiB, more than %d: narrow its arguments", s, len(raw)>>10, sourceValueMax>>10)}
 	}
 	return sourceRead{value: v}
+}
+
+// blockSourceWhy is sourceWhy for a block's source: besides the brain's
+// free reads, the free reads of a server Eriphe provides for code's own
+// blocks, lent to no agent (providedUpstream.codeReads, tool_review.go).
+// No author may write such a source (viewSourceOK, lentSource: it is no
+// catalog server); a monitor may not look at it (sourceWhy).
+func (c *core) blockSourceWhy(s monitorSpec) string {
+	if u := c.pool.get(s.Server); u != nil && u.provided != nil && u.provided.codeReads && s.Resource == "" {
+		if name := claudeToolName(s.Server, s.Tool); !c.pool.readOnly(name) || !c.freeAhead(name, s.Args) {
+			return fmt.Sprintf("%s.%s is not a free read", s.Server, s.Tool)
+		}
+		return ""
+	}
+	return c.sourceWhy(s)
 }
 
 // tokens splits a JSON pointer, each token unescaped.
