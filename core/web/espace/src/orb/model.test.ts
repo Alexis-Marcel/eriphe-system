@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, OrbFeed } from "../data/api";
-import { ANSWER_MS, close, expires, glide, homePoint, ORB, orbShow, placeBeside as besideOrNone, placeHome as homeOrNone, SAID_MS, type Closed, type Mind, type Rect } from "./model";
+import { ANSWER_MS, close, expires, glide, homePoint, NEAR, ORB, orbShow, placeBeside as besideOrNone, placeHome as homeOrNone, SAID_MS, type Closed, type Mind, type Rect } from "./model";
 
 // Where it goes when there is a free spot (the cases below have one).
 const placeBeside = (...a: Parameters<typeof besideOrNone>) => besideOrNone(...a)!;
@@ -152,16 +152,24 @@ describe("where the orb goes", () => {
   });
 
   it("finds the free spot nearest around it when no side is free", () => {
-    // Two pages side by side, the screen's edge at the left: no side of
-    // the first is free, but further down, among the bubbles, there is room.
+    // Two pages side by side, the screen's edge at the left, a bubble
+    // right under the first's middle: no side of it is free, but a little
+    // aside, under it, there is room.
     const mail: Rect = { l: 76, t: 104, r: 696, b: 516 };
-    const prod: Rect = { l: 744, t: 0, r: 1364, b: 630 };
-    const bubbles: Rect[] = [{ l: 269, t: 552, r: 339, b: 621 }, { l: 198, t: 693, r: 267, b: 810 }, { l: 366, t: 683, r: 442, b: 800 }];
-    const all = [mail, prod, ...bubbles, bar];
-    const p = placeBeside(mail, [360, 58], all, screen);
+    const prod: Rect = { l: 860, t: 0, r: 1364, b: 630 };
+    const under: Rect = { l: 350, t: 530, r: 430, b: 610 };
+    const all = [mail, prod, under, bar];
+    const p = besideOrNone(mail, [360, 58], all, screen)!;
     expect(p.side).toBe("around");
     for (const o of all) expect(overlaps(box(p), o)).toBe(false);
-    expect(box(p).t - mail.b).toBeLessThan(200);
+    expect(box(p).t - mail.b).toBeLessThan(NEAR + 40);
+  });
+
+  it("stays out of the space when the nearest free spot is no longer beside it", () => {
+    const mail: Rect = { l: 76, t: 104, r: 696, b: 516 };
+    const prod: Rect = { l: 744, t: 0, r: 1364, b: 630 };
+    const band: Rect = { l: 0, t: 520, r: 1440, b: 760 }; // bubbles all along under it
+    expect(besideOrNone(mail, [360, 58], [mail, prod, band, bar], screen)).toBeNull();
   });
 
   it("keeps its side while it stays free, so that it does not hop", () => {

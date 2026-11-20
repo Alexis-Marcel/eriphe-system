@@ -148,6 +148,9 @@ export const ORB = 26;
 export const GAP = 10;
 export const AWAY = 14;
 export const CLEAR = 6;
+// NEAR is how much further than a side the orb may go around its subject
+// to find a free spot: beyond, it would no longer be beside it.
+export const NEAR = 120;
 
 export type Side = "right" | "left" | "below" | "below-left" | "above" | "above-left" | "around";
 type Beside = Exclude<Side, "around">;
@@ -216,11 +219,11 @@ export function placeBeside(target: Rect, words: [number, number], obstacles: Re
     const b = at(side);
     if (cost(b.box, obstacles, screen) === 0) return { ...b.placed, side };
   }
-  // No side free: the free spot nearest to it, around it, its words
+  // No side free: the free spot nearest to it, around it (NEAR at most), its words
   // opening away from it.
   const tx = (target.l + target.r) / 2, ty = (target.t + target.b) / 2;
   const far = (target.r - target.l) / 2 + AWAY, deep = (target.b - target.t) / 2 + AWAY;
-  for (let r = 0; r < 600; r += 30) {
+  for (let r = 0; r <= NEAR; r += 20) {
     for (let i = 0; i < 24; i++) {
       const a = (i / 24) * Math.PI * 2;
       const [x, y] = [tx + Math.cos(a) * (far + r), ty + Math.sin(a) * (deep + r)];
