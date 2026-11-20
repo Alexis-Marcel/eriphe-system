@@ -188,9 +188,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   const plan = pageOf("Plan du premier article");
   await expect(plan).toContainText("Pourquoi ce métier");
   await expect(plan).toContainText("Ce qui a changé en dix ans");
-  // One version as the user counts them (no list of versions yet): the
+  // One version as the user counts them (no chip of versions yet): the
   // step's empty creation is not one.
-  const v = plan.locator(".pg-versions button");
+  const v = plan.locator(".pg-vchip");
   await expect(v).toHaveCount(0);
   await expect(page.locator(".gr-node.yours .gr-core[aria-label^='Plan du premier article']")).toHaveCount(1);
 
@@ -201,8 +201,14 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(said).toContainText("Plus court, le titre 2 gardé.");
   await expect(plan).not.toContainText("Pourquoi ce métier");
   await expect(plan).toContainText("Ce qui a changé en dix ans");
-  await expect(v).toHaveText(["v2", "v1"]);
-  await v.nth(1).click();
+  // The versions are one chip, the one shown; its list, the newest first.
+  await expect(v).toHaveText("v2");
+  await v.click();
+  const vs = page.getByRole("listbox", { name: "Versions" }).getByRole("option");
+  await expect(vs.locator("b")).toHaveText(["v2", "v1"]);
+  await vs.nth(1).click();
+  await expect(v).toHaveText("v1");
+  await expect(v).toHaveClass(/old/);
   await expect(plan).toContainText("Pourquoi ce métier");
   await expect(plan.locator(".pg-old")).toBeVisible();
   await plan.locator(".pg-old button").click();
@@ -480,7 +486,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await say("Ajoute une conclusion.");
   await expect(said).toHaveText("Conclusion ajoutée.");
   await expect(article).toContainText("Le bureau devient un lieu de rencontre.");
-  await expect(article.locator(".pg-versions button")).toHaveText(["v2", "v1"]);
+  await expect(article.locator(".pg-vchip")).toHaveText("v2");
   await home(page);
   await bubble("Écrire l'article").click();
   await expect(write).toContainText("L'angle des managers.");
