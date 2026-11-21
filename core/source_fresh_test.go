@@ -19,7 +19,7 @@ import (
 func quickFresh(t *testing.T) {
 	t.Helper()
 	q, m := freshQuiet, freshMaxWait
-	freshQuiet, freshMaxWait = 20*time.Millisecond, 200*time.Millisecond
+	freshQuiet, freshMaxWait = 250*time.Millisecond, 2*time.Second
 	t.Cleanup(func() { freshQuiet, freshMaxWait = q, m })
 }
 
@@ -283,6 +283,15 @@ func TestConversationCallWakesTheView(t *testing.T) {
 	if n := woken(); n != 1 {
 		t.Errorf("woken by a call on nothing it lists: %d", n)
 	}
+	// A call of the conversation said yes on its card (on no item): woken.
+	raw, _ = json.Marshal(map[string]any{"ids": []string{"m2"}, "to": "archive"})
+	if _, _, code := c.approvedCall(context.Background(), accessQuestion{TaskID: "t-brain", Input: string(raw)}, claudeToolName("monitor", "move")); code != "" {
+		t.Fatalf("approved call: %s", code)
+	}
+	c.live.wg.Wait()
+	if n := woken(); n != 2 {
+		t.Errorf("the card's yes woke it %d times in all", n)
+	}
 }
 
 // A page opened reads again its sources older than a minute, once a
@@ -311,9 +320,6 @@ func TestPageOpenReadsStale(t *testing.T) {
 		t.Fatal("a fresh source was read again")
 	}
 	c.store.db.Exec(`UPDATE node_reads SET read = ? WHERE node = ?`, time.Now().Add(-2*time.Minute).Unix(), id)
-	c.fresh.mu.Lock()
-	c.fresh.looked = nil // a minute later
-	c.fresh.mu.Unlock()
 	setGot(fm, "m1")
 	open()
 	if calls() != before+1 {
@@ -357,9 +363,28 @@ func TestToolServerResourcesFollowed(t *testing.T) {
 func TestResourceUpdateRereadsItsServer(t *testing.T) {
 	c, fm, id := freshView(t)
 	setGot(fm, "m3")
+	said := freshSaid
+	freshSaid = 600 * time.Millisecond
+	t.Cleanup(func() { freshSaid = said })
 	c.nodeResourceUpdated("monitor", "monitor://invitations")
 	c.live.wg.Wait()
 	if got := states(t, c, id, "inbox", "received"); len(got) != 1 || got["m3"] != "" {
 		t.Fatalf("read again: %v", got)
 	}
+	// Said again at once, twice: one read, at the end of its floor.
+	setGot(fm, "m1", "m3")
+	c.nodeResourceUpdated("monitor", "monitor://received")
+	c.nodeResourceUpdated("monitor", "monitor://received")
+	c.live.wg.Wait()
+	if got := states(t, c, id, "inbox", "received"); len(got) != 1 {
+		t.Fatalf("read before its floor: %v", got)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for len(states(t, c, id, "inbox", "received")) != 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("never read after its floor")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	c.live.wg.Wait()
 }

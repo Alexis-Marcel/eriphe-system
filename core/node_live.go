@@ -498,7 +498,7 @@ func (c *core) nodeResourceUpdated(server, uri string) {
 	if c.nodes == nil {
 		return
 	}
-	c.readServerSoon(server, "")
+	c.serverSaid(server)
 }
 
 // followNodeResources asks each server for the updates of the resources

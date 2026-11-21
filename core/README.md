@@ -1265,7 +1265,7 @@ composes each one from the catalog.
   comes back (in memory only, two minutes at most). A conversation's call on a view's items wakes
   its skill (`node.gesture`, as a user's gesture does); a task's own call never does. A server that
   says one of its resources changed (`notifications/resources/updated`) has its sources read again
-  the same way: eriphe-core follows every resource of a server whose tools a node reads, as well
+  the same way, once every 15 seconds at most (one said meanwhile is read at the end): eriphe-core follows every resource of a server whose tools a node reads, as well
   as the resources nodes read (`eriphe-mail`'s `mail://changes` tells each change its cache sees,
   wherever it was made; `eriphe-calendar` tells nothing yet, its views wait for the period). What
   changes elsewhere and no server tells: a node's sources read more than a minute ago are read again

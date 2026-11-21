@@ -36,7 +36,7 @@ import (
 //     task's never does (a skill's run would wake itself).
 //   - A server that says one of its resources changed
 //     (notifications/resources/updated) changed: its sources are read
-//     again the same way. eriphe-core follows every resource of a server
+//     again the same way, once every freshSaid at most. eriphe-core follows every resource of a server
 //     whose tools a node reads, for this.
 //   - What changes elsewhere (the phone's mail app) and no server tells:
 //     a node's sources older than a minute are read again when its page
@@ -54,6 +54,9 @@ var (
 	// leavingKept is how long an item the call named stays done when no
 	// read of its source comes.
 	leavingKept = 2 * time.Minute
+	// freshSaid is the least time between two reads of a server's
+	// sources on its own word (notifications/resources/updated).
+	freshSaid = 15 * time.Second
 )
 
 // sourceFresh is what is waiting to be read again, the items shown done
@@ -65,19 +68,52 @@ type sourceFresh struct {
 	timer   *time.Timer
 	leaving map[string]map[string]time.Time // node\x00source → item → when the call named it
 	looked  map[string]time.Time            // node → its last staleness check
+	said    map[string]time.Time            // server → its last read on its own word
+	later   map[string]bool                 // server → a read on its word waits for its floor
 }
 
-// onlyReads tells a tool its own annotations mark read-only.
-func onlyReads(t *mcp.Tool) bool {
-	return t != nil && t.Annotations != nil && t.Annotations.ReadOnlyHint
+// serverSaid is a server that said one of its resources changed: its
+// sources are read again as after a call, once every freshSaid at most
+// (a server may say it often); one said meanwhile is read at the end.
+func (c *core) serverSaid(server string) {
+	f := &c.fresh
+	f.mu.Lock()
+	if f.said == nil {
+		f.said, f.later = map[string]time.Time{}, map[string]bool{}
+	}
+	now := time.Now()
+	if wait := freshSaid - now.Sub(f.said[server]); wait > 0 {
+		if !f.later[server] {
+			f.later[server] = true
+			time.AfterFunc(wait, func() {
+				f.mu.Lock()
+				delete(f.later, server)
+				f.said[server] = time.Now()
+				f.mu.Unlock()
+				c.readServerSoon(server, "")
+			})
+		}
+		f.mu.Unlock()
+		return
+	}
+	f.said[server] = now
+	f.mu.Unlock()
+	c.readServerSoon(server, "")
 }
 
-// sourcesChanged is a call that ran well on server's tool t (nil when
-// unknown) with input: unless it only reads, the items it named are shown
-// done, its server's sources are read again soon, and the nodes whose
-// items it named are returned.
-func (c *core) sourcesChanged(server string, t *mcp.Tool, input map[string]any) []string {
-	if c.nodes == nil || onlyReads(t) {
+// onlyReads tells a call of tool t (nil when unknown) that only reads: its
+// own annotations mark it read-only, or its access policy counts it in
+// Read (the user may file an unmarked tool there).
+func onlyReads(t *mcp.Tool, f catalogFacts) bool {
+	return f.read || t != nil && t.Annotations != nil && t.Annotations.ReadOnlyHint
+}
+
+// sourcesChanged is a call that ran well on server with input: unless it
+// only reads (onlyReads), the items it named are shown done, its server's
+// sources are read again soon, and the nodes whose items it named are
+// returned.
+func (c *core) sourcesChanged(server string, reads bool, input map[string]any) []string {
+	if c.nodes == nil || reads {
 		return nil
 	}
 	account, _ := input["account"].(string)
@@ -302,9 +338,18 @@ func (c *core) sourceReadSince(node, source string, began time.Time) bool {
 
 // readStale reads again, in the background, a node's tools and resources
 // read more than freshStale ago: its page opened, or the user back. Once
-// a freshStale per node at most.
+// a freshStale per node at most (a source that fails keeps its old read).
 func (c *core) readStale(node string, now time.Time) {
 	if c.nodes == nil {
+		return
+	}
+	var names []string
+	for _, r := range c.nodeReads(node) {
+		if r.Source.Monitor == "" && r.Read > 0 && now.Sub(time.Unix(r.Read, 0)) > freshStale && !slices.Contains(names, r.Name) {
+			names = append(names, r.Name)
+		}
+	}
+	if len(names) == 0 {
 		return
 	}
 	f := &c.fresh
@@ -318,15 +363,7 @@ func (c *core) readStale(node string, now time.Time) {
 	}
 	f.looked[node] = now
 	f.mu.Unlock()
-	var names []string
-	for _, r := range c.nodeReads(node) {
-		if r.Source.Monitor == "" && r.Read > 0 && now.Sub(time.Unix(r.Read, 0)) > freshStale && !slices.Contains(names, r.Name) {
-			names = append(names, r.Name)
-		}
-	}
-	if len(names) > 0 {
-		c.readNodeLater(context.Background(), node, names)
-	}
+	c.readNodeLater(context.Background(), node, names)
 }
 
 // readAllStale is readStale for every node that reads something: the

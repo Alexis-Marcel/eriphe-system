@@ -409,7 +409,8 @@ func (c *core) catalogCall(ctx context.Context, name, raw string, gesture bool, 
 	if u == nil {
 		return "", "", callWhyGone, "cet outil n'est plus là"
 	}
-	if f := c.pool.facts(name, input); f.noAccount || f.value == gridNever && !(gesture && f.gesture) {
+	f := c.pool.facts(name, input)
+	if f.noAccount || f.value == gridNever && !(gesture && f.gesture) {
 		return "", "", callWhyNotAllowed, "cet outil n'est plus permis"
 	}
 	t := u.toolByClaudeName(tool)
@@ -424,7 +425,7 @@ func (c *core) catalogCall(ctx context.Context, name, raw string, gesture bool, 
 	case res.IsError:
 		return "", "", callWhyError, truncate(resultText(res), 500)
 	}
-	c.sourcesChanged(server, t, input) // its server's live sources read again (source_fresh.go)
+	c.sourcesChanged(server, onlyReads(t, f), input) // its server's live sources read again (source_fresh.go)
 	return truncate(resultText(res), 1500), server, "", ""
 }
 
