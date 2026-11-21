@@ -252,7 +252,7 @@ var bilan = []map[string]any{
 }
 
 // courrier is the mailbox of the view a call to approve lands on
-// (calls-plain.spec.ts): what trash took leaves it.
+// (view-calls.spec.ts): what trash took leaves it.
 var courrier = []map[string]any{
 	{"id": "c1", "subject": "Billets pour Disney", "from": "Parc <billets@example.org>"},
 	{"id": "c2", "subject": "Votre colis est arrivé", "from": "Relais <relais@example.org>"},
@@ -896,7 +896,7 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		return homeFilms
 	case strings.Contains(said, "supprime ces 2"):
 		// Asked in the view's bar: the brain calls the tool on the rows'
-		// ids; its card lands on those rows (calls-plain.spec.ts).
+		// ids; its card lands on those rows (view-calls.spec.ts).
 		b.catalog("mail", "trash", map[string]any{"account": "perso", "ids": []any{"c2", "c4"}}, false)
 		return "Je les mets à la corbeille dès que tu dis oui."
 	case strings.Contains(said, "archiver"):
@@ -1379,7 +1379,7 @@ func (sc *scenario) handlePurge(rw http.ResponseWriter, r *http.Request) {
 }
 
 // handleCourrier is POST /e2e/courrier: a view of the mailbox, a plain
-// List of its mails (calls-plain.spec.ts), shown; the brain's call on two
+// List of its mails (view-calls.spec.ts), shown; the brain's call on two
 // of its rows waits on them.
 func (sc *scenario) handleCourrier(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
