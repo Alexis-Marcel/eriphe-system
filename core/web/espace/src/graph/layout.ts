@@ -23,7 +23,8 @@
 // linked to it follow on their springs, with an energy that falls with
 // the links between them (HOP1, HOP2, beyond still), passing over what is
 // not theirs; nothing else moves. Dropped, it stays exactly there for the
-// session (a bubble by its subject) and wins every collision: what is
+// session (a bubble by its subject; one dropped by its subject's open
+// page goes back on its springs) and wins every collision: what is
 // under it steps aside by the smallest move; its followers settle on
 // their springs, giving way to the bodies in place. A subject the graph
 // left far behind (loose past the disc's edge) is let go. Nothing here
@@ -161,6 +162,7 @@ export class Sim {
   private passing = new Map<string, { n: number; e: number }>(); // the followers still coming round: the ticks they have left, their warmth
   private openSeq = 0;
   private contacts: Contact[] = []; // the bodies that touched at the last tick
+  private home = new Set<string>(); // the bubbles of a page that closed, coming back round their parent
 
   // sync tells the simulation the graph as it is now: the nodes in a
   // stable order, the open ones with their page's size. beside is the page
@@ -247,7 +249,11 @@ export class Sim {
     if (!x) return;
     const at = this.leash(x, [x.x, x.y], true);
     const p = x.parent ? this.byId.get(x.parent) : undefined;
-    this.fixed.set(x.id, p ? { at: [at[0] - p.x, at[1] - p.y], of: p.id, seq: ++this.fixSeq } : { at, seq: ++this.fixSeq });
+    // a bubble (not a page) dropped by its subject's open page lives on
+    // its springs round the page: nothing is kept of where it was
+    // dropped, that the page closed would put far from its subject
+    if (!p?.box || x.box) this.fixed.set(x.id, p ? { at: [at[0] - p.x, at[1] - p.y], of: p.id, seq: ++this.fixSeq } : { at, seq: ++this.fixSeq });
+    else [x.x, x.y] = at;
     for (const [id, e] of this.group) this.warmUp(id, e);
     this.trail = new Set(this.group.keys());
     this.anchor = at;
@@ -401,8 +407,10 @@ export class Sim {
     }
     // a body's own energy cools
     for (const [id, h] of this.heat) {
-      if (h < 0.005 || !this.byId.has(id)) this.heat.delete(id);
-      else this.heat.set(id, h * T.cool);
+      if (h < 0.005 || !this.byId.has(id)) {
+        this.heat.delete(id);
+        this.home.delete(id);
+      } else this.heat.set(id, h * T.cool);
     }
     // the pull to the centre: the graph stays a compact disc (none during
     // a drag; what followed one gathers around where it was dropped while
@@ -468,10 +476,16 @@ export class Sim {
       x.x += (to[0] - x.x) * T.glide;
       x.y += (to[1] - x.y) * T.glide;
     }
-    // the open pages glide to the middle of the graph, side by side
+    // the open pages glide to the middle of the graph, side by side,
+    // carrying their bubbles: nothing slips between a page and its own
     if (!held) for (const [x, to] of this.row()) {
-      x.x += (to[0] - x.x) * T.pageGlide;
-      x.y += (to[1] - x.y) * T.pageGlide;
+      const dx = (to[0] - x.x) * T.pageGlide, dy = (to[1] - x.y) * T.pageGlide;
+      x.x += dx;
+      x.y += dy;
+      for (const k of this.own(x)) {
+        k.x += dx;
+        k.y += dy;
+      }
     }
     // collision last: nothing overlaps, softly while the first layout is
     // hot, at once afterwards (again while a shove put one body on another)
@@ -566,14 +580,17 @@ export class Sim {
 
   // rank is who gives way when two bodies collide: the higher. The one
   // held never; then those the user dropped, the last one first; then the
-  // open pages; then the bubbles at rest; a bubble that moves on its own
-  // warmth (a follower of the last drop, the bubbles of a page that
-  // opened) gives way to them, a new bubble first of all.
+  // open pages; then their bubbles, and those of a page that closed while
+  // they come back round their subject: the other bubbles make way for
+  // them, so that none is left behind one not its own; then the bubbles at
+  // rest; a bubble that moves on its own warmth (a follower of the last
+  // drop) gives way to them, a new bubble first of all.
   private rank(x: Body): number {
     if (this.held?.id === x.id) return HELD;
     const f = this.fixed.get(x.id);
     if (f) return 2 - f.seq / (this.fixSeq + 1);
     if (x.box) return 10;
+    if (x.parent && (this.byId.get(x.parent)?.box || (this.home.has(x.id) && this.heat.has(x.id)))) return 20;
     if (this.ticks - x.born < T.fresh) return 2000;
     return this.trail.has(x.id) || this.heat.has(x.id) ? 1500 : 1000;
   }
@@ -714,7 +731,10 @@ export class Sim {
     x.box = undefined;
     x.opened = undefined;
     this.stir = Math.max(this.stir, T.stir);
-    for (const k of this.below(x)) this.warmUp(k.id, 0.5);
+    for (const k of this.below(x)) {
+      this.warmUp(k.id, 0.5);
+      this.home.add(k.id);
+    }
     this.wake();
   }
 
@@ -872,6 +892,19 @@ export class Sim {
     return out;
   }
 
+  // own is the bubbles a page carries: those under it, down to the pages
+  // (an open page goes its own way, with its bubbles) and the bodies the
+  // user dropped.
+  private own(x: Body): Body[] {
+    const out: Body[] = [];
+    for (let ring = [x]; ring.length; ) {
+      const next = this.list.filter((b) => b.parent && !b.box && !this.pinned(b) && ring.some((r) => r.id === b.parent));
+      out.push(...next);
+      ring = next;
+    }
+    return out;
+  }
+
   private depth(x: Body): number {
     let d = 0;
     for (let p = x.parent; p && d < 64; p = this.byId.get(p)?.parent) d++;
@@ -887,6 +920,7 @@ export class Sim {
     this.byId.delete(id);
     this.heat.delete(id);
     this.trail.delete(id);
+    this.home.delete(id);
     this.passing.delete(id);
     this.group.delete(id);
     if (this.held?.id === id) {

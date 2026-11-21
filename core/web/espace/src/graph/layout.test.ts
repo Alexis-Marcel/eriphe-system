@@ -562,6 +562,109 @@ describe("the living graph", () => {
     });
   });
 
+  describe("a subject's bubbles, opened or not", () => {
+    // A graph of k subjects more round the prototype's, Prod GetOut with
+    // one bubble whose title is long (a task done).
+    function crowd(k: number): LNode[] {
+      const out = [...small().filter((n) => n.id !== "FAI"), node("ENQ", "Revoir la panne du site de la veille.", { parent: "PRO", r: 13 })];
+      for (let i = 0; i < k; i++) {
+        out.push(node(`s${i}`, `Sujet numéro ${i}`));
+        for (let j = 0; j < i % 3; j++) out.push(node(`s${i}c${j}`, `Bulle ${i}.${j} avec un titre`, { parent: `s${i}` }));
+      }
+      return out;
+    }
+    // gap is the room between two bodies' boxes, edge to edge.
+    function gap(sim: Sim, nodes: LNode[], a: string, b: string): number {
+      const na = nodes.find((n) => n.id === a)!, nb = nodes.find((n) => n.id === b)!, pa = sim.at(a)!, pb = sim.at(b)!;
+      const [ha, ta, ba] = extent(na, pa), [hb, tb, bb] = extent(nb, pb);
+      return Math.hypot(Math.max(0, Math.abs(pa[0] - pb[0]) - ha - hb), Math.max(0, tb - ba, ta - bb));
+    }
+    // openPRO is the graph with Prod GetOut's page open, h high.
+    const openPRO = (nodes: LNode[], h: number) => nodes.map((n) => (n.id === "PRO" ? { ...n, box: [700, h] as Pt } : n));
+
+    it("keeps the bubble beside its subject's page, and nothing drifts as the graph wakes again and again", () => {
+      for (const k of [3, 6, 10, 16, 24])
+        for (const h of [280, 400]) {
+          const nodes = crowd(k);
+          const sim = laid(nodes);
+          // the page opens at its first size, then takes its content's height
+          sim.sync(openPRO(nodes, 520));
+          for (let i = 0; i < 20; i++) sim.tick();
+          // the app tells the graph again and again (the page measured anew,
+          // a node's state), each time waking it
+          let ended: Pt = [0, 0];
+          for (let i = 0; i < 3600; i++) {
+            const now = openPRO(nodes, h + (Math.floor(i / 300) % 2) * 20);
+            if (i % 300 === 0) sim.sync(now);
+            sim.tick();
+            if (i >= 600 && i % 300 === 299) expect(gap(sim, now, "PRO", "ENQ"), `k=${k} h=${h} tick ${i}`).toBeLessThan(45);
+            if (i === 2399) ended = sim.at("ENQ")!;
+          }
+          // the same after twelve hundred ticks more: it does not creep away
+          expect(dist(sim.at("ENQ")!, ended), `k=${k} h=${h} drift`).toBeLessThan(10);
+          // the page in the middle of the graph, the others round it
+          const opened = openPRO(nodes, h);
+          expect(Math.hypot(...sim.at("PRO")!), `k=${k} h=${h} centre`).toBeLessThan(60);
+          expect(amid(sim, opened, sim.at("PRO")!)).toBe(true);
+          expect(stragglers(sim, opened, 120)).toEqual([]);
+          // closed, it comes back beside its subject
+          sim.sync(nodes);
+          sim.settle();
+          expect(gap(sim, nodes, "PRO", "ENQ"), `k=${k} h=${h} closed`).toBeLessThan(60);
+          expect(overlaps(sim, nodes)).toEqual([]);
+        }
+    }, 60_000);
+
+    it("brings a bubble dropped by its subject's open page back beside its subject when the page closes", () => {
+      const nodes = crowd(6);
+      const sim = laid(nodes);
+      const opened = openPRO(nodes, 280);
+      sim.sync(opened);
+      sim.settle();
+      // dropped far past the page's corner
+      const pro = sim.at("PRO")!;
+      drag(sim, "ENQ", [pro[0] + 650, pro[1] + 340]);
+      expect(gap(sim, opened, "PRO", "ENQ")).toBeLessThan(45);
+      sim.sync(nodes);
+      sim.settle();
+      expect(gap(sim, nodes, "PRO", "ENQ")).toBeLessThan(60);
+    });
+
+    it("keeps a bubble's page the user dropped in place as its subject's page opens, and nothing runs off", () => {
+      const nodes = crowd(6);
+      const box: Pt = [620, 300];
+      const pages = (ids: string[], h = 300) => nodes.map((n) => (n.id === "ENQ" && ids.includes(n.id) ? { ...n, box } : n.id === "PRO" && ids.includes(n.id) ? { ...n, box: [620, h] as Pt } : n));
+      const sim = laid(nodes);
+      // the bubble's page alone, dragged aside and dropped
+      sim.sync(pages(["ENQ"]));
+      sim.settle();
+      const at = sim.at("ENQ")!;
+      drag(sim, "ENQ", [at[0] - 900, at[1]]);
+      const dropped = sim.at("ENQ")!;
+      // its subject's page opens where its bubble was, measured anew again
+      // and again, waking the graph
+      for (let i = 0; i < 1200; i++) {
+        if (i % 300 === 0) sim.sync(pages(["ENQ", "PRO"], 300 + (i / 300) * 20), "ENQ");
+        sim.tick();
+      }
+      sim.settle();
+      expect(dist(sim.at("ENQ")!, dropped), "dropped, then its subject opened").toBeLessThan(10);
+      expect(dist(sim.at("PRO")!, dropped)).toBeLessThan(620 + 48 + 400);
+      expect(sim.asleep()).toBe(true);
+      // dragged again under its subject's page, both open: the subject's
+      // page gliding to it does not carry it away, nothing runs off
+      const pro = sim.at("PRO")!;
+      drag(sim, "ENQ", [pro[0], pro[1] + 400]);
+      for (let i = 0; i < 1200; i++) {
+        if (i % 300 === 0) sim.sync(pages(["ENQ", "PRO"], 320 - (i / 300) * 20), "ENQ");
+        sim.tick();
+      }
+      sim.settle();
+      for (const id of ["ENQ", "PRO"]) expect(Math.hypot(...sim.at(id)!), id).toBeLessThan(2000);
+      expect(sim.asleep()).toBe(true);
+    });
+  });
+
   it("scrolls at the edge after a wait, speeding up gently", () => {
     expect(edgePush(500, 0, 1000)).toBe(0);
     expect(edgePush(0, 0, 1000)).toBe(-1);
