@@ -26,6 +26,7 @@ const at = { sub: [0, 0] as [number, number], mail: [400, 0] as [number, number]
 const boot = { lang: "fr", name: "Eriphe", csrf: "", strings: {}, live: true } as Boot;
 
 let reduce = false;
+let hidden = false;
 let el: HTMLDivElement;
 let root: Root;
 const draw = async (narrow = false) =>
@@ -41,12 +42,19 @@ const feed = (orb: OrbFeed) => act(async () => store.setState({ orb }));
 const say = () => el.querySelector(".orb-say");
 const orb = () => el.querySelector<HTMLButtonElement>("button.orb")!;
 const live = () => el.querySelector('[aria-live="polite"]')?.textContent;
+const wait = (ms: number) => act(async () => vi.advanceTimersByTime(ms));
+const tab = (h: boolean) =>
+  act(async () => {
+    hidden = h;
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
 
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal("matchMedia", (q: string) => ({ matches: reduce && q.includes("reduce"), addEventListener() {}, removeEventListener() {} }));
   vi.stubGlobal("requestAnimationFrame", () => 0);
   vi.stubGlobal("cancelAnimationFrame", () => undefined);
+  Object.defineProperty(document, "visibilityState", { configurable: true, get: () => (hidden ? "hidden" : "visible") });
   localStorage.clear();
   resetOrb();
   store.setState({ ...empty(), nodes });
@@ -59,11 +67,13 @@ afterEach(() => {
   el.remove();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  delete (document as { visibilityState?: unknown }).visibilityState;
   reduce = false;
+  hidden = false;
 });
 
 describe("the orb", () => {
-  it("rests in the bar, then says beside its subject what it did, for a while", async () => {
+  it("rests in the bar, then says beside its subject what it did, until something else happens", async () => {
     await draw();
     expect(orb().classList.contains("docked")).toBe(true);
     expect(say()?.textContent).toBe("");
@@ -75,8 +85,60 @@ describe("the orb", () => {
     // « Voir plus » opens its page: the rest is there, not in the orb
     await act(async () => [...say()!.querySelectorAll("button")].find((b) => b.textContent === "Voir plus")!.click());
     expect(store.getState().open).toEqual(["sub"]);
-    // its while over, it goes back to the bar
-    await act(async () => vi.advanceTimersByTime(16_000));
+    // its page open, the words stay beside it, long past the old 15 s
+    await wait(60_000);
+    expect(say()?.textContent).toContain("J'ai ouvert le sujet.");
+    // two minutes of nothing else, it goes back to the bar
+    await wait(60_000);
+    expect(orb().classList.contains("docked")).toBe(true);
+  });
+
+  it("lets newer words replace its words, for good", async () => {
+    await draw();
+    await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." } });
+    await wait(20_000);
+    expect(say()?.textContent).toContain("C'est fait.");
+    await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." }, said: { seq: 6, node: "mail", text: "Un mail est arrivé." } });
+    expect(say()?.textContent).toContain("Un mail est arrivé.");
+    expect(orb().getAttribute("aria-label")).toBe("Eriphe, à côté de Urgent : la prod ⚠ : l'ouvrir");
+    // closed, the words they replaced do not come back
+    await act(async () => (say()!.querySelector("button.orb-x") as HTMLButtonElement).click());
+    expect(orb().classList.contains("docked")).toBe(true);
+  });
+
+  it("moves on from its words when the user opens another subject", async () => {
+    await draw();
+    await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." } });
+    await act(async () => store.setState({ open: ["mail"], talk: "mail" }));
+    expect(orb().classList.contains("docked")).toBe(true);
+    // the subject they are about, opened: they stay beside its page
+    await feed({ asked: 6, answer: { seq: 7, node: "sub", text: "Et le plan." } });
+    await act(async () => store.setState({ open: ["sub"], talk: "sub" }));
+    expect(say()?.textContent).toContain("Et le plan.");
+  });
+
+  it("moves on from its words when the user writes", async () => {
+    await draw();
+    const x: OrbFeed = { asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." } };
+    await feed(x);
+    await act(async () => store.setState({ sent: { text: "Merci.", after: 4, to: null } }));
+    expect(orb().classList.contains("working")).toBe(true);
+    // the message read, no answer yet: the old words do not come back
+    await act(async () => store.setState({ sent: null, orb: { ...x, asked: 6 } }));
+    expect(orb().classList.contains("docked")).toBe(true);
+  });
+
+  it("counts its two minutes only while the tab is seen", async () => {
+    await draw();
+    await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." } });
+    await wait(60_000);
+    await tab(true);
+    await wait(10 * 60_000);
+    await tab(false);
+    expect(say()?.textContent).toContain("C'est fait.");
+    await wait(59_000);
+    expect(say()?.textContent).toContain("C'est fait.");
+    await wait(1_000);
     expect(orb().classList.contains("docked")).toBe(true);
   });
 

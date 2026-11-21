@@ -33,7 +33,7 @@ export type State = {
   shown: number; // the last show applied
   orb: OrbFeed | null; // what Eriphe's orb shows (orb/)
   sent: Sent | null; // what the user just sent, until eriphe-core has it
-  call: { id: string; n: number } | null; // the last node that began to wait for the user, the n-th (the orb says it)
+  call: { id: string; n: number; after: number } | null; // the last node that began to wait for the user, the n-th, after the orb's words of that seq (the orb says it)
   notes: Note[];
   moved: Moved & { n: number }; // the proposals that moved last, n growing each time
   live: boolean; // the stream is open
@@ -92,7 +92,8 @@ export function applyNodes(s: State, ev: NodeEvent): State {
   // The page the bar talked to left: it talks to the last one open.
   const talk = s.talk === null || open.includes(s.talk) ? s.talk : (open.at(-1) ?? null);
   const began = newlyWaiting(s.nodes, nodes, ev.reset);
-  const call = began.length ? { id: began[began.length - 1], n: (s.call?.n ?? 0) + 1 } : s.call;
+  const after = Math.max(s.orb?.answer?.seq ?? 0, s.orb?.said?.seq ?? 0);
+  const call = began.length ? { id: began[began.length - 1], n: (s.call?.n ?? 0) + 1, after } : s.call;
   return { ...s, nodes, open, talk, call };
 }
 
