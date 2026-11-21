@@ -159,6 +159,7 @@ type proposal struct {
 	text      func(lang string) string
 	fields    func(lang string) []cardField      // Fields in the user's language, when they have words of ours
 	summary   func(lang string) []string         // what a yes makes, in plain sentences of code's, before the fields
+	context   func(lang string) string           // where it acts, said quietly beside its text (an account: « compte Gmail »)
 	origin    func(lang string) cardOrigin       // where it comes from and what its Oui does (card_origin.go)
 	choices   func(lang string) []proposalChoice // a calls card's calls the user may leave out (call_fold.go)
 	acts      func(lang string) []string         // what its Oui says for 1, 2… items chosen
@@ -188,6 +189,15 @@ func (p proposal) SummaryIn(lang string) []string {
 		return nil
 	}
 	return p.summary(lang)
+}
+
+// ContextIn is where it acts, in a few quiet words of lang: "" for most
+// kinds.
+func (p proposal) ContextIn(lang string) string {
+	if p.context == nil {
+		return ""
+	}
+	return p.context(lang)
 }
 
 // Text is what it proposes, in a line, with the words of lang.

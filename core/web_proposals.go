@@ -19,6 +19,7 @@ type proposalView struct {
 	Kind    string      `json:"kind"`  // what it is: memory and intention only ask to keep something
 	State   string      `json:"state"` // pending, approved, rejected, gone
 	Text    string      `json:"text"`
+	Context string      `json:"context,omitempty"` // where it acts, quietly beside its text (an account)
 	Why     string      `json:"why,omitempty"`
 	Tainted bool        `json:"tainted,omitempty"`
 	Summary []string    `json:"summary,omitempty"` // what a yes makes, in plain sentences
@@ -43,6 +44,7 @@ func (w *web) proposalView(x convoCard, p proposal, lang string) proposalView {
 	if t := p.Text(lang); t != "" {
 		v.Text = t
 	}
+	v.Context = p.ContextIn(lang)
 	v.Summary = p.SummaryIn(lang)
 	v.Fields = p.FieldsIn(lang)
 	o := p.Origin(lang)

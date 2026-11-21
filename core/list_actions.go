@@ -64,12 +64,15 @@ type listAction struct {
 // the List filters its source's items (list_sections.go), and shows only
 // the rows given, never the others.
 type pageList struct {
-	Component string       `json:"component"`
-	Source    string       `json:"source"`
-	Filtered  bool         `json:"filtered,omitempty"`
-	Open      bool         `json:"open,omitempty"` // its rows open in place (item_open.go)
-	Items     []listItem   `json:"items"`
-	Actions   []listAction `json:"actions"`
+	Component string `json:"component"`
+	Source    string `json:"source"`
+	Filtered  bool   `json:"filtered,omitempty"`
+	Open      bool   `json:"open,omitempty"` // its rows open in place (item_open.go)
+	// RowCard: its row template draws each row's card itself (an inline
+	// Proposal on _card); else the page adds a row's Oui to the row.
+	RowCard bool         `json:"rowCard,omitempty"`
+	Items   []listItem   `json:"items"`
+	Actions []listAction `json:"actions"`
 }
 
 // actionsMaxIDs is the most items one click acts on.
@@ -461,10 +464,51 @@ func (c *core) blockLists(b *nodefile.Block, data map[string]any, lang string, o
 		open := src.Items != nil && src.Items.Open != nil
 		carded := slices.ContainsFunc(rows, func(r listItem) bool { return r.Card != "" })
 		if len(acts) > 0 || f != nil || open || folded[id] || carded {
-			out = append(out, pageList{Component: id, Source: name, Filtered: f != nil, Open: open, Items: rows, Actions: acts})
+			out = append(out, pageList{Component: id, Source: name, Filtered: f != nil, Open: open, Items: rows, Actions: acts,
+				RowCard: rowCardIn(comps, tpl["componentId"])})
 		}
 	}
 	return out
+}
+
+// rowCardIn tells whether a List's row template (the component id) draws
+// its row's own card: an inline Proposal bound to the item's _card
+// (rowCard), in it or below it. Else the page adds the row's Oui itself.
+func rowCardIn(comps []map[string]any, id any) bool {
+	byID := map[string]map[string]any{}
+	for _, comp := range comps {
+		if s, ok := comp["id"].(string); ok {
+			byID[s] = comp
+		}
+	}
+	seen := map[string]bool{}
+	var walk func(id string) bool
+	walk = func(id string) bool {
+		comp, ok := byID[id]
+		if !ok || seen[id] {
+			return false
+		}
+		seen[id] = true
+		if rowCard(comp) {
+			return true
+		}
+		var kids []string
+		for _, k := range []string{"child", "aside", "trigger", "content"} {
+			if s, ok := comp[k].(string); ok {
+				kids = append(kids, s)
+			}
+		}
+		if list, ok := comp["children"].([]any); ok {
+			for _, k := range list {
+				if s, ok := k.(string); ok {
+					kids = append(kids, s)
+				}
+			}
+		}
+		return slices.ContainsFunc(kids, walk)
+	}
+	s, _ := id.(string)
+	return walk(s)
 }
 
 // listAction is an action's button, its words code's; items are the rows

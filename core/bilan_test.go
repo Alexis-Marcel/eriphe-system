@@ -249,7 +249,7 @@ func TestItemCardOnItsRow(t *testing.T) {
 	// Its words: the tool's title, the item; the reply to read, named.
 	_, id, _ := parseProposalRef(ref)
 	p := c.proposalOf(cardCalls, id)
-	if got := p.Text("fr"); got != "Send a reply · « STAGE – Data Engineer » · Emplois Example" {
+	if got := p.Text("fr"); got != "Send a reply · « STAGE – Data Engineer » · Emplois Example ⚠" {
 		t.Errorf("text %q", got)
 	}
 	fs := p.FieldsIn("fr")
@@ -257,10 +257,14 @@ func TestItemCardOnItsRow(t *testing.T) {
 		t.Errorf("fields %+v", fs)
 	}
 
-	// No inline Proposal: the card waits at the page's foot.
+	// No inline Proposal in its template: the page adds the row's Oui
+	// (RowCard false), and the card is not at the page's foot too.
+	if l.RowCard {
+		t.Error("a template with no Proposal is told it draws its card")
+	}
 	pg, _ := w.nodePageOf(node, 0, "fr")
-	if !slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == ref }) {
-		t.Errorf("the foot lacks %s: %+v", ref, pg.Cards)
+	if slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == ref }) {
+		t.Errorf("the foot shows %s, on its row: %+v", ref, pg.Cards)
 	}
 }
 

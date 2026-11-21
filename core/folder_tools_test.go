@@ -222,7 +222,7 @@ func TestFoldersToolWriteOnApproval(t *testing.T) {
 	}
 	x := accessCard(t, c, "")
 	_, p := c.liveCard(x)
-	if fr, en := p.Text("fr"), p.Text("en"); !strings.Contains(fr, "dans le dossier Clients") || !strings.Contains(en, "in the folder Clients") {
+	if fr, en := p.ContextIn("fr"), p.ContextIn("en"); fr != "le dossier Clients" || en != "the folder Clients" {
 		t.Errorf("card: %q / %q", fr, en)
 	}
 	if s := startText(c.accessStartNeeds([]ResourceRef{{Kind: resTool, Ref: foldersServer}}, true), "fr"); !strings.Contains(s, "le dossier Clients") {

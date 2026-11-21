@@ -185,6 +185,9 @@ func (c *core) channelCards() {
 // and Non buttons.
 func cardText(x convoCard, p proposal, lang string) string {
 	text := tr(lang, "card.kind."+x.Kind) + "\n" + truncate(p.Text(lang), 600)
+	if ctx := p.ContextIn(lang); ctx != "" {
+		text += " · " + ctx
+	}
 	for _, s := range p.SummaryIn(lang) {
 		text += "\n- " + truncate(s, 300)
 	}

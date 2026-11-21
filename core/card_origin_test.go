@@ -43,7 +43,7 @@ func TestAccessCardNamesItsTask(t *testing.T) {
 	// A call of that task: its text names no task, its origin does.
 	id = c.newAccessAsk(accessQuestion{TaskID: "t-1", Permission: "p-2", Need: accessNeed{"github", catChange, ""}, Call: "github__merge_pull_request []", Input: `{}`})
 	x, p = c.liveCard(cardOf(t, c, cardAccess, id))
-	if o := p.Origin("en"); o.From != "task “Trie les mails”" || o.Yes != "On Yes, this call runs once, exactly as shown." {
+	if o := p.Origin("en"); o.From != "task “Trie les mails”" || o.Yes != "" {
 		t.Errorf("call %+v", o)
 	}
 	// Decided, the card still says where it came from.
@@ -103,9 +103,9 @@ func TestCardYesSaysWhatItDoes(t *testing.T) {
 		{accessQuestion{Need: accessNeed{"mail", catChange, ""}}, "On Yes, the task may change in mail until it ends."},
 		{accessQuestion{Call: webSearchTool + " []"}, "may run this search, once."},
 		{accessQuestion{Call: webFetchTool + " []"}, "may read this page, once."},
-		{accessQuestion{Call: "mcp__code__merge []"}, "On Yes, this call runs once, exactly as shown."},
+		{accessQuestion{Call: "mcp__code__merge []"}, ""}, // its text says it; its exact call under Détails
 	} {
-		if got := c.accessYes(tc.a, "en"); !strings.HasSuffix(got, tc.want) {
+		if got := c.accessYes(tc.a, "en"); !strings.HasSuffix(got, tc.want) || tc.want == "" && got != "" {
 			t.Errorf("%+v: %q", tc.a, got)
 		}
 	}

@@ -39,10 +39,10 @@ func askOn(t *testing.T, c *core, node, tool string, input map[string]any, label
 	return id
 }
 
-// moveWords is what a folded card of moves to the archive says, as a list
-// action's button would (actionWords): for how many.
+// moveWords is what a folded card of moves to the archive says, in plain
+// words (callPhrase): for how many.
 func moveWords(n string) string {
-	return "Déplacer " + n + " → account : sam@example.org, to : archive"
+	return "Archiver " + n
 }
 
 // waitTraced waits until the node's trace tells n decided moves: a call
@@ -65,7 +65,7 @@ func batchOf(c *core, id int64) int64 {
 }
 
 // The skill, woken once per mail, proposes to archive each: one card
-// « Déplacer 2 éléments → … » in the view, each mail a line the user may leave
+// « Archiver 2 mails » in the view, each mail a line the user may leave
 // out, Oui saying how many go.
 func TestSameKindCallsWaitAsOneCard(t *testing.T) {
 	c, node, r := mailView(t)
@@ -78,7 +78,7 @@ func TestSameKindCallsWaitAsOneCard(t *testing.T) {
 		t.Fatalf("cards %+v", calls)
 	}
 	p := calls[0]
-	if got := p.Text("fr"); got != moveWords("2 éléments") {
+	if got := p.Text("fr"); got != moveWords("2 mails") {
 		t.Errorf("text %q", got)
 	}
 	var lines []string
@@ -88,10 +88,10 @@ func TestSameKindCallsWaitAsOneCard(t *testing.T) {
 			t.Errorf("choice %+v", ch)
 		}
 	}
-	if !slices.Equal(lines, []string{"« STAGE – Data Engineer » · Emplois Example", "« Votre lettre de la semaine » · news@example.org"}) {
+	if !slices.Equal(lines, []string{"« STAGE – Data Engineer » · Emplois Example ⚠", "« Votre lettre de la semaine » · news@example.org ⚠"}) {
 		t.Errorf("choices %q", lines)
 	}
-	if got := p.acts("fr"); !slices.Equal(got, []string{moveWords("1 élément"), moveWords("2 éléments")}) {
+	if got := p.acts("fr"); !slices.Equal(got, []string{moveWords("1 mail"), moveWords("2 mails")}) {
 		t.Errorf("acts %q", got)
 	}
 	if len(p.Fields) != 2 || !p.Fields[0].Detail || !p.Fields[1].Detail {
@@ -285,7 +285,7 @@ func TestCallFoldedInAfterDrawnWaitsOn(t *testing.T) {
 		t.Fatalf("no new card for the late call: %+v", xs)
 	}
 	x, p := c.liveCard(xs[0])
-	if x.State != cardPending || p.Text("fr") != "Archiver 1 mail" {
+	if x.State != cardPending || p.Text("fr") != "Archiver 1 élément" {
 		t.Errorf("the new card %+v: %q", x, p.Text("fr"))
 	}
 	if ch := p.choices("fr"); len(ch) != 1 || ch[0].ID != late {
