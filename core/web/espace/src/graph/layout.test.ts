@@ -615,6 +615,34 @@ describe("the living graph", () => {
         }
     }, 60_000);
 
+    it("keeps a page's bubbles beside it as it is enlarged, on the side they stood when it is brought back", () => {
+      for (const k of [3, 6, 10, 16]) {
+        const nodes = crowd(k);
+        const sim = laid(nodes);
+        const opened = openPRO(nodes, 300);
+        sim.sync(opened);
+        sim.settle();
+        // side is the side of the page the bubble stands on, (w, h) its size
+        const side = ([w, h]: Pt) => {
+          const [px, py] = sim.at("PRO")!, [x, y] = sim.at("ENQ")!;
+          return Math.abs(x - px) - w / 2 > Math.abs(y - py) - h / 2 ? (x < px ? "left" : "right") : y < py ? "above" : "below";
+        };
+        const was = side([700, 300]);
+        // enlarged: most of the screen, and the bar's room
+        const big = nodes.map((n) => (n.id === "PRO" ? { ...n, box: [1240, 1100] as Pt } : n));
+        sim.sync(big);
+        sim.settle();
+        expect(gap(sim, big, "PRO", "ENQ"), `k=${k} big`).toBeLessThan(45);
+        expect(side([1240, 1100]), `k=${k} big`).toBe(was);
+        // brought back
+        sim.sync(opened);
+        sim.settle();
+        expect(side([700, 300]), `k=${k}`).toBe(was);
+        expect(gap(sim, opened, "PRO", "ENQ"), `k=${k}`).toBeLessThan(45);
+        expect(overlaps(sim, opened)).toEqual([]);
+      }
+    });
+
     it("brings a bubble dropped by its subject's open page back beside its subject when the page closes", () => {
       const nodes = crowd(6);
       const sim = laid(nodes);
