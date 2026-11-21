@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { createAdapter, type Adapter } from "../a2ui/adapter";
+import { useAdapter } from "../a2ui/adapter";
 import { Markdown, type Wiki } from "../a2ui/markdown";
 import { PicksContext, type Picks } from "../a2ui/picks";
 import { SurfaceView } from "../a2ui/Surfaces";
 import { act, ask, mark, openItem, type NodePage, type PickItem } from "../data/api";
+import { sampleAct, sampleOpen } from "../data/samplecore";
 import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Cards } from "../page/Cards";
-import { blockOf, messages, pickLists, pieces, sourceMessage, toGesture, type Piece } from "./blocks";
+import { blockOf, messages, pickLists, pieces, sourceMessage, surfaceOf, toGesture, type Piece } from "./blocks";
 
 // Doc draws a node's page: its text as Markdown, by the page's own
 // renderer, which makes no HTML of it; its blocks through the A2UI
@@ -44,8 +45,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
       external: t("espace.title.external"),
     };
   }, [page, nodes, onOpen, t]);
-  const [adapter] = useState<Adapter>(() => createAdapter(lang));
-  useEffect(() => () => adapter.dispose(), [adapter]);
+  const adapter = useAdapter(lang);
   const ps = useMemo(() => pieces(page), [page]);
 
   // The page read again (a new version, another one asked): its blocks
@@ -100,13 +100,20 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
     return {
       list: (surface, component) => lists.get(surface)?.find((l) => l.component === component),
       // Only on the last version, live: an older one shows its rows.
-      run:
-        latest && live
+      // On the dev server, the sample's make-believe core (samplecore.ts).
+      run: !latest
+        ? undefined
+        : live
           ? (surface, list, action, ids) => act(page.node.id, surface.slice(page.node.id.length + 2), list.component, action.name, page.version, ids)
-          : undefined,
+          : (surface, list, action, ids) => sampleAct(page.node.id, surface.slice(page.node.id.length + 2), list.component, action.name, ids),
       kept,
-      open: latest && live ? (surface, list, item, yes, tool) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item, yes, tool) : undefined,
+      open: !latest
+        ? undefined
+        : live
+          ? (surface, list, item, yes, tool) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item, yes, tool)
+          : (_surface, _list, item) => sampleOpen(page.node.id, item),
       opened,
+      marked: (surface) => page.parts.some((p) => !!p.block?.external && surfaceOf(page.node.id, p.block.name) === surface),
     };
   }, [latest, live, page, rows, kept, opened]);
 
@@ -131,11 +138,10 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
           const s = surfaces.find((x) => x.id === p.surface);
           return (
             <section key={p.surface} className={`a2-block${p.block.external ? " ext" : ""}`} data-surface={p.surface}>
-              {p.block.external && (
-                <span className="a2-block-mark" title={t("espace.external.why")}>
-                  {t("espace.external.mark")}
-                </span>
-              )}
+              {/* Someone else's words: the page's head says it once, in
+                  words; the block only says where, quietly (a thin edge, a
+                  small dot on it whose words say why). */}
+              {p.block.external && <span className="a2-block-mark" role="img" title={t("espace.external.why")} aria-label={t("espace.external.why")} />}
               {s && <SurfaceView surface={s} />}
             </section>
           );

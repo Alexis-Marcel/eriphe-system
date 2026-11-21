@@ -1231,6 +1231,114 @@
      ]
     }
    }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-bilan",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "todo_h",
+       "todo",
+       "trash"
+      ]
+     },
+     {
+      "id": "todo_h",
+      "component": "Text",
+      "variant": "subtitle",
+      "text": "À traiter"
+     },
+     {
+      "id": "todo",
+      "component": "List",
+      "children": {
+       "path": "/todo",
+       "componentId": "todo_row"
+      }
+     },
+     {
+      "id": "todo_row",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "todo_item",
+       "todo_yes"
+      ]
+     },
+     {
+      "id": "todo_item",
+      "component": "Item",
+      "title": {
+       "@path": "_note"
+      },
+      "detail": {
+       "@path": "from"
+      },
+      "note": {
+       "@path": "subject"
+      }
+     },
+     {
+      "id": "todo_yes",
+      "component": "Proposal",
+      "inline": true,
+      "proposalId": {
+       "@path": "_card"
+      }
+     },
+     {
+      "id": "trash",
+      "component": "Fold",
+      "list": "jeter",
+      "label": "{n} mails inutiles à jeter",
+      "child": "jeter"
+     },
+     {
+      "id": "jeter",
+      "component": "List",
+      "children": {
+       "path": "/trash",
+       "componentId": "jeter_row"
+      }
+     },
+     {
+      "id": "jeter_row",
+      "component": "Item",
+      "level": "low",
+      "title": {
+       "@path": "subject"
+      },
+      "note": {
+       "@path": "_note"
+      }
+     }
+    ],
+    "dataModel": {
+     "todo": [
+      {
+       "_note": "Répondre à Sam — brouillon prêt",
+       "from": "Sam",
+       "subject": "Devis terrasse",
+       "_card": "rule:7"
+      }
+     ],
+     "trash": [
+      {
+       "subject": "La lettre de la semaine",
+       "_note": "Newsletter jamais ouverte"
+      },
+      {
+       "subject": "-40 % ce week-end",
+       "_note": "Publicité"
+      }
+     ]
+    }
+   }
   }
  ],
  "en": [
@@ -2461,6 +2569,114 @@
          "y": 10
         }
        ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "version": "1.0",
+   "createSurface": {
+    "surfaceId": "gallery-bilan",
+    "catalogId": "urn:eriphe:a2ui:workspace:v1",
+    "components": [
+     {
+      "id": "root",
+      "component": "Column",
+      "children": [
+       "todo_h",
+       "todo",
+       "trash"
+      ]
+     },
+     {
+      "id": "todo_h",
+      "component": "Text",
+      "variant": "subtitle",
+      "text": "To do"
+     },
+     {
+      "id": "todo",
+      "component": "List",
+      "children": {
+       "path": "/todo",
+       "componentId": "todo_row"
+      }
+     },
+     {
+      "id": "todo_row",
+      "component": "Row",
+      "align": "center",
+      "children": [
+       "todo_item",
+       "todo_yes"
+      ]
+     },
+     {
+      "id": "todo_item",
+      "component": "Item",
+      "title": {
+       "@path": "_note"
+      },
+      "detail": {
+       "@path": "from"
+      },
+      "note": {
+       "@path": "subject"
+      }
+     },
+     {
+      "id": "todo_yes",
+      "component": "Proposal",
+      "inline": true,
+      "proposalId": {
+       "@path": "_card"
+      }
+     },
+     {
+      "id": "trash",
+      "component": "Fold",
+      "list": "jeter",
+      "label": "{n} useless emails to throw away",
+      "child": "jeter"
+     },
+     {
+      "id": "jeter",
+      "component": "List",
+      "children": {
+       "path": "/trash",
+       "componentId": "jeter_row"
+      }
+     },
+     {
+      "id": "jeter_row",
+      "component": "Item",
+      "level": "low",
+      "title": {
+       "@path": "subject"
+      },
+      "note": {
+       "@path": "_note"
+      }
+     }
+    ],
+    "dataModel": {
+     "todo": [
+      {
+       "_note": "Answer Sam — draft ready",
+       "from": "Sam",
+       "subject": "Terrace quote",
+       "_card": "rule:7"
+      }
+     ],
+     "trash": [
+      {
+       "subject": "The weekly letter",
+       "_note": "Newsletter never opened"
+      },
+      {
+       "subject": "40% off this weekend",
+       "_note": "Advert"
       }
      ]
     }

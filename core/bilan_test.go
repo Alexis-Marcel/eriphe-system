@@ -445,3 +445,34 @@ func TestCallShownNames(t *testing.T) {
 		t.Errorf("details %+v", d)
 	}
 }
+
+// Written after an external read, a block may still hold a row's own
+// card: an inline Proposal bound to the item's _card, which code writes
+// and the page answers only on the row code told it waits on. Any other
+// Proposal could be answered as something else: refused.
+func TestTaintedRowCard(t *testing.T) {
+	tw, _, _, id := actionsWeb(t, archiveAction)
+	c := tw.c
+	write := func(yes string) error {
+		block := "```eriphe:block inbox\n" + `{"components": [
+  {"id": "root", "component": "List", "children": {"path": "/received/messages", "componentId": "row"}},
+  {"id": "row", "component": "Row", "children": ["t", "yes"]},
+  {"id": "t", "component": "Text", "text": {"@path": "subject"}},
+  ` + yes + `],
+ "sources": {"received": {"resource": "monitor", "uri": "monitor://received", "items": {"path": "messages", "id": "id", "title": "subject"}}}}` + "\n```\n"
+		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, true, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody("Les mails.\n\n" + block) })
+		return err
+	}
+	if err := write(`{"id": "yes", "component": "Proposal", "inline": true, "proposalId": {"@path": "_card"}}`); err != nil {
+		t.Errorf("a row's own card: %v", err)
+	}
+	for _, bad := range []string{
+		`{"id": "yes", "component": "Proposal", "inline": true, "proposalId": "calls:3"}`,
+		`{"id": "yes", "component": "Proposal", "inline": true, "proposalId": {"@path": "card"}}`,
+		`{"id": "yes", "component": "Proposal", "proposalId": {"@path": "_card"}}`,
+	} {
+		if err := write(bad); err == nil || !strings.Contains(err.Error(), "could be answered as something else") {
+			t.Errorf("%s: %v", bad, err)
+		}
+	}
+}

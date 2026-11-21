@@ -45,4 +45,16 @@ export function useMoved(src: Proposals, refs: string[] | null): number {
   return n;
 }
 
+// answerOne answers a card that waits on one item (its row's Oui, or the
+// same Oui in the item opened): its calls all chosen, then read again.
+// where names the surface and component it is answered from, and the row
+// (at) when bound inside a list.
+export async function answerOne(src: Proposals, ref: string, p: ProposalView, yes: boolean, where: { surfaceId: string; componentId: string; at?: string }): Promise<{ ok: boolean; again: ProposalView | null }> {
+  const choices = p.choices ?? [];
+  const only = yes && choices.length > 0 ? { only: choices.map((c) => c.id), left: [] } : {};
+  const ok = await src.answer({ surfaceId: where.surfaceId, componentId: where.componentId, ref: p.ref, yes, ...(where.at ? { at: where.at } : {}), ...only }).catch(() => false);
+  const again = await src.read(ref).catch(() => null);
+  return { ok, again };
+}
+
 export type { Answer, Moved, ProposalView };

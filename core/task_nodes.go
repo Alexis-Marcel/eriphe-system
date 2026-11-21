@@ -413,6 +413,13 @@ func (c *core) externalSources(d *nodestore.Doc, author string) error {
 	return err
 }
 
+// rowCard tells a Proposal that answers only its row's own card: inline,
+// its ref bound to the item's _card, which code writes, never an author.
+func rowCard(comp map[string]any) bool {
+	ref, _ := comp["proposalId"].(map[string]any)
+	return comp["inline"] == true && len(ref) == 1 && ref["@path"] == itemCardField
+}
+
 // nodeGuard checks the blocks an author wrote (names) in a node: a card
 // block places one of the node's own cards, never when tainted; the
 // actions' grammar, nothing asked when tainted, no Link to a
@@ -444,7 +451,9 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 			at := "/components/" + strconv.Itoa(i)
 			switch comp["component"] {
 			case "Proposal":
-				if tainted {
+				// A row's own card (inline, bound to the item's _card, code's):
+				// the page answers it only on the row code told it waits on.
+				if tainted && !rowCard(comp) {
 					errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: at, Message: "a Proposal written after reading external content could be answered as something else: leave it out"})
 				}
 			}

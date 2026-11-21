@@ -65,7 +65,7 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
 - **Tabs** : Des onglets, un enfant par onglet.
   tabs* [{title* texte · child* id d'un composant}, …]
 - **Fold** : Une ligne qui se déplie : ce qu'elle résume (« 4 étapes faites »), et en dessous un enfant, montré quand on l'ouvre.
-  label* texte · child* id d'un composant · aside id d'un composant (Sur sa ligne, au bout, ouverte ou non : une action sur tout ce qu'elle résume (« Archiver les 2 »)) · open booléen (Ouverte d'abord (non par défaut))
+  label* texte · child* id d'un composant · aside id d'un composant (Sur sa ligne, au bout, ouverte ou non : une action sur tout ce qu'elle résume (« Archiver les 2 »)) · list texte fixe (Un lot : l'id de la List qu'elle replie, liée aux éléments d'une source avec une action. Sa ligne dit `{n}` (le nombre de lignes) dans `label` et porte l'action sur toutes ses lignes, cochées d'avance ; dépliée, on décoche ce qu'on garde. Vide, elle disparaît) · open booléen (Ouverte d'abord (non par défaut))
 - **Divider** : Un trait qui sépare.
 - **Button** : Un bouton qui déclenche une action.
   label* texte · action* action ({"event": {"name", "context"}} ou {"functionCall": appel}) · icon alert|arrowDown|arrowUp|calendar|chart|check|clock|close|cloud|document|error|event|folder|home|info|link|lock|mail|message|money|note|person|phone|place|refresh|search|server|settings|star|task|trendDown|trendUp|warning ou liaison · variant primary|default|quiet
@@ -100,7 +100,7 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
   date* texte (Le jour, AAAA-MM-JJ) · events* [{title* texte fixe · start* texte fixe (Date et heure ISO 8601, ou la date seule pour toute la journée) · allDay booléen fixe · end texte fixe · place texte fixe}, …] ou liaison · proposals booléen fixe (Montrer les propositions datées de ce jour (oui par défaut) ; false pour une journée qui n'est pas celle de l'utilisateur)
   Exemple : `{"id": "demain", "component": "Day", "date": "2026-11-13", "events": [{"end": "2026-11-13T10:00:00+01:00", "place": "Centre", "start": "2026-11-13T09:30:00+01:00", "title": "Dentiste"}]}`
 - **Proposal** : Une proposition d'Eriphe qui attend un oui ou un non (créer un événement, répondre à un message, lancer une tâche…), montrée là où elle compte : ses boutons Oui et Non envoient `answer`, que le code lie à cette proposition et à aucune autre. Sa référence est celle d'une proposition qui attend (`kind:id`), écrite telle quelle ou liée à la donnée. Elle se met à jour quand on y répond ailleurs. Dans un bloc au contenu extérieur, elle se répond dans la conversation.
-  proposalId* texte (La référence de la proposition, type:numéro) · compact booléen fixe (Une fois décidée, une ligne qui se déplie au clic ; tant qu'elle attend, entière)
+  proposalId* texte (La référence de la proposition, type:numéro) · compact booléen fixe (Une fois décidée, une ligne qui se déplie au clic ; tant qu'elle attend, entière) · inline booléen fixe (Sur la ligne d'un élément : seulement son bouton Oui (Non au survol), ce que fait le oui se lit en ouvrant la ligne ; liée au champ `_card` de l'élément (`{"@path": "_card"}`), rien quand aucune carte n'attend sur lui)
   Exemple : `{"id": "accord", "component": "Proposal", "proposalId": "intention:12"}`
 - **Alert** : Un avertissement qui doit se voir.
   text* texte · level info|success|warning|error · title texte

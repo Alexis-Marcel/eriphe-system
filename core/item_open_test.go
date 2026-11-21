@@ -85,7 +85,7 @@ func TestItemOpenReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m1"})
-	if code != http.StatusOK || out["title"] != "Facture" || out["from"] != "Sam" || out["date"] != "2026-11-04T09:00:00Z" || out["body"] != "Le texte de m1" || !strings.Contains(out["raw"].(string), `"subject": "Facture"`) {
+	if code != http.StatusOK || out["title"] != "Facture" || out["from"] != "Sam <sam@example.org>" || out["date"] != "2026-11-04T09:00:00Z" || out["body"] != "Le texte de m1" || !strings.Contains(out["raw"].(string), `"subject": "Facture"`) {
 		t.Fatalf("open: %d %v", code, out)
 	}
 	if out["external"] != true {

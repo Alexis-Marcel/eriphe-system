@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as PtrEvent } from "react";
 import { createPortal } from "react-dom";
 import { stamp } from "../a2ui/format";
-import { archive, label, type PageAlive, type PageOrigin, type TraceEntry } from "../data/api";
+import { archive, label, type PageAlive, type PageOrigin, type ProposalView, type TraceEntry } from "../data/api";
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
@@ -31,9 +31,17 @@ export type PageProps = {
   onClose: () => void;
   onGrab?: (e: PtrEvent) => void;
   onOpen: (id: string) => void;
+  // In the graph, like a window: big, enlarged to most of the screen; a
+  // toggle (its button, a double click on its head) and a corner to drag
+  // (or its arrows, from the keyboard) to give it a size. The phone's
+  // list gives none: it takes the screen.
+  big?: boolean;
+  onBig?: () => void;
+  onResize?: (e: PtrEvent) => void;
+  onResizeBy?: (dw: number, dh: number) => void;
 };
 
-export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: PageProps) {
+export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, onBig, onResize, onResizeBy }: PageProps) {
   const { t, lang } = useWords();
   const nodes = useGraph((s) => s.nodes);
   const node = nodes[id];
@@ -52,6 +60,12 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
   const running = node?.state === "running";
   const at = stamp(lang, node?.updated);
   const shift = page?.shift ?? 0;
+  // At its foot, only the cards that still ask something (eriphe-core's
+  // cards: one that waits, or whose yes runs or failed). What is settled
+  // leaves the page: it is in the « ⋯ » menu (Déjà décidé), and in the
+  // trace.
+  const waiting = page?.cards ?? [];
+  const settled = page?.settled ?? [];
   const gone = (n: number) => (n === 0 ? "" : n === 1 ? t("espace.page.archive.one") : t("espace.page.archive.many", n));
 
   return (
@@ -66,6 +80,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
             onGrab(e);
           })
         }
+        onDoubleClick={onBig && ((e) => !(e.target as HTMLElement).closest("button, input, a, select") && onBig())}
       >
         {(kicker || page?.archived) && (
           <div className="pg-kicker">
@@ -83,12 +98,14 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               that nothing beside it pushes it onto two; then, on the same
               line, the small badge of a node someone else's words reached
               (its title marked when they may have written it), and the
-              sign of a node the user did not ask for. */}
+              sign of a node the user did not ask for. That badge is the
+              page's one word for it: inside, a block only has its quiet
+              edge (Doc.tsx). */}
           <h2>
             <span className="pg-title-tx" title={node?.title || external}>
               <NodeTitle x={node} fallback={external} />
             </span>
-            {node?.external && (
+            {(node?.external || page?.parts.some((x) => x.block?.external)) && (
               <em className="pg-badge warn" title={t("espace.external.why")}>
                 {t("espace.external.mark")}
               </em>
@@ -116,7 +133,14 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
               {t("espace.page.archive")}
             </button>
           )}
-          <More tab={tab} onTab={setTab} alive={page?.alive} origin={page?.origin} />
+          <More tab={tab} onTab={setTab} alive={page?.alive} origin={page?.origin} settled={settled} />
+          {onBig && (
+            <button type="button" className="pg-big" aria-pressed={!!big} onClick={onBig} title={t(big ? "espace.page.small" : "espace.page.big")} aria-label={t(big ? "espace.page.small" : "espace.page.big")}>
+              <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+                <path d={big ? "M6.5 2.5v4h-4M9.5 13.5v-4h4" : "M2.5 6.5v-4h4M13.5 9.5v4h-4"} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
           <button type="button" className="pg-x" onClick={onClose} aria-label={t("espace.page.close")}>
             ✕
           </button>
@@ -144,9 +168,9 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
         {tab === "doc" && (page ? <Doc page={page} latest={latest} live={live} onOpen={onOpen} /> : failed ? <p className="pg-empty">{t("espace.page.gone")}</p> : <Skeleton />)}
         {tab === "trace" && (trace ? <Trace entries={trace} /> : <Skeleton />)}
         {tab === "md" && (file ? <MdTab key={`${id}@${version}`} id={id} file={file} latest={latest} live={live} shift={shift} /> : <Skeleton />)}
-        {page && page.cards.length > 0 && latest && (
+        {waiting.length > 0 && latest && (
           <footer className="pg-foot">
-            <Cards surface={`${id}--cards`} refs={page.cards.map((c) => c.ref)} home={id} />
+            <Cards surface={`${id}--cards`} refs={waiting.map((c) => c.ref)} home={id} />
           </footer>
         )}
       </div>
@@ -168,6 +192,29 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
           </span>
         </footer>
       )}
+      {onResize && (
+        <button
+          type="button"
+          className="pg-resize"
+          aria-label={t("espace.page.resize")}
+          title={t("espace.page.resize")}
+          onPointerDown={(e) => {
+            onTalk();
+            onResize(e);
+          }}
+          onKeyDown={(e) => {
+            const step = e.shiftKey ? 120 : 40;
+            const d = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+            if (!d || !onResizeBy) return;
+            e.preventDefault();
+            onResizeBy(d[0], d[1]);
+          }}
+        >
+          <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+            <path d="M11 4 4 11M11 8 8 11" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
     </article>
   );
 }
@@ -177,7 +224,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen }: Pag
 // over everything (the page clips what overflows it), under its button.
 // It says where the node comes from (origin), and a permanent subject's
 // what keeps it alive (alive).
-function More({ tab, onTab, alive, origin }: { tab: Tab; onTab: (t: Tab) => void; alive?: PageAlive; origin?: PageOrigin }) {
+function More({ tab, onTab, alive, origin, settled = [] }: { tab: Tab; onTab: (t: Tab) => void; alive?: PageAlive; origin?: PageOrigin; settled?: ProposalView[] }) {
   const { t } = useWords();
   const [open, setOpen] = useState<{ top: number; right: number } | null>(null);
   const box = useRef<HTMLSpanElement>(null);
@@ -218,12 +265,32 @@ function More({ tab, onTab, alive, origin }: { tab: Tab; onTab: (t: Tab) => void
                 {t(`espace.page.${k}`)}
               </button>
             ))}
+            {settled.length > 0 && <Settled cards={settled} />}
             {origin && <Origin origin={origin} />}
             {alive && <Alive alive={alive} />}
           </span>,
           document.body,
         )}
     </span>
+  );
+}
+
+// Settled are the cards of the node already decided, the last first: a
+// line each, what it was and how it went.
+export function Settled({ cards }: { cards: ProposalView[] }) {
+  const { t } = useWords();
+  return (
+    <section className="pg-settled" role="group" aria-label={t("espace.page.settled")}>
+      <h3>{t("espace.page.settled")}</h3>
+      <ul>
+        {cards.map((c) => (
+          <li key={c.ref} className={c.state === "approved" ? "yes" : "no"}>
+            <span className="pg-settled-word">{t(c.state === "approved" ? "espace.row.done" : "espace.row.rejected")}</span>
+            <span className="pg-settled-text">{c.text}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -251,7 +318,21 @@ export function Alive({ alive }: { alive: PageAlive }) {
   return (
     <section className="pg-alive" role="group" aria-label={t("espace.alive")}>
       <h3>{t("espace.alive")}</h3>
-      {groups.length === 0 && <p className="pg-alive-none">{t("espace.alive.none")}</p>}
+      {/* What the user approved the view for: its notes, once, here. */}
+      {alive.decided && (
+        <div className="pg-alive-decided">
+          <h4>{t("espace.page.decided")}</h4>
+          <p>
+            {alive.decided}
+            {alive.decidedExternal && (
+              <em className="pg-badge warn" title={t("espace.external.why")}>
+                {t("espace.external.mark")}
+              </em>
+            )}
+          </p>
+        </div>
+      )}
+      {groups.length === 0 && !alive.decided && <p className="pg-alive-none">{t("espace.alive.none")}</p>}
       {groups.map((k) => (
         <div key={k} className={`pg-alive-${k}`}>
           <h4>{t(`espace.alive.${k}`)}</h4>

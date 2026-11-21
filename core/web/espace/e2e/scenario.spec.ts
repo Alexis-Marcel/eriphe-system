@@ -361,7 +361,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   // 14b. The view's skill, woken once per mail, proposed to archive
   // three: they wait as one card on the view's page, worded as a list
   // action is (« Déplacer 3 éléments → archive »), each mail a line
-  // ticked, still « extérieur », where it comes from
+  // ticked, still signed as someone else's words (⚠), where it comes from
   // under Détails. The user leaves one out: Oui archives the two others,
   // the card, settled, leaves the page's foot.
   await home(page);
@@ -391,7 +391,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   const ticks = batch.locator(".a2-proposal-choices input[type=checkbox]");
   await expect(ticks).toHaveCount(3);
   await expect(batch.locator(".a2-proposal-choices")).toContainText("« La lettre de la semaine » · news@example.org");
-  await expect(batch.locator(".a2-badge-external")).toBeVisible();
+  await expect(batch.locator(".a2-proposal-kicker .a2-taint")).toBeVisible();
   await expect(batch.locator(":scope > .a2-proposal-from, :scope > .a2-proposal-yes, :scope > .a2-proposal-why")).toHaveCount(0);
   // Oui is the strong button, in the ink, in either theme; Non the quiet one.
   const [oui, non] = [batch.locator(".a2-proposal-actions .a2-button-primary"), batch.getByRole("button", { name: "Non" })];
@@ -424,6 +424,11 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect
     .poll(async () => ((await (await request.get("/e2e/tools")).json()).moved as string[][]).filter((ids) => ids.some((id) => /^n\d$/.test(id))).sort())
     .toEqual([["n1"], ["n3"]]);
+  // Kept in the « ⋯ » menu, under « Déjà décidé ».
+  await view.getByRole("button", { name: "Plus" }).click();
+  await expect(page.locator(".pg-menu .pg-settled h3")).toHaveText("Déjà décidé");
+  await expect(page.locator(".pg-menu .pg-settled li").first()).toContainText("Fait");
+  await page.keyboard.press("Escape");
   await shot(page, "chosen-calls");
 
   // 15. A card no page holds (proposed at the home, no subject opened)

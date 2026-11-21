@@ -1,4 +1,5 @@
 import type { OrbFeed } from "../data/api";
+import { sampleCards } from "../data/samplecore";
 import type { Lang } from "../i18n";
 import type { Message } from "./adapter";
 import { CATALOG } from "./catalog";
@@ -111,9 +112,12 @@ export function sampleProposals(lang: Lang): Proposals {
     const v = views.find((v) => v.ref === ref);
     return v ? { ...v, state: states.get(ref) ?? v.state } : null;
   };
+  // The dev server's views keep their own cards (samplecore.ts).
+  const viewCards = sampleCards();
   return {
-    read: async (ref) => read(ref),
+    read: async (ref) => viewCards.read(ref) ?? read(ref),
     answer: async ({ ref, yes }) => {
+      if (viewCards.read(ref)) return viewCards.answer(ref, yes);
       if (read(ref)?.state !== "pending") return false;
       states.set(ref, yes ? "approved" : "rejected");
       for (const f of followers) f({ refs: [ref] });
@@ -122,7 +126,11 @@ export function sampleProposals(lang: Lang): Proposals {
     day: async (date) => views.map((v) => read(v.ref)!).filter((v) => v.state === "pending" && v.when?.some((w) => w.start.startsWith(date))),
     follow: (on) => {
       followers.add(on);
-      return () => followers.delete(on);
+      const off = viewCards.follow(on);
+      return () => {
+        followers.delete(on);
+        off();
+      };
     },
   };
 }

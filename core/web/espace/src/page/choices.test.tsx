@@ -130,7 +130,7 @@ describe("a card of several calls", () => {
     expect(answers[0].only).toBeUndefined();
   });
 
-  it("on its own node's page, keeps where it comes from under Détails; the external badge stays", async () => {
+  it("on its own node's page, keeps where it comes from under Détails; the external sign stays", async () => {
     await draw("n1");
     const card = el.querySelector(".a2-proposal")!;
     const details = card.querySelector(".a2-proposal-details")!;
@@ -138,7 +138,7 @@ describe("a card of several calls", () => {
       expect(card.querySelector(`:scope > .${cls}`)).toBeNull();
       expect(details.querySelector(`.${cls}`)).not.toBeNull();
     }
-    expect(card.querySelector(".a2-badge-external")).not.toBeNull();
+    expect(card.querySelector(".a2-taint")).not.toBeNull();
   });
 
   it("elsewhere, says where it comes from", async () => {

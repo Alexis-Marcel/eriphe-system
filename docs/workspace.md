@@ -67,13 +67,28 @@ A page shows:
   task wrote meanwhile), nothing is saved: the page shows that version, and you take it or keep
   your text to save it over;
 - its **versions** (v1, v2…): an older one shows as it was;
-- the cards waiting for your answer, where Eriphe placed them in the page (under « What we
-  decided », say), else at its foot: what a yes makes in plain words first, the technical details
-  (sources, monitor, trigger, the skill's instructions) one click away under **Details**. A card in
-  the page is drawn by Eriphe's code from its records, never from the page's words: once answered it
-  says **Approved** or **Declined**, and **Proposal withdrawn** when it went with its archived page; a
-  card that is not this page's shows as **Card not found**, with no Yes;
+- the cards that still ask you something, where Eriphe placed them in the page, else at its foot:
+  what a yes makes in plain words first, the technical details (sources, monitor, trigger, the
+  skill's instructions) one click away under **Details**. A card in the page is drawn by Eriphe's
+  code from its records, never from the page's words: once answered it says **Approved** or
+  **Declined**, and **Proposal withdrawn** when it went with its archived page; a card that is not
+  this page's shows as **Card not found**, with no Yes. What is decided leaves the page's foot: the
+  **⋯** menu lists it under **Already decided** (Done, Set aside), with **What we decided** (what
+  you asked a view for) and **What keeps it alive**;
 - **Archive**: see below.
+
+A page is like a window: its **enlarge** button (or a double click on its title line) gives it most
+of the screen, its text at a width that reads, a table or a chart the whole width; its corner,
+dragged (or its arrow keys), gives it a size. Sizes last for the session; the graph makes room
+around the page.
+
+A view that follows things (your mails, the alerts of a service) reads as a **bilan**: a sentence
+or two on top, what waits for you first, then **For info** in a few words; under it, « To handle »,
+one line per item saying what Eriphe proposes, with its one **Yes** (No is a discreet ✕ on hover);
+what goes as a batch (« 38 useless mails to throw away ») on one line with its action on all of them,
+which you open to untick what you keep. A line clicked opens the item as a letter: who, when, its
+subject, its text, then **On Yes** and what it sends (the reply itself), the exact call under one
+**details**. Done, an item leaves its section.
 
 The bar talks to the page you opened or clicked last: « Write to Eriphe about Plan of the first
 article ». With no page open it talks to the home. Close every page, or click Eriphe's name, to go
@@ -207,9 +222,11 @@ forget one. There is no settings page for the workspace and no rule to maintain.
   out of sight (the only buttons the bar ever has). A proposed appointment shows on a day's block as a ghost marked **Proposed**.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows
   **Approved · running…**, then **done** or **failed** with why.
-- **Content from outside cannot act.** A block that may carry someone else's words is marked
-  « outside »: a proposal shown inside it has no Yes / No: its card waits at the foot of the page.
-  A mail that says "click here to approve" cannot make anything happen.
+- **Content from outside cannot act.** A page that may carry someone else's words says « outside »
+  once, by its title, and its block has a quiet edge: a proposal shown inside it has no Yes / No and
+  its card waits at the foot of the page, but for the Yes on an item's own line, which answers only
+  the card Eriphe's code says waits on that very item. A mail that says "click here to approve"
+  cannot make anything happen.
 
 ## Where the conversation is
 

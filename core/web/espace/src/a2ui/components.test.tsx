@@ -585,14 +585,15 @@ describe("the catalog's components", () => {
     expect(sent).toEqual([{ surfaceId: "t", componentId: "item", ref: "memory:2", yes: true, at: "/items/1" }]);
   });
 
-  it("mark a proposal drawn from external content with a small badge, the whole sentence for screen readers", async () => {
+  it("mark a proposal drawn from external content with a small sign, no word, its whole sentence on hover and for screen readers", async () => {
     const view = { ref: "rule:11", card: 11, state: "pending", text: "Classer la facture ?", tainted: true };
     await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "rule:11" }]), { read: async () => view, answer: async () => true });
     await act(async () => {});
-    const badge = $(".a2-proposal-kicker .a2-badge-external");
-    expect(badge.getAttribute("title")).toBe("Vient d'un contenu extérieur : vérifie ce qui va être fait.");
-    expect(badge.querySelector("[aria-hidden=true]:not(svg)")?.textContent).toBe("extérieur");
-    expect(badge.querySelector(".sr-only")?.textContent).toBe("Vient d'un contenu extérieur : vérifie ce qui va être fait.");
+    const sign = $(".a2-proposal-kicker .a2-taint");
+    expect(sign.getAttribute("role")).toBe("img");
+    expect(sign.getAttribute("title")).toBe("Vient d'un contenu extérieur : vérifie ce qui va être fait.");
+    expect(sign.getAttribute("aria-label")).toBe("Vient d'un contenu extérieur : vérifie ce qui va être fait.");
+    expect($(".a2-proposal-kicker").textContent).not.toContain("extérieur"); // no pill
     // No more line of its own under the proposal.
     expect($(".a2-proposal-taint")).toBeNull();
   });

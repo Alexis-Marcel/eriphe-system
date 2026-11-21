@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALL, BOTTOM, boxAt, edgeMark, FOOT, frameAll, framePages, pageMax, READABLE, SIDE, slide, TOP, type Box, type Cam } from "./camera";
+import { ALL, bigBox, bigRoom, BOTTOM, boxAt, edgeMark, FOOT, frameAll, frameAlone, framePages, pageMax, READABLE, SIDE, slide, TOP, type Box, type Cam } from "./camera";
 
 describe("the camera", () => {
   const size = { w: 1440, h: 900 };
@@ -100,5 +100,38 @@ describe("the edge marks", () => {
     const low = edgeMark(500, 760, size)!;
     expect(low.y).toBe(800 - FOOT);
     expect(low.turn).toBeCloseTo(Math.PI / 2);
+  });
+});
+
+describe("an enlarged page", () => {
+  it("takes most of the screen above the bar, a margin left for the graph, and is framed whole at scale 1", () => {
+    for (const size of [{ w: 1440, h: 900 }, { w: 1180, h: 720 }]) {
+      const [w, h] = bigBox(size, 700);
+      expect(w).toBeLessThanOrEqual(size.w - 2 * SIDE - 200);
+      expect(h).toBe(pageMax(size, 4000));
+      const box = boxAt([300, -120], [w, h]);
+      const cam = frameAlone(box, size);
+      expect(cam.k).toBe(1);
+      // whole: its head under the corner's icons, its foot above the bar
+      expect(cam.y + box[1] * cam.k).toBeGreaterThanOrEqual(TOP);
+      expect(cam.y + box[3] * cam.k).toBeLessThanOrEqual(size.h - BOTTOM);
+      expect(cam.x + box[0] * cam.k).toBeGreaterThanOrEqual(SIDE + 90);
+    }
+  });
+
+  it("is never narrower than a page", () => {
+    expect(bigBox({ w: 600, h: 700 }, 700)[0]).toBe(700);
+  });
+
+  it("keeps the bar's room clear: no bubble at rest beside it sits behind the bar", () => {
+    for (const size of [{ w: 1440, h: 900 }, { w: 1440, h: 900, foot: 260 }, { w: 1180, h: 720 }]) {
+      const page = bigBox(size, 700);
+      const room = bigRoom(page, size);
+      expect(room[0]).toBe(page[0]);
+      const at: [number, number] = [300, -120];
+      const cam = frameAlone(boxAt(at, page), size);
+      // A bubble just out of the room, under the page, is under the screen's foot.
+      expect(cam.y + (at[1] + room[1] / 2) * cam.k).toBeGreaterThanOrEqual(size.h);
+    }
   });
 });

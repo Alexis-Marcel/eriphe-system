@@ -234,7 +234,7 @@ func openFields(v any) openOut {
 		}
 	}
 	out.Title, _ = itemField(m, "", itemTitleFields[:5], false) // subject, title, name, summary, label
-	out.From, _ = itemField(m, "", itemDetailFields, true)
+	out.From, _ = itemField(m, "", itemDetailFields, false)     // as written: the page says the name, the address beside
 	out.Date = firstText(m, openDateFields, 80)
 	out.Body = firstText(m, openBodyFields, openValueMax)
 	return out

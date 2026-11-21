@@ -962,6 +962,18 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   it and the page says « Carte introuvable », with no Oui or Non. A placed card leaves the page's
   foot (`cards`); an unplaced one waits there. The propose tools return the card's ref (`card`:
   `cardProposed`), and `propose_view` says how to place it (`cardPlaceNote`).
+- **The page's foot only asks.** `nodePageOf` sends at the foot (`cards`) only the cards that still
+  ask something (`pendingAsks`: pending, or approved with its call running or failed) and that no
+  row answers (a block with an inline Proposal, `inlineProposals`, holds the calls cards of its
+  rows); the decided ones go to `settled` (20 at most, the last first), which the page lists in its
+  « ⋯ » menu under « Déjà décidé ». `alive.decided` is the goal the user approved the view with
+  (`view_proposals`), shown there as « Ce qu'on a décidé ».
+- **A row's own card.** An inline Proposal (`"inline": true`) bound to the item's `_card`
+  (`{"@path": "_card"}`, code's field) may stand in a block written on a tainted turn (`rowCard`):
+  the page answers it only when the ref is the card code told it waits on that very row
+  (`lists[].items[].card`, out of band), never from the block's data. Any other Proposal on a
+  tainted turn is refused. A `Fold` with `list` (a batch) must name a List of the same block
+  (`a2ui` validation).
 - **Done.** `node_set` `done` (`setNodeDone`) marks the front matter's `done` and the state
   `done` (`nodestore.SetDone`, a version of its own that never conflicts with an author's write),
   once: done again changes nothing. A node done now leaves one dated **decision memory** about it
@@ -3234,7 +3246,7 @@ token in `X-CSRF-Token`:
   under its policy: never (or a call that must name its account) is `403`; a free read that does
   not reach the open web runs; any other answers `{ask: {tool, args}}` and runs on a second click
   with `yes` and that `tool` (`409` when the open changed since), logged by the user. `200` `{title, from, date, body, raw, external, note: {group, note,
-  external}}`: its common fields picked generically, the whole as JSON, `external` for a server not
+  external}}`: its common fields picked generically (`from` as written, « Sam <sam@example.org> »: the page splits name and address), the whole as JSON, `external` for a server not
   trusted; `502` when the tool failed. Nothing is kept: no version, no trace, no journal of what it
   said.
 - `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
