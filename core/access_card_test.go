@@ -181,8 +181,8 @@ func TestAccessCardNotifies(t *testing.T) {
 		t.Errorf("not a question: %q", msgs[0].Text)
 	}
 	x := accessQuestion{TaskID: "b", Need: accessNeed{"mail", catSend, ""}, Call: "mcp__mail__send {}"}
-	if _, ok := asksUser(c.accessText(x, "fr")); !ok {
-		t.Errorf("the brain's is not a question: %q", c.accessText(x, "fr"))
+	if got := c.accessText(x, "fr"); got != "Utiliser « send »" { // its words: what it does; its message asks
+		t.Errorf("the brain's card says %q", got)
 	}
 }
 
@@ -373,7 +373,10 @@ func TestBrainCardIsForOneCall(t *testing.T) {
 	if told, allow := answeredAllow(t, c, "b-1", "p-1"); !told || allow {
 		t.Fatalf("the brain is held: told %v, allow %v", told, allow)
 	}
-	x := accessCard(t, c, "use “move” in mail")
+	x := accessCard(t, c, "Use “move”")
+	if _, p := c.liveCard(x); p.ContextIn("en") != "mail" {
+		t.Errorf("where it acts: %q", p.ContextIn("en"))
+	}
 	// The brain restarted meanwhile: the card still waits, and still runs.
 	c.store.updateTask("b-1", map[string]any{"state": stateStopped})
 	if _, err := c.decideCard(ctx, x.ID, true, "web"); err != nil {
@@ -455,21 +458,21 @@ func TestBrainCardReads(t *testing.T) {
 	in := map[string]any{"repo": "portfolio", "number": 7, "body": long}
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	brainCalls(t, c, "p-1", "mcp__mail__merge_pull_request", in)
-	_, p := c.liveCard(accessCard(t, c, "merge a pull request"))
-	if fr := p.Text("fr"); !strings.Contains(fr, "fusionner une pull request") || strings.Contains(fr, "mcp__") || strings.Contains(fr, "{") {
+	_, p := c.liveCard(accessCard(t, c, "Merge a pull request"))
+	if fr := p.Text("fr"); fr != "Fusionner une pull request" {
 		t.Errorf("fr: %q", fr)
 	}
-	got := map[string]string{}
-	var names []string
-	for _, f := range p.Fields {
-		got[f.Name] = f.Value
-		names = append(names, f.Name)
+	// Its long text to read, named; its exact call, the rest, under the
+	// one Détails.
+	fs := p.FieldsIn("fr")
+	if len(fs) != 2 || fs[0].Name != "Texte" || fs[0].Value != long || fs[0].Detail {
+		t.Fatalf("fields: %+v", fs)
 	}
-	if strings.Join(names, ",") != "body,number,repo" || got["number"] != "7" || got["repo"] != "portfolio" {
-		t.Errorf("fields: %+v", p.Fields)
+	if d := fs[1]; !d.Detail || d.Name != "mail/merge_pull_request" || d.Value != "number : 7\nrepo : portfolio" {
+		t.Errorf("details: %+v", d)
 	}
-	if len([]rune(got["body"])) > cardValueMax+3 {
-		t.Errorf("a value of %d", len(got["body"]))
+	if v := (&web{c: c}).proposalView(convoCard{Kind: cardAccess, State: cardPending}, p, "fr"); v.Yes != "" {
+		t.Errorf("Oui says %q", v.Yes)
 	}
 	msgs, _ := c.store.messagesAfter(0, 10)
 	if len(msgs) == 0 || strings.Contains(msgs[len(msgs)-1].Text, "pull request") {

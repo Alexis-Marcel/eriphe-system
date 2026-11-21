@@ -236,6 +236,33 @@ export function placeBeside(target: Rect, words: [number, number], obstacles: Re
   return null;
 }
 
+// keepOnScreen keeps the orb's words whole on screen, whatever placed them
+// and however wide they turned out (measured late, grown since): words
+// that would leave the screen on their side open on the orb's other side
+// when they fit there and cover nothing there (avoid: the subject, the
+// other bodies, the bar), else slide in, a margin from the edge (screen is
+// the screen less its margins); never higher or lower than it either.
+export function keepOnScreen(p: Placed, screen: Rect, avoid: Rect[] = []): Placed {
+  const w0 = p.words;
+  if (!w0) return p;
+  const w = w0.r - w0.l, h = w0.b - w0.t;
+  const fits = (l: number) => l >= screen.l && l + w <= screen.r;
+  const free = (l: number) => !avoid.some((o) => hits({ l, t: w0.t, r: l + w, b: w0.b }, o, 0));
+  let l = w0.l, dir = p.dir;
+  if (!fits(l)) {
+    const other = dir === 1 ? p.orb[0] - ORB / 2 - GAP - w : p.orb[0] + ORB / 2 + GAP;
+    if (fits(other) && free(other)) {
+      l = other;
+      dir = dir === 1 ? -1 : 1;
+    } else {
+      l = Math.max(screen.l, Math.min(l, screen.r - w));
+    }
+  }
+  const t = Math.max(screen.t, Math.min(w0.t, screen.b - h));
+  if (l === w0.l && t === w0.t) return p;
+  return { ...p, words: { l, t, r: l + w, b: t + h }, dir };
+}
+
 // placeHome is where the orb goes at the home: the free spot nearest the
 // middle of the screen's free band (the one it had, prev, while it stays
 // free); null when there is none.

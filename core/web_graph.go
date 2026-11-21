@@ -300,15 +300,18 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 	}
 	placed := map[string]bool{}
-	for i, part := range p.Parts {
+	for _, part := range p.Parts {
 		if part.Block != nil && part.Block.Proposal != nil {
 			placed[part.Block.Proposal.Ref] = true
 		}
-		if part.Block != nil && inlineProposals(d.Node.Parts()[i].Block) {
+		if part.Block != nil {
+			// A card on a row of a List the page draws: its Oui on that
+			// row (the row's own Proposal, or the one the page adds to
+			// it), or on the line of the batch its List is.
 			for _, l := range part.Block.Lists {
 				for _, it := range l.Items {
 					if it.Card != "" {
-						placed[it.Card] = true // on its row, its Oui there
+						placed[it.Card] = true
 					}
 				}
 			}
@@ -335,17 +338,6 @@ const settledMax = 20
 // its page: it waits, or its yes runs or failed.
 func pendingAsks(v proposalView) bool {
 	return v.State == cardPending || v.State == cardApproved && (v.Exec == callRunning || v.Exec == callFailed)
-}
-
-// inlineProposals tells whether a block draws Proposals on its items'
-// rows (inline): a card on one of its rows is answered there.
-func inlineProposals(b *nodefile.Block) bool {
-	if b == nil {
-		return false
-	}
-	var comps []map[string]any
-	json.Unmarshal(b.Components, &comps)
-	return slices.ContainsFunc(comps, func(m map[string]any) bool { return m["component"] == "Proposal" && m["inline"] == true })
 }
 
 // placedCard is the card a card block of node id places, as its records

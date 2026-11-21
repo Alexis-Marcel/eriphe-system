@@ -124,8 +124,20 @@ type receiveOut struct {
 	Last     int64     `json:"last"` // to give as after next
 }
 
+// titles are the tools' titles, as people read them: eriphe-core says with
+// them what a call does (« Move · 2 mails ») when it has no words of its own.
+var titles = map[string]string{
+	"status":   "Show the number",
+	"register": "Register the number",
+	"verify":   "Verify the number",
+	"set_pin":  "Set the PIN",
+	"remove":   "Unregister the number",
+	"send":     "Send a message",
+	"receive":  "Receive messages",
+}
+
 func tool[In, Out any](s *mcp.Server, name, desc string, ann *mcp.ToolAnnotations, h func(context.Context, In) (Out, error)) {
-	mcp.AddTool(s, &mcp.Tool{Name: name, Description: desc, Meta: setupMeta, Annotations: ann},
+	mcp.AddTool(s, &mcp.Tool{Name: name, Title: titles[name], Description: desc, Meta: setupMeta, Annotations: ann},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 			start := time.Now()
 			out, err := h(ctx, in)

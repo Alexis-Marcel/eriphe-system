@@ -23,7 +23,6 @@ const pending: ProposalView = {
   tainted: true,
   node: "n1",
   from: "Dans « Mes mails » · 3 éléments du nœud",
-  yes: "Sur Oui, ces 3 appels partent une seule fois, tels qu'ils sont montrés.",
   fields: [{ name: "monitor/move", value: "ids : [\"m1\"]", detail: true }],
   choices: [
     { id: 4, text: "« Offre de stage » · Emplois", n: 1, state: "proposed" },
@@ -134,10 +133,11 @@ describe("a card of several calls", () => {
     await draw("n1");
     const card = el.querySelector(".a2-proposal")!;
     const details = card.querySelector(".a2-proposal-details")!;
-    for (const cls of ["a2-proposal-why", "a2-proposal-from", "a2-proposal-yes"]) {
+    for (const cls of ["a2-proposal-why", "a2-proposal-from"]) {
       expect(card.querySelector(`:scope > .${cls}`)).toBeNull();
       expect(details.querySelector(`.${cls}`)).not.toBeNull();
     }
+    expect(card.querySelector(".a2-proposal-yes")).toBeNull(); // its sentence says what Oui does
     expect(card.querySelector(".a2-taint")).not.toBeNull();
   });
 

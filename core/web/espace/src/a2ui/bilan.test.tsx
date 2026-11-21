@@ -58,6 +58,7 @@ async function mount(tainted: boolean) {
     source: "mails",
     filtered: true,
     open: true,
+    rowCard: true, // its row template draws its card (an inline Proposal)
     items: [
       { n: 0, id: "m1", title: "Devis", card: "calls:1" },
       { n: 1, id: "m2", title: "Autre" },

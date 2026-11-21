@@ -124,7 +124,7 @@ func TestSkillCardsWaitInTheirView(t *testing.T) {
 	if got := one.Text("en"); got != "Archive 1 email" {
 		t.Errorf("English text %q", got)
 	}
-	if got := one.SummaryIn("fr"); !slices.Equal(got, []string{"« STAGE – Data Engineer » · Emplois Example"}) {
+	if got := one.SummaryIn("fr"); !slices.Equal(got, []string{"« STAGE – Data Engineer » · Emplois Example ⚠"}) {
 		t.Errorf("summary %q", got)
 	}
 	if fs := one.FieldsIn("fr"); len(fs) != 1 || !fs[0].Detail || fs[0].Name != "monitor/move" ||
@@ -151,27 +151,6 @@ func TestSkillCardsWaitInTheirView(t *testing.T) {
 	}
 	if fs := two.FieldsIn("fr"); len(fs) != 1 || !fs[0].Detail || !strings.Contains(fs[0].Value, `["m1","m2"]`) {
 		t.Errorf("details %+v", fs)
-	}
-}
-
-// What a call does, said from its tool and its parameters; any other
-// tool by its name.
-func TestCallSentence(t *testing.T) {
-	for _, tc := range []struct{ call, input, want string }{
-		{"mcp__mail__move {}", `{"ids":["a"],"to":"archive"}`, "Archiver 1 mail"},
-		{"mcp__mail__move {}", `{"ids":["a","b","c"],"to":"Archive"}`, "Archiver 3 mails"},
-		{"mcp__mail__move {}", `{"ids":["a"],"to":"inbox"}`, "Remettre 1 mail dans la boîte de réception"},
-		{"mcp__mail__move {}", `{"ids":["a","b"],"to":"Factures"}`, "Déplacer 2 mails dans un autre dossier"},
-		{"mcp__mail__move {}", `{"ids":[],"to":"archive"}`, "Utiliser « move »"},
-		{"mcp__mail__trash {}", `{"ids":["a"]}`, "Mettre 1 mail à la corbeille"},
-		{"mcp__mail__trash {}", `{"ids":["a"],"junk":true}`, "Mettre 1 mail dans les indésirables"},
-		{"mcp__mail__mark {}", `{"ids":["a","b"],"read":true}`, "Marquer 2 mails comme lu"},
-		{"mcp__github__merge_pull_request {}", `{"pullNumber":3}`, "Fusionner une pull request"},
-		{"mcp__monitor__rollback {}", `{"version":"2.0.0"}`, "Utiliser « rollback »"},
-	} {
-		if got := callSentence(tc.call, tc.input, "fr"); got != tc.want {
-			t.Errorf("%s %s: %q, want %q", tc.call, tc.input, got, tc.want)
-		}
 	}
 }
 

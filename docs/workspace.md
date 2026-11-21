@@ -222,6 +222,12 @@ forget one. There is no settings page for the workspace and no rule to maintain.
   out of sight (the only buttons the bar ever has). A proposed appointment shows on a day's block as a ghost marked **Proposed**.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows
   **Approved · running…**, then **done** or **failed** with why.
+- **A call says what it does, to which items.** "Move 2 mails to the trash", the mails listed by
+  their subject and sender (at most five, then "and N more"), the account quietly beside it
+  ("Gmail account"); the exact call is under one **details**. When you ask Eriphe to act on items
+  a page shows ("delete these 2"), its Yes sits on those items' own lines: one card for all of
+  them, a small mark saying how many share it, the others lighting up when you point at one; a Yes
+  on any line does it once, for all. Nothing waits at the foot of the page for them.
 - **Content from outside cannot act.** A page that may carry someone else's words says « outside »
   once, by its title, and its block has a quiet edge: a proposal shown inside it has no Yes / No and
   its card waits at the foot of the page, but for the Yes on an item's own line, which answers only

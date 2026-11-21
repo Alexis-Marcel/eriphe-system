@@ -12,6 +12,9 @@ number. eriphe-core alone registers the number and talks through it.
 
 ## Tools
 
+Every tool has a title (`titles` in `tools.go`, « Move to the trash »): eriphe-core says with it
+what a call does when it has no words of its own for it.
+
 | Tool | Arguments | Answer |
 |---|---|---|
 | `status` | none | `{number, version}`: the number registered (none before), signal-cli's version |

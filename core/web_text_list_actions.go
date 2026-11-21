@@ -105,6 +105,7 @@ var listActionStrings = map[string]map[string]string{
 		"espace.row.no":       "Non, pas ça",
 		"espace.row.done":     "Fait",
 		"espace.row.running":  "En cours…",
+		"espace.row.shared":   "Une seule carte pour ces %d lignes : un Oui sur l'une les fait toutes",
 		"espace.row.failed":   "N'a pas pu se faire",
 		"espace.row.rejected": "Écarté",
 
@@ -203,6 +204,7 @@ var listActionStrings = map[string]map[string]string{
 		"espace.row.no":       "No, not that",
 		"espace.row.done":     "Done",
 		"espace.row.running":  "Running…",
+		"espace.row.shared":   "One card for these %d rows: a Yes on one does them all",
 		"espace.row.failed":   "Could not be done",
 		"espace.row.rejected": "Set aside",
 

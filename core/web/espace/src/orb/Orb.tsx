@@ -5,7 +5,7 @@ import { TOP } from "../graph/camera";
 import { extent, type LNode, type Pos, type Pt } from "../graph/layout";
 import { titleOf } from "../graph/model";
 import { useWords } from "../i18n";
-import { glide, homePoint, placeBeside, placeHome, type Placed, type Rect, type Side } from "./model";
+import { glide, homePoint, keepOnScreen, placeBeside, placeHome, type Placed, type Rect, type Side } from "./model";
 import { setCrowded, useOrb } from "./useOrb";
 import { Words } from "./Words";
 
@@ -53,11 +53,13 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
     let docked = show.mode === "rest";
     let to: Pt = rest;
     let placed: Placed | null = null;
+    let avoid: Rect[] = [];
     if (docked) {
       s.side = undefined;
       s.home = undefined;
     } else {
       const obstacles: Rect[] = bodies.filter((b) => at[b.id]).map((b) => rect(b, at[b.id]));
+      avoid = obstacles; // its subject among them
       for (const sel of [".cs", ".hud-corner", ".notices"]) {
         const r = document.querySelector(sel)?.getBoundingClientRect();
         if (r && r.width > 0) obstacles.push({ l: r.left, t: r.top, r: r.right, b: r.bottom });
@@ -83,6 +85,8 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
       // No free spot: it covers nothing, it stays in the bar and its
       // words show as a line above it.
       if (placed) {
+        // Its words whole on screen, flipped or slid in if need be.
+        placed = keepOnScreen(placed, screen, avoid);
         s.side = placed.side;
         to = placed.orb;
       } else {
@@ -124,7 +128,12 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
   useMotionValueEvent(cam[2], "change", kick);
   useEffect(() => {
     addEventListener("resize", kick);
+    // Its words grown or shrunk (a font come late, a longer answer): it
+    // looks again, so that they stay whole on screen.
+    const ro = typeof ResizeObserver === "undefined" || !say.current ? null : new ResizeObserver(() => kick());
+    if (ro && say.current) ro.observe(say.current);
     return () => {
+      ro?.disconnect();
       removeEventListener("resize", kick);
       if (st.current.raf !== null) cancelAnimationFrame(st.current.raf);
     };

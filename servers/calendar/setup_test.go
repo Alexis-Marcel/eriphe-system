@@ -22,6 +22,9 @@ func TestTestAccount(t *testing.T) {
 	}
 	tools, _ := cs.ListTools(t.Context(), nil)
 	for _, tl := range tools.Tools {
+		if tl.Title == "" {
+			t.Errorf("%s has no title", tl.Name)
+		}
 		if (tl.Name == "test_account") != (tl.Meta["eriphe/setup"] == true) {
 			t.Errorf("%s: meta %v", tl.Name, tl.Meta)
 		}

@@ -448,6 +448,7 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-proposal-kicker { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--accent-text); }
 .a2-proposal-decided .a2-proposal-kicker { color: var(--fg3); }
 .a2-proposal-text { margin: 0; font-size: 15px; font-weight: 500; line-height: 1.4; }
+.a2-proposal-context { font-size: 13px; font-weight: 400; color: var(--fg3); }
 .a2-proposal-why { margin: 0; font-size: 13.5px; color: var(--fg2); }
 .a2-proposal-from, .a2-proposal-yes { margin: 0; font-size: 13px; color: var(--fg3); }
 .a2-proposal-from a { color: inherit; }
@@ -1035,6 +1036,16 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 .a2-inline-ext { display: inline-grid; place-items: center; color: var(--warn-text); }
 .a2-inline-ext .a2-icon { width: 13px; height: 13px; }
 .a2-block.ext .a2-inline-ext { display: none; } /* the block's own mark says it */
+/* A card the page adds to a row whose template draws none; one card on
+   several rows: a quiet mark of how many, its siblings lit on hover. */
+.a2-rowcard { flex-wrap: nowrap; gap: 10px; padding-left: 10px; }
+.a2-rowcard > .a2-inline { flex: 0 1 auto; min-width: 0; }
+.a2-inline-what { min-width: 0; max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--fg3); margin-right: 2px; }
+.a2-rowcard > :first-child { flex: 1 1 auto; min-width: 0; }
+.a2-inline-shared { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--accent-text); }
+.a2-inline-shared .a2-icon { width: 12px; height: 12px; }
+.a2-list > li.a2-card-sibling { border-radius: 10px; background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.a2-fold-card { display: inline-flex; margin-left: auto; }
 .a2-inline-state { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--fg3); }
 .a2-inline-state .a2-icon { width: 13px; height: 13px; }
 .a2-inline-approved:not(.a2-inline-failed) { color: var(--ok-text); }

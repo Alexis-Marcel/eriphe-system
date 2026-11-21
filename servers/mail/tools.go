@@ -493,8 +493,23 @@ func parallel(accts []*Account, fn func(int, *Account)) {
 
 // tool registers a typed tool and logs each call: name, duration, error.
 // Arguments are not logged: they may hold message text.
+// titles are the tools' titles, as people read them: eriphe-core says with
+// them what a call does (« Move · 2 mails ») when it has no words of its own.
+var titles = map[string]string{
+	"list_accounts":   "List the accounts",
+	"list_folders":    "List the folders",
+	"search_messages": "Search the mail",
+	"read_message":    "Read a message",
+	"create_draft":    "Write a draft",
+	"send_message":    "Send a message",
+	"mark":            "Mark",
+	"move":            "Move",
+	"trash":           "Move to the trash",
+	"test_account":    "Test an account",
+}
+
 func tool[In, Out any](s *mcp.Server, name, desc string, ann *mcp.ToolAnnotations, fn func(context.Context, In) (Out, error)) {
-	mcp.AddTool(s, &mcp.Tool{Name: name, Description: desc, Annotations: ann},
+	mcp.AddTool(s, &mcp.Tool{Name: name, Title: titles[name], Description: desc, Annotations: ann},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 			start := time.Now()
 			out, err := fn(ctx, in)

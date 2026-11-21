@@ -5,6 +5,9 @@ Microsoft Graph. Secrets are app passwords or OAuth access tokens lent by eriphe
 
 ## Tools
 
+Every tool has a title (`toolTitles` in `tools.go`, « Move to the trash »): eriphe-core says with it
+what a call does when it has no words of its own for it.
+
 | Tool | What | Hints |
 |---|---|---|
 | `list_accounts` | accounts and the default time zone | read-only |

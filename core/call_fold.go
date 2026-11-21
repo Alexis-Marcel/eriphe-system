@@ -196,31 +196,15 @@ func (c *core) choiceText(a accessQuestion, lang string) string {
 		}
 	}
 	if len(items) == 0 {
-		s, _ := c.callText(a, lang)
-		return s
+		return c.callText(a, lang)
 	}
 	return strings.Join(items, ", ")
 }
 
-// kindSentence says what calls that do the same thing do to n items, as a
-// list action's button says it (actionWords, list_actions.go): the
-// tool's verb and its other arguments, for how many.
+// kindSentence says what calls that do the same thing do to n items, in
+// one sentence (callPhrase): the action, for how many.
 func (c *core) kindSentence(a accessQuestion, n int, lang string) string {
-	_, list := foldKey(a)
-	if list == "" {
-		s, _ := c.callText(a, lang)
-		return s
-	}
-	var args map[string]any
-	json.Unmarshal([]byte(a.Input), &args)
-	delete(args, list)
-	tool := callTool(a.Call)
-	_, t := c.actionTool(tool)
-	one, many := actionWords(t, tool, args, lang)
-	if n == 1 {
-		return one
-	}
-	return strings.ReplaceAll(many, "{n}", fmt.Sprint(n))
+	return c.callTextN(a, n, lang)
 }
 
 // decideCallsChosen is Oui on a calls card with the user's choice: the

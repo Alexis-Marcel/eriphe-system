@@ -6,6 +6,9 @@ access token lent by eriphe-core and used with XOAUTH2 (the server never runs an
 
 ## Tools
 
+Every tool has a title (`titles` in `tools.go`, « Move to the trash »): eriphe-core says with it
+what a call does when it has no words of its own for it.
+
 | Tool | What | Hints |
 |---|---|---|
 | `list_accounts` | configured accounts | read-only |

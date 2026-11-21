@@ -314,8 +314,16 @@ func (c *core) askBrainAccess(ctx context.Context, t *TaskRow, pid, tool string,
 	source := c.turnSource() // in a turn about a node, the card is the node's (node_turn.go)
 	if c.store.db.QueryRow(`SELECT id FROM access_asks WHERE call LIKE ? AND input = ? AND state = ? AND batch = 0`, tool+" %", string(raw), startProposed).Scan(&id) != nil {
 		fields, _ := json.Marshal(cardFields(c.callContext(ctx, tool, input), input))
-		c.newAccessAsk(accessQuestion{TaskID: t.ID, Permission: pid, Need: c.callNeed(tool, input, c.pool.facts(tool, input)),
-			Call: tool + " " + string(fields), Input: string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", "), source: source})
+		q := accessQuestion{TaskID: t.ID, Permission: pid, Need: c.callNeed(tool, input, c.pool.facts(tool, input)),
+			Call: tool + " " + string(fields), Input: string(raw), Tainted: strings.Join(c.turnTaintBut(pending), ", "), source: source}
+		// The items it names by their id, as a node's sources list them
+		// (the turn's node first): its card waits on their rows, and says
+		// them by their titles (call_words.go). It is that node's card.
+		prefer, _ := strings.CutPrefix(source, refNode+":")
+		if node, labels := c.callRows(prefer, tool, input); node != "" {
+			q.Node, q.Source, q.Labels, q.source = node, labels[0].Source, labels, nodeRef(node)
+		}
+		c.newAccessAsk(q)
 	} else {
 		c.cardRaisedFor(source, proposalRef(cardAccess, id)) // the same call asked again
 	}
@@ -357,6 +365,7 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	if server != "" && !c.trustsServer(server) {
 		taint = name // delivered, it taints the turn that reads it
 	}
+	c.accessCardMoved(a) // its rows: no card; the items it took leave them (sourcesChanged)
 	c.callToBrain(a, text, taint)
 }
 
@@ -467,8 +476,14 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 		raw, _ := json.Marshal(a.Refs)
 		refs = string(raw)
 	}
-	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, refs, tainted, created)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, a.TaskID, a.Permission, a.Need.Server, a.Need.Category, a.Need.Account, a.Call, a.Input, refs, a.Tainted, time.Now().Unix())
+	labels := ""
+	if len(a.Labels) > 0 {
+		raw, _ := json.Marshal(a.Labels)
+		labels = string(raw)
+	}
+	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, refs, tainted, created, node, source, labels)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, a.TaskID, a.Permission, a.Need.Server, a.Need.Category, a.Need.Account, a.Call, a.Input, refs, a.Tainted, time.Now().Unix(),
+		a.Node, a.Source, labels)
 	if err != nil {
 		log.Printf("access: %v", err)
 		return 0
@@ -477,6 +492,8 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 	// The question itself: what notifies the user of a question notifies them of this one.
 	// The card says what: the message does not say it twice.
 	c.cardNow(cardAccess, id, fmt.Sprintf(tr(c.userLang(), "access.ask.message"), a.Need.TargetIn(c.userLang())), cmpOr(a.source, "task:"+a.TaskID))
+	a.ID = id
+	c.accessCardMoved(a) // on its items' rows (item_cards.go)
 	log.Printf("access: card %d for task %s: %s", id, a.TaskID, a.Need.Category)
 	return id
 }
@@ -506,6 +523,15 @@ func (c *core) accessProposal(p proposal) proposal {
 	p.text = func(lang string) string { return c.accessText(a, lang) }
 	p.origin = func(lang string) cardOrigin { return c.accessOrigin(a, lang) }
 	p.Fields = a.fields()
+	if catalogAsk(a) {
+		// A call of a catalog tool, read plainly (call_words.go): what it
+		// does to which items, the account apart; its exact call under
+		// the one Détails.
+		p.summary = func(lang string) []string { return labelLines(c.labelsOf(a), c.callCount(a), lang) }
+		p.fields = func(lang string) []cardField { return c.callFieldsOf(a, lang) }
+		p.Fields = p.fields(c.userLang())
+		p.context = func(lang string) string { return c.callAccountWords(a, lang) }
+	}
 	return p
 }
 
@@ -590,7 +616,8 @@ func (c *core) accessText(a accessQuestion, lang string) string {
 	case strings.HasPrefix(a.Call, webFetchTool+" "):
 		return fmt.Sprintf(tr(lang, "access.ask.page"), c.conf().assistantName())
 	case a.Call != "":
-		return fmt.Sprintf(tr(lang, "access.ask.brain"), c.conf().assistantName(), callVerb(a.Call, lang), a.Need.TargetIn(lang))
+		// What it does to what (call_words.go).
+		return c.callText(a, lang)
 	}
 	return fmt.Sprintf(tr(lang, "access.ask.task"), title, verbs([]string{a.Need.Category}, lang), a.Need.TargetIn(lang))
 }
@@ -674,6 +701,7 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 			c.itemCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name))
 			return nil
 		}
+		c.accessCardMoved(a) // off its rows
 		c.callToBrain(a, fmt.Sprintf("%s a refusé sur la carte : %s n'est pas exécutée.", c.conf().User, name), "")
 		return nil
 	}

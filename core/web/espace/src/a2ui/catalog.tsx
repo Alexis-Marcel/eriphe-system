@@ -9,9 +9,10 @@ import { Day as DayView, cleanEvents, type Ghost } from "./day";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
-import { allText, AskPanel, BatchContext, buttonText, MAX_IDS, openable, Pickable, RowItem, useList, type Asking, type Result, type Row } from "./picks";
+import { allText, AskPanel, BatchContext, buttonText, MAX_IDS, openable, Pickable, useList, type Asking, type Result, type Row } from "./picks";
+import { InlineYes, RowItem } from "./inline";
 import type { PickAction, PickItem } from "../data/api";
-import { answerOne, HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
+import { HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
 // eriphe-core owns the catalog (its JSON Schema, which validates what a
@@ -299,6 +300,7 @@ function BatchFold({ surface, told, label, open: first, child }: { surface: stri
   useEffect(() => void picks.kept.set(key, { picked: [...left], result, asking }), [picks.kept, key, left, result, asking]);
   const items = list.items;
   const chosen = items.filter((it) => !left.has(it.id));
+  const cards = [...new Set(items.map((it) => it.card).filter((c): c is string => !!c))];
   const toggle = (itemId: string) => {
     setResult(null);
     setAsking(null);
@@ -345,6 +347,14 @@ function BatchFold({ surface, told, label, open: first, child }: { surface: stri
             <span className="a2-fold-label">{label.replace("{n}", String(items.length))}</span>
             {left.size > 0 && <span className="a2-batch-kept">{t("espace.batch.kept", left.size)}</span>}
           </button>
+          {/* A card on its rows (the brain's call on several of them):
+              its Oui on the line while the rows are folded. */}
+          {!open &&
+            cards.map((ref) => (
+              <span key={ref} className="a2-fold-card">
+                <InlineYes refText={ref} answerable say where={{ surfaceId: surface, componentId: list.component }} />
+              </span>
+            ))}
           {picks.run && chosen.length > 0 && (
             <div className="a2-fold-aside">
               {list.actions.map((a) => (
@@ -1104,76 +1114,10 @@ const Proposal = createComponentImplementation(
 // never from its data, which an author may write): the ref cannot be
 // steered to another card.
 function InlineProposal({ refText, context }: { refText: string; context: ComponentContext }) {
-  const { t } = useWords();
-  const src = useProposals();
   const row = useContext(RowItem);
   const base = context.dataContext.path && context.dataContext.path !== "/" ? context.dataContext.path : null;
-  const [p, setP] = useState<ProposalView | null | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (!refText) return;
-    let live = true;
-    src.read(refText).then(
-      (v) => live && setP(v),
-      () => live && setP(null),
-    );
-    return () => {
-      live = false;
-    };
-  }, [src, refText]);
-  const moved = useMoved(src, refText ? [refText] : []);
-  useEffect(() => {
-    if (!moved || !refText) return;
-    let live = true;
-    src.read(refText).then((v) => live && setP(v), () => {});
-    return () => {
-      live = false;
-    };
-  }, [src, refText, moved]);
-  if (!refText || !p) return null;
   const answerable = !onlyAsks(context.dataContext.surface) || (!!row?.card && row.card === refText);
-  const answer = async (yes: boolean) => {
-    if (busy) return;
-    setBusy(true);
-    setFailed(false);
-    const { ok, again } = await answerOne(src, refText, p, yes, { surfaceId: context.dataContext.surface?.id ?? "", componentId: context.componentModel.id, ...(base ? { at: base } : {}) });
-    if (!ok) setFailed(true);
-    setP(again ?? p);
-    setBusy(false);
-  };
-  if (p.state !== "pending") {
-    const word = p.state === "approved" ? (p.exec === "running" ? "espace.row.running" : p.exec === "failed" ? "espace.row.failed" : "espace.row.done") : "espace.row.rejected";
-    return (
-      <span className={`a2-inline-state a2-inline-${p.state}${p.exec ? " a2-inline-" + p.exec : ""}`} role="status">
-        <IconView name={p.state === "approved" && p.exec !== "failed" ? (p.exec === "running" ? "clock" : "check") : "close"} />
-        {t(word)}
-      </span>
-    );
-  }
-  if (!answerable) return null;
-  const yesWord = p.acts?.[0] && (p.choices?.length ?? 0) > 1 ? p.acts[Math.min(p.choices!.length, p.acts.length) - 1] : t("espace.a2.yes");
-  return (
-    <span className="a2-inline" aria-label={p.text}>
-      {p.tainted && (
-        <span className="a2-inline-ext" title={t("espace.a2.proposal.tainted")}>
-          <IconView name="warning" />
-          <span className="sr-only">{t("espace.a2.proposal.tainted")}</span>
-        </span>
-      )}
-      <button type="button" className="a2-inline-no" disabled={busy} title={t("espace.row.no")} aria-label={t("espace.row.no")} onClick={() => answer(false)}>
-        <IconView name="close" />
-      </button>
-      <button type="button" className={`btn a2-button a2-button-primary a2-inline-yes${busy ? " is-busy" : ""}`} disabled={busy} title={p.text} aria-busy={busy} onClick={() => answer(true)}>
-        {yesWord}
-      </button>
-      {failed && (
-        <span className="a2-proposal-failed" role="alert">
-          {t("espace.a2.proposal.failed")}
-        </span>
-      )}
-    </span>
-  );
+  return <InlineYes refText={refText} answerable={answerable} where={{ surfaceId: context.dataContext.surface?.id ?? "", componentId: context.componentModel.id, ...(base ? { at: base } : {}) }} />;
 }
 
 function ProposalFull({ props, context }: { props: { proposalId?: unknown; compact?: boolean }; context: ComponentContext }) {
@@ -1284,7 +1228,10 @@ function ProposalFull({ props, context }: { props: { proposalId?: unknown; compa
           )}
         </p>
         {exec === "failed" && p.execWhy && <p className="a2-proposal-failed">{t(`espace.a2.proposal.why.${p.execWhy}`)}</p>}
-        <p className="a2-proposal-text">{p.text}</p>
+        <p className="a2-proposal-text">
+          {p.text}
+          {p.context && <span className="a2-proposal-context"> · {p.context}</span>}
+        </p>
         {why && <p className="a2-proposal-why">{why}</p>}
         {p.summary && p.summary.length > 0 && (
           <ul className="a2-proposal-summary">

@@ -389,6 +389,9 @@ func TestToolAnnotations(t *testing.T) {
 	got := map[string]*mcp.ToolAnnotations{}
 	for _, tl := range res.Tools {
 		got[tl.Name] = tl.Annotations
+		if tl.Title == "" {
+			t.Errorf("%s has no title", tl.Name)
+		}
 	}
 	if len(got) != 10 {
 		t.Errorf("tools: %v", got)

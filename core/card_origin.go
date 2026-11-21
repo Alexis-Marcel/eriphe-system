@@ -132,7 +132,7 @@ func (c *core) accessYes(a accessQuestion, lang string) string {
 	case strings.HasPrefix(a.Call, webFetchTool+" "):
 		return fmt.Sprintf(tr(lang, "card.yes.page"), c.conf().assistantName())
 	case a.Call != "":
-		return tr(lang, "card.yes.call")
+		return "" // its text says what it does; its exact call is under Détails
 	}
 	return fmt.Sprintf(tr(lang, "card.yes.grant"), verbs([]string{a.Need.Category}, lang), a.Need.TargetIn(lang))
 }

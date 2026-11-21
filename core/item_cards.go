@@ -123,7 +123,7 @@ func (c *core) callsProposal(p proposal) proposal {
 	var shown, details []cardField
 	for i, a := range asks {
 		fs, names := c.callShown(a, c.userLang())
-		for _, f := range fs {
+		for _, f := range append(callRead(a), fs...) {
 			if slices.ContainsFunc(shown, func(g cardField) bool { return g.Name == f.Name }) {
 				f.Name = fmt.Sprintf("%s (%d)", f.Name, i+1)
 			}
@@ -132,7 +132,7 @@ func (c *core) callsProposal(p proposal) proposal {
 		details = append(details, callDetail(a, names))
 	}
 	p.Fields = append(shown, details...)
-	p.origin = func(lang string) cardOrigin { return c.callsOrigin(first, items, len(asks), lang) }
+	p.origin = func(lang string) cardOrigin { return c.callsOrigin(first, items, lang) }
 	if len(asks) > 1 {
 		return c.chosenCalls(p, asks)
 	}
@@ -147,9 +147,6 @@ func (c *core) callsProposal(p proposal) proposal {
 	// Détails.
 	p.text = func(lang string) string {
 		text, _ := c.callsWords(asks, lang)
-		if len(items) > 1 {
-			return fmt.Sprintf(tr(lang, "card.calls.items"), text, len(items))
-		}
 		return text
 	}
 	p.summary = func(lang string) []string {
@@ -194,12 +191,6 @@ func (c *core) chosenCalls(p proposal, asks []accessQuestion) proposal {
 		}
 		return c.callsDecidedText(asks, lang, true)
 	}
-	p.summary = func(lang string) []string {
-		if f := callFolder(asks[0].Call, asks[0].Input, lang); f != "" {
-			return []string{f}
-		}
-		return nil
-	}
 	p.acts = func(lang string) []string {
 		out := make([]string, total)
 		for k := range out {
@@ -223,7 +214,7 @@ func asksItems(asks []accessQuestion) []string {
 
 // callsOrigin is a calls card's origin: its node, its item (by its
 // source and its id) or how many, and what Oui does.
-func (c *core) callsOrigin(first accessQuestion, items []string, calls int, lang string) cardOrigin {
+func (c *core) callsOrigin(first accessQuestion, items []string, lang string) cardOrigin {
 	o := originParts{node: first.Node}
 	if o.node != "" {
 		o.title, o.titleExt = c.titleOfNode(o.node)
@@ -248,11 +239,9 @@ func (c *core) callsOrigin(first accessQuestion, items []string, calls int, lang
 	if from != "" {
 		from += " · "
 	}
-	yes := tr(lang, "card.yes.call")
-	if calls > 1 {
-		yes = fmt.Sprintf(tr(lang, "card.yes.calls"), calls)
-	}
-	return cardOrigin{Node: first.Node, From: from + item, Yes: yes, External: ext}
+	// What Oui does is the card's own sentence: its exact calls are under
+	// its Détails.
+	return cardOrigin{Node: first.Node, From: from + item, External: ext}
 }
 
 // trustedItemSource tells whether a node's source is read from a server
@@ -355,7 +344,49 @@ func (c *core) itemCards(node, source string) map[string]string {
 			out[p.item] = proposalRef(cardCalls, p.batch)
 		}
 	}
+	// The brain's calls on items of the node (askBrainAccess): one card
+	// on each of the rows it names, shared; the newest on a row it shares
+	// with another card, what the user just asked.
+	for _, a := range c.asksWhere(`node = ? AND batch = 0 AND run = 0 AND labels != '' AND (state = ? OR state = ? AND decided >= ?) ORDER BY id`,
+		node, startProposed, startApproved, time.Now().Add(-itemCardsKept).Unix()) {
+		if !c.accessAsks(a) {
+			continue
+		}
+		for _, l := range a.Labels {
+			if l.Source == source {
+				out[l.ID] = proposalRef(cardAccess, a.ID)
+			}
+		}
+	}
 	return out
+}
+
+// accessAsks tells whether an access card still asks something of the
+// user: it waits for a yes, or its yes's call is not done (about to run,
+// running, or failed).
+func (c *core) accessAsks(a accessQuestion) bool {
+	if a.State == startProposed {
+		return true
+	}
+	s, _ := c.callState(a.ID)
+	return a.State == startApproved && s != callDone
+}
+
+// accessCardMoved is the brain's call on items of a node that was made,
+// decided, or whose yes ran: the page is told its items' sources again
+// (their _card). Once its call ran, catalogCall's sourcesChanged
+// (source_fresh.go) shows its ids done at once and reads the sources again.
+func (c *core) accessCardMoved(a accessQuestion) {
+	if a.Node == "" || len(a.Labels) == 0 || c.nodes == nil {
+		return
+	}
+	seen := map[string]bool{}
+	for _, l := range a.Labels {
+		if !seen[l.Source] {
+			seen[l.Source] = true
+			c.graphSaid(graphEvent{Kind: graphEvSource, Node: a.Node, Name: l.Source})
+		}
+	}
 }
 
 // itemCardMoved is a calls card on an item that was made, decided, or

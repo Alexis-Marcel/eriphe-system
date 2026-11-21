@@ -1463,15 +1463,30 @@ else's words (a tainted turn). The others take their buttons only: they come at 
 yes may answer something else. A card never holds the brain: its call is answered at once as not
 run, the card keeps the exact input, and a yes runs it from eriphe-core, however late and even after
 the brain restarted, if the tool is still allowed; the result, or a no, comes back as an event. The
-same call asked again is the same card. A brain's card says the action in words and lists the call's
-parameters by name, the long ones folded, on a channel the user writes from too; never the raw call. A call on a pull request
-adds its title and the start of its description, read with the tool itself when the card is made.
+same call asked again is the same card. A call on a pull request adds its title and the start of
+its description, read with the tool itself when the card is made.
 
-A skill run's calls cards (`calls`, `runcalls`) read plainly (`call_words.go`): a sentence of code's
-says what the yes does (« Archiver 2 mails », from the tool and its parameters for the usual mail
-actions, else the tool's name), the items it acts on follow by their title and detail as the node's
-sources list them (kept with the call), never a model's note; the exact call (`server/tool` and its
-parameters) is under Détails. Such a card, like a task's access, start or memory card, is linked to
+**A call in plain words** (`call_words.go`), the brain's (`access`) as a skill run's (`calls`,
+`runcalls`): a sentence of code's says what happens to what, never a question and never a model's
+words: « Mettre 2 mails à la corbeille ». Its verb comes from a fr+en table of usual actions
+(`act.verb.*`, a move to `archive`, `inbox` or `trash` by its destination), else the tool's title
+(`Title` or `annotations.title`; our servers give every tool one), else « Utiliser « tool » »; its
+noun from the server or source (`nounWords`: mails, events, files…), else « élément(s) ». The
+items it acts on follow by their title and detail as the node's sources list them (`callRows`,
+`itemLabel`, kept with the call), at most 5 then « et N autres »; a title from a source that is not
+a trusted server's keeps its « ⚠ ». Where it acts goes apart, quietly (`context`: « compte
+Gmail », the account by its provider when it is the only one, « le dossier Clients »). The exact
+call (`server/tool` and every parameter, raw ids included) is under one « détails »; no line
+of what Oui does. A channel gets the sentence and where it acts.
+
+**On its rows.** A brain's call whose ids are those of rows a node's source shows (the node the
+turn is about first, else any live node that read them: `node_reads`) is kept on that node and
+those items (`access_asks.node`, `source`, `labels`): `itemCards` gives each row the card's ref,
+so the page draws its Oui on every row it names (one card on several rows: a Oui on any answers
+it, a mark says how many share it, and hovering lights the others), on a folded batch's line, and
+never in the page's foot (`placed`: any told row's card). A call on no row keeps its foot card,
+in the same words. Decided, its rows settle; once run, its ids show done and its sources are read again (`sourcesChanged`, `source_fresh.go`); the brain is
+told, as for any access card. Such a card, like a task's access, start or memory card, is linked to
 the node its run or task works in (`cardNodeOf`, `node_cards`) and is about it: it waits on that
 node's page, which stays waiting while it does, never above the bar.
 

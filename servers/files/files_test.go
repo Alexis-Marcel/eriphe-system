@@ -377,6 +377,9 @@ func TestSetupToolsAreSetupOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tl := range tools.Tools {
+		if tl.Title == "" {
+			t.Errorf("%s has no title", tl.Name)
+		}
 		if (tl.Name == "browse_places" || tl.Name == "test_account") != (tl.Meta["eriphe/setup"] == true) {
 			t.Errorf("%s: meta %v", tl.Name, tl.Meta)
 		}
