@@ -54,8 +54,9 @@ test("the steps of the scenario", async ({ page, request }) => {
 
   // 2. One call, no node opened; it is logged in « Ma journée »'s trace.
   // A turn about no subject: the orb leaves the bar and answers at the
-  // home, on a free spot, clear of every bubble, title and the bar; after
-  // a while it goes back to the bar. No button in the bar.
+  // home, on a free spot, clear of every bubble, title and the bar; its
+  // words stay until the user moves on, here closes them: it goes back to
+  // the bar. No button in the bar.
   await say("Allume la lumière du bureau.");
   await expect(said).toContainText("C'est allumé.");
   await expect(orb).not.toHaveClass(/docked/);
@@ -63,7 +64,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   await orbClear(page);
   await shot(page, "orb-home");
   await expect(barButtons).toHaveCount(0);
-  await expect(orb).toHaveClass(/docked/, { timeout: 25_000 });
+  await words.getByRole("button", { name: "Fermer" }).click();
+  await expect(orb).toHaveClass(/docked/);
   await expect(said).toHaveCount(0);
   await expect(page.locator("article.pg")).toHaveCount(0);
   expect((await (await request.get("/e2e/tools")).json()).lit).toEqual(["bureau"]);
@@ -111,11 +113,11 @@ test("the steps of the scenario", async ({ page, request }) => {
   const waiting = page.locator(`.gr-node.yours[data-node="${mail}"]`);
   await expect(waiting).toHaveCount(1);
   await expect(waiting.locator(".gr-label em.yours")).toHaveText("t'attend");
-  // Unasked, it began to wait: once the last answer has had its while,
-  // the orb goes beside it and says so, its title marked as someone
+  // Unasked, it began to wait: newer than the last answer, it replaces
+  // it; the orb goes beside it and says so, its title marked as someone
   // else's words.
-  await expect(words).toHaveClass(/said/, { timeout: 30_000 });
-  await expect(words).toContainText(`${external} t'attend.`, { timeout: 30_000 });
+  await expect(words).toHaveClass(/said/);
+  await expect(words).toContainText(`${external} t'attend.`);
   await orbBeside(page, waiting.locator(".gr-core"), waiting.locator(".gr-label"));
   await shot(page, "orb-announce");
   await shot(page, "waiting");

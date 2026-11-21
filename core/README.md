@@ -3382,8 +3382,8 @@ token in `X-CSRF-Token`:
   at work (`work`, from the moment the user sends: the first line of what it writes, or dots);
   a turn that failed (`failed`: Réessayer, the agents' settings); a card that waits for the user's
   yes (`wait`); an answer to the user's message (`answer`); what an event made it say (`said`); a
-  node that began to wait for the user, unasked (`call`, from the graph's stream: « X t'attend. »);
-  else it rests. It glides beside the subject that is about (`placeBeside`: its bubble, or its
+  node that began to wait for the user, unasked (`call`, from the graph's stream: « X t'attend. »),
+  the newest of these last three; else it rests. It glides beside the subject that is about (`placeBeside`: its bubble, or its
   page when open, as drawn): the first side of six where it and its words cover no bubble, no
   title, no page, not the bar nor the corner's icons, keeping the side it had while it stays free;
   when none is, the free spot nearest around it (`NEAR`, 120 px further at most); at the home, a
@@ -3392,9 +3392,12 @@ token in `X-CSRF-Token`:
   follows its subject. Its words show once it is there, open away from the subject, in a few
   lines (`fewLines` on eriphe-core's side) with « Voir plus », which opens the subject's page:
   the orb never says what the page holds. For a waiting card it sits at the card's height and its
-  « Voir » scrolls the card into view. An answer or a line goes after a while (15 s, 9 s for an
-  event's, from when the page first showed it); its ✕ closes it sooner; both are remembered
-  (`localStorage`, `eriphe.espace.orb.closed`), so a reload does not replay them. **An answer
+  « Voir » scrolls the card into view. Its words beside a subject (an answer, an event's, a call)
+  stay until something else happens: newer words replace them (a call is newer than the words
+  before it), or the user moves on (writes, opens another subject, or a called one, closes them
+  with ✕); else they go after two minutes of the page being seen (`WORDS_MS`: a hidden tab does
+  not count). What went is remembered (`localStorage`, `eriphe.espace.orb.closed`), so a reload
+  does not replay it. **An answer
   given at the home** (no subject opened) that is more than its lines has no subject to hold it:
   the orb holds it whole (`whole`, Markdown, scrolling past 40 % of the screen) until the user
   writes again, opens a subject, or closes it; what an event made Eriphe say meanwhile waits

@@ -97,6 +97,13 @@ describe("the store", () => {
     expect(talkTo(openPage(s, "b", true), "b").orb).toBe(s.orb);
   });
 
+  it("notes the node that began to wait, after the orb's newest words", () => {
+    let s = applyOrb(withGraph(), { asked: 2, answer: { seq: 3, node: "b", text: "Oui." }, said: { seq: 5, text: "Un outil de plus." } });
+    expect(s.call).toBeNull();
+    s = applyNodes(s, { nodes: [node("a1", { parent: "a", waits: true })] });
+    expect(s.call).toEqual({ id: "a1", n: 1, after: 5 });
+  });
+
   it("holds the message sent until eriphe-core has it", () => {
     let s = applyOrb(withGraph(), { asked: 5 });
     s = setSent(s, { text: "Et alors ?", after: 5, to: null });

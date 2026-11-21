@@ -71,11 +71,13 @@ test("an answer given at home stays readable until you move on", async ({ page, 
   await atHome(page);
   await expect(answer).toContainText("Réglages → Outils → films.");
 
-  // Closed: the event's words come, then go; the answer does not come back.
+  // Closed: the event's words come, and stay until closed too; the answer
+  // does not come back.
   await words.getByRole("button", { name: "Fermer" }).click();
   await expect(answer).toHaveCount(0);
   await expect(said).toContainText("Un outil de plus : films.");
-  await expect(said).toHaveCount(0, { timeout: 15_000 });
+  await words.getByRole("button", { name: "Fermer" }).click();
+  await expect(said).toHaveCount(0);
   await expect(orb).toHaveClass(/docked/);
   await atHome(page);
   await expect(answer).toHaveCount(0);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, OrbFeed } from "../data/api";
-import { ANSWER_MS, close, expires, glide, GAP, homePoint, keepOnScreen, NEAR, ORB, orbShow, placeBeside as besideOrNone, placeHome as homeOrNone, SAID_MS, type Closed, type Mind, type Rect } from "./model";
+import { close, expires, glide, GAP, homePoint, keepOnScreen, leaves, NEAR, ORB, orbShow, placeBeside as besideOrNone, placeHome as homeOrNone, replaced, WORDS_MS, type Closed, type Mind, type Rect } from "./model";
 
 // Where it goes when there is a free spot (the cases below have one).
 const placeBeside = (...a: Parameters<typeof besideOrNone>) => besideOrNone(...a)!;
@@ -25,23 +25,59 @@ describe("what the orb shows", () => {
     expect(s).toMatchObject({ mode: "answer", node: null, pinned: true });
     expect(expires(s)).toBeNull();
     // long after, still there
-    expect(orbShow(x, mind({ met: () => 0, now: 10 * ANSWER_MS })).mode).toBe("answer");
+    expect(orbShow(x, mind({ met: () => 0, now: 10 * WORDS_MS })).mode).toBe("answer");
     // closed: gone, for good
     const c = close(none, s);
     expect(c.answer).toBe(5);
     expect(orbShow(x, mind({ closed: c })).mode).toBe("rest");
   });
 
-  it("goes beside the subject its answer belongs to, for a while", () => {
+  it("goes beside the subject its answer belongs to, until something else happens", () => {
     const x: OrbFeed = { asked: 4, answer: { seq: 5, node: "sub", text: "J'ai ouvert le sujet.\nLe plan est écrit.", more: true } };
     const s = orbShow(x, mind());
     expect(s).toMatchObject({ mode: "answer", node: "sub" });
     expect(s.pinned).toBeFalsy();
-    expect(expires(s)).toBe(ANSWER_MS);
-    expect(orbShow(x, mind({ met: () => mind().now - ANSWER_MS + 10 })).mode).toBe("answer");
-    expect(orbShow(x, mind({ met: () => mind().now - ANSWER_MS })).mode).toBe("rest");
-    // its while over, it is seen: a reload does not bring it back
+    expect(expires(s)).toBe(WORDS_MS);
+    // long past the old 15 s, still there
+    expect(orbShow(x, mind({ met: () => mind().now - 60_000 })).mode).toBe("answer");
+    // two minutes of the page seen: gone
+    expect(orbShow(x, mind({ met: () => mind().now - WORDS_MS + 10 })).mode).toBe("answer");
+    expect(orbShow(x, mind({ met: () => mind().now - WORDS_MS })).mode).toBe("rest");
+    // closed, it is seen: a reload does not bring it back
     expect(orbShow(x, mind({ closed: close(none, s) })).mode).toBe("rest");
+  });
+
+  it("lets newer words replace the words beside a subject", () => {
+    const answer: OrbFeed = { asked: 4, answer: { seq: 5, node: "sub", text: "Fait." } };
+    const a = orbShow(answer, mind());
+    // an event's newer words come in front of the answer
+    const said: OrbFeed = { ...answer, said: { seq: 6, node: "day", text: "Un outil de plus : films." } };
+    const s = orbShow(said, mind());
+    expect(s).toMatchObject({ mode: "said", node: "day" });
+    expect(replaced(a, s)).toBe(true);
+    // a newer answer comes in front of those words
+    const again = orbShow({ ...said, asked: 7, answer: { seq: 8, node: "mail", text: "Envoyé." } }, mind());
+    expect(again).toMatchObject({ mode: "answer", node: "mail" });
+    expect(replaced(s, again)).toBe(true);
+    // the user writing replaces them too
+    expect(replaced(a, orbShow(answer, mind({ sent: { text: "Et ?", after: 4, to: "sub" } })))).toBe(true);
+    // a card or a failure only comes before them; pinned things are not words
+    expect(replaced(a, orbShow({ ...answer, wait: { card: 2, node: "mail" } }, mind()))).toBe(false);
+    expect(replaced(orbShow({ answer: { seq: 5, text: "a\n\nb", whole: true } }, mind()), s)).toBe(false);
+  });
+
+  it("moves on from the words when the user opens another subject", () => {
+    const s = orbShow({ asked: 4, answer: { seq: 5, node: "sub", text: "Fait." } }, mind());
+    expect(leaves(s, "mail")).toBe(true);
+    expect(leaves(s, null)).toBe(true);
+    // the subject they are about, opened (« Voir plus », Eriphe's show): they stay beside its page
+    expect(leaves(s, "sub")).toBe(false);
+    // a call: opening its subject answers it
+    const c = orbShow({}, mind({ call: { id: "mail", n: 1, after: 0 } }));
+    expect(leaves(c, "mail")).toBe(true);
+    expect(leaves(c, "sub")).toBe(false);
+    // the pinned ones are not words that leave
+    expect(leaves(orbShow({ wait: { card: 3, node: "mail" } }, mind()), "sub")).toBe(false);
   });
 
   it("speaks at the home when its subject is not in the graph", () => {
@@ -76,7 +112,7 @@ describe("what the orb shows", () => {
     expect(orbShow({ wait: { card: 4, node: "gone" } }, mind()).mode).toBe("rest");
   });
 
-  it("announces an event's words for a while, behind what comes first, never in its place", () => {
+  it("announces an event's words, behind what comes first, never in its place", () => {
     const home: OrbFeed = { asked: 4, answer: { seq: 5, text: "Oui.\n\nEt plus.", whole: true }, said: { seq: 6, node: "day", text: "Un outil de plus : films." } };
     // the pinned answer first: the words wait
     expect(orbShow(home, mind()).mode).toBe("answer");
@@ -85,18 +121,25 @@ describe("what the orb shows", () => {
     const s = orbShow(home, mind({ closed: c }));
     expect(s).toMatchObject({ mode: "said", node: "day" });
     expect(s.words?.text).toBe("Un outil de plus : films.");
-    expect(expires(s)).toBe(SAID_MS);
-    expect(orbShow(home, mind({ closed: c, met: () => mind().now - SAID_MS })).mode).toBe("rest");
+    expect(expires(s)).toBe(WORDS_MS);
+    expect(orbShow(home, mind({ closed: c, met: () => mind().now - 60_000 })).mode).toBe("said");
+    expect(orbShow(home, mind({ closed: c, met: () => mind().now - WORDS_MS })).mode).toBe("rest");
     // words older than the answer are not news
     expect(orbShow({ answer: { seq: 9, node: "sub", text: "Fait." }, said: { seq: 8, text: "avant" } }, mind({ closed: { ...none, seen: 9 } })).mode).toBe("rest");
   });
 
   it("says a subject began to wait for the user, unasked", () => {
-    const s = orbShow({}, mind({ call: { id: "mail", n: 1 } }));
+    const call = { id: "mail", n: 1, after: 0 };
+    const s = orbShow({}, mind({ call }));
     expect(s).toMatchObject({ mode: "said", node: "mail", call: "mail" });
-    expect(orbShow({}, mind({ call: { id: "mail", n: 1 }, met: () => mind().now - SAID_MS })).mode).toBe("rest");
+    expect(orbShow({}, mind({ call, met: () => mind().now - 60_000 })).mode).toBe("said");
+    expect(orbShow({}, mind({ call, met: () => mind().now - WORDS_MS })).mode).toBe("rest");
     // the user's work comes first
-    expect(orbShow({ work: { node: "sub" } }, mind({ call: { id: "mail", n: 1 } })).mode).toBe("work");
+    expect(orbShow({ work: { node: "sub" } }, mind({ call })).mode).toBe("work");
+    // newer than the answer it came after: in front of it; older: behind
+    const x: OrbFeed = { asked: 4, answer: { seq: 5, node: "sub", text: "Fait." } };
+    expect(orbShow(x, mind({ call: { ...call, after: 5 } }))).toMatchObject({ call: "mail" });
+    expect(orbShow(x, mind({ call: { ...call, after: 4 } }))).toMatchObject({ mode: "answer", node: "sub" });
   });
 });
 

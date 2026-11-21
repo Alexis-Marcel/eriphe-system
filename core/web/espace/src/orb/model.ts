@@ -16,14 +16,18 @@ import type { Sent } from "../data/store";
 //   4. answer: its answer to the user's last message: at the home, an
 //      answer of more than a line, whole, held until the user moves on
 //      (writes again, opens a subject, closes it); beside a subject, a few
-//      lines for a while (its page says the rest);
+//      lines (its page says the rest);
 //   5. said: its later words that answer no message of the user's (an
-//      event's), for a while: they wait behind what comes first, never
-//      replace it; then a subject that began to wait for the user unasked
-//      (a monitor's mail, tools to review): « X t'attend »;
+//      event's), then a subject that began to wait for the user unasked
+//      (a monitor's mail, tools to review): « X t'attend ». They wait
+//      behind what comes before them, never replace it;
 //   6. rest: in the bar.
-// What it showed for its while, or the user closed, is not shown again
-// (Closed, kept in the browser).
+// Words beside a subject (4, 5) stay until something else happens: newer
+// words replace them (the newest of 4 and 5 shows), or the user moves on
+// (opens another subject, writes, closes them); else they go after
+// WORDS_MS of the page being seen.
+// What the user closed, or saw for its while, is not shown again (Closed,
+// kept in the browser).
 
 export type Mode = "rest" | "work" | "failed" | "wait" | "answer" | "said";
 
@@ -38,30 +42,34 @@ export type Show = {
   pinned?: boolean; // stays until the user moves on
 };
 
-// ANSWER_MS and SAID_MS are how long Eriphe's words stay beside a subject:
-// an answer, an event's words.
-export const ANSWER_MS = 15_000;
-export const SAID_MS = 9_000;
+// WORDS_MS is how long Eriphe's words stay beside a subject when nothing
+// else happens, counted while the page is seen (useOrb's clock).
+export const WORDS_MS = 120_000;
 
 // Closed is what the user closed or saw for its while: the home's answer
 // (its seq), the words seen (their seq), the cards (their id), the
 // failures (their seq). Seqs and ids only grow.
 export type Closed = { answer: number; seen: number; wait: number; failed: number };
 
+// Call is a node that began to wait for the user, unasked, the n-th; after:
+// the newest of Eriphe's words then (their seq), older than it.
+export type Call = { id: string; n: number; after: number };
+
 export type Mind = {
-  now: number;
+  now: number; // the orb's clock: how long the page was seen
+
   sent: Sent | null;
   closed: Closed;
-  met: (key: string) => number | undefined; // when it was first shown
+  met: (key: string) => number | undefined; // when it was first shown, on that clock
   nodes: Record<string, GraphNode>;
-  call: { id: string; n: number } | null; // a node that began to wait for the user, unasked
+  call: Call | null;
 };
 
 export function orbShow(x: OrbFeed | null, m: Mind): Show {
   const known = (id?: string | null) => (id && m.nodes[id] ? id : null);
-  const fresh = (key: string, ms: number) => {
+  const fresh = (key: string) => {
     const at = m.met(key);
-    return at === undefined || m.now - at < ms;
+    return at === undefined || m.now - at < WORDS_MS;
   };
   if (m.sent || x?.work) {
     const at = x?.work ? x.work.node : m.sent?.to;
@@ -70,34 +78,53 @@ export function orbShow(x: OrbFeed | null, m: Mind): Show {
   if (x?.failed && x.failed.seq > m.closed.failed) return { mode: "failed", node: known(x.failed.node), key: `failed:${x.failed.seq}`, pinned: true };
   const a = x?.answer;
   const answerKey = a ? `answer:${a.seq}` : "";
-  const answerFresh = !!a && a.seq > m.closed.seen && fresh(answerKey, ANSWER_MS);
+  const answerFresh = !!a && a.seq > m.closed.seen && fresh(answerKey);
   if (x?.wait && x.wait.card > m.closed.wait && known(x.wait.node)) {
     const words = a && answerFresh && known(a.node) === x.wait.node ? a : undefined;
     return { mode: "wait", node: x.wait.node, key: `wait:${x.wait.card}`, card: x.wait.card, words, pinned: true };
   }
-  if (a && a.whole && !a.node) {
-    if (a.seq > m.closed.answer) return { mode: "answer", node: null, key: answerKey, words: a, pinned: true };
-  } else if (a && answerFresh) {
-    return { mode: "answer", node: known(a.node), key: answerKey, words: a };
+  const home = !!a && !!a.whole && !a.node;
+  if (a && home && a.seq > m.closed.answer) return { mode: "answer", node: null, key: answerKey, words: a, pinned: true };
+  // Beside a subject, the newest words: an answer, an event's words (newer
+  // than the answer), a call (newer than the words it came after).
+  let show: Show = { mode: "rest", node: null, key: "rest" };
+  let newest = -1;
+  if (a && !home && answerFresh) {
+    show = { mode: "answer", node: known(a.node), key: answerKey, words: a };
+    newest = a.seq;
   }
   const s = x?.said;
-  if (s && s.seq > m.closed.seen && (!a || s.seq > a.seq)) {
-    const key = `said:${s.seq}`;
-    if (fresh(key, SAID_MS)) return { mode: "said", node: known(s.node), key, words: s };
+  if (s && s.seq > m.closed.seen && (!a || s.seq > a.seq) && fresh(`said:${s.seq}`)) {
+    show = { mode: "said", node: known(s.node), key: `said:${s.seq}`, words: s };
+    newest = s.seq;
   }
-  if (m.call && known(m.call.id)) {
+  if (m.call && known(m.call.id) && m.call.after >= newest) {
     const key = `call:${m.call.id}:${m.call.n}`;
-    if (fresh(key, SAID_MS)) return { mode: "said", node: m.call.id, key, call: m.call.id };
+    if (fresh(key)) show = { mode: "said", node: m.call.id, key, call: m.call.id };
   }
-  return { mode: "rest", node: null, key: "rest" };
+  return show;
 }
 
 // expires is how long the shown thing stays from when it was first shown;
 // null: until the user moves on.
 export function expires(s: Show): number | null {
-  if (s.pinned || s.mode === "work" || s.mode === "rest") return null;
-  return s.mode === "answer" ? ANSWER_MS : SAID_MS;
+  return s.pinned || s.mode === "work" || s.mode === "rest" ? null : WORDS_MS;
 }
+
+// words tells whether it shows Eriphe's words beside a subject: those
+// that stay until something else happens (not the pinned ones).
+export const words = (s: Show) => (s.mode === "answer" || s.mode === "said") && !s.pinned;
+
+// replaced tells whether the words shown (was) are over now that
+// something else shows (now): newer words, or Eriphe at work (the user
+// wrote). A card or a failure only comes before them: they come back after.
+export const replaced = (was: Show, now: Show) => words(was) && was.key !== now.key && (now.mode === "work" || words(now));
+
+// leaves tells whether the bar talking to another page (talk) moves on
+// from the words shown: words about another subject, or a call to this
+// one. Words about the subject just opened (by the user, or by Eriphe for
+// what was asked at the home) stay beside its page.
+export const leaves = (s: Show, talk: string | null) => words(s) && (s.call ? s.call === talk : s.node !== talk);
 
 // close is what the user closing it (or its while over) remembers.
 export function close(c: Closed, s: Show): Closed {
