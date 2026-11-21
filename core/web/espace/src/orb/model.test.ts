@@ -59,6 +59,10 @@ describe("what the orb shows", () => {
     const again = orbShow({ ...said, asked: 7, answer: { seq: 8, node: "mail", text: "Envoyé." } }, mind());
     expect(again).toMatchObject({ mode: "answer", node: "mail" });
     expect(replaced(s, again)).toBe(true);
+    // the same message read first as an event's words, then as the answer: not replaced
+    const early = orbShow({ asked: 4, said: { seq: 5, node: "sub", text: "Fait." } }, mind());
+    expect(early.mode).toBe("said");
+    expect(replaced(early, a)).toBe(false);
     // the user writing replaces them too
     expect(replaced(a, orbShow(answer, mind({ sent: { text: "Et ?", after: 4, to: "sub" } })))).toBe(true);
     // a card or a failure only comes before them; pinned things are not words

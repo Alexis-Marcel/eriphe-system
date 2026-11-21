@@ -106,6 +106,15 @@ describe("the orb", () => {
     expect(orb().classList.contains("docked")).toBe(true);
   });
 
+  it("keeps its answer when it was first read as an event's words", async () => {
+    await draw();
+    // eriphe-core marks a message as the answer just after writing it: a
+    // feed may come in between
+    await feed({ asked: 4, said: { seq: 5, text: "Voici la vue de ton agenda." } });
+    await feed({ asked: 4, answer: { seq: 5, text: "Voici la vue de ton agenda." } });
+    expect(say()?.textContent).toContain("Voici la vue de ton agenda.");
+  });
+
   it("moves on from its words when the user opens another subject", async () => {
     await draw();
     await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." } });
