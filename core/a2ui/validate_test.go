@@ -77,6 +77,17 @@ func TestValidSurface(t *testing.T) {
 	if errs := ValidateSurface(s); len(errs) > 0 {
 		t.Fatal(errs)
 	}
+	// A batch: a Fold that names the List it folds; a row's inline Proposal.
+	s = surfaceOf(
+		`{"id":"root","component":"Fold","label":"{n} mails à jeter","child":"jeter","list":"jeter"}`,
+		`{"id":"jeter","component":"List","children":{"path":"/mails/messages","componentId":"row"}}`,
+		`{"id":"row","component":"Row","children":["item","yes"]}`,
+		`{"id":"item","component":"Item","title":{"@path":"subject"}}`,
+		`{"id":"yes","component":"Proposal","inline":true,"proposalId":{"@path":"_card"}}`,
+	)
+	if errs := ValidateSurface(s); len(errs) > 0 {
+		t.Fatal(errs)
+	}
 }
 
 // What a model gets wrong comes back where it is, in a sentence it can act on.
@@ -90,6 +101,10 @@ func TestInvalidSurfaces(t *testing.T) {
 	}{
 		{"wrong type", surfaceOf(`{"id":"root","component":"Text","text":42}`),
 			CodeValidationFailed, "/components/0/text", "got number, want string or object"},
+		{"a batch of no List", surfaceOf(`{"id":"root","component":"Fold","label":"{n} à jeter","child":"t","list":"t"}`, `{"id":"t","component":"Text","text":"a"}`),
+			CodeValidationFailed, "/components/0/list", `"t" is not the id of a List of this block`},
+		{"a batch of nothing", surfaceOf(`{"id":"root","component":"Fold","label":"{n} à jeter","child":"t","list":"nope"}`, `{"id":"t","component":"Text","text":"a"}`),
+			CodeValidationFailed, "/components/0/list", `"nope" is not the id of a List of this block`},
 		{"unknown property", surfaceOf(`{"id":"root","component":"Text","text":"a","color":"red"}`),
 			CodeValidationFailed, "/components/0/color", `property "color" is not allowed`},
 		{"unknown component", surfaceOf(`{"id":"root","component":"Gauge","value":3}`),

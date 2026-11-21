@@ -113,7 +113,7 @@ test.describe("a page with 17 versions", () => {
     const chip = pg.locator(".pg-vchip");
     await expect(chip).toHaveCount(1);
     await expect(chip).toHaveText("v17");
-    await expect(pg.locator(".pg-title button")).toHaveCount(4); // the chip, archive, ⋯, ✕
+    await expect(pg.locator(".pg-title button")).toHaveCount(5); // the chip, archive, ⋯, enlarge, ✕
     await oneLine(pg);
     await shots(page, "versions-closed");
 

@@ -56,6 +56,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/review", sc.handleReview)
 	mux.HandleFunc("POST /e2e/sections", sc.handleSections)
 	mux.HandleFunc("POST /e2e/open", sc.handleOpen)
+	mux.HandleFunc("POST /e2e/bilan", sc.handleBilan)
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
 	mux.HandleFunc("POST /e2e/catalog", sc.handleCatalog)
 	mux.Handle("/", sc.web.w.routes())
@@ -217,6 +218,8 @@ type scenarioTools struct {
 	moved   [][]string // ranger: the ids of each call (selection.spec.ts)
 	deleted [][]string // supprimer: the ids of each call (sections.spec.ts)
 	read    []string   // lire: the id of each call (sources-open.spec.ts)
+	trashed []string   // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
+	replied []string   // repondre: the id of each call (view-bilan.spec.ts)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
 	veille *mcp.Server
@@ -230,6 +233,34 @@ func guetter(desc string) *mcp.Tool {
 func guetterRun(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
 	return nil, map[string]any{"news": []any{}}, nil
 }
+
+// bilan is the mailbox the view as a bilan shows (view-bilan.spec.ts), in two
+// accounts: what trash took and what repondre answered leave it.
+var bilan = []map[string]any{
+	{"id": "a1", "subject": "Devis terrasse", "from": "Sam <sam@example.org>", "account": "perso", "date": "2026-11-20T08:10:00Z",
+		"body": "Bonjour,\n\nVoici le devis pour la terrasse : 4 200 €, pose comprise. Peux-tu me dire avant vendredi si on lance la commande ?\n\nSam"},
+	{"id": "a2", "subject": "Avenant au bail", "from": "Agence <agence@example.org>", "account": "travail", "date": "2026-11-19T16:40:00Z",
+		"body": "Bonjour,\n\nVous trouverez ci-joint l'avenant au bail (3 pages). Rien à signer, il est pour information.\n\nL'agence"},
+	{"id": "j1", "subject": "Soldes d'hiver", "from": "promo@example.org", "account": "perso", "date": "2026-11-20T06:00:00Z", "body": "-50 % sur tout."},
+	{"id": "j2", "subject": "Lettre du dimanche", "from": "news@example.org", "account": "travail", "date": "2026-11-19T07:00:00Z", "body": "Les nouvelles de la semaine."},
+	{"id": "j3", "subject": "Votre colis est bloqué", "from": "colis@example.net", "account": "perso", "date": "2026-11-18T12:00:00Z", "body": "Payez 1,99 € pour le débloquer."},
+	{"id": "i1", "subject": "Facture d'électricité", "from": "energie@example.org", "account": "perso", "date": "2026-11-18T09:00:00Z", "body": "62 €, prélevés le 5 décembre."},
+	{"id": "i2", "subject": "Entraînement de samedi", "from": "club@example.org", "account": "travail", "date": "2026-11-17T18:00:00Z", "body": "Avancé à 9 h."},
+}
+
+// bilanNotes are the bilan's items as its skill notes them: group, note.
+var bilanNotes = map[string][2]string{
+	"a1": {"À traiter", "Répondre à Sam — brouillon prêt, avant vendredi"},
+	"a2": {"À traiter", "À lire : l'avenant au bail, rien à signer"},
+	"j1": {"À jeter", "Publicité"},
+	"j2": {"À jeter", "Newsletter jamais ouverte"},
+	"j3": {"À jeter", "Hameçonnage : faux transporteur"},
+	"i1": {"Pour info", "62 €, prélevés le 5 décembre"},
+	"i2": {"Pour info", "Entraînement avancé à 9 h"},
+}
+
+// bilanReply is the reply the bilan's skill drafted for Sam.
+const bilanReply = "Bonjour Sam,\n\nMerci pour le devis, il me va : tu peux lancer la commande. Dis-moi quand la pose est possible.\n\nÀ bientôt"
 
 // tri is the mailbox the view in sections shows (sections.spec.ts),
 // noted into two groups: what supprimer deleted leaves it.
@@ -322,6 +353,50 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 					map[string]any{"id": "l1", "subject": "Ordre du jour", "from": "sam@example.org"},
 					map[string]any{"id": "l2", "subject": "Photos du week-end", "from": "lou@example.org"},
 				}}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "bilan", Description: "Les mails de la boîte, des deux comptes", Annotations: read},
+			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				msgs := []any{}
+				for _, m := range bilan {
+					id := m["id"].(string)
+					if !slices.ContainsFunc(f.trashed, func(t string) bool { return slices.Contains(strings.Split(t[strings.Index(t, ":")+1:], ","), id) }) {
+						msgs = append(msgs, map[string]any{"id": id, "subject": m["subject"], "from": m["from"], "account": m["account"], "date": m["date"]})
+					}
+				}
+				return nil, map[string]any{"messages": msgs}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "lettre", Description: "Lit un mail de la boîte en entier", Annotations: read},
+			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+				ID string `json:"id"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				for _, m := range bilan {
+					if m["id"] == in.ID {
+						return nil, map[string]any{"subject": m["subject"], "from": m["from"], "date": m["date"], "body": m["body"]}, nil
+					}
+				}
+				return nil, map[string]any{}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "trash", Description: "Met des mails d'un compte à la corbeille"},
+			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+				IDs     []string `json:"ids"`
+				Account string   `json:"account"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.trashed = append(f.trashed, in.Account+":"+strings.Join(in.IDs, ","))
+				return nil, map[string]any{"trashed": len(in.IDs)}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "repondre", Description: "Répond à un mail", Annotations: &mcp.ToolAnnotations{Title: "Envoyer la réponse"}},
+			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+				ID   string `json:"id"`
+				Body string `json:"body"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.replied = append(f.replied, in.ID)
+				return nil, map[string]any{"ok": true}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "lire", Description: "Lit un mail en entier", Annotations: read},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
@@ -957,7 +1032,7 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f := sc.tools
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved), "deleted": slices.Clone(f.deleted), "read": slices.Clone(f.read)})
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved), "deleted": slices.Clone(f.deleted), "read": slices.Clone(f.read), "trashed": slices.Clone(f.trashed), "replied": slices.Clone(f.replied)})
 }
 
 // handleCatalog is POST /e2e/catalog: the tools' catalog changed, an
@@ -1142,6 +1217,65 @@ func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
 	}
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
+	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// handleBilan is POST /e2e/bilan: a view of the mailbox as a bilan
+// (view-bilan.spec.ts), as its skill leaves it: the bilan on top, one block
+// that reads the mails of two accounts once, « À traiter » with a reply
+// drafted for Sam waiting on its row, « À jeter » as a batch whose trash
+// takes each mail's account, « Pour info » folded. Written after an
+// external read, as a skill that read mails writes it.
+func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
+	c := sc.c
+	lead := "1 réponse attendue : Sam, avant vendredi. 1 hameçonnage dans le lot à jeter.\n\n**Pour info** · La facture d'électricité est arrivée (62 €, prélevés le 5 décembre). Le club avance l'entraînement de samedi à 9 h.\n"
+	d, err := c.nodes.Create(nodestore.New{Title: "Mes mails du jour", Lifetime: nodefile.Standing, Author: byBrain, Body: lead})
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id := d.Node.Meta.ID
+	body := lead + "\n```eriphe:block boite\n" + `{"components": [
+  {"id": "root", "component": "Column", "children": ["todo_h", "todo", "trash", "info"]},
+  {"id": "todo_h", "component": "Text", "variant": "subtitle", "text": "À traiter"},
+  {"id": "todo", "component": "List", "children": {"path": "/mails/messages[_group=À traiter][_state!=done]", "componentId": "todo_row"}, "emptyText": "Rien ne t'attend."},
+  {"id": "todo_row", "component": "Row", "align": "center", "children": ["todo_item", "todo_yes"]},
+  {"id": "todo_item", "component": "Item", "title": {"@path": "_note"}, "detail": {"@path": "from"}, "note": {"@path": "subject"}},
+  {"id": "todo_yes", "component": "Proposal", "inline": true, "proposalId": {"@path": "_card"}},
+  {"id": "trash", "component": "Fold", "list": "jeter", "label": "{n} mails inutiles à jeter", "child": "jeter"},
+  {"id": "jeter", "component": "List", "children": {"path": "/mails/messages[_group=À jeter]", "componentId": "jeter_row"}},
+  {"id": "jeter_row", "component": "Item", "level": "low", "title": {"@path": "subject"}, "detail": {"@path": "from"}, "note": {"@path": "_note"}},
+  {"id": "info", "component": "Fold", "list": "infos", "label": "Les {n} mails pour info", "child": "infos"},
+  {"id": "infos", "component": "List", "children": {"path": "/mails/messages[_group=Pour info]", "componentId": "info_row"}},
+  {"id": "info_row", "component": "Item", "level": "low", "title": {"@path": "subject"}, "detail": {"@path": "from"}, "note": {"@path": "_note"}}],
+ "sources": {"mails": {"tool": "mail/bilan", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lettre", "id": "id"}}}},
+ "actions": {"jeter": {"label": "Jeter", "tool": "mail/trash", "args": {"account": {"@item": "account"}}, "items": "ids", "source": "mails", "list": "jeter"}}}` + "\n```\n"
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for item, n := range bilanNotes {
+		if err := c.nodes.NoteItem(id, nodestore.Item{Source: "mails", Item: item, Group: n[0], Note: n[1], State: "act", Author: byBrain}); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	// The reply its skill drafted for Sam: a card on the mail's row.
+	raw, _ := json.Marshal(map[string]any{"id": "a1", "body": bilanReply})
+	labels, _ := json.Marshal([]itemLabel{{ID: "a1", Title: "Devis terrasse", Detail: "Sam"}})
+	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, tainted, created, node, source, item, labels)
+		VALUES ('t-brain', 'mail', 'send', 'mcp__mail__repondre []', ?, 'external:mail', ?, ?, 'mails', 'a1', ?)`, string(raw), time.Now().Unix(), id, string(labels))
+	ask, err := rowsID(res, err)
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, ask, ask)
+	c.cardNow(cardCalls, ask, "", refNode+":"+id)
+	c.syncCards()
+	c.readNode(sc.ctx, id, nil, time.Now())
+	c.showNode(id, byBrain, false)
+	c.bump()
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
 }
 

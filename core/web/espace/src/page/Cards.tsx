@@ -1,5 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { createAdapter } from "../a2ui/adapter";
+import { useEffect, useSyncExternalStore } from "react";
+import { useAdapter } from "../a2ui/adapter";
 import { CATALOG } from "../a2ui/catalog";
 import { HomeNode } from "../a2ui/proposals";
 import { SurfaceView } from "../a2ui/Surfaces";
@@ -11,8 +11,7 @@ import { useWords } from "../i18n";
 // those no node holds.
 export function Cards({ surface, refs, home }: { surface: string; refs: string[]; home?: string }) {
   const { lang } = useWords();
-  const [adapter] = useState(() => createAdapter(lang));
-  useEffect(() => () => adapter.dispose(), [adapter]);
+  const adapter = useAdapter(lang);
   const key = refs.join(" ");
   useEffect(() => {
     const list = key ? key.split(" ") : [];

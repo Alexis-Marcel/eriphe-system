@@ -7,7 +7,7 @@ import { makeT, WordsContext } from "../i18n";
 import strings from "../strings.json";
 import { createAdapter, type Adapter } from "./adapter";
 import { CATALOG } from "./catalog";
-import type { OpenState } from "./opener";
+import { sender, type OpenState } from "./opener";
 import { PicksContext, type Picks } from "./picks";
 import { Surfaces } from "./Surfaces";
 
@@ -41,7 +41,7 @@ let adapter: Adapter;
 let reads: { item: string; yes: boolean; tool?: string }[];
 let answer: (item: string, yes: boolean) => Opened;
 
-async function mount(actions: PickAction[] = []) {
+async function mount(actions: PickAction[] = [], marked = true) {
   const list: PickList = {
     component: "root",
     source: "inbox",
@@ -61,6 +61,7 @@ async function mount(actions: PickAction[] = []) {
       return answer(item, yes);
     },
     opened: new Map<string, OpenState>(),
+    marked: () => marked,
   };
   adapter = createAdapter("fr");
   root = createRoot(el);
@@ -109,11 +110,15 @@ describe("an item opened in place", () => {
     const panel = el.querySelector(".a2-opened")!;
     expect(disclosures()[0].getAttribute("aria-expanded")).toBe("true");
     expect(disclosures()[0].getAttribute("aria-controls")).toBe(panel.id);
-    expect(panel.querySelector(".a2-opentext")?.textContent).toBe("<b>Le texte</b>"); // text, never HTML
+    expect(panel.querySelector(".a2-read-text")?.textContent).toBe("<b>Le texte</b>"); // text, never HTML
     expect(panel.querySelector("b")).toBeNull();
-    expect(panel.querySelector(".a2-text-mark")?.textContent).toBe("extérieur");
-    expect(panel.querySelector(".a2-opennote")?.textContent).toBe("Classé « À supprimer » : Une promo");
-    expect(panel.querySelector(".a2-openraw summary")?.textContent).toBe("Détails");
+    // Someone else's words: said once by the page's head and the block's
+    // edge, never again inside the item.
+    expect(panel.textContent).not.toContain("extérieur");
+    // The note, the row not saying it; one « détails », holding the item as read.
+    expect(panel.querySelector(".a2-read-note")?.textContent).toBe("Classé « À supprimer » : Une promo");
+    expect([...panel.querySelectorAll("summary")].map((s) => s.textContent)).toEqual(["détails"]);
+    expect(panel.querySelector(".a2-read-more h5")?.textContent).toBe("L'élément, tel que lu");
     expect(reads).toEqual([{ item: "m1", yes: false }]);
     await click(heads()[0].querySelector(".a2-text"));
     expect(el.querySelector(".a2-opened")).toBeNull();
@@ -147,7 +152,7 @@ describe("an item opened in place", () => {
       { item: "m1", yes: false },
       { item: "m1", yes: true, tool: "mail/get" },
     ]);
-    expect(el.querySelector(".a2-opentext")?.textContent).toBe("Le texte");
+    expect(el.querySelector(".a2-read-text")?.textContent).toBe("Le texte");
   });
 
   it("takes up a read under way when the page draws its blocks again meanwhile", async () => {
@@ -161,7 +166,7 @@ describe("an item opened in place", () => {
     await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: surface } }]));
     await act(async () => adapter.applyMessages(messages));
     await act(async () => done(answerNow("m1", false)));
-    expect(el.querySelector(".a2-opentitle")?.textContent).toBe("Facture");
+    expect(el.querySelector(".a2-read-title")?.textContent).toBe("Facture");
     expect(reads).toHaveLength(1);
   });
 
@@ -181,7 +186,47 @@ describe("an item opened in place", () => {
     await click(disclosures()[1]);
     await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: surface } }]));
     await act(async () => adapter.applyMessages(messages));
-    expect(el.querySelector(".a2-opentitle")?.textContent).toBe("Relance");
+    expect(el.querySelector(".a2-read-title")?.textContent).toBe("Relance");
     expect(reads).toHaveLength(1);
+  });
+
+  it("reads as a letter: the sender's name, the address quieter, a date as people say it", async () => {
+    answer = () => ({ title: "Facture", from: "Sam <sam@example.org>", date: "2020-03-04T09:05:00Z", body: "x" });
+    await mount();
+    await click(disclosures()[0]);
+    expect(el.querySelector(".a2-read-from")?.firstChild?.textContent).toBe("Sam");
+    expect(el.querySelector(".a2-read-addr")?.textContent).toBe("sam@example.org");
+    const date = el.querySelector(".a2-read-date")!;
+    expect(date.getAttribute("dateTime")).toBe("2020-03-04T09:05:00Z");
+    expect(date.textContent).toMatch(/^\d+ mars 2020$/); // never the raw ISO
+  });
+
+  it("signs someone else's words quietly only when its block is not marked", async () => {
+    await mount();
+    await click(disclosures()[0]);
+    expect(el.querySelector(".a2-read .a2-taint")).toBeNull(); // the block's edge says it
+    act(() => root.unmount());
+    adapter.dispose();
+    await mount([], false);
+    await click(disclosures()[0]);
+    const sign = el.querySelector(".a2-read-head .a2-taint");
+    expect(sign?.getAttribute("aria-label")).toBeTruthy();
+    expect(el.querySelector(".a2-read")?.textContent).not.toContain("extérieur");
+  });
+
+  it("does not say the note again when the row already says it", async () => {
+    answer = () => ({ title: "Facture", body: "x", note: { group: "À traiter", note: "Facture" } });
+    await mount();
+    await click(disclosures()[0]);
+    expect(el.querySelector(".a2-read-note")).toBeNull();
+  });
+});
+
+describe("sender", () => {
+  it("splits a name and its address, and leaves anything else as it is", () => {
+    expect(sender("Sam <sam@example.org>")).toEqual({ name: "Sam", address: "sam@example.org" });
+    expect(sender('"Sam M." <sam@example.org>')).toEqual({ name: "Sam M.", address: "sam@example.org" });
+    expect(sender("sam@example.org")).toEqual({ name: "sam@example.org" });
+    expect(sender("api-gateway")).toEqual({ name: "api-gateway" });
   });
 });

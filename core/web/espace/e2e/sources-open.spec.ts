@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // An item opened in place (item_open.go), against the test core of
 // TestEspaceScenario: a node whose block lists two faked mails (mail/lus)
 // and says how one is read in full (mail/lire, a free read). A click on a
-// row shows its body below it, marked as someone else's words, with the
+// row shows it below itself as a letter (the page's head saying once it is someone else's words), with the
 // item's note; a click again closes it. Seeded at /e2e/open, on its own
 // node.
 
@@ -29,9 +29,13 @@ test("a click on a mail shows its body in place", async ({ page, request }) => {
 
   await rows.first().getByText("Ordre du jour").click();
   const opened = rows.first().locator(".a2-opened");
-  await expect(opened.locator(".a2-opentext")).toHaveText("Bonjour,\nvoici l'ordre du jour de l1.");
-  await expect(opened.locator(".a2-opennote")).toHaveText("Classé « À traiter » : Sam attend ton avis");
-  await expect(opened.locator(".a2-text-mark").first()).toHaveText("extérieur");
+  await expect(opened.locator(".a2-read-text")).toHaveText("Bonjour,\nvoici l'ordre du jour de l1.");
+  await expect(opened.locator(".a2-read-note")).toHaveText("Classé « À traiter » : Sam attend ton avis");
+  // Someone else's words: said once by the page's head and the block's edge, not again inside.
+  await expect(pg.locator(".pg-title .pg-badge.warn")).toHaveText("extérieur");
+  await expect(pg.locator(".a2-block.ext .a2-block-mark")).toHaveCount(1);
+  await expect(opened.locator(".a2-taint")).toHaveCount(0);
+  await expect(opened.locator(".a2-read-from")).toContainText("Sam");
   await expect(rows.first().getByRole("button", { name: "Fermer" }).first()).toHaveAttribute("aria-expanded", "true");
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).read).toEqual(["l1"]);
 

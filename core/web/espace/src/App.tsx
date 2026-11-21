@@ -7,6 +7,7 @@ import { Surfaces } from "./a2ui/Surfaces";
 import { tab, type Boot } from "./data/api";
 import { startPresence } from "./data/presence";
 import { sample } from "./data/sample";
+import { onBump } from "./data/samplecore";
 import { applyTheme, keep } from "./data/keep";
 import { applyNodes, applyNotes, openPage, restore, step, store, useGraph } from "./data/store";
 import { connect } from "./data/stream";
@@ -40,7 +41,8 @@ export function App({ boot }: { boot: Boot }) {
     if (!boot.live) {
       step(store, applyNodes, { reset: true, nodes: sample.nodes });
       store.setState({ orb: sampleOrb(lang) });
-      return;
+      // A view the make-believe core changed is read again, as eriphe-core's "doc" says.
+      return onBump((id) => store.setState((s) => ({ docs: { ...s.docs, [id]: (s.docs[id] ?? 0) + 1 } })));
     }
     step(store, restore, boot.view);
     const stop = connect(store);

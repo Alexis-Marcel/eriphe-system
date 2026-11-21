@@ -37,11 +37,22 @@ export type Picks = {
   // (item_open.go), and what the page read, by surface, List and item.
   open?: (surface: string, list: PickList, item: string, yes: boolean, tool?: string) => Promise<Opened>;
   opened?: Map<string, OpenState>;
+  // marked: whether a surface is a block marked as someone else's words
+  // (its edge says it): an item opened in it says nothing more.
+  marked?: (surface: string) => boolean;
 };
 
-type Kept = { picked: string[]; result: Result | null; asking?: Asking | null };
+export type Kept = { picked: string[]; result: Result | null; asking?: Asking | null };
 
 export const PicksContext = createContext<Picks | null>(null);
+
+// A batch (a Fold that names a List: « 38 mails inutiles · Tout mettre à
+// la corbeille »): the Fold's line carries the List's actions on all its
+// rows, ticked beforehand; opened, the List shows each row with its box,
+// and the user unticks what they keep (left). The List draws no bar nor
+// head of its own: the line is its only place to act.
+export type Batch = { list: string; left: ReadonlySet<string>; toggle: (id: string) => void };
+export const BatchContext = createContext<Batch | null>(null);
 
 // useList is what eriphe-core told of a List: its rows (a filtered one
 // shows only those) and, when the user may run its actions, picks.
@@ -69,31 +80,65 @@ export function itemLine(it: PickItem): string {
 
 // openable is a row as a List draws it: one that opens in place when its
 // source opens its items and the page may read them (opener.tsx).
+// The row also tells what it draws which item it is, as eriphe-core
+// listed it (RowItem): its card, code's, never the block's data.
 export function openable(surface: string, list: PickList, picks: Picks, node: ReactNode, item: PickItem | undefined): ReactNode {
-  if (!list.open || !picks.open || !item) return node;
-  return (
+  if (!item) return node;
+  const inner = !list.open || !picks.open ? node : (
     <Opener surface={surface} list={list} picks={picks} item={item}>
       {node}
     </Opener>
   );
+  return <RowItem.Provider value={item}>{inner}</RowItem.Provider>;
 }
+
+// RowItem is the item a row of a List of a source's items draws, as
+// eriphe-core told of it (its id, its card): out of the block's data, so
+// that no author can write it.
+export const RowItem = createContext<PickItem | undefined>(undefined);
 
 // MAX_IDS is the most items one click acts on (actionsMaxIDs): a list of
 // more has no button for all its rows.
 export const MAX_IDS = 200;
 
-type Result = { ok: boolean; text: string };
+export type Result = { ok: boolean; text: string };
 
 // A row of a List as drawn: its place in the source's list, and what it
 // shows.
 export type Row = { n: number; node: ReactNode };
 
 // Asking: an action that throws away, on the very items it will take.
-type Asking = { action: PickAction; items: PickItem[]; label: string };
+export type Asking = { action: PickAction; items: PickItem[]; label: string };
 
 // Pickable draws a List's rows with their boxes, the buttons on all its
 // rows, and the bar.
 export function Pickable({ surface, list, picks, rows, direction }: { surface: string; list: PickList; picks: Picks; rows: Row[]; direction: string }) {
+  const batch = useContext(BatchContext);
+  if (batch && batch.list === list.component) return <BatchRows surface={surface} list={list} picks={picks} rows={rows} direction={direction} batch={batch} />;
+  return <Picking surface={surface} list={list} picks={picks} rows={rows} direction={direction} />;
+}
+
+// BatchRows are a batch's rows: each ticked unless the user left it.
+function BatchRows({ surface, list, picks, rows, direction, batch }: { surface: string; list: PickList; picks: Picks; rows: Row[]; direction: string; batch: Batch }) {
+  const { t } = useWords();
+  const byN = new Map(list.items.map((it) => [it.n, it]));
+  return (
+    <ul className={`a2-list a2-list-${direction} a2-pickable a2-batchrows`}>
+      {rows.map((row) => {
+        const it = byN.get(row.n);
+        const on = !!it && !batch.left.has(it.id);
+        return (
+          <li key={row.n} className={on ? "picked" : "left"}>
+            {it && <input type="checkbox" className="a2-pick" checked={on} onChange={() => batch.toggle(it.id)} aria-label={t("espace.batch.keep", it.title || it.id)} />}
+            <div className="a2-pickrow">{openable(surface, list, picks, row.node, it)}</div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Picking({ surface, list, picks, rows, direction }: { surface: string; list: PickList; picks: Picks; rows: Row[]; direction: string }) {
   const { t } = useWords();
   const key = `${surface}\u0000${list.component}`;
   const [picked, setPicked] = useState<string[]>(() => picks.kept.get(key)?.picked ?? []);
@@ -164,30 +209,7 @@ export function Pickable({ surface, list, picks, rows, direction }: { surface: s
           ))}
         </div>
       )}
-      {asking && (
-        <div className="a2-pickask" role="alertdialog" aria-label={asking.label}>
-          <p>{t("espace.act.ask")}</p>
-          <dl>
-            <dt>{asking.action.tool}</dt>
-            {(asking.action.args ?? []).map((l) => (
-              <dd key={l}>{l}</dd>
-            ))}
-          </dl>
-          <ul>
-            {asking.items.map((it) => (
-              <li key={it.id}>{itemLine(it)}</li>
-            ))}
-          </ul>
-          <span className="a2-pickask-btns">
-            <button type="button" className="btn" onClick={() => setAsking(null)}>
-              {t("espace.act.cancel")}
-            </button>
-            <button type="button" className="btn primary" onClick={() => void run(asking.action, asking.items)}>
-              {t("espace.act.confirm")}
-            </button>
-          </span>
-        </div>
-      )}
+      {asking && <AskPanel asking={asking} onCancel={() => setAsking(null)} onRun={() => void run(asking.action, asking.items)} />}
       {running && (
         <p className="a2-pickdone" role="status">
           {t("espace.act.running")}
@@ -231,6 +253,36 @@ export function Pickable({ surface, list, picks, rows, direction }: { surface: s
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+// AskPanel asks once more before an action that throws away: its exact
+// call, the tool, its fixed args and the very items it will take.
+export function AskPanel({ asking, onCancel, onRun }: { asking: Asking; onCancel: () => void; onRun: () => void }) {
+  const { t } = useWords();
+  return (
+    <div className="a2-pickask" role="alertdialog" aria-label={asking.label}>
+      <p>{t("espace.act.ask")}</p>
+      <dl>
+        <dt>{asking.action.tool}</dt>
+        {(asking.action.args ?? []).map((l) => (
+          <dd key={l}>{l}</dd>
+        ))}
+      </dl>
+      <ul>
+        {asking.items.map((it) => (
+          <li key={it.id}>{itemLine(it)}</li>
+        ))}
+      </ul>
+      <span className="a2-pickask-btns">
+        <button type="button" className="btn" onClick={onCancel}>
+          {t("espace.act.cancel")}
+        </button>
+        <button type="button" className="btn primary" onClick={onRun}>
+          {t("espace.act.confirm")}
+        </button>
+      </span>
     </div>
   );
 }

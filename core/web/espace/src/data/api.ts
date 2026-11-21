@@ -144,7 +144,9 @@ export type NodePage = {
   versions: PageVersion[];
   shift?: number;
   parts: PagePart[];
+  // cards: those that still ask, at its foot; settled: those decided, for the « ⋯ » menu
   cards: ProposalView[];
+  settled?: ProposalView[];
   refs?: Record<string, PageRef>;
   alive?: PageAlive;
   // origin: who wanted it, as eriphe-core recorded it
@@ -154,7 +156,8 @@ export type NodePage = {
 // sources, monitors and skills, each named, what it does in code's words.
 export type AliveLine = { name: string; what: string };
 export type PageOrigin = { unasked?: boolean; text: string };
-export type PageAlive = { sources?: AliveLine[]; monitors?: AliveLine[]; skills?: AliveLine[]; updated: string };
+// decided: the goal of the view the user approved (« Ce qu'on a décidé »), decidedExternal when written after an external read.
+export type PageAlive = { decided?: string; decidedExternal?: boolean; sources?: AliveLine[]; monitors?: AliveLine[]; skills?: AliveLine[]; updated: string };
 // The node a [[link]] of a page's text opens, by the name as written
 // (pageRef, web_graph.go): its title, titleExternal when it may be someone
 // else's words (shown marked); archived, it opens nothing. A name no node
@@ -187,7 +190,9 @@ export type PageBlock = {
 // words may have written it); confirm: a tool that throws away,
 // asked once more with its exact call. A filtered List shows its rows
 // only, never the source's others.
-export type PickItem = { n: number; id: string; title?: string; detail?: string };
+// card: the ref of the card that waits on this item (item_cards.go), shown
+// when the row is opened: what its Oui does, in code's words.
+export type PickItem = { n: number; id: string; title?: string; detail?: string; card?: string };
 export type PickAction = { name: string; one: string; many: string; all?: string; tool: string; args?: string[]; hint?: string; hintExternal?: boolean; confirm?: boolean };
 export type PickList = { component: string; source: string; filtered?: boolean; open?: boolean; items: PickItem[]; actions: PickAction[] };
 

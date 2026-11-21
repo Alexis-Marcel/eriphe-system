@@ -1,6 +1,28 @@
 import { MessageProcessor, type ActionPayload, type ComponentApi, type SurfaceModel } from "@a2ui/web_core/v1_0";
+import { useEffect, useState } from "react";
 import type { Lang } from "../i18n";
 import { catalog } from "./catalog";
+
+const disposed = new WeakSet<Adapter>();
+
+// useAdapter is a component's own adapter, disposed when it leaves. React's
+// StrictMode (the dev server) runs an effect's cleanup once more right
+// after mounting: the adapter it disposed is then made again, so that the
+// component never draws with a dead engine.
+export function useAdapter(lang: Lang): Adapter {
+  const [a, setA] = useState(() => createAdapter(lang));
+  useEffect(() => {
+    if (disposed.has(a)) {
+      setA(createAdapter(lang));
+      return;
+    }
+    return () => {
+      disposed.add(a);
+      a.dispose();
+    };
+  }, [a, lang]);
+  return a;
+}
 
 // The adapter between eriphe-core and the A2UI engine (@a2ui/web_core): the
 // rest of the page knows only this. It feeds the engine the messages core

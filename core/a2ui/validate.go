@@ -318,6 +318,19 @@ func (st *stream) tree(sid string, s *surfaceState) {
 
 	// Allowed parents and children; the root's parent is the Surface.
 	kindOf := func(id string) string { k, _ := s.components[id].value["component"].(string); return k }
+
+	// A batch Fold names a List of the surface by its id (not a child: the
+	// List is its child, or its child's, already).
+	for _, id := range ids {
+		p := s.components[id]
+		l, ok := p.value["list"].(string)
+		if kindOf(id) != "Fold" || !ok {
+			continue
+		}
+		if _, there := s.components[l]; !there || kindOf(l) != "List" {
+			st.fail(CodeValidationFailed, sid, append(slices.Clone(p.loc), "list"), fmt.Sprintf("list: %q is not the id of a List of this block", l))
+		}
+	}
 	if root != nil {
 		if allowed, ok := st.c.parents[kindOf("root")]; ok && !slices.Contains(allowed, "Surface") {
 			st.fail(CodeUnallowedParent, sid, append(slices.Clone(root.loc), "component"),
