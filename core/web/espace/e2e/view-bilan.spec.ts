@@ -112,6 +112,18 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   const text = await pg.locator(".pg-doc > .a2-markdown").first().boundingBox();
   expect(text!.width).toBeLessThanOrEqual(761);
   await page.waitForTimeout(600); // the camera frames it
+  // No bubble rests behind the bar: the page keeps the bar's room clear.
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const bar = document.querySelector(".cs-bar")!.getBoundingClientRect();
+        return [...document.querySelectorAll(".gr-node .gr-core")].filter((n) => {
+          const b = n.getBoundingClientRect();
+          return b.right > bar.left && b.left < bar.right && b.bottom > bar.top && b.top < bar.bottom;
+        }).length;
+      }),
+    )
+    .toBe(0);
   await shots(page, "7-enlarged");
   await pg.locator(".pg-head .pg-title-tx").dblclick();
   await expect(box).not.toHaveClass(/\bbig\b/);
@@ -125,9 +137,9 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect.poll(async () => (await box.boundingBox())!.width).toBeGreaterThan(w1 + 30);
   await page.waitForTimeout(600);
   await shots(page, "8-resized");
-  // Closed: the specs after this one find the home as they expect it.
+  // Closed.
   await pg.locator(".pg-x").click();
-  await expect(page.locator("article.pg")).toHaveCount(0);
+  await expect(pg).toHaveCount(0);
   expect(problems).toEqual([]);
 });
 
