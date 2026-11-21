@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -375,9 +374,9 @@ func (c *core) accessAsks(a accessQuestion) bool {
 
 // accessCardMoved is the brain's call on items of a node that was made,
 // decided, or whose yes ran: the page is told its items' sources again
-// (their _card); once its call ran, the node's sources are read again
-// (the items it took leave them).
-func (c *core) accessCardMoved(a accessQuestion, ran bool) {
+// (their _card). Once its call ran, catalogCall's sourcesChanged
+// (source_fresh.go) shows its ids done at once and reads the sources again.
+func (c *core) accessCardMoved(a accessQuestion) {
 	if a.Node == "" || len(a.Labels) == 0 || c.nodes == nil {
 		return
 	}
@@ -387,9 +386,6 @@ func (c *core) accessCardMoved(a accessQuestion, ran bool) {
 			seen[l.Source] = true
 			c.graphSaid(graphEvent{Kind: graphEvSource, Node: a.Node, Name: l.Source})
 		}
-	}
-	if ran {
-		c.readNodeLater(context.Background(), a.Node, slices.Collect(maps.Keys(seen)))
 	}
 }
 

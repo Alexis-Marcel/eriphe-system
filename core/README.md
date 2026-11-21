@@ -1485,7 +1485,7 @@ those items (`access_asks.node`, `source`, `labels`): `itemCards` gives each row
 so the page draws its Oui on every row it names (one card on several rows: a Oui on any answers
 it, a mark says how many share it, and hovering lights the others), on a folded batch's line, and
 never in the page's foot (`placed`: any told row's card). A call on no row keeps its foot card,
-in the same words. Decided, its rows settle and the node reads its sources again; the brain is
+in the same words. Decided, its rows settle; once run, its ids show done and its sources are read again (`sourcesChanged`, `source_fresh.go`); the brain is
 told, as for any access card. Such a card, like a task's access, start or memory card, is linked to
 the node its run or task works in (`cardNodeOf`, `node_cards`) and is about it: it waits on that
 node's page, which stays waiting while it does, never above the bar.

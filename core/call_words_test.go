@@ -162,3 +162,27 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 		t.Errorf("rows after a no %v", cards)
 	}
 }
+
+// A shared card's Oui, on any of its rows: the call runs once, its rows
+// carry no card any more, and its items are shown done at once
+// (source_fresh.go), until their source is read again.
+func TestBrainCallOnRowsYesMarksThemDone(t *testing.T) {
+	c, node, _ := mailView(t)
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	brainCallOn(t, c, "p-1", "mcp__monitor__move", map[string]any{"account": "sam@example.org", "ids": []any{"m1", "m2"}, "to": "archive"})
+	var id int64
+	c.store.db.QueryRow(`SELECT id FROM access_asks WHERE permission_id = 'p-1'`).Scan(&id)
+	if cards := c.itemCards(node, "mails"); cards["m1"] == "" || cards["m1"] != cards["m2"] {
+		t.Fatalf("one card on both rows: %v", cards)
+	}
+	if _, err := c.decideCard(context.Background(), cardOf(t, c, cardAccess, id).ID, true, "web"); err != nil {
+		t.Fatal(err)
+	}
+	if got := states(t, c, node, "recus", "mails"); got["m1"] != itemDone || got["m2"] != itemDone {
+		t.Errorf("its items at once: %v", got)
+	}
+	if cards := c.itemCards(node, "mails"); cards["m1"] != "" || cards["m2"] != "" {
+		t.Errorf("rows after its yes %v", cards)
+	}
+	c.live.wg.Wait()
+}

@@ -365,7 +365,7 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	if server != "" && !c.trustsServer(server) {
 		taint = name // delivered, it taints the turn that reads it
 	}
-	c.accessCardMoved(a, true) // its rows: the items it took leave them
+	c.accessCardMoved(a) // its rows: no card; the items it took leave them (sourcesChanged)
 	c.callToBrain(a, text, taint)
 }
 
@@ -493,7 +493,7 @@ func (c *core) newAccessAsk(a accessQuestion) int64 {
 	// The card says what: the message does not say it twice.
 	c.cardNow(cardAccess, id, fmt.Sprintf(tr(c.userLang(), "access.ask.message"), a.Need.TargetIn(c.userLang())), cmpOr(a.source, "task:"+a.TaskID))
 	a.ID = id
-	c.accessCardMoved(a, false) // on its items' rows (item_cards.go)
+	c.accessCardMoved(a) // on its items' rows (item_cards.go)
 	log.Printf("access: card %d for task %s: %s", id, a.TaskID, a.Need.Category)
 	return id
 }
@@ -701,7 +701,7 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 			c.itemCallDone(a, fmt.Sprintf("%s a refusé : %s n'est pas exécutée.", c.conf().User, name))
 			return nil
 		}
-		c.accessCardMoved(a, false) // off its rows
+		c.accessCardMoved(a) // off its rows
 		c.callToBrain(a, fmt.Sprintf("%s a refusé sur la carte : %s n'est pas exécutée.", c.conf().User, name), "")
 		return nil
 	}
