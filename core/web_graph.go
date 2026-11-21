@@ -535,6 +535,11 @@ func (w *web) handleNodePage(rw http.ResponseWriter, r *http.Request, _ *session
 	}
 	rw.Header().Set("Cache-Control", "no-store")
 	writeJSON(rw, http.StatusOK, p)
+	if version <= 0 {
+		// Opened: what changed elsewhere since its sources' last read
+		// comes in the stream (source_fresh.go).
+		w.c.readStale(r.PathValue("id"), time.Now())
+	}
 }
 
 // traceEntry is an entry of a node's trace: when, who, what.

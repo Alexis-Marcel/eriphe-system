@@ -152,7 +152,7 @@ func (c *core) runAction(ctx context.Context, id string, in nodeActIn, lang stri
 	}
 	src := b.Sources[a.Source]
 	value := c.sourceNow(id, b, a.Source)
-	noteItems(src, value, c.itemNotes(id, a.Source), c.itemCards(id, a.Source)) // its notes now, for the filters
+	noteItems(src, value, c.itemNotes(id, a.Source), c.itemCards(id, a.Source), c.leavingItems(id, a.Source)) // its notes now, for the filters
 	listed, _ := itemIDs(src, value, filter)
 	var picked []listedItem
 	seen := map[string]bool{}
