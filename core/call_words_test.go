@@ -165,7 +165,9 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 
 // A shared card's Oui, on any of its rows: the call runs once, its rows
 // carry no card any more, and its items are shown done at once
-// (source_fresh.go), until their source is read again.
+// (source_fresh.go), until their source is read again. The call runs
+// beside the yes (runApprovedCall): its row keeps the card, running,
+// until it is done.
 func TestBrainCallOnRowsYesMarksThemDone(t *testing.T) {
 	c, node, _ := mailView(t)
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
@@ -178,6 +180,7 @@ func TestBrainCallOnRowsYesMarksThemDone(t *testing.T) {
 	if _, err := c.decideCard(context.Background(), cardOf(t, c, cardAccess, id).ID, true, "web"); err != nil {
 		t.Fatal(err)
 	}
+	c.yeses.Wait() // the call ran
 	if got := states(t, c, node, "recus", "mails"); got["m1"] != itemDone || got["m2"] != itemDone {
 		t.Errorf("its items at once: %v", got)
 	}

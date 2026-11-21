@@ -79,6 +79,7 @@ type core struct {
 	props       proposalFeed           // the proposals that moved, for the workspace (card_moves.go)
 	live        nodeLive               // the live blocks being read (node_live.go)
 	fresh       sourceFresh            // the sources to read again after a change (source_fresh.go)
+	yeses       sync.WaitGroup         // the calls a card's yes runs, under way (runApprovedCall)
 	attention   sync.Map               // node id → whether a source of its marked attention lists items (node_attention.go)
 	graph       graphFeed              // what changes on the graph, for the workspace (graph_feed.go)
 
