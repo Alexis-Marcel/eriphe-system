@@ -241,6 +241,15 @@ describe("its words stay whole on screen", () => {
     expect(inside(q.words!)).toBe(true);
   });
 
+  it("never opens them on its subject: slid in instead", () => {
+    // Left of a page, its words open left past the edge; its other side is the page.
+    const page: Rect = { l: 60 + ORB / 2 + 4, t: 200, r: 900, b: 600 };
+    const p = { orb: [60, 300] as [number, number], words: { l: 60 - ORB / 2 - GAP - 300, t: 290, r: 60 - ORB / 2 - GAP, b: 330 }, side: "left" as const, dir: -1 as const };
+    const q = keepOnScreen(p, screen, [page]);
+    expect(q.dir).toBe(-1);
+    expect(q.words).toEqual({ l: 8, t: 290, r: 308, b: 330 });
+  });
+
   it("slides them in when neither side holds them, and never above the top or below the bottom", () => {
     // Wider than either side of an orb in the middle of a narrow screen.
     const narrow: Rect = { l: 8, t: 60, r: 392, b: 792 };

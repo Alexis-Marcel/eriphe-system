@@ -45,6 +45,18 @@ test("a call to approve says what it does to which items, on their rows", async 
   await expect(colis.locator(".a2-inline-shared")).toHaveCount(1);
   await expect(rows.filter({ hasText: "Billets pour Disney" }).locator(".a2-inline-yes")).toHaveCount(0);
   await expect(pg.locator(".pg-foot")).toHaveCount(0);
+  // On a narrow screen, the orb's words stay whole on it.
+  const wide = page.viewportSize()!;
+  await page.setViewportSize({ width: 1000, height: wide.height });
+  await expect(page.locator(".orb-say.on")).toBeVisible();
+  await expect
+    .poll(async () => {
+      const b = await page.locator(".orb-say.on").boundingBox();
+      return !!b && b.x >= 0 && b.x + b.width <= 1000 && b.y >= 0 && b.y + b.height <= wide.height;
+    })
+    .toBe(true);
+  await shots(page, "4-narrow");
+  await page.setViewportSize(wide);
   // Hovered, its sibling row is shown as the same card.
   await colis.locator(".a2-inline-yes").hover();
   await expect(relais).toHaveClass(/a2-card-sibling/);

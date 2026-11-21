@@ -53,11 +53,13 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
     let docked = show.mode === "rest";
     let to: Pt = rest;
     let placed: Placed | null = null;
+    let avoid: Rect[] = [];
     if (docked) {
       s.side = undefined;
       s.home = undefined;
     } else {
       const obstacles: Rect[] = bodies.filter((b) => at[b.id]).map((b) => rect(b, at[b.id]));
+      avoid = obstacles; // its subject among them
       for (const sel of [".cs", ".hud-corner", ".notices"]) {
         const r = document.querySelector(sel)?.getBoundingClientRect();
         if (r && r.width > 0) obstacles.push({ l: r.left, t: r.top, r: r.right, b: r.bottom });
@@ -84,7 +86,7 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
       // words show as a line above it.
       if (placed) {
         // Its words whole on screen, flipped or slid in if need be.
-        placed = keepOnScreen(placed, screen);
+        placed = keepOnScreen(placed, screen, avoid);
         s.side = placed.side;
         to = placed.orb;
       } else {
