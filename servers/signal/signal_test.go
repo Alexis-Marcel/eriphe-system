@@ -187,6 +187,9 @@ func TestEveryToolIsSetup(t *testing.T) {
 	var names []string
 	for _, tl := range res.Tools {
 		names = append(names, tl.Name)
+		if tl.Title == "" {
+			t.Errorf("%s has no title", tl.Name)
+		}
 		if tl.Meta["eriphe/setup"] != true {
 			t.Errorf("%s is not a setup tool", tl.Name)
 		}

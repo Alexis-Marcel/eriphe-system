@@ -194,7 +194,7 @@ export type PageBlock = {
 // when the row is opened: what its Oui does, in code's words.
 export type PickItem = { n: number; id: string; title?: string; detail?: string; card?: string };
 export type PickAction = { name: string; one: string; many: string; all?: string; tool: string; args?: string[]; hint?: string; hintExternal?: boolean; confirm?: boolean };
-export type PickList = { component: string; source: string; filtered?: boolean; open?: boolean; items: PickItem[]; actions: PickAction[] };
+export type PickList = { component: string; source: string; filtered?: boolean; open?: boolean; rowCard?: boolean; items: PickItem[]; actions: PickAction[] };
 
 // What opening an item read (item_open.go): its common fields and the
 // whole as JSON, external when its server is not trusted, with the item's
@@ -352,6 +352,7 @@ export type ProposalView = {
   kind?: string;
   state: string; // pending, approved, rejected, gone
   text: string;
+  context?: string; // where it acts, said quietly beside its text (« compte Gmail »)
   why?: string;
   tainted?: boolean;
   // summary: what a yes makes, in plain sentences of code's (a view's);

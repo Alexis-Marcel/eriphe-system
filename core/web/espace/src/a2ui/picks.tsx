@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Opened, PickAction, PickItem, PickList } from "../data/api";
+import { InlineYes, RowItem } from "./inline";
 import { Opener, type OpenState } from "./opener";
 import { useWords } from "../i18n";
 
@@ -81,21 +82,30 @@ export function itemLine(it: PickItem): string {
 // openable is a row as a List draws it: one that opens in place when its
 // source opens its items and the page may read them (opener.tsx).
 // The row also tells what it draws which item it is, as eriphe-core
-// listed it (RowItem): its card, code's, never the block's data.
+// listed it (RowItem): its card, code's, never the block's data, and how
+// many rows of the List share that card. A card on the row whose template
+// does not draw it (no inline Proposal: list.rowCard) gets its Oui here,
+// beside the row: a card on a row is always answered on that row.
 export function openable(surface: string, list: PickList, picks: Picks, node: ReactNode, item: PickItem | undefined): ReactNode {
   if (!item) return node;
-  const inner = !list.open || !picks.open ? node : (
-    <Opener surface={surface} list={list} picks={picks} item={item}>
+  const shared = item.card ? list.items.filter((it) => it.card === item.card).length : 0;
+  const row = item.card && !list.rowCard ? (
+    <div className="a2-row a2-align-center a2-rowcard">
       {node}
+      <InlineYes refText={item.card} answerable say where={{ surfaceId: surface, componentId: list.component }} />
+    </div>
+  ) : (
+    node
+  );
+  const inner = !list.open || !picks.open ? row : (
+    <Opener surface={surface} list={list} picks={picks} item={item}>
+      {row}
     </Opener>
   );
-  return <RowItem.Provider value={item}>{inner}</RowItem.Provider>;
+  return <RowItem.Provider value={{ ...item, shared }}>{inner}</RowItem.Provider>;
 }
 
-// RowItem is the item a row of a List of a source's items draws, as
-// eriphe-core told of it (its id, its card): out of the block's data, so
-// that no author can write it.
-export const RowItem = createContext<PickItem | undefined>(undefined);
+export { RowItem };
 
 // MAX_IDS is the most items one click acts on (actionsMaxIDs): a list of
 // more has no button for all its rows.

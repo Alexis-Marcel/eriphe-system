@@ -616,8 +616,8 @@ func (c *core) accessText(a accessQuestion, lang string) string {
 	case strings.HasPrefix(a.Call, webFetchTool+" "):
 		return fmt.Sprintf(tr(lang, "access.ask.page"), c.conf().assistantName())
 	case a.Call != "":
-		// What it does to what, as a question (call_words.go).
-		return fmt.Sprintf(tr(lang, "card.call.ask"), c.callText(a, lang))
+		// What it does to what (call_words.go).
+		return c.callText(a, lang)
 	}
 	return fmt.Sprintf(tr(lang, "access.ask.task"), title, verbs([]string{a.Need.Category}, lang), a.Need.TargetIn(lang))
 }

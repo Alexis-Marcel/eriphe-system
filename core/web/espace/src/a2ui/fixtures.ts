@@ -93,10 +93,10 @@ export function sampleProposals(lang: Lang): Proposals {
       card: 9,
       state: "pending",
       kind: "calls",
-      text: en ? "use “move funds”" : "utiliser « move funds »",
+      text: en ? "Move funds · 1 item" : "Move funds · 1 élément",
+      context: en ? "My accounts" : "Mes comptes",
       from: en ? "My accounts · an item of the node" : "Mes comptes · un élément de la bulle",
-      yes: en ? "On Yes, this call runs once, exactly as shown." : "Sur Oui, cet appel part une seule fois, tel qu'il est montré.",
-      fields: [{ name: en ? "use “move funds”" : "utiliser « move funds »", value: "to : Courant" }],
+      fields: [{ name: "bank/move_funds", value: "to : Courant", detail: true }],
     },
     {
       ref: "intention:3",

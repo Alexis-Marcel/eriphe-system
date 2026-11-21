@@ -787,8 +787,23 @@ func each(n int, fn func(int)) {
 
 // tool registers a typed tool and logs each call: name, duration, error.
 // Arguments are not logged.
+// toolTitles are the tools' titles, as people read them: eriphe-core says with
+// them what a call does (« Move · 2 mails ») when it has no words of its own.
+var toolTitles = map[string]string{
+	"list_accounts":  "List the accounts",
+	"list_calendars": "List the calendars",
+	"list_events":    "List the events",
+	"get_event":      "Read an event",
+	"create_event":   "Create an event",
+	"update_event":   "Change an event",
+	"delete_event":   "Delete an event",
+	"respond_event":  "Answer an invitation",
+	"find_free_time": "Find free time",
+	"test_account":   "Test an account",
+}
+
 func tool[In, Out any](s *mcp.Server, name, desc string, ann *mcp.ToolAnnotations, fn func(context.Context, In) (Out, error)) {
-	mcp.AddTool(s, &mcp.Tool{Name: name, Description: desc, Annotations: ann},
+	mcp.AddTool(s, &mcp.Tool{Name: name, Title: toolTitles[name], Description: desc, Annotations: ann},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 			start := time.Now()
 			o, err := fn(ctx, in)

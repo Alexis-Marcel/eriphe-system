@@ -92,7 +92,9 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(ask.locator("li")).toHaveText(["Soldes d'hiver · promo@example.org", "Votre colis est bloqué · colis@example.net"]);
   await shots(page, "4-batch-confirm");
   await ask.getByRole("button", { name: "Lancer" }).click();
-  await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).trashed).toEqual(["perso:j1,j3"]);
+  // Its own calls: the test core is shared with the other files (calls-plain.spec.ts trashes too).
+  const mine = (all: string[]) => all.filter((x) => /:[aij]\d/.test(x));
+  await expect.poll(async () => mine((await (await request.get("/e2e/tools")).json()).trashed)).toEqual(["perso:j1,j3"]);
   await expect(pg.locator(".a2-batch-done")).toContainText("1 gardé(s)");
   await shots(page, "5-after-actions");
 

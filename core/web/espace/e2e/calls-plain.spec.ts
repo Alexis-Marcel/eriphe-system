@@ -41,6 +41,7 @@ test("a call to approve says what it does to which items, on their rows", async 
   // One card on both rows, in plain words; none at the foot.
   await expect(relais.locator(".a2-inline-yes")).toBeVisible();
   await expect(colis.locator(".a2-inline-yes")).toHaveAttribute("title", "Mettre 2 mails à la corbeille · compte perso");
+  await expect(colis.locator(".a2-inline-what")).toHaveText("Mettre 2 mails à la corbeille");
   await expect(colis.locator(".a2-inline-shared")).toHaveCount(1);
   await expect(rows.filter({ hasText: "Billets pour Disney" }).locator(".a2-inline-yes")).toHaveCount(0);
   await expect(pg.locator(".pg-foot")).toHaveCount(0);
@@ -49,10 +50,17 @@ test("a call to approve says what it does to which items, on their rows", async 
   await expect(relais).toHaveClass(/a2-card-sibling/);
   await shots(page, "2-hover-siblings");
 
-  // The card read in full (the row opened): what it does, to which mails;
-  // its exact call behind one « détails », closed.
-  const card = await (await request.get("/e2e/proposals")).json().catch(() => null);
-  void card;
+  // The card as eriphe-core reads it: what it does, to which mails by
+  // their titles, the account apart; its exact call under its one
+  // « détails »; no line of what Oui does.
+  const ref = await colis.locator(".a2-inline").getAttribute("data-row-card");
+  expect(ref).toMatch(/^access:\d+$/);
+  const card = await (await page.request.get(`/api/proposals/${ref}`)).json();
+  expect(card.text).toBe("Mettre 2 mails à la corbeille");
+  expect(card.context).toBe("compte perso");
+  expect(card.summary).toEqual(["« Votre colis est arrivé » · Relais ⚠", "« Colis en point relais » · Relais ⚠"]);
+  expect(card.fields).toEqual([{ name: "mail/trash", value: 'account : perso\nids : ["c2","c4"]', detail: true }]);
+  expect(card.yes ?? "").toBe("");
 
   // Oui on the second row answers the one card: the call runs once.
   await relais.locator(".a2-inline-yes").click();
@@ -78,6 +86,7 @@ async function shots(page: Page, name: string) {
   await page.waitForTimeout(300);
   for (const theme of ["light", "dark"]) {
     await page.evaluate((th) => (document.documentElement.dataset.theme = th), theme);
+    await page.waitForTimeout(400); // its colours settled
     await page.screenshot({ path: `${dir}/${name}-${theme}.png` });
   }
   await page.evaluate(() => delete document.documentElement.dataset.theme);

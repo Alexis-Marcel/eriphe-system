@@ -15,6 +15,9 @@ environment, never through a task.
 
 ## Tools
 
+Every tool has a title (`titles` in `tools.go`, « Move to the trash »): eriphe-core says with it
+what a call does when it has no words of its own for it.
+
 | Tool | What | Hints |
 |---|---|---|
 | `list_folders` | the places given to Eriphe, with their account (`all: true` for a whole account) | read-only |

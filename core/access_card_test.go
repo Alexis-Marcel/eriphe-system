@@ -181,8 +181,8 @@ func TestAccessCardNotifies(t *testing.T) {
 		t.Errorf("not a question: %q", msgs[0].Text)
 	}
 	x := accessQuestion{TaskID: "b", Need: accessNeed{"mail", catSend, ""}, Call: "mcp__mail__send {}"}
-	if _, ok := asksUser(c.accessText(x, "fr")); !ok {
-		t.Errorf("the brain's is not a question: %q", c.accessText(x, "fr"))
+	if got := c.accessText(x, "fr"); got != "Utiliser « send »" { // its words: what it does; its message asks
+		t.Errorf("the brain's card says %q", got)
 	}
 }
 
@@ -373,7 +373,7 @@ func TestBrainCardIsForOneCall(t *testing.T) {
 	if told, allow := answeredAllow(t, c, "b-1", "p-1"); !told || allow {
 		t.Fatalf("the brain is held: told %v, allow %v", told, allow)
 	}
-	x := accessCard(t, c, "Use “move”?")
+	x := accessCard(t, c, "Use “move”")
 	if _, p := c.liveCard(x); p.ContextIn("en") != "mail" {
 		t.Errorf("where it acts: %q", p.ContextIn("en"))
 	}
@@ -458,8 +458,8 @@ func TestBrainCardReads(t *testing.T) {
 	in := map[string]any{"repo": "portfolio", "number": 7, "body": long}
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
 	brainCalls(t, c, "p-1", "mcp__mail__merge_pull_request", in)
-	_, p := c.liveCard(accessCard(t, c, "Merge a pull request?"))
-	if fr := p.Text("fr"); fr != "Fusionner une pull request ?" {
+	_, p := c.liveCard(accessCard(t, c, "Merge a pull request"))
+	if fr := p.Text("fr"); fr != "Fusionner une pull request" {
 		t.Errorf("fr: %q", fr)
 	}
 	// Its long text to read, named; its exact call, the rest, under the

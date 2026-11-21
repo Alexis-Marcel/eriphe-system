@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, OrbFeed } from "../data/api";
-import { ANSWER_MS, close, expires, glide, homePoint, NEAR, ORB, orbShow, placeBeside as besideOrNone, placeHome as homeOrNone, SAID_MS, type Closed, type Mind, type Rect } from "./model";
+import { ANSWER_MS, close, expires, glide, GAP, homePoint, keepOnScreen, NEAR, ORB, orbShow, placeBeside as besideOrNone, placeHome as homeOrNone, SAID_MS, type Closed, type Mind, type Rect } from "./model";
 
 // Where it goes when there is a free spot (the cases below have one).
 const placeBeside = (...a: Parameters<typeof besideOrNone>) => besideOrNone(...a)!;
@@ -219,5 +219,35 @@ describe("how the orb moves", () => {
 
   it("goes at once when the user asks for less motion", () => {
     expect(glide([0, 0], [300, 120], true)).toEqual([300, 120]);
+  });
+});
+
+describe("its words stay whole on screen", () => {
+  const screen: Rect = { l: 8, t: 60, r: 1192, b: 792 };
+  const inside = (w: Rect) => w.l >= screen.l && w.r <= screen.r && w.t >= screen.t && w.b <= screen.b;
+
+  it("leaves words that fit as they are", () => {
+    const p = { orb: [600, 300] as [number, number], words: { l: 623, t: 290, r: 923, b: 330 }, side: "right" as const, dir: 1 as const };
+    expect(keepOnScreen(p, screen)).toBe(p);
+  });
+
+  it("opens them on the orb's other side when they would leave the screen on theirs", () => {
+    // Opened to the left of an orb near the left edge: cut off.
+    const p = { orb: [60, 300] as [number, number], words: { l: 60 - ORB / 2 - GAP - 300, t: 290, r: 60 - ORB / 2 - GAP, b: 330 }, side: "left" as const, dir: -1 as const };
+    const q = keepOnScreen(p, screen);
+    expect(q.dir).toBe(1);
+    expect(q.words!.l).toBe(60 + ORB / 2 + GAP);
+    expect(q.words!.r - q.words!.l).toBe(300);
+    expect(inside(q.words!)).toBe(true);
+  });
+
+  it("slides them in when neither side holds them, and never above the top or below the bottom", () => {
+    // Wider than either side of an orb in the middle of a narrow screen.
+    const narrow: Rect = { l: 8, t: 60, r: 392, b: 792 };
+    const p = { orb: [200, 40] as [number, number], words: { l: 223, t: 20, r: 583, b: 80 }, side: "above" as const, dir: 1 as const };
+    const q = keepOnScreen(p, narrow);
+    expect(q.words).toEqual({ l: 32, t: 60, r: 392, b: 120 });
+    const low = keepOnScreen({ ...p, orb: [200, 780], words: { l: 223, t: 770, r: 300, b: 830 } }, narrow);
+    expect(low.words!.b).toBe(792);
   });
 });

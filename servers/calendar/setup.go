@@ -28,7 +28,7 @@ type testAccountOut struct {
 // addTestAccount serves test_account: try signs the account in as the
 // server will use it.
 func addTestAccount(s *mcp.Server, try func(ctx context.Context, account string) error) {
-	mcp.AddTool(s, &mcp.Tool{Name: "test_account", Meta: setupMeta,
+	mcp.AddTool(s, &mcp.Tool{Name: "test_account", Title: toolTitles["test_account"], Meta: setupMeta,
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(true)},
 		Description: "Setup only, for the workspace: sign one account in as this server uses it, and say whether it works."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in testAccountIn) (*mcp.CallToolResult, testAccountOut, error) {

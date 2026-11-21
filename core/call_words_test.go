@@ -112,7 +112,7 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 		t.Errorf("the card is not the view's: %v", c.cardNodes(ref))
 	}
 	p := c.proposalOf(cardAccess, id)
-	if got := p.Text("fr"); got != "Archiver 2 mails ?" {
+	if got := p.Text("fr"); got != "Archiver 2 mails" {
 		t.Errorf("text %q", got)
 	}
 	if got := p.SummaryIn("fr"); !slices.Equal(got, []string{"« STAGE – Data Engineer » · Emplois Example ⚠", "« Votre lettre de la semaine » · news@example.org ⚠"}) {
@@ -149,7 +149,7 @@ func TestBrainCallLandsOnItsRows(t *testing.T) {
 	if o, _ := c.accessAskOf(other); o.Node != "" || len(o.Labels) != 0 {
 		t.Errorf("a call on no row: %+v", o)
 	}
-	if got := c.proposalOf(cardAccess, other).Text("fr"); got != "Archiver 1 élément ?" {
+	if got := c.proposalOf(cardAccess, other).Text("fr"); got != "Archiver 1 élément" {
 		t.Errorf("its words %q", got)
 	}
 
