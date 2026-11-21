@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // A kept call read plainly (calls and runcalls cards): what its yes does,
@@ -183,18 +186,86 @@ func callTool(call string) string {
 }
 
 // callDetail is a kept call's exact parameters, under the card's
-// Détails.
-func callDetail(a accessQuestion) cardField {
+// Détails, but those shown (callShown, by name).
+func callDetail(a accessQuestion, shown []string) cardField {
 	var lines []string
 	for _, f := range a.fields() {
-		lines = append(lines, f.Name+" : "+f.Value)
+		if !slices.Contains(shown, f.Name) {
+			lines = append(lines, f.Name+" : "+f.Value)
+		}
 	}
 	return cardField{Name: callTool(a.Call), Value: truncate(strings.Join(lines, "\n"), cardValueMax), Detail: true}
 }
 
+// callLongMin is from how many characters a text argument is content to
+// read (a reply, a message: or one of several lines), shown on its card
+// rather than under its Détails; callShownMax is the most it shows so,
+// whole: a longer one stays under Détails.
+const (
+	callLongMin  = 90
+	callShownMax = 4 * cardValueMax
+)
+
+// callShown are a kept call's long text arguments, lifted out of its
+// Détails as fields to read (the very reply its Oui sends), as kept,
+// whole; each named by its tool's input schema (the parameter's title),
+// else in the user's words for a common name (body, text, message…),
+// else by its own. names are their parameters, left out of the Détails.
+// Whoever wrote them, the page shows them as text.
+func (c *core) callShown(a accessQuestion, lang string) (fs []cardField, names []string) {
+	var input map[string]any
+	if json.Unmarshal([]byte(a.Input), &input) != nil {
+		return nil, nil
+	}
+	tool, _, _ := strings.Cut(a.Call, " ")
+	props, _ := c.inputSchema(tool)["properties"].(map[string]any)
+	for _, k := range slices.Sorted(maps.Keys(input)) {
+		s, ok := input[k].(string)
+		n := utf8.RuneCountInString(s)
+		if !ok || n > callShownMax || n <= callLongMin && !strings.Contains(strings.TrimSpace(s), "\n") {
+			continue
+		}
+		p, _ := props[k].(map[string]any)
+		name, _ := p["title"].(string)
+		if name = truncate(oneLine(name), 60); name == "" {
+			name = k
+			if w := tr(lang, "card.param."+strings.ToLower(k)); w != "card.param."+strings.ToLower(k) {
+				name = w
+			}
+		}
+		fs = append(fs, cardField{Name: name, Value: s})
+		names = append(names, k)
+	}
+	return fs, names
+}
+
+// callText is a kept call's sentence (callSentence); a tool that has no
+// words of ours is said by its own title (its annotations' or its own)
+// when it has one, rather than by its name; generic tells it is one of
+// these.
+func (c *core) callText(a accessQuestion, lang string) (s string, generic bool) {
+	s = callSentence(a.Call, a.Input, lang)
+	name, _, _ := strings.Cut(a.Call, " ")
+	short := name
+	if _, t, ok := splitToolName(name); ok {
+		short = t
+	}
+	if key := "access.call." + short; s != upperFirst(callVerb(a.Call, lang)) || tr(lang, key) != key {
+		return s, false
+	}
+	if _, t := c.actionTool(callTool(a.Call)); t != nil {
+		if title := buttonText(cmpOr(t.Title, annotationTitle(t)), 80); title != "" {
+			return title, true
+		}
+	}
+	return s, true
+}
+
 // callsWords are a card's words for the calls it keeps: one sentence for
-// one call, its items below; for several, text is said by the card, and
-// each call is a line, with its items.
+// one call, its items below (a tool without words of ours says its item
+// in its sentence: « Send message · « Devis terrasse » · Sam »); for
+// several, text is said by the card, and each call is a line, with its
+// items.
 func (c *core) callsWords(asks []accessQuestion, lang string) (sentence string, lines []string) {
 	if len(asks) == 1 {
 		a := asks[0]
@@ -206,11 +277,17 @@ func (c *core) callsWords(asks []accessQuestion, lang string) (sentence string, 
 				lines = append(lines, s)
 			}
 		}
-		return callSentence(a.Call, a.Input, lang), lines
+		s, generic := c.callText(a, lang)
+		if ls := c.labelsOf(a); generic && len(ls) == 1 {
+			if l := labelLine(ls[0], lang); l != "" {
+				s += " · " + l
+			}
+		}
+		return s, lines
 	}
 	var said []string
 	for _, a := range asks {
-		s := callSentence(a.Call, a.Input, lang)
+		s, _ := c.callText(a, lang)
 		said = append(said, s)
 		if f := callFolder(a.Call, a.Input, lang); f != "" {
 			s += " · " + f

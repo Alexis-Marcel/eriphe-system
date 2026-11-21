@@ -336,14 +336,16 @@ func (c *core) runApprovedCall(a accessQuestion) {
 	ctx, cancel := context.WithTimeout(context.Background(), approvedCallTimeout)
 	defer cancel()
 	name, _, _ := strings.Cut(a.Call, " ")
-	if a.Run != 0 {
+	if a.Run != 0 || a.Batch != 0 {
 		text, _ := c.trackedCall(ctx, a, name)
-		c.runCallDone(a, text) // a run's: the brain is not told (skill_cards.go)
-		return
-	}
-	if a.Batch != 0 {
-		text, _ := c.trackedCall(ctx, a, name)
-		c.itemCallDone(a, text) // an item's (item_cards.go)
+		if a.Run != 0 {
+			c.runCallDone(a, text) // a run's: the brain is not told (skill_cards.go)
+		} else {
+			c.itemCallDone(a, text) // an item's (item_cards.go)
+		}
+		if a.Batch != 0 {
+			c.itemCardMoved(a.Batch) // its row, its item settled once all ran
+		}
 		return
 	}
 	if name == webFetchTool || name == webSearchTool {

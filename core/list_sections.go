@@ -17,54 +17,64 @@ import (
 // value. Nothing here knows a server, a tool or a group's name: the
 // author (Eriphe, a skill) chooses the groups when it notes the items
 // (item_note's group), and writes one List per section, its template's
-// path the source's items with a filter:
+// path the source's items with a filter, or several that must all hold:
 //
 //	/mails/messages[_group=À supprimer]
 //	/mails/messages[_group!=À supprimer]
+//	/mails/messages[_group=À traiter][_state!=done]
 //
-// Code evaluates the filter, never the page: the page gets the List bound
+// Code evaluates the filters, never the page: the page gets the List bound
 // to the source's items as a whole, and the rows it shows (pageList,
 // filtered), in the source's order. The click on an action of such a list
-// is checked against the filter as it stands (web_list_actions.go).
+// is checked against the filters as they stand (web_list_actions.go).
 
 // The fields code adds to each item of a source that lists items: its
-// note, its state, its group (empty when it has none), and, when the note
-// may carry someone else's words, _external.
+// note, its state, its group (empty when it has none), the card that
+// waits on it (its ref while it still asks something, item_cards.go;
+// empty otherwise) and, when the note may carry someone else's words,
+// _external. Code writes them over whatever the source gave.
 const (
 	itemNoteField     = "_note"
 	itemStateField    = "_state"
 	itemGroupField    = "_group"
+	itemCardField     = "_card"
 	itemExternalField = "_external"
 )
 
-// itemFilter is a List's filter on its source's items: the items whose
-// field has the value, or, Not, those whose field has another.
+// itemFilter is one of a List's filters on its source's items: the items
+// whose field has the value, or, Not, those whose field has another.
 type itemFilter struct {
 	Field, Value string
 	Not          bool
 }
 
-// keeps tells whether an item passes the filter; nil keeps all. A field
-// the item has not reads as empty.
-func (f *itemFilter) keeps(it any) bool {
-	if f == nil {
-		return true
-	}
+// itemFilters are a List's filters: an item shows when each keeps it;
+// none keeps all.
+type itemFilters []itemFilter
+
+// keeps tells whether an item passes every filter. A field the item has
+// not reads as empty.
+func (fs itemFilters) keeps(it any) bool {
 	o, _ := it.(map[string]any)
-	got := ""
-	if v, ok := o[f.Field]; ok && v != nil {
-		got = valueText(v)
+	for _, f := range fs {
+		got := ""
+		if v, ok := o[f.Field]; ok && v != nil {
+			got = valueText(v)
+		}
+		if (got == f.Value) == f.Not {
+			return false
+		}
 	}
-	return (got == f.Value) != f.Not
+	return true
 }
 
 var errNotItems = errors.New("not the items of a source")
 
 // listBinding is what a List's template path binds among a block's
 // sources: the source whose items it shows as a whole (listPath), and
-// the filter after them, if any. errNotItems when the path is not a
+// the filters after them, if any. errNotItems when the path is not a
 // source's items; another error for a filter that does not read.
-func listBinding(path string, sources map[string]nodefile.Source) (string, *itemFilter, error) {
+func listBinding(path string, sources map[string]nodefile.Source) (string, itemFilters, error) {
 	base, filter, _ := strings.Cut(path, "[")
 	name := ""
 	for _, n := range slices.Sorted(maps.Keys(sources)) {
@@ -79,22 +89,30 @@ func listBinding(path string, sources map[string]nodefile.Source) (string, *item
 	if !strings.Contains(path, "[") {
 		return name, nil, nil
 	}
+	bad := fmt.Errorf("%s: a filter is [field=value] or [field!=value], one or more after the source's items (%s[_group=À traiter][_state!=done])", path, base)
 	steps, err := parsePath("[" + filter)
-	if err != nil || len(steps) != 1 || steps[0].field == "" || !strings.HasSuffix(filter, "]") || strings.Count(filter, "[") > 0 {
-		return "", nil, fmt.Errorf("%s: a filter is one [field=value] or [field!=value], after the source's items (%s[_group=À supprimer])", path, base)
+	if err != nil || len(steps) == 0 || !strings.HasSuffix(filter, "]") || strings.Count(filter, "[") != len(steps)-1 {
+		return "", nil, bad
 	}
-	st := steps[0]
-	return name, &itemFilter{Field: st.field, Value: st.equals, Not: st.not}, nil
+	fs := make(itemFilters, 0, len(steps))
+	for _, st := range steps {
+		if st.field == "" {
+			return "", nil, bad
+		}
+		fs = append(fs, itemFilter{Field: st.field, Value: st.equals, Not: st.not})
+	}
+	return name, fs, nil
 }
 
 // noteItems adds to each item of a source's value its note's fields
 // (_note, _state, _group, and _external when the note may carry someone
-// else's words), the items' notes given by id; every item gets the
-// first three, empty when it has none, so that a filter reads them.
-// value is the block's own copy (read for the page, never kept): it is
-// changed in place. A source whose items' path is not plain fields is
-// left as it is.
-func noteItems(src nodefile.Source, value any, notes map[string]nodestore.Item) {
+// else's words), the items' notes given by id, and the card that waits
+// on it (_card, cards by id); every item gets the first four, empty when
+// it has none, so that a filter reads them and no source's own field
+// passes for code's. value is the block's own copy (read for the page,
+// never kept): it is changed in place. A source whose items' path is not
+// plain fields is left as it is.
+func noteItems(src nodefile.Source, value any, notes map[string]nodestore.Item, cards map[string]string) {
 	if src.Items == nil || value == nil || listPath("x", src) == "" {
 		return
 	}
@@ -108,8 +126,9 @@ func noteItems(src nodefile.Source, value any, notes map[string]nodestore.Item) 
 		if !ok {
 			continue
 		}
-		n := notes[itemID(src, it)]
-		o[itemNoteField], o[itemStateField], o[itemGroupField] = n.Note, n.State, n.Group
+		id := itemID(src, it)
+		n := notes[id]
+		o[itemNoteField], o[itemStateField], o[itemGroupField], o[itemCardField] = n.Note, n.State, n.Group, cards[id]
 		delete(o, itemExternalField)
 		if n.Tainted != "" {
 			o[itemExternalField] = true
@@ -141,12 +160,12 @@ func (c *core) itemNotes(id, source string) map[string]nodestore.Item {
 	return out
 }
 
-// noteSources adds their notes to the items of a block's sources in
-// data, the block's data as the page gets it.
+// noteSources adds their notes and cards to the items of a block's
+// sources in data, the block's data as the page gets it.
 func (c *core) noteSources(id string, b *nodefile.Block, data map[string]any) {
 	for name, src := range b.Sources {
 		if src.Items != nil && data[name] != nil {
-			noteItems(src, data[name], c.itemNotes(id, name))
+			noteItems(src, data[name], c.itemNotes(id, name), c.itemCards(id, name))
 		}
 	}
 }

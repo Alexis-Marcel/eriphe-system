@@ -1259,7 +1259,7 @@ composes each one from the catalog.
   ends and at each card sync (cards made before fold there; the folded cards go, from their node
   too). The card keeps each call as kept, its own `access_asks` row: Oui runs each exactly as
   shown and records each decision. Each call is a line with a box, all ticked; the yes button says
-  what goes, worded as a list action's button is (`actionWords`: « Déplacer 4 éléments → archive (mail/move) »). `POST /cards/{id}/yes` then carries `only` (the calls ticked)
+  what goes, worded as a list action's button is (`actionWords`: « Déplacer 4 éléments → archive »). `POST /cards/{id}/yes` then carries `only` (the calls ticked)
   and `left` (unticked), by id: both must be calls of the card that wait, or nothing is decided;
   `only` run, `left` are refused, and a call folded in after the page drew the card waits on, on
   a new card at once (the decided one keeps the words of what it decided). The workspace sends
@@ -3218,11 +3218,15 @@ token in `X-CSRF-Token`:
   else its snapshot) that the List's filter keeps with the items' notes now (`400`, nothing run:
   the set is never made larger), sent to the tool as the source gave it; 200 items at most. The tool's policy
   holds: never (or a call that must name its account) is `403`; on approval the click is the
-  user's yes; free runs. One call with the fixed `args` and the ids in its `items` parameter, kept
-  in the decisions' journal (`by` user, the reason saying the click counted as the yes) and in the
-  node's trace in code's words (never the items' titles); no turn. Then the source is read again;
-  `200` `{text, done}` says in a line what was done (« 2 déplacés »), any other answer `{error}`,
-  why not (`502` with the tool's error, as plain text, when it failed: for the call as a whole).
+  user's yes; free runs. One call with the fixed `args` and the ids in its `items` parameter, or,
+  with an arg taken from each item (`{"@item": field}`), one call per value read from the source's
+  items (`400` `act.noitemarg` when one lacks it), each under its own policy, all checked before
+  any runs; each kept in the decisions' journal (`by` user, the reason saying the click counted
+  as the yes) and in the node's trace in code's words (never the items' titles); no turn. Then the
+  source is read again and the node's skills are woken (`node.gesture`, `wakeNodeSkills`);
+  `200` `{text, done}` says in a line what was done (« 2 déplacés », with what failed when some
+  calls did), any other answer `{error}`, why not (`502` with the tool's error, as plain text, when
+  every call failed).
 - `POST /api/nodes/{id}/open` `{block, source, item, yes, tool}`: an item opened in place
   (`item_open.go`), the user's gesture. The source's `items.open` is read again in the stored block
   (`409` when it has none); the item must be one the source lists now (`400`). The tool (a read of

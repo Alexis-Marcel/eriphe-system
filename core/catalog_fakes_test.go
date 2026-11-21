@@ -103,8 +103,14 @@ func (m *fakeMonitor) server() *mcp.Server {
 			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: "monitor://invitations", Text: string(raw)}}}, nil
 		})
 	// send replies to a message, respond answers an invitation: actions on
-	// an item, by its id.
-	mcp.AddTool(s, &mcp.Tool{Name: "send"},
+	// an item, by its id. send has a title of its own; reply's schema names
+	// its text.
+	s.AddTool(&mcp.Tool{Name: "reply", InputSchema: map[string]any{"type": "object", "properties": map[string]any{
+		"id": map[string]any{"type": "string"}, "text": map[string]any{"type": "string", "title": "Ta réponse"}}}},
+		func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return &mcp.CallToolResult{}, nil
+		})
+	mcp.AddTool(s, &mcp.Tool{Name: "send", Annotations: &mcp.ToolAnnotations{Title: "Send a reply"}},
 		func(_ context.Context, _ *mcp.CallToolRequest, in struct {
 			ID   string `json:"id"`
 			Body string `json:"body"`
@@ -123,7 +129,7 @@ func (m *fakeMonitor) server() *mcp.Server {
 		}) (*mcp.CallToolResult, map[string]any, error) {
 			m.mu.Lock()
 			defer m.mu.Unlock()
-			m.sent = append(m.sent, map[string]any{"tool": "move", "ids": in.IDs, "to": in.To})
+			m.sent = append(m.sent, map[string]any{"tool": "move", "ids": in.IDs, "to": in.To, "account": in.Account})
 			return nil, map[string]any{"moved": len(in.IDs)}, nil
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "respond"},

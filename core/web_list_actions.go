@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,12 +36,17 @@ import (
 //     in the node's trace, in code's words (never the items' titles,
 //     someone else's words the brain would read as the user's). No turn
 //     starts.
-//   - Then the source is read again, and the page says in a line what was
-//     done, or why not.
+//   - Then the source is read again, the page says in a line what was
+//     done, or why not, and the skills that work in the node are woken
+//     (wakeNodeSkills): its view changed by the user's hand.
 //
-// One call with all the ids: what the user confirmed is that call. A tool
-// that fails says so for the call as a whole; a tool's words in its
-// error are shown as plain text.
+// One call with all the ids: what the user confirmed is that call. An
+// action with an arg taken from each item ({"@item": "account"}) makes
+// one call per value the picked items have, read from the source (the
+// mails of each account, by their account), each under its own access
+// policy, all checked before any runs; the confirm said those values. A
+// call that fails says so for its items; a tool's words in its error are
+// shown as plain text.
 
 func (w *web) listActionRoutes(mux *webMux) {
 	mux.Handle("POST /api/nodes/{id}/act", w.auth(w.handleNodeAct))
@@ -143,10 +150,11 @@ func (c *core) runAction(ctx context.Context, id string, in nodeActIn, lang stri
 	if len(in.IDs) > actionsMaxIDs {
 		return actFail(http.StatusBadRequest, fmt.Sprintf(tr(lang, "act.toomany"), actionsMaxIDs))
 	}
+	src := b.Sources[a.Source]
 	value := c.sourceNow(id, b, a.Source)
-	noteItems(b.Sources[a.Source], value, c.itemNotes(id, a.Source)) // its notes now, for the filter
-	listed, _ := itemIDs(b.Sources[a.Source], value, filter)
-	var ids []any
+	noteItems(src, value, c.itemNotes(id, a.Source), c.itemCards(id, a.Source)) // its notes now, for the filters
+	listed, _ := itemIDs(src, value, filter)
+	var picked []listedItem
 	seen := map[string]bool{}
 	missing := 0
 	for _, x := range in.IDs {
@@ -157,7 +165,7 @@ func (c *core) runAction(ctx context.Context, id string, in nodeActIn, lang stri
 		}
 		if !seen[x] {
 			seen[x] = true
-			ids = append(ids, v)
+			picked = append(picked, v)
 		}
 	}
 	if missing > 0 {
@@ -169,63 +177,126 @@ func (c *core) runAction(ctx context.Context, id string, in nodeActIn, lang stri
 		return actFail(http.StatusGone, tr(lang, "act.gone"))
 	}
 	name := claudeToolName(u.name, t.Name)
-	input := map[string]any{}
-	for k, v := range a.Args {
-		input[k] = v
+	calls, missingArg := actionCalls(a, picked)
+	if missingArg != "" {
+		return actFail(http.StatusBadRequest, fmt.Sprintf(tr(lang, "act.noitemarg"), missingArg))
 	}
-	input[a.Items] = ids
-	raw, _ := json.Marshal(input)
-	f := c.pool.facts(name, input)
-	switch {
-	case f.noAccount:
-		return actFail(http.StatusForbidden, tr(lang, "act.account"))
-	case f.value == gridNever && !f.gesture:
-		return actFail(http.StatusForbidden, tr(lang, "act.never"))
-	case f.gesture && !strings.HasPrefix(b.Sources[a.Source].Tool, u.name+"/"):
-		// A tool only the user's gesture runs acts on what its own server
-		// listed and the user saw, never on another source's ids.
-		return actFail(http.StatusForbidden, tr(lang, "act.never"))
-	}
-	reason := "geste de l'utilisateur sur une liste"
-	if f.gesture {
-		reason = "geste de l'utilisateur sur une liste : un outil que seul son geste lance"
-	}
-	if f.value == gridApproval {
-		reason = "geste de l'utilisateur sur une liste : son clic vaut son oui"
-	}
-	one, many := actionWords(t, a.Tool, a.Args, "fr")
-	said := one
-	if len(ids) > 1 {
-		said = strings.ReplaceAll(many, "{n}", fmt.Sprint(len(ids)))
+	// Each call under its tool's policy, all of them before any runs: one
+	// that may not run, and nothing does.
+	for _, cl := range calls {
+		cl.facts = c.pool.facts(name, cl.input)
+		switch f := cl.facts; {
+		case f.noAccount:
+			return actFail(http.StatusForbidden, tr(lang, "act.account"))
+		case f.value == gridNever && !f.gesture:
+			return actFail(http.StatusForbidden, tr(lang, "act.never"))
+		case f.gesture && !strings.HasPrefix(src.Tool, u.name+"/"):
+			// A tool only the user's gesture runs acts on what its own server
+			// listed and the user saw, never on another source's ids.
+			return actFail(http.StatusForbidden, tr(lang, "act.never"))
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), actTimeout)
 	defer cancel()
-	out, _, code, why := c.catalogCall(ctx, name, string(raw), true, func(input map[string]any) {
-		c.store.logDecision("", "", name, input, decideAllow, byUser, reason)
-	})
-	note := "Sur la liste du bloc « " + in.Block + " », " + c.conf().User + " a lancé : " + said
-	if f.value == gridApproval {
-		note += " (son clic vaut son oui)"
-	}
-	if code != "" {
-		note += ". Échec."
-	} else {
-		note += "."
-	}
-	if err := c.nodes.AppendTrace(id, byUser, note); err != nil {
-		log.Printf("nodes: %s: trace: %v", id, err)
+	one, many := actionWords(t, a.Tool, a.FixedArgs(), "fr")
+	done, failed := 0, 0
+	code, why := "", ""
+	for _, cl := range calls {
+		f := cl.facts
+		reason := "geste de l'utilisateur sur une liste"
+		if f.gesture {
+			reason = "geste de l'utilisateur sur une liste : un outil que seul son geste lance"
+		}
+		if f.value == gridApproval {
+			reason = "geste de l'utilisateur sur une liste : son clic vaut son oui"
+		}
+		raw, _ := json.Marshal(cl.input)
+		out, _, c1, w1 := c.catalogCall(ctx, name, string(raw), true, func(input map[string]any) {
+			c.store.logDecision("", "", name, input, decideAllow, byUser, reason)
+		})
+		_ = out // the tool's result: someone else's words, never shown nor kept
+		said := one
+		if len(cl.ids) > 1 {
+			said = strings.ReplaceAll(many, "{n}", fmt.Sprint(len(cl.ids)))
+		}
+		note := "Sur la liste du bloc « " + in.Block + " », " + c.conf().User + " a lancé : " + said + " (" + a.Tool + ")"
+		if f.value == gridApproval {
+			note += " (son clic vaut son oui)"
+		}
+		if c1 != "" {
+			note += ". Échec."
+			failed += len(cl.ids)
+			if code == "" {
+				code, why = c1, w1
+			}
+		} else {
+			note += "."
+			done += len(cl.ids)
+		}
+		if err := c.nodes.AppendTrace(id, byUser, note); err != nil {
+			log.Printf("nodes: %s: trace: %v", id, err)
+		}
 	}
 	c.readNodeLater(context.Background(), id, []string{a.Source})
-	_ = out // the tool's result: someone else's words, never shown nor kept
-	switch code {
-	case "":
-		return actResult{Status: http.StatusOK, Text: doneText(a.Tool, len(ids), lang), Done: len(ids)}
-	case callWhyNotAllowed:
+	if done > 0 {
+		c.wakeNodeSkills(id, "action")
+	}
+	switch {
+	case code == "":
+		return actResult{Status: http.StatusOK, Text: doneText(a.Tool, done, lang), Done: done}
+	case done > 0:
+		// Some calls ran, some did not: both said, the page reads the
+		// source again.
+		return actResult{Status: http.StatusOK, Text: fmt.Sprintf(tr(lang, "act.partial"), doneText(a.Tool, done, lang), failed), Done: done}
+	case code == callWhyNotAllowed:
 		return actFail(http.StatusForbidden, tr(lang, "act.never"))
-	case callWhyGone, callWhyNotKept:
+	case code == callWhyGone, code == callWhyNotKept:
 		return actFail(http.StatusGone, tr(lang, "act.gone"))
 	}
 	return actFail(http.StatusBadGateway, fmt.Sprintf(tr(lang, "act.failed"), truncate(oneLine(why), 200)))
+}
+
+// actionCall is one call a click makes: its input, the ids it takes, and
+// its tool's policy for that input.
+type actionCall struct {
+	input map[string]any
+	ids   []any
+	facts catalogFacts
+}
+
+// actionCalls are the calls a click on picked items makes: one with all
+// their ids, or, for an action whose args are taken from each item, one
+// per value they have, each with the ids of its items, in the order
+// first met. The values are read from the source's items, never from the
+// page. missing names the arg an item has no value for: nothing runs.
+func actionCalls(a nodefile.Action, picked []listedItem) (calls []*actionCall, missing string) {
+	byItem := a.ItemArgs()
+	params := slices.Sorted(maps.Keys(byItem))
+	keyed := map[string]*actionCall{}
+	for _, it := range picked {
+		input := a.FixedArgs()
+		key := ""
+		for _, k := range params {
+			text := itemArgValue(it.Item, byItem[k])
+			if text == "" {
+				return nil, k
+			}
+			v, _ := extract(it.Item, byItem[k])
+			input[k] = v
+			key += k + "\x00" + text + "\x00"
+		}
+		cl := keyed[key]
+		if cl == nil {
+			cl = &actionCall{input: input}
+			keyed[key] = cl
+			calls = append(calls, cl)
+		}
+		cl.ids = append(cl.ids, it.ID)
+	}
+	for _, cl := range calls {
+		cl.input[a.Items] = cl.ids
+	}
+	return calls, ""
 }
 
 // sourceNow is a block's source's value now: its last read, else its

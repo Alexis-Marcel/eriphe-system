@@ -169,7 +169,10 @@ A block may declare what the user can run on the items of one of its sources, by
                         "items": "ids", "source": "inbox"}}
 ```
 
-- `tool`: a catalog tool, `<server>/<tool>`, as a source's; `args`: its fixed arguments;
+- `tool`: a catalog tool, `<server>/<tool>`, as a source's; `args`: its fixed arguments, or one
+  taken from each item, `{"@item": "<field>"}` (plain fields joined by dots): one call per value
+  the picked items have, each with its own items (`"args": {"account": {"@item": "account"}}`
+  trashes the mails of each account with that account named);
 - `items`: the tool's parameter that takes the ids the user picks, a list; never among `args`;
 - `source`: one of the block's sources, with an `items` descriptor (the ids are its items' `id`);
 - `label`: the author's name for it, one line, 60 characters at most: only a hint;
@@ -177,27 +180,34 @@ A block may declare what the user can run on the items of one of its sources, by
   items; without it, it shows on every List of them.
 
 A name is lowercase letters, digits, `_` and `-`, 40 at most. When an author writes it, code checks
-it against the catalog: the tool is there, `items` is one of its parameters that takes a list, and
-`args` hold against its input schema with that parameter left out.
+it against the catalog: the tool is there, `items` is one of its parameters that takes a list, an
+arg taken from each item is one of its parameters that takes one value, and the fixed `args` hold
+against its input schema with those parameters left out.
 
 A `List` bound as a whole to that source's items (its template's `path` is `/<source>/<items.path>`,
 a path of plain fields, with or without a [filter](#sections)) lets the user pick rows: a box on
-each, « tout sélectionner », a button per action on all its rows (« Supprimer les 12 », up to 200
+each, « tout sélectionner », a button per action on all its rows (« Tout supprimer », up to 200
 rows), and, once something is picked, the actions over the picked rows. What a button says is
-code's, built from the tool and its fixed args (« Déplacer 2 éléments → archive (mail/move) »); the
-`label` shows beside it, never on an `external` block. A tool that looks destructive (it says so,
-or `trash`, `delete`, `remove` in its name or description) shows its exact call (the tool, its
-args, and the very items it will take, title · detail) before it runs.
+code's, built from the tool and its fixed args (« Déplacer les 2 → archive »), never with the tool
+(the confirm and the button's tooltip say it); the `label` shows beside it, never on an `external`
+block. A tool that looks destructive (it says so, or `trash`, `delete`, `remove` in its name or
+description) shows its exact call (the tool, its args, an arg taken from each item by its values,
+« account : perso, travail (un appel par account) », and the very items it will take, title ·
+detail) before it runs.
 
 The click is the user's own gesture, on the ids the page showed (frozen when the button is pressed,
 whatever the list shows meanwhile): code reads the action and the List the click was made in again
 in the block as stored (each the same as at the version the page showed), checks that every id is
-one the source lists now and that the List's filter keeps now, and runs one call on those ids, never
+one the source lists now and that the List's filters keep now, and runs one call on those ids, never
 more (a mail come since the page showed the list is not in it; one id that is not enough for nothing
-to run), with the tool's access policy (never: refused, but for a tool only the user's gesture runs,
-such as `eriphe-catalog`'s `catalog_accept` and `catalog_refuse`, never to any agent and run by
-the click alone; on approval: the click is the yes, logged as
-such; free: runs). The node's trace says it in code's words. The source is then read again.
+to run), or, with an arg taken from each item, one call per value read from the source's items
+(an item without it, and nothing runs), with the tool's access policy for each call, all checked
+before any runs (never: refused, but for a tool only the user's gesture runs, such as
+`eriphe-catalog`'s `catalog_accept` and `catalog_refuse`, never to any agent and run by the click
+alone; on approval: the click is the yes, logged as such; free: runs; a call that must name its
+account and names none is refused). The node's trace says each call in code's words. The source is
+then read again, and the skills that work in the node are woken (a journal event `node.gesture`,
+once the user's gestures pause ten seconds): the view's skill writes its bilan again.
 
 ### Sections
 
@@ -209,13 +219,27 @@ per section whose template's path filters the source's items by a field:
 {"id": "drop", "component": "List", "children": {"path": "/mails/messages[_group=À supprimer]", "componentId": "row"}}
 ```
 
-- The filter is one `[field=value]` or `[field!=value]`, after the source's items as their `items`
-  path says them, on a `List` only; checked when an author writes the block. A field the item has
-  not reads as empty: `[_group=]` keeps the items in no group.
+- A filter is `[field=value]` or `[field!=value]`, one or more after the source's items as their
+  `items` path says them (all must hold: `[_group=À traiter][_state!=done]`), on a `List` only;
+  checked when an author writes the block. A field the item has not reads as empty: `[_group=]`
+  keeps the items in no group.
 - Each item of a source with `items` carries, in the block's data (never in its file), its note's
-  fields: `_note`, `_state` and `_group` (empty when it has none), and `_external: true` when the
-  note was written after reading external content. A component may show them (`{"@path":
-  "_note"}`); they follow the notes live.
+  fields: `_note`, `_state` and `_group` (empty when it has none), `_card`, the ref of the card that
+  waits on it while it still asks something (its yes to give, or a yes that runs or failed; empty
+  otherwise), and `_external: true` when the note was written after reading external content.
+  Code writes them over whatever the source gave. A component may show them (`{"@path":
+  "_note"}`); they follow the notes and the cards live. The page is also told each row's card out
+  of band (its Lists' rows), never from the block's data.
+- A card on an item, once its yes ran, notes the item `done` (code's, its note and group kept,
+  until a skill notes it again): a List that keeps `[_state!=done]` lets it go at once. Said yes or
+  no, the skills that work in the node are woken, as after an action.
+- Code filters, never the page: the page draws the List bound to the source's items as a whole and
+  shows only the rows code kept, in the source's order; a List whose filter keeps nothing shows its
+  `emptyText`. An action with `list` shows on its section only.
+
+A skill's run whose call acts on an item without naming it (an event made from a mail) puts it on
+that item with `item_note`'s `call` (the reference the run was told when the call was kept): its
+card then waits on the item's row, its words naming the item.
 - Code filters, never the page: the page draws the List bound to the source's items as a whole and
   shows only the rows code kept, in the source's order; a List whose filter keeps nothing shows its
   `emptyText`. An action with `list` shows on its section only.

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -26,7 +27,63 @@ const (
 	cardRunCalls   = "runcalls"
 	runCallsWait   = "Pas exécutée maintenant : eriphe-core la garde, telle quelle, pour une carte que l'utilisateur verra à la fin de ton tour ; s'il dit oui, elle sera exécutée. N'insiste pas et continue ; dis-le dans ton message final."
 	urgentSkillWhy = "Ton skill « %s » est urgent : tu as approuvé ce message pour être prévenu à toute heure."
+	runCallsRef    = " Sa référence : %d. Si elle porte sur un élément de ton nœud qu'elle ne nomme pas (un événement à créer pour un mail), passe-la à item_note (call) sur cet élément : sa carte attendra sur sa ligne."
 )
+
+// bindItemBatch puts a run's kept call on an item's card: the one its
+// other calls on that item are on, else its own.
+func (c *core) bindItemBatch(run, id int64, node, source, item string) {
+	batch := c.runItemBatch(run, node, source, item)
+	if batch == 0 {
+		batch = id
+	}
+	c.store.db.Exec(`UPDATE access_asks SET node = ?, source = ?, item = ?, batch = ? WHERE id = ?`, node, source, item, batch, id)
+}
+
+// itemCall puts a call a run kept (call, the id its answer gave) on an
+// item of its node (item_note's call): it acts on that item without
+// naming it (an event made from a mail). Only a call of this very run,
+// still waiting, on no other item; the item one its node's source lists.
+// Its card then waits on the item's row, its words naming the item.
+func (c *core) itemCall(task, node, source, item string, call int64) error {
+	r := c.runOfTask(task)
+	if r == nil {
+		return errors.New("call: only a skill's run keeps calls for a card")
+	}
+	a, err := c.accessAskOf(call)
+	if err != nil || a.Run != r.ID {
+		return fmt.Errorf("call: %d is not a call this run kept", call)
+	}
+	if a.State != startProposed {
+		return fmt.Errorf("call: %d was already decided", call)
+	}
+	if a.Item != "" && (a.Source != source || a.Item != item) {
+		return fmt.Errorf("call: %d is on another item (%s)", call, a.Item)
+	}
+	var label *itemLabel
+	for _, rd := range c.nodeReads(node) {
+		if rd.Name != source || rd.Source.Items == nil {
+			continue
+		}
+		for _, it := range sourceItems(rd.Name, rd.Source, rd.Value, 0) {
+			if id, _ := it["id"].(string); id == item {
+				l := itemLabel{ID: id}
+				if t, _ := it["title"].(string); t != id {
+					l.Title = t
+				}
+				l.Detail, _ = it["detail"].(string)
+				label = &l
+			}
+		}
+	}
+	if label == nil {
+		return fmt.Errorf("call: %s is not an item the source %s of your node lists", item, source)
+	}
+	raw, _ := json.Marshal([]itemLabel{*label})
+	c.store.db.Exec(`UPDATE access_asks SET labels = ? WHERE id = ?`, string(raw), call)
+	c.bindItemBatch(r.ID, call, node, source, item)
+	return nil
+}
 
 // askRunCall keeps a run's call for its card and answers the task: not run.
 func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[string]any) {
@@ -57,16 +114,18 @@ func (c *core) askRunCall(t *TaskRow, r *skillRun, pid, tool string, input map[s
 		res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, permission_id, server, category, account, call, input, tainted, created, run, node, source, item, labels)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.ID, pid, n.Server, n.Category, n.Account, tool+" "+string(fields), string(raw),
 			c.store.get(taskTaintKey(t.ID)), time.Now().Unix(), r.ID, node, source, item, labels)
-		if id, _ := rowsID(res, err); onItem && id > 0 {
-			// One card per item: the one its other calls on it are on.
-			batch := c.runItemBatch(r.ID, node, source, item)
-			if batch == 0 {
-				batch = id
-			}
-			c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, batch, id)
+		id, _ = rowsID(res, err)
+		if onItem && id > 0 {
+			c.bindItemBatch(r.ID, id, node, source, item)
 		}
 	}
-	c.store.addInbox(t.ID, "permission", map[string]any{"id": pid, "allow": false, "message": runCallsWait, "by": byPolicy})
+	wait := runCallsWait
+	if !onItem && id > 0 {
+		// A call that names no item of its node: the run may put it on
+		// the item it is about (item_note's call).
+		wait += fmt.Sprintf(runCallsRef, id)
+	}
+	c.store.addInbox(t.ID, "permission", map[string]any{"id": pid, "allow": false, "message": wait, "by": byPolicy})
 	c.store.recordDecision(t.ID, pid, tool, input, decideDeny, byPolicy, "kept for the run's card")
 	c.bump()
 }
@@ -144,7 +203,7 @@ func (c *core) runCallsProposal(p proposal) proposal {
 	}
 	var fs []cardField
 	for _, a := range asks {
-		fs = append(fs, callDetail(a))
+		fs = append(fs, callDetail(a, nil))
 	}
 	p.Fields = fs
 	return p

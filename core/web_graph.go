@@ -155,8 +155,11 @@ func (c *core) graphRows() ([]graphNode, error) {
 }
 
 // nodePage is a node's page: its row, the version shown and the others,
-// its body in parts, and its cards: those its document does not place
-// (a card block places one where its author wrote it).
+// its body in parts, and its cards: at its foot, those that still ask
+// something (pendingAsks) its document does not place (a card block
+// places one where its author wrote it) nor a row of its Lists shows (a
+// card on an item, its Oui on its row); the others, decided, are its
+// settled ones, the last first, for its ⋯ menu (« Déjà décidé »).
 type nodePage struct {
 	Node     graphNode      `json:"node"`
 	Version  int            `json:"version"` // the version shown
@@ -165,6 +168,7 @@ type nodePage struct {
 	Shift    int            `json:"shift,omitempty"` // 1 when its creation was empty: the user's v1 is its version 2
 	Parts    []pagePart     `json:"parts"`
 	Cards    []proposalView `json:"cards"`
+	Settled  []proposalView `json:"settled"`
 	// Refs: the node each [[name]] of its text opens, by the name as
 	// written; a name no node has is not there (the page greys it).
 	Refs map[string]pageRef `json:"refs"`
@@ -296,17 +300,52 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 	}
 	placed := map[string]bool{}
-	for _, part := range p.Parts {
+	for i, part := range p.Parts {
 		if part.Block != nil && part.Block.Proposal != nil {
 			placed[part.Block.Proposal.Ref] = true
 		}
+		if part.Block != nil && inlineProposals(d.Node.Parts()[i].Block) {
+			for _, l := range part.Block.Lists {
+				for _, it := range l.Items {
+					if it.Card != "" {
+						placed[it.Card] = true // on its row, its Oui there
+					}
+				}
+			}
+		}
 	}
+	p.Cards, p.Settled = []proposalView{}, []proposalView{}
 	for _, v := range w.nodeCards(id, lang) {
-		if !placed[v.Ref] {
+		switch {
+		case !pendingAsks(v):
+			if len(p.Settled) < settledMax {
+				p.Settled = append(p.Settled, v)
+			}
+		case !placed[v.Ref]:
 			p.Cards = append(p.Cards, v)
 		}
 	}
 	return p, nil
+}
+
+// settledMax is the most decided cards a page lists in its ⋯ menu.
+const settledMax = 20
+
+// pendingAsks tells whether a card still asks something of the user on
+// its page: it waits, or its yes runs or failed.
+func pendingAsks(v proposalView) bool {
+	return v.State == cardPending || v.State == cardApproved && (v.Exec == callRunning || v.Exec == callFailed)
+}
+
+// inlineProposals tells whether a block draws Proposals on its items'
+// rows (inline): a card on one of its rows is answered there.
+func inlineProposals(b *nodefile.Block) bool {
+	if b == nil {
+		return false
+	}
+	var comps []map[string]any
+	json.Unmarshal(b.Components, &comps)
+	return slices.ContainsFunc(comps, func(m map[string]any) bool { return m["component"] == "Proposal" && m["inline"] == true })
 }
 
 // placedCard is the card a card block of node id places, as its records

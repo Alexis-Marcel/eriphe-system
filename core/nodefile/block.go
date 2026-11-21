@@ -92,7 +92,9 @@ type Source struct {
 // a list: a tool with fixed args, the ids they picked in its Items
 // parameter. The author names it (Label, a hint only); what its button
 // says is code's, from the tool and its args. The click is the user's own
-// gesture (the core's web_list_actions.go).
+// gesture (the core's web_list_actions.go). An arg may be taken from each
+// item, {"@item": "<field>"}: one call per value the picked items have
+// (the mails of each account, by their account).
 type Action struct {
 	Label  string         `json:"label,omitempty"`
 	Tool   string         `json:"tool"`
@@ -104,6 +106,48 @@ type Action struct {
 
 // ActionRe is an action's name.
 var ActionRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
+
+// ItemFieldRe is the field an arg takes from each item: plain fields
+// joined by dots (account, meta.project).
+var ItemFieldRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}(\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,3}$`)
+
+// ItemArg is the field an action's arg takes from each item, when it is
+// {"@item": "<field>"}; ok false for a fixed arg.
+func ItemArg(v any) (field string, ok bool) {
+	m, isMap := v.(map[string]any)
+	if !isMap {
+		return "", false
+	}
+	f, has := m["@item"]
+	if !has {
+		return "", false
+	}
+	s, _ := f.(string)
+	return s, true
+}
+
+// ItemArgs are an action's args taken from each item, by parameter: the
+// field each reads.
+func (a Action) ItemArgs() map[string]string {
+	out := map[string]string{}
+	for k, v := range a.Args {
+		if f, ok := ItemArg(v); ok {
+			out[k] = f
+		}
+	}
+	return out
+}
+
+// FixedArgs are an action's args the same for every item.
+func (a Action) FixedArgs() map[string]any {
+	out := map[string]any{}
+	for k, v := range a.Args {
+		if _, ok := ItemArg(v); !ok {
+			out[k] = v
+		}
+	}
+	return out
+}
 
 // ActionLabelMax is the most runes of an action's label.
 const ActionLabelMax = 60
@@ -593,6 +637,12 @@ func (a Action) check(name string, sources map[string]Source) []string {
 		out = append(out, at+"items names the tool's parameter that takes the ids the user picks")
 	} else if _, ok := a.Args[a.Items]; ok {
 		out = append(out, at+"args has no "+a.Items+": the ids the user picks go there")
+	}
+	for _, k := range slices.Sorted(maps.Keys(a.Args)) {
+		m, _ := a.Args[k].(map[string]any)
+		if f, ok := ItemArg(a.Args[k]); ok && (len(m) != 1 || !ItemFieldRe.MatchString(f)) {
+			out = append(out, fmt.Sprintf("%sargs.%s: an arg taken from each item is {\"@item\": \"<its field>\"} alone, plain fields joined by dots", at, k))
+		}
 	}
 	if src, ok := sources[a.Source]; !ok {
 		out = append(out, at+"source names one of the block's sources, the list it acts on")
