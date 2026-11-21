@@ -688,7 +688,11 @@ func (c *core) decideAccess(ctx context.Context, id int64, approve bool) error {
 		return nil
 	case a.Call != "":
 		if approve {
-			go c.runApprovedCall(a) // outside the cards' lock: it may take a while
+			c.yeses.Add(1)
+			go func() { // outside the cards' lock: it may take a while
+				defer c.yeses.Done()
+				c.runApprovedCall(a)
+			}()
 			return nil
 		}
 		name, _, _ := strings.Cut(a.Call, " ")

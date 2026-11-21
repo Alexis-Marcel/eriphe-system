@@ -209,9 +209,7 @@ func TestChosenCallsRunAlone(t *testing.T) {
 			t.Errorf("call %d is %s, want %s", id, x.State, state)
 		}
 	}
-	for i := 0; i < 200 && func() bool { s, _ := c.callsExec(a); return s != callDone }(); i++ {
-		time.Sleep(10 * time.Millisecond)
-	}
+	c.yeses.Wait() // the chosen calls ran
 	if s, _ := c.callsExec(a); s != callDone {
 		t.Fatalf("the chosen calls: %s", s)
 	}
