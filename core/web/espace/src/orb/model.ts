@@ -65,6 +65,12 @@ export type Mind = {
   call: Call | null;
 };
 
+// wordsKey is the key of Eriphe's words, by their message alone: the same
+// message, first read as an event's words then as the answer (eriphe-core
+// marks it an answer just after writing it), is the same thing shown, not
+// newer words that replace it.
+const wordsKey = (seq: number) => `words:${seq}`;
+
 export function orbShow(x: OrbFeed | null, m: Mind): Show {
   const known = (id?: string | null) => (id && m.nodes[id] ? id : null);
   const fresh = (key: string) => {
@@ -77,7 +83,7 @@ export function orbShow(x: OrbFeed | null, m: Mind): Show {
   }
   if (x?.failed && x.failed.seq > m.closed.failed) return { mode: "failed", node: known(x.failed.node), key: `failed:${x.failed.seq}`, pinned: true };
   const a = x?.answer;
-  const answerKey = a ? `answer:${a.seq}` : "";
+  const answerKey = a ? wordsKey(a.seq) : "";
   const answerFresh = !!a && a.seq > m.closed.seen && fresh(answerKey);
   if (x?.wait && x.wait.card > m.closed.wait && known(x.wait.node)) {
     const words = a && answerFresh && known(a.node) === x.wait.node ? a : undefined;
@@ -94,8 +100,8 @@ export function orbShow(x: OrbFeed | null, m: Mind): Show {
     newest = a.seq;
   }
   const s = x?.said;
-  if (s && s.seq > m.closed.seen && (!a || s.seq > a.seq) && fresh(`said:${s.seq}`)) {
-    show = { mode: "said", node: known(s.node), key: `said:${s.seq}`, words: s };
+  if (s && s.seq > m.closed.seen && (!a || s.seq > a.seq) && fresh(wordsKey(s.seq))) {
+    show = { mode: "said", node: known(s.node), key: wordsKey(s.seq), words: s };
     newest = s.seq;
   }
   if (m.call && known(m.call.id) && m.call.after >= newest) {
