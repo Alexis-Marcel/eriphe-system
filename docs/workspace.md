@@ -115,9 +115,10 @@ other apart, a bubble stays close to its subject and linked subjects close to ea
 linked to nothing on the edge. Drag a bubble, or a page by its head: it passes over everything, and
 what is linked to it follows, less and less the further the link; nothing else moves. Drop it: it
 stays exactly there, and what was under it steps aside. A subject dragged far out in the void lags
-behind and, dropped there, comes back to the edge; a bubble stays near its subject. Bring a bubble to
-the edge of the screen and the view follows. A page that opens pushes bubbles aside; closed, they
-go back where they were.
+behind and, dropped there, comes back to the edge; a bubble stays near its subject, and a bubble
+dropped by an open page goes back beside it. Bring a bubble to the edge of the screen and the view
+follows. A page that opens pushes bubbles aside, its own bubbles staying beside it; closed, they go
+back where they were.
 
 Where things are holds while the workspace is open, not after: a reload lays the graph out afresh.
 Your Eriphe keeps the pages you left open and your light or dark choice (the sun or moon at the top;
