@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -309,9 +308,13 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 			  error = excluded.error, waiting = excluded.waiting, next_at = excluded.next_at, filed = excluded.filed`,
 			node, r.Block, r.Name, r.spec, value, r.Read, r.Error, r.Waiting, r.NextAt, r.Filed)
 	}
-	// The pages that show it get the new values at once (graph_feed.go).
+	// The pages that show it get the new values at once (graph_feed.go),
+	// and the items a call named before this read began as it says them:
+	// gone, or back (source_fresh.go).
 	for i, r := range reads {
-		if r.Value != nil && valueHash(r.Value) != was[i] {
+		_, read := got[r.Block+"/"+r.Name]
+		settled := read && c.sourceReadSince(node, r.Name, now)
+		if settled || r.Value != nil && valueHash(r.Value) != was[i] {
 			c.graphSaid(graphEvent{Kind: graphEvSource, Node: node, Block: r.Block, Name: r.Name})
 		}
 	}
@@ -489,25 +492,18 @@ func (c *core) monitorRaise(m *monitor, kind string, p map[string]any) {
 func nodeRef(id string) string { return "node:" + id }
 
 // nodeResourceUpdated is the pool's hook: a server said a resource
-// changed; the blocks that read it read it again.
+// changed. Its state changed: the blocks that read it read it again,
+// whatever they read of it, a tool or a resource (source_fresh.go).
 func (c *core) nodeResourceUpdated(server, uri string) {
 	if c.nodes == nil {
 		return
 	}
-	srcs, _ := c.nodes.Sources("")
-	byNode := map[string][]string{}
-	for _, s := range srcs {
-		if s.Source.Resource == server && s.Source.URI == uri {
-			byNode[s.ID] = append(byNode[s.ID], s.Name)
-		}
-	}
-	for _, id := range slices.Sorted(maps.Keys(byNode)) {
-		c.readNodeLater(context.Background(), id, byNode[id])
-	}
+	c.readServerSoon(server, "")
 }
 
 // followNodeResources asks each server for the updates of the resources
-// the nodes read, and of those only.
+// the nodes read, and of all its resources when the nodes read its
+// tools: what it says changed is read again (source_fresh.go).
 func (c *core) followNodeResources() {
 	if c.pool == nil {
 		return
@@ -518,6 +514,11 @@ func (c *core) followNodeResources() {
 	}
 	for server, uris := range c.nodeResources() {
 		want[server] = append(want[server], uris...)
+	}
+	for _, server := range c.toolServers() {
+		if u := c.pool.get(server); u != nil {
+			want[server] = append(want[server], u.resourceURIs()...)
+		}
 	}
 	for name, uris := range want {
 		if u := c.pool.get(name); u != nil {
@@ -536,6 +537,21 @@ func (c *core) nodeResources() map[string][]string {
 	for _, s := range srcs {
 		if s.Source.Resource != "" && !slices.Contains(out[s.Source.Resource], s.Source.URI) {
 			out[s.Source.Resource] = append(out[s.Source.Resource], s.Source.URI)
+		}
+	}
+	return out
+}
+
+// toolServers are the servers whose tools the nodes read.
+func (c *core) toolServers() []string {
+	var out []string
+	if c.nodes == nil {
+		return out
+	}
+	srcs, _ := c.nodes.Sources("")
+	for _, s := range srcs {
+		if server, _, ok := strings.Cut(s.Source.Tool, "/"); ok && !slices.Contains(out, server) {
+			out = append(out, server)
 		}
 	}
 	return out

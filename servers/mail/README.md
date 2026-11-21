@@ -68,6 +68,13 @@ at each start, and the container stays read-only.
   oldest first. A monitor of eriphe-core reads it (core/README.md, Monitors: `cond: new`,
   `path: messages`, `id: id`) and writes one `monitor.new` per new message. Without the cache
   nothing is listed.
+- **Changes for eriphe-core**: the MCP resource `mail://changes` says when each cached folder of
+  each account last changed, `{"folders": [{"account", "folder", "changed", "new", "gone",
+  "flags"}]}`, wherever the change was made (another mail app, the webmail, this server). The
+  server offers resource subscriptions: a subscriber hears `notifications/resources/updated` for
+  `mail://changes` at each change and for `mail://received` at each new message. eriphe-core
+  subscribes and reads its views of the mail again then (core/README.md, Read again after a
+  change). Without the cache nothing is told.
 - Gmail labels and categories are not cached: `go-imap` v2 does not fetch `X-GM-LABELS`.
 
 | Env | Default | |

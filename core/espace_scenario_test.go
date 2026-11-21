@@ -57,6 +57,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/sections", sc.handleSections)
 	mux.HandleFunc("POST /e2e/open", sc.handleOpen)
 	mux.HandleFunc("POST /e2e/bilan", sc.handleBilan)
+	mux.HandleFunc("POST /e2e/purge", sc.handlePurge)
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
 	mux.HandleFunc("POST /e2e/catalog", sc.handleCatalog)
 	mux.Handle("/", sc.web.w.routes())
@@ -220,6 +221,7 @@ type scenarioTools struct {
 	read    []string   // lire: the id of each call (sources-open.spec.ts)
 	trashed []string   // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
 	replied []string   // repondre: the id of each call (view-bilan.spec.ts)
+	purged  []string   // purger: the ids it deleted (view-refresh.spec.ts)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
 	veille *mcp.Server
@@ -270,6 +272,15 @@ var tri = []map[string]any{
 	{"id": "s3", "subject": "Votre colis est en route", "from": "colis@example.org"},
 	{"id": "s4", "subject": "Lettre du dimanche", "from": "news@example.org"},
 	{"id": "s5", "subject": "Planning de mars", "from": "lou@example.org"},
+}
+
+// promos is the mailbox the conversation cleans (view-refresh.spec.ts):
+// what purger deleted leaves it.
+var promos = []map[string]any{
+	{"id": "p1", "subject": "Soldes d'automne", "from": "promo@example.org"},
+	{"id": "p2", "subject": "Compte rendu de la réunion", "from": "sam@example.org"},
+	{"id": "p3", "subject": "Dernière chance : -70 %", "from": "promo@example.org"},
+	{"id": "p4", "subject": "Photos du week-end", "from": "lou@example.org"},
 }
 
 // boite is the mailbox the list with actions shows (selection.spec.ts):
@@ -426,6 +437,29 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				defer f.mu.Unlock()
 				f.moved = append(f.moved, slices.Clone(in.IDs))
 				return nil, map[string]any{"moved": len(in.IDs)}, nil
+			})
+		// promos lists the mailbox the conversation cleans, purger deletes
+		// from it (view-refresh.spec.ts).
+		mcp.AddTool(s, &mcp.Tool{Name: "promos", Description: "Les mails de la boîte à nettoyer", Annotations: read},
+			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				msgs := []any{}
+				for _, m := range promos {
+					if !slices.Contains(f.purged, m["id"].(string)) {
+						msgs = append(msgs, m)
+					}
+				}
+				return nil, map[string]any{"messages": msgs}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "purger", Description: "Supprime des mails pour de bon"},
+			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
+				IDs []string `json:"ids"`
+			}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				f.purged = append(f.purged, in.IDs...)
+				return nil, map[string]any{"deleted": len(in.IDs)}, nil
 			})
 		mcp.AddTool(s, &mcp.Tool{Name: "envoyer", Description: "Envoie un mail"},
 			func(_ context.Context, _ *mcp.CallToolRequest, in struct {
@@ -839,6 +873,12 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		return homeFilms
 	case strings.Contains(said, "archiver"):
 		return "C'est toi qui archives : « Archiver », en haut de sa page."
+	case strings.Contains(said, "Supprime les deux promos"):
+		// From the conversation, a call the user allowed for good: the view
+		// that lists the mailbox reads it again by itself
+		// (view-refresh.spec.ts).
+		b.catalog("mail", "purger", map[string]any{"ids": []string{"p1", "p3"}}, false)
+		return "Les deux promos sont supprimées."
 	case strings.Contains(said, "Écris-moi un article"):
 		// Asked at the home: the main subject opens with its plan and its
 		// questions, their buttons below.
@@ -1032,7 +1072,7 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f := sc.tools
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved), "deleted": slices.Clone(f.deleted), "read": slices.Clone(f.read), "trashed": slices.Clone(f.trashed), "replied": slices.Clone(f.replied)})
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved), "deleted": slices.Clone(f.deleted), "read": slices.Clone(f.read), "trashed": slices.Clone(f.trashed), "replied": slices.Clone(f.replied), "purged": slices.Clone(f.purged)})
 }
 
 // handleCatalog is POST /e2e/catalog: the tools' catalog changed, an
@@ -1276,6 +1316,34 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
 	c.bump()
+	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// handlePurge is POST /e2e/purge: a view of a mailbox (mail/promos), read
+// once, every five minutes after, and shown; purger allowed for good, as
+// the user would have (view-refresh.spec.ts).
+func (sc *scenario) handlePurge(rw http.ResponseWriter, r *http.Request) {
+	c := sc.c
+	d, err := c.nodes.Create(nodestore.New{Title: "Boîte à nettoyer", Lifetime: nodefile.Standing, Author: byBrain, Body: "La boîte.\n"})
+	if err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id := d.Node.Meta.ID
+	body := "La boîte.\n\n```eriphe:block promos\n" + `{"components": [
+  {"id": "root", "component": "List", "children": {"path": "/promos/messages", "componentId": "row"}},
+  {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
+ "sources": {"promos": {"tool": "mail/promos", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
+	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := c.store.allowAction("mail", claudeToolName("mail", "purger"), ""); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	c.readNode(sc.ctx, id, nil, time.Now())
+	c.showNode(id, byBrain, false)
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
 }
 

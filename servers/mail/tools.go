@@ -210,7 +210,7 @@ const instructions = "Mail of the user, across all their accounts (one tool set 
 func ptr[T any](v T) *T { return &v }
 
 func newServer(m *Mailer, version string) *mcp.Server {
-	s := mcp.NewServer(&mcp.Implementation{Name: "eriphe-mail", Version: version}, &mcp.ServerOptions{Instructions: instructions})
+	s := mcp.NewServer(&mcp.Implementation{Name: "eriphe-mail", Version: version}, subscriptions()) // changes.go
 	addTestAccount(s, func(ctx context.Context, name string) error {
 		a, err := m.account(name)
 		if err == nil {
@@ -219,6 +219,7 @@ func newServer(m *Mailer, version string) *mcp.Server {
 		return err
 	})
 	addReceived(s, m, &receivedLog{}) // received.go
+	addChanges(s, m, &changesLog{})   // changes.go, after: it tells received's subscribers too
 	ro := &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: ptr(false)}
 
 	tool(s, "list_accounts", "List the configured mail accounts.", ro,

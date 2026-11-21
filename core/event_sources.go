@@ -64,6 +64,7 @@ func (c *core) tickReturned(now time.Time) {
 	c.emitLogged(journalEvent{Kind: evUserReturned, Source: "user", At: a.Back, Payload: map[string]any{
 		"left": a.Left.In(loc).Format(time.RFC3339), "back": a.Back.In(loc).Format(time.RFC3339),
 		"away_minutes": int(a.Back.Sub(a.Left) / time.Minute)}})
+	c.readAllStale(now) // the views as they are now (source_fresh.go)
 }
 
 // taskEnded is the lifecycle's hook: a worker task finished.

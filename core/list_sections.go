@@ -111,8 +111,9 @@ func listBinding(path string, sources map[string]nodefile.Source) (string, itemF
 // it has none, so that a filter reads them and no source's own field
 // passes for code's. value is the block's own copy (read for the page,
 // never kept): it is changed in place. A source whose items' path is not
-// plain fields is left as it is.
-func noteItems(src nodefile.Source, value any, notes map[string]nodestore.Item, cards map[string]string) {
+// plain fields is left as it is. An item leaving (a call named it, and
+// its source was not read since: source_fresh.go) is done.
+func noteItems(src nodefile.Source, value any, notes map[string]nodestore.Item, cards map[string]string, leaving map[string]bool) {
 	if src.Items == nil || value == nil || listPath("x", src) == "" {
 		return
 	}
@@ -129,6 +130,9 @@ func noteItems(src nodefile.Source, value any, notes map[string]nodestore.Item, 
 		id := itemID(src, it)
 		n := notes[id]
 		o[itemNoteField], o[itemStateField], o[itemGroupField], o[itemCardField] = n.Note, n.State, n.Group, cards[id]
+		if leaving[id] {
+			o[itemStateField] = itemDone
+		}
 		delete(o, itemExternalField)
 		if n.Tainted != "" {
 			o[itemExternalField] = true
@@ -165,7 +169,7 @@ func (c *core) itemNotes(id, source string) map[string]nodestore.Item {
 func (c *core) noteSources(id string, b *nodefile.Block, data map[string]any) {
 	for name, src := range b.Sources {
 		if src.Items != nil && data[name] != nil {
-			noteItems(src, data[name], c.itemNotes(id, name), c.itemCards(id, name))
+			noteItems(src, data[name], c.itemNotes(id, name), c.itemCards(id, name), c.leavingItems(id, name))
 		}
 	}
 }

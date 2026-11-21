@@ -297,8 +297,18 @@ func (c *core) proxyCall(ctx context.Context, taskID string, grant []string, u *
 	if err != nil {
 		return toolError(err.Error())
 	}
-	if acting && !res.IsError && taskID == c.brainTaskID() {
+	if res.IsError {
+		return res
+	}
+	brain := taskID == c.brainTaskID()
+	if acting && brain {
 		c.traceBrainCall(u.name, tool)
+	}
+	// Its server's live sources read again (source_fresh.go); the views
+	// whose items the conversation's call named wake their skill, never
+	// on a task's own call (a skill's run would wake itself).
+	if named := c.sourcesChanged(u.name, u.tool(tool), input); brain {
+		c.wakeViews(named)
 	}
 	return res
 }

@@ -154,7 +154,11 @@ node waits for the user (its bubble says « t'attend », as for a card); when it
 node rests.
 
 Code reads the sources without a model, as the brain's free reads are: a source new or changed at
-once, then every `every` minutes, a resource at its update, a monitor at each of its looks. A read
+once, then every `every` minutes, a resource at its update, a monitor at each of its looks. A
+source is also read again a second after any call that may change its server (any tool not marked
+read-only, from the conversation, a card, an action or a run), after its server says it changed,
+and when its page is opened or the user comes back if it was read more than a minute ago; the
+items such a call named show done until that read says them gone, or back. A read
 that fails keeps the last good value. A value that changed is written into the block's `snapshot`
 with `at`, in a version by `eriphe`, once a quarter of an hour at most per block; a block that
 reads a server that is not trusted is marked `external`. An author's write made on a version older

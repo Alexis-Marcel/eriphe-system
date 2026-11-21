@@ -1253,6 +1253,24 @@ composes each one from the catalog.
   changes. A block that reads a server not trusted is marked `external`, checked at each read:
   code marks it, never unmarks it. A monitor's value is its latest number, its last points, whether
   it is past its limit or failing, and its last events (kind and time, numbers only).
+- **Read again after a change** (`source_fresh.go`): a call that ran well and may change something
+  (its tool is not marked `readOnlyHint`) is followed by a read of every live source of its server,
+  every node's: those of the account it names (its `account` argument) and those that name none;
+  all of them when it names none. Every path counts: the brain's own calls and its tasks' (a skill
+  run's too, `proxyCall`), a card's yes, an item's Oui and a view's action (`catalogCall`). The calls
+  of a moment are gathered into one read, a second after the last (three at most after the first);
+  the new values reach the open pages as `source` events. Until then, the items whose ids the call
+  named show `_state: done` at once (a List that keeps what is not done lets them go); the next
+  read of their source that began after the call says them as they are, an item it still lists
+  comes back (in memory only, two minutes at most). A conversation's call on a view's items wakes
+  its skill (`node.gesture`, as a user's gesture does); a task's own call never does. A server that
+  says one of its resources changed (`notifications/resources/updated`) has its sources read again
+  the same way: eriphe-core follows every resource of a server whose tools a node reads, as well
+  as the resources nodes read (`eriphe-mail`'s `mail://changes` tells each change its cache sees,
+  wherever it was made; `eriphe-calendar` tells nothing yet, its views wait for the period). What
+  changes elsewhere and no server tells: a node's sources read more than a minute ago are read again
+  when its page is opened (`GET /api/nodes/{id}`), and every node's when the user comes back
+  (`user.returned`), once a minute per node at most. Monitors keep their own looks.
 - **A monitor raises its nodes**: crossed and holding, or failing, it puts each node whose blocks
   read it in the attention queue (`node:<id>`, in code's words), tainted when its server is not
   trusted.
