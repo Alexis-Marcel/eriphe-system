@@ -51,8 +51,8 @@ test("a changed tool waits in a view, and is accepted there", async ({ page, req
   await pg.getByRole("checkbox", { name: "Choisir « veille · guetter »" }).check();
   const bar = pg.locator(".a2-pickbar");
   const accept = bar.locator(".a2-pickact", { hasText: "Accepter" });
-  await expect(accept).toHaveText("Accepter 1 élément (eriphe-catalog/catalog_accept)");
-  await expect(bar.locator(".a2-pickact", { hasText: "Refuser" })).toHaveText("Refuser 1 élément (eriphe-catalog/catalog_refuse)");
+  await expect(accept).toHaveText("Accepter 1 élément");
+  await expect(bar.locator(".a2-pickact", { hasText: "Refuser" })).toHaveText("Refuser 1 élément");
   await accept.click();
 
   // Nothing left: the list empties (its line goes with its rows), the
