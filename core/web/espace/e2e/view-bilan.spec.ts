@@ -108,6 +108,9 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   // its text at a measure that reads; resized from the keyboard.
   const box = page.locator(".gr-page", { has: pg });
   const w0 = (await box.boundingBox())!.width;
+  // its own width, in the graph's units: what the camera's scale leaves out
+  const own = () => box.evaluate((e) => (e as HTMLElement).offsetWidth);
+  const own0 = await own();
   await pg.getByRole("button", { name: "Agrandir" }).click();
   await expect(box).toHaveClass(/\bbig\b/);
   await expect.poll(async () => (await box.boundingBox())!.width).toBeGreaterThan(w0 + 200);
@@ -129,7 +132,10 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await shots(page, "7-enlarged");
   await pg.locator(".pg-head .pg-title-tx").dblclick();
   await expect(box).not.toHaveClass(/\bbig\b/);
-  await expect.poll(async () => (await box.boundingBox())!.width).toBeLessThan(w0 + 20);
+  // Back to its size. On screen it may differ a little: the bubbles the
+  // enlarged page moved aside come back their own way, and the camera
+  // frames the graph as it is then.
+  await expect.poll(own).toBe(own0);
   const resize = pg.locator(".pg-resize");
   await resize.focus();
   const w1 = (await box.boundingBox())!.width;
