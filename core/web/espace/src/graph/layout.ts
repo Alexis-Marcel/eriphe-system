@@ -206,6 +206,17 @@ export class Sim {
     for (const b of this.list) {
       const box = want.get(b.id)!.box;
       if (b.box && box && (b.box[0] !== box[0] || b.box[1] !== box[1])) {
+        // its bubbles go with its edges as it grows, beside it on the side
+        // they stood (else the edge passing over them would put them on
+        // any side); as it shrinks, their springs bring them back that
+        // way: a page enlarged then given back its size has them where
+        // they were
+        const dw = Math.max(0, box[0] - b.box[0]) / 2, dh = Math.max(0, box[1] - b.box[1]) / 2;
+        for (const k of this.own(b)) {
+          const ox = k.x - b.x, oy = k.y - b.y;
+          if (Math.abs(ox) > b.box[0] / 2) k.x += Math.sign(ox) * dw;
+          if (Math.abs(oy) > b.box[1] / 2) k.y += Math.sign(oy) * dh;
+        }
         b.box = box;
         for (const k of this.below(b)) this.warmUp(k.id, 0.3);
         this.wake();
