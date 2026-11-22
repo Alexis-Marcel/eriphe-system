@@ -293,7 +293,7 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 }
 
 // answersUser makes the turn gone on over events answer the user: one of
-// them tells what came of their Oui or Non on a card (userActKey). It
+// them tells what came of their Oui or Non on a card (userActEvent). It
 // keeps its taint and its context: only who it answers changes.
 func (t *brainTurn) answersUser() {
 	t.mu.Lock()

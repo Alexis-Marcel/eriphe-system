@@ -205,7 +205,7 @@ type wire struct {
 	// code's, kept outside the file. An old version that holds one still
 	// reads; an author never writes one.
 	Snapshot json.RawMessage `json:"snapshot"`
-	External   *bool             `json:"external"`
+	External *bool           `json:"external"`
 }
 
 // decodeBlock reads a block's JSON; short: a single component, an object

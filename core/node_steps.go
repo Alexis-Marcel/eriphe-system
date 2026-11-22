@@ -667,7 +667,7 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 		return nil, err
 	}
 	for i, p := range plan {
-		if err := stepCreated(c.nodes.Create(p.nw)); err != nil {
+		if err := stepCreate(c.nodes, p.nw); err != nil {
 			for _, q := range plan[i:] {
 				c.store.db.Exec(`DELETE FROM node_steps WHERE node = ?`, q.nw.ID)
 				delete(ids, q.key)
@@ -699,9 +699,11 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 	return ids, nil
 }
 
-// stepCreated is a step node's creation, as openSteps sees it: a test
-// makes it fail.
-var stepCreated = func(_ *nodestore.Doc, err error) error { return err }
+// stepCreate makes a step's node: a test makes it fail.
+var stepCreate = func(s *nodestore.Store, nw nodestore.New) error {
+	_, err := s.Create(nw)
+	return err
+}
 
 // The engine.
 

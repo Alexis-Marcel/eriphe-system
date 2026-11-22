@@ -117,8 +117,8 @@ type Store struct {
 	dir    string // the repository
 	traces string // the traces' folder, beside it
 	db     *sql.DB
-	repo *git.Repository
-	opts Options
+	repo   *git.Repository
+	opts   Options
 
 	// One write at a time: the repository's worktree is not shared. A
 	// read of the repository waits for a write.

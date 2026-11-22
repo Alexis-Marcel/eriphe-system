@@ -314,28 +314,44 @@ func TestOrbAnswerToTheLastMessage(t *testing.T) {
 func TestOrbCardAsked(t *testing.T) {
 	tw := newTestWeb(t)
 	c := tw.c
-	brief := convoCard{Ref: "access:1", Seq: 9}
-	if c.cardAsked(brief, false) || c.cardAsked(convoCard{Ref: "view:2"}, false) {
+	// card is the card of ref as kept, made if it is not yet.
+	card := func(ref string, seq int64) convoCard {
+		c.store.db.Exec(`INSERT OR IGNORE INTO convo_cards (ref, kind, seq, created) VALUES (?, ?, ?, ?)`, ref, cardAccess, seq, time.Now().Unix())
+		xs, _ := c.cardsWhere(`ref = ?`, ref)
+		return xs[0]
+	}
+	said, _ := c.store.addMessage(roleBrain, "Voilà.", true)
+	brief := card("access:1", said)
+	if c.cardAsked(brief, false) || c.cardAsked(card("view:2", 0), false) {
 		t.Fatal("a card raised unasked is the orb's")
 	}
-	if !c.cardAsked(convoCard{Ref: "view:2"}, true) {
+	if !c.cardAsked(card("view:2", 0), true) {
 		t.Error("a card raised in the turn that answers the user is not the orb's")
 	}
-	c.store.set(answerKey(9), "8")
+	c.store.db.Exec(`UPDATE messages SET answer_to = 8 WHERE seq = ?`, said)
 	if !c.cardAsked(brief, false) {
 		t.Error("a card shown with the answer is not the orb's")
 	}
 	ev, _ := c.store.addMessage(roleEvent, "Un mail.", true)
 	c.turn.goOn(int(ev), int(ev), 0, nil)
+	card("access:3", 0)
 	c.markCardAsked("access:3")
-	if c.cardAsked(convoCard{Ref: "access:3", Seq: 12}, false) {
+	if c.cardAsked(card("access:3", 0), false) {
 		t.Error("a call asked in an event's turn is the orb's")
 	}
 	asked, _ := c.store.addMessage(roleUser, "Réponds-lui.", true)
 	c.turn.start(int(asked), int(asked), 0)
+	card("access:4", 0)
 	c.markCardAsked("access:4")
-	if !c.cardAsked(convoCard{Ref: "access:4", Seq: 12}, false) {
+	if !c.cardAsked(card("access:4", 0), false) {
 		t.Error("a call the brain asked a yes for, answering the user, is not the orb's")
+	}
+	// The mark goes with its card.
+	c.store.db.Exec(`DELETE FROM convo_cards WHERE ref = ?`, "access:4")
+	var n int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM kv WHERE key LIKE 'asked_card:%' OR key LIKE 'answer_msg:%' OR key LIKE 'user_act:%' OR key LIKE 'card_answer:%'`).Scan(&n)
+	if n != 0 {
+		t.Errorf("%d marks in kv", n)
 	}
 }
 

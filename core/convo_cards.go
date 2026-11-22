@@ -51,7 +51,8 @@ const convoCardsSchema = `CREATE TABLE IF NOT EXISTS convo_cards (
 	attached INTEGER NOT NULL DEFAULT 0,
 	decided  INTEGER NOT NULL DEFAULT 0,
 	by       TEXT NOT NULL DEFAULT '',
-	about  TEXT NOT NULL DEFAULT ''   -- what it is about: node:<id> or an entity's key (about.go)
+	about  TEXT NOT NULL DEFAULT '',  -- what it is about: node:<id> or an entity's key (about.go)
+	asked  INTEGER NOT NULL DEFAULT 0 -- raised by the brain in a turn that answered the user (web_orb.go's markCardAsked)
 );
 CREATE INDEX IF NOT EXISTS convo_cards_seq ON convo_cards (seq);`
 
@@ -96,6 +97,7 @@ type convoCard struct {
 	Decided  time.Time
 	By       string // web, a channel's id, text, page (the fallback page), or archive (withdrawCards)
 	About    string // what it is about: its proposal's, else its maker's (cardAbout)
+	Asked    bool   // raised by the brain in a turn that answered the user (markCardAsked)
 }
 
 func proposalRef(kind string, id int64) string { return kind + ":" + strconv.FormatInt(id, 10) }
@@ -106,12 +108,12 @@ func parseProposalRef(ref string) (string, int64, bool) {
 	return kind, id, ok && err == nil && id > 0 && slices.Contains(proposalKinds, kind)
 }
 
-const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by, about`
+const cardColumns = `id, ref, kind, seq, turn, state, text, created, attached, decided, by, about, asked`
 
 func scanCard(row interface{ Scan(...any) error }) (convoCard, error) {
 	var x convoCard
 	var created, attached, decided int64
-	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By, &x.About)
+	err := row.Scan(&x.ID, &x.Ref, &x.Kind, &x.Seq, &x.Turn, &x.State, &x.Text, &created, &attached, &decided, &x.By, &x.About, &x.Asked)
 	x.Created, x.Attached, x.Decided = unixOrZero(created), unixOrZero(attached), unixOrZero(decided)
 	return x, err
 }
@@ -735,8 +737,13 @@ func plainAnswer(text string) (yes, ok bool) {
 	return false, false
 }
 
-// cardAnswerKey keeps, for the brain, what a message of the user's decided.
-func cardAnswerKey(seq int) string { return fmt.Sprintf("card_answer:%d", seq) }
+// cardAnswer is what a message of the user's decided, for the brain:
+// state|ref|text; "" when it decided nothing.
+func (s *Store) cardAnswer(seq int) string {
+	var v string
+	s.db.QueryRow(`SELECT card_answer FROM messages WHERE seq = ?`, seq).Scan(&v)
+	return v
+}
 
 // resolveByText lets a message of the user's answer a card in words. Only
 // when all of this holds, else the brain reads it and asks, or the user
@@ -780,7 +787,7 @@ func (c *core) resolveByText(ctx context.Context, seq int) (convoCard, bool) {
 	if err != nil {
 		return none, false
 	}
-	c.store.set(cardAnswerKey(seq), x.State+"|"+x.Ref+"|"+truncate(p.Text("fr"), 200))
+	c.store.db.Exec(`UPDATE messages SET card_answer = ? WHERE seq = ?`, x.State+"|"+x.Ref+"|"+truncate(p.Text("fr"), 200), seq)
 	return x, true
 }
 
@@ -811,7 +818,7 @@ func (c *core) channelCardNote(x convoCard) pushNote {
 
 // cardAnswerLine tells the brain what a message of the user's decided.
 func (c *core) cardAnswerLine(seq int) string {
-	raw := c.store.get(cardAnswerKey(seq))
+	raw := c.store.cardAnswer(seq)
 	if raw == "" {
 		return ""
 	}

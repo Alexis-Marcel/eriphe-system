@@ -516,6 +516,39 @@ func (c *core) toolServers() []string {
 	return out
 }
 
+// nodeValueShown is the most bytes of one source's value node_read gives
+// (its JSON): one longer is said to be so, never cut in the middle.
+const nodeValueShown = 16 << 10
+
+// nodeValues are the last good values of a node's sources as node_read
+// gives them, by block then source (nil when none), and whether one of
+// them comes from a server not trusted: its words may be someone else's,
+// whether or not its block was marked yet.
+func (c *core) nodeValues(n *nodefile.Node) (map[string]map[string]any, bool) {
+	var out map[string]map[string]any
+	for _, r := range c.nodeReads(n.Meta.ID) {
+		if r.Value == nil {
+			continue
+		}
+		if out == nil {
+			out = map[string]map[string]any{}
+		}
+		if out[r.Block] == nil {
+			out[r.Block] = map[string]any{}
+		}
+		var v any = r.Value
+		if raw, _ := json.Marshal(r.Value); len(raw) > nodeValueShown {
+			v = fmt.Sprintf("(%d KiB: too long to give here, the page shows it)", len(raw)>>10)
+		}
+		out[r.Block][r.Name] = v
+	}
+	untrusted := false
+	for _, b := range n.Blocks() {
+		untrusted = untrusted || out[b.Name] != nil && c.untrustedSources(b)
+	}
+	return out, untrusted
+}
+
 // nodeValue is the last good value of a node's source, by its name (in
 // any of its blocks), nil if none.
 func (c *core) nodeValue(node, name string) (nodeRead, bool) {

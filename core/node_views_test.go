@@ -405,6 +405,14 @@ func TestLiveBlockKeepsLastGood(t *testing.T) {
 	if tasks() != before {
 		t.Fatal("a task ran to read a block")
 	}
+	// node_read gives them, a trusted server's tainting nothing.
+	c.turn.start(0, 0, 0)
+	if out, err := c.brainNodeRead(brainNodeReadIn{ID: node}); err != nil || state(out["values"].(map[string]map[string]any)["etat"]) != "up" {
+		t.Fatalf("node_read %v %v", out["values"], err)
+	}
+	if _, _, _, tainted := c.turn.snapshot(); len(tainted) != 0 {
+		t.Fatalf("tainted %v", tainted)
+	}
 
 	// Archived: read no more, its page still shows the last value.
 	if err := c.nodes.Archive(node, byUser); err != nil {
@@ -431,6 +439,18 @@ func TestUntrustedSourceMarksExternal(t *testing.T) {
 	c.readNode(context.Background(), d.Node.Meta.ID, nil, time.Now())
 	if !block(t, c, d.Node.Meta.ID, "etat").External {
 		t.Fatal("a block reading a server not trusted is not external")
+	}
+	// node_read gives the values, and taints the turn.
+	c.turn.start(0, 0, 0)
+	out, err := c.brainNodeRead(brainNodeReadIn{ID: d.Node.Meta.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := out["values"].(map[string]map[string]any); v["etat"]["web"] == nil {
+		t.Fatalf("values %v", out["values"])
+	}
+	if _, _, _, tainted := c.turn.snapshot(); len(tainted) == 0 {
+		t.Fatal("its values did not taint the turn")
 	}
 }
 

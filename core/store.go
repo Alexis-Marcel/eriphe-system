@@ -121,7 +121,11 @@ CREATE TABLE IF NOT EXISTS messages (
   role TEXT NOT NULL, text TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0,
   via TEXT NOT NULL DEFAULT '',
   node TEXT NOT NULL DEFAULT '',   -- the node it belongs to, '' for the home (node_turn.go)
-  filed TEXT NOT NULL DEFAULT ''); -- the brain's answer: the node code filed it in (node_net.go)
+  filed TEXT NOT NULL DEFAULT '',  -- the brain's answer: the node code filed it in (node_net.go)
+  user_act INTEGER NOT NULL DEFAULT 0,   -- an event that tells the brain what came of the user's Oui or Non (web_orb.go)
+  answer_to INTEGER NOT NULL DEFAULT 0,  -- Eriphe's words in a turn that answered the user: the last message it read (web_orb.go)
+  card_answer TEXT NOT NULL DEFAULT ''); -- the user's plain yes or no: the card it decided, state|ref|text (convo_cards.go)
+CREATE INDEX IF NOT EXISTS messages_node ON messages (node, seq);
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS inbox (
   seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, kind TEXT NOT NULL,
@@ -142,20 +146,6 @@ var extraSchema []string
 // schemaFixes bring a table made by an older eriphe-core up to date (a
 // column added), after the schema: CREATE TABLE IF NOT EXISTS never does.
 var schemaFixes []func(*sql.DB) error
-
-// A conversation made before the nodes (#632) gets its messages' node and
-// filed; its thread column is left, unread.
-func init() {
-	schemaFixes = append(schemaFixes, func(db *sql.DB) error {
-		for _, col := range []string{"node", "filed"} {
-			if err := addColumn(db, "messages", col, "TEXT NOT NULL DEFAULT ''"); err != nil {
-				return err
-			}
-		}
-		_, err := db.Exec(`CREATE INDEX IF NOT EXISTS messages_node ON messages (node, seq)`)
-		return err
-	})
-}
 
 // addColumn adds a column to a table that lacks it; a table that has it
 // is left as it is.
@@ -526,12 +516,19 @@ type Message struct {
 	// Filed is, for the brain's answer, the node code filed it in, as
 	// nothing of the turn had (node_net.go): the answer links to it.
 	Filed string `json:"filed,omitempty"`
+	// UserAct: an event that tells the brain what came of the user's Oui
+	// or Non on a card (web_orb.go's userActEvent).
+	UserAct bool `json:"-"`
+	// AnswerTo is, for Eriphe's words or error in a turn that answered
+	// the user, the last message that turn read; 0 for an event's turn
+	// (web_orb.go's markAnswer).
+	AnswerTo int `json:"-"`
 	// Attachments are the files of my message (attachments.go).
 	Attachments []Attachment `json:"attachments,omitempty"`
 }
 
 // messageCols are a message's columns, as queryMessages reads them.
-const messageCols = "seq, time, role, text, via, node, filed"
+const messageCols = "seq, time, role, text, via, node, filed, user_act, answer_to"
 
 func (s *Store) addMessage(role, text string, delivered bool) (int64, error) {
 	return s.addMessageVia(role, text, "", delivered)
@@ -607,7 +604,7 @@ func (s *Store) queryMessages(q string, args ...any) ([]Message, error) {
 	for rows.Next() {
 		var m Message
 		var t int64
-		if err := rows.Scan(&m.Seq, &t, &m.Role, &m.Text, &m.Via, &m.Node, &m.Filed); err != nil {
+		if err := rows.Scan(&m.Seq, &t, &m.Role, &m.Text, &m.Via, &m.Node, &m.Filed, &m.UserAct, &m.AnswerTo); err != nil {
 			return nil, err
 		}
 		m.Time = time.Unix(t, 0)
