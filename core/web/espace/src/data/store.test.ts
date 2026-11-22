@@ -92,6 +92,11 @@ describe("the store", () => {
     expect(h.open).toEqual([]);
     h = applyNodes(h, { nodes: [node("subject")] });
     expect(h).toMatchObject({ open: ["subject"], talk: "subject" });
+    // a newer show drops the one that waited: shows open in their order
+    let o = applyShow(withGraph(), { node: "late", seq: 9, at }, now);
+    o = applyShow(o, { node: "b", seq: 10, at }, now);
+    o = applyNodes(o, { nodes: [node("late")] });
+    expect(o.open).toEqual(["b"]);
   });
 
   it("moves the console into a subject opened from the home, never from a page", () => {

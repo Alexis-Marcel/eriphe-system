@@ -16,6 +16,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/revlist"
 )
 
+// headRead, set by a test, runs in Backup once the branch's commit is read.
+var headRead func()
+
 // Backup is the nightly copy: a git bundle of the repository and a copy of
 // the index go into dir, nodes-<day>.bundle and nodes-<day>.db, the last
 // keep days kept. Writes go on meanwhile: the store's lock is held only to
@@ -28,8 +31,9 @@ import (
 // The repository is only read: no gc, no repack, no object removed. The
 // bundle is written aside, read back and checked before it takes its
 // name; the index's copy takes its name last, so that nodes-<day>.db says
-// the night's backup was made whole. The older copies are dropped only once the night's are made. A failed
-// backup leaves the repository as it was, and the copies before it.
+// the night's backup was made whole. The older copies are dropped only
+// once the night's are made. A failed backup leaves the repository as it
+// was, and the copies before it.
 func (s *Store) Backup(dir string, keep int) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -46,6 +50,9 @@ func (s *Store) Backup(dir string, keep int) error {
 	s.mu.RLock()
 	head, err := s.repo.Head()
 	s.mu.RUnlock()
+	if headRead != nil {
+		headRead()
+	}
 	switch {
 	case errors.Is(err, plumbing.ErrReferenceNotFound): // no commit yet: no bundle
 	case err != nil:

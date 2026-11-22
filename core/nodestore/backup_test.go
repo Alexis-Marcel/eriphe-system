@@ -152,29 +152,43 @@ func TestBackupKeepsALargeRepositoryWhole(t *testing.T) {
 	}
 }
 
-// Writes go on during a backup: the store's lock is not held while the
-// bundle is made. The bundle is whole, and the index's copy is never ahead
-// of it: the commit it says it indexed is in the bundle.
+// Writes go on during a backup: the store's lock is held only to read the
+// branch's commit, not while the bundle is made (a write made then would
+// wait for ever here). The bundle holds the commit read, not the write
+// made after it, and the index's copy is never ahead of it: the commit it
+// says it indexed is in the bundle.
 func TestBackupLetsWritesGoOn(t *testing.T) {
 	_, s, _ := largeGraph(t)
 	backups := filepath.Join(t.TempDir(), "backups")
-	done := make(chan error, 1)
-	go func() { done <- s.Backup(backups, 3) }()
-	d := mustRead(t, s, "n2")
-	for i := range 5 {
-		var err error
-		if d, err = s.Write("n2", fmt.Sprintf("Note %d.", i), d.Version.Hash, "brain"); err != nil {
-			t.Fatal(err)
+	ref, _ := s.repo.Head()
+	var after string
+	headRead = func() {
+		d := mustRead(t, s, "n2")
+		w, err := s.Write("n2", "Écrit pendant la sauvegarde.", d.Version.Hash, "brain")
+		if err != nil {
+			t.Error(err)
+			return
 		}
+		after = w.Version.Hash
 	}
-	if err := <-done; err != nil {
+	t.Cleanup(func() { headRead = nil })
+	if err := s.Backup(backups, 3); err != nil {
 		t.Fatal(err)
+	}
+	if after == "" {
+		t.Fatal("no write during the backup")
 	}
 	raw, err := os.ReadFile(filepath.Join(backups, "nodes-2026-11-17.bundle"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(string(raw), ref.Hash().String()+" HEAD\n") {
+		t.Error("the bundle's head is not the commit read")
+	}
 	got := decodeBundle(t, raw)
+	if _, err := object.GetCommit(got, plumbing.NewHash(after)); err == nil {
+		t.Error("the write made after the commit was read is in the bundle")
+	}
 	db, err := sql.Open("sqlite", filepath.Join(backups, "nodes-2026-11-17.db"))
 	if err != nil {
 		t.Fatal(err)

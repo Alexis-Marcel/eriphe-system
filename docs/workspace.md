@@ -110,7 +110,7 @@ va »: Eriphe marks it done) or when you archive it. A page counts its versions 
 something in it: a step opened empty for its task to write starts at v1 with the task's text.
 
 On a phone the graph gives way to a list: each subject, its bubbles under it, in the order they were
-made, what waits for you or runs said on its line. A tap opens its page over the list; closing it
+made, what waits for you shown by its bright dot, what runs by its line. A tap opens its page over the list; closing it
 brings the list back. The bar is the same.
 
 ## Move things

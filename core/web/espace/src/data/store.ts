@@ -136,11 +136,12 @@ export const SHOW_FRESH = 60_000;
 // user asked at the home (talk) takes the bar with it, when it still
 // talks to the home: the exchange goes on in that page. Each show once. A
 // show of a node the graph does not have yet (its row comes after) waits
-// for it (pending), the last such one only: applyNodes opens it.
+// for it (pending), the last show only: applyNodes opens it; a newer show
+// drops it, so that shows open in their order.
 export function applyShow(s: State, ev: Shown, now = Date.now()): State {
   if (!ev || typeof ev.node !== "string" || !(ev.seq > s.shown)) return s;
   const first = s.shown === 0;
-  const seen = { ...s, shown: ev.seq };
+  const seen = { ...s, shown: ev.seq, pending: null };
   if (first && ev.at && now - Date.parse(ev.at) > SHOW_FRESH) return seen;
   if (!s.nodes[ev.node]) return { ...seen, pending: ev };
   return showNode(seen, ev);
