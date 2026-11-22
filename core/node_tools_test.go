@@ -403,51 +403,23 @@ func fmtJSON(v any) string {
 	return string(raw)
 }
 
-// The prompt says when to open a node, how to write it, that only the
-// user archives, how a wake turn goes and how long answers are filed,
-// what it asks before setting up what runs alone;
-// it names no tool that is gone.
+// The prompt names nothing that is gone (#706): no word of the thread
+// workspace, no tool, field or component code removed, no patch written
+// for one incident. What the brain does with it is the live bench's to
+// measure (nodes_bench_live_test.go).
 func TestBrainPromptNodes(t *testing.T) {
 	raw, _ := os.ReadFile("brain-prompt.md")
 	prompt := string(raw)
-	start := strings.Index(prompt, "## Les nœuds")
-	end := strings.Index(prompt, "## Ta mémoire")
-	if start < 0 || end < start {
-		t.Fatal("no « Les nœuds »")
-	}
-	section := prompt[start:end]
-	for _, want := range []string{
-		"**Quand en ouvrir un.**", "`node_find`", "`node_open`", "reste du texte, sans nœud", "`node_write` avec `expect`", "`node_edit`",
-		"`node_set` `done`", "son **but** est atteint", "Tu n'archives jamais un nœud", "`node_show`",
-		"**Les liens sont dans le texte**", "`[[Titre]]`", "[[Choisir l'angle]]",
-		"propose sa fusion", "seulement la vérification, rien d'autre",
-		"**Un travail en étapes.**", "`node_open` avec `steps`", "`[nœud <id> « titre »] …`", "`node_settle`", "sans te réveiller",
-		"`item_note`", "une recherche", "aucune question de toi-même", "`[rien]`",
-		"se range seul dans ce nœud", "Sa réponse sur une de ces cartes",
-		"`node_open` avec `parent`", "**Un oui n'est jamais un composant.**", "`Grid`", "`\"kind\": \"stack\"`",
-		"## Les vues", "`propose_view`", "un seul oui les crée", "la dernière bonne valeur reste", "marqué extérieur",
-		"« Répondre à Sam »", "attend son oui sur une carte",
-		"**une action simple**", "**une question**", "**un travail**", "le nœud permanent de sa journée s'il en a un, jamais dans un nouveau nœud",
-		"découpe-le toi-même", "une nouvelle version du même nœud",
-		"**Une vue est le travail fait d'avance de son assistant**", "Tu ne crées jamais une vue toi-même",
-		"**Ce qui tournera seul se règle d'abord avec lui.**", "chacune avec ce que tu feras s'il ne dit rien",
-		"dont une qui prend tous tes choix par défaut", "Une seule série de questions", "une vue qui ne fait que montrer n'a rien à régler",
-		"le `goal` d'une vue, la `description` d'un skill", "jamais un souvenir",
+	for _, gone := range []string{
+		"_thread", "thread:", "workspace_arrange", "workspace_focus", "workspace_read", "`progress`",
+		"« Les fils »", "l'espace de {{user}}, tel que", "`note_item`", "`surface_write`", "suggestions", "suggérées", "console",
+		// removed by #722-#724 and here
+		"lifetime", "eriphe-workspace", "`Proposal`", "`Mark`", "\"actions\"", "`waiting`", "task_status wait", "`about` de `run_task`",
+		"Ma journée", "## Tes concepts",
+		// the incidents' patches
+		"même pour une lumière", "moins de 200 caractères", "seul dans ton premier appel", "Déjà fusionnée", "inaccessible", "mail.trash",
+		"Ne parle pas ici de Home Assistant",
 	} {
-		if !strings.Contains(section, want) {
-			t.Errorf("« Les nœuds » lacks %q", want)
-		}
-	}
-	for _, want := range []string{"demande-lui ce qui compte (voir « Ce qui tournera seul » dans « Les vues »)", "**Dans son espace, une ligne ; le reste dans le sujet.**", "**Tes questions et leurs boutons sont dans le document.**",
-		"« Fais comme tu proposes »", "Sur un tour contaminé, pas de bouton", "**Chaque échange réécrit le document.**", "« Ce qu'on a décidé »",
-		"`{\"card\": \"view:3\"}`", "rien de cela ne s'y applique",
-		"eriphe-core la range lui-même", "#N · nœud <id>]`", "## Où en sont les choses", "`node.done`"} {
-		if !strings.Contains(prompt, want) {
-			t.Errorf("the prompt lacks %q", want)
-		}
-	}
-	for _, gone := range []string{"_thread", "thread:", "workspace_arrange", "workspace_focus", "workspace_read", "`progress`",
-		"« Les fils »", "l'espace de {{user}}, tel que", "`note_item`", "`surface_write`", "suggestions", "suggérées", "console"} {
 		if strings.Contains(prompt, gone) {
 			t.Errorf("the prompt still says %q", gone)
 		}

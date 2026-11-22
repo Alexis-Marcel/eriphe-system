@@ -106,8 +106,9 @@ A node's links, the graph's edges, are its text's links (resolved) and its front
 
 ## Body and blocks
 
-The body is markdown. A **block** is a fenced section that starts with a line
-`` ```eriphe:block <name> `` and ends at the next line `` ``` ``:
+The body is markdown. The page shows the node's title above it: a heading that only repeats the
+title at the top of an author's body is dropped when it is written. A **block** is a fenced
+section that starts with a line `` ```eriphe:block <name> `` and ends at the next line `` ``` ``:
 
 - Its name is lowercase letters, digits and `_`, 32 at most, starting with a letter or a digit. A
   node has one block of each name.
