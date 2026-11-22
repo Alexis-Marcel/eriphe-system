@@ -177,30 +177,18 @@ func (c *core) fileTaskReport(task string, r *checkedReceipt) string {
 		return ""
 	}
 	c.store.db.Exec(`UPDATE task_nodes SET filed = ? WHERE task = ?`, hash, task)
-	author := c.taskAuthor(task)
-	if c.writeTaint(task) != "" {
-		c.markNodeExternal(id, author) // the report may carry someone else's words: marked before it is filed
+	traceErr, docErr := c.fileText(id, c.taskAuthor(task), report, c.writeTaint(task) != "", true, c.lentTo(nil))
+	problem := ""
+	switch {
+	case traceErr != nil:
+		problem = "sa trace l'a refusé : " + traceErr.Error()
+	case docErr != nil:
+		problem = "il n'a pas pu devenir son document : " + docErr.Error()
 	}
-	var problems []string
-	for _, part := range traceParts(report, nodestore.MaxTrace) {
-		if err := c.nodes.AppendTrace(id, author, part); err != nil {
-			problems = append(problems, "sa trace l'a refusé : "+err.Error())
-			break
-		}
+	if problem != "" {
+		log.Printf("task %s: its report in node %s: %s", task, id, problem)
 	}
-	d, err := c.nodes.Read(id, 0)
-	if err != nil {
-		return strings.Join(problems, " ; ")
-	}
-	if strings.TrimSpace(d.Node.Text()) == "" && len(d.Node.Blocks()) == 0 && d.Node.Meta.Lifetime != nodefile.Standing {
-		if _, err := c.writeTaskBody(task, report, d.Version.Hash, nil); err != nil {
-			problems = append(problems, "il n'a pas pu devenir son document : "+err.Error())
-		}
-	}
-	if len(problems) > 0 {
-		log.Printf("task %s: its report in node %s: %s", task, id, strings.Join(problems, "; "))
-	}
-	return strings.Join(problems, " ; ")
+	return problem
 }
 
 // traceParts cuts a report into parts of max bytes at most, at a line's

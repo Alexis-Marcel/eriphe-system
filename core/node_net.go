@@ -104,22 +104,41 @@ func (c *core) fileInTalked(id, answer string, tainted, doc bool) string {
 	if err != nil || !sum.Archived.IsZero() {
 		return ""
 	}
-	if tainted {
-		c.markNodeExternal(id, byBrain) // before the answer: never words without the mark
+	traceErr, docErr := c.fileText(id, byBrain, answer, tainted, doc, c.viewSourceOK(""))
+	if traceErr != nil {
+		log.Printf("node %s: the brain's answer not filed in its trace: %v", id, traceErr)
+		return ""
 	}
-	for _, part := range traceParts(answer, nodestore.MaxTrace) {
-		if err := c.nodes.AppendTrace(id, byBrain, part); err != nil {
-			log.Printf("node %s: the brain's answer not filed in its trace: %v", id, err)
-			return ""
-		}
-	}
-	d, err := c.nodes.Read(id, 0)
-	if doc && err == nil && strings.TrimSpace(d.Node.Text()) == "" && len(d.Node.Blocks()) == 0 && d.Node.Meta.Lifetime != nodefile.Standing {
-		if _, err := c.authorWrite(id, d.Version.Hash, byBrain, tainted, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(answer) }); err != nil {
-			log.Printf("node %s: the brain's answer kept in its trace, not as its doc: %v", id, err)
-		}
+	if docErr != nil {
+		log.Printf("node %s: the brain's answer kept in its trace, not as its doc: %v", id, docErr)
 	}
 	return id
+}
+
+// fileText files an author's long text (the brain's answer, a task's
+// report) in node id, whole: in its trace, in as many entries as it
+// takes, and as its doc when doc says so and it has none (never a
+// standing node's: what runs in it reports in its trace only). Tainted,
+// the node is marked external first: never words without the mark. It
+// tells why the trace, or the doc, refused it.
+func (c *core) fileText(id, author, text string, tainted, doc bool, sourceOK func(nodefile.Source) error) (traceErr, docErr error) {
+	if tainted {
+		c.markNodeExternal(id, author)
+	}
+	for _, part := range traceParts(text, nodestore.MaxTrace) {
+		if err := c.nodes.AppendTrace(id, author, part); err != nil {
+			return err, nil
+		}
+	}
+	if !doc {
+		return nil, nil
+	}
+	d, err := c.nodes.Read(id, 0)
+	if err != nil || strings.TrimSpace(d.Node.Text()) != "" || len(d.Node.Blocks()) > 0 || d.Node.Meta.Lifetime == nodefile.Standing {
+		return nil, nil
+	}
+	_, err = c.authorWrite(id, d.Version.Hash, author, tainted, sourceOK, func(n *nodefile.Node) error { return n.AuthorBody(text) })
+	return nil, err
 }
 
 // fileInNew files an answer into a new work node at the top: the answer

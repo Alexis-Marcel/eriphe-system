@@ -2,6 +2,7 @@ package main
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -9,7 +10,7 @@ import (
 // Eriphe's orb: the workspace shows Eriphe as a small blue orb that lives
 // in the graph. It rests in the bar, and leaves it only in reply to what
 // the user said to it (a message, or their Oui or Non on a card: what came
-// of it is told to Eriphe as an event that answers the user, userActEvent):
+// of it is told to Eriphe as an event that answers the user, nodeEvent):
 // while Eriphe works on their message, it goes beside
 // the subject it works on and shows it; when Eriphe has answered, it goes
 // beside the subject its answer belongs to, or to a free spot of the home
@@ -112,7 +113,7 @@ type orbWait struct {
 // their message (thinking: the brain is at work; draft: what it is
 // writing), the cards and the messages that wait. Its words and errors in
 // a turn that answers no act of the user's (a message, or a card's Oui or
-// Non: userActEvent) are not the orb's. A card's decision moves nothing by
+// Non: nodeEvent) are not the orb's. A card's decision moves nothing by
 // itself: only what Eriphe says of it replaces what the orb says.
 func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 	c, s := w.c, w.c.store
@@ -186,7 +187,7 @@ func (s *Store) lastAsked() int {
 
 // userActs are the user's own acts among the messages, as SQL: their
 // messages (not the first run's aside), and the events that tell the
-// brain what came of their Oui or Non on a card (userActEvent). Its one
+// brain what came of their Oui or Non on a card (nodeEvent). Its one
 // parameter is firstRunVia.
 const userActs = `(role = 'user' AND via != ? OR role = 'event' AND user_act = 1)`
 
@@ -200,26 +201,41 @@ func (s *Store) lastActed() int {
 }
 
 // isUserAct tells an event that tells the brain what came of the user's
-// own act, their Oui or Non on a card (userActEvent): the turn that reads
+// own act, their Oui or Non on a card (nodeEvent): the turn that reads
 // it answers the user (deliverConversation), and what it says, or its
 // failure, is the orb's, as a reply to a message is, and replaces what
 // the orb said before; the decision alone replaces nothing.
 func (s *Store) isUserAct(m Message) bool { return m.Role == roleEvent && m.UserAct }
 
-// userActEvent tells the brain, as an event of node, what came of the
-// user's Oui or Non on a card; taint is what its words make the turn
-// that reads it. Written delivered, marked a user's act with it, its
-// taint set, then handed to the brain: it is never delivered before its
-// marks.
-func (c *core) userActEvent(text, node, taint string) {
-	res, err := c.store.db.Exec(`INSERT INTO messages (time, role, text, delivered, node, user_act) VALUES (?, ?, ?, 1, ?, 1)`,
-		time.Now().Unix(), roleEvent, text, node)
+// nodeEvent tells the brain something as an event of node ("" for the
+// home): what came of the user's Oui or Non on a card (userAct: what the
+// brain says of it answers them), an exception of a work cut in steps.
+// An event of a node names it first (nodeHead), and the turn that reads
+// it is about that node (nodesDelivered); taint is what its words make
+// that turn, with the node's title when it may be someone else's words.
+// Written delivered, its marks set, then handed to the brain: it is never
+// delivered before its marks.
+func (c *core) nodeEvent(node, text string, userAct bool, taint ...string) {
+	taint = slices.Clone(taint)
+	if node != "" {
+		head, t := c.nodeHead(node)
+		text = head + " " + text
+		taint = append(taint, t)
+	}
+	var why []string
+	for _, t := range taint {
+		if t != "" && !slices.Contains(why, t) {
+			why = append(why, t)
+		}
+	}
+	res, err := c.store.db.Exec(`INSERT INTO messages (time, role, text, delivered, node, user_act) VALUES (?, ?, ?, 1, ?, ?)`,
+		time.Now().Unix(), roleEvent, text, node, userAct)
 	if err != nil {
 		return
 	}
 	seq, _ := res.LastInsertId()
-	if taint != "" {
-		c.store.set(taintKey(int(seq)), taint)
+	if len(why) > 0 {
+		c.store.set(taintKey(int(seq)), strings.Join(why, ", "))
 	}
 	c.store.undeliver(int(seq), int(seq))
 	c.ping()

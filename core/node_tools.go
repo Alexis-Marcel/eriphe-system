@@ -640,19 +640,7 @@ func (c *core) archiveNode(ctx context.Context, id, by string) error {
 // reopened. Its withdrawn cards stay linked, gone: a card block of its
 // document says so (web_graph.go).
 func (c *core) linkedNodeGone(id string) {
-	rows, err := c.store.db.Query(`SELECT ref FROM node_cards WHERE node = ?`, id)
-	if err != nil {
-		return
-	}
-	var refs []string
-	for rows.Next() {
-		var ref string
-		if rows.Scan(&ref) == nil {
-			refs = append(refs, ref)
-		}
-	}
-	rows.Close()
-	for _, ref := range refs {
+	for _, ref := range c.nodeCardRefs(id) {
 		if c.cardState(ref) == cardPending {
 			c.store.db.Exec(`DELETE FROM node_cards WHERE node = ? AND ref = ?`, id, ref)
 		}
@@ -661,17 +649,5 @@ func (c *core) linkedNodeGone(id string) {
 
 // nodeTasks are the tasks that work in a node.
 func (c *core) nodeTasks(id string) []string {
-	rows, err := c.store.db.Query(`SELECT task FROM task_nodes WHERE node = ?`, id)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var t string
-		if rows.Scan(&t) == nil {
-			out = append(out, t)
-		}
-	}
-	return out
+	return c.store.column(`SELECT task FROM task_nodes WHERE node = ?`, id)
 }

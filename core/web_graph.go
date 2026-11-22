@@ -484,19 +484,7 @@ func (c *core) sourceEvents(id, block, name string) []map[string]any {
 // (node_turn.go), the last first.
 func (w *web) nodeCards(id, lang string) []proposalView {
 	out := []proposalView{}
-	rows, err := w.c.store.db.Query(`SELECT ref FROM node_cards WHERE node = ? ORDER BY created DESC`, id)
-	if err != nil {
-		return out
-	}
-	var refs []string
-	for rows.Next() {
-		var ref string
-		if rows.Scan(&ref) == nil {
-			refs = append(refs, ref)
-		}
-	}
-	rows.Close()
-	for _, ref := range refs {
+	for _, ref := range w.c.nodeCardRefs(id) {
 		xs, err := w.c.cardsWhere(`ref = ?`, ref)
 		if err != nil || len(xs) == 0 {
 			continue

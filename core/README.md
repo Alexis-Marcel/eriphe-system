@@ -3508,7 +3508,7 @@ its answer belongs to. The orb only answers: the event carries nothing of a turn
 act of the user's (an event's, a wake's, a node's task's: its work, its words, its failure,
 its cards), nor any word at all before the user's first message. The user's acts are their
 messages and their Oui or Non on a card: what came of a decision reaches the brain as an event
-marked as the user's (`userActEvent`, `messages.user_act`: a call run or refused on a card,
+marked as the user's (`nodeEvent`, `messages.user_act`: a call run or refused on a card,
 `callToBrain`; a release, `accessDecidedTold`; a task's start declined, `taskStartDeclined`), and
 the turn that reads it answers the user (`deliverConversation`, `brainTurn.answersUser`), its
 taint and context kept: its reply (« C'est fait », or what failed), its work and its failure are

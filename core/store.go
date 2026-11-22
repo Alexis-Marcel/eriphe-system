@@ -517,7 +517,7 @@ type Message struct {
 	// nothing of the turn had (node_net.go): the answer links to it.
 	Filed string `json:"filed,omitempty"`
 	// UserAct: an event that tells the brain what came of the user's Oui
-	// or Non on a card (web_orb.go's userActEvent).
+	// or Non on a card (web_orb.go's nodeEvent).
 	UserAct bool `json:"-"`
 	// AnswerTo is, for Eriphe's words or error in a turn that answered
 	// the user, the last message that turn read; 0 for an event's turn
