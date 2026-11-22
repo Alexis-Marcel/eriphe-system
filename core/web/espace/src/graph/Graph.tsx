@@ -227,12 +227,15 @@ export function Graph({ live }: { live: boolean }) {
     }
     return frameAll(all, band);
   })();
+  // Asked for less motion, the camera goes there at once, as the graph
+  // settles at once (wake): nothing glides.
   useEffect(() => {
     if (manual) return;
-    camK.set(target.k);
-    camX.set(target.x);
-    camY.set(target.y);
-  }, [manual, target.k, target.x, target.y, camK, camX, camY]);
+    const go = reduced ? "jump" : "set";
+    camK[go](target.k);
+    camX[go](target.x);
+    camY[go](target.y);
+  }, [manual, reduced, target.k, target.x, target.y, camK, camX, camY]);
 
   const vp = useRef<HTMLDivElement>(null);
   // At rest: the graph asleep, nothing held, the camera still. Said on the

@@ -3455,8 +3455,11 @@ the catalog's after the permission round trip, a worker's `eriphe-nodes`); the e
 the filing and the stream are the real ones. `TestEspaceScenario` serves only when
 `ERIPHE_E2E_ADDR` is set; the world outside the user is asked of it at `/e2e/mail` (a monitor's
 mail), `/e2e/finish/{key}` (a worker finishes) and `/e2e/tools` (what the tools did), routes of
-the test only. The test fails on any console error and any CSP violation. CI runs it
-(`espace-e2e`) on the committed build:
+the test only. The test fails on any console error and any CSP violation. The browser asks for
+less motion (`reducedMotion`): the graph and the camera are at rest at once, so the tests check
+what the workspace does, not how it moves (the layout's and the camera's geometry are unit tests);
+the few tagged `@motion` play after the others with motion. CI runs it (`espace-e2e`) on the
+committed build:
 
 ```sh
 cd core/web/espace
