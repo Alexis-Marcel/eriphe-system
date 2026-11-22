@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { still } from "./rest";
 
 // A page with many versions: one chip in its head, the version shown,
@@ -9,7 +10,6 @@ import { still } from "./rest";
 // one thing this file adds to the core), and on the standing « Mails »;
 // their pages are given 17 versions here, and the view is not written.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 const title = "Urgent : la prod renvoie des 500";
 const faked = [title, "Mails"];
 
@@ -42,10 +42,6 @@ async function fake(page: Page, asked: number[]) {
 }
 
 async function signIn(page: Page) {
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
 }
 
 // shots saves the screen in both themes when SHOTS names a folder.

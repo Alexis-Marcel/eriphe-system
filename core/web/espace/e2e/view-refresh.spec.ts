@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // A view reads its sources again right after anything changes them
 // (core/source_fresh.go), against the test core of TestEspaceScenario: a
@@ -8,19 +8,12 @@ import { expect, test } from "@playwright/test";
 // moments, with no reload and no word to Eriphe. Seeded at /e2e/purge, on
 // its own node.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 
 test("a view loses what the conversation deleted, without a reload", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
 
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
-  // No page open, whatever the spec before left (one shared test core).
-  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await page.goto("/espace");
   await expect(page.locator(".cs-bar input")).toBeVisible();
 

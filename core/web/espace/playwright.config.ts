@@ -23,11 +23,12 @@ export default defineConfig({
   // The tests check what the workspace does, not how it moves: they ask
   // for less motion, so the graph and the camera are at rest at once (the
   // layout's and the camera's geometry are unit tests). The few tagged
-  // @motion play with motion, after the others: what most users see is
-  // still played in a browser.
+  // @motion play with motion: what most users see is still played in a
+  // browser. Each test stands alone (e2e/fixtures.ts): signed in, nothing
+  // left by the test before.
   projects: [
     { name: "still", grepInvert: /@motion/, use: { reducedMotion: "reduce" } },
-    { name: "motion", grep: /@motion/, use: { reducedMotion: "no-preference" }, dependencies: ["still"] },
+    { name: "motion", grep: /@motion/, use: { reducedMotion: "no-preference" } },
   ],
   webServer: {
     command: "go test -count=1 -run '^TestEspaceScenario$' -timeout 0 .",

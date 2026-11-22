@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // A view in sections (list_sections.go), against the test core of
 // TestEspaceScenario: a node whose block lists five faked mails
@@ -7,19 +7,12 @@ import { expect, test } from "@playwright/test";
 // « Tout supprimer » asks once more, naming the three, and the faked
 // server gets exactly those. Seeded at /e2e/sections, on its own node.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 
 test("a section's action runs on exactly the rows it showed", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
 
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
-  // No page open, whatever the spec before left (one shared test core).
-  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await page.goto("/espace");
   await expect(page.locator(".cs-bar input")).toBeVisible();
 
