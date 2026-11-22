@@ -549,7 +549,8 @@ test("the steps of the scenario", async ({ page, request }) => {
 // What the workspace keeps for the user: the pages open and the theme, on
 // the next visit; a bubble dropped holds where it was dropped for the
 // session, and is not kept.
-test("the workspace as the user left it", async ({ page }) => {
+// With motion (@motion): a dragged bubble glides to where it is let go.
+test("the workspace as the user left it", { tag: "@motion" }, async ({ page }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));

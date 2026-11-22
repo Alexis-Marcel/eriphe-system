@@ -35,6 +35,10 @@ test("an answer given at home stays readable until you move on", async ({ page, 
   await page.locator('input[name="password"]').fill(password);
   await page.locator('button[type="submit"]').click();
   await page.waitForURL((u) => u.pathname !== "/login");
+  // No page open and nothing left to show, whatever the spec before left
+  // (one shared test core): the stream says the last page shown when it
+  // connects, and the workspace opens it unless the view has seen it.
+  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await atHome(page);
 
   const say = async (text: string) => {

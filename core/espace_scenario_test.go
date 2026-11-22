@@ -1123,7 +1123,13 @@ func (sc *scenario) handleTools(rw http.ResponseWriter, r *http.Request) {
 	f := sc.tools
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	writeJSON(rw, http.StatusOK, map[string]any{"lit": slices.Clone(f.lit), "sent": slices.Clone(f.sent), "moved": slices.Clone(f.moved), "deleted": slices.Clone(f.deleted), "read": slices.Clone(f.read), "trashed": slices.Clone(f.trashed), "replied": slices.Clone(f.replied), "purged": slices.Clone(f.purged)})
+	writeJSON(rw, http.StatusOK, map[string]any{"lit": jsonList(f.lit), "sent": jsonList(f.sent), "moved": jsonList(f.moved), "deleted": jsonList(f.deleted), "read": jsonList(f.read), "trashed": jsonList(f.trashed), "replied": jsonList(f.replied), "purged": jsonList(f.purged)})
+}
+
+// jsonList is a copy of s, empty rather than nil: a spec reads [] before the
+// first call, never null.
+func jsonList[T any](s []T) []T {
+	return append([]T{}, s...)
 }
 
 // handleCatalog is POST /e2e/catalog: the tools' catalog changed, an
