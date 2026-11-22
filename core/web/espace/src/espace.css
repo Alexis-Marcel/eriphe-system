@@ -373,20 +373,33 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-more { align-self: flex-start; margin-top: 2px; padding: 0; border: 0; background: none; color: var(--fg2); font-size: 12.5px; font-weight: 500; cursor: pointer; }
 .a2-more:hover { color: var(--fg); text-decoration: underline; }
 
-/* Day: half-hour rows; an event starts at a row (.a2-r-N), spans rows
-   (.a2-span-N) and takes a lane (.a2-lane-N) when events overlap. */
-.a2-day { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.a2-day-label { margin: 0; font-size: 13px; font-weight: 500; color: var(--fg3); }
-.a2-day-label::first-letter { text-transform: uppercase; }
-.a2-day-allday { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
-.a2-day-grid {
-  display: grid; grid-auto-rows: 20px; column-gap: 4px; min-width: 0;
-  background: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 40px);
+/* Agenda: its first day by the hour, the next one as lines, the days after
+   as a strip of small columns, or a list of days when the block is narrow
+   (a container query: a page is resized, a phone is narrow). Events are
+   quiet greys; what waits for the user is one sign, a dashed violet ghost;
+   a status is a word. Half-hour rows of 24px: an event starts at a row
+   (.a2-r-N), spans rows (.a2-span-N) and takes a lane (.a2-lane-N) when
+   events overlap. */
+.a2-agenda { container-type: inline-size; min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+.a2-agenda-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; }
+@container (min-width: 620px) {
+  .a2-agenda-n2 .a2-agenda-main, .a2-agenda-n3 .a2-agenda-main { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 0; }
+  .a2-agenda-main > .a2-agenda-list { padding-left: 20px; margin-left: 20px; border-left: 1px solid var(--line); }
 }
-.a2-lanes-1 { grid-template-columns: 3em minmax(0, 1fr); }
-.a2-lanes-2 { grid-template-columns: 3em repeat(2, minmax(0, 1fr)); }
-.a2-lanes-3 { grid-template-columns: 3em repeat(3, minmax(0, 1fr)); }
-.a2-hour { grid-column: 1; grid-row-end: span 2; padding-top: 2px; font: 11px var(--mono); color: var(--fg3); }
+.a2-agenda-day { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.a2-agenda-head { margin: 0; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.a2-agenda-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.a2-agenda-date { font-size: 13px; color: var(--fg3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.a2-agenda-allday { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.a2-agenda-grid {
+  position: relative; display: grid; grid-auto-rows: 24px; column-gap: 4px; min-width: 0;
+  background: repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 48px);
+}
+.a2-agenda-none { grid-column: 2 / -1; align-self: center; padding-left: 4px; }
+.a2-lanes-1 { grid-template-columns: 2.6em minmax(0, 1fr); }
+.a2-lanes-2 { grid-template-columns: 2.6em repeat(2, minmax(0, 1fr)); }
+.a2-lanes-3 { grid-template-columns: 2.6em repeat(3, minmax(0, 1fr)); }
+.a2-hour { grid-column: 1; grid-row-end: span 2; padding-top: 3px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--fg3); }
 .a2-lane-0 { grid-column: 2; } .a2-lane-1 { grid-column: 3; } .a2-lane-2 { grid-column: 4; } .a2-lane-all { grid-column: 2 / -1; }
 .a2-r-0 { grid-row-start: 1; } .a2-r-1 { grid-row-start: 2; } .a2-r-2 { grid-row-start: 3; } .a2-r-3 { grid-row-start: 4; } .a2-r-4 { grid-row-start: 5; } .a2-r-5 { grid-row-start: 6; }
 .a2-r-6 { grid-row-start: 7; } .a2-r-7 { grid-row-start: 8; } .a2-r-8 { grid-row-start: 9; } .a2-r-9 { grid-row-start: 10; } .a2-r-10 { grid-row-start: 11; } .a2-r-11 { grid-row-start: 12; }
@@ -405,28 +418,80 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-span-37 { grid-row-end: span 37; } .a2-span-38 { grid-row-end: span 38; } .a2-span-39 { grid-row-end: span 39; } .a2-span-40 { grid-row-end: span 40; } .a2-span-41 { grid-row-end: span 41; } .a2-span-42 { grid-row-end: span 42; }
 .a2-span-43 { grid-row-end: span 43; } .a2-span-44 { grid-row-end: span 44; } .a2-span-45 { grid-row-end: span 45; } .a2-span-46 { grid-row-end: span 46; } .a2-span-47 { grid-row-end: span 47; } .a2-span-48 { grid-row-end: span 48; }
 .a2-ev {
-  min-width: 0; margin: 1px 0; padding: 2px 8px; overflow: hidden;
-  display: flex; flex-direction: column; border-radius: 6px; font-size: 12px; line-height: 1.3;
-  background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent);
+  min-width: 0; margin: 1px 0; padding: 3px 8px; overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; column-gap: 8px;
+  border-radius: 6px; font-size: 12.5px; line-height: 1.35;
+  background: var(--fill); box-shadow: inset 2px 0 0 var(--line-strong);
 }
-.a2-ev-short { flex-direction: row; align-items: baseline; gap: 6px; container-type: inline-size; }
-@container (max-width: 150px) { .a2-ev-short .a2-ev-time { display: none; } }
-.a2-ev-short .a2-ev-title { flex: 0 1 auto; min-width: 0; }
-.a2-ev-allday { padding: 2px 10px; border-radius: 999px; flex-direction: row; gap: 6px; box-shadow: none; }
-.a2-ev-time { flex: none; font: 11px var(--mono); color: var(--fg2); white-space: nowrap; }
-.a2-ev-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.a2-ev-place { color: var(--fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.a2-ev-overlap { background: var(--warn-soft); box-shadow: inset 2px 0 0 var(--hot); }
-/* A ghost: a dated proposal that waits for the user's yes, drawn apart. */
-.a2-ev-ghost {
-  background: transparent; box-shadow: none;
-  outline: 1.5px dashed var(--accent); outline-offset: -1.5px;
+.a2-ev-line { grid-column: 1; display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.a2-ev-short { align-content: center; padding-block: 0; }
+.a2-ev-short .a2-ev-sub { display: none; }
+.a2-ev-title { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-ev-time { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--fg3); white-space: nowrap; }
+.a2-ev-place, .a2-ev-clash { min-width: 0; font-size: 11.5px; color: var(--fg3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-ev-said { flex: none; font-size: 11.5px; color: var(--fg3); white-space: nowrap; }
+.a2-ev > .a2-inline { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
+/* Tall enough: its Oui under its lines, so they keep the width. */
+.a2-ev-tall { display: flex; flex-direction: column; }
+.a2-ev-tall > .a2-inline { align-self: flex-end; margin-top: auto; }
+.a2-ev-allday { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; box-shadow: none; }
+/* Gone by: quieter. Off (declined, cancelled): struck, no fill. Maybe: an
+   outline, no fill. */
+.a2-ev-past { opacity: 0.55; }
+.a2-ev-declined, .a2-ev-cancelled { background: none; box-shadow: inset 0 0 0 1px var(--line); }
+.a2-ev-declined .a2-ev-title, .a2-ev-cancelled .a2-ev-title { color: var(--fg3); text-decoration: line-through; font-weight: 400; }
+.a2-ev-tentative { background: var(--card); box-shadow: inset 0 0 0 1px var(--line-strong); }
+/* What waits for the user's answer: a ghost, the one violet sign. */
+.a2-ev-waits {
+  background: color-mix(in oklab, var(--accent) 6%, var(--card)); box-shadow: none;
+  outline: 1.5px dashed color-mix(in oklab, var(--accent) 70%, transparent); outline-offset: -1.5px;
 }
-.a2-ev-ghost.a2-ev-clash { outline-color: var(--hot); }
-/* An event a ghost would overlap: marked as any overlap, outlined too. */
-.a2-ev-clashed { outline: 1px solid var(--hot); outline-offset: -1px; }
-.a2-ev-kicker { flex: none; font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; color: var(--accent-text); }
-.a2-ev-clash-what { font-size: 11px; color: var(--hot-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.a2-ev-waits .a2-ev-said { color: var(--accent-text); font-weight: 500; }
+.a2-agenda .a2-inline { gap: 2px; }
+.a2-agenda .a2-inline-yes { min-width: 0; padding: 1px 11px; font-size: 12px; line-height: 18px; }
+.a2-agenda .a2-inline-no { width: 22px; height: 22px; }
+.a2-ev:hover .a2-inline-no { opacity: 1; }
+/* Now: a line across the day, its time in the hours' gutter; placed in its
+   half-hour row, then a third (10 min) at a time. */
+.a2-now { grid-column: 2 / -1; align-self: start; height: 0; border-top: 1.5px solid var(--fg); position: relative; z-index: 1; pointer-events: none; }
+.a2-now::before { content: ""; position: absolute; left: -4px; top: -4.75px; width: 8px; height: 8px; border-radius: 50%; background: var(--fg); }
+.a2-now-time {
+  grid-column: 1; align-self: start; z-index: 1; transform: translateY(-50%); padding-right: 2px;
+  font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--fg); background: var(--card);
+}
+.a2-now-1 { margin-top: 8px; } .a2-now-2 { margin-top: 16px; }
+/* A day as lines: its time, what, and its word. */
+.a2-agenda-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.a2-agenda-line {
+  display: grid; grid-template-columns: 3.2em minmax(0, 1fr) auto; align-items: baseline; column-gap: 8px;
+  padding: 4px 6px; margin: 0 -6px; border-radius: 6px; font-size: 13px;
+}
+.a2-agenda-line > .a2-inline { align-self: center; }
+.a2-agenda-at { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--fg3); white-space: nowrap; }
+.a2-agenda-what { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
+.a2-agenda-what .a2-ev-title { font-weight: 400; white-space: normal; }
+.a2-agenda-line.a2-ev-waits { outline-offset: -1.5px; }
+.a2-agenda-line.a2-ev-declined, .a2-agenda-line.a2-ev-cancelled, .a2-agenda-line.a2-ev-tentative { background: none; box-shadow: none; }
+.a2-agenda-free { font-size: 12.5px; }
+/* The days after: small columns side by side, a list when narrow. */
+.a2-agenda-week {
+  list-style: none; margin: 0; padding: 14px 0 0; border-top: 1px solid var(--line);
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 14px;
+}
+.a2-agenda-small { gap: 6px; }
+.a2-agenda-small .a2-agenda-name { font-size: 13px; font-weight: 500; }
+.a2-agenda-weekend .a2-agenda-name { color: var(--fg3); }
+.a2-agenda-small .a2-agenda-line { grid-template-columns: minmax(0, 1fr); row-gap: 0; padding: 3px 6px; font-size: 12.5px; }
+.a2-agenda-small .a2-agenda-at { font-size: 11px; }
+.a2-agenda-small .a2-agenda-what .a2-ev-title { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.a2-agenda-small .a2-agenda-line > .a2-inline { justify-self: start; margin-top: 4px; }
+@container (max-width: 560px) {
+  .a2-agenda-week { grid-auto-flow: row; grid-auto-columns: auto; gap: 0; padding-top: 4px; }
+  .a2-agenda-small { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .a2-agenda-small:last-child { border-bottom: 0; }
+  .a2-agenda-small .a2-agenda-line { grid-template-columns: 3.2em minmax(0, 1fr) auto; }
+  .a2-agenda-small .a2-agenda-line > .a2-inline { justify-self: end; margin-top: 0; }
+}
 
 /* Proposal: what Eriphe proposes, and the user's yes or no. */
 .a2-proposal { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 10px; background: var(--card); border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--line)); }

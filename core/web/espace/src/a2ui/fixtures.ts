@@ -123,7 +123,7 @@ export function sampleProposals(lang: Lang): Proposals {
       for (const f of followers) f({ refs: [ref] });
       return true;
     },
-    day: async (date) => views.map((v) => read(v.ref)!).filter((v) => v.state === "pending" && v.when?.some((w) => w.start.startsWith(date))),
+    day: async (date) => [...views.map((v) => read(v.ref)!).filter((v) => v.state === "pending" && v.when?.some((w) => w.start.startsWith(date))), ...viewCards.day(date)],
     follow: (on) => {
       followers.add(on);
       const off = viewCards.follow(on);

@@ -24,7 +24,7 @@
      },
      {
       "id": "day",
-      "component": "Day",
+      "component": "Agenda",
       "date": "2026-11-12",
       "events": {
        "@path": "/events"
@@ -1333,7 +1333,7 @@
      },
      {
       "id": "day",
-      "component": "Day",
+      "component": "Agenda",
       "date": "2026-11-12",
       "events": {
        "@path": "/events"

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { useWords, type Lang } from "../i18n";
 import { Chart as ChartView, cleanSeries } from "./chart";
 import { Code as CodeView } from "./code";
-import { Day as DayView, cleanEvents, type Ghost } from "./day";
+import { Agenda as AgendaView, AGENDA_DAYS, addDays, cleanEvents, today, useNow, type AgendaCards, type Ghost } from "./agenda";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
@@ -876,29 +876,47 @@ const Message = createComponentImplementation(
   },
 );
 
-const Day = createComponentImplementation(
+// Agenda is anything from a calendar: its days from date (today when
+// absent), the first by the hour. Bound to a source's items, each event's
+// card is what eriphe-core told of the row (lists.tsx), never the data's.
+// A status is the source's word, said by the page in the user's (agenda.tsx).
+const Agenda = createComponentImplementation(
   {
-    name: "Day",
+    name: "Agenda",
     schema: z.object({
-      date: CommonSchemas.DynamicString,
+      date: CommonSchemas.DynamicString.optional(),
+      days: z.number().int().min(1).max(AGENDA_DAYS).optional(),
       events: listOr(
-        z.object({ title: z.string(), start: z.string(), end: z.string().optional(), place: z.string().optional(), allDay: z.boolean().optional() }),
+        z.object({
+          title: z.string(),
+          start: z.string(),
+          end: z.string().optional(),
+          place: z.string().optional(),
+          allDay: z.boolean().optional(),
+          status: z.string().optional(),
+        }),
       ),
       proposals: z.boolean().optional(),
     }),
   },
-  ({ props }) => {
+  ({ props, context }) => {
     const { t, lang } = useWords();
-    const date = str(props.date);
-    const ghosts = useGhosts(date.slice(0, 10), props.proposals !== false);
-    return <DayView date={date} events={cleanEvents(props.events)} ghosts={ghosts} lang={lang} t={t} />;
+    const now = useNow();
+    const date = /^\d{4}-\d{2}-\d{2}/.test(str(props.date)) ? str(props.date).slice(0, 10) : today(now).date;
+    const days = Math.max(1, Math.min(AGENDA_DAYS, props.days ?? 1));
+    const ghosts = useGhosts(date, days, props.proposals !== false);
+    const surface = context.dataContext.surface?.id;
+    const told = useList(surface, context.componentModel.id);
+    const cards: AgendaCards | undefined =
+      told && surface ? { where: { surfaceId: surface, componentId: told.list.component }, card: (n) => told.list.items.find((it) => it.n === n)?.card } : undefined;
+    return <AgendaView date={date} days={days} events={cleanEvents(props.events)} ghosts={ghosts} cards={cards} lang={lang} t={t} now={now} />;
   },
 );
 
-// useGhosts are the proposals that wait on a day, as ghosts: read from
-// eriphe-core, and again whenever a proposal moved (one made, one
+// useGhosts are the proposals that wait on the days shown, as ghosts: read
+// from eriphe-core, and again whenever a proposal moved (one made, one
 // answered anywhere).
-function useGhosts(date: string, show: boolean): Ghost[] {
+function useGhosts(date: string, days: number, show: boolean): Ghost[] {
   const src = useProposals();
   const moved = useMoved(src, show ? null : []);
   const [ghosts, setGhosts] = useState<Ghost[]>([]);
@@ -908,14 +926,14 @@ function useGhosts(date: string, show: boolean): Ghost[] {
       return;
     }
     let live = true;
-    src.day(date).then(
-      (ps) => live && setGhosts(ghostsOf(ps)),
+    Promise.all(Array.from({ length: days }, (_, i) => src.day(addDays(date, i)))).then(
+      (all) => live && setGhosts(ghostsOf(all.flat())),
       () => {},
     );
     return () => {
       live = false;
     };
-  }, [src, date, show, moved]);
+  }, [src, date, days, show, moved]);
   return ghosts;
 }
 
@@ -997,7 +1015,7 @@ export const components: ReactComponentImplementation[] = [
   Timeline,
   Item,
   Message,
-  Day,
+  Agenda,
   Alert,
   Placeholder,
 ];

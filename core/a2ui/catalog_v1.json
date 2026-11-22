@@ -5,7 +5,7 @@
   "title": "Eriphe workspace catalog",
   "description": "The shapes a block of a node's page is made of. Shapes only: no component belongs to a tool.",
   "catalogId": "urn:eriphe:a2ui:workspace:v1",
-  "instructions": "Un bloc est une partie de la page d'un nœud : des composants de ce catalogue, entre le texte. Il s'écrit comme une liste plate de composants ; chacun a un `id` unique (lettres, chiffres et `_`, ni tiret ni chiffre au début), un `component` (un nom ci-dessous) et ses propriétés. Un seul composant a l'id `root` : la racine. Un composant désigne ses enfants par leur id (`child`, `children`, `tabs`), jamais en les écrivant dedans.\n\n**Valeurs.** Une propriété de type texte, nombre, booléen ou valeur prend un littéral (`\"Bonjour\"`, `42`), une liaison vers les données du bloc `{\"@path\": \"/ventes/total\"}` (un pointeur JSON) ou un appel de fonction `{\"@call\": \"formatNumber\", \"args\": {\"value\": {\"@path\": \"/total\"}}}`. Une propriété marquée « ou liaison » prend une liste littérale ou une liaison vers une liste de même forme.\n\n**Listes répétées.** `children` prend une liste d'ids `[\"a\", \"b\"]` ou un modèle `{\"path\": \"/mails\", \"componentId\": \"ligne\"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{\"@path\": \"sujet\"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.\n\n**Règles.**\n- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; une répartition, aujourd'hui et la cible : Chart `stack` ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day ; des cartes en galerie : Grid ; un lien vers une page : Link ; du code ou un diff : Code). Des options, une liste, un brouillon ne sont pas des composants : compose-les de ceux-ci.\n- Un bloc dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.\n- Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et le bloc reste à jour.\n- Un bouton ne fait qu'une chose : `ask`, il demande quelque chose à Eriphe avec tes propres mots : `{\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Relance la sauvegarde\"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code le relit dans le bloc, et Eriphe le reçoit comme un message de l'utilisateur sur ce nœud. Il n'agit sur rien. Tout autre nom est refusé.\n- Un oui n'est jamais un composant : ce qui attend le oui de l'utilisateur est une carte, que le code dessine d'après ses registres. La carte d'un élément se montre d'elle-même sur sa ligne (un seul Oui, ✕ pour refuser) ; une autre, là où un bloc carte la place, sinon au pied de la page.\n- Un Link montre son adresse en clair et ne s'ouvre que si l'utilisateur clique. Son `url` est une adresse http(s) écrite telle quelle, ou une liaison vers un champ que l'outil rend déjà comme une adresse (`{\"@path\": \"url\"}` dans un modèle) ; jamais une adresse construite à partir des données : pas de formatString, rien d'ajouté à la requête, pas d'identifiant ni de mot de passe dans l'adresse. Une adresse qui ne suit pas cette règle est refusée, ou n'est pas montrée.\n- Du code se montre avec Code, tel quel ; un diff unifié avec `\"mode\": \"diff\"`. Pour relire des modifications : leur description (Markdown), le diff (Code), les vérifications (Timeline) et un Link « Ouvrir dans … » vers leur page, pour aller plus loin là où elles sont.\n- N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.\n\n## Exemple : des mails, liés aux données\n```json\n[\n  {\"id\": \"root\", \"component\": \"List\", \"children\": {\"path\": \"/messages\", \"componentId\": \"mail\"}, \"emptyText\": \"Rien à traiter\"},\n  {\"id\": \"mail\", \"component\": \"Message\", \"from\": {\"@path\": \"from\"}, \"date\": {\"@path\": \"date\"}, \"subject\": {\"@path\": \"subject\"}, \"excerpt\": {\"@path\": \"snippet\"}}\n]\n```\nDonnées : `{\"messages\": [{\"from\": \"Sam\", \"date\": \"2026-11-12T08:10:00Z\", \"subject\": \"Devis\", \"snippet\": \"Voici le devis…\"}]}`\n\n## Exemple : des chiffres composés une fois\n```json\n[\n  {\"id\": \"root\", \"component\": \"Row\", \"children\": [\"cpu\", \"disque\"]},\n  {\"id\": \"cpu\", \"component\": \"Metric\", \"label\": \"Processeur\", \"value\": 37, \"unit\": \"%\", \"delta\": -5, \"better\": \"down\"},\n  {\"id\": \"disque\", \"component\": \"Metric\", \"label\": \"Disque libre\", \"value\": 1.2, \"unit\": \"To\"}\n]\n```",
+  "instructions": "Un bloc est une partie de la page d'un nœud : des composants de ce catalogue, entre le texte. Il s'écrit comme une liste plate de composants ; chacun a un `id` unique (lettres, chiffres et `_`, ni tiret ni chiffre au début), un `component` (un nom ci-dessous) et ses propriétés. Un seul composant a l'id `root` : la racine. Un composant désigne ses enfants par leur id (`child`, `children`, `tabs`), jamais en les écrivant dedans.\n\n**Valeurs.** Une propriété de type texte, nombre, booléen ou valeur prend un littéral (`\"Bonjour\"`, `42`), une liaison vers les données du bloc `{\"@path\": \"/ventes/total\"}` (un pointeur JSON) ou un appel de fonction `{\"@call\": \"formatNumber\", \"args\": {\"value\": {\"@path\": \"/total\"}}}`. Une propriété marquée « ou liaison » prend une liste littérale ou une liaison vers une liste de même forme.\n\n**Listes répétées.** `children` prend une liste d'ids `[\"a\", \"b\"]` ou un modèle `{\"path\": \"/mails\", \"componentId\": \"ligne\"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{\"@path\": \"sujet\"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.\n\n**Règles.**\n- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; une répartition, aujourd'hui et la cible : Chart `stack` ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; un calendrier, une journée ou une semaine : Agenda ; des cartes en galerie : Grid ; un lien vers une page : Link ; du code ou un diff : Code). Des options, une liste, un brouillon ne sont pas des composants : compose-les de ceux-ci.\n- Un bloc dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.\n- Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et le bloc reste à jour.\n- Un bouton ne fait qu'une chose : `ask`, il demande quelque chose à Eriphe avec tes propres mots : `{\"event\": {\"name\": \"ask\", \"context\": {\"text\": \"Relance la sauvegarde\"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code le relit dans le bloc, et Eriphe le reçoit comme un message de l'utilisateur sur ce nœud. Il n'agit sur rien. Tout autre nom est refusé.\n- Un oui n'est jamais un composant : ce qui attend le oui de l'utilisateur est une carte, que le code dessine d'après ses registres. La carte d'un élément se montre d'elle-même sur sa ligne (un seul Oui, ✕ pour refuser) ; une autre, là où un bloc carte la place, sinon au pied de la page.\n- Un Link montre son adresse en clair et ne s'ouvre que si l'utilisateur clique. Son `url` est une adresse http(s) écrite telle quelle, ou une liaison vers un champ que l'outil rend déjà comme une adresse (`{\"@path\": \"url\"}` dans un modèle) ; jamais une adresse construite à partir des données : pas de formatString, rien d'ajouté à la requête, pas d'identifiant ni de mot de passe dans l'adresse. Une adresse qui ne suit pas cette règle est refusée, ou n'est pas montrée.\n- Du code se montre avec Code, tel quel ; un diff unifié avec `\"mode\": \"diff\"`. Pour relire des modifications : leur description (Markdown), le diff (Code), les vérifications (Timeline) et un Link « Ouvrir dans … » vers leur page, pour aller plus loin là où elles sont.\n- N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.\n\n## Exemple : des mails, liés aux données\n```json\n[\n  {\"id\": \"root\", \"component\": \"List\", \"children\": {\"path\": \"/messages\", \"componentId\": \"mail\"}, \"emptyText\": \"Rien à traiter\"},\n  {\"id\": \"mail\", \"component\": \"Message\", \"from\": {\"@path\": \"from\"}, \"date\": {\"@path\": \"date\"}, \"subject\": {\"@path\": \"subject\"}, \"excerpt\": {\"@path\": \"snippet\"}}\n]\n```\nDonnées : `{\"messages\": [{\"from\": \"Sam\", \"date\": \"2026-11-12T08:10:00Z\", \"subject\": \"Devis\", \"snippet\": \"Voici le devis…\"}]}`\n\n## Exemple : des chiffres composés une fois\n```json\n[\n  {\"id\": \"root\", \"component\": \"Row\", \"children\": [\"cpu\", \"disque\"]},\n  {\"id\": \"cpu\", \"component\": \"Metric\", \"label\": \"Processeur\", \"value\": 37, \"unit\": \"%\", \"delta\": -5, \"better\": \"down\"},\n  {\"id\": \"disque\", \"component\": \"Metric\", \"label\": \"Disque libre\", \"value\": 1.2, \"unit\": \"To\"}\n]\n```",
   "components": {
     "Text": {
       "type": "object",
@@ -342,23 +342,25 @@
       },
       "required": ["component", "from"]
     },
-    "Day": {
+    "Agenda": {
       "type": "object",
-      "description": "Une journée et ses événements, dans l'ordre des heures. Les propositions datées qui attendent un oui ou un non s'y montrent d'elles-mêmes en fantôme à leur heure, avec ce qu'elles chevauchent ; on y répond par leur carte.",
+      "description": "Un agenda : tout ce qui vient d'un calendrier. Le premier jour se dessine heure par heure (aujourd'hui avec une ligne à l'heure qu'il est), le suivant en colonne compacte, les autres en petites colonnes. Une invitation sans réponse (statut needs-action) et une proposition datée qui attend un oui s'y montrent en fantôme « à répondre », avec le Oui de leur carte ; un statut se dit toujours en mots, jamais tel que la source l'écrit. Lie events aux éléments d'une source (items) : la carte qui attend sur un événement se montre d'elle-même sur son fantôme.",
       "properties": {
-        "component": {"const": "Day"},
-        "date": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Le jour, AAAA-MM-JJ."},
+        "component": {"const": "Agenda"},
+        "date": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Le premier jour, AAAA-MM-JJ ; aujourd'hui s'il manque."},
+        "days": {"type": "integer", "minimum": 1, "maximum": 7, "default": 1, "description": "Combien de jours depuis date : 1 la journée, 2 avec demain, jusqu'à 7 la semaine."},
         "events": {
           "oneOf": [
-            {"type": "array", "items": {"$ref": "#/$defs/DayEvent"}},
+            {"type": "array", "items": {"$ref": "#/$defs/AgendaEvent"}},
             {"$ref": "common_types.json#/$defs/DataBinding"}
           ]
         },
-        "proposals": {"type": "boolean", "default": true, "description": "Montrer les propositions datées de ce jour (oui par défaut) ; false pour une journée qui n'est pas celle de l'utilisateur."}
+        "proposals": {"type": "boolean", "default": true, "description": "Montrer les propositions datées de ces jours (oui par défaut) ; false pour un agenda qui n'est pas celui de l'utilisateur."}
       },
-      "required": ["component", "date", "events"],
+      "required": ["component", "events"],
       "examples": [
-        {"id": "demain", "component": "Day", "date": "2026-11-13", "events": [{"title": "Dentiste", "start": "2026-11-13T09:30:00+01:00", "end": "2026-11-13T10:00:00+01:00", "place": "Centre"}]}
+        {"id": "semaine", "component": "Agenda", "days": 7, "events": {"@path": "/agenda/events"}},
+        {"id": "demain", "component": "Agenda", "date": "2026-11-13", "events": [{"title": "Dentiste", "start": "2026-11-13T09:30:00+01:00", "end": "2026-11-13T10:00:00+01:00", "place": "Centre"}]}
       ]
     },
     "Alert": {
@@ -482,7 +484,7 @@
         {"$ref": "#/components/Timeline"},
         {"$ref": "#/components/Item"},
         {"$ref": "#/components/Message"},
-        {"$ref": "#/components/Day"},
+        {"$ref": "#/components/Agenda"},
         {"$ref": "#/components/Alert"},
         {"$ref": "#/components/Placeholder"}
       ],
@@ -568,14 +570,15 @@
       "required": ["label", "state"],
       "additionalProperties": false
     },
-    "DayEvent": {
+    "AgendaEvent": {
       "type": "object",
       "properties": {
         "title": {"type": "string"},
         "start": {"type": "string", "description": "Date et heure ISO 8601, ou la date seule pour toute la journée."},
         "end": {"type": "string"},
         "place": {"type": "string"},
-        "allDay": {"type": "boolean"}
+        "allDay": {"type": "boolean"},
+        "status": {"type": "string", "description": "Où en est l'événement, tel que la source le dit : confirmed, tentative, needs-action (une invitation sans réponse), declined, cancelled (accepted, needsAction, canceled aussi, en majuscules ou non). Un autre ne se montre pas."}
       },
       "required": ["title", "start"],
       "additionalProperties": false
