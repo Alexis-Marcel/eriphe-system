@@ -628,14 +628,7 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 				after = append(after, a) // a step node of the work
 			}
 		}
-		goal := ""
-		if sp.Contract != nil {
-			goal = sp.Contract.Objective
-		}
-		if goal == "" {
-			goal, _, _ = strings.Cut(strings.TrimSpace(sp.Prompt), "\n")
-		}
-		nw := nodestore.New{ID: ids[sp.Key], Title: sp.Title, Parent: parent, Goal: truncate(oneLine(goal), taskNodeGoalMax),
+		nw := nodestore.New{ID: ids[sp.Key], Title: sp.Title, Parent: parent, Goal: workGoal(sp.Contract, sp.Prompt),
 			External: len(by.tainted) > 0, OpenedBy: c.workOrigin(parent, by.task), Author: by.author}
 		if err := c.nodes.Check(nw); err != nil {
 			return nil, fmt.Errorf("step %s: %w", sp.Key, err)

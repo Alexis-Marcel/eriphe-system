@@ -422,17 +422,25 @@ func (c *core) callToBrain(a accessQuestion, text, taint string) {
 	c.userActEvent(text, node, taint)
 }
 
-// brainRunTask starts the task the brain asks for, in a node of its own
-// (a child of node, when it names one): its start's card goes with the
-// brain's message, it is tainted by the turn, and its end reaches the
-// brain as an event pointing to its node (task_node.go). A turn about a
-// node makes the task about it.
+// brainRunTask starts the task the brain asks for, in a node of its own,
+// a child of the node it names, else of the turn's node (at the top when
+// the turn is about none, or its node is archived): what it does is
+// written in the graph, under what it is for. Its start's card goes with
+// the brain's message, it is tainted by the turn, it is about the node it
+// works under, and its end reaches the brain as an event pointing to its
+// node (task_node.go).
 func (c *core) brainRunTask(ctx context.Context, in runRequest) (map[string]any, error) {
 	if err := c.taintedResources(in); err != nil { // resources.go
 		return nil, err
 	}
-	if in.About == "" {
-		in.About = c.turnSource()
+	in.Node = strings.TrimSpace(in.Node)
+	if in.Node == "" {
+		if id := c.turn.aboutNode(); c.nodeParent(id) == nil {
+			in.Node = id
+		}
+	}
+	if in.Node != "" {
+		in.about = nodeRef(in.Node)
 	}
 	in.askStart, in.byBrain, in.taint = true, true, c.turnTaint()
 	t, err := c.runTask(ctx, in)

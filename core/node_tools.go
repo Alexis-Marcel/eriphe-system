@@ -42,14 +42,10 @@ const nodeFindMax = 30
 const nodeTraceShown = 6000
 
 type brainNodeOpenIn struct {
-	Title    string     `json:"title" jsonschema:"its name for the user, a few words in their language, no ids"`
-	Parent   string     `json:"parent,omitempty" jsonschema:"the node it is a child of: a part of that work; leave it out for a node of its own"`
-	Lifetime string     `json:"lifetime,omitempty" jsonschema:"work (by default): a piece of work that ends; standing: what the user follows continuously (« Ma journée », a subject), never done"`
-	Goal     string     `json:"goal,omitempty" jsonschema:"what it is for, in one or two sentences; never shown to the user. With steps, what must be true at the end: a fresh agent checks it once every step is accepted"`
-	Body     string     `json:"body,omitempty" jsonschema:"its first body: markdown text, and blocks in fences (eriphe:block <name>, a JSON object: components, data, sources; catalog_read gives the components)"`
-	Steps    []stepSpec `json:"steps,omitempty" jsonschema:"to cut its work in steps, each a child of it run by an agent: a key, a title, the keys of the steps it comes after, a self-contained prompt, an agent, resources and a contract. Eriphe starts each step once those it comes after are accepted and accepts it on its proof"`
-	Budget   int        `json:"budget_minutes,omitempty" jsonschema:"with steps: the minutes of running time the work may take, 60 by default"`
-	Aside    bool       `json:"aside,omitempty" jsonschema:"true only when the user asks for it on the side (« à part », « sur le côté », « en arrière-plan »): opened without being shown, the bar stays where it is; it rises when it has something for the user. By default the node opens in front of the user"`
+	nodeOpenFields
+	Parent   string `json:"parent,omitempty" jsonschema:"the node it is a child of: a part of that work; leave it out for a node of its own"`
+	Lifetime string `json:"lifetime,omitempty" jsonschema:"leave it out: a node opened here is a piece of work, which ends. What the user follows continuously (« Ma journée », their mails) is a view, made only by propose_view on their yes"`
+	Aside    bool   `json:"aside,omitempty" jsonschema:"true only when the user asks for it on the side (« à part », « sur le côté », « en arrière-plan »): opened without being shown, the bar stays where it is; it rises when it has something for the user. By default the node opens in front of the user"`
 }
 
 type nodeFindIn struct {
@@ -101,7 +97,7 @@ type settleIn struct {
 }
 
 func registerNodeTools(s *mcp.Server, c *core) {
-	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result (a research, a reply to write, a plan), or with lifetime standing what the user follows continuously (« Ma journée », a subject). With parent, a part of that node's work. Its body is markdown text and blocks; with steps, its work is cut in steps, each a child an agent runs, accepted by Eriphe on its proof. Find it first (node_find): the same thing has one node. It opens in front of the user: asked from the home, the bar moves into it and the exchange goes on there; asked from a node, it opens beside it. With aside, only when the user asks for it on the side, it opens in the background.",
+	tool(s, "node_open", "Open a node on the user's graph: one piece of work and its result (a research, a reply to write, a plan). What the user follows continuously (« Ma journée », their mails) is a view: only propose_view makes one, on their yes. With parent, a part of that node's work. Its body is markdown text and blocks; with steps, its work is cut in steps, each a child an agent runs, accepted by Eriphe on its proof. Find it first (node_find): the same thing has one node. It opens in front of the user: asked from the home, the bar moves into it and the exchange goes on there; asked from a node, it opens beside it. With aside, only when the user asks for it on the side, it opens in the background.",
 		func(ctx context.Context, in brainNodeOpenIn) (map[string]any, error) { return c.brainNodeOpen(ctx, in) })
 	tool(s, "node_find", "Find nodes: by words of their title, goal, text or blocks; without words, those at work or waiting for the user, then the last changed. archived: the archived ones too. Each says its id, state (running, waiting, idle, done), parent and when it changed; a title written after reading external content says title_external, and is quoted only with include_external, which taints the turn (node_read reads it too).",
 		func(ctx context.Context, in nodeFindIn) (map[string]any, error) { return c.brainNodeFind(in) })
@@ -159,78 +155,106 @@ func (c *core) brainNode(id string) (nodestore.Summary, error) {
 	return sum, err
 }
 
-// brainNodeOpen is node_open.
+// errStandingOpen refuses a standing node to node_open: what the user
+// follows continuously is a view, made only on their yes.
+var errStandingOpen = errors.New("node_open opens a piece of work only: what the user follows continuously (« Ma journée », their mails, a subject) is a view, made only by propose_view on the user's yes")
+
+// brainNodeOpen is node_open, as the brain calls it: openNode in its turn,
+// tainted by it, its blocks' sources catalog servers or approved monitors.
+// The node opens in front of the user, unless aside.
 func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[string]any, error) {
-	if c.nodes == nil {
-		return nil, errNoGraph
-	}
-	title := strings.TrimSpace(in.Title)
-	if title == "" {
-		return nil, errors.New("a title is needed")
-	}
-	lifetime := nodefile.Lifetime(strings.ToLower(strings.TrimSpace(in.Lifetime)))
-	switch lifetime {
-	case "":
-		lifetime = nodefile.Work
-	case nodefile.Work, nodefile.Standing:
+	switch nodefile.Lifetime(strings.ToLower(strings.TrimSpace(in.Lifetime))) {
+	case "", nodefile.Work:
+	case nodefile.Standing:
+		return nil, errStandingOpen
 	default:
-		return nil, fmt.Errorf("lifetime %q: work or standing", in.Lifetime)
-	}
-	if lifetime == nodefile.Standing && len(in.Steps) > 0 {
-		return nil, errors.New("a standing node never ends: its work in steps goes in a child of it")
+		return nil, fmt.Errorf("lifetime %q: leave it out, a node opened here is a piece of work", in.Lifetime)
 	}
 	parent := strings.TrimSpace(in.Parent)
-	if err := c.nodeParent(parent); err != nil {
-		return nil, err
-	}
-	taint := c.turnTaint()
-	tainted := len(taint) > 0
-	// What it says is checked as a write of the brain's (nodeGuard).
-	probe, err := nodefile.New(nodefile.Meta{ID: "probe", Title: "probe", Lifetime: nodefile.Work, Created: time.Now()}, "")
-	if err == nil {
-		err = probe.AuthorBody(in.Body)
-	}
-	if err == nil {
-		_, err = c.nodeGuard(probe, blockNames(probe), tainted, c.viewSourceOK(""))
-	}
-	if err != nil {
-		return nil, err
-	}
-	if len(in.Steps) > 0 { // checked before the node is made: refused, nothing is
-		if err := c.checkSteps(in.Steps, in.Budget, taint); err != nil {
-			return nil, err
-		}
-	}
-	d, err := c.nodes.Create(nodestore.New{Title: title, Parent: parent, Lifetime: lifetime, Goal: strings.TrimSpace(in.Goal),
-		Body: in.Body, External: tainted, OpenedBy: c.turnOrigin(), Author: byBrain})
-	if err != nil {
+	d, steps, err := c.openNode(ctx, in.nodeOpenFields, parent, nodeOpener{
+		stepOpener: stepOpener{author: byBrain, tainted: c.turnTaint()}, origin: c.turnOrigin(), sourceOK: c.viewSourceOK("")})
+	if d == nil {
 		return nil, err
 	}
 	id := d.Node.Meta.ID
-	if err := c.externalSources(d, byBrain); err != nil {
-		return nil, err
-	}
 	c.turn.wrote()
 	c.turn.about(id)
 	if !in.Aside && !c.moveHomeTurn(id) && c.turnAnswersUser() { // a subject opened from the home: the exchange goes on in it (node_turn.go)
 		c.showNode(id, byBrain, false) // from a node: beside it, the bar where it is
-	}
-	if len(d.Node.Blocks()) > 0 {
-		c.readNodeLater(context.WithoutCancel(ctx), id, nil) // its live blocks, at once (node_live.go)
 	}
 	out := map[string]any{"id": id, "title": d.Node.Meta.Title, "version": d.Version.N, "hash": d.Version.Hash}
 	c.noteWaitingLinks(out, d)
 	if parent != "" {
 		out["parent"] = parent
 	}
-	if len(in.Steps) > 0 {
-		ids, err := c.openSteps(ctx, id, in.Steps, in.Budget, stepOpener{author: byBrain, tainted: taint})
-		if err != nil {
-			return out, fmt.Errorf("node %s is open, but not its steps: %w", id, err)
-		}
-		out["steps"] = ids
+	if steps != nil {
+		out["steps"] = steps
 	}
-	return out, nil
+	return out, err
+}
+
+// nodeOpener is who opens a node with node_open: the brain in its turn,
+// or a task under its own node. Its author, task and taint open the
+// node's steps too.
+type nodeOpener struct {
+	stepOpener
+	origin   *nodefile.Origin            // who wanted it (node_origin.go)
+	sourceOK func(nodefile.Source) error // the sources its blocks may read (nodeGuard)
+}
+
+// openNode is node_open, for the brain and for a task alike: a work node
+// under parent ("" for the top), its body checked as a write of the
+// opener's (nodeGuard), external when the opener is tainted, its steps
+// checked before anything is made and opened under it. It never opens a
+// standing node: a view is made only by propose_view, on the user's yes.
+// A node made whose steps could not open is given with the error.
+func (c *core) openNode(ctx context.Context, in nodeOpenFields, parent string, by nodeOpener) (*nodestore.Doc, map[string]string, error) {
+	if c.nodes == nil {
+		return nil, nil, errNoGraph
+	}
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
+		return nil, nil, errors.New("a title is needed")
+	}
+	if err := c.nodeParent(parent); err != nil {
+		return nil, nil, err
+	}
+	tainted := len(by.tainted) > 0
+	probe, err := nodefile.New(nodefile.Meta{ID: "probe", Title: "probe", Lifetime: nodefile.Work, Created: time.Now()}, "")
+	if err == nil {
+		err = probe.AuthorBody(in.Body)
+	}
+	if err == nil {
+		_, err = c.nodeGuard(probe, blockNames(probe), tainted, by.sourceOK)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(in.Steps) > 0 { // checked before the node is made: refused, nothing is
+		if err := c.checkSteps(in.Steps, in.Budget, by.tainted); err != nil {
+			return nil, nil, err
+		}
+	}
+	d, err := c.nodes.Create(nodestore.New{Title: title, Parent: parent, Lifetime: nodefile.Work, Goal: strings.TrimSpace(in.Goal),
+		Body: in.Body, External: tainted, OpenedBy: by.origin, Author: by.author})
+	if err != nil {
+		return nil, nil, err
+	}
+	id := d.Node.Meta.ID
+	if err := c.externalSources(d, by.author); err != nil {
+		return nil, nil, err
+	}
+	if len(d.Node.Blocks()) > 0 {
+		c.readNodeLater(context.WithoutCancel(ctx), id, nil) // its live blocks, at once (node_live.go)
+	}
+	if len(in.Steps) == 0 {
+		return d, nil, nil
+	}
+	ids, err := c.openSteps(ctx, id, in.Steps, in.Budget, by.stepOpener)
+	if err != nil {
+		return d, ids, fmt.Errorf("node %s is open, but not its steps: %w", id, err)
+	}
+	return d, ids, nil
 }
 
 // nodeFound is a node as node_find gives it.

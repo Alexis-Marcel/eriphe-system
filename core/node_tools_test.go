@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
@@ -144,9 +145,27 @@ func TestBrainNodeTools(t *testing.T) {
 	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Enfant", "parent": "nothere"}); msg == "" {
 		t.Error("a child of a missing node")
 	}
-	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Autre", "lifetime": "forever"}); !strings.Contains(msg, "work or standing") {
+	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Autre", "lifetime": "forever"}); !strings.Contains(msg, "piece of work") {
 		t.Errorf("a bad lifetime: %q", msg)
 	}
+	// A standing node is a view: only propose_view makes one, on the
+	// user's yes; nothing is made.
+	n := len(mustGraph(t, c))
+	if _, msg := brainNodes(t, c, "node_open", map[string]any{"title": "Ma journée", "lifetime": "standing"}); !strings.Contains(msg, "propose_view") {
+		t.Errorf("a standing node opened: %q", msg)
+	}
+	if len(mustGraph(t, c)) != n {
+		t.Error("a node made by a refused node_open")
+	}
+}
+
+func mustGraph(t *testing.T, c *core) []nodestore.Summary {
+	t.Helper()
+	g, err := c.nodes.Graph()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return g
 }
 
 // Links between nodes are written in their text: node_link is gone; a
@@ -223,7 +242,11 @@ func TestBrainNodeSetShow(t *testing.T) {
 	if n := c.mem.count(`kind = 'decision' AND status = 'active' AND superseded_by IS NULL AND source_ref = '` + nodeRef(id) + `'`); n != 1 {
 		t.Errorf("%d current decisions", n)
 	}
-	day := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Ma journée", "lifetime": "standing"})["id"].(string)
+	dd, err := c.nodes.Create(nodestore.New{Title: "Ma journée", Lifetime: nodefile.Standing, Author: "user"}) // a view the user said yes to
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := dd.Node.Meta.ID
 	if _, msg := brainNodes(t, c, "node_set", map[string]any{"id": day, "done": true}); !strings.Contains(msg, "standing") {
 		t.Errorf("a standing node done: %q", msg)
 	}

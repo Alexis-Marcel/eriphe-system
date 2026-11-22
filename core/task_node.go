@@ -41,6 +41,19 @@ func init() { extraSchema = append(extraSchema, taskNodeSchema) }
 // contract's objective or its prompt's first line.
 const taskNodeGoalMax = 300
 
+// workGoal is the goal of the node a task or a step works in: its
+// contract's objective, else its prompt's first line.
+func workGoal(k *taskContract, prompt string) string {
+	goal := ""
+	if k != nil {
+		goal = k.Objective
+	}
+	if goal == "" {
+		goal, _, _ = strings.Cut(strings.TrimSpace(prompt), "\n")
+	}
+	return truncate(oneLine(goal), taskNodeGoalMax)
+}
+
 // taskNode is the node task works in; "" for none.
 func (c *core) taskNode(task string) string {
 	var id string
@@ -85,13 +98,6 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest) error {
 	if title == "" {
 		title = neutral
 	}
-	goal := ""
-	if r.Contract != nil {
-		goal = r.Contract.Objective
-	}
-	if goal == "" {
-		goal, _, _ = strings.Cut(strings.TrimSpace(r.Prompt), "\n")
-	}
 	origin := r.origin
 	switch {
 	case origin != nil:
@@ -106,7 +112,7 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest) error {
 		origin = &cp
 	}
 	nw := nodestore.New{Title: truncate(oneLine(title), nodefile.TitleMax-1), Parent: strings.TrimSpace(r.Node),
-		Goal: truncate(oneLine(goal), taskNodeGoalMax), External: len(r.taint) > 0, OpenedBy: origin, Author: c.taskAuthor(t.ID)}
+		Goal: workGoal(r.Contract, r.Prompt), External: len(r.taint) > 0, OpenedBy: origin, Author: c.taskAuthor(t.ID)}
 	// A title or a goal the filter refuses (« Renouvelle le token: expiré »)
 	// does not stop the task: its node goes without the goal, then with a
 	// neutral title.

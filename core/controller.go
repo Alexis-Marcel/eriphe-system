@@ -299,14 +299,17 @@ type runRequest struct {
 	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository the user gave to Eriphe cloned into /work/repo (repo, with branch, base, dir; see list_repos), the user's folders and the places of their tools (folder, place; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
 	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
 	Device    string        `json:"device,omitempty" jsonschema:"device name; empty lets the scheduler choose"`
-	About     string        `json:"about,omitempty" jsonschema:"what it is about: node:<id>, or an entity's key (person:<slug>); leave it out for what this turn is about (its node)"`
-	Node      string        `json:"node,omitempty" jsonschema:"the node this work belongs to, by its id: the task works in a node of its own, opened as a child of it; leave it out for a node at the top"`
+	Node      string        `json:"node,omitempty" jsonschema:"the node this work belongs to, by its id: the task works in a node of its own, opened as a child of it; leave it out for this turn's node (at the top when the turn is about none)"`
 	// Contract: what must be true at the end, for a task that changes
 	// something (contract.go); none for a search or a read.
 	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
 
 	// Tools is an assistant's grant, never a brain's call.
 	Tools []string `json:"-"`
+
+	// about: what it is about (about.go), set by code: the node it works
+	// under, a skill's alias.
+	about string
 
 	// askStart: what the task will need of the user's is asked at launch,
 	// on a card, and the task waits for the answer (task_start.go); taint
@@ -369,7 +372,7 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 			return nil, err
 		}
 	}
-	about, err := c.aboutIs(r.About)
+	about, err := c.aboutIs(r.about)
 	if err != nil {
 		return nil, fmt.Errorf("about: %w", err)
 	}
