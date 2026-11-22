@@ -889,3 +889,26 @@ func TestWebChangePassword(t *testing.T) {
 		t.Fatal("no limit on the current password")
 	}
 }
+
+// The templates are parsed once per process and each language keeps its
+// own set: rendering in one language, then the other, then the first again
+// gives each its own words, on every workspace.
+func TestTemplatesKeepTheirLanguage(t *testing.T) {
+	a, b := newTestWeb(t), newTestWeb(t)
+	data := joinWait{Name: "pc", ID: "0123456789abcdef", Connected: true}
+	for _, w := range []*web{a.w, b.w, a.w} {
+		for _, lang := range []string{"fr", "en", "fr"} {
+			got, err := w.fragment(lang, "settings", "join-wait", data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			other := map[string]string{"fr": "en", "en": "fr"}[lang]
+			if !strings.Contains(got, ">"+tr(lang, "devices.done")+"<") || strings.Contains(got, ">"+tr(other, "devices.done")+"<") {
+				t.Fatalf("%s:\n%s", lang, got)
+			}
+		}
+	}
+	if _, err := a.w.fragment("fr", "no-such-page", "x", nil); err == nil {
+		t.Fatal("an unknown page renders")
+	}
+}

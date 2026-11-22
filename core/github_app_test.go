@@ -41,9 +41,15 @@ type fakeGitHubAPI struct {
 	created time.Time
 }
 
+// fakeGitHubKey is the faked app's key: one per test process, since
+// making a 2048-bit key takes a while.
+var fakeGitHubKey = sync.OnceValues(func() (*rsa.PrivateKey, error) {
+	return rsa.GenerateKey(rand.Reader, 2048)
+})
+
 func newFakeGitHub(t *testing.T) *fakeGitHubAPI {
 	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	key, err := fakeGitHubKey()
 	if err != nil {
 		t.Fatal(err)
 	}
