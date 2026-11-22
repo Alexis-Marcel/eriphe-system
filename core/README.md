@@ -1268,7 +1268,9 @@ composes each one from the catalog.
   looks (`monitorLooked`). A read that fails or waits keeps the last good value, with why. The
   values stay in `node_reads`, never in the node's file: a read makes no version, however often it
   runs. The page draws the block from them, whatever the version shown; an archived node's reads
-  are kept (`KeptSources`) and its page shows them, read no more; they go with their source.
+  are kept (`KeptSources`, `keptReads`) and its page shows them, read no more; they go with their
+  source. What code acts on (attention, cards, skills, freshness) is a live node's reads only
+  (`nodeReads`).
   `node_read` gives them (`values`, by block then source, one past 16 KiB said to be so), tainting
   the turn when a block reads a server not trusted. A block that reads a server not trusted is marked `external`, checked at each read:
   code marks it, never unmarks it. A monitor's value is its latest number, its last points, whether
