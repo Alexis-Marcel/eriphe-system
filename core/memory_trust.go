@@ -206,6 +206,7 @@ type brainTurn struct {
 	answer    int                  // its answer is the brain's messages past this seq; 0: no answer to file (node_net.go)
 	asked     bool                 // it answers messages of the user's, not events or a wake only (node_turn.go)
 	home      bool                 // the user.s message, said in a node, is not about it: the turn answers as at the home (node_turn.go)
+	titleFree bool                 // the user's request of this turn has titled no subject yet (requestTitled, node_tools.go)
 	namedRefs []string             // the entities my messages of the turn name (names.go)
 	keep      func(brainTurnState) // stores it, so a restart of eriphe-core does not forget it
 }
@@ -265,6 +266,7 @@ func (t *brainTurn) start(from, to, eventSeq int) {
 	t.from, t.to, t.eventSeq, t.tainted, t.node, t.talk, t.filed, t.namedRefs = from, to, eventSeq, nil, "", "", false, nil
 	t.answer = to // what it writes past the messages delivered answers them; none delivered, nothing to file
 	t.asked = from != 0
+	t.titleFree = from != 0
 	t.home = false
 	t.save()
 }
@@ -283,6 +285,7 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 	t.filed = false // a new answer: the net looks at it alone (node_net.go)
 	t.answer = to   // past what it was just given; given nothing, nothing to file
 	t.asked = false // events or a wake: no request of the user's to answer now
+	t.titleFree = false
 	t.home = false
 	for _, why := range carried {
 		if !containsStr(t.tainted, why) {
@@ -290,6 +293,17 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 		}
 	}
 	t.save()
+}
+
+// requestTitled takes the turn's request as a subject's title: once per
+// turn, and only in the turn that delivered it (never on events or a
+// wake that went on from it).
+func (t *brainTurn) requestTitled() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	free := t.titleFree
+	t.titleFree = false
+	return free
 }
 
 // answersUser makes the turn gone on over events answer the user: one of
@@ -423,10 +437,8 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 			// The task's own node: what it reads there taints by its own
 			// record (task_nodes.go).
 		case slices.ContainsFunc(providedServers, func(s string) bool { return strings.HasPrefix(name, "mcp__"+s+"__") }):
-			// Eriphe's own (the workspace), as eriphe-core's: what it tells
-			// of a source's result or error taints by its own record
-			// (workspaceSourceRead); tools' descriptions are read as any lent
-			// tool's are.
+			// Eriphe's own (the folders): what it reads taints by its own
+			// record (folder_tools.go).
 		case strings.HasPrefix(name, "mcp__"):
 			if k := callKey(name, e.Data["input"]); pending[k] > 0 || unrun[k] > 0 {
 				if pending[k] > 0 {

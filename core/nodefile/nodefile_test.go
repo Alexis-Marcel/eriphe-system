@@ -618,3 +618,23 @@ func TestOpenedByIsCodes(t *testing.T) {
 		t.Errorf("an author's body: %+v %v", again.Meta.OpenedBy, err)
 	}
 }
+
+// A heading that repeats the node's title at the top of an author's body
+// goes; any other heading stays.
+func TestAuthorBodyDropsTitleHeading(t *testing.T) {
+	for body, want := range map[string]string{
+		"# Sam's node\n\nOù on en est.\n":         "Où on en est.\n",
+		"\n## **sam's NODE** ##\nOù on en est.\n": "Où on en est.\n",
+		"# Le plan\n\nOù on en est.\n":            "# Le plan\n\nOù on en est.\n",
+		"Où on en est.\n# Sam's node\n":           "Où on en est.\n# Sam's node\n",
+		"# Sam's node\n":                          "",
+	} {
+		n, err := authorNew(body)
+		if err != nil {
+			t.Fatalf("%q: %v", body, err)
+		}
+		if got := n.Text(); got != want {
+			t.Errorf("%q: text %q, want %q", body, got, want)
+		}
+	}
+}

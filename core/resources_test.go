@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // folderRefs lends folders; Clients, shared write in these tests, to write.
@@ -258,7 +261,8 @@ func TestTaintedResources(t *testing.T) {
 	}
 }
 
-// run_task teaches resources first; the old fields say they are legacy.
+// Resources are taught once, in node_open's steps; run_task names them
+// there.
 func TestRunTaskSchema(t *testing.T) {
 	c := newCatalogCore(t)
 	cs := connectTo(t, newMCPServer(c))
@@ -266,18 +270,47 @@ func TestRunTaskSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	schemas := map[string]string{}
 	for _, tl := range tools.Tools {
-		if tl.Name != "run_task" {
+		raw, _ := json.Marshal(tl.InputSchema)
+		schemas[tl.Name] = string(raw)
+	}
+	for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "place"} {
+		if !strings.Contains(schemas["node_open"], want) {
+			t.Errorf("node_open's schema lacks %s: %s", want, schemas["node_open"])
+		}
+	}
+	if s := schemas["run_task"]; !strings.Contains(s, `"resources"`) || !strings.Contains(s, "node_open's steps' resources") {
+		t.Errorf("run_task's resources: %s", s)
+	}
+}
+
+// A shape another tool says in full is still checked whole: a misspelt
+// field in it is refused before the tool runs, never dropped (a lent tool
+// unheld, a contract with no checks).
+func TestSharedShapesCheckedWhole(t *testing.T) {
+	c := newCatalogCore(t)
+	cs := connectTo(t, newMCPServer(c))
+	for name, args := range map[string]map[string]any{
+		"run_task": {"title": "T", "prompt": "p", "resources": []any{
+			map[string]any{"kind": "tool", "ref": "mail.search", "hlod": true}}},
+		"run_task ": {"title": "T", "prompt": "p", "contract": map[string]any{
+			"objective": "o", "chekcs": []any{}}},
+		"node_settle":  {"id": "n", "outcome": "replan", "steps": []any{map[string]any{"name": "a", "promt": "p"}}},
+		"propose_view": {"title": "T", "body": "b", "monitor": map[string]any{"name": "m", "evrey": "1h"}},
+	} {
+		res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: strings.TrimSpace(name), Arguments: args})
+		if err == nil && !res.IsError {
+			t.Errorf("%s with a misspelt field ran", name)
 			continue
 		}
-		raw, _ := json.Marshal(tl.InputSchema)
-		s := string(raw)
-		for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "place"} {
-			if !strings.Contains(s, want) {
-				t.Errorf("schema lacks %s: %s", want, s)
-			}
+		msg := fmt.Sprint(err)
+		if res != nil && len(res.Content) > 0 {
+			raw, _ := json.Marshal(res.Content)
+			msg = string(raw)
 		}
-		return
+		if !strings.Contains(msg, "invalid arguments") {
+			t.Errorf("%s: refused for another reason: %s", name, msg)
+		}
 	}
-	t.Fatal("no run_task")
 }

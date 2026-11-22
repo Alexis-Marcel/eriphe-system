@@ -99,17 +99,6 @@ func shownSchema(s any) json.RawMessage {
 	return raw
 }
 
-// workspaceSourceRead is what taints a task told what a source gave
-// through the workspace: its other calls do not (eventsTaint).
-const workspaceSourceRead = "eriphe-workspace: a source's result or error"
-
-// saw marks the caller told what a source gave.
-func (w catalogCaller) saw() {
-	if w.sawSource != nil {
-		w.sawSource()
-	}
-}
-
 // toolSourcesRead is sources_read.
 func (c *core) toolSourcesRead(in sourcesIn) (map[string]any, error) {
 	only := strings.TrimSpace(in.Tool)
@@ -131,5 +120,5 @@ func (c *core) toolSourcesRead(in sourcesIn) (map[string]any, error) {
 
 // sourcesReadHelp is sources_read's description.
 const sourcesReadHelp = "What a node's block may read live: the user's read-only tools and resources that code reads for you (a block's sources, propose_view), " +
-	"each with whether it is a free read now; one by name with its arguments and the shape of its result when the tool gives it. You do not need to be lent them: code reads them under the user's access policy. " +
+	"each with whether it is a free read now; one by name with its arguments and the shape of its result when the tool gives it. The brain need not be lent them: code reads them under the user's access policy; a task's block reads only the tools it is lent. " +
 	"It lists, it reads nothing."

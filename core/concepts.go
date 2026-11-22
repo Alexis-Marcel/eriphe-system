@@ -7,11 +7,10 @@ import (
 )
 
 // The brain's concepts, one per need, and the hints that send it to the
-// right one when it reaches for another. The map is given to the brain in
-// the MCP instructions (here, in English) and at the top of its standing
-// prompt (brain-prompt.md, « Tes concepts », in French); the concept bench
-// (concepts_test.go) checks both name every tool, and that each wrong
-// tool for a request answers with the right one.
+// right one when it reaches for another. The map is given to the brain
+// once, in its tools' instructions (tools.go), which its standing prompt
+// points to; the concept bench (concepts_test.go) checks it names every
+// tool, and that each wrong tool for a request answers with the right one.
 
 type concept struct {
 	Name  string // memory, intention, …

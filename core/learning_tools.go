@@ -69,7 +69,7 @@ func viewLearned(e *learnEntry, now time.Time) learnedView {
 }
 
 func registerLearningTools(s *mcp.Server, c *core) {
-	tool(s, "learned", "What you learned, newest first: each change to a lesson, a preference, a decision, the profile, what the nightly extraction kept on its own (fact, person, situation) or a skill, with its id, when, what it changed, its status (trial, confirmed, dormant, reverted), its source and risk, and the evidence (msg:N, task:<id>). Filter by kind, status, about, topic (query) or period. For « qu'as-tu appris ? » and before unlearn.",
+	tool(s, "learned", "What you learned, newest first: each change to a lesson, preference, decision, the profile or a skill, and what the nightly extraction kept on its own (fact, person, situation), with its id, status (trial, confirmed, dormant, reverted), source and evidence. For « qu'as-tu appris ? » and before unlearn.",
 		func(ctx context.Context, in learnedIn) (map[string]any, error) {
 			return c.brainLearned(in)
 		})

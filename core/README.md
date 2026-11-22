@@ -715,13 +715,13 @@ whatever address it dials) and one client certificate per device.
 | `stop_task` | stop the agent |
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); returns the card's ref (`card`), to place in the subject's document |
-| `catalog_read`, `sources_read` | read the catalog of a node's blocks and what a block may read |
-| `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` refused but for `work` (a standing node, a view, is made only by `propose_view`, on the user's yes), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external; the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `catalog_read`, `sources_read` | the whole grammar of a node's block (components, sources, items, sections, glance) and what a block may read ([The catalog tools](#the-catalog-tools-node_cataloggo)) |
+| `node_open` | open a work node: `title`, `parent` (a child of that node), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external, and a subject opened at the home in answer to the user is titled from the user's request (`requestTitle`: their words, its title trusted); a standing node, a view, is made only by `propose_view`, on the user's yes; the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_find` | find nodes by words of their title, goal, text or blocks, each with its `status`; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying `external` (code's field); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, move it under another node (`parent`, `""` for the top; never under itself or a node below it, never a step: `nodestore.SetParent`), or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
-| `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
+| `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page): asked at the home, the turn and the bar move into it (`moveHomeTurn`), from a node it opens beside; writes nothing |
 | `turn_home` | the user's message, said in a node's bar, is not about that node: the turn is about no node from then on, as at the home (`turnHome`, node_turn.go). What it raises waits above the bar (a card it raised already is unlinked from that node), and nothing of it is filed there; its lines stay in that node's bar, where the user reads them. At the home, or on events only, it does nothing |
 | `item_note` | note an item of a node's source: what the user should know, a state (`act`, `look`, `info`, `none`, `done`) and a group, the section a view shows it in (`À supprimer`; a List filters on `_group`) |
 
@@ -1048,7 +1048,13 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
 - **A call in the trace** (`proxy.go`, `traceBrainCall`): a call the brain made with the user's
   permission (a ticket, not a free read) is a line of the trace of the node it talks to (the page
   the user spoke from), else, from the home, of the node the turn is about (the last it named):
-  `Appel : <server>/<tool>.`. A turn of the home that named no node logs it in the decisions only.
+  `Appel : <server>/<tool>.`. A turn of the home about no node (a light switched on) files it in no
+  node: the decisions keep it, and the brain reads nothing first to place it (#706).
+- **A title before an external read** (`brainNodeOpen`): a subject the brain opens at the home, in
+  answer to the user, after its turn read external content, takes the user's request as its title
+  (`requestTitle`, the safety net's: their first line, never an untrusted channel's nor a secret),
+  trusted: their words are never marked external, whatever the brain wrote. A child, or a node
+  opened from a node, keeps the brain's title, marked when the turn is tainted.
 
 ## Node files (`nodefile/`)
 
@@ -1889,8 +1895,7 @@ version, read with its diff.
 - **It works in a node of its own**, as any worker task
   ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)): it writes there what it found and
   notes the items of its sources (`item_note`), with the user's preferences about what they see
-  in its prompt (`seePreferences`). A skill is not lent `eriphe-workspace` (refused in its
-  `tools`): its node is its own. A view's skill works in the view's standing node
+  in its prompt (`seePreferences`), and the catalog's tools beside its node's. A view's skill works in the view's standing node
   ([views](#views-node_livego-view_cardgo)).
 - **Its last message** is optional, the run's report, weighed by its receipt's
   [attention signal](#attention-signals-attention_signalgo) (`tellRun`), the same 1-to-5 scale
@@ -2123,6 +2128,18 @@ With a `brain` section in the config, eriphe-core keeps a permanent orchestrator
 task on a device (stable `profile`, so its session survives restarts), with only MCP tools
 (eriphe-core's own plus its grant from the catalog, `brain.tools`) and its standing instructions:
 `brain-prompt.md`, built into the binary, or the file `prompt_file` names instead.
+
+**Its fixed context** (#706) is what it reads before any work: the standing prompt (in French,
+at most 35,000 characters), its tools as the MCP client lists them (at most 45 KB of JSON for the
+46 tools) and their instructions (`tools.go`, at most 5 KB, the concepts' map with them). A test
+(`brain_size_test.go`) prints and bounds the three. What keeps them small: a rule the code
+enforces is code, not a sentence (a home call's trace, a subject's title after an external read, a
+heading that repeats the title, dropped by `AuthorBody`); a shape is said once, in one tool's
+schema, the others naming it (`sharedShapes`: run_task's contract and resources are node_open's
+steps', node_settle's steps node_open's, propose_view's monitor and skill write_monitor's and
+write_skill's), and no tool has an output schema; a block's grammar is `catalog_read`'s. The
+prompt says how to work, once each: what the code does is the truth, and its behaviour is
+measured by the live bench (`nodes_bench_live_test.go`), not by phrases.
 
 **How it reaches eriphe-core.** Without `self_url`, the brain's device relays eriphe-core's own MCP
 server to it as it relays a catalog server (`<callback-url>/mcp/eriphe-core`, with the task's
@@ -3877,24 +3894,18 @@ A proposal shows where it matters (#428), with no code for any tool:
 ### The catalog tools (`node_catalog.go`)
 
 Two tools, to compose a node's blocks (what is followed continuously is a
-[view](#views-node_livego-view_cardgo)); the **author is the
-caller**, never a field:
+[view](#views-node_livego-view_cardgo)):
 
 | Tool | Does |
 |---|---|
-| `catalog_read` | `a2ui.CatalogPrompt()`, the catalog's whole French section (~9 KB): kept out of every turn, read on demand, to compose a node's blocks |
+| `catalog_read` | the whole grammar of a block, in French: `a2ui.CatalogPrompt()` (the components) then `nodeGrammar` (`node_grammar.go`: the block's envelope and its card block, its live sources and `every`, their `items` and `open`, the fields code writes on each item, the sections' filters, a batch's `Fold`, the `glance`, and an example checked by its test). Kept out of every turn, read on demand: the prompt and the tools' descriptions point to it instead of restating it |
 | `sources_read` | what code may read for a block (`workspace_sources.go`): each read-only tool of the brain's grant (`server/tool`, its description cut to 300 characters, whether it is a free read now, whether it gives its result's shape) and each server's resource; with `tool`, that one with its input and output schemas (4 KB each at most). It reads nothing and lends nothing: code reads them under the access policy (`sourceWhy`) |
 
-- **Who has them.** The brain, on its own tools (`/mcp`), as `brain`, with its turn's taint. A task
-  through **`eriphe-workspace`, a server Eriphe provides**: lent like any catalog server
-  (`{kind: tool, ref: eriphe-workspace}` or `eriphe-workspace.<tool>` in `run_task`'s resources,
-  never in a skill's `tools`), checked by `checkGrant`, listed by `list_tools` under `provided`, put
-  in the task's spec by `specServers` and relayed by its device at
-  `/v1/device/tasks/<id>/mcp/eriphe-workspace` like the others (`taskMCPHandler` serves the tools
-  its grant covers; a task not lent it gets 403). The name is reserved. A task's captured pages go
-  to its own node, not through it ([Captured pages](#captured-pages-web_mediago)).
-- **Taint.** Calling `eriphe-workspace` does not taint a task by itself, as eriphe-core's own tools
-  do not (`eventsTaint`).
+- **Who has them.** The brain, on its own tools (`/mcp`), and every worker task with a node, beside
+  its node's tools on `eriphe-nodes` ([a task's node](#a-tasks-node-task_nodego-task_nodesgo)),
+  allowed in advance: they only read what code holds, so they are never lent and taint nothing.
+  A task's captured pages go to its own node ([Captured pages](#captured-pages-web_mediago)).
+
 ### Signing in
 
 The workspace has one owner; how they sign in is set in Settings → Access → Web workspace → Connexion, or in
@@ -4162,7 +4173,8 @@ never a memory: `recall` returns the matching rules typed as rules, and the tool
 wrong concept with a hint naming the right one (`remember` of a notification preference → `rule`
 or `setting`; a one-off time → `intend`; something recurring → a skill with `when`). The concept
 bench (`concepts_test.go`) checks, without a model, that each request's right call is taken and its
-wrong one redirected, and that the map is in the MCP instructions and the prompt.
+wrong one redirected, and that the map is in the MCP instructions: given there once, in English,
+the prompt points to it.
 
 The interruption bench (`notify_eval_test.go`, `testdata/notifyeval`) runs with the tests: it scores
 the decision on labelled cases (accuracy, precision and recall of "now", night wake-ups no rule

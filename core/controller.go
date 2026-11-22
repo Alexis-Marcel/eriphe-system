@@ -295,15 +295,15 @@ func (r runRequest) title() string {
 }
 
 type runRequest struct {
-	Title     string        `json:"title,omitempty" jsonschema:"what the user reads for this task, in a few words in their language: Écrire le README de portfolio. Not the agent's instructions"`
+	Title     string        `json:"title,omitempty" jsonschema:"what the user reads, a few words in their language"`
 	Prompt    string        `json:"prompt" jsonschema:"what the agent must do, self-contained: it does not see this conversation"`
-	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what the task is lent, each {kind, ref, access}: a repository the user gave to Eriphe cloned into /work/repo (repo, with branch, base, dir; see list_repos), the user's folders and the places of their tools (folder, place; see list_folders), catalog tools (tool; see list_tools), accesses a program uses, a package registry or an API key (access; see list_tools); only what it needs, with the least access"`
-	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
-	Device    string        `json:"device,omitempty" jsonschema:"device name; empty lets the scheduler choose"`
-	Node      string        `json:"node,omitempty" jsonschema:"the node this work belongs to, by its id: the task works in a node of its own, opened as a child of it; leave it out for this turn's node (at the top when the turn is about none)"`
+	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what it is lent, as node_open's steps' resources: only what it needs, the least access"`
+	Agent     string        `json:"agent,omitempty" jsonschema:"from list_agents; empty for the default"`
+	Device    string        `json:"device,omitempty" jsonschema:"empty: the scheduler chooses"`
+	Node      string        `json:"node,omitempty" jsonschema:"the node it works under; empty for this turn's node"`
 	// Contract: what must be true at the end, for a task that changes
 	// something (contract.go); none for a search or a read.
-	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something: objective (required), constraints, checks, evidence, verify, budget; leave it out for a search or a read. Approval is never part of it: the policy decides"`
+	Contract *taskContract `json:"contract,omitempty" jsonschema:"for a task that changes something, as node_open's steps' contract; none for a read. Approval is never in it"`
 
 	// Tools is an assistant's grant, never a brain's call.
 	Tools []string `json:"-"`

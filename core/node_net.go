@@ -80,7 +80,8 @@ func (c *core) fileTurnAnswer() {
 		id = c.fileInTalked(talk, answer, tainted, long || cut) // an unasked line: its trace only, never its doc
 	}
 	if id == "" && long {
-		id = c.fileInNew(c.netTitle(from, to), answer, tainted)
+		title, trusted := c.netTitle(from, to)
+		id = c.fileInNew(title, trusted, answer, tainted)
 		if !c.moveHomeTurn(id) && home && id != "" { // from the home: the exchange goes on in it (node_turn.go)
 			c.showNode(id, byBrain, false)
 		}
@@ -142,10 +143,11 @@ func (c *core) fileText(id, author, text string, tainted, doc bool, sourceOK fun
 }
 
 // fileInNew files an answer into a new work node at the top: the answer
-// as its doc (in its trace when the doc refuses it). It gives the node,
-// "" when the store refused it.
-func (c *core) fileInNew(title, answer string, tainted bool) string {
-	nw := nodestore.New{Title: title, Body: answer, External: tainted, OpenedBy: c.turnOrigin(), Author: byBrain}
+// as its doc (in its trace when the doc refuses it); trusted, its title
+// is the user's words, never marked external. It gives the node, "" when
+// the store refused it.
+func (c *core) fileInNew(title string, trusted bool, answer string, tainted bool) string {
+	nw := nodestore.New{Title: title, Body: answer, External: tainted, TitleTrusted: trusted, OpenedBy: c.turnOrigin(), Author: byBrain}
 	d, err := c.nodes.Create(nw)
 	if err != nil {
 		nw.Body = "" // a block that does not hold, the size: the answer goes in its trace
@@ -168,22 +170,31 @@ func (c *core) fileInNew(title, answer string, tainted bool) string {
 	return d.Node.Meta.ID
 }
 
-// netTitle is a filed answer's node's title: the first line of the user's
-// request of the turn (its messages from..to), never of the answer nor of
-// an event; a neutral one when there is none, or when it may not be the
-// user's words.
-func (c *core) netTitle(from, to int) string {
-	neutral := fmt.Sprintf(tr(c.userLang(), "node.net.title"), time.Now().Format("2006-01-02 15:04"))
+// netTitle is a filed answer's node's title: the user's request
+// (requestTitle), else a neutral one; trusted tells it is the user's
+// words.
+func (c *core) netTitle(from, to int) (title string, trusted bool) {
+	if title, ok := c.requestTitle(from, to); ok {
+		return title, true
+	}
+	return fmt.Sprintf(tr(c.userLang(), "node.net.title"), time.Now().Format("2006-01-02 15:04")), false
+}
+
+// requestTitle is the first line of the user's request of the turn (its
+// messages from..to), never of an answer nor of an event; false when
+// there is none, or when it may not be the user's words (an untrusted
+// channel, a secret).
+func (c *core) requestTitle(from, to int) (string, bool) {
 	if from == 0 {
-		return neutral
+		return "", false
 	}
 	msgs, err := c.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? AND seq >= ? AND seq <= ? ORDER BY seq LIMIT 1`, roleUser, from, to)
 	if err != nil || len(msgs) == 0 || c.fromUntrusted(msgs[0].Seq) {
-		return neutral
+		return "", false
 	}
 	title := firstLine(msgs[0].Text)
 	if title == "" || scanSecrets(title) != "" {
-		return neutral
+		return "", false
 	}
-	return truncate(title, netTitleMax)
+	return truncate(title, netTitleMax), true
 }

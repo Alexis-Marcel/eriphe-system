@@ -956,7 +956,7 @@
       "id": "state",
       "component": "Progress",
       "label": "À toi",
-      "tone": "attention",
+      "tone": "default",
       "value": {
        "@path": "/done"
       },
@@ -1045,7 +1045,6 @@
        "note": "Il faut dire oui ou non avant jeudi.",
        "due": "2026-11-19",
        "mark": "",
-       "level": "high",
        "id": "inv1"
       },
       {
@@ -2266,7 +2265,7 @@
       "id": "state",
       "component": "Progress",
       "label": "Yours",
-      "tone": "attention",
+      "tone": "default",
       "value": {
        "@path": "/done"
       },
@@ -2355,7 +2354,6 @@
        "note": "Say yes or no before Thursday.",
        "due": "2026-11-19",
        "mark": "",
-       "level": "high",
        "id": "inv1"
       },
       {

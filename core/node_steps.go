@@ -197,14 +197,14 @@ func finalKey(parent string) string { return "final:" + parent }
 
 // stepSpec is a step as its opener gives it.
 type stepSpec struct {
-	Key       string        `json:"key" jsonschema:"a short id for the step, unique in this plan: style, plan, review"`
-	Title     string        `json:"title" jsonschema:"what the user reads for this step, a few words in their language"`
-	After     []string      `json:"after,omitempty" jsonschema:"the keys of the steps of this plan (or the node ids of steps already in the work) it needs accepted first; their results are passed to it"`
-	Prompt    string        `json:"prompt" jsonschema:"what the agent must do, self-contained; the work's goal and the results of the steps it comes after are added"`
-	Agent     string        `json:"agent,omitempty" jsonschema:"agent from list_agents; empty for the default one"`
-	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what it is lent, as run_task's resources"`
-	Contract  *taskContract `json:"contract,omitempty" jsonschema:"as run_task's contract: its checks (a test, a command) are the step's proof with its receipt"`
-	Device    string        `json:"device,omitempty" jsonschema:"device name; empty lets the scheduler choose"`
+	Key       string        `json:"key" jsonschema:"a short id, unique in the plan: style, plan"`
+	Title     string        `json:"title" jsonschema:"a few words in the user's language"`
+	After     []string      `json:"after,omitempty" jsonschema:"the keys of this plan's steps (or the node ids of the work's steps) it needs accepted first; their results are passed to it"`
+	Prompt    string        `json:"prompt" jsonschema:"what the agent must do, self-contained; the goal and earlier results are added"`
+	Agent     string        `json:"agent,omitempty" jsonschema:"from list_agents; empty for the default"`
+	Resources []ResourceRef `json:"resources,omitempty" jsonschema:"what it is lent, the least it needs"`
+	Contract  *taskContract `json:"contract,omitempty" jsonschema:"its proof, with its receipt"`
+	Device    string        `json:"device,omitempty" jsonschema:"empty: the scheduler chooses"`
 }
 
 // Step is a step as the engine keeps it.

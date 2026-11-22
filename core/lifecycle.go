@@ -118,13 +118,6 @@ func (c *core) handleAssignments(w http.ResponseWriter, r *http.Request) {
 				if c.conf().Servers[s].AlwaysLoad {
 					spec.AlwaysLoad = append(spec.AlwaysLoad, s)
 				}
-				switch s {
-				case workspaceServer:
-					// Lent, its tools ask nothing: they only read the
-					// catalog (node_catalog.go).
-					spec.AlwaysLoad = append(spec.AlwaysLoad, s)
-					spec.AllowedTools = append(append([]string(nil), spec.AllowedTools...), taskWorkspaceTools(splitGrant(a.Tools))...)
-				}
 			}
 			// Its own node, written through its device (task_nodes.go).
 			if a.Kind == "worker" && c.nodes != nil && c.taskNode(a.ID) != "" {

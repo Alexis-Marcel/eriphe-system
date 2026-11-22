@@ -77,11 +77,6 @@ func (c *core) taskMCPHandler() http.Handler {
 			return
 		}
 		grant := c.taskGrant(t)
-		if server == workspaceServer && slices.Contains(grantServers(grant), server) {
-			// A server Eriphe provides, lent like any (workspace_tools.go).
-			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), proxyServerKey{}, c.taskWorkspaceServer(t, grant))))
-			return
-		}
 		if !slices.Contains(grantServers(grant), server) || c.pool.get(server) == nil {
 			http.Error(w, "this task has no access to "+server, http.StatusForbidden)
 			return

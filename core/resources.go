@@ -58,17 +58,17 @@ var resourceKinds = map[string][]string{
 // repository's only.
 type ResourceRef struct {
 	Kind   string `json:"kind" jsonschema:"repo, folder, place, tool, access or file"`
-	Ref    string `json:"ref" jsonschema:"what it is: repo owner/name or a git URL, one of list_repos; folder or place its name in list_folders; tool a catalog server or server.tool with * globs (list_tools); access (a credential) its name in list_tools' accesses"`
-	Access string `json:"access,omitempty" jsonschema:"read or write (read < write). repo: read, or write to push; folder: read, or write to change the folder itself (create, change, rename, delete; its machine takes a snapshot first), where its rights allow (list_folders); place: read, or write to add, modify or trash files where the place's rights allow (each call is still held to them); tool: read or write, from the tools' annotations when empty; file: read; access: none, leave it empty. Default read"`
-	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to create and push to"`
-	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from; the default branch if empty"`
-	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside the repository, if not its root"`
+	Ref    string `json:"ref" jsonschema:"repo: owner/name (list_repos); folder or place: its name (list_folders); tool: a server or server.tool glob (list_tools); access: its name (list_tools' accesses)"`
+	Access string `json:"access,omitempty" jsonschema:"read (default) or write: push to a repo, change a folder (a snapshot first) or a place, within their rights; tool: from its annotations if empty; access: leave it empty"`
+	Branch string `json:"branch,omitempty" jsonschema:"repo: the work branch to push to"`
+	Base   string `json:"base,omitempty" jsonschema:"repo: the branch or tag to start from"`
+	Dir    string `json:"dir,omitempty" jsonschema:"repo: the working directory inside it"`
 	// TrustSkills loads the agent skills a repository carries even when it
 	// is not the user's own (repo_skills.go).
-	TrustSkills bool `json:"trust_skills,omitempty" jsonschema:"repo: also load the agent skills the repository carries (.claude/skills, .agents/skills, .opencode/skills) when it is not the user's own; the user's own repositories load theirs anyway. Only for a repository the user said they trust"`
+	TrustSkills bool `json:"trust_skills,omitempty" jsonschema:"repo not the user's: load its agent skills too, only if the user said they trust it"`
 	// Hold lends a tool held back (lend.go): the task sees it, but none of
 	// its calls is authorized until the user approves its release on a card.
-	Hold bool `json:"hold,omitempty" jsonschema:"tool or access: lend it held back, for work the user validates before it acts: the task sees it, but nothing of it is authorized until the user approves its release on a card (answer_task with release). It may be lent on a tainted turn"`
+	Hold bool `json:"hold,omitempty" jsonschema:"tool or access: lent held back, nothing of it authorized until the user approves its release (answer_task release)"`
 }
 
 // key tells two entries for the same thing apart from different ones.

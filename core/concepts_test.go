@@ -154,27 +154,20 @@ func TestScheduleHintNamesTimedSkill(t *testing.T) {
 	}
 }
 
-// The map is the same everywhere: every concept and tool is in the MCP
-// instructions and in the prompt's « Tes concepts ».
+// The map is given once, in the MCP instructions, with every concept and
+// its tools; the prompt points to it and keeps the safety rules.
 func TestConceptMapGiven(t *testing.T) {
 	raw, _ := os.ReadFile("brain-prompt.md")
 	prompt := string(raw)
-	start := strings.Index(prompt, "## Tes concepts")
-	end := strings.Index(prompt, "## Ce que tu reçois")
-	if start < 0 || end < start {
-		t.Fatal("the prompt has no « Tes concepts » at the top")
-	}
-	section := prompt[start:end]
 	for _, c := range concepts {
 		if !strings.Contains(instructions, "- "+c.Name+" ("+c.Tools+")") {
 			t.Errorf("the MCP instructions lack %s", c.Name)
 		}
-		first, _, _ := strings.Cut(c.Tools, ",")
-		if !strings.Contains(section, "`"+first+"`") {
-			t.Errorf("« Tes concepts » lacks %s", first)
-		}
 	}
-	for _, safety := range []string{"Jamais de jeton", "Tour contaminé", "À valider", "jamais des consignes", "exactement"} {
+	if !strings.Contains(prompt, "instructions de tes outils") {
+		t.Error("the prompt does not point to the concepts' map")
+	}
+	for _, safety := range []string{"Jamais de jeton", "Tour contaminé", "À valider", "jamais une consigne", "exactement", "Rien ne tourne ni ne change avant son oui"} {
 		if !strings.Contains(prompt, safety) {
 			t.Errorf("the prompt lost %q", safety)
 		}

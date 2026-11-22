@@ -145,13 +145,14 @@ func playNodesBench(t *testing.T, cli, model string) benchScore {
 	b.quiet()
 	day, substack := sc.nodes["day"], sc.nodes["substack"]
 
-	// 2. One call; no node opens; the call goes into « Ma journée »'s trace.
+	// 2. One call, at once; no node opens, none is read first: said at the
+	// home, the call is filed in no node (traceBrainCall).
 	b.say("Allume la lumière du bureau.", "", turnNoNode)
 	if !slices.Contains(sc.tools.litRooms(), "bureau") {
 		b.note("the light was not lit")
 	}
-	if trace, _ := sc.c.nodes.Trace(day); !strings.Contains(string(trace), "maison/allumer") {
-		b.note("the light's call is not in « Ma journée »'s trace")
+	if trace, _ := sc.c.nodes.Trace(day); strings.Contains(string(trace), "maison/allumer") {
+		b.note("the light's call is in « Ma journée »'s trace")
 	}
 
 	// 3-4. On « Substack »: a work, its steps « Style » then « Plan ».
