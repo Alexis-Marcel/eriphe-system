@@ -262,27 +262,6 @@ func TestFind(t *testing.T) {
 	}
 }
 
-func TestSetState(t *testing.T) {
-	e := newEnv(t)
-	s, _ := e.open(t)
-	mustCreate(t, s, New{Title: "Plan", Body: "x"})
-	if sum, _ := s.Get("n1"); sum.State != Idle {
-		t.Fatalf("a new node is %s", sum.State)
-	}
-	if err := s.SetState("n1", Running); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetState("n1", "paused"); err == nil {
-		t.Fatal("an unknown state")
-	}
-	if err := s.SetState("nope", Running); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("an unknown node: %v", err)
-	}
-	if d, _ := write(s, "n1", "y", mustRead(t, s, "n1").Version.Hash, "brain"); d.State != Running {
-		t.Fatalf("a write changed the state: %s", d.State)
-	}
-}
-
 func mustRead(t *testing.T, s *Store, id string) *Doc {
 	t.Helper()
 	d, err := s.Read(id, 0)
@@ -592,14 +571,13 @@ func TestNodeFileBrokenByHand(t *testing.T) {
 	s, _ := e.open(t)
 	d := mustCreate(t, s, New{Title: "Plan", Body: "One."})
 	mustCreate(t, s, New{Title: "Kid", Parent: "n1", Body: "k"})
-	s.SetState("n1", Running)
 	s.Close()
 	os.WriteFile(filepath.Join(e.dir, d.File), []byte("---\nid: n1\n"), 0o600)
 	s2, rep := e.open(t)
 	if len(rep.Broken) != 1 || len(rep.Gone) != 0 {
 		t.Fatalf("report: %+v", rep)
 	}
-	if sum, err := s2.Get("n1"); err != nil || sum.State != Running {
+	if sum, err := s2.Get("n1"); err != nil || sum.Title != "Plan" {
 		t.Fatalf("the broken node's row: %+v %v", sum, err)
 	}
 	if _, err := s2.Read("n1", 0); err == nil {

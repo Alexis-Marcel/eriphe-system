@@ -115,7 +115,7 @@ var feedSources = map[string]feedSource{
 }
 
 // nodeHappenings are the nodes changed since from, each once, where it
-// stands now: its state (or archived), its title and its doc's first
+// stands now: its status (or archived), its title and its doc's first
 // line; one that may hold someone else's words is external, its title
 // and its doc never quoted.
 func nodeHappenings(c *core, from time.Time, limit int) ([]happening, error) {
@@ -127,11 +127,11 @@ func nodeHappenings(c *core, from time.Time, limit int) ([]happening, error) {
 		return nil, err
 	}
 	var out []happening
-	for _, x := range xs {
+	for _, x := range c.withStatus(xs) {
 		if x.Updated.Before(from) {
 			break // the last changed first
 		}
-		event := x.State
+		event := x.Status
 		if !x.Archived.IsZero() {
 			event = "archived"
 		}

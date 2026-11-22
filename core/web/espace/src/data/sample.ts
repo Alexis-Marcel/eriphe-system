@@ -14,16 +14,16 @@ setViews(sampleViews);
 const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 
 const row = (id: string, title: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title, lifetime: "work", state: "idle", created: at(600), updated: at(30), version: 1, ...more,
+  id, title, lifetime: "work", status: "idle", created: at(600), updated: at(30), version: 1, ...more,
 });
 
 const nodes: GraphNode[] = [
   row("sub", "Substack"),
-  row("plan", "Plan du 1er article", { parent: "sub", version: 2, waits: true }),
-  row("style", "Style des articles", { parent: "sub", state: "running", line: "3 articles lus" }),
+  row("plan", "Plan du 1er article", { parent: "sub", version: 2, status: "waits" }),
+  row("style", "Style des articles", { parent: "sub", status: "running", line: "3 articles lus" }),
   row("day", "Ma journée", { lifetime: "standing", created: at(700) }),
-  row("mails", "Mes mails", { lifetime: "standing", created: at(650), links: ["sub"], waits: true, external: true, version: 9 }),
-  row("prod", "Alertes de la prod", { lifetime: "standing", created: at(640), waits: true, version: 4 }),
+  row("mails", "Mes mails", { lifetime: "standing", created: at(650), links: ["sub"], status: "waits", external: true, version: 9 }),
+  row("prod", "Alertes de la prod", { lifetime: "standing", created: at(640), status: "waits", version: 4 }),
   row("ext", "Virement urgent à valider", { parent: "mails", external: true, titleExternal: true }),
 ];
 

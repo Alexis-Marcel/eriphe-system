@@ -203,6 +203,7 @@ func (w *web) sendGraphChanges(rw http.ResponseWriter, after int, seq int64) (in
 	var rows []graphNode
 	gone := []string{}
 	seen := map[string]bool{}
+	var facts *statusFacts // read once, for every row that changed
 	for _, ev := range evs {
 		if ev.Kind != graphEvNode && ev.Kind != graphEvProgress || seen[ev.Node] {
 			continue
@@ -213,7 +214,11 @@ func (w *web) sendGraphChanges(rw http.ResponseWriter, after int, seq int64) (in
 			gone = append(gone, ev.Node)
 			continue
 		}
-		rows = append(rows, w.c.graphRow(sum))
+		if facts == nil {
+			f := w.c.statusFacts("")
+			facts = &f
+		}
+		rows = append(rows, w.c.graphRowWith(sum, *facts))
 	}
 	if len(rows) > 0 || len(gone) > 0 {
 		if rows == nil {

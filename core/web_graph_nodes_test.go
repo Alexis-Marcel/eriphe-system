@@ -124,7 +124,7 @@ func TestNodePage(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &p); err != nil {
 		t.Fatal(err)
 	}
-	if p.Node.Title != "Plan du 1er article" || p.Version != 2 || len(p.Versions) != 2 || p.Versions[1].Author != byUser || !p.Node.Waits {
+	if p.Node.Title != "Plan du 1er article" || p.Version != 2 || len(p.Versions) != 2 || p.Versions[1].Author != byUser || p.Node.Status != nodeWaits {
 		t.Errorf("page %+v", p)
 	}
 	if len(p.Parts) != 3 || !strings.Contains(p.Parts[0].Text, "Trois titres.") || p.Parts[1].Block == nil || !strings.Contains(p.Parts[2].Text, "La suite.") {
@@ -272,7 +272,7 @@ func TestGraphStream(t *testing.T) {
 		t.Errorf("trace: %s", got)
 	}
 
-	c.nodes.SetState(id, nodestore.Running)
+	setStatus(t, c, id, nodeRunning)
 	next(t, evs, "node")
 	c.nodeProgress(id, "Trois articles lus")
 	if got := next(t, evs, "node"); !strings.Contains(got, `"line":"Trois articles lus"`) {
@@ -325,20 +325,49 @@ func TestProgressLineTainted(t *testing.T) {
 	}
 }
 
-// A node's line of work is kept while it runs, and goes when its state
-// changes: the feed does not keep a line for every node that ever ran.
+// A node's line of work is kept while it runs, and goes when its run
+// ends, its step ends, or it is archived: the feed does not keep a line
+// for every node that ever ran, and an archived node says none.
 func TestProgressLineGoesWithItsRun(t *testing.T) {
 	c := graphCore(t)
 	c.useNodes(c.nodes)
 	id := mustNode(t, c, nodestore.New{Title: "Recherche"})
-	c.nodes.SetState(id, nodestore.Running)
+	task := workIn(t, c, id, stateRunning)
 	c.nodeProgress(id, "Trois articles lus")
 	if p, ok := c.progressOf(id); !ok || p.Text != "Trois articles lus" {
 		t.Fatalf("while it runs: %+v %v", p, ok)
 	}
-	c.nodes.SetState(id, nodestore.Done)
+	sum, _ := c.nodes.Get(id)
+	if row := c.graphRow(sum); row.Status != nodeRunning || row.Line != "Trois articles lus" {
+		t.Fatalf("its row while it runs: %+v", row)
+	}
+	c.store.updateTask(task, map[string]any{"state": stateWaitingPermission})
+	c.taskNodeMoved(task, stateWaitingPermission)
 	if p, ok := c.progressOf(id); ok {
-		t.Errorf("kept after its run: %+v", p)
+		t.Errorf("kept while its run waits: %+v", p)
+	}
+
+	step := mustNode(t, c, nodestore.New{Title: "Étape"})
+	setStatus(t, c, step, nodeRunning)
+	c.nodeProgress(step, "Deux tests passent")
+	c.setStep(step, map[string]any{"status": stepAccepted})
+	if p, ok := c.progressOf(step); ok {
+		t.Errorf("kept after its step: %+v", p)
+	}
+
+	gone := mustNode(t, c, nodestore.New{Title: "Archivé"})
+	workIn(t, c, gone, stateRunning)
+	c.nodeProgress(gone, "Je lis")
+	if err := c.archiveNode(context.Background(), gone, byUser); err != nil {
+		t.Fatal(err)
+	}
+	if p, ok := c.progressOf(gone); ok {
+		t.Errorf("kept once archived: %+v", p)
+	}
+	c.nodeProgress(gone, "Je lis encore") // its task, not stopped yet, said more
+	sum, _ = c.nodes.Get(gone)
+	if row := c.graphRow(sum); row.Line != "" {
+		t.Errorf("an archived node says its line: %+v", row)
 	}
 }
 

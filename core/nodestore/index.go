@@ -15,13 +15,13 @@ import (
 // The index, nodes.db: what must be fast, kept from the files. It is
 // rebuilt from them (and from the log, for the versions) when it is lost,
 // nothing lost: what code keeps beside a node (its items' notes, its
-// cards, its sources' reads) is in core.db. Only the node's state is
-// still kept here, a rebuilt index starting it over (idle).
+// cards, its sources' reads) is in core.db. A node's status (running,
+// waiting, done) is not kept at all: eriphe-core computes it.
 
 // schemaVersion is the schema nodes.db is at; meta.schema_version says
 // it. A file at another version is refused, never changed: delete it,
 // it is made again from the files.
-const schemaVersion = 2
+const schemaVersion = 3
 
 // refsSchema holds the [[links]] of the nodes' text: each name a node's
 // text links (its LinkKey) and the node it was resolved to, ” while no
@@ -39,7 +39,6 @@ const schema = `CREATE TABLE nodes (
 	  title TEXT NOT NULL,
 	  parent TEXT NOT NULL DEFAULT '',
 	  lifetime TEXT NOT NULL,
-	  state TEXT NOT NULL DEFAULT 'idle', -- code's: running, waiting, idle, done
 	  created INTEGER NOT NULL,
 	  updated INTEGER NOT NULL,
 	  done INTEGER NOT NULL DEFAULT 0,
@@ -124,7 +123,7 @@ type querier interface {
 }
 
 // indexNode writes what the index keeps of a node's file: its row, links,
-// sources and words. The state and the version are kept when the row is
+// sources and words. The version is kept when the row is
 // there; version is the n of its last version. Its text's [[links]] keep
 // the nodes they were resolved to; a new one waits for resolveRefs.
 func indexNode(tx querier, n *nodefile.Node, file string, raw []byte, version int, updated time.Time) error {

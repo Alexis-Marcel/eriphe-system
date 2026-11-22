@@ -310,8 +310,7 @@ func (w *web) handleArchives(rw http.ResponseWriter, r *http.Request, _ *session
 			return
 		}
 		for _, x := range xs {
-			row := w.c.graphRow(x.Summary)
-			row.Waits, row.Line = false, ""
+			row := w.c.graphRow(x.Summary) // archived: waits for no one, says no line
 			out = append(out, archivedNode{graphNode: row, Archived: x.Archived.Format(time.RFC3339), With: x.With})
 		}
 	}

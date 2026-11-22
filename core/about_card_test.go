@@ -23,7 +23,7 @@ func siteNode(t *testing.T, c *core) string {
 		t.Fatal(err)
 	}
 	id := d.Node.Meta.ID
-	c.nodes.SetState(id, nodestore.Running)
+	setStatus(t, c, id, nodeRunning)
 	key, m := nodeRef(id), c.mem
 	for i := 1; i <= 4; i++ {
 		mustAdd(t, m, &Memory{Kind: kindDecision, About: key, Text: fmt.Sprintf("Décision %d du site", i)})
@@ -265,11 +265,11 @@ func TestContextPackListsActiveNodes(t *testing.T) {
 			t.Fatal(err)
 		}
 		id := d.Node.Meta.ID
-		state := nodestore.Running
+		state := nodeRunning
 		if i%2 == 1 {
-			state = nodestore.Waiting
+			state = nodeWaits
 		}
-		c.nodes.SetState(id, state)
+		setStatus(t, c, id, state)
 		ids = append(ids, id)
 		for range 3 {
 			mustAdd(t, c.mem, &Memory{Kind: kindDecision, About: nodeRef(id), Text: strings.Repeat("une décision ", 15)})
@@ -284,7 +284,7 @@ func TestContextPackListsActiveNodes(t *testing.T) {
 	for i, id := range ids {
 		state := "running"
 		if i%2 == 1 {
-			state = "waiting"
+			state = "waits"
 		}
 		if !strings.Contains(pack, fmt.Sprintf("- nœud %s [%s", id, state)) || !strings.Contains(pack, fmt.Sprintf("« Travail %d » : Où en est le travail %d.", i, i)) {
 			t.Errorf("node %s left out:\n%s", id, pack)

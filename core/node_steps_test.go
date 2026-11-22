@@ -141,8 +141,8 @@ func TestStepsRunWithoutTheBrain(t *testing.T) {
 	if c.taskNode(a.Task) != names || c.taskNode(b.Task) != market {
 		t.Fatalf("task nodes %q %q", c.taskNode(a.Task), c.taskNode(b.Task))
 	}
-	if sum, _ := c.nodes.Get(names); sum.State != nodestore.Running {
-		t.Errorf("a running step's node is %s", sum.State)
+	if s := nodeStatusNow(t, c, names); s != nodeRunning {
+		t.Errorf("a running step's node is %s", s)
 	}
 
 	endStepTurn(t, c, a.Task, "Lumen, Aster, Rivet", "done")
@@ -166,29 +166,27 @@ func TestStepsRunWithoutTheBrain(t *testing.T) {
 	if w, _ := c.work(parent); w.State != workDone {
 		t.Fatalf("work %s", w.State)
 	}
-	if sum, _ := c.nodes.Get(parent); sum.State != nodestore.Done {
-		t.Errorf("the parent is %s", sum.State)
+	if s := nodeStatusNow(t, c, parent); s != nodeDone {
+		t.Errorf("the parent is %s", s)
 	}
-	if sum, _ := c.nodes.Get(names); sum.State != nodestore.Done {
-		t.Errorf("an accepted step's node is %s", sum.State)
+	if s := nodeStatusNow(t, c, names); s != nodeDone {
+		t.Errorf("an accepted step's node is %s", s)
 	}
-	if sum, _ := c.nodes.Get(check); sum.State != nodestore.Waiting {
-		t.Errorf("the work's result is %s", sum.State)
+	if s := nodeStatusNow(t, c, check); s != nodeWaits {
+		t.Errorf("the work's result is %s", s)
 	}
 	// The user's word stands: the result said done stays done.
 	sum, _ := c.nodes.Get(check)
 	if _, err := c.setNodeDone(sum, true, byUser); err != nil {
 		t.Fatal(err)
 	}
-	c.workForUser(parent)
-	if sum, _ := c.nodes.Get(check); sum.State != nodestore.Done {
-		t.Errorf("a result said done is %s again", sum.State)
+	if s := nodeStatusNow(t, c, check); s != nodeDone {
+		t.Errorf("a result said done is %s", s)
 	}
 	// Had the last step been dropped, the ones before it would be the result.
 	c.setStep(check, map[string]any{"status": stepDropped})
-	c.workForUser(parent)
-	if sum, _ := c.nodes.Get(names); sum.State != nodestore.Waiting {
-		t.Errorf("the result, its sequel dropped, is %s", sum.State)
+	if s := nodeStatusNow(t, c, names); s != nodeWaits {
+		t.Errorf("the result, its sequel dropped, is %s", s)
 	}
 
 	if w := wakes(c); len(w) != 0 {

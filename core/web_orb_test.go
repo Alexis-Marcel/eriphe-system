@@ -182,7 +182,7 @@ func TestOrbWait(t *testing.T) {
 	if x, _ = w.orbFor("", false); x.Wait != nil || x.Answer == nil || x.Answer.Text != "Dis oui sur sa carte." {
 		t.Errorf("the orb points at a card raised unasked: %+v", x)
 	}
-	if ids, _ := c.cardsWhere(`state = ?`, cardPending); len(ids) != 1 || !c.nodeCardWaits(subject) {
+	if ids, _ := c.cardsWhere(`state = ?`, cardPending); len(ids) != 1 || !cardWaitsOn(c, subject) {
 		t.Errorf("the card raised unasked does not wait in its page: %v", ids)
 	}
 }

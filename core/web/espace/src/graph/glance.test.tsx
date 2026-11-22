@@ -20,7 +20,7 @@ const node = (id: string, g?: Glance, o: Partial<GraphNode> = {}): GraphNode => 
   id,
   title: id,
   lifetime: "standing",
-  state: "idle",
+  status: "idle",
   created: "",
   updated: "",
   version: 1,
@@ -45,7 +45,7 @@ describe("which nodes are tiles", () => {
   });
 
   it("never makes a tile of a node that waits, nor of one seen", () => {
-    const nodes = [node("mails", glance(5), { waits: true }), node("asks", glance(5), { state: "waiting" }), node("seen", glance(5, 2, { seen: true })), node("pea", glance(3))];
+    const nodes = [node("mails", glance(5), { status: "waits" }), node("asks", glance(5), { status: "waits" }), node("seen", glance(5, 2, { seen: true })), node("pea", glance(3))];
     expect(pickTiles(nodes, [], [])).toEqual(["pea"]);
   });
 

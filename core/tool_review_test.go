@@ -106,7 +106,7 @@ func TestToolChangesListed(t *testing.T) {
 	if ids := reviewIDs(t, c, id); len(ids) != 3 {
 		t.Errorf("the source lists %v", ids)
 	}
-	if !c.graphRow(sum).Waits {
+	if c.graphRow(sum).Status != nodeWaits {
 		t.Error("the node does not wait while changes do")
 	}
 	// Archived, it is made again: it is the one place the changes wait.
@@ -161,7 +161,7 @@ func TestToolReviewActs(t *testing.T) {
 	c.live.wg.Wait()
 	c.readNode(context.Background(), id, nil, time.Now())
 	sum, _ := c.nodes.Get(id)
-	if c.graphRow(sum).Waits {
+	if c.graphRow(sum).Status == nodeWaits {
 		t.Error("the node waits with nothing to review")
 	}
 	// A change no longer waiting does nothing.

@@ -239,7 +239,7 @@ type nodeFound struct {
 	Title string `json:"title,omitempty"` // one that may be someone else's words only with include_external
 	// TitleExternal: its title was written after an external read
 	TitleExternal bool   `json:"title_external,omitempty"`
-	State         string `json:"state"`
+	Status        string `json:"status"` // running, waits, done or idle (node_status.go)
 	Lifetime      string `json:"lifetime"`
 	Parent        string `json:"parent,omitempty"`
 	Changed       string `json:"changed"`
@@ -250,8 +250,8 @@ type nodeFound struct {
 
 // foundNode is a node as node_find gives it; quote: its title too when it
 // may be someone else's words (the caller taints the turn).
-func (c *core) foundNode(x nodestore.Summary, quote bool) nodeFound {
-	f := nodeFound{ID: x.ID, State: x.State, Lifetime: string(x.Lifetime), Parent: x.Parent, Changed: x.Updated.Local().Format("2006-01-02 15:04"),
+func (c *core) foundNode(x statusNode, quote bool) nodeFound {
+	f := nodeFound{ID: x.ID, Status: x.Status, Lifetime: string(x.Lifetime), Parent: x.Parent, Changed: x.Updated.Local().Format("2006-01-02 15:04"),
 		Done: !x.Done.IsZero(), Archived: !x.Archived.IsZero(), External: x.External, TitleExternal: x.TitleExternal()}
 	if !f.TitleExternal || quote {
 		f.Title = x.Title
@@ -268,23 +268,24 @@ func (c *core) brainNodeFind(in nodeFindIn) (map[string]any, error) {
 	if c.nodes == nil {
 		return nil, errNoGraph
 	}
-	var xs []nodestore.Summary
-	var err error
+	var xs []statusNode
 	if q := strings.TrimSpace(in.Query); q != "" {
-		xs, err = c.nodes.Find(q, in.Archived, nodeFindMax)
+		found, err := c.nodes.Find(q, in.Archived, nodeFindMax)
+		if err != nil {
+			return nil, err
+		}
+		xs = c.withStatus(found)
 	} else {
-		xs, err = c.nodes.InStates([]string{nodestore.Running, nodestore.Waiting}, nodeFindMax)
-		if err == nil {
-			more, _ := c.nodes.Recent(in.Archived, nodeFindMax)
-			for _, x := range more {
-				if len(xs) < nodeFindMax && !slices.ContainsFunc(xs, func(y nodestore.Summary) bool { return y.ID == x.ID }) {
-					xs = append(xs, x)
-				}
+		xs = c.activeNodes(nodeFindMax)
+		more, err := c.nodes.Recent(in.Archived, nodeFindMax)
+		if err != nil {
+			return nil, err
+		}
+		for _, x := range c.withStatus(more) {
+			if len(xs) < nodeFindMax && !slices.ContainsFunc(xs, func(y statusNode) bool { return y.ID == x.ID }) {
+				xs = append(xs, x)
 			}
 		}
-	}
-	if err != nil {
-		return nil, err
 	}
 	found := make([]nodeFound, 0, len(xs))
 	quoted := false
@@ -318,7 +319,7 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	c.turnNode(id)
 	c.cardLookedUp(nodeRef(id)) // its card was not enough (card_use.go)
 	m := d.Node.Meta
-	out := map[string]any{"id": id, "title": m.Title, "state": d.State, "lifetime": string(m.Lifetime), "version": d.Version.N, "last": d.Last,
+	out := map[string]any{"id": id, "title": m.Title, "status": c.nodeStatus(sum), "lifetime": string(m.Lifetime), "version": d.Version.N, "last": d.Last,
 		"hash": d.Version.Hash, "external": m.External, "body": nodeBody(d.Raw)}
 	if values != nil {
 		out["values"] = values // code's, never in the file
@@ -346,7 +347,7 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 	}
 	if kids, err := c.nodes.Children(id); err == nil && len(kids) > 0 {
 		list := make([]nodeFound, 0, len(kids))
-		for _, k := range kids {
+		for _, k := range c.withStatus(kids) {
 			list = append(list, c.foundNode(k, false))
 		}
 		out["children"] = list
@@ -605,6 +606,7 @@ func (c *core) archiveNode(ctx context.Context, id, by string) error {
 	c.withdrawCards(ctx, ids)
 	for _, nid := range ids {
 		c.linkedNodeGone(nid)
+		c.nodeMoved(nid, true) // its line goes with it
 	}
 	return nil
 }

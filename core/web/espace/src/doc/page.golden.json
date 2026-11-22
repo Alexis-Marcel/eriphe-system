@@ -3,7 +3,7 @@
     "id": "plan1",
     "title": "Plan du 1er article",
     "lifetime": "work",
-    "state": "idle",
+    "status": "idle",
     "created": "0001-01-01T00:00:00Z",
     "updated": "0001-01-01T00:00:00Z",
     "version": 1

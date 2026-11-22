@@ -13,8 +13,8 @@ func TestSetDone(t *testing.T) {
 		t.Fatalf("done: %v %v", changed, err)
 	}
 	got, _ := s.Read("n1", 0)
-	if got.Node.Meta.Done.IsZero() || got.State != Done || got.Version.N != 2 {
-		t.Fatalf("not done: %+v %s", got.Node.Meta, got.State)
+	if got.Node.Meta.Done.IsZero() || got.Version.N != 2 {
+		t.Fatalf("not done: %+v", got.Node.Meta)
 	}
 	if changed, _ := s.SetDone("n1", true, "brain"); changed {
 		t.Fatal("done twice")
@@ -26,26 +26,19 @@ func TestSetDone(t *testing.T) {
 	if changed, err := s.SetDone("n1", false, "user"); err != nil || !changed {
 		t.Fatalf("not done again: %v %v", changed, err)
 	}
-	if got, _ := s.Get("n1"); !got.Done.IsZero() || got.State != Idle {
+	if got, _ := s.Get("n1"); !got.Done.IsZero() {
 		t.Fatalf("still done: %+v", got)
 	}
 }
 
-func TestInStatesAndRecent(t *testing.T) {
+func TestRecent(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
 	mustCreate(t, s, New{Title: "Style", Body: "Reading."})
 	mustCreate(t, s, New{Title: "Plan", Body: "Waiting."})
 	mustCreate(t, s, New{Title: "Old", Body: "Gone."})
-	s.SetState("n1", Running)
-	s.SetState("n2", Waiting)
-	s.SetState("n3", Waiting)
 	if err := s.Archive("n3", "user"); err != nil {
 		t.Fatal(err)
-	}
-	got, err := s.InStates([]string{Running, Waiting}, 0)
-	if err != nil || len(got) != 2 {
-		t.Fatalf("in states: %+v %v", got, err)
 	}
 	if got, _ := s.Recent(false, 0); len(got) != 2 {
 		t.Fatalf("recent: %+v", got)

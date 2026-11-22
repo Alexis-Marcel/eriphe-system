@@ -39,7 +39,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -64,14 +63,6 @@ const (
 	// file becomes its older part, <id>.trace.1.md, the one before
 	// dropped.
 	MaxTraceFile = 2 << 20
-)
-
-// States of a node, code's, in the index only.
-const (
-	Running = "running"
-	Waiting = "waiting"
-	Idle    = "idle"
-	Done    = "done"
 )
 
 // Outside is the author of a version made from a file changed outside
@@ -103,13 +94,12 @@ type Options struct {
 const (
 	ChangedDoc   = "doc"   // a new version of its file
 	ChangedTrace = "trace" // its trace grew
-	ChangedState = "state" // its state, in the index only
 )
 
 // Change is a node that changed, and what of it.
 type Change struct {
 	ID   string
-	What string // ChangedDoc, ChangedTrace or ChangedState
+	What string // ChangedDoc or ChangedTrace
 }
 
 // Store is the graph's nodes.
@@ -172,7 +162,6 @@ type Doc struct {
 	File    string
 	Version Version // the version read
 	Last    int     // the last version's n
-	State   string
 }
 
 // Summary is what the index holds of a node.
@@ -182,7 +171,6 @@ type Summary struct {
 	Title    string
 	Parent   string
 	Lifetime nodefile.Lifetime
-	State    string
 	Created  time.Time
 	Updated  time.Time
 	Done     time.Time
@@ -524,11 +512,7 @@ func (s *Store) save(n *nodefile.Node, file string, prev *Doc, author, op string
 		return nil, err
 	}
 	s.changed(ChangedDoc, n.Meta.ID)
-	state := Idle
-	if prev != nil {
-		state = prev.State
-	}
-	return &Doc{Node: n, Raw: raw, File: file, Version: v, Last: num, State: state}, nil
+	return &Doc{Node: n, Raw: raw, File: file, Version: v, Last: num}, nil
 }
 
 // settleTitle sets whether a node's title is trusted, as it is written
@@ -652,7 +636,7 @@ func (s *Store) read(id string, version int) (*Doc, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", sum.File, err)
 	}
-	return &Doc{Node: node, Raw: raw, File: sum.File, Version: v, Last: sum.Version, State: sum.State}, nil
+	return &Doc{Node: node, Raw: raw, File: sum.File, Version: v, Last: sum.Version}, nil
 }
 
 // Versions are a node's versions, the first first.
@@ -673,27 +657,6 @@ func (s *Store) Versions(id string) ([]Version, error) {
 		out = append(out, v)
 	}
 	return out, rows.Err()
-}
-
-// SetState sets a node's state: running, waiting, idle or done.
-func (s *Store) SetState(id, state string) error {
-	if !slices.Contains([]string{Running, Waiting, Idle, Done}, state) {
-		return fmt.Errorf("a node's state is %s, %s, %s or %s, not %q", Running, Waiting, Idle, Done, state)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var was string
-	if err := s.db.QueryRow(`SELECT state FROM nodes WHERE id = ?`, id).Scan(&was); err != nil {
-		return fmt.Errorf("%s: %w", id, ErrNotFound)
-	}
-	if was == state {
-		return nil
-	}
-	if _, err := s.db.Exec(`UPDATE nodes SET state = ? WHERE id = ?`, state, id); err != nil {
-		return err
-	}
-	s.changed(ChangedState, id)
-	return nil
 }
 
 // Archive archives a node and, in the same commit, every node below it
@@ -788,7 +751,7 @@ func (s *Store) summary(id string) (Summary, error) {
 }
 
 func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
-	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.lifetime, n.state, n.created, n.updated,
+	rows, err := s.db.Query(`SELECT n.id, n.file, n.title, n.parent, n.lifetime, n.created, n.updated,
 		n.done, n.archived, n.external, n.title_trusted, n.opened_by, n.version,
 		(SELECT group_concat(t, ' ') FROM (SELECT l.target AS t FROM node_links l WHERE l.id = n.id
 		  UNION SELECT r.target FROM node_refs r WHERE r.id = n.id AND r.target != '' AND r.target != n.id)) FROM nodes n `+where, args...)
@@ -801,7 +764,7 @@ func (s *Store) summaries(where string, args ...any) ([]Summary, error) {
 		var x Summary
 		var created, updated, done, archived int64
 		var links sql.NullString
-		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Parent, &x.Lifetime, &x.State, &created, &updated,
+		if err := rows.Scan(&x.ID, &x.File, &x.Title, &x.Parent, &x.Lifetime, &created, &updated,
 			&done, &archived, &x.External, &x.TitleTrusted, &x.OpenedBy, &x.Version, &links); err != nil {
 			return nil, err
 		}

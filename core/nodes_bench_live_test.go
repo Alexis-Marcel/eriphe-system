@@ -516,7 +516,7 @@ func (b *bench) end(work string) {
 	}
 	var waiting []string
 	for _, sum := range b.liveNodes() {
-		if sum.State == nodestore.Waiting {
+		if b.sc.c.nodeStatus(sum) == nodeWaits {
 			waiting = append(waiting, sum.Title)
 		}
 	}

@@ -102,20 +102,20 @@ func TestContextPackState(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.nodes.SetState(d.Node.Meta.ID, state)
+		setStatus(t, c, d.Node.Meta.ID, state)
 		return d.Node.Meta.ID
 	}
-	site := open("Site en ligne", "Il reste le certificat.", false, nodestore.Running)
+	site := open("Site en ligne", "Il reste le certificat.", false, nodeRunning)
 	c.mem.db.Exec(`UPDATE memories SET about = ? WHERE about = 'project:site'`, nodeRef(site)) // the site's memories are its node's
-	tainted := open("PLAN EXTÉRIEUR", "RÉSUMÉ D'UN MAIL", true, nodestore.Waiting)
-	open("Nœud au repos", "Rien.", false, nodestore.Idle)
-	open("Nœud fini", "Fini.", false, nodestore.Done)
+	tainted := open("PLAN EXTÉRIEUR", "RÉSUMÉ D'UN MAIL", true, nodeWaits)
+	open("Nœud au repos", "Rien.", false, nodeIdle)
+	open("Nœud fini", "Fini.", false, nodeDone)
 	say(t, c, roleUser, "Où en est le site ?", true)
 
 	pack, st := c.contextPack()
 	for _, want := range []string{
 		"- nœud " + site + " [running", "« Site en ligne » : Il reste le certificat.",
-		"- nœud " + tainted + " [waiting] : il peut porter",
+		"- nœud " + tainted + " [waits] : il peut porter",
 		"Héberger le site sur le NAS",
 		"Sam relit les PR du site", "Le domaine est example.org", "fact tiré d'un contenu extérieur",
 		"Relancer Sam", "Paul est le voisin",
@@ -168,7 +168,7 @@ func TestContextPackStateBudget(t *testing.T) {
 			t.Fatal(err)
 		}
 		id := d.Node.Meta.ID
-		c.nodes.SetState(id, nodestore.Running)
+		setStatus(t, c, id, nodeRunning)
 		mustAdd(t, c.mem, &Memory{Kind: kindDecision, About: nodeRef(id), Text: strings.Repeat("une décision ", 20)})
 		mustAdd(t, c.mem, &Memory{Kind: kindFact, About: nodeRef(id), Text: strings.Repeat("un fait ", 30)})
 	}

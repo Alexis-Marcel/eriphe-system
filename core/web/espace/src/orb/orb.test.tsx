@@ -15,7 +15,7 @@ import { resetOrb } from "./useOrb";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const node = (id: string, title: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title, lifetime: "work", state: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
+  id, title, lifetime: "work", status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
 });
 const nodes = { sub: node("sub", "Substack"), mail: node("mail", "Urgent : la prod", { titleExternal: true }) };
 const bodies: LNode[] = [
@@ -118,7 +118,7 @@ describe("the orb", () => {
   it("stays in the bar when a subject begins to wait for the user, unasked", async () => {
     await draw();
     await feed({ asked: 4 });
-    await act(async () => store.setState({ nodes: { ...store.getState().nodes, sub: { ...store.getState().nodes.sub, waits: true } } }));
+    await act(async () => store.setState({ nodes: { ...store.getState().nodes, sub: { ...store.getState().nodes.sub, status: "waits" } } }));
     expect(orb().classList.contains("docked")).toBe(true);
     expect(say()?.textContent ?? "").not.toContain("t'attend");
   });

@@ -14,7 +14,7 @@ const node = (title: string, titleExternal?: boolean): GraphNode => ({
   title,
   titleExternal,
   lifetime: "work",
-  state: "idle",
+  status: "idle",
   created: "",
   updated: "",
   version: 1,

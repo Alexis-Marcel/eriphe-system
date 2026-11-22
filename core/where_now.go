@@ -5,7 +5,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -71,7 +70,7 @@ func (c *core) whereNow(now time.Time) map[string]any {
 	// their answer (a title that may be someone else's words not quoted).
 	var waiting []nodeFound
 	for _, x := range c.activeNodes(packNodes) {
-		if x.State == nodestore.Waiting {
+		if x.Status == nodeWaits {
 			waiting = append(waiting, c.foundNode(x, false))
 		}
 	}

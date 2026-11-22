@@ -17,8 +17,9 @@ import (
 // A worker task works in a node of its own (#629): code opens it when the
 // task starts, a child of the node run_task names (node), else at the
 // top. The task writes it as it goes with eriphe-nodes (task_nodes.go),
-// on its own node only. Its state is code's: running, waiting (held for
-// its card, or for a permission), idle (its turn ended), done (it ended).
+// on its own node only. Its node's status follows it (node_status.go):
+// running while it works, waiting while it is held for its card or for a
+// permission, idle once its turn ended or it ended.
 //
 // At the end of each turn, its last message, its report, is filed by
 // code, never cut: whole in the node's trace, and as the node's doc when
@@ -69,19 +70,14 @@ func (c *core) nodeParent(id string) error {
 
 // openTaskNode opens a worker task's node, a child of parent ("" for the
 // top), titled as the task, external when the task starts tainted.
-func (c *core) openTaskNode(t *TaskRow, r runRequest, held bool) error {
+func (c *core) openTaskNode(t *TaskRow, r runRequest) error {
 	if c.nodes == nil {
 		return nil
-	}
-	state := nodestore.Running
-	if held {
-		state = nodestore.Waiting
 	}
 	if r.inNode != "" { // a step's task in the step's node (node_steps.go), a skill's run in its standing node
 		if _, err := c.store.db.Exec(`INSERT INTO task_nodes (task, node) VALUES (?, ?)`, t.ID, r.inNode); err != nil {
 			return err
 		}
-		c.nodes.SetState(r.inNode, state)
 		return nil
 	}
 	neutral := fmt.Sprintf(tr(c.userLang(), "tasknode.title"), t.ID)
@@ -130,7 +126,6 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest, held bool) error {
 	if _, err := c.store.db.Exec(`INSERT INTO task_nodes (task, node) VALUES (?, ?)`, t.ID, id); err != nil {
 		return err
 	}
-	c.nodes.SetState(id, state)
 	return nil
 }
 
@@ -147,39 +142,6 @@ func (c *core) taskAuthor(task string) string {
 		return "skill:" + r.Skill
 	}
 	return "task:" + task
-}
-
-// taskNodeState follows a task's state on its node.
-func (c *core) taskNodeState(task, state string) {
-	id := c.taskNode(task)
-	if id == "" || c.nodes == nil {
-		return
-	}
-	if st, ok := c.nodeStep(id); ok && (st.Task != task || state != stateWaitingPermission && state != stateRunning && state != statePending) {
-		return // a step's node: its engine says where it stands (node_steps.go)
-	}
-	if c.standingWork(id) && (state == stateStopped || state == stateFailed || state == stateLost) {
-		state = stateIdle // a standing node outlives the runs that work in it
-	}
-	var to string
-	switch state {
-	case stateRunning, statePending:
-		to = nodestore.Running
-	case stateWaitingPermission:
-		to = nodestore.Waiting
-	case stateIdle:
-		to = nodestore.Idle
-	case stateStopped, stateFailed, stateLost:
-		to = nodestore.Done
-	default:
-		return
-	}
-	if to == nodestore.Idle && c.nodeCardWaits(id) {
-		to = nodestore.Waiting // a card of its waits for the user (node_turn.go)
-	}
-	if err := c.nodes.SetState(id, to); err != nil {
-		log.Printf("task %s: node %s: %v", task, id, err)
-	}
 }
 
 // fileTaskReport files a task's report, its last message, in its node:

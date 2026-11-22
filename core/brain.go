@@ -45,12 +45,12 @@ func (c *core) notifyBrain(id, state string) {
 	}
 	c.logTask(id, state, outcome.receipt) // for since (since.go)
 	// Its node first, whoever hears of it next (task_node.go): the report
-	// filed whole, the node's state.
+	// filed whole, the graph told (node_status.go).
 	var filing string
 	if state == stateIdle {
 		filing = c.fileTaskReport(id, outcome.receipt)
 	}
-	c.taskNodeState(id, state)
+	c.taskNodeMoved(id, state)
 	if c.skillTaskChanged(id, state, outcome) {
 		return // a triggered skill's: it tells the user itself (skill_runs.go)
 	}

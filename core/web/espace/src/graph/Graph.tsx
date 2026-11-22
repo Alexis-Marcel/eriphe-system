@@ -134,7 +134,7 @@ export function Graph({ live }: { live: boolean }) {
   // of it is kept: a reload lays the graph out afresh.
   const [held, setHeld] = useState<string | null>(null);
   const layoutKey =
-    list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.state}:${tileOf(x) ? "tile" : ""}`).join(",") +
+    list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.status}:${tileOf(x) ? "tile" : ""}`).join(",") +
     "|" + openIds.map((id) => `${id}:${roomOf(id)[0]}x${roomOf(id)[1]}`).join(",");
   const [, setFrame] = useState(0);
   const raf = useRef<number | null>(null);
@@ -633,15 +633,15 @@ function Bubble(p: {
 }) {
   const { x, d, r, tile } = p;
   const yours = waits(x);
-  const run = x.state === "running";
+  const run = x.status === "running";
   const R = r + (d === 0 ? 12 : 6);
   const still = useReducedMotion();
   const shape = coreShape(tile, r, !!still);
   const morph = shape.move;
   // A tile is shown whole: a figure that deserves a look.
-  const opacity = p.open ? 0 : tile ? (p.dim ? 0.6 : 1) : p.dim ? (d === 0 ? 0.42 : 0.28) : x.state === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
+  const opacity = p.open ? 0 : tile ? (p.dim ? 0.6 : 1) : p.dim ? (d === 0 ? 0.42 : 0.28) : x.status === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
-  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.state, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.unasked && "unasked", tile && "tiled"]
+  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.unasked && "unasked", tile && "tiled"]
     .filter(Boolean)
     .join(" ");
   return (
@@ -694,7 +694,7 @@ function Bubble(p: {
             </motion.span>
           ) : (
             <motion.span key="code" className="gl-in" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: still ? 0 : 0.15, duration: 0.25 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>
-              {d === 0 ? <span className="gr-code">{codeOf(p.title)}</span> : x.state === "done" ? <span className="gr-glyph">✓</span> : null}
+              {d === 0 ? <span className="gr-code">{codeOf(p.title)}</span> : x.status === "done" ? <span className="gr-glyph">✓</span> : null}
             </motion.span>
           )}
         </AnimatePresence>

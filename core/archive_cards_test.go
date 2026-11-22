@@ -114,7 +114,7 @@ func TestArchiveWithdrawsItsCards(t *testing.T) {
 			t.Errorf("%s came back: %s", ref, x.State)
 		}
 	}
-	if c.nodeCardWaits(subject) {
+	if cardWaitsOn(c, subject) {
 		t.Error("the reopened subject waits on a withdrawn card")
 	}
 }

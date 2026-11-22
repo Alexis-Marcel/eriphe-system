@@ -425,6 +425,7 @@ const cardsAttendedEachMax = 50
 // each, delivered together.
 func (c *core) attendQueuedCards() {
 	c.syncCards()
+	c.settleCards("") // a proposal decided elsewhere, or gone, no longer waits on its card (node_status.go)
 	queued, err := c.cardsWhere(`seq = 0 AND turn = 0 AND state = ? ORDER BY id LIMIT ?`, cardPending, cardsAttendedEachMax)
 	if err != nil {
 		return

@@ -169,7 +169,8 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 				c.taskRead(w.task, "node:"+w.node) // its words may be someone else's
 			}
 			items, _ := c.nodeItems(w.node)
-			out := map[string]any{"id": w.node, "title": d.Node.Meta.Title, "state": d.State, "version": d.Version.N, "last": d.Last,
+			sum, _ := c.nodes.Get(w.node)
+			out := map[string]any{"id": w.node, "title": d.Node.Meta.Title, "status": c.nodeStatus(sum), "version": d.Version.N, "last": d.Last,
 				"hash": d.Version.Hash, "external": d.Node.Meta.External, "body": nodeBody(d.Raw)}
 			if values != nil {
 				out["values"] = values // code's, never in the file

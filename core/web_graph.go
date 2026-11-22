@@ -112,13 +112,12 @@ type graphNode struct {
 	Parent        string       `json:"parent,omitempty"`
 	Links         []string     `json:"links,omitempty"`
 	Lifetime      string       `json:"lifetime"`
-	State         string       `json:"state"`
+	Status        string       `json:"status"` // running, waits, done or idle, computed (node_status.go)
 	Created       time.Time    `json:"created"`
 	Updated       time.Time    `json:"updated"`
 	Done          *time.Time   `json:"done,omitempty"`
 	External      bool         `json:"external,omitempty"`
 	Version       int          `json:"version"`
-	Waits         bool         `json:"waits,omitempty"`   // one of its cards waits for the user, or a source marked attention lists items (node_attention.go)
 	Line          string       `json:"line,omitempty"`    // while it runs: its task's last word of where it is
 	Unasked       bool         `json:"unasked,omitempty"` // a skill or an event opened it, not the user (node_origin.go)
 	Glance        *graphGlance `json:"glance,omitempty"`  // a figure of one of its sources, shown at a glance when it moved (node_glance.go)
@@ -126,21 +125,26 @@ type graphNode struct {
 
 // graphRow is a node's row.
 func (c *core) graphRow(sum nodestore.Summary) graphNode {
-	g := graphNode{ID: sum.ID, Title: sum.Title, TitleExternal: sum.TitleExternal(), Parent: sum.Parent, Links: sum.Links, Lifetime: string(sum.Lifetime), State: sum.State,
+	return c.graphRowWith(sum, c.statusFacts(sum.ID))
+}
+
+// graphRowWith is a node's row, its status from f.
+func (c *core) graphRowWith(sum nodestore.Summary, f statusFacts) graphNode {
+	g := graphNode{ID: sum.ID, Title: sum.Title, TitleExternal: sum.TitleExternal(), Parent: sum.Parent, Links: sum.Links, Lifetime: string(sum.Lifetime), Status: f.of(sum),
 		Created: sum.Created, Updated: sum.Updated, External: sum.External, Version: sum.Version, Unasked: sum.Unasked()}
 	if !sum.Done.IsZero() {
 		d := sum.Done
 		g.Done = &d
 	}
-	g.Waits = c.nodeCardWaits(sum.ID) || c.nodeAttention(sum.ID)
 	g.Glance = c.nodeGlance(sum.ID)
-	if p, ok := c.progressOf(sum.ID); ok && sum.State == nodestore.Running {
+	if p, ok := c.progressOf(sum.ID); ok && g.Status == nodeRunning && sum.Archived.IsZero() {
 		g.Line = p.Text
 	}
 	return g
 }
 
-// graphRows is the graph: every node not archived.
+// graphRows is the graph: every node not archived, in a constant number
+// of queries (statusFacts, warmNodeCaches).
 func (c *core) graphRows() ([]graphNode, error) {
 	if c.nodes == nil {
 		return []graphNode{}, nil
@@ -149,9 +153,11 @@ func (c *core) graphRows() ([]graphNode, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.warmNodeCaches(xs)
+	f := c.statusFacts("")
 	out := make([]graphNode, 0, len(xs))
 	for _, x := range xs {
-		out = append(out, c.graphRow(x))
+		out = append(out, c.graphRowWith(x, f))
 	}
 	return out, nil
 }

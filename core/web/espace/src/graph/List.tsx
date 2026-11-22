@@ -54,14 +54,14 @@ export function List({ live }: { live: boolean }) {
           const d = depthOf(nodes, x.id);
           const yours = waits(x);
           return (
-            <li key={x.id} className={`ls-row d${Math.min(d, 3)} ${x.state}${x.external ? " external" : ""}`}>
+            <li key={x.id} className={`ls-row d${Math.min(d, 3)} ${x.status}${x.external ? " external" : ""}`}>
               <button type="button" onClick={() => step(store, openPage, x.id, false)}>
-                <i className={`dot${yours ? " yours" : x.state === "running" ? " run" : ""}`} role={yours ? "img" : undefined} aria-label={yours ? t("espace.waits") : undefined} />
+                <i className={`dot${yours ? " yours" : x.status === "running" ? " run" : ""}`} role={yours ? "img" : undefined} aria-label={yours ? t("espace.waits") : undefined} />
                 <b>
                   <NodeTitle x={x} fallback={external} />
                 </b>
                 {x.unasked && <UnaskedMark />}
-                {!yours && x.state === "running" && x.line && <em className="runs">{x.line}</em>}
+                {x.status === "running" && x.line && <em className="runs">{x.line}</em>}
               </button>
             </li>
           );

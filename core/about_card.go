@@ -148,7 +148,7 @@ func (c *core) aboutCardParts(key string) []cardSection {
 	// Where it stands: the node's line.
 	if id, ok := strings.CutPrefix(key, "node:"); ok && c.nodes != nil {
 		if sum, err := c.nodes.Get(id); err == nil {
-			parts = append(parts, cardSection{lines: []string{truncate(c.nodeLine(sum), aboutCardNodeMax)}, refs: []string{key}})
+			parts = append(parts, cardSection{lines: []string{truncate(c.nodeLine(statusNode{sum, c.nodeStatus(sum)}), aboutCardNodeMax)}, refs: []string{key}})
 		}
 	}
 	if c.mem != nil {

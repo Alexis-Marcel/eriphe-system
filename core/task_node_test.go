@@ -97,8 +97,8 @@ func TestTaskWritesItsNode(t *testing.T) {
 	pid := parent.Node.Meta.ID
 	task, id := startInNode(t, c, runRequest{Title: "Style des articles", Prompt: "Analyse le style.", Node: pid})
 	sum, _ := c.nodes.Get(id)
-	if sum.Parent != pid || sum.Title != "Style des articles" || sum.State != nodestore.Running {
-		t.Fatalf("its node: %+v", sum)
+	if sum.Parent != pid || sum.Title != "Style des articles" || c.nodeStatus(sum) != nodeRunning {
+		t.Fatalf("its node: %+v %s", sum, c.nodeStatus(sum))
 	}
 	spec, _ := c.store.taskSpec(task.ID)
 	if !strings.Contains(spec.AppendSystemPrompt, nodesServer) {
@@ -155,10 +155,12 @@ func TestTaskWritesItsNode(t *testing.T) {
 	if _, err := callNodes(t, c.core, task.ID, "node_read", map[string]any{"id": kid["id"]}); err == "" {
 		t.Fatal("a task read its child")
 	}
-	// Its state follows the task's.
-	c.taskNodeState(task.ID, stateStopped)
-	if sum, _ := c.nodes.Get(id); sum.State != nodestore.Done {
-		t.Fatalf("state %s", sum.State)
+	// Its status follows the task's: stopped, it is idle, not done (only
+	// the user says a node is done).
+	c.store.updateTask(task.ID, map[string]any{"state": stateStopped})
+	c.taskNodeMoved(task.ID, stateStopped)
+	if s := nodeStatusNow(t, c.core, id); s != nodeIdle {
+		t.Fatalf("status %s", s)
 	}
 	// A node that is not there, or archived, is refused before the start.
 	if _, err := c.runTask(context.Background(), runRequest{Prompt: "x", Node: "nope"}); err == nil {
@@ -195,8 +197,8 @@ func TestTaskReportFiled(t *testing.T) {
 	if strings.TrimSpace(d.Node.Text()) != report {
 		t.Fatalf("the doc is not the report (%d bytes)", len(d.Node.Text()))
 	}
-	if sum, _ := c.nodes.Get(id); sum.State != nodestore.Idle {
-		t.Fatalf("state %s", sum.State)
+	if s := nodeStatusNow(t, c.core, id); s != nodeIdle {
+		t.Fatalf("status %s", s)
 	}
 	// The doc written, the next report goes to the trace only.
 	if !strings.Contains(string(trace), "Merci.") || strings.Contains(d.Node.Text(), "Merci.") {
