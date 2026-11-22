@@ -77,13 +77,12 @@ func TestValidSurface(t *testing.T) {
 	if errs := ValidateSurface(s); len(errs) > 0 {
 		t.Fatal(errs)
 	}
-	// A batch: a Fold that names the List it folds; a row's inline Proposal.
+	// A batch: a Fold that names the List it folds; each row an Item (its
+	// card is code's, drawn on the row).
 	s = surfaceOf(
 		`{"id":"root","component":"Fold","label":"{n} mails à jeter","child":"jeter","list":"jeter"}`,
-		`{"id":"jeter","component":"List","children":{"path":"/mails/messages","componentId":"row"}}`,
-		`{"id":"row","component":"Row","children":["item","yes"]}`,
+		`{"id":"jeter","component":"List","children":{"path":"/mails/messages","componentId":"item"}}`,
 		`{"id":"item","component":"Item","title":{"@path":"subject"}}`,
-		`{"id":"yes","component":"Proposal","inline":true,"proposalId":{"@path":"_card"}}`,
 	)
 	if errs := ValidateSurface(s); len(errs) > 0 {
 		t.Fatal(errs)

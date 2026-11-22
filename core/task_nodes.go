@@ -424,16 +424,9 @@ func (c *core) externalSources(d *nodestore.Doc, author string) error {
 	return err
 }
 
-// rowCard tells a Proposal that answers only its row's own card: inline,
-// its ref bound to the item's _card, which code writes, never an author.
-func rowCard(comp map[string]any) bool {
-	ref, _ := comp["proposalId"].(map[string]any)
-	return comp["inline"] == true && len(ref) == 1 && ref["@path"] == itemCardField
-}
-
 // nodeGuard checks the blocks an author wrote (names) in a node: a card
 // block places one of the node's own cards, never when tainted; the
-// actions' grammar, nothing asked when tainted, no Link to a
+// actions' grammar (an ask only), nothing asked when tainted, no Link to a
 // source's value, sources the author may give (sourceOK: those a task is
 // lent, lentTo). It tells the blocks that read a source of a server not
 // trusted.
@@ -460,14 +453,6 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 		json.Unmarshal(b.Components, &list)
 		for i, comp := range list {
 			at := "/components/" + strconv.Itoa(i)
-			switch comp["component"] {
-			case "Proposal":
-				// A row's own card (inline, bound to the item's _card, code's):
-				// the page answers it only on the row code told it waits on.
-				if tainted && !rowCard(comp) {
-					errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: at, Message: "a Proposal written after reading external content could be answered as something else: leave it out"})
-				}
-			}
 			a, _ := comp["action"].(map[string]any)
 			if ev, ok := a["event"].(map[string]any); ok && tainted && ev["name"] == a2ui.ActionAsk {
 				errs = append(errs, a2ui.ValidationError{SurfaceID: sid, Path: at + "/action/event",
@@ -490,11 +475,6 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 			}
 			if err := c.openOK(b.Sources[src]); err != nil {
 				problems = append(problems, fmt.Sprintf("block %s: source %s: %v", name, src, err))
-			}
-		}
-		for _, act := range slices.Sorted(maps.Keys(b.Actions)) {
-			if err := c.actionOK(b.Actions[act]); err != nil {
-				problems = append(problems, fmt.Sprintf("block %s: action %s: %v", name, act, err))
 			}
 		}
 		for _, p := range listsOK(b) {
@@ -582,12 +562,12 @@ func nodeExternal(n *nodefile.Node) bool {
 }
 
 // blockSig is what an author writes of a block, in one form: its
-// components, data, sources and actions.
+// components, data and sources.
 func blockSig(b *nodefile.Block) string {
 	var comps, data any
 	json.Unmarshal(b.Components, &comps)
 	json.Unmarshal(b.Data, &data)
-	raw, _ := json.Marshal([]any{comps, data, b.Sources, b.Actions})
+	raw, _ := json.Marshal([]any{comps, data, b.Sources})
 	return string(raw)
 }
 

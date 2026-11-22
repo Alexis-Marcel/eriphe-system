@@ -103,7 +103,7 @@ const (
 	scoreActive = -4
 )
 
-// schedule picks the device for a task: the requested one if it is online and
+// schedule chooses the device for a task: the requested one if it is online and
 // fits, otherwise the best scoring device; for a resident task, the best of
 // the online always-on devices that fit when there is one. If none is online
 // but one would fit, it returns a *waitingError.

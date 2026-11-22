@@ -7,9 +7,10 @@ import { expect, test } from "./fixtures";
 // read (one sign in the page's head, a quiet edge on the block); « À
 // traiter » whose rows say what Eriphe proposes, Sam's with its one Oui
 // (a reply its skill drafted, a card on the mail); « À jeter » as a batch
-// whose trash takes each mail's account; « Pour info » folded. The user
-// reads Sam's mail as a letter with what Oui sends, says yes on the row,
-// unticks one mail of the batch and trashes the others, then enlarges and
+// whose rows share one card (a trash per mail, folded); « Pour info »
+// folded. The user reads Sam's mail as a letter with what Oui sends, says
+// yes on the row, unticks one mail of the batch and says yes to the
+// others on its line, then enlarges and
 // resizes the page. Seeded at /e2e/bilan, on its own node.
 
 
@@ -68,30 +69,30 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(todo).toHaveCount(0);
   await expect(lease).toHaveCount(1);
 
-  // « À jeter »: a batch line, all ticked; opened, one mail kept.
+  // « À jeter »: a batch line carrying its rows' one card, all ticked;
+  // opened, one mail kept: its Oui says how many go.
   const batch = pg.locator(".a2-batch").filter({ hasText: "à jeter" });
-  // « Pour info »: a batch with no action, its line only.
-  await expect(pg.locator(".a2-batch").filter({ hasText: "pour info" }).locator(".a2-fold-label")).toHaveText("Les 2 mails pour info");
+  // « Pour info »: a batch with no card, its line only.
+  const infos = pg.locator(".a2-batch").filter({ hasText: "pour info" });
+  await expect(infos.locator(".a2-fold-label")).toHaveText("Les 2 mails pour info");
+  await expect(infos.locator(".a2-inline-yes")).toHaveCount(0);
   await expect(batch.locator(".a2-fold-label")).toHaveText("3 mails inutiles à jeter");
-  const act = batch.locator(".a2-batch-act");
-  await expect(act).toHaveText("Tout mettre à la corbeille");
+  const yes = batch.locator(".a2-fold-card .a2-inline-yes");
+  await expect(yes).toHaveText("Mettre 3 mails à la corbeille");
   await batch.locator(".a2-fold-head").click();
+  await expect(batch.locator(".a2-batchrows .a2-inline-yes")).toHaveCount(0); // its rows are quiet: the Oui is the line's
   await batch.getByRole("checkbox", { name: "Décocher « Lettre du dimanche » : le garder" }).uncheck();
   await expect(batch.locator(".a2-batch-kept")).toHaveText("1 gardé(s)");
-  await expect(act).toHaveText("Mettre les 2 à la corbeille");
+  await expect(yes).toHaveText("Mettre 2 mails à la corbeille");
   await shots(page, "3-batch-open");
-  await act.click();
-  // A trash asks once more, with its exact call: one call per account.
-  const ask = pg.locator(".a2-pickask");
-  await expect(ask.locator("dt")).toHaveText("mail/trash");
-  await expect(ask.locator("dd")).toContainText(["account : perso, travail (un appel par account)"]);
-  await expect(ask.locator("li")).toHaveText(["Soldes d'hiver · promo@example.org", "Votre colis est bloqué · colis@example.net"]);
-  await shots(page, "4-batch-confirm");
-  await ask.getByRole("button", { name: "Lancer" }).click();
-  // Its own calls: the test core is shared with the other files (view-calls.spec.ts trashes too).
-  const mine = (all: string[]) => all.filter((x) => /:[aij]\d/.test(x));
-  await expect.poll(async () => mine((await (await request.get("/e2e/tools")).json()).trashed)).toEqual(["perso:j1,j3"]);
-  await expect(pg.locator(".a2-batch-done")).toContainText("1 gardé(s)");
+  await yes.click();
+  // Its own calls, each as it was kept: the test core is shared with the
+  // other files (view-calls.spec.ts trashes too).
+  const mine = (all: string[]) => all.filter((x) => /:[aij]\d/.test(x)).sort();
+  await expect.poll(async () => mine((await (await request.get("/e2e/tools")).json()).trashed)).toEqual(["perso:j1", "perso:j3"]);
+  // Decided, the batch asks nothing more: the mail kept stays, no Oui.
+  await expect(batch.locator(".a2-fold-label")).toHaveText("1 mails inutiles à jeter");
+  await expect(batch.locator(".a2-inline-yes")).toHaveCount(0);
   await shots(page, "5-after-actions");
 
   // The ⋯ menu: what was decided, and what the view was asked for.

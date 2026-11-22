@@ -244,7 +244,7 @@ func (w *web) handleMonitorAction(rw http.ResponseWriter, r *http.Request, s *se
 	case "delete":
 		err, to = w.c.deleteMonitor(name), "/settings/monitors"
 	case "approve", "reject":
-		err = w.c.decideProposal(r.Context(), cardMonitor, m.ID, r.PathValue("action") == "approve")
+		err = w.c.answerProposal(r.Context(), cardMonitor, m.ID, r.PathValue("action") == "approve")
 		if _, gone := w.c.monitorNamed(name); gone != nil {
 			to = "/settings/monitors"
 		}

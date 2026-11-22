@@ -520,7 +520,7 @@ func (c *core) deleteAssistant(name string) error {
 	return c.commit(d, change{persist: func() error { return c.store.deleteCatalog(kindAssistant, name) }})
 }
 
-// setBrainAgent picks the agent the brain runs, unless the configuration
+// setBrainAgent chooses the agent the brain runs, unless the configuration
 // file names it. The brain restarts on it once its turn is over.
 func (c *core) setBrainAgent(name string) error {
 	c.catalogMu.Lock()

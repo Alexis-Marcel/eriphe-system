@@ -32,7 +32,7 @@ import (
 // folder's own machine or one keeping a copy in sync now, with nothing
 // pending either way; while a folder's machine is away, a copy that was
 // complete when that machine was last seen will do (syncGrace). The
-// scheduler picks the best of them, as for any task (scheduler.go). With
+// scheduler chooses the best of them, as for any task (scheduler.go). With
 // write the task writes on the copy (after a snapshot
 // of the copy, on the machine running it), and Syncthing brings that back
 // to the folder's machine, at once or when it returns. The task's level is
@@ -390,7 +390,7 @@ func (v *syncView) iCloudHint(f *Folder) bool {
 // folderHosts are the machines a task lent fs may run on now, by name:
 // for each folder, its own machine, sharing it as it last reported, or one
 // that keeps a copy of it in sync (copyUsable). Which machine owns a
-// folder does not matter: the scheduler picks the best of them
+// folder does not matter: the scheduler chooses the best of them
 // (scheduler.go).
 func (c *core) folderHosts(fs []*Folder) []string {
 	v, err := c.syncView()

@@ -98,57 +98,15 @@ func TestNodeSave(t *testing.T) {
 	}
 }
 
-// A mark is code's write in the block, made on the version the page
-// showed: no version on the page, no turn; only what a Mark of the block
-// can carry. Code's versions since the one shown do not stop it; an
-// author's write does.
-func TestNodeMark(t *testing.T) {
+// The workspace says yes only on a card: no route marks, selects or acts
+// on a block's items.
+func TestNoGestureActs(t *testing.T) {
 	tw, csrf := graphWeb(t)
-	c := tw.c
-	block := "```eriphe:block options\n" + `{"components": [
-  {"id": "root", "component": "List", "children": {"componentId": "row", "path": "/items"}},
-  {"id": "row", "component": "Row", "children": ["t", "m"]},
-  {"id": "t", "component": "Text", "text": {"@path": "name"}},
-  {"id": "m", "component": "Mark", "list": "opts", "item": {"@path": "id"}, "marks": ["keep", "drop"]}],
- "data": {"items": [{"id": "a", "name": "A"}, {"id": "b", "name": "B"}]}}` + "\n```\n"
-	id := mustNode(t, c, nodestore.New{Title: "Options", Body: "Deux options.\n\n" + block + "\n" + planBlock})
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/mark", nodeMarkIn{Block: "options", List: "opts", Item: "a", Mark: "keep", Version: 1}); code != http.StatusNoContent {
-		t.Fatalf("mark: %d", code)
-	}
-	d, _ := c.nodes.Read(id, 0)
-	if d.Node.Block("options").Marks["opts"]["a"] != "keep" || d.Version.Author != nodeByCode {
-		t.Fatalf("marks %v by %s", d.Node.Block("options").Marks, d.Version.Author)
-	}
-	p, _ := tw.w.nodePageOf(id, 0, "fr")
-	if len(p.Versions) != 2 || p.Versions[0].N != 1 {
-		t.Fatalf("versions shown: %+v", p.Versions)
-	}
-	for _, bad := range []nodeMarkIn{
-		{Block: "titles", List: "opts", Item: "a", Mark: "keep", Version: 1}, // no Mark there
-		{Block: "options", List: "opts", Item: "a b", Mark: "keep", Version: 1},
-		{Block: "options", List: "opts", Item: "a", Mark: "love", Version: 1},
-		{Block: "none", List: "opts", Item: "a", Mark: "keep", Version: 1},
-		{Block: "options", List: "opts", Item: "a", Mark: "keep"}, // no version
-	} {
-		if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/mark", bad); code != http.StatusBadRequest {
-			t.Errorf("%+v: %d", bad, code)
+	id := mustNode(t, tw.c, nodestore.New{Title: "Options", Body: "Deux options.\n\n" + planBlock})
+	for _, path := range []string{"/mark", "/act"} {
+		if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+path, map[string]any{"block": "titles"}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
+			t.Errorf("%s: %d", path, code)
 		}
-	}
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/mark", nodeMarkIn{Block: "options", List: "opts", Item: "a", Version: 1}); code != http.StatusNoContent {
-		t.Fatalf("unmark: %d", code)
-	}
-	if d, _ := c.nodes.Read(id, 0); len(d.Node.Block("options").Marks) != 0 {
-		t.Fatalf("marks after unmark: %v", d.Node.Block("options").Marks)
-	}
-	// The brain writes the node: a mark made on the page it replaced is refused.
-	if _, err := nodeWrite(c, id, "Trois options.\n\n"+block, lastHash(t, c, id), byBrain); err != nil {
-		t.Fatal(err)
-	}
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/mark", nodeMarkIn{Block: "options", List: "opts", Item: "b", Mark: "drop", Version: 1}); code != http.StatusConflict {
-		t.Fatalf("a mark on a page written over: %d", code)
-	}
-	if d, _ := c.nodes.Read(id, 0); len(d.Node.Block("options").Marks) != 0 {
-		t.Fatalf("marked anyway: %v", d.Node.Block("options").Marks)
 	}
 }
 

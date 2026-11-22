@@ -420,9 +420,11 @@ func (c *core) pendingProposals() []proposal {
 	return out
 }
 
-// decideProposal applies the user's answer to one proposal, through the
-// same code as the pages' buttons. It refuses a proposal that no longer
-// waits: an answer never touches what is already in force.
+// decideProposal applies the user's answer to one proposal, by its kind.
+// Only decideCardWith calls it (and withdrawProposal, for a no nobody
+// said): every yes goes through a card (TestOneWayToSayYes). It refuses a
+// proposal that no longer waits: an answer never touches what is already
+// in force.
 func (c *core) decideProposal(ctx context.Context, kind string, id int64, approve bool) error {
 	p := c.proposalOf(kind, id)
 	if !p.Pending {
@@ -643,14 +645,17 @@ func (c *core) liveCard(x convoCard) (convoCard, proposal) {
 	return x, p
 }
 
-// decideCard is a card's Oui or Non: its proposal's own approval.
+// decideCard is a card's Oui or ✕: its proposal's own approval.
 func (c *core) decideCard(ctx context.Context, id int64, approve bool, by string) (convoCard, error) {
 	return c.decideCardWith(ctx, id, approve, by, func(kind string, pid int64) error {
 		return c.decideProposal(ctx, kind, pid, approve)
 	})
 }
 
-// decideCardWith is decideCard, its proposal decided by decide.
+// decideCardWith is the one way a proposal is answered, whoever answers:
+// a card's Oui or ✕ on the workspace, a word in the bar or a channel
+// (decideCard), a page's buttons (answerProposal), a calls card with the
+// user's choice (decideCardChosen). Its card says so in the same call.
 func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by string, decide func(kind string, pid int64) error) (convoCard, error) {
 	cardMu.Lock()
 	defer cardMu.Unlock()
@@ -686,15 +691,20 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	return x, nil
 }
 
-// proposalDecided keeps a card in step with a decision made on a page.
-func (c *core) proposalDecided(kind string, id int64, approved bool) {
-	state := cardRejected
-	if approved {
-		state = cardApproved
+// answerProposal is a page's yes or no on a proposal (Réglages, Mémoire):
+// the same as its card's, which it is given first if it has none.
+func (c *core) answerProposal(ctx context.Context, kind string, id int64, approve bool) error {
+	p := c.proposalOf(kind, id)
+	if !p.Pending {
+		return errCardDecided
 	}
-	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = 'page' WHERE ref = ? AND state = ?`,
-		state, time.Now().Unix(), proposalRef(kind, id), cardPending)
-	c.proposalMoved(proposalRef(kind, id))
+	c.syncCard(p)
+	xs, err := c.cardsWhere(`ref = ? AND state = ?`, proposalRef(kind, id), cardPending)
+	if err != nil || len(xs) == 0 {
+		return errNoCard
+	}
+	_, err = c.decideCard(ctx, xs[0].ID, approve, "page")
+	return err
 }
 
 // cardNote tells the brain where its proposal waits: on a card, with its message.
@@ -873,31 +883,55 @@ func (c *core) withdrawCards(ctx context.Context, ids []string) {
 	defer cardMu.Unlock()
 	moved := false
 	for _, ref := range slices.Sorted(maps.Keys(refs)) {
-		kind, pid, ok := parseProposalRef(ref)
-		if !ok || c.cardHeld(ref) {
-			continue
-		}
-		xs, _ := c.cardsWhere(`ref = ? AND state = ?`, ref, cardPending)
-		for _, x := range xs {
-			c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ? AND state = ?`,
-				cardGone, time.Now().Unix(), cardByArchive, x.ID, cardPending)
-			c.attentionDone(cardItemRef(x.ID))
-		}
-		pending := c.proposalOf(kind, pid).Pending
-		if pending {
-			if err := c.withdrawProposal(ctx, kind, pid); err != nil && !errors.Is(err, errCardDecided) {
-				log.Printf("cards: %s: withdrawn with its node: %v", ref, err)
-			}
-		}
-		if len(xs) > 0 || pending {
-			c.proposalMoved(ref)
-			log.Printf("cards: %s gone with its archived node", ref)
+		if !c.cardHeld(ref) && c.withdrawRef(ctx, ref, cardByArchive) {
 			moved = true
 		}
 	}
 	if moved {
 		c.bump()
 	}
+}
+
+// cardByCode is who decided a card code withdrew: what it asked waits on
+// nothing any more.
+const cardByCode = "code"
+
+// withdrawCard withdraws one card: its proposal waits no more, undecided
+// by the user (withdrawRef).
+func (c *core) withdrawCard(ctx context.Context, ref, by string) {
+	cardMu.Lock()
+	moved := c.withdrawRef(ctx, ref, by)
+	cardMu.Unlock()
+	if moved {
+		c.bump()
+	}
+}
+
+// withdrawRef makes a card gone, decided by by, and its proposal wait no
+// more (withdrawProposal). It tells whether anything moved. cardMu held.
+func (c *core) withdrawRef(ctx context.Context, ref, by string) bool {
+	kind, pid, ok := parseProposalRef(ref)
+	if !ok {
+		return false
+	}
+	xs, _ := c.cardsWhere(`ref = ? AND state = ?`, ref, cardPending)
+	for _, x := range xs {
+		c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ? AND state = ?`,
+			cardGone, time.Now().Unix(), by, x.ID, cardPending)
+		c.attentionDone(cardItemRef(x.ID))
+	}
+	pending := c.proposalOf(kind, pid).Pending
+	if pending {
+		if err := c.withdrawProposal(ctx, kind, pid); err != nil && !errors.Is(err, errCardDecided) {
+			log.Printf("cards: %s: withdrawn (%s): %v", ref, by, err)
+		}
+	}
+	if len(xs) == 0 && !pending {
+		return false
+	}
+	c.proposalMoved(ref)
+	log.Printf("cards: %s withdrawn (%s)", ref, by)
+	return true
 }
 
 // withdrawProposal makes a proposal wait no more, undecided by the user:

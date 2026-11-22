@@ -51,7 +51,7 @@ func TestNodesRefuseSecretsOnly(t *testing.T) {
 	}
 	// What an author writes: the body, code's fields left out.
 	for _, b := range n.Blocks() {
-		b.Marks, b.External = nil, false
+		b.External = false
 	}
 	raw, _ := n.Bytes()
 	_, after, _ := strings.Cut(string(raw), "\n---\n")

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -15,9 +14,9 @@ import (
 )
 
 // A view as a bilan (docs/node-format.md): rows that carry the card that
-// waits on them, Lists with several filters, a batch whose action takes
-// an arg from each item, settled items that leave, decided cards that
-// leave the page's foot, and the view's skill woken by the user's hand.
+// waits on them, Lists with several filters, settled items that leave,
+// decided cards that leave the page's foot, and the view's skill woken by
+// the user's hand.
 
 // Several filters on one List: an item shows when each keeps it.
 func TestListFiltersAll(t *testing.T) {
@@ -46,135 +45,6 @@ func TestListFiltersAll(t *testing.T) {
 		if _, _, err := listBinding(bad, srcs); err == nil || !strings.Contains(err.Error(), "a filter is [field=value]") {
 			t.Errorf("%s: %v", bad, err)
 		}
-	}
-}
-
-// accountsAction trashes (moves to the trash) the picked mails, the
-// account each is in taken from the item: one call per account.
-const accountsAction = `{"jeter": {"tool": "monitor/move", "args": {"to": "trash", "account": {"@item": "account"}}, "items": "ids", "source": "received"}}`
-
-// accountsWeb is actionsWeb with mails in two accounts.
-func accountsWeb(t *testing.T) (*testWeb, string, *fakeMonitor, string) {
-	tw, csrf, fm, id := actionsWeb(t, accountsAction)
-	fm.mu.Lock()
-	fm.got = []map[string]any{
-		{"id": "m1", "subject": "Promo", "from": "Shop", "account": "perso"},
-		{"id": "m2", "subject": "Lettre", "from": "News", "account": "travail"},
-		{"id": "m3", "subject": "Soldes", "from": "Shop", "account": "perso"},
-	}
-	fm.mu.Unlock()
-	tw.c.readNode(context.Background(), id, []string{"received"}, time.Now())
-	return tw, csrf, fm, id
-}
-
-// An arg taken from each item: the confirm says its values, the buttons
-// say no tool, and a click makes one call per account, each with its
-// own mails, read from the source, never from the page.
-func TestActionArgFromEachItem(t *testing.T) {
-	tw, csrf, fm, id := accountsWeb(t)
-	c := tw.c
-	p, err := tw.w.nodePageOf(id, 0, "fr")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var a listAction
-	for _, part := range p.Parts {
-		if part.Block != nil {
-			for _, l := range part.Block.Lists {
-				a = l.Actions[0]
-			}
-		}
-	}
-	if a.All != "Tout déplacer → trash" || a.Many != "Déplacer les {n} → trash" || !slices.Contains(a.Args, "account : perso, travail (un appel par account)") || !slices.Contains(a.Args, "to : trash") {
-		t.Fatalf("the action as shown: %+v", a)
-	}
-	d, _ := c.nodes.Read(id, 0)
-	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "jeter", Version: d.Version.N, IDs: []string{"m1", "m2", "m3"}})
-	if code != http.StatusOK || out["text"] != "3 déplacés" {
-		t.Fatalf("act: %d %v", code, out)
-	}
-	sent := sentNow(fm)
-	if len(sent) != 2 || sent[0]["account"] != "perso" || !slices.Equal(sent[0]["ids"].([]string), []string{"m1", "m3"}) ||
-		sent[1]["account"] != "travail" || !slices.Equal(sent[1]["ids"].([]string), []string{"m2"}) || sent[0]["to"] != "trash" {
-		t.Fatalf("the tool got %v", sent)
-	}
-	raw, _ := c.nodes.Trace(id)
-	if n := strings.Count(string(raw), "a lancé"); n != 2 {
-		t.Errorf("the trace tells %d calls:\n%s", n, raw)
-	}
-}
-
-// Each call holds under its own account's access, all checked before any
-// runs: one account the user never lets act, and nothing is sent. A
-// plain action on a server whose accounts differ is still refused until
-// it names its account (act.account).
-func TestActionArgEachUnderItsAccess(t *testing.T) {
-	tw, csrf, fm, id := accountsWeb(t)
-	u := tw.c.pool.get("monitor")
-	u.mu.Lock()
-	u.srv.AccountGrids = map[string]accountGrid{
-		"perso":   {Grid: accessGrid{Read: gridFree, Change: gridFree, Delete: gridFree, Send: gridFree}},
-		"travail": {Grid: accessGrid{Read: gridFree, Change: gridNever, Delete: gridNever, Send: gridNever}},
-	}
-	u.mu.Unlock()
-	if code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "jeter", IDs: []string{"m1", "m2"}}); code != http.StatusForbidden {
-		t.Fatalf("an account never allowed: %d %v", code, out)
-	}
-	if n := len(sentNow(fm)); n != 0 {
-		t.Fatalf("%d calls ran", n)
-	}
-	// Its own account's mails alone: allowed.
-	if code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "jeter", IDs: []string{"m1", "m3"}}); code != http.StatusOK {
-		t.Fatalf("perso alone: %d %v", code, out)
-	}
-	if sent := sentNow(fm); len(sent) != 1 || sent[0]["account"] != "perso" {
-		t.Fatalf("the tool got %v", sent)
-	}
-	// The same action naming no account: refused as before.
-	c := tw.c
-	if _, err := c.nodes.Change(id, lastHash(t, c, id), byBrain, func(n *nodefile.Node) error {
-		return n.AuthorBody("Les mails.\n\n" + actionsBlock(`{"jeter": {"tool": "monitor/move", "args": {"to": "trash"}, "items": "ids", "source": "received"}}`))
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "jeter", IDs: []string{"m1"}}); code != http.StatusForbidden || !strings.Contains(out["error"].(string), "nommer son compte") {
-		t.Fatalf("no account: %d %v", code, out)
-	}
-}
-
-// An item without the field: nothing runs. An arg taken from each item is
-// checked when written: {"@item": field} alone, a parameter of the tool
-// that takes one value.
-func TestActionArgChecked(t *testing.T) {
-	tw, csrf, fm, id := accountsWeb(t)
-	fm.mu.Lock()
-	fm.got = append(fm.got, map[string]any{"id": "m4", "subject": "Sans compte", "from": "X"})
-	fm.mu.Unlock()
-	c := tw.c
-	c.readNode(context.Background(), id, []string{"received"}, time.Now())
-	if code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "jeter", IDs: []string{"m1", "m4"}}); code != http.StatusBadRequest || !strings.Contains(out["error"].(string), "account") {
-		t.Fatalf("an item without its account: %d %v", code, out)
-	}
-	if n := len(sentNow(fm)); n != 0 {
-		t.Fatalf("%d calls ran", n)
-	}
-	write := func(actions string) error {
-		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
-			return n.AuthorBody("Les mails.\n\n" + actionsBlock(actions))
-		})
-		return err
-	}
-	for want, actions := range map[string]string{
-		"alone, plain fields":   `{"a": {"tool": "monitor/move", "args": {"to": "trash", "account": {"@item": "account", "x": 1}}, "items": "ids", "source": "received"}}`,
-		"plain fields":          `{"a": {"tool": "monitor/move", "args": {"to": "trash", "account": {"@item": "a b"}}, "items": "ids", "source": "received"}}`,
-		"has no such parameter": `{"a": {"tool": "monitor/move", "args": {"to": "trash", "nope": {"@item": "account"}}, "items": "ids", "source": "received"}}`,
-	} {
-		if err := write(actions); err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("%s: %v, want %q", actions, err, want)
-		}
-	}
-	if err := write(accountsAction); err != nil {
-		t.Errorf("a good one: %v", err)
 	}
 }
 
@@ -216,9 +86,9 @@ func itemOf(data map[string]any, source, id string) map[string]any {
 
 // A card on an item is on its row: each item carries its ref (_card,
 // code's, over whatever the source said), the page's List tells it
-// (items[].card), and it leaves the page's foot only when a row answers
-// it (an inline Proposal). Its words are its tool's title and its item;
-// what it sends that is to read (a reply) shows, named, out of Détails.
+// (items[].card), the page draws it on the row, and it is not at the
+// page's foot too. Its words are its tool's title and its item; what it
+// sends that is to read (a reply) shows, named, out of Détails.
 func TestItemCardOnItsRow(t *testing.T) {
 	c, fm, node, r := mailViewOf(t)
 	w := &web{c: c}
@@ -257,11 +127,7 @@ func TestItemCardOnItsRow(t *testing.T) {
 		t.Errorf("fields %+v", fs)
 	}
 
-	// No inline Proposal in its template: the page adds the row's Oui
-	// (RowCard false), and the card is not at the page's foot too.
-	if l.RowCard {
-		t.Error("a template with no Proposal is told it draws its card")
-	}
+	// On its row, never at the page's foot too.
 	pg, _ := w.nodePageOf(node, 0, "fr")
 	if slices.ContainsFunc(pg.Cards, func(v proposalView) bool { return v.Ref == ref }) {
 		t.Errorf("the foot shows %s, on its row: %+v", ref, pg.Cards)
@@ -450,33 +316,22 @@ func TestCallShownNames(t *testing.T) {
 	}
 }
 
-// Written after an external read, a block may still hold a row's own
-// card: an inline Proposal bound to the item's _card, which code writes
-// and the page answers only on the row code told it waits on. Any other
-// Proposal could be answered as something else: refused.
-func TestTaintedRowCard(t *testing.T) {
-	tw, _, _, id := actionsWeb(t, archiveAction)
+// A block never holds a Proposal, tainted or not: a row's card is code's,
+// drawn on its row from the List's rows (items[].card), never from the
+// block's data an author may write.
+func TestNoProposalInABlock(t *testing.T) {
+	tw, _, _, id := rowsWeb(t)
 	c := tw.c
-	write := func(yes string) error {
+	for _, tainted := range []bool{false, true} {
 		block := "```eriphe:block inbox\n" + `{"components": [
   {"id": "root", "component": "List", "children": {"path": "/received/messages", "componentId": "row"}},
   {"id": "row", "component": "Row", "children": ["t", "yes"]},
   {"id": "t", "component": "Text", "text": {"@path": "subject"}},
-  ` + yes + `],
+  {"id": "yes", "component": "Proposal", "inline": true, "proposalId": {"@path": "_card"}}],
  "sources": {"received": {"resource": "monitor", "uri": "monitor://received", "items": {"path": "messages", "id": "id", "title": "subject"}}}}` + "\n```\n"
-		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, true, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody("Les mails.\n\n" + block) })
-		return err
-	}
-	if err := write(`{"id": "yes", "component": "Proposal", "inline": true, "proposalId": {"@path": "_card"}}`); err != nil {
-		t.Errorf("a row's own card: %v", err)
-	}
-	for _, bad := range []string{
-		`{"id": "yes", "component": "Proposal", "inline": true, "proposalId": "calls:3"}`,
-		`{"id": "yes", "component": "Proposal", "inline": true, "proposalId": {"@path": "card"}}`,
-		`{"id": "yes", "component": "Proposal", "proposalId": {"@path": "_card"}}`,
-	} {
-		if err := write(bad); err == nil || !strings.Contains(err.Error(), "could be answered as something else") {
-			t.Errorf("%s: %v", bad, err)
+		_, err := c.authorWrite(id, lastHash(t, c, id), byBrain, tainted, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody("Les mails.\n\n" + block) })
+		if err == nil || !strings.Contains(err.Error(), "Proposal") {
+			t.Errorf("tainted %v: %v", tainted, err)
 		}
 	}
 }

@@ -15,7 +15,7 @@ import (
 // task never sees a vendor credential: its MCP configuration points at its
 // device, which relays to eriphe-core, which calls the server with the real
 // credential (see pool.go and proxy.go). Like agents, servers are what the
-// brain picks from: "use" tells it what each one is for.
+// brain chooses from: "use" tells it what each one is for.
 
 // Server is one entry of the catalog: either remote (url and auth) or local
 // (run: a container a device runs as a service, see services).

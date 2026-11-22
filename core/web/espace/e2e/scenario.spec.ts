@@ -399,7 +399,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(batch.locator(".a2-proposal-choices")).toContainText("« La lettre de la semaine » · news@example.org");
   await expect(batch.locator(".a2-proposal-kicker .a2-taint")).toBeVisible();
   await expect(batch.locator(":scope > .a2-proposal-from, :scope > .a2-proposal-yes, :scope > .a2-proposal-why")).toHaveCount(0);
-  // Oui is the strong button, in the ink, in either theme; Non the quiet one.
+  // Oui is the strong button, in the ink, in either theme; Non a discreet ✕, no fill.
   const [oui, non] = [batch.locator(".a2-proposal-actions .a2-button-primary"), batch.getByRole("button", { name: "Non" })];
   const bg = (b: Locator) => b.evaluate((el) => getComputedStyle(el).backgroundColor);
   // A theme's colour, as the page computes it.
@@ -417,7 +417,7 @@ test("the steps of the scenario", async ({ page, request }) => {
     const [fg, card] = [await token("--fg"), await token("--card")];
     expect(fg).not.toBe(card);
     await expect.poll(() => bg(oui)).toBe(fg);
-    await expect.poll(() => bg(non)).toBe(card);
+    await expect.poll(() => bg(non)).toBe("rgba(0, 0, 0, 0)");
   }
   await page.evaluate(() => (document.documentElement.dataset.theme = "light"));
   await still(view);
@@ -613,7 +613,7 @@ async function shot(page: Page, name: string, both = true) {
   await set(was ?? "light");
 }
 
-// menu picks an entry of a page's « ⋯ » menu.
+// menu chooses an entry of a page's « ⋯ » menu.
 async function menu(pg: Locator, name: string) {
   await pg.getByRole("button", { name: "Plus" }).click();
   await pg.page().getByRole("menuitemcheckbox", { name }).click();

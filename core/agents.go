@@ -15,7 +15,7 @@ import (
 )
 
 // Two levels, like a RuntimeClass: providers are where models live and the
-// credential to reach them; agents are what the brain picks for a task: a
+// credential to reach them; agents are what the brain chooses for a task: a
 // runtime, a provider, a model, and when to use it. The brain is an agent too.
 
 // Provider is a connection to models. Its secret is lent to each task that
@@ -133,7 +133,7 @@ func (c *Config) checkAgentEntry(name string, a Agent) error {
 	if !slices.Contains(k.Runtimes, a.Runtime) {
 		return fmt.Errorf("agent %s: runtime %q cannot use a %s provider", name, a.Runtime, p.Kind)
 	}
-	// OpenCode picks the key by the model's provider: they must agree.
+	// OpenCode chooses the key by the model's provider: they must agree.
 	if want := k.ModelNS + "/"; harnessOf(a.Runtime).ProviderModels && !strings.HasPrefix(a.Model, want) {
 		return fmt.Errorf("agent %s: an %s model with a %s provider is %s<model>, not %q", name, a.Runtime, p.Kind, want, a.Model)
 	}

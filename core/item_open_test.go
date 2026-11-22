@@ -118,42 +118,22 @@ func TestItemOpenReads(t *testing.T) {
 	}
 }
 
-// A read that is not free ahead (it reaches the open web) asks the user
-// first, the call in code's words, and runs on their yes; a tool never
-// allowed runs nothing.
+// A read that is not free ahead (it reaches the open web) is refused, in
+// a line that says its yes is asked on a card: the open asks no yes of
+// its own. A tool never allowed runs nothing either.
 func TestItemOpenPolicy(t *testing.T) {
 	tw, csrf, fm, id := openWeb(t, `{"tool": "monitor/letter", "id": "id"}`)
 	c := tw.c
 	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2"})
-	ask, _ := out["ask"].(map[string]any)
-	if code != http.StatusOK || ask["tool"] != "monitor/letter" || out["body"] != nil {
-		t.Fatalf("no yes yet: %d %v", code, out)
+	if code != http.StatusForbidden || !strings.Contains(out["error"].(string), "carte") || out["body"] != nil || out["ask"] != nil {
+		t.Fatalf("not free: %d %v", code, out)
 	}
-	if got := openedNow(fm); len(got) != 0 {
-		t.Fatalf("it ran before the yes: %v", got)
-	}
-	// A yes for another call than the one shown: nothing runs.
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2", Yes: true, Tool: "monitor/message"}); code != http.StatusConflict {
-		t.Fatalf("a yes for another call: %d", code)
-	}
-	if got := openedNow(fm); len(got) != 0 {
-		t.Fatalf("it ran on a yes for another call: %v", got)
-	}
-	code, out = gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2", Yes: true, Tool: "monitor/letter"})
-	if code != http.StatusOK || out["body"] != "Le texte de m2" {
-		t.Fatalf("on the yes: %d %v", code, out)
-	}
-	rows, _ := c.store.decisions(0, 5)
-	if len(rows) == 0 || rows[0].By != byUser || !strings.Contains(rows[0].Reason, "dit oui") {
-		t.Fatalf("journal: %+v", rows)
-	}
-
 	c.pool.sync(setServer(c, "monitor", func(s *Server) { s.Exceptions = map[string]string{"letter": gridNever} }))
 	waitStatus(t, c.pool.get("monitor"), statusReady)
-	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2", Yes: true, Tool: "monitor/letter"}); code != http.StatusForbidden {
+	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m2"}); code != http.StatusForbidden {
 		t.Fatalf("never: %d", code)
 	}
-	if got := openedNow(fm); len(got) != 1 {
+	if got := openedNow(fm); len(got) != 0 {
 		t.Fatalf("calls: %v", got)
 	}
 }

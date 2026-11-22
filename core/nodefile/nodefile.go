@@ -10,9 +10,9 @@
 // canonical form; everything else keeps its bytes (front matter, text,
 // each block).
 //
-// Some fields are code's only: a block's marks and external, and the
-// node's external. Code sets them with the methods of Node (SetMark,
-// SetBlockExternal, Meta.External); an author's write goes through
+// Some fields are code's only: a block's external, and the node's
+// external. Code sets them with the methods of Node (SetBlockExternal,
+// Meta.External); an author's write goes through
 // AuthorBody or PutAuthorBlock, which
 // keep them when the author leaves them out and refuse a write that
 // changes them.

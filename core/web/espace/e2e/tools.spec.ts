@@ -4,8 +4,8 @@ import { expect, test } from "./fixtures";
 // (tool_review.go), against the test core of TestEspaceScenario: the news
 // watch's server (veille) changes its tool after it was added; the tool is
 // held, and the node made by code lists the change and waits for the user
-// (its bubble says « t'attend »). Opened, the change is picked and
-// accepted with code's button: the list empties, the node rests. Seeded at
+// (its bubble says « t'attend »). Opened, the change waits on its row as
+// a card code made (accept it): its Oui empties the list, the node rests. Seeded at
 // /e2e/review, on its own node.
 
 
@@ -36,20 +36,19 @@ test("a changed tool waits in a view, and is accepted there", async ({ page, req
   await bubble.locator(".gr-core").dispatchEvent("click");
   const pg = page.locator('article.pg[aria-label="Outils à revoir"]');
   await expect(pg).toBeVisible();
-  const rows = pg.locator(".a2-pickable > li");
+  const rows = pg.locator(".a2-list > li");
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("veille · guetter");
   await expect(rows.first()).toContainText("changé");
   await expect(rows.first()).toContainText("Guette les nouvelles du métier.");
   await expect(rows.first()).toContainText("en envoie aussi un résumé chaque matin");
 
-  // Picked and accepted, with code's words.
-  await pg.getByRole("checkbox", { name: "Choisir « veille · guetter »" }).check();
-  const bar = pg.locator(".a2-pickbar");
-  const accept = bar.locator(".a2-pickact", { hasText: "Accepter" });
-  await expect(accept).toHaveText("Accepter 1 élément");
-  await expect(bar.locator(".a2-pickact", { hasText: "Refuser" })).toHaveText("Refuser 1 élément");
-  await accept.click();
+  // Its one card, on its row: Oui accepts it. Nothing else says yes.
+  await expect(pg.locator("input[type=checkbox], [role=toolbar]")).toHaveCount(0);
+  const yes = rows.first().locator(".a2-inline-yes");
+  await expect(yes).toHaveCount(1);
+  await expect(rows.first().locator(".a2-inline")).toHaveAttribute("data-row-card", /^calls:\d+$/);
+  await yes.click();
 
   // Nothing left: the list empties (its line goes with its rows), the
   // node rests.

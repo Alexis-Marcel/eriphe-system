@@ -91,9 +91,6 @@ func TestNodeStatusOf(t *testing.T) {
 		steps:   map[string]string{"step-run": stepRunning, "step-ok": stepAccepted, "step-drop": stepDropped, "step-failed": stepFailed, "result": stepAccepted},
 		results: map[string]bool{"result": true, "work-alone": true},
 		settled: map[string]bool{"step-ok": true, "step-drop": true, "work": true},
-		attention: func(id string) bool {
-			return id == "attention"
-		},
 	}
 	for _, tc := range []struct {
 		name           string
@@ -105,7 +102,6 @@ func TestNodeStatusOf(t *testing.T) {
 		{"a card waits on it", "card", false, false, nodeWaits},
 		{"a card waits on it while it runs", "card-run", false, false, nodeWaits},
 		{"a card waits on a node said done", "card-done", true, false, nodeWaits},
-		{"a source marked attention lists items", "attention", false, false, nodeWaits},
 		{"a task works in it", "run", false, false, nodeRunning},
 		{"a task held for its start or a permission", "held", false, false, nodeWaits},
 		{"a task that ended (failed, stopped, lost) or whose turn ended", "ended", false, false, nodeIdle},
@@ -270,7 +266,7 @@ func TestGraphRowsQueriesConstant(t *testing.T) {
 			c.store.db.Exec(`INSERT INTO convo_cards (ref, kind, text, created) VALUES (?, 'memory', 'x', 1)`, ref)
 			c.store.db.Exec(`INSERT INTO node_cards (node, ref, created) VALUES (?, ?, 1)`, id, ref)
 		}
-		c.attention, c.glances = sync.Map{}, sync.Map{} // cold, as at start
+		c.glances = sync.Map{} // cold, as at start
 		counted := countQueries(t, c)
 		if _, err := c.graphRows(); err != nil {
 			t.Fatal(err)

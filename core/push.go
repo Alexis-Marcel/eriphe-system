@@ -32,7 +32,7 @@ import (
 // own VAPID key, kept in its data folder and never logged.
 //
 // Everything goes through tell (route_send.go), which also reaches the
-// user on their other channels (channels.go) and picks the device
+// user on their other channels (channels.go) and chooses the device
 // (route.go), and a push service that no longer knows a subscription
 // (404, 410) has it removed.
 

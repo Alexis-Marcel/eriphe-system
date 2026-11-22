@@ -56,12 +56,13 @@ describe("a card block", () => {
     expect(pieces(pageWith(undefined))[1]).toMatchObject({ kind: "card", found: false });
   });
 
-  it("shows the card where the document places it: Oui and Non while it waits", async () => {
+  it("shows the card where the document places it: one Oui and a discreet ✕ while it waits", async () => {
     await draw(pageWith(view("pending")), "pending");
     const card = el.querySelector(".pg-card");
     expect(card?.previousElementSibling?.textContent).toContain("Toutes les boîtes.");
     expect(card?.querySelector(".a2-proposal-text")?.textContent).toBe("Créer la vue « Mes mails »");
-    expect(card?.querySelector(".a2-proposal-actions")?.textContent).toBe("OuiNon");
+    expect(card?.querySelector(".a2-proposal-actions .a2-button-primary")?.textContent).toBe("Oui");
+    expect(card?.querySelector(".a2-proposal-actions .a2-proposal-no")?.getAttribute("aria-label")).toBe("Non");
   });
 
   it("says where it stands once decided, or withdrawn with its node", async () => {

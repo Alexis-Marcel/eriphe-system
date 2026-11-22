@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // A kept call read plainly (the brain's access card, calls and runcalls
@@ -347,7 +349,7 @@ func callPhrase(tool, title string, input map[string]any, labels []itemLabel, no
 // toolTitle is a catalog tool's own title: its annotations' or its own;
 // "" when it has none or is not there.
 func (c *core) toolTitle(tool string) string {
-	if _, t := c.actionTool(callTool(tool)); t != nil {
+	if _, t := c.catalogTool(callTool(tool)); t != nil {
 		return cmpOr(t.Title, annotationTitle(t))
 	}
 	return ""
@@ -549,4 +551,104 @@ func (c *core) callsWords(asks []accessQuestion, lang string) (sentence string, 
 		lines = append(lines, s)
 	}
 	return strings.Join(said, " · "), lines
+}
+
+// catalogTool is a catalog tool in the pool, by its server/tool name;
+// nil when it is not there.
+func (c *core) catalogTool(name string) (*upstream, *mcp.Tool) {
+	server, tool, ok := strings.Cut(name, "/")
+	if !ok || c.pool == nil {
+		return nil, nil
+	}
+	u := c.pool.get(server)
+	if u == nil {
+		return nil, nil
+	}
+	return u, u.toolByClaudeName(tool)
+}
+
+// destructiveWords are the words of a tool that throws something away.
+var destructiveWords = []string{"trash", "delete", "remove", "destroy", "purge", "erase"}
+
+// destructive tells whether a tool looks like it throws something away:
+// it says so (destructiveHint), or its name or description does.
+func destructive(t *mcp.Tool) bool {
+	if t == nil {
+		return false
+	}
+	if t.Annotations != nil && t.Annotations.DestructiveHint != nil && *t.Annotations.DestructiveHint {
+		return true
+	}
+	text := strings.ToLower(t.Name + " " + t.Description)
+	return slices.ContainsFunc(destructiveWords, func(w string) bool { return strings.Contains(text, w) })
+}
+
+// annotationTitle is a tool's title as its annotations say it.
+func annotationTitle(t *mcp.Tool) string {
+	if t.Annotations != nil {
+		return t.Annotations.Title
+	}
+	return ""
+}
+
+// buttonText is a text of a tool's for a card's words: one line, no
+// placeholder of ours, n runes at most.
+func buttonText(s string, n int) string {
+	s = strings.NewReplacer("{n}", "", "%", "％").Replace(s)
+	return truncate(oneLine(s), n)
+}
+
+// argsText says a call's args in a line: a single text by its
+// value, else each as « name : value ».
+func argsText(args map[string]any, lang string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	keys := slices.Sorted(maps.Keys(args))
+	if len(keys) == 1 {
+		if s, ok := args[keys[0]].(string); ok {
+			return buttonText(s, 40)
+		}
+	}
+	return strings.Join(argLines(args, lang, 3), ", ")
+}
+
+// argLines are a call's args, « name : value » each, most of
+// them (0: all).
+func argLines(args map[string]any, lang string, most int) []string {
+	var out []string
+	for _, k := range slices.Sorted(maps.Keys(args)) {
+		if most > 0 && len(out) == most {
+			out = append(out, "…")
+			break
+		}
+		out = append(out, buttonText(k, 30)+" : "+buttonText(argValue(args[k], lang), 60))
+	}
+	return out
+}
+
+// argValue is an arg's value in words.
+func argValue(v any, lang string) string {
+	switch x := v.(type) {
+	case bool:
+		return tr(lang, map[bool]string{true: "act.yes", false: "act.no"}[x])
+	case string:
+		return x
+	}
+	raw, _ := json.Marshal(v)
+	return string(raw)
+}
+
+// doneText says in a line what calls did: by the tool's verb when it has
+// one of its own (act.done.<tool>), else how many items they took.
+func doneText(tool string, n int, lang string) string {
+	_, short, _ := strings.Cut(tool, "/")
+	key := "act.done." + short
+	if tr(lang, key+".one") == key+".one" {
+		key = "act.done"
+	}
+	if n == 1 {
+		return tr(lang, key+".one")
+	}
+	return fmt.Sprintf(tr(lang, key+".many"), n)
 }

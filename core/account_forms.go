@@ -13,7 +13,7 @@ import (
 )
 
 // Account forms, built from a tool's card (accountShape, tool_cards.go):
-// the user picks where the account is (a choice: a provider the tool knows,
+// the user chooses where the account is (a choice: a provider the tool knows,
 // or one written out), then fills the fields that choice asks for, then its
 // password. Nothing here knows a mailbox or a calendar: the card says which
 // fields there are, where each goes in the account the server reads

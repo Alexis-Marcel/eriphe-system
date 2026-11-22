@@ -475,7 +475,7 @@ var agentStrings = map[string]map[string]string{
 		"assistants.badname":                "“%s” does not work as a name: 1 to 32 characters, letters, digits, spaces, apostrophes or dashes.",
 		"agents.thinkswith":                 "Thinks with",
 		"agents.itstasks":                   "Its tasks",
-		"agents.tasksmany":                  "It picks the agent for each task, among your %d agents.",
+		"agents.tasksmany":                  "It chooses the agent for each task, among your %d agents.",
 		"agents.tasksone":                   "It hands them to your agent. Add others: it will pick one for each task.",
 		"agents.tasksnone":                  "No agent yet: add one so it can hand out tasks.",
 		"agents.technical":                  "Technical details",

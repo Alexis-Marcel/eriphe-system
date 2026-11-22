@@ -42,7 +42,7 @@ import (
 //     query, as the tab tells its presence, web_push.go).
 //
 // Every event carries the last message's seq as its id, so a reconnecting
-// browser picks up where it left.
+// browser takes up where it left.
 func (w *web) handleEvents(rw http.ResponseWriter, r *http.Request, s *session) {
 	flusher, ok := rw.(http.Flusher)
 	if !ok {
@@ -246,7 +246,7 @@ func (w *web) sendGraphChanges(rw http.ResponseWriter, after int, seq int64) (in
 		case graphEvSource:
 			// A source read again, or its items' notes changed (no block:
 			// each block that reads it): its value and the rows of its
-			// Lists (list_actions.go, list_sections.go).
+			// Lists (list_rows.go, list_sections.go).
 			if said[key] {
 				continue
 			}

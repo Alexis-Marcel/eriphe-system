@@ -66,7 +66,7 @@ func TestChannelsNothingSetUp(t *testing.T) {
 }
 
 // A channel registered with a line of its own is a line like the others,
-// known by nothing but its registration: the router picks it, a rule and
+// known by nothing but its registration: the router chooses it, a rule and
 // the settings name it, the where page shows it by its name.
 func TestRegisteredChannelIsALine(t *testing.T) {
 	saved := slices.Clone(channelKinds)

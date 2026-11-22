@@ -10,17 +10,16 @@ const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 // --- Mes mails ------------------------------------------------------------
 
 // A section of things that ask the user: one line per item, what Eriphe
-// proposes (its note) and its one Oui (a card that waits on it).
+// proposes (its note); the page draws the Oui of the card that waits on
+// it beside it (code's, never the block's).
 const todo = (prefix: string, source: string, path: string, group: string, empty: string) => [
   { id: `${prefix}_h`, component: "Text", variant: "subtitle", text: group },
   {
     id: prefix,
     component: "List",
-    children: { path: `/${source}/${path}[_group=${group}][_state!=done]`, componentId: `${prefix}_row` },
+    children: { path: `/${source}/${path}[_group=${group}][_state!=done]`, componentId: `${prefix}_item` },
     emptyText: empty,
   },
-  { id: `${prefix}_row`, component: "Row", align: "center", children: [`${prefix}_item`, `${prefix}_yes`] },
-  { id: `${prefix}_yes`, component: "Proposal", inline: true, proposalId: { "@path": "_card" } },
 ];
 
 const mailBlock: Authored = {
@@ -33,15 +32,12 @@ const mailBlock: Authored = {
       items: { path: "messages", id: "id", title: "subject", detail: "from", open: { tool: "mail/read_message", id: "id" } },
     },
   },
-  actions: {
-    jeter: { label: "Jeter", tool: "mail/trash", args: { account: { "@item": "account" } }, items: "ids", source: "mails", list: "jeter" },
-  },
   components: [
     { id: "root", component: "Column", children: ["todo_h", "todo", "trash", "info"] },
     ...todo("todo", "mails", "messages", "À traiter", "Rien ne t'attend."),
     { id: "todo_item", component: "Item", title: { "@path": "_note" }, detail: { "@path": "from" }, note: { "@path": "subject" } },
     { id: "trash", component: "Fold", list: "jeter", label: "{n} mails inutiles à jeter", child: "jeter" },
-    { id: "jeter", component: "List", children: { path: "/mails/messages[_group=À jeter]", componentId: "jeter_row" } },
+    { id: "jeter", component: "List", children: { path: "/mails/messages[_group=À jeter][_state!=done]", componentId: "jeter_row" } },
     { id: "jeter_row", component: "Item", level: "low", title: { "@path": "subject" }, detail: { "@path": "from" }, note: { "@path": "_note" } },
     { id: "info", component: "Fold", list: "infos", label: "Les {n} mails pour info", child: "infos" },
     { id: "infos", component: "List", children: { path: "/mails/messages[_group=Pour info]", componentId: "info_row" } },
@@ -146,11 +142,30 @@ mail(
 const sam = "Bonjour Sam,\n\nMerci pour le devis. 4 200 € posé me va, et lundi 7 décembre aussi.\nJe te confirme par écrit, peux-tu m'envoyer le bon à signer ?\n\nBonne soirée";
 const alex = "Salut Alex,\n\nOui, je le relis demain matin et je te fais mes retours avant midi.\n\nÀ mardi";
 
+// junkCard is the one card of the mails to throw away: a call each, folded
+// (call_fold.go); the batch's rows unticked leave theirs out.
+function junkCard(): SampleView["cards"][number] {
+  const junk = mails.filter((m) => notes[m.id]?.group === "À jeter");
+  const n = (k: number) => (k === 1 ? "1 mail" : `${k} mails`);
+  return {
+    ref: "calls:44",
+    card: 44,
+    items: junk.map((m) => m.id),
+    kind: "calls",
+    state: "pending",
+    tainted: true,
+    node: "mails",
+    text: `Mettre ${n(junk.length)} à la corbeille`,
+    choices: junk.map((m, i) => ({ id: 440 + i, text: `« ${m.subject} » · ${m.from}`, n: 1, state: "proposed", items: [m.id] })),
+    acts: junk.map((_, i) => `Mettre ${n(i + 1)} à la corbeille`),
+  };
+}
+
 const mailCards: SampleView["cards"] = [
   {
     ref: "calls:41",
     card: 41,
-    item: "m1",
+    items: ["m1"],
     kind: "calls",
     state: "pending",
     tainted: true,
@@ -166,7 +181,7 @@ const mailCards: SampleView["cards"] = [
   {
     ref: "calls:42",
     card: 42,
-    item: "m2",
+    items: ["m2"],
     kind: "calls",
     state: "pending",
     tainted: true,
@@ -181,7 +196,7 @@ const mailCards: SampleView["cards"] = [
   {
     ref: "calls:43",
     card: 43,
-    item: "m3",
+    items: ["m3"],
     kind: "calls",
     state: "pending",
     tainted: true,
@@ -192,6 +207,9 @@ const mailCards: SampleView["cards"] = [
       { name: "mail/send_message", value: `account : travail\nreply_to : m3\nbody : ${alex.slice(0, 60)}…`, detail: true },
     ],
   },
+  // the skill proposed the same on each mail to throw away: one card over
+  // them all, its Oui on the batch's line (call_fold.go)
+  junkCard(),
   // already decided: the menu's « Déjà décidé », never the page's foot
   { ref: "runcalls:30", card: 30, kind: "runcalls", state: "approved", exec: "done", node: "mails", text: "Archiver 12 mails" },
   { ref: "calls:31", card: 31, kind: "calls", state: "approved", exec: "done", node: "mails", text: "Mettre 5 mails à la corbeille" },
@@ -222,15 +240,6 @@ const mailView: SampleView = {
   bodies,
   cards: mailCards,
   bilan: mailBilan,
-  words: {
-    "mail/trash": {
-      one: "Mettre 1 élément à la corbeille",
-      many: "Mettre les {n} à la corbeille",
-      all: "Tout mettre à la corbeille",
-      done: (n) => (n === 1 ? "1 mis à la corbeille" : `${n} mis à la corbeille`),
-      confirm: true,
-    },
-  },
 };
 mailView.parts[0] = mailBilan(mailView);
 
@@ -244,9 +253,6 @@ const prodBlock: Authored = {
       args: { since: "24h" },
       items: { path: "alerts", id: "id", title: "title", detail: "service", open: { tool: "alerts/get_alert", id: "id" } },
     },
-  },
-  actions: {
-    acquitter: { label: "Acquitter", tool: "alerts/ack", args: { project: { "@item": "project" } }, items: "ids", source: "alertes", list: "resolues" },
   },
   components: [
     { id: "root", component: "Column", children: ["todo_h", "todo", "fold"] },
@@ -285,7 +291,7 @@ const prodView: SampleView = {
     {
       ref: "calls:51",
       card: 51,
-      item: "a1",
+      items: ["a1"],
       kind: "calls",
       state: "pending",
       node: "prod",
@@ -297,14 +303,6 @@ const prodView: SampleView = {
     const open = v.notes.a1?.state !== "done";
     const left = ((v.values.alertes.alerts as Alert[]) ?? []).filter((a) => a.id.startsWith("r")).length;
     return `${open ? "1 alerte demande ton oui : le disque de db-1 est à 91 %, il sera plein vers dimanche. " : "Le disque de db-1 est agrandi. "}Le front est lent depuis le déploiement de 14 h, à regarder.${left ? ` ${left} alertes se sont résolues seules.` : ""}\n\n`;
-  },
-  words: {
-    "alerts/ack": {
-      one: "Acquitter 1 élément",
-      many: "Acquitter les {n}",
-      all: "Tout acquitter",
-      done: (n) => (n === 1 ? "1 acquittée" : `${n} acquittées`),
-    },
   },
 };
 prodView.parts[0] = prodView.bilan!(prodView);

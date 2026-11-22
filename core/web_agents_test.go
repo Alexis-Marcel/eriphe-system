@@ -112,7 +112,7 @@ func TestWebAgentForm(t *testing.T) {
 	if !strings.Contains(body, `value="openrouter/moonshotai/kimi-k3.1-pro" selected`) || !strings.Contains(body, `name="runtime" value="opencode"`) {
 		t.Fatalf("refresh: %s", body)
 	}
-	// Only a runtime that picks its own model offers to name none.
+	// Only a runtime that chooses its own model offers to name none.
 	if strings.Contains(body, "Le choix de Claude Code") {
 		t.Error("opencode offers its own choice of model")
 	}
@@ -542,7 +542,7 @@ func TestWebACPAgents(t *testing.T) {
 	}
 }
 
-// Settings → Agents picks the brain's agent among those that can be it.
+// Settings → Agents chooses the brain's agent among those that can be it.
 func TestWebBrainAgent(t *testing.T) {
 	tw, c, csrf := catalogWeb(t, func(cfg *Config) { noAgents(cfg); cfg.Brain = &BrainConfig{Device: "nas"} })
 	tw.post("/settings/providers", url.Values{"kind": {"claude-subscription"}, "key": {"sk-ant-oat01-" + strings.Repeat("x", 40)},

@@ -217,11 +217,10 @@ func (w *web) handleSettingProposal(rw http.ResponseWriter, r *http.Request, s *
 		http.Error(rw, "approve or reject", http.StatusBadRequest)
 		return
 	}
-	if err := w.c.decideSetting(id, action == "approve"); err != nil {
+	if err := w.c.answerProposal(r.Context(), cardSetting, id, action == "approve"); err != nil { // its card's answer (convo_cards.go)
 		w.toast(rw, err.Error(), false)
 		return
 	}
-	w.c.proposalDecided(cardSetting, id, action == "approve") // its card says so (convo_cards.go)
 	rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "setting.did."+action), true, true))
 	rw.Header().Set("HX-Reswap", "none")
 	rw.WriteHeader(http.StatusOK)

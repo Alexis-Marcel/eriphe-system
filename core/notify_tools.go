@@ -296,7 +296,7 @@ func (c *core) brainNotifications(in notificationsIn) (map[string]any, error) {
 		out["feedback_30_days"] = tallies
 		set := c.routeSettings()
 		routing := map[string]any{"mode": set.Mode, "order": set.Order, "off": set.Off, "move_on_after_minutes": int(set.Delay / time.Minute),
-			"note": "eriphe-core picks the device, never you. When a device's notifications are often seen late, moved on, or answered not now, propose a rule (also, never) or say the user can reorder Settings → Notifications."}
+			"note": "eriphe-core chooses the device, never you. When a device's notifications are often seen late, moved on, or answered not now, propose a rule (also, never) or say the user can reorder Settings → Notifications."}
 		if d := c.deviceTallies(); len(d) > 0 {
 			routing["by_device_30_days"] = d
 		}

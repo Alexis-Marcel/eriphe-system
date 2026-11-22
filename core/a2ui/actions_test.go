@@ -6,52 +6,23 @@ import (
 	"testing"
 )
 
-// An author never writes mark nor answer on a Button: the Mark and
-// Proposal components send them; a name outside the grammar is refused.
-func TestCheckActionsRefusesComponentActions(t *testing.T) {
-	for name, want := range map[string]string{"mark": "write a Mark", "answer": "write a Proposal", "offer": "no action", "open": "no action"} {
-		button := json.RawMessage(`[{"id":"root","component":"Button","label":"x","action":{"event":{"name":"` + name + `","context":{"list":"options","item":"a","mark":"keep"}}}}]`)
+// A button only asks: any other name, marks and answers included, is
+// refused, and so are the Mark and Proposal components.
+func TestCheckActionsAskOnly(t *testing.T) {
+	for _, name := range []string{"mark", "answer", "expand", "tab", "offer", "open"} {
+		button := json.RawMessage(`[{"id":"root","component":"Button","label":"x","action":{"event":{"name":"` + name + `","context":{"text":"x"}}}}]`)
 		errs := CheckActions("block:x", button)
-		if len(errs) != 1 || errs[0].Path != "/components/0/action/event/name" || !strings.Contains(errs[0].Message, want) {
+		if len(errs) != 1 || errs[0].Path != "/components/0/action/event/name" || !strings.Contains(errs[0].Message, "only asks") {
 			t.Errorf("%s on a Button: %+v", name, errs)
 		}
 	}
-	mark := json.RawMessage(`[{"id":"root","component":"Mark","list":"options","item":"a","marks":["keep"]}]`)
-	if errs := CheckActions("block:x", mark); len(errs) > 0 {
-		t.Errorf("a Mark: %+v", errs)
+	ask := json.RawMessage(`[{"id":"root","component":"Button","label":"x","action":{"event":{"name":"ask","context":{"text":"Fais comme tu proposes"}}}}]`)
+	if errs := CheckActions("block:x", ask); len(errs) > 0 {
+		t.Errorf("an ask: %+v", errs)
 	}
-}
-
-// Mark's shape: list and item each an id or a binding, never text nor a
-// function call; the marks it offers, one to three of keep, drop, done.
-func TestMarkShape(t *testing.T) {
-	mark := func(props string) Surface {
-		return surfaceOf(`{"id":"root","component":"Mark",` + props + `}`)
-	}
-	for _, ok := range []string{
-		`"list":"options","item":"a","marks":["keep","drop"]`,
-		`"list":"options","item":{"@path":"/id"},"marks":["done"]`,
-		`"list":{"@path":"/list"},"item":"msg-18c3:1@x","marks":["keep","drop","done"]`,
-	} {
-		if errs := ValidateSurface(mark(ok)); len(errs) > 0 {
-			t.Errorf("%s: %v", ok, errs)
-		}
-	}
-	for name, bad := range map[string]string{
-		"no marks":         `"list":"options","item":"a"`,
-		"no mark":          `"list":"options","item":"a","marks":[]`,
-		"another mark":     `"list":"options","item":"a","marks":["star"]`,
-		"twice":            `"list":"options","item":"a","marks":["keep","keep"]`,
-		"text":             `"list":"options","item":"garde tout","marks":["keep"]`,
-		"a path":           `"list":"a/b","item":"a","marks":["keep"]`,
-		"too long":         `"list":"options","item":"` + strings.Repeat("a", 129) + `","marks":["keep"]`,
-		"a function call":  `"list":"options","item":{"@call":"formatString","args":{"value":"x"}},"marks":["keep"]`,
-		"no item":          `"list":"options","marks":["keep"]`,
-		"an action":        `"list":"options","item":"a","marks":["keep"],"action":{"event":{"name":"ask","context":{"text":"x"}}}`,
-		"an unknown field": `"node":12,"list":"options","item":"a","marks":["keep"]`,
-	} {
-		if errs := ValidateSurface(mark(bad)); len(errs) == 0 {
-			t.Errorf("%s: accepted", name)
+	for _, comp := range []string{`{"id":"root","component":"Mark","list":"options","item":"a","marks":["keep"]}`, `{"id":"root","component":"Proposal","proposalId":"view:3"}`} {
+		if errs := ValidateSurface(surfaceOf(comp)); len(errs) == 0 {
+			t.Errorf("%s: accepted", comp)
 		}
 	}
 }

@@ -29,7 +29,7 @@ func quickFresh(t *testing.T) {
 func freshView(t *testing.T) (*core, *fakeMonitor, string) {
 	t.Helper()
 	quickFresh(t)
-	tw, _, fm, id := actionsWeb(t, archiveAction)
+	tw, _, fm, id := rowsWeb(t)
 	return tw.c, fm, id
 }
 
@@ -88,15 +88,16 @@ func setGot(fm *fakeMonitor, ids ...string) {
 	fm.got = got
 }
 
-// The brain trashes two mails from the conversation: they show done at
-// once, the open pages are told, and the source is read again moments
-// after: they are gone. One the server still lists comes back.
+// The brain trashes two mails from the conversation: the open pages are
+// told, nothing is shown done ahead of the read (an item is done only by
+// its note), and the source is read again moments after: they are gone.
+// One the server still lists stays, as it is.
 func TestWriteCallRereadsItsServer(t *testing.T) {
 	c, fm, id := freshView(t)
 	setGot(fm, "m2") // what the server holds once the call ran
 	seq := graphSeq(c)
 	brainCall(t, c, "move", map[string]any{"ids": []string{"m1", "m3"}, "to": "trash"})
-	if got := states(t, c, id, "inbox", "received"); got["m1"] != itemDone || got["m3"] != itemDone || got["m2"] != "" {
+	if got := states(t, c, id, "inbox", "received"); got["m1"] != "" || got["m3"] != "" || got["m2"] != "" {
 		t.Fatalf("at once: %v", got)
 	}
 	if !sourceSaid(c, id, seq) {
@@ -111,18 +112,11 @@ func TestWriteCallRereadsItsServer(t *testing.T) {
 		t.Error("the new value was not pushed")
 	}
 
-	// Named, but the server still lists it: back, as it is.
+	// Named, but the server still lists it: it stays, as it is.
 	brainCall(t, c, "move", map[string]any{"ids": []string{"m2"}, "to": "archive"})
-	if got := states(t, c, id, "inbox", "received"); got["m2"] != itemDone {
-		t.Fatalf("at once: %v", got)
-	}
-	seq = graphSeq(c)
 	c.live.wg.Wait()
 	if got := states(t, c, id, "inbox", "received"); got["m2"] != "" {
-		t.Fatalf("the item did not come back: %v", got)
-	}
-	if !sourceSaid(c, id, seq) {
-		t.Error("its return was not pushed, though the value did not change")
+		t.Fatalf("the item is not as its server says: %v", got)
 	}
 }
 
@@ -135,7 +129,7 @@ func TestReadCallRereadsNothing(t *testing.T) {
 	fm.mu.Unlock()
 	brainCall(t, c, "message", map[string]any{"id": "m1"})
 	c.fresh.mu.Lock()
-	waiting := c.fresh.timer != nil || len(c.fresh.asks) > 0 || len(c.fresh.leaving) > 0
+	waiting := c.fresh.timer != nil || len(c.fresh.asks) > 0
 	c.fresh.mu.Unlock()
 	if waiting {
 		t.Fatal("a read asked for a re-read")
@@ -215,39 +209,18 @@ func TestRereadScope(t *testing.T) {
 	}
 }
 
-// A card's yes and a view's action run through catalogCall: the same.
+// A card's yes runs through catalogCall: the same.
 func TestApprovedCallRereads(t *testing.T) {
 	c, fm, id := freshView(t)
 	setGot(fm, "m1", "m3")
 	raw, _ := json.Marshal(map[string]any{"ids": []string{"m2"}, "to": "trash"})
-	if _, _, code, why := c.catalogCall(context.Background(), claudeToolName("monitor", "move"), string(raw), false, func(map[string]any) {}); code != "" {
+	if _, _, code, why := c.catalogCall(context.Background(), claudeToolName("monitor", "move"), string(raw), func(map[string]any) {}); code != "" {
 		t.Fatalf("call: %s %s", code, why)
-	}
-	if got := states(t, c, id, "inbox", "received"); got["m2"] != itemDone {
-		t.Fatalf("at once: %v", got)
 	}
 	c.live.wg.Wait()
 	if got := states(t, c, id, "inbox", "received"); len(got) != 2 || got["m1"] != "" || got["m3"] != "" {
 		t.Fatalf("read again: %v", got)
 	}
-}
-
-// A read already under way when the call ran says nothing of what the
-// call named: only one begun after it does.
-func TestReadBeforeCallKeepsLeaving(t *testing.T) {
-	c, _, id := freshView(t)
-	began := time.Now()
-	brainCall(t, c, "move", map[string]any{"ids": []string{"m1"}, "to": "trash"})
-	if c.sourceReadSince(id, "received", began) {
-		t.Error("a read begun before the call cleared what it named")
-	}
-	if !c.leavingItems(id, "received")["m1"] {
-		t.Error("m1 no longer leaving")
-	}
-	if !c.sourceReadSince(id, "received", time.Now()) || c.leavingItems(id, "received")["m1"] {
-		t.Error("a read begun after the call kept m1 leaving")
-	}
-	c.live.wg.Wait()
 }
 
 // The conversation's call on a view's items wakes its skill, once; a

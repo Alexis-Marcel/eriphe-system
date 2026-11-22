@@ -33,7 +33,7 @@ import (
 // set up; the user may narrow that default (Settings → Notifications), and a
 // topic rule may name its own ("project:getout → now, push and a chat app").
 // That is how notifications go in observe mode; in route mode the router
-// picks one device at a time (route.go), and a rule's channels keep only
+// chooses one device at a time (route.go), and a rule's channels keep only
 // those.
 
 const (

@@ -8,7 +8,7 @@ import { createAdapter, type ActionMessage, type Adapter, type ErrorMessage, typ
 import { CATALOG } from "./catalog";
 import { galleryFixtures, sampleProposals } from "./fixtures";
 import { safeHref } from "./markdown";
-import { ProposalsContext, type Answer, type Moved, type Proposals } from "./proposals";
+import { ProposalsContext, type Answer, type Proposals } from "./proposals";
 import { Surfaces } from "./Surfaces";
 
 // Every component of the catalog, rendered from the gallery's data
@@ -104,8 +104,8 @@ const MARK: Record<string, string> = {
   Column: ".a2-column", List: ".a2-list", Card: ".a2-card", Tabs: ".a2-tabs", Fold: ".a2-fold", Divider: "hr.a2-divider",
   Button: "button.a2-button", Choice: "fieldset.a2-choice", TextField: ".a2-field input[type=text]",
   DateField: ".a2-field input[type=datetime-local]", Metric: ".a2-metric", Progress: ".a2-progress", Chart: ".a2-chart", Table: "table.a2-table",
-  Timeline: "ol.a2-timeline", Item: ".a2-item", Message: "article.a2-message", Day: ".a2-day", Proposal: ".a2-proposal-pending",
-  Alert: ".a2-alert", Placeholder: ".a2-placeholder", Mark: ".a2-marks",
+  Timeline: "ol.a2-timeline", Item: ".a2-item", Message: "article.a2-message", Day: ".a2-day",
+  Alert: ".a2-alert", Placeholder: ".a2-placeholder",
 };
 
 // The accessible name of an element, as far as these components give one.
@@ -153,8 +153,6 @@ for (const lang of ["fr", "en"] as const) {
       await mount(lang);
       await act(async () => {});
       const fr = lang === "fr";
-      expect(text(".a2-proposal-actions")).toBe(fr ? "OuiNon" : "YesNo");
-      expect(text(".a2-proposal-kicker")).toBe(fr ? "Proposition" : "Proposal");
       expect(text(".a2-more")).toBe(fr ? "Lire tout" : "Read all");
       expect(text(".a2-step-done .sr-only")).toBe(fr ? ", terminé" : ", done");
       expect(text(".a2-day-label")).toBe(fr ? "jeudi 12 novembre" : "Thursday 12 November");
@@ -324,77 +322,6 @@ describe("the catalog's components", () => {
     expect(text(".a2-step-current .a2-step-detail")).toBe("Pages d'accueil et d'agenda");
   });
 
-  it("answer the one proposal it shows, and say how it was decided", async () => {
-    await mount("fr");
-    await act(async () => {});
-    expect(text(".a2-proposal-text")).toBe("Ne plus te prévenir des factures avant le brief ?");
-    expect(text(".a2-proposal-why")).toBe("Tu n'as ouvert aucune des cinq dernières.");
-    await click($$(".a2-proposal-actions button")[0]);
-    expect(answers).toEqual([{ surfaceId: "gallery-more", componentId: "proposal", ref: "rule:7", yes: true }]);
-    expect($(".a2-proposal-actions")).toBeNull();
-    expect(text(".a2-proposal-kicker")).toBe("Validé");
-  });
-
-  it("say where a proposal bound in a list is, so only its own row answers it", async () => {
-    const sent: Answer[] = [];
-    const views: Record<string, { ref: string; card: number; kind: string; state: string; text: string }> = {
-      "calls:3": { ref: "calls:3", card: 3, kind: "calls", state: "pending", text: "Archiver" },
-      "calls:5": { ref: "calls:5", card: 5, kind: "calls", state: "pending", text: "Archiver" },
-    };
-    await mount(
-      "fr",
-      one(
-        [
-          { id: "root", component: "List", children: { path: "/rows", componentId: "row" } },
-          { id: "row", component: "List", children: { path: "cards", componentId: "card" } },
-          { id: "card", component: "Proposal", proposalId: { "@path": "ref" } },
-        ],
-        { rows: [{ cards: [{ ref: "calls:3" }] }, { cards: [{ ref: "calls:5" }] }] },
-      ),
-      { read: async (r) => views[r] ?? null, answer: async (a) => (sent.push(a), true) },
-    );
-    await act(async () => {});
-    await click($$(".a2-proposal-actions button")[2]);
-    expect(sent).toEqual([{ surfaceId: "t", componentId: "card", ref: "calls:5", yes: true, at: "/rows/1/cards/0" }]);
-  });
-
-  it("lead a view's card with what its yes makes, its technical words one click away", async () => {
-    const view = {
-      ref: "view:1",
-      card: 4,
-      kind: "view",
-      state: "pending",
-      text: "Créer la vue « Mes mails » ?",
-      why: "Les mails qui demandent une réponse",
-      summary: ["Une page « Mes mails » dans ton graphe, tenue à jour", "Regarde toutes les 5 min s'il y a du nouveau"],
-      fields: [
-        { name: "Moniteur mails-recus", value: "toutes les 5 min, regarde mail.recus", detail: true },
-        { name: "mails-trier · Consignes", value: "# Trier les mails\n\nPour **chaque** mail :\n\n1. Note-le.\n2. Prépare une réponse.\n\n```\nnode_open titre=Répondre\n```", detail: true, markdown: true },
-        { name: "Dépôts", value: "sam/site" },
-      ],
-    };
-    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "view:1" }]), { read: async () => view, answer: async () => true });
-    await act(async () => {});
-    expect(text(".a2-proposal-why")).toBe("Les mails qui demandent une réponse");
-    expect($$(".a2-proposal-summary li").map((li) => li.textContent)).toEqual(view.summary);
-    // A field that is no detail stays in sight; the others under Détails, closed.
-    const details = $("details.a2-proposal-details") as HTMLDetailsElement;
-    expect(details.open).toBe(false);
-    expect(text("details.a2-proposal-details > summary")).toBe("Détails");
-    expect($$(".a2-proposal > .a2-proposal-fields dt").map((d) => d.textContent)).toEqual(["Dépôts"]);
-    expect([...details.querySelectorAll("dt")].map((d) => d.textContent)).toEqual(["Moniteur mails-recus", "mails-trier · Consignes"]);
-    // The instructions are drawn as Markdown, never shown raw.
-    const md = details.querySelector(".a2-proposal-md dd")!;
-    expect(md.querySelector("h3")?.textContent).toBe("Trier les mails");
-    expect(md.querySelector("strong")?.textContent).toBe("chaque");
-    expect(md.querySelectorAll("ol li")).toHaveLength(2);
-    expect(md.querySelector("pre code")?.textContent).toBe("node_open titre=Répondre");
-    expect(md.textContent).not.toContain("**");
-    // Its Oui stays out of the disclosure.
-    expect(details.querySelector(".a2-proposal-actions")).toBeNull();
-    expect($(".a2-proposal-actions")).not.toBeNull();
-  });
-
   it("show a day's dated proposals as ghosts, and what they overlap", async () => {
     const src = sampleProposals("fr");
     await mount("fr", galleryFixtures("fr"), src);
@@ -444,195 +371,6 @@ describe("the catalog's components", () => {
     expect(ghost.querySelector(".a2-ev-kicker")?.textContent).toBe("Proposed · external content");
     expect(ghost.querySelector(".a2-ev-title")?.textContent).toBe("Pay the supplier");
     expect($(".a2-empty")).toBeNull();
-  });
-
-  it("update a proposal answered elsewhere, and only on its own move", async () => {
-    let state = "pending";
-    let reads = 0;
-    const followers = new Set<(m: Moved) => void>();
-    const move = (m: Moved) => act(async () => followers.forEach((f) => f(m)));
-    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "rule:9" }]), {
-      read: async () => (reads++, { ref: "rule:9", card: 9, state, text: "Ranger les mails ?" }),
-      answer: async () => false,
-      follow: (on) => (followers.add(on), () => followers.delete(on)),
-    });
-    await act(async () => {});
-    expect($(".a2-proposal-actions")).not.toBeNull();
-    const before = reads;
-    await move({ refs: ["rule:10"] });
-    expect(reads).toBe(before);
-    // Decided in the conversation: the stream says so, the surface reads it again.
-    state = "approved";
-    await move({ refs: ["rule:9"] });
-    await act(async () => {});
-    expect($(".a2-proposal-actions")).toBeNull();
-    expect(text(".a2-proposal-kicker")).toBe("Validé");
-    // A stream that fell behind: everything is read again.
-    state = "rejected";
-    await move({ refs: [], all: true });
-    await act(async () => {});
-    expect(text(".a2-proposal-kicker")).toBe("Refusé");
-  });
-
-  it("follow an approved call: running, then done or failed with our reason", async () => {
-    let view: Record<string, unknown> = { ref: "access:4", card: 4, state: "approved", exec: "running", text: "Fusionner ?" };
-    const followers = new Set<(m: Moved) => void>();
-    const move = (m: Moved) => act(async () => followers.forEach((f) => f(m)));
-    await mount("en", one([{ id: "root", component: "Proposal", proposalId: "access:4" }]), {
-      read: async () => view as never,
-      answer: async () => false,
-      follow: (on) => (followers.add(on), () => followers.delete(on)),
-    });
-    await act(async () => {});
-    expect(text(".a2-proposal-kicker")).toBe("Approved · running…");
-    expect($(".a2-proposal-exec-running")?.getAttribute("aria-busy")).toBe("true");
-    view = { ...view, exec: "done" };
-    await move({ refs: ["access:4"] });
-    await act(async () => {});
-    expect(text(".a2-proposal-kicker")).toBe("Approved · done");
-    view = { ...view, exec: "failed", execWhy: "error" };
-    await move({ refs: ["access:4"] });
-    await act(async () => {});
-    expect(text(".a2-proposal-kicker")).toBe("Approved · failed");
-    expect(text(".a2-proposal-failed")).toBe("The tool answered with an error.");
-  });
-
-  it("say when a proposal is gone, or an answer did not leave", async () => {
-    const view = { ref: "rule:9", card: 9, state: "pending", text: "Ranger les mails ?" };
-    await mount("fr", one([
-      { id: "root", component: "Column", children: ["a", "b"] },
-      { id: "a", component: "Proposal", proposalId: "rule:404" },
-      { id: "b", component: "Proposal", proposalId: { "@path": "/p" } },
-    ], { p: "rule:9" }), { read: async (ref) => (ref === "rule:9" ? view : null), answer: async () => false });
-    await act(async () => {});
-    expect(text(".a2-empty")).toBe("Cette proposition n'existe plus.");
-    await click($$(".a2-proposal-actions button")[1]);
-    expect(text(".a2-proposal-failed")).toBe("La réponse n'est pas partie : réessaie.");
-    expect($(".a2-proposal-actions")).not.toBeNull();
-  });
-
-  it("leave a proposal on a surface showing external content to the conversation", async () => {
-    const view = { ref: "rule:9", card: 9, state: "pending", text: "Ranger les mails ?" };
-    const sent: Answer[] = [];
-    const comps = [{ id: "root", component: "Proposal", proposalId: "rule:9" }];
-    const metadata = { extensions: { eriphe: { title: "Mails", tainted: true } } };
-    await mount("fr", [{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata } }], {
-      read: async () => view,
-      answer: async (a) => (sent.push(a), true),
-    });
-    await act(async () => {});
-    expect(text(".a2-proposal-text")).toBe("Ranger les mails ?");
-    expect($(".a2-proposal-actions")).toBeNull();
-    expect(text(".a2-proposal-inchat")).toBe("Ce bloc montre un contenu extérieur : réponds-y dans la conversation.");
-    expect(sent).toEqual([]);
-    // Code's own surface (the attention queue's): Oui and Non, as the card.
-    await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: "t" } }]));
-    const core = { extensions: { eriphe: { ...metadata.extensions.eriphe, author: "core" } } };
-    await act(async () => adapter.applyMessages([{ version: "1.0", createSurface: { surfaceId: "t", catalogId: CATALOG.id, components: comps, dataModel: {}, metadata: core } }]));
-    await act(async () => {});
-    expect($(".a2-proposal-actions")).not.toBeNull();
-  });
-
-  it("say what a card asks by its kind: keep a memory or a reminder, or do something", async () => {
-    const views: Record<string, { ref: string; card: number; kind: string; state: string; text: string }> = {
-      "memory:1": { ref: "memory:1", card: 1, kind: "memory", state: "pending", text: "Sam prefers mornings" },
-      "intention:2": { ref: "intention:2", card: 2, kind: "intention", state: "pending", text: "Add the event to the calendar" },
-      "access:3": { ref: "access:3", card: 3, kind: "access", state: "pending", text: "Send the quote" },
-    };
-    for (const lang of ["fr", "en"] as const) {
-      const fr = lang === "fr";
-      for (const [ref, kicker, buttons] of [
-        ["memory:1", fr ? "Garder en mémoire ?" : "Keep in memory?", fr ? "GarderOublier" : "KeepForget"],
-        ["intention:2", fr ? "Garder ce rappel ?" : "Keep this reminder?", fr ? "GarderOublier" : "KeepForget"],
-        ["access:3", fr ? "Proposition" : "Proposal", fr ? "OuiNon" : "YesNo"],
-      ]) {
-        await mount(lang, one([{ id: "root", component: "Proposal", proposalId: ref }]), {
-          read: async (r) => views[r] ?? null,
-          answer: async () => true,
-        });
-        await act(async () => {});
-        expect(text(".a2-proposal-kicker")).toBe(kicker);
-        expect(text(".a2-proposal-actions")).toBe(buttons);
-        await act(async () => root.unmount());
-        adapter.dispose();
-      }
-    }
-    // Kept or forgotten, once answered.
-    views["memory:1"].state = "approved";
-    views["intention:2"].state = "rejected";
-    await mount("fr", one([
-      { id: "root", component: "Column", children: ["a", "b"] },
-      { id: "a", component: "Proposal", proposalId: "memory:1" },
-      { id: "b", component: "Proposal", proposalId: "intention:2" },
-    ]), { read: async (r) => views[r] ?? null, answer: async () => true });
-    await act(async () => {});
-    expect($$(".a2-proposal-kicker").map((n) => n.textContent)).toEqual(["Gardé", "Oublié"]);
-  });
-
-  it("answer a proposal of a list, naming the template's component and where it is", async () => {
-    const view = (ref: string) => ({ ref, card: 1, kind: "memory", state: "pending", text: ref });
-    const sent: Answer[] = [];
-    await mount("fr", one([
-      { id: "root", component: "List", children: { path: "/items", componentId: "item" } },
-      { id: "item", component: "Proposal", proposalId: { "@path": "ref" } },
-    ], { items: [{ ref: "memory:1" }, { ref: "memory:2" }] }), {
-      read: async (r) => view(r),
-      answer: async (a) => (sent.push(a), true),
-    });
-    await act(async () => {});
-    expect($$(".a2-proposal-text").map((n) => n.textContent)).toEqual(["memory:1", "memory:2"]);
-    await click($$(".a2-proposal-actions button")[2]);
-    expect(sent).toEqual([{ surfaceId: "t", componentId: "item", ref: "memory:2", yes: true, at: "/items/1" }]);
-  });
-
-  it("mark a proposal drawn from external content with a small sign, no word, its whole sentence on hover and for screen readers", async () => {
-    const view = { ref: "rule:11", card: 11, state: "pending", text: "Classer la facture ?", tainted: true };
-    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "rule:11" }]), { read: async () => view, answer: async () => true });
-    await act(async () => {});
-    const sign = $(".a2-proposal-kicker .a2-taint");
-    expect(sign.getAttribute("role")).toBe("img");
-    expect(sign.getAttribute("title")).toBe("Vient d'un contenu extérieur : vérifie ce qui va être fait.");
-    expect(sign.getAttribute("aria-label")).toBe("Vient d'un contenu extérieur : vérifie ce qui va être fait.");
-    expect($(".a2-proposal-kicker").textContent).not.toContain("extérieur"); // no pill
-    // No more line of its own under the proposal.
-    expect($(".a2-proposal-taint")).toBeNull();
-  });
-
-  it("say where a proposal comes from, linked to its node, and what its Oui does while it waits", async () => {
-    const view = {
-      ref: "access:4", card: 4, kind: "access", state: "pending", text: "Autoriser la tâche « Chercher » à modifier dans github ?",
-      node: "k3m9", from: "Bulle « PR alerting »", yes: "Sur Oui, la tâche peut modifier dans github jusqu'à sa fin.",
-    };
-    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "access:4" }]), { read: async () => view, answer: async () => true });
-    await act(async () => {});
-    expect($(".a2-proposal-from a").getAttribute("href")).toBe("/espace?open=node-k3m9");
-    expect(text(".a2-proposal-from")).toBe("Bulle « PR alerting »");
-    expect(text(".a2-proposal-yes")).toBe("Sur Oui, la tâche peut modifier dans github jusqu'à sa fin.");
-  });
-
-  it("show a proposal of no node without a line of where it comes from", async () => {
-    const view = { ref: "access:5", card: 5, kind: "access", state: "pending", text: "Autoriser ?", yes: "Sur Oui, cet appel part une seule fois, tel qu'il est montré." };
-    await mount("fr", one([{ id: "root", component: "Proposal", proposalId: "access:5" }]), { read: async () => view, answer: async () => true });
-    await act(async () => {});
-    expect($(".a2-proposal-from")).toBeNull();
-    expect(text(".a2-proposal-yes")).toBe("Sur Oui, cet appel part une seule fois, tel qu'il est montré.");
-  });
-
-  it("say at once that an answer is on its way", async () => {
-    const view = { ref: "rule:12", card: 12, state: "pending", text: "Ranger ?" };
-    let done!: (ok: boolean) => void;
-    await mount("en", one([{ id: "root", component: "Proposal", proposalId: "rule:12" }]), {
-      read: async () => view,
-      answer: () => new Promise<boolean>((r) => (done = r)),
-    });
-    await act(async () => {});
-    const [yes, no] = $$(".a2-proposal-actions button");
-    await act(async () => yes.click());
-    expect(yes.classList.contains("is-busy")).toBe(true);
-    expect(yes.getAttribute("aria-busy")).toBe("true");
-    expect((no as HTMLButtonElement).disabled).toBe(true);
-    expect(no.classList.contains("is-busy")).toBe(false);
-    await act(async () => done(true));
   });
 
   it("render Markdown as text, never as HTML", async () => {

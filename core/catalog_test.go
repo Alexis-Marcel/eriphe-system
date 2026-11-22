@@ -440,7 +440,7 @@ func TestCatalogTellsTheBrain(t *testing.T) {
 	wantKey(t, c.deleteAgent("sonnet"), "catalog.readonly")
 }
 
-// Without a brain agent in the file, the workspace picks it: the default
+// Without a brain agent in the file, the workspace chooses it: the default
 // agent first, then my choice, kept across a restart; a harness that cannot
 // be the brain, an unknown agent or the brain's own removal are refused.
 func TestCatalogBrainAgent(t *testing.T) {

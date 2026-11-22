@@ -2,24 +2,25 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Opened, PickAction, PickList } from "../data/api";
+import type { ListRow, Opened, SourceList } from "../data/api";
 import { makeT, WordsContext } from "../i18n";
 import strings from "../strings.json";
 import { createAdapter, type Adapter } from "./adapter";
 import { CATALOG } from "./catalog";
 import { sender, type OpenState } from "./opener";
-import { PicksContext, type Picks } from "./picks";
+import { ListsContext, type Lists } from "./lists";
+import { ProposalsContext, type Proposals } from "./proposals";
 import { Surfaces } from "./Surfaces";
 
-// A row that opens in place: a click on it (not on its box) opens it and
-// reads the item once, its disclosure button says so, a click again or ✕
-// closes it; what was read is text, marked when its server is not
-// trusted, with the item's note; a read that needs a yes asks first.
+// A row that opens in place: a click on it (not on its card's Oui) opens
+// it and reads the item once, its disclosure button says so, a click again
+// or ✕ closes it; what was read is text, marked when its server is not
+// trusted, with the item's note. Opening is never a yes: a read that
+// needs one is refused by eriphe-core, and the page says why.
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const surface = "n1--mails";
-const archive: PickAction = { name: "archive", one: "Déplacer 1 élément", many: "Déplacer {n} éléments", tool: "mail/move" };
 const messages = [
   {
     version: "1.0" as const,
@@ -38,27 +39,30 @@ const messages = [
 let el: HTMLDivElement;
 let root: Root;
 let adapter: Adapter;
-let reads: { item: string; yes: boolean; tool?: string }[];
-let answer: (item: string, yes: boolean) => Opened;
+let reads: { item: string }[];
+let answer: (item: string) => Opened;
+let answered: string[];
+const proposals: Proposals = {
+  read: async (ref) => (ref === "calls:5" ? { ref, card: 5, kind: "calls", state: "pending", text: "Répondre à Sam", fields: [{ name: "Ta réponse", value: "Bonjour Sam,\n\nÇa me va." }] } : null),
+  answer: async (a) => {
+    answered.push(a.ref);
+    return true;
+  },
+  day: async () => [],
+  follow: () => () => {},
+};
 
-async function mount(actions: PickAction[] = [], marked = true) {
-  const list: PickList = {
-    component: "root",
-    source: "inbox",
-    open: true,
-    items: [
-      { n: 0, id: "m1", title: "Facture" },
-      { n: 1, id: "m2", title: "Relance" },
-    ],
-    actions,
-  };
-  const picks: Picks = {
+async function mount(rowCards: (string | undefined)[] = [], marked = true) {
+  const items: ListRow[] = [
+    { n: 0, id: "m1", title: "Facture", card: rowCards[0] },
+    { n: 1, id: "m2", title: "Relance", card: rowCards[1] },
+  ];
+  const list: SourceList = { component: "root", source: "inbox", open: true, items };
+  const ls: Lists = {
     list: (s, c) => (s === surface && c === "root" ? list : undefined),
-    kept: new Map(),
-    run: async () => ({ ok: true, text: "" }),
-    open: async (_s, _l, item, yes, tool) => {
-      reads.push({ item, yes, tool });
-      return answer(item, yes);
+    open: async (_s, _l, item) => {
+      reads.push({ item });
+      return answer(item);
     },
     opened: new Map<string, OpenState>(),
     marked: () => marked,
@@ -68,9 +72,11 @@ async function mount(actions: PickAction[] = [], marked = true) {
   await act(async () =>
     root.render(
       <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
-        <PicksContext.Provider value={picks}>
-          <Surfaces adapter={adapter} />
-        </PicksContext.Provider>
+        <ProposalsContext.Provider value={proposals}>
+          <ListsContext.Provider value={ls}>
+            <Surfaces adapter={adapter} />
+          </ListsContext.Provider>
+        </ProposalsContext.Provider>
       </WordsContext.Provider>,
     ),
   );
@@ -85,6 +91,7 @@ beforeEach(() => {
   el = document.createElement("div");
   document.body.append(el);
   reads = [];
+  answered = [];
   answer = (item) => ({
     title: item === "m1" ? "Facture" : "Relance",
     from: "Sam",
@@ -119,7 +126,7 @@ describe("an item opened in place", () => {
     expect(panel.querySelector(".a2-read-note")?.textContent).toBe("Classé « À supprimer » : Une promo");
     expect([...panel.querySelectorAll("summary")].map((s) => s.textContent)).toEqual(["détails"]);
     expect(panel.querySelector(".a2-read-more h5")?.textContent).toBe("L'élément, tel que lu");
-    expect(reads).toEqual([{ item: "m1", yes: false }]);
+    expect(reads).toEqual([{ item: "m1" }]);
     await click(heads()[0].querySelector(".a2-text"));
     expect(el.querySelector(".a2-opened")).toBeNull();
     await click(disclosures()[0]); // the keyboard's way: its button
@@ -129,30 +136,28 @@ describe("an item opened in place", () => {
     expect(el.querySelector(".a2-opened")).toBeNull();
   });
 
-  it("does not open when the row's box is clicked", async () => {
-    await mount([archive]);
-    const box = el.querySelectorAll<HTMLInputElement>(".a2-pickable .a2-pick")[1];
-    await click(box);
-    expect(box.checked).toBe(true);
+  it("does not open when the row's Oui is clicked, and shows the card's Oui in the letter", async () => {
+    await mount([undefined, "calls:5"]);
+    await act(async () => new Promise((r) => setTimeout(r, 0)));
+    const yes = heads()[1].querySelector<HTMLButtonElement>(".a2-inline-yes")!;
+    await click(yes);
+    expect(answered).toEqual(["calls:5"]);
     expect(el.querySelector(".a2-opened")).toBeNull();
     expect(reads).toEqual([]);
     await click(heads()[1].querySelector(".a2-text"));
-    expect(reads).toEqual([{ item: "m2", yes: false }]);
+    expect(reads).toEqual([{ item: "m2" }]);
+    const onYes = el.querySelector(".a2-onyes")!;
+    expect(onYes.textContent).toContain("Répondre à Sam");
+    expect(onYes.querySelector(".a2-onyes-text")?.textContent).toContain("Ça me va.");
   });
 
-  it("asks a yes first for a read that needs one, then reads", async () => {
-    answer = (_item, yes) => (yes ? { body: "Le texte" } : { ask: { tool: "mail/get", args: ["id : m1"] } });
+  it("says why when a read needs a yes: nothing to approve there", async () => {
+    answer = () => ({ error: "Le lire demande ton oui : demande-le à Eriphe, qui te le proposera sur une carte." });
     await mount();
     await click(disclosures()[0]);
-    const ask = el.querySelector(".a2-openask")!;
-    expect(ask.textContent).toContain("mail/get");
-    expect(ask.textContent).toContain("id : m1");
-    await click(ask.querySelector("button")!);
-    expect(reads).toEqual([
-      { item: "m1", yes: false },
-      { item: "m1", yes: true, tool: "mail/get" },
-    ]);
-    expect(el.querySelector(".a2-read-text")?.textContent).toBe("Le texte");
+    expect(el.querySelector(".a2-openfail")?.textContent).toContain("demande-le à Eriphe");
+    expect(el.querySelector(".a2-opened button.primary, .a2-openask")).toBeNull();
+    expect(reads).toEqual([{ item: "m1" }]);
   });
 
   it("takes up a read under way when the page draws its blocks again meanwhile", async () => {
@@ -165,20 +170,9 @@ describe("an item opened in place", () => {
     expect(el.querySelector(".a2-openwait")).not.toBeNull();
     await act(async () => adapter.applyMessages([{ version: "1.0", deleteSurface: { surfaceId: surface } }]));
     await act(async () => adapter.applyMessages(messages));
-    await act(async () => done(answerNow("m1", false)));
+    await act(async () => done(answerNow("m1")));
     expect(el.querySelector(".a2-read-title")?.textContent).toBe("Facture");
     expect(reads).toHaveLength(1);
-  });
-
-  it("sends the yes with the call it was asked for", async () => {
-    answer = (_item, yes) => (yes ? { body: "ok" } : { ask: { tool: "mail/get", args: [] } });
-    await mount();
-    await click(disclosures()[0]);
-    await click(el.querySelector(".a2-openask button")!);
-    expect(reads).toEqual([
-      { item: "m1", yes: false, tool: undefined },
-      { item: "m1", yes: true, tool: "mail/get" },
-    ]);
   });
 
   it("stays open when the page draws its blocks again", async () => {

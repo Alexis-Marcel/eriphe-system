@@ -618,7 +618,7 @@ func valueText(v any) string {
 	return string(raw)
 }
 
-// A path picks what a monitor compares in a result:
+// A path chooses what a monitor compares in a result:
 //
 //	data.state                 a field
 //	items.0.name               an item of a list by its index

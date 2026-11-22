@@ -38,7 +38,7 @@ import (
 //	ERIPHE_LIVE_NODES=1 go test -run TestNodesBenchLive -timeout 0 -v .
 //
 // ERIPHE_LIVE_NODES_RUNS (1 by default) plays it that many times,
-// ERIPHE_LIVE_NODES_MODEL picks the model (sonnet by default),
+// ERIPHE_LIVE_NODES_MODEL chooses the model (sonnet by default),
 // ERIPHE_LIVE_NODES_CLI the command (claude). The CLI runs in a temporary
 // directory, without this machine's settings, CLAUDE.md, memory or MCP
 // servers, and with none of its harness tools but the search for deferred

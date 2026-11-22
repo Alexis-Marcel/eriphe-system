@@ -532,7 +532,7 @@ func TestFinalCheck(t *testing.T) {
 }
 
 // What the engine holds is in core.db: a core started again on the same
-// data picks a step's task that ended its turn meanwhile, accepts it on
+// data chooses a step's task that ended its turn meanwhile, accepts it on
 // its proof and starts the next.
 func TestStepsResumeAfterRestart(t *testing.T) {
 	c := graphCore(t)

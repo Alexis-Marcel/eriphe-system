@@ -54,7 +54,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/finish/{key}", sc.handleFinish)
 	mux.HandleFunc("GET /e2e/tools", sc.handleTools)
 	mux.HandleFunc("GET /e2e/turns", sc.handleTurns)
-	mux.HandleFunc("POST /e2e/actions", sc.handleActions)
+	mux.HandleFunc("POST /e2e/rows", sc.handleRows)
 	mux.HandleFunc("POST /e2e/review", sc.handleReview)
 	mux.HandleFunc("POST /e2e/sections", sc.handleSections)
 	mux.HandleFunc("POST /e2e/open", sc.handleOpen)
@@ -221,7 +221,7 @@ type scenarioTools struct {
 	mu      sync.Mutex
 	lit     []string
 	sent    []string
-	moved   [][]string // ranger: the ids of each call (selection.spec.ts)
+	moved   [][]string // move: the ids of each call (view-rows.spec.ts)
 	deleted [][]string // supprimer: the ids of each call (sections.spec.ts)
 	read    []string   // lire: the id of each call (sources-open.spec.ts)
 	trashed []string   // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
@@ -250,7 +250,7 @@ var bilan = []map[string]any{
 	{"id": "a2", "subject": "Avenant au bail", "from": "Agence <agence@example.org>", "account": "travail", "date": "2026-11-19T16:40:00Z",
 		"body": "Bonjour,\n\nVous trouverez ci-joint l'avenant au bail (3 pages). Rien à signer, il est pour information.\n\nL'agence"},
 	{"id": "j1", "subject": "Soldes d'hiver", "from": "promo@example.org", "account": "perso", "date": "2026-11-20T06:00:00Z", "body": "-50 % sur tout."},
-	{"id": "j2", "subject": "Lettre du dimanche", "from": "news@example.org", "account": "travail", "date": "2026-11-19T07:00:00Z", "body": "Les nouvelles de la semaine."},
+	{"id": "j2", "subject": "Lettre du dimanche", "from": "news@example.org", "account": "perso", "date": "2026-11-19T07:00:00Z", "body": "Les nouvelles de la semaine."},
 	{"id": "j3", "subject": "Votre colis est bloqué", "from": "colis@example.net", "account": "perso", "date": "2026-11-18T12:00:00Z", "body": "Payez 1,99 € pour le débloquer."},
 	{"id": "i1", "subject": "Facture d'électricité", "from": "energie@example.org", "account": "perso", "date": "2026-11-18T09:00:00Z", "body": "62 €, prélevés le 5 décembre."},
 	{"id": "i2", "subject": "Entraînement de samedi", "from": "club@example.org", "account": "travail", "date": "2026-11-17T18:00:00Z", "body": "Avancé à 9 h."},
@@ -298,8 +298,8 @@ var promos = []map[string]any{
 	{"id": "p4", "subject": "Photos du week-end", "from": "lou@example.org"},
 }
 
-// boite is the mailbox the list with actions shows (selection.spec.ts):
-// what ranger moved leaves it.
+// boite is the mailbox whose rows each wait on a card (view-rows.spec.ts):
+// what move moved leaves it.
 var boite = []map[string]any{
 	{"id": "b1", "subject": "Facture d'octobre", "from": "facturation@example.org"},
 	{"id": "b2", "subject": "Lettre d'information", "from": "news@example.org"},
@@ -1199,11 +1199,11 @@ func (sc *scenario) handleProposals(rw http.ResponseWriter, r *http.Request) {
 	rw.WriteHeader(http.StatusNoContent)
 }
 
-// handleActions is POST /e2e/actions: a node whose block lists the
-// mailbox with an action that archives what the user picks
-// (selection.spec.ts), written by the brain as any author, read once, and
-// shown.
-func (sc *scenario) handleActions(rw http.ResponseWriter, r *http.Request) {
+// handleRows is POST /e2e/rows: a node whose block lists the mailbox,
+// plain rows (view-rows.spec.ts), written by the brain as any author, read
+// once, and shown; the brain's three calls, each on one row, each a card
+// of its own (each moves to another folder: none folds with another).
+func (sc *scenario) handleRows(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
 	d, err := c.nodes.Create(nodestore.New{Title: "Tri de la boîte", Lifetime: nodefile.Standing, Author: byBrain, Body: "La boîte, à trier.\n"})
 	if err != nil {
@@ -1214,15 +1214,43 @@ func (sc *scenario) handleActions(rw http.ResponseWriter, r *http.Request) {
 	body := "La boîte, à trier.\n\n```eriphe:block boite\n" + `{"components": [
   {"id": "root", "component": "List", "children": {"path": "/boite/messages", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
- "sources": {"boite": {"tool": "mail/boite", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}},
- "actions": {"archive": {"label": "Ranger", "tool": "mail/move", "args": {"to": "archive"}, "items": "ids", "source": "boite"}}}` + "\n```\n"
+ "sources": {"boite": {"tool": "mail/boite", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
 	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	c.readNode(sc.ctx, id, nil, time.Now())
+	for _, m := range []struct{ to, item, title string }{{"archive", "b1", "Facture d'octobre"}, {"suivi", "b2", "Lettre d'information"}, {"factures", "b3", "Réunion de lundi"}} {
+		if err := sc.callOn(id, "boite", "mail", "move", map[string]any{"ids": []string{m.item}, "to": m.to}, itemLabel{ID: m.item, Title: m.title}); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	c.syncCards()
+	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
+	c.bump()
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// callOn keeps a call of the brain's on items of a node's source, waiting
+// for the user's yes on a card of its own, as a call the brain made then
+// (item_cards.go): what the scenario's specs approve on their rows.
+func (sc *scenario) callOn(node, source, server, tool string, input map[string]any, items ...itemLabel) error {
+	c := sc.c
+	raw, _ := json.Marshal(input)
+	labels, _ := json.Marshal(items)
+	res, err := c.store.db.Exec(`INSERT INTO access_asks (task_id, server, category, call, input, tainted, created, node, source, item, labels)
+		VALUES ('t-brain', ?, 'change', ?, ?, ?, ?, ?, ?, ?, ?)`, server, claudeToolName(server, tool)+" []", string(raw), "external:"+server, time.Now().Unix(), node, source, items[0].ID, string(labels))
+	ask, err := rowsID(res, err)
+	if err != nil {
+		return err
+	}
+	if _, err := c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, ask, ask); err != nil {
+		return err
+	}
+	c.cardNow(cardCalls, ask, "", refNode+":"+node)
+	return nil
 }
 
 // handleReview is POST /e2e/review: the news watch's server changes its
@@ -1254,9 +1282,10 @@ func (sc *scenario) handleReview(rw http.ResponseWriter, r *http.Request) {
 }
 
 // handleSections is POST /e2e/sections: a view of the mails to sort in
-// two sections, its items noted into two groups as a skill would, with an
-// action that deletes on the first (sections.spec.ts), written by the
-// brain as any author, read once, and shown.
+// two sections, its items noted into two groups as a skill would
+// (sections.spec.ts), written by the brain as any author, read once, and
+// shown; the brain's one call that deletes the first section's three
+// mails waits on their rows, one card.
 func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
 	d, err := c.nodes.Create(nodestore.New{Title: "Mails en sections", Lifetime: nodefile.Standing, Author: byBrain, Body: "Les mails, triés.\n"})
@@ -1272,8 +1301,7 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
   {"id": "c2", "component": "Card", "title": "Pour info", "child": "info"},
   {"id": "info", "component": "List", "children": {"path": "/tri/messages[_group=Pour info]", "componentId": "row"}},
   {"id": "row", "component": "Item", "title": {"@path": "subject"}, "detail": {"@path": "from"}}],
- "sources": {"tri": {"tool": "mail/tri", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}},
- "actions": {"drop": {"tool": "mail/delete", "items": "ids", "source": "tri", "list": "drop"}}}` + "\n```\n"
+ "sources": {"tri": {"tool": "mail/tri", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
 	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -1285,7 +1313,15 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 	c.readNode(sc.ctx, id, nil, time.Now())
+	drop := []itemLabel{{ID: "s1", Title: "Soldes d'hiver"}, {ID: "s3", Title: "Votre colis est en route"}, {ID: "s4", Title: "Lettre du dimanche"}}
+	if err := sc.callOn(id, "tri", "mail", "delete", map[string]any{"ids": []string{"s1", "s3", "s4"}}, drop...); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	c.syncCards()
+	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
+	c.bump()
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
 }
 
@@ -1320,8 +1356,8 @@ func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
 // handleBilan is POST /e2e/bilan: a view of the mailbox as a bilan
 // (view-bilan.spec.ts), as its skill leaves it: the bilan on top, one block
 // that reads the mails of two accounts once, « À traiter » with a reply
-// drafted for Sam waiting on its row, « À jeter » as a batch whose trash
-// takes each mail's account, « Pour info » folded. Written after an
+// drafted for Sam waiting on its row, « À jeter » as a batch whose rows
+// share one card (a trash per mail, folded), « Pour info » folded. Written after an
 // external read, as a skill that read mails writes it.
 func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 	c := sc.c
@@ -1335,18 +1371,15 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 	body := lead + "\n```eriphe:block boite\n" + `{"components": [
   {"id": "root", "component": "Column", "children": ["todo_h", "todo", "trash", "info"]},
   {"id": "todo_h", "component": "Text", "variant": "subtitle", "text": "À traiter"},
-  {"id": "todo", "component": "List", "children": {"path": "/mails/messages[_group=À traiter][_state!=done]", "componentId": "todo_row"}, "emptyText": "Rien ne t'attend."},
-  {"id": "todo_row", "component": "Row", "align": "center", "children": ["todo_item", "todo_yes"]},
+  {"id": "todo", "component": "List", "children": {"path": "/mails/messages[_group=À traiter][_state!=done]", "componentId": "todo_item"}, "emptyText": "Rien ne t'attend."},
   {"id": "todo_item", "component": "Item", "title": {"@path": "_note"}, "detail": {"@path": "from"}, "note": {"@path": "subject"}},
-  {"id": "todo_yes", "component": "Proposal", "inline": true, "proposalId": {"@path": "_card"}},
   {"id": "trash", "component": "Fold", "list": "jeter", "label": "{n} mails inutiles à jeter", "child": "jeter"},
-  {"id": "jeter", "component": "List", "children": {"path": "/mails/messages[_group=À jeter]", "componentId": "jeter_row"}},
+  {"id": "jeter", "component": "List", "children": {"path": "/mails/messages[_group=À jeter][_state!=done]", "componentId": "jeter_row"}},
   {"id": "jeter_row", "component": "Item", "level": "low", "title": {"@path": "subject"}, "detail": {"@path": "from"}, "note": {"@path": "_note"}},
   {"id": "info", "component": "Fold", "list": "infos", "label": "Les {n} mails pour info", "child": "infos"},
   {"id": "infos", "component": "List", "children": {"path": "/mails/messages[_group=Pour info]", "componentId": "info_row"}},
   {"id": "info_row", "component": "Item", "level": "low", "title": {"@path": "subject"}, "detail": {"@path": "from"}, "note": {"@path": "_note"}}],
- "sources": {"mails": {"tool": "mail/bilan", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lettre", "id": "id"}}}},
- "actions": {"jeter": {"label": "Jeter", "tool": "mail/trash", "args": {"account": {"@item": "account"}}, "items": "ids", "source": "mails", "list": "jeter"}}}` + "\n```\n"
+ "sources": {"mails": {"tool": "mail/bilan", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from", "open": {"tool": "mail/lettre", "id": "id"}}}}}` + "\n```\n"
 	if _, err := c.authorWrite(id, d.Version.Hash, byBrain, true, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(body) }); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
@@ -1369,6 +1402,13 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 	}
 	c.store.db.Exec(`UPDATE access_asks SET batch = ? WHERE id = ?`, ask, ask)
 	c.cardNow(cardCalls, ask, "", refNode+":"+id)
+	// Its trash of each mail to throw away: three cards that fold into one.
+	for _, m := range []itemLabel{{ID: "j1", Title: "Soldes d'hiver"}, {ID: "j2", Title: "Lettre du dimanche"}, {ID: "j3", Title: "Votre colis est bloqué"}} {
+		if err := sc.callOn(id, "mails", "mail", "trash", map[string]any{"account": "perso", "ids": []string{m.ID}}, m); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 	c.syncCards()
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)

@@ -785,7 +785,7 @@ func (c *core) deleteAgent(name string) error {
 		event: fmt.Sprintf("Catalogue : l'agent « %s » a été retiré depuis l'espace de travail.", name)})
 }
 
-// setDefaultAgent picks the agent of a task that names none, unless the
+// setDefaultAgent chooses the agent of a task that names none, unless the
 // configuration file sets it.
 func (c *core) setDefaultAgent(name string) error {
 	c.catalogMu.Lock()

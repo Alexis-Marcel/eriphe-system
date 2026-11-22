@@ -12,8 +12,8 @@ import (
 // order: a new one is a decision, not a side effect.
 func TestCatalogComponents(t *testing.T) {
 	want := []string{"Text", "Markdown", "Image", "Icon", "Link", "Code", "Row", "Column", "List", "Grid", "Card", "Tabs", "Fold", "Divider",
-		"Button", "Mark", "Choice", "TextField", "DateField", "Metric", "Progress", "Chart", "Table", "Timeline", "Item", "Message", "Day",
-		"Proposal", "Alert", "Placeholder"}
+		"Button", "Choice", "TextField", "DateField", "Metric", "Progress", "Chart", "Table", "Timeline", "Item", "Message", "Day",
+		"Alert", "Placeholder"}
 	c := Eriphe()
 	if got := c.Components(); !slices.Equal(got, want) {
 		t.Errorf("components:\n got %v\nwant %v", got, want)
@@ -62,7 +62,7 @@ func TestCatalogDescribesItsComponents(t *testing.T) {
 	// The properties that carry data accept a binding.
 	for _, p := range []struct{ comp, prop string }{
 		{"Metric", "value"}, {"Metric", "delta"}, {"Chart", "series"}, {"Table", "rows"}, {"Timeline", "items"},
-		{"Day", "events"}, {"Day", "date"}, {"Message", "from"}, {"Message", "body"}, {"Proposal", "proposalId"},
+		{"Day", "events"}, {"Day", "date"}, {"Message", "from"}, {"Message", "body"},
 		{"Progress", "value"}, {"Progress", "total"}, {"Item", "title"}, {"Item", "due"}, {"Item", "level"},
 	} {
 		comp := `{"id":"root","component":"` + p.comp + `"`

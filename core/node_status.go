@@ -15,8 +15,7 @@ import (
 //
 //   - waits: a card linked to it waits for the user's answer (node_turn.go),
 //     a task in it is held for its start card or waits for a permission,
-//     a source of its marked attention lists items (node_attention.go), or
-//     it is the result of a finished work the user has not said done yet:
+//     or it is the result of a finished work the user has not said done yet:
 //     an accepted step no other accepted step comes after, or the work's
 //     node itself when no step is such a result (node_steps.go);
 //   - running: a task works in it, or it is a step whose task runs;
@@ -47,9 +46,6 @@ type statusFacts struct {
 	steps   map[string]string // step's node → its status
 	results map[string]bool   // results of a finished work, waiting until the user says them done
 	settled map[string]bool   // nodes the steps' engine finished
-	// attention tells a node one of whose sources marked attention lists
-	// items; nil for none.
-	attention func(id string) bool
 }
 
 // of is a node's status.
@@ -66,7 +62,7 @@ func (f statusFacts) of(sum nodestore.Summary) string {
 		return nodeIdle
 	}
 	switch {
-	case f.cards[id], f.tasks[id] == nodeWaits, f.attention != nil && f.attention(id), !done && f.results[id]:
+	case f.cards[id], f.tasks[id] == nodeWaits, !done && f.results[id]:
 		return nodeWaits
 	case running:
 		return nodeRunning
@@ -80,7 +76,7 @@ func (f statusFacts) of(sum nodestore.Summary) string {
 // only one node's (and its work's, for a step) when only is given.
 func (c *core) statusFacts(only string) statusFacts {
 	f := statusFacts{cards: map[string]bool{}, tasks: map[string]string{}, steps: map[string]string{},
-		results: map[string]bool{}, settled: map[string]bool{}, attention: c.nodeAttention}
+		results: map[string]bool{}, settled: map[string]bool{}}
 	db := c.store.db
 	filter := func(q, col string) (string, []any) {
 		if only == "" {
@@ -269,14 +265,11 @@ func (c *core) settleCards(node string) {
 }
 
 // warmNodeCaches fills what the graph's rows read of each node and keeps
-// in memory (its attention, its glance) for those not read yet, in a
-// constant number of queries: the graph never reads its nodes one by one.
+// in memory (its glance) for those not read yet, in a constant number of
+// queries: the graph never reads its nodes one by one.
 func (c *core) warmNodeCaches(xs []nodestore.Summary) {
-	var attention, glance []string
+	var glance []string
 	for _, x := range xs {
-		if _, ok := c.attention.Load(x.ID); !ok {
-			attention = append(attention, x.ID)
-		}
 		if _, ok := c.glances.Load(x.ID); !ok {
 			glance = append(glance, x.ID)
 		}
@@ -285,22 +278,6 @@ func (c *core) warmNodeCaches(xs []nodestore.Summary) {
 		kept := c.allGlances()
 		for _, id := range glance {
 			c.glances.LoadOrStore(id, kept[id])
-		}
-	}
-	if len(attention) > 0 {
-		srcs, err := c.nodes.Sources("")
-		if err != nil {
-			return
-		}
-		by := map[string][]nodestore.LiveSource{}
-		for _, s := range srcs {
-			by[s.ID] = append(by[s.ID], s)
-		}
-		kept := c.allReads()
-		for _, id := range attention {
-			if _, ok := c.attention.Load(id); !ok {
-				c.noteAttention(id, readsWith(by[id], kept[id]))
-			}
 		}
 	}
 }

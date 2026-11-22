@@ -164,13 +164,11 @@ func (w *web) handleRuleAction(rw http.ResponseWriter, r *http.Request, s *sessi
 		return
 	}
 	switch action := r.PathValue("action"); action {
-	case "approve":
-		if _, err = w.c.approveNotifyRule(id); err == nil {
-			w.c.proposalDecided(cardRule, id, true) // its card says so (convo_cards.go)
-		}
-	case "reject", "delete":
-		if err = w.c.deleteNotifyRule(id); err == nil {
-			w.c.proposalDecided(cardRule, id, false)
+	case "approve", "reject", "delete":
+		if action != "delete" || w.c.proposalOf(cardRule, id).Pending { // its card's answer (convo_cards.go)
+			err = w.c.answerProposal(r.Context(), cardRule, id, action == "approve")
+		} else {
+			err = w.c.deleteNotifyRule(id)
 		}
 	default:
 		http.Error(rw, "approve, reject or delete", http.StatusBadRequest)

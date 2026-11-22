@@ -26,11 +26,11 @@ type modelPick struct {
 
 // modelPicker is the form's list of models.
 type modelPicker struct {
-	Name   string // the provider being edited: its stored device, address and key are asked
-	Picks  []modelPick
-	Manual string    // names typed by hand
-	Result *testView // what the server answered, once asked
-	Auto   bool      // ask the server as soon as shown
+	Name    string // the provider being edited: its stored device, address and key are asked
+	Options []modelPick
+	Manual  string    // names typed by hand
+	Result  *testView // what the server answered, once asked
+	Auto    bool      // ask the server as soon as shown
 }
 
 // ManualOpen tells whether the names typed by hand are offered: when the
@@ -42,7 +42,7 @@ func (p modelPicker) ManualOpen() bool {
 // Ticked are the models ticked, in their order: the first is the default.
 func (p modelPicker) Ticked() []string {
 	var out []string
-	for _, m := range p.Picks {
+	for _, m := range p.Options {
 		if m.Checked {
 			out = append(out, m.ID)
 		}
@@ -159,6 +159,6 @@ func (w *web) handleDetectModels(rw http.ResponseWriter, r *http.Request, s *ses
 		used = w.c.conf().Providers[name].Models
 	}
 	pk := modelPicker{Name: name, Manual: r.PostFormValue("models"), Result: w.askModels(r, s, name)}
-	pk.Picks = pickModels(used, postedTicks(r), name != "", pk.Result)
+	pk.Options = pickModels(used, postedTicks(r), name != "", pk.Result)
 	w.render(rw, r, s, "settings", "model-picker-fragment", page{Data: pk})
 }

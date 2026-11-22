@@ -17,10 +17,9 @@ import (
 
 // What the user does on the graph workspace (#633), kept by eriphe-core:
 //
-//   - a mark on an item a block shows (keep, drop, done), written by code
-//     in the block (nodefile's SetMark), a version of code's: no turn;
 //   - a block's button that asks Eriphe: the ask its author wrote, read
 //     again from the stored block, sent as the user's message to its node;
+//     it acts on nothing (a yes is a card's, web_convo_cards.go);
 //   - the archive of a node and what is under it, and its reopening, the
 //     user's alone (archiveNode, reopenNode);
 //   - an edit of a node's text in its .md tab, made on the version it was
@@ -33,7 +32,6 @@ import (
 
 func (w *web) gestureRoutes(mux *webMux) {
 	mux.Handle("PUT /api/nodes/{id}/md", w.auth(w.handleNodeSave))
-	mux.Handle("POST /api/nodes/{id}/mark", w.auth(w.handleNodeMark))
 	mux.Handle("POST /api/nodes/{id}/ask", w.auth(w.handleNodeAsk))
 	mux.Handle("POST /api/nodes/{id}/archive", w.auth(w.handleNodeArchive))
 	mux.Handle("POST /api/nodes/{id}/reopen", w.auth(w.handleNodeReopen))
@@ -125,70 +123,6 @@ func authorBody(d *nodestore.Doc) string {
 }
 
 // A block's gestures.
-
-// nodeMarkIn is a mark on an item a block shows: ids only, never text.
-type nodeMarkIn struct {
-	Block string `json:"block"`
-	List  string `json:"list"`
-	Item  string `json:"item"`
-	Mark  string `json:"mark"` // keep, drop, done, or "" to take it away
-	// Version is the version the page showed: the mark is made on it, so
-	// that a mark on an item someone has since written over is refused.
-	Version int `json:"version"`
-}
-
-// handleNodeMark is POST /api/nodes/{id}/mark: code writes the user's mark
-// in the block, on the version the page showed, as a version of its own
-// (not listed on the page), and starts no turn. 204; 400 for a mark the
-// block cannot carry (no such block, a list or item that is not an id,
-// another mark) or no version; 404; 409 when an author wrote the node
-// since the version shown (code's own versions since do not count); 410
-// archived.
-func (w *web) handleNodeMark(rw http.ResponseWriter, r *http.Request, _ *session) {
-	sum, ok := w.gestureNode(rw, r)
-	if !ok {
-		return
-	}
-	var in nodeMarkIn
-	if !gestureBody(rw, r, 4<<10, &in) {
-		return
-	}
-	if in.Version <= 0 {
-		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "version is needed: the one the page showed"})
-		return
-	}
-	c := w.c
-	shown, err := c.nodes.Read(sum.ID, in.Version)
-	if err != nil {
-		writeJSON(rw, http.StatusNotFound, map[string]string{"error": errNoNode.Error()})
-		return
-	}
-	if !blockHas(shown.Node.Block(in.Block), "Mark") {
-		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "no Mark in this block"})
-		return
-	}
-	_, err = c.nodes.Change(sum.ID, shown.Version.Hash, nodeByCode, func(n *nodefile.Node) error { return n.SetMark(in.Block, in.List, in.Item, in.Mark) })
-	switch {
-	case errors.Is(err, nodestore.ErrConflict):
-		writeJSON(rw, http.StatusConflict, map[string]string{"error": "the node changed since the page was read"})
-	case errors.Is(err, nodestore.ErrArchived):
-		writeJSON(rw, http.StatusGone, map[string]string{"error": "archived"})
-	case err != nil:
-		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": err.Error()})
-	default:
-		rw.WriteHeader(http.StatusNoContent)
-	}
-}
-
-// blockHas tells whether a block has a component of that type.
-func blockHas(b *nodefile.Block, component string) bool {
-	if b == nil {
-		return false
-	}
-	var list []map[string]any
-	json.Unmarshal(b.Components, &list)
-	return slices.ContainsFunc(list, func(c map[string]any) bool { return c["component"] == component })
-}
 
 // nodeAskIn names the button clicked: its block and its component.
 type nodeAskIn struct {

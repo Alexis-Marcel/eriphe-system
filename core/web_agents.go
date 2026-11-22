@@ -292,12 +292,12 @@ type agentForm struct {
 	Name       string
 	Provider   string
 	Model      string // a choice's ID, "" for the runtime's default, or "other"
-	AutoModel  bool   // the runtime picks a model when none is named
+	AutoModel  bool   // the runtime chooses a model when none is named
 	ModelOther string
 	Use        string
 	Default    bool // make it the default agent
 	IsDefault  bool // it is the default agent already
-	CanDefault bool // the workspace picks the default agent
+	CanDefault bool // the workspace chooses the default agent
 	Runtime    string
 	Needs      string
 	PrefCPU    bool
@@ -724,7 +724,7 @@ func (w *web) handleEditProvider(rw http.ResponseWriter, r *http.Request, s *ses
 	k, _ := kindOf(p.Kind)
 	agents := m.agentsOf(name)
 	sort.Strings(agents)
-	w.providerFormPage(rw, r, s, providerForm{Edit: true, Name: name, Kind: k, Env: p.Env, BaseURL: p.BaseURL, Picker: modelPicker{Picks: pickModels(p.Models, nil, true, nil)},
+	w.providerFormPage(rw, r, s, providerForm{Edit: true, Name: name, Kind: k, Env: p.Env, BaseURL: p.BaseURL, Picker: modelPicker{Options: pickModels(p.Models, nil, true, nil)},
 		Device: p.Device, KeySet: p.Secret != "", Agents: agents}, "")
 }
 
@@ -834,7 +834,7 @@ func readSelfHostedForm(r *http.Request, pp *providerPost) {
 	f.BaseURL = strings.TrimRight(strings.TrimSpace(r.PostFormValue("base_url")), "/")
 	f.Where, f.Device = r.PostFormValue("where"), r.PostFormValue("device")
 	ticked := postedTicks(r)
-	f.Picker = modelPicker{Manual: r.PostFormValue("models"), Picks: pickModels(pp.usedModels, ticked, f.Edit, nil)}
+	f.Picker = modelPicker{Manual: r.PostFormValue("models"), Options: pickModels(pp.usedModels, ticked, f.Edit, nil)}
 	pp.p.Models = modelLines(strings.Join(append(slices.Clone(ticked), f.Picker.Manual), "\n"))
 	if f.Where == whereOnDevice {
 		pp.p.Device = f.Device
@@ -876,7 +876,7 @@ func (w *web) providerFormError(r *http.Request, s *session, m *Config, pp *prov
 			name = f.Name
 		}
 		f.Picker.Result = w.askModels(r, s, name)
-		f.Picker.Picks = pickModels(pp.usedModels, nil, f.Edit, f.Picker.Result)
+		f.Picker.Options = pickModels(pp.usedModels, nil, f.Edit, f.Picker.Result)
 		if v := f.Picker.Result; v != nil && v.State != "ok" {
 			return errors.New("providers.nomodels")
 		}

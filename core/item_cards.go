@@ -141,7 +141,7 @@ func (c *core) callsProposal(p proposal) proposal {
 	// (call_fold.go).
 	p.choices = func(lang string) []proposalChoice {
 		a := asks[0]
-		return []proposalChoice{{ID: a.ID, Text: c.choiceText(a, lang), N: itemCount(a), State: a.State}}
+		return []proposalChoice{{ID: a.ID, Text: c.choiceText(a, lang), N: itemCount(a), State: a.State, Items: choiceItems(a)}}
 	}
 	// Its words read plainly (call_words.go); the exact calls under
 	// Détails.
@@ -174,7 +174,7 @@ func (c *core) chosenCalls(p proposal, asks []accessQuestion) proposal {
 			if same {
 				text = c.choiceText(a, lang)
 			}
-			out = append(out, proposalChoice{ID: a.ID, Text: text, N: itemCount(a), State: a.State})
+			out = append(out, proposalChoice{ID: a.ID, Text: text, N: itemCount(a), State: a.State, Items: choiceItems(a)})
 		}
 		return out
 	}
@@ -317,31 +317,25 @@ func (c *core) itemCards(node, source string) map[string]string {
 	if node == "" || source == "" {
 		return out
 	}
-	rows, err := c.store.db.Query(`SELECT item, batch FROM access_asks WHERE node = ? AND source = ? AND item != '' AND batch != 0
-		AND (state = ? OR state = ? AND decided >= ?) ORDER BY batch DESC`, node, source, startProposed, startApproved, time.Now().Add(-itemCardsKept).Unix())
-	if err != nil {
-		return out
-	}
-	type pair struct {
-		item  string
-		batch int64
-	}
-	var ps []pair
-	for rows.Next() {
-		var p pair
-		if rows.Scan(&p.item, &p.batch) == nil {
-			ps = append(ps, p)
+	// Each item the calls of a card act on carries it, a card of several
+	// calls (call_fold.go) or of one call on several items on all its
+	// rows: a batch's one card; an item two cards act on, the newest.
+	asks := c.asksWhere(`node = ? AND source = ? AND item != '' AND batch != 0
+		AND (state = ? OR state = ? AND decided >= ?) ORDER BY batch DESC, id`, node, source, startProposed, startApproved, time.Now().Add(-itemCardsKept).Unix())
+	asking := map[int64]bool{}
+	for _, a := range asks {
+		yes, ok := asking[a.Batch]
+		if !ok {
+			yes = c.callsAsk(a.Batch)
+			asking[a.Batch] = yes
 		}
-	}
-	rows.Close() // one connection: each is read after
-	seen := map[int64]bool{}
-	for _, p := range ps {
-		if _, ok := out[p.item]; ok || seen[p.batch] {
+		if !yes {
 			continue
 		}
-		seen[p.batch] = true
-		if c.callsAsk(p.batch) {
-			out[p.item] = proposalRef(cardCalls, p.batch)
+		for _, item := range choiceItems(a) {
+			if _, ok := out[item]; !ok && labelOf(a, item, source) {
+				out[item] = proposalRef(cardCalls, a.Batch)
+			}
 		}
 	}
 	// The brain's calls on items of the node (askBrainAccess): one card
@@ -361,6 +355,21 @@ func (c *core) itemCards(node, source string) map[string]string {
 	return out
 }
 
+// labelOf tells whether an item a call acts on is one of a source's: the
+// item it is on, or one of its labels naming that source or none (the
+// call's own); a label of another source's item is not on these rows.
+func labelOf(a accessQuestion, item, source string) bool {
+	if item == a.Item {
+		return true
+	}
+	for _, l := range a.Labels {
+		if l.ID == item && (l.Source == "" || l.Source == source) {
+			return true
+		}
+	}
+	return false
+}
+
 // accessAsks tells whether an access card still asks something of the
 // user: it waits for a yes, or its yes's call is not done (about to run,
 // running, or failed).
@@ -374,11 +383,17 @@ func (c *core) accessAsks(a accessQuestion) bool {
 
 // accessCardMoved is the brain's call on items of a node that was made,
 // decided, or whose yes ran: the page is told its items' sources again
-// (their _card). Once its call ran, catalogCall's sourcesChanged
-// (source_fresh.go) shows its ids done at once and reads the sources again.
+// (their _card). Once its call ran well, its items are done
+// (itemDoneByCode), and catalogCall's sourcesChanged (source_fresh.go)
+// reads the sources again.
 func (c *core) accessCardMoved(a accessQuestion) {
 	if a.Node == "" || len(a.Labels) == 0 || c.nodes == nil {
 		return
+	}
+	if s, _ := c.callState(a.ID); s == callDone {
+		for _, l := range a.Labels {
+			c.itemDoneByCode(a.Node, l.Source, l.ID)
+		}
 	}
 	seen := map[string]bool{}
 	for _, l := range a.Labels {
@@ -423,15 +438,25 @@ func (c *core) itemCardMoved(batch int64) {
 		return // its decision and its call's end may both come here
 	}
 	if slices.ContainsFunc(asks, func(x accessQuestion) bool { return x.State == startApproved }) {
-		n := c.itemNotes(a.Node, a.Source)[a.Item]
-		if n.State != itemDone {
-			n.Source, n.Item, n.State, n.Author = a.Source, a.Item, itemDone, nodeByCode
-			if err := c.noteItem(a.Node, n); err != nil {
-				log.Printf("item card %d: %s: %v", batch, a.Node, err)
-			}
-		}
+		c.itemDoneByCode(a.Node, a.Source, a.Item)
 	}
+	c.readNodeLater(context.Background(), a.Node, []string{a.Source}) // what it settled, as its source says it now
 	c.wakeNodeSkills(a.Node, "card")
+}
+
+// itemDoneByCode notes an item done, its note and group kept (code's
+// state, until an author notes it again): a card's yes ran on it. The
+// item's note is the one truth of an item done (list_sections.go): a List
+// that keeps what is not done lets it go.
+func (c *core) itemDoneByCode(node, source, item string) {
+	n := c.itemNotes(node, source)[item]
+	if n.State == itemDone {
+		return
+	}
+	n.Source, n.Item, n.State, n.Author = source, item, itemDone, nodeByCode
+	if err := c.noteItem(node, n); err != nil {
+		log.Printf("item %s of %s: %s: %v", item, source, node, err)
+	}
 }
 
 // itemDone is the state of an item whose matter is over (item_note's done).
