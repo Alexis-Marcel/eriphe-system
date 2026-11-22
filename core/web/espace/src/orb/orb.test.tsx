@@ -77,19 +77,28 @@ describe("the orb", () => {
     await draw();
     expect(orb().classList.contains("docked")).toBe(true);
     expect(say()?.textContent).toBe("");
-    await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "J'ai ouvert le sujet.\nLe plan est écrit.", more: true } });
+    await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "J'ai ouvert le sujet.\nLe plan est écrit.", more: true, full: "J'ai ouvert le sujet.\n\nLe plan est écrit.\n\n- **Étape un**\n- Étape deux" } });
     expect(orb().classList.contains("docked")).toBe(false);
     expect(orb().getAttribute("aria-label")).toBe("Eriphe, à côté de Substack : l'ouvrir");
     expect(say()?.textContent).toContain("J'ai ouvert le sujet.");
     expect(live()).toBe("J'ai ouvert le sujet.\nLe plan est écrit.");
-    // « Voir plus » opens its page: the rest is there, not in the orb
-    await act(async () => [...say()!.querySelectorAll("button")].find((b) => b.textContent === "Voir plus")!.click());
-    expect(store.getState().open).toEqual(["sub"]);
-    // its page open, the words stay beside it, long past the old 15 s
-    await wait(60_000);
-    expect(say()?.textContent).toContain("J'ai ouvert le sujet.");
     // two minutes of nothing else, it goes back to the bar
-    await wait(60_000);
+    await wait(120_000);
+    expect(orb().classList.contains("docked")).toBe(true);
+  });
+
+  it("unfolds its whole answer in place on « Voir plus », and keeps it until closed", async () => {
+    await draw();
+    await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "J'ai ouvert le sujet.\nLe plan est écrit.", more: true, full: "J'ai ouvert le sujet.\n\nLe plan est écrit.\n\n- **Étape un**\n- Étape deux" } });
+    expect(say()?.textContent).not.toContain("Étape deux");
+    await act(async () => [...say()!.querySelectorAll("button")].find((b) => b.textContent === "Voir plus")!.click());
+    expect(say()?.querySelector(".orb-answer strong")?.textContent).toBe("Étape un");
+    expect(say()?.textContent).toContain("Étape deux");
+    expect([...say()!.querySelectorAll("button")].some((b) => b.textContent === "Voir plus")).toBe(false);
+    // unfolded, it does not go by itself
+    await wait(180_000);
+    expect(say()?.textContent).toContain("Étape deux");
+    await act(async () => (say()!.querySelector("button.orb-x") as HTMLButtonElement).click());
     expect(orb().classList.contains("docked")).toBe(true);
   });
 

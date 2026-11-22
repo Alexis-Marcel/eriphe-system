@@ -37,21 +37,25 @@ func TestOrbWords(t *testing.T) {
 		t.Fatalf("the greeting: %+v", x)
 	}
 
-	// Asked in a subject: the answer belongs to it, a few lines, the rest
-	// in its page.
+	// Asked in a subject: the answer belongs to it, a few plain lines, and
+	// all of it as Markdown for « voir plus ».
 	asked, _ := st.addNodeMessage(roleUser, "Où en est le certificat ?", "", node, true)
 	c.turn.start(int(asked), int(asked), 0)
-	said, _ := st.addNodeMessage(roleBrain, "Le certificat est **renouvelé**.\n\n## Ce que j'ai fait\n\n1. Lu le journal\n2. Relancé le service\n3. Noté la date", "", node, true)
+	answer := "Le certificat est **renouvelé**.\n\n## Ce que j'ai fait\n\n1. Lu le journal\n2. Relancé le service\n3. Noté la date\n4. Prévenu Sam\n5. Fermé le ticket\n6. Rangé le journal"
+	said, _ := st.addNodeMessage(roleBrain, answer, "", node, true)
 	c.markAnswer(int(said))
 	x, _ = tw.w.orbFor("", false)
 	if x.Asked != int(asked) || x.Answer == nil || x.Answer.Node != node || x.Answer.Seq != int(said) || x.Answer.Whole || !x.Answer.More {
 		t.Fatalf("the answer in a subject: %+v", x.Answer)
 	}
-	if x.Answer.Text != "Le certificat est renouvelé.\nCe que j'ai fait\nLu le journal" {
+	if x.Answer.Text != "Le certificat est renouvelé.\nCe que j'ai fait\nLu le journal\nRelancé le service\nNoté la date\nPrévenu Sam" {
 		t.Errorf("its lines: %q", x.Answer.Text)
 	}
-	if raw := fmtJSON(x); strings.Contains(raw, "**") || strings.Contains(raw, "Noté la date") {
-		t.Errorf("the orb says more than a few plain lines: %s", raw)
+	if strings.Contains(x.Answer.Text, "**") {
+		t.Errorf("its lines are not plain: %q", x.Answer.Text)
+	}
+	if x.Answer.Full != answer {
+		t.Errorf("all of it: %q", x.Answer.Full)
 	}
 	// Written in a tainted turn: marked.
 	st.set(taintKey(int(said)), "brain:task:t-1")
@@ -111,14 +115,15 @@ func TestOrbWords(t *testing.T) {
 
 // Beside a subject the orb says at most a few lines, as plain text.
 func TestFewLines(t *testing.T) {
-	long := strings.Repeat("Une phrase assez longue pour remplir une bonne partie de la ligne. ", 3)
+	long := strings.Repeat("Une phrase assez longue pour remplir une bonne partie de la ligne. ", 5)
 	for _, c := range []struct {
 		in, want string
 		cut      bool
 	}{
 		{"C'est allumé.", "C'est allumé.", false},
 		{"Fait.\n\nLa vue est **prête**.", "Fait.\nLa vue est prête.", false},
-		{"Un\nDeux\nTrois\nQuatre", "Un\nDeux\nTrois", true},
+		{"Un\nDeux\nTrois\nQuatre", "Un\nDeux\nTrois\nQuatre", false},
+		{"1\n2\n3\n4\n5\n6\n7", "1\n2\n3\n4\n5\n6", true},
 		{"```\ncode\n```\nC'est fait.", "C'est fait.", true},
 		{"| a | b |\n|---|---|\nVoilà.", "Voilà.", true},
 		{long, "Une phrase assez longue pour remplir une bonne partie de la ligne.", true},

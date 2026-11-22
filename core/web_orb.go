@@ -21,10 +21,10 @@ import (
 // moves it: the graph shows it (a node's ring).
 //
 // The subject's document is the conversation: beside a subject the orb
-// says only a few lines (its « voir plus » opens the page, where the rest
-// is, written by the brain or filed by code, node_net.go). Only an answer
-// given at the home, which no subject holds, is held whole, as Markdown,
-// until the user moves on.
+// says its first lines; its « voir plus » unfolds the whole answer in
+// place, as Markdown (Full), the page holding what the brain or code wrote
+// there (node_net.go). Only an answer given at the home, which no subject
+// holds, is held whole at once, as Markdown, until the user moves on.
 //
 // The workspace's stream (/events, web_sse.go) sends what the orb needs as
 // JSON, its "orb" event, whatever page the bar talks to: a snapshot keyed
@@ -47,8 +47,9 @@ import (
 const (
 	askedMax  = 500  // the user's message that waits, as the bar folds it
 	ackRunes  = 140  // a line of Eriphe's
-	wordLines = 3    // Eriphe's words beside a subject: at most these lines
-	wordRunes = 280  // ... and these runes
+	wordLines = 6    // Eriphe's words beside a subject: at most these lines
+	wordRunes = 600  // ... and these runes
+	lineRunes = 280  // ... a line of them at most these
 	answerMax = 2000 // an answer given at the home, as the orb holds it (node_net.go files one of netMinRunes)
 )
 
@@ -82,14 +83,15 @@ type orbWork struct {
 }
 
 // orbWords are Eriphe's words where they belong (Node; "" for the home): a
-// few plain lines (More: there is more, in the subject's page); at the
-// home, an answer to the user of more than a line, whole, as Markdown
+// few plain lines (More: there is more, Full: all of it, as Markdown); at
+// the home, an answer to the user of more than a line, whole, as Markdown
 // (Whole).
 type orbWords struct {
 	Seq      int    `json:"seq"`
 	Node     string `json:"node,omitempty"`
 	Text     string `json:"text"`
 	More     bool   `json:"more,omitempty"`
+	Full     string `json:"full,omitempty"` // with More: the whole answer, as Markdown
 	Whole    bool   `json:"whole,omitempty"`
 	External bool   `json:"external,omitempty"` // written in a turn that read external content
 }
@@ -263,6 +265,9 @@ func (s *Store) orbWordsOf(msgs []Message) *orbWords {
 	if w.Text, w.More = fewLines(text); w.Text == "" {
 		return nil
 	}
+	if w.More {
+		w.Full = truncate(text, answerMax)
+	}
 	return &w
 }
 
@@ -373,8 +378,8 @@ func (c *core) cardHeld(ref string) bool {
 
 // fewLines are Eriphe's words beside a subject: the first lines of what it
 // wrote that say something, as plain text, at most wordLines lines and
-// wordRunes runes, a long line cut as ackLine cuts it; cut tells that they
-// are not all of it.
+// wordRunes runes, a line past lineRunes cut as ackLine cuts one; cut
+// tells that they are not all of it.
 func fewLines(text string) (lines string, cut bool) {
 	var out []string
 	n, fenced := 0, false
@@ -391,7 +396,7 @@ func fewLines(text string) (lines string, cut bool) {
 			cut = true // a table, a rule: not words to say
 			continue
 		}
-		line, short := ackLine(t)
+		line, short := sayLine(t, lineRunes)
 		if len(out) == wordLines || (len(out) > 0 && n+len([]rune(line)) > wordRunes) {
 			cut = true
 			break
@@ -411,7 +416,10 @@ func fewLines(text string) (lines string, cut bool) {
 // at most ackRunes: its first sentence when that fits, else cut at a word
 // with « … ». cut tells that the line is not all of it: more lines, or a
 // line cut.
-func ackLine(text string) (line string, cut bool) {
+func ackLine(text string) (line string, cut bool) { return sayLine(text, ackRunes) }
+
+// sayLine is ackLine with limit runes at most.
+func sayLine(text string, limit int) (line string, cut bool) {
 	for _, l := range strings.Split(strings.TrimSpace(text), "\n") {
 		t := strings.TrimSpace(l)
 		if t == "" {
@@ -427,8 +435,8 @@ func ackLine(text string) (line string, cut bool) {
 		}
 		line = plainLine(t)
 	}
-	if len([]rune(line)) > ackRunes {
-		return shortLine(line), true
+	if len([]rune(line)) > limit {
+		return shortLine(line, limit), true
 	}
 	return line, cut
 }
@@ -454,16 +462,16 @@ func plainLine(t string) string {
 	return strings.TrimSpace(ackSpacesRe.ReplaceAllString(t, " "))
 }
 
-// shortLine is a line longer than ackRunes, made short: its first
+// shortLine is a line longer than limit runes, made short: its first
 // sentence when that fits, else cut at a word.
-func shortLine(line string) string {
+func shortLine(line string, limit int) string {
 	r := []rune(line)
-	for i := 20; i < ackRunes; i++ {
+	for i := 20; i < limit; i++ {
 		if (r[i] == '.' || r[i] == '?' || r[i] == '!') && r[i+1] == ' ' {
 			return string(r[:i+1])
 		}
 	}
-	head := string(r[:ackRunes])
+	head := string(r[:limit])
 	if i := strings.LastIndex(head, " "); i > len(head)/2 {
 		head = head[:i]
 	}

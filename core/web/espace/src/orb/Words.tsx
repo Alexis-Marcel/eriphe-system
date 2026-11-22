@@ -8,10 +8,10 @@ import type { Show } from "./model";
 // (Line.tsx): Eriphe's few lines, marked when written after reading
 // external content, never replaced; the home's answer whole, as Markdown;
 // that it works; that it could not answer, and the way to try again; the
-// card its answer raised. « Voir plus » and
-// « Voir » open the subject's page, where the rest is; ✕ closes what
+// card its answer raised. « Voir plus » unfolds the whole answer in place,
+// as Markdown; « Voir » opens the page that holds the card; ✕ closes what
 // stays until the user moves on.
-export function Words({ show, dismiss, open }: { show: Show; dismiss: () => void; open: (id: string) => void }) {
+export function Words({ show, dismiss, open, unfold }: { show: Show; dismiss: () => void; open: (id: string) => void; unfold: () => void }) {
   const { t } = useWords();
   const ext = <span className="orb-ext" role="img" title={t("espace.orb.external")} aria-label={t("espace.orb.external")} />;
   const x = <Close onClick={dismiss} label={t("espace.orb.close")} />;
@@ -61,11 +61,11 @@ export function Words({ show, dismiss, open }: { show: Show; dismiss: () => void
       );
     case "answer":
       if (!show.words) return null;
-      if (show.words.whole) {
+      if (show.words.whole || show.full) {
         return (
           <>
             <div className="orb-answer">
-              <Markdown text={show.words.text} newTab={t("espace.a2.newtab")} />
+              <Markdown text={show.full ? show.words.full! : show.words.text} newTab={t("espace.a2.newtab")} />
               {show.words.external && ext}
             </div>
             {x}
@@ -77,10 +77,10 @@ export function Words({ show, dismiss, open }: { show: Show; dismiss: () => void
           <p className="orb-text">
             {show.words.text}
             {show.words.external && ext}
-            {show.words.more && show.node && (
+            {show.words.more && show.words.full && (
               <>
                 {" "}
-                <button type="button" className="orb-link" onClick={() => open(show.node!)}>
+                <button type="button" className="orb-link" onClick={unfold}>
                   {t("espace.orb.more")}
                 </button>
               </>

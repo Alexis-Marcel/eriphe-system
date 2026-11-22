@@ -324,7 +324,7 @@ export type Waiting = { seq: number; text: string; node?: string; title?: string
 // the home; a few plain lines (more: the subject's page says the rest),
 // or at the home an answer of more than a line, whole, as Markdown
 // (whole); external: written after reading external content.
-export type OrbWords = { seq: number; node?: string; text: string; more?: boolean; whole?: boolean; external?: boolean };
+export type OrbWords = { seq: number; node?: string; text: string; more?: boolean; full?: string; whole?: boolean; external?: boolean };
 
 // The "orb" event (orbEvent, web_orb.go): what Eriphe's orb shows,
 // whatever page the bar talks to. asked: the seq of the user's last

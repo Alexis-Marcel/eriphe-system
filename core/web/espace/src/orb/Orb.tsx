@@ -24,7 +24,7 @@ const ARRIVED = 8; // px from its place: there, its words show
 export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>]; onOpen: (id: string) => void }) {
   const { t } = useWords();
   const nodes = useGraph((s) => s.nodes);
-  const { show, dismiss } = useOrb();
+  const { show, dismiss, unfold } = useOrb();
   const reduced = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
   const orb = useRef<HTMLButtonElement>(null);
   const say = useRef<HTMLDivElement>(null);
@@ -155,7 +155,7 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
         onClick={() => show.node && open(show.node)}
       />
       <div ref={say} className={`orb-say ${show.mode}${show.pinned ? " pinned" : ""}`} data-orb={show.key}>
-        <Words show={show} dismiss={dismiss} open={open} />
+        <Words show={show} dismiss={dismiss} open={open} unfold={unfold} />
       </div>
     </>
   );

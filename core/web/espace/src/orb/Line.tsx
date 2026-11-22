@@ -12,7 +12,7 @@ import { Words } from "./Words";
 export function Line({ mini = true }: { mini?: boolean }) {
   const { t } = useWords();
   const nodes = useGraph((s) => s.nodes);
-  const { show, dismiss } = useOrb();
+  const { show, dismiss, unfold } = useOrb();
   if (show.mode === "rest") return null;
   const open = (id: string) => step(store, openPage, id, false);
   return (
@@ -23,7 +23,7 @@ export function Line({ mini = true }: { mini?: boolean }) {
           {t("espace.orb.on", titleOf(nodes[show.node], t("espace.external")))}
         </button>
       )}
-      <Words show={show} dismiss={dismiss} open={open} />
+      <Words show={show} dismiss={dismiss} open={open} unfold={unfold} />
     </div>
   );
 }
