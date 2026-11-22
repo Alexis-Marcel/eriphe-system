@@ -219,7 +219,7 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 	}
 	if !approve {
 		c.store.updateTask(s.TaskID, map[string]any{"desired": desiredStopped, "state": stateStopped, "pending_reason": "its start was declined"})
-		c.taskNodeState(s.TaskID, stateStopped) // task_node.go
+		c.taskNodeMoved(s.TaskID, stateStopped) // node_status.go
 		log.Printf("task %s: start declined by the user", s.TaskID)
 		c.bump()
 		return nil
@@ -237,7 +237,7 @@ func (c *core) decideTaskStart(id int64, approve bool) error {
 	}
 	c.store.db.Exec(`UPDATE tasks SET desired = ?, pending_reason = '', updated = ? WHERE id = ? AND desired = ?`,
 		desiredRunning, time.Now().Unix(), s.TaskID, desiredHeld)
-	c.taskNodeState(s.TaskID, statePending) // task_node.go: it runs
+	c.taskNodeMoved(s.TaskID, statePending) // node_status.go: it runs
 	log.Printf("task %s: start approved by the user", s.TaskID)
 	if t, err := c.store.task(s.TaskID); err == nil && t.Device == "" {
 		c.placePending()

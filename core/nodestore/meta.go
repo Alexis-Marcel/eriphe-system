@@ -1,7 +1,6 @@
 package nodestore
 
 import (
-	"strings"
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
@@ -12,8 +11,8 @@ import (
 // one: it never conflicts with an author's write.
 
 // SetDone marks a node done now, or not done any more: its front
-// matter's done, and its state (done, else idle). It tells whether it
-// changed: a node done already is not done again.
+// matter's done. It tells whether it changed: a node done already is not
+// done again.
 func (s *Store) SetDone(id string, done bool, author string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -34,32 +33,7 @@ func (s *Store) SetDone(id string, done bool, author string) (bool, error) {
 	}); err != nil {
 		return false, err
 	}
-	state := Idle
-	if done {
-		state = Done
-	}
-	if _, err = s.db.Exec(`UPDATE nodes SET state = ? WHERE id = ?`, state, id); err != nil {
-		return true, err
-	}
-	s.changed(ChangedState, id)
 	return true, nil
-}
-
-// InStates are the nodes in one of states, archived ones left out, the
-// last changed first.
-func (s *Store) InStates(states []string, limit int) ([]Summary, error) {
-	if len(states) == 0 {
-		return nil, nil
-	}
-	if limit <= 0 {
-		limit = 20
-	}
-	args := make([]any, 0, len(states)+1)
-	for _, st := range states {
-		args = append(args, st)
-	}
-	marks := strings.TrimSuffix(strings.Repeat("?, ", len(states)), ", ")
-	return s.summaries(`WHERE n.archived = 0 AND n.state IN (`+marks+`) ORDER BY n.updated DESC, n.id LIMIT ?`, append(args, limit)...)
 }
 
 // Recent are the last changed nodes; archived ones only when asked, then

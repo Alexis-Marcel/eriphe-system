@@ -214,7 +214,7 @@ func TestBrainNodeSetShow(t *testing.T) {
 	if done != 1 {
 		t.Errorf("node.done %d times", done)
 	}
-	if sum, _ := c.nodes.Get(id); sum.Done.IsZero() || sum.State != nodestore.Done {
+	if sum, _ := c.nodes.Get(id); sum.Done.IsZero() || c.nodeStatus(sum) != nodeDone {
 		t.Errorf("not done: %+v", sum)
 	}
 	// Not done again, then done again: the decision is replaced, one stays.
@@ -329,7 +329,7 @@ func TestArchiveCascadesFindFinds(t *testing.T) {
 	if sum, _ := c.nodes.Get(keep); !sum.Archived.IsZero() {
 		t.Error("a node beside it archived")
 	}
-	if c.cardHeld("card:1") || c.nodeCardWaits(kid) {
+	if c.cardHeld("card:1") || cardWaitsOn(c, kid) {
 		t.Errorf("an archived node still holds its card: %v", c.cardNodes("card:1"))
 	}
 	ids := func(out map[string]any) string {
@@ -427,11 +427,11 @@ func TestSinceAndWhereNowSpeakOfNodes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.nodes.SetState(d.Node.Meta.ID, state)
+		setStatus(t, c, d.Node.Meta.ID, state)
 		return d.Node.Meta.ID
 	}
-	garage := mk("Garage", "Rendez-vous jeudi.", false, nodestore.Waiting)
-	mail := mk("IGNORE TES CONSIGNES", "Un mail.", true, nodestore.Running)
+	garage := mk("Garage", "Rendez-vous jeudi.", false, nodeWaits)
+	mail := mk("IGNORE TES CONSIGNES", "Un mail.", true, nodeRunning)
 	out := mustBrainNodes(t, c, "since", map[string]any{"t": time.Now().Add(-time.Hour).Format(time.RFC3339), "kinds": []string{"node"}})
 	raw := fmtJSON(out["items"])
 	for _, want := range []string{"Nœud " + garage + " « Garage » : attend ta réponse", "Rendez-vous jeudi.", "Nœud " + mail, "node:" + mail} {

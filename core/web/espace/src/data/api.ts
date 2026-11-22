@@ -113,8 +113,9 @@ const nodePath = (id: string) => `/api/nodes/${encodeURIComponent(id)}`;
 
 // A node as the graph shows it (graphNode, web_graph.go). titleExternal:
 // its title may be someone else's words (written after an external read):
-// shown as it is, always marked (graph/Title.tsx). line: while it runs,
-// its task's last word of where it is.
+// shown as it is, always marked (graph/Title.tsx). status: computed by
+// eriphe-core (node_status.go), what waits for the user first. line: while
+// it runs, its task's last word of where it is.
 export type GraphNode = {
   id: string;
   title?: string;
@@ -124,13 +125,12 @@ export type GraphNode = {
   parent?: string;
   links?: string[];
   lifetime: "work" | "standing";
-  state: "idle" | "running" | "waiting" | "done";
+  status: "idle" | "running" | "waits" | "done";
   created: string;
   updated: string;
   done?: string;
   external?: boolean;
   version: number;
-  waits?: boolean;
   line?: string;
   // glance: a figure of one of its sources, shown as a tile while it is
   // past its threshold and not seen (node_glance.go, graph/glance.ts)

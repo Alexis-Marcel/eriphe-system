@@ -258,7 +258,7 @@ func TestMailViewOneYes(t *testing.T) {
 		t.Fatalf("sent %v", got)
 	}
 	// The standing node is still the view's: never done by a run.
-	if sum, _ := c.nodes.Get(node); sum.State == "done" || !sum.Archived.IsZero() {
+	if sum, _ := c.nodes.Get(node); c.nodeStatus(sum) == nodeDone || !sum.Archived.IsZero() {
 		t.Fatalf("the view's node %+v", sum)
 	}
 }

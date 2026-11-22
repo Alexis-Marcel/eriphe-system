@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
-	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // The context pack: what a fresh session of the brain is given so that it
@@ -270,7 +269,7 @@ func (c *core) contextPack() (string, contextPackStats) {
 
 // packNode is a node at work or waiting, and its card if it has one.
 type packNode struct {
-	node nodestore.Summary
+	node statusNode
 	card *pushedCard
 }
 
@@ -294,28 +293,15 @@ func notShown(xs []*Memory, shown map[string]bool) []*Memory {
 	return slices.DeleteFunc(xs, func(x *Memory) bool { return shown[fmt.Sprintf("memory:%d", x.ID)] })
 }
 
-// activeNodes are the nodes at work or waiting for the user, the last
-// changed first.
-func (c *core) activeNodes(limit int) []nodestore.Summary {
-	if c.nodes == nil {
-		return nil
-	}
-	xs, err := c.nodes.InStates([]string{nodestore.Running, nodestore.Waiting}, limit)
-	if err != nil {
-		log.Printf("nodes: %v", err)
-	}
-	return xs
-}
-
-// nodeLine is a node in a line: its id, state, lifetime, title and the
+// nodeLine is a node in a line: its id, status, lifetime, title and the
 // first line of its doc. One whose words may carry what someone else
 // wrote is named, not quoted.
-func (c *core) nodeLine(x nodestore.Summary) string {
+func (c *core) nodeLine(x statusNode) string {
 	if x.External {
-		return fmt.Sprintf("- nœud %s [%s] : il peut porter ce qu'un autre a écrit : node_read le relit", x.ID, x.State)
+		return fmt.Sprintf("- nœud %s [%s] : il peut porter ce qu'un autre a écrit : node_read le relit", x.ID, x.Status)
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "- nœud %s [%s", x.ID, x.State)
+	fmt.Fprintf(&b, "- nœud %s [%s", x.ID, x.Status)
 	if x.Lifetime == nodefile.Standing {
 		b.WriteString(", permanent")
 	}

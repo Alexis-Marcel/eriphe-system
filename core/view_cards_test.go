@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
-	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // mailView is « Mes mails » approved: a standing node listing the
@@ -111,9 +110,10 @@ func TestSkillCardsWaitInTheirView(t *testing.T) {
 	}
 	c.syncCards()
 	held()
-	c.taskNodeState(r.Task, stateIdle) // its run's task idle: the node still waits on its cards
-	if sum, _ := c.nodes.Get(node); sum.State != nodestore.Waiting {
-		t.Errorf("the view's node is %s while its cards wait", sum.State)
+	c.store.updateTask(r.Task, map[string]any{"state": stateIdle})
+	c.taskNodeMoved(r.Task, stateIdle) // its run's task idle: the node still waits on its cards
+	if s := nodeStatusNow(t, c, node); s != nodeWaits {
+		t.Errorf("the view's node is %s while its cards wait", s)
 	}
 
 	// On the item: one mail, by its subject and sender.

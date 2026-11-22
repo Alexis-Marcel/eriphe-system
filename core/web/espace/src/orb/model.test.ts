@@ -7,7 +7,7 @@ const placeBeside = (...a: Parameters<typeof besideOrNone>) => besideOrNone(...a
 const placeHome = (...a: Parameters<typeof homeOrNone>) => homeOrNone(...a)!;
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title: id.toUpperCase(), lifetime: "work", state: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
+  id, title: id.toUpperCase(), lifetime: "work", status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
 });
 const nodes = { sub: node("sub"), mail: node("mail"), day: node("day") };
 const none: Closed = { answer: 0, seen: 0, wait: 0, failed: 0 };
@@ -107,7 +107,7 @@ describe("what the orb shows", () => {
   it("only answers: a subject that begins to wait for the user, unasked, leaves it in the bar", () => {
     // what the orb is told carries nothing unasked: a node that waits is
     // the graph's (its ring), whatever its nodes say
-    const waiting = { ...nodes, mail: node("mail", { waits: true }) };
+    const waiting = { ...nodes, mail: node("mail", { status: "waits" }) };
     expect(orbShow({ asked: 3 }, mind({ nodes: waiting }))).toMatchObject({ mode: "rest", node: null });
     expect(orbShow(null, mind({ nodes: waiting })).mode).toBe("rest");
     // the answer it had stays where it was

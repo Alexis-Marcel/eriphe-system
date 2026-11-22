@@ -73,7 +73,7 @@ func TestHomeSubjectTakesTheExchange(t *testing.T) {
 		t.Errorf("the answer about the card was filed: %+v", m)
 	}
 	ref := proposalRef(cardViewKind, 1)
-	if !slices.Contains(c.cardNodes(ref), subject) || !c.nodeCardWaits(subject) {
+	if !slices.Contains(c.cardNodes(ref), subject) || !cardWaitsOn(c, subject) {
 		t.Fatalf("the view's card does not wait on its subject: %v", c.cardNodes(ref))
 	}
 	w := &web{c: c}

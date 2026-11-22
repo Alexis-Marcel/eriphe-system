@@ -458,13 +458,14 @@ func (c *core) startTask(ctx context.Context, kind string, r runRequest, extra d
 		t.Desired, t.PendingReason = desiredHeld, "waits for "+c.conf().User+"'s approval to start, asked on a card in the conversation"
 	}
 	if kind == "worker" {
-		if err := c.openTaskNode(t, r, len(needs) > 0); err != nil { // task_node.go
+		if err := c.openTaskNode(t, r); err != nil { // task_node.go
 			return nil, err
 		}
 	}
 	if err := c.store.insertTask(t); err != nil {
 		return nil, err
 	}
+	c.nodeMoved(c.taskNode(t.ID), false) // it works in it, or waits for its start (node_status.go)
 	if len(r.taint) > 0 && c.store.get(taskTaintKey(t.ID)) == "" {
 		// Started on what someone else wrote: tainted from its start (task_taint.go).
 		c.store.set(taskTaintKey(t.ID), "started on a tainted turn: "+strings.Join(r.taint, ", "))

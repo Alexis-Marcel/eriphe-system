@@ -294,8 +294,12 @@ type proposalFeed struct {
 	changed chan struct{}
 }
 
-// proposalMoved notes that a proposal's card was made or changed state.
+// proposalMoved notes that a proposal's card was made or changed state,
+// and tells the graph of the nodes it is linked to (node_status.go).
 func (c *core) proposalMoved(ref string) {
+	for _, id := range c.cardNodes(ref) {
+		c.nodeMoved(id, false)
+	}
 	f := &c.props
 	f.mu.Lock()
 	defer f.mu.Unlock()

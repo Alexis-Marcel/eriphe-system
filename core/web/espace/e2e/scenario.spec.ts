@@ -203,7 +203,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await request.post("/e2e/finish/style");
   await expect(page.locator(".gr-node.done .gr-core[aria-label^='Style des articles']")).toBeVisible();
   // Plan's result is the user's: it waits for them, the work around it done.
-  await expect(page.locator(".gr-node.waiting .gr-core[aria-label^='Plan du premier article']")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".gr-node.waits .gr-core[aria-label^='Plan du premier article']")).toBeVisible({ timeout: 30_000 });
 
   // 10. Back on Substack: what happened while away.
   await home(page);

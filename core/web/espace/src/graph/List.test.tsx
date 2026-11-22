@@ -12,7 +12,7 @@ import { listOrder } from "./model";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const node = (id: string, created: string, parent?: string): GraphNode => ({
-  id, title: id, parent, lifetime: "work", state: "idle", created: `2026-11-18T10:${created}:00Z`, updated: "2026-11-18T10:00:00Z", version: 1,
+  id, title: id, parent, lifetime: "work", status: "idle", created: `2026-11-18T10:${created}:00Z`, updated: "2026-11-18T10:00:00Z", version: 1,
 });
 
 describe("the list, on a small screen", () => {
@@ -25,8 +25,8 @@ describe("the list, on a small screen", () => {
 
   it("says a node waits with its dot only, no word on the row", () => {
     store.setState(empty(), true);
-    const waits = { ...node("w", "01"), title: "Devis", waits: true, state: "running" as const, line: "Je compare les devis" };
-    const runs = { ...node("r", "02"), title: "Recherche", state: "running" as const, line: "Je lis les sources" };
+    const waits = { ...node("w", "01"), title: "Devis", status: "waits" as const, line: "Je compare les devis" };
+    const runs = { ...node("r", "02"), title: "Recherche", status: "running" as const, line: "Je lis les sources" };
     step(store, applyNodes, { reset: true, nodes: [waits, runs] });
     const el = document.createElement("div");
     document.body.append(el);

@@ -281,6 +281,9 @@ func (c *core) setStep(node string, fields map[string]any) {
 	if _, err := c.store.db.Exec(`UPDATE node_steps SET `+strings.Join(sets, ", ")+` WHERE node = ?`, append(args, node)...); err != nil {
 		log.Printf("step %s: %v", node, err)
 	}
+	if status, ok := fields["status"]; ok {
+		c.nodeMoved(node, status != stepRunning) // its node's status follows it (node_status.go)
+	}
 }
 
 func (c *core) work(parent string) (work, bool) {
@@ -299,7 +302,12 @@ func (c *core) workOfFinal(id string) (work, bool) {
 	return c.work(parent)
 }
 
-// setWork changes a work's columns.
+// setWork changes a work's columns. Its state changes the statuses of
+// its node and of its steps' (node_status.go): a work done puts its
+// results before the user, the accepted steps no other accepted step
+// comes after, until they, or the brain on their word (node_set done),
+// say them done; the work's node is done then, or waits itself when no
+// step is such a result.
 func (c *core) setWork(parent string, fields map[string]any) {
 	var sets []string
 	var args []any
@@ -310,23 +318,12 @@ func (c *core) setWork(parent string, fields map[string]any) {
 	if _, err := c.store.db.Exec(`UPDATE node_works SET `+strings.Join(sets, ", ")+` WHERE parent = ?`, append(args, parent)...); err != nil {
 		log.Printf("work %s: %v", parent, err)
 	}
-}
-
-// stepState puts a step's node in the state its status gives it: running
-// while its task works, done once accepted or dropped, idle otherwise.
-func (c *core) stepState(node, status string) {
-	if c.nodes == nil {
-		return
-	}
-	state := nodestore.Idle
-	switch status {
-	case stepRunning:
-		state = nodestore.Running
-	case stepAccepted, stepDropped:
-		state = nodestore.Done
-	}
-	if err := c.nodes.SetState(node, state); err != nil {
-		log.Printf("step %s: state: %v", node, err)
+	if _, ok := fields["state"]; ok {
+		c.nodeMoved(parent, false)
+		steps, _ := c.workSteps(parent)
+		for _, st := range steps {
+			c.nodeMoved(st.Node, false)
+		}
 	}
 }
 
@@ -764,7 +761,6 @@ func (c *core) advanceLocked(ctx context.Context, parent string) {
 			log.Printf("work %s: step %s: %v", parent, st.Node, err)
 			note := truncate(err.Error(), stepNoteMax)
 			c.setStep(st.Node, map[string]any{"status": stepBlocked, "note": note, "ended": time.Now().Unix()})
-			c.stepState(st.Node, stepBlocked)
 			c.traceWork(parent, fmt.Sprintf("L'étape « %s » n'a pas pu démarrer : %s", st.Spec.Title, note), "")
 			c.wakeForWork(parent, fmt.Sprintf("L'étape « %s » (nœud %s) n'a pas pu démarrer : %s\nDécide avec node_settle : retry (en disant quoi changer), drop ou replan.", st.Spec.Title, st.Node, note), nil)
 			status[st.Node] = stepBlocked
@@ -826,7 +822,6 @@ func (c *core) startStep(ctx context.Context, st Step, steps []Step, again strin
 		c.store.set(lentByUserKey(t.ID), "1") // the user's own skill, approved with what it borrows (lend.go)
 	}
 	c.setStep(st.Node, map[string]any{"status": stepRunning, "task": t.ID, "started": time.Now().Unix(), "failed": false, "note": truncate(again, stepNoteMax), "ended": 0})
-	c.stepState(st.Node, stepRunning)
 	c.traceWork(st.Parent, fmt.Sprintf("L'étape « %s » démarre : tâche %s.", st.Spec.Title, t.ID), "")
 	return nil
 }
@@ -900,7 +895,6 @@ func (c *core) stepTaskChanged(id, state string, outcome turnOutcome) bool {
 		}
 		if proven(r) {
 			c.setStep(st.Node, map[string]any{"status": stepAccepted, "output": output, "note": "", "ended": now})
-			c.stepState(st.Node, stepAccepted)
 			c.stopStepTask(ctx, id)
 			c.traceWork(st.Parent, fmt.Sprintf("L'étape « %s » est acceptée sur sa preuve (%s).", st.Spec.Title, proofWords(r)), "")
 			c.advanceLocked(ctx, st.Parent)
@@ -912,7 +906,6 @@ func (c *core) stepTaskChanged(id, state string, outcome turnOutcome) bool {
 			why = r.verdict()
 		}
 		c.setStep(st.Node, map[string]any{"status": stepFailed, "failed": failed, "output": output, "note": truncate(why, stepNoteMax), "ended": now})
-		c.stepState(st.Node, stepFailed)
 		c.traceWork(st.Parent, fmt.Sprintf("L'étape « %s » n'a pas fait sa preuve : %s.", st.Spec.Title, why), strings.Join(taint, ", "))
 		accept := "accept (son travail tient malgré tout)"
 		if failed {
@@ -926,7 +919,6 @@ func (c *core) stepTaskChanged(id, state string, outcome turnOutcome) bool {
 		}
 		note := truncate(state+c.endedNote(tst.Task), stepNoteMax)
 		c.setStep(st.Node, map[string]any{"status": stepBlocked, "note": note, "ended": now})
-		c.stepState(st.Node, stepBlocked)
 		c.traceWork(st.Parent, fmt.Sprintf("L'étape « %s » s'est arrêtée (%s).", st.Spec.Title, state), "")
 		c.wakeForWork(st.Parent, fmt.Sprintf("L'étape « %s » (nœud %s, tâche %s) s'est arrêtée : %s.\nDécide avec node_settle : retry (%d essai(s) restant(s)), drop ou replan.",
 			st.Spec.Title, st.Node, id, note, max(0, stepRetries-st.Tries)), taint)
@@ -989,40 +981,6 @@ func (c *core) holdForBudget(w work) {
 // minutes at least.
 func budgetMore(w work) int { return max(30, w.Budget/2) }
 
-// workForUser puts a done work before the user: its result, the
-// accepted steps no other step comes after, waits for them until they, or
-// the brain on their word (node_set done), say it is done; the work around
-// it is done. A work with no such step waits itself.
-func (c *core) workForUser(parent string) {
-	steps, _ := c.workSteps(parent)
-	after := map[string]bool{}
-	for _, st := range steps {
-		if st.Status != stepAccepted {
-			continue // a dropped step is no one's sequel
-		}
-		for _, a := range st.After {
-			after[a] = true
-		}
-	}
-	var results []string
-	for _, st := range steps {
-		if st.Status == stepAccepted && !after[st.Node] {
-			results = append(results, st.Node)
-		}
-	}
-	if len(results) == 0 {
-		c.nodes.SetState(parent, nodestore.Waiting)
-		return
-	}
-	for _, id := range results {
-		// One the user already said done, or archived, stays so.
-		if sum, err := c.nodes.Get(id); err == nil && sum.Done.IsZero() && sum.Archived.IsZero() {
-			c.nodes.SetState(id, nodestore.Waiting)
-		}
-	}
-	c.nodes.SetState(parent, nodestore.Done)
-}
-
 // The final check.
 
 // finishWork ends a work whose steps are all accepted or dropped: a fresh
@@ -1035,7 +993,6 @@ func (c *core) finishWork(ctx context.Context, w work, steps []Step) {
 	if goal == "" {
 		c.setWork(w.Parent, map[string]any{"state": workDone, "spent": int64(w.elapsed(time.Now()) / time.Second), "since": 0})
 		c.traceWork(w.Parent, "Toutes les étapes sont acceptées.", "")
-		c.workForUser(w.Parent)
 		return
 	}
 	if err := c.startFinal(ctx, w, goal, steps); err != nil {
@@ -1117,7 +1074,6 @@ func (c *core) finalChanged(w work, id, state string, outcome turnOutcome) {
 	if proven(r) {
 		c.setWork(w.Parent, map[string]any{"state": workDone, "spent": int64(w.elapsed(time.Now()) / time.Second), "since": 0})
 		c.traceWork(w.Parent, "Objectif vérifié par un agent neuf : "+r.verdict(), strings.Join(taint, ", "))
-		c.workForUser(w.Parent)
 		return
 	}
 	why := state
@@ -1164,7 +1120,6 @@ func (c *core) settleStep(ctx context.Context, parent, step, outcome, note strin
 			return "", errors.New("its checks failed: a report is only a claim. Retry it, saying what to fix, drop it or replan")
 		}
 		c.setStep(st.Node, map[string]any{"status": stepAccepted, "note": truncate(note, stepNoteMax), "ended": now})
-		c.stepState(st.Node, stepAccepted)
 		c.stopStepTask(ctx, st.Task)
 		c.traceWork(parent, fmt.Sprintf("Étape « %s » acceptée par Eriphe.%s", st.Spec.Title, withNote(note)), "")
 	case settleRetry:
@@ -1275,7 +1230,6 @@ func (c *core) settleWork(ctx context.Context, w work, outcome, note string) (st
 	case outcome == settleAccept && w.State == workFailed:
 		c.setWork(w.Parent, map[string]any{"state": workDone})
 		c.traceWork(w.Parent, "Travail tenu pour fait par Eriphe."+withNote(note), "")
-		c.workForUser(w.Parent)
 		return "The work is done.", nil
 	case outcome == settleRetry && w.State == workFailed:
 		if w.Checks >= finalChecks {
@@ -1291,7 +1245,6 @@ func (c *core) settleWork(ctx context.Context, w work, outcome, note string) (st
 			if !st.over() {
 				c.stopStepTask(ctx, st.Task)
 				c.setStep(st.Node, map[string]any{"status": stepDropped, "ended": now})
-				c.stepState(st.Node, stepDropped)
 			}
 		}
 		c.stopStepTask(ctx, w.Final)
@@ -1315,7 +1268,6 @@ func (c *core) retryStep(ctx context.Context, st Step, note string) error {
 	if t, err := c.store.task(st.Task); err == nil && t.State == stateIdle {
 		if _, err := c.answer(ctx, t.ID, "", "Ton travail n'est pas accepté tel quel. À corriger : "+note, nil, byBrain); err == nil {
 			c.setStep(st.Node, map[string]any{"status": stepRunning, "tries": st.Tries + 1, "failed": false, "note": truncate(note, stepNoteMax), "ended": 0})
-			c.stepState(st.Node, stepRunning)
 			return nil
 		}
 	}
@@ -1338,7 +1290,6 @@ func (c *core) dropStep(ctx context.Context, st Step) []string {
 		if slices.Contains(gone, x.Node) {
 			c.stopStepTask(ctx, x.Task)
 			c.setStep(x.Node, map[string]any{"status": stepDropped, "ended": now})
-			c.stepState(x.Node, stepDropped)
 		}
 	}
 	return gone

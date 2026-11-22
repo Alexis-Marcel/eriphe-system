@@ -147,21 +147,43 @@ func (c *core) readsOf(node string, sources func(string) ([]nodestore.LiveSource
 	if err != nil || len(srcs) == 0 {
 		return nil
 	}
-	kept := map[string]nodeRead{}
-	rows, err := c.store.db.Query(`SELECT block, name, spec, value, read, error, waiting, next_at FROM node_reads WHERE node = ?`, node)
-	if err == nil {
-		for rows.Next() {
-			var r nodeRead
-			var value string
-			if rows.Scan(&r.Block, &r.Name, &r.spec, &value, &r.Read, &r.Error, &r.Waiting, &r.NextAt) != nil {
-				continue
-			}
-			if value != "" {
-				json.Unmarshal([]byte(value), &r.Value)
-			}
-			kept[r.Block+"\x00"+r.Name] = r
+	return readsWith(srcs, c.keptReadsOf(`WHERE node = ?`, node)[node])
+}
+
+// keptReadsOf are the reads kept in node_reads, by node, then by block
+// and name.
+func (c *core) keptReadsOf(where string, args ...any) map[string]map[string]nodeRead {
+	out := map[string]map[string]nodeRead{}
+	rows, err := c.store.db.Query(`SELECT node, block, name, spec, value, read, error, waiting, next_at FROM node_reads `+where, args...)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var r nodeRead
+		var node, value string
+		if rows.Scan(&node, &r.Block, &r.Name, &r.spec, &value, &r.Read, &r.Error, &r.Waiting, &r.NextAt) != nil {
+			continue
 		}
-		rows.Close()
+		if value != "" {
+			json.Unmarshal([]byte(value), &r.Value)
+		}
+		if out[node] == nil {
+			out[node] = map[string]nodeRead{}
+		}
+		out[node][r.Block+"\x00"+r.Name] = r
+	}
+	return out
+}
+
+// allReads are the reads kept of every node.
+func (c *core) allReads() map[string]map[string]nodeRead { return c.keptReadsOf(``) }
+
+// readsWith are a node's sources with the reads kept of them, by block
+// then name; a source new, or changed since, from nothing.
+func readsWith(srcs []nodestore.LiveSource, kept map[string]nodeRead) []nodeRead {
+	if len(srcs) == 0 {
+		return nil
 	}
 	out := make([]nodeRead, 0, len(srcs))
 	for _, s := range srcs {

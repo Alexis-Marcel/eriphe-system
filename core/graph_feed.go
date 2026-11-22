@@ -11,8 +11,9 @@ import (
 // workspace's stream (web_sse.go) sends it as its "node", "doc",
 // "progress", "source" and "show" events.
 //
-//   - node: a node's row changed (its title, state, parent, links,
-//     version): the store tells (nodestore.Watch), and a card of its moved;
+//   - node: a node's row changed (its title, status, parent, links,
+//     version): the store tells (nodestore.Watch), and whatever its status
+//     is computed from (nodeMoved, node_status.go);
 //   - doc: a new version of its file, or its trace grew;
 //   - progress: a task said where its work is (task_nodes.go);
 //   - source: a live block's source gave a new value (node_live.go);
@@ -70,11 +71,6 @@ func (c *core) useNodes(s *nodestore.Store) {
 			c.graphSaid(graphEvent{Kind: graphEvDoc, Node: ch.ID})
 		case nodestore.ChangedTrace:
 			c.graphSaid(graphEvent{Kind: graphEvTrace, Node: ch.ID})
-		case nodestore.ChangedState:
-			// Its work stopped or moved on: the line said while it ran
-			// goes; a new run says its own.
-			c.forgetProgress(ch.ID)
-			c.graphSaid(graphEvent{Kind: graphEvNode, Node: ch.ID})
 		default:
 			c.graphSaid(graphEvent{Kind: graphEvNode, Node: ch.ID})
 		}
@@ -150,7 +146,8 @@ func (c *core) progressOf(id string) (progressLine, bool) {
 	return p, ok
 }
 
-// forgetProgress drops a node's line of work: its state changed.
+// forgetProgress drops a node's line of work: its run or its step ended,
+// or it was archived (nodeMoved).
 func (c *core) forgetProgress(id string) {
 	f := &c.graph
 	f.mu.Lock()

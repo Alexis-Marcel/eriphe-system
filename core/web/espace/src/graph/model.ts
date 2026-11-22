@@ -11,9 +11,9 @@ export const OLD = 7 * 24 * 3600 * 1000;
 export function weight(x: GraphNode, nodes: Record<string, GraphNode>, now = Date.now()): number {
   const d = depthOf(nodes, x.id);
   let v = d === 0 ? (x.lifetime === "standing" ? 0.82 : 0.95) : d === 1 ? 0.55 : 0.42;
-  if (x.waits || x.state === "waiting") v += 0.35;
-  if (x.state === "running") v += 0.18;
-  if (x.state === "done") v -= 0.1;
+  if (x.status === "waits") v += 0.35;
+  if (x.status === "running") v += 0.18;
+  if (x.status === "done") v -= 0.1;
   if (now - Date.parse(x.updated) > OLD) v -= 0.12;
   return Math.max(0.15, Math.min(1.3, v));
 }
@@ -23,8 +23,8 @@ export function radiusOf(x: GraphNode, nodes: Record<string, GraphNode>, now = D
   return depthOf(nodes, x.id) === 0 ? 20 + 18 * wt : 9 + 13 * wt;
 }
 
-// waits tells whether a node waits for the user: a card of its, or its state.
-export const waits = (x: GraphNode) => !!x.waits || x.state === "waiting";
+// waits tells whether a node waits for the user (its status, eriphe-core's).
+export const waits = (x: GraphNode) => x.status === "waits";
 
 // titleOf is a node's name as plain words (a label, a sentence): its
 // title, marked with ⚠ when it may be someone else's words, never
@@ -44,7 +44,7 @@ export const codeOf = (title: string) => title.replace(/[^\p{L}\p{N}]/gu, "").sl
 // labelBox is the room a node's label takes under it, roughly: its title
 // and, while it runs, its line.
 export function labelBox(x: GraphNode, title: string, d: number, r: number) {
-  const run = !!x.line && x.state === "running";
+  const run = !!x.line && x.status === "running";
   const long = Math.max(title.length, run ? x.line!.length * 0.9 : 0);
   return { r, lw: Math.min(300, long * (d === 0 ? 8.4 : 7.4) + 8), lh: d === 0 ? 44 : run ? 34 : 18 };
 }

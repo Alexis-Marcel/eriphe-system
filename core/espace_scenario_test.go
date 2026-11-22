@@ -1510,7 +1510,9 @@ func (sc *scenario) mail() (string, error) {
 	sc.mu.Lock()
 	sc.nodes["mail"] = d.Node.Meta.ID
 	sc.mu.Unlock()
-	c.nodes.SetState(d.Node.Meta.ID, nodestore.Waiting)
+	if err := fakeStatus(c, d.Node.Meta.ID, nodeWaits); err != nil {
+		return "", err
+	}
 	return d.Node.Meta.ID, nil
 }
 

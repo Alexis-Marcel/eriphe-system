@@ -717,7 +717,7 @@ whatever address it dials) and one client certificate per device.
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); returns the card's ref (`card`), to place in the subject's document |
 | `catalog_read`, `sources_read` | read the catalog of a node's blocks and what a block may read |
 | `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
-| `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
+| `node_find` | find nodes by words of their title, goal, text or blocks, each with its `status`; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying marks (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
@@ -996,7 +996,10 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   `callToBrain`, `[nœud <id> « title »] …`). The turn is **about** the last node it named (a node
   tool on it, a delivered message of it): what it raises meanwhile (an access card, a task's start,
   a proposal) is linked to it (`node_cards`), and the node waits for the user while one waits
-  (`cardRaisedFor`, `linkedCardMoved`). `run_task` in a turn about a node is about it (its
+  (`cardRaisedFor`; its status, `node_status.go`). A decided card stays linked (a card block still
+  places it, the page lists it as settled): the status reads only the cards still pending, in one
+  query. A card whose proposal went elsewhere (its task stopped, a decision made on a page) is
+  settled when its task moves and at each minute's tick (`settleCards`). `run_task` in a turn about a node is about it (its
   `about`); its own node is a child of `node` when given.
 - **A subject opened from the home** (`moveHomeTurn`): by default a node the brain opens
   (`node_open` without `aside`) opens in front of the user. In a turn that answers the user at the
@@ -1030,7 +1033,7 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   unfiled message never counts.
 - **The context pack and the cards.** A fresh session's pack lists the nodes running and waiting
   (`activeNodes`, the last changed first, at most 20), each with its card (`about_card.go`: the
-  node's line, its state, title and its doc's first line, then its decisions, facts, people,
+  node's line, its status, title and its doc's first line, then its decisions, facts, people,
   intentions, cards and preferences); a turn about a node gets its card when the session does not
   hold it as it is. `since` lists the nodes changed (kind `node`: where each stands now, its title and its doc's first line; an external one's quoted only with `include_external`, the activity page quoting it marked « Contenu extérieur »), and `where_now` the nodes that wait for the user (`nodes_waiting`). The tasks panel lists the nodes
   running and waiting above the tasks (`/espace?open=node-<id>`).
@@ -1085,9 +1088,9 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   documents only. The slug (lowercase ASCII from the title, 40 characters at most) is frozen at
   creation: a new title changes the front matter, never the file's name.
 - **Index:** `nodes.db` next to it, outside the repository: a pure index, made again from the files
-  and the log when it is deleted, nothing lost but the node's state (until it is computed). SQLite,
-  its schema version in `meta` (2); a file at another version is refused, never migrated: delete
-  it. Tables: `nodes` (file, title, parent, lifetime, state,
+  and the log when it is deleted, nothing lost: a node's status is not kept, it is computed
+  (`node_status.go`). SQLite, its schema version in `meta` (3); a file at another version is
+  refused, never migrated: delete it. Tables: `nodes` (file, title, parent, lifetime,
   times, external, last version, the file's git hash, the title's link key), `node_links` (the front
   matter's), `node_refs` (each `[[name]]` of a node's text and the node it was resolved to, kept
   across renames; `''` while no node has it), `node_versions` (n → commit
@@ -1125,7 +1128,8 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   older part, `<id>.trace.1.md`, the one before dropped. `Trace(id)` gives both parts, the older
   first (the `.../trace` endpoint, `node_read`'s end of the trace, the nightly extraction). An
   archived node keeps its trace.
-- **State:** `SetState` (`running`, `waiting`, `idle`, `done`) is code's, in the index only.
+- **Status:** none in the store. A node's status (`running`, `waits`, `done`, `idle`) is computed
+  by eriphe-core each time it is read (`node_status.go`, below).
 - **Archive:** `Archive(id, author)` archives the node and every node below it in one commit, each
   a new version. Only the user archives (the tools of a later step).
 - **At start:** the files are compared to the index and the last commit. A file changed, added or
@@ -1162,9 +1166,20 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
 Every worker task works in a node of its own (#629). `run_task` takes `node`: the task's node is
 opened as a child of it, else at the top (an unknown or archived node refuses the start). The node
 is titled as the task, its goal its contract's objective or its prompt's first line, `external`
-when the task starts on a tainted turn. Code keeps which task works in which node (`task_nodes`)
-and follows its state on the node: `running`, `waiting` (held for its start card, or for a
-permission), `idle` (its turn ended), `done` (it ended).
+when the task starts on a tainted turn. Code keeps which task works in which node (`task_nodes`).
+
+**A node's status** (`node_status.go`) is computed each time it is read, never stored: the graph,
+the page, `node_find`, `node_read`, `since`, `where_now` and the context pack read the same one.
+`waits`: a card linked to it is pending, a task in it is held for its start card or waits for a
+permission, a source of its marked attention lists items, or it is a finished work's result the
+user has not said done (below); `running`: a task works in it, or it is a step whose task runs;
+`done`: its file says `done`, or the steps' engine finished it (a step accepted or dropped, a work
+done whose results are its steps); `idle` otherwise. What waits comes first; an archived node waits
+for no one. A task that ended (stopped, failed, lost) leaves its node idle: only the user, or the
+brain on their word, says a node is done. The graph's rows are computed in a constant number of
+queries (`statusFacts`, `warmNodeCaches`); whatever a status comes from tells the graph when it
+moves (`nodeMoved`: a task's state, a step's status, a work's state, a card linked, raised or
+decided), and a run or a step that ends, or the node archived, drops its progress line.
 
 - **`eriphe-nodes`**, an MCP server Eriphe provides, relayed by the device like `eriphe-memory`
   (the name is reserved in the catalog): every worker with a node has it, its tools allowed in
@@ -1233,9 +1248,9 @@ The **engine** is code, without a model:
 - Once every step is accepted or dropped, a **final check**: a fresh agent in a child node of the
   work (« Contrôle de l'objectif »), lent read-only what the steps wrote, given the goal and each
   step's result. Its receipt done with no failed check makes the work done; its verdict goes into
-  the work's trace. A work done puts its **result before the user** (`workForUser`): the accepted
-  steps no other accepted step comes after wait for the user (one already done or archived stays
-  so), the work around them done, until the user,
+  the work's trace. A work done puts its **result before the user** (its status, computed): the
+  accepted steps no other accepted step comes after wait for the user (one already done or archived
+  stays so), the work around them done, until the user,
   or the brain on their word (`node_set` done), says it is done, or they archive it. A work with no
   such step waits itself.
 - **Restart**: what the engine knows is in core.db (`node_steps`: node, parent, after, spec,
@@ -3261,8 +3276,9 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   the user: a small « ↯ » after its title on its bubble and in its page's header, its tooltip
   « Tu ne l'as pas demandé : un skill ou un événement l'a ouvert. »; the user's own
   nodes, and those whose origin is not known, have none), `parent`, `links`,
-  `lifetime`, `state`, `created`, `updated`, `done`, `external`, `version`, `waits` (one of its
-  cards waits for the user) and, while it runs, `line`: its task's last word of where it is.
+  `lifetime`, `status` (`running`, `waits`, `done` or `idle`, computed: above), `created`,
+  `updated`, `done`, `external`, `version` and, while it runs (not archived), `line`: its task's
+  last word of where it is.
 
 **The stream** (`/events?tab=<tab>&node=<id>`, `web_sse.go`). JSON events, the graph's from
 `graph_feed.go`, which the node store tells of each change (`nodestore.Watch`):

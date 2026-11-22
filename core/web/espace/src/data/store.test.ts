@@ -6,7 +6,7 @@ import {
 } from "./store";
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
-  id, title: id.toUpperCase(), lifetime: "work", state: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
+  id, title: id.toUpperCase(), lifetime: "work", status: "idle", created: "2026-11-18T10:00:00Z", updated: "2026-11-18T10:00:00Z", version: 1, ...more,
 });
 
 function withGraph(): State {
@@ -17,7 +17,7 @@ describe("the store", () => {
   it("takes the graph whole, then the rows that changed, and drops those that left", () => {
     let s = withGraph();
     expect(Object.keys(s.nodes)).toHaveLength(5);
-    s = applyNodes(s, { nodes: [node("a1", { parent: "a", state: "running", line: "Trois articles lus" })] });
+    s = applyNodes(s, { nodes: [node("a1", { parent: "a", status: "running", line: "Trois articles lus" })] });
     expect(s.nodes.a1.line).toBe("Trois articles lus");
     s = applyNodes(s, { gone: ["b1"] });
     expect(s.nodes.b1).toBeUndefined();

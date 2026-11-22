@@ -17,7 +17,7 @@ import { Doc } from "./Doc";
 const view = (state: string): ProposalView => ({ ref: "view:3", card: 7, kind: "view", state, text: "Créer la vue « Mes mails »" });
 
 const pageWith = (proposal: ProposalView | undefined): NodePage => ({
-  node: { id: "n1", title: "Garder un œil sur mes mails", lifetime: "work", state: "waiting", created: "", updated: "", version: 2 },
+  node: { id: "n1", title: "Garder un œil sur mes mails", lifetime: "work", status: "waits", created: "", updated: "", version: 2 },
   version: 2,
   versions: [],
   parts: [{ text: "## Ce qu'on a décidé\n\nToutes les boîtes.\n" }, { block: { name: "vue", components: [], data: {}, card: "view:3", proposal } }, { text: "La suite.\n" }],

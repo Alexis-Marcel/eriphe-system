@@ -127,8 +127,7 @@ func TestCheckMakesNothing(t *testing.T) {
 	}
 }
 
-// The watcher hears each change: a version, a trace, a state; a state set
-// again to what it was is no change.
+// The watcher hears each change: a version, a trace.
 func TestWatch(t *testing.T) {
 	s, _ := newEnv(t).open(t)
 	var got []string
@@ -140,12 +139,10 @@ func TestWatch(t *testing.T) {
 	if err := s.AppendTrace("n1", "brain", "Wrote it."); err != nil {
 		t.Fatal(err)
 	}
-	s.SetState("n1", Running)
-	s.SetState("n1", Running)
 	if err := s.Archive("n1", "user"); err != nil {
 		t.Fatal(err)
 	}
-	want := "doc n1,doc n1,trace n1,state n1,doc n1"
+	want := "doc n1,doc n1,trace n1,doc n1"
 	if strings.Join(got, ",") != want {
 		t.Fatalf("heard %v, want %s", got, want)
 	}

@@ -677,9 +677,8 @@ func (c *core) decideCardWith(ctx context.Context, id int64, approve bool, by st
 	}
 	c.attentionDone(cardItemRef(x.ID))
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = ? WHERE id = ?`, x.State, x.Decided.Unix(), by, id)
-	c.callsDecided(x) // its words as decided, what still waits on a new card (call_fold.go)
-	c.proposalMoved(x.Ref)
-	c.linkedCardMoved(x.Ref) // the nodes it is linked to (node_turn.go)
+	c.callsDecided(x)      // its words as decided, what still waits on a new card (call_fold.go)
+	c.proposalMoved(x.Ref) // and the nodes it is linked to
 	if kind == cardCalls {
 		c.itemCardMoved(pid) // its item's row (item_cards.go)
 	}
@@ -696,7 +695,6 @@ func (c *core) proposalDecided(kind string, id int64, approved bool) {
 	c.store.db.Exec(`UPDATE convo_cards SET state = ?, decided = ?, by = 'page' WHERE ref = ? AND state = ?`,
 		state, time.Now().Unix(), proposalRef(kind, id), cardPending)
 	c.proposalMoved(proposalRef(kind, id))
-	c.linkedCardMoved(proposalRef(kind, id))
 }
 
 // cardNote tells the brain where its proposal waits: on a card, with its message.

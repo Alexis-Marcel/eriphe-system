@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
-	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // The conversation per node (#632). One brain, one queue: each message of
@@ -196,13 +195,7 @@ func (c *core) turnHome() (map[string]any, error) {
 	for _, x := range xs {
 		c.store.db.Exec(`DELETE FROM node_cards WHERE node = ? AND ref = ?`, talk, x.Ref)
 	}
-	if c.nodes != nil {
-		if sum, err := c.nodes.Get(talk); err == nil && sum.State == nodestore.Waiting && !c.nodeCardWaits(talk) {
-			if _, ok := c.work(talk); !ok {
-				c.nodes.SetState(talk, nodestore.Idle)
-			}
-		}
-	}
+	c.nodeMoved(talk, false)
 	return map[string]any{"note": "This turn is about no node now, as at the home."}, nil
 }
 
@@ -289,7 +282,9 @@ func (c *core) nodeHead(id string) (head, taint string) {
 }
 
 // The cards of a node: those raised in a turn about it, and those of its
-// tasks. The node waits for the user while one of them waits.
+// tasks. The node waits for the user while one of them waits
+// (node_status.go). A decided card stays linked: a card block of the
+// node's document still places it, and its page lists it as settled.
 
 const nodeCardsSchema = `CREATE TABLE IF NOT EXISTS node_cards (
 	node    TEXT NOT NULL,
@@ -302,7 +297,7 @@ CREATE INDEX IF NOT EXISTS node_cards_ref ON node_cards (ref);`
 func init() { extraSchema = append(extraSchema, nodeCardsSchema) }
 
 // cardRaisedFor links a card raised for a node to it (cardNodeOf): the
-// node waits for the user, unless it is at work.
+// node waits for the user while it waits.
 func (c *core) cardRaisedFor(source, ref string) {
 	id := c.cardNodeOf(source, ref)
 	if id == "" || c.nodes == nil {
@@ -313,9 +308,7 @@ func (c *core) cardRaisedFor(source, ref string) {
 		return
 	}
 	c.store.db.Exec(`INSERT OR IGNORE INTO node_cards (node, ref, created) VALUES (?, ?, ?)`, id, ref, time.Now().Unix())
-	if sum.State == nodestore.Idle {
-		c.nodes.SetState(id, nodestore.Waiting)
-	}
+	c.nodeMoved(id, false)
 }
 
 // cardNodeOf is the node a card is raised for: the one its proposal
@@ -360,25 +353,6 @@ func (c *core) proposalNode(kind string, id int64) string {
 	return ""
 }
 
-// linkedCardMoved tells the nodes a card is linked to that it was
-// decided: one that waited for it alone, and for no work of its steps, is
-// idle again.
-func (c *core) linkedCardMoved(ref string) {
-	if c.nodes == nil {
-		return
-	}
-	for _, id := range c.cardNodes(ref) {
-		sum, err := c.nodes.Get(id)
-		if err != nil || sum.State != nodestore.Waiting || c.nodeCardWaits(id) {
-			continue
-		}
-		if _, ok := c.work(id); ok {
-			continue // its steps' engine says where it stands (node_steps.go)
-		}
-		c.nodes.SetState(id, nodestore.Idle)
-	}
-}
-
 // cardNodes are the nodes a card is linked to, the last linked first.
 func (c *core) cardNodes(ref string) []string {
 	rows, err := c.store.db.Query(`SELECT node FROM node_cards WHERE ref = ? ORDER BY created DESC, node`, ref)
@@ -405,29 +379,6 @@ func (c *core) nodeHasCard(id, ref string) bool {
 	var n int
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM node_cards WHERE node = ? AND ref = ?`, id, ref).Scan(&n)
 	return n > 0
-}
-
-// nodeCardWaits tells a node one of whose linked cards waits for the
-// user.
-func (c *core) nodeCardWaits(id string) bool {
-	rows, err := c.store.db.Query(`SELECT ref FROM node_cards WHERE node = ?`, id)
-	if err != nil {
-		return false
-	}
-	var refs []string
-	for rows.Next() {
-		var ref string
-		if rows.Scan(&ref) == nil {
-			refs = append(refs, ref)
-		}
-	}
-	rows.Close() // one connection: the cards are read after
-	for _, ref := range refs {
-		if c.cardState(ref) == cardPending {
-			return true
-		}
-	}
-	return false
 }
 
 // cardState is where a card stands: pending, approved, rejected or gone.

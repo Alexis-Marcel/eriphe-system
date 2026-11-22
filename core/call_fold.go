@@ -166,6 +166,7 @@ func (c *core) foldInto(batch, target int64) {
 			c.attentionDone(cardItemRef(x.ID))
 		}
 	}
+	linked := c.cardNodes(ref)
 	c.store.db.Exec(`DELETE FROM convo_cards WHERE ref = ?`, ref)
 	c.store.db.Exec(`DELETE FROM node_cards WHERE ref = ?`, ref)
 	to := proposalRef(cardCalls, target)
@@ -173,7 +174,9 @@ func (c *core) foldInto(batch, target int64) {
 	c.store.db.Exec(`UPDATE convo_cards SET text = ? WHERE ref = ? AND state = ?`, p.Text(c.userLang()), to, cardPending)
 	c.proposalMoved(ref)
 	c.proposalMoved(to)
-	c.linkedCardMoved(ref)
+	for _, id := range linked {
+		c.nodeMoved(id, false)
+	}
 	log.Printf("cards: %s folded into %s", ref, to)
 }
 

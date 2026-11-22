@@ -157,17 +157,40 @@ func (st glanceState) view(g nodefile.Glance) *graphGlance {
 
 // loadGlance is a node's glance as kept; ok false when none.
 func (c *core) loadGlance(id string) (glanceState, bool) {
-	var st glanceState
-	var series string
-	var shown, seen, ext int
-	err := c.store.db.QueryRow(`SELECT spec, day, first, prev, value, series, shown, seen, ext FROM node_glance WHERE node = ?`, id).
-		Scan(&st.Spec, &st.Day, &st.First, &st.Prev, &st.Value, &series, &shown, &seen, &ext)
+	st, ok := c.glancesOf(`WHERE node = ?`, id)[id]
+	return st, ok
+}
+
+// glancesOf are the glances kept in node_glance, by node.
+func (c *core) glancesOf(where string, args ...any) map[string]glanceState {
+	out := map[string]glanceState{}
+	rows, err := c.store.db.Query(`SELECT node, spec, day, first, prev, value, series, shown, seen, ext FROM node_glance `+where, args...)
 	if err != nil {
-		return glanceState{}, false
+		return out
 	}
-	json.Unmarshal([]byte(series), &st.Series)
-	st.Shown, st.Seen, st.Ext = shown == 1, seen == 1, ext == 1
-	return st, true
+	defer rows.Close()
+	for rows.Next() {
+		var st glanceState
+		var id, series string
+		var shown, seen, ext int
+		if rows.Scan(&id, &st.Spec, &st.Day, &st.First, &st.Prev, &st.Value, &series, &shown, &seen, &ext) != nil {
+			continue
+		}
+		json.Unmarshal([]byte(series), &st.Series)
+		st.Shown, st.Seen, st.Ext = shown == 1, seen == 1, ext == 1
+		out[id] = st
+	}
+	return out
+}
+
+// allGlances are every node's glance as the graph shows it (nodeGlance),
+// read at once; a node with none is not there.
+func (c *core) allGlances() map[string]*graphGlance {
+	out := map[string]*graphGlance{}
+	for id, st := range c.glancesOf(``) {
+		out[id] = st.glanceView()
+	}
+	return out
 }
 
 // saveGlance keeps a node's glance.
@@ -189,13 +212,20 @@ func (c *core) nodeGlance(id string) *graphGlance {
 	}
 	var out *graphGlance
 	if st, ok := c.loadGlance(id); ok {
-		var spec glanceSpec
-		if json.Unmarshal([]byte(st.Spec), &spec) == nil {
-			out = st.view(spec.Glance)
-		}
+		out = st.glanceView()
 	}
 	c.glances.Store(id, out)
 	return out
+}
+
+// glanceView is what the graph shows of a glance kept: nil when its spec
+// does not read.
+func (st glanceState) glanceView() *graphGlance {
+	var spec glanceSpec
+	if json.Unmarshal([]byte(st.Spec), &spec) != nil {
+		return nil
+	}
+	return st.view(spec.Glance)
 }
 
 // keepGlance keeps what the workspace shows of a node's glance, and tells

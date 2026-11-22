@@ -57,7 +57,7 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, 
   const external = t("espace.external");
   const path = pathOf(nodes, id);
   const kicker = path.length > 1 ? titleOf(nodes[path[0]], external) : null;
-  const running = node?.state === "running";
+  const running = node?.status === "running";
   const at = stamp(lang, node?.updated);
   const shift = page?.shift ?? 0;
   // At its foot, only the cards that still ask something (eriphe-core's
