@@ -615,7 +615,7 @@ const Metric = createComponentImplementation(
 
 // Progress says where a thing stands: its state word in a pill, coloured
 // by its tone, and when it has steps a bar of them, done, running, to come.
-const TONES = ["default", "attention", "urgent", "success", "muted"] as const;
+const TONES = ["default", "urgent", "success", "muted"] as const;
 const PROGRESS_MAX = 40; // segments drawn at most
 
 const Progress = createComponentImplementation(
@@ -770,9 +770,9 @@ const Timeline = createComponentImplementation(
 
 // Item is one line of a list: what it is and, quieter, where it comes
 // from; under it a note; aside its due date and a short mark (« extérieur
-// »). Its level puts it forward (high: it waits for the user) or makes it
-// one quiet line (low).
-const LEVELS = ["high", "normal", "low"];
+// »). Its level makes it one quiet line (low); what waits for the user is
+// the item's card, on its row, never a level.
+const LEVELS = ["normal", "low"];
 
 const Item = createComponentImplementation(
   {

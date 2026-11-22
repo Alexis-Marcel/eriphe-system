@@ -251,7 +251,7 @@
       "properties": {
         "component": {"const": "Progress"},
         "label": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Le mot d'état (« En cours », « À toi »)."},
-        "tone": {"type": "string", "enum": ["default", "attention", "urgent", "success", "muted"], "default": "default", "description": "Sa couleur : attention pour ce qui attend l'utilisateur, urgent, success pour ce qui est fini, muted pour ce qui dort."},
+        "tone": {"type": "string", "enum": ["default", "urgent", "success", "muted"], "default": "default", "description": "Sa couleur : urgent, success pour ce qui est fini, muted pour ce qui dort. Ce qui attend l'utilisateur est une carte, jamais une couleur."},
         "value": {"$ref": "common_types.json#/$defs/DynamicNumber", "description": "Combien sont faites."},
         "current": {"$ref": "common_types.json#/$defs/DynamicNumber", "description": "Combien sont en cours."},
         "total": {"$ref": "common_types.json#/$defs/DynamicNumber", "description": "Combien en tout ; sans total, la pastille seule."}
@@ -325,7 +325,7 @@
         "note": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Ce qu'il faut en savoir, en une phrase."},
         "due": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Son échéance, date ISO 8601, en pastille."},
         "mark": {"$ref": "common_types.json#/$defs/DynamicString", "description": "Une marque courte (« extérieur »)."},
-        "level": {"$ref": "common_types.json#/$defs/DynamicString", "description": "high (elle attend l'utilisateur, en avant), normal (par défaut) ou low (une ligne, discrète)."}
+        "level": {"$ref": "common_types.json#/$defs/DynamicString", "description": "normal (par défaut) ou low (une ligne, discrète). Ce qui attend l'utilisateur est la carte de l'élément, sur sa ligne."}
       },
       "required": ["component", "title"]
     },

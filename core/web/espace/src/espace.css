@@ -534,7 +534,6 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
   border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--fg2);
 }
 .a2-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.a2-tone-attention .a2-pill { color: var(--accent-text); border-color: color-mix(in oklab, var(--accent) 35%, var(--line)); }
 .a2-tone-urgent .a2-pill { color: var(--hot-text); border-color: color-mix(in oklab, var(--hot) 35%, var(--line)); }
 .a2-tone-success .a2-pill { color: var(--ok-text); border-color: color-mix(in oklab, var(--ok) 35%, var(--line)); }
 .a2-tone-muted .a2-pill { color: var(--fg3); }
@@ -546,7 +545,6 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 
 /* Item: a line of a list, its note under it, its due date aside. */
 .a2-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; min-width: 0; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); }
-.a2-item-high { --fg3: var(--fg2); border-color: color-mix(in oklab, var(--hot) 40%, var(--line)); background: var(--hot-soft); }
 .a2-item-low { padding: 5px 12px; border-color: transparent; }
 .a2-item-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .a2-item-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 14px; }
@@ -558,7 +556,6 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-item-side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .a2-item-side .a2-badge { margin-left: 0; cursor: default; }
 .a2-due { padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap; color: var(--fg2); }
-.a2-item-high .a2-due { border-color: var(--hot); background: var(--hot); color: var(--on-hot); }
 
 
 /* ---------- the graph (graph/) ---------- */
