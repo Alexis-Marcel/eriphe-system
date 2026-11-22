@@ -18,6 +18,8 @@ test("a click on a mail shows its body in place", async ({ page, request }) => {
   await page.locator('input[name="password"]').fill(password);
   await page.locator('button[type="submit"]').click();
   await page.waitForURL((u) => u.pathname !== "/login");
+  // No page open, whatever the spec before left (one shared test core).
+  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await page.goto("/espace");
   await expect(page.locator(".cs-bar input")).toBeVisible();
 

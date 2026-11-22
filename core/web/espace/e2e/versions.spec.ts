@@ -58,8 +58,15 @@ async function shots(page: Page, name: string) {
   await page.evaluate(() => delete document.documentElement.dataset.theme);
 }
 
-// still waits until a box stops moving (the page opening, the camera).
+// still waits until a box stops moving (the page opening, the camera): in
+// the graph, until it is at rest and the camera still (data-still); on a
+// phone's list, until the box stays.
 async function still(el: Locator) {
+  const vp = el.page().locator(".gr-viewport");
+  if (await vp.count()) {
+    await expect(el.page().locator(".gr-viewport[data-still]")).toHaveCount(1, { timeout: 60_000 });
+    return (await el.boundingBox())!;
+  }
   let last = "";
   for (let i = 0; i < 60; i++) {
     const b = await el.boundingBox();

@@ -234,6 +234,21 @@ export function Graph({ live }: { live: boolean }) {
   }, [manual, target.k, target.x, target.y, camK, camX, camY]);
 
   const vp = useRef<HTMLDivElement>(null);
+  // At rest: the graph asleep, nothing held, the camera still. Said on the
+  // viewport (data-still) for what must measure the graph once it settled
+  // (the browser tests), looked at again after each frame drawn (the
+  // camera told its target first, above) and when the camera starts or
+  // stops.
+  const markStill = () => {
+    vp.current?.toggleAttribute("data-still", sim.asleep() && !sim.heldId() && ![camX, camY, camK].some((v) => v.isAnimating()));
+  };
+  useEffect(markStill);
+  useMotionValueEvent(camX, "animationStart", markStill);
+  useMotionValueEvent(camY, "animationStart", markStill);
+  useMotionValueEvent(camK, "animationStart", markStill);
+  useMotionValueEvent(camX, "animationComplete", markStill);
+  useMotionValueEvent(camY, "animationComplete", markStill);
+  useMotionValueEvent(camK, "animationComplete", markStill);
   useEffect(() => {
     const el = vp.current;
     if (!el) return;

@@ -64,6 +64,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
 	mux.HandleFunc("POST /e2e/catalog", sc.handleCatalog)
 	mux.HandleFunc("POST /e2e/conso", sc.handleConso)
+	mux.HandleFunc("POST /e2e/view", sc.handleView)
 	mux.Handle("/", sc.web.w.routes())
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -1367,6 +1368,20 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 	c.showNode(id, byBrain, false)
 	c.bump()
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// handleView is POST /e2e/view: the workspace as a spec begins it, whatever
+// the one before left open (its pages stay open in the view kept here, the
+// next spec's beside them): no page open, the bar at the home, Eriphe's
+// last show already seen, so that no fresh show opens its page again.
+func (sc *scenario) handleView(rw http.ResponseWriter, r *http.Request) {
+	last, _ := sc.c.lastShown()
+	raw, _ := json.Marshal(espaceView{Open: []string{}, Shown: int(last.Seq)})
+	if err := sc.c.store.set(espaceViewKey, string(raw)); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
 }
 
 // handlePurge is POST /e2e/purge: a view of a mailbox (mail/promos), read
