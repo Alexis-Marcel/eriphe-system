@@ -77,6 +77,8 @@ var (
 	ErrNotFound = errors.New("no such node")
 	// ErrArchived: an archived node is not written any more.
 	ErrArchived = errors.New("the node is archived")
+	// ErrCycle: a node never goes under itself, nor under a node below it.
+	ErrCycle = errors.New("a node cannot go under itself")
 )
 
 // Options are a store's.
