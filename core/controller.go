@@ -44,6 +44,7 @@ type core struct {
 	turn brainTurn // what the brain's current turn read (memory_trust.go)
 
 	nodes *nodestore.Store // the graph's nodes (nodes.go); nil if they could not open
+	steps stepStarts       // the tasks the step engine claimed, started once it lets go of stepMu (node_steps.go)
 
 	relayMu sync.Mutex // one copy of the brain's output at a time (relayBrainOutput)
 	// delivering: one delivery of the conversation at a time, and a

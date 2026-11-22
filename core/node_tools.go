@@ -650,7 +650,7 @@ func (c *core) archiveNode(ctx context.Context, id, by string) error {
 			c.stopStepTask(ctx, task)
 		}
 	}
-	stepMu.Unlock()
+	c.unlockSteps(ctx)
 	if err := c.nodes.Archive(id, by); err != nil {
 		return err
 	}

@@ -130,8 +130,70 @@ const (
 var stepKeyRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,23}$`)
 
 // stepMu makes the engine's changes one at a time: a step's end, a
-// settle and a tick at the same moment move a work once each.
+// settle and a tick at the same moment move a work once each. A task's
+// start (its node, its card, a device) is never made under it: the
+// engine claims what starts (c.steps), lets go of stepMu (unlockSteps),
+// starts the tasks, then takes it again to record each one.
 var stepMu sync.Mutex
+
+// stepStarts are the starts the engine claimed under stepMu: a step's
+// task, or a final check's, by the step's node or final:<parent>. A
+// claim lives in memory only: one that a restart loses leaves its step
+// waiting (or its work checking with no task, which the tick runs again),
+// never stuck.
+type stepStarts struct {
+	claims map[string]uint64 // what is claimed, and which claim
+	n      uint64
+	todo   []func(context.Context)
+}
+
+// claim claims key for start, run once stepMu is let go; false when it
+// is claimed already.
+func (c *core) claim(key string, start func(ctx context.Context, claim uint64)) bool {
+	if _, ok := c.steps.claims[key]; ok {
+		return false
+	}
+	if c.steps.claims == nil {
+		c.steps.claims = map[string]uint64{}
+	}
+	c.steps.n++
+	n := c.steps.n
+	c.steps.claims[key] = n
+	c.steps.todo = append(c.steps.todo, func(ctx context.Context) { start(ctx, n) })
+	return true
+}
+
+// claimed tells key claimed.
+func (c *core) claimed(key string) bool {
+	_, ok := c.steps.claims[key]
+	return ok
+}
+
+// unclaim ends claim n of key, under stepMu; false when it is no longer
+// that claim.
+func (c *core) unclaim(key string, n uint64) bool {
+	if c.steps.claims[key] != n {
+		return false
+	}
+	delete(c.steps.claims, key)
+	return true
+}
+
+// unlockSteps lets go of stepMu, then starts what was claimed under it.
+func (c *core) unlockSteps(ctx context.Context) {
+	todo := c.steps.todo
+	c.steps.todo = nil
+	stepMu.Unlock()
+	for _, start := range todo {
+		start(ctx)
+	}
+}
+
+// runStepTask starts a claimed task: a test watches it.
+var runStepTask = (*core).runTask
+
+// finalKey is the claim of a work's final check.
+func finalKey(parent string) string { return "final:" + parent }
 
 // stepSpec is a step as its opener gives it.
 type stepSpec struct {
@@ -565,7 +627,7 @@ func (c *core) checkSteps(specs []stepSpec, budget int, tainted []string) error 
 // what it has). It gives the steps' nodes by key.
 func (c *core) openSteps(ctx context.Context, parent string, specs []stepSpec, budget int, by stepOpener) (map[string]string, error) {
 	stepMu.Lock()
-	defer stepMu.Unlock()
+	defer c.unlockSteps(ctx)
 	return c.openStepsLocked(ctx, parent, specs, budget, by)
 }
 
@@ -708,7 +770,7 @@ var stepCreate = func(s *nodestore.Store, nw nodestore.New) error {
 // advanceWork starts what may start in a work.
 func (c *core) advanceWork(ctx context.Context, parent string) {
 	stepMu.Lock()
-	defer stepMu.Unlock()
+	defer c.unlockSteps(ctx)
 	c.advanceLocked(ctx, parent)
 }
 
@@ -729,17 +791,18 @@ func (c *core) advanceLocked(ctx context.Context, parent string) {
 	var writing []string
 	for _, st := range steps {
 		status[st.Node] = st.Status
-		if st.Status == stepRunning || st.Status == stepFailed { // a failed step's task waits for its retry
+		// A failed step's task waits for its retry; a claimed one starts.
+		if st.Status == stepRunning || st.Status == stepFailed || c.claimed(st.Node) {
 			writing = append(writing, st.scopes()...)
 		}
 	}
-	busy := false // something runs, waits or waits for the brain
+	busy := false // something runs, starts, waits or waits for the brain
 	for i, st := range steps {
-		switch st.Status {
-		case stepRunning, stepFailed, stepBlocked:
+		switch {
+		case st.Status == stepRunning || st.Status == stepFailed || st.Status == stepBlocked || st.Status == stepWaiting && c.claimed(st.Node):
 			busy = true
 			continue
-		case stepWaiting:
+		case st.Status == stepWaiting:
 		default:
 			continue
 		}
@@ -750,12 +813,8 @@ func (c *core) advanceLocked(ctx context.Context, parent string) {
 		if slices.ContainsFunc(st.scopes(), func(sc string) bool { return slices.Contains(writing, sc) }) {
 			continue // its turn to write comes
 		}
-		if err := c.startStep(ctx, st, steps, ""); err != nil {
-			log.Printf("work %s: step %s: %v", parent, st.Node, err)
-			note := truncate(err.Error(), stepNoteMax)
-			c.setStep(st.Node, map[string]any{"status": stepBlocked, "note": note, "ended": time.Now().Unix()})
-			c.traceWork(parent, fmt.Sprintf("L'étape « %s » n'a pas pu démarrer : %s", st.Spec.Title, note), "")
-			c.wakeForWork(parent, fmt.Sprintf("L'étape « %s » (nœud %s) n'a pas pu démarrer : %s\nDécide avec node_settle : retry (en disant quoi changer), drop ou replan.", st.Spec.Title, st.Node, note), nil)
+		if err := c.startStep(st, steps, ""); err != nil {
+			c.stepNotStarted(st, err)
 			status[st.Node] = stepBlocked
 			continue
 		}
@@ -773,7 +832,7 @@ func (c *core) advanceLocked(ctx context.Context, parent string) {
 
 // startStep starts a step's task, in its node, with the work's goal and
 // what the steps it comes after produced; again is what a retry asks.
-func (c *core) startStep(ctx context.Context, st Step, steps []Step, again string) error {
+func (c *core) startStep(st Step, steps []Step, again string) error {
 	goal := ""
 	if d, err := c.nodes.Read(st.Parent, 0); err == nil {
 		goal = d.Node.Meta.Goal
@@ -807,16 +866,49 @@ func (c *core) startStep(ctx context.Context, st Step, steps []Step, again strin
 	clean := st.Clean && len(taint) == 0
 	r := runRequest{Title: st.Spec.Title, Prompt: b.String(), Resources: st.Spec.Resources, Agent: st.Spec.Agent, Contract: st.Spec.Contract,
 		Device: st.Spec.Device, askStart: true, cleanStart: clean, taint: taint, inNode: st.Node}
-	t, err := c.runTask(ctx, r)
-	if err != nil {
+	if err := c.checkTaskRequest(r); err != nil { // what its start would refuse, told now
 		return err
 	}
-	if clean {
+	if !c.claim(st.Node, func(ctx context.Context, n uint64) { c.launchStep(ctx, st, r, again, n) }) {
+		return errors.New("it is starting already")
+	}
+	return nil
+}
+
+// launchStep starts a step's task, claimed under stepMu (claim n), with
+// stepMu let go; then records it under stepMu. A step settled meanwhile
+// (dropped, its work stopped or archived) takes no task: the one started
+// stops. A start refused blocks the step, for the brain to decide.
+func (c *core) launchStep(ctx context.Context, st Step, r runRequest, again string, n uint64) {
+	t, err := runStepTask(c, ctx, r)
+	stepMu.Lock()
+	defer c.unlockSteps(ctx)
+	cur, ok := c.nodeStep(st.Node)
+	if !c.unclaim(st.Node, n) || !ok || cur.over() {
+		if err == nil {
+			c.stopByBrain(ctx, t.ID)
+		}
+		return
+	}
+	if err != nil {
+		c.stepNotStarted(cur, err)
+		return
+	}
+	if r.cleanStart {
 		c.store.set(lentByUserKey(t.ID), "1") // the user's own skill, approved with what it borrows (lend.go)
 	}
 	c.setStep(st.Node, map[string]any{"status": stepRunning, "task": t.ID, "started": time.Now().Unix(), "failed": false, "note": truncate(again, stepNoteMax), "ended": 0})
 	c.traceWork(st.Parent, fmt.Sprintf("L'étape « %s » démarre : tâche %s.", st.Spec.Title, t.ID), "")
-	return nil
+}
+
+// stepNotStarted blocks a step whose task could not start, and wakes the
+// brain to decide.
+func (c *core) stepNotStarted(st Step, err error) {
+	log.Printf("work %s: step %s: %v", st.Parent, st.Node, err)
+	note := truncate(err.Error(), stepNoteMax)
+	c.setStep(st.Node, map[string]any{"status": stepBlocked, "note": note, "ended": time.Now().Unix()})
+	c.traceWork(st.Parent, fmt.Sprintf("L'étape « %s » n'a pas pu démarrer : %s", st.Spec.Title, note), "")
+	c.wakeForWork(st.Parent, fmt.Sprintf("L'étape « %s » (nœud %s) n'a pas pu démarrer : %s\nDécide avec node_settle : retry (en disant quoi changer), drop ou replan.", st.Spec.Title, st.Node, note), nil)
 }
 
 // stepTaint is why a step's result may carry someone else's words: what
@@ -848,12 +940,13 @@ func (c *core) stepTaskChanged(id, state string, outcome turnOutcome) bool {
 			return false // a permission is the user's, told as any task's
 		}
 	}
+	ctx := context.Background()
 	if w, ok := c.workOfFinal(id); ok {
 		if state == stateWaitingPermission {
 			return false
 		}
 		stepMu.Lock()
-		defer stepMu.Unlock()
+		defer c.unlockSteps(ctx)
 		c.finalChanged(w, id, state, outcome)
 		return true
 	}
@@ -862,11 +955,10 @@ func (c *core) stepTaskChanged(id, state string, outcome turnOutcome) bool {
 		return false
 	}
 	stepMu.Lock()
-	defer stepMu.Unlock()
+	defer c.unlockSteps(ctx)
 	if st, ok = c.stepOfTask(id); !ok || st.Status != stepRunning {
 		return true // settled already, or stopped by the engine
 	}
-	ctx := context.Background()
 	tst, err := c.status(id, 0)
 	if err != nil {
 		return true
@@ -975,17 +1067,14 @@ func (c *core) finishWork(ctx context.Context, w work, steps []Step) {
 		c.traceWork(w.Parent, "Toutes les étapes sont acceptées.", "")
 		return
 	}
-	if err := c.startFinal(ctx, w, goal, steps); err != nil {
-		c.setWork(w.Parent, map[string]any{"state": workFailed})
-		c.traceWork(w.Parent, "Le contrôle final n'a pas pu démarrer : "+err.Error(), "")
-		c.wakeForWork(w.Parent, "Toutes les étapes sont acceptées, mais le contrôle final de l'objectif n'a pas pu démarrer : "+err.Error()+
-			"\nnode_settle sur le nœud, sans étape : retry le relance, accept tient le travail pour fait, drop l'arrête.", nil)
+	if err := c.startFinal(w, goal, steps); err != nil {
+		c.finalNotStarted(w, err)
 	}
 }
 
 // startFinal starts the final check: a fresh agent, lent read-only what
 // the steps wrote, given the goal and what each step produced.
-func (c *core) startFinal(ctx context.Context, w work, goal string, steps []Step) error {
+func (c *core) startFinal(w work, goal string, steps []Step) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "You are a fresh judge, independent from the agents who did the work. Check whether this work reached its goal.\n\nGoal: %s\n\n", goal)
 	b.WriteString("Inspect what you are lent (read-only) yourself; what the steps say below is only their claim.\n")
@@ -1010,14 +1099,45 @@ func (c *core) startFinal(ctx context.Context, w work, goal string, steps []Step
 		}
 	}
 	b.WriteString("\nYour receipt's status is done only if the goal holds, with how you checked it in verified; otherwise partial, with what is missing in not_verified.")
-	title := tr(c.userLang(), "step.final.title")
-	t, err := c.runTask(ctx, runRequest{Title: title, Prompt: b.String(), Resources: lent, Node: w.Parent, askStart: true, taint: taint})
-	if err != nil {
+	r := runRequest{Title: tr(c.userLang(), "step.final.title"), Prompt: b.String(), Resources: lent, Node: w.Parent, askStart: true, taint: taint}
+	if err := c.checkTaskRequest(r); err != nil { // what its start would refuse, told now
 		return err
 	}
-	c.setWork(w.Parent, map[string]any{"state": workChecking, "final": t.ID, "checks": w.Checks + 1, "tainted": strings.Join(taint, ", ")})
-	c.traceWork(w.Parent, fmt.Sprintf("Toutes les étapes sont acceptées : un agent neuf vérifie l'objectif (tâche %s).", t.ID), "")
+	if !c.claim(finalKey(w.Parent), func(ctx context.Context, n uint64) { c.launchFinal(ctx, w.Parent, r, n) }) {
+		return errors.New("it is starting already")
+	}
+	c.setWork(w.Parent, map[string]any{"state": workChecking, "final": "", "checks": w.Checks + 1, "tainted": strings.Join(taint, ", ")})
 	return nil
+}
+
+// launchFinal starts a work's final check, claimed under stepMu (claim
+// n), with stepMu let go; then records it under stepMu. A work settled
+// meanwhile takes no check: the task started stops.
+func (c *core) launchFinal(ctx context.Context, parent string, r runRequest, n uint64) {
+	t, err := runStepTask(c, ctx, r)
+	stepMu.Lock()
+	defer c.unlockSteps(ctx)
+	w, ok := c.work(parent)
+	if !c.unclaim(finalKey(parent), n) || !ok || w.State != workChecking || w.Final != "" {
+		if err == nil {
+			c.stopByBrain(ctx, t.ID)
+		}
+		return
+	}
+	if err != nil {
+		c.finalNotStarted(w, err)
+		return
+	}
+	c.setWork(parent, map[string]any{"final": t.ID})
+	c.traceWork(parent, fmt.Sprintf("Toutes les étapes sont acceptées : un agent neuf vérifie l'objectif (tâche %s).", t.ID), "")
+}
+
+// finalNotStarted tells the brain a final check that could not start.
+func (c *core) finalNotStarted(w work, err error) {
+	c.setWork(w.Parent, map[string]any{"state": workFailed})
+	c.traceWork(w.Parent, "Le contrôle final n'a pas pu démarrer : "+err.Error(), "")
+	c.wakeForWork(w.Parent, "Toutes les étapes sont acceptées, mais le contrôle final de l'objectif n'a pas pu démarrer : "+err.Error()+
+		"\nnode_settle sur le nœud, sans étape : retry le relance, accept tient le travail pour fait, drop l'arrête.", nil)
 }
 
 // finalChanged reads the final check's verdict: the goal holds and the
@@ -1077,7 +1197,7 @@ func (c *core) finalChanged(w work, id, state string, outcome turnOutcome) {
 // check again; drop: the work stops).
 func (c *core) settleStep(ctx context.Context, parent, step, outcome, note string) (string, error) {
 	stepMu.Lock()
-	defer stepMu.Unlock()
+	defer c.unlockSteps(ctx)
 	w, ok := c.work(parent)
 	if !ok {
 		return "", fmt.Errorf("node %s has no steps", parent)
@@ -1148,7 +1268,7 @@ func (c *core) replan(ctx context.Context, parent, step, note string, specs []st
 		return "", errors.New("replan gives the new steps: steps, as node_open's")
 	}
 	stepMu.Lock()
-	defer stepMu.Unlock()
+	defer c.unlockSteps(ctx)
 	w, ok := c.work(parent)
 	switch {
 	case !ok:
@@ -1253,7 +1373,7 @@ func (c *core) retryStep(ctx context.Context, st Step, note string) error {
 	}
 	steps, _ := c.workSteps(st.Parent)
 	c.stopStepTask(ctx, st.Task)
-	if err := c.startStep(ctx, st, steps, note); err != nil {
+	if err := c.startStep(st, steps, note); err != nil {
 		return err
 	}
 	c.setStep(st.Node, map[string]any{"tries": st.Tries + 1})
@@ -1314,6 +1434,10 @@ func (c *core) stepsTick() {
 	rows.Close()
 	ctx := context.Background()
 	for _, l := range ws {
+		if l.state == workChecking && l.final == "" {
+			c.finalLost(ctx, l.parent)
+			continue
+		}
 		if l.state == workChecking {
 			c.missedEnd(l.final)
 			continue
@@ -1326,6 +1450,20 @@ func (c *core) stepsTick() {
 		}
 		c.advanceWork(ctx, l.parent)
 	}
+}
+
+// finalLost runs again a final check claimed but never started: its
+// claim lost with a restart, the work goes back to running and finishes
+// again.
+func (c *core) finalLost(ctx context.Context, parent string) {
+	stepMu.Lock()
+	defer c.unlockSteps(ctx)
+	w, ok := c.work(parent)
+	if !ok || w.State != workChecking || w.Final != "" || c.claimed(finalKey(parent)) {
+		return
+	}
+	c.setWork(parent, map[string]any{"state": workRunning, "checks": max(0, w.Checks-1)})
+	c.advanceLocked(ctx, parent)
 }
 
 // missedEnd tells the engine of a task's end it may have missed: ended,
