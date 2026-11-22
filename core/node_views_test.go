@@ -225,7 +225,7 @@ func TestMailViewOneYes(t *testing.T) {
 	// The run: it notes the mail, opens the reply with its draft.
 	mustNodes(t, c, r.Task, "item_note", map[string]any{"source": "mails", "item": "m1", "note": "Sam propose jeudi.", "state": "act"})
 	kid := mustNodes(t, c, r.Task, "node_open", map[string]any{"title": "Répondre à Sam", "goal": "Répondre à Sam pour jeudi.", "body": "Brouillon : jeudi 10 h me va."})
-	if items, _ := c.nodes.Items(node); len(items) != 1 || items[0].Item != "m1" || items[0].State != "act" {
+	if items, _ := c.nodeItems(node); len(items) != 1 || items[0].Item != "m1" || items[0].State != "act" {
 		t.Fatalf("items %+v", items)
 	}
 	kids, _ := c.nodes.Children(node)
@@ -332,9 +332,10 @@ func TestInvitationReplyCard(t *testing.T) {
 	}
 }
 
-// A live block is read by code, with no model: its value is written in
-// its snapshot with when; a read that fails keeps the last good value; a
-// new one is written once the quarter of an hour is past.
+// A live block is read by code, with no model: its value is kept in
+// core.db, never in the node's file (no version, however many reads); a
+// read that fails keeps the last good value; the page draws the block
+// from the reads, an archived node's page too.
 func TestLiveBlockKeepsLastGood(t *testing.T) {
 	c, fm, _ := viewCore(t)
 	c.setServerTrust("monitor", true, "user")
@@ -349,21 +350,20 @@ func TestLiveBlockKeepsLastGood(t *testing.T) {
 		c.store.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE kind != 'brain'`).Scan(&n)
 		return n
 	}
-	before := tasks()
-	start := time.Now()
-	c.readNode(context.Background(), node, nil, start)
-	snap := func() map[string]any {
-		var m map[string]any
-		json.Unmarshal(block(t, c, node, "etat").Snapshot, &m)
-		return m
-	}
 	state := func(m map[string]any) any {
 		web, _ := m["web"].(map[string]any)
 		data, _ := web["data"].(map[string]any)
 		return data["state"]
 	}
-	if s := snap(); state(s) != "up" || s[nodefile.SnapshotAt] == nil {
-		t.Fatalf("snapshot %v", s)
+	shown := func() any {
+		d, _ := c.nodes.Read(node, 0)
+		return state(c.blockView(node, d.Node.Block("etat"), c.keptReads(node)).Data) // as the page
+	}
+	before := tasks()
+	start := time.Now()
+	c.readNode(context.Background(), node, nil, start)
+	if got := shown(); got != "up" {
+		t.Fatalf("shown %v", got)
 	}
 	if block(t, c, node, "etat").External {
 		t.Error("a trusted server's block marked external")
@@ -375,30 +375,60 @@ func TestLiveBlockKeepsLastGood(t *testing.T) {
 	fm.mu.Unlock()
 	c.readNode(context.Background(), node, []string{"web"}, start.Add(time.Minute))
 	r, ok := c.nodeValue(node, "web")
-	if !ok || r.Error == "" || state(map[string]any{"web": r.Value}) != "up" {
+	if !ok || r.Error == "" || state(map[string]any{"web": r.Value}) != "up" || shown() != "up" {
 		t.Fatalf("read %+v", r)
-	}
-	if state(snap()) != "up" {
-		t.Fatal("the snapshot lost its last good value")
 	}
 
-	// Back, changed: kept at once, written once the quarter is past.
+	// Back, changing at each read: shown at once, and still no version.
 	fm.mu.Lock()
-	fm.failing, fm.state = false, "down"
+	fm.failing = false
 	fm.mu.Unlock()
-	c.readNode(context.Background(), node, []string{"web"}, start.Add(2*time.Minute))
-	if r, _ := c.nodeValue(node, "web"); r.Error != "" || state(map[string]any{"web": r.Value}) != "down" {
-		t.Fatalf("read %+v", r)
+	for i := range 40 {
+		want := "down"
+		if i%2 == 1 {
+			want = "up"
+		}
+		fm.mu.Lock()
+		fm.state = want
+		fm.mu.Unlock()
+		c.readNode(context.Background(), node, []string{"web"}, start.Add(time.Duration(2+i)*time.Hour))
+		if got := shown(); got != want {
+			t.Fatalf("read %d: shown %v, not %s", i, got, want)
+		}
 	}
-	if state(snap()) != "up" {
-		t.Fatal("a snapshot written within the quarter")
+	if vs, _ := c.nodes.Versions(node); len(vs) != 1 {
+		t.Fatalf("reads made versions: %+v", vs)
 	}
-	c.readNode(context.Background(), node, []string{"web"}, start.Add(nodeSnapshotEvery+3*time.Minute))
-	if state(snap()) != "down" {
-		t.Fatalf("snapshot %v", snap())
+	if last, _ := c.nodes.Read(node, 0); strings.Contains(string(last.Raw), "snapshot") {
+		t.Fatalf("a value in the file:\n%s", last.Raw)
 	}
 	if tasks() != before {
 		t.Fatal("a task ran to read a block")
+	}
+	// node_read gives them, a trusted server's tainting nothing.
+	c.turn.start(0, 0, 0)
+	if out, err := c.brainNodeRead(brainNodeReadIn{ID: node}); err != nil || state(out["values"].(map[string]map[string]any)["etat"]) != "up" {
+		t.Fatalf("node_read %v %v", out["values"], err)
+	}
+	if _, _, _, tainted := c.turn.snapshot(); len(tainted) != 0 {
+		t.Fatalf("tainted %v", tainted)
+	}
+
+	// Archived: read no more, its page still shows the last value.
+	if err := c.nodes.Archive(node, byUser); err != nil {
+		t.Fatal(err)
+	}
+	c.nodeSourcesDue(context.Background(), start.Add(100*time.Hour))
+	if got := shown(); got != "up" {
+		t.Fatalf("archived: shown %v", got)
+	}
+	// Code acts on no read of an archived node (attention, cards,
+	// skills): its kept reads are only shown.
+	if rs := c.nodeReads(node); len(rs) != 0 {
+		t.Fatalf("archived: live reads %+v", rs)
+	}
+	if rs := c.keptReads(node); len(rs) != 1 {
+		t.Fatalf("archived: kept reads %+v", rs)
 	}
 }
 
@@ -417,6 +447,18 @@ func TestUntrustedSourceMarksExternal(t *testing.T) {
 	c.readNode(context.Background(), d.Node.Meta.ID, nil, time.Now())
 	if !block(t, c, d.Node.Meta.ID, "etat").External {
 		t.Fatal("a block reading a server not trusted is not external")
+	}
+	// node_read gives the values, and taints the turn.
+	c.turn.start(0, 0, 0)
+	out, err := c.brainNodeRead(brainNodeReadIn{ID: d.Node.Meta.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := out["values"].(map[string]map[string]any); v["etat"]["web"] == nil {
+		t.Fatalf("values %v", out["values"])
+	}
+	if _, _, _, tainted := c.turn.snapshot(); len(tainted) == 0 {
+		t.Fatal("its values did not taint the turn")
 	}
 }
 

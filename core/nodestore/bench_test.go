@@ -42,7 +42,7 @@ func TestStoreBench(t *testing.T) {
 	for v := nodes; v < versions; v++ {
 		id := ids[rng.IntN(len(ids))]
 		start := time.Now()
-		d, err := s.Write(id, body(v, v), last[id], "task:bench")
+		d, err := write(s, id, body(v, v), last[id], "task:bench")
 		if err != nil {
 			t.Fatal(err)
 		}

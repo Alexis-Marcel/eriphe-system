@@ -27,7 +27,7 @@ with the bridge's gateway address.
 
 At first start it makes what it lacks in the data directory, and reuses it after: the API token
 (`core-token`), the vault key (`vault.key`), the database (`core.db`, `memory.db`), the graph's
-nodes (`nodes/`, `nodes.db`), the memory's readable mirror (`memoire/`) and the
+nodes (`nodes/`, `nodes-trace/`, `nodes.db`), the memory's readable mirror (`memoire/`) and the
 workspace's self-signed certificate (`web-cert.pem`, `web-key.pem`). The API listens on
 `0.0.0.0:8800`, the workspace on `https://0.0.0.0:8443` (`ERIPHE_API_LISTEN` and `ERIPHE_WEB_LISTEN`,
 e.g. `0.0.0.0:9443`, move them, as `install.sh --api-port`, `--web-port` does on a Mac), and the
@@ -719,7 +719,7 @@ whatever address it dials) and one client certificate per device.
 | `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_find` | find nodes by words of their title, goal, text or blocks; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
 | `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
-| `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying marks or snapshots (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying marks (code's fields); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
 | `turn_home` | the user's message, said in a node's bar, is not about that node: the turn is about no node from then on, as at the home (`turnHome`, node_turn.go). What it raises waits above the bar (a card it raised already is unlinked from that node), and nothing of it is filed there; its lines stay in that node's bar, where the user reads them. At the home, or on events only, it does nothing |
@@ -940,7 +940,7 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   text, `[[Title]]` ([links between nodes](../docs/node-format.md#links-between-nodes)): there is no
   link tool; front-matter `links` are code's alone (a view decided from a card). Each
   checks the node exists (`no node <id>: node_find finds it`) and refuses an archived one
-  (`ErrArchived`); a body carrying a block's marks, snapshot or external is refused
+  (`ErrArchived`); a body carrying a block's marks or external is refused
   (`nodefile`'s author API: those are code's). There is **no archive tool**: archiving is the
   user's gesture (`archiveNode`, `by` `user` alone): it archives the node and every node under it
   (`nodestore.Below`), stops their tasks and their steps' work, and withdraws the cards that
@@ -1062,11 +1062,14 @@ body and typed blocks (`` ```eriphe:block <name> ``). The format is specified in
   and the shape of its `actions` (a name, a `server/tool`, the parameter that takes the ids, not
   among the fixed `args`, a source of the block with `items`).
   A bad block is a `BlockError` that names it.
-- **Code's fields** (a block's `snapshot`, `marks` and `external`, the node's `after` and `external`) are set by
-  code (`SetMark`, `SetSnapshot`, `SetBlockExternal`, `Meta.External`). An author's write goes
-  through `ParseAuthor`, `AuthorBody` or `PutAuthorBlock`: left out, they are kept from the version
+- **Code's fields** (a block's `marks` and `external`, the node's `external`, `title_trusted` and
+  `opened_by`) are set by code (`SetMark`, `SetBlockExternal`, `Meta.External`). An author's write
+  goes through `AuthorBody` or `PutAuthorBlock`: left out, they are kept from the version
   written over; written otherwise, the write is refused (`ErrCodeField`). Authors may give a block
-  in its short form (one component, no root); it is completed.
+  in its short form (one component, no root); it is completed. A block's sources' values are never
+  in the file (they are code's, in `core.db`): a block that says a `snapshot` (an old version,
+  an author copying one) still reads, the snapshot ignored, and is written again without it. An
+  old step's front matter `after` reads as a field this package does not know, kept as it was.
 
 The checks that need the core (actions, offers, a Proposal after external content, a bound Link's
 value, taint) are the tools' that write nodes. A block's `actions` are checked against the catalog
@@ -1078,23 +1081,24 @@ list, and the fixed `args` hold against its input schema with that parameter lef
 The package `nodestore` keeps the nodes: the files are the truth, the index is for speed.
 
 - **Repository:** `nodes/` next to `core.db`, a git repository written with go-git (no git
-  binary). Files are flat: `<slug>-<id>.md`, its trace `<slug>-<id>.trace.md`, its media in
-  `files/<id>/` (written by a later step). The slug (lowercase ASCII from the title, 40 characters at most) is frozen at
+  binary). Files are flat: `<slug>-<id>.md`, its media in `files/<id>/`. Git versions the
+  documents only. The slug (lowercase ASCII from the title, 40 characters at most) is frozen at
   creation: a new title changes the front matter, never the file's name.
-- **Index:** `nodes.db` next to it, outside the repository (SQLite, its schema version in `meta`, a
-  file at another version is refused). Tables: `nodes` (file, title, parent, lifetime, state,
+- **Index:** `nodes.db` next to it, outside the repository: a pure index, made again from the files
+  and the log when it is deleted, nothing lost but the node's state (until it is computed). SQLite,
+  its schema version in `meta` (2); a file at another version is refused, never migrated: delete
+  it. Tables: `nodes` (file, title, parent, lifetime, state,
   times, external, last version, the file's git hash, the title's link key), `node_links` (the front
   matter's), `node_refs` (each `[[name]]` of a node's text and the node it was resolved to, kept
   across renames; `''` while no node has it), `node_versions` (n → commit
-  hash, author, time), `node_sources` (each block's live sources), `node_items` (notes on the items
-  a source lists) and `node_fts` (FTS5 over the title,
+  hash, author, time), `node_sources` (each block's live sources) and `node_fts` (FTS5 over the title,
   the goal, the text and the words the blocks show). History is never asked of git by path: a
   version's commit is in `node_versions`.
 - **Writes:** each is one commit by its author (`brain`, `task:<id>`, `user`…), whose message names
-  the versions it makes (`Node: <id> <n>`). `Create` makes version 1; `Write(id, body, expect,
-  author)` replaces the body through nodefile's author API (code's fields kept, a change to them
-  refused) and is refused with `ErrConflict` when `expect` is not the last version's commit hash; a
-  body alike makes no version. An archived node is not written (`ErrArchived`). A node is 512 KiB
+  the versions it makes (`Node: <id> <n>`). `Create` makes version 1; `Change(id, expect,
+  author, fn)` writes the last version, an author's body through nodefile's author API (code's
+  fields kept, a change to them refused); it is refused with `ErrConflict` when `expect` is not the
+  last version's commit hash; a node alike makes no version. An archived node is not written (`ErrArchived`). A node is 512 KiB
   and 32 blocks at most. Secrets are refused by the memory's filter (`scanSecrets` in
   `memory_trust.go`: credentials, long random strings, links with a password or a token); its
   injection rules are not applied, as a node may quote someone else's words. A link's path is not
@@ -1102,23 +1106,25 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   token's known shape anywhere, a query's or fragment's token key or long random value, and a
   link's password still are. A random secret as a bare path segment, in no known shape, passes.
 - **Code's writes:** `Change(id, expect, author, fn)` lets code change what no author may (a
-  block's or the node's `external`, a block's `snapshot`, the title, the goal); the id, parent,
+  block's or the node's `external`, the title, the goal); the id, parent,
   creation, done and archived never change this way, and the filter runs over the node written.
   `Create` with `External` marks the node and each of its blocks; with `ID`, the node takes an id
   given beforehand (`NewID` gives a free one: a card shows the node before it exists).
-- **An author's write over code's:** `Write` and `Change` made on an older version are not stale
-  when every version since changed code's fields only (`onlyCodeSince`: the snapshot a live block
-  wrote, a block marked external): the write applies over them, code's fields kept.
+- **An author's write over code's:** `Change` made on an older version is not stale when every
+  version since changed code's fields only (`onlyCodeSince`: a mark, a block marked external): the
+  write applies over them, code's fields kept.
 - **Live sources:** `Sources(id)` lists the sources of every block of the nodes not archived (or of
-  one node), from `node_sources`: what the live engine reads (`node_live.go`).
-- **Item notes:** `NoteItem(id, item)` keeps a note and a state (`act`, `look`, `info`, `none`,
-  `done`) on an item one of the node's blocks' sources lists, in `node_items`, with its author
-  and taint; no note nor state takes it away. `Items(id)` reads them. A note is not a version.
+  one node), from `node_sources`: what the live engine reads (`node_live.go`); `KeptSources(id)`
+  archived nodes' too, whose pages still show their last values.
 - **Reads:** `Read(id, n)` gives version `n` (0: the last), `Versions`, `Children` (archived ones
   included), `Find(query, archived, limit)` (all the words, prefixes from three letters; archived
   nodes only when asked), `Get`.
-- **Trace:** `AppendTrace(id, author, text)` adds a dated entry, never cut (256 KiB an entry), in a
-  commit of its own; a trace is not a version of its node.
+- **Trace** (`trace.go`): `AppendTrace(id, author, text)` adds a dated entry, never cut (256 KiB an
+  entry), at the end of `<id>.trace.md` in `nodes-trace/`, beside the repository (`O_APPEND`): no
+  commit, no version, the node's `updated` moved. Past 2 MiB (`MaxTraceFile`) the file becomes its
+  older part, `<id>.trace.1.md`, the one before dropped. `Trace(id)` gives both parts, the older
+  first (the `.../trace` endpoint, `node_read`'s end of the trace, the nightly extraction). An
+  archived node keeps its trace.
 - **State:** `SetState` (`running`, `waiting`, `idle`, `done`) is code's, in the index only.
 - **Archive:** `Archive(id, author)` archives the node and every node below it in one commit, each
   a new version. Only the user archives (the tools of a later step).
@@ -1128,14 +1134,15 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   last good version readable). When `nodes.db` is missing, it is made again from the files, and
   the versions from one walk of the log; when it is behind the repository (`meta.head` is not the
   last commit: a copy put back, a stop between a commit and its indexing), the versions are read
-  again from the log. The state, the layout and the item notes are not in the files: a rebuilt
-  index starts them over. First, every object the branch reaches is read (each commit and tree,
+  again from the log. Only the state is not in the files: a rebuilt index starts it over (idle). First, every object the branch reaches is read (each commit and tree,
   each blob present): a repository that lacks one does not open, and the log names the ref and the
   missing object (`nodes: repository …: the repository is broken: refs/heads/main reaches blob …`);
   the graph stays off until the repository is put back from a bundle.
 - **Nightly**, at the memory's hour (`memory.extract_at`), into its backup folder
   (`memory.backup_dir`, `memory.backup_keep` days): `nodes-<day>.bundle` (a git bundle of `main`
-  and `HEAD`: `git clone` reads it and checks it out) and `nodes-<day>.db` (a copy of the index).
+  and `HEAD`: `git clone` reads it and checks it out), `nodes-<day>.trace.tar` (the traces, each as
+  long as it was when the tar opened it) and `nodes-<day>.db` (a copy of the index, named last: it
+  says the night's backup is whole).
   The repository is only read: no gc, no repack, no object removed (go-git's repack deleted the
   loose objects before its new pack was checked, and a failed repack lost the history). The
   bundle is packed from the objects as they are, written aside, read back whole (every object
@@ -1161,7 +1168,7 @@ permission), `idle` (its turn ended), `done` (it ended).
 
 - **`eriphe-nodes`**, an MCP server Eriphe provides, relayed by the device like `eriphe-memory`
   (the name is reserved in the catalog): every worker with a node has it, its tools allowed in
-  advance; it is not lent. `node_read` (a version, its hash, its body, its item notes), `node_write`
+  advance; it is not lent. `node_read` (a version, its hash, its body, its sources' last values, its item notes), `node_write`
   (the whole body), `node_edit` (one block, or a piece of text found once) and `node_append` work
   on **its own node only**: another id is refused, naming the task's node. Each write names the
   hash of the version it was made on (`expect`; `node_append` writes over nothing). `node_open`
@@ -1197,8 +1204,11 @@ as `run_task`'s, an `agent`, `resources`, a `contract`, a `device`), with the wo
 `budget_minutes` (60 by default, a day at most). The plan is checked before any node is made:
 keys unique, what each comes `after` a step of the plan or of the work, no cycle, 20 unfinished
 steps at once and 200 over the work's life, and each step's task as `run_task` would refuse it.
-Each step is a child node of the work's node, its `after` written by code in its front matter
-([docs/node-format.md](../docs/node-format.md)), never changed by an author.
+Each step is a child node of the work's node; what it comes `after` is the engine's, in
+`node_steps` (core.db), never in the node's file. Every step is checked and given its node's id
+(`NewID`, `Check`) before anything is made, then its row is written, all in one transaction, then
+its node: a node that cannot be made takes the rows of the steps not made with it, so no step is
+without its node, nor a step node without its row.
 
 The **engine** is code, without a model:
 
@@ -1256,10 +1266,13 @@ composes each one from the catalog.
   a server's resource, or a monitor the user approved. A source new or changed is read at once,
   then every `every` minutes (5 by default), at a resource's update, and a monitor's at each of its
   looks (`monitorLooked`). A read that fails or waits keeps the last good value, with why. The
-  values are written back into the block's `snapshot`, with `at` (code's, a reserved source name),
-  in one version of code's (`eriphe`) when a value changed, once a quarter of an hour at most per
-  block; a snapshot the store refuses (a secret, too big) is not tried again until its value
-  changes. A block that reads a server not trusted is marked `external`, checked at each read:
+  values stay in `node_reads`, never in the node's file: a read makes no version, however often it
+  runs. The page draws the block from them, whatever the version shown; an archived node's reads
+  are kept (`KeptSources`, `keptReads`) and its page shows them, read no more; they go with their
+  source. What code acts on (attention, cards, skills, freshness) is a live node's reads only
+  (`nodeReads`).
+  `node_read` gives them (`values`, by block then source, one past 16 KiB said to be so), tainting
+  the turn when a block reads a server not trusted. A block that reads a server not trusted is marked `external`, checked at each read:
   code marks it, never unmarks it. A monitor's value is its latest number, its last points, whether
   it is past its limit or failing, and its last events (kind and time, numbers only).
 - **A node's glance** (`node_glance.go`, `nodefile/glance.go`, table `node_glance` in `core.db`): a
@@ -1297,9 +1310,11 @@ composes each one from the catalog.
 - **A monitor raises its nodes**: crossed and holding, or failing, it puts each node whose blocks
   read it in the attention queue (`node:<id>`, in code's words), tainted when its server is not
   trusted.
-- **Item notes** (`node_items.go`): a listing source's `items` (`path`, `id`, `title`, `detail`)
-  give its items; a task notes one (`item_note`: note, state, group) in `node_items`; a note that
-  changes sends the source again to the pages that show it ([sections](../docs/node-format.md#sections)).
+- **Item notes** (`node_items.go`, `item_notes.go`): a listing source's `items` (`path`, `id`,
+  `title`, `detail`) give its items; a task notes one (`item_note`: note, state `act`, `look`,
+  `info`, `none` or `done`, group) in `node_items` in `core.db` (`noteItem`, `nodeItems`: never a
+  version, nothing a rebuilt `nodes.db` loses), with its author and taint; no note, state nor group
+  takes it away; an archived node is noted no more. A note that changes sends the source again to the pages that show it ([sections](../docs/node-format.md#sections)).
 - **Calls on an item** (`item_cards.go`): a skill run's call kept for the user that names exactly
   one item of a source of the run's node, on the call's own server, is kept on that item
   (`access_asks.node`, `source`, `item`): one card per item (kind `calls`), answered alone. A call
@@ -3212,8 +3227,8 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   ce qu'a vu la surveillance « m », sans demande de ta part », « Ouvert après un événement, sans
   demande de ta part », « Origine inconnue » for a node made before); `origin.unasked` tells a node
   a skill or an event opened. A block (`pageBlock`) is ready to draw: its `name`, its A2UI `components`, its
-  `data` with each source's last value at `/<name>` (the version's snapshot, then the latest read
-  while the last version shows) and the user's marks at `/marks/<list>/<item>`; or its `error`
+  `data` with each source's last value at `/<name>` (its latest read, whatever version
+  shows: the values are code's, never in the file) and the user's marks at `/marks/<list>/<item>`; or its `error`
   when it does not read as a block. Its media go through eriphe-core (`/espace/media`, signed),
   those an external block's author wrote dropped unless a source gave them; a Link keeps to the
   addresses a Link may open. Each item of a source with `items` carries its note's fields
@@ -3284,8 +3299,8 @@ token in `X-CSRF-Token`:
   items the user picked in a List (`list`, its component id), or all the rows it showed
   (`web_list_actions.go`), the user's own gesture. The action and the List are read again in the
   stored block, the same at the version the page showed (`version`) as at the last, the action
-  shown on that List (`409` otherwise); every id must be one the source lists now (its last read,
-  else its snapshot) that the List's filter keeps with the items' notes now (`400`, nothing run:
+  shown on that List (`409` otherwise); every id must be one the source lists now (its last read)
+  that the List's filter keeps with the items' notes now (`400`, nothing run:
   the set is never made larger), sent to the tool as the source gave it; 200 items at most. The tool's policy
   holds: never (or a call that must name its account) is `403`; on approval the click is the
   user's yes; free runs. One call with the fixed `args` and the ids in its `items` parameter, or,
@@ -3502,7 +3517,7 @@ its answer belongs to. The orb only answers: the event carries nothing of a turn
 act of the user's (an event's, a wake's, a node's task's: its work, its words, its failure,
 its cards), nor any word at all before the user's first message. The user's acts are their
 messages and their Oui or Non on a card: what came of a decision reaches the brain as an event
-marked as the user's (`userActEvent`, kv `user_act:<seq>`: a call run or refused on a card,
+marked as the user's (`userActEvent`, `messages.user_act`: a call run or refused on a card,
 `callToBrain`; a release, `accessDecidedTold`; a task's start declined, `taskStartDeclined`), and
 the turn that reads it answers the user (`deliverConversation`, `brainTurn.answersUser`), its
 taint and context kept: its reply (« C'est fait », or what failed), its work and its failure are
@@ -3521,13 +3536,13 @@ so that nothing Eriphe says is lost on a page the user is not looking at: `orb` 
   link's words only, at most 140 characters, its first sentence when that fits, else cut at a
   word with « … »);
 - `answer`: Eriphe's words written since that message in a turn that answered it or a card's decision since (`markAnswer`,
-  kv `answer_msg:<seq>`), `{seq, node, text, more, whole, external}`: `node` where its messages belong (`placeOf`: the
+  `messages.answer_to`), `{seq, node, text, more, whole, external}`: `node` where its messages belong (`placeOf`: the
   node of the message, else the one its answer was filed in, none for the home); `text`, its last
   messages there joined, said in a few lines (`fewLines`: at most 3 lines and 280 characters, no
   code, table or rule), `more` when that cut it (the rest is in the node: the brain writes it
   there, else the safety net files it); at the home, an answer cut is sent whole instead
   (`whole`, Markdown, at most `answerMax`: the brain's messages of a turn that answered the
-  user's home message, `markAnswer`, kv `answer_msg:<seq>`, filed nowhere); `external` when
+  user's home message, `markAnswer`, `messages.answer_to`, filed nowhere); `external` when
   written in a tainted turn (`markBrainMessage`). An answer the user wrote past is no longer sent;
 - `failed`: the last line of a turn that answered the user is an error (`{seq, node}`, never its
   raw text; `brainFailed` marks it as `markAnswer` does; a failure to start, or of an event's
@@ -3535,7 +3550,7 @@ so that nothing Eriphe says is lost on a page the user is not looking at: `orb` 
 - `wait`: the newest card that waits for the user's yes in a live node, raised in answer to the
   user's last message read: shown with a message `markAnswer` marked, raised in the turn under
   way that answers it, or a call of the brain's it asked a yes for in such a turn, whatever
-  message of code's showed it (`markCardAsked`, kv `asked_card:<ref>`) (`newestWait`,
+  message of code's showed it (`markCardAsked`, `convo_cards.asked`) (`newestWait`,
   `cardAsked`, `{card, node}`): the orb goes beside that node and points at it.
   An older one, or one raised unasked (an event's turn, a brief), waits in its page, its bubble
   says so;
@@ -3564,7 +3579,7 @@ waits changes (`waitingKey`, each round: a
 delivery or a withdrawal adds no message). The ✕ on one is `DELETE /messages/{seq}` (CSRF token):
 the message and its attachments are deleted at once, so the brain never reads it and the
 conversation keeps no trace of it (the log keeps a line); `204`, `409` once Eriphe has it (or once
-its plain yes or no decided a card, `resolveByText`), `404` when there is no such message of the
+its plain yes or no decided a card, `resolveByText`, `messages.card_answer`), `404` when there is no such message of the
 user's. The withdrawal and the delivery hold the same lock (`core.delivering`), the delivery from
 what it reads to its mark: a message is either in the turn or withdrawn, never both. On a `409` the
 bar says it was too late.

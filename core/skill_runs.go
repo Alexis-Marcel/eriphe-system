@@ -748,7 +748,7 @@ func (c *core) runNodeWork(r *skillRun) string {
 	if node == "" || c.nodes == nil {
 		return ""
 	}
-	items, _ := c.nodes.Items(node)
+	items, _ := c.nodeItems(node)
 	n := 0
 	for _, it := range items {
 		if it.Author == "skill:"+r.Skill {

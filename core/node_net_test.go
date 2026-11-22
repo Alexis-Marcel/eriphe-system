@@ -1,8 +1,6 @@
 package main
 
 import (
-	"database/sql"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -176,7 +174,7 @@ func TestNetFilesUnaskedWordsInTheirNode(t *testing.T) {
 		}, true},
 		{"yes", "Ce qu'on suit.\n", func(x *core, id string) int64 {
 			seq, _ := x.store.addNodeMessage(roleEvent, "Sam a dit oui : mail/trash est exécutée.", "", id, false)
-			x.store.set(userActKey(int(seq)), "1")
+			x.store.db.Exec(`UPDATE messages SET user_act = 1 WHERE seq = ?`, seq)
 			return seq
 		}, false},
 	} {
@@ -190,7 +188,7 @@ func TestNetFilesUnaskedWordsInTheirNode(t *testing.T) {
 		seq := c.event(x, id)
 		x.store.markDelivered(int(seq))
 		x.turn.goOn(int(seq), int(seq), 0, nil)
-		if x.store.isUserAct(Message{Seq: int(seq), Role: roleEvent}) {
+		if msgs, _ := x.store.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq = ?`, seq); len(msgs) == 1 && x.store.isUserAct(msgs[0]) {
 			x.turn.answersUser()
 		}
 		x.turn.answersIn(id)
@@ -320,35 +318,5 @@ func TestExtractionReadsNodeTraces(t *testing.T) {
 	}
 	if segs := c.nodeSegments(now.Add(time.Hour), now.Add(2*time.Hour)); len(segs) != 0 {
 		t.Errorf("another day's trace: %+v", segs)
-	}
-}
-
-// A conversation made before the nodes opens with its messages' node and
-// filed added, its messages kept, the home's.
-func TestStoreAddsMessagesNode(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "core.db")
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{`CREATE TABLE messages (seq INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL,
-		role TEXT NOT NULL, text TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, via TEXT NOT NULL DEFAULT '',
-		thread INTEGER NOT NULL DEFAULT 0)`, `INSERT INTO messages (time, role, text, delivered, thread) VALUES (1, 'user', 'Bonjour', 1, 3)`} {
-		if _, err := db.Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	db.Close()
-	s, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.db.Close()
-	msgs, err := s.queryMessages(`SELECT ` + messageCols + ` FROM messages WHERE node = ''`)
-	if err != nil || len(msgs) != 1 || msgs[0].Text != "Bonjour" {
-		t.Fatalf("the home's messages %+v %v", msgs, err)
-	}
-	if _, err := s.addNodeMessage(roleBrain, "Salut", "", "k3x9m2p7qa", true); err != nil {
-		t.Fatal(err)
 	}
 }

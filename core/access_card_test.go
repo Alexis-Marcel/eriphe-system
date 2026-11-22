@@ -417,6 +417,22 @@ func brainCalls(t *testing.T, c *core, pid, tool string, in map[string]any) {
 	}
 }
 
+// A call the brain asks while answering the user is marked on its card,
+// the card made by then: the orb points at it.
+func TestBrainCardAskedMark(t *testing.T) {
+	c := newMailCore(t, "")
+	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "box", Runtime: "claude-code", State: stateWaitingPermission})
+	asked, _ := c.store.addMessage(roleUser, "Range ce mail.", true)
+	c.turn.start(int(asked), int(asked), 0)
+	brainCalls(t, c, "p-1", "mcp__mail__move", map[string]any{"id": "42"})
+	if x := accessCard(t, c, "move"); !x.Asked || !c.cardAsked(x, false) {
+		t.Fatalf("not marked asked: %+v", x)
+	}
+	if kvMarks(c) != 0 {
+		t.Errorf("%d marks in kv", kvMarks(c))
+	}
+}
+
 // A no runs nothing, and the brain is told; the same call asked twice is one card.
 func TestBrainCardNo(t *testing.T) {
 	c := newMailCore(t, "")

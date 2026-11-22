@@ -59,7 +59,7 @@ func TestTextLinks(t *testing.T) {
 	}
 	// Removed from the text, the link goes.
 	d := mustRead(t, s, "n2")
-	if _, err := s.Write("n2", "Plus que [[La recherche]].", d.Version.Hash, "brain"); err != nil {
+	if _, err := write(s, "n2", "Plus que [[La recherche]].", d.Version.Hash, "brain"); err != nil {
 		t.Fatal(err)
 	}
 	if got := linksOf(t, s, "n2"); !slices.Equal(got, []string{"n1"}) {
@@ -80,7 +80,7 @@ func TestTextLinkKeptOnRename(t *testing.T) {
 		t.Fatalf("after the rename %v", got)
 	}
 	d := mustRead(t, s, "n2")
-	if _, err := s.Write("n2", "Voir [[Plan]], encore.", d.Version.Hash, "brain"); err != nil {
+	if _, err := write(s, "n2", "Voir [[Plan]], encore.", d.Version.Hash, "brain"); err != nil {
 		t.Fatal(err)
 	}
 	if got := linksOf(t, s, "n2"); !slices.Equal(got, []string{"n1"}) {
@@ -114,8 +114,7 @@ func TestTextLinkResolution(t *testing.T) {
 }
 
 // An index rebuilt from the files resolves the links by the titles of the
-// day, whatever the order the files are read in; an index made before the
-// links is filled with them.
+// day, whatever the order the files are read in.
 func TestTextLinksRebuilt(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
@@ -129,14 +128,5 @@ func TestTextLinksRebuilt(t *testing.T) {
 	s2, _ := e.open(t)
 	if got := linksOf(t, s2, "n1"); !slices.Equal(got, []string{"n2", "n3"}) {
 		t.Fatalf("rebuilt %v", got)
-	}
-	// An index of before: no node_refs, no title_key.
-	if _, err := s2.db.Exec(`DROP TABLE node_refs; DROP INDEX nodes_title_key; ALTER TABLE nodes DROP COLUMN title_key`); err != nil {
-		t.Fatal(err)
-	}
-	s2.Close()
-	s3, _ := e.open(t)
-	if got := linksOf(t, s3, "n1"); !slices.Equal(got, []string{"n2", "n3"}) {
-		t.Fatalf("an old index %v", got)
 	}
 }

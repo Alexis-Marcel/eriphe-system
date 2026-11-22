@@ -98,12 +98,6 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		}
 		onDisk[name] = true
 		committed := head[name].String() == blobHash(raw)
-		if strings.HasSuffix(name, ".trace.md") {
-			if !committed {
-				changes = append(changes, change{path: name, data: raw})
-			}
-			continue
-		}
 		n, err := nodefile.Parse(raw)
 		if err != nil {
 			rep.Broken = append(rep.Broken, name+": "+err.Error())
@@ -186,6 +180,9 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 		if err := tx.Commit(); err != nil {
 			return rep, err
 		}
+	}
+	if fresh {
+		s.tracesMoved()
 	}
 	if repoHead, err = s.headHash(); err != nil || repoHead == "" {
 		return rep, err

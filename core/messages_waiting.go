@@ -102,7 +102,7 @@ func (c *core) waitingKey(thinking bool) string {
 func (c *core) withdrawMessage(seq int) error {
 	c.delivering.Lock()
 	defer c.delivering.Unlock()
-	if c.store.get(cardAnswerKey(seq)) != "" {
+	if c.store.cardAnswer(seq) != "" {
 		return errMessageTaken // its yes or no decided a card already
 	}
 	atts, err := c.store.withdrawMessage(seq)

@@ -68,6 +68,12 @@ func mustCreate(t *testing.T, s *Store, nw New) *Doc {
 	return d
 }
 
+// write replaces a node's body with an author's, as the authors' writes
+// do (Change, AuthorBody).
+func write(s *Store, id, body, expect, author string) (*Doc, error) {
+	return s.Change(id, expect, author, func(n *nodefile.Node) error { return n.AuthorBody(body) })
+}
+
 const statusBlock = "\n```eriphe:block status\n{\"components\": {\"component\": \"Text\", \"text\": \"Waiting for Sam.\"}}\n```\n"
 
 func TestCreateWriteAndVersions(t *testing.T) {
@@ -84,7 +90,7 @@ func TestCreateWriteAndVersions(t *testing.T) {
 	if string(onDisk) != string(d.Raw) {
 		t.Fatal("the file on disk is not the node written")
 	}
-	d2, err := s.Write("n1", "Second draft."+statusBlock, d.Version.Hash, "task:t1")
+	d2, err := write(s, "n1", "Second draft."+statusBlock, d.Version.Hash, "task:t1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +98,7 @@ func TestCreateWriteAndVersions(t *testing.T) {
 		t.Fatalf("second version: %+v", d2.Version)
 	}
 	// The same body again makes no version.
-	same, err := s.Write("n1", "Second draft."+statusBlock, d2.Version.Hash, "brain")
+	same, err := write(s, "n1", "Second draft."+statusBlock, d2.Version.Hash, "brain")
 	if err != nil || same.Version.N != 2 {
 		t.Fatalf("a body alike: v%d, %v", same.Version.N, err)
 	}
@@ -118,7 +124,7 @@ func TestReadAnOldVersion(t *testing.T) {
 	d := mustCreate(t, s, New{Title: "Plan", Body: "Version one."})
 	expect := d.Version.Hash
 	for i := 2; i <= 4; i++ {
-		d, err := s.Write("n1", fmt.Sprintf("Version %d.", i), expect, "brain")
+		d, err := write(s, "n1", fmt.Sprintf("Version %d.", i), expect, "brain")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -144,14 +150,14 @@ func TestStaleExpectRefused(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
 	d := mustCreate(t, s, New{Title: "Plan", Body: "One."})
-	if _, err := s.Write("n1", "Two.", d.Version.Hash, "brain"); err != nil {
+	if _, err := write(s, "n1", "Two.", d.Version.Hash, "brain"); err != nil {
 		t.Fatal(err)
 	}
-	_, err := s.Write("n1", "Three, on one.", d.Version.Hash, "task:t2")
+	_, err := write(s, "n1", "Three, on one.", d.Version.Hash, "task:t2")
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("a stale expect: %v", err)
 	}
-	if _, err := s.Write("n1", "No expect.", "", "brain"); err == nil {
+	if _, err := write(s, "n1", "No expect.", "", "brain"); err == nil {
 		t.Fatal("a write without expect is refused")
 	}
 	if last, _ := s.Read("n1", 0); last.Node.Text() != "Two." {
@@ -183,34 +189,6 @@ func TestLimits(t *testing.T) {
 	}
 }
 
-func TestTraceAppend(t *testing.T) {
-	e := newEnv(t)
-	s, _ := e.open(t)
-	d := mustCreate(t, s, New{Title: "Research", Body: "Doc."})
-	long := strings.Repeat("A long report line.\n", 2000)
-	if err := s.AppendTrace("n1", "task:t1", "Started."); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.AppendTrace("n1", "task:t1", long); err != nil {
-		t.Fatal(err)
-	}
-	tr, _ := s.Trace("n1")
-	if !strings.HasPrefix(string(tr), "# Research\n\n## ") || !strings.Contains(string(tr), "· task:t1\n\nStarted.\n\n") ||
-		!strings.Contains(string(tr), long) {
-		t.Fatalf("trace:\n%.300s", tr)
-	}
-	if _, err := os.Stat(filepath.Join(e.dir, "research-n1.trace.md")); err != nil {
-		t.Fatal(err)
-	}
-	// The trace is no version of the node.
-	if last, _ := s.Read("n1", 0); last.Version.N != 1 || last.Version.Hash != d.Version.Hash {
-		t.Fatalf("a trace made a version: %+v", last.Version)
-	}
-	if err := s.AppendTrace("n1", "task:t1", "token ghp_abc"); err == nil {
-		t.Fatal("a secret in the trace")
-	}
-}
-
 func TestArchiveCascade(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
@@ -237,7 +215,7 @@ func TestArchiveCascade(t *testing.T) {
 	if a.Version.Hash != b.Version.Hash {
 		t.Fatal("the cascade is not one commit")
 	}
-	if _, err := s.Write("n2", "Late.", a.Version.Hash, "brain"); !errors.Is(err, ErrArchived) {
+	if _, err := write(s, "n2", "Late.", a.Version.Hash, "brain"); !errors.Is(err, ErrArchived) {
 		t.Fatalf("a write to an archived node: %v", err)
 	}
 	kids, _ := s.Children("n1")
@@ -300,7 +278,7 @@ func TestSetState(t *testing.T) {
 	if err := s.SetState("nope", Running); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("an unknown node: %v", err)
 	}
-	if d, _ := s.Write("n1", "y", mustRead(t, s, "n1").Version.Hash, "brain"); d.State != Running {
+	if d, _ := write(s, "n1", "y", mustRead(t, s, "n1").Version.Hash, "brain"); d.State != Running {
 		t.Fatalf("a write changed the state: %s", d.State)
 	}
 }
@@ -321,7 +299,7 @@ func TestSecretRefused(t *testing.T) {
 		t.Fatalf("a secret in a new node: %v", err)
 	}
 	d := mustCreate(t, s, New{Title: "Keys", Body: "None here."})
-	if _, err := s.Write(d.Node.Meta.ID, "ghp_0123456789abcdefghij", d.Version.Hash, "brain"); err == nil {
+	if _, err := write(s, d.Node.Meta.ID, "ghp_0123456789abcdefghij", d.Version.Hash, "brain"); err == nil {
 		t.Fatal("a secret in a write")
 	}
 	if files, _ := filepath.Glob(filepath.Join(e.dir, "*.md")); len(files) != 1 {
@@ -402,7 +380,7 @@ func TestIndexRebuiltFromFiles(t *testing.T) {
 	d := mustCreate(t, s, New{Title: "Substack", Lifetime: nodefile.Standing, Body: "Newsletter." +
 		"\n```eriphe:block readers\n{\"components\": {\"component\": \"Text\", \"text\": \"Readers\"}, \"sources\": {\"subs\": {\"tool\": \"substack/stats\", \"every\": 60}}}\n```\n"})
 	mustCreate(t, s, New{Title: "Style", Parent: "n1", Links: []string{"n1"}, Body: "Short."})
-	if _, err := s.Write("n1", "Newsletter, v2.", d.Version.Hash, "user"); err != nil {
+	if _, err := write(s, "n1", "Newsletter, v2.", d.Version.Hash, "user"); err != nil {
 		t.Fatal(err)
 	}
 	s.AppendTrace("n2", "task:t1", "Done.")
@@ -466,7 +444,7 @@ func TestBackup(t *testing.T) {
 		t.Fatalf("an empty graph: %v", err)
 	}
 	d := mustCreate(t, s, New{Title: "Plan", Body: "One."})
-	s.Write("n1", "Two.", d.Version.Hash, "brain")
+	write(s, "n1", "Two.", d.Version.Hash, "brain")
 	if err := s.Backup(backups, 2); err != nil {
 		t.Fatal(err)
 	}
@@ -497,7 +475,7 @@ func TestBackup(t *testing.T) {
 	if old, err := s.Read("n1", 1); err != nil || old.Node.Text() != "One." {
 		t.Fatalf("after the backup: %v", err)
 	}
-	if _, err := s.Write("n1", "Three.", vs[1].Hash, "brain"); err != nil {
+	if _, err := write(s, "n1", "Three.", vs[1].Hash, "brain"); err != nil {
 		t.Fatalf("a write after the backup: %v", err)
 	}
 }
@@ -549,11 +527,11 @@ func TestIndexBehindTheRepository(t *testing.T) {
 	if err := s.Backup(backups, 1); err != nil {
 		t.Fatal(err)
 	}
-	d2, err := s.Write("n1", "Two.", d.Version.Hash, "brain")
+	d2, err := write(s, "n1", "Two.", d.Version.Hash, "brain")
 	if err != nil {
 		t.Fatal(err)
 	}
-	d3, err := s.Write("n1", "Three.", d2.Version.Hash, "user")
+	d3, err := write(s, "n1", "Three.", d2.Version.Hash, "user")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -574,13 +552,13 @@ func TestIndexBehindTheRepository(t *testing.T) {
 	if last := mustRead(t, s2, "n1"); last.Version.N != 3 || last.Version.Hash != d3.Version.Hash {
 		t.Fatalf("last: %+v", last.Version)
 	}
-	if _, err := s2.Write("n1", "On one.", d.Version.Hash, "brain"); !errors.Is(err, ErrConflict) {
+	if _, err := write(s2, "n1", "On one.", d.Version.Hash, "brain"); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a write on v1: %v", err)
 	}
 	if sum, err := s2.Get("n2"); err != nil || sum.Version != 1 {
 		t.Fatalf("the node born since: %+v %v", sum, err)
 	}
-	d4, err := s2.Write("n1", "Four.", d3.Version.Hash, "brain")
+	d4, err := write(s2, "n1", "Four.", d3.Version.Hash, "brain")
 	if err != nil || d4.Version.N != 4 {
 		t.Fatalf("the next write: %v %+v", err, d4)
 	}

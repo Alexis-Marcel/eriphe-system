@@ -2,7 +2,6 @@ package nodefile
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -34,6 +33,18 @@ func mustBytes(t *testing.T, n *Node) []byte {
 // head is a front matter, then body.
 func head(body string) string {
 	return "---\nid: abc123\ntitle: Sam's node\nlifetime: work\ncreated: 2026-11-17T09:00:00Z\n---\n" + body
+}
+
+// authorNew is a new node whose body an author wrote (AuthorBody).
+func authorNew(body string) (*Node, error) {
+	n, err := Parse([]byte(head("")))
+	if err != nil {
+		return nil, err
+	}
+	if err := n.AuthorBody(body); err != nil {
+		return nil, err
+	}
+	return n, n.Validate()
 }
 
 func TestRoundTrip(t *testing.T) {
@@ -174,7 +185,7 @@ func TestAwkwardScalars(t *testing.T) {
 }
 
 func TestWriterOutputParsesToSameBytes(t *testing.T) {
-	m := Meta{ID: "abc", Title: "Plan", Parent: "k3v9q2m7", Links: []string{"p8d2x4c1"}, After: []string{"s1", "s2"}, Lifetime: Work, Goal: "A plan.",
+	m := Meta{ID: "abc", Title: "Plan", Parent: "k3v9q2m7", Links: []string{"p8d2x4c1"}, Lifetime: Work, Goal: "A plan.",
 		Created: time.Date(2026, 11, 17, 9, 0, 0, 0, time.FixedZone("", 3600))}
 	n, err := New(m, "# Plan\n")
 	if err != nil {
@@ -188,7 +199,7 @@ func TestWriterOutputParsesToSameBytes(t *testing.T) {
 	}
 	n.Meta.External = true
 	out := mustBytes(t, n)
-	want := "---\nid: abc\ntitle: Plan\nparent: k3v9q2m7\nlinks: [p8d2x4c1]\nafter: [s1, s2]\nlifetime: work\ngoal: A plan.\ncreated: 2026-11-17T09:00:00+01:00\nexternal: true\n---\n# Plan\n\n" +
+	want := "---\nid: abc\ntitle: Plan\nparent: k3v9q2m7\nlinks: [p8d2x4c1]\nlifetime: work\ngoal: A plan.\ncreated: 2026-11-17T09:00:00+01:00\nexternal: true\n---\n# Plan\n\n" +
 		"```eriphe:block steps\n{\"components\": [\n  {\"component\":\"Text\",\"id\":\"root\",\"text\":{\"@path\":\"/t\"}}\n],\n \"data\": {\"t\":\"One\"},\n \"marks\": {\"lines\":{\"one\":\"done\"}}}\n```\n"
 	if string(out) != want {
 		t.Fatalf("written:\n%s\nwant:\n%s", out, want)
@@ -245,9 +256,6 @@ func TestErrors(t *testing.T) {
 		{"own parent", strings.Replace(head(""), "lifetime", "parent: abc123\nlifetime", 1), "its own parent", ""},
 		{"links twice", strings.Replace(head(""), "lifetime", "links: [abc, abc]\nlifetime", 1), "there twice", ""},
 		{"links itself", strings.Replace(head(""), "lifetime", "links: [abc123]\nlifetime", 1), "link to itself", ""},
-		{"after twice", strings.Replace(head(""), "lifetime", "after: [abc, abc]\nlifetime", 1), "there twice", ""},
-		{"after itself", strings.Replace(head(""), "lifetime", "after: [abc123]\nlifetime", 1), "wait for itself", ""},
-		{"after bad id", strings.Replace(head(""), "lifetime", "after: [Not-An-Id]\nlifetime", 1), "not a node's id", ""},
 		{"bad block json", block("plan", `{"components": [`), "not a block's JSON", "plan"},
 		{"two objects", block("plan", text+text), "one JSON object only", "plan"},
 		{"unknown block key", block("plan", `{"components": [], "layout": 1}`), "unknown field", "plan"},
@@ -264,7 +272,6 @@ func TestErrors(t *testing.T) {
 		{"every", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"s": {"tool": "a/b", "every": 2000}}}`), "every is 1 to 1440", "plan"},
 		{"attention without items", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"s": {"tool": "a/b", "attention": true}}}`), "attention needs items", "plan"},
 		{"bad mark", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "marks": {"l": {"i": "maybe"}}}`), "keep, drop or done", "plan"},
-		{"bad snapshot", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "snapshot": [1]}`), "snapshot: an object", "plan"},
 		{"short form in a file", block("plan", `{"components": {"component": "Text", "text": "Hi"}}`), "", "plan"},
 		{"unclosed block", head("```eriphe:block plan\n" + text + "\n"), "no closing ``` line", "plan"},
 		{"same name twice", head("```eriphe:block plan\n" + text + "\n```\n```eriphe:block plan\n" + text + "\n```\n"), "one block so named", "plan"},
@@ -308,8 +315,7 @@ func TestShortForm(t *testing.T) {
 		`[{"component": "Text", "text": "Hi"}]`,
 		`[{"id": "hello", "component": "Text", "text": "Hi"}]`,
 	} {
-		raw := head("```eriphe:block note\n{\"components\": " + comps + "}\n```\n")
-		n, err := ParseAuthor([]byte(raw), nil)
+		n, err := authorNew("```eriphe:block note\n{\"components\": " + comps + "}\n```\n")
 		if err != nil {
 			t.Fatalf("%s: %v", comps, err)
 		}
@@ -322,8 +328,7 @@ func TestShortForm(t *testing.T) {
 		}
 	}
 	// Two components without root are not a short form.
-	raw := head("```eriphe:block note\n{\"components\": [{\"id\": \"a\", \"component\": \"Text\", \"text\": \"Hi\"}, {\"id\": \"b\", \"component\": \"Text\", \"text\": \"Ho\"}]}\n```\n")
-	if _, err := ParseAuthor([]byte(raw), nil); err == nil {
+	if _, err := authorNew("```eriphe:block note\n{\"components\": [{\"id\": \"a\", \"component\": \"Text\", \"text\": \"Hi\"}, {\"id\": \"b\", \"component\": \"Text\", \"text\": \"Ho\"}]}\n```\n"); err == nil {
 		t.Error("two components without root parsed")
 	}
 }
@@ -340,7 +345,6 @@ func TestAuthorCodeFields(t *testing.T) {
 		{"marks changed", `, "marks": {"lines": {"l1": "keep"}}`},
 		{"marks emptied", `, "marks": {}`},
 		{"external changed", `, "external": false`},
-		{"snapshot written", `, "snapshot": {"at": "2026-11-17T10:00"}`},
 	}
 	for _, tc := range refused {
 		t.Run(tc.name, func(t *testing.T) {
@@ -369,36 +373,6 @@ func TestAuthorCodeFields(t *testing.T) {
 			t.Error("the block is not written")
 		}
 	}
-	// A whole node: the front matter's external, and a block's.
-	whole := string(read(t, "full.md"))
-	cases := map[string]string{
-		"node external off": strings.Replace(whole, "external: true\n", "external: false\n", 1),
-		"block external on": strings.Replace(whole, `"marks": {},`+"\n"+` "external": false`, `"external": true`, 1),
-		"new block marked":  whole + "\n```eriphe:block more\n{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"Hi\"}], \"marks\": {\"l\": {\"i\": \"keep\"}}}\n```\n",
-	}
-	for name, raw := range cases {
-		if _, err := ParseAuthor([]byte(raw), prev); !errors.Is(err, ErrCodeField) {
-			t.Errorf("%s: not refused: %v", name, err)
-		}
-	}
-	if _, err := ParseAuthor([]byte(whole), nil); !errors.Is(err, ErrCodeField) {
-		t.Errorf("a new node said external: %v", err)
-	}
-	// Left out of a whole node: kept from prev.
-	bare := strings.Replace(whole, "external: true\n", "", 1)
-	bare = strings.Replace(bare, `"marks": {"lines": {"l1": "done"}},`+"\n"+` "external": true}`, `"data": {"text": "x"}}`, 1)
-	bare = strings.Replace(bare, `"data": {"text": "I am looking at it within the hour."},`+"\n", "", 1)
-	n, err := ParseAuthor([]byte(bare), prev)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !n.Meta.External || n.Block("draft").Marks["lines"]["l1"] != MarkDone || !n.Block("draft").External {
-		t.Errorf("code's fields not kept: %+v", n.Block("draft"))
-	}
-	again, err := Parse(mustBytes(t, n))
-	if err != nil || !again.Meta.External || again.Block("draft").Marks["lines"]["l1"] != MarkDone {
-		t.Errorf("not written: %v", err)
-	}
 	// AuthorBody keeps them too.
 	body := "New text.\n\n```eriphe:block draft\n" + draft("") + "\n```\n"
 	if err := prev.AuthorBody(body); err != nil {
@@ -409,6 +383,35 @@ func TestAuthorCodeFields(t *testing.T) {
 	}
 	if err := prev.AuthorBody("```eriphe:block draft\n" + draft(`, "external": false`) + "\n```\n"); !errors.Is(err, ErrCodeField) {
 		t.Errorf("body: not refused: %v", err)
+	}
+	// A new block an author marks is refused.
+	if err := prev.AuthorBody("```eriphe:block more\n" + draft(`, "marks": {"l": {"i": "keep"}}`) + "\n```\n"); err == nil {
+		t.Error("a new block marked by its author")
+	}
+	// One that says a snapshot (copied from an old version) is taken
+	// without it: the sources' values are code's, kept outside the file.
+	if err := prev.AuthorBody("```eriphe:block more\n" + draft(`, "snapshot": {"text": "x"}`) + "\n```\n"); err != nil {
+		t.Fatal(err)
+	}
+	if out := mustBytes(t, prev); bytes.Contains(out, []byte("snapshot")) {
+		t.Errorf("written with its snapshot:\n%s", out)
+	}
+}
+
+// A version written when a block kept its sources' values (snapshot)
+// still reads: the field is ignored, and the block written again without
+// it.
+func TestOldSnapshotReads(t *testing.T) {
+	raw := head("```eriphe:block b\n{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"Hi\"}], \"snapshot\": {\"at\": \"2026-11-17T10:00:00Z\"}}\n```\n")
+	n, err := Parse([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text, _ := n.AuthorText(); strings.Contains(text, "snapshot") {
+		t.Errorf("an author's text says it: %s", text)
+	}
+	if out := mustBytes(t, n); bytes.Contains(out, []byte("snapshot")) || !bytes.Contains(out, []byte(`"text":"Hi"`)) {
+		t.Errorf("written:\n%s", out)
 	}
 }
 
@@ -423,9 +426,6 @@ func TestAuthorBadComponents(t *testing.T) {
 		if err := n.AuthorBody("```eriphe:block b\n" + raw + "\n```\n"); err == nil {
 			t.Errorf("%s: body", comps)
 		}
-		if _, err := ParseAuthor([]byte(head("```eriphe:block b\n"+raw+"\n```\n")), nil); err == nil {
-			t.Errorf("%s: parse", comps)
-		}
 	}
 }
 
@@ -433,7 +433,7 @@ func TestAuthorBadComponents(t *testing.T) {
 // written back as it was, and refused with anything of a card's own.
 func TestCardBlock(t *testing.T) {
 	body := "## Ce qu'on a décidé\n\n```eriphe:block vue\n{\"card\": \"view:3\"}\n```\n\nLa suite.\n"
-	n, err := ParseAuthor([]byte(head(body)), nil)
+	n, err := authorNew(body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,8 +464,8 @@ func TestCardBlock(t *testing.T) {
 		if err := n.PutAuthorBlock("c", []byte(bad), ""); err == nil {
 			t.Errorf("%s: put", bad)
 		}
-		if _, err := ParseAuthor([]byte(head("```eriphe:block c\n"+bad+"\n```\n")), nil); err == nil {
-			t.Errorf("%s: parse", bad)
+		if _, err := authorNew("```eriphe:block c\n" + bad + "\n```\n"); err == nil {
+			t.Errorf("%s: body", bad)
 		}
 	}
 }
@@ -529,12 +529,6 @@ func TestCodeAPI(t *testing.T) {
 	if err := n.SetMark("draft", "lines", "l1", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := n.SetSnapshot("errors", json.RawMessage(`{"at": "2026-11-17T10:20", "errors_5xx": {"series": [{"name": "5xx", "points": [{"x": "10:20", "y": 3}]}]}}`)); err != nil {
-		t.Fatal(err)
-	}
-	if err := n.SetSnapshot("errors", json.RawMessage(`[1]`)); err == nil {
-		t.Error("a snapshot that is no object")
-	}
 	if err := n.SetBlockExternal("errors", true); err != nil {
 		t.Fatal(err)
 	}
@@ -542,7 +536,7 @@ func TestCodeAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(again.Block("draft").Marks) != 0 || !again.Block("errors").External || !strings.Contains(string(again.Block("errors").Snapshot), "10:20") {
+	if len(again.Block("draft").Marks) != 0 || !again.Block("errors").External {
 		t.Errorf("code's fields: %+v %+v", again.Block("draft"), again.Block("errors"))
 	}
 }
@@ -580,24 +574,17 @@ func TestDocExamples(t *testing.T) {
 	}
 }
 
-func TestAuthorKeepsAfter(t *testing.T) {
-	prev, err := Parse([]byte(strings.Replace(head("Text.\n"), "lifetime", "after: [s1]\nlifetime", 1)))
+// A file written when a step's node said the steps it waited for (after)
+// still reads: a field this package does not know, written back as it
+// was.
+func TestOldAfterReads(t *testing.T) {
+	raw := strings.Replace(head("Text.\n"), "lifetime", "after: [s1]\nlifetime", 1)
+	n, err := Parse([]byte(raw))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(prev.Meta.After, []string{"s1"}) {
-		t.Fatalf("after %v", prev.Meta.After)
-	}
-	if _, err := ParseAuthor([]byte(strings.Replace(head("Other text.\n"), "lifetime", "after: [s1]\nlifetime", 1)), prev); err != nil {
-		t.Errorf("after kept: %v", err)
-	}
-	for _, raw := range []string{head("Other text.\n"), strings.Replace(head("Other text.\n"), "lifetime", "after: [s2]\nlifetime", 1)} {
-		if _, err := ParseAuthor([]byte(raw), prev); !errors.Is(err, ErrCodeField) {
-			t.Errorf("after changed by an author: %v", err)
-		}
-	}
-	if _, err := ParseAuthor([]byte(strings.Replace(head("New.\n"), "lifetime", "after: [s1]\nlifetime", 1)), nil); !errors.Is(err, ErrCodeField) {
-		t.Errorf("a new node's after from an author: %v", err)
+	if len(n.Meta.Extra) != 1 || n.Meta.Extra[0].Key != "after" || string(mustBytes(t, n)) != raw {
+		t.Errorf("extra %+v, written:\n%s", n.Meta.Extra, mustBytes(t, n))
 	}
 }
 
@@ -613,9 +600,8 @@ func TestParts(t *testing.T) {
 	}
 }
 
-// opened_by is code's: an author's whole write leaves it out (kept), or
-// writes it alike; changed, emptied or added, the write is refused. It
-// reads and writes back as it was.
+// opened_by is code's: it reads and writes back as it was, an author's
+// bytes leave it out, and an author's body keeps it.
 func TestOpenedByIsCodes(t *testing.T) {
 	meta := Meta{ID: "a1", Title: "Alerte", Lifetime: Work, Created: time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC),
 		OpenedBy: &Origin{By: OpenedSkill, Skill: "tri", On: "monitor:mails", Task: "t3"}}
@@ -634,25 +620,7 @@ func TestOpenedByIsCodes(t *testing.T) {
 	if b, _ := again.AuthorBytes(); strings.Contains(string(b), "opened_by") {
 		t.Errorf("an author's bytes say it:\n%s", b)
 	}
-	for name, w := range map[string]string{
-		"changed": strings.Replace(raw, "by: skill", "by: user", 1),
-		"emptied": strings.Replace(raw, "  by: skill\n  skill: tri\n  trigger: monitor:mails\n  task: t3\n", "  by: \"\"\n", 1),
-	} {
-		if _, err := ParseAuthor([]byte(w), prev); !errors.Is(err, ErrCodeField) {
-			t.Errorf("%s: not refused: %v", name, err)
-		}
-	}
-	if _, err := ParseAuthor([]byte(raw), nil); !errors.Is(err, ErrCodeField) {
-		t.Errorf("a new node said it: %v", err)
-	}
-	none, _ := New(Meta{ID: "a2", Title: "Avant", Lifetime: Work, Created: meta.Created}, "")
-	if _, err := ParseAuthor([]byte(strings.Replace(raw, "id: a1", "id: a2", 1)), none); !errors.Is(err, ErrCodeField) {
-		t.Errorf("added on a node without one: %v", err)
-	}
-	for name, w := range map[string]string{"alike": raw, "left out": strings.Replace(raw, "opened_by:\n  by: skill\n  skill: tri\n  trigger: monitor:mails\n  task: t3\n", "", 1)} {
-		n, err := ParseAuthor([]byte(w), prev)
-		if err != nil || n.Meta.OpenedBy == nil || *n.Meta.OpenedBy != *meta.OpenedBy {
-			t.Errorf("%s: %+v %v", name, n, err)
-		}
+	if err := again.AuthorBody("Autre texte.\n"); err != nil || again.Meta.OpenedBy == nil || *again.Meta.OpenedBy != *meta.OpenedBy {
+		t.Errorf("an author's body: %+v %v", again.Meta.OpenedBy, err)
 	}
 }

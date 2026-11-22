@@ -29,8 +29,7 @@ open on a question.
   {"id":"root","component":"Card","title":"Subscribers","child":"chart"},
   {"id":"chart","component":"Chart","kind":"line","unit":"readers","series":{"@path":"/subscribers/series"}}
 ],
- "sources": {"subscribers":{"tool":"substack/stats","args":{"metric":"subscribers"},"every":60}},
- "snapshot": {"at":"2026-11-17T10:14:00+01:00","subscribers":{"series":[{"name":"Subscribers","points":[{"x":"mon.","y":120},{"x":"tue.","y":126}]}]}}}
+ "sources": {"subscribers":{"tool":"substack/stats","args":{"metric":"subscribers"},"every":60}}}
 ```
 
 The titles proposed for the first article:
@@ -50,7 +49,12 @@ The titles proposed for the first article:
 ## The file
 
 - **Name:** `<slug>-<id>.md`, flat in the graph's repository. The name is frozen when the node is
-  created: renaming a node changes its title, not its file. Its trace is `<slug>-<id>.trace.md`.
+  created: renaming a node changes its title, not its file.
+- **Its trace** (what happened in it: a task's progress, the calls made from it, the user's
+  decisions) is not in the file nor in the repository: a plain file, `<id>.trace.md`, in the folder
+  beside it (`nodes-trace/`), each entry appended at its end (`## <time> · <author>`, then its text).
+  Past 2 MiB it becomes its older part, `<id>.trace.1.md` (the one before dropped), and a new file
+  begins. The night's backup holds both (`nodes-<day>.trace.tar`).
 - **Encoding:** UTF-8. The file starts with its front matter, between two `---` lines; the body
   follows.
 - **Round trip:** reading a file and writing it again gives the same bytes. When code changes one
@@ -65,7 +69,6 @@ The titles proposed for the first article:
 | `title` | text | Its title for the user: one line, 120 characters at most. Required. |
 | `parent` | id | The node it belongs to; none for a node at the top. |
 | `links` | list of ids | Written by code only (a view created from a card links the subjects the card was raised in): the nodes it links to; no duplicate, never itself. An author's write keeps them. An author links nodes in the text instead ([Links between nodes](#links-between-nodes)). |
-| `after` | list of ids | Written by code only, at a step's creation: the sibling steps it waits for (no duplicate, never itself). Absent for a node that is no step. |
 | `lifetime` | `work` or `standing` | Work ends when it is done; a standing node (the day, the mails) stays. Required. |
 | `goal` | text | What the node is for. Never shown to the user. |
 | `created` | timestamp | When it was created (RFC 3339). Required. |
@@ -121,11 +124,12 @@ The body is markdown. A **block** is a fenced section that starts with a line
 | `data` | the author | An object: the values its components read. |
 | `sources` | the author | Live sources read by code, by name: each one's value is at `/<name>`. |
 | `actions` | the author | What the user may run on the items of a source they pick in a list, by name ([Actions](#actions)). |
-| `snapshot` | code | The sources' last good values by name, with `at` (when they were read), so that the file reads well offline. |
 | `marks` | code | The user's marks: by list, then by item, `keep`, `drop` or `done`. |
 | `external` | code | `true` when the block was written after reading external content, or binds a source of a server that is not trusted. |
 
-A key that is not one of these is an error. The empty ones may be left out.
+A key that is not one of these is an error. The empty ones may be left out. The values a block's
+sources read are code's, never in the file: they are kept in `core.db`, and the page draws the block
+from them.
 
 ### Components and bindings
 
@@ -148,8 +152,7 @@ A source is one of:
 `every` is 1 to 1440 minutes (code's default when absent). A tool or a resource that lists things
 may say where its items are: `"items": {"path": "messages", "id": "id", "title": "subject",
 "detail": "from"}`, and how one is read in full (`open`, [Reading an item](#reading-an-item)). A source's name is lowercase letters, digits, `_` and `-`, 40 at most; it is not
-also a key of `data`, and `marks` is no source's or data key's name, nor `at` a source's (the
-snapshot's time). A source with `items` may say `"attention": true`: while it lists items, its
+also a key of `data`, and `marks` is no source's or data key's name. A source with `items` may say `"attention": true`: while it lists items, its
 node waits for the user (its bubble's violet halo and ring say so, as for a card); when it lists none, the
 node rests.
 
@@ -183,10 +186,11 @@ source is also read again a second after any call that may change its server (an
 read-only, from the conversation, a card, an action or a run), after its server says it changed,
 and when its page is opened or the user comes back if it was read more than a minute ago; the
 items such a call named show done until that read says them gone, or back. A read
-that fails keeps the last good value. A value that changed is written into the block's `snapshot`
-with `at`, in a version by `eriphe`, once a quarter of an hour at most per block; a block that
-reads a server that is not trusted is marked `external`. An author's write made on a version older
-than code's snapshot is not stale: it applies over it, the snapshot kept.
+that fails keeps the last good value. The values are kept in `core.db` only: a read makes no
+version, however often it runs, and every version of the page, an archived node's too, shows the
+last ones. A block that reads a server that is not trusted is marked `external`, in a version by
+`eriphe`. An author's write made on a version older than one of code's (marks, `external`) is not
+stale: it applies over it, code's fields kept.
 
 ### Actions
 
@@ -297,7 +301,7 @@ written: no version, no trace, nothing the brain reads; the page keeps it for it
 
 ### Code's fields
 
-`snapshot`, `marks` and `external`, and the front matter's `after`, `external`, `title_trusted` and `opened_by`, are written by code only:
+A block's `marks` and `external`, and the front matter's `external`, `title_trusted` and `opened_by`, are written by code only:
 
 - An author (the brain, a task, the user in Eriphe's editor) may leave them out: code keeps them as
   the version written over has them.

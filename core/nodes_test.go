@@ -11,9 +11,15 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
+// nodeWrite replaces a node's body with an author's, as the authors'
+// writes do (nodestore's Change, nodefile's AuthorBody).
+func nodeWrite(c *core, id, body, expect, author string) (*nodestore.Doc, error) {
+	return c.nodes.Change(id, expect, author, func(n *nodefile.Node) error { return n.AuthorBody(body) })
+}
+
 // The graph opens next to core.db, refuses a secret with the memory's
 // filter, and lets a real node through: the format's own example, live
-// sources, snapshots and links included.
+// sources and links included.
 func TestNodesRefuseSecretsOnly(t *testing.T) {
 	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db")}
 	s, err := openNodes(cfg)
@@ -45,7 +51,7 @@ func TestNodesRefuseSecretsOnly(t *testing.T) {
 	}
 	// What an author writes: the body, code's fields left out.
 	for _, b := range n.Blocks() {
-		b.Snapshot, b.Marks, b.External = nil, nil, false
+		b.Marks, b.External = nil, false
 	}
 	raw, _ := n.Bytes()
 	_, after, _ := strings.Cut(string(raw), "\n---\n")

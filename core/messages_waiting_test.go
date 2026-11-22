@@ -120,7 +120,7 @@ func TestWaitingMessagesWithdrawn(t *testing.T) {
 func TestWaitingMessageThatDecidedACard(t *testing.T) {
 	c, _, _ := waitingCore(t)
 	seq, _ := c.store.addUserMessage("oui", nil, "")
-	c.store.set(cardAnswerKey(int(seq)), "approved|p-1|Garder un œil")
+	c.store.db.Exec(`UPDATE messages SET card_answer = ? WHERE seq = ?`, "approved|p-1|Garder un œil", seq)
 	if err := c.withdrawMessage(int(seq)); !errors.Is(err, errMessageTaken) {
 		t.Fatalf("withdraw: %v", err)
 	}

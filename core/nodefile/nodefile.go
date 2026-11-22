@@ -3,15 +3,17 @@
 // ("```eriphe:block <name>"). The format is written down in
 // docs/node-format.md.
 //
-// Parsing is lossless: a node parsed then written gives the same bytes.
+// Parsing is lossless: a node parsed then written gives the same bytes,
+// but for a block written in short form or saying an old snapshot, which
+// is written again in its canonical form.
 // What changes through this package's API is written again in its
 // canonical form; everything else keeps its bytes (front matter, text,
 // each block).
 //
-// Some fields are code's only: a block's marks, snapshot and external,
-// and the node's external. Code sets them with the methods of Node
-// (SetMark, SetSnapshot, SetBlockExternal, Meta.External); an author's
-// write goes through ParseAuthor, AuthorBody or PutAuthorBlock, which
+// Some fields are code's only: a block's marks and external, and the
+// node's external. Code sets them with the methods of Node (SetMark,
+// SetBlockExternal, Meta.External); an author's write goes through
+// AuthorBody or PutAuthorBlock, which
 // keep them when the author leaves them out and refuse a write that
 // changes them.
 package nodefile
@@ -54,7 +56,6 @@ type Meta struct {
 	Title    string
 	Parent   string   // the parent's id, "" for a node at the top
 	Links    []string // ids of the nodes it links to
-	After    []string // a step's: ids of its sibling steps it waits for (written by code at its creation)
 	Lifetime Lifetime
 	Goal     string // what the node is for, never shown to the user
 	Created  time.Time
@@ -113,7 +114,7 @@ type Field struct {
 }
 
 // known are the front matter's fields, in the order they are written.
-var known = []string{"id", "title", "parent", "links", "after", "lifetime", "goal", "created", "done", "archived", "external", "title_trusted", "opened_by"}
+var known = []string{"id", "title", "parent", "links", "lifetime", "goal", "created", "done", "archived", "external", "title_trusted", "opened_by"}
 
 // Node is a node's file, parsed.
 type Node struct {
@@ -123,9 +124,6 @@ type Node struct {
 
 	rawFront   []byte // the front matter as read, fences included
 	canonFront []byte // its canonical form when read
-	hasExt     bool   // the front matter said external (author writes)
-	hasTrust   bool   // the front matter said title_trusted (author writes)
-	hasOpened  bool   // the front matter said opened_by (author writes)
 	vouched    bool   // its writer stands for the title it wrote (VouchTitle)
 }
 
@@ -190,16 +188,15 @@ func (n *Node) Text() string {
 // Parse reads a node's file and checks it: its front matter and each of
 // its blocks. The file holds blocks in their full form.
 func Parse(raw []byte) (*Node, error) {
-	n, err := parse(raw, false)
+	n, err := parse(raw)
 	if err != nil {
 		return nil, err
 	}
 	return n, n.Validate()
 }
 
-// parse reads a file; short: a block may be in its short form (an
-// author's write), completed.
-func parse(raw []byte, short bool) (*Node, error) {
+// parse reads a file, its blocks in their full form.
+func parse(raw []byte) (*Node, error) {
 	if !utf8.Valid(raw) {
 		return nil, errors.New("a node is UTF-8 text")
 	}
@@ -208,14 +205,13 @@ func parse(raw []byte, short bool) (*Node, error) {
 		return nil, err
 	}
 	n := &Node{rawFront: front}
-	if n.Meta, n.hasExt, n.hasTrust, err = decodeMeta(yml); err != nil {
+	if n.Meta, err = decodeMeta(yml); err != nil {
 		return nil, err
 	}
-	n.hasOpened = n.Meta.OpenedBy != nil
 	if n.canonFront, err = encodeMeta(n.Meta); err != nil {
 		return nil, err
 	}
-	if n.segs, err = parseBody(body, short); err != nil {
+	if n.segs, err = parseBody(body, false); err != nil {
 		return nil, err
 	}
 	return n, nil
@@ -301,16 +297,6 @@ func (m Meta) validate() error {
 			return fmt.Errorf("front matter: links: %s is there twice", l)
 		}
 	}
-	for i, a := range m.After {
-		switch {
-		case !IDOK(a):
-			return fmt.Errorf("front matter: after: %q is not a node's id", a)
-		case a == m.ID:
-			return errors.New("front matter: after: a node does not wait for itself")
-		case slices.Contains(m.After[:i], a):
-			return fmt.Errorf("front matter: after: %s is there twice", a)
-		}
-	}
 	return nil
 }
 
@@ -345,25 +331,24 @@ func cutLine(b []byte) (line, rest []byte, ok bool) {
 // trimEOL is a line without its end and trailing blanks.
 func trimEOL(line []byte) string { return strings.TrimRight(string(line), " \t\r\n") }
 
-// decodeMeta reads the front matter's YAML; ext and trust tell whether it
-// says external and title_trusted.
-func decodeMeta(yml []byte) (m Meta, ext, trust bool, err error) {
+// decodeMeta reads the front matter's YAML.
+func decodeMeta(yml []byte) (m Meta, err error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(yml, &doc); err != nil {
-		return m, false, false, fmt.Errorf("front matter: %w", err)
+		return m, fmt.Errorf("front matter: %w", err)
 	}
 	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
-		return m, false, false, errors.New("front matter: a mapping of fields (id, title, …)")
+		return m, errors.New("front matter: a mapping of fields (id, title, …)")
 	}
 	top := doc.Content[0]
 	seen := map[string]bool{}
 	for i := 0; i+1 < len(top.Content); i += 2 {
 		k, v := top.Content[i], top.Content[i+1]
 		if k.Kind != yaml.ScalarNode {
-			return m, false, false, fmt.Errorf("front matter: line %d: a field's name is plain text", k.Line)
+			return m, fmt.Errorf("front matter: line %d: a field's name is plain text", k.Line)
 		}
 		if seen[k.Value] {
-			return m, false, false, fmt.Errorf("front matter: %s is there twice", k.Value)
+			return m, fmt.Errorf("front matter: %s is there twice", k.Value)
 		}
 		seen[k.Value] = true
 		var err error
@@ -376,8 +361,6 @@ func decodeMeta(yml []byte) (m Meta, ext, trust bool, err error) {
 			err = v.Decode(&m.Parent)
 		case "links":
 			err = v.Decode(&m.Links)
-		case "after":
-			err = v.Decode(&m.After)
 		case "lifetime":
 			err = v.Decode(&m.Lifetime)
 		case "goal":
@@ -389,10 +372,8 @@ func decodeMeta(yml []byte) (m Meta, ext, trust bool, err error) {
 		case "archived":
 			err = v.Decode(&m.Archived)
 		case "external":
-			ext = true
 			err = v.Decode(&m.External)
 		case "title_trusted":
-			trust = true
 			err = v.Decode(&m.TitleTrusted)
 		case "opened_by":
 			m.OpenedBy = &Origin{}
@@ -401,10 +382,10 @@ func decodeMeta(yml []byte) (m Meta, ext, trust bool, err error) {
 			m.Extra = append(m.Extra, Field{Key: k.Value, Value: v})
 		}
 		if err != nil {
-			return m, false, false, fmt.Errorf("front matter: %s: %w", k.Value, err)
+			return m, fmt.Errorf("front matter: %s: %w", k.Value, err)
 		}
 	}
-	return m, ext, trust, nil
+	return m, nil
 }
 
 // encodeMeta is the front matter's canonical YAML: the known fields in
@@ -416,7 +397,7 @@ func encodeMeta(m Meta) ([]byte, error) {
 		if err := val.Encode(v); err != nil {
 			return fmt.Errorf("front matter: %s: %w", key, err)
 		}
-		if key == "links" || key == "after" {
+		if key == "links" {
 			val.Style = yaml.FlowStyle
 		}
 		top.Content = append(top.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: key}, &val)
@@ -434,10 +415,6 @@ func encodeMeta(m Meta) ([]byte, error) {
 		case "links":
 			if len(m.Links) > 0 {
 				v = m.Links
-			}
-		case "after":
-			if len(m.After) > 0 {
-				v = m.After
 			}
 		case "lifetime":
 			v = string(m.Lifetime)

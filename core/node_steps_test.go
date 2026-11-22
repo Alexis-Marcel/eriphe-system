@@ -127,10 +127,13 @@ func TestStepsRunWithoutTheBrain(t *testing.T) {
 			t.Fatalf("step node %s: %+v %v", id, sum, err)
 		}
 	}
-	if d, _ := c.nodes.Read(check, 0); !slices.Equal(d.Node.Meta.After, []string{names, market}) {
-		t.Fatalf("check comes after %v", d.Node.Meta.After)
-	}
 	a, b, k := stepNow(t, c, names), stepNow(t, c, market), stepNow(t, c, check)
+	if !slices.Equal(k.After, []string{names, market}) {
+		t.Fatalf("check comes after %v", k.After)
+	}
+	if d, _ := c.nodes.Read(check, 0); strings.Contains(string(d.Raw), "\nafter:") {
+		t.Fatalf("its file says what code keeps:\n%s", d.Raw)
+	}
 	if a.Status != stepRunning || b.Status != stepRunning || k.Status != stepWaiting || a.Task == "" || b.Task == "" || k.Task != "" {
 		t.Fatalf("at the start: %s %s %s", a.Status, b.Status, k.Status)
 	}

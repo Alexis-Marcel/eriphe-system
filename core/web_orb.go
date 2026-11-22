@@ -1,16 +1,15 @@
 package main
 
 import (
-	"fmt"
 	"regexp"
-	"strconv"
 	"strings"
+	"time"
 )
 
 // Eriphe's orb: the workspace shows Eriphe as a small blue orb that lives
 // in the graph. It rests in the bar, and leaves it only in reply to what
 // the user said to it (a message, or their Oui or Non on a card: what came
-// of it is told to Eriphe as an event that answers the user, userActKey):
+// of it is told to Eriphe as an event that answers the user, userActEvent):
 // while Eriphe works on their message, it goes beside
 // the subject it works on and shows it; when Eriphe has answered, it goes
 // beside the subject its answer belongs to, or to a free spot of the home
@@ -113,7 +112,7 @@ type orbWait struct {
 // their message (thinking: the brain is at work; draft: what it is
 // writing), the cards and the messages that wait. Its words and errors in
 // a turn that answers no act of the user's (a message, or a card's Oui or
-// Non: userActKey) are not the orb's. A card's decision moves nothing by
+// Non: userActEvent) are not the orb's. A card's decision moves nothing by
 // itself: only what Eriphe says of it replaces what the orb says.
 func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 	c, s := w.c, w.c.store
@@ -130,7 +129,7 @@ func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 	var answer []Message
 	turn := 0 // the act the answer collected replies to
 	for _, m := range msgs {
-		mark := answeredTo(s.get(answerKey(m.Seq)))
+		mark := m.AnswerTo
 		if mark < from {
 			// An event's words, a failure of a turn that answered none,
 			// or the answer to an earlier message of the user's (written
@@ -187,9 +186,9 @@ func (s *Store) lastAsked() int {
 
 // userActs are the user's own acts among the messages, as SQL: their
 // messages (not the first run's aside), and the events that tell the
-// brain what came of their Oui or Non on a card (userActKey). Its one
+// brain what came of their Oui or Non on a card (userActEvent). Its one
 // parameter is firstRunVia.
-const userActs = `(role = 'user' AND via != ? OR role = 'event' AND 'user_act:' || seq IN (SELECT key FROM kv))`
+const userActs = `(role = 'user' AND via != ? OR role = 'event' AND user_act = 1)`
 
 // lastActed is the seq of the user's last act Eriphe read: their message,
 // or the event of their Oui or Non on a card; 0 if none. Past lastAsked,
@@ -200,28 +199,25 @@ func (s *Store) lastActed() int {
 	return from
 }
 
-// userActKey marks an event that tells the brain what came of the user's
+// isUserAct tells an event that tells the brain what came of the user's
 // own act, their Oui or Non on a card (userActEvent): the turn that reads
 // it answers the user (deliverConversation), and what it says, or its
 // failure, is the orb's, as a reply to a message is, and replaces what
 // the orb said before; the decision alone replaces nothing.
-func userActKey(seq int) string { return fmt.Sprintf("user_act:%d", seq) }
-
-// isUserAct tells such an event.
-func (s *Store) isUserAct(m Message) bool {
-	return m.Role == roleEvent && s.get(userActKey(m.Seq)) != ""
-}
+func (s *Store) isUserAct(m Message) bool { return m.Role == roleEvent && m.UserAct }
 
 // userActEvent tells the brain, as an event of node, what came of the
 // user's Oui or Non on a card; taint is what its words make the turn
-// that reads it. Written delivered, its marks set, then handed to the
-// brain: it is never delivered before its marks.
+// that reads it. Written delivered, marked a user's act with it, its
+// taint set, then handed to the brain: it is never delivered before its
+// marks.
 func (c *core) userActEvent(text, node, taint string) {
-	seq, err := c.store.addNodeMessage(roleEvent, text, "", node, true)
+	res, err := c.store.db.Exec(`INSERT INTO messages (time, role, text, delivered, node, user_act) VALUES (?, ?, ?, 1, ?, 1)`,
+		time.Now().Unix(), roleEvent, text, node)
 	if err != nil {
 		return
 	}
-	c.store.set(userActKey(int(seq)), "1")
+	seq, _ := res.LastInsertId()
 	if taint != "" {
 		c.store.set(taintKey(int(seq)), taint)
 	}
@@ -319,23 +315,22 @@ func (c *core) newestWait(after int) *orbWait {
 // for in such a turn (markCardAsked), whatever message then showed it.
 func (c *core) cardAsked(x convoCard, asked bool) bool {
 	switch {
-	case c.store.get(askedCardKey(x.Ref)) != "":
+	case x.Asked:
 		return true
 	case x.Seq > 0:
-		return c.store.get(answerKey(x.Seq)) != ""
+		var to int
+		c.store.db.QueryRow(`SELECT answer_to FROM messages WHERE seq = ?`, x.Seq).Scan(&to)
+		return to > 0
 	}
 	return asked
 }
 
-// askedCardKey marks a card the brain raised in a turn that answers the
-// user, shown by a message of code's (an access card is shown at once).
-func askedCardKey(ref string) string { return "asked_card:" + ref }
-
 // markCardAsked marks a card the brain just raised, when its turn answers
-// the user: the orb points at it.
+// the user: the orb points at it, whatever message of code's shows it (an
+// access card is shown at once).
 func (c *core) markCardAsked(ref string) {
 	if c.turnAnswersUser() {
-		c.store.set(askedCardKey(ref), "1")
+		c.store.db.Exec(`UPDATE convo_cards SET asked = 1 WHERE ref = ?`, ref)
 	}
 }
 
@@ -478,18 +473,6 @@ func shortLine(line string, limit int) string {
 	return strings.TrimRight(head, " ,;:") + "…"
 }
 
-// answerKey marks a message of Eriphe's written in a turn that answers
-// messages of the user's (markAnswer), its words or its error: the last
-// message that turn read.
-func answerKey(seq int) string { return fmt.Sprintf("answer_msg:%d", seq) }
-
-// answeredTo is the last message read by the turn an answer mark names;
-// 0 for none.
-func answeredTo(mark string) int {
-	n, _ := strconv.Atoi(mark)
-	return n
-}
-
 // markAnswer marks a message the brain just wrote, or its error, when its
 // turn answers the user, not events or a wake only: the orb says it; an
 // event's words never. The mark is the last message the turn read: a
@@ -500,6 +483,6 @@ func (c *core) markAnswer(seq int) {
 	asked, to := c.turn.asked, c.turn.to
 	c.turn.mu.Unlock()
 	if asked {
-		c.store.set(answerKey(seq), strconv.Itoa(max(to, 1)))
+		c.store.db.Exec(`UPDATE messages SET answer_to = ? WHERE seq = ?`, max(to, 1), seq)
 	}
 }

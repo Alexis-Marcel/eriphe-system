@@ -2,7 +2,6 @@ package nodefile
 
 import (
 	"bytes"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -10,57 +9,12 @@ import (
 )
 
 // The authors' API: what the brain, a task or the user writes. Code's
-// fields (a block's snapshot, marks and external, the node's external,
+// fields (a block's marks and external, the node's external,
 // title_trusted and opened_by) are never theirs: left out, they are kept as the version written over
 // has them; written alike, they are accepted; written otherwise, the
 // write is refused. A new block has none. A block may be written in its
 // short form (one component, its root): it is completed, and written in
 // its full form.
-
-// ParseAuthor reads an author's write of a whole node over the version
-// it replaces (prev; nil for a new node), with code's fields kept from
-// prev, and checks it.
-func ParseAuthor(raw []byte, prev *Node) (*Node, error) {
-	n, err := parse(raw, true)
-	if err != nil {
-		return nil, err
-	}
-	ext := prev != nil && prev.Meta.External
-	if n.hasExt && n.Meta.External != ext {
-		return nil, fmt.Errorf("front matter: external is %w: leave it out", ErrCodeField)
-	}
-	n.Meta.External = ext
-	trusted := prev != nil && prev.Meta.TitleTrusted
-	if n.hasTrust && n.Meta.TitleTrusted != trusted {
-		return nil, fmt.Errorf("front matter: title_trusted is %w: leave it out", ErrCodeField)
-	}
-	n.Meta.TitleTrusted = trusted
-	var opened *Origin
-	if prev != nil {
-		opened = prev.Meta.OpenedBy
-	}
-	if n.hasOpened && !sameOrigin(n.Meta.OpenedBy, opened) {
-		return nil, fmt.Errorf("front matter: opened_by is %w: leave it out", ErrCodeField)
-	}
-	n.Meta.OpenedBy = opened
-	var after []string
-	if prev != nil {
-		after = prev.Meta.After
-	}
-	if !slices.Equal(n.Meta.After, after) {
-		return nil, fmt.Errorf("front matter: after is %w: leave it as it is", ErrCodeField)
-	}
-	for _, b := range n.Blocks() {
-		var pb *Block
-		if prev != nil {
-			pb = prev.Block(b.Name)
-		}
-		if err := b.keepCode(pb); err != nil {
-			return nil, err
-		}
-	}
-	return n, n.Validate()
-}
 
 // AuthorBody replaces the node's body (its text and blocks) with an
 // author's, code's fields of its blocks kept from those so named.
@@ -157,9 +111,6 @@ func (b *Block) keepCode(prev *Block) error {
 		keep = *prev
 	}
 	var problems []string
-	if b.has.snapshot && !sameField(b.Snapshot, keep.Snapshot) {
-		problems = append(problems, "snapshot is "+ErrCodeField.Error()+": leave it out")
-	}
 	if b.has.marks && !sameField(b.Marks, keep.Marks) {
 		problems = append(problems, "marks are "+ErrCodeField.Error()+", the user's: leave them out")
 	}
@@ -169,7 +120,7 @@ func (b *Block) keepCode(prev *Block) error {
 	if len(problems) > 0 {
 		return &BlockError{Name: b.Name, Problems: problems, Err: ErrCodeField}
 	}
-	b.Snapshot, b.External = keep.Snapshot, keep.External
+	b.External = keep.External
 	b.Marks = nil
 	for list, items := range keep.Marks {
 		if b.Marks == nil {
@@ -182,8 +133,8 @@ func (b *Block) keepCode(prev *Block) error {
 }
 
 // AuthorText is the body as its author writes it (AuthorBody takes it
-// back): its text and blocks, without code's fields of the blocks (a
-// source's snapshot, the user's marks, external).
+// back): its text and blocks, without code's fields of the blocks (the
+// user's marks, external).
 func (n *Node) AuthorText() (string, error) {
 	var b bytes.Buffer
 	for _, s := range n.segs {
@@ -192,7 +143,7 @@ func (n *Node) AuthorText() (string, error) {
 			continue
 		}
 		bare := *s.block
-		bare.Snapshot, bare.Marks, bare.External = nil, nil, false
+		bare.Marks, bare.External = nil, false
 		out, err := bare.canonical()
 		if err != nil {
 			return "", err
@@ -204,7 +155,7 @@ func (n *Node) AuthorText() (string, error) {
 
 // AuthorBytes is the node as its authors wrote it: its front matter and
 // body in their canonical form, without code's fields (a block's
-// snapshot, marks and external, the node's external, title_trusted and
+// marks and external, the node's external, title_trusted and
 // opened_by, done and links). Two versions alike
 // there differ only by what code wrote: an author's write made on one
 // applies on the other.
@@ -223,7 +174,7 @@ func (n *Node) AuthorBytes() ([]byte, error) {
 			continue
 		}
 		bare := *s.block
-		bare.Snapshot, bare.Marks, bare.External = nil, nil, false
+		bare.Marks, bare.External = nil, false
 		out, err := bare.canonical()
 		if err != nil {
 			return nil, err
@@ -242,11 +193,3 @@ func (n *Node) VouchTitle() { n.vouched = true }
 
 // TitleVouched tells whether the node's writer vouched for its title.
 func (n *Node) TitleVouched() bool { return n.vouched }
-
-// sameOrigin tells two origins alike (both nil, or the same fields).
-func sameOrigin(a, b *Origin) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
-}

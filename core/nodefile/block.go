@@ -27,10 +27,6 @@ var SourceRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 // and no source is so named.
 const MarksKey = "marks"
 
-// SnapshotAt is the key of a snapshot that says when it was read; no
-// source is so named.
-const SnapshotAt = "at"
-
 // The marks the user may set.
 const (
 	MarkKeep = "keep"
@@ -47,7 +43,7 @@ const fenceOpen = "```eriphe:block"
 var CardRe = regexp.MustCompile(`^[a-z][a-z_]{0,31}:[1-9][0-9]{0,17}$`)
 
 // Block is a named block of a node: components shown with their data and
-// live sources, and code's fields (snapshot, marks, external). A card
+// live sources, and code's fields (marks, external). A card
 // block holds only the ref of one of the node's cards (Card): where its
 // author places it in the text; code draws the card from its records.
 type Block struct {
@@ -57,7 +53,6 @@ type Block struct {
 	Data       json.RawMessage   // an object, nil when it has none
 	Sources    map[string]Source // live sources read by code, at /<name>
 	Actions    map[string]Action // what the user may run on the items of a source, by name
-	Snapshot   json.RawMessage   // code's: the sources' last good values, an object
 	Marks      Marks             // code's: the user's marks
 	External   bool              // code's: it may show someone else's words
 
@@ -68,7 +63,7 @@ type Block struct {
 
 // has tells which of code's fields a block said, and whether it said a
 // card.
-type has struct{ snapshot, marks, external, completed, card bool }
+type has struct{ marks, external, completed, card bool }
 
 // Marks are the user's marks on what a block shows: by list, then by
 // item, "keep", "drop" or "done".
@@ -205,9 +200,13 @@ type wire struct {
 	Data       json.RawMessage   `json:"data"`
 	Sources    map[string]Source `json:"sources"`
 	Actions    map[string]Action `json:"actions"`
-	Snapshot   json.RawMessage   `json:"snapshot"`
 	Marks      *Marks            `json:"marks"`
-	External   *bool             `json:"external"`
+	// Snapshot is no field of a block any more: the sources' values are
+	// code's, kept outside the file. A block that says one (an old
+	// version, or an author copying one) reads, the snapshot ignored: the
+	// block is written again without it.
+	Snapshot json.RawMessage `json:"snapshot"`
+	External *bool           `json:"external"`
 }
 
 // decodeBlock reads a block's JSON; short: a single component, an object
@@ -226,10 +225,7 @@ func decodeBlock(name string, raw []byte, short bool) (*Block, error) {
 	if !isEmpty(w.Data) {
 		b.Data = w.Data
 	}
-	if !isEmpty(w.Snapshot) {
-		b.Snapshot = w.Snapshot
-	}
-	b.has = has{snapshot: w.Snapshot != nil, marks: w.Marks != nil, external: w.External != nil, card: w.Card != ""}
+	b.has = has{marks: w.Marks != nil, external: w.External != nil, card: w.Card != ""}
 	if w.Marks != nil && len(*w.Marks) > 0 {
 		b.Marks = *w.Marks
 	}
@@ -239,7 +235,9 @@ func decodeBlock(name string, raw []byte, short bool) (*Block, error) {
 	if short && b.Card == "" {
 		b.Components = completeShort(b.Components)
 	}
-	b.has.completed = !bytes.Equal(b.Components, w.Components)
+	// Completed, or saying a snapshot: written again in its canonical
+	// form, without it.
+	b.has.completed = !bytes.Equal(b.Components, w.Components) || w.Snapshot != nil
 	return b, nil
 }
 
@@ -372,11 +370,6 @@ func (b *Block) canonical() ([]byte, error) {
 	}
 	if len(b.Actions) > 0 {
 		if err := field("actions", b.Actions); err != nil {
-			return nil, err
-		}
-	}
-	if b.Snapshot != nil {
-		if err := field("snapshot", b.Snapshot); err != nil {
 			return nil, err
 		}
 	}
@@ -520,12 +513,6 @@ func (b *Block) Validate() error {
 			fail("%s", err)
 		}
 	}
-	if b.Snapshot != nil {
-		var snap map[string]json.RawMessage
-		if json.Unmarshal(b.Snapshot, &snap) != nil {
-			fail("snapshot: an object")
-		}
-	}
 	for _, list := range slices.Sorted(maps.Keys(b.Marks)) {
 		for _, item := range slices.Sorted(maps.Keys(b.Marks[list])) {
 			if err := checkMark(list, item, b.Marks[list][item]); err != "" {
@@ -580,7 +567,7 @@ func (b *Block) validateCard() error {
 	if !CardRe.MatchString(b.Card) {
 		problems = append(problems, "card: the ref a propose tool gave (view:3, memory:12)")
 	}
-	if !isEmpty(b.Components) && string(bytes.TrimSpace(b.Components)) != "[]" || b.Data != nil || len(b.Sources) > 0 || len(b.Actions) > 0 || b.Snapshot != nil || len(b.Marks) > 0 {
+	if !isEmpty(b.Components) && string(bytes.TrimSpace(b.Components)) != "[]" || b.Data != nil || len(b.Sources) > 0 || len(b.Actions) > 0 || len(b.Marks) > 0 {
 		problems = append(problems, "a card block holds its card's ref only: {\"card\": \"view:3\"}; what the card says comes from it")
 	}
 	if len(problems) > 0 {
@@ -602,8 +589,6 @@ func (s Source) check(name string) string {
 		return fmt.Sprintf("source %q: a name is lowercase letters, digits, _ and -, 40 at most", name)
 	case name == MarksKey:
 		return "source /" + MarksKey + " is code's: the user's marks"
-	case name == SnapshotAt:
-		return "source " + SnapshotAt + ": the name is code's, when its snapshot was read"
 	case kinds != 1:
 		return "source " + name + ": one of tool, resource or monitor"
 	case s.Resource != "" && s.URI == "":
@@ -816,25 +801,6 @@ func (n *Node) SetMark(block, list, item, mark string) error {
 		b.Marks[list] = map[string]string{}
 	}
 	b.Marks[list][item] = mark
-	return nil
-}
-
-// SetSnapshot keeps the last good values of a block's sources: an
-// object, nil to have none.
-func (n *Node) SetSnapshot(block string, snap json.RawMessage) error {
-	b := n.Block(block)
-	if b == nil {
-		return fmt.Errorf("no block %s", block)
-	}
-	if isEmpty(snap) {
-		b.Snapshot = nil
-		return nil
-	}
-	var m map[string]json.RawMessage
-	if json.Unmarshal(snap, &m) != nil {
-		return blockErr(block, "snapshot: an object")
-	}
-	b.Snapshot = snap
 	return nil
 }
 

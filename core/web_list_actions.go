@@ -21,14 +21,13 @@ import (
 //   - The action and the List it was made in are read again in the block
 //     as stored, never taken from the page: each must be the same at the
 //     version the page showed and at the last one (code's own versions, a
-//     source's snapshot, come in between and change nothing of them); the
-//     action shows on that List.
-//   - The ids must be items the source lists now (its last read, else its
-//     snapshot) that the List's filter keeps now, its items' notes as
-//     they are: none is guessed, the set is never made larger (a mail come
-//     since the page showed the list is not in it), and the tool gets each
-//     id as the source gave it. One id that is not is enough for nothing
-//     to run.
+//     block marked external, come in between and change nothing of
+//     them); the action shows on that List.
+//   - The ids must be items the source lists now (its last read) that
+//     the List's filter keeps now, its items' notes as they are: none is
+//     guessed, the set is never made larger (a mail come since the page
+//     showed the list is not in it), and the tool gets each id as the
+//     source gave it. One id that is not is enough for nothing to run.
 //   - The tool's access policy holds: never is refused (but a tool only the
 //     user's gesture runs, catalogFacts.gesture, which the click runs); on approval, the
 //     click is the user's yes, given on the exact call the page showed;
@@ -299,17 +298,14 @@ func actionCalls(a nodefile.Action, picked []listedItem) (calls []*actionCall, m
 	return calls, ""
 }
 
-// sourceNow is a block's source's value now: its last read, else its
-// snapshot.
+// sourceNow is a block's source's value now: its last read, nil if none.
 func (c *core) sourceNow(id string, b *nodefile.Block, name string) any {
 	for _, r := range c.nodeReads(id) {
 		if r.Block == b.Name && r.Name == name && r.Value != nil {
 			return r.Value
 		}
 	}
-	var snap map[string]any
-	json.Unmarshal(b.Snapshot, &snap)
-	return snap[name]
+	return nil
 }
 
 // doneText says in a line what a click did: by the tool's verb when it

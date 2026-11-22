@@ -157,7 +157,7 @@ func TestAboutCardPushedToTurn(t *testing.T) {
 		t.Fatalf("a card about nothing:\n%s", got)
 	}
 	d, _ := c.nodes.Read(id, 0)
-	if _, err := c.nodes.Write(id, "Le certificat est posé.", d.Version.Hash, byBrain); err != nil {
+	if _, err := nodeWrite(c, id, "Le certificat est posé.", d.Version.Hash, byBrain); err != nil {
 		t.Fatal(err)
 	}
 	if got := deliver("Le site ?", id); !strings.Contains(got, "Fiche de "+key) || !strings.Contains(got, "Le certificat est posé") {
