@@ -1,7 +1,6 @@
 import { Markdown } from "../a2ui/markdown";
 import * as api from "../data/api";
-import { openPage, step, store, useGraph } from "../data/store";
-import { titleOf } from "../graph/model";
+import { openPage, step, store } from "../data/store";
 import { useWords } from "../i18n";
 import type { Show } from "./model";
 
@@ -9,12 +8,11 @@ import type { Show } from "./model";
 // (Line.tsx): Eriphe's few lines, marked when written after reading
 // external content, never replaced; the home's answer whole, as Markdown;
 // that it works; that it could not answer, and the way to try again; the
-// card it points at; a subject that began to wait. « Voir plus » and
+// card its answer raised. « Voir plus » and
 // « Voir » open the subject's page, where the rest is; ✕ closes what
 // stays until the user moves on.
 export function Words({ show, dismiss, open }: { show: Show; dismiss: () => void; open: (id: string) => void }) {
   const { t } = useWords();
-  const nodes = useGraph((s) => s.nodes);
   const ext = <span className="orb-ext" role="img" title={t("espace.orb.external")} aria-label={t("espace.orb.external")} />;
   const x = <Close onClick={dismiss} label={t("espace.orb.close")} />;
   switch (show.mode) {
@@ -62,20 +60,6 @@ export function Words({ show, dismiss, open }: { show: Show; dismiss: () => void
         </>
       );
     case "answer":
-    case "said":
-      if (show.call) {
-        return (
-          <>
-            <p className="orb-text">
-              {t("espace.orb.waits", titleOf(nodes[show.call], t("espace.external")))}{" "}
-              <button type="button" className="orb-link" onClick={() => open(show.call!)}>
-                {t("espace.orb.show")}
-              </button>
-            </p>
-            {x}
-          </>
-        );
-      }
       if (!show.words) return null;
       if (show.words.whole) {
         return (

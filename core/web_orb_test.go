@@ -12,10 +12,11 @@ import (
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
-// Where the orb speaks: Eriphe's words where they belong, a few plain
-// lines beside a subject (more: its page says the rest), the home's answer
-// whole; a later event's words never take the answer's place; a failure
-// says it, without its text; a new message of the user's moves on.
+// Where the orb speaks, only in reply to the user: Eriphe's answer where
+// it belongs, a few plain lines beside a subject (more: its page says the
+// rest), the home's answer whole; its words unasked (a greeting, an
+// event's) are never the orb's; a failure says it, without its text; a new
+// message of the user's moves on.
 func TestOrbWords(t *testing.T) {
 	tw := newTestWeb(t)
 	c, st := tw.c, tw.c.store
@@ -26,13 +27,13 @@ func TestOrbWords(t *testing.T) {
 	}
 	node := d.Node.Meta.ID
 
-	// No message of the user's yet: Eriphe's last words, at the home.
+	// No message of the user's yet: Eriphe's words are not the orb's.
 	st.addMessage(roleBrain, "Bonjour. Rien ne t'attend ce matin.", true)
-	x, err := tw.w.orbFor("", false)
+	x, err := tw.w.orbFor("", true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if x.Said == nil || x.Said.Node != "" || x.Said.Text != "Bonjour. Rien ne t'attend ce matin." || x.Answer != nil || x.Asked != 0 {
+	if x.Answer != nil || x.Work != nil || x.Asked != 0 {
 		t.Fatalf("the greeting: %+v", x)
 	}
 
@@ -57,15 +58,19 @@ func TestOrbWords(t *testing.T) {
 	if x, _ = tw.w.orbFor("", false); x.Answer == nil || !x.Answer.External {
 		t.Errorf("a tainted answer is not marked: %+v", x.Answer)
 	}
-	// An event's words later, at the home: they come as said, the answer
-	// stays.
+	// An event's turn later, at the home: neither its work, nor its words,
+	// nor its failure are the orb's; the answer stays.
 	ev, _ := st.addMessage(roleEvent, "Le catalogue d'outils a changé.", true)
 	c.turn.goOn(int(ev), int(ev), 0, nil)
+	if x, _ = tw.w.orbFor("Je regarde", true); x.Work != nil {
+		t.Errorf("at work on an event: %+v", x.Work)
+	}
 	line, _ := st.addMessage(roleBrain, "Un outil de plus : films.", true)
 	c.markAnswer(int(line))
+	c.brainFailed("event turn broke", "turn")
 	x, _ = tw.w.orbFor("", false)
-	if x.Answer == nil || x.Answer.Seq != int(said) || x.Said == nil || x.Said.Seq != int(line) || x.Said.Node != "" || x.Said.Text != "Un outil de plus : films." {
-		t.Fatalf("an event's words: answer %+v, said %+v", x.Answer, x.Said)
+	if x.Answer == nil || x.Answer.Seq != int(said) || x.Failed != nil || strings.Contains(fmtJSON(x), "films") {
+		t.Fatalf("an event's words: %+v", x)
 	}
 
 	// The user writes again, not yet read: the answer is gone.
@@ -77,11 +82,11 @@ func TestOrbWords(t *testing.T) {
 	st.db.Exec(`UPDATE messages SET delivered = 1 WHERE seq = ?`, next)
 	c.turn.start(int(next), int(next), 0)
 	c.turnNode(node)
-	if x, _ = tw.w.orbFor("Je **regarde**.\n\nPuis", true); x.Work == nil || x.Work.Node != node || x.Work.Draft != "Je regarde." || x.Answer != nil || x.Said != nil {
+	if x, _ = tw.w.orbFor("Je **regarde**.\n\nPuis", true); x.Work == nil || x.Work.Node != node || x.Work.Draft != "Je regarde." || x.Answer != nil {
 		t.Errorf("at work: %+v", x)
 	}
 	// It fails: said, never its text.
-	st.addMessageVia(roleError, "panic: raw trace", "turn", true)
+	c.brainFailed("panic: raw trace", "turn")
 	if x, _ = tw.w.orbFor("", false); x.Failed == nil || x.Answer != nil || strings.Contains(fmtJSON(x), "panic") {
 		t.Errorf("failed: %+v", x)
 	}
@@ -157,6 +162,24 @@ func TestOrbWait(t *testing.T) {
 	if x, _ = w.orbFor("", false); x.Wait != nil {
 		t.Errorf("a decided card still waits: %+v", x.Wait)
 	}
+	// A card raised in an event's turn waits in its page: the orb does
+	// not go to it unasked.
+	ev, _ := c.store.addMessage(roleEvent, "Un nouveau mail.", true)
+	c.turn.goOn(int(ev), int(ev), 0, nil)
+	c.turnNode(subject)
+	if _, err := c.proposeView(proposeViewIn{Title: "Mes mails urgents", Body: "Les urgents.\n"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if x, _ = w.orbFor("", true); x.Wait != nil {
+		t.Errorf("the orb points at a card raised unasked, in the turn: %+v", x.Wait)
+	}
+	answer("Une carte de plus.")
+	if x, _ = w.orbFor("", false); x.Wait != nil || x.Answer == nil || x.Answer.Text != "Dis oui sur sa carte." {
+		t.Errorf("the orb points at a card raised unasked: %+v", x)
+	}
+	if ids, _ := c.cardsWhere(`state = ?`, cardPending); len(ids) != 1 || !c.nodeCardWaits(subject) {
+		t.Errorf("the card raised unasked does not wait in its page: %v", ids)
+	}
 }
 
 // A line of Eriphe's: the first that says something, as plain text, cut
@@ -194,6 +217,7 @@ func TestWorkspaceStreamOrb(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
 	seq, _ := tw.c.store.addMessage(roleUser, "quel temps demain ?", true)
+	tw.c.turn.start(int(seq), int(seq), 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "GET", tw.srv.URL+"/events", nil)
@@ -242,15 +266,47 @@ func TestWorkspaceStreamOrb(t *testing.T) {
 		}
 	}
 	first := next(func(orbEvent) bool { return true })
-	if first.Asked != int(seq) || first.Said != nil || first.Work != nil {
+	if first.Asked != int(seq) || first.Answer != nil || first.Work != nil {
 		t.Fatalf("first orb event %+v", first)
 	}
 	tw.c.draft.set("Demain, il", int(seq))
 	next(func(ev orbEvent) bool { return ev.Work != nil && ev.Work.Draft == "Demain, il" })
-	tw.c.store.addMessage(roleBrain, "Demain, il **pleut**.", true)
+	said, _ := tw.c.store.addMessage(roleBrain, "Demain, il **pleut**.", true)
+	tw.c.markAnswer(int(said))
 	tw.c.draft.set("", int(seq)+1)
-	got := next(func(ev orbEvent) bool { return ev.Said != nil })
-	if got.Said.Text != "Demain, il pleut." || got.Work != nil {
+	got := next(func(ev orbEvent) bool { return ev.Answer != nil })
+	if got.Answer.Text != "Demain, il pleut." || got.Work != nil {
 		t.Fatalf("reply %+v", got)
+	}
+}
+
+// A card is the orb's only when raised in answer to the user: shown with
+// an answer of theirs, raised in a turn that answers them, or a call of
+// the brain's in such a turn, whatever message of code's then showed it.
+func TestOrbCardAsked(t *testing.T) {
+	tw := newTestWeb(t)
+	c := tw.c
+	brief := convoCard{Ref: "access:1", Seq: 9}
+	if c.cardAsked(brief, false) || c.cardAsked(convoCard{Ref: "view:2"}, false) {
+		t.Fatal("a card raised unasked is the orb's")
+	}
+	if !c.cardAsked(convoCard{Ref: "view:2"}, true) {
+		t.Error("a card raised in the turn that answers the user is not the orb's")
+	}
+	c.store.set(answerKey(9), "1")
+	if !c.cardAsked(brief, false) {
+		t.Error("a card shown with the answer is not the orb's")
+	}
+	ev, _ := c.store.addMessage(roleEvent, "Un mail.", true)
+	c.turn.goOn(int(ev), int(ev), 0, nil)
+	c.markCardAsked("access:3")
+	if c.cardAsked(convoCard{Ref: "access:3", Seq: 12}, false) {
+		t.Error("a call asked in an event's turn is the orb's")
+	}
+	asked, _ := c.store.addMessage(roleUser, "Réponds-lui.", true)
+	c.turn.start(int(asked), int(asked), 0)
+	c.markCardAsked("access:4")
+	if !c.cardAsked(convoCard{Ref: "access:4", Seq: 12}, false) {
+		t.Error("a call the brain asked a yes for, answering the user, is not the orb's")
 	}
 }

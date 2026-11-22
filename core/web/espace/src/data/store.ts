@@ -33,7 +33,6 @@ export type State = {
   shown: number; // the last show applied
   orb: OrbFeed | null; // what Eriphe's orb shows (orb/)
   sent: Sent | null; // what the user just sent, until eriphe-core has it
-  call: { id: string; n: number; after: number } | null; // the last node that began to wait for the user, the n-th, after the orb's words of that seq (the orb says it)
   notes: Note[];
   moved: Moved & { n: number }; // the proposals that moved last, n growing each time
   live: boolean; // the stream is open
@@ -52,7 +51,6 @@ export const empty = (): State => ({
   shown: 0,
   orb: null,
   sent: null,
-  call: null,
   notes: [],
   moved: { n: 0, refs: [] },
   live: false,
@@ -91,21 +89,7 @@ export function applyNodes(s: State, ev: NodeEvent): State {
   const open = s.open.filter((id) => nodes[id]);
   // The page the bar talked to left: it talks to the last one open.
   const talk = s.talk === null || open.includes(s.talk) ? s.talk : (open.at(-1) ?? null);
-  const began = newlyWaiting(s.nodes, nodes, ev.reset);
-  const after = Math.max(s.orb?.answer?.seq ?? 0, s.orb?.said?.seq ?? 0);
-  const call = began.length ? { id: began[began.length - 1], n: (s.call?.n ?? 0) + 1, after } : s.call;
-  return { ...s, nodes, open, talk, call };
-}
-
-// newlyWaiting are the nodes that began to wait for the user (a card of
-// theirs, their state) from one graph to the next: none in the first
-// graph, nor in a whole graph sent again (reset: the stream came back).
-export function newlyWaiting(before: Record<string, GraphNode>, after: Record<string, GraphNode>, reset?: boolean): string[] {
-  const waits = (x: GraphNode | undefined) => !!x && (!!x.waits || x.state === "waiting");
-  if (reset || Object.keys(before).length === 0) return [];
-  return Object.values(after)
-    .filter((x) => waits(x) && !waits(before[x.id]))
-    .map((x) => x.id);
+  return { ...s, nodes, open, talk };
 }
 
 // The "doc" event: a new version ({id, version}) or a trace that grew
@@ -173,7 +157,7 @@ export function applyOrb(s: State, x: OrbFeed): State {
   const wait = x.wait && typeof x.wait.card === "number" && typeof x.wait.node === "string" ? x.wait : undefined;
   const cards = Array.isArray(x.cards) ? x.cards.filter((t) => typeof t === "string") : undefined;
   const waiting = Array.isArray(x.waiting) ? x.waiting.filter((w): w is Waiting => !!words(w)) : undefined;
-  const orb: OrbFeed = { asked: typeof x.asked === "number" ? x.asked : undefined, work, answer: words(x.answer), said: words(x.said), failed, wait, cards, waiting };
+  const orb: OrbFeed = { asked: typeof x.asked === "number" ? x.asked : undefined, work, answer: words(x.answer), failed, wait, cards, waiting };
   return { ...s, orb, sent: landed(orb, s.sent) ? null : s.sent };
 }
 

@@ -42,10 +42,11 @@ export const plainTitle = (x: GraphNode | undefined, fallback: string) => x?.tit
 export const codeOf = (title: string) => title.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 3).toUpperCase() || "·";
 
 // labelBox is the room a node's label takes under it, roughly: its title
-// and, while it runs, its line, or the word that it waits.
+// and, while it runs, its line.
 export function labelBox(x: GraphNode, title: string, d: number, r: number) {
-  const long = Math.max(title.length, x.line && x.state === "running" ? x.line.length * 0.9 : 0);
-  return { r, lw: Math.min(300, long * (d === 0 ? 8.4 : 7.4) + 8), lh: d === 0 ? 44 : x.line || waits(x) ? 34 : 18 };
+  const run = !!x.line && x.state === "running";
+  const long = Math.max(title.length, run ? x.line!.length * 0.9 : 0);
+  return { r, lw: Math.min(300, long * (d === 0 ? 8.4 : 7.4) + 8), lh: d === 0 ? 44 : run ? 34 : 18 };
 }
 
 // listOrder is the graph as the list reads it: each root, then the nodes

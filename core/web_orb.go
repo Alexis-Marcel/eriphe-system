@@ -7,12 +7,15 @@ import (
 )
 
 // Eriphe's orb: the workspace shows Eriphe as a small blue orb that lives
-// in the graph. It rests in the bar; while Eriphe works, it goes beside
-// the subject it works on and shows it; when Eriphe has said something, it
-// goes beside the subject its words belong to, or to a free spot of the
-// home when they belong to none, and says them in a few lines; when a card
-// waits for the user's yes, it goes beside the subject that holds it.
-// After every turn of Eriphe's, the user sees where its answer is.
+// in the graph. It rests in the bar, and leaves it only in reply to what
+// the user said to it: while Eriphe works on their message, it goes beside
+// the subject it works on and shows it; when Eriphe has answered, it goes
+// beside the subject its answer belongs to, or to a free spot of the home
+// when it belongs to none, and says it in a few lines; when that turn
+// raised a card that waits for the user's yes, it goes beside the subject
+// that holds it; when that turn failed, it says so. What Eriphe does or
+// says unasked (an event's words, a subject that began to wait) never
+// moves it: the graph shows it (a node's ring).
 //
 // The subject's document is the conversation: beside a subject the orb
 // says only a few lines (its « voir plus » opens the page, where the rest
@@ -54,15 +57,13 @@ type orbEvent struct {
 	// Work: Eriphe is at work, on that node ("": none, the home).
 	Work *orbWork `json:"work,omitempty"`
 	// Answer is Eriphe's answer to the user's last message it read, where
-	// it belongs; none once the user wrote again. Said are its last words
-	// after it that answer no message of the user's (an event's, a
-	// wake's): where they belong.
+	// it belongs; none once the user wrote again.
 	Answer *orbWords `json:"answer,omitempty"`
-	Said   *orbWords `json:"said,omitempty"`
-	// Failed: Eriphe could not answer; its error's seq and node, never its
-	// text.
+	// Failed: Eriphe could not answer the user's message; its error's seq
+	// and node, never its text.
 	Failed *orbFailed `json:"failed,omitempty"`
-	// Wait is the newest card that waits for the user's yes in a node.
+	// Wait is the newest card raised in answer to the user that waits for
+	// their yes in a node.
 	Wait *orbWait `json:"wait,omitempty"`
 	// Cards are the cards that wait and no node holds: their refs.
 	Cards []string `json:"cards,omitempty"`
@@ -103,35 +104,34 @@ type orbWait struct {
 	Node string `json:"node"`
 }
 
-// orbFor is the orb's event: Eriphe's last words, its work (thinking: the
-// brain is at work; draft: what it is writing), the cards and the
-// messages that wait.
+// orbFor is the orb's event: Eriphe's answer to the user, its work on
+// their message (thinking: the brain is at work; draft: what it is
+// writing), the cards and the messages that wait. Its words and errors in
+// a turn that answers no message of the user's are not the orb's.
 func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 	c, s := w.c, w.c.store
 	from := s.lastAsked()
 	x := orbEvent{Asked: from}
+	if from == 0 {
+		x.Cards, x.Waiting = c.unheldCards(), c.waiting(thinking)
+		return x, nil
+	}
 	msgs, err := s.queryMessages(`SELECT `+messageCols+` FROM messages WHERE seq > ? AND role IN (?, ?) ORDER BY seq`, from, roleBrain, roleError)
 	if err != nil {
 		return orbEvent{}, err
 	}
-	if from == 0 && len(msgs) == 0 {
-		// No message of the user's yet: Eriphe's last words, if any.
-		if msgs, err = s.queryMessages(`SELECT `+messageCols+` FROM messages WHERE role = ? ORDER BY seq DESC LIMIT 1`, roleBrain); err != nil {
-			return orbEvent{}, err
-		}
-	}
-	var answer, said []Message
+	var answer []Message
 	for _, m := range msgs {
 		switch {
+		case s.get(answerKey(m.Seq)) == "":
+			// An event's words, a failure of a turn that answered none:
+			// not in reply to the user.
 		case m.Role == roleError:
 			x.Failed = &orbFailed{Seq: m.Seq, Node: m.Node}
-			answer, said = nil, nil
-		case from > 0 && s.get(answerKey(m.Seq)) != "":
-			x.Failed = nil
-			answer, said = append(answer, m), nil
+			answer = nil
 		default:
 			x.Failed = nil
-			said = append(said, m)
+			answer = append(answer, m)
 		}
 	}
 	// The user wrote again (read or not): Eriphe's answer to the message
@@ -141,9 +141,8 @@ func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 	if since > 0 {
 		answer, x.Failed = nil, nil
 	}
-	x.Answer = s.orbWordsOf(answer, true)
-	x.Said = s.orbWordsOf(said, false)
-	if line, _ := ackLine(draft); thinking || line != "" {
+	x.Answer = s.orbWordsOf(answer)
+	if line, _ := ackLine(draft); (thinking || line != "") && c.turnAnswersUser() {
 		x.Work = &orbWork{Node: c.workNode(), Draft: line}
 	}
 	x.Wait = c.newestWait(from)
@@ -169,11 +168,11 @@ func placeOf(m Message) string {
 	return m.Node
 }
 
-// orbWordsOf are Eriphe's words of msgs, where the last one belongs: those
-// of msgs that belong there, joined. At the home, an answer to the user
-// (answer) of more than a line is held whole, as Markdown; anything else
-// is a few plain lines. Nil when they say nothing.
-func (s *Store) orbWordsOf(msgs []Message, answer bool) *orbWords {
+// orbWordsOf are Eriphe's answer of msgs, where the last one belongs: those
+// of msgs that belong there, joined. At the home, an answer of more than a
+// line is held whole, as Markdown; beside a subject, a few plain lines.
+// Nil when they say nothing.
+func (s *Store) orbWordsOf(msgs []Message) *orbWords {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -189,7 +188,7 @@ func (s *Store) orbWordsOf(msgs []Message, answer bool) *orbWords {
 		w.External = w.External || strings.HasPrefix(s.get(taintKey(m.Seq)), "brain:")
 	}
 	text := strings.Join(parts, "\n\n")
-	if _, cut := ackLine(text); answer && place == "" && cut {
+	if _, cut := ackLine(text); place == "" && cut {
 		w.Text, w.Whole = truncate(text, answerMax), true
 		return &w
 	}
@@ -212,9 +211,10 @@ func (c *core) workNode() string {
 }
 
 // newestWait is the newest card that waits for the user's yes in a live
-// node, shown since the user's last message read (after: its seq) or in
-// the turn under way; nil when none does. An older card waits in its page,
-// its bubble says so: the user moved on from it.
+// node, raised in answer to the user's last message read (after: its seq):
+// shown with that answer, or in the turn under way that answers it; nil
+// when none does. An older card, or one raised unasked (an event's turn,
+// a brief), waits in its page, its bubble says so.
 func (c *core) newestWait(after int) *orbWait {
 	if c.nodes == nil {
 		return nil
@@ -223,7 +223,11 @@ func (c *core) newestWait(after int) *orbWait {
 	if err != nil {
 		return nil
 	}
+	asked := c.turnAnswersUser()
 	for _, x := range xs {
+		if !c.cardAsked(x, asked) {
+			continue // not raised in answer to the user
+		}
 		if x, _ = c.liveCard(x); x.State != cardPending {
 			continue
 		}
@@ -234,6 +238,32 @@ func (c *core) newestWait(after int) *orbWait {
 		}
 	}
 	return nil
+}
+
+// cardAsked tells a card raised in answer to the user: shown with an
+// answer of Eriphe's to them (markAnswer), raised in the turn under way
+// when it answers them (asked), or a call of the brain's it asked a yes
+// for in such a turn (markCardAsked), whatever message then showed it.
+func (c *core) cardAsked(x convoCard, asked bool) bool {
+	switch {
+	case c.store.get(askedCardKey(x.Ref)) != "":
+		return true
+	case x.Seq > 0:
+		return c.store.get(answerKey(x.Seq)) != ""
+	}
+	return asked
+}
+
+// askedCardKey marks a card the brain raised in a turn that answers the
+// user, shown by a message of code's (an access card is shown at once).
+func askedCardKey(ref string) string { return "asked_card:" + ref }
+
+// markCardAsked marks a card the brain just raised, when its turn answers
+// the user: the orb points at it.
+func (c *core) markCardAsked(ref string) {
+	if c.turnAnswersUser() {
+		c.store.set(askedCardKey(ref), "1")
+	}
 }
 
 // unheldCardsMax is the most cards no node holds the event carries.
@@ -373,12 +403,12 @@ func shortLine(line string) string {
 }
 
 // answerKey marks a message of Eriphe's written in a turn that answers
-// messages of the user's (markAnswer).
+// messages of the user's (markAnswer), its words or its error.
 func answerKey(seq int) string { return fmt.Sprintf("answer_msg:%d", seq) }
 
-// markAnswer marks a message the brain just wrote when its turn answers
-// the user, not events or a wake only: the orb holds it as the answer, and
-// an event's words never take its place.
+// markAnswer marks a message the brain just wrote, or its error, when its
+// turn answers the user, not events or a wake only: the orb says it; an
+// event's words never.
 func (c *core) markAnswer(seq int) {
 	if c.turnAnswersUser() {
 		c.store.set(answerKey(seq), "1")

@@ -11,7 +11,7 @@ const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
 });
 const nodes = { sub: node("sub"), mail: node("mail"), day: node("day") };
 const none: Closed = { answer: 0, seen: 0, wait: 0, failed: 0 };
-const mind = (more: Partial<Mind> = {}): Mind => ({ now: 1_000_000, sent: null, closed: none, met: () => undefined, nodes, call: null, ...more });
+const mind = (more: Partial<Mind> = {}): Mind => ({ now: 1_000_000, sent: null, closed: none, met: () => undefined, nodes, ...more });
 
 describe("what the orb shows", () => {
   it("rests in the bar with nothing to say", () => {
@@ -47,27 +47,19 @@ describe("what the orb shows", () => {
     expect(orbShow(x, mind({ closed: close(none, s) })).mode).toBe("rest");
   });
 
-  it("lets newer words replace the words beside a subject", () => {
+  it("lets a newer answer replace the words beside a subject", () => {
     const answer: OrbFeed = { asked: 4, answer: { seq: 5, node: "sub", text: "Fait." } };
     const a = orbShow(answer, mind());
-    // an event's newer words come in front of the answer
-    const said: OrbFeed = { ...answer, said: { seq: 6, node: "day", text: "Un outil de plus : films." } };
-    const s = orbShow(said, mind());
-    expect(s).toMatchObject({ mode: "said", node: "day" });
-    expect(replaced(a, s)).toBe(true);
-    // a newer answer comes in front of those words
-    const again = orbShow({ ...said, asked: 7, answer: { seq: 8, node: "mail", text: "Envoyé." } }, mind());
+    const again = orbShow({ asked: 7, answer: { seq: 8, node: "mail", text: "Envoyé." } }, mind());
     expect(again).toMatchObject({ mode: "answer", node: "mail" });
-    expect(replaced(s, again)).toBe(true);
-    // the same message read first as an event's words, then as the answer: not replaced
-    const early = orbShow({ asked: 4, said: { seq: 5, node: "sub", text: "Fait." } }, mind());
-    expect(early.mode).toBe("said");
-    expect(replaced(early, a)).toBe(false);
+    expect(replaced(a, again)).toBe(true);
+    // the same answer again: not replaced
+    expect(replaced(a, orbShow(answer, mind()))).toBe(false);
     // the user writing replaces them too
     expect(replaced(a, orbShow(answer, mind({ sent: { text: "Et ?", after: 4, to: "sub" } })))).toBe(true);
     // a card or a failure only comes before them; pinned things are not words
     expect(replaced(a, orbShow({ ...answer, wait: { card: 2, node: "mail" } }, mind()))).toBe(false);
-    expect(replaced(orbShow({ answer: { seq: 5, text: "a\n\nb", whole: true } }, mind()), s)).toBe(false);
+    expect(replaced(orbShow({ answer: { seq: 5, text: "a\n\nb", whole: true } }, mind()), again)).toBe(false);
   });
 
   it("moves on from the words when the user opens another subject", () => {
@@ -76,10 +68,6 @@ describe("what the orb shows", () => {
     expect(leaves(s, null)).toBe(true);
     // the subject they are about, opened (« Voir plus », Eriphe's show): they stay beside its page
     expect(leaves(s, "sub")).toBe(false);
-    // a call: opening its subject answers it
-    const c = orbShow({}, mind({ call: { id: "mail", n: 1, after: 0 } }));
-    expect(leaves(c, "mail")).toBe(true);
-    expect(leaves(c, "sub")).toBe(false);
     // the pinned ones are not words that leave
     expect(leaves(orbShow({ wait: { card: 3, node: "mail" } }, mind()), "sub")).toBe(false);
   });
@@ -116,34 +104,15 @@ describe("what the orb shows", () => {
     expect(orbShow({ wait: { card: 4, node: "gone" } }, mind()).mode).toBe("rest");
   });
 
-  it("announces an event's words, behind what comes first, never in its place", () => {
-    const home: OrbFeed = { asked: 4, answer: { seq: 5, text: "Oui.\n\nEt plus.", whole: true }, said: { seq: 6, node: "day", text: "Un outil de plus : films." } };
-    // the pinned answer first: the words wait
-    expect(orbShow(home, mind()).mode).toBe("answer");
-    // closed, they show, beside their subject, for a while
-    const c = close(none, orbShow(home, mind()));
-    const s = orbShow(home, mind({ closed: c }));
-    expect(s).toMatchObject({ mode: "said", node: "day" });
-    expect(s.words?.text).toBe("Un outil de plus : films.");
-    expect(expires(s)).toBe(WORDS_MS);
-    expect(orbShow(home, mind({ closed: c, met: () => mind().now - 60_000 })).mode).toBe("said");
-    expect(orbShow(home, mind({ closed: c, met: () => mind().now - WORDS_MS })).mode).toBe("rest");
-    // words older than the answer are not news
-    expect(orbShow({ answer: { seq: 9, node: "sub", text: "Fait." }, said: { seq: 8, text: "avant" } }, mind({ closed: { ...none, seen: 9 } })).mode).toBe("rest");
-  });
-
-  it("says a subject began to wait for the user, unasked", () => {
-    const call = { id: "mail", n: 1, after: 0 };
-    const s = orbShow({}, mind({ call }));
-    expect(s).toMatchObject({ mode: "said", node: "mail", call: "mail" });
-    expect(orbShow({}, mind({ call, met: () => mind().now - 60_000 })).mode).toBe("said");
-    expect(orbShow({}, mind({ call, met: () => mind().now - WORDS_MS })).mode).toBe("rest");
-    // the user's work comes first
-    expect(orbShow({ work: { node: "sub" } }, mind({ call })).mode).toBe("work");
-    // newer than the answer it came after: in front of it; older: behind
+  it("only answers: a subject that begins to wait for the user, unasked, leaves it in the bar", () => {
+    // what the orb is told carries nothing unasked: a node that waits is
+    // the graph's (its ring), whatever its nodes say
+    const waiting = { ...nodes, mail: node("mail", { waits: true }) };
+    expect(orbShow({ asked: 3 }, mind({ nodes: waiting }))).toMatchObject({ mode: "rest", node: null });
+    expect(orbShow(null, mind({ nodes: waiting })).mode).toBe("rest");
+    // the answer it had stays where it was
     const x: OrbFeed = { asked: 4, answer: { seq: 5, node: "sub", text: "Fait." } };
-    expect(orbShow(x, mind({ call: { ...call, after: 5 } }))).toMatchObject({ call: "mail" });
-    expect(orbShow(x, mind({ call: { ...call, after: 4 } }))).toMatchObject({ mode: "answer", node: "sub" });
+    expect(orbShow(x, mind({ nodes: waiting }))).toMatchObject({ mode: "answer", node: "sub" });
   });
 });
 

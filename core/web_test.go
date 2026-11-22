@@ -558,6 +558,7 @@ func TestWebEventsStream(t *testing.T) {
 	}
 	tw.c.store.addMessage(roleUser, "before", true)
 	last := tw.c.store.lastMessageSeq()
+	tw.c.turn.start(last, last, 0) // a turn that answers it
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -588,21 +589,22 @@ func TestWebEventsStream(t *testing.T) {
 		}
 		if !asked {
 			// The stream is under way: the answer comes.
-			tw.c.store.addMessage(roleBrain, "a new **answer**", true)
+			seq, _ := tw.c.store.addMessage(roleBrain, "a new **answer**", true)
+			tw.c.markAnswer(int(seq))
 			tw.w.notify()
 			asked = true
 			continue
 		}
-		if strings.Contains(data, `"said":{"seq":`) && strings.Contains(data, `"text":"a new answer"`) { // its first line, plain
+		if strings.Contains(data, `"answer":{"seq":`) && strings.Contains(data, `"text":"a new answer"`) { // its first line, plain
 			return
 		}
 	}
 	t.Fatalf("no orb event with the answer: %v", sc.Err())
 }
 
-// A card made outside a brain turn comes with its message on the event
-// stream (the orb's words, its proposal moved), and in the attention queue, no
-// user message needed.
+// A card made outside a brain turn comes on the event stream (the orb's
+// cards no node holds, its proposal moved; never the orb's words: it only
+// answers), and in the attention queue, no user message needed.
 func TestWebAttention(t *testing.T) {
 	tw := newTestWeb(t)
 	tw.setup()
@@ -634,7 +636,10 @@ func TestWebAttention(t *testing.T) {
 		}
 		switch event {
 		case "orb":
-			sawText = sawText || strings.Contains(data, "Fix the menu")
+			sawText = sawText || strings.Contains(data, `"cards":["`)
+			if strings.Contains(data, "Fix the menu") {
+				t.Fatalf("the orb says words unasked: %s", data)
+			}
 		case "proposals":
 			sawCard = sawCard || strings.Contains(data, `"refs":["`)
 		}

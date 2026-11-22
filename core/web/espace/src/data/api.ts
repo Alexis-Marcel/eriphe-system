@@ -308,14 +308,13 @@ export type OrbWords = { seq: number; node?: string; text: string; more?: boolea
 // whatever page the bar talks to. asked: the seq of the user's last
 // message Eriphe read; work: Eriphe is at work, on that node (none: the
 // home), and what it is writing; answer: its answer to that message;
-// said: its later words that answer none (an event's); failed: it could
-// not answer; wait: the newest card that waits for the user's yes in a
-// node; cards: those no node holds, shown above the bar.
+// failed: it could not answer it; wait: the newest card that answer raised
+// that waits for the user's yes in a node; cards: those no node holds,
+// shown above the bar. Nothing Eriphe says or does unasked is the orb's.
 export type OrbFeed = {
   asked?: number;
   work?: { node?: string; draft?: string };
   answer?: OrbWords;
-  said?: OrbWords;
   failed?: { seq: number; node?: string };
   wait?: { card: number; node: string };
   cards?: string[];

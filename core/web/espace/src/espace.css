@@ -633,18 +633,17 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
   text-shadow: 0 0 10px var(--bg), 0 0 4px var(--bg), 0 0 2px var(--bg); }
 .gr-label b { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
 .gr-node.d1 .gr-label b, .gr-node.d2 .gr-label b { font-size: 12.5px; font-weight: 500; }
-.gr-node.external .gr-label b { color: var(--warn-text); font-weight: 500; }
 /* A title written after an external read: shown as it is, in the external
-   amber, with a small ⚠ whose words say why (graph/Title.tsx). */
-.title-ext, .gr-node.title-ext .gr-label b { color: var(--warn-text); }
+   amber, with a small ⚠ whose words say why (graph/Title.tsx), in a page,
+   the list, the bar; in the graph, a bubble's title is drawn as any other
+   (one sign per meaning: its page says « extérieur »). */
+.title-ext { color: var(--warn-text); }
 .ext-mark { display: inline-block; margin-left: 0.3em; font-size: 0.8em; font-weight: 600; color: var(--warn); cursor: help; text-shadow: none; }
-.gr-label .ext-mark { pointer-events: auto; }
 .title-ext { display: inline-flex; align-items: baseline; max-width: 100%; min-width: 0; vertical-align: bottom; }
 .title-tx { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .title-ext .ext-mark { flex: none; }
 .gr-label em { font-style: normal; font-size: 12px; color: var(--fg2); }
 .gr-label em.runs { color: var(--run); }
-.gr-label em.yours { color: var(--accent-text); font-weight: 500; }
 /* A node that waits, out of view: a mark at the screen's edge, toward it. */
 .gr-edge { position: absolute; z-index: 15; translate: -50% -50%; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 999px; cursor: pointer;
   color: var(--accent-text); background: var(--card); border: 1.5px solid var(--accent); box-shadow: var(--lift), 0 0 14px -2px color-mix(in oklab, var(--accent) 55%, transparent); animation: halo 2.4s ease-in-out infinite; }
