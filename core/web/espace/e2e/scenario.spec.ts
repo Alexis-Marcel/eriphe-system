@@ -629,6 +629,11 @@ async function menu(pg: Locator, name: string) {
 // home closes every page open, one by one, the one the camera frames (the
 // bar talks to it) first: the bar then talks to the home.
 async function home(page: Page) {
+  // The graph come first (its nodes reach the page on the stream, after
+  // the view it restores): a page of the view is drawn only once its node
+  // is there, so none counted before would be none closed. On a phone, an
+  // open page stands in place of the list.
+  await expect(page.locator(".gr-node, .ls-row, article.pg")).not.toHaveCount(0);
   const pages = page.locator("article.pg");
   for (let n = await pages.count(); n > 0; n = await pages.count()) {
     // once they are at rest (the layout and the camera ease them into
@@ -671,10 +676,12 @@ async function openMail(page: Page, id: string) {
   await expect(page.locator(`article.pg[aria-label="${external}"]`)).toBeVisible();
 }
 
-// settledBox waits until a page stopped moving (the camera and its spring
-// at rest); one that left meanwhile (a page still fading out when it was
-// counted) is settled.
+// settledBox waits until a page stopped moving: the graph at rest and the
+// camera still, as the viewport says (data-still); on a phone, where the
+// graph is a list, until its box stops moving. One that left meanwhile (a
+// page still fading out when it was counted) is settled.
 async function settledBox(el: Locator): Promise<void> {
+  if (await rest(el.page())) return;
   const box = () => el.boundingBox({ timeout: 2_000 }).catch(() => null);
   let last = await box();
   for (let i = 0; i < 40; i++) {
@@ -684,6 +691,14 @@ async function settledBox(el: Locator): Promise<void> {
     if (last && now && Math.abs(now.x - last.x) + Math.abs(now.y - last.y) + Math.abs(now.width - last.width) < 0.5) return;
     last = now;
   }
+}
+
+// rest waits until the graph is at rest and the camera still; false when
+// no graph is drawn (a phone's list).
+async function rest(page: Page): Promise<boolean> {
+  if (!(await page.locator(".gr-viewport").count())) return false;
+  await expect(page.locator(".gr-viewport[data-still]")).toHaveCount(1, { timeout: 60_000 });
+  return true;
 }
 
 // expectApart checks open pages, once they are at rest (the layout's
@@ -752,16 +767,10 @@ async function dragOnto(page: Page, what: Locator, onto: Locator): Promise<void>
   await page.mouse.up();
 }
 
-// settled is where a bubble is once it stopped moving.
+// settled is where a bubble is once the graph is at rest.
 async function settled(node: Locator): Promise<[number, number]> {
-  let last = await at(node);
-  for (let i = 0; i < 40; i++) {
-    await node.page().waitForTimeout(150);
-    const now = await at(node);
-    if (Math.hypot(now[0] - last[0], now[1] - last[1]) < 0.01) return now;
-    last = now;
-  }
-  return last;
+  await rest(node.page());
+  return at(node);
 }
 
 // On a phone: the graph as a list, a tap opens one page over it.

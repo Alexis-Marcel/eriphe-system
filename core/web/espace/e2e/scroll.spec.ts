@@ -82,18 +82,12 @@ async function shots(page: Page, name: string) {
   await page.evaluate(() => delete document.documentElement.dataset.theme);
 }
 
-// still waits until the box of what the locator finds stops moving (the
-// page opening, the camera framing it).
+// still waits until the graph is at rest and the camera still (the page
+// opening, the camera framing it: the viewport says so, data-still), then
+// gives the box of what the locator finds.
 async function still(page: Page, sel: string) {
-  let last = "";
-  for (let i = 0; i < 60; i++) {
-    const b = await page.locator(sel).boundingBox();
-    const now = JSON.stringify(b && [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]);
-    if (b && now === last) return b;
-    last = now;
-    await page.waitForTimeout(150);
-  }
-  throw new Error(`${sel} does not settle`);
+  await expect(page.locator(".gr-viewport[data-still]")).toHaveCount(1, { timeout: 60_000 });
+  return (await page.locator(sel).boundingBox())!;
 }
 
 test.describe("a long page with its cards", () => {
@@ -123,9 +117,8 @@ test.describe("a long page with its cards", () => {
     // The page stays above the bar.
     const box = await still(page, 'article.pg[aria-label="Ma journée"]');
     expect(box.y + box.height).toBeLessThanOrEqual(680);
-    // The camera: its scale and where the world is. Its spring may still
-    // be ending by a pixel or two; a wheel that moved it would move it by
-    // a hundred.
+    // The camera, at rest: its scale and where the world is. A wheel that
+    // moved it would move it by a hundred.
     const world = () =>
       page.locator(".gr-world").evaluate((e) => {
         const m = new DOMMatrix(getComputedStyle(e).transform);

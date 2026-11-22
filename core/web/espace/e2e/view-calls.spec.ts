@@ -2,8 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 // A call to approve, asked in conversation, against the test core of
 // TestEspaceScenario: a view of the mailbox (a plain List, /e2e/courrier)
-// is open; the user says « supprime ces 2 » in its bar; the scripted brain
-// calls mail/trash on two of its rows. The card says what it does to
+// is open, alone; the user says « supprime ces 2 » in the bar; the
+// scripted brain calls mail/trash on two of its rows. The card says what it does to
 // which items in plain words, on those two rows (one card: a Oui on
 // either answers it), not at the page's foot; its exact call is behind
 // one « détails ». Oui: the mails leave, Eriphe says it is done.
@@ -19,6 +19,8 @@ test("a call to approve says what it does to which items, on their rows", async 
   await page.locator('input[name="password"]').fill(password);
   await page.locator('button[type="submit"]').click();
   await page.waitForURL((u) => u.pathname !== "/login");
+  // No page open, whatever the spec before left (one shared test core).
+  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await page.goto("/espace");
   const input = page.locator(".cs-bar input");
   await expect(input).toBeVisible();
@@ -30,7 +32,7 @@ test("a call to approve says what it does to which items, on their rows", async 
   const rows = pg.locator(".a2-list > li");
   await expect(rows).toHaveCount(4);
 
-  // Said in the view's bar: the brain calls trash on two rows.
+  // Said in the bar: the brain calls trash on two rows of the view.
   await input.fill("supprime ces 2");
   await input.press("Enter");
   const colis = rows.filter({ hasText: "Votre colis est arrivé" });
@@ -45,13 +47,17 @@ test("a call to approve says what it does to which items, on their rows", async 
   await expect(colis.locator(".a2-inline-shared")).toHaveCount(1);
   await expect(rows.filter({ hasText: "Billets pour Disney" }).locator(".a2-inline-yes")).toHaveCount(0);
   await expect(pg.locator(".pg-foot")).toHaveCount(0);
-  // On a narrow screen, the orb's words stay whole on it.
+  // On a narrow screen, the orb's words stay whole on it: beside the page
+  // where there is room for them, else as the bar's line (no free spot
+  // left by where the graph put the page).
   const wide = page.viewportSize()!;
   await page.setViewportSize({ width: 1000, height: wide.height });
-  await expect(page.locator(".orb-say.on")).toBeVisible();
+  await expect(page.locator(".gr-viewport[data-still]")).toHaveCount(1, { timeout: 60_000 });
+  const words = page.locator(".orb-say.on, .orb-line");
+  await expect(words).toContainText("Il me faut ton oui ici.");
   await expect
     .poll(async () => {
-      const b = await page.locator(".orb-say.on").boundingBox();
+      const b = await words.boundingBox();
       return !!b && b.x >= 0 && b.x + b.width <= 1000 && b.y >= 0 && b.y + b.height <= wide.height;
     })
     .toBe(true);
