@@ -253,8 +253,8 @@ func (c *core) taskStartDeclined(id int64) {
 	if err != nil {
 		return
 	}
-	c.userActEvent(fmt.Sprintf("%s a refusé le lancement de la tâche %s : elle ne démarre pas. Ne la relance pas telle quelle ; "+
-		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), c.taskEventNode(s.TaskID), "") // the user's act: what the brain says of it answers them
+	c.nodeEvent(c.taskEventNode(s.TaskID), fmt.Sprintf("%s a refusé le lancement de la tâche %s : elle ne démarre pas. Ne la relance pas telle quelle ; "+
+		"dis-le en une phrase seulement s'il attend une suite.", c.conf().User, s.TaskID), true) // the user's act: what the brain says of it answers them
 }
 
 // startState says, for the brain, what a task's start waits for, as it is

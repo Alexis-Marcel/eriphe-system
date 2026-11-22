@@ -704,7 +704,7 @@ whatever address it dials) and one client certificate per device.
 | `list_agents` | agents, when to use each, and whether a device can run them now |
 | `list_tools` | the tool catalog: servers, status, `use`, tools, which need the user to connect them |
 | `list_devices` | machines, online or not, what each reports (CPUs, memory, labels, runtimes, volumes, images), active tasks |
-| `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), device (or let the scheduler choose), an optional [contract](#contracts-contractgo) |
+| `run_task` | start a task: title (what the user reads; else its contract's objective, else the prompt's first line), prompt, [resources](#resources) (a repository, the user's folders, catalog tools), agent (or the default), device (or let the scheduler choose), an optional [contract](#contracts-contractgo), `node` (its own node is a child of that node, else of the turn's node, else at the top) |
 | `list_repos` | the GitHub repositories the app's connections reach: `repo`, its `cases` (`read`, `change`, `delete`, `send`: `free`, `approval` or `never`) and `own_rules` when it has cases of its own (listed first); a task is lent only one of these |
 | `list_folders` | the user's folders: name, machine (online or not), access (`read` or `write`, as shared on its machine), `rights` (`read`, `change`: free, approval or never), `copyable`, where a task finds it, and `machines`: every machine holding it (its own, then its copies), each `online` and `up_to_date` or not; a task may run on any up to date |
 | `list_skills` | the user's [skills](#skills), approved and on: name, description, files, whether it has scripts |
@@ -716,11 +716,11 @@ whatever address it dials) and one client certificate per device.
 | `node_settle` | decide on an exception of a work cut in steps, when woken by `[nœud <id> « title »]`: on a step `accept`, `retry` (with what to fix), `drop` or `replan` (with the `steps` that replace it); on the work, no step, `accept` (more time, or done after a final check that fails), `retry` (the final check again), `replan` (with `steps` to add) or `drop` ([Work in steps](#work-in-steps-node_stepsgo)) |
 | `propose_view` | propose a view: a standing node, its monitor and its skill, on one card ([Views](#views-node_livego-view_cardgo)); returns the card's ref (`card`), to place in the subject's document |
 | `catalog_read`, `sources_read` | read the catalog of a node's blocks and what a block may read |
-| `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` (`work` by default, or `standing`: never done), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
+| `node_open` | open a node: `title`, `parent` (a child of that node), `lifetime` refused but for `work` (a standing node, a view, is made only by `propose_view`, on the user's yes), `goal` (never shown), `body` (markdown text and `eriphe:block` fences), `steps` and `budget_minutes` ([Work in steps](#work-in-steps-node_stepsgo)), `aside` (opened in the background: not shown, the bar stays); written in a tainted turn, the node is external; the same `openNode` as a task's `node_open`; by default it opens in front of the user (from the home, the bar moves into it) ([The brain on nodes](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
 | `node_find` | find nodes by words of their title, goal, text or blocks, each with its `status`; with no words, those running or waiting, then the last changed; `archived` the archived ones too; a title that may be someone else's words (an external node's, not `title_trusted`) says `title_external`, and is quoted only with `include_external`, which taints the turn (as `node_read` of such a node does) |
-| `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
+| `node_read` | a node's title, state, version and `hash`, body, goal, parent, children, links, `backlinks` (the live nodes that link it, by their text or code), done, archived, its items' notes and its trace's end; an external node, or a tainted item note, taints the turn |
 | `node_write`, `node_edit` | replace a node's body, or write one block or replace a piece of text, on the version read (`expect`); `node_open`, `node_write` and `node_edit` list the `[[links]]` of the text that name no node yet (`links_waiting`): a stale write is refused, so is one on an archived node and a block carrying `external` (code's field); a card block `{"card": "<ref>"}` places one of the node's cards ([card blocks](#the-brain-on-nodes-node_toolsgo-node_turngo-node_netgo)) |
-| `node_set` | change a node's `title` or `goal`, or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
+| `node_set` | change a node's `title` or `goal`, move it under another node (`parent`, `""` for the top; never under itself or a node below it, never a step: `nodestore.SetParent`), or set it `done` (a decision memory `source_ref` `node:<id>`, once; the event `node.done`) or not; a standing node is never done |
 | `node_show` | open a node's page on the user's screen (kv `node_show`, read by the page); writes nothing |
 | `turn_home` | the user's message, said in a node's bar, is not about that node: the turn is about no node from then on, as at the home (`turnHome`, node_turn.go). What it raises waits above the bar (a card it raised already is unlinked from that node), and nothing of it is filed there; its lines stay in that node's bar, where the user reads them. At the home, or on events only, it does nothing |
 | `item_note` | note an item of a node's source: what the user should know, a state (`act`, `look`, `info`, `none`, `done`) and a group, the section a view shows it in (`À supprimer`; a List filters on `_group`) |
@@ -933,9 +933,9 @@ until deployed, an appointment, a research), its doc saying where the matter sta
 what happened in it ([Node store](#node-store-nodestore-nodesgo)).
 
 - **Tools.** The brain finds a node before it opens another (`node_find`), opens one at once, with
-  no card (`node_open`; `work` by default, `standing` for what the user follows continuously, never
-  done), reads it (`node_read`: its version's `hash`), writes it on the version it read
-  (`node_write`, `node_edit`, refused when stale: `ErrConflict`), sets its title, goal or `done`
+  no card (`node_open`: a piece of work; what the user follows continuously, never done, is a view
+  only `propose_view` makes, on their yes), reads it (`node_read`: its version's `hash`), writes it on the version it read
+  (`node_write`, `node_edit`, refused when stale: `ErrConflict`), sets its title, goal, `parent` or `done`
   (`node_set`) and opens its page on the user's screen (`node_show`). It links nodes in their
   text, `[[Title]]` ([links between nodes](../docs/node-format.md#links-between-nodes)): there is no
   link tool; front-matter `links` are code's alone (a view decided from a card). Each
@@ -997,8 +997,8 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   (`cardRaisedFor`; its status, `node_status.go`). A decided card stays linked (a card block still
   places it, the page lists it as settled): the status reads only the cards still pending, in one
   query. A card whose proposal went elsewhere (its task stopped) is settled when its task moves and at
-  each minute's tick (`settleCards`); a page's yes or no is the card's own (`answerProposal`). `run_task` in a turn about a node is about it (its
-  `about`); its own node is a child of `node` when given.
+  each minute's tick (`settleCards`); a page's yes or no is the card's own (`answerProposal`). `run_task` works under the node it names, else the turn's node (at the top when the turn is about none), and is about that node (its
+  `about`, set by code: it takes none).
 - **A subject opened from the home** (`moveHomeTurn`): by default a node the brain opens
   (`node_open` without `aside`) opens in front of the user. In a turn that answers the user at the
   home (typed in the workspace: a channel's request keeps its exchange at the home), the turn moves
@@ -1158,7 +1158,7 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
 ## A task's node (`task_node.go`, `task_nodes.go`)
 
 Every worker task works in a node of its own (#629). `run_task` takes `node`: the task's node is
-opened as a child of it, else at the top (an unknown or archived node refuses the start). The node
+opened as a child of it, else, for the brain's `run_task`, of its turn's node (one archived is passed over), else at the top (an unknown or archived node named refuses the start). The node
 is titled as the task, its goal its contract's objective or its prompt's first line, `external`
 when the task starts on a tainted turn. Code keeps which task works in which node (`task_nodes`).
 
@@ -1207,8 +1207,8 @@ decided), and a run or a step that ends, or the node archived, drops its progres
 
 ## Work in steps (`node_steps.go`)
 
-A piece of work cut in steps is a node whose children are the steps (#630). A task opens them
-with `node_open` and `steps` (each a `key`, a `title`, the `after` keys it needs, a `prompt`, and,
+A piece of work cut in steps is a node whose children are the steps (#630). The brain or a task opens them,
+through the one `node_open` (`openNode`), with `steps` (each a `key`, a `title`, the `after` keys it needs, a `prompt`, and,
 as `run_task`'s, an `agent`, `resources`, a `contract`, a `device`), with the work's
 `budget_minutes` (60 by default, a day at most). The plan is checked before any node is made:
 keys unique, what each comes `after` a step of the plan or of the work, no cycle, 20 unfinished
@@ -1224,7 +1224,7 @@ The **engine** is code, without a model:
 - It starts every step whose predecessors are accepted, in parallel when they may: never two that
   write the same repository branch or folder (the second waits). Each step's task works in the
   step's node (`runRequest.inNode`), given the work's goal and the results of the steps it comes
-  after (2000 characters each); what those may carry of someone else's words taints it.
+  after (2000 characters each); what those may carry of someone else's words taints it. The engine moves one change at a time (`stepMu`), but never starts a task under it: it claims the step (in memory: a claim a restart loses leaves the step waiting, a final check's work goes back to running), lets go of the lock, starts the task, then records it; a step dropped meanwhile stops the task started for it.
 - It **accepts a proven step on its own** (`proven`): its receipt says done, no check of its
   contract failed, nothing it claims is denied by what the device saw. The step's node is done
   (but the work's result, below), its result kept, the decision a line of the work's trace, and the next steps start. No brain turn.
@@ -3508,7 +3508,7 @@ its answer belongs to. The orb only answers: the event carries nothing of a turn
 act of the user's (an event's, a wake's, a node's task's: its work, its words, its failure,
 its cards), nor any word at all before the user's first message. The user's acts are their
 messages and their Oui or Non on a card: what came of a decision reaches the brain as an event
-marked as the user's (`userActEvent`, `messages.user_act`: a call run or refused on a card,
+marked as the user's (`nodeEvent`, `messages.user_act`: a call run or refused on a card,
 `callToBrain`; a release, `accessDecidedTold`; a task's start declined, `taskStartDeclined`), and
 the turn that reads it answers the user (`deliverConversation`, `brainTurn.answersUser`), its
 taint and context kept: its reply (« C'est fait », or what failed), its work and its failure are

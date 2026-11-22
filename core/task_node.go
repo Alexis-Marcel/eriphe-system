@@ -15,8 +15,8 @@ import (
 )
 
 // A worker task works in a node of its own (#629): code opens it when the
-// task starts, a child of the node run_task names (node), else at the
-// top. The task writes it as it goes with eriphe-nodes (task_nodes.go),
+// task starts, a child of the node run_task names (node), else of the
+// brain's turn's node, else at the top. The task writes it as it goes with eriphe-nodes (task_nodes.go),
 // on its own node only. Its node's status follows it (node_status.go):
 // running while it works, waiting while it is held for its card or for a
 // permission, idle once its turn ended or it ended.
@@ -40,6 +40,19 @@ func init() { extraSchema = append(extraSchema, taskNodeSchema) }
 // taskNodeGoalMax is the most runes of a task's node's goal, made from its
 // contract's objective or its prompt's first line.
 const taskNodeGoalMax = 300
+
+// workGoal is the goal of the node a task or a step works in: its
+// contract's objective, else its prompt's first line.
+func workGoal(k *taskContract, prompt string) string {
+	goal := ""
+	if k != nil {
+		goal = k.Objective
+	}
+	if goal == "" {
+		goal, _, _ = strings.Cut(strings.TrimSpace(prompt), "\n")
+	}
+	return truncate(oneLine(goal), taskNodeGoalMax)
+}
 
 // taskNode is the node task works in; "" for none.
 func (c *core) taskNode(task string) string {
@@ -85,13 +98,6 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest) error {
 	if title == "" {
 		title = neutral
 	}
-	goal := ""
-	if r.Contract != nil {
-		goal = r.Contract.Objective
-	}
-	if goal == "" {
-		goal, _, _ = strings.Cut(strings.TrimSpace(r.Prompt), "\n")
-	}
 	origin := r.origin
 	switch {
 	case origin != nil:
@@ -106,7 +112,7 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest) error {
 		origin = &cp
 	}
 	nw := nodestore.New{Title: truncate(oneLine(title), nodefile.TitleMax-1), Parent: strings.TrimSpace(r.Node),
-		Goal: truncate(oneLine(goal), taskNodeGoalMax), External: len(r.taint) > 0, OpenedBy: origin, Author: c.taskAuthor(t.ID)}
+		Goal: workGoal(r.Contract, r.Prompt), External: len(r.taint) > 0, OpenedBy: origin, Author: c.taskAuthor(t.ID)}
 	// A title or a goal the filter refuses (« Renouvelle le token: expiré »)
 	// does not stop the task: its node goes without the goal, then with a
 	// neutral title.
@@ -171,30 +177,18 @@ func (c *core) fileTaskReport(task string, r *checkedReceipt) string {
 		return ""
 	}
 	c.store.db.Exec(`UPDATE task_nodes SET filed = ? WHERE task = ?`, hash, task)
-	author := c.taskAuthor(task)
-	if c.writeTaint(task) != "" {
-		c.markNodeExternal(id, author) // the report may carry someone else's words: marked before it is filed
+	traceErr, docErr := c.fileText(id, c.taskAuthor(task), report, c.writeTaint(task) != "", true, c.lentTo(nil))
+	problem := ""
+	switch {
+	case traceErr != nil:
+		problem = "sa trace l'a refusé : " + traceErr.Error()
+	case docErr != nil:
+		problem = "il n'a pas pu devenir son document : " + docErr.Error()
 	}
-	var problems []string
-	for _, part := range traceParts(report, nodestore.MaxTrace) {
-		if err := c.nodes.AppendTrace(id, author, part); err != nil {
-			problems = append(problems, "sa trace l'a refusé : "+err.Error())
-			break
-		}
+	if problem != "" {
+		log.Printf("task %s: its report in node %s: %s", task, id, problem)
 	}
-	d, err := c.nodes.Read(id, 0)
-	if err != nil {
-		return strings.Join(problems, " ; ")
-	}
-	if strings.TrimSpace(d.Node.Text()) == "" && len(d.Node.Blocks()) == 0 && d.Node.Meta.Lifetime != nodefile.Standing {
-		if _, err := c.writeTaskBody(task, report, d.Version.Hash, nil); err != nil {
-			problems = append(problems, "il n'a pas pu devenir son document : "+err.Error())
-		}
-	}
-	if len(problems) > 0 {
-		log.Printf("task %s: its report in node %s: %s", task, id, strings.Join(problems, "; "))
-	}
-	return strings.Join(problems, " ; ")
+	return problem
 }
 
 // traceParts cuts a report into parts of max bytes at most, at a line's

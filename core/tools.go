@@ -87,7 +87,7 @@ func newMCPServer(c *core) *mcp.Server {
 			return out, nil
 		})
 
-	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a device, with the resources it is lent (a repository, folders, tools: kind, ref, access). It works in a node of its own on the graph, a child of node when you name one: it writes its result there, and its end reaches you as an event that points to it. Work of several steps, each accepted on its proof, is opened as steps of a node (node_open with steps, by a task); you are woken only when a step needs your decision (node_settle). If no online device can run it but an offline one could, the task stays pending with no device and a pending_reason, and starts when such a device comes online; stop_task cancels it.",
+	tool(s, "run_task", "Start a task: an agent (see list_agents) works on the prompt, in a fresh container on a device, with the resources it is lent (a repository, folders, tools: kind, ref, access). It works in a node of its own on the graph, a child of node when you name one, else of this turn's node (at the top when the turn is about none): it writes its result there, and its end reaches you as an event that points to it. Work of several steps, each accepted on its proof, is opened as steps of a node (node_open with steps, by you or a task); you are woken only when a step needs your decision (node_settle). If no online device can run it but an offline one could, the task stays pending with no device and a pending_reason, and starts when such a device comes online; stop_task cancels it.",
 		func(ctx context.Context, in runRequest) (map[string]any, error) {
 			return c.brainRunTask(ctx, in) // node_turn.go
 		})

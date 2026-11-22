@@ -158,7 +158,7 @@ a figure) stays with the orb.
 Each exchange rewrites the subject's page: the questions you answered go, what you chose is written
 under « What we decided », and what comes next shows. When a part of it moves on in a bubble of its
 own (a research done, an angle chosen in « Choose the angle », a new version of the article), Eriphe
-updates the main page too: its summary, its plan, what remains.
+updates the main page too: its summary, its plan, what remains. Work Eriphe hands to an agent goes in a bubble under the subject you are on; a bubble that turns out to be part of another subject, Eriphe moves under it.
 
 To have something done **on the side** ("run a research on this aside", "look at my mail and
 analyze it, but on the side"), say so: Eriphe opens its bubble without showing it (under the page
@@ -192,7 +192,7 @@ answer in one click, one of them taking every default ("Do as you propose"). It 
 already said or what it remembers, and asks once (twice only if an answer opens something
 essential). Then it proposes the whole view on **one card**, placed in that page under what you
 decided: its page, the monitor and the skill together, the card recalling your choices, and
-nothing exists before your yes. Your yes opens the view. What you said matters
+nothing exists before your yes. Your yes opens the view. Your day is a view like any other: Eriphe never makes one on its own. What you said matters
 to you is remembered as a preference; when to tell you is a notification rule.
 
 What you want to see once ("open the production for me") is not a view: Eriphe opens a bubble

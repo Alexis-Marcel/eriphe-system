@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -98,10 +97,12 @@ type nodeAppendIn struct {
 	Text string `json:"text" jsonschema:"markdown text to add at the end of your node"`
 }
 
-type nodeOpenIn struct {
+// nodeOpenFields are what node_open makes, for the brain (brainNodeOpenIn)
+// and a task (its node_open) alike: openNode.
+type nodeOpenFields struct {
 	Title  string     `json:"title" jsonschema:"its name for the user, a few words in their language, no ids"`
 	Goal   string     `json:"goal,omitempty" jsonschema:"what it is for, in one or two sentences; never shown to the user. With steps, what must be true at the end: a fresh agent checks it once every step is accepted"`
-	Body   string     `json:"body,omitempty" jsonschema:"its first body: markdown text and blocks"`
+	Body   string     `json:"body,omitempty" jsonschema:"its first body: markdown text, and blocks in fences (eriphe:block <name>, a JSON object: components, data, sources)"`
 	Steps  []stepSpec `json:"steps,omitempty" jsonschema:"to cut its work in steps, each a child of it run by an agent: a key, a title, the keys of the steps it comes after, a self-contained prompt, an agent, resources and a contract. Eriphe starts each step once those it comes after are accepted, in parallel when it can, and accepts a step on its proof: its receipt says done and every check of its contract (a test, a command) passes"`
 	Budget int        `json:"budget_minutes,omitempty" jsonschema:"with steps: the minutes of running time the work may take, 60 by default"`
 }
@@ -224,45 +225,21 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			return written(d), err
 		})
 	tool(s, "node_open", "Open a child of your node, for a part of the work: its title, its goal, and its first body; with steps, its work cut in steps, each a child of it that an agent runs, accepted by Eriphe on its proof. You write only your own node: the child is the user's and Eriphe's to follow, and you never start a task yourself.",
-		func(ctx context.Context, in nodeOpenIn) (map[string]any, error) {
-			if err := c.nodeParent(w.node); err != nil {
-				return nil, err
+		func(ctx context.Context, in nodeOpenFields) (map[string]any, error) {
+			if w.node == "" {
+				return nil, errors.New("this task has no node")
 			}
-			tainted := c.writeTaint(w.task)
-			// What it says is checked as a write of the task's (nodeGuard).
-			probe, err := nodefile.New(nodefile.Meta{ID: "probe", Title: "probe", Lifetime: nodefile.Work, Created: time.Now()}, "")
-			if err == nil {
-				err = probe.AuthorBody(in.Body)
-			}
-			if err == nil {
-				_, err = c.nodeGuard(probe, blockNames(probe), tainted != "", c.lentTo(w.grant))
-			}
-			if err != nil {
-				return nil, err
-			}
-			if len(in.Steps) > 0 { // checked before the node is made: refused, nothing is
-				if err := c.checkSteps(in.Steps, in.Budget, c.taskTaint(w.task)); err != nil {
-					return nil, err
-				}
-			}
-			d, err := c.nodes.Create(nodestore.New{Title: strings.TrimSpace(in.Title), Goal: in.Goal, Body: in.Body, Parent: w.node,
-				External: tainted != "", OpenedBy: c.taskOrigin(w.task, w.node), Author: w.author})
-			if err != nil {
-				return nil, err
-			}
-			if err := c.externalSources(d, w.author); err != nil {
+			d, steps, err := c.openNode(ctx, in, w.node, nodeOpener{
+				stepOpener: stepOpener{author: w.author, task: w.task, tainted: c.taskTaint(w.task)},
+				origin:     c.taskOrigin(w.task, w.node), sourceOK: c.lentTo(w.grant)})
+			if d == nil {
 				return nil, err
 			}
 			out := map[string]any{"id": d.Node.Meta.ID, "title": d.Node.Meta.Title, "parent": w.node}
-			if len(in.Steps) > 0 {
-				ids, err := c.openSteps(ctx, d.Node.Meta.ID, in.Steps, in.Budget,
-					stepOpener{author: w.author, task: w.task, tainted: c.taskTaint(w.task)})
-				if err != nil {
-					return out, fmt.Errorf("node %s is open, but not its steps: %w", d.Node.Meta.ID, err)
-				}
-				out["steps"] = ids
+			if steps != nil {
+				out["steps"] = steps
 			}
-			return out, nil
+			return out, err
 		})
 	tool(s, "item_note", "Note one item a source of your node lists (a mail, an event), by the source's name and the item's id: what the user should know of it, a state (act, look, info, none, done) and a group, the section a view shows it in (À supprimer, Pour info). The same item noted again replaces it; no note, state nor group takes it away. Written after reading external content, it is marked so.",
 		func(ctx context.Context, in taskItemNoteIn) (map[string]any, error) {

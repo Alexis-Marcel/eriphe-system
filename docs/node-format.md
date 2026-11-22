@@ -64,9 +64,9 @@ The titles proposed for the first article:
 |---|---|---|
 | `id` | text | The node's id: lowercase letters and digits, 32 at most, no dash. Required. |
 | `title` | text | Its title for the user: one line, 120 characters at most. Required. |
-| `parent` | id | The node it belongs to; none for a node at the top. |
+| `parent` | id | The node it belongs to; none for a node at the top. Code writes it: at creation, and when Eriphe moves the node (`node_set parent`), never under itself or a node below it. |
 | `links` | list of ids | Written by code only (a view created from a card links the subjects the card was raised in): the nodes it links to; no duplicate, never itself. An author's write keeps them. An author links nodes in the text instead ([Links between nodes](#links-between-nodes)). |
-| `lifetime` | `work` or `standing` | Work ends when it is done; a standing node (the day, the mails) stays. Required. |
+| `lifetime` | `work` or `standing` | Work ends when it is done; a standing node (the day, the mails) stays. Required. A standing node is a view: only `propose_view` makes one, on the user's yes; `node_open` opens work only. |
 | `goal` | text | What the node is for. Never shown to the user. |
 | `created` | timestamp | When it was created (RFC 3339). Required. |
 | `done` | timestamp | Written by code (Eriphe's `node_set` `done`, the user's gestures): when it was marked done; absent while not done. An author's write keeps it. |

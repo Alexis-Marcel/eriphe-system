@@ -213,7 +213,7 @@ func TestAboutCardAtStart(t *testing.T) {
 	c, _ := testMemoryCore(t)
 	key := nodeRef(siteNode(t, c))
 	card, _ := c.aboutCard(key, aboutCardChars)
-	task, err := c.runTask(context.Background(), runRequest{Prompt: "Pose le certificat", About: key})
+	task, err := c.runTask(context.Background(), runRequest{Prompt: "Pose le certificat", about: key})
 	if err != nil {
 		t.Fatal(err)
 	}

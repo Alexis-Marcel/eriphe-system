@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
@@ -66,5 +67,104 @@ func TestOpenStepsNoOrphans(t *testing.T) {
 	// The step made runs: its work is set up for it.
 	if w, ok := c.work(parent); !ok || w.State != workRunning {
 		t.Errorf("no running work for the step made: %+v %v", w, ok)
+	}
+}
+
+// A claimed start refused when it runs blocks the step and wakes the
+// brain once, and leaves no claim; a retry starts a new task through a
+// claim, and runs; a final check refused fails the work and counts no
+// check.
+func TestClaimedStartRefused(t *testing.T) {
+	c := graphCore(t)
+	ctx := context.Background()
+	refuse := map[string]bool{}
+	runStepTask = func(c *core, ctx context.Context, r runRequest) (*TaskRow, error) {
+		if refuse[r.Title] {
+			return nil, errors.New("no device can run it")
+		}
+		return c.runTask(ctx, r)
+	}
+	t.Cleanup(func() { runStepTask = (*core).runTask })
+
+	parent := workNode(t, c, "Le site est en ligne.")
+	refuse["A"] = true
+	ids, err := c.openSteps(ctx, parent, []stepSpec{{Key: "a", Title: "A", Prompt: "Fais A."}}, 0, stepOpener{author: byBrain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := ids["a"]
+	if st := stepNow(t, c, a); st.Status != stepBlocked || st.Task != "" || !strings.Contains(st.Note, "no device") {
+		t.Fatalf("a refused start: %+v", st)
+	}
+	if len(wakes(c)) != 1 || c.claimed(a) {
+		t.Fatalf("wakes %q, claimed %v", wakes(c), c.claimed(a))
+	}
+
+	refuse["A"] = false
+	if _, err := c.settleStep(ctx, parent, a, settleRetry, "Avec un autre appareil."); err != nil {
+		t.Fatal(err)
+	}
+	st := stepNow(t, c, a)
+	if st.Status != stepRunning || st.Task == "" || st.Tries != 1 {
+		t.Fatalf("retried: %+v", st)
+	}
+
+	refuse[tr(c.userLang(), "step.final.title")] = true
+	endStepTurn(t, c, st.Task, "A fait", "done")
+	w, _ := c.work(parent)
+	if w.State != workFailed || w.Checks != 0 || w.Final != "" || c.claimed(finalKey(parent)) {
+		t.Fatalf("a refused final check: %+v", w)
+	}
+	if all := wakes(c); len(all) != 2 || !strings.Contains(all[1], "contrôle final") {
+		t.Errorf("wakes %q", all)
+	}
+}
+
+// A step's task starts with stepMu let go: while it starts, another work
+// moves and the step itself may be dropped, which stops the task started
+// for it.
+func TestStepStartsOutsideTheLock(t *testing.T) {
+	c := graphCore(t)
+	ctx := context.Background()
+	a, b := workNode(t, c, ""), workNode(t, c, "")
+	var bIDs map[string]string
+	moved := false
+	runStepTask = func(c *core, ctx context.Context, r runRequest) (*TaskRow, error) {
+		if st, ok := c.nodeStep(r.inNode); ok && st.Parent == a && !moved {
+			moved = true
+			if !stepMu.TryLock() {
+				t.Error("a step's task starts under stepMu")
+			} else {
+				stepMu.Unlock()
+			}
+			var err error
+			if bIDs, err = c.openSteps(ctx, b, []stepSpec{{Key: "b", Title: "B", Prompt: "Fais B."}}, 0, stepOpener{author: byBrain}); err != nil {
+				t.Error(err)
+			}
+			if _, err := c.settleStep(ctx, a, st.Node, settleDrop, "plus besoin"); err != nil {
+				t.Error(err)
+			}
+		}
+		return c.runTask(ctx, r)
+	}
+	t.Cleanup(func() { runStepTask = (*core).runTask })
+	ids, err := c.openSteps(ctx, a, []stepSpec{{Key: "a", Title: "A", Prompt: "Fais A."}}, 0, stepOpener{author: byBrain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !moved {
+		t.Fatal("the step did not start")
+	}
+	if st := stepNow(t, c, ids["a"]); st.Status != stepDropped || st.Task != "" {
+		t.Errorf("the dropped step: %+v", st)
+	}
+	if tasks := c.nodeTasks(ids["a"]); len(tasks) != 1 || c.store.get("brain_stopped:"+tasks[0]) == "" {
+		t.Errorf("its task is not stopped: %v", tasks)
+	}
+	if st := stepNow(t, c, bIDs["b"]); st.Status != stepRunning || st.Task == "" {
+		t.Errorf("the other work's step: %+v", st)
+	}
+	if c.claimed(ids["a"]) || c.claimed(bIDs["b"]) {
+		t.Error("a claim is left")
 	}
 }

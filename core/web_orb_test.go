@@ -350,7 +350,7 @@ func TestOrbCardAsked(t *testing.T) {
 	// nothing is left in kv.
 	answer, _ := c.store.addMessage(roleBrain, "C'est fait.", true)
 	c.markAnswer(int(answer))
-	c.userActEvent("Sam a dit oui.", "", "")
+	c.nodeEvent("", "Sam a dit oui.", true)
 	var acts, answered int
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE user_act = 1`).Scan(&acts)
 	c.store.db.QueryRow(`SELECT answer_to FROM messages WHERE seq = ?`, answer).Scan(&answered)

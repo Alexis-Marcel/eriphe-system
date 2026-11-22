@@ -859,21 +859,11 @@ const cardByArchive = "archive"
 func (c *core) withdrawCards(ctx context.Context, ids []string) {
 	refs := map[string]bool{}
 	for _, id := range ids {
-		for _, q := range []struct{ query, arg string }{
-			{`SELECT ref FROM node_cards WHERE node = ?`, id},
-			{`SELECT ref FROM convo_cards WHERE about = ? AND state = 'pending'`, refNode + ":" + id},
-		} {
-			rows, err := c.store.db.Query(q.query, q.arg)
-			if err != nil {
-				continue
-			}
-			for rows.Next() {
-				var ref string
-				if rows.Scan(&ref) == nil {
-					refs[ref] = true
-				}
-			}
-			rows.Close()
+		for _, ref := range c.nodeCardRefs(id) {
+			refs[ref] = true
+		}
+		for _, ref := range c.store.column(`SELECT ref FROM convo_cards WHERE about = ? AND state = 'pending'`, nodeRef(id)) {
+			refs[ref] = true
 		}
 	}
 	if len(refs) == 0 {

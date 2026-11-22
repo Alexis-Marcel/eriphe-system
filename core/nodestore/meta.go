@@ -1,6 +1,8 @@
 package nodestore
 
 import (
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
@@ -75,6 +77,52 @@ func (s *Store) below(id string) ([]string, error) {
 		}
 	}
 	return ids, nil
+}
+
+// SetParent moves a node under parent ("" for the top): its front
+// matter's parent, a version of its own made on the last one. Neither
+// may be archived, and a node never goes under itself nor under a node
+// below it. It tells whether it changed.
+func (s *Store) SetParent(id, parent, author string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur, err := s.read(id, 0)
+	if err != nil {
+		return false, err
+	}
+	if cur.Node.Meta.Parent == parent {
+		return false, nil
+	}
+	if parent != "" {
+		p, err := s.summary(parent)
+		if err != nil {
+			return false, fmt.Errorf("parent %s: %w", parent, err)
+		}
+		if !p.Archived.IsZero() {
+			return false, fmt.Errorf("parent %s: %w", parent, ErrArchived)
+		}
+		below, err := s.below(id)
+		if err != nil {
+			return false, err
+		}
+		if slices.Contains(below, parent) {
+			return false, fmt.Errorf("%w: %s is %s or below it", ErrCycle, parent, id)
+		}
+	}
+	if _, err := s.change(id, cur.Version.Hash, author, "parent", func(n *nodefile.Node) error {
+		n.Meta.Parent = parent
+		return nil
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// Backlinks are the nodes not archived that link a node: by a [[link]] of
+// their text resolved to it, or a link code wrote; the oldest first.
+func (s *Store) Backlinks(id string) ([]Summary, error) {
+	return s.summaries(`WHERE n.archived = 0 AND n.id != ? AND n.id IN (SELECT l.id FROM node_links l WHERE l.target = ?
+		UNION SELECT r.id FROM node_refs r WHERE r.target = ?) ORDER BY n.created, n.id`, id, id, id)
 }
 
 // Graph is the graph: every node not archived, the oldest first.

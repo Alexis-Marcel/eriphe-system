@@ -830,5 +830,5 @@ func (c *core) accessDecidedTold(id int64, approve bool) {
 	if approve {
 		word = "accepté"
 	}
-	c.userActEvent(fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), c.taskEventNode(a.TaskID), "") // the user's act: what the brain says of it answers them
+	c.nodeEvent(c.taskEventNode(a.TaskID), fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), true) // the user's act: what the brain says of it answers them
 }

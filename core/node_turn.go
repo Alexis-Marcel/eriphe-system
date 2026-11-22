@@ -355,16 +355,27 @@ func (c *core) proposalNode(kind string, id int64) string {
 
 // cardNodes are the nodes a card is linked to, the last linked first.
 func (c *core) cardNodes(ref string) []string {
-	rows, err := c.store.db.Query(`SELECT node FROM node_cards WHERE ref = ? ORDER BY created DESC, node`, ref)
+	return c.store.column(`SELECT node FROM node_cards WHERE ref = ? ORDER BY created DESC, node`, ref)
+}
+
+// nodeCardRefs are the cards linked to a node, waiting or not, the last
+// linked first.
+func (c *core) nodeCardRefs(id string) []string {
+	return c.store.column(`SELECT ref FROM node_cards WHERE node = ? ORDER BY created DESC, ref`, id)
+}
+
+// column is the one column a query gives, row by row; nil when it fails.
+func (s *Store) column(query string, args ...any) []string {
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 	var out []string
 	for rows.Next() {
-		var id string
-		if rows.Scan(&id) == nil {
-			out = append(out, id)
+		var v string
+		if rows.Scan(&v) == nil {
+			out = append(out, v)
 		}
 	}
 	return out
@@ -405,34 +416,35 @@ func (c *core) cardState(ref string) string {
 // yes, or refused), taint being what its words make the turn. A card
 // linked to a node makes it an event of that node: the turn that reads it
 // is about the node (nodesDelivered), and what it raises next is the
-// node's. It is the user's act (userActEvent): what the brain says of it
+// node's. It is the user's act (nodeEvent): what the brain says of it
 // answers them.
 func (c *core) callToBrain(a accessQuestion, text, taint string) {
 	node := ""
 	if ids := c.cardNodes(proposalRef(cardAccess, a.ID)); len(ids) > 0 {
 		node = ids[0]
-		head, t := c.nodeHead(node)
-		text = head + " " + text
-		if t != "" && taint == "" {
-			taint = t
-		} else if t != "" {
-			taint += ", " + t
-		}
 	}
-	c.userActEvent(text, node, taint)
+	c.nodeEvent(node, text, true, taint)
 }
 
-// brainRunTask starts the task the brain asks for, in a node of its own
-// (a child of node, when it names one): its start's card goes with the
-// brain's message, it is tainted by the turn, and its end reaches the
-// brain as an event pointing to its node (task_node.go). A turn about a
-// node makes the task about it.
+// brainRunTask starts the task the brain asks for, in a node of its own,
+// a child of the node it names, else of the turn's node (at the top when
+// the turn is about none, or its node is archived): what it does is
+// written in the graph, under what it is for. Its start's card goes with
+// the brain's message, it is tainted by the turn, it is about the node it
+// works under, and its end reaches the brain as an event pointing to its
+// node (task_node.go).
 func (c *core) brainRunTask(ctx context.Context, in runRequest) (map[string]any, error) {
 	if err := c.taintedResources(in); err != nil { // resources.go
 		return nil, err
 	}
-	if in.About == "" {
-		in.About = c.turnSource()
+	in.Node = strings.TrimSpace(in.Node)
+	if in.Node == "" {
+		if id := c.turn.aboutNode(); c.nodeParent(id) == nil {
+			in.Node = id
+		}
+	}
+	if in.Node != "" {
+		in.about = nodeRef(in.Node)
 	}
 	in.askStart, in.byBrain, in.taint = true, true, c.turnTaint()
 	t, err := c.runTask(ctx, in)
