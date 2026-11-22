@@ -20,6 +20,9 @@ import { closePage, openPage, step, store } from "../data/store";
 //   the others stay circles.
 
 export const CAP = 3;
+// OFF: a tile stays one until its variation falls under this share of its
+// threshold, so a figure hovering at the threshold does not flap.
+export const OFF = 0.85;
 
 export type Style = "A" | "B" | "C";
 
@@ -80,7 +83,7 @@ export const weightOf = (g: Glance, l: Live | undefined) => (l ? Math.abs(l.delt
 // so two near figures do not swap at each tick.
 export function pick(s: Pick<State, "live" | "seen" | "tiles">, list: [GraphNode, Glance][]): { tiles: string[]; over: string[] } {
   const over = list
-    .filter(([x, g]) => !x.waits && x.state !== "waiting" && !s.seen[x.id] && weightOf(g, s.live[x.id]) >= 1)
+    .filter(([x, g]) => !x.waits && x.state !== "waiting" && !s.seen[x.id] && weightOf(g, s.live[x.id]) >= (s.tiles.includes(x.id) ? OFF : 1))
     .map(([x, g]) => ({ id: x.id, w: weightOf(g, s.live[x.id]) * (s.tiles.includes(x.id) ? 1.2 : 1) }))
     .sort((a, b) => b.w - a.w || a.id.localeCompare(b.id))
     .map((o) => o.id);
@@ -163,7 +166,7 @@ function step1() {
     // the sparkline is the day so far: a new point every few ticks, the last one live
     const series = tick % 4 === 0 ? [...l.series.slice(1), v] : [...l.series.slice(0, -1), v];
     live[x.id] = { delta: d, trend, series };
-    if (seen[x.id] && Math.abs(d) < g.threshold) delete seen[x.id];
+    if (seen[x.id] && Math.abs(d) < g.threshold * OFF) delete seen[x.id];
   }
   useGlance.setState({ live, seen });
   refresh();

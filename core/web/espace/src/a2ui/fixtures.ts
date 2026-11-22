@@ -162,6 +162,6 @@ export function sampleOrb(lang: Lang): OrbFeed {
   const en = lang === "en";
   return {
     asked: 11,
-    answer: { seq: 12, node: "sub", text: en ? "All right: a contact form rather than a mailto link." : "D'accord : un formulaire de contact plutôt qu'un lien mailto.", more: true },
+    answer: { seq: 12, node: "day", text: en ? "Your day is ready: three meetings, nothing before ten." : "Ta journée est prête : trois rendez-vous, rien avant dix heures.", more: true },
   };
 }
