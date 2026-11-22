@@ -983,7 +983,9 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   standing node is never done.
 - **Taint.** Reading a node marked external, or an item note written in a tainted turn, taints
   the turn (`c.turn.taint`); a node written or opened in a tainted turn is marked external, so is
-  a title or goal it sets; `node_find`, the context pack, the about cards and events name an
+  a title or goal it sets. Words filed in a node's trace from a tainted turn or task mark it
+  first (`markNodeExternal`, tried again when a write comes between its read and its own), then
+  are written: never words without the mark; `node_find`, the context pack, the about cards and events name an
   external node by its id, never quoting its title.
 - **The conversation per node.** Each message belongs to a node or to the home: the `messages.node`
   column (`""`: the home). The user's message belongs to the node the bar talks to: the page
@@ -1139,9 +1141,14 @@ The package `nodestore` keeps the nodes: the files are the truth, the index is f
   bundle is packed from the objects as they are, written aside, read back whole (every object
   inflates, the checksum holds, every object of the branch is in it) and only then takes its name;
   older copies are dropped only once the night's are made. A failed backup is logged and leaves
-  the repository and the earlier copies as they were. Objects stay loose: to compact the
-  repository, stop Eriphe and run `git gc` in it. Writes wait meanwhile; a start after the hour
-  finds the night's copy and does not make another.
+  the repository and the earlier copies as they were, and is tried again at the next minute's
+  tick, not the next night. Objects stay loose: to compact the repository, stop Eriphe and run
+  `git gc` in it. Writes go on meanwhile: the store's lock is held only to read the branch's
+  commit, and the bundle packs what it reaches through a repository handle of its own. The
+  index is copied first (`VACUUM INTO`, aside) and takes its name last, so it is never ahead of
+  the bundle (put back, it is behind at most, which a start reads again from the log) and its
+  presence says the night's backup was made whole: a start after the hour finds it and does not
+  make another.
 
 ## A task's node (`task_node.go`, `task_nodes.go`)
 
@@ -3266,9 +3273,10 @@ token in `X-CSRF-Token`:
   (`authorWrite` as `user`, the node's guard and the secrets filter as for any author), made on
   the version whose hash is `expect`. A newer version gives `409` with its `version`, `hash` and
   `body`, and writes nothing; an archived node `410`; a body that does not read `400`.
-- `POST /api/nodes/{id}/mark` `{block, list, item, mark}`: the user's mark (`keep`, `drop`, `done`,
-  `""` to take it away) on an item a block shows; the block must hold a Mark. Code writes it
-  (`nodefile.SetMark`), a version of its own: no turn.
+- `POST /api/nodes/{id}/mark` `{block, list, item, mark, version}`: the user's mark (`keep`, `drop`,
+  `done`, `""` to take it away) on an item a block shows; the block must hold a Mark. Code writes it
+  (`nodefile.SetMark`), a version of its own, made on the `version` the page showed: no turn. An
+  author's write since that version gives `409` (code's own versions do not count).
 - `POST /api/nodes/{id}/ask` `{block, component}`: a block's button. Its words are read again in
   the stored block (`a2ui.AskText`), never taken from the page, and become the user's message to
   that node; a block written after reading external content asks nothing (`403`).
@@ -3367,7 +3375,8 @@ token in `X-CSRF-Token`:
   gives it back. A bubble's size and light come from what the node is (`model.ts`): a subject is
   bigger, what waits for the user brighter, what runs a little, what is done or old quieter. Under
   760 px wide the graph is a list (`graph/List.tsx`, `listOrder`): each subject, then its bubbles
-  under it, depth first, in the order they were made; a tap opens its page alone over the list,
+  under it, depth first, in the order they were made, one that waits for the user said by its
+  accent dot alone (its words for a screen reader only), one at work by its line; a tap opens its page alone over the list,
   and a page shown from it takes the screen (the bar with it) until it closes.
 - `page/`: a page in the graph, any number open: a click opens one alone, ⌘, Ctrl or shift with
   the click one more. Dragged by its head; its head says what it belongs to, its title, its date

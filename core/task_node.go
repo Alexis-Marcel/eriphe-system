@@ -216,15 +216,15 @@ func (c *core) fileTaskReport(task string, r *checkedReceipt) string {
 	}
 	c.store.db.Exec(`UPDATE task_nodes SET filed = ? WHERE task = ?`, hash, task)
 	author := c.taskAuthor(task)
+	if c.writeTaint(task) != "" {
+		c.markNodeExternal(id, author) // the report may carry someone else's words: marked before it is filed
+	}
 	var problems []string
 	for _, part := range traceParts(report, nodestore.MaxTrace) {
 		if err := c.nodes.AppendTrace(id, author, part); err != nil {
 			problems = append(problems, "sa trace l'a refusé : "+err.Error())
 			break
 		}
-	}
-	if len(problems) == 0 && c.writeTaint(task) != "" {
-		c.markNodeExternal(id, author) // the report may carry someone else's words
 	}
 	d, err := c.nodes.Read(id, 0)
 	if err != nil {
@@ -268,27 +268,44 @@ func (c *core) traceTask(task, author, line, tainted string) {
 	if id == "" || c.nodes == nil {
 		return
 	}
+	if tainted != "" {
+		c.markNodeExternal(id, author) // before the line: never words without the mark
+	}
 	if err := c.nodes.AppendTrace(id, author, line); err != nil {
 		log.Printf("task %s: node %s: trace: %v", task, id, err)
-		return
-	}
-	if tainted != "" {
-		c.markNodeExternal(id, author)
 	}
 }
 
+// markRead, set by a test, runs between markNodeExternal's read and its
+// write.
+var markRead func(id string)
+
 // markNodeExternal marks a node external: it holds someone else's words.
+// It is called before those words are written. A write made meanwhile (a
+// conflict) is no reason to lose the mark: it is tried again on the new
+// version.
 func (c *core) markNodeExternal(id, author string) {
-	d, err := c.nodes.Read(id, 0)
-	if err != nil || d.Node.Meta.External {
+	for try := 0; try < 3; try++ {
+		d, err := c.nodes.Read(id, 0)
+		if err != nil || d.Node.Meta.External {
+			return
+		}
+		if markRead != nil {
+			markRead(id)
+		}
+		_, err = c.nodes.Change(id, d.Version.Hash, author, func(n *nodefile.Node) error {
+			n.Meta.External = true
+			return nil
+		})
+		if errors.Is(err, nodestore.ErrConflict) {
+			continue
+		}
+		if err != nil {
+			log.Printf("node %s: external: %v", id, err)
+		}
 		return
 	}
-	if _, err := c.nodes.Change(id, d.Version.Hash, author, func(n *nodefile.Node) error {
-		n.Meta.External = true
-		return nil
-	}); err != nil {
-		log.Printf("node %s: external: %v", id, err)
-	}
+	log.Printf("node %s: external: not marked, written over three times in a row", id)
 }
 
 // firstLine is a text's first line that says something, short.

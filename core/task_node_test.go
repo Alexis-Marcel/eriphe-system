@@ -412,3 +412,33 @@ func TestTaskNodeRefusedGoal(t *testing.T) {
 		t.Fatalf("node %+v", d.Node.Meta)
 	}
 }
+
+// A node is marked external even when someone writes it between the mark's
+// read and its write: the mark is tried again on the new version, and the
+// write made meanwhile is kept.
+func TestExternalMarkSurvivesAConcurrentWrite(t *testing.T) {
+	c := graphCore(t)
+	d, err := c.nodes.Create(nodestore.New{Title: "Réponse à Sam", Body: "Brouillon.", Author: byBrain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := d.Node.Meta.ID
+	first := true
+	markRead = func(string) {
+		if first {
+			first = false
+			if _, err := c.nodes.Write(id, "Écrit entre-temps.", d.Version.Hash, byUser); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+	t.Cleanup(func() { markRead = nil })
+	c.markNodeExternal(id, byBrain)
+	got, _ := c.nodes.Read(id, 0)
+	if !got.Node.Meta.External {
+		t.Fatal("the mark was lost")
+	}
+	if got.Node.Text() != "Écrit entre-temps." {
+		t.Errorf("the write made meanwhile: %q", got.Node.Text())
+	}
+}

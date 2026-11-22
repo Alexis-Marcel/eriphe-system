@@ -335,12 +335,11 @@ func (c *core) traceWork(parent, line, tainted string) {
 	if c.nodes == nil {
 		return
 	}
+	if tainted != "" {
+		c.markNodeExternal(parent, "eriphe") // before the line: never words without the mark
+	}
 	if err := c.nodes.AppendTrace(parent, "eriphe", line); err != nil {
 		log.Printf("work %s: trace: %v", parent, err)
-		return
-	}
-	if tainted != "" {
-		c.markNodeExternal(parent, "eriphe")
 	}
 }
 

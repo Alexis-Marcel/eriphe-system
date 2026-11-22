@@ -273,9 +273,11 @@ export async function saveFile(id: string, body: string, expect: string): Promis
   return { ok: false, why: data?.error ?? String(status) };
 }
 
-// mark sets the user's mark on an item a block shows ("" takes it away).
-export async function mark(id: string, block: string, list: string, item: string, m: string): Promise<boolean> {
-  return (await sendJSON("POST", `${nodePath(id)}/mark`, { block, list, item, mark: m })).status === 204;
+// mark sets the user's mark on an item a block shows ("" takes it away),
+// made on the version the page shows: refused (false) when the node was
+// written since.
+export async function mark(id: string, version: number, block: string, list: string, item: string, m: string): Promise<boolean> {
+  return (await sendJSON("POST", `${nodePath(id)}/mark`, { block, list, item, mark: m, version })).status === 204;
 }
 
 // ask sends a block's button: eriphe-core reads its words in the block.

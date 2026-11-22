@@ -31,6 +31,7 @@ export type State = {
   open: string[];
   talk: string | null;
   shown: number; // the last show applied
+  pending: Shown | null; // a show of a node the graph does not have yet, applied when it comes
   orb: OrbFeed | null; // what Eriphe's orb shows (orb/)
   sent: Sent | null; // what the user just sent, until eriphe-core has it
   notes: Note[];
@@ -49,6 +50,7 @@ export const empty = (): State => ({
   open: [],
   talk: null,
   shown: 0,
+  pending: null,
   orb: null,
   sent: null,
   notes: [],
@@ -89,7 +91,9 @@ export function applyNodes(s: State, ev: NodeEvent): State {
   const open = s.open.filter((id) => nodes[id]);
   // The page the bar talked to left: it talks to the last one open.
   const talk = s.talk === null || open.includes(s.talk) ? s.talk : (open.at(-1) ?? null);
-  return { ...s, nodes, open, talk };
+  const next = { ...s, nodes, open, talk };
+  // A show that came before its node: the node is here, it opens now.
+  return s.pending && nodes[s.pending.node] ? showNode({ ...next, pending: null }, s.pending) : next;
 }
 
 // The "doc" event: a new version ({id, version}) or a trace that grew
@@ -130,16 +134,24 @@ export const SHOW_FRESH = 60_000;
 // gesture (a click on a page or a bubble) moves it, so Eriphe's answer stays
 // where it was asked. One exception: a subject Eriphe opened for what the
 // user asked at the home (talk) takes the bar with it, when it still
-// talks to the home: the exchange goes on in that page. Each show once.
+// talks to the home: the exchange goes on in that page. Each show once. A
+// show of a node the graph does not have yet (its row comes after) waits
+// for it (pending), the last show only: applyNodes opens it; a newer show
+// drops it, so that shows open in their order.
 export function applyShow(s: State, ev: Shown, now = Date.now()): State {
   if (!ev || typeof ev.node !== "string" || !(ev.seq > s.shown)) return s;
   const first = s.shown === 0;
-  const seen = { ...s, shown: ev.seq };
+  const seen = { ...s, shown: ev.seq, pending: null };
   if (first && ev.at && now - Date.parse(ev.at) > SHOW_FRESH) return seen;
-  if (!s.nodes[ev.node]) return seen;
-  if (ev.talk && s.talk === null) return openPage(seen, ev.node, true);
-  if (s.open.includes(ev.node)) return seen;
-  return { ...seen, open: [...s.open, ev.node] };
+  if (!s.nodes[ev.node]) return { ...seen, pending: ev };
+  return showNode(seen, ev);
+}
+
+// showNode opens the page of a show whose node the graph has.
+function showNode(s: State, ev: Shown): State {
+  if (ev.talk && s.talk === null) return openPage(s, ev.node, true);
+  if (s.open.includes(ev.node)) return s;
+  return { ...s, open: [...s.open, ev.node] };
 }
 
 // Sent is a message the user just wrote: after is the orb's asked seq

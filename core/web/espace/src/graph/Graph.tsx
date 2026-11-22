@@ -21,8 +21,9 @@ import { UnaskedMark } from "./Title";
 // session: nothing is kept, a reload lays the graph out afresh.
 // The camera frames the open pages, else the whole graph; a drag or the
 // wheel moves it by hand, a double click gives it back. A node that waits
-// for the user says it on its bubble (a ring that breathes, « t'attend »);
-// out of view, a small mark at the screen's edge points to it.
+// for the user says it on its bubble by its halo alone, no word (the word
+// is for screen readers only); out of view, a small mark at the screen's
+// edge points to it.
 
 const ease = [0.2, 0.7, 0.2, 1] as const;
 const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;

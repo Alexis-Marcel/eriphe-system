@@ -31,6 +31,44 @@ func mustBrainNodes(t *testing.T, c *core, name string, args map[string]any) map
 	return out
 }
 
+// The brain's node_edit names the node it edits: its schema requires the
+// id and says nothing of leaving it out (a worker's says so, it has only
+// its own node), and an edit by id writes that node.
+func TestBrainNodeEditNeedsID(t *testing.T) {
+	c := graphCore(t)
+	res, err := connectServer(t, newMCPServer(c)).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Required   []string                                `json:"required"`
+		Properties map[string]struct{ Description string } `json:"properties"`
+	}
+	for _, tl := range res.Tools {
+		if tl.Name == "node_edit" {
+			raw, _ := json.Marshal(tl.InputSchema)
+			if err := json.Unmarshal(raw, &schema); err != nil {
+				t.Fatalf("%v: %s", err, raw)
+			}
+		}
+	}
+	if !slices.Contains(schema.Required, "id") || !slices.Contains(schema.Required, "expect") {
+		t.Fatalf("required %v", schema.Required)
+	}
+	if d := schema.Properties["id"].Description; d == "" || strings.Contains(d, "leave it out") {
+		t.Errorf("id says %q", d)
+	}
+	id := mustBrainNodes(t, c, "node_open", map[string]any{"title": "Liste de courses", "body": "Du pain."})["id"].(string)
+	d, _ := c.nodes.Read(id, 0)
+	mustBrainNodes(t, c, "node_edit", map[string]any{"id": id, "expect": d.Version.Hash, "old": "pain", "new": "lait"})
+	if d, _ := c.nodes.Read(id, 0); d.Node.Text() != "Du lait." {
+		t.Errorf("edited %q", d.Node.Text())
+	}
+	if _, msg := brainNodes(t, c, "node_edit", map[string]any{"expect": d.Version.Hash, "old": "lait", "new": "riz"}); msg == "" {
+		t.Error("an edit without id")
+	}
+}
+
 // The brain opens a node, reads it, writes it on the version it read and
 // edits it; a write made on an older version is refused, so is one on a
 // node that is not there or archived, and a block whose marks the brain
