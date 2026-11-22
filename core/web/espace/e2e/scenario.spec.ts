@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { rest, still } from "./rest";
 
 // The epic's acceptance scenario (#625), its steps played in the
@@ -17,7 +18,6 @@ import { rest, still } from "./rest";
 // (src/graph/layout.test.ts, camera.test.ts, src/orb/model.test.ts); here
 // it is checked once or twice, where the real sizes of the page meet them.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 // A node someone else's words titled (the urgent mail): its title is shown
 // as it is, marked with ⚠, never replaced.
 const mailTitle = "Urgent : la prod renvoie des 500";
@@ -33,10 +33,6 @@ test("the steps of the scenario", async ({ page, request }) => {
     document.addEventListener("securitypolicyviolation", (e) => console.error(`CSP: ${e.violatedDirective} ${e.blockedURI}`));
   });
 
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
   await page.goto("/espace");
 
   // Eriphe's words: its orb's, out in the space (or, with no free spot
@@ -554,10 +550,6 @@ test("the workspace as the user left it", { tag: "@motion" }, async ({ page }) =
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
   await page.goto("/espace");
 
   // Home: no page open, the whole graph in view.
@@ -755,10 +747,6 @@ test("the workspace on a small screen", async ({ page }) => {
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
   await page.goto("/espace");
 
   await home(page);

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // Picking items in a list and running the action its block declares
 // (list_actions.go), against the test core of TestEspaceScenario: a node
@@ -6,22 +6,14 @@ import { expect, test } from "@playwright/test";
 // archives what the user picks (mail/move, on approval: the click is the
 // user's yes). The block reads a server that is not trusted: the author's
 // label is not shown, the button says code's words. Seeded at
-// /e2e/actions, after the scenario (this file runs second), on its own
-// node.
+// /e2e/actions, on its own node.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 
 test("pick two rows and archive them", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
 
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
-  // No page open, whatever the spec before left (one shared test core).
-  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await page.goto("/espace");
   await expect(page.locator(".cs-bar input")).toBeVisible();
 

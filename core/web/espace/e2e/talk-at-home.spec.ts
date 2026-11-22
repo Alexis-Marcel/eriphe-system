@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // An answer given at the home, no subject opened, more than a line: the
 // orb holds it whole, out in the space, and it does not go; words an event
@@ -10,7 +11,6 @@ import { expect, test, type Page } from "@playwright/test";
 // home's. And a question said in a subject's bar about something else:
 // the card it needs is in front at once.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 
 // atHome opens the workspace with no page open, the bar talking to the
 // home: the view as the scenario left it, its pages closed.
@@ -31,14 +31,6 @@ test("an answer given at home stays readable until you move on", async ({ page, 
     await route.fulfill({ response: r, json: b });
   });
 
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
-  // No page open and nothing left to show, whatever the spec before left
-  // (one shared test core): the stream says the last page shown when it
-  // connects, and the workspace opens it unless the view has seen it.
-  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await atHome(page);
 
   const say = async (text: string) => {
@@ -110,10 +102,6 @@ test("a card raised for a question about something else is in front at once", as
     delete b.view?.talk;
     await route.fulfill({ response: r, json: b });
   });
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
   await atHome(page);
 
   await page.locator('.gr-node:not(.external) .gr-core[aria-label^="Substack"]').click();

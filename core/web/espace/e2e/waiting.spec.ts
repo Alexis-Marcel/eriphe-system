@@ -1,25 +1,17 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // The messages that wait for Eriphe (messages_waiting.go), against the
 // test core of TestEspaceScenario: the scripted brain is held at work by
 // « Prends ton temps » until /e2e/finish/hold; what the user says
 // meanwhile shows above the bar with a clock, and one is withdrawn before
 // Eriphe reads it. /e2e/turns tells what each of its turns was given.
-// This file runs last, on the same test core.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 
 test("messages wait with a clock, and one is withdrawn", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
   try {
-    await page.goto("/login");
-    await page.locator('input[name="password"]').fill(password);
-    await page.locator('button[type="submit"]').click();
-    await page.waitForURL((u) => u.pathname !== "/login");
-    // No page open, whatever the spec before left (one shared test core).
-    expect((await request.post("/e2e/view")).ok()).toBe(true);
     await page.goto("/espace");
     const input = page.locator(".cs-bar input");
     await expect(input).toBeVisible();

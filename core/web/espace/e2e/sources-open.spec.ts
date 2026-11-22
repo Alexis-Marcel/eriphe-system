@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // An item opened in place (item_open.go), against the test core of
 // TestEspaceScenario: a node whose block lists two faked mails (mail/lus)
@@ -7,19 +7,12 @@ import { expect, test } from "@playwright/test";
 // item's note; a click again closes it. Seeded at /e2e/open, on its own
 // node.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 
 test("a click on a mail shows its body in place", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
 
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
-  // No page open, whatever the spec before left (one shared test core).
-  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await page.goto("/espace");
   await expect(page.locator(".cs-bar input")).toBeVisible();
 

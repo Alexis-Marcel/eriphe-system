@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // A view as a bilan (docs/node-format.md), against the test core of
 // TestEspaceScenario: the bilan on top, drawn larger; one block that reads
@@ -11,19 +12,12 @@ import { expect, test, type Page } from "@playwright/test";
 // unticks one mail of the batch and trashes the others, then enlarges and
 // resizes the page. Seeded at /e2e/bilan, on its own node.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 
 test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a page as a window", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
 
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
-  // No page open, whatever the spec before left (one shared test core).
-  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await page.goto("/espace");
   await expect(page.locator(".cs-bar input")).toBeVisible();
 
@@ -94,7 +88,7 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(ask.locator("li")).toHaveText(["Soldes d'hiver · promo@example.org", "Votre colis est bloqué · colis@example.net"]);
   await shots(page, "4-batch-confirm");
   await ask.getByRole("button", { name: "Lancer" }).click();
-  // Its own calls: the test core is shared with the other files (view-calls.spec.ts, run after, trashes too).
+  // Its own calls: the test core is shared with the other files (view-calls.spec.ts trashes too).
   const mine = (all: string[]) => all.filter((x) => /:[aij]\d/.test(x));
   await expect.poll(async () => mine((await (await request.get("/e2e/tools")).json()).trashed)).toEqual(["perso:j1,j3"]);
   await expect(pg.locator(".a2-batch-done")).toContainText("1 gardé(s)");

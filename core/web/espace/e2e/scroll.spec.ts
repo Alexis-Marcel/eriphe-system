@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { still } from "./rest";
 
 // A page scrolls as one: its head stays, its document, its blocks and the
@@ -9,7 +10,6 @@ import { still } from "./rest";
 // mails, two cards that wait), and nothing it does is written back: the
 // answers and the view are kept in this test.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 
 const mails = Array.from({ length: 40 }, (_, i) => ({ label: `Message ${i + 1} : point de la semaine, relance et suite à donner` }));
 const longText = Array.from({ length: 8 }, (_, i) => `Paragraphe ${i + 1}. Ce qui est arrivé ce matin, ce qui attend une réponse et ce qui peut attendre demain, en quelques lignes.`).join("\n\n");
@@ -65,10 +65,6 @@ async function fake(page: Page, answered: number[]) {
 }
 
 async function signIn(page: Page) {
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
 }
 
 // shots saves the screen in both themes when SHOTS names a folder, as the

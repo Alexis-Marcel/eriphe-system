@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 // A tool that changed waits in « Outils à revoir » like any other item
 // (tool_review.go), against the test core of TestEspaceScenario: the news
@@ -6,21 +6,14 @@ import { expect, test } from "@playwright/test";
 // held, and the node made by code lists the change and waits for the user
 // (its bubble says « t'attend »). Opened, the change is picked and
 // accepted with code's button: the list empties, the node rests. Seeded at
-// /e2e/review; this file runs after selection.spec.ts, on its own node.
+// /e2e/review, on its own node.
 
-const password = "correct horse battery"; // testPassword, core/web_test.go
 
 test("a changed tool waits in a view, and is accepted there", async ({ page, request }) => {
   const problems: string[] = [];
   page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.text()}`));
   page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
 
-  await page.goto("/login");
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((u) => u.pathname !== "/login");
-  // No page open, whatever the spec before left (one shared test core).
-  expect((await request.post("/e2e/view")).ok()).toBe(true);
   await page.goto("/espace");
   await expect(page.locator(".cs-bar input")).toBeVisible();
 
