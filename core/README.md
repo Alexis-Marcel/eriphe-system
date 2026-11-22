@@ -1253,6 +1253,20 @@ composes each one from the catalog.
   changes. A block that reads a server not trusted is marked `external`, checked at each read:
   code marks it, never unmarks it. A monitor's value is its latest number, its last points, whether
   it is past its limit or failing, and its last events (kind and time, numbers only).
+- **A node's glance** (`node_glance.go`, `nodefile/glance.go`, table `node_glance` in `core.db`): a
+  source may declare a `glance` (label, path, threshold, unit `percent`|`amount`, compare
+  `day`|`previous`|`fixed` with `base`; [node format](../docs/node-format.md#sources)), one per
+  node (`nodeGuard`). Each read of the node (`readNodeOnce` → `noteGlance`) takes the JSON number
+  at its path and keeps the day's first value (in the user's zone), the previous one, the last one and
+  up to 32 recent values, one per 30 minutes, the last one live; no model, no brain turn. The
+  variation is from its reference, in percent of it or in its units; `shown` once it reaches the
+  threshold, until it falls under 0.85 of it (`glanceOff`). `seen` is set when the workspace's
+  view opens the node while shown (`glanceOpened`, from `PUT /api/espace/view`), or when it crosses
+  while open, and cleared under 0.85: seen survives a reload and holds on every screen. A
+  declaration changed starts afresh; one taken away, or its node gone, is forgotten. The node's
+  row (`graphNode.glance`: label, `labelExternal` when its block is external, unit, value, ref,
+  delta, threshold, series, shown, seen) is sent again (`graphEvNode`) when it changes. The
+  workspace draws at most 3 tiles (graph/glance.ts).
 - **Read again after a change** (`source_fresh.go`): a call that ran well and may change something
   (its tool is not marked `readOnlyHint`) is followed by a read of every live source of its server,
   every node's: those of the account it names (its `account` argument) and those that name none;

@@ -1,13 +1,15 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PtrEvent } from "react";
-import { AnimatePresence, motion, useMotionValueEvent, useSpring, type MotionValue } from "motion/react";
+import { AnimatePresence, motion, useMotionValueEvent, useReducedMotion, useSpring, type MotionValue } from "motion/react";
 import type { GraphNode } from "../data/api";
 import { closePage, depthOf, openPage, step, store, subtree, talkTo, useGraph } from "../data/store";
-import { useWords } from "../i18n";
+import { useWords, type Lang } from "../i18n";
 import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, framePages, pageMax, type Box, type Cam } from "./camera";
 import { edgePush, edgeStep, extent, Sim, type Pos, type Pt } from "./layout";
+import { coreShape, pickTiles, TILE, variation } from "./glance";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
+import { TileFace } from "./Tile";
 import { UnaskedMark } from "./Title";
 
 // The graph (#633): every node a bubble, a subject bigger than its own,
@@ -42,7 +44,7 @@ type Sizing = { id: string; sx: number; sy: number; w0: number; h0: number; c0: 
 type Grab = { id: string; sx: number; sy: number; px: number; py: number; ox: number; oy: number; moved: boolean; raw?: Pt; edgeSince?: number };
 
 export function Graph({ live }: { live: boolean }) {
-  const { t } = useWords();
+  const { t, lang } = useWords();
   const nodes = useGraph((s) => s.nodes);
   const open = useGraph((s) => s.open);
   const talk = useGraph((s) => s.talk);
@@ -64,6 +66,17 @@ export function Graph({ live }: { live: boolean }) {
   const lit = useMemo(() => new Set(openIds.flatMap((id) => subtree(nodes, id))), [openIds.join(","), nodes]); // eslint-disable-line react-hooks/exhaustive-deps
   const now = Date.now();
   const rOf = (x: GraphNode) => radiusOf(x, nodes, now);
+  // The nodes drawn as tiles (graph/glance.ts): a tile's body is its
+  // rounded rectangle, for the layout and the camera alike.
+  const tilesWas = useRef<string[]>([]);
+  const tiles = useMemo(() => pickTiles(list, openIds, tilesWas.current), [list, openIds.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => void (tilesWas.current = tiles), [tiles]);
+  const tileOf = (x: GraphNode) => (tiles.includes(x.id) ? TILE : undefined);
+  const bodyOf = (x: GraphNode) => {
+    const b = labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x));
+    const tile = tileOf(x);
+    return tile ? { ...b, r: tile[0] / 2, tile } : b;
+  };
 
   // The room the bar takes at the foot (its cards, when it shows some).
   const foot = useFoot();
@@ -120,7 +133,7 @@ export function Graph({ live }: { live: boolean }) {
   // of it is kept: a reload lays the graph out afresh.
   const [held, setHeld] = useState<string | null>(null);
   const layoutKey =
-    list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.state}`).join(",") +
+    list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.state}:${tileOf(x) ? "tile" : ""}`).join(",") +
     "|" + openIds.map((id) => `${id}:${roomOf(id)[0]}x${roomOf(id)[1]}`).join(",");
   const [, setFrame] = useState(0);
   const raf = useRef<number | null>(null);
@@ -164,7 +177,7 @@ export function Graph({ live }: { live: boolean }) {
     id: x.id,
     parent: parentOf(x),
     links: (x.links ?? []).filter((l) => ids.has(l) && l !== x.id),
-    ...labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x)),
+    ...bodyOf(x),
     box: openIds.includes(x.id) ? roomOf(x.id) : undefined,
   }));
   useLayoutEffect(() => {
@@ -196,7 +209,7 @@ export function Graph({ live }: { live: boolean }) {
   }, [talk]);
   // A bubble's box: the bubble and its label under it, whole.
   const bubbleBox = (x: GraphNode, at: Pt): Box => {
-    const [h, top, bottom] = extent({ id: x.id, links: [], ...labelBox(x, titleOf(x, external), depthOf(nodes, x.id), rOf(x)) }, at);
+    const [h, top, bottom] = extent({ id: x.id, links: [], ...bodyOf(x) }, at);
     return [at[0] - h, top, at[0] + h, bottom];
   };
   const target: Cam = (() => {
@@ -463,6 +476,9 @@ export function Graph({ live }: { live: boolean }) {
               said={titleOf(x, external)}
               d={d}
               r={rOf(x)}
+              tile={tileOf(x)}
+              lang={lang}
+              glanceWord={x.glance ? glanceSaid(x.glance, lang, t) : ""}
               at={at(x.id)}
               open={openIds.includes(x.id)}
               focus={x.id === talk}
@@ -587,17 +603,26 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
 // and ring alone (and to a screen reader, its core's words); its title is
 // drawn as any other, someone else's words or not: the sign that it may
 // be is its page's (« extérieur »), and its core's words (⚠).
+// A node whose glance is a tile (graph/glance.ts): its core morphs from
+// the circle to a rounded rectangle that shows the figure, and back; its
+// orbit and satellite fade, its label slides under it; with less motion,
+// the two only cross-fade.
 function Bubble(p: {
-  x: GraphNode; title: string; said: string; d: number; r: number; at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number; waitsWord: string; standingWord: string;
+  x: GraphNode; title: string; said: string; d: number; r: number; tile?: [number, number]; lang: Lang; glanceWord: string;
+  at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number; waitsWord: string; standingWord: string;
   onGrab: (e: PtrEvent) => void; onOpen: (beside: boolean) => void;
 }) {
-  const { x, d, r } = p;
+  const { x, d, r, tile } = p;
   const yours = waits(x);
   const run = x.state === "running";
   const R = r + (d === 0 ? 12 : 6);
-  const opacity = p.open ? 0 : p.dim ? (d === 0 ? 0.42 : 0.28) : x.state === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
+  const still = useReducedMotion();
+  const shape = coreShape(tile, r, !!still);
+  const morph = shape.move;
+  // A tile is shown whole: a figure that deserves a look.
+  const opacity = p.open ? 0 : tile ? (p.dim ? 0.6 : 1) : p.dim ? (d === 0 ? 0.42 : 0.28) : x.state === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
-  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.state, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.unasked && "unasked"]
+  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.state, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.unasked && "unasked", tile && "tiled"]
     .filter(Boolean)
     .join(" ");
   return (
@@ -613,33 +638,62 @@ function Bubble(p: {
       {/* A permanent subject: a small satellite orbits it, slowly (still
           when the user asks for less motion). */}
       {x.lifetime === "standing" && (
-        <span className="gr-sat" style={{ width: (R + 3) * 2, height: (R + 3) * 2 }} aria-hidden="true">
+        <motion.span className="gr-sat" style={{ width: (R + 3) * 2, height: (R + 3) * 2 }} initial={false} animate={{ opacity: tile ? 0 : 1 }} transition={{ duration: 0.3 }} aria-hidden="true">
           <i />
-        </span>
+        </motion.span>
       )}
-      <svg className="gr-ring" width={ring * 2 + 16} height={ring * 2 + 16} viewBox={`${-ring - 8} ${-ring - 8} ${ring * 2 + 16} ${ring * 2 + 16}`} aria-hidden="true">
+      <motion.svg
+        className="gr-ring"
+        width={ring * 2 + 16}
+        height={ring * 2 + 16}
+        viewBox={`${-ring - 8} ${-ring - 8} ${ring * 2 + 16} ${ring * 2 + 16}`}
+        initial={false}
+        animate={{ opacity: tile ? 0 : 1 }}
+        transition={{ duration: 0.3 }}
+        aria-hidden="true"
+      >
         {d === 0 && <circle r={R + 7} className="gr-orbit" />}
         {run && <circle r={R} className="gr-ring-run" />}
         {!run && yours && <circle r={R} className="gr-ring-yours" />}
-      </svg>
-      <button
+      </motion.svg>
+      {tile && <span className="gl-ping" style={{ width: tile[0], height: tile[1] }} aria-hidden="true" />}
+      <motion.button
         type="button"
-        className="gr-core"
-        style={{ width: r * 2, height: r * 2 }}
+        className={`gr-core${tile ? " tile" : ""}`}
+        initial={false}
+        animate={shape.to}
+        transition={morph}
         onPointerDown={p.onGrab}
         onClick={(e) => p.onOpen(e.metaKey || e.ctrlKey || e.shiftKey)}
         title={x.lifetime === "standing" ? p.standingWord : undefined}
-        aria-label={[x.line && run ? `${p.said} : ${x.line}` : p.said, yours && p.waitsWord].filter(Boolean).join(", ")}
+        aria-label={[x.line && run ? `${p.said} : ${x.line}` : p.said, tile && p.glanceWord, yours && p.waitsWord].filter(Boolean).join(", ")}
       >
-        {d === 0 ? <span className="gr-code">{codeOf(p.title)}</span> : x.state === "done" ? <span className="gr-glyph">✓</span> : null}
-      </button>
-      <span className="gr-label" style={{ marginTop: R + (d === 0 ? 14 : 8) }}>
+        <AnimatePresence initial={false}>
+          {tile && x.glance ? (
+            <motion.span key="tile" className="gl-in" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: still ? 0 : 0.12, duration: 0.25 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>
+              <TileFace g={x.glance} lang={p.lang} />
+            </motion.span>
+          ) : (
+            <motion.span key="code" className="gl-in" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: still ? 0 : 0.15, duration: 0.25 } }} exit={{ opacity: 0, transition: { duration: 0.1 } }}>
+              {d === 0 ? <span className="gr-code">{codeOf(p.title)}</span> : x.state === "done" ? <span className="gr-glyph">✓</span> : null}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </motion.button>
+      <motion.span className="gr-label" initial={false} animate={{ marginTop: tile ? tile[1] / 2 + 10 : R + (d === 0 ? 14 : 8) }} transition={morph}>
         <b>
           {p.title}
           {x.unasked && <UnaskedMark />}
         </b>
         {x.line && run && !p.dim && <em className="runs">{x.line}</em>}
-      </span>
+      </motion.span>
     </motion.div>
   );
+}
+
+// glanceSaid is a glance's words for a screen reader: its label and its
+// variation, and that its label may be someone else's words.
+function glanceSaid(g: NonNullable<GraphNode["glance"]>, lang: Lang, t: (key: string, ...args: (string | number)[]) => string): string {
+  const { up, text } = variation(g, lang);
+  return [t(up ? "espace.glance.up" : "espace.glance.down", g.label, text), g.labelExternal && `⚠ ${t("espace.glance.external")}`].filter(Boolean).join(", ");
 }

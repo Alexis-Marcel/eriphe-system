@@ -86,6 +86,9 @@ type Source struct {
 	// Attention: while it lists items, its node waits for the user (its
 	// bubble says so), as for a card; empty, the node rests.
 	Attention bool `json:"attention,omitempty"`
+	// Glance: a figure its value holds, that its node shows at a glance
+	// when it moved past a threshold (glance.go); one per node.
+	Glance *Glance `json:"glance,omitempty"`
 }
 
 // Action is what the user may run on the items of a source they pick in
@@ -617,6 +620,8 @@ func (s Source) check(name string) string {
 		return "source " + name + ": attention needs items: the node waits while there are some"
 	case s.Items != nil && s.Items.Open != nil && (s.Items.Open.ID == "" || !toolNameOK(s.Items.Open.Tool)):
 		return "source " + name + ": items' open is {\"tool\": \"<server>/<tool>\", \"id\": \"<its parameter that takes an item's id>\"}"
+	case s.Glance != nil:
+		return s.Glance.check(name)
 	}
 	return ""
 }

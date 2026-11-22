@@ -283,6 +283,29 @@ func TestWorkspaceStreamOrb(t *testing.T) {
 // A card is the orb's only when raised in answer to the user: shown with
 // an answer of theirs, raised in a turn that answers them, or a call of
 // the brain's in such a turn, whatever message of code's then showed it.
+// A message of the user's sent while a turn runs waits for the next one:
+// the answer then is the next turn's alone, not the words written meanwhile
+// in reply to the message before it (waiting.spec.ts).
+func TestOrbAnswerToTheLastMessage(t *testing.T) {
+	tw := newTestWeb(t)
+	c, st := tw.c, tw.c.store
+	first, _ := st.addMessage(roleUser, "Prends ton temps.", true)
+	c.turn.start(int(first), int(first), 0)
+	waits, _ := st.addMessage(roleUser, "Et pour le budget ?", false)
+	hello, _ := st.addMessage(roleBrain, "Me voilà.", true)
+	c.markAnswer(int(hello))
+	st.markDelivered(int(waits))
+	c.turn.start(int(waits), int(waits), 0)
+	if x, _ := tw.w.orbFor("", true); x.Answer != nil {
+		t.Fatalf("the earlier answer taken for the reply to the message that waited: %+v", x.Answer)
+	}
+	ok, _ := st.addMessage(roleBrain, "D'accord.", true)
+	c.markAnswer(int(ok))
+	if x, _ := tw.w.orbFor("", false); x.Answer == nil || x.Answer.Text != "D'accord." || x.Answer.Seq != int(ok) {
+		t.Fatalf("the reply to the message that waited: %+v", x.Answer)
+	}
+}
+
 func TestOrbCardAsked(t *testing.T) {
 	tw := newTestWeb(t)
 	c := tw.c
@@ -293,7 +316,7 @@ func TestOrbCardAsked(t *testing.T) {
 	if !c.cardAsked(convoCard{Ref: "view:2"}, true) {
 		t.Error("a card raised in the turn that answers the user is not the orb's")
 	}
-	c.store.set(answerKey(9), "1")
+	c.store.set(answerKey(9), "8")
 	if !c.cardAsked(brief, false) {
 		t.Error("a card shown with the answer is not the orb's")
 	}

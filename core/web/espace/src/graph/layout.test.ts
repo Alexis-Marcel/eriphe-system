@@ -693,6 +693,30 @@ describe("the living graph", () => {
     });
   });
 
+  // A bubble turned into its glance's tile (graph/glance.ts): its body is
+  // the tile's rectangle, its neighbours step aside, and back.
+  it("gives a tile its rectangle, the others stepping aside, and back", () => {
+    const x = node("PRO", "Prod GetOut");
+    const [h, top, bottom] = extent({ ...x, r: 74, tile: [148, 60] }, [0, 0]);
+    expect([h, top, bottom]).toEqual([Math.max(74, x.lw / 2) + 10, -38, 40 + x.lh]);
+    for (const nodes of [small(), owner()]) {
+      const sim = laid(nodes);
+      const tiled = nodes.map((n) => (n.id === "PRO" || n.id === "MES" || n.id === "FAI" ? { ...n, r: 74, tile: [148, 60] as Pt } : n));
+      sim.sync(tiled);
+      sim.settle();
+      expect(sim.asleep()).toBe(true);
+      expect(overlaps(sim, tiled)).toEqual([]);
+      // its page opens beside its tiled neighbours, and closes
+      const opened = tiled.map((n) => (n.id === "MAJ" ? { ...n, box: [620, 400] as Pt } : n));
+      sim.sync(opened);
+      sim.settle();
+      expect(overlaps(sim, opened)).toEqual([]);
+      sim.sync(nodes);
+      sim.settle();
+      expect(overlaps(sim, nodes)).toEqual([]);
+    }
+  });
+
   it("scrolls at the edge after a wait, speeding up gently", () => {
     expect(edgePush(500, 0, 1000)).toBe(0);
     expect(edgePush(0, 0, 1000)).toBe(-1);

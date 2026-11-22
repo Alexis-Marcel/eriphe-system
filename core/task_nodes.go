@@ -491,10 +491,27 @@ func (c *core) nodeGuard(n *nodefile.Node, names []string, tainted bool, sourceO
 		}
 		outside[name] = c.untrustedSources(b)
 	}
+	if glances := nodeGlances(n); len(glances) > 1 {
+		problems = append(problems, fmt.Sprintf("a node shows one glance, not %d (%s): keep the one the user asked to watch", len(glances), strings.Join(glances, ", ")))
+	}
 	if len(problems) > 0 {
 		return nil, errors.New(strings.Join(problems, "; "))
 	}
 	return outside, nil
+}
+
+// nodeGlances are the sources of a node that declare a glance, as
+// block/source (node_glance.go).
+func nodeGlances(n *nodefile.Node) []string {
+	var out []string
+	for _, b := range n.Blocks() {
+		for _, name := range slices.Sorted(maps.Keys(b.Sources)) {
+			if b.Sources[name].Glance != nil {
+				out = append(out, b.Name+"/"+name)
+			}
+		}
+	}
+	return out
 }
 
 // lentTo is nodeGuard's check for a task with grant.

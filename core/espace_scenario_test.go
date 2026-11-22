@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -61,6 +63,7 @@ func TestEspaceScenario(t *testing.T) {
 	mux.HandleFunc("POST /e2e/courrier", sc.handleCourrier)
 	mux.HandleFunc("POST /e2e/proposals", sc.handleProposals)
 	mux.HandleFunc("POST /e2e/catalog", sc.handleCatalog)
+	mux.HandleFunc("POST /e2e/conso", sc.handleConso)
 	mux.Handle("/", sc.web.w.routes())
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -223,6 +226,7 @@ type scenarioTools struct {
 	trashed []string   // trash: "<account>:<ids>" of each call (view-bilan.spec.ts)
 	replied []string   // repondre: the id of each call (view-bilan.spec.ts)
 	purged  []string   // purger: the ids it deleted (view-refresh.spec.ts)
+	kw      float64    // conso: the house's consumption (view-glance.spec.ts)
 	// veille: the news watch's server, whose tool changes after it was
 	// added (tools.spec.ts).
 	veille *mcp.Server
@@ -315,6 +319,12 @@ func (f *scenarioTools) server(name string) *mcp.Server {
 				defer f.mu.Unlock()
 				f.lit = append(f.lit, in.Piece)
 				return nil, map[string]any{"ok": true, "piece": in.Piece}, nil
+			})
+		mcp.AddTool(s, &mcp.Tool{Name: "conso", Description: "La consommation de la maison, en kW", Annotations: read},
+			func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, map[string]any, error) {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				return nil, map[string]any{"kw": cmp.Or(f.kw, 2)}, nil
 			})
 	case "agenda":
 		mcp.AddTool(s, &mcp.Tool{Name: "aujourdhui", Description: "Les rendez-vous du jour", Annotations: read},
@@ -901,6 +911,15 @@ func (sc *scenario) script(b *brainPlay, said, node string) string {
 		return "Je les mets à la corbeille dès que tu dis oui."
 	case strings.Contains(said, "archiver"):
 		return "C'est toi qui archives : « Archiver », en haut de sa page."
+	case strings.Contains(said, "Garde un œil sur la consommation"):
+		// A glance on the figure the user asked to watch, on a node of its
+		// own, on the side (view-glance.spec.ts).
+		out := b.self("node_open", map[string]any{"title": "Énergie maison", "aside": true, "body": "La consommation de la maison.\n\n```eriphe:block conso\n" +
+			`{"components": [{"id": "root", "component": "Metric", "label": "Consommation (kW)", "value": {"@path": "/conso/kw"}}], "sources": {"conso": {"tool": "maison/conso", "glance": {"label": "Conso", "path": "kw", "threshold": 10}}}}` + "\n```\n"})
+		if id, _ := out["id"].(string); id != "" {
+			keep("conso", id)
+		}
+		return "Je garde un œil sur la consommation."
 	case strings.Contains(said, "Supprime les deux promos"):
 		// From the conversation, a call the user allowed for good: the view
 		// that lists the mailbox reads it again by itself
@@ -1376,6 +1395,29 @@ func (sc *scenario) handlePurge(rw http.ResponseWriter, r *http.Request) {
 	c.readNode(sc.ctx, id, nil, time.Now())
 	c.showNode(id, byBrain, false)
 	writeJSON(rw, http.StatusOK, map[string]string{"id": id})
+}
+
+// handleConso is POST /e2e/conso?kw=…: the house's consumption is now kw,
+// and the node that watches it reads it again (view-glance.spec.ts), as its
+// period or its server's change would.
+func (sc *scenario) handleConso(rw http.ResponseWriter, r *http.Request) {
+	kw, err := strconv.ParseFloat(r.URL.Query().Get("kw"), 64)
+	if err != nil {
+		http.Error(rw, "kw", http.StatusBadRequest)
+		return
+	}
+	sc.tools.mu.Lock()
+	sc.tools.kw = kw
+	sc.tools.mu.Unlock()
+	sc.mu.Lock()
+	id := sc.nodes["conso"]
+	sc.mu.Unlock()
+	if id == "" {
+		http.Error(rw, "no glance yet", http.StatusConflict)
+		return
+	}
+	sc.c.readNode(sc.ctx, id, []string{"conso"}, time.Now()) // named: read now, due or not
+	writeJSON(rw, http.StatusOK, map[string]any{"id": id, "glance": sc.c.nodeGlance(id)})
 }
 
 // handleCourrier is POST /e2e/courrier: a view of the mailbox, a plain
