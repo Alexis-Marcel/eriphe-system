@@ -68,11 +68,15 @@ function Theme() {
 
 // Archives lists what the user archived, the latest first, each to reopen:
 // it comes back to the graph with what was archived with it, and opens.
+// The list is read once, then only when it may have changed: a node left
+// the graph (archived), one was reopened, the panel opens.
 function Archives() {
   const { t, lang } = useWords();
   const [open, setOpen] = useState(false);
   const [list, setList] = useState<ArchivedNode[] | null>(null);
-  const size = useGraph((s) => Object.keys(s.nodes).length); // an archive or a reopening changes it
+  const [stale, setStale] = useState(0);
+  const again = () => setStale((n) => n + 1);
+  useEffect(() => store.subscribe((s, before) => s.nodes !== before.nodes && Object.keys(before.nodes).some((id) => !s.nodes[id]) && again()), []);
   useEffect(() => {
     let on = true;
     archives().then(
@@ -82,10 +86,15 @@ function Archives() {
     return () => {
       on = false;
     };
-  }, [open, size]);
+  }, [stale]);
+  const toggle = () => {
+    if (!open) again();
+    setOpen(!open);
+  };
   const back = (id: string) =>
     void reopen(id).then((ok) => {
       if (!ok) return;
+      again();
       setOpen(false);
       const show = () => store.getState().nodes[id] && (step(store, openPage, id, true), true);
       if (show()) return;
@@ -96,7 +105,7 @@ function Archives() {
   const external = t("espace.external");
   return (
     <div className="hud-archives">
-      <button type="button" className={`hud-icon${open ? " on" : ""}`} aria-expanded={open} aria-label={label} title={label} onClick={() => setOpen((o) => !o)}>
+      <button type="button" className={`hud-icon${open ? " on" : ""}`} aria-expanded={open} aria-label={label} title={label} onClick={toggle}>
         <Glyph>
           <path d="M3.5 5h17v4h-17z" />
           <path d="M5 9v10h14V9" />

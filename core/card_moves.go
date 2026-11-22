@@ -281,8 +281,9 @@ func (c *core) userZone() *time.Location {
 const proposalFeedMax = 64
 
 type proposalMove struct {
-	seq int64
-	ref string
+	seq   int64
+	ref   string
+	nodes []string // its card's nodes
 }
 
 // proposalFeed keeps the refs of the proposals that moved lately, and
@@ -297,14 +298,15 @@ type proposalFeed struct {
 // proposalMoved notes that a proposal's card was made or changed state,
 // and tells the graph of the nodes it is linked to (node_status.go).
 func (c *core) proposalMoved(ref string) {
-	for _, id := range c.cardNodes(ref) {
+	nodes := c.cardNodes(ref)
+	for _, id := range nodes {
 		c.nodeMoved(id, false)
 	}
 	f := &c.props
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.seq++
-	f.moves = append(f.moves, proposalMove{f.seq, ref})
+	f.moves = append(f.moves, proposalMove{f.seq, ref, nodes})
 	if len(f.moves) > proposalFeedMax {
 		f.moves = f.moves[len(f.moves)-proposalFeedMax:]
 	}
@@ -315,10 +317,13 @@ func (c *core) proposalMoved(ref string) {
 }
 
 // proposalsEvent is the data of the stream's "proposals" event: the refs
-// of the proposals that moved, or all when the stream fell behind.
+// of the proposals that moved, or all when the stream fell behind; nodes,
+// the nodes their cards are linked to, whose pages read them again (a new
+// card is in no page yet).
 type proposalsEvent struct {
-	Refs []string `json:"refs"`
-	All  bool     `json:"all,omitempty"`
+	Refs  []string `json:"refs"`
+	Nodes []string `json:"nodes,omitempty"`
+	All   bool     `json:"all,omitempty"`
 }
 
 // watchProposals is what moved after seq, the last seq, and a channel
@@ -335,8 +340,16 @@ func (c *core) watchProposals(after int64) (proposalsEvent, int64, <-chan struct
 		ev.All = true
 	}
 	for _, m := range f.moves {
-		if m.seq > after && !slices.Contains(ev.Refs, m.ref) {
+		if m.seq <= after {
+			continue
+		}
+		if !slices.Contains(ev.Refs, m.ref) {
 			ev.Refs = append(ev.Refs, m.ref)
+		}
+		for _, id := range m.nodes {
+			if !slices.Contains(ev.Nodes, id) {
+				ev.Nodes = append(ev.Nodes, id)
+			}
 		}
 	}
 	return ev, f.seq, f.changed

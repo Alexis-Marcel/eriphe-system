@@ -1,5 +1,4 @@
 import type { Lang } from "../i18n";
-import strings from "../strings.json";
 
 // The data layer's requests: the one place, with stream.ts, that talks to
 // eriphe-core. The page reads
@@ -25,9 +24,11 @@ import strings from "../strings.json";
 
 // The workspace as the user left it (espaceView, web_gestures.go): the
 // pages open, the one the bar talked to, the last of Eriphe's shows
-// taken, the theme ("" follows the system).
+// taken, the theme ("" follows the system), what the user closed of the
+// orb's (orb/model.ts: Closed).
 export type Theme = "" | "light" | "dark";
-export type View = { open: string[]; talk?: string; shown?: number; theme?: Theme };
+export type OrbClosed = { answer: number; seen: number; wait: number; failed: number };
+export type View = { open: string[]; talk?: string; shown?: number; theme?: Theme; orb?: OrbClosed };
 
 export type Boot = {
   lang: Lang;
@@ -45,8 +46,6 @@ const json = { Accept: "application/json" };
 
 let csrf = ""; // from the boot
 
-export const csrfToken = () => csrf;
-
 // This page's tab id: it tells eriphe-core whether it is in front of the
 // user (presence.ts), and gets the notifications routed to it.
 export const tab = Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -63,21 +62,32 @@ export function signedOut(r: Response): Response {
   return r;
 }
 
-// boot reads what the app needs from eriphe-core. With no boot to read (the
-// dev server), the app runs on its made-up graph (sample.ts); a boot that
-// cannot be read fails: the shell then offers the conversation (main.tsx),
-// never made-up data in place of the user's.
-export async function boot(url: string | undefined): Promise<Boot> {
-  if (url) {
-    const r = signedOut(await fetch(url, { credentials: "same-origin", headers: json }));
-    if (!r.ok) throw new Error(`${url}: ${r.status}`);
-    const b: Boot = { ...(await r.json()), live: true };
-    csrf = b.csrf;
-    return b;
-  }
-  const asked = new URLSearchParams(location.search).get("lang");
-  const lang: Lang = asked === "en" || (!asked && !navigator.language.startsWith("fr")) ? "en" : "fr";
-  return { lang, name: "Eriphe", csrf: "", strings: strings[lang], live: false };
+// boot reads what the app needs from eriphe-core; a boot that cannot be
+// read fails: the shell then offers the conversation (main.tsx), never
+// made-up data in place of the user's. The dev server has no boot to read:
+// its made-up workspace (dev.tsx) gives one.
+export async function boot(url: string): Promise<Boot> {
+  const r = signedOut(await fetch(url, { credentials: "same-origin", headers: json }));
+  if (!r.ok) throw new Error(`${url}: ${r.status}`);
+  const b: Boot = { ...(await r.json()), live: true };
+  csrf = b.csrf;
+  return b;
+}
+
+// Reads is how a page reads a node: from eriphe-core, or, on the dev
+// server, from its made-up core (dev.tsx, setReads). The one seam between
+// the two: nothing else reads a node another way.
+export type Reads = {
+  page(id: string, version: number): Promise<NodePage | null>;
+  trace(id: string): Promise<TraceEntry[]>;
+  file(id: string, version: number): Promise<NodeFile | null>;
+  open(id: string, block: string, source: string, item: string): Promise<Opened>;
+};
+
+let reads: Reads | null = null;
+
+export function setReads(r: Reads | null): void {
+  reads = r;
 }
 
 async function getJSON<T>(path: string): Promise<T | null> {
@@ -227,6 +237,7 @@ export type Opened = {
 // openItem reads an item of a block's source in full, the user's gesture
 // (never a yes).
 export async function openItem(id: string, block: string, source: string, item: string): Promise<Opened> {
+  if (reads) return reads.open(id, block, source, item);
   const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, { block, source, item });
   if (r.status === 200 && r.data) return r.data;
   return { error: r.data?.error ?? String(r.status) };
@@ -238,14 +249,17 @@ export type TraceEntry = { at: string; author: string; text: string };
 export type NodeFile = { md: string; body: string; version: number; hash: string; last: number };
 
 export function nodePage(id: string, version = 0): Promise<NodePage | null> {
+  if (reads) return reads.page(id, version);
   return getJSON<NodePage>(`${nodePath(id)}${version ? `?version=${version}` : ""}`);
 }
 
 export async function nodeTrace(id: string): Promise<TraceEntry[]> {
+  if (reads) return reads.trace(id);
   return (await getJSON<{ entries: TraceEntry[] }>(`${nodePath(id)}/trace`))?.entries ?? [];
 }
 
 export function nodeFile(id: string, version = 0): Promise<NodeFile | null> {
+  if (reads) return reads.file(id, version);
   return getJSON<NodeFile>(`${nodePath(id)}/md${version ? `?version=${version}` : ""}`);
 }
 
@@ -414,5 +428,6 @@ export async function answerProposal(a: Answer): Promise<boolean> {
   return answerCard(p.card, a.yes, a.only, a.left);
 }
 
-// What moved: the refs of the proposals made or decided, or all of them.
-export type Moved = { refs: string[]; all?: boolean };
+// What moved: the refs of the proposals made or decided, or all of them;
+// nodes, the nodes their cards are linked to (card_moves.go).
+export type Moved = { refs: string[]; nodes?: string[]; all?: boolean };

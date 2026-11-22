@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
+import { rest } from "./rest";
 
 // A view as a bilan (docs/node-format.md), against the test core of
 // TestEspaceScenario: the bilan on top, drawn larger; one block that reads
@@ -32,10 +33,10 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect(lead).toHaveText("1 réponse attendue : Sam, avant vendredi. 1 hameçonnage dans le lot à jeter.");
   const size = (n: number) => pg.locator(".pg-doc > .a2-markdown:first-child > p").nth(n).evaluate((p) => parseFloat(getComputedStyle(p).fontSize));
   expect(await size(0)).toBeGreaterThan(await size(1));
-  // Someone else's words: one sign in the head, the block's quiet edge.
-  await expect(pg.locator(".pg-title .pg-badge.warn")).toHaveCount(1);
+  // Someone else's words: one sign in the head (its ⚠, no word), the block's quiet edge.
+  await expect(pg.locator(".pg-title .ext-mark")).toHaveCount(1);
   await expect(pg.locator(".a2-block.ext .a2-block-mark")).toHaveCount(1);
-  await expect(pg.getByText("extérieur", { exact: true })).toHaveCount(1);
+  await expect(pg.getByText("extérieur", { exact: true })).toHaveCount(0);
 
   // « À traiter »: each row what Eriphe proposes; Sam's with its one Oui.
   const todo = pg.locator(".a2-openrow").filter({ hasText: "Répondre à Sam" });
@@ -113,7 +114,7 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect.poll(async () => (await box.boundingBox())!.width).toBeGreaterThan(w0 + 200);
   const text = await pg.locator(".pg-doc > .a2-markdown").first().boundingBox();
   expect(text!.width).toBeLessThanOrEqual(761);
-  await page.waitForTimeout(600); // the camera frames it
+  await rest(page); // the camera frames it
   // No bubble rests behind the bar: the page keeps the bar's room clear.
   await expect
     .poll(async () =>
@@ -140,7 +141,7 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   // Two steps of 40, in the graph's units: on screen it depends on how
   // the camera frames the wider page then.
   await expect.poll(own).toBe(own0 + 80);
-  await page.waitForTimeout(600);
+  await rest(page);
   await shots(page, "8-resized");
   // Closed.
   await pg.locator(".pg-x").click();
@@ -154,15 +155,7 @@ async function shots(page: Page, name: string) {
   const dir = process.env.SHOTS;
   if (!dir) return;
   // The page come to rest: opened, the camera framing it.
-  let last = "";
-  for (let i = 0; i < 60; i++) {
-    const b = await page.locator(".gr-page").first().boundingBox();
-    const now = JSON.stringify(b && [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]);
-    if (b && now === last) break;
-    last = now;
-    await page.waitForTimeout(200);
-  }
-  await page.waitForTimeout(300);
+  await rest(page);
   for (const theme of ["light", "dark"]) {
     await page.evaluate((th) => (document.documentElement.dataset.theme = th), theme);
     await page.screenshot({ path: `${dir}/${name}-${theme}.png` });

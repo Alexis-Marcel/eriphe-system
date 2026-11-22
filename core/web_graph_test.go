@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"net/http/cookiejar"
 	"os"
@@ -43,6 +44,31 @@ func TestEspaceFontsLicense(t *testing.T) {
 	fonts, _ := filepath.Glob("web/espace/src/fonts/*.woff2")
 	if len(fonts) != 2 {
 		t.Errorf("fonts: %v", fonts)
+	}
+}
+
+// The built app carries none of the dev server's made-up workspace (its
+// samples and gallery, web/espace/src/dev.tsx), and its one chunk (the
+// .md tab's editor) imports nothing of the entry's: loaded without the
+// entry's ?v=, it would load a second app.
+func TestEspaceBundle(t *testing.T) {
+	entry, err := fs.ReadFile(webFS, "web/static/espace/espace.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One line each of sample.ts, sampleviews.ts, fixtures.ts, gallery.json.
+	for _, s := range []string{"Virement urgent à valider", "Temps de réponse p95", "Relire le devis de Sam", "Le train de 7 h 12"} {
+		if bytes.Contains(entry, []byte(s)) {
+			t.Errorf("espace.js holds a sample's %q", s)
+		}
+	}
+	chunks, _ := fs.Glob(webFS, "web/static/espace/espace-*.js")
+	if len(chunks) != 1 || !bytes.Contains(entry, []byte(strings.TrimPrefix(chunks[0], "web/static/espace/"))) {
+		t.Fatalf("chunks: %v", chunks)
+	}
+	raw, _ := fs.ReadFile(webFS, chunks[0])
+	if regexp.MustCompile(`(from|import\s*\(?)\s*["'\x60]\./`).Match(raw) {
+		t.Errorf("%s imports a module", chunks[0])
 	}
 }
 

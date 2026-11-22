@@ -5,8 +5,9 @@ import { closePage, depthOf, openPage, step, store, subtree, talkTo, useGraph } 
 import { useWords, type Lang } from "../i18n";
 import { Orb } from "../orb/Orb";
 import { Page } from "../page/Page";
+import { onReads, readsUnderWay } from "../page/usePage";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, framePages, pageMax, type Box, type Cam } from "./camera";
-import { edgePush, edgeStep, extent, Sim, type Pos, type Pt } from "./layout";
+import { edgePush, edgeStep, extent, Sim, type LNode, type Pos, type Pt } from "./layout";
 import { coreShape, pickTiles, TILE, variation } from "./glance";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
 import { TileFace } from "./Tile";
@@ -24,6 +25,10 @@ import { UnaskedMark } from "./Title";
 // for the user says it on its bubble by its halo alone, no word (the word
 // is for screen readers only); out of view, a small mark at the screen's
 // edge points to it.
+// React draws the graph when what it shows changes (a node, a page, a
+// drag begun); each frame of the simulation only moves what is drawn:
+// the bubbles, the pages and the links are placed straight on their
+// elements (place), the orb and the edge marks told (onFrame).
 
 const ease = [0.2, 0.7, 0.2, 1] as const;
 const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;
@@ -31,6 +36,15 @@ const PAGE_W = 700, PAGE_W_MANY = 620, PAGE_H = 520, PAGE_MAX = 640;
 // sim is the graph's simulation, one for the page's life: it outlives the
 // graph's switch to the phone's list and back.
 const sim = new Sim();
+const where = (id: string) => sim.at(id);
+
+// What moves with the simulation's frames, told after each (the orb, the
+// edge marks).
+const framed = new Set<() => void>();
+const onFrame = (f: () => void) => {
+  framed.add(f);
+  return () => void framed.delete(f);
+};
 
 // sizes: the pages the user gave a size, like windows: enlarged ("big",
 // its size worked out from the screen's), or dragged by the corner (its
@@ -43,6 +57,9 @@ const MIN_W = 420, MIN_H = 240;
 type Sizing = { id: string; sx: number; sy: number; w0: number; h0: number; c0: Pt; moved: boolean };
 
 type Grab = { id: string; sx: number; sy: number; px: number; py: number; ox: number; oy: number; moved: boolean; raw?: Pt; edgeSince?: number };
+
+// A link drawn: a bubble's to its parent (line), or a text link (rel).
+type Link = { key: string; a: string; b: string; rel: boolean };
 
 export function Graph({ live }: { live: boolean }) {
   const { t, lang } = useWords();
@@ -63,14 +80,15 @@ export function Graph({ live }: { live: boolean }) {
   const list = useMemo(() => Object.values(nodes).sort((a, b) => a.created.localeCompare(b.created) || a.id.localeCompare(b.id)), [nodes]);
   const ids = useMemo(() => new Set(list.map((x) => x.id)), [list]);
   const parentOf = (x: GraphNode) => (x.parent && ids.has(x.parent) ? x.parent : undefined);
-  const openIds = open.filter((id) => ids.has(id));
-  const lit = useMemo(() => new Set(openIds.flatMap((id) => subtree(nodes, id))), [openIds.join(","), nodes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const openKey = open.filter((id) => ids.has(id)).join(",");
+  const openIds = useMemo(() => (openKey ? openKey.split(",") : []), [openKey]);
+  const lit = useMemo(() => new Set(openIds.flatMap((id) => subtree(nodes, id))), [openIds, nodes]);
   const now = Date.now();
   const rOf = (x: GraphNode) => radiusOf(x, nodes, now);
   // The nodes drawn as tiles (graph/glance.ts): a tile's body is its
   // rounded rectangle, for the layout and the camera alike.
   const tilesWas = useRef<string[]>([]);
-  const tiles = useMemo(() => pickTiles(list, openIds, tilesWas.current), [list, openIds.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tiles = useMemo(() => pickTiles(list, openIds, tilesWas.current), [list, openIds]);
   useEffect(() => void (tilesWas.current = tiles), [tiles]);
   const tileOf = (x: GraphNode) => (tiles.includes(x.id) ? TILE : undefined);
   const bodyOf = (x: GraphNode) => {
@@ -90,7 +108,7 @@ export function Graph({ live }: { live: boolean }) {
   const pageW = openIds.length > 1 ? PAGE_W_MANY : PAGE_W;
   const maxH = pageMax(band, PAGE_MAX);
   const big = bigBox(band, pageW);
-  const [, setSized] = useState(0);
+  const [sized, setSized] = useState(0);
   // A page's box: enlarged, most of the screen; given a size, that size
   // within the screen's; else its width and its content's height.
   const boxOf = (id: string): Pt => {
@@ -114,7 +132,10 @@ export function Graph({ live }: { live: boolean }) {
       f = (el) => {
         ro?.disconnect();
         ro = null;
+        if (el) els.current.pages.set(id, el);
+        else els.current.pages.delete(id);
         if (!el) return;
+        place();
         const read = () => {
           const h = Math.ceil(Math.max(240, el.offsetHeight) / 20) * 20;
           setPageH((c) => (c[id] === h ? c : { ...c, [id]: h }));
@@ -129,37 +150,119 @@ export function Graph({ live }: { live: boolean }) {
   };
 
   // The layout: a living force graph (layout.ts), one simulation for the
-  // page's life (sim, below), told the graph and what is open whenever
-  // they change, ticked a frame at a time while something moves. Nothing
-  // of it is kept: a reload lays the graph out afresh.
+  // page's life (sim, above), told the graph and what is open whenever
+  // they change (layoutKey), ticked a frame at a time while something
+  // moves. Nothing of it is kept: a reload lays the graph out afresh.
   const [held, setHeld] = useState<string | null>(null);
-  const layoutKey =
-    list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.status}:${tileOf(x) ? "tile" : ""}`).join(",") +
-    "|" + openIds.map((id) => `${id}:${roomOf(id)[0]}x${roomOf(id)[1]}`).join(",");
-  const [, setFrame] = useState(0);
+  const layoutKey = useMemo(
+    () =>
+      list.map((x) => `${x.id}:${parentOf(x) ?? ""}:${(x.links ?? []).join("+")}:${Math.round(rOf(x))}:${titleOf(x, external).length}:${x.status}:${tileOf(x) ? "tile" : ""}`).join(",") +
+      "|" +
+      openIds.map((id) => `${id}:${roomOf(id)[0]}x${roomOf(id)[1]}`).join(","),
+    [list, openIds, tiles, pageH, sized, size.w, size.h, foot, external], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  // The bodies as the simulation has them, the same while the layout is.
+  const bodies: LNode[] = useMemo(
+    () =>
+      list.map((x) => ({
+        id: x.id,
+        parent: parentOf(x),
+        links: (x.links ?? []).filter((l) => ids.has(l) && l !== x.id),
+        ...bodyOf(x),
+        box: openIds.includes(x.id) ? roomOf(x.id) : undefined,
+      })),
+    [layoutKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const links: Link[] = useMemo(
+    () =>
+      list.flatMap((x) => {
+        const par = parentOf(x);
+        const out: Link[] = par ? [{ key: `p-${x.id}`, a: par, b: x.id, rel: false }] : [];
+        for (const l of x.links ?? []) if (ids.has(l)) out.push({ key: `l-${x.id}-${l}`, a: x.id, b: l, rel: true });
+        return out;
+      }),
+    [list, ids], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // What is drawn, by node: placed straight on its element at each frame.
+  const els = useRef({ nodes: new Map<string, HTMLElement>(), pages: new Map<string, HTMLElement>(), links: new Map<string, SVGElement>() });
+  const linksNow = useRef(links);
+  linksNow.current = links;
+  const place = () => {
+    const E = els.current;
+    const pos = sim.positions();
+    for (const [id, el] of E.nodes) {
+      const p = pos[id];
+      if (!p) continue;
+      el.style.left = `${p[0]}px`;
+      el.style.top = `${p[1]}px`;
+    }
+    for (const [id, el] of E.pages) {
+      const p = pos[id];
+      if (!p) continue;
+      el.style.left = `${p[0]}px`;
+      el.style.top = `${p[1]}px`;
+    }
+    for (const l of linksNow.current) {
+      const el = E.links.get(l.key), a = pos[l.a], b = pos[l.b];
+      if (!el || !a || !b) continue;
+      const [x1, y1] = a, [x2, y2] = b;
+      if (l.rel) el.setAttribute("d", `M${x1},${y1} Q${(x1 + x2) / 2 - (y2 - y1) * 0.18},${(y1 + y2) / 2 + (x2 - x1) * 0.18} ${x2},${y2}`);
+      else {
+        el.setAttribute("x1", String(x1));
+        el.setAttribute("y1", String(y1));
+        el.setAttribute("x2", String(x2));
+        el.setAttribute("y2", String(y2));
+      }
+    }
+    for (const f of framed) f();
+  };
+  const regs = useRef(new Map<string, (el: Element | null) => void>());
+  const reg = (kind: "nodes" | "links", key: string) => {
+    const k = `${kind}:${key}`;
+    let f = regs.current.get(k);
+    if (!f) {
+      f = (el) => {
+        const m = els.current[kind] as Map<string, Element>;
+        if (el) m.set(key, el);
+        else m.delete(key);
+      };
+      regs.current.set(k, f);
+    }
+    return f;
+  };
+
   const raf = useRef<number | null>(null);
   // rest: where the bodies were when the graph last came to rest (or
   // what is open changed, and every few frames while it moves, nothing
   // held): the camera frames that, not each frame.
   const rest = useRef<Pos>({});
+  const [, setRested] = useState(0);
+  const rested = () => {
+    rest.current = sim.positions();
+    setRested((n) => n + 1);
+  };
   const frames = useRef(0);
   const reduced = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
   const wake = () => {
     if (reduced && !sim.heldId()) {
       sim.settle();
-      rest.current = sim.positions();
-      setFrame((n) => n + 1);
+      place();
+      rested();
+      markStill();
       return;
     }
     if (raf.current !== null) return;
     const loop = () => {
       if (!sim.asleep()) sim.tick();
       const still = sim.asleep();
-      if (still || (!sim.heldId() && ++frames.current % 15 === 0)) rest.current = sim.positions();
-      setFrame((n) => n + 1);
+      place();
+      if (still || (!sim.heldId() && ++frames.current % 15 === 0)) rested();
       raf.current = still ? null : requestAnimationFrame(loop);
+      markStill();
     };
     raf.current = requestAnimationFrame(loop);
+    markStill();
   };
   // Unmounted (the switch to the phone's list, a remount): the loop stops
   // and what was held is let go; mounted again, the next change wakes it.
@@ -174,27 +277,20 @@ export function Graph({ live }: { live: boolean }) {
   // A page opened goes beside the one the bar talked to before it.
   const talkWas = useRef(talk);
   useEffect(() => void (talkWas.current = talk), [talk]);
-  const bodies = list.map((x) => ({
-    id: x.id,
-    parent: parentOf(x),
-    links: (x.links ?? []).filter((l) => ids.has(l) && l !== x.id),
-    ...bodyOf(x),
-    box: openIds.includes(x.id) ? roomOf(x.id) : undefined,
-  }));
   useLayoutEffect(() => {
     sim.sync(bodies, talkWas.current);
     rest.current = sim.positions();
     wake();
-  }, [layoutKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const pos = sim.positions();
-  const at = (id: string): Pt => pos[id] ?? [0, 0];
+  }, [bodies]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Whatever React drew (a bubble come, a page opened) goes where the
+  // simulation has it, before the screen shows it.
+  useLayoutEffect(place);
 
   /* ---------- the camera ---------- */
   const camX = useSpring(size.w / 2, { stiffness: 70, damping: 20 });
   const camY = useSpring(size.h / 2, { stiffness: 70, damping: 20 });
   const camK = useSpring(0.9, { stiffness: 70, damping: 20 });
   const [manual, setManual] = useState(false);
-  const openKey = openIds.join(",");
   useEffect(() => setManual(false), [openKey, talk]);
   // The page in focus: the last one opened (Eriphe's show too), or the
   // one the user turns to; framed whole when the pages do not all fit.
@@ -235,24 +331,40 @@ export function Graph({ live }: { live: boolean }) {
     camK[go](target.k);
     camX[go](target.x);
     camY[go](target.y);
-  }, [manual, reduced, target.k, target.x, target.y, camK, camX, camY]);
+    markStill();
+  }, [manual, reduced, target.k, target.x, target.y, camK, camX, camY]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const vp = useRef<HTMLDivElement>(null);
-  // At rest: the graph asleep, nothing held, the camera still. Said on the
-  // viewport (data-still) for what must measure the graph once it settled
-  // (the browser tests), looked at again after each frame drawn (the
-  // camera told its target first, above) and when the camera starts or
-  // stops.
+  // The pages springing open or shut (their motion), by node.
+  const springing = useRef(new Set<string>());
+  // At rest: the graph asleep, nothing held, the camera still, no page
+  // springing open or read. Said on the viewport (data-still) for what
+  // must measure the graph once it settled (the browser tests), looked at
+  // again after each frame, when the camera starts or stops, a page's
+  // spring starts or ends, a page's read starts or ends.
   const markStill = () => {
-    vp.current?.toggleAttribute("data-still", sim.asleep() && !sim.heldId() && ![camX, camY, camK].some((v) => v.isAnimating()));
+    vp.current?.toggleAttribute("data-still", sim.asleep() && !sim.heldId() && ![camX, camY, camK].some((v) => v.isAnimating()) && springing.current.size === 0 && readsUnderWay() === 0);
   };
   useEffect(markStill);
+  useEffect(() => onReads(markStill), []); // eslint-disable-line react-hooks/exhaustive-deps
   useMotionValueEvent(camX, "animationStart", markStill);
   useMotionValueEvent(camY, "animationStart", markStill);
   useMotionValueEvent(camK, "animationStart", markStill);
   useMotionValueEvent(camX, "animationComplete", markStill);
   useMotionValueEvent(camY, "animationComplete", markStill);
   useMotionValueEvent(camK, "animationComplete", markStill);
+  // (One shutting is not waited for: it is gone.)
+  const openNow = useRef(openIds);
+  openNow.current = openIds;
+  const spring = (id: string, on: boolean) => {
+    if (on && openNow.current.includes(id)) springing.current.add(id);
+    else springing.current.delete(id);
+    markStill();
+  };
+  useEffect(() => {
+    for (const id of springing.current) if (!openIds.includes(id)) springing.current.delete(id);
+    markStill();
+  }, [openIds]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = vp.current;
     if (!el) return;
@@ -446,13 +558,17 @@ export function Graph({ live }: { live: boolean }) {
     setManual(false);
     step(store, openPage, id, beside);
   };
+  // The bubbles' gestures, the same functions for the page's life: a
+  // bubble is drawn again only when what it shows changes (memo).
+  const gestures = useRef({ grabNode, openNode });
+  gestures.current = { grabNode, openNode };
+  const [onGrab] = useState(() => (id: string, e: PtrEvent) => gestures.current.grabNode(id, e));
+  const [onOpen] = useState(() => (id: string, beside: boolean) => gestures.current.openNode(id, beside));
 
   return (
     <div
       className={`gr-viewport${held ? " holding" : ""}${resizing ? " resizing" : ""}`}
       ref={vp}
-      role="application"
-      aria-label={t("espace.graph")}
       onDoubleClick={(e) => !(e.target as HTMLElement).closest(".pg") && setManual(false)}
       onPointerDown={onDown}
       onPointerMove={onMove}
@@ -461,62 +577,48 @@ export function Graph({ live }: { live: boolean }) {
     >
       <motion.div className="gr-world" style={{ x: camX, y: camY, scale: camK }}>
         <svg className="gr-links" aria-hidden="true">
-          {list.map((x) => {
-            const out = [];
-            const par = parentOf(x);
-            if (par) {
-              const [x1, y1] = at(par), [x2, y2] = at(x.id);
-              const on = lit.has(x.id) && lit.has(par);
-              out.push(<line key={`p-${x.id}`} x1={x1} y1={y1} x2={x2} y2={y2} className={`gr-link${on ? " on" : ""}${openIds.length && !on ? " far" : ""}`} />);
-            }
-            for (const l of x.links ?? []) {
-              if (!ids.has(l)) continue;
-              const [x1, y1] = at(x.id), [x2, y2] = at(l);
-              const far = openIds.length > 0 && !(lit.has(x.id) || lit.has(l));
-              out.push(
-                <path
-                  key={`l-${x.id}-${l}`}
-                  d={`M${x1},${y1} Q${(x1 + x2) / 2 - (y2 - y1) * 0.18},${(y1 + y2) / 2 + (x2 - x1) * 0.18} ${x2},${y2}`}
-                  className={`gr-link rel${far ? " far" : ""}`}
-                />,
-              );
-            }
-            return out;
+          {links.map((l) => {
+            const on = !l.rel && lit.has(l.a) && lit.has(l.b);
+            const far = openIds.length > 0 && (l.rel ? !(lit.has(l.a) || lit.has(l.b)) : !on);
+            return l.rel ? (
+              <path key={l.key} ref={reg("links", l.key)} className={`gr-link rel${far ? " far" : ""}`} />
+            ) : (
+              <line key={l.key} ref={reg("links", l.key)} className={`gr-link${on ? " on" : ""}${far ? " far" : ""}`} />
+            );
           })}
         </svg>
 
-        {list.map((x) => {
-          const d = depthOf(nodes, x.id);
-          return (
+        {/* The bubbles: the graph as the keyboard and a screen reader
+            reach it (the pages are documents of their own, beside it). */}
+        <div role="application" aria-label={t("espace.graph")}>
+          {list.map((x) => (
             <Bubble
               key={x.id}
+              place={reg("nodes", x.id)}
               x={x}
               title={plainTitle(x, external)}
               said={titleOf(x, external)}
-              d={d}
+              d={depthOf(nodes, x.id)}
               r={rOf(x)}
               tile={tileOf(x)}
               lang={lang}
               glanceWord={x.glance ? glanceSaid(x.glance, lang, t) : ""}
-              at={at(x.id)}
               open={openIds.includes(x.id)}
-              focus={x.id === talk}
               dim={openIds.length > 0 && !lit.has(x.id)}
               held={held === x.id}
               light={0.3 + 0.7 * Math.min(1, weight(x, nodes, now) / 0.85)}
               waitsWord={t("espace.waits")}
-              standingWord={t("espace.standing.short")}
-              onGrab={(e) => grabNode(x.id, e)}
-              onOpen={(beside) => openNode(x.id, beside)}
+              standingWord={t("espace.standing")}
+              onGrab={onGrab}
+              onOpen={onOpen}
             />
-          );
-        })}
+          ))}
+        </div>
 
         <AnimatePresence>
           {openIds
-            .filter((id) => pos[id])
+            .filter((id) => sim.at(id))
             .map((id) => {
-              const [cx, cy] = at(id);
               const sized = sizes.has(id);
               const [bw, bh] = boxOf(id);
               return (
@@ -524,12 +626,14 @@ export function Graph({ live }: { live: boolean }) {
                   key={`page-${id}`}
                   className={`gr-page${sized ? " sized" : ""}${sizes.get(id) === "big" ? " big" : ""}${resizing === id ? " sizing" : ""}`}
                   data-page={id}
-                  style={{ left: cx, top: cy, width: bw, height: sized ? bh : undefined, maxHeight: sized ? bh : maxH, zIndex: held === id || resizing === id ? 5 : undefined }}
+                  style={{ width: bw, height: sized ? bh : undefined, maxHeight: sized ? bh : maxH, zIndex: held === id || resizing === id ? 5 : undefined }}
                   ref={sizer(id)}
                   initial={{ opacity: 0, scale: 0.2 }}
                   animate={{ opacity: held === id && resizing !== id ? 0.5 : 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.2 }}
                   transition={{ type: "spring", stiffness: 200, damping: 26 }}
+                  onAnimationStart={() => spring(id, true)}
+                  onAnimationComplete={() => spring(id, false)}
                 >
                   <StillPage
                     id={id}
@@ -552,10 +656,10 @@ export function Graph({ live }: { live: boolean }) {
       <Edges
         cam={[camX, camY, camK]}
         size={size}
-        marks={list.filter((x) => waits(x) && !openIds.includes(x.id) && pos[x.id]).map((x) => ({ id: x.id, title: titleOf(x, external), at: at(x.id) }))}
+        marks={list.filter((x) => waits(x) && !openIds.includes(x.id)).map((x) => ({ id: x.id, title: titleOf(x, external) }))}
         onOpen={(id) => openNode(id, false)}
       />
-      <Orb bodies={bodies} at={pos} cam={[camX, camY, camK]} onOpen={(id) => openNode(id, true)} />
+      <Orb bodies={bodies} at={where} onFrame={onFrame} cam={[camX, camY, camK]} onOpen={(id) => openNode(id, true)} />
     </div>
   );
 }
@@ -586,8 +690,9 @@ export function useFoot(): number {
 }
 
 // Edges marks the nodes that wait for the user out of view: a small arrow
-// at the screen's edge, toward each; a click opens it.
-function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>]; size: { w: number; h: number }; marks: { id: string; title: string; at: Pt }[]; onOpen: (id: string) => void }) {
+// at the screen's edge, toward each; a click opens it. It looks again as
+// the camera or the graph moves, at most once a frame.
+function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>]; size: { w: number; h: number }; marks: { id: string; title: string }[]; onOpen: (id: string) => void }) {
   const { t } = useWords();
   const [x, y, k] = cam;
   const [, setTick] = useState(0);
@@ -598,9 +703,11 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
   useMotionValueEvent(x, "change", again);
   useMotionValueEvent(y, "change", again);
   useMotionValueEvent(k, "change", again);
+  useEffect(() => (marks.length ? onFrame(again) : undefined), [marks.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => void (raf.current !== null && cancelAnimationFrame(raf.current)), []);
   const out = marks.flatMap((m) => {
-    const e = edgeMark(x.get() + m.at[0] * k.get(), y.get() + m.at[1] * k.get(), size);
+    const p = sim.at(m.id);
+    const e = p && edgeMark(x.get() + p[0] * k.get(), y.get() + p[1] * k.get(), size);
     return e ? [{ ...m, cx: e.x, cy: e.y, turn: e.turn }] : [];
   });
   return (
@@ -617,19 +724,23 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
 }
 
 // Bubble is one node: its core (a click opens its page; with ⌘ or shift,
-// beside the others), a ring for what runs or waits, its label. One sign
-// per meaning: a node that waits for the user says it by its violet halo
-// and ring alone (and to a screen reader, its core's words); its title is
-// drawn as any other, someone else's words or not: the sign that it may
-// be is its page's (« extérieur »), and its core's words (⚠).
+// beside the others), a ring for what runs, its label. One sign per
+// meaning: a node that waits for the user says it by its violet halo
+// alone (and to a screen reader, its core's words); its title is drawn as
+// any other, someone else's words or not: the sign that it may be is its
+// page's ⚠, and its core's words (⚠).
 // A node whose glance is a tile (graph/glance.ts): its core morphs from
 // the circle to a rounded rectangle that shows the figure, and back; its
 // orbit and satellite fade, its label slides under it; with less motion,
 // the two only cross-fade.
-function Bubble(p: {
+// Drawn again only when what it shows changes (memo): where it is, the
+// graph writes on its element at each frame (place). An open node's
+// bubble is its page: hidden, out of the keyboard's reach.
+const Bubble = memo(function Bubble(p: {
+  place: (el: HTMLElement | null) => void;
   x: GraphNode; title: string; said: string; d: number; r: number; tile?: [number, number]; lang: Lang; glanceWord: string;
-  at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number; waitsWord: string; standingWord: string;
-  onGrab: (e: PtrEvent) => void; onOpen: (beside: boolean) => void;
+  open: boolean; dim: boolean; held: boolean; light: number; waitsWord: string; standingWord: string;
+  onGrab: (id: string, e: PtrEvent) => void; onOpen: (id: string, beside: boolean) => void;
 }) {
   const { x, d, r, tile } = p;
   const yours = waits(x);
@@ -641,17 +752,19 @@ function Bubble(p: {
   // A tile is shown whole: a figure that deserves a look.
   const opacity = p.open ? 0 : tile ? (p.dim ? 0.6 : 1) : p.dim ? (d === 0 ? 0.42 : 0.28) : x.status === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
-  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.unasked && "unasked", tile && "tiled"]
+  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.status, yours && "yours", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.unasked && "unasked", tile && "tiled"]
     .filter(Boolean)
     .join(" ");
   return (
     <motion.div
+      ref={p.place}
       className={cls}
-      style={{ left: p.at[0], top: p.at[1], pointerEvents: p.open ? "none" : undefined, zIndex: p.held ? 6 : undefined }}
+      style={{ pointerEvents: p.open ? "none" : undefined, zIndex: p.held ? 6 : undefined }}
       initial={{ opacity: 0, scale: 0.3 }}
       animate={{ opacity: p.held ? 0.5 : opacity, scale: p.held ? 1.08 : 1 }}
       transition={{ duration: p.held ? 0.15 : 0.6, ease }}
       data-node={x.id}
+      aria-hidden={p.open || undefined}
     >
       {yours && <span className="gr-halo" style={{ width: r * 5, height: r * 5 }} />}
       {/* A permanent subject: a small satellite orbits it, slowly (still
@@ -673,7 +786,6 @@ function Bubble(p: {
       >
         {d === 0 && <circle r={R + 7} className="gr-orbit" />}
         {run && <circle r={R} className="gr-ring-run" />}
-        {!run && yours && <circle r={R} className="gr-ring-yours" />}
       </motion.svg>
       {tile && <span className="gl-ping" style={{ width: tile[0], height: tile[1] }} aria-hidden="true" />}
       <motion.button
@@ -682,8 +794,9 @@ function Bubble(p: {
         initial={false}
         animate={shape.to}
         transition={morph}
-        onPointerDown={p.onGrab}
-        onClick={(e) => p.onOpen(e.metaKey || e.ctrlKey || e.shiftKey)}
+        tabIndex={p.open ? -1 : undefined}
+        onPointerDown={(e) => p.onGrab(x.id, e)}
+        onClick={(e) => p.onOpen(x.id, e.metaKey || e.ctrlKey || e.shiftKey)}
         title={x.lifetime === "standing" ? p.standingWord : undefined}
         aria-label={[x.line && run ? `${p.said} : ${x.line}` : p.said, tile && p.glanceWord, yours && p.waitsWord].filter(Boolean).join(", ")}
       >
@@ -708,7 +821,7 @@ function Bubble(p: {
       </motion.span>
     </motion.div>
   );
-}
+});
 
 // glanceSaid is a glance's words for a screen reader: its label and its
 // variation, and that its label may be someone else's words.

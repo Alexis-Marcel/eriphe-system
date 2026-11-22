@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { GraphNode, Moved, Note, OrbFeed, OrbWords, ListRow, Theme, View, Waiting } from "./api";
+import type { GraphNode, Moved, Note, OrbClosed, OrbFeed, OrbWords, ListRow, Theme, View, Waiting } from "./api";
 
 // The workspace's state: the graph as eriphe-core streams it (stream.ts),
 // and what the user has open. The graph is core's: the page never changes a
@@ -38,6 +38,7 @@ export type State = {
   moved: Moved & { n: number }; // the proposals that moved last, n growing each time
   live: boolean; // the stream is open
   theme: Theme; // "" follows the system
+  closed: OrbClosed; // what the user closed of the orb's
 };
 
 export const empty = (): State => ({
@@ -57,24 +58,33 @@ export const empty = (): State => ({
   moved: { n: 0, refs: [] },
   live: false,
   theme: "",
+  closed: { answer: 0, seen: 0, wait: 0, failed: 0 },
 });
 
 // restore is the workspace as the user left it: its pages open (kept when
 // their nodes come), the one the bar talked to, the last show taken
-// (one the user saw is not shown again), the theme.
+// (one the user saw is not shown again), the theme, what the user closed
+// of the orb's (not shown again either).
 export function restore(s: State, v: View | undefined): State {
   const open = Array.isArray(v?.open) ? v.open.filter((id) => typeof id === "string") : [];
   const talk = v?.talk && open.includes(v.talk) ? v.talk : null;
   const theme: Theme = v?.theme === "light" || v?.theme === "dark" ? v.theme : "";
   const shown = typeof v?.shown === "number" && v.shown > 0 ? v.shown : s.shown;
-  return { ...s, open, talk, theme, shown };
+  const n = (k: keyof OrbClosed) => (typeof v?.orb?.[k] === "number" && v.orb[k] > 0 ? v.orb[k] : 0);
+  const closed = { answer: n("answer"), seen: n("seen"), wait: n("wait"), failed: n("failed") };
+  return { ...s, open, talk, theme, shown, closed };
 }
 
 // viewOf is what eriphe-core keeps of what is open.
-export const viewOf = (s: State): View => ({ open: s.open, talk: s.talk ?? undefined, shown: s.shown || undefined, theme: s.theme });
+export const viewOf = (s: State): View => ({ open: s.open, talk: s.talk ?? undefined, shown: s.shown || undefined, theme: s.theme, orb: s.closed });
 
 export function setTheme(s: State, theme: Theme): State {
   return theme === s.theme ? s : { ...s, theme };
+}
+
+// setClosed notes what the user closed of the orb's (orb/model.ts: close).
+export function setClosed(s: State, closed: OrbClosed): State {
+  return closed === s.closed ? s : { ...s, closed };
 }
 
 export const sourceKey = (node: string, block: string, name: string) => `${node}\u0000${block}\u0000${name}`;
@@ -205,7 +215,8 @@ export function dropNote(s: State, id: number): State {
 
 export function applyMoved(s: State, m: Moved): State {
   if (!m || !(m.all || m.refs?.length)) return s;
-  return { ...s, moved: { n: s.moved.n + 1, refs: Array.isArray(m.refs) ? m.refs : [], all: Boolean(m.all) } };
+  const nodes = Array.isArray(m.nodes) ? m.nodes.filter((id) => typeof id === "string") : [];
+  return { ...s, moved: { n: s.moved.n + 1, refs: Array.isArray(m.refs) ? m.refs : [], nodes, all: Boolean(m.all) } };
 }
 
 // openPage opens a node's page: alone, or beside those open (a ⌘-click,
@@ -251,13 +262,7 @@ export function useGraph<T>(select: (s: State) => T): T {
   return useStore(store, select);
 }
 
-// childrenOf, rootOf and pathOf read the graph's parents.
-export function rootOf(nodes: Record<string, GraphNode>, id: string): string {
-  let c = id;
-  for (let i = 0; i < 64 && nodes[c]?.parent && nodes[nodes[c].parent!]; i++) c = nodes[c].parent!;
-  return c;
-}
-
+// pathOf and depthOf read the graph's parents.
 export function pathOf(nodes: Record<string, GraphNode>, id: string): string[] {
   const out: string[] = [];
   for (let c: string | undefined = id; c && nodes[c] && out.length < 64; c = nodes[c].parent) out.unshift(c);

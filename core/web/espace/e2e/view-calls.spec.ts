@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
+import { rest } from "./rest";
 
 // A call to approve, asked in conversation, against the test core of
 // TestEspaceScenario: a view of the mailbox (a plain List, /e2e/courrier)
@@ -46,7 +47,7 @@ test("a call to approve says what it does to which items, on their rows", async 
   // left by where the graph put the page).
   const wide = page.viewportSize()!;
   await page.setViewportSize({ width: 1000, height: wide.height });
-  await expect(page.locator(".gr-viewport[data-still]")).toHaveCount(1, { timeout: 60_000 });
+  await rest(page);
   const words = page.locator(".orb-say.on, .orb-line");
   await expect(words).toContainText("Il me faut ton oui ici.");
   await expect
@@ -89,15 +90,7 @@ test("a call to approve says what it does to which items, on their rows", async 
 async function shots(page: Page, name: string) {
   const dir = process.env.SHOTS;
   if (!dir) return;
-  let last = "";
-  for (let i = 0; i < 60; i++) {
-    const b = await page.locator(".gr-page").first().boundingBox();
-    const now = JSON.stringify(b && [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]);
-    if (b && now === last) break;
-    last = now;
-    await page.waitForTimeout(200);
-  }
-  await page.waitForTimeout(300);
+  await rest(page);
   for (const theme of ["light", "dark"]) {
     await page.evaluate((th) => (document.documentElement.dataset.theme = th), theme);
     await page.waitForTimeout(400); // its colours settled

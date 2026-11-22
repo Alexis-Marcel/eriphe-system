@@ -5,7 +5,7 @@ import { archive, label, type PageAlive, type PageOrigin, type ProposalView, typ
 import { pathOf, subtree, useGraph } from "../data/store";
 import { Doc } from "../doc/Doc";
 import { titleOf } from "../graph/model";
-import { NodeTitle, UnaskedMark } from "../graph/Title";
+import { ExtMark, NodeTitle, StandingMark, UnaskedMark } from "../graph/Title";
 import { useWords } from "../i18n";
 import { Cards } from "./Cards";
 import { MdTab } from "./MdTab";
@@ -48,9 +48,9 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, 
   const [version, setVersion] = useState(0); // 0: the last
   const [tab, setTab] = useState<Tab>("doc");
   const [asking, setAsking] = useState(false); // whether to archive
-  const { page, failed } = usePage(id, version, live);
-  const trace = useTrace(id, tab === "trace", live);
-  const file = useFile(id, version, tab === "md", live);
+  const { page, failed } = usePage(id, version);
+  const trace = useTrace(id, tab === "trace");
+  const file = useFile(id, version, tab === "md");
   const last = page?.versions.at(-1)?.n ?? node?.version ?? 1;
   const shown = page?.version ?? last;
   const latest = version === 0 || version === last;
@@ -96,27 +96,21 @@ export function Page({ id, live, talking, onTalk, onClose, onGrab, onOpen, big, 
         <div className="pg-title">
           {/* Its title, on one line, cut short (whole in its tooltip) so
               that nothing beside it pushes it onto two; then, on the same
-              line, the small badge of a node someone else's words reached
-              (its title marked when they may have written it), and the
-              sign of a node the user did not ask for. That badge is the
-              page's one word for it: inside, a block only has its quiet
+              line, the one ⚠ of a node someone else's words reached (its
+              title among them, or its content: its words say which), and
+              the sign of a node the user did not ask for. That ⚠ is the
+              page's one sign for it: inside, a block only has its quiet
               edge (Doc.tsx). */}
           <h2>
             <span className="pg-title-tx" title={node?.title || external}>
-              <NodeTitle x={node} fallback={external} />
+              <NodeTitle x={node} fallback={external} mark={false} />
             </span>
-            {(node?.external || page?.parts.some((x) => x.block?.external)) && (
-              <em className="pg-badge warn" title={t("espace.external.why")}>
-                {t("espace.external.mark")}
-              </em>
+            {(node?.external || node?.titleExternal || page?.parts.some((x) => x.block?.external)) && (
+              <ExtMark why={node?.external || page?.parts.some((x) => x.block?.external) ? t("espace.external.why") : undefined} />
             )}
             {node?.unasked && <UnaskedMark />}
           </h2>
-          {node?.lifetime === "standing" && (
-            <span className="pg-standing" role="img" aria-label={t("espace.standing")} title={t("espace.standing")}>
-              ∞
-            </span>
-          )}
+          {node?.lifetime === "standing" && <StandingMark />}
           <span className="pg-when">
             {running ? (
               <span className="pg-live">
@@ -324,11 +318,7 @@ export function Alive({ alive }: { alive: PageAlive }) {
           <h4>{t("espace.page.decided")}</h4>
           <p>
             {alive.decided}
-            {alive.decidedExternal && (
-              <em className="pg-badge warn" title={t("espace.external.why")}>
-                {t("espace.external.mark")}
-              </em>
-            )}
+            {alive.decidedExternal && <ExtMark why={t("espace.external.why")} />}
           </p>
         </div>
       )}

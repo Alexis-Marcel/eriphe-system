@@ -24,7 +24,7 @@ test("a changed tool waits in a view, and is accepted there", async ({ page, req
   // The bubble waits for the user; no message was said about it.
   const bubble = page.locator(`.gr-node[data-node="${id}"]`);
   await expect(bubble).toHaveClass(/\byours\b/);
-  await expect(bubble.locator(".gr-ring-yours")).toHaveCount(1);
+  await expect(bubble.locator(".gr-halo")).toHaveCount(1);
   await expect(bubble.locator(".gr-label em")).toHaveCount(0);
 
   // Opened: the change, its kind, before and now.

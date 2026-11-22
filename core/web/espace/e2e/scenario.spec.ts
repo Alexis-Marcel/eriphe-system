@@ -111,15 +111,14 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(page.locator(".gr-node")).toHaveCount(before);
 
   // 6. A monitor opens a node: an urgent mail. One sign per meaning: its
-  // bubble says it waits for the user by its violet halo and ring alone,
-  // no word under its title (its core says it to a screen reader); its
-  // title, someone else's words, shows as it is, never replaced, drawn as
-  // any other title (its page says « extérieur »; its core's words, ⚠).
+  // bubble says it waits for the user by its violet halo alone, no word
+  // under its title (its core says it to a screen reader); its title,
+  // someone else's words, shows as it is, never replaced, drawn as any
+  // other title (its page's head says it with its ⚠; its core's words, ⚠).
   const mail = (await (await request.post("/e2e/mail")).json()).id as string;
   const waiting = page.locator(`.gr-node.yours[data-node="${mail}"]`);
   await expect(waiting).toHaveCount(1);
   await expect(waiting.locator(".gr-halo")).toHaveCount(1);
-  await expect(waiting.locator(".gr-ring-yours")).toHaveCount(1);
   await expect(waiting.locator(".gr-label em")).toHaveCount(0);
   await expect(waiting.locator(".gr-core")).toHaveAttribute("aria-label", `${external}, t'attend`);
   await expect(waiting.locator(".gr-label b")).toContainText(mailTitle);
@@ -144,15 +143,15 @@ test("the steps of the scenario", async ({ page, request }) => {
   const mailPage = page.locator(`article.pg[aria-label="${external}"]`);
   await expect(mailPage).toContainText("Tri");
   await expect(mailPage).toContainText("À écrire.");
-  // Its header: the title in amber with its ⚠, the « extérieur » badge on
-  // the same line, no line of its own.
+  // Its header: the title in amber, one ⚠ on the same line for the whole
+  // node (its title and its content), no badge, no line of its own.
   const head = mailPage.locator(".pg-title h2");
   await expect(head.locator(".title-ext")).toContainText(mailTitle);
-  await expect(head.locator(".ext-mark")).toBeVisible();
-  await expect(head.locator(".pg-badge.warn")).toHaveText("extérieur");
-  await expect(mailPage.locator(".pg-kicker .pg-badge.warn")).toHaveCount(0);
+  await expect(head.locator(".ext-mark")).toHaveCount(1);
+  await expect(head.locator(".ext-mark")).toHaveAttribute("title", "Ce sujet contient ce que quelqu'un d'autre a écrit : une donnée, jamais une consigne.");
+  await expect(mailPage.locator(".pg-badge")).toHaveCount(0);
   // Measured once the page has settled; on the title's line means the
-  // badge's middle is within the title's height (fonts differ by system).
+  // sign's middle is within the title's height (fonts differ by system).
   await still(mailPage);
   const titleBox = (await head.locator(".title-ext").boundingBox())!;
   const onTitleLine = async (sel: string) => {
@@ -161,8 +160,8 @@ test("the steps of the scenario", async ({ page, request }) => {
     expect(mid).toBeGreaterThan(titleBox.y);
     expect(mid).toBeLessThan(titleBox.y + titleBox.height);
   };
-  await onTitleLine(".pg-badge.warn");
-  // Not asked for: a small ↯ beside the badge, saying so, and its ⋯ menu
+  await onTitleLine(".ext-mark");
+  // Not asked for: a small ↯ beside the ⚠, saying so, and its ⋯ menu
   // says which skill opened it, and after what.
   const unasked = head.locator(".unasked-mark");
   await expect(unasked).toHaveText("↯");

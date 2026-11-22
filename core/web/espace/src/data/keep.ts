@@ -3,11 +3,12 @@ import { viewOf, type State, type Store } from "./store";
 
 // What eriphe-core keeps of the workspace as the user leaves it (#633,
 // web_gestures.go): the pages open, the one the console talks to, the
-// theme. keep sends them a moment after they change, the last only, and at
-// once if the page leaves before; the boot gives them back on any of the
-// user's screens. A page opened on a node shown as its glance's tile is
-// sent at once: eriphe-core marks the glance seen (node_glance.go), even
-// if the page closes within the moment.
+// theme, what the user closed of the orb's. keep sends them a moment after
+// they change, the last only, and at once if the page leaves before; the
+// boot gives them back on any of the user's screens. A page opened on a
+// node shown as its glance's tile is sent at once: eriphe-core marks the
+// glance seen (node_glance.go), even if the page closes within the moment;
+// so is the orb closed, that a reload right after does not show it again.
 
 export const KEEP_AFTER = 600;
 
@@ -23,7 +24,7 @@ export function keep(store: Store): () => void {
     const now = JSON.stringify(viewOf(s));
     if (now === last) return;
     last = now;
-    if (opensGlance(s, was)) return send(false);
+    if (opensGlance(s, was) || s.closed !== was.closed) return send(false);
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => send(false), KEEP_AFTER);
   });

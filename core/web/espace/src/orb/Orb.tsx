@@ -6,7 +6,7 @@ import { extent, type LNode, type Pos, type Pt } from "../graph/layout";
 import { titleOf } from "../graph/model";
 import { useWords } from "../i18n";
 import { glide, homePoint, keepOnScreen, placeBeside, placeHome, type Placed, type Rect, type Side } from "./model";
-import { setCrowded, useOrb } from "./useOrb";
+import { useOrb } from "./useOrb";
 import { Words } from "./Words";
 
 // Orb is Eriphe in the graph: a small blue orb. It rests in the bar (its
@@ -18,23 +18,37 @@ import { Words } from "./Words";
 // following its subject when it moves. Its words open away from the
 // subject; it shows them once there. With less motion asked, it goes at
 // once. Each frame is written straight to its elements: no drawing again.
+// It looks where to go only when something moved: what it says, the graph
+// (onFrame), the camera, the screen, its words' size; still, it reads
+// nothing.
 
 const ARRIVED = 8; // px from its place: there, its words show
 
-export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>]; onOpen: (id: string) => void }) {
+export function Orb({ bodies, at: where, onFrame, cam, onOpen }: {
+  bodies: LNode[];
+  at: (id: string) => Pt | undefined;
+  onFrame: (f: () => void) => () => void;
+  cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>];
+  onOpen: (id: string) => void;
+}) {
   const { t } = useWords();
   const nodes = useGraph((s) => s.nodes);
-  const { show, dismiss, unfold, crowded } = useOrb();
+  const { show, dismiss, unfold, crowded, setCrowded } = useOrb();
   const reduced = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
   const orb = useRef<HTMLButtonElement>(null);
   const say = useRef<HTMLDivElement>(null);
   const st = useRef<{ cur: Pt | null; side?: Side | "home"; home?: Pt; key: string; raf: number | null; still: number }>({ cur: null, key: "", raf: null, still: 0 });
-  const latest = useRef({ show, bodies, at, crowded });
-  latest.current = { show, bodies, at, crowded };
+  const latest = useRef({ show, bodies, crowded });
+  latest.current = { show, bodies, crowded };
 
   const frame = () => {
     const s = st.current;
-    const { show, bodies, at, crowded } = latest.current;
+    const { show, bodies, crowded } = latest.current;
+    const at: Pos = {};
+    for (const b of bodies) {
+      const p = where(b.id);
+      if (p) at[b.id] = p;
+    }
     const o = orb.current, w = say.current;
     if (!o || !w) return true;
     const [cx, cy, k] = [cam[0].get(), cam[1].get(), cam[2].get()];
@@ -119,15 +133,16 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
     };
     s.raf = requestAnimationFrame(loop);
   };
-  // Whatever changed (the graph moved, what it says), it looks again; the
-  // camera moving too.
+  // What it says, or the graph, changed: it looks again; the graph moving,
+  // the camera too.
   useLayoutEffect(() => {
     frame();
     kick();
-  });
+  }, [show, bodies, crowded]); // eslint-disable-line react-hooks/exhaustive-deps
   useMotionValueEvent(cam[0], "change", kick);
   useMotionValueEvent(cam[1], "change", kick);
   useMotionValueEvent(cam[2], "change", kick);
+  useEffect(() => onFrame(kick), [onFrame]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     addEventListener("resize", kick);
     // Its words grown or shrunk (a font come late, a longer answer): it

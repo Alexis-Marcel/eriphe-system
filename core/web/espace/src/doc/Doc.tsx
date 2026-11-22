@@ -4,7 +4,6 @@ import { Markdown, type Wiki } from "../a2ui/markdown";
 import { ListsContext, type Lists } from "../a2ui/lists";
 import { SurfaceView } from "../a2ui/Surfaces";
 import { ask, openItem, type ListRow, type NodePage } from "../data/api";
-import { sampleOpen } from "../data/samplecore";
 import { sourceKey, store, useGraph } from "../data/store";
 import { useWords } from "../i18n";
 import { Cards } from "../page/Cards";
@@ -96,17 +95,12 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
     const told = sourceLists(page, (block, component) => (latest ? rows[sourceKey(page.node.id, block, component)] : undefined));
     return {
       list: (surface, component) => told.get(surface)?.find((l) => l.component === component),
-      // Only on the last version: an older one shows its rows. On the dev
-      // server, the sample's make-believe core (samplecore.ts).
-      open: !latest
-        ? undefined
-        : live
-          ? (surface, list, item) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item)
-          : (_surface, _list, item) => sampleOpen(page.node.id, item),
+      // Only on the last version: an older one shows its rows.
+      open: latest ? (surface, list, item) => openItem(page.node.id, surface.slice(page.node.id.length + 2), list.source, item) : undefined,
       opened,
       marked: (surface) => page.parts.some((p) => !!p.block?.external && surfaceOf(page.node.id, p.block.name) === surface),
     };
-  }, [latest, live, page, rows, opened]);
+  }, [latest, page, rows, opened]);
 
   const surfaces = useSyncExternalStore(adapter.subscribe, adapter.surfaces);
   if (ps.length === 0) return <p className="pg-empty">{t("espace.page.empty")}</p>;

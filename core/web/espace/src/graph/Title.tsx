@@ -1,40 +1,57 @@
 import type { GraphNode } from "../data/api";
 import { useWords } from "../i18n";
 
-// A title written after an external read (titleExternal) may be someone
-// else's words: it is shown as it is, never replaced, and always marked
-// so, in the external amber with a small ⚠ whose words say why (a
-// tooltip, and a screen reader's). A trusted title has no mark.
+// Someone else's words have one sign, everywhere: a small ⚠ whose words
+// say why (a tooltip, and a screen reader's). A title written after an
+// external read (titleExternal) may be such words: it is shown as it is,
+// never replaced, in the external amber, with its ⚠. A page's head says
+// it once for the whole node (Page.tsx): one ⚠, never a second sign.
 
-// ExtMark is the small ⚠ after such a title.
-export function ExtMark() {
+// ExtMark is the small ⚠: by default, after a title that may be someone
+// else's words; why, for what else it marks.
+export function ExtMark({ why }: { why?: string }) {
   const { t } = useWords();
-  const why = t("espace.title.external");
+  const words = why ?? t("espace.title.external");
   return (
-    <span className="ext-mark" role="img" aria-label={why} title={why}>
+    <span className="ext-mark" role="img" aria-label={words} title={words}>
       ⚠
     </span>
   );
 }
 
 // NodeTitle is a node's title as the screen shows it: marked when it may
-// be someone else's words. A title cut short loses its end, never its mark.
-export function NodeTitle({ x, fallback }: { x: GraphNode | undefined; fallback: string }) {
+// be someone else's words (mark: false when the ⚠ is said beside it, once
+// for the node). A title cut short loses its end, never its mark.
+export function NodeTitle({ x, fallback, mark = true }: { x: GraphNode | undefined; fallback: string; mark?: boolean }) {
   const title = x?.title || fallback;
   if (!x?.titleExternal) return <>{title}</>;
   return (
     <span className="title-ext">
       <span className="title-tx">{title}</span>
-      <ExtMark />
+      {mark && <ExtMark />}
+    </span>
+  );
+}
+
+// StandingMark is the sign of a permanent subject, the same words
+// everywhere: ∞ beside its title (its page, its row on a phone); on its
+// bubble, the satellite that orbits it, whose words are its core's
+// tooltip.
+export function StandingMark() {
+  const { t } = useWords();
+  const why = t("espace.standing");
+  return (
+    <span className="pg-standing" role="img" aria-label={why} title={why}>
+      ∞
     </span>
   );
 }
 
 // UnaskedMark is the sign of a node the user did not ask for: a skill or
 // an event opened it. Their own nodes have none. A small ↯ after its
-// title, on its bubble and in its page's header (there, a small badge
-// beside « extérieur »); its words say why (a tooltip, and a screen
-// reader's), its page's ⋯ menu who opened it.
+// title, on its bubble and in its page's header (there, beside its ⚠ if
+// it has one); its words say why (a tooltip, and a screen reader's), its
+// page's ⋯ menu who opened it.
 export function UnaskedMark() {
   const { t } = useWords();
   const why = t("espace.unasked.why");

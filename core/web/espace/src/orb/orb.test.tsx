@@ -10,7 +10,7 @@ import { makeT, WordsContext } from "../i18n";
 import strings from "../strings.json";
 import { Bar } from "./Bar";
 import { Orb } from "./Orb";
-import { resetOrb } from "./useOrb";
+import { OrbProvider, resetOrb } from "./useOrb";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -32,10 +32,10 @@ let root: Root;
 const draw = async (narrow = false) =>
   act(async () =>
     root.render(
-      <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
-        {!narrow && <Orb bodies={bodies} at={at} cam={[motionValue(300), motionValue(300), motionValue(1)]} onOpen={(id) => store.setState({ open: [id], talk: id })} />}
+      <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}><OrbProvider>
+        {!narrow && <Orb bodies={bodies} at={(id) => at[id as keyof typeof at]} onFrame={() => () => undefined} cam={[motionValue(300), motionValue(300), motionValue(1)]} onOpen={(id) => store.setState({ open: [id], talk: id })} />}
         <Bar boot={boot} narrow={narrow} />
-      </WordsContext.Provider>,
+      </OrbProvider></WordsContext.Provider>,
     ),
   );
 const feed = (orb: OrbFeed) => act(async () => store.setState({ orb }));
@@ -216,10 +216,10 @@ describe("the orb", () => {
     const huge: LNode[] = [{ id: "sub", links: [], r: 4000, lw: 120, lh: 44 }];
     await act(async () =>
       root.render(
-        <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}>
-          <Orb bodies={huge} at={at} cam={[motionValue(300), motionValue(300), motionValue(1)]} onOpen={() => undefined} />
+        <WordsContext.Provider value={{ t: makeT(strings.fr), lang: "fr" }}><OrbProvider>
+          <Orb bodies={huge} at={(id) => at[id as keyof typeof at]} onFrame={() => () => undefined} cam={[motionValue(300), motionValue(300), motionValue(1)]} onOpen={() => undefined} />
           <Bar boot={boot} narrow={false} />
-        </WordsContext.Provider>,
+        </OrbProvider></WordsContext.Provider>,
       ),
     );
     await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." } });

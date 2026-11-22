@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { GraphNode, OrbWords } from "./api";
 import {
   applyDoc, applyMoved, applyNodes, applyNotes, applyOrb, applyProgress, applyShow, applySource, closePage, empty, NOTES_KEPT,
-  landed, openPage, pathOf, restore, setSent, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
+  landed, openPage, pathOf, restore, setClosed, setSent, setTheme, SHOW_FRESH, sourceKey, subtree, talkTo, viewOf, type State,
 } from "./store";
 
 const node = (id: string, more: Partial<GraphNode> = {}): GraphNode => ({
@@ -143,8 +143,8 @@ describe("the store", () => {
     // the rows of its Lists, by the List's component
     s = applySource(s, { node: "a", block: "b", name: "n", value: {}, lists: [{ component: "drop", items: [{ n: 2, id: "m3" }] }] });
     expect(s.rows[sourceKey("a", "b", "drop")]).toEqual([{ n: 2, id: "m3" }]);
-    s = applyMoved(s, { refs: ["card:1"] });
-    expect(s.moved).toMatchObject({ n: 1, refs: ["card:1"] });
+    s = applyMoved(s, { refs: ["card:1"], nodes: ["a", 3 as never] });
+    expect(s.moved).toMatchObject({ n: 1, refs: ["card:1"], nodes: ["a"] });
     expect(applyMoved(s, { refs: [] })).toBe(s);
     for (let i = 0; i < NOTES_KEPT + 2; i++) s = applyNotes(s, [{ id: i, body: { fr: "x" }, url: "/" }]);
     expect(s.notes.map((n) => n.id)).toEqual([2, 3, 4, 5]);
@@ -157,12 +157,16 @@ describe("the store", () => {
   });
 
   it("comes back as the user left it: its pages once their nodes come, the theme", () => {
-    let s = restore(empty(), { open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark" });
-    expect(s).toMatchObject({ open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark" });
+    const orb = { answer: 41, seen: 12, wait: 3, failed: 0 };
+    let s = restore(empty(), { open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark", orb });
+    expect(s).toMatchObject({ open: ["a1", "gone", "b"], talk: "a1", shown: 4, theme: "dark", closed: orb });
     s = applyNodes(s, { reset: true, nodes: [node("a"), node("a1", { parent: "a" }), node("b")] });
     expect(s.open).toEqual(["a1", "b"]);
     expect(s.talk).toBe("a1");
-    expect(viewOf(s)).toEqual({ open: ["a1", "b"], talk: "a1", shown: 4, theme: "dark" });
+    expect(viewOf(s)).toEqual({ open: ["a1", "b"], talk: "a1", shown: 4, theme: "dark", orb });
+    // What the user closed of the orb's: a closed one again changes nothing.
+    expect(setClosed(s, s.closed)).toBe(s);
+    expect(restore(empty(), { open: [], orb: { answer: -1, seen: "x" } as never }).closed).toEqual({ answer: 0, seen: 0, wait: 0, failed: 0 });
     // A show the user already took, given again as the stream opens, opens nothing.
     expect(applyShow(s, { node: "a", seq: 4, at: new Date().toISOString() }).open).toEqual(["a1", "b"]);
     // What eriphe-core kept that is not a view reads as nothing.
