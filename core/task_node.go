@@ -129,12 +129,6 @@ func (c *core) openTaskNode(t *TaskRow, r runRequest) error {
 	return nil
 }
 
-// standingWork tells a standing node: tasks work in it, none ends it.
-func (c *core) standingWork(id string) bool {
-	sum, err := c.nodes.Get(id)
-	return err == nil && sum.Lifetime == nodefile.Standing
-}
-
 // taskAuthor is who a task writes as: skill:<name> for a skill's run,
 // task:<id> for another.
 func (c *core) taskAuthor(task string) string {
