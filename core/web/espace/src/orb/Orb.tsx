@@ -24,17 +24,17 @@ const ARRIVED = 8; // px from its place: there, its words show
 export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam: [MotionValue<number>, MotionValue<number>, MotionValue<number>]; onOpen: (id: string) => void }) {
   const { t } = useWords();
   const nodes = useGraph((s) => s.nodes);
-  const { show, dismiss, unfold } = useOrb();
+  const { show, dismiss, unfold, crowded } = useOrb();
   const reduced = useMemo(() => matchMedia("(prefers-reduced-motion: reduce)").matches, []);
   const orb = useRef<HTMLButtonElement>(null);
   const say = useRef<HTMLDivElement>(null);
   const st = useRef<{ cur: Pt | null; side?: Side | "home"; home?: Pt; key: string; raf: number | null; still: number }>({ cur: null, key: "", raf: null, still: 0 });
-  const latest = useRef({ show, bodies, at });
-  latest.current = { show, bodies, at };
+  const latest = useRef({ show, bodies, at, crowded });
+  latest.current = { show, bodies, at, crowded };
 
   const frame = () => {
     const s = st.current;
-    const { show, bodies, at } = latest.current;
+    const { show, bodies, at, crowded } = latest.current;
     const o = orb.current, w = say.current;
     if (!o || !w) return true;
     const [cx, cy, k] = [cam[0].get(), cam[1].get(), cam[2].get()];
@@ -102,7 +102,9 @@ export function Orb({ bodies, at, cam, onOpen }: { bodies: LNode[]; at: Pos; cam
     o.classList.toggle("docked", docked);
     const there = !docked && Math.hypot(to[0] - cur[0], to[1] - cur[1]) < ARRIVED;
     if (placed?.words) w.style.transform = `translate(${placed.words.l + cur[0] - to[0]}px, ${placed.words.t + cur[1] - to[1]}px)`;
-    w.classList.toggle("on", there && !!placed?.words);
+    // Its words out here only once the line above the bar is gone (the
+    // bar draws it from the crowded it was rendered with): never both.
+    w.classList.toggle("on", there && !!placed?.words && !crowded);
     w.classList.toggle("left", placed?.dir === -1);
     s.still = moved ? 0 : s.still + 1;
     return s.still > 30;

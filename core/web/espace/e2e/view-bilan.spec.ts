@@ -134,11 +134,11 @@ test("a view as a bilan: a proposal's Oui, a batch, an item read as a letter, a 
   await expect.poll(own).toBe(own0);
   const resize = pg.locator(".pg-resize");
   await resize.focus();
-  const w1 = (await box.boundingBox())!.width;
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
-  // Two steps of 40 in the graph's units: wider on screen, whatever the camera's scale.
-  await expect.poll(async () => (await box.boundingBox())!.width).toBeGreaterThan(w1 + 30);
+  // Two steps of 40, in the graph's units: on screen it depends on how
+  // the camera frames the wider page then.
+  await expect.poll(own).toBe(own0 + 80);
   await page.waitForTimeout(600);
   await shots(page, "8-resized");
   // Closed.
