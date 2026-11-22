@@ -33,13 +33,9 @@ import (
 //     only: written again at each of its looks (monitorLooked).
 //   - A read that fails or waits keeps the last good value: a block is
 //     never blanked by a failure.
-//   - The values are written back into the block's snapshot, with when, so
-//     that the file reads well offline: a version of code's, made only when
-//     a value changed. An author's write over it is not stale
-//     (nodestore's onlyCodeSince). A snapshot the store refuses (a secret,
-//     too big) is not tried again until its value changes; its value stays
-//     here. A block's snapshot is written once a quarter of an hour at
-//     most: the reads keep the value between.
+//   - The values are kept here only, never in the node's file: a read
+//     makes no version, and the page draws the block from them (an
+//     archived node's page too: its reads are kept until its source goes).
 //   - A block that reads a source of a server not trusted is external,
 //     checked at each read: code marks it, never unmarks it.
 
@@ -53,7 +49,6 @@ const nodeReadsSchema = `CREATE TABLE IF NOT EXISTS node_reads (
 	error   TEXT NOT NULL DEFAULT '',   -- why the last read failed
 	waiting TEXT NOT NULL DEFAULT '',   -- why the last read was not made (sourceWhy)
 	next_at INTEGER NOT NULL DEFAULT 0,
-	filed   TEXT NOT NULL DEFAULT '',   -- the hash of the value last written in the snapshot, or tried
 	PRIMARY KEY (node, block, name)
 );`
 
@@ -66,9 +61,6 @@ const (
 	nodeEventsShown = 5
 	// nodeLiveTick is how often the sources are looked at.
 	nodeLiveTick = 15 * time.Second
-	// nodeSnapshotEvery is the least time between two snapshots of a
-	// block: a monitor looks every minute, git keeps every version.
-	nodeSnapshotEvery = 15 * time.Minute
 )
 
 // nodeRead is a source's reads, as kept.
@@ -79,7 +71,6 @@ type nodeRead struct {
 	Error   string
 	Waiting string
 	NextAt  int64
-	Filed   string
 	spec    string
 }
 
@@ -138,20 +129,20 @@ func (c *core) runNodeSources(ctx context.Context) {
 	}
 }
 
-// nodeReads are the reads kept of a node's sources, its block's only if
-// given, by block then name.
+// nodeReads are the reads kept of a node's sources, by block then name;
+// an archived node's too, read no more.
 func (c *core) nodeReads(node string) []nodeRead {
-	srcs, err := c.nodes.Sources(node)
+	srcs, err := c.nodes.KeptSources(node)
 	if err != nil || len(srcs) == 0 {
 		return nil
 	}
 	kept := map[string]nodeRead{}
-	rows, err := c.store.db.Query(`SELECT block, name, spec, value, read, error, waiting, next_at, filed FROM node_reads WHERE node = ?`, node)
+	rows, err := c.store.db.Query(`SELECT block, name, spec, value, read, error, waiting, next_at FROM node_reads WHERE node = ?`, node)
 	if err == nil {
 		for rows.Next() {
 			var r nodeRead
 			var value string
-			if rows.Scan(&r.Block, &r.Name, &r.spec, &value, &r.Read, &r.Error, &r.Waiting, &r.NextAt, &r.Filed) != nil {
+			if rows.Scan(&r.Block, &r.Name, &r.spec, &value, &r.Read, &r.Error, &r.Waiting, &r.NextAt) != nil {
 				continue
 			}
 			if value != "" {
@@ -190,7 +181,7 @@ func (c *core) nodeSourcesDue(ctx context.Context, now time.Time) {
 			ids = append(ids, s.ID)
 		}
 	}
-	c.forgetReads(live)
+	c.forgetReads()
 	c.forgetGlances(nodes)
 	c.followNodeResources()
 	for _, id := range ids {
@@ -204,8 +195,17 @@ func (c *core) nodeSourcesDue(ctx context.Context, now time.Time) {
 	}
 }
 
-// forgetReads drops the reads of the sources no longer live.
-func (c *core) forgetReads(live map[string]bool) {
+// forgetReads drops the reads of the sources no node has any more; an
+// archived node's are kept, for its page.
+func (c *core) forgetReads() {
+	kept, err := c.nodes.KeptSources("")
+	if err != nil {
+		return
+	}
+	live := map[string]bool{}
+	for _, s := range kept {
+		live[s.ID+"\x00"+s.Block+"\x00"+s.Name] = true
+	}
 	rows, err := c.store.db.Query(`SELECT node, block, name FROM node_reads`)
 	if err != nil {
 		return
@@ -234,8 +234,7 @@ func (c *core) readNodeLater(ctx context.Context, node string, only []string) {
 }
 
 // readNode reads a node's sources that are due (those named in only, all
-// of them, if given) and writes what changed into their blocks'
-// snapshots. One read of a node at a time: one asked meanwhile reads all
+// of them, if given). One read of a node at a time: one asked meanwhile reads all
 // of its sources after.
 func (c *core) readNode(ctx context.Context, node string, only []string, now time.Time) {
 	a := &again{}
@@ -305,10 +304,10 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 			raw, _ := json.Marshal(r.Value)
 			value = string(raw)
 		}
-		c.store.db.Exec(`INSERT INTO node_reads (node, block, name, spec, value, read, error, waiting, next_at, filed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		c.store.db.Exec(`INSERT INTO node_reads (node, block, name, spec, value, read, error, waiting, next_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (node, block, name) DO UPDATE SET spec = excluded.spec, value = excluded.value, read = excluded.read,
-			  error = excluded.error, waiting = excluded.waiting, next_at = excluded.next_at, filed = excluded.filed`,
-			node, r.Block, r.Name, r.spec, value, r.Read, r.Error, r.Waiting, r.NextAt, r.Filed)
+			  error = excluded.error, waiting = excluded.waiting, next_at = excluded.next_at`,
+			node, r.Block, r.Name, r.spec, value, r.Read, r.Error, r.Waiting, r.NextAt)
 	}
 	// The pages that show it get the new values at once (graph_feed.go),
 	// and the items a call named before this read began as it says them:
@@ -322,7 +321,7 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 	}
 	c.noteAttention(node, reads)   // node_attention.go
 	c.noteGlance(node, reads, now) // node_glance.go
-	c.fileSnapshots(node, reads, now)
+	c.markUntrusted(node)
 }
 
 // valueHash is a value's hash, to tell a value changed.
@@ -332,51 +331,25 @@ func valueHash(v any) string {
 	return hex.EncodeToString(h[:])
 }
 
-// fileSnapshots writes the values that changed into their blocks'
-// snapshots, with when, and marks external the blocks that read a server
-// not trusted: one version of code's, none when nothing changed.
-func (c *core) fileSnapshots(node string, reads []nodeRead, now time.Time) {
-	changed := map[string]bool{}
-	for _, r := range reads {
-		if r.Value != nil && valueHash(r.Value) != r.Filed {
-			changed[r.Block] = true
-		}
-	}
+// markUntrusted marks external the blocks of a node that read a server
+// not trusted: one version of code's, once, none when there is none.
+func (c *core) markUntrusted(node string) {
 	for try := 0; try < 3; try++ {
 		d, err := c.nodes.Read(node, 0)
-		if err != nil {
+		if err != nil || !d.Node.Meta.Archived.IsZero() {
 			return
 		}
-		mark := map[string]bool{}
+		var mark []string
 		for _, b := range d.Node.Blocks() {
 			if !b.External && c.untrustedSources(b) {
-				mark[b.Name] = true
-			}
-			if changed[b.Name] && recentSnapshot(b, now) {
-				delete(changed, b.Name) // its reads keep the value until then
+				mark = append(mark, b.Name)
 			}
 		}
-		if len(changed) == 0 && len(mark) == 0 {
+		if len(mark) == 0 {
 			return
 		}
 		_, err = c.nodes.Change(node, d.Version.Hash, nodeByCode, func(n *nodefile.Node) error {
-			for block := range changed {
-				b := n.Block(block)
-				if b == nil {
-					continue
-				}
-				snap := map[string]any{nodefile.SnapshotAt: now.Format(time.RFC3339)}
-				for _, r := range reads {
-					if r.Block == block && r.Value != nil {
-						snap[r.Name] = r.Value
-					}
-				}
-				raw, _ := json.Marshal(snap)
-				if err := n.SetSnapshot(block, raw); err != nil {
-					return err
-				}
-			}
-			for block := range mark {
+			for _, block := range mark {
 				n.SetBlockExternal(block, true)
 			}
 			return nil
@@ -385,27 +358,10 @@ func (c *core) fileSnapshots(node string, reads []nodeRead, now time.Time) {
 			continue
 		}
 		if err != nil {
-			log.Printf("node %s: snapshot not written: %v", node, err)
+			log.Printf("node %s: blocks not marked external: %v", node, err)
 		}
-		break
+		return
 	}
-	// Written, or refused: not tried again before the value changes.
-	for _, r := range reads {
-		if changed[r.Block] && r.Value != nil {
-			c.store.db.Exec(`UPDATE node_reads SET filed = ? WHERE node = ? AND block = ? AND name = ?`, valueHash(r.Value), node, r.Block, r.Name)
-		}
-	}
-}
-
-// recentSnapshot tells a block whose snapshot was written moments ago.
-func recentSnapshot(b *nodefile.Block, now time.Time) bool {
-	var snap map[string]any
-	if json.Unmarshal(b.Snapshot, &snap) != nil {
-		return false
-	}
-	s, _ := snap[nodefile.SnapshotAt].(string)
-	at, err := time.Parse(time.RFC3339, s)
-	return err == nil && now.Sub(at) < nodeSnapshotEvery
 }
 
 // monitorRead is a monitor's value, from its last looks: its number and

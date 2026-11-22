@@ -346,7 +346,7 @@ func (c *core) brainNodeRead(in brainNodeReadIn) (map[string]any, error) {
 		}
 		out["children"] = list
 	}
-	if items, _ := c.nodes.Items(id); len(items) > 0 {
+	if items, _ := c.nodeItems(id); len(items) > 0 {
 		var list []map[string]string
 		for _, it := range items {
 			if it.Tainted != "" {
@@ -517,7 +517,7 @@ func (c *core) brainItemNote(in brainItemNoteIn) (map[string]any, error) {
 	if taint := c.turnTaint(); len(taint) > 0 {
 		tainted = "brain:" + strings.Join(taint, ", ")
 	}
-	err = c.nodes.NoteItem(sum.ID, nodestore.Item{Source: strings.TrimSpace(in.Source), Item: strings.TrimSpace(in.Item),
+	err = c.noteItem(sum.ID, itemNote{Source: strings.TrimSpace(in.Source), Item: strings.TrimSpace(in.Item),
 		Note: in.Note, State: in.State, Group: in.Group, Author: byBrain, Tainted: tainted})
 	if err != nil {
 		return nil, err

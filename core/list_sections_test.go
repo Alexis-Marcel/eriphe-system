@@ -50,12 +50,12 @@ func sectionsWeb(t *testing.T) (*testWeb, string, *fakeMonitor, string) {
 		t.Fatal(err)
 	}
 	c.readNode(context.Background(), id, nil, time.Now())
-	for _, it := range []nodestore.Item{
+	for _, it := range []itemNote{
 		{Source: "received", Item: "m1", Group: "À supprimer", Note: "Une promotion", State: "none", Author: byBrain},
 		{Source: "received", Item: "m2", Group: "Pour info", Author: byBrain, Tainted: "external:monitor"},
 		{Source: "received", Item: "m3", Group: "À supprimer", Author: byBrain},
 	} {
-		if err := c.nodes.NoteItem(id, it); err != nil {
+		if err := c.noteItem(id, it); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -151,7 +151,7 @@ func TestListSectionsRows(t *testing.T) {
 	// A note that changes: the source as the page draws it, sent again.
 	c.useNodes(c.nodes) // watched, as at a start
 	seq, _ := c.graphHead()
-	if err := c.nodes.NoteItem(id, nodestore.Item{Source: "received", Item: "m4", Group: "À supprimer", Author: byBrain}); err != nil {
+	if err := c.noteItem(id, itemNote{Source: "received", Item: "m4", Group: "À supprimer", Author: byBrain}); err != nil {
 		t.Fatal(err)
 	}
 	evs, _, _, _ := c.graphAfter(seq)
@@ -177,9 +177,10 @@ func TestListSectionsMedia(t *testing.T) {
 	b := &nodefile.Block{Name: "pics", Components: json.RawMessage(`[
   {"id": "root", "component": "List", "children": {"path": "/received/messages[_group=x]", "componentId": "pic"}},
   {"id": "pic", "component": "Image", "url": {"@path": "url"}}]`),
-		Sources:  map[string]nodefile.Source{"received": {Resource: "monitor", URI: "monitor://received", Items: &nodefile.Items{Path: "messages", ID: "id"}}},
-		Snapshot: json.RawMessage(`{"received": {"messages": [{"id": "a", "url": "https://example.org/a.png"}]}}`)}
-	v := c.blockView("n1", b, nil)
+		Sources: map[string]nodefile.Source{"received": {Resource: "monitor", URI: "monitor://received", Items: &nodefile.Items{Path: "messages", ID: "id"}}}}
+	read := nodeRead{LiveSource: nodestore.LiveSource{ID: "n1", Block: "pics", Name: "received"},
+		Value: map[string]any{"messages": []any{map[string]any{"id": "a", "url": "https://example.org/a.png"}}}}
+	v := c.blockView("n1", b, []nodeRead{read})
 	got := v.Data["received"].(map[string]any)["messages"].([]any)[0].(map[string]any)["url"].(string)
 	if !strings.HasPrefix(got, mediaPath+"?") {
 		t.Fatalf("an image under a filtered List: %q", got)
@@ -225,7 +226,7 @@ func TestNodeActSection(t *testing.T) {
 	fm.got = append(fm.got, map[string]any{"id": "m5", "subject": "Encore", "from": "Shop"})
 	fm.mu.Unlock()
 	c.readNode(context.Background(), id, nil, time.Now())
-	if err := c.nodes.NoteItem(id, nodestore.Item{Source: "received", Item: "m5", Group: "À supprimer", Author: byBrain}); err != nil {
+	if err := c.noteItem(id, itemNote{Source: "received", Item: "m5", Group: "À supprimer", Author: byBrain}); err != nil {
 		t.Fatal(err)
 	}
 	code, out := act(nodeActIn{Block: "inbox", List: "drop", Action: "drop", IDs: []string{"m1", "m3"}})
@@ -238,7 +239,7 @@ func TestNodeActSection(t *testing.T) {
 	}
 
 	// A note changed since: the filter as it stands.
-	if err := c.nodes.NoteItem(id, nodestore.Item{Source: "received", Item: "m5", Group: "Pour info", Author: byBrain}); err != nil {
+	if err := c.noteItem(id, itemNote{Source: "received", Item: "m5", Group: "Pour info", Author: byBrain}); err != nil {
 		t.Fatal(err)
 	}
 	if code, _ := act(nodeActIn{Block: "inbox", List: "drop", Action: "drop", IDs: []string{"m5"}}); code != http.StatusBadRequest {

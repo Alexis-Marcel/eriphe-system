@@ -56,103 +56,27 @@ func TestChange(t *testing.T) {
 	}
 }
 
-// An item's note is kept by the node, its source and the item; the
-// source is one of the node's; no note nor state takes it away.
-func TestNoteItem(t *testing.T) {
-	s, _ := newEnv(t).open(t)
-	block := "\n```eriphe:block mails\n{\"components\": {\"component\": \"Text\", \"text\": \"Mails\"}, \"sources\": {\"inbox\": {\"tool\": \"mail/list\", \"every\": 5}}}\n```\n"
-	mustCreate(t, s, New{Title: "Mails", Body: block})
-	mustCreate(t, s, New{Title: "Plain", Body: "No source."})
-	if err := s.NoteItem("n1", Item{Source: "inbox", Item: "m1", Note: "Sam asks for Tuesday", State: "act", Author: "task:t1", Tainted: "task:t1"}); err != nil {
-		t.Fatal(err)
-	}
-	items, _ := s.Items("n1")
-	if len(items) != 1 || items[0].Note != "Sam asks for Tuesday" || items[0].Tainted != "task:t1" {
-		t.Fatalf("items: %+v", items)
-	}
-	for _, bad := range []struct {
-		id string
-		it Item
-	}{
-		{"n1", Item{Source: "outbox", Item: "m1", Note: "x", Author: "brain"}},
-		{"n2", Item{Source: "inbox", Item: "m1", Note: "x", Author: "brain"}},
-		{"n1", Item{Source: "inbox", Item: "m1", State: "urgent", Author: "brain"}},
-		{"n1", Item{Source: "inbox", Item: "m1", Note: strings.Repeat("x", ItemNoteMax+1), Author: "brain"}},
-		{"n1", Item{Source: "inbox", Item: "m1", Note: "ghp_x", Author: "brain"}},
-	} {
-		if err := s.NoteItem(bad.id, bad.it); err == nil {
-			t.Errorf("noted: %s %+v", bad.id, bad.it)
-		}
-	}
-	// A group alone is a note: the section a view shows the item in.
-	if err := s.NoteItem("n1", Item{Source: "inbox", Item: "m2", Group: "  À supprimer ", Author: "brain"}); err != nil {
-		t.Fatal(err)
-	}
-	if items, _ := s.Items("n1"); len(items) != 2 || items[1].Group != "À supprimer" || items[1].Note != "" {
-		t.Fatalf("grouped: %+v", items)
-	}
-	for _, g := range []string{strings.Repeat("x", ItemGroupMax+1), "a]b", "a/b", "a=b", "a!b", "two\nlines", "ghp_x"} {
-		if err := s.NoteItem("n1", Item{Source: "inbox", Item: "m2", Group: g, Author: "brain"}); err == nil {
-			t.Errorf("group %q kept", g)
-		}
-	}
-	for _, m := range []string{"m1", "m2"} {
-		if err := s.NoteItem("n1", Item{Source: "inbox", Item: m, Author: "brain"}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if items, _ := s.Items("n1"); len(items) != 0 {
-		t.Fatalf("not taken away: %+v", items)
-	}
-}
-
-func TestCreateAfterSiblings(t *testing.T) {
-	s, _ := newEnv(t).open(t)
-	parent := mustCreate(t, s, New{Title: "Substack", Author: "brain"})
-	style := mustCreate(t, s, New{Title: "Style", Parent: parent.Node.Meta.ID, Author: "brain"})
-	plan := mustCreate(t, s, New{Title: "Plan", Parent: parent.Node.Meta.ID, After: []string{style.Node.Meta.ID}, Author: "brain"})
-	if got := plan.Node.Meta.After; len(got) != 1 || got[0] != style.Node.Meta.ID {
-		t.Fatalf("after %v", got)
-	}
-	other := mustCreate(t, s, New{Title: "Other", Author: "brain"})
-	for _, nw := range []New{
-		{Title: "Loose", Parent: parent.Node.Meta.ID, After: []string{other.Node.Meta.ID}, Author: "brain"},
-		{Title: "Top", After: []string{style.Node.Meta.ID}, Author: "brain"},
-		{Title: "Missing", Parent: parent.Node.Meta.ID, After: []string{"zz9"}, Author: "brain"},
-	} {
-		if _, err := s.Create(nw); err == nil {
-			t.Errorf("%s: created", nw.Title)
-		}
-	}
-	if _, err := s.Change(plan.Node.Meta.ID, plan.Version.Hash, "brain", func(n *nodefile.Node) error {
-		n.Meta.After = nil
-		return nil
-	}); err == nil {
-		t.Error("after changed by a write")
-	}
-}
-
 // A write made on a version code changed since, its code's fields only
-// (a source's snapshot), applies on the last version with them kept; one
-// made on a version an author changed since is stale.
+// (a block marked external), applies on the last version with them kept;
+// one made on a version an author changed since is stale.
 func TestWriteOverCodeChange(t *testing.T) {
 	s, _ := newEnv(t).open(t)
 	block := "\n```eriphe:block mails\n{\"components\": {\"component\": \"Text\", \"text\": \"Mails\"}, \"sources\": {\"inbox\": {\"tool\": \"mail/list\"}}}\n```\n"
 	d := mustCreate(t, s, New{Title: "Mails", Body: "Inbox." + block})
 	snap, err := s.Change("n1", d.Version.Hash, "eriphe", func(n *nodefile.Node) error {
-		return n.SetSnapshot("mails", []byte(`{"inbox": {"messages": []}}`))
+		return n.SetBlockExternal("mails", true)
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	d3, err := s.Write("n1", "Inbox, sorted."+block, d.Version.Hash, "task:t1")
+	d3, err := write(s, "n1", "Inbox, sorted."+block, d.Version.Hash, "task:t1")
 	if err != nil {
-		t.Fatalf("a write over a snapshot refused: %v", err)
+		t.Fatalf("a write over code's change refused: %v", err)
 	}
-	if d3.Version.N != 3 || d3.Node.Block("mails").Snapshot == nil || !strings.Contains(d3.Node.Text(), "sorted") {
+	if d3.Version.N != 3 || !d3.Node.Block("mails").External || !strings.Contains(d3.Node.Text(), "sorted") {
 		t.Fatalf("written: v%d\n%s", d3.Version.N, d3.Raw)
 	}
-	if _, err := s.Write("n1", "Again."+block, snap.Version.Hash, "task:t2"); err == nil {
+	if _, err := write(s, "n1", "Again."+block, snap.Version.Hash, "task:t2"); err == nil {
 		t.Fatal("a write over an author's change written")
 	}
 }
@@ -210,7 +134,7 @@ func TestWatch(t *testing.T) {
 	var got []string
 	s.Watch(func(c Change) { got = append(got, c.What+" "+c.ID) })
 	d := mustCreate(t, s, New{Title: "Plan", Body: "Text."})
-	if _, err := s.Write("n1", "More.", d.Version.Hash, "brain"); err != nil {
+	if _, err := write(s, "n1", "More.", d.Version.Hash, "brain"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.AppendTrace("n1", "brain", "Wrote it."); err != nil {
@@ -256,7 +180,7 @@ func TestTitleTrust(t *testing.T) {
 		t.Fatalf("a vouched title is not trusted: %v %v", tr, idx)
 	}
 	change(view, func(n *nodefile.Node) { n.SetBlockExternal("status", true) })
-	if _, err := s.Write(view, "Other text."+statusBlock, mustRead(t, s, view).Version.Hash, "task:t1"); err != nil {
+	if _, err := write(s, view, "Other text."+statusBlock, mustRead(t, s, view).Version.Hash, "task:t1"); err != nil {
 		t.Fatal(err)
 	}
 	if tr, idx := titled(view); !tr || !idx {
@@ -287,13 +211,6 @@ func TestTitleTrust(t *testing.T) {
 		t.Fatalf("a title written clean is not trusted once external: %v %v", tr, idx)
 	}
 
-	// An author never says it.
-	d := mustRead(t, s, mail)
-	raw := strings.Replace(string(d.Raw), "external: true\n", "external: true\ntitle_trusted: true\n", 1)
-	if _, err := nodefile.ParseAuthor([]byte(raw), d.Node); err == nil {
-		t.Fatal("an author's title_trusted is accepted")
-	}
-
 	// The index made again from the files says the same.
 	s.Close()
 	os.Remove(e.index)
@@ -304,32 +221,23 @@ func TestTitleTrust(t *testing.T) {
 		}
 	}
 
-	// An index made before title_trusted gets it, none trusted.
+	// An index at another schema is refused, never changed: deleted, it
+	// is made again from the files.
 	s.Close()
 	db, err := sql.Open("sqlite", e.index)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`ALTER TABLE nodes DROP COLUMN title_trusted`); err != nil {
+	if _, err := db.Exec(`UPDATE meta SET value = '1' WHERE key = 'schema_version'`); err != nil {
 		t.Fatal(err)
 	}
 	db.Close()
+	if _, _, err := Open(e.dir, e.index, e.opts); err == nil || !strings.Contains(err.Error(), "delete it") {
+		t.Fatalf("an old index opened: %v", err)
+	}
+	os.Remove(e.index)
 	s, _ = e.open(t)
-	if sum, err := s.Get(view); err != nil || !sum.TitleExternal() || sum.Title != "Mes mails" {
-		t.Fatalf("an old index: %+v %v", sum, err)
-	}
-
-	// An index made before the items' groups gets them, none grouped.
-	s.Close()
-	if db, err = sql.Open("sqlite", e.index); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`ALTER TABLE node_items DROP COLUMN grp`); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-	s, _ = e.open(t)
-	if _, err := s.Items(view); err != nil {
-		t.Fatalf("an old index's items: %v", err)
+	if sum, err := s.Get(view); err != nil || sum.TitleExternal() || sum.Title != "Mes mails" {
+		t.Fatalf("rebuilt: %+v %v", sum, err)
 	}
 }

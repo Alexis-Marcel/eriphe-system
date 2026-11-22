@@ -1,13 +1,16 @@
 package nodestore
 
 import (
+	"archive/tar"
 	"bufio"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	git "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -19,9 +22,9 @@ import (
 // headRead, set by a test, runs in Backup once the branch's commit is read.
 var headRead func()
 
-// Backup is the nightly copy: a git bundle of the repository and a copy of
-// the index go into dir, nodes-<day>.bundle and nodes-<day>.db, the last
-// keep days kept. Writes go on meanwhile: the store's lock is held only to
+// Backup is the nightly copy: a git bundle of the repository, a tar of the
+// traces and a copy of the index go into dir, nodes-<day>.bundle,
+// nodes-<day>.trace.tar and nodes-<day>.db, the last keep days kept. Writes go on meanwhile: the store's lock is held only to
 // read the branch's commit; the bundle packs what that commit reaches,
 // objects no write changes, through a handle of its own on the repository.
 // The index is copied first (VACUUM INTO, a snapshot of its own), so it
@@ -30,7 +33,9 @@ var headRead func()
 //
 // The repository is only read: no gc, no repack, no object removed. The
 // bundle is written aside, read back and checked before it takes its
-// name; the index's copy takes its name last, so that nodes-<day>.db says
+// name; the traces' tar is written aside too, each trace as long as it
+// was when it was opened (an entry appended meanwhile waits for the next
+// night); the index's copy takes its name last, so that nodes-<day>.db says
 // the night's backup was made whole. The older copies are dropped only
 // once the night's are made. A failed backup leaves the repository as it
 // was, and the copies before it.
@@ -66,11 +71,14 @@ func (s *Store) Backup(dir string, keep int) error {
 			return fmt.Errorf("bundle: %w", err)
 		}
 	}
+	if err := s.writeTraces(filepath.Join(dir, "nodes-"+day+".trace.tar")); err != nil {
+		return fmt.Errorf("traces: %w", err)
+	}
 	os.Remove(db)
 	if err := os.Rename(tmp, db); err != nil {
 		return fmt.Errorf("index: %w", err)
 	}
-	for _, pattern := range []string{"nodes-*.bundle", "nodes-*.db"} {
+	for _, pattern := range []string{"nodes-*.bundle", "nodes-*.trace.tar", "nodes-*.db"} {
 		files, _ := filepath.Glob(filepath.Join(dir, pattern))
 		sort.Strings(files)
 		for len(files) > keep {
@@ -79,6 +87,71 @@ func (s *Store) Backup(dir string, keep int) error {
 		}
 	}
 	return nil
+}
+
+// writeTraces writes every trace file into a tar at path, through a
+// temporary file renamed once whole. Each file is opened under the
+// traces' lock, then read to the length it had: an append meanwhile adds
+// past it, a file moved to its older part is still the one open.
+func (s *Store) writeTraces(path string) error {
+	entries, err := os.ReadDir(s.traces)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp)
+	tw := tar.NewWriter(f)
+	for _, e := range entries {
+		if !e.Type().IsRegular() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		if err = s.tarTrace(tw, e.Name()); err != nil {
+			break
+		}
+	}
+	if err == nil {
+		err = tw.Close()
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// tarTrace adds one trace file to the tar, as long as it is when opened.
+func (s *Store) tarTrace(tw *tar.Writer, name string) error {
+	s.traceMu.Lock()
+	f, err := os.Open(filepath.Join(s.traces, name))
+	var fi os.FileInfo
+	if err == nil {
+		fi, err = f.Stat()
+	}
+	s.traceMu.Unlock()
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil // moved to its older part, which the tar holds
+	}
+	if err != nil {
+		if f != nil {
+			f.Close()
+		}
+		return err
+	}
+	defer f.Close()
+	if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: fi.Size(), ModTime: fi.ModTime(), Typeflag: tar.TypeReg}); err != nil {
+		return err
+	}
+	_, err = io.CopyN(tw, f, fi.Size())
+	return err
 }
 
 // writeBundle writes the bundle of r at its commit head at path: through

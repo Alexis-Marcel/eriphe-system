@@ -71,7 +71,7 @@ func largeGraph(t *testing.T) (*testEnv, *Store, []Version) {
 	d := mustCreate(t, s, New{Title: "Le long brouillon", Body: longFrench(300<<10, 0)})
 	for i := 1; i <= 4; i++ {
 		var err error
-		if d, err = s.Write("n1", longFrench(300<<10, i), d.Version.Hash, "brain"); err != nil {
+		if d, err = write(s, "n1", longFrench(300<<10, i), d.Version.Hash, "brain"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -123,7 +123,7 @@ func TestBackupKeepsALargeRepositoryWhole(t *testing.T) {
 	if old, err := s.Read("n1", 1); err != nil || !strings.HasPrefix(old.Node.Text(), "Ébauche 0.0") {
 		t.Fatalf("after the backup: %v", err)
 	}
-	if _, err := s.Write("n1", "Plus court.", d.Version.Hash, "brain"); err != nil {
+	if _, err := write(s, "n1", "Plus court.", d.Version.Hash, "brain"); err != nil {
 		t.Fatalf("a write after the backup: %v", err)
 	}
 
@@ -164,7 +164,7 @@ func TestBackupLetsWritesGoOn(t *testing.T) {
 	var after string
 	headRead = func() {
 		d := mustRead(t, s, "n2")
-		w, err := s.Write("n2", "Écrit pendant la sauvegarde.", d.Version.Hash, "brain")
+		w, err := write(s, "n2", "Écrit pendant la sauvegarde.", d.Version.Hash, "brain")
 		if err != nil {
 			t.Error(err)
 			return
@@ -299,7 +299,7 @@ func TestOpenRefusesABrokenRepository(t *testing.T) {
 			e := newEnv(t)
 			s, _ := e.open(t)
 			d := mustCreate(t, s, New{Title: "Plan", Body: "Un."})
-			d2, err := s.Write("n1", "Deux.", d.Version.Hash, "brain")
+			d2, err := write(s, "n1", "Deux.", d.Version.Hash, "brain")
 			if err != nil {
 				t.Fatal(err)
 			}

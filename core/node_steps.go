@@ -343,16 +343,6 @@ func (c *core) traceWork(parent, line, tainted string) {
 	}
 }
 
-// nodeTitle is a node's title, its id when it has none.
-func (c *core) nodeTitle(id string) string {
-	if c.nodes != nil {
-		if s, err := c.nodes.Get(id); err == nil {
-			return s.Title
-		}
-	}
-	return id
-}
-
 // Opening steps.
 
 // stepOpener is who opens steps: the brain, or a task (a skill's run, a
@@ -609,9 +599,29 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 			return nil, err
 		}
 	}
+	// Every step is checked and given its node's id before anything is
+	// made; then its row, all in one transaction; then its node. A node
+	// that cannot be made takes the rows of the steps not made with it:
+	// no row without its node, no node without its row.
 	borrow := c.borrowOf(by.task)
-	n := len(have)
 	ids := map[string]string{}
+	taken := map[string]bool{}
+	for _, sp := range specs {
+		id := c.nodes.NewID()
+		for taken[id] {
+			id = c.nodes.NewID()
+		}
+		taken[id] = true
+		ids[sp.Key] = id
+	}
+	type planned struct {
+		key, after string
+		nw         nodestore.New
+		spec       []byte
+		skill      string
+		clean      bool
+	}
+	var plan []planned
 	for _, sp := range specs {
 		var after []string
 		for _, a := range sp.After {
@@ -628,14 +638,11 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 		if goal == "" {
 			goal, _, _ = strings.Cut(strings.TrimSpace(sp.Prompt), "\n")
 		}
-		d, err := c.nodes.Create(nodestore.New{Title: sp.Title, Parent: parent, After: after, Goal: truncate(oneLine(goal), taskNodeGoalMax),
-			External: len(by.tainted) > 0, OpenedBy: c.workOrigin(parent, by.task), Author: by.author})
-		if err != nil {
-			return ids, fmt.Errorf("step %s: %w", sp.Key, err)
+		nw := nodestore.New{ID: ids[sp.Key], Title: sp.Title, Parent: parent, Goal: truncate(oneLine(goal), taskNodeGoalMax),
+			External: len(by.tainted) > 0, OpenedBy: c.workOrigin(parent, by.task), Author: by.author}
+		if err := c.nodes.Check(nw); err != nil {
+			return nil, fmt.Errorf("step %s: %w", sp.Key, err)
 		}
-		node := d.Node.Meta.ID
-		ids[sp.Key] = node
-		n++
 		var skill string
 		clean := false
 		if borrow != nil {
@@ -643,9 +650,29 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 			clean = borrow.clean && len(by.tainted) == 0 && borrow.declares(sp.Resources)
 		}
 		raw, _ := json.Marshal(sp)
-		if _, err := c.store.db.Exec(`INSERT INTO node_steps (node, parent, n, key, after, spec, status, opener, tainted, skill, clean) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			node, parent, n, sp.Key, strings.Join(after, ","), string(raw), stepWaiting, by.author, strings.Join(by.tainted, ", "), skill, clean); err != nil {
-			return ids, err
+		plan = append(plan, planned{key: sp.Key, after: strings.Join(after, ","), nw: nw, spec: raw, skill: skill, clean: clean})
+	}
+	tx, err := c.store.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	for i, p := range plan {
+		if _, err := tx.Exec(`INSERT INTO node_steps (node, parent, n, key, after, spec, status, opener, tainted, skill, clean) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			p.nw.ID, parent, len(have)+i+1, p.key, p.after, string(p.spec), stepWaiting, by.author, strings.Join(by.tainted, ", "), p.skill, p.clean); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	for i, p := range plan {
+		if err := stepCreated(c.nodes.Create(p.nw)); err != nil {
+			for _, q := range plan[i:] {
+				c.store.db.Exec(`DELETE FROM node_steps WHERE node = ?`, q.nw.ID)
+				delete(ids, q.key)
+			}
+			return ids, fmt.Errorf("step %s: %w", p.key, err)
 		}
 	}
 	now := time.Now().Unix()
@@ -671,6 +698,10 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 	c.advanceLocked(ctx, parent)
 	return ids, nil
 }
+
+// stepCreated is a step node's creation, as openSteps sees it: a test
+// makes it fail.
+var stepCreated = func(_ *nodestore.Doc, err error) error { return err }
 
 // The engine.
 

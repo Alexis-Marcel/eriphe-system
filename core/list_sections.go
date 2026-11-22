@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodefile"
-	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // A view in sections (docs/node-format.md, « Sections »): the items of a
@@ -113,7 +112,7 @@ func listBinding(path string, sources map[string]nodefile.Source) (string, itemF
 // never kept): it is changed in place. A source whose items' path is not
 // plain fields is left as it is. An item leaving (a call named it, and
 // its source was not read since: source_fresh.go) is done.
-func noteItems(src nodefile.Source, value any, notes map[string]nodestore.Item, cards map[string]string, leaving map[string]bool) {
+func noteItems(src nodefile.Source, value any, notes map[string]itemNote, cards map[string]string, leaving map[string]bool) {
 	if src.Items == nil || value == nil || listPath("x", src) == "" {
 		return
 	}
@@ -150,12 +149,12 @@ func itemID(src nodefile.Source, it any) string {
 }
 
 // itemNotes are a node's notes on the items of a source, by item.
-func (c *core) itemNotes(id, source string) map[string]nodestore.Item {
-	out := map[string]nodestore.Item{}
+func (c *core) itemNotes(id, source string) map[string]itemNote {
+	out := map[string]itemNote{}
 	if c.nodes == nil {
 		return out
 	}
-	items, _ := c.nodes.Items(id)
+	items, _ := c.nodeItems(id)
 	for _, it := range items {
 		if it.Source == source {
 			out[it.Item] = it

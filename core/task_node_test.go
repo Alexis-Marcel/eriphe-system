@@ -289,7 +289,7 @@ func TestTaintedTaskWritesExternal(t *testing.T) {
 		t.Fatal("a tainted task's child is clean")
 	}
 	// An item is noted on one of its sources only.
-	if err := c.nodes.NoteItem(id, nodestore.Item{Source: "x", Item: "1", Note: "n", Author: "brain"}); err == nil {
+	if err := c.noteItem(id, itemNote{Source: "x", Item: "1", Note: "n", Author: "brain"}); err == nil {
 		t.Fatal("noted on no source")
 	}
 }
@@ -326,7 +326,7 @@ func TestTaskBlocksGuarded(t *testing.T) {
 	}
 	// An item of one of its sources is noted, tainted when it is.
 	mustNodes(t, c.core, task.ID, "item_note", map[string]any{"source": "page", "item": "p1", "note": "À lire", "state": "look"})
-	if items, _ := c.nodes.Items(id); len(items) != 1 || items[0].Tainted != "" || items[0].Author != "task:"+task.ID {
+	if items, _ := c.nodeItems(id); len(items) != 1 || items[0].Tainted != "" || items[0].Author != "task:"+task.ID {
 		t.Fatalf("items %+v", items)
 	}
 }
@@ -427,7 +427,7 @@ func TestExternalMarkSurvivesAConcurrentWrite(t *testing.T) {
 	markRead = func(string) {
 		if first {
 			first = false
-			if _, err := c.nodes.Write(id, "Écrit entre-temps.", d.Version.Hash, byUser); err != nil {
+			if _, err := nodeWrite(c, id, "Écrit entre-temps.", d.Version.Hash, byUser); err != nil {
 				t.Error(err)
 			}
 		}

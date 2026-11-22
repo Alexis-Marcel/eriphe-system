@@ -64,9 +64,9 @@ func TestNodeSave(t *testing.T) {
 	if code != 200 || !strings.HasPrefix(md.Body, "Trois titres.") || strings.Contains(md.Body, "marks") {
 		t.Fatalf("md: %d %q", code, md.Body)
 	}
-	// Code's version in between: a source's snapshot.
+	// Code's version in between: a block marked external.
 	d, _ := c.nodes.Change(id, md.Hash, nodeByCode, func(n *nodefile.Node) error {
-		return n.SetSnapshot("titles", json.RawMessage(`{"ledger": {"accounts": []}}`))
+		return n.SetBlockExternal("titles", true)
 	})
 	if code, out := gesture(t, tw, csrf, "PUT", "/api/nodes/"+id+"/md", nodeSaveIn{Body: md.Body, Expect: md.Hash}); code != 200 || out["version"] != float64(d.Version.N) {
 		t.Fatalf("a save alike: %d %v", code, out)
@@ -78,13 +78,13 @@ func TestNodeSave(t *testing.T) {
 		t.Fatalf("a save: %d %v", code, out)
 	}
 	saved, _ := c.nodes.Read(id, int(n))
-	if saved.Version.Author != byUser || saved.Node.Block("titles").Snapshot == nil || !strings.Contains(string(saved.Raw), "Deux titres.") {
-		t.Fatalf("saved by %s, snapshot %s", saved.Version.Author, saved.Node.Block("titles").Snapshot)
+	if saved.Version.Author != byUser || !saved.Node.Block("titles").External || !strings.Contains(string(saved.Raw), "Deux titres.") {
+		t.Fatalf("saved by %s, external %v", saved.Version.Author, saved.Node.Block("titles").External)
 	}
 	saved, _ = c.nodes.Read(id, 0)
 	// The brain writes meanwhile: the user's save on the old version is a
 	// conflict, nothing written, the last version given back.
-	c.nodes.Write(id, "Un titre.\n", saved.Version.Hash, byBrain)
+	nodeWrite(c, id, "Un titre.\n", saved.Version.Hash, byBrain)
 	code, out = gesture(t, tw, csrf, "PUT", "/api/nodes/"+id+"/md", nodeSaveIn{Body: "Mon titre.\n", Expect: saved.Version.Hash})
 	if code != http.StatusConflict || out["body"] != "Un titre.\n" || out["hash"] != lastHash(t, c, id) {
 		t.Fatalf("a conflict: %d %v", code, out)
@@ -141,7 +141,7 @@ func TestNodeMark(t *testing.T) {
 		t.Fatalf("marks after unmark: %v", d.Node.Block("options").Marks)
 	}
 	// The brain writes the node: a mark made on the page it replaced is refused.
-	if _, err := c.nodes.Write(id, "Trois options.\n\n"+block, lastHash(t, c, id), byBrain); err != nil {
+	if _, err := nodeWrite(c, id, "Trois options.\n\n"+block, lastHash(t, c, id), byBrain); err != nil {
 		t.Fatal(err)
 	}
 	if code, _ := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/mark", nodeMarkIn{Block: "options", List: "opts", Item: "b", Mark: "drop", Version: 1}); code != http.StatusConflict {

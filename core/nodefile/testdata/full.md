@@ -30,7 +30,6 @@ A rule above, then a block:
                 {"id": "c", "component": "Chart", "kind": "line", "series": {"@path": "/errors_5xx/series"}}],
  "data": {},
  "sources": {"errors_5xx": {"tool": "grafana.query", "args": {"q": "errors_5xx"}, "every": 1}},
- "snapshot": {"at": "2026-11-17T10:14", "errors_5xx": {"series": []}},
  "marks": {},
  "external": false}
 ```

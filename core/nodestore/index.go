@@ -13,14 +13,15 @@ import (
 )
 
 // The index, nodes.db: what must be fast, kept from the files. It is
-// rebuilt from them (and from the log, for the versions) when it is lost.
-// The node's state and the notes on its items are code's and the
-// workspace's, not the files': a rebuilt index starts them over (idle, no
-// note).
+// rebuilt from them (and from the log, for the versions) when it is lost,
+// nothing lost: what code keeps beside a node (its items' notes, its
+// cards, its sources' reads) is in core.db. Only the node's state is
+// still kept here, a rebuilt index starting it over (idle).
 
 // schemaVersion is the schema nodes.db is at; meta.schema_version says
-// it. A file at another version is refused, never changed.
-const schemaVersion = 1
+// it. A file at another version is refused, never changed: delete it,
+// it is made again from the files.
+const schemaVersion = 2
 
 // refsSchema holds the [[links]] of the nodes' text: each name a node's
 // text links (its LinkKey) and the node it was resolved to, ” while no
@@ -61,12 +62,6 @@ const schema = `CREATE TABLE nodes (
 	  id TEXT NOT NULL, block TEXT NOT NULL, name TEXT NOT NULL,
 	  spec TEXT NOT NULL,                -- the source as the block says it, JSON
 	  PRIMARY KEY (id, block, name));
-	CREATE TABLE node_items (
-	  id TEXT NOT NULL, source TEXT NOT NULL, item TEXT NOT NULL,
-	  note TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT '',
-	  grp TEXT NOT NULL DEFAULT '',      -- its group: the section a view shows it in
-	  author TEXT NOT NULL, tainted TEXT NOT NULL DEFAULT '', noted INTEGER NOT NULL,
-	  PRIMARY KEY (id, source, item));
 	CREATE VIRTUAL TABLE node_fts USING fts5(id UNINDEXED, title, body,
 	  tokenize='unicode61 remove_diacritics 2');`
 
@@ -89,67 +84,11 @@ func openIndex(path string) (db *sql.DB, fresh bool, err error) {
 	}
 	switch version {
 	case schemaVersion:
-		// An index made before title_trusted lacks it: no title was
-		// trusted then, as no file says it (0, its default).
-		var n int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('nodes') WHERE name = 'title_trusted'`).Scan(&n); err != nil {
-			db.Close()
-			return nil, false, err
-		}
-		if n == 0 {
-			if _, err := db.Exec(`ALTER TABLE nodes ADD COLUMN title_trusted INTEGER NOT NULL DEFAULT 0`); err != nil {
-				db.Close()
-				return nil, false, err
-			}
-		}
-		// An index made before the items' groups lacks them: none was
-		// grouped then.
-		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('node_items') WHERE name = 'grp'`).Scan(&n); err != nil {
-			db.Close()
-			return nil, false, err
-		}
-		if n == 0 {
-			if _, err := db.Exec(`ALTER TABLE node_items ADD COLUMN grp TEXT NOT NULL DEFAULT ''`); err != nil {
-				db.Close()
-				return nil, false, err
-			}
-		}
-		// An index made before opened_by lacks it: no file said it then
-		// ('', unknown, its default).
-		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('nodes') WHERE name = 'opened_by'`).Scan(&n); err != nil {
-			db.Close()
-			return nil, false, err
-		}
-		if n == 0 {
-			if _, err := db.Exec(`ALTER TABLE nodes ADD COLUMN opened_by TEXT NOT NULL DEFAULT ''`); err != nil {
-				db.Close()
-				return nil, false, err
-			}
-		}
-		// An index made before the text's links lacks them: they are
-		// added, and every node is indexed again from its file (its blob
-		// forgotten, reconcile reads it again), its state kept.
-		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'node_refs'`).Scan(&n); err != nil {
-			db.Close()
-			return nil, false, err
-		}
-		if n == 0 {
-			if err := addRefs(db); err != nil {
-				db.Close()
-				return nil, false, err
-			}
-		}
-		// An index made when the graph kept where bubbles were dropped
-		// has their table: nothing reads it any more.
-		if _, err := db.Exec(`DROP TABLE IF EXISTS node_layout`); err != nil {
-			db.Close()
-			return nil, false, err
-		}
 		return db, false, nil
 	case 0:
 	default:
 		db.Close()
-		return nil, false, fmt.Errorf("nodes.db is at schema %d, this eriphe-core reads %d", version, schemaVersion)
+		return nil, false, fmt.Errorf("nodes.db is at schema %d, this eriphe-core reads %d: delete it, it is made again from the files", version, schemaVersion)
 	}
 	tx, err := db.Begin()
 	if err != nil {
@@ -170,22 +109,6 @@ func openIndex(path string) (db *sql.DB, fresh bool, err error) {
 		return nil, false, err
 	}
 	return db, true, nil
-}
-
-// addRefs adds the text's links to an index made before them, in one
-// transaction: a stop halfway leaves the index as it was.
-func addRefs(db *sql.DB) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	for _, q := range []string{`ALTER TABLE nodes ADD COLUMN title_key TEXT NOT NULL DEFAULT ''`, refsSchema, `UPDATE nodes SET blob = ''`} {
-		if _, err := tx.Exec(q); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
 }
 
 // execer is a transaction or the database.

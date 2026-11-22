@@ -4,10 +4,12 @@
 // them when it is lost. The file format is package nodefile's
 // (docs/node-format.md).
 //
-//   - A node is <slug>-<id>.md, flat at the repository's root, its trace
-//     <slug>-<id>.trace.md, its media in files/<id>/. The slug is frozen
-//     at creation: a new title changes the file's front matter, not its
-//     name.
+//   - A node is <slug>-<id>.md, flat at the repository's root, its media
+//     in files/<id>/. The slug is frozen at creation: a new title changes
+//     the file's front matter, not its name.
+//   - Its trace is not versioned: a plain file, <id>.trace.md, appended
+//     to in a folder beside the repository (<repository>-trace), its
+//     oldest part moved to <id>.trace.1.md past MaxTraceFile (trace.go).
 //   - Every write is one commit, with its author (brain, task:<id>,
 //     user…). A node's write makes a new version; the index keeps each
 //     version's commit hash, so history is never asked of git by path. A
@@ -35,7 +37,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -59,6 +60,10 @@ const (
 	MaxBlocks = 32
 	// MaxTrace is the most bytes one append to a trace adds.
 	MaxTrace = 256 << 10
+	// MaxTraceFile is the most bytes of a trace's file: past it, the
+	// file becomes its older part, <id>.trace.1.md, the one before
+	// dropped.
+	MaxTraceFile = 2 << 20
 )
 
 // States of a node, code's, in the index only.
@@ -99,26 +104,28 @@ const (
 	ChangedDoc   = "doc"   // a new version of its file
 	ChangedTrace = "trace" // its trace grew
 	ChangedState = "state" // its state, in the index only
-	ChangedItems = "items" // the notes on the items of one of its sources (Source), in the index only
 )
 
 // Change is a node that changed, and what of it.
 type Change struct {
-	ID     string
-	What   string // ChangedDoc, ChangedTrace, ChangedState or ChangedItems
-	Source string // ChangedItems: the source whose items' notes changed
+	ID   string
+	What string // ChangedDoc, ChangedTrace or ChangedState
 }
 
 // Store is the graph's nodes.
 type Store struct {
-	dir  string // the repository
-	db   *sql.DB
+	dir    string // the repository
+	traces string // the traces' folder, beside it
+	db     *sql.DB
 	repo *git.Repository
 	opts Options
 
 	// One write at a time: the repository's worktree is not shared. A
 	// read of the repository waits for a write.
 	mu sync.RWMutex
+	// One append to the traces at a time: a file moved to its older part
+	// is never appended to meanwhile.
+	traceMu sync.Mutex
 
 	watch func(Change) // Watch's
 }
@@ -200,8 +207,9 @@ func (x Summary) Unasked() bool { return nodefile.UnaskedBy(x.OpenedBy) }
 func (x Summary) TitleExternal() bool { return x.External && !x.TitleTrusted }
 
 // Open opens the store: the repository in dir, the index at index (kept
-// outside dir). The index is made from the files when it is missing; the
-// files changed outside Eriphe are committed and reported.
+// outside dir), the traces in dir's sibling <dir>-trace. The index is
+// made from the files when it is missing; the files changed outside
+// Eriphe are committed and reported.
 func Open(dir, index string, opts Options) (*Store, Report, error) {
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -219,14 +227,17 @@ func Open(dir, index string, opts Options) (*Store, Report, error) {
 	if err := checkRepo(repo); err != nil {
 		return nil, Report{}, fmt.Errorf("repository %s: %w; put it back from a backup (nodes-<day>.bundle: git clone it) and keep the broken one aside", dir, err)
 	}
-	if err := os.MkdirAll(filepath.Dir(index), 0o700); err != nil {
-		return nil, Report{}, err
+	traces := filepath.Clean(dir) + "-trace"
+	for _, d := range []string{filepath.Dir(index), traces} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			return nil, Report{}, err
+		}
 	}
 	db, fresh, err := openIndex(index)
 	if err != nil {
 		return nil, Report{}, fmt.Errorf("index: %w", err)
 	}
-	s := &Store{dir: dir, db: db, repo: repo, opts: opts}
+	s := &Store{dir: dir, traces: traces, db: db, repo: repo, opts: opts}
 	rep, err := s.reconcile(fresh)
 	if err != nil {
 		db.Close()
@@ -289,16 +300,12 @@ func slug(title string) string {
 	return strings.TrimRight(b.String(), "-")
 }
 
-// traceFile is a node's trace's file.
-func traceFile(file string) string { return strings.TrimSuffix(file, ".md") + ".trace.md" }
-
 // New is a node to create.
 type New struct {
 	ID       string // its id when it was given beforehand (a card that shows it); a new one when empty
 	Title    string
 	Parent   string
 	Links    []string
-	After    []string          // a step's: its sibling steps it waits for
 	Lifetime nodefile.Lifetime // work by default
 	Goal     string
 	Body     string // the author's: text and blocks, short forms accepted
@@ -364,15 +371,6 @@ func (s *Store) prepare(nw New) (*nodefile.Node, error) {
 			return nil, fmt.Errorf("link %s: %w", l, err)
 		}
 	}
-	for _, a := range nw.After {
-		sum, err := s.summary(a)
-		if err != nil {
-			return nil, fmt.Errorf("after %s: %w", a, err)
-		}
-		if sum.Parent != nw.Parent || nw.Parent == "" {
-			return nil, fmt.Errorf("after %s: a step waits only for steps of its own parent", a)
-		}
-	}
 	id := nw.ID
 	if id == "" {
 		id = s.opts.NewID()
@@ -384,7 +382,7 @@ func (s *Store) prepare(nw New) (*nodefile.Node, error) {
 	}
 	now := s.opts.Now().Truncate(time.Second)
 	n, err := nodefile.New(nodefile.Meta{
-		ID: id, Title: strings.TrimSpace(nw.Title), Parent: nw.Parent, Links: nw.Links, After: nw.After,
+		ID: id, Title: strings.TrimSpace(nw.Title), Parent: nw.Parent, Links: nw.Links,
 		Lifetime: nw.Lifetime, Goal: nw.Goal, Created: now, External: nw.External, OpenedBy: nw.OpenedBy,
 	}, "")
 	if err != nil {
@@ -402,18 +400,6 @@ func (s *Store) prepare(nw New) (*nodefile.Node, error) {
 		n.VouchTitle()
 	}
 	return n, nil
-}
-
-// Write replaces a node's body (its text and blocks) with an author's,
-// made on the version whose hash is expect. Code's fields of its blocks
-// are kept. A body alike gives the version it was made on.
-func (s *Store) Write(id, body, expect, author string) (*Doc, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.refuse(body); err != nil {
-		return nil, err
-	}
-	return s.change(id, expect, author, "write", func(n *nodefile.Node) error { return n.AuthorBody(body) })
 }
 
 // change applies fn to a node's last version and writes it, when expect
@@ -447,8 +433,8 @@ func (s *Store) change(id, expect, author, op string, fn func(*nodefile.Node) er
 
 // Change is code's write of a node: fn changes its last version, which
 // expect names, as code does what no author may (a block's or the
-// node's external, its title or goal). The node's id, parent, the steps
-// it waits for, creation, done and archived are never changed this way. The store's filter runs
+// node's external, its title or goal). The node's id, parent, creation,
+// done and archived are never changed this way. The store's filter runs
 // over the node written.
 func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error) (*Doc, error) {
 	s.mu.Lock()
@@ -459,8 +445,8 @@ func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error)
 			return err
 		}
 		m := n.Meta
-		if m.ID != was.ID || m.Parent != was.Parent || !slices.Equal(m.After, was.After) || !m.Created.Equal(was.Created) || !m.Done.Equal(was.Done) || !m.Archived.Equal(was.Archived) {
-			return errors.New("a node's id, parent, after, creation, done and archived are not changed by a write")
+		if m.ID != was.ID || m.Parent != was.Parent || !m.Created.Equal(was.Created) || !m.Done.Equal(was.Done) || !m.Archived.Equal(was.Archived) {
+			return errors.New("a node's id, parent, creation, done and archived are not changed by a write")
 		}
 		raw, err := n.Bytes()
 		if err != nil {
@@ -471,10 +457,9 @@ func (s *Store) Change(id, expect, author string, fn func(*nodefile.Node) error)
 }
 
 // onlyCodeSince tells whether a node's versions since the one whose hash
-// is expect changed only code's fields (a source's snapshot, the user's
-// marks, external): a write made on that version then applies on the
-// last one, code's fields kept. A live block's snapshot never makes an
-// author's write stale.
+// is expect changed only code's fields (the user's marks, external): a
+// write made on that version then applies on the last one, code's fields
+// kept.
 func (s *Store) onlyCodeSince(cur *Doc, expect string) bool {
 	var n int
 	if s.db.QueryRow(`SELECT n FROM node_versions WHERE id = ? AND hash = ?`, cur.Node.Meta.ID, expect).Scan(&n) != nil || n >= cur.Version.N {
@@ -688,65 +673,6 @@ func (s *Store) Versions(id string) ([]Version, error) {
 		out = append(out, v)
 	}
 	return out, rows.Err()
-}
-
-// AppendTrace adds an entry at the end of a node's trace: when, who, and
-// its text, never cut. The trace is not a version of the node; the node
-// is changed now all the same (Summary.Updated).
-func (s *Store) AppendTrace(id, author, text string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if strings.TrimSpace(author) == "" {
-		return errors.New("a write has an author")
-	}
-	if len(text) > MaxTrace {
-		return fmt.Errorf("a trace entry is %d KiB at most", MaxTrace>>10)
-	}
-	if err := s.refuse(text); err != nil {
-		return err
-	}
-	sum, err := s.summary(id)
-	if err != nil {
-		return err
-	}
-	file := traceFile(sum.File)
-	old, err := os.ReadFile(filepath.Join(s.dir, file))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	now := s.opts.Now()
-	entry := fmt.Sprintf("## %s · %s\n\n%s\n\n", now.Format(time.RFC3339), author, strings.TrimRight(text, "\n"))
-	if len(old) == 0 {
-		old = []byte("# " + sum.Title + "\n\n")
-	}
-	hash, err := s.commit(fmt.Sprintf("trace %s", id), author, now, []change{{path: file, data: append(old, entry...)}}, nil)
-	if err != nil {
-		return err
-	}
-	// The node moved: it is among the last changed (Recent).
-	if _, err := s.db.Exec(`UPDATE nodes SET updated = ? WHERE id = ?`, now.Unix(), id); err != nil {
-		return err
-	}
-	if err := setIndexed(s.db, hash); err != nil {
-		return err
-	}
-	s.changed(ChangedTrace, id)
-	return nil
-}
-
-// Trace is a node's trace; empty while it has none.
-func (s *Store) Trace(id string) ([]byte, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	sum, err := s.summary(id)
-	if err != nil {
-		return nil, err
-	}
-	b, err := os.ReadFile(filepath.Join(s.dir, traceFile(sum.File)))
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	return b, err
 }
 
 // SetState sets a node's state: running, waiting, idle or done.

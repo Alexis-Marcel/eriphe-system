@@ -144,8 +144,9 @@ func TestNodePage(t *testing.T) {
 		t.Errorf("cards %+v", p.Cards)
 	}
 
-	// An older version shows its own snapshot, not the reads.
-	if _, body, _ := tw.do("GET", "/api/nodes/"+id+"?version=1", nil, nil); !strings.Contains(body, `"version":1`) || strings.Contains(body, "Titre 1") {
+	// An older version shows the last reads too: the sources' values are
+	// code's, never in a version; its marks are its own.
+	if _, body, _ := tw.do("GET", "/api/nodes/"+id+"?version=1", nil, nil); !strings.Contains(body, `"version":1`) || !strings.Contains(body, "Titre 1") || strings.Contains(body, `"t2":"keep"`) {
 		t.Errorf("v1: %s", body)
 	}
 	if code, _, _ := tw.do("GET", "/api/nodes/zz9", nil, nil); code != http.StatusNotFound {
@@ -417,7 +418,7 @@ func TestNodePageNumbersFromContent(t *testing.T) {
 	c := tw.c
 	id := mustNode(t, c, nodestore.New{Title: "Plan"})
 	d, _ := c.nodes.Read(id, 0)
-	if _, err := c.nodes.Write(id, "1. Un titre\n", d.Version.Hash, byBrain); err != nil {
+	if _, err := nodeWrite(c, id, "1. Un titre\n", d.Version.Hash, byBrain); err != nil {
 		t.Fatal(err)
 	}
 	p, err := tw.w.nodePageOf(id, 0, "fr")

@@ -1279,7 +1279,7 @@ func (sc *scenario) handleSections(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for item, group := range map[string]string{"s1": "À supprimer", "s2": "Pour info", "s3": "À supprimer", "s4": "À supprimer", "s5": "Pour info"} {
-		if err := c.nodes.NoteItem(id, nodestore.Item{Source: "tri", Item: item, Group: group, Author: byBrain}); err != nil {
+		if err := c.noteItem(id, itemNote{Source: "tri", Item: item, Group: group, Author: byBrain}); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -1308,7 +1308,7 @@ func (sc *scenario) handleOpen(rw http.ResponseWriter, r *http.Request) {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := c.nodes.NoteItem(id, nodestore.Item{Source: "lus", Item: "l1", Group: "À traiter", Note: "Sam attend ton avis", Author: byBrain}); err != nil {
+	if err := c.noteItem(id, itemNote{Source: "lus", Item: "l1", Group: "À traiter", Note: "Sam attend ton avis", Author: byBrain}); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -1352,7 +1352,7 @@ func (sc *scenario) handleBilan(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for item, n := range bilanNotes {
-		if err := c.nodes.NoteItem(id, nodestore.Item{Source: "mails", Item: item, Group: n[0], Note: n[1], State: "act", Author: byBrain}); err != nil {
+		if err := c.noteItem(id, itemNote{Source: "mails", Item: item, Group: n[0], Note: n[1], State: "act", Author: byBrain}); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 			return
 		}

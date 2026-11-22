@@ -81,7 +81,7 @@ func TestItemOpenChecked(t *testing.T) {
 func TestItemOpenReads(t *testing.T) {
 	tw, csrf, fm, id := openWeb(t, `{"tool": "monitor/message", "id": "id"}`)
 	c := tw.c
-	if err := c.nodes.NoteItem(id, nodestore.Item{Source: "received", Item: "m1", Group: "À supprimer", Note: "Une relance", Author: byBrain, Tainted: "external:monitor"}); err != nil {
+	if err := c.noteItem(id, itemNote{Source: "received", Item: "m1", Group: "À supprimer", Note: "Une relance", Author: byBrain, Tainted: "external:monitor"}); err != nil {
 		t.Fatal(err)
 	}
 	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/open", itemOpenIn{Block: "inbox", Source: "received", Item: "m1"})

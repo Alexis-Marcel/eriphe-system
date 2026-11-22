@@ -426,7 +426,7 @@ func (c *core) itemCardMoved(batch int64) {
 		n := c.itemNotes(a.Node, a.Source)[a.Item]
 		if n.State != itemDone {
 			n.Source, n.Item, n.State, n.Author = a.Source, a.Item, itemDone, nodeByCode
-			if err := c.nodes.NoteItem(a.Node, n); err != nil {
+			if err := c.noteItem(a.Node, n); err != nil {
 				log.Printf("item card %d: %s: %v", batch, a.Node, err)
 			}
 		}

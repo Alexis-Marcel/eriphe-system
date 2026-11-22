@@ -167,7 +167,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if nodeExternal(d.Node) {
 				c.taskRead(w.task, "node:"+w.node) // its words may be someone else's
 			}
-			items, _ := c.nodes.Items(w.node)
+			items, _ := c.nodeItems(w.node)
 			out := map[string]any{"id": w.node, "title": d.Node.Meta.Title, "state": d.State, "version": d.Version.N, "last": d.Last,
 				"hash": d.Version.Hash, "external": d.Node.Meta.External, "body": nodeBody(d.Raw)}
 			if len(items) > 0 {
@@ -267,7 +267,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 					return nil, err
 				}
 			}
-			err := c.nodes.NoteItem(w.node, nodestore.Item{Source: source, Item: item,
+			err := c.noteItem(w.node, itemNote{Source: source, Item: item,
 				Note: in.Note, State: in.State, Group: in.Group, Author: w.author, Tainted: c.writeTaint(w.task)})
 			if err != nil {
 				return nil, err

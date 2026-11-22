@@ -70,11 +70,6 @@ func (c *core) useNodes(s *nodestore.Store) {
 			c.graphSaid(graphEvent{Kind: graphEvDoc, Node: ch.ID})
 		case nodestore.ChangedTrace:
 			c.graphSaid(graphEvent{Kind: graphEvTrace, Node: ch.ID})
-		case nodestore.ChangedItems:
-			// The notes on a source's items: its row, and the source as
-			// the page draws it, in each block that reads it.
-			c.graphSaid(graphEvent{Kind: graphEvNode, Node: ch.ID})
-			c.graphSaid(graphEvent{Kind: graphEvSource, Node: ch.ID, Name: ch.Source})
 		case nodestore.ChangedState:
 			// Its work stopped or moved on: the line said while it ran
 			// goes; a new run says its own.

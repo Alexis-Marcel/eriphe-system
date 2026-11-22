@@ -269,12 +269,9 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 			p.Versions = append(p.Versions, pageVersion{N: v.N, Author: v.Author, At: v.At})
 		}
 	}
-	// The sources' last values are the reads' at the last version; an
-	// older one shows its own snapshot.
-	var reads []nodeRead
-	if d.Version.N == d.Last {
-		reads = c.nodeReads(id)
-	}
+	// The sources' values are their last reads, whatever the version:
+	// they are code's, never in the file.
+	reads := c.nodeReads(id)
 	for _, part := range d.Node.Parts() {
 		if part.Block == nil {
 			p.Parts = append(p.Parts, pagePart{Text: part.Text})
@@ -384,12 +381,7 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 			v.Data = map[string]any{}
 		}
 	}
-	var snap map[string]any
-	json.Unmarshal(b.Snapshot, &snap)
 	for name := range b.Sources {
-		if val, ok := snap[name]; ok {
-			v.Data[name] = val
-		}
 		for _, r := range reads {
 			if r.Block == b.Name && r.Name == name && r.Value != nil {
 				v.Data[name] = r.Value

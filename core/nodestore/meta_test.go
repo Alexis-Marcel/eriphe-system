@@ -20,7 +20,7 @@ func TestSetDone(t *testing.T) {
 		t.Fatal("done twice")
 	}
 	// A write made on the version before it applies: done is code's.
-	if _, err := s.Write("n1", "Draft, v2.", d.Version.Hash, "brain"); err != nil {
+	if _, err := write(s, "n1", "Draft, v2.", d.Version.Hash, "brain"); err != nil {
 		t.Fatalf("an author's write after done: %v", err)
 	}
 	if changed, err := s.SetDone("n1", false, "user"); err != nil || !changed {
