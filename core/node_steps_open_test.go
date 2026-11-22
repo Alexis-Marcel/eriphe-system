@@ -34,7 +34,7 @@ func TestOpenStepsNoOrphans(t *testing.T) {
 	}
 
 	// The second node fails as it is made: the first stays with its row,
-	// the second has neither.
+	// the second has neither, and the work runs the first.
 	made := 0
 	was := stepCreate
 	stepCreate = func(s *nodestore.Store, nw nodestore.New) error {
@@ -62,5 +62,9 @@ func TestOpenStepsNoOrphans(t *testing.T) {
 		if _, err := c.nodes.Get(st.Node); err != nil {
 			t.Errorf("step %s without its node", st.Node)
 		}
+	}
+	// The step made runs: its work is set up for it.
+	if w, ok := c.work(parent); !ok || w.State != workRunning {
+		t.Errorf("no running work for the step made: %+v %v", w, ok)
 	}
 }

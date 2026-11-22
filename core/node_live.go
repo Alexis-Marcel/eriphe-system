@@ -129,10 +129,21 @@ func (c *core) runNodeSources(ctx context.Context) {
 	}
 }
 
-// nodeReads are the reads kept of a node's sources, by block then name;
-// an archived node's too, read no more.
+// nodeReads are the reads kept of a live node's sources, by block then
+// name: what code acts on (attention, cards, skills, freshness). None for
+// an archived node.
 func (c *core) nodeReads(node string) []nodeRead {
-	srcs, err := c.nodes.KeptSources(node)
+	return c.readsOf(node, c.nodes.Sources)
+}
+
+// keptReads are nodeReads, an archived node's too, read no more: what
+// its page and node_read show.
+func (c *core) keptReads(node string) []nodeRead {
+	return c.readsOf(node, c.nodes.KeptSources)
+}
+
+func (c *core) readsOf(node string, sources func(string) ([]nodestore.LiveSource, error)) []nodeRead {
+	srcs, err := sources(node)
 	if err != nil || len(srcs) == 0 {
 		return nil
 	}
@@ -525,7 +536,7 @@ const nodeValueShown = 16 << 10
 // whether or not its block was marked yet.
 func (c *core) nodeValues(n *nodefile.Node) (map[string]map[string]any, bool) {
 	var out map[string]map[string]any
-	for _, r := range c.nodeReads(n.Meta.ID) {
+	for _, r := range c.keptReads(n.Meta.ID) {
 		if r.Value == nil {
 			continue
 		}

@@ -271,7 +271,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 	}
 	// The sources' values are their last reads, whatever the version:
 	// they are code's, never in the file.
-	reads := c.nodeReads(id)
+	reads := c.keptReads(id)
 	for _, part := range d.Node.Parts() {
 		if part.Block == nil {
 			p.Parts = append(p.Parts, pagePart{Text: part.Text})
@@ -463,7 +463,7 @@ func (c *core) sourceEvents(id, block, name string) []map[string]any {
 			continue
 		}
 		if reads == nil {
-			reads = c.nodeReads(id)
+			reads = c.keptReads(id)
 		}
 		v := c.blockView(id, b, reads)
 		val, ok := v.Data[name]

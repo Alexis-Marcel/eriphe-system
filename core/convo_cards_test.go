@@ -227,6 +227,9 @@ func TestCardAnsweredInWords(t *testing.T) {
 	if line := c.cardAnswerLine(seq); !strings.Contains(line, "validé") || !strings.Contains(line, "ne la refais pas") {
 		t.Fatalf("the brain is not told: %q", line)
 	}
+	if c.store.cardAnswer(seq) == "" || kvMarks(c) != 0 {
+		t.Fatalf("the answer is not its message's: %q, %d in kv", c.store.cardAnswer(seq), kvMarks(c))
+	}
 
 	// "non" rejects.
 	r = proposedRule(t, c, "banque", "")

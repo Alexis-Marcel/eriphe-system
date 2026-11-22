@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
 )
 
 // Item notes: what an author says of one item a block's source lists (a
@@ -83,7 +85,7 @@ func (c *core) noteItem(id string, it itemNote) error {
 		return err
 	}
 	if !cur.Node.Meta.Archived.IsZero() {
-		return fmt.Errorf("%s: the node is archived", id)
+		return fmt.Errorf("%s: %w", id, nodestore.ErrArchived)
 	}
 	var names []string
 	found := false

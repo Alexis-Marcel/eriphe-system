@@ -357,7 +357,7 @@ func TestLiveBlockKeepsLastGood(t *testing.T) {
 	}
 	shown := func() any {
 		d, _ := c.nodes.Read(node, 0)
-		return state(c.blockView(node, d.Node.Block("etat"), c.nodeReads(node)).Data)
+		return state(c.blockView(node, d.Node.Block("etat"), c.keptReads(node)).Data) // as the page
 	}
 	before := tasks()
 	start := time.Now()
@@ -421,6 +421,14 @@ func TestLiveBlockKeepsLastGood(t *testing.T) {
 	c.nodeSourcesDue(context.Background(), start.Add(100*time.Hour))
 	if got := shown(); got != "up" {
 		t.Fatalf("archived: shown %v", got)
+	}
+	// Code acts on no read of an archived node (attention, cards,
+	// skills): its kept reads are only shown.
+	if rs := c.nodeReads(node); len(rs) != 0 {
+		t.Fatalf("archived: live reads %+v", rs)
+	}
+	if rs := c.keptReads(node); len(rs) != 1 {
+		t.Fatalf("archived: kept reads %+v", rs)
 	}
 }
 

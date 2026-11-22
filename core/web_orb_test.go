@@ -346,13 +346,27 @@ func TestOrbCardAsked(t *testing.T) {
 	if !c.cardAsked(card("access:4", 0), false) {
 		t.Error("a call the brain asked a yes for, answering the user, is not the orb's")
 	}
-	// The mark goes with its card.
-	c.store.db.Exec(`DELETE FROM convo_cards WHERE ref = ?`, "access:4")
+	// The marks are columns of their message or card: they go with it,
+	// nothing is left in kv.
+	answer, _ := c.store.addMessage(roleBrain, "C'est fait.", true)
+	c.markAnswer(int(answer))
+	c.userActEvent("Sam a dit oui.", "", "")
+	var acts, answered int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE user_act = 1`).Scan(&acts)
+	c.store.db.QueryRow(`SELECT answer_to FROM messages WHERE seq = ?`, answer).Scan(&answered)
+	if acts != 1 || answered != int(asked) {
+		t.Errorf("user acts %d, answer to %d", acts, answered)
+	}
+	if kvMarks(c) != 0 {
+		t.Errorf("%d marks in kv", kvMarks(c))
+	}
+}
+
+// kvMarks counts the marks that are columns now, would one still go to kv.
+func kvMarks(c *core) int {
 	var n int
 	c.store.db.QueryRow(`SELECT COUNT(*) FROM kv WHERE key LIKE 'asked_card:%' OR key LIKE 'answer_msg:%' OR key LIKE 'user_act:%' OR key LIKE 'card_answer:%'`).Scan(&n)
-	if n != 0 {
-		t.Errorf("%d marks in kv", n)
-	}
+	return n
 }
 
 // The user's Oui or Non on a card is the user talking to Eriphe: what

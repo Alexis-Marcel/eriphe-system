@@ -666,14 +666,22 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	// The steps made before one that could not be are a plan of their
+	// own: the work is set up for them and they run; the error says which
+	// step was not made.
+	var failed error
 	for i, p := range plan {
 		if err := stepCreate(c.nodes, p.nw); err != nil {
 			for _, q := range plan[i:] {
 				c.store.db.Exec(`DELETE FROM node_steps WHERE node = ?`, q.nw.ID)
 				delete(ids, q.key)
 			}
-			return ids, fmt.Errorf("step %s: %w", p.key, err)
+			failed = fmt.Errorf("step %s: %w", p.key, err)
+			break
 		}
+	}
+	if len(ids) == 0 {
+		return ids, failed
 	}
 	now := time.Now().Unix()
 	w, ok := c.work(parent)
@@ -696,7 +704,7 @@ func (c *core) openStepsLocked(ctx context.Context, parent string, specs []stepS
 	keys := slices.Sorted(maps.Keys(ids))
 	c.traceWork(parent, fmt.Sprintf("Étapes ouvertes par %s : %s.", by.author, strings.Join(keys, ", ")), strings.Join(by.tainted, ", "))
 	c.advanceLocked(ctx, parent)
-	return ids, nil
+	return ids, failed
 }
 
 // stepCreate makes a step's node: a test makes it fail.

@@ -3,7 +3,9 @@
 // ("```eriphe:block <name>"). The format is written down in
 // docs/node-format.md.
 //
-// Parsing is lossless: a node parsed then written gives the same bytes.
+// Parsing is lossless: a node parsed then written gives the same bytes,
+// but for a block written in short form or saying an old snapshot, which
+// is written again in its canonical form.
 // What changes through this package's API is written again in its
 // canonical form; everything else keeps its bytes (front matter, text,
 // each block).
