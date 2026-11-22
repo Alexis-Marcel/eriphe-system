@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -123,9 +124,11 @@ func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 	var answer []Message
 	for _, m := range msgs {
 		switch {
-		case s.get(answerKey(m.Seq)) == "":
-			// An event's words, a failure of a turn that answered none:
-			// not in reply to the user.
+		case answeredTo(s.get(answerKey(m.Seq))) < from:
+			// An event's words, a failure of a turn that answered none,
+			// or the answer to an earlier message of the user's (written
+			// after this one was sent, while it waited): not the reply to
+			// the user's last message.
 		case m.Role == roleError:
 			x.Failed = &orbFailed{Seq: m.Seq, Node: m.Node}
 			answer = nil
@@ -403,14 +406,27 @@ func shortLine(line string) string {
 }
 
 // answerKey marks a message of Eriphe's written in a turn that answers
-// messages of the user's (markAnswer), its words or its error.
+// messages of the user's (markAnswer), its words or its error: the last
+// message that turn read.
 func answerKey(seq int) string { return fmt.Sprintf("answer_msg:%d", seq) }
+
+// answeredTo is the last message read by the turn an answer mark names;
+// 0 for none.
+func answeredTo(mark string) int {
+	n, _ := strconv.Atoi(mark)
+	return n
+}
 
 // markAnswer marks a message the brain just wrote, or its error, when its
 // turn answers the user, not events or a wake only: the orb says it; an
-// event's words never.
+// event's words never. The mark is the last message the turn read: a
+// message of the user's sent while it ran waits for the next turn, whose
+// answer alone replies to it.
 func (c *core) markAnswer(seq int) {
-	if c.turnAnswersUser() {
-		c.store.set(answerKey(seq), "1")
+	c.turn.mu.Lock()
+	asked, to := c.turn.asked, c.turn.to
+	c.turn.mu.Unlock()
+	if asked {
+		c.store.set(answerKey(seq), strconv.Itoa(max(to, 1)))
 	}
 }
