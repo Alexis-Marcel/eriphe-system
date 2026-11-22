@@ -1973,7 +1973,7 @@ compares what a path extracts from the result with what it saw:
 
 | Condition | Event | Payload |
 |---|---|---|
-| `changed`: the value at `path` (the whole result if empty) is not the last one, and a second look 30 s later saw the same (a flap tells nothing) | `monitor.changed` | `value`, `was` |
+| `changed`: the value at `path` (the whole result if empty) is not the last one, and a second look 30 s later still finds it is not (back as it was, a flap tells nothing; a value that moves at every look, such as a series with its evaluation time, is still a change: keep such parts out of `path`, which `try_monitor` warns of with `moves_by_itself`) | `monitor.changed` | `value`, `was` |
 | `new`: the items of the list at `path` whose `id` was not seen (the last 1000 ids kept) | `monitor.new`, one per item | `id`, `item` |
 | `cross`: the number at `path` goes `above` (or `below`) the limit, or back, confirmed the same way: a measure becomes a state, so 47 % then 52 % is nothing. Before its first look the limit counts as not crossed: a number already past it tells | `monitor.crossed` | `value`, `holds` (true past the limit, false back), `above` or `below` |
 | three failed looks in a row, then the next good one | `monitor.failed`, `monitor.recovered` | `error` |

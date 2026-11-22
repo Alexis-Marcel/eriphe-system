@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -25,6 +26,7 @@ type fakeMonitor struct {
 	failing  bool
 	calls    int
 	rules    []map[string]any // alerts: Grafana-like alert rules, each uid, name, state
+	stamped  bool             // alerts: each rule comes with its evaluation, new at each call
 	cpu      float64          // status: data.cpu
 	got      []map[string]any // monitor://received: messages, each id, subject
 	silenced []string         // silence: the uids it was called on
@@ -57,6 +59,10 @@ func (m *fakeMonitor) server() *mcp.Server {
 			}
 			rules := []any{}
 			for _, r := range m.rules {
+				if m.stamped {
+					r = maps.Clone(r)
+					r["evaluated"] = m.calls
+				}
 				rules = append(rules, r)
 			}
 			return nil, map[string]any{"data": map[string]any{"rules": rules}, "at": time.Now().Format(time.RFC3339Nano)}, nil

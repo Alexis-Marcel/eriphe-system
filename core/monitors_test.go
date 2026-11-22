@@ -113,6 +113,50 @@ func TestMonitorChanged(t *testing.T) {
 	}
 }
 
+// changed: a value that moves at every look (Prometheus series with their
+// evaluation time) is still told, once the second look finds it is not
+// the last one either; back to the last one before it, a flap.
+func TestMonitorChangedMovingValue(t *testing.T) {
+	c, mon, now := pollCore(t)
+	mon.stamped = true
+	mon.rules = []map[string]any{{"uid": "a", "name": "down", "state": "normal"}}
+	approvedMonitor(t, c, "getout-alertes", monitorSpec{Server: "monitor", Tool: "alerts", Every: 2, Path: "data.rules[state=firing]"})
+	lookAt(c, *now) // the baseline: []
+	mon.rules[0]["state"] = "firing"
+	lookAt(c, now.Add(2*time.Minute))
+	lookAt(c, now.Add(2*time.Minute+monitorConfirm))
+	es := eventsOf(t, c, evMonitorChanged)
+	if len(es) != 1 || es[0].Payload["was"] != "[]" {
+		t.Fatalf("a firing alert with its evaluation time was not told: %+v", es)
+	}
+	// Back to [] before the second look: a flap, whatever moved between.
+	mon.rules[0]["state"] = "normal"
+	lookAt(c, now.Add(4*time.Minute))
+	lookAt(c, now.Add(6*time.Minute))
+	mon.rules[0]["state"] = "firing"
+	lookAt(c, now.Add(8*time.Minute))
+	mon.rules[0]["state"] = "normal"
+	lookAt(c, now.Add(8*time.Minute+monitorConfirm))
+	if es := eventsOf(t, c, evMonitorChanged); len(es) != 2 {
+		t.Fatalf("want the alert, then its end, no flap: %+v", es)
+	}
+}
+
+// try_monitor says when a changed monitor's value moves by itself.
+func TestTryMonitorMovesByItself(t *testing.T) {
+	c, mon, _ := pollCore(t)
+	mon.stamped = true
+	mon.rules = []map[string]any{{"uid": "a", "name": "down", "state": "firing"}}
+	out, _ := callBrainTool(t, c, "try_monitor", map[string]any{"server": "monitor", "tool": "alerts", "path": "data.rules"})
+	if out["works"] != true || out["moves_by_itself"] == nil {
+		t.Fatalf("a value with its evaluation time: %v", out)
+	}
+	out, _ = callBrainTool(t, c, "try_monitor", map[string]any{"server": "monitor", "tool": "alerts", "path": "data.rules.*.name"})
+	if out["works"] != true || out["moves_by_itself"] != nil {
+		t.Fatalf("a steady value: %v", out)
+	}
+}
+
 // new: one event per item not seen, after the baseline.
 func TestMonitorNew(t *testing.T) {
 	c, mon, now := pollCore(t)
