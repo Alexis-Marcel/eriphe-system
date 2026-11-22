@@ -84,7 +84,8 @@ func TestRunTaskContract(t *testing.T) {
 	}
 }
 
-// run_task's schema teaches the contract, and has no approval in it.
+// The contract is taught once, in node_open's steps (the brain's and the
+// workers'); run_task names it there, and neither has approval in it.
 func TestRunTaskContractSchema(t *testing.T) {
 	c := newCatalogCore(t)
 	cs := connectTo(t, newMCPServer(c))
@@ -92,23 +93,24 @@ func TestRunTaskContractSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	schemas := map[string]string{}
 	for _, tl := range tools.Tools {
-		if tl.Name != "run_task" {
-			continue
-		}
 		raw, _ := json.Marshal(tl.InputSchema)
-		s := string(raw)
-		for _, want := range []string{`"contract"`, `"objective"`, `"checks"`, `"exists"`, `"budget"`, `"attempts"`, "the policy decides"} {
-			if !strings.Contains(s, want) {
-				t.Errorf("schema lacks %s", want)
-			}
-		}
-		if strings.Contains(s, `"approval"`) {
-			t.Error("the model may set approval")
-		}
-		return
+		schemas[tl.Name] = string(raw)
 	}
-	t.Fatal("no run_task")
+	for _, want := range []string{`"contract"`, `"objective"`, `"checks"`, `"exists"`, `"budget"`, `"attempts"`} {
+		if !strings.Contains(schemas["node_open"], want) {
+			t.Errorf("node_open's schema lacks %s", want)
+		}
+	}
+	if s := schemas["run_task"]; !strings.Contains(s, `"contract"`) || !strings.Contains(s, "node_open's steps' contract") || !strings.Contains(s, "Approval is never in it") {
+		t.Errorf("run_task's contract: %s", s)
+	}
+	for _, name := range []string{"run_task", "node_open"} {
+		if strings.Contains(schemas[name], `"approval"`) {
+			t.Errorf("the model may set approval in %s", name)
+		}
+	}
 }
 
 func TestContractOnDrawer(t *testing.T) {

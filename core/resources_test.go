@@ -258,7 +258,8 @@ func TestTaintedResources(t *testing.T) {
 	}
 }
 
-// run_task teaches resources first; the old fields say they are legacy.
+// Resources are taught once, in node_open's steps; run_task names them
+// there.
 func TestRunTaskSchema(t *testing.T) {
 	c := newCatalogCore(t)
 	cs := connectTo(t, newMCPServer(c))
@@ -266,18 +267,17 @@ func TestRunTaskSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	schemas := map[string]string{}
 	for _, tl := range tools.Tools {
-		if tl.Name != "run_task" {
-			continue
-		}
 		raw, _ := json.Marshal(tl.InputSchema)
-		s := string(raw)
-		for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "place"} {
-			if !strings.Contains(s, want) {
-				t.Errorf("schema lacks %s: %s", want, s)
-			}
-		}
-		return
+		schemas[tl.Name] = string(raw)
 	}
-	t.Fatal("no run_task")
+	for _, want := range []string{`"resources"`, `"kind"`, `"access"`, "place"} {
+		if !strings.Contains(schemas["node_open"], want) {
+			t.Errorf("node_open's schema lacks %s: %s", want, schemas["node_open"])
+		}
+	}
+	if s := schemas["run_task"]; !strings.Contains(s, `"resources"`) || !strings.Contains(s, "node_open's steps' resources") {
+		t.Errorf("run_task's resources: %s", s)
+	}
 }

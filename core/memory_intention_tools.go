@@ -14,14 +14,14 @@ import (
 // are its language work; when an intention becomes due is code's.
 
 type intendIn struct {
-	Text      string `json:"text" jsonschema:"what is owed or to remember, in the user's language, one sentence"`
-	Kind      string `json:"kind,omitempty" jsonschema:"promise (the user owes someone), commitment (you owe the user), waiting_for (someone owes the user), reminder (something to remember to do); reminder by default"`
-	Owner     string `json:"owner,omitempty" jsonschema:"who owes: owner (the user), assistant (you), person:<slug>"`
-	OwedTo    string `json:"owed_to,omitempty" jsonschema:"to whom: owner, person:<slug>…"`
-	About     string `json:"about,omitempty" jsonschema:"what it is about, kind:slug: project:<name>, client:<slug>, pr:<owner>/<repo>#<n>…"`
+	Text      string `json:"text" jsonschema:"one sentence, in the user's language"`
+	Kind      string `json:"kind,omitempty" jsonschema:"promise (the user owes), commitment (you owe), waiting_for (someone owes the user) or reminder (default)"`
+	Owner     string `json:"owner,omitempty" jsonschema:"who owes: owner, assistant, person:<slug>"`
+	OwedTo    string `json:"owed_to,omitempty" jsonschema:"to whom: owner, person:<slug>"`
+	About     string `json:"about,omitempty" jsonschema:"kind:slug: project:<name>, pr:<owner>/<repo>#<n>"`
 	DueAt     string `json:"due_at,omitempty" jsonschema:"the deadline, YYYY-MM-DD or YYYY-MM-DDTHH:MM"`
-	RemindAt  string `json:"remind_at,omitempty" jsonschema:"when to bring it up; the deadline itself by default (9:00 for a day without a time)"`
-	Cue       string `json:"cue,omitempty" jsonschema:"for 'the next time I talk about X': the name that brings it up (instead of a time)"`
+	RemindAt  string `json:"remind_at,omitempty" jsonschema:"when to bring it up; the deadline by default"`
+	Cue       string `json:"cue,omitempty" jsonschema:"the name whose mention brings it up, instead of a time"`
 	SourceRef string `json:"source_ref,omitempty" jsonschema:"the user's message it comes from, msg:N"`
 }
 
@@ -73,7 +73,7 @@ func viewIntention(x *Intention, now time.Time) intentionView {
 }
 
 func registerIntentionTools(s *mcp.Server, c *core) {
-	tool(s, "intend", "Record an intention, something owed or to do once: a promise, a commitment of yours, something the user waits for, a one-off reminder (remind me at 14:00); what comes back on a schedule is a timed skill instead (write_skill, when: time); with its deadline, when to bring it up, or the person whose mention brings it up. eriphe-core wakes you when it is due. What a turn that read external content records is only proposed.",
+	tool(s, "intend", "Record something owed or to do once: a promise, a commitment of yours, what the user waits for, a reminder; with its deadline, when to bring it up, or the name that brings it up. eriphe-core wakes you when it is due. What recurs is a timed skill. In a tainted turn, only proposed.",
 		func(ctx context.Context, in intendIn) (map[string]any, error) {
 			return c.brainIntend(in)
 		})

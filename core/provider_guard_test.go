@@ -57,6 +57,8 @@ func providerHits(t *testing.T, file string) []string {
 	ast.Inspect(f, func(n ast.Node) bool {
 		var s string
 		switch x := n.(type) {
+		case *ast.ImportSpec:
+			return false // a library's module path, not a provider's case
 		case *ast.Ident:
 			s = x.Name
 		case *ast.BasicLit:

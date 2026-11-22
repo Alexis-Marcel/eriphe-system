@@ -945,17 +945,17 @@ func (in writeMonitorIn) spec() (monitorSpec, error) {
 }
 
 type writeMonitorIn struct {
-	Name     string         `json:"name" jsonschema:"lowercase letters, digits and dashes: getout-prod; the key of its events"`
+	Name     string         `json:"name" jsonschema:"lowercase letters, digits and dashes: the key of its events"`
 	Server   string         `json:"server" jsonschema:"the catalog server (list_tools)"`
-	Tool     string         `json:"tool,omitempty" jsonschema:"one of its read-only tools, a free read of yours; or"`
-	Resource string         `json:"resource,omitempty" jsonschema:"one of its resources, by its URI (the mail server's mail://received: the messages just received, as a list messages, each with its id; the calendar server's calendar://invitations: the invitations waiting for an answer, as a list invitations, each with its id)"`
+	Tool     string         `json:"tool,omitempty" jsonschema:"one of its read-only tools, a free read of yours; or resource"`
+	Resource string         `json:"resource,omitempty" jsonschema:"one of its resources, by URI"`
 	Args     map[string]any `json:"args,omitempty" jsonschema:"the tool's fixed arguments"`
-	Every    string         `json:"every,omitempty" jsonschema:"how often it looks: 1m to 1d (2m, 15m, 1h); 5m if empty"`
-	Cond     string         `json:"cond,omitempty" jsonschema:"changed (default): an event when the value at path changes; new: one event per item of the list at path not seen before; cross: an event when the number at path goes past above or below, and when it comes back (holds true or false)"`
-	Path     string         `json:"path,omitempty" jsonschema:"what it compares in the result: fields joined by dots, * for every item of a list, [field=value] or [field!=value] to keep some (data.rules[state=firing].name); the whole result if empty"`
-	ID       string         `json:"id,omitempty" jsonschema:"with new: the field of an item that tells it from another (id, uid)"`
-	Above    *float64       `json:"above,omitempty" jsonschema:"with cross: the limit the number goes above (90 for a CPU at 90 %)"`
-	Below    *float64       `json:"below,omitempty" jsonschema:"with cross: the limit the number goes below (200 for a price under 200)"`
+	Every    string         `json:"every,omitempty" jsonschema:"1m to 1d; 5m if empty"`
+	Cond     string         `json:"cond,omitempty" jsonschema:"changed (default), new (an event per new item at path) or cross (past above or below, and back)"`
+	Path     string         `json:"path,omitempty" jsonschema:"what it compares: fields by dots, * for every item, [field=value] or [field!=value] to keep some (data.rules[state=firing].name); the whole result if empty"`
+	ID       string         `json:"id,omitempty" jsonschema:"with new: the field that tells an item from another"`
+	Above    *float64       `json:"above,omitempty" jsonschema:"with cross: the upper limit"`
+	Below    *float64       `json:"below,omitempty" jsonschema:"with cross: the lower limit"`
 }
 
 type nameIn struct {
@@ -963,20 +963,20 @@ type nameIn struct {
 }
 
 type tryMonitorIn struct {
-	Name     string         `json:"name,omitempty" jsonschema:"a monitor of the user's (monitors), tried as it is; or leave it empty and give a draft"`
+	Name     string         `json:"name,omitempty" jsonschema:"one of the user's monitors; empty for a draft"`
 	Server   string         `json:"server,omitempty" jsonschema:"a draft's catalog server"`
 	Tool     string         `json:"tool,omitempty" jsonschema:"a draft's read-only tool, or"`
 	Resource string         `json:"resource,omitempty" jsonschema:"a draft's resource, by its URI"`
 	Args     map[string]any `json:"args,omitempty"`
 	Cond     string         `json:"cond,omitempty" jsonschema:"changed (default), new or cross"`
-	Path     string         `json:"path,omitempty" jsonschema:"as write_monitor's: data.rules[state=firing].name"`
+	Path     string         `json:"path,omitempty" jsonschema:"as write_monitor's"`
 	ID       string         `json:"id,omitempty"`
 	Above    *float64       `json:"above,omitempty"`
 	Below    *float64       `json:"below,omitempty"`
 }
 
 func registerMonitorTools(s *mcp.Server, c *core) {
-	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core itself calls one read-only tool of the catalog, or reads one of a server's resources, at an interval, without a model, and writes an event when what it watches changes (monitor.changed), when a list gets a new item (monitor.new), when a number crosses a limit either way (monitor.crossed, holds true or false), or when its looks keep failing (monitor.failed, then monitor.recovered); keyed by its name. It only detects: a skill reacts to its events (write_skill with when: monitor.changed key=<name>). Use it to watch a tool that does not tell by itself (« surveille les alertes Grafana de la prod »): never a time skill that calls the tool every few minutes. New mail: the mail server's resource mail://received, cond new, path messages, id id: one monitor.new per message received, its sender and subject in the item. New invitations: the calendar server's resource calendar://invitations, cond new, path invitations, id id: one monitor.new per invitation waiting for the user's answer, its title, start, organizer and event id in the item. Nothing looks before the user approves it on its card.",
+	tool(s, "write_monitor", "Propose a monitor, or a change of one: eriphe-core calls one read-only tool (or reads a resource) at an interval, without a model, and writes an event keyed by its name: monitor.changed, monitor.new (a new item of a list), monitor.crossed (a number past a limit, and back), monitor.failed then monitor.recovered. It only detects: a skill reacts (write_skill's when). For a tool that does not tell by itself, never a timed skill that calls it. Mail received: resource mail://received, cond new, path messages, id id; invitations: calendar://invitations, path invitations. Nothing looks before the user's yes on its card.",
 		func(ctx context.Context, in writeMonitorIn) (map[string]any, error) {
 			spec, err := in.spec()
 			if err != nil {
@@ -984,7 +984,7 @@ func registerMonitorTools(s *mcp.Server, c *core) {
 			}
 			return c.writeMonitor(in.Name, spec, c.turnTaint())
 		})
-	tool(s, "try_monitor", "Try a monitor once, without keeping or writing anything: call its tool (or read its resource), apply its path and say what it extracts (the value, the list's items and their ids, or the number), or why it cannot (not a free read, a path that finds nothing, not a list, not a number). For changed, it looks twice and says moves_by_itself when the value moved between (a time or counter in the path: every look would tell a change). Give the name of one of the user's monitors to check it works (and whether a look now would find a change since its last look), or a draft (server, tool or resource, args, cond, path, id, above, below, as write_monitor) to try before proposing it. Only a monitor that polls.",
+	tool(s, "try_monitor", "Try a monitor once, writing nothing: one of the user's by name, or a draft as write_monitor's. It says what its path extracts, or why not; for changed, moves_by_itself says the value moves on its own (a time in the path).",
 		func(ctx context.Context, in tryMonitorIn) (map[string]any, error) {
 			return c.tryMonitorSaid(ctx, strings.TrimSpace(in.Name), monitorSpec{Way: wayPoll, Server: in.Server, Tool: in.Tool, Resource: in.Resource, Args: in.Args,
 				Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID, Above: in.Above, Below: in.Below})

@@ -17,12 +17,12 @@ import (
 // preferences, written with them or only proposed).
 
 type notifyIn struct {
-	Text   string `json:"text" jsonschema:"what to tell the user, in the user's language, one or two sentences, plain text"`
-	Weight int    `json:"weight" jsonschema:"how much it needs the user, 1 to 5: 5 interrupts (worth a push within the hour), 4 needs the user now, 3 matters today, 2 a glance, 1 background; from 4 it is delivered at once (5 is pushed to a device), 3 waits for the next pause, 1 and 2 for the user's return (the brief)"`
-	Why    string `json:"why" jsonschema:"why you tell it, in the user's language, one sentence the user sees on opening it (the source, what triggered it)"`
-	Where  string `json:"where,omitempty" jsonschema:"the line to try first, from where_now: inapp, computer, voice, phone, or a channel's own line (where_now lists them); empty lets the router choose (best, unless you have a reason). Lines off, the quiet hours and the user's rules still apply"`
-	About  string `json:"about,omitempty" jsonschema:"what it is about, the key rules match: node:<id>, or a key kind:slug; leave it out for what this turn is about (its node); give one only for another: a known topic (notifications lists them) before a new one"`
-	Ref    string `json:"ref,omitempty" jsonschema:"a record it is about, if one: task:<id>, intention:<id>"`
+	Text   string `json:"text" jsonschema:"one or two plain sentences, in the user's language"`
+	Weight int    `json:"weight" jsonschema:"1 background, 2 a glance, 3 today, 4 now, 5 interrupts"`
+	Why    string `json:"why" jsonschema:"what triggered it, one sentence the user sees"`
+	Where  string `json:"where,omitempty" jsonschema:"a line to try first (where_now); empty: the router chooses"`
+	About  string `json:"about,omitempty" jsonschema:"node:<id> or kind:slug (a known topic first); empty for this turn's node"`
+	Ref    string `json:"ref,omitempty" jsonschema:"a record: task:<id>, intention:<id>"`
 }
 
 type notificationsIn struct {
@@ -31,25 +31,25 @@ type notificationsIn struct {
 }
 
 type ruleIn struct {
-	Action    string `json:"action,omitempty" jsonschema:"add (by default; it replaces the rule for the same match or nights) or delete"`
+	Action    string `json:"action,omitempty" jsonschema:"add (default, replaces the same match) or delete"`
 	ID        int64  `json:"id,omitempty" jsonschema:"for delete: the rule's id"`
-	Kind      string `json:"kind,omitempty" jsonschema:"topic (what to do with notifications about a ref) or quiet (the quiet hours); topic by default"`
-	Match     string `json:"match,omitempty" jsonschema:"for topic: what it applies to, as given to notify (node:<id>, or a key kind:slug), or a kind alone with its colon for every key of it (project:, person:, skill:; a word without a colon is a topic); project:getout also matches project:getout:prod, and the longest match wins"`
-	Floor     int    `json:"floor,omitempty" jsonschema:"for topic: the least weight its notifications get, 1 to 5 (5: always worth interrupting)"`
-	Ceiling   *int   `json:"ceiling,omitempty" jsonschema:"for topic: the most weight its notifications get, 0 to 4 (2: only at the user's return, the brief; 0: never); leave it out for no ceiling"`
-	Night     bool   `json:"night,omitempty" jsonschema:"for topic with a floor of 5: pushed even in the quiet hours and over the daily cap; only if the user said so"`
-	Channels  string `json:"channels,omitempty" jsonschema:"for topic: where its notifications go: push, a channel's id (where_now lists them), or several comma-separated; the user's default channels when empty"`
-	Also      string `json:"also,omitempty" jsonschema:"for topic: lines added to the first device, only if the user asked: phone, computer or a channel's line ('Getout: on the phone too')"`
-	Never     string `json:"never,omitempty" jsonschema:"for topic: lines it never goes by: voice, phone, computer, inapp or a channel's line"`
-	Days      string `json:"days,omitempty" jsonschema:"for quiet: all, weekdays (the nights before a weekday) or weekend (Friday and Saturday nights); all by default"`
-	From      string `json:"from,omitempty" jsonschema:"for quiet: when the quiet hours start, HH:MM"`
-	To        string `json:"to,omitempty" jsonschema:"for quiet: when they end, HH:MM"`
-	Why       string `json:"why" jsonschema:"why this rule, in the user's language, one sentence: what the user said, or the feedback or activity it comes from"`
-	SourceRef string `json:"source_ref,omitempty" jsonschema:"the user's message of this turn that asks for it, msg:N; without it the rule is only proposed"`
+	Kind      string `json:"kind,omitempty" jsonschema:"topic (default) or quiet"`
+	Match     string `json:"match,omitempty" jsonschema:"for topic: as notify's about (node:<id>, kind:slug), or a kind and its colon for all its keys (project:); the longest match wins"`
+	Floor     int    `json:"floor,omitempty" jsonschema:"for topic: the least weight, 1 to 5"`
+	Ceiling   *int   `json:"ceiling,omitempty" jsonschema:"for topic: the most weight, 0 to 4 (2: the brief; 0: never)"`
+	Night     bool   `json:"night,omitempty" jsonschema:"for topic with floor 5: even in quiet hours and over the cap; only if the user said so"`
+	Channels  string `json:"channels,omitempty" jsonschema:"for topic: push or channel ids (where_now), comma-separated"`
+	Also      string `json:"also,omitempty" jsonschema:"for topic: lines added to the first device, only if asked"`
+	Never     string `json:"never,omitempty" jsonschema:"for topic: lines it never goes by"`
+	Days      string `json:"days,omitempty" jsonschema:"for quiet: all (default), weekdays or weekend"`
+	From      string `json:"from,omitempty" jsonschema:"for quiet: HH:MM"`
+	To        string `json:"to,omitempty" jsonschema:"for quiet: HH:MM"`
+	Why       string `json:"why" jsonschema:"why, one sentence in the user's language"`
+	SourceRef string `json:"source_ref,omitempty" jsonschema:"the user's message of this turn asking for it, msg:N; without it, only proposed"`
 }
 
 func registerNotifyTools(s *mcp.Server, c *core) {
-	tool(s, "notify", "Tell the user something on your own, with its weight (1 to 5) and why. eriphe-core decides what happens: from weight 4 it is delivered at once (5 is pushed to a device), 3 waits for the next pause, 1 and 2 for the user's return (the brief); the user's rules raise or lower the weight of a node or a topic, quiet hours and a daily cap of pushes may hold a 4 or a 5, and a turn that read external content never interrupts. The result says what happened: never say a notification was sent if it was not.",
+	tool(s, "notify", "Tell the user something on your own, with its weight and why. eriphe-core decides: 4 and 5 at once (5 pushed), 3 at the next pause, 1 and 2 at the brief; the user's rules, quiet hours, the daily cap and a tainted turn may hold it. The result says what happened.",
 		func(ctx context.Context, in notifyIn) (map[string]any, error) {
 			return c.brainNotify(in)
 		})
@@ -57,7 +57,7 @@ func registerNotifyTools(s *mcp.Server, c *core) {
 		func(ctx context.Context, in notificationsIn) (map[string]any, error) {
 			return c.brainNotifications(in)
 		})
-	tool(s, "rule", "Write a notification rule of the user's: the weight of notifications about a node, a key or a kind of key (a floor, a ceiling, 0 for never, even at night, and by which lines), or the quiet hours; or delete a notification rule. A preference about being told lives here, never in remember; general settings (device order, daily cap, time zone, a channel's detail) are setting. A topic's match is a known topic (notifications lists them): a new one matches only notifications about that same node or key. Written only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). Suggest one when it would help; never impose it.",
+	tool(s, "rule", "Write or delete a notification rule: the weight of notifications about a node, a key or a kind of key (floor, ceiling, never, night, lines), or the quiet hours. Written only when the user asks for it in this turn (source_ref); otherwise only proposed. General settings are setting.",
 		func(ctx context.Context, in ruleIn) (map[string]any, error) {
 			return c.brainRule(in)
 		})

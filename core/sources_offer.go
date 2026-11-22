@@ -99,17 +99,6 @@ func shownSchema(s any) json.RawMessage {
 	return raw
 }
 
-// workspaceSourceRead is what taints a task told what a source gave
-// through the workspace: its other calls do not (eventsTaint).
-const workspaceSourceRead = "eriphe-workspace: a source's result or error"
-
-// saw marks the caller told what a source gave.
-func (w catalogCaller) saw() {
-	if w.sawSource != nil {
-		w.sawSource()
-	}
-}
-
 // toolSourcesRead is sources_read.
 func (c *core) toolSourcesRead(in sourcesIn) (map[string]any, error) {
 	only := strings.TrimSpace(in.Tool)

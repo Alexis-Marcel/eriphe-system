@@ -423,10 +423,8 @@ func (c *core) eventsTaint(id string, seq int, tainted []string, pending map[str
 			// The task's own node: what it reads there taints by its own
 			// record (task_nodes.go).
 		case slices.ContainsFunc(providedServers, func(s string) bool { return strings.HasPrefix(name, "mcp__"+s+"__") }):
-			// Eriphe's own (the workspace), as eriphe-core's: what it tells
-			// of a source's result or error taints by its own record
-			// (workspaceSourceRead); tools' descriptions are read as any lent
-			// tool's are.
+			// Eriphe's own (the folders): what it reads taints by its own
+			// record (folder_tools.go).
 		case strings.HasPrefix(name, "mcp__"):
 			if k := callKey(name, e.Data["input"]); pending[k] > 0 || unrun[k] > 0 {
 				if pending[k] > 0 {

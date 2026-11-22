@@ -17,12 +17,15 @@ import (
 // its full form.
 
 // AuthorBody replaces the node's body (its text and blocks) with an
-// author's, code's fields of its blocks kept from those so named.
+// author's, code's fields of its blocks kept from those so named. A
+// heading that only repeats the node's title at its top goes: the page
+// shows the title above the body already.
 func (n *Node) AuthorBody(body string) error {
 	segs, err := parseBody([]byte(body), true)
 	if err != nil {
 		return err
 	}
+	segs = dropTitleHeading(segs, n.Meta.Title)
 	for _, s := range segs {
 		if s.block == nil {
 			continue
@@ -183,3 +186,28 @@ func (n *Node) VouchTitle() { n.vouched = true }
 
 // TitleVouched tells whether the node's writer vouched for its title.
 func (n *Node) TitleVouched() bool { return n.vouched }
+
+// dropTitleHeading takes away a heading that repeats title, at the top of
+// a body's first text, and the blank lines after it.
+func dropTitleHeading(segs []segment, title string) []segment {
+	if len(segs) == 0 || segs[0].block != nil || strings.TrimSpace(title) == "" {
+		return segs
+	}
+	text := strings.TrimLeft(segs[0].text, " \t\r\n")
+	line, rest, _ := strings.Cut(text, "\n")
+	head := strings.TrimSpace(line)
+	if !strings.HasPrefix(head, "#") {
+		return segs
+	}
+	head = strings.TrimSpace(strings.Trim(strings.TrimLeft(head, "#"), " #*_"))
+	if !strings.EqualFold(head, strings.TrimSpace(title)) {
+		return segs
+	}
+	rest = strings.TrimLeft(rest, " \t\r\n")
+	if rest == "" {
+		return slices.Clone(segs[1:])
+	}
+	out := slices.Clone(segs)
+	out[0].text = rest
+	return out
+}

@@ -7,6 +7,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/go-git/go-git/v5 v5.19.3
+	github.com/google/jsonschema-go v0.4.3
 	github.com/hashicorp/yamux v0.1.2
 	github.com/kljensen/snowball v0.10.0
 	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
@@ -46,7 +47,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hdevalence/ed25519consensus v0.2.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect

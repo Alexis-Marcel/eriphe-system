@@ -194,14 +194,14 @@ var settingRequest = sync.OnceValue(func() *regexp.Regexp {
 })
 
 type settingIn struct {
-	Name      string `json:"name" jsonschema:"device_order (lines first to last: inapp, computer, voice, phone, then the channels' own lines as notifications lists them), lines_off (lines never used, or none), move_on_after_minutes (before a now not seen goes to the next line), daily_cap (now notifications a day, 0 to 20), time_zone (IANA, e.g. Europe/Paris, or default), channel_detail (a channel and full: the text, or alert: only that something waits; '<channel> alert'), voice_for_urgent (on: an urgent skill's fixed message is said aloud in the user's room too, even at night; off)"`
+	Name      string `json:"name" jsonschema:"device_order (inapp, computer, voice, phone, then channels' lines), lines_off (or none), move_on_after_minutes, daily_cap (0 to 20), time_zone (IANA, or default), channel_detail ('<channel> full' or '<channel> alert'), voice_for_urgent (on or off: an urgent skill's fixed message said aloud)"`
 	Value     string `json:"value" jsonschema:"the new value, as the name describes"`
 	Why       string `json:"why" jsonschema:"why, in the user's language, one sentence: what the user said, or the feedback it comes from"`
 	SourceRef string `json:"source_ref,omitempty" jsonschema:"the user's message of this turn that asks for it, msg:N; without it the setting is only proposed"`
 }
 
 func registerSettingTools(s *mcp.Server, c *core) {
-	tool(s, "setting", "Change one of the user's notification settings: the device order, the lines turned off, the delay before the next line, the daily cap of interruptions, the time zone, or how much a channel is told, or whether an urgent skill's fixed message is said aloud. Applied only when the user asked for it in this turn (cite their message); otherwise only proposed, for the user to approve in the workspace (À valider). What to do about one topic, or the quiet hours, is a rule (rule). The current values are in notifications (settings).",
+	tool(s, "setting", "Change one of the user's notification settings. Applied only when the user asks for it in this turn (source_ref); otherwise only proposed. A topic or the quiet hours are a rule; the current values are in notifications.",
 		func(ctx context.Context, in settingIn) (map[string]any, error) {
 			return c.brainSetting(in)
 		})

@@ -92,24 +92,24 @@ func parseEnd(s string) (time.Time, error) {
 }
 
 type rememberIn struct {
-	Text       string   `json:"text" jsonschema:"one thing to keep, self-contained, in French, written as a fact (not as an instruction)"`
-	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, lesson, decision (a choice and its reason) or situation (where the user is or what they do for a while, with valid_to: « en vacances à Lyon jusqu'à dimanche »)"`
-	About      string   `json:"about,omitempty" jsonschema:"kind:slug, kind project, person, client, pr, mail, event, alert, home, tool or topic; owner alone for the user: owner, person:<slug>, project:<name>, topic:workspace (how the user wants the composed workspace: a preference), topic:<word>"`
-	Links      []string `json:"links,omitempty" jsonschema:"where the details are: vault wikilinks or paths, URLs without tokens; never copy the vault"`
+	Text       string   `json:"text" jsonschema:"one thing, self-contained, in French, written as a fact"`
+	Kind       string   `json:"kind" jsonschema:"profile, preference, fact, person, episode, lesson, decision (with its reason) or situation (for a while, with valid_to)"`
+	About      string   `json:"about,omitempty" jsonschema:"owner, person:<slug>, project:<name>, topic:workspace (what the user wants to see more or less), topic:<word>; kind:slug"`
+	Links      []string `json:"links,omitempty" jsonschema:"where the details are: vault links, URLs without tokens"`
 	ValidFrom  string   `json:"valid_from,omitempty" jsonschema:"when it became true, YYYY-MM-DD; now by default"`
-	ValidTo    string   `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD (the whole day) or YYYY-MM-DDTHH:MM; required for a situation"`
+	ValidTo    string   `json:"valid_to,omitempty" jsonschema:"when it stops being true, YYYY-MM-DD or YYYY-MM-DDTHH:MM; required for a situation"`
 	OccurredAt string   `json:"occurred_at,omitempty" jsonschema:"for an episode, when it happened; now by default"`
-	Supersedes int64    `json:"supersedes,omitempty" jsonschema:"id of the memory this one replaces: it is kept, dated, never overwritten"`
-	SourceRef  string   `json:"source_ref,omitempty" jsonschema:"the message it comes from: msg:N for the user's message #N. Required for profile, preference and lesson"`
-	Keywords   string   `json:"keywords,omitempty" jsonschema:"a few other words someone could use to look for it (synonyms, variants: 'voiture auto bagnole'), indexed with the text"`
-	Importance int      `json:"importance,omitempty" jsonschema:"1 (trivial) to 5 (essential to know the user), 3 by default"`
+	Supersedes int64    `json:"supersedes,omitempty" jsonschema:"the id of the memory it replaces"`
+	SourceRef  string   `json:"source_ref,omitempty" jsonschema:"the user's message, msg:N; required for profile, preference and lesson"`
+	Keywords   string   `json:"keywords,omitempty" jsonschema:"other words to find it by (synonyms)"`
+	Importance int      `json:"importance,omitempty" jsonschema:"1 to 5, 3 by default"`
 	// The escape of rememberRedirect: a preference about the conversation
 	// itself that only sounds like one about notifications.
-	AboutConversation bool `json:"about_conversation,omitempty" jsonschema:"true only when a preference is about how you behave in the conversation (not about notifications, which are rules), and remember refused it as a rule"`
+	AboutConversation bool `json:"about_conversation,omitempty" jsonschema:"true only for a preference about the conversation that remember refused as a rule"`
 }
 
 type recallIn struct {
-	Query       string   `json:"query,omitempty" jsonschema:"words to look for, or the question itself: word families are found (anniversaire, anniversaires), synonyms are not, so add them ('voiture auto'); a time in it (hier, en septembre, la semaine dernière) ranks what is dated then first"`
+	Query       string   `json:"query,omitempty" jsonschema:"words, or the question: word families are found, synonyms are not, so add them ('voiture auto'); a time in it (hier, en septembre) ranks what is dated then first"`
 	Kinds       []string `json:"kinds,omitempty" jsonschema:"only these kinds"`
 	About       string   `json:"about,omitempty" jsonschema:"only what is about this: node:<id> or a key (kind:slug); 'person:' for every person"`
 	Since       string   `json:"since,omitempty" jsonschema:"only from this date (an episode's date, a fact's valid_from)"`
@@ -139,7 +139,7 @@ type forgetIn struct {
 }
 
 func registerMemoryTools(s *mcp.Server, c *core) {
-	tool(s, "remember", "Keep what you must know about the user in Eriphe's memory: one fact, preference, person, episode, lesson or decision per call; where a matter stands is never a memory: it is its node's doc (node_write). What the code enforces is never a memory: what is owed or to do once is intend, what comes back on a schedule is watch, how or when the user is told is rule or setting. To record a change, supersede the old memory (it is kept, dated). What a turn that read external content remembers is only proposed to the user.",
+	tool(s, "remember", "Keep one thing you must know about the user. Never where a matter stands (its node's doc), what is owed (intend), what recurs (write_skill) or how the user is told (rule, setting). A change supersedes the old memory, kept dated. In a tainted turn, only proposed.",
 		func(ctx context.Context, in rememberIn) (map[string]any, error) {
 			return c.brainRemember(in)
 		})

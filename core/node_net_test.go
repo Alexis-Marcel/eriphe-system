@@ -207,19 +207,19 @@ func TestNetFilesUnaskedWordsInTheirNode(t *testing.T) {
 	}
 }
 
-// In a tainted turn the node is external, and its title is a neutral one
-// when the request may not be the user's words.
+// In a tainted turn the node is external, its title the user's words, not
+// marked; a neutral one when the request may not be the user's words.
 func TestNetTaintedTurn(t *testing.T) {
 	c, answer := netCore(t, "Résume ce mail", "")
 	c.turn.taint("mail.read")
 	answer(longAnswer)
 	m := lastBrainMessage(t, c)
 	sum, err := c.nodes.Get(m.Filed)
-	if err != nil || !sum.External || sum.Title != "Résume ce mail" {
+	if err != nil || !sum.External || sum.Title != "Résume ce mail" || sum.TitleExternal() {
 		t.Fatalf("node %+v %v", sum, err)
 	}
-	if !strings.Contains(c.netTitle(0, 0), time.Now().Format("2006-01-02")) {
-		t.Errorf("neutral title %q", c.netTitle(0, 0))
+	if title, trusted := c.netTitle(0, 0); trusted || !strings.Contains(title, time.Now().Format("2006-01-02")) {
+		t.Errorf("neutral title %q (trusted %v)", title, trusted)
 	}
 }
 

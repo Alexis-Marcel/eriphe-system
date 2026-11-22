@@ -46,7 +46,7 @@ const (
 )
 
 // nodesTools are its tools, in order.
-var nodesTools = []string{"node_read", "node_write", "node_edit", "node_append", "node_open", "item_note", "progress"}
+var nodesTools = []string{"node_read", "node_write", "node_edit", "node_append", "node_open", "item_note", "progress", "catalog_read", "sources_read"}
 
 // taskNodesTools are its tools as the task's agent names them: allowed in
 // advance, they ask nothing.
@@ -100,11 +100,11 @@ type nodeAppendIn struct {
 // nodeOpenFields are what node_open makes, for the brain (brainNodeOpenIn)
 // and a task (its node_open) alike: openNode.
 type nodeOpenFields struct {
-	Title  string     `json:"title" jsonschema:"its name for the user, a few words in their language, no ids"`
-	Goal   string     `json:"goal,omitempty" jsonschema:"what it is for, in one or two sentences; never shown to the user. With steps, what must be true at the end: a fresh agent checks it once every step is accepted"`
-	Body   string     `json:"body,omitempty" jsonschema:"its first body: markdown text, and blocks in fences (eriphe:block <name>, a JSON object: components, data, sources)"`
-	Steps  []stepSpec `json:"steps,omitempty" jsonschema:"to cut its work in steps, each a child of it run by an agent: a key, a title, the keys of the steps it comes after, a self-contained prompt, an agent, resources and a contract. Eriphe starts each step once those it comes after are accepted, in parallel when it can, and accepts a step on its proof: its receipt says done and every check of its contract (a test, a command) passes"`
-	Budget int        `json:"budget_minutes,omitempty" jsonschema:"with steps: the minutes of running time the work may take, 60 by default"`
+	Title  string     `json:"title" jsonschema:"a few words in the user's language, no ids"`
+	Goal   string     `json:"goal,omitempty" jsonschema:"what it is for, one or two sentences, never shown; with steps, what a fresh agent checks once every step is accepted"`
+	Body   string     `json:"body,omitempty" jsonschema:"its first body: markdown and blocks (catalog_read)"`
+	Steps  []stepSpec `json:"steps,omitempty" jsonschema:"its work in steps, each a child an agent runs: a step starts once those it comes after are accepted (in parallel when it can), and is accepted when its receipt says done and its contract's checks pass"`
+	Budget int        `json:"budget_minutes,omitempty" jsonschema:"with steps: the running minutes the work may take, 60 by default"`
 }
 
 type itemNoteIn struct {
@@ -112,7 +112,7 @@ type itemNoteIn struct {
 	Item   string `json:"item" jsonschema:"the item's id, as the source gives it"`
 	Note   string `json:"note,omitempty" jsonschema:"what the user should know of it and do of it, a short sentence in their language, no ids; empty with no state nor group takes the note away"`
 	State  string `json:"state,omitempty" jsonschema:"act, look, info, none or done"`
-	Group  string `json:"group,omitempty" jsonschema:"the section a view shows it in, a short label of your choice in the user's language (À supprimer, Pour info), 40 characters at most, without [ ] / = !; a List of the view filters on it ([_group=À supprimer])"`
+	Group  string `json:"group,omitempty" jsonschema:"a short label in the user's language (À traiter), 40 characters at most, without [ ] / = !"`
 }
 
 // taskItemNoteIn is a task's item_note: a skill's run may put on the item
@@ -277,6 +277,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			}
 			return map[string]any{"note": "Noted."}, nil
 		})
+	c.registerCatalogTools(s) // the grammar its node is written in (node_catalog.go)
 	return s
 }
 

@@ -695,8 +695,17 @@ func TestBrainCallTraced(t *testing.T) {
 	if out, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "get_issue", Arguments: map[string]any{"number": 3}}); out.IsError {
 		t.Fatalf("free read = %s", resultText(out))
 	}
-	c.turnNode(id)
 	args := map[string]any{"title": "x"}
+	// Said at the home, in a turn about no node: the call runs, with no
+	// node to find or read first, and is on record in the decisions only.
+	c.store.recordDecision("b-1", "p0", "mcp__github__create_issue", args, decideAllow, byUser, "")
+	if out, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "create_issue", Arguments: args}); out.IsError {
+		t.Fatalf("allowed call at the home = %s", resultText(out))
+	}
+	if raw, _ := c.nodes.Trace(id); strings.Contains(string(raw), "Appel : ") {
+		t.Fatalf("a home call filed in a node:\n%s", raw)
+	}
+	c.turnNode(id)
 	c.store.recordDecision("b-1", "p1", "mcp__github__create_issue", args, decideAllow, byUser, "")
 	if out, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "create_issue", Arguments: args}); out.IsError {
 		t.Fatalf("allowed call = %s", resultText(out))

@@ -20,27 +20,27 @@ import (
 // contract's: the policy decides it, never the model.
 
 type taskContract struct {
-	Objective   string      `json:"objective" jsonschema:"one sentence: what must be true at the end (required)"`
-	Constraints []string    `json:"constraints,omitempty" jsonschema:"what the agent must not do or change, in its words (advice; access is enforced by the resources)"`
-	Checks      []taskCheck `json:"checks,omitempty" jsonschema:"deterministic checks the device runs in the task's container when a turn ends, cheapest first: only what a check sees pass counts as verified"`
-	Evidence    []string    `json:"evidence,omitempty" jsonschema:"what the receipt must show (a PR link, test output…)"`
-	Verify      string      `json:"verify,omitempty" jsonschema:"none, auto (default) or always: whether an independent review may run (recorded, not used yet)"`
-	Budget      *taskBudget `json:"budget,omitempty" jsonschema:"limits eriphe-core enforces: it stops the task beyond them"`
+	Objective   string      `json:"objective" jsonschema:"one sentence: what must be true at the end"`
+	Constraints []string    `json:"constraints,omitempty" jsonschema:"what the agent must not do or change (advice)"`
+	Checks      []taskCheck `json:"checks,omitempty" jsonschema:"deterministic checks run when a turn ends, cheapest first: only what passes counts as verified"`
+	Evidence    []string    `json:"evidence,omitempty" jsonschema:"what the receipt must show"`
+	Verify      string      `json:"verify,omitempty" jsonschema:"none, auto or always (recorded)"`
+	Budget      *taskBudget `json:"budget,omitempty" jsonschema:"limits enforced: the task is stopped beyond them"`
 }
 
 type taskCheck struct {
-	Name    string `json:"name" jsonschema:"short name, e.g. build, tests, report"`
-	Run     string `json:"run,omitempty" jsonschema:"a shell command, passing when it exits 0"`
-	Exists  string `json:"exists,omitempty" jsonschema:"a file or folder that must be there, under /work (or relative to the task's working directory)"`
-	Dir     string `json:"dir,omitempty" jsonschema:"where run runs: relative to the task's working directory, or under /work"`
-	Timeout int    `json:"timeout,omitempty" jsonschema:"seconds, default 300, at most 3600"`
+	Name    string `json:"name" jsonschema:"short name: build, tests"`
+	Run     string `json:"run,omitempty" jsonschema:"a shell command, passing on exit 0"`
+	Exists  string `json:"exists,omitempty" jsonschema:"a path that must exist, under /work"`
+	Dir     string `json:"dir,omitempty" jsonschema:"where run runs, relative to the working directory"`
+	Timeout int    `json:"timeout,omitempty" jsonschema:"seconds, 300 by default, 3600 at most"`
 }
 
 type taskBudget struct {
-	Minutes  int `json:"minutes,omitempty" jsonschema:"wall-clock minutes from the start"`
-	Attempts int `json:"attempts,omitempty" jsonschema:"automatic retries: a failed check sent back, a passing failure retried (default 2)"`
+	Minutes  int `json:"minutes,omitempty" jsonschema:"wall-clock minutes"`
+	Attempts int `json:"attempts,omitempty" jsonschema:"automatic retries, 2 by default"`
 	Turns    int `json:"turns,omitempty" jsonschema:"agent turns"`
-	Tokens   int `json:"tokens,omitempty" jsonschema:"input and output tokens, where the agent's harness reports them"`
+	Tokens   int `json:"tokens,omitempty" jsonschema:"tokens, where the harness reports them"`
 }
 
 // The contract's limits.

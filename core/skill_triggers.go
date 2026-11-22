@@ -168,8 +168,6 @@ func parseSkillTrigger(m skillManifest) (*skillTrigger, error) {
 		switch {
 		case !serverName.MatchString(t):
 			return nil, skillErr("skills.err.tools", t)
-		case t == workspaceServer:
-			return nil, skillErr("skills.err.workspace", t) // a run writes in its node (task_nodes.go)
 		}
 	}
 	for _, r := range frontList(m.Repos) {

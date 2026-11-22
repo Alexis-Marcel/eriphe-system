@@ -80,7 +80,7 @@ func TestWorkspaceToolsThroughMCP(t *testing.T) {
 		t.Error("the brain's instructions carry the catalog")
 	}
 	got, _ := callOn(t, brain, "catalog_read", map[string]any{})
-	if got["catalog"] != full {
+	if got["catalog"] != full+"\n"+nodeGrammar {
 		t.Fatalf("catalog_read: %v", got)
 	}
 }
@@ -105,61 +105,27 @@ func taskEndpoint(t *testing.T, c *core, task, server string, secret ...string) 
 	return sess, err
 }
 
-// The workspace reaches a task through its grant only, like any tool: a
-// task not lent it does not reach it; one lent a tool of it sees that one,
-// its device relays it and allows it in advance; skills lend it by name.
-func TestWorkspaceGrantPath(t *testing.T) {
-	c, _ := ledgerCore(t)
-	c.store.registerDevice("pc", hashSecret("device-secret"))
-	c.store.setDeviceStatus("pc", true, []byte(`{"runtimes":["claude-code"]}`))
-	c.store.insertTask(&TaskRow{ID: "t-none", Device: "pc", Runtime: "claude-code", State: stateRunning, Tools: "ledger"})
-	if _, err := taskEndpoint(t, c, "t-none", workspaceServer); err == nil {
-		t.Fatal("a task without the grant reached the workspace")
+// Every worker with a node has the catalog beside its node's tools,
+// allowed in advance, never lent: eriphe-workspace is no server, a task is
+// not lent it, and list_tools does not list it.
+func TestWorkerHasTheCatalog(t *testing.T) {
+	c := nodeCore(t)
+	task, _ := startInNode(t, c, runRequest{Title: "Une page", Prompt: "Compose la page."})
+	got := mustNodes(t, c.core, task.ID, "catalog_read", nil)
+	if got["catalog"] != a2ui.CatalogPrompt()+"\n"+nodeGrammar {
+		t.Fatalf("catalog_read: %v", got)
 	}
-
-	ctx := context.Background()
-	if _, err := c.runTask(ctx, runRequest{Prompt: "x", Tools: []string{"nowhere"}}); err == nil {
-		t.Fatal("an unknown server was granted")
-	}
-	task, err := c.runTask(ctx, runRequest{Prompt: "lis l'espace", Resources: []ResourceRef{{Kind: resTool, Ref: workspaceServer + ".catalog_read"}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.store.updateTask(task.ID, map[string]any{"device": "pc", "state": stateRunning})
-	sess, err := taskEndpoint(t, c, task.ID, workspaceServer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res, err := sess.ListTools(ctx, nil)
-	if err != nil || len(res.Tools) != 1 || res.Tools[0].Name != "catalog_read" {
-		t.Fatalf("tools %+v %v", res, err)
-	}
-
-	req := httptest.NewRequest("GET", "/v1/device/assignments?rev=0&wait=0", nil)
-	req.Header.Set("Authorization", "Bearer device-secret")
-	req.Header.Set("Eriphe-Device", "pc")
-	w := httptest.NewRecorder()
-	c.handleAssignments(w, req)
-	var out struct {
-		Tasks []deviceAssignment `json:"tasks"`
-	}
-	json.Unmarshal(w.Body.Bytes(), &out)
-	found := false
-	for _, a := range out.Tasks {
-		if a.ID == task.ID {
-			found = true
-			if !slices.Contains(a.Spec.Servers, workspaceServer) || !slices.Contains(a.Spec.AllowedTools, "mcp__eriphe-workspace__catalog_read") ||
-				slices.Contains(a.Spec.AllowedTools, "mcp__eriphe-workspace__surface_write") {
-				t.Fatalf("spec %+v", a.Spec)
-			}
+	mustNodes(t, c.core, task.ID, "sources_read", nil)
+	for _, name := range []string{"mcp__eriphe-nodes__catalog_read", "mcp__eriphe-nodes__sources_read"} {
+		if !slices.Contains(taskNodesTools(), name) {
+			t.Errorf("%s not allowed in advance: %v", name, taskNodesTools())
 		}
 	}
-	if !found {
-		t.Fatalf("assignments %s", w.Body.Bytes())
+	if _, err := c.runTask(context.Background(), runRequest{Prompt: "x", Resources: []ResourceRef{{Kind: resTool, Ref: "eriphe-workspace"}}}); err == nil {
+		t.Error("eriphe-workspace was lent")
 	}
-
-	listed, _ := callOn(t, connectServer(t, newMCPServer(c)), "list_tools", map[string]any{})
-	if raw, _ := json.Marshal(listed["provided"]); !strings.Contains(string(raw), workspaceServer) || !strings.Contains(string(raw), "catalog_read") {
+	listed, _ := callOn(t, connectServer(t, newMCPServer(c.core)), "list_tools", map[string]any{})
+	if raw, _ := json.Marshal(listed); strings.Contains(string(raw), "eriphe-workspace") {
 		t.Fatalf("list_tools: %s", raw)
 	}
 }
