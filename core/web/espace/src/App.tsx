@@ -16,6 +16,7 @@ import { List, useNarrow } from "./graph/List";
 import { Hud } from "./hud/Hud";
 import { Bar } from "./orb/Bar";
 import { useWords } from "./i18n";
+import { Panel as GlancePanel } from "./proto/Panel";
 
 // The workspace, Eriphe's home page (#633): the graph of nodes, the pages
 // open in it, Eriphe's orb, the head-up display over it and the bar under it; on
@@ -81,6 +82,7 @@ export function App({ boot }: { boot: Boot }) {
           <Hud live={boot.live} />
           <Bar boot={boot} narrow={narrow} />
           <Sample live={boot.live} />
+          {!boot.live && <GlancePanel />}
         </div>
       </MotionConfig>
     </ProposalsContext.Provider>

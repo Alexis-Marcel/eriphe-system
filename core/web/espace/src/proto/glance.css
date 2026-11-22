@@ -1,0 +1,59 @@
+/* The node-glance prototype (proto/node-glance): a node's tile, and the
+   prototype's own panel. The tile is information, not a request: no
+   accent (the violet says « t'attend »), a card on the ground with a
+   neutral lift, its figure the strongest thing in it. */
+
+/* The tile: the bubble's core, reshaped (Graph.tsx animates its size). */
+.gr-node.tiled .gr-core.tile { background: var(--card); color: var(--fg); overflow: hidden; place-items: stretch;
+  box-shadow: 0 0 0 1px var(--line-strong), 0 10px 28px -14px rgb(16 16 20 / 0.35), 0 0 0 4px color-mix(in oklab, var(--fg) 4%, transparent); }
+:root[data-theme="dark"] .gr-node.tiled .gr-core.tile { box-shadow: 0 0 0 1px var(--line-strong), 0 12px 30px -12px rgb(0 0 0 / 0.8), 0 0 22px -8px color-mix(in oklab, var(--fg) 30%, transparent); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .gr-node.tiled .gr-core.tile { box-shadow: 0 0 0 1px var(--line-strong), 0 12px 30px -12px rgb(0 0 0 / 0.8), 0 0 22px -8px color-mix(in oklab, var(--fg) 30%, transparent); }
+}
+.gr-node.tiled:hover .gr-core.tile { transform: scale(1.03); box-shadow: 0 0 0 1px var(--fg3), 0 12px 30px -12px rgb(16 16 20 / 0.4); }
+/* Once, as it becomes a tile: a quiet ring that widens and fades. */
+.gl-ping { pointer-events: none; border-radius: 14px; box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--fg) 45%, transparent);
+  animation: gl-ping 1.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.35s both; }
+@keyframes gl-ping { from { opacity: 0.9; scale: 1; } to { opacity: 0; scale: 1.18 1.45; } }
+@media (prefers-reduced-motion: reduce) { .gl-ping { display: none; } }
+
+.gl-face { display: grid; align-content: center; gap: 4px; padding: 0 12px; width: 100%; height: 100%; text-align: left; }
+.gl-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; white-space: nowrap; }
+.gl-label { font-size: 11.5px; color: var(--fg2); letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; }
+.gl-delta { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: var(--fg); }
+.gl-delta i { font-style: normal; font-size: 0.66em; margin-right: 0.35em; position: relative; top: -0.12em; color: var(--fg3); }
+.gl-spark { display: block; width: 100%; height: 18px; overflow: visible; }
+.gl-line { fill: none; stroke: var(--fg3); stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+.gl-area { fill: color-mix(in oklab, var(--fg3) 10%, transparent); stroke: none; }
+.gl-dot { fill: var(--fg2); }
+/* C: a discreet colour, good news or bad, muted toward the text. */
+.gl-face.good { --tone: color-mix(in oklab, var(--ok-text) 78%, var(--fg2)); }
+.gl-face.bad { --tone: color-mix(in oklab, var(--hot-text) 72%, var(--fg2)); }
+.gl-face.good .gl-delta, .gl-face.bad .gl-delta { color: var(--tone); }
+.gl-face.good .gl-delta i, .gl-face.bad .gl-delta i { color: var(--tone); }
+.gl-face.good .gl-line, .gl-face.bad .gl-line { stroke: var(--tone); }
+.gl-face.good .gl-area, .gl-face.bad .gl-area { fill: color-mix(in oklab, var(--tone) 12%, transparent); }
+.gl-face.good .gl-dot, .gl-face.bad .gl-dot { fill: var(--tone); }
+
+/* The prototype's panel: top left, out of the graph's way. */
+.gl-panel { position: absolute; top: 12px; left: 14px; z-index: 40; width: 268px; padding: 10px 12px 12px; border-radius: var(--r);
+  background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--lift);
+  font-size: 12px; color: var(--fg); }
+.gl-panel.folded { width: auto; padding-bottom: 10px; }
+.gl-panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gl-fold { border: 0; background: none; color: var(--fg3); cursor: pointer; font: inherit; padding: 0 4px; }
+.gl-k { margin: 10px 0 5px; font-size: 11px; color: var(--fg3); }
+.gl-list { display: grid; gap: 3px; }
+.gl-list button, .gl-seg button { font: inherit; text-align: left; padding: 4px 8px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--card); color: var(--fg2); cursor: pointer; }
+.gl-list button:hover, .gl-seg button:hover { color: var(--fg); border-color: var(--line-strong); }
+.gl-list button.on, .gl-seg button.on { color: var(--fg); border-color: var(--fg3); background: var(--fill); font-weight: 500; }
+.gl-seg { display: flex; gap: 3px; }
+.gl-seg button { flex: 1; text-align: center; padding: 5px 4px; }
+.gl-hint { margin: 6px 0 0; font-size: 11.5px; color: var(--fg3); line-height: 1.4; }
+.gl-over { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.gl-over li { display: grid; grid-template-columns: 1fr auto; column-gap: 8px; font-size: 12px; }
+.gl-over li em { grid-column: 1 / -1; font-style: normal; font-size: 11px; color: var(--fg3); }
+.gl-over li.out { color: var(--fg3); }
+.gl-num { font-variant-numeric: tabular-nums; }
+.gl-none { color: var(--fg3); }
+.gl-in { display: grid; place-items: center; width: 100%; height: 100%; }

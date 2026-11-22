@@ -132,6 +132,23 @@ export type GraphNode = {
   version: number;
   waits?: boolean;
   line?: string;
+  // glance (prototype, proto/node-glance): what the node's skill declared
+  // its reduced form shows when something deserves a look (proto/glance.ts)
+  glance?: Glance;
+};
+
+// Glance is a node's declared « glance » (prototype): the figure its tile
+// shows, read live from one of its sources (source: the source's name and
+// the path of the value in it), the variation that makes it a tile (over
+// threshold, in its unit), whether a rise is good news (up) or bad (down),
+// and whether it draws its recent values (spark).
+export type Glance = {
+  label: string;
+  source: string;
+  unit: "pct" | "count";
+  threshold: number;
+  good: "up" | "down";
+  spark?: boolean;
 };
 
 // A node's page (nodePage, web_graph.go): the version shown, its text and

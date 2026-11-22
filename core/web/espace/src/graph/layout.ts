@@ -34,7 +34,9 @@ export type Pt = [number, number];
 export type Pos = Record<string, Pt>;
 // r: the bubble's radius; lw, lh: the size of the label under it, so
 // labels never sit on each other; box: an open page, drawn in the graph.
-export type LNode = { id: string; parent?: string; links: string[]; r: number; lw: number; lh: number; box?: Pt };
+// tile (prototype, proto/node-glance): the bubble drawn as a glance, a
+// rounded rectangle of that size: its body follows that shape.
+export type LNode = { id: string; parent?: string; links: string[]; r: number; lw: number; lh: number; box?: Pt; tile?: Pt };
 
 // The tuning, validated in a prototype by the owner.
 export const T = {
@@ -95,7 +97,9 @@ export function hash(s: string): number {
 export function extent(x: LNode, at: Pt): [number, number, number] {
   return x.box
     ? [x.box[0] / 2 + 24, at[1] - x.box[1] / 2 - 24, at[1] + x.box[1] / 2 + 24]
-    : [Math.max(x.r, x.lw / 2) + 10, at[1] - x.r - 8, at[1] + x.r + 10 + x.lh];
+    : x.tile
+      ? [Math.max(x.tile[0] / 2, x.lw / 2) + 10, at[1] - x.tile[1] / 2 - 8, at[1] + x.tile[1] / 2 + 10 + x.lh]
+      : [Math.max(x.r, x.lw / 2) + 10, at[1] - x.r - 8, at[1] + x.r + 10 + x.lh];
 }
 
 // overlap tells whether two bodies at those points sit on each other.
@@ -120,7 +124,8 @@ export function bornBeside(at: Pt, box: Pt, from: Pt, fromBox: Pt): Pt {
 // edgeRest is how far from an open page's centre its bubble x rests, in
 // the direction (ux, uy): just past the page's edge, its label clear.
 function edgeRest([w, h]: Pt, ux: number, uy: number, x: LNode): number {
-  const hx = w / 2 + 24 + Math.max(x.r, x.lw / 2) + 10, hy = h / 2 + 24 + x.r + x.lh + 10;
+  const [rx, ry] = x.tile ? [x.tile[0] / 2, x.tile[1] / 2] : [x.r, x.r];
+  const hx = w / 2 + 24 + Math.max(rx, x.lw / 2) + 10, hy = h / 2 + 24 + ry + x.lh + 10;
   return Math.min(Math.abs(ux) > 1e-6 ? hx / Math.abs(ux) : Infinity, Math.abs(uy) > 1e-6 ? hy / Math.abs(uy) : Infinity) + 30;
 }
 
@@ -182,11 +187,13 @@ export class Sim {
     for (const n of nodes) {
       let b = this.byId.get(n.id);
       if (!b) {
-        b = { id: n.id, parent: n.parent, links: n.links, r: n.r, lw: n.lw, lh: n.lh, x: 0, y: 0, vx: 0, vy: 0, born: this.ticks };
+        b = { id: n.id, parent: n.parent, links: n.links, r: n.r, lw: n.lw, lh: n.lh, tile: n.tile, x: 0, y: 0, vx: 0, vy: 0, born: this.ticks };
         this.byId.set(n.id, b);
         fresh.push(b);
-      } else if (b.r !== n.r || b.lw !== n.lw || b.lh !== n.lh || b.parent !== n.parent || b.links.join() !== n.links.join()) {
-        Object.assign(b, { parent: n.parent, links: n.links, r: n.r, lw: n.lw, lh: n.lh });
+      } else if (b.r !== n.r || b.lw !== n.lw || b.lh !== n.lh || String(b.tile) !== String(n.tile) || b.parent !== n.parent || b.links.join() !== n.links.join()) {
+        // a bubble that turns into a tile, or back, is warmed: its neighbours step aside
+        if (String(b.tile) !== String(n.tile)) this.warmUp(b.id, 0.3);
+        Object.assign(b, { parent: n.parent, links: n.links, r: n.r, lw: n.lw, lh: n.lh, tile: n.tile });
         this.wake();
       }
       next.push(b);

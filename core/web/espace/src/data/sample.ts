@@ -17,14 +17,20 @@ const row = (id: string, title: string, more: Partial<GraphNode> = {}): GraphNod
   id, title, lifetime: "work", state: "idle", created: at(600), updated: at(30), version: 1, ...more,
 });
 
+// The node-glance prototype's graph (proto/node-glance): close to a real
+// one, every figure made up. Four subjects declare a glance (Glance,
+// api.ts); « Mes mails » waits for the user, to compare its violet ring
+// with a tile. (The e2e scenarios, written for the earlier graph, are not
+// kept up on this branch.)
 const nodes: GraphNode[] = [
-  row("sub", "Substack"),
-  row("plan", "Plan du 1er article", { parent: "sub", version: 2, waits: true }),
-  row("style", "Style des articles", { parent: "sub", state: "running", line: "3 articles lus" }),
   row("day", "Ma journée", { lifetime: "standing", created: at(700) }),
-  row("mails", "Mes mails", { lifetime: "standing", created: at(650), links: ["sub"], waits: true, external: true, version: 9 }),
-  row("prod", "Alertes de la prod", { lifetime: "standing", created: at(640), waits: true, version: 4 }),
+  row("mails", "Mes mails", { lifetime: "standing", created: at(650), links: ["day"], waits: true, external: true, version: 9 }),
   row("ext", "Virement urgent à valider", { parent: "mails", external: true, titleExternal: true }),
+  row("tools", "Outils à revoir", { created: at(645), glance: { label: "À revoir", source: "tools:/review/count", unit: "count", threshold: 3, good: "down", spark: true } }),
+  row("prod", "Prod GetOut", { lifetime: "standing", created: at(640), version: 4, glance: { label: "Erreurs 5xx", source: "metrics:/http/errors_rate", unit: "pct", threshold: 25, good: "down", spark: true } }),
+  row("deploy", "Déploiement v2.4", { parent: "prod", state: "running", line: "migrations 3/5" }),
+  row("invest", "Investissements", { lifetime: "standing", created: at(630), glance: { label: "PEA", source: "quotes:/portfolio/pea/change_day", unit: "pct", threshold: 2, good: "up", spark: true } }),
+  row("energy", "Énergie maison", { lifetime: "standing", created: at(620), links: ["day"], glance: { label: "Conso", source: "meter:/day/kwh_vs_usual", unit: "pct", threshold: 15, good: "down", spark: true } }),
 ];
 
 const page = (id: string): NodePage | null => {
