@@ -53,7 +53,7 @@ type web struct {
 	c         *core
 	cfg       WebConfig
 	now       func() time.Time
-	pages     map[string]*template.Template
+	pages     map[string]pageTemplates
 	limiter   *loginLimiter
 	testLimit *testLimiter // the tool form's connection tests
 	langSet   bool         // web.lang is given: it wins over the browser's language
@@ -121,21 +121,32 @@ func newWeb(c *core, cfg WebConfig) (*web, error) {
 			return nil, err
 		}
 	}
-	if err := w.parse(); err != nil {
+	pages, err := parsePages()
+	if err != nil {
 		return nil, err
 	}
+	w.pages = pages
 	w.startPush()     // web_push.go
 	w.startChannels() // web_channels.go
 	return w, nil
 }
 
-// parse reads the templates: every page is the layout plus its own file,
-// with the shared ones beside.
-func (w *web) parse() error {
-	w.pages = map[string]*template.Template{}
+// pageTemplates is a page's templates: as parsed, and ready to run in
+// each language.
+type pageTemplates struct {
+	base   *template.Template            // never executed, so it can be cloned
+	byLang map[string]*template.Template // a clone of base with lang's helpers
+}
+
+// parsePages reads the templates once per process (they are embedded):
+// every page is the layout plus its own file, with the shared ones beside.
+// Each language gets its own clone, escaped at its first run and then
+// executed as it is: a template runs safely in parallel.
+var parsePages = sync.OnceValues(func() (map[string]pageTemplates, error) {
+	pages := map[string]pageTemplates{}
 	files, err := fs.Glob(webFS, "web/templates/*.html")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	common := []string{"web/templates/layout.html"}
 	for _, name := range sharedTemplates {
@@ -146,13 +157,33 @@ func (w *web) parse() error {
 		if name == "layout" || containsStr(sharedTemplates, name) {
 			continue
 		}
-		t, err := template.New(name).Funcs(templateFuncs("fr")).ParseFS(webFS, append(common, f)...)
+		base, err := template.New(name).Funcs(templateFuncs("fr")).ParseFS(webFS, append(common, f)...)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		w.pages[name] = t
+		p := pageTemplates{base: base, byLang: map[string]*template.Template{}}
+		for _, lang := range []string{"fr", "en"} {
+			t, err := base.Clone()
+			if err != nil {
+				return nil, err
+			}
+			p.byLang[lang] = t.Funcs(templateFuncs(lang))
+		}
+		pages[name] = p
 	}
-	return nil
+	return pages, nil
+})
+
+// in is the page's templates in lang.
+func (p pageTemplates) in(lang string) (*template.Template, error) {
+	if t, ok := p.byLang[lang]; ok {
+		return t, nil
+	}
+	t, err := p.base.Clone()
+	if err != nil {
+		return nil, err
+	}
+	return t.Funcs(templateFuncs(lang)), nil
 }
 
 // sharedTemplates are the files of definitions every page has, not pages.
@@ -448,7 +479,7 @@ func (w *web) updateNotice() updateNotice {
 
 // render executes a page, or one of its templates (a fragment for htmx).
 func (w *web) render(rw http.ResponseWriter, r *http.Request, s *session, name, block string, p page) {
-	t, ok := w.pages[name]
+	pt, ok := w.pages[name]
 	if !ok {
 		http.Error(rw, "no page "+name, http.StatusInternalServerError)
 		return
@@ -471,9 +502,8 @@ func (w *web) render(rw http.ResponseWriter, r *http.Request, s *session, name, 
 	if s != nil {
 		p.CSRF = s.CSRF
 	}
-	t, err := t.Clone()
+	t, err := pt.in(p.Lang)
 	if err == nil {
-		t = t.Funcs(templateFuncs(p.Lang))
 		if block == "" {
 			block = "layout"
 		}
@@ -491,12 +521,16 @@ func (w *web) render(rw http.ResponseWriter, r *http.Request, s *session, name, 
 
 // fragment renders a named template of a page to a string, for the event stream.
 func (w *web) fragment(lang, name, block string, data any) (string, error) {
-	t, err := w.pages[name].Clone()
+	pt, ok := w.pages[name]
+	if !ok {
+		return "", fmt.Errorf("no page %s", name)
+	}
+	t, err := pt.in(lang)
 	if err != nil {
 		return "", err
 	}
 	var buf bytes.Buffer
-	err = t.Funcs(templateFuncs(lang)).ExecuteTemplate(&buf, block, data)
+	err = t.ExecuteTemplate(&buf, block, data)
 	return buf.String(), err
 }
 
