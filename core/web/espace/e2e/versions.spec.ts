@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { still } from "./rest";
 
 // A page with many versions: one chip in its head, the version shown,
 // that opens their list; the title stays on one line, cut short, its
@@ -58,30 +59,10 @@ async function shots(page: Page, name: string) {
   await page.evaluate(() => delete document.documentElement.dataset.theme);
 }
 
-// still waits until a box stops moving (the page opening, the camera): in
-// the graph, until it is at rest and the camera still (data-still); on a
-// phone's list, until the box stays.
-async function still(el: Locator) {
-  const vp = el.page().locator(".gr-viewport");
-  if (await vp.count()) {
-    await expect(el.page().locator(".gr-viewport[data-still]")).toHaveCount(1, { timeout: 60_000 });
-    return (await el.boundingBox())!;
-  }
-  let last = "";
-  for (let i = 0; i < 60; i++) {
-    const b = await el.boundingBox();
-    const now = JSON.stringify(b && [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)]);
-    if (b && now === last) return b;
-    last = now;
-    await el.page().waitForTimeout(150);
-  }
-  throw new Error("the page does not settle");
-}
-
 // oneLine checks the head: the title on one line, its badge on that line,
 // every control of the title's row inside the page.
 async function oneLine(pg: Locator, name = title) {
-  const box = await still(pg);
+  const box = (await still(pg))!;
   const tx = pg.locator(".pg-title-tx");
   await expect(tx).toHaveAttribute("title", name);
   const line = await tx.evaluate((e) => [e.offsetHeight, parseFloat(getComputedStyle(e).lineHeight)]);

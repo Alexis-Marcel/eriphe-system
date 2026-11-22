@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { still } from "./rest";
 
 // A page scrolls as one: its head stays, its document, its blocks and the
 // cards waiting at its foot scroll together, and the wheel over it scrolls
@@ -82,14 +83,6 @@ async function shots(page: Page, name: string) {
   await page.evaluate(() => delete document.documentElement.dataset.theme);
 }
 
-// still waits until the graph is at rest and the camera still (the page
-// opening, the camera framing it: the viewport says so, data-still), then
-// gives the box of what the locator finds.
-async function still(page: Page, sel: string) {
-  await expect(page.locator(".gr-viewport[data-still]")).toHaveCount(1, { timeout: 60_000 });
-  return (await page.locator(sel).boundingBox())!;
-}
-
 test.describe("a long page with its cards", () => {
   test.use({ viewport: { width: 1240, height: 680 }, colorScheme: "dark" });
 
@@ -115,7 +108,7 @@ test.describe("a long page with its cards", () => {
     );
     expect(nested).toBe(0);
     // The page stays above the bar.
-    const box = await still(page, 'article.pg[aria-label="Ma journée"]');
+    const box = (await still(page.locator('article.pg[aria-label="Ma journée"]')))!;
     expect(box.y + box.height).toBeLessThanOrEqual(680);
     // The camera, at rest: its scale and where the world is. A wheel that
     // moved it would move it by a hundred.
