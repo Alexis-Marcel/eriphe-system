@@ -1,11 +1,11 @@
 package main
 
-// The words of the actions on a list's items (list_actions.go,
-// web_list_actions.go): the buttons' words, built by code (act.*), and
-// the page's (espace.act.*, sent to the app with the other espace.*).
+// The words of a list's rows and of the calls cards keep (list_rows.go,
+// call_words.go, item_open.go): code's (act.*, open.*), and the page's
+// (espace.*, sent to the app with the others).
 
 func init() {
-	for lang, words := range listActionStrings {
+	for lang, words := range rowStrings {
 		for k, v := range words {
 			webStrings[lang][k] = v
 			if len(k) > 7 && k[:7] == "espace." {
@@ -15,25 +15,8 @@ func init() {
 	}
 }
 
-var listActionStrings = map[string]map[string]string{
+var rowStrings = map[string]map[string]string{
 	"fr": {
-		"act.one":               "1 élément",
-		"act.many":              "{n} éléments",
-		"act.all":               "les {n}",
-		"act.everything":        "tout",
-		"act.allverb.move":      "Tout déplacer",
-		"act.allverb.archive":   "Tout archiver",
-		"act.allverb.trash":     "Tout mettre à la corbeille",
-		"act.allverb.delete":    "Tout supprimer",
-		"act.allverb.remove":    "Tout retirer",
-		"act.allverb.mark":      "Tout marquer",
-		"act.allverb.label":     "Tout étiqueter",
-		"act.allverb.close":     "Tout fermer",
-		"act.allverb.copy":      "Tout copier",
-		"act.item.one":          "un appel",
-		"act.item.each":         "un appel par %s",
-		"act.noitemarg":         "Un élément n'a pas de « %s » : rien n'a été fait.",
-		"act.partial":           "%s · %d non fait(s) : l'outil a échoué",
 		"act.verb.other":        "Utiliser « %s » sur %s",
 		"act.verb.move":         "Déplacer %s",
 		"act.verb.archive":      "Archiver %s",
@@ -60,35 +43,17 @@ var listActionStrings = map[string]map[string]string{
 		"act.done.remove.many":  "%d retirés",
 		"act.done.mark.one":     "1 marqué",
 		"act.done.mark.many":    "%d marqués",
-		"act.archived":          "Ce nœud est archivé : rien n'a été fait.",
-		"act.noaction":          "Cette liste n'a pas cette action.",
-		"act.changed":           "Cette action a changé depuis : relis la page, rien n'a été fait.",
-		"act.none":              "Choisis au moins un élément.",
-		"act.toomany":           "%d éléments au plus à la fois.",
-		"act.stale":             "La liste a changé (%d élément(s) n'y sont plus) : rien n'a été fait.",
 		"act.gone":              "Cet outil n'est plus là : rien n'a été fait.",
 		"act.account":           "Ses comptes n'ont pas le même accès : cette action doit nommer son compte. Rien n'a été fait.",
 		"act.never":             "Cet outil n'est jamais permis (Réglages › Outils) : rien n'a été fait.",
 		"act.failed":            "L'outil a échoué : %s",
 
-		"espace.act.pick":    "Choisir « %s »",
-		"espace.act.all":     "Tout sélectionner",
-		"espace.act.clear":   "Tout désélectionner",
-		"espace.act.picked":  "%d sélectionné(s)",
-		"espace.act.bar":     "Actions sur la sélection",
-		"espace.act.confirm": "Lancer",
-		"espace.act.cancel":  "Annuler",
-		"espace.act.ask":     "Cet appel sera lancé :",
-		"espace.act.running": "En cours…",
-		"espace.act.error":   "Impossible de joindre {{name}} : rien n'a été fait.",
-
-		"open.none":  "Cette liste n'ouvre pas ses éléments.",
-		"open.stale": "Cet élément n'est plus dans la liste.",
+		"open.none":    "Cette liste n'ouvre pas ses éléments.",
+		"open.stale":   "Cet élément n'est plus dans la liste.",
+		"open.notfree": "Le lire demande ton oui : demande-le à {{name}}, qui te le proposera sur une carte.",
 
 		"espace.open.show":    "Ouvrir « %s »",
 		"espace.open.loading": "Lecture…",
-		"espace.open.ask":     "Lire cet élément lancera cet appel :",
-		"espace.open.yes":     "Lire",
 		"espace.open.close":   "Fermer",
 		"espace.open.group":   "Classé « %s »",
 		"espace.open.note":    "Note",
@@ -98,9 +63,8 @@ var listActionStrings = map[string]map[string]string{
 		"espace.open.call":    "Ce que Oui lance",
 		"espace.open.raw":     "L'élément, tel que lu",
 
-		"espace.batch.keep":  "Décocher « %s » : le garder",
-		"espace.batch.kept":  "%d gardé(s)",
-		"espace.batch.label": "Le lot",
+		"espace.batch.keep": "Décocher « %s » : le garder",
+		"espace.batch.kept": "%d gardé(s)",
 
 		"espace.row.no":       "Non, pas ça",
 		"espace.row.done":     "Fait",
@@ -116,23 +80,6 @@ var listActionStrings = map[string]map[string]string{
 		"espace.page.resize":  "Redimensionner : glisser, ou flèches du clavier",
 	},
 	"en": {
-		"act.one":               "1 item",
-		"act.many":              "{n} items",
-		"act.all":               "all {n}",
-		"act.everything":        "everything",
-		"act.allverb.move":      "Move them all",
-		"act.allverb.archive":   "Archive them all",
-		"act.allverb.trash":     "Move them all to the trash",
-		"act.allverb.delete":    "Delete them all",
-		"act.allverb.remove":    "Remove them all",
-		"act.allverb.mark":      "Mark them all",
-		"act.allverb.label":     "Label them all",
-		"act.allverb.close":     "Close them all",
-		"act.allverb.copy":      "Copy them all",
-		"act.item.one":          "one call",
-		"act.item.each":         "one call per %s",
-		"act.noitemarg":         "An item has no “%s”: nothing was done.",
-		"act.partial":           "%s · %d not done: the tool failed",
 		"act.verb.other":        "Use “%s” on %s",
 		"act.verb.move":         "Move %s",
 		"act.verb.archive":      "Archive %s",
@@ -159,35 +106,17 @@ var listActionStrings = map[string]map[string]string{
 		"act.done.remove.many":  "%d removed",
 		"act.done.mark.one":     "1 marked",
 		"act.done.mark.many":    "%d marked",
-		"act.archived":          "This node is archived: nothing was done.",
-		"act.noaction":          "This list has no such action.",
-		"act.changed":           "This action changed since: reload the page, nothing was done.",
-		"act.none":              "Pick at least one item.",
-		"act.toomany":           "%d items at most at once.",
-		"act.stale":             "The list changed (%d item(s) no longer in it): nothing was done.",
 		"act.gone":              "This tool is no longer there: nothing was done.",
 		"act.account":           "Its accounts do not have the same access: this action must name its account. Nothing was done.",
 		"act.never":             "This tool is never allowed (Settings › Tools): nothing was done.",
 		"act.failed":            "The tool failed: %s",
 
-		"espace.act.pick":    "Pick “%s”",
-		"espace.act.all":     "Select all",
-		"espace.act.clear":   "Clear the selection",
-		"espace.act.picked":  "%d selected",
-		"espace.act.bar":     "Actions on the selection",
-		"espace.act.confirm": "Run",
-		"espace.act.cancel":  "Cancel",
-		"espace.act.ask":     "This call will run:",
-		"espace.act.running": "Running…",
-		"espace.act.error":   "Cannot reach {{name}}: nothing was done.",
-
-		"open.none":  "This list does not open its items.",
-		"open.stale": "This item is no longer in the list.",
+		"open.none":    "This list does not open its items.",
+		"open.stale":   "This item is no longer in the list.",
+		"open.notfree": "Reading it asks your yes: ask {{name}}, who will propose it on a card.",
 
 		"espace.open.show":    "Open “%s”",
 		"espace.open.loading": "Reading…",
-		"espace.open.ask":     "Reading this item will run this call:",
-		"espace.open.yes":     "Read",
 		"espace.open.close":   "Close",
 		"espace.open.group":   "Filed under “%s”",
 		"espace.open.note":    "Note",
@@ -197,9 +126,8 @@ var listActionStrings = map[string]map[string]string{
 		"espace.open.call":    "What Yes runs",
 		"espace.open.raw":     "The item, as read",
 
-		"espace.batch.keep":  "Untick “%s”: keep it",
-		"espace.batch.kept":  "%d kept",
-		"espace.batch.label": "The batch",
+		"espace.batch.keep": "Untick “%s”: keep it",
+		"espace.batch.kept": "%d kept",
 
 		"espace.row.no":       "No, not that",
 		"espace.row.done":     "Done",

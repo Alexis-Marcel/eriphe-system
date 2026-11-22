@@ -1,14 +1,14 @@
 import type { Action, Message } from "../a2ui/adapter";
 import { CATALOG } from "../a2ui/catalog";
-import type { NodePage, PageBlock, PickItem, PickList } from "../data/api";
+import type { ListRow, NodePage, PageBlock, SourceList } from "../data/api";
 
 // A node's page as the page draws it (web_graph.go's nodePage): its text
 // as Markdown, its blocks as A2UI surfaces, one per block, through the
 // renderer the catalog's components use (a2ui/). A block's surface is
 // named by its node and its name; its data is the block's, with each
-// source's last value at /<name> and the user's marks at /marks, as
-// eriphe-core sends it. A block someone else's words may have written
-// (external) is marked so: there, a Proposal can only ask.
+// source's last value at /<name>, as eriphe-core sends it. A block
+// someone else's words may have written (external) is marked so: there,
+// a button asks nothing.
 
 export type Piece =
   | { kind: "text"; text: string }
@@ -57,13 +57,14 @@ export function sourceMessage(node: string, block: string, name: string, value: 
   return { version: "1.0", updateDataModel: { surfaceId: surfaceOf(node, block), path: `/${name.replace(/~/g, "~0").replace(/\//g, "~1")}`, value } };
 }
 
-// pickLists are the Lists bound to a source's items the page must know
-// (those that filter them, those the user may pick items in), by their
-// block's surface (list_actions.go, list_sections.go): none from a block
-// that is not drawn. Each one's rows are its latest (rows, by the List's
-// component, as the stream sent them), else the page's.
-export function pickLists(page: NodePage, rows: (block: string, component: string) => PickItem[] | undefined): Map<string, PickList[]> {
-  const out = new Map<string, PickList[]>();
+// sourceLists are the Lists bound to a source's items the page must know
+// (those that filter them, open their rows, a batch folds, or on whose
+// rows a card waits), by their block's surface (list_rows.go,
+// list_sections.go): none from a block that is not drawn. Each one's rows
+// are its latest (rows, by the List's component, as the stream sent
+// them), else the page's.
+export function sourceLists(page: NodePage, rows: (block: string, component: string) => ListRow[] | undefined): Map<string, SourceList[]> {
+  const out = new Map<string, SourceList[]>();
   for (const p of pieces(page)) {
     if (p.kind !== "block" || !Array.isArray(p.block.lists) || !p.block.lists.length) continue;
     out.set(
@@ -80,11 +81,9 @@ export function blockOf(page: NodePage, name: string): PageBlock | undefined {
 }
 
 // A gesture on a block, as eriphe-core takes it: a button's ask (the
-// button only: eriphe-core reads its words in the block), or the user's
-// mark on an item. Local names (expand, tab) stay in the page.
-export type Gesture =
-  | { kind: "ask"; block: string; component: string }
-  | { kind: "mark"; block: string; list: string; item: string; mark: string };
+// button only: eriphe-core reads its words in the block). It is the only
+// one: nothing in a block acts.
+export type Gesture = { kind: "ask"; block: string; component: string };
 
 // toGesture reads an action of one of the node's blocks: none from
 // another surface, from a block that is not there, or from an external
@@ -96,11 +95,5 @@ export function toGesture(a: Action, node: string, block: (name: string) => Page
   const b = block(name);
   if (!b || b.external) return null;
   if (a.name === "ask") return { kind: "ask", block: name, component: a.sourceComponentId };
-  if (a.name === "mark") {
-    const c = a.context ?? {};
-    const [list, item, m] = [c.list, c.item, c.mark];
-    if (typeof list !== "string" || typeof item !== "string" || typeof m !== "string") return null;
-    return { kind: "mark", block: name, list, item, mark: m };
-  }
   return null;
 }

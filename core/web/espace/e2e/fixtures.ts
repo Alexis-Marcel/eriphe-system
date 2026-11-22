@@ -1,4 +1,4 @@
-import { test as base, expect } from "@playwright/test";
+import { test as base, expect, type Request } from "@playwright/test";
 
 // What every test starts from, against the one test core of a run
 // (TestEspaceScenario): signed in, and the workspace as the user would
@@ -26,11 +26,20 @@ export const test = base.extend<{ fresh: void }, { session: Session }>({
   ],
   storageState: ({ session }, use) => use(session),
   // No page open, and the last page shown seen already: the stream says it
-  // when it connects, and the workspace would open it again.
+  // when it connects, and the workspace would open it again. At its end,
+  // the test's view still to be kept is kept before the next test begins:
+  // data/keep.ts sends it a moment after it changes, else as the page
+  // leaves, which would land after the next test's reset.
   fresh: [
-    async ({ request }, use) => {
+    async ({ request, page }, use) => {
       expect((await request.post("/e2e/view")).ok()).toBe(true);
       await use();
+      const kept = (r: Request) => r.method() === "PUT" && r.url().endsWith("/api/espace/view");
+      for (;;) {
+        const sent = await page.waitForRequest(kept, { timeout: 800 }).catch(() => null);
+        if (!sent) break;
+        await sent.response().catch(() => null);
+      }
     },
     { auto: true },
   ],

@@ -106,13 +106,17 @@ func (w *web) handleIntention(rw http.ResponseWriter, r *http.Request, s *sessio
 		w.toast(rw, tr(w.lang(r), "intent.approvefirst"), false)
 		return
 	}
-	got, err := w.c.mem.changeIntention(id, ch, "owner", action)
+	var got *Intention
+	if x.State == intentProposed { // its card's answer (convo_cards.go)
+		if err = w.c.answerProposal(r.Context(), cardIntention, id, action == "approve"); err == nil {
+			got, err = w.c.mem.intention(id)
+		}
+	} else {
+		got, err = w.c.mem.changeIntention(id, ch, "owner", action)
+	}
 	if err != nil {
 		w.toast(rw, err.Error(), false)
 		return
-	}
-	if x.State == intentProposed {
-		w.c.proposalDecided(cardIntention, id, action == "approve") // its card says so (convo_cards.go)
 	}
 	rw.Header().Set("HX-Trigger", hxTrigger(tr(w.lang(r), "intent.did."+action), true, true))
 	w.render(rw, r, s, "memory", "intent-card-frag", page{Data: w.intentCard(got)})

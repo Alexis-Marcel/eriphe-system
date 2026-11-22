@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { GraphNode, Moved, Note, OrbFeed, OrbWords, PickItem, Theme, View, Waiting } from "./api";
+import type { GraphNode, Moved, Note, OrbFeed, OrbWords, ListRow, Theme, View, Waiting } from "./api";
 
 // The workspace's state: the graph as eriphe-core streams it (stream.ts),
 // and what the user has open. The graph is core's: the page never changes a
@@ -25,9 +25,9 @@ export type State = {
   // the sources' last values, by node, block and name
   sources: Record<string, unknown>;
   // the rows of the Lists the page must know (those that filter a
-  // source's items, those the user picks in), by node, block and the
-  // List's component id (list_actions.go, list_sections.go)
-  rows: Record<string, PickItem[]>;
+  // source's items, open them, a batch folds, a card waits on), by node, block and the
+  // List's component id (list_rows.go, list_sections.go)
+  rows: Record<string, ListRow[]>;
   open: string[];
   talk: string | null;
   shown: number; // the last show applied
@@ -113,7 +113,7 @@ export function applyProgress(s: State, ev: ProgressEvent): State {
   return { ...s, progress: { ...s.progress, [ev.node]: { text: ev.text, at: ev.at } } };
 }
 
-export type SourceEvent = { node: string; block: string; name: string; value: unknown; lists?: { component: string; items: PickItem[] }[] };
+export type SourceEvent = { node: string; block: string; name: string; value: unknown; lists?: { component: string; items: ListRow[] }[] };
 
 export function applySource(s: State, ev: SourceEvent): State {
   if (!ev || typeof ev.node !== "string" || typeof ev.block !== "string" || typeof ev.name !== "string") return s;

@@ -194,13 +194,13 @@ func TestWriterOutputParsesToSameBytes(t *testing.T) {
 	if err := n.PutAuthorBlock("steps", []byte(`{"components": {"component": "Text", "text": {"@path": "/t"}}, "data": {"t": "One"}}`), ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := n.SetMark("steps", "lines", "one", MarkDone); err != nil {
+	if err := n.SetBlockExternal("steps", true); err != nil {
 		t.Fatal(err)
 	}
 	n.Meta.External = true
 	out := mustBytes(t, n)
 	want := "---\nid: abc\ntitle: Plan\nparent: k3v9q2m7\nlinks: [p8d2x4c1]\nlifetime: work\ngoal: A plan.\ncreated: 2026-11-17T09:00:00+01:00\nexternal: true\n---\n# Plan\n\n" +
-		"```eriphe:block steps\n{\"components\": [\n  {\"component\":\"Text\",\"id\":\"root\",\"text\":{\"@path\":\"/t\"}}\n],\n \"data\": {\"t\":\"One\"},\n \"marks\": {\"lines\":{\"one\":\"done\"}}}\n```\n"
+		"```eriphe:block steps\n{\"components\": [\n  {\"component\":\"Text\",\"id\":\"root\",\"text\":{\"@path\":\"/t\"}}\n],\n \"data\": {\"t\":\"One\"},\n \"external\": true}\n```\n"
 	if string(out) != want {
 		t.Fatalf("written:\n%s\nwant:\n%s", out, want)
 	}
@@ -219,7 +219,7 @@ func TestEditOneBlockLeavesTheRest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := n.SetMark("errors", "series", "s1", MarkKeep); err != nil {
+	if err := n.SetBlockExternal("errors", true); err != nil {
 		t.Fatal(err)
 	}
 	out := mustBytes(t, n)
@@ -231,8 +231,8 @@ func TestEditOneBlockLeavesTheRest(t *testing.T) {
 	if !bytes.HasSuffix(out, raw[end:]) {
 		t.Error("the bytes after the block changed")
 	}
-	if !bytes.Contains(out, []byte(`"marks": {"series":{"s1":"keep"}}`)) {
-		t.Errorf("the mark is not written:\n%s", out)
+	if !bytes.Contains(out, []byte(`"external": true}`)) {
+		t.Errorf("external is not written:\n%s", out)
 	}
 }
 
@@ -265,13 +265,12 @@ func TestErrors(t *testing.T) {
 		{"missing data", block("chart", `{"components": [{"id": "root", "component": "Text", "text": {"@path": "/t"}}], "data": {"u": "x"}}`), "(there: u)", "chart"},
 		{"bad bound link", block("link", `{"components": [{"id": "root", "component": "Link", "label": "Go", "url": {"@path": "/u"}}], "data": {"u": "javascript:alert(1)"}}`), "an http(s) address as a whole", "link"},
 		{"bad link", block("link", `{"components": [{"id": "root", "component": "Link", "label": "Go", "url": "javascript:alert(1)"}]}`), "http(s) address", "link"},
-		{"data marks", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "data": {"marks": 1}}`), "data /marks is code's", "plan"},
 		{"data is source", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "data": {"s": 1}, "sources": {"s": {"tool": "a/b"}}}`), "place of the source s", "plan"},
 		{"two kinds", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"s": {"tool": "a/b", "monitor": "m"}}}`), "one of tool, resource or monitor", "plan"},
 		{"source name", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"Bad Name": {"tool": "a/b"}}}`), "a name is lowercase", "plan"},
 		{"every", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"s": {"tool": "a/b", "every": 2000}}}`), "every is 1 to 1440", "plan"},
-		{"attention without items", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "sources": {"s": {"tool": "a/b", "attention": true}}}`), "attention needs items", "plan"},
-		{"bad mark", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "marks": {"l": {"i": "maybe"}}}`), "keep, drop or done", "plan"},
+		{"marks are no field", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "marks": {"l": {"i": "keep"}}}`), "unknown field", "plan"},
+		{"actions are no field", block("plan", `{"components": [{"id": "root", "component": "Text", "text": "Hi"}], "actions": {}}`), "unknown field", "plan"},
 		{"short form in a file", block("plan", `{"components": {"component": "Text", "text": "Hi"}}`), "", "plan"},
 		{"unclosed block", head("```eriphe:block plan\n" + text + "\n"), "no closing ``` line", "plan"},
 		{"same name twice", head("```eriphe:block plan\n" + text + "\n```\n```eriphe:block plan\n" + text + "\n```\n"), "one block so named", "plan"},
@@ -342,8 +341,6 @@ func TestAuthorCodeFields(t *testing.T) {
 		return `{"components": [{"id": "root", "component": "Markdown", "text": {"@path": "/text"}}], "data": {"text": "Shorter."}` + extra + `}`
 	}
 	refused := []struct{ name, extra string }{
-		{"marks changed", `, "marks": {"lines": {"l1": "keep"}}`},
-		{"marks emptied", `, "marks": {}`},
 		{"external changed", `, "external": false`},
 	}
 	for _, tc := range refused {
@@ -360,13 +357,13 @@ func TestAuthorCodeFields(t *testing.T) {
 		})
 	}
 	// Left out, or written alike: kept.
-	for _, extra := range []string{"", `, "marks": {"lines": {"l1": "done"}}, "external": true`} {
+	for _, extra := range []string{"", `, "external": true`} {
 		n, _ := Parse(read(t, "full.md"))
 		if err := n.PutAuthorBlock("draft", []byte(draft(extra)), ""); err != nil {
 			t.Fatalf("%q: %v", extra, err)
 		}
 		b := n.Block("draft")
-		if b.Marks["lines"]["l1"] != MarkDone || !b.External {
+		if !b.External {
 			t.Errorf("%q: code's fields lost: %+v", extra, b)
 		}
 		if !bytes.Contains(mustBytes(t, n), []byte("Shorter.")) {
@@ -378,15 +375,15 @@ func TestAuthorCodeFields(t *testing.T) {
 	if err := prev.AuthorBody(body); err != nil {
 		t.Fatal(err)
 	}
-	if prev.Block("draft").Marks["lines"]["l1"] != MarkDone || prev.Block("errors") != nil {
+	if !prev.Block("draft").External || prev.Block("errors") != nil {
 		t.Errorf("body: %+v", prev.Blocks())
 	}
 	if err := prev.AuthorBody("```eriphe:block draft\n" + draft(`, "external": false`) + "\n```\n"); !errors.Is(err, ErrCodeField) {
 		t.Errorf("body: not refused: %v", err)
 	}
-	// A new block an author marks is refused.
-	if err := prev.AuthorBody("```eriphe:block more\n" + draft(`, "marks": {"l": {"i": "keep"}}`) + "\n```\n"); err == nil {
-		t.Error("a new block marked by its author")
+	// A new block an author says external is refused.
+	if err := prev.AuthorBody("```eriphe:block more\n" + draft(`, "external": true`) + "\n```\n"); err == nil {
+		t.Error("a new block said external by its author")
 	}
 	// One that says a snapshot (copied from an old version) is taken
 	// without it: the sources' values are code's, kept outside the file.
@@ -520,13 +517,10 @@ func TestCodeAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := n.SetMark("draft", "lines", "l1", "maybe"); err == nil {
-		t.Error("a mark that is none")
+	if err := n.SetBlockExternal("nothere", true); err == nil {
+		t.Error("external on no block")
 	}
-	if err := n.SetMark("nothere", "l", "i", MarkKeep); err == nil {
-		t.Error("a mark on no block")
-	}
-	if err := n.SetMark("draft", "lines", "l1", ""); err != nil {
+	if err := n.SetBlockExternal("draft", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := n.SetBlockExternal("errors", true); err != nil {
@@ -536,13 +530,13 @@ func TestCodeAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(again.Block("draft").Marks) != 0 || !again.Block("errors").External {
+	if again.Block("draft").External || !again.Block("errors").External {
 		t.Errorf("code's fields: %+v %+v", again.Block("draft"), again.Block("errors"))
 	}
 }
 
 // The doc's examples: the full one parses, round trips and shows its
-// marks; the canonical one is what code writes.
+// blocks; the canonical one is what code writes.
 func TestDocExamples(t *testing.T) {
 	doc, err := os.ReadFile("../../docs/node-format.md")
 	if err != nil {
@@ -560,7 +554,7 @@ func TestDocExamples(t *testing.T) {
 	if out := mustBytes(t, n); !bytes.Equal(out, full) {
 		t.Errorf("round trip:\n%s", out)
 	}
-	if n.Block("titles").Marks["titles"]["t2"] != MarkKeep || len(n.Block("readers").Sources) != 1 {
+	if n.Block("titles") == nil || len(n.Block("readers").Sources) != 1 {
 		t.Errorf("blocks: %+v", n.Blocks())
 	}
 	canon := examples[1][1]

@@ -91,8 +91,8 @@ around the page.
 A view that follows things (your mails, the alerts of a service) reads as a **bilan**: a sentence
 or two on top, what waits for you first, then **For info** in a few words; under it, « To handle »,
 one line per item saying what Eriphe proposes, with its one **Yes** (No is a discreet ✕ on hover);
-what goes as a batch (« 38 useless mails to throw away ») on one line with its action on all of them,
-which you open to untick what you keep. A line clicked opens the item as a letter: who, when, its
+what goes as a batch (« 38 useless mails to throw away ») on one line with the one **Yes** of the
+card they share, which you open to untick what you keep. A line clicked opens the item as a letter: who, when, its
 subject, its text, then **On Yes** and what it sends (the reply itself), the exact call under one
 **details**. Done, an item leaves its section.
 
@@ -140,9 +140,9 @@ lists what you archived, latest first, each with **Reopen**: the bubble comes ba
 archived with it.
 
 In a block, a button Eriphe wrote sends its words to Eriphe about that page, as if you had typed
-them (that is how you answer its questions: « Do as you propose » takes every default it wrote), and
-a mark (keep, drop, done) is kept by Eriphe's code; neither works on an older version, nor in a
-block marked « outside ».
+them (that is how you answer its questions: « Do as you propose » takes every default it wrote); it
+does nothing else, and does not work on an older version, nor in a block marked « outside ». No
+button, box or mark in a page acts: what acts waits for your yes on a card.
 
 ## Ask for something
 
@@ -223,8 +223,12 @@ forget one. There is no settings page for the workspace and no rule to maintain.
 
 ## Proposals
 
+- **One way to say yes.** Eriphe proposes one thing per item, and you say **Yes** (a discreet ✕
+  declines). Whatever asks your yes is a card, in its page or on the line of the item it is about;
+  to do something else, say it in the bar. Answering on a card, in words, from a channel or on a
+  page in Settings is the same answer, and the card says so everywhere.
 - **A proposal runs only after your yes.** When Eriphe proposes something (an event to add, a reply
-  to send, a new skill), it shows as a card with **Yes** and **No**, in its page. A card that
+  to send, a new skill), it shows as a card with **Yes** and ✕, in its page. A card that
   belongs to no page shows above the bar, wherever you are, until you answer it: no card waits
   out of sight (the only buttons the bar ever has). A proposed appointment shows on a day's block as a ghost marked **Proposed**.
   Answering in one place answers everywhere. After your yes, a proposal that runs a call shows
@@ -234,7 +238,13 @@ forget one. There is no settings page for the workspace and no rule to maintain.
   ("Gmail account"); the exact call is under one **details**. When you ask Eriphe to act on items
   a page shows ("delete these 2"), its Yes sits on those items' own lines: one card for all of
   them, a small mark saying how many share it, the others lighting up when you point at one; a Yes
-  on any line does it once, for all. Nothing waits at the foot of the page for them.
+  on any line does it once, for all. Nothing waits at the foot of the page for them. The same
+  thing proposed on many items (« throw away these 38 mails ») is one card too: its batch line
+  carries the Yes, and unfolded you untick what you keep.
+- **Opening an item is never a yes.** A line opens as a letter when its server reads it freely;
+  a read that asks your yes is not opened: ask Eriphe, who proposes it on a card.
+- **Tools to review.** When a server's tools change, « Outils à revoir » lists each change with its
+  own card: Yes accepts it, ✕ refuses it.
 - **Content from outside cannot act.** A page that may carry someone else's words says « outside »
   once, by its title, and its block has a quiet edge: a proposal shown inside it has no Yes / No and
   its card waits at the foot of the page, but for the Yes on an item's own line, which answers only

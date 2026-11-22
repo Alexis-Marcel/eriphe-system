@@ -32,7 +32,7 @@ type harness struct {
 	Resume            bool   // takes up a previous session again
 	AutoModel         bool   // runs a model of its own choice when the agent names none
 	ProviderModels    bool   // its model names start with the provider's (openrouter/<model>)
-	ByCommand         bool   // an agent of it is its command (Agent.Command), which picks the model
+	ByCommand         bool   // an agent of it is its command (Agent.Command), which chooses the model
 	Skills            string // how it takes the user's skills: skills*
 	ModelServer       bool   // reaches a self-hosted model server by its address (Task.ModelEndpoint)
 	EffortEnv         string // the variable that sets how hard it thinks (low, medium, high); "" when none does

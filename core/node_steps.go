@@ -47,7 +47,7 @@ import (
 //
 // What the engine knows is in core.db (node_steps, node_works), never
 // read back from a node's file: an author writes the file, the rights
-// and the proof are code's. It survives a restart: the tick picks up
+// and the proof are code's. It survives a restart: the tick takes up
 // what moved while eriphe-core was down.
 
 const nodeStepsSchema = `CREATE TABLE IF NOT EXISTS node_steps (

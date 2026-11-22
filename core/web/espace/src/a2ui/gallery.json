@@ -511,7 +511,10 @@
       "variant": "quiet",
       "action": {
        "event": {
-        "name": "expand"
+        "name": "ask",
+        "context": {
+         "text": "Rappelle-le-moi plus tard"
+        }
        }
       }
      },
@@ -551,7 +554,6 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "proposal",
        "info",
        "when",
        "ago",
@@ -559,11 +561,6 @@
        "icons",
        "image"
       ]
-     },
-     {
-      "id": "proposal",
-      "component": "Proposal",
-      "proposalId": "rule:7"
      },
      {
       "id": "info",
@@ -952,8 +949,7 @@
       "children": [
        "state",
        "answer",
-       "info",
-       "done"
+       "info"
       ]
      },
      {
@@ -988,8 +984,7 @@
       "id": "row",
       "component": "Row",
       "children": [
-       "rowitem",
-       "rowmark"
+       "rowitem"
       ]
      },
      {
@@ -1015,18 +1010,6 @@
       }
      },
      {
-      "id": "rowmark",
-      "component": "Mark",
-      "list": "invitations",
-      "item": {
-       "@path": "id"
-      },
-      "marks": [
-       "keep",
-       "drop"
-      ]
-     },
-     {
       "id": "info",
       "component": "Fold",
       "label": "Pour info · 1",
@@ -1050,12 +1033,6 @@
        "@path": "detail"
       },
       "level": "low"
-     },
-     {
-      "id": "done",
-      "component": "Proposal",
-      "proposalId": "access:5",
-      "compact": true
      }
     ],
     "dataModel": {
@@ -1266,8 +1243,7 @@
       "component": "Row",
       "align": "center",
       "children": [
-       "todo_item",
-       "todo_yes"
+       "todo_item"
       ]
      },
      {
@@ -1281,14 +1257,6 @@
       },
       "note": {
        "@path": "subject"
-      }
-     },
-     {
-      "id": "todo_yes",
-      "component": "Proposal",
-      "inline": true,
-      "proposalId": {
-       "@path": "_card"
       }
      },
      {
@@ -1853,7 +1821,10 @@
       "variant": "quiet",
       "action": {
        "event": {
-        "name": "expand"
+        "name": "ask",
+        "context": {
+         "text": "Remind me later"
+        }
        }
       }
      },
@@ -1893,7 +1864,6 @@
       "id": "root",
       "component": "Column",
       "children": [
-       "proposal",
        "info",
        "when",
        "ago",
@@ -1901,11 +1871,6 @@
        "icons",
        "image"
       ]
-     },
-     {
-      "id": "proposal",
-      "component": "Proposal",
-      "proposalId": "rule:7"
      },
      {
       "id": "info",
@@ -2294,8 +2259,7 @@
       "children": [
        "state",
        "answer",
-       "info",
-       "done"
+       "info"
       ]
      },
      {
@@ -2330,8 +2294,7 @@
       "id": "row",
       "component": "Row",
       "children": [
-       "rowitem",
-       "rowmark"
+       "rowitem"
       ]
      },
      {
@@ -2357,18 +2320,6 @@
       }
      },
      {
-      "id": "rowmark",
-      "component": "Mark",
-      "list": "invitations",
-      "item": {
-       "@path": "id"
-      },
-      "marks": [
-       "keep",
-       "drop"
-      ]
-     },
-     {
       "id": "info",
       "component": "Fold",
       "label": "For your information · 1",
@@ -2392,12 +2343,6 @@
        "@path": "detail"
       },
       "level": "low"
-     },
-     {
-      "id": "done",
-      "component": "Proposal",
-      "proposalId": "access:5",
-      "compact": true
      }
     ],
     "dataModel": {
@@ -2608,8 +2553,7 @@
       "component": "Row",
       "align": "center",
       "children": [
-       "todo_item",
-       "todo_yes"
+       "todo_item"
       ]
      },
      {
@@ -2623,14 +2567,6 @@
       },
       "note": {
        "@path": "subject"
-      }
-     },
-     {
-      "id": "todo_yes",
-      "component": "Proposal",
-      "inline": true,
-      "proposalId": {
-       "@path": "_card"
       }
      },
      {

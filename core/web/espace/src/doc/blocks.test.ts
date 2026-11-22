@@ -40,15 +40,13 @@ describe("a node's page", () => {
     expect(pieces(ext)[1]).toEqual({ kind: "broken", name: "bad", error: "not JSON" });
   });
 
-  it("sends a block's gestures as eriphe-core takes them, never from an external block or another surface", () => {
+  it("sends a block's one gesture, its ask, as eriphe-core takes it, never from an external block or another surface", () => {
     const b = (name: string) => blockOf(page, name);
     const at = { timestamp: "", context: {} };
     const sid = surfaceOf("plan1", "titles");
     expect(toGesture({ ...at, name: "ask", surfaceId: sid, sourceComponentId: "go" }, "plan1", b)).toEqual({ kind: "ask", block: "titles", component: "go" });
-    expect(toGesture({ ...at, name: "mark", surfaceId: sid, sourceComponentId: "m", context: { list: "l", item: "i", mark: "keep" } }, "plan1", b)).toEqual({
-      kind: "mark", block: "titles", list: "l", item: "i", mark: "keep",
-    });
-    expect(toGesture({ ...at, name: "mark", surfaceId: sid, sourceComponentId: "m", context: { list: "l" } }, "plan1", b)).toBeNull();
+    // An ask is the one gesture: nothing in a block marks or acts.
+    expect(toGesture({ ...at, name: "mark", surfaceId: sid, sourceComponentId: "m", context: { list: "l", item: "i", mark: "keep" } }, "plan1", b)).toBeNull();
     expect(toGesture({ ...at, name: "expand", surfaceId: sid, sourceComponentId: "f" }, "plan1", b)).toBeNull();
     expect(toGesture({ ...at, name: "ask", surfaceId: surfaceOf("other", "titles"), sourceComponentId: "go" }, "plan1", b)).toBeNull();
     expect(toGesture({ ...at, name: "ask", surfaceId: surfaceOf("plan1", "gone"), sourceComponentId: "go" }, "plan1", b)).toBeNull();

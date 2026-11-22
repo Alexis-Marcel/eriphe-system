@@ -168,9 +168,9 @@ func TestStaleExpectRefused(t *testing.T) {
 func TestAuthorCannotWriteCodeFields(t *testing.T) {
 	e := newEnv(t)
 	s, _ := e.open(t)
-	_, err := s.Create(New{Title: "Marks", Author: "brain", Body: "```eriphe:block b\n{\"components\": {\"component\": \"Text\", \"text\": \"x\"}, \"marks\": {\"l\": {\"i\": \"keep\"}}}\n```\n"})
+	_, err := s.Create(New{Title: "External", Author: "brain", Body: "```eriphe:block b\n{\"components\": {\"component\": \"Text\", \"text\": \"x\"}, \"external\": true}\n```\n"})
 	if !errors.Is(err, nodefile.ErrCodeField) {
-		t.Fatalf("a new block with marks: %v", err)
+		t.Fatalf("a new block marked external by its author: %v", err)
 	}
 }
 

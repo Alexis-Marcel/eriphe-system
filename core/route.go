@@ -187,34 +187,34 @@ func route(n routeNote, sig routeSignals, set routeSettings, tried []string) rou
 		// tainted turn's choice is not followed: what it read may have asked.
 		order = append([]string{n.First}, slices.DeleteFunc(slices.Clone(order), func(s string) bool { return s == n.First })...)
 	}
-	var picks []routeTarget
+	var chosen []routeTarget
 	used := slices.Clone(tried)
 	for _, step := range order {
 		if !lineAllowed(n, set, step) || step == stepVoice && !voiceAllowed(n, sig, set) {
 			continue
 		}
 		if t, ok := pickTarget(step, sig, used); ok {
-			picks = append(picks, t)
+			chosen = append(chosen, t)
 			used = append(used, t.key())
 		}
 	}
-	if len(picks) == 0 && lineAllowed(n, set, stepComputer) {
+	if len(chosen) == 0 && lineAllowed(n, set, stepComputer) {
 		// No line reaches the user: rather a computer of theirs than nothing.
 		if t, ok := anyComputer(sig, used); ok {
-			picks = append(picks, t)
+			chosen = append(chosen, t)
 		}
 	}
 	var p routePlan
-	if len(picks) == 0 {
+	if len(chosen) == 0 {
 		return p
 	}
-	p.First = []routeTarget{picks[0]}
+	p.First = []routeTarget{chosen[0]}
 	if !n.Tainted {
 		p.First = append(p.First, alsoTargets(n, sig, set, p.First)...)
 	}
 	// The later steps stand without a fresh signal: a device in use now may
 	// not be in ten minutes, and a re-route then sees it.
-	for _, t := range picks[1:] {
+	for _, t := range chosen[1:] {
 		reached := slices.ContainsFunc(p.First, func(f routeTarget) bool { return f.key() == t.key() })
 		if t.Step != stepInApp && t.Step != stepComputer && !reached && len(p.Then) < maxEscalation {
 			p.Then = append(p.Then, t)

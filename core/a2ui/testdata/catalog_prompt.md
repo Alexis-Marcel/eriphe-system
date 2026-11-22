@@ -7,11 +7,11 @@ Un bloc est une partie de la page d'un nœud : des composants de ce catalogue, e
 **Listes répétées.** `children` prend une liste d'ids `["a", "b"]` ou un modèle `{"path": "/mails", "componentId": "ligne"}` qui répète le composant `ligne` pour chaque élément de `/mails`. Dans ce modèle et ses enfants, un chemin sans `/` au début (`{"@path": "sujet"}`) se lit dans l'élément ; un chemin qui commence par `/` se lit depuis la racine des données.
 
 **Règles.**
-- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; une répartition, aujourd'hui et la cible : Chart `stack` ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day ; des cartes en galerie : Grid ; un lien vers une page : Link ; du code ou un diff : Code). Des options, une liste à cocher, un brouillon ne sont pas des composants : compose-les de ceux-ci, avec Mark.
+- Les composants sont des formes, jamais des outils : montre ce qu'un outil rend avec la forme qui lui va (un chiffre : Metric ; une série : Chart ; une répartition, aujourd'hui et la cible : Chart `stack` ; des lignes : Table ; des étapes : Timeline ; un mail ou un message : Message ; une journée : Day ; des cartes en galerie : Grid ; un lien vers une page : Link ; du code ou un diff : Code). Des options, une liste, un brouillon ne sont pas des composants : compose-les de ceux-ci.
 - Un bloc dit une chose : peu de composants, l'essentiel d'abord. Pas de texte qui répète un titre.
 - Lie les composants aux champs que l'outil rend (`@path`) plutôt que de recopier les valeurs : le code relit l'outil et le bloc reste à jour.
-- Un bouton ne fait qu'une action, d'une liste fermée ; il n'écrit jamais dans un outil. `ask` demande quelque chose à Eriphe avec tes propres mots : `{"event": {"name": "ask", "context": {"text": "Relance la sauvegarde"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code le relit dans le bloc, et Eriphe le reçoit comme un message de l'utilisateur sur ce nœud. Les noms locaux `expand` et `tab` sont les gestes de la page, sans contexte : un bouton n'en a presque jamais besoin. Une proposition se montre avec un composant Proposal, qui seul envoie le oui ou le non (`answer`) ; jamais un bouton. Tout autre nom est refusé : `mark` ne s'écrit pas sur un bouton.
-- Mark laisse l'utilisateur garder, écarter ou cocher ce que le bloc montre : `{"component": "Mark", "list": "options", "item": {"@path": "id"}, "marks": ["keep", "drop"]}` (`["done"]` pour cocher). `list` et `item` sont des ids, écrits tels quels ou liés à l'id d'une ligne, jamais du texte ; le code garde la marque dans le bloc, en `/marks/<list>/<item>`, et Mark l'y lit. Une action sur un élément est l'appel de son outil, gardé pour le oui de l'utilisateur.
+- Un bouton ne fait qu'une chose : `ask`, il demande quelque chose à Eriphe avec tes propres mots : `{"event": {"name": "ask", "context": {"text": "Relance la sauvegarde"}}}`, un texte écrit tel quel et rien d'autre, jamais une liaison ; le code le relit dans le bloc, et Eriphe le reçoit comme un message de l'utilisateur sur ce nœud. Il n'agit sur rien. Tout autre nom est refusé.
+- Un oui n'est jamais un composant : ce qui attend le oui de l'utilisateur est une carte, que le code dessine d'après ses registres. La carte d'un élément se montre d'elle-même sur sa ligne (un seul Oui, ✕ pour refuser) ; une autre, là où un bloc carte la place, sinon au pied de la page.
 - Un Link montre son adresse en clair et ne s'ouvre que si l'utilisateur clique. Son `url` est une adresse http(s) écrite telle quelle, ou une liaison vers un champ que l'outil rend déjà comme une adresse (`{"@path": "url"}` dans un modèle) ; jamais une adresse construite à partir des données : pas de formatString, rien d'ajouté à la requête, pas d'identifiant ni de mot de passe dans l'adresse. Une adresse qui ne suit pas cette règle est refusée, ou n'est pas montrée.
 - Du code se montre avec Code, tel quel ; un diff unifié avec `"mode": "diff"`. Pour relire des modifications : leur description (Markdown), le diff (Code), les vérifications (Timeline) et un Link « Ouvrir dans … » vers leur page, pour aller plus loin là où elles sont.
 - N'invente ni composant, ni propriété, ni fonction : ce qui n'est pas ci-dessous est refusé.
@@ -19,8 +19,7 @@ Un bloc est une partie de la page d'un nœud : des composants de ce catalogue, e
 ## Exemple : des mails, liés aux données
 ```json
 [
-  {"id": "root", "component": "Card", "title": "Mails à traiter", "child": "mails"},
-  {"id": "mails", "component": "List", "children": {"path": "/messages", "componentId": "mail"}, "emptyText": "Rien à traiter"},
+  {"id": "root", "component": "List", "children": {"path": "/messages", "componentId": "mail"}, "emptyText": "Rien à traiter"},
   {"id": "mail", "component": "Message", "from": {"@path": "from"}, "date": {"@path": "date"}, "subject": {"@path": "subject"}, "excerpt": {"@path": "snippet"}}
 ]
 ```
@@ -65,14 +64,11 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
 - **Tabs** : Des onglets, un enfant par onglet.
   tabs* [{title* texte · child* id d'un composant}, …]
 - **Fold** : Une ligne qui se déplie : ce qu'elle résume (« 4 étapes faites »), et en dessous un enfant, montré quand on l'ouvre.
-  label* texte · child* id d'un composant · aside id d'un composant (Sur sa ligne, au bout, ouverte ou non : une action sur tout ce qu'elle résume (« Archiver les 2 »)) · list texte fixe (Un lot : l'id de la List qu'elle replie, liée aux éléments d'une source avec une action. Sa ligne dit `{n}` (le nombre de lignes) dans `label` et porte l'action sur toutes ses lignes, cochées d'avance ; dépliée, on décoche ce qu'on garde. Vide, elle disparaît) · open booléen (Ouverte d'abord (non par défaut))
+  label* texte · child* id d'un composant · aside id d'un composant (Sur sa ligne, au bout, ouverte ou non : un bouton qui demande quelque chose à Eriphe sur tout ce qu'elle résume) · list texte fixe (Un lot : l'id de la List qu'elle replie, liée aux éléments d'une source. Sa ligne dit `{n}` (le nombre de lignes) dans `label` et porte le Oui de la carte que ses lignes partagent ; dépliée, on décoche ce qu'on garde. Vide, elle disparaît) · open booléen (Ouverte d'abord (non par défaut))
 - **Divider** : Un trait qui sépare.
-- **Button** : Un bouton qui déclenche une action.
+- **Button** : Un bouton qui demande quelque chose à Eriphe (`ask`) : il envoie tes mots, n'agit sur rien.
   label* texte · action* action ({"event": {"name", "context"}} ou {"functionCall": appel}) · icon alert|arrowDown|arrowUp|calendar|chart|check|clock|close|cloud|document|error|event|folder|home|info|link|lock|mail|message|money|note|person|phone|place|refresh|search|server|settings|star|task|trendDown|trendUp|warning ou liaison · variant primary|default|quiet
   Exemple : `{"id": "relancer", "component": "Button", "action": {"event": {"context": {"text": "Relance la sauvegarde de cette nuit"}, "name": "ask"}}, "label": "Relancer la sauvegarde"}`
-- **Mark** : La marque de l'utilisateur sur ce que le bloc montre : un bouton à bascule par marque, enfoncé quand c'est la sienne ; le code la garde en `/marks/<list>/<item>`.
-  list* texte fixe ou liaison (La liste marquée, un id (« options »)) · item* texte fixe ou liaison (La chose marquée : un id, ou lié à l'id d'une ligne) · marks* [keep|drop|done, …] (keep et drop pour garder ou écarter, done pour cocher)
-  Exemple : `{"id": "garder", "component": "Mark", "item": "temporal", "list": "options", "marks": ["keep", "drop"]}`
 - **Choice** : Un choix parmi des options, rangé dans les données du bloc.
   options* [{label* texte · value* texte fixe}, …] · value* liste de textes (Les valeurs choisies : une liaison vers une liste de textes) · label texte · multiple booléen fixe (Plusieurs choix possibles)
 - **TextField** : Un champ de saisie, rangé dans les données du bloc.
@@ -96,12 +92,9 @@ Données : `{"messages": [{"from": "Sam", "date": "2026-11-12T08:10:00Z", "subje
   title* texte · detail texte (À côté du titre, plus discret (qui l'envoie, d'où elle vient)) · due texte (Son échéance, date ISO 8601, en pastille) · level texte (high (elle attend l'utilisateur, en avant), normal (par défaut) ou low (une ligne, discrète)) · mark texte (Une marque courte (« extérieur »)) · note texte (Ce qu'il faut en savoir, en une phrase)
 - **Message** : Un message : un mail, un message d'une messagerie, une note reçue.
   from* texte · body texte (Le texte entier, quand il compte) · date texte (Date ISO 8601) · excerpt texte (Le début, en une ou deux lignes) · subject texte
-- **Day** : Une journée et ses événements, dans l'ordre des heures. Les propositions datées qui attendent un oui ou un non s'y montrent d'elles-mêmes en fantôme à leur heure, avec ce qu'elles chevauchent ; on y répond par leur carte ou un Proposal.
+- **Day** : Une journée et ses événements, dans l'ordre des heures. Les propositions datées qui attendent un oui ou un non s'y montrent d'elles-mêmes en fantôme à leur heure, avec ce qu'elles chevauchent ; on y répond par leur carte.
   date* texte (Le jour, AAAA-MM-JJ) · events* [{title* texte fixe · start* texte fixe (Date et heure ISO 8601, ou la date seule pour toute la journée) · allDay booléen fixe · end texte fixe · place texte fixe}, …] ou liaison · proposals booléen fixe (Montrer les propositions datées de ce jour (oui par défaut) ; false pour une journée qui n'est pas celle de l'utilisateur)
   Exemple : `{"id": "demain", "component": "Day", "date": "2026-11-13", "events": [{"end": "2026-11-13T10:00:00+01:00", "place": "Centre", "start": "2026-11-13T09:30:00+01:00", "title": "Dentiste"}]}`
-- **Proposal** : Une proposition d'Eriphe qui attend un oui ou un non (créer un événement, répondre à un message, lancer une tâche…), montrée là où elle compte : ses boutons Oui et Non envoient `answer`, que le code lie à cette proposition et à aucune autre. Sa référence est celle d'une proposition qui attend (`kind:id`), écrite telle quelle ou liée à la donnée. Elle se met à jour quand on y répond ailleurs. Dans un bloc au contenu extérieur, elle se répond dans la conversation.
-  proposalId* texte (La référence de la proposition, type:numéro) · compact booléen fixe (Une fois décidée, une ligne qui se déplie au clic ; tant qu'elle attend, entière) · inline booléen fixe (Sur la ligne d'un élément : seulement son bouton Oui (Non au survol), ce que fait le oui se lit en ouvrant la ligne ; liée au champ `_card` de l'élément (`{"@path": "_card"}`), rien quand aucune carte n'attend sur lui)
-  Exemple : `{"id": "accord", "component": "Proposal", "proposalId": "intention:12"}`
 - **Alert** : Un avertissement qui doit se voir.
   text* texte · level info|success|warning|error · title texte
 - **Placeholder** : Une place réservée pendant que le bloc se prépare.

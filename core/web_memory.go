@@ -487,11 +487,10 @@ func (w *web) handleMemoryApprove(rw http.ResponseWriter, r *http.Request, s *se
 	if x == nil {
 		return
 	}
-	if _, err := w.c.mem.approve(x.ID, "owner"); err != nil {
+	if err := w.c.answerProposal(r.Context(), cardMemory, x.ID, true); err != nil { // its card's answer (convo_cards.go)
 		w.toast(rw, err.Error(), false)
 		return
 	}
-	w.c.proposalDecided(cardMemory, x.ID, true) // its card says so (convo_cards.go)
 	w.gone(rw, r, "mem.approved")
 }
 
@@ -504,11 +503,10 @@ func (w *web) handleMemoryReject(rw http.ResponseWriter, r *http.Request, s *ses
 		w.toast(rw, tr(w.lang(r), "mem.notproposed"), false)
 		return
 	}
-	if err := w.c.mem.forget(x.ID, "owner", "rejected"); err != nil {
+	if err := w.c.answerProposal(r.Context(), cardMemory, x.ID, false); err != nil {
 		w.toast(rw, err.Error(), false)
 		return
 	}
-	w.c.proposalDecided(cardMemory, x.ID, false)
 	w.gone(rw, r, "mem.rejected")
 }
 

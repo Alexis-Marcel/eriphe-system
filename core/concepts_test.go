@@ -13,7 +13,7 @@ import (
 // wrong tool the brain could reach for instead: the right call is taken,
 // and the wrong one is refused with a hint that names the right tool.
 // A model's choice is not measured here; what is measured is that the
-// tools steer whatever it picks.
+// tools steer whatever it chooses.
 
 type benchCall func(c *core, seq int) (map[string]any, error)
 

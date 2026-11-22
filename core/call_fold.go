@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// Same-kind proposals wait as one card, and the user picks what goes.
+// Same-kind proposals wait as one card, and the user unticks what stays.
 //
 // A skill woken once per item (a monitor's new mail) proposes the same
 // action on each: a calls card each (item_cards.go), a pile of identical
@@ -27,8 +27,8 @@ import (
 //     exactly as shown, each in the decisions, never a call made up of
 //     their union. A card decided, or one of whose calls runs or waits
 //     for its run to end, takes no more.
-//   - Each call is a line with a box, all ticked: the user unticks what
-//     should not go. Oui sends the ticked calls (only) and those unticked
+//   - Each call is a line with a box (on a batch, its item's row), all
+//     ticked: the user unticks what should not go. Oui sends the ticked calls (only) and those unticked
 //     (left): code checks both are calls of the card that wait, runs the
 //     first and refuses the others. A call folded in after the page drew
 //     the card is in neither: it waits on, its card comes again. Non
@@ -183,10 +183,26 @@ func (c *core) foldInto(batch, target int64) {
 // proposalChoice is one call of a card the user may leave out: what it
 // acts on, in words; how many items; where it stands.
 type proposalChoice struct {
-	ID    int64  `json:"id"`
-	Text  string `json:"text"`
-	N     int    `json:"n"`
-	State string `json:"state"` // proposed, approved, rejected
+	ID    int64    `json:"id"`
+	Text  string   `json:"text"`
+	N     int      `json:"n"`
+	State string   `json:"state"`           // proposed, approved, rejected
+	Items []string `json:"items,omitempty"` // the items it acts on, by id: a batch's rows unticked leave it out
+}
+
+// choiceItems are the ids of the items a kept call acts on: those kept
+// with it (its labels) and the item it is on, in that order, once each.
+func choiceItems(a accessQuestion) []string {
+	var out []string
+	for _, l := range a.Labels {
+		if l.ID != "" && !slices.Contains(out, l.ID) {
+			out = append(out, l.ID)
+		}
+	}
+	if a.Item != "" && !slices.Contains(out, a.Item) {
+		out = append(out, a.Item)
+	}
+	return out
 }
 
 // choiceText is a call's line on a card of calls that do the same thing:

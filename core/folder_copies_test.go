@@ -103,7 +103,7 @@ func copiesCore(t *testing.T) (*core, *syncDevice, *syncDevice) {
 	return c, mac, nas
 }
 
-// The user picks the machines that keep a copy of a copyable folder: each
+// The user chooses the machines that keep a copy of a copyable folder: each
 // device is handed its plan, the folder's machine sending it at its level,
 // the copy's keeping it, each pinning the other's Syncthing device ID; a plan is
 // handed again only when it changes.
@@ -308,7 +308,7 @@ func TestFolderCopyStatusAndPlacement(t *testing.T) {
 
 // With its machine online, a folder may be worked on wherever it is up to
 // date: its machine, or one keeping a copy in sync, nothing pending either
-// way; the scheduler picks the best of them.
+// way; the scheduler chooses the best of them.
 func TestFolderTaskOnAnyHolder(t *testing.T) {
 	c, mac, nas := copiesCore(t)
 	ctx := context.Background()

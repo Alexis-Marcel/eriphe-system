@@ -138,9 +138,9 @@ type catalogFacts struct {
 	// an unclean turn it is the user's, as WebFetch is, and it is never
 	// allowed in advance.
 	openWorld bool
-	// gesture: a tool only the user's own gesture runs (a list action's
-	// click, web_list_actions.go): never to any agent (value is never),
-	// whoever asks and whatever was allowed before (tool_review.go).
+	// gesture: a tool only the user's own yes runs, on a card code made
+	// (catalogCall): never to any agent (value is never), whoever asks and
+	// whatever was allowed before (tool_review.go).
 	gesture bool
 }
 
@@ -428,7 +428,7 @@ const (
 
 func tokenAccessKey(server string) string { return "server." + server + ".token-access" }
 
-// scopesFor picks the OAuth scopes to ask a server for at a level, from
+// scopesFor chooses the OAuth scopes to ask a server for at a level, from
 // what it advertises (found), and says what the token will allow. fixed:
 // the configuration's own scopes, asked as they are.
 func scopesFor(preset, level string, found []string, fixed bool) ([]string, string) {

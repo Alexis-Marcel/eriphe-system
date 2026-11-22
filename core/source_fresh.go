@@ -19,18 +19,16 @@ import (
 //
 //   - A call that ran well and may change something (its tool is not
 //     marked readOnlyHint) is a change of its server: the brain's own
-//     calls and its tasks' (a skill's run's too, proxy.go), a card's yes,
-//     an item's Oui and a view's action (catalogCall). A read never is.
+//     calls and its tasks' (a skill's run's too, proxy.go), and a card's
+//     yes (catalogCall). A read never is.
 //   - The sources of its server are read again, every node's: those of
 //     the account the call names (its "account" argument) and those that
 //     name none; all of them when the call names none. The calls of a
 //     moment are gathered: one read, a second after the last call (three
 //     at most after the first).
-//   - The items of those sources whose ids the call named are shown done
-//     at once (_state, list_sections.go: a List that keeps what is not
-//     done lets them go), until the next read of their source that began
-//     after the call: an item it still lists comes back. Nothing is kept:
-//     never more than a couple of minutes, and not across a restart.
+//   - Nothing is shown done ahead of the read: an item is done only when
+//     its note says so (item_notes.go), which code writes after a card's
+//     yes ran on it; the read shows what its server says.
 //   - A conversation's call on items of a view wakes its skill, as the
 //     user's own gestures do (wakeNodeSkills): its bilan follows. A
 //     task's never does (a skill's run would wake itself).
@@ -51,25 +49,21 @@ var (
 	// freshStale is how old a source may be when its page is opened, or
 	// the user comes back, and not be read again.
 	freshStale = time.Minute
-	// leavingKept is how long an item the call named stays done when no
-	// read of its source comes.
-	leavingKept = 2 * time.Minute
 	// freshSaid is the least time between two reads of a server's
 	// sources on its own word (notifications/resources/updated).
 	freshSaid = 15 * time.Second
 )
 
-// sourceFresh is what is waiting to be read again, the items shown done
-// until then, and when each node was last looked at for staleness.
+// sourceFresh is what is waiting to be read again, and when each node was
+// last looked at for staleness.
 type sourceFresh struct {
-	mu      sync.Mutex
-	asks    map[string]map[string]bool // server → the accounts changed; "" all of them
-	first   time.Time
-	timer   *time.Timer
-	leaving map[string]map[string]time.Time // node\x00source → item → when the call named it
-	looked  map[string]time.Time            // node → its last staleness check
-	said    map[string]time.Time            // server → its last read on its own word
-	later   map[string]bool                 // server → a read on its word waits for its floor
+	mu     sync.Mutex
+	asks   map[string]map[string]bool // server → the accounts changed; "" all of them
+	first  time.Time
+	timer  *time.Timer
+	looked map[string]time.Time // node → its last staleness check
+	said   map[string]time.Time // server → its last read on its own word
+	later  map[string]bool      // server → a read on its word waits for its floor
 }
 
 // serverSaid is a server that said one of its resources changed: its
@@ -109,32 +103,15 @@ func onlyReads(t *mcp.Tool, f catalogFacts) bool {
 }
 
 // sourcesChanged is a call that ran well on server with input: unless it
-// only reads (onlyReads), the items it named are shown done, its server's
-// sources are read again soon, and the nodes whose items it named are
-// returned.
+// only reads (onlyReads), its server's sources are read again soon, the
+// pages showing the items it named are told, and the nodes whose items it
+// named are returned.
 func (c *core) sourcesChanged(server string, reads bool, input map[string]any) []string {
 	if c.nodes == nil || reads {
 		return nil
 	}
 	account, _ := input["account"].(string)
 	named := c.itemsNamed(server, account, input)
-	if len(named) > 0 {
-		now := time.Now()
-		f := &c.fresh
-		f.mu.Lock()
-		if f.leaving == nil {
-			f.leaving = map[string]map[string]time.Time{}
-		}
-		for key, ids := range named {
-			if f.leaving[key] == nil {
-				f.leaving[key] = map[string]time.Time{}
-			}
-			for _, id := range ids {
-				f.leaving[key][id] = now
-			}
-		}
-		f.mu.Unlock()
-	}
 	var nodes []string
 	for _, key := range slices.Sorted(maps.Keys(named)) {
 		node, source := splitFreshKey(key)
@@ -292,48 +269,6 @@ func (c *core) readChanged() {
 	for _, id := range slices.Sorted(maps.Keys(byNode)) {
 		c.readNodeLater(context.Background(), id, byNode[id])
 	}
-}
-
-// leavingItems are the items of a node's source shown done until it is
-// read again.
-func (c *core) leavingItems(node, source string) map[string]bool {
-	f := &c.fresh
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	key := freshKey(node, source)
-	out := map[string]bool{}
-	for id, at := range f.leaving[key] {
-		if time.Since(at) > leavingKept {
-			delete(f.leaving[key], id)
-			continue
-		}
-		out[id] = true
-	}
-	if len(f.leaving[key]) == 0 {
-		delete(f.leaving, key)
-	}
-	return out
-}
-
-// sourceReadSince is a read of a node's source that began at began: the
-// items a call named before it are shown as it says, gone or back. It
-// tells whether there were some.
-func (c *core) sourceReadSince(node, source string, began time.Time) bool {
-	f := &c.fresh
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	key := freshKey(node, source)
-	had := false
-	for id, at := range f.leaving[key] {
-		if at.Before(began) {
-			delete(f.leaving[key], id)
-			had = true
-		}
-	}
-	if len(f.leaving[key]) == 0 {
-		delete(f.leaving, key)
-	}
-	return had
 }
 
 // readStale reads again, in the background, a node's tools and resources

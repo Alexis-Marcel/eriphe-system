@@ -45,13 +45,27 @@ export function useMoved(src: Proposals, refs: string[] | null): number {
   return n;
 }
 
-// answerOne answers a card that waits on one item (its row's Oui, or the
-// same Oui in the item opened): its calls all chosen, then read again.
-// where names the surface and component it is answered from, and the row
-// (at) when bound inside a list.
-export async function answerOne(src: Proposals, ref: string, p: ProposalView, yes: boolean, where: { surfaceId: string; componentId: string; at?: string }): Promise<{ ok: boolean; again: ProposalView | null }> {
+// chosen splits a card's calls by the items the user left (a batch's rows
+// unticked): a call all of whose items are left goes to left, any other
+// to only.
+export function chosen(p: ProposalView, leftItems?: ReadonlySet<string>): { only: number[]; left: number[] } {
+  const out = { only: [] as number[], left: [] as number[] };
+  for (const c of p.choices ?? []) {
+    const items = c.items ?? [];
+    if (leftItems && items.length > 0 && items.every((id) => leftItems.has(id))) out.left.push(c.id);
+    else out.only.push(c.id);
+  }
+  return out;
+}
+
+// answerOne answers a card that waits on items (its row's Oui, a batch's,
+// or the same Oui in the item opened): its calls chosen (all but those of
+// the items left), then read again. where names the surface and
+// component it is answered from, and the row (at) when bound inside a
+// list.
+export async function answerOne(src: Proposals, ref: string, p: ProposalView, yes: boolean, where: { surfaceId: string; componentId: string; at?: string }, leftItems?: ReadonlySet<string>): Promise<{ ok: boolean; again: ProposalView | null }> {
   const choices = p.choices ?? [];
-  const only = yes && choices.length > 0 ? { only: choices.map((c) => c.id), left: [] } : {};
+  const only = yes && choices.length > 0 ? chosen(p, leftItems) : {};
   const ok = await src.answer({ surfaceId: where.surfaceId, componentId: where.componentId, ref: p.ref, yes, ...(where.at ? { at: where.at } : {}), ...only }).catch(() => false);
   const again = await src.read(ref).catch(() => null);
   return { ok, again };

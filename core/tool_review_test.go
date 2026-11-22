@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -68,7 +67,8 @@ func reviewIDs(t *testing.T, c *core, id string) map[string]string {
 }
 
 // Each change waits with its id, its kind, what it said before and says
-// now; the node made once waits for the user while some do.
+// now, a card on its row; the node made once waits for the user while
+// some do, because their cards wait.
 func TestToolChangesListed(t *testing.T) {
 	tw, _, id := reviewWorld(t)
 	c := tw.c
@@ -97,17 +97,31 @@ func TestToolChangesListed(t *testing.T) {
 	if err != nil || sum.Lifetime != nodefile.Standing || sum.Title != "Outils à revoir" || sum.TitleExternal() {
 		t.Fatalf("node: %+v %v", sum, err)
 	}
-	if b := block(t, c, id, "tools"); !b.External || !b.Sources[reviewSource].Attention {
-		t.Errorf("block: external %v, source %+v", b.External, b.Sources[reviewSource])
+	if b := block(t, c, id, "tools"); !b.External {
+		t.Errorf("block: external %v", b.External)
 	}
 	if again, _ := c.ensureToolReview(); again != id {
 		t.Errorf("made again: %s, was %s", again, id)
 	}
-	if ids := reviewIDs(t, c, id); len(ids) != 3 {
+	ids := reviewIDs(t, c, id)
+	if len(ids) != 3 {
 		t.Errorf("the source lists %v", ids)
 	}
+	cards := c.itemCards(id, reviewSource)
+	for tool, ch := range ids {
+		if !strings.HasPrefix(cards[ch], cardCalls+":") {
+			t.Errorf("%s has no card on its row: %v", tool, cards)
+		}
+	}
 	if c.graphRow(sum).Status != nodeWaits {
-		t.Error("the node does not wait while changes do")
+		t.Error("the node does not wait while its cards do")
+	}
+	// Read again: no card twice.
+	c.readNode(context.Background(), id, nil, time.Now())
+	var n int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM access_asks WHERE server = ?`, reviewServer).Scan(&n)
+	if n != 3 {
+		t.Errorf("%d cards for 3 changes", n)
 	}
 	// Archived, it is made again: it is the one place the changes wait.
 	if err := c.nodes.Archive(id, byUser); err != nil {
@@ -118,37 +132,42 @@ func TestToolChangesListed(t *testing.T) {
 	}
 }
 
-// The user's click accepts or refuses the changes picked: accepted, the
-// tool is lent with that definition; refused, it stays held and no longer
-// waits. Each click is on record as the user's own gesture; once nothing
-// is left, the node rests.
-func TestToolReviewActs(t *testing.T) {
-	tw, csrf, id := reviewWorld(t)
+// reviewCard is the card on a change's row, decided: yes or no.
+func decideReviewCard(t *testing.T, c *core, node, change string, yes bool) {
+	t.Helper()
+	ref := c.itemCards(node, reviewSource)[change]
+	xs, err := c.cardsWhere(`ref = ?`, ref)
+	if err != nil || len(xs) != 1 {
+		t.Fatalf("card %q of %s: %v %v", ref, change, xs, err)
+	}
+	if _, err := c.decideCard(context.Background(), xs[0].ID, yes, "web"); err != nil {
+		t.Fatal(err)
+	}
+	c.yeses.Wait()
+}
+
+// A change's card: its Oui accepts it (the tool is lent with that
+// definition), its ✕ refuses it (it stays held, and no longer waits).
+// Each yes is on record as the user's, on the card; once nothing is left,
+// the node rests.
+func TestToolReviewCards(t *testing.T) {
+	tw, _, id := reviewWorld(t)
 	c := tw.c
 	u := c.pool.get("monitor")
 	ids := reviewIDs(t, c, id)
-	act := func(action string, picked ...string) (int, map[string]any) {
-		d, _ := c.nodes.Read(id, 0)
-		return gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "tools", List: "root", Action: action, Version: d.Version.N, IDs: picked})
-	}
-	if code, out := act("accept", ids["status"]); code != http.StatusOK || out["text"] != "1 accepté" {
-		t.Fatalf("accept: %d %v", code, out)
-	}
+	decideReviewCard(t, c, id, ids["status"], true)
 	if slices.Contains(u.heldTools(), "status") || u.tool("status") == nil {
 		t.Errorf("status still held: %v", u.heldTools())
 	}
 	rows, _ := c.store.decisions(0, 5)
-	if len(rows) == 0 || rows[0].By != byUser || rows[0].Tool != "mcp__eriphe-catalog__catalog_accept" || !strings.Contains(rows[0].Reason, "seul son geste") {
+	if len(rows) == 0 || rows[0].By != byUser || rows[0].Tool != "mcp__eriphe-catalog__catalog_accept" || !strings.Contains(rows[0].Reason, "carte") {
 		t.Fatalf("journal: %+v", rows)
 	}
-	raw, _ := c.nodes.Trace(id)
-	if !strings.Contains(string(raw), "Accepter 1 élément (eriphe-catalog/catalog_accept)") {
-		t.Errorf("trace: %s", raw)
-	}
 	c.live.wg.Wait()
-	if code, out := act("refuse", ids["alerts"], ids["gone"]); code != http.StatusOK || out["text"] != "2 refusés" {
-		t.Fatalf("refuse: %d %v", code, out)
-	}
+	decideReviewCard(t, c, id, ids["alerts"], false)
+	decideReviewCard(t, c, id, ids["gone"], false)
+	c.live.wg.Wait()
+	c.readNode(context.Background(), id, nil, time.Now()) // its list read again: the ✕ said refuses
 	if !slices.Contains(u.heldTools(), "alerts") {
 		t.Error("a refused tool is lent")
 	}
@@ -158,8 +177,6 @@ func TestToolReviewActs(t *testing.T) {
 	if left := c.toolChanges("fr"); len(left) != 0 {
 		t.Errorf("left to review: %+v", left)
 	}
-	c.live.wg.Wait()
-	c.readNode(context.Background(), id, nil, time.Now())
 	sum, _ := c.nodes.Get(id)
 	if c.graphRow(sum).Status == nodeWaits {
 		t.Error("the node waits with nothing to review")
@@ -181,21 +198,43 @@ func TestToolReviewActs(t *testing.T) {
 	}
 	msgs, _ := c.store.messagesAfter(0, 50)
 	for _, m := range msgs {
-		if strings.Contains(m.Text, "monitor") || strings.Contains(m.Text, "outil") {
+		if m.Role != "eriphe" && (strings.Contains(m.Text, "monitor") || strings.Contains(m.Text, "outil")) {
 			t.Errorf("the brain is told: %+v", m)
 		}
 	}
 }
 
-// Only the user's gesture accepts or refuses: the brain, a task, an
-// approved card, even with a yes given before, are refused; the changes
-// are read by code alone, lent to no agent.
+// A change accepted elsewhere (its server's page in Réglages) waits no
+// more: its card is withdrawn at the next read of the list, gone, never
+// read as the user's no.
+func TestToolReviewCardWithdrawn(t *testing.T) {
+	tw, _, id := reviewWorld(t)
+	c := tw.c
+	ids := reviewIDs(t, c, id)
+	ref := c.itemCards(id, reviewSource)[ids["status"]]
+	if err := c.approveTools("monitor"); err != nil {
+		t.Fatal(err)
+	}
+	c.live.wg.Wait()
+	c.readNode(context.Background(), id, nil, time.Now())
+	xs, _ := c.cardsWhere(`ref = ?`, ref)
+	if len(xs) != 1 || xs[0].State != cardGone {
+		t.Fatalf("its card: %+v", xs)
+	}
+	if refused := c.store.refusedChanges(); len(refused) != 0 {
+		t.Errorf("a withdrawn card refused %v", refused)
+	}
+}
+
+// Only the user's yes on a card code made accepts: the brain and a task,
+// even with a yes given before, are refused, and no card is kept for
+// them; the changes are read by code alone, lent to no agent.
 func TestToolReviewNeverForAgents(t *testing.T) {
 	tw, _, _ := reviewWorld(t)
 	c := tw.c
 	ctx := context.Background()
 	review := c.pool.get(reviewServer)
-	for _, tool := range []string{"catalog_accept", "catalog_refuse"} {
+	for _, tool := range []string{"catalog_accept"} {
 		name := claudeToolName(reviewServer, tool)
 		input := map[string]any{"ids": []any{"monitor/status@x"}}
 		if d, _ := c.decideBrainCall(name, input, nil); d != decideDeny {
@@ -215,15 +254,20 @@ func TestToolReviewNeverForAgents(t *testing.T) {
 				t.Errorf("%s: %s's call ran", tool, task)
 			}
 		}
-		if _, _, code, _ := c.catalogCall(ctx, name, `{"ids":[]}`, false, func(map[string]any) {}); code != callWhyNotAllowed {
-			t.Errorf("%s: an approved card's call: %q", tool, code)
-		}
 		if slices.ContainsFunc(c.lentTools(), func(x catalogTool) bool { return x.server == reviewServer && x.tool == tool }) {
 			t.Errorf("%s is lent", tool)
 		}
 	}
 	if len(c.toolChanges("fr")) != 3 {
 		t.Error("an agent's call settled something")
+	}
+	var kept int
+	c.store.db.QueryRow(`SELECT COUNT(*) FROM access_asks WHERE server = ?`, reviewServer).Scan(&kept)
+	if kept != 3 {
+		t.Errorf("%d calls kept: an agent's attempt made a card", kept)
+	}
+	if review.toolByClaudeName("catalog_refuse") != nil {
+		t.Error("catalog_refuse is a tool: a no is the card's ✕")
 	}
 	// No agent is lent the server, nor may a grant name it: the changes
 	// are code's own read, never the brain's.
@@ -249,21 +293,5 @@ func TestToolReviewNeverForAgents(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("the brain writes a block reading the changes")
-	}
-}
-
-// A tool only the user's gesture runs acts on its own server's list: an
-// action that hands it another source's ids is refused, nothing done.
-func TestToolReviewActOnItsOwnList(t *testing.T) {
-	tw, csrf, fm, id := actionsWeb(t, `{"accept": {"tool": "eriphe-catalog/catalog_accept", "items": "ids", "source": "received"}}`)
-	_ = fm
-	waitStatus(t, tw.c.pool.get(reviewServer), statusReady)
-	d, _ := tw.c.nodes.Read(id, 0)
-	code, out := gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", nodeActIn{Block: "inbox", List: "root", Action: "accept", Version: d.Version.N, IDs: []string{"m1"}})
-	if code != http.StatusForbidden {
-		t.Fatalf("act on another list: %d %v", code, out)
-	}
-	if rows, _ := tw.c.store.decisions(0, 5); len(rows) != 0 {
-		t.Errorf("journal: %+v", rows)
 	}
 }

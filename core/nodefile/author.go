@@ -2,14 +2,14 @@ package nodefile
 
 import (
 	"bytes"
-	"maps"
+
 	"slices"
 	"strings"
 	"time"
 )
 
 // The authors' API: what the brain, a task or the user writes. Code's
-// fields (a block's marks and external, the node's external,
+// fields (a block's external, the node's external,
 // title_trusted and opened_by) are never theirs: left out, they are kept as the version written over
 // has them; written alike, they are accepted; written otherwise, the
 // write is refused. A new block has none. A block may be written in its
@@ -111,9 +111,6 @@ func (b *Block) keepCode(prev *Block) error {
 		keep = *prev
 	}
 	var problems []string
-	if b.has.marks && !sameField(b.Marks, keep.Marks) {
-		problems = append(problems, "marks are "+ErrCodeField.Error()+", the user's: leave them out")
-	}
 	if b.has.external && b.External != keep.External {
 		problems = append(problems, "external is "+ErrCodeField.Error()+": leave it out")
 	}
@@ -121,20 +118,13 @@ func (b *Block) keepCode(prev *Block) error {
 		return &BlockError{Name: b.Name, Problems: problems, Err: ErrCodeField}
 	}
 	b.External = keep.External
-	b.Marks = nil
-	for list, items := range keep.Marks {
-		if b.Marks == nil {
-			b.Marks = Marks{}
-		}
-		b.Marks[list] = maps.Clone(items)
-	}
 	b.has = has{completed: b.has.completed, card: b.has.card}
 	return nil
 }
 
 // AuthorText is the body as its author writes it (AuthorBody takes it
-// back): its text and blocks, without code's fields of the blocks (the
-// user's marks, external).
+// back): its text and blocks, without code's field of the blocks
+// (external).
 func (n *Node) AuthorText() (string, error) {
 	var b bytes.Buffer
 	for _, s := range n.segs {
@@ -143,7 +133,7 @@ func (n *Node) AuthorText() (string, error) {
 			continue
 		}
 		bare := *s.block
-		bare.Marks, bare.External = nil, false
+		bare.External = false
 		out, err := bare.canonical()
 		if err != nil {
 			return "", err
@@ -155,7 +145,7 @@ func (n *Node) AuthorText() (string, error) {
 
 // AuthorBytes is the node as its authors wrote it: its front matter and
 // body in their canonical form, without code's fields (a block's
-// marks and external, the node's external, title_trusted and
+// external, the node's external, title_trusted and
 // opened_by, done and links). Two versions alike
 // there differ only by what code wrote: an author's write made on one
 // applies on the other.
@@ -174,7 +164,7 @@ func (n *Node) AuthorBytes() ([]byte, error) {
 			continue
 		}
 		bare := *s.block
-		bare.Marks, bare.External = nil, false
+		bare.External = false
 		out, err := bare.canonical()
 		if err != nil {
 			return nil, err

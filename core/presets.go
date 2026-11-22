@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Presets of the workspace: common tools a user picks from a list, with
+// Presets of the workspace: common tools a user chooses from a list, with
 // everything filled in but the credential and, where it differs per
 // person, the address. The URLs were checked against each vendor's own
 // documentation (October 2026); the user can still edit them.

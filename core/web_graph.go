@@ -231,8 +231,8 @@ type pageBlock struct {
 	Error      string           `json:"error,omitempty"`
 	Card       string           `json:"card,omitempty"`
 	Proposal   *proposalView    `json:"proposal,omitempty"`
-	// Lists: the Lists the user may pick items in, and the actions on
-	// them (list_actions.go).
+	// Lists: the Lists whose rows the page must know: what they show, the
+	// card that waits on each, how they open (list_rows.go).
 	Lists []pageList `json:"lists,omitempty"`
 }
 
@@ -285,7 +285,7 @@ func (w *web) nodePageOf(id string, version int, lang string) (nodePage, error) 
 		}
 		b := c.blockView(id, part.Block, reads)
 		if b.Error == "" && b.Card == "" {
-			b.Lists = c.blockLists(part.Block, b.Data, lang)
+			b.Lists = c.blockLists(part.Block, b.Data)
 		}
 		if b.Card != "" && b.Error == "" {
 			b.Proposal = w.placedCard(id, part.Block, lang)
@@ -397,15 +397,6 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 	// The items' notes on them (list_sections.go): the values are this
 	// view's own, read for it.
 	c.noteSources(id, b, v.Data)
-	marks := map[string]any{}
-	for list, items := range b.Marks {
-		m := map[string]any{}
-		for item, mark := range items {
-			m[item] = mark
-		}
-		marks[list] = m
-	}
-	v.Data[nodefile.MarksKey] = marks
 
 	var list []map[string]any
 	json.Unmarshal(b.Components, &list)
@@ -448,8 +439,8 @@ func (c *core) blockView(id string, b *nodefile.Block, reads []nodeRead) pageBlo
 // sourceEvents are what "source" events send of a block's source: its
 // node, block and name, its value at /<name> as the page draws it (its
 // items' notes on them), and the rows of the Lists the page must know
-// that show it (blockLists: those that filter it, those the user picks
-// in). block "": each block of the node that reads a source so named (its
+// that show it (blockLists: those that filter it, those a batch folds,
+// those a card waits on). block "": each block of the node that reads a source so named (its
 // items' notes changed). None when the node or the source is no more.
 func (c *core) sourceEvents(id, block, name string) []map[string]any {
 	if c.nodes == nil {
@@ -477,7 +468,7 @@ func (c *core) sourceEvents(id, block, name string) []map[string]any {
 			continue
 		}
 		ev := map[string]any{"node": id, "block": b.Name, "name": name, "value": val}
-		if lists := c.blockLists(b, v.Data, "fr", name); len(lists) > 0 {
+		if lists := c.blockLists(b, v.Data, name); len(lists) > 0 {
 			rows := make([]map[string]any, 0, len(lists))
 			for _, l := range lists {
 				rows = append(rows, map[string]any{"component": l.Component, "items": l.Items})

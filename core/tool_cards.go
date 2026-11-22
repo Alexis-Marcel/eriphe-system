@@ -86,7 +86,7 @@ var (
 )
 
 // The mail's account: a mailbox of eriphe-mail with a password. The user
-// picks the kind of mailbox first; each one has its own form. Checked
+// chooses the kind of mailbox first; each one has its own form. Checked
 // against each provider's help (October 2026):
 //   - Gmail: an app password needs 2-Step Verification
 //     (support.google.com/accounts/answer/185833).

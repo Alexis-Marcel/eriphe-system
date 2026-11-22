@@ -326,19 +326,6 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 
 /* Mark: the user's keep, drop or done, toggles pressed when theirs. What
    they dropped fades; what they did is struck through. */
-.a2-marks { display: inline-flex; flex: none; gap: 4px; }
-.a2-mark { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--fg3); font-size: 12.5px; cursor: pointer; }
-.a2-mark:hover { background: var(--fill); color: var(--fg); }
-.a2-mark[aria-pressed="true"] { border-color: var(--line); background: var(--fill); color: var(--fg); }
-.a2-mark-keep[aria-pressed="true"] { border-color: color-mix(in oklab, var(--ok) 45%, var(--line)); color: var(--ok-text); background: var(--ok-soft); }
-.a2-mark:disabled { opacity: 0.5; cursor: default; }
-.a2-mark-box { width: 18px; height: 18px; padding: 0; justify-content: center; border: 1.5px solid var(--line-strong); border-radius: 4px; }
-.a2-mark-box .a2-icon { width: 12px; height: 12px; stroke-width: 3; opacity: 0; }
-.a2-mark-box[aria-pressed="true"] { border-color: var(--ok); background: var(--ok); color: var(--card); }
-.a2-mark-box[aria-pressed="true"] .a2-icon { opacity: 1; }
-.a2-cells > li:has(.a2-marked-drop), .a2-list > li:has(.a2-marked-drop) { opacity: 0.55; }
-.a2-list > li:has(.a2-marked-done) .a2-text { color: var(--fg3); text-decoration: line-through; }
-.a2-cells > li:has(.a2-marked-keep) > .a2-card { border-color: color-mix(in oklab, var(--ok) 55%, var(--line)); }
 
 
 /* Table */
@@ -484,7 +471,8 @@ textarea.a2-input { resize: vertical; min-height: 4.5em; }
 .a2-proposal-md dd { max-height: 220px; overflow-y: auto; padding: 6px 10px; border-radius: 8px; background: var(--fill); border: 1px solid var(--line); scrollbar-width: thin; }
 .a2-proposal-md .a2-markdown > :first-child { margin-top: 0; }
 .a2-proposal-md .a2-markdown > :last-child { margin-bottom: 0; }
-.a2-proposal-actions { display: flex; gap: 8px; margin-top: 8px; }
+.a2-proposal-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.a2-proposal:hover .a2-proposal-no, .a2-proposal-no:focus-visible { opacity: 1; }
 /* The answer on its way: the button pressed says so at once. */
 .a2-button.is-busy { opacity: 1; cursor: progress; }
 .a2-button.is-busy::after {
@@ -969,15 +957,11 @@ a.notice-text:hover { text-decoration: underline; }
   .btn, .a2-option span, .gr-core, .gr-link, .pg { transition: none; }
 }
 
-/* Picking items in a list, and the actions on them (a2ui/picks.tsx): the
-   boxes show on hover, once something is picked, and always on a touch
-   screen; the bar only once something is picked. */
-.a2-picks { position: relative; display: flex; flex-direction: column; gap: 6px; }
-.a2-pickable > li { display: flex; align-items: flex-start; gap: 8px; }
-.a2-pickrow { flex: 1; min-width: 0; }
-.a2-pick { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--accent); cursor: pointer; opacity: 0; transition: opacity 120ms; }
-.a2-pickall { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-size: 12px; color: var(--fg3); cursor: pointer; opacity: 0; transition: opacity 120ms; }
-.a2-pickall .a2-pick { margin: 0; }
+/* A batch's rows (a2ui/lists.tsx): each with its box, all ticked, the
+   user unticking what they keep. */
+.a2-batchrows > li { display: flex; align-items: flex-start; gap: 8px; }
+.a2-tickrow { flex: 1; min-width: 0; }
+.a2-tick { width: 16px; height: 16px; margin: 3px 0 0; flex: none; accent-color: var(--accent); cursor: pointer; }
 /* A row that opens in place (opener.tsx): the row, its disclosure, what it read below it. */
 .a2-openhead { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
 .a2-openmain { flex: 1; min-width: 0; }
@@ -1009,37 +993,7 @@ a.notice-text:hover { text-decoration: underline; }
 .a2-read-more h5 { margin: 0; font-size: 11px; font-weight: 500; color: var(--fg3); }
 .a2-read-more pre { margin: 0; padding: 8px 10px; max-height: 220px; overflow: auto; border-radius: 8px; background: var(--fill); font-family: var(--mono); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg2); }
 .a2-openfail { color: var(--hot-text); }
-.a2-openask { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.a2-openask p, .a2-openask dl { margin: 0; }
-.a2-openask dt, .a2-openask dd { font-family: var(--mono); font-size: 12px; }
-.a2-openask dd { margin: 0 0 0 12px; color: var(--fg2); }
-/* The head: « tout sélectionner », and an action on all the rows (« Supprimer les 12 »), always seen. */
-.a2-pickhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.a2-pickwhole { padding: 2px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: none; color: var(--fg2); font: inherit; font-size: 12px; cursor: pointer; }
-.a2-pickall + .a2-pickwhole { margin-left: auto; }
-.a2-pickwhole:hover { background: var(--fill); color: var(--fg); }
-.a2-pickwhole:disabled { opacity: 0.5; cursor: default; }
-.a2-picks:hover .a2-pick, .a2-picks:hover .a2-pickall, .a2-picks.picking .a2-pick, .a2-picks.picking .a2-pickall,
-.a2-pick:focus-visible, .a2-pickall:focus-within { opacity: 1; }
-@media (hover: none) { .a2-pick, .a2-pickall { opacity: 1; } }
-.a2-pickable > li.picked { background: color-mix(in oklab, var(--accent) 7%, transparent); border-radius: var(--r-sm); }
-.a2-pickbar { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); box-shadow: var(--shadow); }
-.a2-pickcount { font-size: 12px; color: var(--fg3); margin-right: 4px; }
-.a2-pickact { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: none; color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; }
-.a2-pickact:hover { background: var(--fill); }
-.a2-pickact:disabled { opacity: 0.5; cursor: default; }
-.a2-pickhint { color: var(--fg3); font-size: 11px; }
-.a2-pickhint.ext, .a2-wiki.ext, .a2-from-ext { color: var(--warn-text); }
-.a2-pickask { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--fill); font-size: 13px; }
-.a2-pickask p { margin: 0; color: var(--fg2); }
-.a2-pickask dl { margin: 0; }
-.a2-pickask dt { font-family: var(--mono); font-size: 12px; }
-.a2-pickask dd { margin: 0 0 0 12px; font-family: var(--mono); font-size: 12px; color: var(--fg2); }
-.a2-pickask ul { margin: 0; padding-left: 18px; color: var(--fg2); max-height: 150px; overflow-y: auto; scrollbar-width: thin; }
-.a2-pickask-btns { display: flex; gap: 6px; justify-content: flex-end; }
-.a2-pickdone { margin: 0; font-size: 12px; color: var(--ok-text); }
-.a2-pickdone.failed { color: var(--hot-text); }
-@media (prefers-reduced-motion: reduce) { .a2-pick, .a2-pickall { transition: none; } }
+.a2-wiki.ext, .a2-from-ext { color: var(--warn-text); }
 
 /* --- A page's opening, items that propose, batches -------------------------
    A page's text opens with what matters (the prompt: « commence par ce qui
@@ -1061,8 +1015,8 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 .a2-inline-ext { display: inline-grid; place-items: center; color: var(--warn-text); }
 .a2-inline-ext .a2-icon { width: 13px; height: 13px; }
 .a2-block.ext .a2-inline-ext { display: none; } /* the block's own mark says it */
-/* A card the page adds to a row whose template draws none; one card on
-   several rows: a quiet mark of how many, its siblings lit on hover. */
+/* A card the page draws on its row; one card on several rows: a quiet
+   mark of how many, its siblings lit on hover. */
 .a2-rowcard { flex-wrap: nowrap; gap: 10px; padding-left: 10px; }
 .a2-rowcard > .a2-inline { flex: 0 1 auto; min-width: 0; }
 .a2-inline-what { min-width: 0; max-width: 22em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--fg3); margin-right: 2px; }
@@ -1101,21 +1055,15 @@ li:hover .a2-inline-no, .a2-inline-no:focus-visible { opacity: 1; }
 .a2-onyes-state .a2-icon { width: 13px; height: 13px; flex: none; }
 .a2-openrow.open > .a2-openhead .a2-inline { visibility: hidden; }
 
-/* A batch: one line, how many and the action on all; opened, its rows. */
+/* A batch: one line, how many and the Oui of their card; opened, its rows. */
 .a2-batch .a2-fold-head { gap: 10px; padding: 9px 12px; border-style: dashed; color: var(--fg2); }
 .a2-batch.a2-fold-open .a2-fold-head { border-style: solid; }
 .a2-batch .a2-fold-chev { margin-left: 0; order: -1; font-size: 11px; }
 .a2-batch .a2-fold-label { color: var(--fg); }
 .a2-batch-kept { font-size: 12px; color: var(--fg3); }
-.a2-batch-act { padding: 6px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; }
-.a2-batch-act:hover { border-color: color-mix(in oklab, var(--hot) 50%, var(--line-strong)); color: var(--hot-text); }
-.a2-batch-act:disabled { opacity: 0.5; cursor: default; }
 .a2-batch .a2-fold-body { max-height: 320px; overflow-y: auto; scrollbar-width: thin; padding: 2px 4px; }
-.a2-batchrows .a2-pick { opacity: 1; }
 .a2-batchrows > li.left { opacity: 0.55; }
-.a2-batchrows > li.picked { background: none; }
-.a2-batch-done { display: flex; align-items: center; gap: 6px; margin: 0; padding: 6px 2px; font-size: 13px; color: var(--ok-text); }
-.a2-batch-done .a2-icon { width: 14px; height: 14px; }
+.a2-batchrows > li.ticked { background: none; }
 
 /* What is already decided, in the page's « ⋯ » menu. */
 .pg-settled { margin: 4px 0 0; padding: 8px 10px 6px; border-top: 1px solid var(--line); max-width: min(340px, 86vw); display: grid; gap: 6px; }

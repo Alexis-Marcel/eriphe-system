@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -14,18 +13,15 @@ import (
 )
 
 // sectionsBlock is a block that shows the monitor's received messages in
-// two sections, by their group, with an action on the first.
-func sectionsBlock(actions string) string {
+// two sections, by their group.
+func sectionsBlock() string {
 	return "```eriphe:block inbox\n" + `{"components": [
   {"id": "root", "component": "Column", "children": ["drop", "info"]},
   {"id": "drop", "component": "List", "children": {"path": "/received/messages[_group=À supprimer]", "componentId": "row"}, "emptyText": "Rien"},
   {"id": "info", "component": "List", "children": {"path": "/received/messages[_group!=À supprimer]", "componentId": "row"}},
   {"id": "row", "component": "Text", "text": {"@path": "subject"}}],
- "sources": {"received": {"resource": "monitor", "uri": "monitor://received", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}},
- "actions": ` + actions + `}` + "\n```\n"
+ "sources": {"received": {"resource": "monitor", "uri": "monitor://received", "items": {"path": "messages", "id": "id", "title": "subject", "detail": "from"}}}}` + "\n```\n"
 }
-
-const dropAction = `{"drop": {"tool": "monitor/move", "args": {"to": "trash"}, "items": "ids", "source": "received", "list": "drop"}}`
 
 // sectionsWeb is the workspace on a core whose monitor lists m1 to m4, a
 // node that shows them in two sections, m1 and m3 grouped « À supprimer »,
@@ -45,7 +41,7 @@ func sectionsWeb(t *testing.T) (*testWeb, string, *fakeMonitor, string) {
 	csrf := tw.setup()
 	id := mustNode(t, c, nodestore.New{Title: "Mails", Lifetime: nodefile.Standing, Body: "Les mails.\n"})
 	if _, err := c.authorWrite(id, lastHash(t, c, id), byBrain, false, c.viewSourceOK(""), func(n *nodefile.Node) error {
-		return n.AuthorBody("Les mails.\n\n" + sectionsBlock(dropAction))
+		return n.AuthorBody("Les mails.\n\n" + sectionsBlock())
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -73,15 +69,15 @@ func TestListSectionsChecked(t *testing.T) {
 		})
 		return err
 	}
-	if err := write(sectionsBlock(dropAction)); err != nil {
+	if err := write(sectionsBlock()); err != nil {
 		t.Fatalf("good sections: %v", err)
 	}
-	good := sectionsBlock(dropAction)
+	good := sectionsBlock()
 	for want, body := range map[string]string{
 		"a filter follows a source's items": strings.Replace(good, "/received/messages[_group=À", "/received/other[_group=À", 1),
 		"a filter is [field=value]":         strings.Replace(good, "[_group=À supprimer]", "[_group]", 1),
 		"only a List filters":               strings.Replace(good, `"id": "drop", "component": "List"`, `"id": "drop", "component": "Grid"`, 1),
-		"is not a List of the source":       strings.Replace(good, `"list": "drop"`, `"list": "row"`, 1),
+		"is not the id of a List":           strings.Replace(good, `"children": ["drop", "info"]},`, `"children": ["drop", "info", "f"]}, {"id": "f", "component": "Fold", "label": "x", "child": "drop", "list": "row"},`, 1),
 	} {
 		if err := write(body); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s: %v", want, err)
@@ -137,11 +133,11 @@ func TestListSectionsRows(t *testing.T) {
 		}
 		return out
 	}
-	if drop.Component != "drop" || !drop.Filtered || !slices.Equal(ns(drop), []int{0, 2}) || len(drop.Actions) != 1 || drop.Actions[0].All != "Tout déplacer → trash" {
+	if drop.Component != "drop" || !drop.Filtered || !slices.Equal(ns(drop), []int{0, 2}) {
 		t.Fatalf("drop: %+v", drop)
 	}
-	if info.Component != "info" || !info.Filtered || !slices.Equal(ns(info), []int{1, 3}) || len(info.Actions) != 0 {
-		t.Fatalf("info, no action of its own: %+v", info)
+	if info.Component != "info" || !info.Filtered || !slices.Equal(ns(info), []int{1, 3}) {
+		t.Fatalf("info: %+v", info)
 	}
 	d, _ := c.nodes.Read(id, 0)
 	if strings.Contains(string(d.Raw), "_note") || strings.Contains(string(d.Raw), `"_group"`) {
@@ -189,60 +185,8 @@ func TestListSectionsMedia(t *testing.T) {
 	// A filter that does not read (a file written by hand): the page
 	// shows none of the items, never all of them.
 	b.Components = json.RawMessage(strings.Replace(string(b.Components), "messages[_group=x]", "other[_group=x]", 1))
-	lists := c.blockLists(b, v.Data, "fr")
+	lists := c.blockLists(b, v.Data)
 	if len(lists) != 1 || !lists[0].Filtered || len(lists[0].Items) != 0 {
 		t.Fatalf("a filter that does not read: %+v", lists)
-	}
-}
-
-// The click on a section's action runs on exactly the ids the page sent,
-// each an item of the source the List's filter keeps now: one that is
-// not is enough for nothing to run, and an item come since is never
-// added.
-func TestNodeActSection(t *testing.T) {
-	tw, csrf, fm, id := sectionsWeb(t)
-	c := tw.c
-	act := func(in nodeActIn) (int, map[string]any) {
-		return gesture(t, tw, csrf, "POST", "/api/nodes/"+id+"/act", in)
-	}
-	// m2 is not « À supprimer »: refused, nothing runs.
-	if code, out := act(nodeActIn{Block: "inbox", List: "drop", Action: "drop", IDs: []string{"m1", "m2"}}); code != http.StatusBadRequest || !strings.Contains(out["error"].(string), "1 élément") {
-		t.Fatalf("an id the filter does not keep: %d %v", code, out)
-	}
-	// The action shows on its List only.
-	if code, _ := act(nodeActIn{Block: "inbox", List: "info", Action: "drop", IDs: []string{"m2"}}); code != http.StatusConflict {
-		t.Fatalf("on another List: %d", code)
-	}
-	if code, _ := act(nodeActIn{Block: "inbox", Action: "drop", IDs: []string{"m1"}}); code != http.StatusConflict {
-		t.Fatalf("no List: %d", code)
-	}
-	if n := len(sentNow(fm)); n != 0 {
-		t.Fatalf("calls after the refusals: %d", n)
-	}
-
-	// A mail come since the page showed the section, in its group: the
-	// click takes what the page sent, never more.
-	fm.mu.Lock()
-	fm.got = append(fm.got, map[string]any{"id": "m5", "subject": "Encore", "from": "Shop"})
-	fm.mu.Unlock()
-	c.readNode(context.Background(), id, nil, time.Now())
-	if err := c.noteItem(id, itemNote{Source: "received", Item: "m5", Group: "À supprimer", Author: byBrain}); err != nil {
-		t.Fatal(err)
-	}
-	code, out := act(nodeActIn{Block: "inbox", List: "drop", Action: "drop", IDs: []string{"m1", "m3"}})
-	if code != http.StatusOK {
-		t.Fatalf("act: %d %v", code, out)
-	}
-	sent := sentNow(fm)
-	if len(sent) != 1 || !slices.Equal(sent[0]["ids"].([]string), []string{"m1", "m3"}) {
-		t.Fatalf("the tool got %v", sent)
-	}
-
-	// A note changed since: the filter as it stands.
-	if err := c.noteItem(id, itemNote{Source: "received", Item: "m5", Group: "Pour info", Author: byBrain}); err != nil {
-		t.Fatal(err)
-	}
-	if code, _ := act(nodeActIn{Block: "inbox", List: "drop", Action: "drop", IDs: []string{"m5"}}); code != http.StatusBadRequest {
-		t.Fatalf("an item regrouped since: %d", code)
 	}
 }

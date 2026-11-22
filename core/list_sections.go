@@ -24,8 +24,7 @@ import (
 //
 // Code evaluates the filters, never the page: the page gets the List bound
 // to the source's items as a whole, and the rows it shows (pageList,
-// filtered), in the source's order. The click on an action of such a list
-// is checked against the filters as they stand (web_list_actions.go).
+// filtered), in the source's order.
 
 // The fields code adds to each item of a source that lists items: its
 // note, its state, its group (empty when it has none), the card that
@@ -110,9 +109,10 @@ func listBinding(path string, sources map[string]nodefile.Source) (string, itemF
 // it has none, so that a filter reads them and no source's own field
 // passes for code's. value is the block's own copy (read for the page,
 // never kept): it is changed in place. A source whose items' path is not
-// plain fields is left as it is. An item leaving (a call named it, and
-// its source was not read since: source_fresh.go) is done.
-func noteItems(src nodefile.Source, value any, notes map[string]itemNote, cards map[string]string, leaving map[string]bool) {
+// plain fields is left as it is. An item is done only when its note says
+// so (item_notes.go): code writes it after a card's yes ran, or an
+// author with item_note.
+func noteItems(src nodefile.Source, value any, notes map[string]itemNote, cards map[string]string) {
 	if src.Items == nil || value == nil || listPath("x", src) == "" {
 		return
 	}
@@ -129,9 +129,6 @@ func noteItems(src nodefile.Source, value any, notes map[string]itemNote, cards 
 		id := itemID(src, it)
 		n := notes[id]
 		o[itemNoteField], o[itemStateField], o[itemGroupField], o[itemCardField] = n.Note, n.State, n.Group, cards[id]
-		if leaving[id] {
-			o[itemStateField] = itemDone
-		}
 		delete(o, itemExternalField)
 		if n.Tainted != "" {
 			o[itemExternalField] = true
@@ -139,7 +136,7 @@ func noteItems(src nodefile.Source, value any, notes map[string]itemNote, cards 
 	}
 }
 
-// itemID is an item's id as the user picks it ("" when it has none).
+// itemID is an item's id as its source gives it ("" when it has none).
 func itemID(src nodefile.Source, it any) string {
 	v, err := extract(it, src.Items.ID)
 	if err != nil || v == nil {
@@ -168,7 +165,7 @@ func (c *core) itemNotes(id, source string) map[string]itemNote {
 func (c *core) noteSources(id string, b *nodefile.Block, data map[string]any) {
 	for name, src := range b.Sources {
 		if src.Items != nil && data[name] != nil {
-			noteItems(src, data[name], c.itemNotes(id, name), c.itemCards(id, name), c.leavingItems(id, name))
+			noteItems(src, data[name], c.itemNotes(id, name), c.itemCards(id, name))
 		}
 	}
 }
@@ -219,9 +216,9 @@ func unfilterLists(comps []map[string]any) {
 	}
 }
 
-// listsOK checks a block's Lists that filter, and its actions' lists:
-// each filter reads (listBinding), on a List; an action's list is a List
-// of the block bound to the action's source.
+// listsOK checks a block's Lists that filter: each filter reads
+// (listBinding), on a List; a Fold's list is a List of the block bound to
+// a source's items.
 func listsOK(b *nodefile.Block) []string {
 	var comps []map[string]any
 	json.Unmarshal(b.Components, &comps)
@@ -247,10 +244,9 @@ func listsOK(b *nodefile.Block) []string {
 			out = append(out, fmt.Sprintf("component %s: %v", id, err))
 		}
 	}
-	for _, an := range slices.Sorted(maps.Keys(b.Actions)) {
-		a := b.Actions[an]
-		if a.List != "" && lists[a.List] != a.Source {
-			out = append(out, fmt.Sprintf("action %s: list %s is not a List of the source %s's items", an, a.List, a.Source))
+	for _, comp := range comps {
+		if l, _ := comp["list"].(string); comp["component"] == "Fold" && l != "" && lists[l] == "" {
+			out = append(out, fmt.Sprintf("component %v: list %s is not a List of the block bound to a source's items: a batch folds such a List", comp["id"], l))
 		}
 	}
 	return out

@@ -383,7 +383,7 @@ func TestBrainPromptNodes(t *testing.T) {
 		"**Un travail en étapes.**", "`node_open` avec `steps`", "`[nœud <id> « titre »] …`", "`node_settle`", "sans te réveiller",
 		"`item_note`", "une recherche", "aucune question de toi-même", "`[rien]`",
 		"se range seul dans ce nœud", "Sa réponse sur une de ces cartes",
-		"`node_open` avec `parent`", "`Mark`", "`Grid`", "`\"kind\": \"stack\"`",
+		"`node_open` avec `parent`", "**Un oui n'est jamais un composant.**", "`Grid`", "`\"kind\": \"stack\"`",
 		"## Les vues", "`propose_view`", "un seul oui les crée", "la dernière bonne valeur reste", "marqué extérieur",
 		"« Répondre à Sam »", "attend son oui sur une carte",
 		"**une action simple**", "**une question**", "**un travail**", "le nœud permanent de sa journée s'il en a un, jamais dans un nouveau nœud",

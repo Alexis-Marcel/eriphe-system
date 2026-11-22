@@ -37,12 +37,9 @@ The titles proposed for the first article:
 ```eriphe:block titles
 {"components": [
   {"id":"root","component":"List","children":{"path":"/titles","componentId":"row"}},
-  {"id":"row","component":"Row","children":["name","keep"]},
-  {"id":"name","component":"Text","text":{"@path":"label"}},
-  {"id":"keep","component":"Mark","list":"titles","item":{"@path":"id"},"marks":["keep","drop"]}
+  {"id":"row","component":"Item","title":{"@path":"label"},"detail":{"@path":"why"}}
 ],
- "data": {"titles":[{"id":"t1","label":"Why I write by hand"},{"id":"t2","label":"Ten years of notes"}]},
- "marks": {"titles":{"t1":"drop","t2":"keep"}}}
+ "data": {"titles":[{"id":"t1","label":"Why I write by hand","why":"opens on a question"},{"id":"t2","label":"Ten years of notes","why":"short"}]}}
 ```
 ````
 
@@ -123,8 +120,6 @@ The body is markdown. A **block** is a fenced section that starts with a line
 | `components` | the author | A flat list of components of Eriphe's catalog (`core/a2ui/catalog_v1.json`), one with id `root`. |
 | `data` | the author | An object: the values its components read. |
 | `sources` | the author | Live sources read by code, by name: each one's value is at `/<name>`. |
-| `actions` | the author | What the user may run on the items of a source they pick in a list, by name ([Actions](#actions)). |
-| `marks` | code | The user's marks: by list, then by item, `keep`, `drop` or `done`. |
 | `external` | code | `true` when the block was written after reading external content, or binds a source of a server that is not trusted. |
 
 A key that is not one of these is an error. The empty ones may be left out. The values a block's
@@ -138,8 +133,8 @@ Each block is checked alone, as an A2UI surface of its own:
 - against the catalog: component types, properties, ids, a `root`, children that exist;
 - links: a `Link` url, literal or bound to the block's data, is an `http(s)` address;
 - bindings (`{"@path": "/…"}`, and a template's `path`): each one reads the block's own `data`, one
-  of its `sources` (`/<name>/…`, checked when code reads it), or the user's marks
-  (`/marks/<list>/<item>`). A binding to anything else is an error that names the block.
+  of its `sources` (`/<name>/…`, checked when code reads it). A binding to anything else is an
+  error that names the block.
 
 ### Sources
 
@@ -152,9 +147,8 @@ A source is one of:
 `every` is 1 to 1440 minutes (code's default when absent). A tool or a resource that lists things
 may say where its items are: `"items": {"path": "messages", "id": "id", "title": "subject",
 "detail": "from"}`, and how one is read in full (`open`, [Reading an item](#reading-an-item)). A source's name is lowercase letters, digits, `_` and `-`, 40 at most; it is not
-also a key of `data`, and `marks` is no source's or data key's name. A source with `items` may say `"attention": true`: while it lists items, its
-node waits for the user (its bubble's violet halo and ring say so, as for a card); when it lists none, the
-node rests.
+also a key of `data`. A node waits for the user (its bubble's violet halo and ring) only while a
+card waits on it: a source's items never make it wait by themselves.
 
 A source may also give its node a **glance**: a figure its value holds, that the node's bubble shows
 as a small tile when the figure moved past a threshold, until the user opens the node. One per node.
@@ -183,63 +177,27 @@ never a request: a node that waits for the user keeps its circle and its halo.
 Code reads the sources without a model, as the brain's free reads are: a source new or changed at
 once, then every `every` minutes, a resource at its update, a monitor at each of its looks. A
 source is also read again a second after any call that may change its server (any tool not marked
-read-only, from the conversation, a card, an action or a run), after its server says it changed,
-and when its page is opened or the user comes back if it was read more than a minute ago; the
-items such a call named show done until that read says them gone, or back. A read
+read-only, from the conversation, a card or a run), after its server says it changed,
+and when its page is opened or the user comes back if it was read more than a minute ago. A read
 that fails keeps the last good value. The values are kept in `core.db` only: a read makes no
 version, however often it runs, and every version of the page, an archived node's too, shows the
 last ones. A block that reads a server that is not trusted is marked `external`, in a version by
-`eriphe`. An author's write made on a version older than one of code's (marks, `external`) is not
+`eriphe`. An author's write made on a version older than one of code's (`external`) is not
 stale: it applies over it, code's fields kept.
 
-### Actions
+### No yes in a block
 
-A block may declare what the user can run on the items of one of its sources, by name:
+A block draws, reads and asks; it never acts. There are no block actions, no marks and no boxes to
+pick: a button only asks Eriphe (`ask`, the words its author wrote, sent as the user's message), and
+whatever asks the user's yes is a **card**, drawn by code: on an item's row when it waits on that
+item (its `_card`, below), at the foot of the page otherwise, or where a `card` block places it. A
+key `actions` or `marks` is an unknown field, refused like any other.
 
-```json
-"actions": {"archive": {"label": "Ranger", "tool": "mail/move", "args": {"to": "archive"},
-                        "items": "ids", "source": "inbox"}}
-```
-
-- `tool`: a catalog tool, `<server>/<tool>`, as a source's; `args`: its fixed arguments, or one
-  taken from each item, `{"@item": "<field>"}` (plain fields joined by dots): one call per value
-  the picked items have, each with its own items (`"args": {"account": {"@item": "account"}}`
-  trashes the mails of each account with that account named);
-- `items`: the tool's parameter that takes the ids the user picks, a list; never among `args`;
-- `source`: one of the block's sources, with an `items` descriptor (the ids are its items' `id`);
-- `label`: the author's name for it, one line, 60 characters at most: only a hint;
-- `list` (optional): the id of the one `List` of the block it shows on, a List of that source's
-  items; without it, it shows on every List of them.
-
-A name is lowercase letters, digits, `_` and `-`, 40 at most. When an author writes it, code checks
-it against the catalog: the tool is there, `items` is one of its parameters that takes a list, an
-arg taken from each item is one of its parameters that takes one value, and the fixed `args` hold
-against its input schema with those parameters left out.
-
-A `List` bound as a whole to that source's items (its template's `path` is `/<source>/<items.path>`,
-a path of plain fields, with or without a [filter](#sections)) lets the user pick rows: a box on
-each, « tout sélectionner », a button per action on all its rows (« Tout supprimer », up to 200
-rows), and, once something is picked, the actions over the picked rows. What a button says is
-code's, built from the tool and its fixed args (« Déplacer les 2 → archive »), never with the tool
-(the confirm and the button's tooltip say it); the `label` shows beside it, never on an `external`
-block. A tool that looks destructive (it says so, or `trash`, `delete`, `remove` in its name or
-description) shows its exact call (the tool, its args, an arg taken from each item by its values,
-« account : perso, travail (un appel par account) », and the very items it will take, title ·
-detail) before it runs.
-
-The click is the user's own gesture, on the ids the page showed (frozen when the button is pressed,
-whatever the list shows meanwhile): code reads the action and the List the click was made in again
-in the block as stored (each the same as at the version the page showed), checks that every id is
-one the source lists now and that the List's filters keep now, and runs one call on those ids, never
-more (a mail come since the page showed the list is not in it; one id that is not enough for nothing
-to run), or, with an arg taken from each item, one call per value read from the source's items
-(an item without it, and nothing runs), with the tool's access policy for each call, all checked
-before any runs (never: refused, but for a tool only the user's gesture runs, such as
-`eriphe-catalog`'s `catalog_accept` and `catalog_refuse`, never to any agent and run by the click
-alone; on approval: the click is the yes, logged as such; free: runs; a call that must name its
-account and names none is refused). The node's trace says each call in code's words. The source is
-then read again, and the skills that work in the node are woken (a journal event `node.gesture`,
-once the user's gestures pause ten seconds): the view's skill writes its bilan again.
+A card is one thing proposed: the user says Oui, or ✕. Calls that do the same thing to several
+items of a node (the same tool and arguments but for the ids) wait as one card: on each of their
+rows, the same card; folded in a `Fold` with `list`, the batch carries its Oui, and unfolded the
+user unticks the rows that should not go. Every answer, from a card, a word in the bar, a channel
+or a page in Réglages, goes through the same code, which keeps the card in step.
 
 ### Sections
 
@@ -262,19 +220,19 @@ per section whose template's path filters the source's items by a field:
   Code writes them over whatever the source gave. A component may show them (`{"@path":
   "_note"}`); they follow the notes and the cards live. The page is also told each row's card out
   of band (its Lists' rows), never from the block's data.
-- A card on an item, once its yes ran, notes the item `done` (code's, its note and group kept,
-  until a skill notes it again): a List that keeps `[_state!=done]` lets it go at once. Said yes or
-  no, the skills that work in the node are woken, as after an action.
+- An item is done only by its note: a card on an item, once its yes ran, notes the item `done`
+  (code's, its note and group kept, until a skill notes it again), and the source is read again: a
+  List that keeps `[_state!=done]` lets it go at once. Said yes or no, the skills that work in the
+  node are woken (a journal event `node.gesture`): the view's skill writes its bilan again.
 - Code filters, never the page: the page draws the List bound to the source's items as a whole and
   shows only the rows code kept, in the source's order; a List whose filter keeps nothing shows its
-  `emptyText`. An action with `list` shows on its section only.
+  `emptyText`.
+- A `Fold` with `list` names a `List` of the block bound to a source's items: its line counts that
+  List's rows and carries the Oui of the card they share, if any.
 
 A skill's run whose call acts on an item without naming it (an event made from a mail) puts it on
 that item with `item_note`'s `call` (the reference the run was told when the call was kept): its
 card then waits on the item's row, its words naming the item.
-- Code filters, never the page: the page draws the List bound to the source's items as a whole and
-  shows only the rows code kept, in the source's order; a List whose filter keeps nothing shows its
-  `emptyText`. An action with `list` shows on its section only.
 
 A group is one line of 40 characters at most, without `[ ] / = !`.
 
@@ -285,11 +243,11 @@ A source's `items` may say how one item is read in full: `"open": {"tool": "<ser
 (nothing else required). Code checks it against the catalog when an author writes it.
 
 A row of a `List` bound to that source opens below itself on a click (or its disclosure button; a
-click on its box, a button or a link of the row does not), and closes the same way or by its ✕.
+click on its card, a button or a link of the row does not), and closes the same way or by its ✕.
 Code reads the open again in the block as stored, checks that the id is one the source lists now,
-and calls the tool with it, as the source gave it, under the tool's access policy: never is
-refused; a free read that does not reach the open web runs; any other shows the call first, inline,
-and runs on the user's yes, given on the tool shown (logged as such). The click that opens is not the yes. The page shows
+and calls the tool with it, as the source gave it, under the tool's access policy: a free read that
+does not reach the open web runs; any other is refused, with a line saying to ask Eriphe, who will
+propose it on a card. The click that opens is never a yes. The page shows
 what the tool said as text, never as HTML, as a letter: who (a name, its address quieter) and when
 (as people say it) on one line, its title or subject, its body (body, text or content); the item's
 note when its row does not already say it (« Classé « À supprimer » : … »); then the card that
@@ -301,7 +259,7 @@ written: no version, no trace, nothing the brain reads; the page keeps it for it
 
 ### Code's fields
 
-A block's `marks` and `external`, and the front matter's `external`, `title_trusted` and `opened_by`, are written by code only:
+A block's `external`, and the front matter's `external`, `title_trusted` and `opened_by`, are written by code only:
 
 - An author (the brain, a task, the user in Eriphe's editor) may leave them out: code keeps them as
   the version written over has them.

@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/a2ui"
 )
@@ -22,18 +21,6 @@ var BlockRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_]{0,31}$`)
 // SourceRe is a source's name, its place /<name> in the block's data.
 var SourceRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
 
-// MarksKey is where a block's components read the user's marks:
-// /marks/<list>/<item> is "keep", "drop", "done" or nothing. No data key
-// and no source is so named.
-const MarksKey = "marks"
-
-// The marks the user may set.
-const (
-	MarkKeep = "keep"
-	MarkDrop = "drop"
-	MarkDone = "done"
-)
-
 // fenceOpen starts a block's fence, its name after a space.
 const fenceOpen = "```eriphe:block"
 
@@ -43,7 +30,7 @@ const fenceOpen = "```eriphe:block"
 var CardRe = regexp.MustCompile(`^[a-z][a-z_]{0,31}:[1-9][0-9]{0,17}$`)
 
 // Block is a named block of a node: components shown with their data and
-// live sources, and code's fields (marks, external). A card
+// live sources, and code's field external. A card
 // block holds only the ref of one of the node's cards (Card): where its
 // author places it in the text; code draws the card from its records.
 type Block struct {
@@ -52,8 +39,6 @@ type Block struct {
 	Components json.RawMessage   // a flat list, one with id root
 	Data       json.RawMessage   // an object, nil when it has none
 	Sources    map[string]Source // live sources read by code, at /<name>
-	Actions    map[string]Action // what the user may run on the items of a source, by name
-	Marks      Marks             // code's: the user's marks
 	External   bool              // code's: it may show someone else's words
 
 	raw   []byte // the block as read, fences included; nil once completed
@@ -63,11 +48,7 @@ type Block struct {
 
 // has tells which of code's fields a block said, and whether it said a
 // card.
-type has struct{ marks, external, completed, card bool }
-
-// Marks are the user's marks on what a block shows: by list, then by
-// item, "keep", "drop" or "done".
-type Marks map[string]map[string]string
+type has struct{ external, completed, card bool }
 
 // Source is a live source, read by code: a tool, a resource or a monitor.
 type Source struct {
@@ -78,77 +59,10 @@ type Source struct {
 	Monitor  string         `json:"monitor,omitempty"`
 	Items    *Items         `json:"items,omitempty"`
 	Every    int            `json:"every,omitempty"` // minutes between two reads, 1 to 1440; 0: the default
-	// Attention: while it lists items, its node waits for the user (its
-	// bubble says so), as for a card; empty, the node rests.
-	Attention bool `json:"attention,omitempty"`
 	// Glance: a figure its value holds, that its node shows at a glance
 	// when it moved past a threshold (glance.go); one per node.
 	Glance *Glance `json:"glance,omitempty"`
 }
-
-// Action is what the user may run on the items of a source they pick in
-// a list: a tool with fixed args, the ids they picked in its Items
-// parameter. The author names it (Label, a hint only); what its button
-// says is code's, from the tool and its args. The click is the user's own
-// gesture (the core's web_list_actions.go). An arg may be taken from each
-// item, {"@item": "<field>"}: one call per value the picked items have
-// (the mails of each account, by their account).
-type Action struct {
-	Label  string         `json:"label,omitempty"`
-	Tool   string         `json:"tool"`
-	Args   map[string]any `json:"args,omitempty"`
-	Items  string         `json:"items"`
-	Source string         `json:"source"`
-	List   string         `json:"list,omitempty"` // the List it shows on, by its component id; "": every List of its source
-}
-
-// ActionRe is an action's name.
-var ActionRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
-
-// ItemFieldRe is the field an arg takes from each item: plain fields
-// joined by dots (account, meta.project).
-var ItemFieldRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}(\.[A-Za-z_][A-Za-z0-9_]{0,63}){0,3}$`)
-
-// ItemArg is the field an action's arg takes from each item, when it is
-// {"@item": "<field>"}; ok false for a fixed arg.
-func ItemArg(v any) (field string, ok bool) {
-	m, isMap := v.(map[string]any)
-	if !isMap {
-		return "", false
-	}
-	f, has := m["@item"]
-	if !has {
-		return "", false
-	}
-	s, _ := f.(string)
-	return s, true
-}
-
-// ItemArgs are an action's args taken from each item, by parameter: the
-// field each reads.
-func (a Action) ItemArgs() map[string]string {
-	out := map[string]string{}
-	for k, v := range a.Args {
-		if f, ok := ItemArg(v); ok {
-			out[k] = f
-		}
-	}
-	return out
-}
-
-// FixedArgs are an action's args the same for every item.
-func (a Action) FixedArgs() map[string]any {
-	out := map[string]any{}
-	for k, v := range a.Args {
-		if _, ok := ItemArg(v); !ok {
-			out[k] = v
-		}
-	}
-	return out
-}
-
-// ActionLabelMax is the most runes of an action's label.
-const ActionLabelMax = 60
 
 // Items says where a listing source's items are and what each shows, and
 // how one is read in full (Open), if it may be.
@@ -199,8 +113,6 @@ type wire struct {
 	Components json.RawMessage   `json:"components"`
 	Data       json.RawMessage   `json:"data"`
 	Sources    map[string]Source `json:"sources"`
-	Actions    map[string]Action `json:"actions"`
-	Marks      *Marks            `json:"marks"`
 	// Snapshot is no field of a block any more: the sources' values are
 	// code's, kept outside the file. A block that says one (an old
 	// version, or an author copying one) reads, the snapshot ignored: the
@@ -221,14 +133,11 @@ func decodeBlock(name string, raw []byte, short bool) (*Block, error) {
 	if dec.More() {
 		return nil, blockErr(name, "one JSON object only")
 	}
-	b := &Block{Name: name, Card: w.Card, Components: w.Components, Sources: w.Sources, Actions: w.Actions}
+	b := &Block{Name: name, Card: w.Card, Components: w.Components, Sources: w.Sources}
 	if !isEmpty(w.Data) {
 		b.Data = w.Data
 	}
-	b.has = has{marks: w.Marks != nil, external: w.External != nil, card: w.Card != ""}
-	if w.Marks != nil && len(*w.Marks) > 0 {
-		b.Marks = *w.Marks
-	}
+	b.has = has{external: w.External != nil, card: w.Card != ""}
 	if w.External != nil {
 		b.External = *w.External
 	}
@@ -368,16 +277,6 @@ func (b *Block) canonical() ([]byte, error) {
 			return nil, err
 		}
 	}
-	if len(b.Actions) > 0 {
-		if err := field("actions", b.Actions); err != nil {
-			return nil, err
-		}
-	}
-	if len(b.Marks) > 0 {
-		if err := field("marks", b.Marks); err != nil {
-			return nil, err
-		}
-	}
 	if b.External {
 		out.WriteString(",\n \"external\": true")
 	}
@@ -481,7 +380,7 @@ func closesFence(t, fence string) bool {
 
 // Validate checks a block alone: its name, its components against the
 // catalog (core/a2ui), its data, its sources, its bindings against its
-// own data, sources and marks, and its marks.
+// own data and sources.
 func (b *Block) Validate() error {
 	if !BlockRe.MatchString(b.Name) {
 		return blockErr(b.Name, "a block's name is lowercase letters, digits and _, 32 at most")
@@ -496,9 +395,6 @@ func (b *Block) Validate() error {
 		fail("data: an object")
 	}
 	for _, k := range slices.Sorted(maps.Keys(data)) {
-		if k == MarksKey {
-			fail("data /%s is code's: the user's marks", k)
-		}
 		if _, ok := b.Sources[k]; ok {
 			fail("data /%s is the place of the source %s: write your values under another key", k, k)
 		}
@@ -506,18 +402,6 @@ func (b *Block) Validate() error {
 	for _, name := range slices.Sorted(maps.Keys(b.Sources)) {
 		if err := b.Sources[name].check(name); err != "" {
 			fail("%s", err)
-		}
-	}
-	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
-		for _, err := range b.Actions[name].check(name, b.Sources) {
-			fail("%s", err)
-		}
-	}
-	for _, list := range slices.Sorted(maps.Keys(b.Marks)) {
-		for _, item := range slices.Sorted(maps.Keys(b.Marks[list])) {
-			if err := checkMark(list, item, b.Marks[list][item]); err != "" {
-				fail("%s", err)
-			}
 		}
 	}
 	if len(problems) > 0 {
@@ -539,9 +423,6 @@ func (b *Block) Validate() error {
 		if len(at) == 0 {
 			continue
 		}
-		if at[0] == MarksKey {
-			continue // a mark the user has not set reads empty
-		}
 		if _, ok := b.Sources[at[0]]; ok {
 			continue // read by code: checked when it is read
 		}
@@ -560,14 +441,14 @@ func (b *Block) Validate() error {
 }
 
 // validateCard checks a card block: the ref of a card, and nothing else
-// (no components, data, sources nor marks: what the card says, what its
+// (no components, data nor sources: what the card says, what its
 // yes does and whether it waits are code's, read from its records).
 func (b *Block) validateCard() error {
 	var problems []string
 	if !CardRe.MatchString(b.Card) {
 		problems = append(problems, "card: the ref a propose tool gave (view:3, memory:12)")
 	}
-	if !isEmpty(b.Components) && string(bytes.TrimSpace(b.Components)) != "[]" || b.Data != nil || len(b.Sources) > 0 || len(b.Actions) > 0 || len(b.Marks) > 0 {
+	if !isEmpty(b.Components) && string(bytes.TrimSpace(b.Components)) != "[]" || b.Data != nil || len(b.Sources) > 0 {
 		problems = append(problems, "a card block holds its card's ref only: {\"card\": \"view:3\"}; what the card says comes from it")
 	}
 	if len(problems) > 0 {
@@ -587,8 +468,6 @@ func (s Source) check(name string) string {
 	switch {
 	case !SourceRe.MatchString(name):
 		return fmt.Sprintf("source %q: a name is lowercase letters, digits, _ and -, 40 at most", name)
-	case name == MarksKey:
-		return "source /" + MarksKey + " is code's: the user's marks"
 	case kinds != 1:
 		return "source " + name + ": one of tool, resource or monitor"
 	case s.Resource != "" && s.URI == "":
@@ -601,59 +480,10 @@ func (s Source) check(name string) string {
 		return "source " + name + ": every is 1 to 1440 minutes"
 	case s.Items != nil && s.Items.ID == "":
 		return "source " + name + ": items needs id, each item's id"
-	case s.Attention && s.Items == nil:
-		return "source " + name + ": attention needs items: the node waits while there are some"
 	case s.Items != nil && s.Items.Open != nil && (s.Items.Open.ID == "" || !toolNameOK(s.Items.Open.Tool)):
 		return "source " + name + ": items' open is {\"tool\": \"<server>/<tool>\", \"id\": \"<its parameter that takes an item's id>\"}"
 	case s.Glance != nil:
 		return s.Glance.check(name)
-	}
-	return ""
-}
-
-// check is what is wrong with an action, its shape alone: what its tool
-// takes is checked against the catalog when an author writes it (the
-// core's nodeGuard).
-func (a Action) check(name string, sources map[string]Source) []string {
-	var out []string
-	at := "action " + name + ": "
-	if !ActionRe.MatchString(name) {
-		out = append(out, fmt.Sprintf("action %q: a name is lowercase letters, digits, _ and -, 40 at most", name))
-	}
-	if server, tool, ok := strings.Cut(a.Tool, "/"); !ok || server == "" || tool == "" || strings.Contains(tool, "/") {
-		out = append(out, at+"tool is <server>/<tool>, as a source's")
-	}
-	if strings.TrimSpace(a.Items) == "" {
-		out = append(out, at+"items names the tool's parameter that takes the ids the user picks")
-	} else if _, ok := a.Args[a.Items]; ok {
-		out = append(out, at+"args has no "+a.Items+": the ids the user picks go there")
-	}
-	for _, k := range slices.Sorted(maps.Keys(a.Args)) {
-		m, _ := a.Args[k].(map[string]any)
-		if f, ok := ItemArg(a.Args[k]); ok && (len(m) != 1 || !ItemFieldRe.MatchString(f)) {
-			out = append(out, fmt.Sprintf("%sargs.%s: an arg taken from each item is {\"@item\": \"<its field>\"} alone, plain fields joined by dots", at, k))
-		}
-	}
-	if src, ok := sources[a.Source]; !ok {
-		out = append(out, at+"source names one of the block's sources, the list it acts on")
-	} else if src.Items == nil {
-		out = append(out, at+"its source "+a.Source+" says no items (path, id): the user picks items by their id")
-	}
-	if utf8.RuneCountInString(a.Label) > ActionLabelMax || strings.ContainsAny(a.Label, "\n\r") {
-		out = append(out, fmt.Sprintf("%slabel is one line, %d characters at most", at, ActionLabelMax))
-	}
-	return out
-}
-
-// checkMark is what is wrong with a mark; "" when nothing.
-func checkMark(list, item, mark string) string {
-	switch {
-	case !a2ui.MarkIDOK(list):
-		return fmt.Sprintf("marks: %q is not a list's id", list)
-	case !a2ui.MarkIDOK(item):
-		return fmt.Sprintf("marks: %q is not an item's id", item)
-	case mark != MarkKeep && mark != MarkDrop && mark != MarkDone:
-		return fmt.Sprintf("marks: %s/%s is keep, drop or done, not %q", list, item, mark)
 	}
 	return ""
 }
@@ -777,33 +607,6 @@ func inFence(text string) bool {
 
 // Code's API: what only code writes.
 
-// SetMark sets the user's mark on an item of a list a block shows; ""
-// takes it away.
-func (n *Node) SetMark(block, list, item, mark string) error {
-	b := n.Block(block)
-	if b == nil {
-		return fmt.Errorf("no block %s", block)
-	}
-	if mark == "" {
-		delete(b.Marks[list], item)
-		if len(b.Marks[list]) == 0 {
-			delete(b.Marks, list)
-		}
-		return nil
-	}
-	if err := checkMark(list, item, mark); err != "" {
-		return blockErr(block, err)
-	}
-	if b.Marks == nil {
-		b.Marks = Marks{}
-	}
-	if b.Marks[list] == nil {
-		b.Marks[list] = map[string]string{}
-	}
-	b.Marks[list][item] = mark
-	return nil
-}
-
 // SetBlockExternal says whether a block may show someone else's words.
 func (n *Node) SetBlockExternal(block string, external bool) error {
 	b := n.Block(block)
@@ -826,13 +629,6 @@ func sameField(a, b any) bool {
 		json.Unmarshal(ra, &x)
 		json.Unmarshal(rb, &y)
 		return reflect.DeepEqual(x, y)
-	}
-	if ma, ok := a.(Marks); ok {
-		mb := b.(Marks)
-		if len(ma) == 0 || len(mb) == 0 {
-			return len(ma) == 0 && len(mb) == 0
-		}
-		return reflect.DeepEqual(ma, mb)
 	}
 	return a == b
 }

@@ -72,7 +72,7 @@ func (e *skillError) Error() string { return e.Key + ": " + e.Arg }
 
 func skillErr(key, arg string) error { return &skillError{Key: key, Arg: arg} }
 
-// junk are files a folder picks up from the system, never the skill's.
+// junk are files a folder takes up from the system, never the skill's.
 func junk(p string) bool {
 	for _, part := range strings.Split(p, "/") {
 		if part == ".DS_Store" || part == "__MACOSX" || part == ".git" || part == "Thumbs.db" || strings.HasPrefix(part, "._") {

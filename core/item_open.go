@@ -27,11 +27,10 @@ import (
 //     other parameter required (openOK, from nodeGuard).
 //   - Clicked: the open is read again in the block as stored, never taken
 //     from the page; the id must be one the source lists now. The tool's
-//     policy holds: never (or a call that must name its account) is
-//     refused; a free read that does not reach the open web runs; any
-//     other asks the user first, inline, the call in code's words, and
-//     runs on their yes (logged as such). The click that opens is not the
-//     yes: the user has not seen the call yet.
+//     policy holds: only a free read that does not reach the open web
+//     runs; any other is refused, in a line that says so. The click that
+//     opens is no yes: a yes is a card's (web_convo_cards.go), and the
+//     opened item shows the card that waits on it, as its row does.
 //   - Shown: what the tool said, its common fields picked generically
 //     (title, from, date, body: openFields) and the whole as JSON under
 //     « Détails », marked external when the server is not trusted, with
@@ -63,7 +62,7 @@ func (c *core) openOK(src nodefile.Source) error {
 	if server != sourceServer(src) {
 		return fmt.Errorf("items' open: %s is not a tool of the source's own server %s", o.Tool, sourceServer(src))
 	}
-	u, t := c.actionTool(o.Tool)
+	u, t := c.catalogTool(o.Tool)
 	if u == nil || t == nil {
 		return fmt.Errorf("items' open: %s is not a tool of the catalog (list_tools)", o.Tool)
 	}
@@ -82,14 +81,12 @@ func (c *core) openOK(src nodefile.Source) error {
 	return nil
 }
 
-// itemOpenIn is a click that opens an item: the block, its source, the
-// item's id, and the user's yes once they saw the call.
+// itemOpenIn is a click that opens an item: the block, its source and
+// the item's id.
 type itemOpenIn struct {
 	Block  string `json:"block"`
 	Source string `json:"source"`
 	Item   string `json:"item"`
-	Yes    bool   `json:"yes"`
-	Tool   string `json:"tool"` // with yes: the tool of the call the user saw
 }
 
 // openNote is the item's note, as its row's: its group and note, and
@@ -100,9 +97,8 @@ type openNote struct {
 	External bool   `json:"external,omitempty"`
 }
 
-// openOut is what an open shows, or the call it asks a yes for.
+// openOut is what an open shows.
 type openOut struct {
-	Ask      *openAsk  `json:"ask,omitempty"`
 	Title    string    `json:"title,omitempty"`
 	From     string    `json:"from,omitempty"`
 	Date     string    `json:"date,omitempty"`
@@ -112,20 +108,14 @@ type openOut struct {
 	Note     *openNote `json:"note,omitempty"`
 }
 
-// openAsk is the call an open asks a yes for, in code's words.
-type openAsk struct {
-	Tool string   `json:"tool"`
-	Args []string `json:"args"`
-}
-
 func (w *web) itemOpenRoutes(mux *webMux) {
 	mux.Handle("POST /api/nodes/{id}/open", w.auth(w.handleNodeOpen))
 }
 
 // handleNodeOpen is POST /api/nodes/{id}/open: 200 with what the item
-// says, or the call it asks a yes for (ask); 400 for an item the source
-// does not list; 403 for a tool the policy never allows; 404; 409 when
-// the source opens no item; 502 when the tool failed. Every answer but
+// says; 400 for an item the source does not list; 403 for a read that is
+// not free; 404; 409 when the source opens no item; 502 when the tool
+// failed. Every answer but
 // 200 has error, the line to show.
 func (w *web) handleNodeOpen(rw http.ResponseWriter, r *http.Request, _ *session) {
 	sum, ok := w.gestureNode(rw, r)
@@ -167,7 +157,7 @@ func (c *core) openItem(ctx context.Context, id string, in itemOpenIn, lang stri
 	if c.openOK(src) != nil {
 		return openOut{}, http.StatusGone, tr(lang, "act.gone")
 	}
-	u, t := c.actionTool(o.Tool)
+	u, t := c.catalogTool(o.Tool)
 	name := claudeToolName(u.name, t.Name)
 	input := map[string]any{o.ID: v.ID}
 	f := c.pool.facts(name, input)
@@ -176,16 +166,8 @@ func (c *core) openItem(ctx context.Context, id string, in itemOpenIn, lang stri
 		return openOut{}, http.StatusForbidden, tr(lang, "act.account")
 	case f.value == gridNever:
 		return openOut{}, http.StatusForbidden, tr(lang, "act.never")
-	}
-	ahead := c.freeAhead(name, input)
-	if !ahead && in.Yes && in.Tool != buttonText(o.Tool, 80) {
-		return openOut{}, http.StatusConflict, tr(lang, "act.changed") // the yes was for another call
-	}
-	if !ahead && !in.Yes {
-		return openOut{Ask: &openAsk{Tool: buttonText(o.Tool, 80), Args: argLines(input, lang, 0)}}, http.StatusOK, ""
-	}
-	if !ahead {
-		c.store.logDecision("", "", name, input, decideAllow, byUser, "geste de l'utilisateur : il a ouvert un élément d'une liste et dit oui à sa lecture")
+	case !c.freeAhead(name, input):
+		return openOut{}, http.StatusForbidden, tr(lang, "open.notfree")
 	}
 	raw, _ := json.Marshal(input)
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), openTimeout)
@@ -212,7 +194,7 @@ var (
 	openBodyFields = []string{"body", "text", "content", "markdown", "plain", "snippet", "description", "summary"}
 )
 
-// openFields picks an item's common fields from what its tool said, and
+// openFields chooses an item's common fields from what its tool said, and
 // keeps the whole as JSON; a text is its body.
 func openFields(v any) openOut {
 	var out openOut

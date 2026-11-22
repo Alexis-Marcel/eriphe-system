@@ -116,8 +116,8 @@ export function sampleProposals(lang: Lang): Proposals {
   const viewCards = sampleCards();
   return {
     read: async (ref) => viewCards.read(ref) ?? read(ref),
-    answer: async ({ ref, yes }) => {
-      if (viewCards.read(ref)) return viewCards.answer(ref, yes);
+    answer: async ({ ref, yes, only }) => {
+      if (viewCards.read(ref)) return viewCards.answer(ref, yes, only);
       if (read(ref)?.state !== "pending") return false;
       states.set(ref, yes ? "approved" : "rejected");
       for (const f of followers) f({ refs: [ref] });

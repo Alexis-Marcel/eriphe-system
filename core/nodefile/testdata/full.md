@@ -30,7 +30,6 @@ A rule above, then a block:
                 {"id": "c", "component": "Chart", "kind": "line", "series": {"@path": "/errors_5xx/series"}}],
  "data": {},
  "sources": {"errors_5xx": {"tool": "grafana.query", "args": {"q": "errors_5xx"}, "every": 1}},
- "marks": {},
  "external": false}
 ```
 
@@ -39,6 +38,5 @@ Between the blocks.
 ```eriphe:block draft
 {"components": [{"id": "root", "component": "Markdown", "text": {"@path": "/text"}}],
  "data": {"text": "I am looking at it within the hour."},
- "marks": {"lines": {"l1": "done"}},
  "external": true}
 ```

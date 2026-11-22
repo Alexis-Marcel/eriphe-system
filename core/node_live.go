@@ -341,17 +341,12 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 			  error = excluded.error, waiting = excluded.waiting, next_at = excluded.next_at`,
 			node, r.Block, r.Name, r.spec, value, r.Read, r.Error, r.Waiting, r.NextAt)
 	}
-	// The pages that show it get the new values at once (graph_feed.go),
-	// and the items a call named before this read began as it says them:
-	// gone, or back (source_fresh.go).
+	// The pages that show it get the new values at once (graph_feed.go).
 	for i, r := range reads {
-		_, read := got[r.Block+"/"+r.Name]
-		settled := read && c.sourceReadSince(node, r.Name, now)
-		if settled || r.Value != nil && valueHash(r.Value) != was[i] {
+		if r.Value != nil && valueHash(r.Value) != was[i] {
 			c.graphSaid(graphEvent{Kind: graphEvSource, Node: node, Block: r.Block, Name: r.Name})
 		}
 	}
-	c.noteAttention(node, reads)   // node_attention.go
 	c.noteGlance(node, reads, now) // node_glance.go
 	c.markUntrusted(node)
 }

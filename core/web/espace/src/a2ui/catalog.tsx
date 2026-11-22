@@ -1,6 +1,6 @@
-import { useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createComponentImplementation, type ReactComponentImplementation } from "@a2ui/react";
-import { Catalog, CommonSchemas, type ComponentContext } from "@a2ui/web_core/v1_0";
+import { Catalog, CommonSchemas } from "@a2ui/web_core/v1_0";
 import { z } from "zod";
 import { useWords, type Lang } from "../i18n";
 import { Chart as ChartView, cleanSeries } from "./chart";
@@ -9,10 +9,9 @@ import { Day as DayView, cleanEvents, type Ghost } from "./day";
 import { functions, num, number, time, wall, when } from "./format";
 import { Icon as IconView, ICON_NAMES } from "./icons";
 import { Markdown as MarkdownView } from "./markdown";
-import { allText, AskPanel, BatchContext, buttonText, MAX_IDS, openable, Pickable, useList, type Asking, type Result, type Row } from "./picks";
-import { InlineYes, RowItem } from "./inline";
-import type { PickAction, PickItem } from "../data/api";
-import { HomeNode, useMoved, useProposals, type ProposalView } from "./proposals";
+import { BatchContext, sharedCard, SourceRows, useList, type Row } from "./lists";
+import { InlineYes } from "./inline";
+import { useMoved, useProposals, type ProposalView } from "./proposals";
 
 // The workspace's A2UI catalog, as the page renders it: shapes, never tools.
 // eriphe-core owns the catalog (its JSON Schema, which validates what a
@@ -95,10 +94,10 @@ const List = createComponentImplementation(
     }),
   },
   ({ props, buildChild, context }) => {
-    // A list of a source's items eriphe-core told of (picks.tsx): one
-    // that filters them shows only the rows it kept (a section); one some
-    // action of its block acts on lets the user pick rows in it; one whose
-    // source opens its items opens a row in place (opener.tsx).
+    // A list of a source's items eriphe-core told of (lists.tsx): one
+    // that filters them shows only the rows it kept (a section); a row a
+    // card waits on carries its Oui; one whose source opens its items
+    // opens a row in place (opener.tsx).
     const surface = context.dataContext.surface?.id;
     const told = useList(surface, context.componentModel.id);
     let rows: Row[] = kids(props.children, buildChild).map((node, n) => ({ n, node }));
@@ -107,12 +106,11 @@ const List = createComponentImplementation(
       rows = rows.filter((r) => kept.has(r.n));
     }
     if (!rows.length) return props.emptyText ? <p className="a2-empty">{props.emptyText}</p> : null;
-    if (told?.pickable && surface) return <Pickable surface={surface} list={told.list} picks={told.picks} rows={rows} direction={props.direction ?? "vertical"} />;
-    const byN = new Map((told?.list.items ?? []).map((it) => [it.n, it]));
+    if (told && surface) return <SourceRows surface={surface} list={told.list} lists={told.lists} rows={rows} direction={props.direction ?? "vertical"} />;
     return (
       <ul className={`a2-list a2-list-${props.direction ?? "vertical"}`}>
         {rows.map((r) => (
-          <li key={r.n}>{told && surface ? openable(surface, told.list, told.picks, r.node, byN.get(r.n)) : r.node}</li>
+          <li key={r.n}>{r.node}</li>
         ))}
       </ul>
     );
@@ -226,7 +224,7 @@ const Divider = createComponentImplementation({ name: "Divider", schema: z.objec
 
 // Fold is a line that opens in place: what it sums up (« 4 étapes faites
 // »), and under it its child, drawn only when open. Its aside stays on its
-// line, open or not: an action on all it sums up (« Archiver les 2 »).
+// line, open or not (a button that asks).
 const Fold = createComponentImplementation(
   {
     name: "Fold",
@@ -239,7 +237,7 @@ const Fold = createComponentImplementation(
     }),
   },
   ({ props, buildChild, context }) => {
-    // A batch: the List it names, as eriphe-core told of it (picks.tsx).
+    // A batch: the List it names, as eriphe-core told of it (lists.tsx).
     const surface = context.dataContext.surface?.id;
     const told = useList(surface, props.list ?? "");
     if (props.list && told && surface) return <BatchFold surface={surface} told={told} label={str(props.label)} open={props.open === true} child={props.child ? buildChild(props.child) : null} />;
@@ -277,67 +275,29 @@ function FoldView({ label, open: first, aside, child }: { label: string; open: b
   );
 }
 
-// BatchFold is a Fold that names a List of a source's items with actions:
-// its line says how many rows the List has ({n} in its label) and
-// carries the List's actions on all of them, ticked beforehand (code's
-// words: « Tout mettre à la corbeille », then « Mettre les 36 à la
-// corbeille » once two are unticked); opened, the List shows each row
-// with its box (BatchRows). A tool that throws away asks once more, on
-// the line. Done, the line says what was done; empty, nothing shows:
-// what is settled leaves the page. What is left unticked, the confirm
-// and the last result stay while the page is drawn again (picks.kept).
+// BatchFold is a Fold that names a List of a source's items: its line says
+// how many rows the List has ({n} in its label) and carries the Oui of the
+// card its rows share (« Mettre 38 mails à la corbeille »); opened, the
+// List shows each row with its box, all ticked (BatchRows), and the user
+// unticks what they keep: the Oui then leaves their calls out, and says
+// how many go. Rows with cards of their own carry each its Oui. Empty,
+// nothing shows: what is settled leaves the page.
 function BatchFold({ surface, told, label, open: first, child }: { surface: string; told: NonNullable<ReturnType<typeof useList>>; label: string; open: boolean; child: ReactNode }) {
   const { t } = useWords();
-  const { list, picks } = told;
+  const { list } = told;
   const id = useId();
-  const key = `${surface}\u0000${list.component}\u0000batch`;
-  const kept = picks.kept.get(key);
   const [open, setOpen] = useState(first);
-  const [left, setLeft] = useState<ReadonlySet<string>>(() => new Set(kept?.picked ?? []));
-  const [asking, setAsking] = useState<Asking | null>(kept?.asking ?? null);
-  const [result, setResult] = useState<Result | null>(kept?.result ?? null);
-  const [running, setRunning] = useState(false);
-  useEffect(() => void picks.kept.set(key, { picked: [...left], result, asking }), [picks.kept, key, left, result, asking]);
+  const [left, setLeft] = useState<ReadonlySet<string>>(() => new Set());
   const items = list.items;
-  const chosen = items.filter((it) => !left.has(it.id));
-  const cards = [...new Set(items.map((it) => it.card).filter((c): c is string => !!c))];
-  const toggle = (itemId: string) => {
-    setResult(null);
-    setAsking(null);
+  const card = sharedCard(items);
+  const toggle = (itemId: string) =>
     setLeft((was) => {
       const next = new Set(was);
       if (next.has(itemId)) next.delete(itemId);
       else next.add(itemId);
       return next;
     });
-  };
-  const run = async (a: PickAction, its: PickItem[]) => {
-    setAsking(null);
-    setRunning(true);
-    const r = await (picks.run?.(surface, list, a, its.map((it) => it.id)) ?? Promise.resolve({ ok: false, text: t("espace.act.error") })).catch(() => ({ ok: false, text: t("espace.act.error") }));
-    picks.kept.set(key, { picked: [...left], result: r, asking: null });
-    setRunning(false);
-    setResult(r);
-    if (r.ok) setOpen(false);
-  };
-  const words = (a: PickAction) => (chosen.length === items.length ? allText(a, items.length) : buttonText(a, chosen.length));
-  const press = (a: PickAction) => {
-    setResult(null);
-    if (a.confirm) setAsking({ action: a, items: chosen, label: words(a) });
-    else void run(a, chosen);
-  };
-  // Settled: nothing left but what the user kept. The line of what was
-  // done (and how many kept), or nothing.
-  if (!chosen.length && (result?.ok || !items.length)) {
-    return result?.ok ? (
-      <p className="a2-batch-done" role="status">
-        <IconView name="check" />
-        {result.text}
-        {left.size > 0 && <span className="a2-batch-kept">· {t("espace.batch.kept", items.length)}</span>}
-      </p>
-    ) : null;
-  }
-  const whole = chosen.length > 0 && chosen.length <= MAX_IDS;
+  if (!items.length) return null;
   return (
     <BatchContext.Provider value={{ list: list.component, left, toggle }}>
       <div className={`a2-fold a2-batch${open ? " a2-fold-open" : ""}`}>
@@ -347,35 +307,12 @@ function BatchFold({ surface, told, label, open: first, child }: { surface: stri
             <span className="a2-fold-label">{label.replace("{n}", String(items.length))}</span>
             {left.size > 0 && <span className="a2-batch-kept">{t("espace.batch.kept", left.size)}</span>}
           </button>
-          {/* A card on its rows (the brain's call on several of them):
-              its Oui on the line while the rows are folded. */}
-          {!open &&
-            cards.map((ref) => (
-              <span key={ref} className="a2-fold-card">
-                <InlineYes refText={ref} answerable say where={{ surfaceId: surface, componentId: list.component }} />
-              </span>
-            ))}
-          {picks.run && chosen.length > 0 && (
-            <div className="a2-fold-aside">
-              {list.actions.map((a) => (
-                <button key={a.name} type="button" className="a2-batch-act" disabled={running || !whole} onClick={() => press(a)} data-action={a.name}>
-                  {words(a)}
-                </button>
-              ))}
-            </div>
+          {card && (
+            <span className="a2-fold-card">
+              <InlineYes refText={card} say left={left} where={{ surfaceId: surface, componentId: list.component }} />
+            </span>
           )}
         </div>
-        {asking && <AskPanel asking={asking} onCancel={() => setAsking(null)} onRun={() => void run(asking.action, asking.items)} />}
-        {running && (
-          <p className="a2-pickdone" role="status">
-            {t("espace.act.running")}
-          </p>
-        )}
-        {!running && result && !result.ok && (
-          <p className="a2-pickdone failed" role="status">
-            {result.text}
-          </p>
-        )}
         {open && (
           <div id={id} className="a2-fold-body">
             {child}
@@ -492,6 +429,8 @@ const Code = createComponentImplementation(
 
 // --- Input --------------------------------------------------------------
 
+// Button only asks Eriphe: its author's words, sent as the user's message
+// (a2ui/actions.go). It never acts: a yes is a card, which code draws.
 const Button = createComponentImplementation(
   {
     name: "Button",
@@ -510,64 +449,9 @@ const Button = createComponentImplementation(
   ),
 );
 
-// useDataAt is the surface's data at a path, kept up to date; undefined
-// with no path.
-function useDataAt(context: ComponentContext, path: string | null): unknown {
-  const [v, setV] = useState<unknown>(undefined);
-  useEffect(() => {
-    if (!path) {
-      setV(undefined);
-      return;
-    }
-    const sub = context.dataContext.subscribeDynamicValue<unknown>({ "@path": path }, setV);
-    setV(sub.value);
-    return () => sub.unsubscribe();
-  }, [context.dataContext, path]);
-  return v;
-}
-
-// Mark is the user's mark on something a node's block shows: a toggle for
-// each mark it offers, pressed when it is theirs, read where eriphe-core
-// keeps it (/marks/<list>/<item> of the block's data). A click sends "mark" with ids only,
-// the mark or "" to take it away; eriphe-core checks it against this Mark
-// and writes the data again. done alone is a box to check.
-const MARK_ID = /^[A-Za-z0-9_][A-Za-z0-9_.:@=+-]{0,127}$/;
-const MarkId = z.union([z.string(), CommonSchemas.DataBinding]);
-const MARK_ICON = { keep: "star", drop: "close", done: "check" } as const;
-
-const Mark = createComponentImplementation(
-  {
-    name: "Mark",
-    schema: z.object({ list: MarkId, item: MarkId, marks: z.array(z.enum(["keep", "drop", "done"])).min(1) }),
-  },
-  ({ props, context }) => {
-    const { t } = useWords();
-    const list = str(props.list), item = str(props.item);
-    const ok = MARK_ID.test(list) && MARK_ID.test(item);
-    // Shown as eriphe-core keeps it, never ahead of it: it writes the
-    // data again once it took the mark.
-    const shown = str(useDataAt(context, ok ? `/marks/${list}/${item}` : null));
-    const set = (m: string) => void context.dispatchAction({ event: { name: "mark", context: { list, item, mark: shown === m ? "" : m } } });
-    const marks = props.marks ?? [];
-    return (
-      <span className={`a2-marks${shown ? " a2-marked-" + shown : ""}`}>
-        {marks.map((m) => (
-          <button
-            key={m}
-            type="button"
-            className={`a2-mark a2-mark-${m}${marks.length === 1 && m === "done" ? " a2-mark-box" : ""}`}
-            aria-pressed={shown === m}
-            disabled={!ok}
-            onClick={() => set(m)}
-          >
-            <IconView name={MARK_ICON[m]} />
-            <span className={marks.length === 1 && m === "done" ? "sr-only" : undefined}>{t(`espace.a2.mark.${m}`)}</span>
-          </button>
-        ))}
-      </span>
-    );
-  },
-);
+// external tells whether a surface shows external content, whoever wrote it.
+type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string } } } };
+const external = (s: unknown) => Boolean((s as Meta | undefined)?.metadata?.extensions?.eriphe?.tainted);
 
 // The fields write what the user does to the surface's data (the bound
 // path), as A2UI does: an action sent later carries it.
@@ -1042,271 +926,6 @@ export function ghostsOf(ps: ProposalView[]): Ghost[] {
     .flatMap((p) => (p.when ?? []).map((w) => ({ ref: p.ref, title: p.text, start: w.start, end: w.end, allDay: w.allDay, tainted: p.tainted })));
 }
 
-// onlyAsks tells whether a surface shows external content (createSurface's
-// metadata, extensions.eriphe.tainted) and was written by a model: it can
-// only ask. Code's own (author "core", the attention queue's) shows a
-// proposal as its card does, with the proposal's own taint.
-type Meta = { metadata?: { extensions?: { eriphe?: { tainted?: boolean; author?: string } } } };
-const onlyAsks = (s: unknown) => {
-  const m = (s as Meta | undefined)?.metadata?.extensions?.eriphe;
-  return Boolean(m?.tainted) && m?.author !== "core";
-};
-// external tells whether a surface shows external content, whoever wrote it.
-const external = (s: unknown) => Boolean((s as Meta | undefined)?.metadata?.extensions?.eriphe?.tainted);
-
-// KEEPS are the kinds of proposals that only ask whether to keep something
-// (a memory, a reminder): yes runs nothing. Their header asks it and their
-// buttons say Garder and Oublier; any other kind does something once
-// accepted: Proposition, Oui and Non.
-const KEEPS: Record<string, string> = { memory: "espace.a2.proposal.memory", intention: "espace.a2.proposal.intention" };
-
-// decidedWord is the header of a decided proposal: kept or forgotten for
-// what only asked to keep, approved or declined otherwise.
-function decidedWord(state: string, keeps: boolean): string {
-  if (state !== "approved" && state !== "rejected") return "espace.a2.proposal.gone";
-  if (keeps) return state === "approved" ? "espace.a2.proposal.kept" : "espace.a2.proposal.forgotten";
-  return `espace.a2.proposal.${state}`;
-}
-
-// Fields are a proposal's fields, by name: a Markdown value (a skill's
-// instructions) drawn as Markdown, in a box that scrolls when long.
-function Fields({ fields }: { fields: NonNullable<ProposalView["fields"]> }) {
-  const { t } = useWords();
-  if (fields.length === 0) return null;
-  return (
-    <dl className="a2-proposal-fields">
-      {fields.map((f) => (
-        <div key={f.name} className={f.markdown ? "a2-proposal-md" : undefined}>
-          <dt>{f.name}</dt>
-          <dd>{f.markdown ? <MarkdownView text={f.value} newTab={t("espace.a2.newtab")} /> : f.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-// Proposal shows one proposal of Eriphe's, read from eriphe-core by its ref
-// (kind:id), and again when it moved; its Oui and Non send an "answer" action naming this surface,
-// this component and that proposal: eriphe-core decides it only if the
-// surface shows it and it still waits, as its card in the conversation. A
-// surface showing external content can only ask: there, no Oui or Non, the
-// proposal is answered in the conversation. A card of several calls lists
-// each with a box, all ticked: Oui runs those ticked, refuses the others,
-// and says what it does for them. On its own node's page (HomeNode: the
-// page's node, code's, never a block's), where it comes from and what Oui
-// does in general go under Détails.
-const Proposal = createComponentImplementation(
-  { name: "Proposal", schema: z.object({ proposalId: CommonSchemas.DynamicString, compact: z.boolean().optional(), inline: z.boolean().optional() }) },
-  ({ props, context }) => {
-    // On an item's line: its one Oui (InlineProposal).
-    if (props.inline) return <InlineProposal refText={str(props.proposalId)} context={context} />;
-    return <ProposalFull props={props} context={context} />;
-  },
-);
-
-// InlineProposal is a card that waits on an item, on the item's line: one
-// Oui, a discreet Non on hover, what the Oui does in code's words in its
-// tooltip and, the line opened, above the item (opener.tsx). No card on
-// the item (an empty ref): nothing. Decided, a short word of where it
-// stands, until the item leaves the list. In a block someone else's words
-// may have written, it answers only the card eriphe-core told the page
-// waits on the very row it is drawn in (RowItem, from the block's lists,
-// never from its data, which an author may write): the ref cannot be
-// steered to another card.
-function InlineProposal({ refText, context }: { refText: string; context: ComponentContext }) {
-  const row = useContext(RowItem);
-  const base = context.dataContext.path && context.dataContext.path !== "/" ? context.dataContext.path : null;
-  const answerable = !onlyAsks(context.dataContext.surface) || (!!row?.card && row.card === refText);
-  return <InlineYes refText={refText} answerable={answerable} where={{ surfaceId: context.dataContext.surface?.id ?? "", componentId: context.componentModel.id, ...(base ? { at: base } : {}) }} />;
-}
-
-function ProposalFull({ props, context }: { props: { proposalId?: unknown; compact?: boolean }; context: ComponentContext }) {
-  {
-    const { t } = useWords();
-    const homeNode = useContext(HomeNode);
-    const src = useProposals();
-    const ref = str(props.proposalId);
-    const [whole, setWhole] = useState(false); // a compact one opened
-    const [p, setP] = useState<ProposalView | null | undefined>(undefined);
-    const [busy, setBusy] = useState<"yes" | "no" | null>(null); // the answer on its way
-    const [failed, setFailed] = useState(false);
-    const [left, setLeft] = useState<ReadonlySet<number>>(() => new Set()); // the calls unticked
-    useEffect(() => {
-      let live = true;
-      setP(undefined);
-      src.read(ref).then(
-        (v) => live && setP(v),
-        () => live && setP(null),
-      );
-      return () => {
-        live = false;
-      };
-    }, [src, ref]);
-    // Answered elsewhere (its card, a channel, another surface): read again.
-    const moved = useMoved(src, [ref]);
-    useEffect(() => {
-      if (!moved) return;
-      let live = true;
-      src.read(ref).then(
-        (v) => live && setP(v),
-        () => {},
-      );
-      return () => {
-        live = false;
-      };
-    }, [src, ref, moved]);
-    const choices = p?.choices ?? [];
-    const choosing = p?.state === "pending" && choices.length > 1;
-    const count = choices.filter((c) => !left.has(c.id)).reduce((n, c) => n + c.n, 0);
-    const answer = async (yes: boolean) => {
-      if (!p || busy) return;
-      setBusy(yes ? "yes" : "no");
-      setFailed(false);
-      const surfaceId = context.dataContext.surface?.id ?? "";
-      // Bound inside a list (a row's card): where, so that only this row's answers.
-      const at = context.dataContext.path && context.dataContext.path !== "/" ? { at: context.dataContext.path } : {};
-      // A Oui names what the card shows, even one call: a call folded in
-      // since is in neither list, and waits on.
-      const chosen = yes && p.state === "pending" && choices.length > 0 ? { only: choices.filter((c) => !left.has(c.id)).map((c) => c.id), left: choices.filter((c) => left.has(c.id)).map((c) => c.id) } : {};
-      const ok = await src.answer({ surfaceId, componentId: context.componentModel.id, ref: p.ref, yes, ...at, ...chosen }).catch(() => false);
-      if (!ok) setFailed(true);
-      const again = await src.read(ref).catch(() => null);
-      setP(again ?? { ...p, state: ok ? (yes ? "approved" : "rejected") : p.state });
-      setBusy(null);
-    };
-    if (p === undefined) return <div className="a2-proposal a2-proposal-loading" aria-busy="true"><span className="a2-shimmer" aria-hidden="true" /></div>;
-    if (p === null) return <p className="a2-empty">{t("espace.a2.proposal.none")}</p>;
-    const pending = p.state === "pending";
-    const elsewhere = onlyAsks(context.dataContext.surface);
-    const keeps = KEEPS[p.kind ?? ""];
-    // Approved, an action's call runs, then is done or failed: the
-    // stream's "proposals" moves bring each step. What only keeps
-    // something runs nothing: Gardé or Oublié.
-    const exec = p.state === "approved" && !keeps ? p.exec : undefined;
-    const kicker = pending
-      ? t(keeps ?? "espace.a2.proposal")
-      : exec
-        ? t(`espace.a2.proposal.${exec === "failed" ? "execfailed" : exec}`)
-        : t(decidedWord(p.state, Boolean(keeps)));
-    // On its own node's page, where it comes from (its node, its skill)
-    // and what Oui does in general are under Détails: the page says it.
-    const home = Boolean(homeNode && p.node === homeNode);
-    const aside = home && (p.kind === "calls" || p.kind === "runcalls") ? p.why : undefined;
-    const why = aside ? undefined : p.why;
-    // Its origin quotes words that may be someone else's (fromExternal):
-    // shown as eriphe-core marked them, in the external amber.
-    const said = p.fromExternal ? <span className="a2-from-ext" title={t("espace.words.external")}>{p.from}</span> : p.from;
-    const from = p.from && (p.node ? <a href={`/espace?open=node-${p.node}`}>{said}</a> : said);
-    const yesWord = choosing && p.acts && count > 0 ? p.acts[Math.min(count, p.acts.length) - 1] : t(keeps ? "espace.a2.keep" : "espace.a2.yes");
-    const details = Boolean(p.fields?.some((f) => f.detail) || (home && (aside || p.from || (pending && p.yes))));
-    const icon = pending ? "star" : exec === "failed" || p.state !== "approved" ? "close" : exec === "running" ? "clock" : "check";
-    // Compact and decided: one line, opened in place by a click.
-    if (props.compact && !pending && !whole) {
-      return (
-        <button type="button" className={`a2-proposal-line${exec ? " a2-proposal-exec-" + exec : ""}`} aria-expanded="false" onClick={() => setWhole(true)}>
-          <IconView name={icon} />
-          <span className="a2-proposal-line-kicker">{kicker}</span>
-          <span className="a2-proposal-line-text">{p.text}</span>
-        </button>
-      );
-    }
-    return (
-      <section
-        className={`a2-proposal a2-proposal-${pending ? "pending" : "decided"}${exec ? " a2-proposal-exec-" + exec : ""}`}
-        aria-label={t(keeps ?? "espace.a2.proposal")}
-        aria-busy={exec === "running" || undefined}
-      >
-        <p className="a2-proposal-kicker" role={exec ? "status" : undefined}>
-          <IconView name={icon} />
-          {kicker}
-          {/* Drawn from external content: a small amber sign, no word; its
-              whole sentence on hover and for a screen reader. */}
-          {p.tainted && (
-            <span className="a2-taint" role="img" title={t("espace.a2.proposal.tainted")} aria-label={t("espace.a2.proposal.tainted")}>
-              <IconView name="warning" />
-            </span>
-          )}
-        </p>
-        {exec === "failed" && p.execWhy && <p className="a2-proposal-failed">{t(`espace.a2.proposal.why.${p.execWhy}`)}</p>}
-        <p className="a2-proposal-text">
-          {p.text}
-          {p.context && <span className="a2-proposal-context"> · {p.context}</span>}
-        </p>
-        {why && <p className="a2-proposal-why">{why}</p>}
-        {p.summary && p.summary.length > 0 && (
-          <ul className="a2-proposal-summary">
-            {p.summary.map((s) => (
-              <li key={s}>{s}</li>
-            ))}
-          </ul>
-        )}
-        {choices.length > 1 && (
-          <ul className="a2-proposal-choices" aria-label={t("espace.a2.proposal.choices")}>
-            {choices.map((c) =>
-              choosing ? (
-                <li key={c.id}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={!left.has(c.id)}
-                      disabled={!!busy || elsewhere}
-                      onChange={(e) => {
-                        const on = e.target.checked;
-                        setLeft((was) => {
-                          const next = new Set(was);
-                          if (on) next.delete(c.id);
-                          else next.add(c.id);
-                          return next;
-                        });
-                      }}
-                    />
-                    <span>{c.text}</span>
-                  </label>
-                </li>
-              ) : (
-                <li key={c.id} className={c.state === "rejected" ? "is-left" : undefined}>
-                  <span>{c.text}</span>
-                  {c.state === "rejected" && <small>{t("espace.a2.proposal.left")}</small>}
-                </li>
-              ),
-            )}
-          </ul>
-        )}
-        <Fields fields={(p.fields ?? []).filter((f) => !f.detail)} />
-        {details && (
-          <details className="a2-proposal-details">
-            <summary>{t("espace.a2.proposal.details")}</summary>
-            {aside && <p className="a2-proposal-why">{aside}</p>}
-            {home && from && <p className="a2-proposal-from">{from}</p>}
-            {home && pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
-            <Fields fields={(p.fields ?? []).filter((f) => f.detail)} />
-          </details>
-        )}
-        {!home && from && <p className="a2-proposal-from">{from}</p>}
-        {!home && pending && p.yes && <p className="a2-proposal-yes">{p.yes}</p>}
-        {pending && elsewhere && <p className="a2-proposal-why a2-proposal-inchat">{t("espace.a2.proposal.inchat")}</p>}
-        {pending && !elsewhere && (
-          <div className="a2-proposal-actions">
-            <button
-              type="button"
-              className={`btn a2-button a2-button-primary${busy === "yes" ? " is-busy" : ""}`}
-              disabled={!!busy || (choosing && count === 0)}
-              aria-busy={busy === "yes"}
-              onClick={() => answer(true)}
-            >
-              {yesWord}
-            </button>
-            <button type="button" className={`btn a2-button${busy === "no" ? " is-busy" : ""}`} disabled={!!busy} aria-busy={busy === "no"} onClick={() => answer(false)}>
-              {t(keeps ? "espace.a2.forget" : "espace.a2.no")}
-            </button>
-          </div>
-        )}
-        {failed && <p className="a2-proposal-failed" role="alert">{t("espace.a2.proposal.failed")}</p>}
-      </section>
-    );
-  }
-}
-
 const ALERT_ICON = { info: "info", success: "check", warning: "warning", error: "error" } as const;
 
 const Alert = createComponentImplementation(
@@ -1368,7 +987,6 @@ export const components: ReactComponentImplementation[] = [
   Fold,
   Divider,
   Button,
-  Mark,
   Choice,
   TextField,
   DateField,
@@ -1380,7 +998,6 @@ export const components: ReactComponentImplementation[] = [
   Item,
   Message,
   Day,
-  Proposal,
   Alert,
   Placeholder,
 ];

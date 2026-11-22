@@ -518,13 +518,13 @@ once from a device, or with "Detect" from an address. . is a modelPicker. */}}
 <div class="model-picker" id="model-picker"{{if .Auto}} hx-post="{{$url}}" hx-trigger="load" hx-include="closest form" hx-target="this" hx-swap="outerHTML"{{end}}>
   <div class="model-picker-head">
     <span class="model-picker-title" id="mp-title">{{t "providers.models"}}</span>
-    <button class="btn btn-soft sm busy-btn" type="button" hx-post="{{$url}}" hx-include="closest form" hx-target="#model-picker" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{if or .Result .Picks}}{{t "models.refresh"}}{{else}}{{t "models.detect"}}{{end}}</span><span class="when-busy">{{t "models.detecting"}}</span></button>
+    <button class="btn btn-soft sm busy-btn" type="button" hx-post="{{$url}}" hx-include="closest form" hx-target="#model-picker" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="this">{{template "i-plug"}}<span class="when-idle">{{if or .Result .Options}}{{t "models.refresh"}}{{else}}{{t "models.detect"}}{{end}}</span><span class="when-busy">{{t "models.detecting"}}</span></button>
   </div>
   {{with .Result}}{{if eq .State "ok"}}<p class="muted small" role="status">{{.Text}}</p>{{else}}{{template "test-line" .}}{{end}}{{end}}
-  {{if .Picks}}
+  {{if .Options}}
   <input type="hidden" name="picked" value="1">
   <div class="checks model-checks" role="group" aria-labelledby="mp-title" aria-describedby="mp-h">
-    {{range .Picks}}<label class="check"><input type="checkbox" name="model" value="{{.ID}}" {{if .Checked}}checked{{end}}><span><b class="mono">{{.ID}}</b>{{if .New}}<small><span class="tag tag-accent">{{t "models.new"}}</span></small>{{else if .Gone}}<small>{{t "models.gone"}}</small>{{end}}</span></label>{{end}}
+    {{range .Options}}<label class="check"><input type="checkbox" name="model" value="{{.ID}}" {{if .Checked}}checked{{end}}><span><b class="mono">{{.ID}}</b>{{if .New}}<small><span class="tag tag-accent">{{t "models.new"}}</span></small>{{else if .Gone}}<small>{{t "models.gone"}}</small>{{end}}</span></label>{{end}}
   </div>
   <small class="muted" id="mp-h">{{t "models.pickhint"}}</small>
   {{else if not .Result}}

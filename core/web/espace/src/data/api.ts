@@ -15,11 +15,9 @@ import strings from "../strings.json";
 // - POST /cards/{id}/yes|no: a card's answer;
 // - POST /brain/retry: once more the turn Eriphe could not answer;
 // - the user's gestures (web_gestures.go): PUT /api/nodes/{id}/md (an edit,
-//   made on the version it was read at), POST .../mark and .../ask (a
-//   block's Mark and button), .../archive and .../reopen, PUT /api/espace/view (the pages open, the
-//   display settings);
-// - POST /api/nodes/{id}/act: an action on the items picked in a list
-//   (web_list_actions.go);
+//   made on the version it was read at), POST .../ask (a block's button,
+//   which only asks), .../open (an item read in full), .../archive and
+//   .../reopen, PUT /api/espace/view (the pages open, the display settings);
 // - POST /presence: whether this tab is in front of the user (presence.ts).
 // No control of the page keeps a rule or a preference: the user says it to
 // Eriphe, who remembers it. A request without a session gets 401: the page
@@ -188,7 +186,7 @@ export type PageRef = { id: string; title?: string; titleExternal?: boolean; ext
 export type PageVersion = { n: number; author: string; at: string };
 export type PagePart = { text?: string; block?: PageBlock };
 // A block ready to draw: its components and its data, the sources' last
-// values at /<name>, the user's marks at /marks; or what is wrong with it.
+// values at /<name>; or what is wrong with it.
 // A card block names one of the node's cards (card), with the card as
 // eriphe-core's records say it (proposal); none when it is not the node's.
 export type PageBlock = {
@@ -200,29 +198,22 @@ export type PageBlock = {
   card?: string;
   proposal?: ProposalView;
   // the Lists bound to a source's items the page must know: those that
-  // filter them, those the user may pick items in, and the actions on
-  // them (list_actions.go, list_sections.go)
-  lists?: PickList[];
+  // filter them, whose rows open, that a batch folds, or on whose rows a
+  // card waits (list_rows.go, list_sections.go)
+  lists?: SourceList[];
 };
 
 // A row of such a List: its place in its source's list (n), its id, what
-// it shows. An action's words are code's: one for one item, many with
-// {n}, all with {n} for all the rows of the list; hint is the author's
-// label, hintExternal on an external block (shown marked: someone else's
-// words may have written it); confirm: a tool that throws away,
-// asked once more with its exact call. A filtered List shows its rows
-// only, never the source's others.
-// card: the ref of the card that waits on this item (item_cards.go), shown
-// when the row is opened: what its Oui does, in code's words.
-export type PickItem = { n: number; id: string; title?: string; detail?: string; card?: string };
-export type PickAction = { name: string; one: string; many: string; all?: string; tool: string; args?: string[]; hint?: string; hintExternal?: boolean; confirm?: boolean };
-export type PickList = { component: string; source: string; filtered?: boolean; open?: boolean; rowCard?: boolean; items: PickItem[]; actions: PickAction[] };
+// it shows, and card, the ref of the card that waits on this item
+// (item_cards.go): its Oui is drawn on the row, by the page, never by the
+// block. A filtered List shows its rows only, never the source's others.
+export type ListRow = { n: number; id: string; title?: string; detail?: string; card?: string };
+export type SourceList = { component: string; source: string; filtered?: boolean; open?: boolean; items: ListRow[] };
 
 // What opening an item read (item_open.go): its common fields and the
 // whole as JSON, external when its server is not trusted, with the item's
-// note; or the call it asks a yes for (ask); or why not (error).
+// note; or why not (error: a read that asks a yes is not opened).
 export type Opened = {
-  ask?: { tool: string; args: string[] };
   title?: string;
   from?: string;
   date?: string;
@@ -233,10 +224,10 @@ export type Opened = {
   error?: string;
 };
 
-// openItem reads an item of a block's source in full, the user's gesture;
-// yes once they saw the call it asked for, with that call's tool.
-export async function openItem(id: string, block: string, source: string, item: string, yes: boolean, tool?: string): Promise<Opened> {
-  const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, { block, source, item, yes, tool: tool ?? "" });
+// openItem reads an item of a block's source in full, the user's gesture
+// (never a yes).
+export async function openItem(id: string, block: string, source: string, item: string): Promise<Opened> {
+  const r = await sendJSON<Opened>("POST", `${nodePath(id)}/open`, { block, source, item });
   if (r.status === 200 && r.data) return r.data;
   return { error: r.data?.error ?? String(r.status) };
 }
@@ -273,25 +264,9 @@ export async function saveFile(id: string, body: string, expect: string): Promis
   return { ok: false, why: data?.error ?? String(status) };
 }
 
-// mark sets the user's mark on an item a block shows ("" takes it away),
-// made on the version the page shows: refused (false) when the node was
-// written since.
-export async function mark(id: string, version: number, block: string, list: string, item: string, m: string): Promise<boolean> {
-  return (await sendJSON("POST", `${nodePath(id)}/mark`, { block, list, item, mark: m, version })).status === 204;
-}
-
 // ask sends a block's button: eriphe-core reads its words in the block.
 export async function ask(id: string, block: string, component: string): Promise<boolean> {
   return (await sendJSON("POST", `${nodePath(id)}/ask`, { block, component })).status === 204;
-}
-
-// act runs one of a block's actions on the items picked in one of its
-// Lists (its component id), or all those it showed: the user's own
-// gesture (web_list_actions.go). ok, with the line that says what was
-// done, or why not.
-export async function act(id: string, block: string, list: string, action: string, version: number, ids: string[]): Promise<{ ok: boolean; text: string }> {
-  const r = await sendJSON<{ text?: string; error?: string }>("POST", `${nodePath(id)}/act`, { block, list, action, version, ids });
-  return { ok: r.status === 200, text: r.data?.text ?? r.data?.error ?? "" };
 }
 
 export async function archive(id: string): Promise<boolean> {
@@ -399,7 +374,9 @@ export type ProposalView = {
   acts?: string[];
 };
 
-export type Choice = { id: number; text: string; n: number; state: string };
+// items: the items a choice acts on, by id: a batch's rows unticked leave
+// out the choices all of whose items they are (call_fold.go).
+export type Choice = { id: number; text: string; n: number; state: string; items?: string[] };
 
 export type Span = { start: string; end?: string; allDay?: boolean };
 

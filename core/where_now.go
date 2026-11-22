@@ -13,7 +13,7 @@ import (
 // would not, each device as its machine says it (locked, idle, do not
 // disturb), the voice line's room (where a channel says the user is) and
 // the quiet hours. notify's where then puts the
-// line it picks first; without it the router keeps its order. The code
+// line it chooses first; without it the router keeps its order. The code
 // still decides: the lines off, the quiet hours and the user's rules win
 // over a where, and a tainted turn neither adds a line nor escalates.
 

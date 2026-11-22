@@ -257,7 +257,7 @@ func TestTelegramCodeTries(t *testing.T) {
 }
 
 // A notification goes to Telegram with its buttons; a tap records the
-// feedback, from the linked account only. A rule picks the channels.
+// feedback, from the linked account only. A rule chooses the channels.
 func TestTelegramNotifyAndFeedback(t *testing.T) {
 	c, b, f := telegramCore(t)
 	linked(c)

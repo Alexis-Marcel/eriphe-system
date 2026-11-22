@@ -40,8 +40,8 @@ func mustNode(t *testing.T, c *core, nw nodestore.New) string {
 	return d.Node.Meta.ID
 }
 
-// The plan's block: a title, a live source's rows with the user's marks,
-// an image and a link the author wrote.
+// The plan's block: a title, a live source's rows, an image and a link
+// the author wrote.
 const planBlock = "```eriphe:block titles\n" + `{"components": [
   {"id": "root", "component": "Column", "children": ["h", "rows", "pic", "go"]},
   {"id": "h", "component": "Text", "variant": "title", "text": {"@path": "/heading"}},
@@ -98,7 +98,7 @@ func TestGraphRows(t *testing.T) {
 }
 
 // A node's page: its text and its blocks in order, each block with its
-// data, the source's last value at /<name>, the marks at /marks, its media
+// data, the source's last value at /<name>, its media
 // through eriphe-core, its link as it is; its versions; the
 // cards it waits on. No goal.
 func TestNodePage(t *testing.T) {
@@ -107,7 +107,9 @@ func TestNodePage(t *testing.T) {
 	id := mustNode(t, c, nodestore.New{Title: "Plan du 1er article", Goal: "Un plan validé", Body: "# Plan\n\nTrois titres.\n\n" + planBlock + "\nLa suite.\n"})
 	readNodeValue(t, c, id, "titles", "ledger", map[string]any{"accounts": []any{map[string]any{"name": "Titre 1"}}})
 	d, _ := c.nodes.Read(id, 0)
-	if _, err := c.nodes.Change(id, d.Version.Hash, byUser, func(n *nodefile.Node) error { return n.SetMark("titles", "titres", "t2", nodefile.MarkKeep) }); err != nil {
+	if _, err := c.nodes.Change(id, d.Version.Hash, byUser, func(n *nodefile.Node) error {
+		return n.AuthorBody("# Plan\n\nTrois titres.\n\n" + planBlock + "\nLa suite. Revue.\n")
+	}); err != nil {
 		t.Fatal(err)
 	}
 	r := proposedRule(t, c, "banque", "")
@@ -133,7 +135,7 @@ func TestNodePage(t *testing.T) {
 	b := p.Parts[1].Block
 	data, _ := json.Marshal(b.Data)
 	if b.Name != "titles" || b.Error != "" || !strings.Contains(string(data), `"ledger":{"accounts":[{"name":"Titre 1"}]}`) ||
-		!strings.Contains(string(data), `"marks":{"titres":{"t2":"keep"}}`) || !strings.Contains(string(data), `"heading":"Titres"`) {
+		strings.Contains(string(data), `"marks"`) || !strings.Contains(string(data), `"heading":"Titres"`) {
 		t.Errorf("block %+v %s", b, data)
 	}
 	comps, _ := json.Marshal(b.Components)
@@ -145,8 +147,8 @@ func TestNodePage(t *testing.T) {
 	}
 
 	// An older version shows the last reads too: the sources' values are
-	// code's, never in a version; its marks are its own.
-	if _, body, _ := tw.do("GET", "/api/nodes/"+id+"?version=1", nil, nil); !strings.Contains(body, `"version":1`) || !strings.Contains(body, "Titre 1") || strings.Contains(body, `"t2":"keep"`) {
+	// code's, never in a version; its text is its own.
+	if _, body, _ := tw.do("GET", "/api/nodes/"+id+"?version=1", nil, nil); !strings.Contains(body, `"version":1`) || !strings.Contains(body, "Titre 1") || strings.Contains(body, "Revue") {
 		t.Errorf("v1: %s", body)
 	}
 	if code, _, _ := tw.do("GET", "/api/nodes/zz9", nil, nil); code != http.StatusNotFound {
