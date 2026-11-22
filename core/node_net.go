@@ -36,8 +36,8 @@ import (
 // is looked at once: a turn's end with nothing delivered, such as a
 // restarted task's first, files nothing, and no older message ever counts.
 // The answer links to it (messages.filed). Written in a tainted turn, the
-// node is external. Code opens no other node: « Ma journée » is a
-// standing node the brain opens like any other. A refusal (a secret, the
+// node is external. Code opens no other node: « Ma journée » is a view
+// like any other, made only by propose_view on the user's yes. A refusal (a secret, the
 // size) never loses the answer: it stays in the conversation, unfiled.
 
 // netMinRunes is the length past which an answer is filed: under it, an
