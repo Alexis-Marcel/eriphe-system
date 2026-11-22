@@ -384,17 +384,23 @@ func TestAuthorCodeFields(t *testing.T) {
 	if err := prev.AuthorBody("```eriphe:block draft\n" + draft(`, "external": false`) + "\n```\n"); !errors.Is(err, ErrCodeField) {
 		t.Errorf("body: not refused: %v", err)
 	}
-	// A new block an author marks is refused; one that says a snapshot
-	// too: the sources' values are code's, kept outside the file.
-	for _, extra := range []string{`, "marks": {"l": {"i": "keep"}}`, `, "snapshot": {"text": "x"}`} {
-		if err := prev.AuthorBody("```eriphe:block more\n" + draft(extra) + "\n```\n"); err == nil {
-			t.Errorf("%s: not refused", extra)
-		}
+	// A new block an author marks is refused.
+	if err := prev.AuthorBody("```eriphe:block more\n" + draft(`, "marks": {"l": {"i": "keep"}}`) + "\n```\n"); err == nil {
+		t.Error("a new block marked by its author")
+	}
+	// One that says a snapshot (copied from an old version) is taken
+	// without it: the sources' values are code's, kept outside the file.
+	if err := prev.AuthorBody("```eriphe:block more\n" + draft(`, "snapshot": {"text": "x"}`) + "\n```\n"); err != nil {
+		t.Fatal(err)
+	}
+	if out := mustBytes(t, prev); bytes.Contains(out, []byte("snapshot")) {
+		t.Errorf("written with its snapshot:\n%s", out)
 	}
 }
 
 // A version written when a block kept its sources' values (snapshot)
-// still reads: the field is ignored, nothing writes it.
+// still reads: the field is ignored, and the block written again without
+// it.
 func TestOldSnapshotReads(t *testing.T) {
 	raw := head("```eriphe:block b\n{\"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"Hi\"}], \"snapshot\": {\"at\": \"2026-11-17T10:00:00Z\"}}\n```\n")
 	n, err := Parse([]byte(raw))
@@ -403,6 +409,9 @@ func TestOldSnapshotReads(t *testing.T) {
 	}
 	if text, _ := n.AuthorText(); strings.Contains(text, "snapshot") {
 		t.Errorf("an author's text says it: %s", text)
+	}
+	if out := mustBytes(t, n); bytes.Contains(out, []byte("snapshot")) || !bytes.Contains(out, []byte(`"text":"Hi"`)) {
+		t.Errorf("written:\n%s", out)
 	}
 }
 

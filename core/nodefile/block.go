@@ -202,8 +202,9 @@ type wire struct {
 	Actions    map[string]Action `json:"actions"`
 	Marks      *Marks            `json:"marks"`
 	// Snapshot is no field of a block any more: the sources' values are
-	// code's, kept outside the file. An old version that holds one still
-	// reads; an author never writes one.
+	// code's, kept outside the file. A block that says one (an old
+	// version, or an author copying one) reads, the snapshot ignored: the
+	// block is written again without it.
 	Snapshot json.RawMessage `json:"snapshot"`
 	External *bool           `json:"external"`
 }
@@ -220,9 +221,6 @@ func decodeBlock(name string, raw []byte, short bool) (*Block, error) {
 	if dec.More() {
 		return nil, blockErr(name, "one JSON object only")
 	}
-	if short && w.Snapshot != nil {
-		return nil, blockErr(name, "snapshot is no block's field: the sources' values are code's, leave it out")
-	}
 	b := &Block{Name: name, Card: w.Card, Components: w.Components, Sources: w.Sources, Actions: w.Actions}
 	if !isEmpty(w.Data) {
 		b.Data = w.Data
@@ -237,7 +235,9 @@ func decodeBlock(name string, raw []byte, short bool) (*Block, error) {
 	if short && b.Card == "" {
 		b.Components = completeShort(b.Components)
 	}
-	b.has.completed = !bytes.Equal(b.Components, w.Components)
+	// Completed, or saying a snapshot: written again in its canonical
+	// form, without it.
+	b.has.completed = !bytes.Equal(b.Components, w.Components) || w.Snapshot != nil
 	return b, nil
 }
 

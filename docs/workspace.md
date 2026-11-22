@@ -268,9 +268,15 @@ another page) keeps the image in its bubble.
 
 On the machine that runs eriphe-core, in its data folder (`/data` in the container):
 
-- `nodes/`: every bubble as a markdown file, versioned in git; `nodes.db` is its index, rebuilt from
-  the files if it is lost. Edit a page inside Eriphe only (its **.md** tab): a file changed by hand
-  is taken as a new version from « outside » at the next start.
+- `nodes/`: every bubble as a markdown file, versioned in git: git keeps what was written in the
+  page, each change a version. Edit a page inside Eriphe only (its **.md** tab): a file changed by
+  hand is taken as a new version from « outside » at the next start.
+- `nodes-trace/`: each bubble's trace (what happened in it), a plain file appended to, not in git:
+  a progress line or a call adds a line, never a version. Past 2 MiB, its older part is kept beside
+  it and the part before is dropped.
+- `nodes.db`: the graph's index, only made from the files: delete it and the next start makes it
+  again, nothing lost. What Eriphe keeps beside a page (the notes on a list's items, its cards, the
+  values its live blocks last read) is in `core.db`, not in the index.
 - `memoire/`: a **readable copy of what Eriphe knows about you** (your profile, the people, the
   facts, the decisions, the journal), plain markdown files written by Eriphe's code after every
   change. It is not a page of the graph and not in git, so when you ask Eriphe to forget something,
@@ -278,8 +284,8 @@ On the machine that runs eriphe-core, in its data folder (`/data` in the contain
   written over, since the memory itself stays the truth.
 - Every night, the backup folder (`memory-backups/` next to the memory, or `memory.backup_dir` in
   `core.json`) gets `nodes-<day>.bundle` (the graph's history, which `git clone` reads),
-  `nodes-<day>.db`, `memory-<day>.db` and `memoire-<day>.tar.gz` (the readable copy), kept 14 days
-  by default.
+  `nodes-<day>.trace.tar` (the traces), `nodes-<day>.db`, `memory-<day>.db` and
+  `memoire-<day>.tar.gz` (the readable copy), kept 14 days by default.
 
 ## Privacy and safety
 

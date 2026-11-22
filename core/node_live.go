@@ -172,10 +172,9 @@ func (c *core) nodeSourcesDue(ctx context.Context, now time.Time) {
 		log.Printf("nodes: sources: %v", err)
 		return
 	}
-	live, nodes := map[string]bool{}, map[string]bool{}
+	nodes := map[string]bool{}
 	var ids []string
 	for _, s := range srcs {
-		live[s.ID+"\x00"+s.Block+"\x00"+s.Name] = true
 		nodes[s.ID] = true
 		if !slices.Contains(ids, s.ID) {
 			ids = append(ids, s.ID)

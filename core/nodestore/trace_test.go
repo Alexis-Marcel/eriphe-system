@@ -225,3 +225,24 @@ func TestTraceArchived(t *testing.T) {
 		t.Fatalf("reopened: %s", tr)
 	}
 }
+
+// An index made again from the files knows a node moved when its trace
+// was last appended to, not only at its last version.
+func TestRebuiltIndexKnowsTraces(t *testing.T) {
+	e := newEnv(t)
+	s, _ := e.open(t)
+	mustCreate(t, s, New{Title: "Research"})
+	if err := s.AppendTrace("n1", "brain", "Later."); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(filepath.Join(e.dir+"-trace", "n1.trace.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	os.Remove(e.index)
+	s, _ = e.open(t)
+	if sum, _ := s.Get("n1"); sum.Updated.Unix() < fi.ModTime().Unix() {
+		t.Fatalf("updated %v, its trace %v", sum.Updated, fi.ModTime())
+	}
+}

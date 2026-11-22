@@ -181,6 +181,9 @@ func (s *Store) reconcile(fresh bool) (Report, error) {
 			return rep, err
 		}
 	}
+	if fresh {
+		s.tracesMoved()
+	}
 	if repoHead, err = s.headHash(); err != nil || repoHead == "" {
 		return rep, err
 	}

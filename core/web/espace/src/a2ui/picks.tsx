@@ -28,7 +28,7 @@ import { useWords } from "../i18n";
 // surface is, if eriphe-core told of it, and how to run an action on it
 // (none on an older version, or offline). kept holds what is picked in
 // each list, the confirm open and the line of the last click, by surface and List: the page
-// read again (a new version, a source's snapshot) draws its blocks again,
+// read again (a new version, a source's new value) draws its blocks again,
 // and the user's pick and confirm stay.
 export type Picks = {
   list(surface: string, component: string): PickList | undefined;

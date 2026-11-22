@@ -82,6 +82,25 @@ func (s *Store) appendTrace(id, entry string) error {
 	return f.Close()
 }
 
+// tracesMoved gives an index made again from the files when each node
+// last moved: a trace appended to after its last version moved it too
+// (the time of its file).
+func (s *Store) tracesMoved() {
+	entries, err := os.ReadDir(s.traces)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		id, ok := strings.CutSuffix(e.Name(), ".trace.md")
+		if !ok {
+			continue
+		}
+		if fi, err := e.Info(); err == nil {
+			s.db.Exec(`UPDATE nodes SET updated = MAX(updated, ?) WHERE id = ?`, fi.ModTime().Unix(), id)
+		}
+	}
+}
+
 // Trace is a node's trace, its older part first; empty while it has none.
 func (s *Store) Trace(id string) ([]byte, error) {
 	if _, err := s.summary(id); err != nil {
