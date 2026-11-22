@@ -83,8 +83,8 @@ comments included. When code writes it again (a new title, say), the known field
 order of the table, the empty ones left out, then the other fields in their order; YAML comments are
 not kept. A field given twice, or YAML that does not parse, is an error.
 
-The node's state (`running`, `waiting`, `idle`, `done`) is not in the file: it is code's, in the
-graph's index.
+The node's status (`running`, `waits`, `done`, `idle`) is in no file nor index: eriphe-core
+computes it from its cards, its tasks and steps, and this file's `done`.
 
 ## Links between nodes
 
