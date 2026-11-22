@@ -181,15 +181,17 @@ func (c *core) nodeSourcesDue(ctx context.Context, now time.Time) {
 		log.Printf("nodes: sources: %v", err)
 		return
 	}
-	live := map[string]bool{}
+	live, nodes := map[string]bool{}, map[string]bool{}
 	var ids []string
 	for _, s := range srcs {
 		live[s.ID+"\x00"+s.Block+"\x00"+s.Name] = true
+		nodes[s.ID] = true
 		if !slices.Contains(ids, s.ID) {
 			ids = append(ids, s.ID)
 		}
 	}
 	c.forgetReads(live)
+	c.forgetGlances(nodes)
 	c.followNodeResources()
 	for _, id := range ids {
 		due := false
@@ -318,7 +320,8 @@ func (c *core) readNodeOnce(ctx context.Context, node string, only []string, for
 			c.graphSaid(graphEvent{Kind: graphEvSource, Node: node, Block: r.Block, Name: r.Name})
 		}
 	}
-	c.noteAttention(node, reads) // node_attention.go
+	c.noteAttention(node, reads)   // node_attention.go
+	c.noteGlance(node, reads, now) // node_glance.go
 	c.fileSnapshots(node, reads, now)
 }
 

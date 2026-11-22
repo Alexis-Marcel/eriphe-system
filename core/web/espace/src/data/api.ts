@@ -132,6 +132,28 @@ export type GraphNode = {
   version: number;
   waits?: boolean;
   line?: string;
+  // glance: a figure of one of its sources, shown as a tile while it is
+  // past its threshold and not seen (node_glance.go, graph/glance.ts)
+  glance?: Glance;
+};
+
+// Glance is a node's glance as eriphe-core reads it (graphGlance,
+// node_glance.go): its label (the author's words; labelExternal when its
+// block may hold someone else's), its last value, the reference and the
+// variation from it (in percent of it, or in its units: amount), its
+// threshold, its recent values; shown: past its threshold; seen: opened
+// since it crossed.
+export type Glance = {
+  label: string;
+  labelExternal?: boolean;
+  unit: "percent" | "amount";
+  value: number;
+  ref: number;
+  delta: number;
+  threshold: number;
+  series: number[];
+  shown?: boolean;
+  seen?: boolean;
 };
 
 // A node's page (nodePage, web_graph.go): the version shown, its text and

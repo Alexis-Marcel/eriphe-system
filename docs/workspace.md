@@ -17,7 +17,12 @@ other.
 How a bubble looks says what it is, never chosen by an AI, one sign for each meaning: what waits for
 you is brighter, with a violet halo and a breathing ring (out of view, a small arrow at the edge of
 the screen points to it: click it to open it), what is running turns and says where it is under its name (« 3 articles read »), what is
-done or old fades. A bubble whose title could be someone else's words (a mail's subject, say) is
+done or old fades. A subject that watches a figure you asked Eriphe to keep an eye on (« tell me
+if my PEA moves more than 2 % ») becomes a small **tile** when the figure moves past that: its
+name, the variation with ▲ or ▼, and a line of its recent values, in plain greys, updated as the
+figure changes. Open it and it is a circle again, until the figure falls back and moves past
+again. At most three tiles at once, the largest moves first; a subject that waits for you keeps its
+circle and halo. A bubble whose title could be someone else's words (a mail's subject, say) is
 named **Outside content**: its own words are never shown as a title.
 
 At the bottom, the **bar**: the one field to write to Eriphe. The bar is only a bar: no history,

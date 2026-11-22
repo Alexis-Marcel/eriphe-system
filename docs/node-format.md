@@ -153,6 +153,30 @@ snapshot's time). A source with `items` may say `"attention": true`: while it li
 node waits for the user (its bubble's violet halo and ring say so, as for a card); when it lists none, the
 node rests.
 
+A source may also give its node a **glance**: a figure its value holds, that the node's bubble shows
+as a small tile when the figure moved past a threshold, until the user opens the node. One per node.
+
+```json
+"sources": {"pea": {"tool": "bourse/portefeuille", "glance": {"label": "PEA", "path": "total", "threshold": 2}}}
+```
+
+- `label`: the figure's name on the tile, one line, 24 characters at most.
+- `path`: where the figure is in the source's value, fields joined by dots, a list's index as a
+  number (`rates.0.v`), six steps at most. Only a JSON number there counts: words never reach the
+  tile.
+- `threshold`: how far it must move to show, more than 0.
+- `unit`: `percent` (by default: the variation in percent of the reference) or `amount` (in the
+  figure's own units).
+- `compare`: the reference, `day` (by default: its first value of the user's day), `previous` (its
+  value before it last changed) or `fixed`, with `base` a value given (not 0 in percent).
+
+Code reads the figure at each read of its source, with no model, and keeps in `core.db` what the
+variation needs (its first value of the day, the previous one, its last ones for the tile's line). The
+node is past its threshold once the variation reaches it, and stays so until it falls under 0.85 of
+it. Opened while past it, the node is **seen**: a circle again, on every screen and after a reload,
+until the variation falls under 0.85 of the threshold and crosses it again. A glance is information,
+never a request: a node that waits for the user keeps its circle and its halo.
+
 Code reads the sources without a model, as the brain's free reads are: a source new or changed at
 once, then every `every` minutes, a resource at its update, a monitor at each of its looks. A
 source is also read again a second after any call that may change its server (any tool not marked

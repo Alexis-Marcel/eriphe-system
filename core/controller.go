@@ -81,6 +81,7 @@ type core struct {
 	fresh       sourceFresh            // the sources to read again after a change (source_fresh.go)
 	yeses       sync.WaitGroup         // the calls a card's yes runs, under way (runApprovedCall)
 	attention   sync.Map               // node id → whether a source of its marked attention lists items (node_attention.go)
+	glances     sync.Map               // node id → its glance as the graph shows it, nil for none (node_glance.go)
 	graph       graphFeed              // what changes on the graph, for the workspace (graph_feed.go)
 
 	appClients // the clients of the providers that mint tokens (github_app.go)

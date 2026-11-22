@@ -108,19 +108,20 @@ type graphNode struct {
 	ID    string `json:"id"`
 	Title string `json:"title,omitempty"`
 	// TitleExternal: its title may be someone else's words, shown marked
-	TitleExternal bool       `json:"titleExternal,omitempty"`
-	Parent        string     `json:"parent,omitempty"`
-	Links         []string   `json:"links,omitempty"`
-	Lifetime      string     `json:"lifetime"`
-	State         string     `json:"state"`
-	Created       time.Time  `json:"created"`
-	Updated       time.Time  `json:"updated"`
-	Done          *time.Time `json:"done,omitempty"`
-	External      bool       `json:"external,omitempty"`
-	Version       int        `json:"version"`
-	Waits         bool       `json:"waits,omitempty"`   // one of its cards waits for the user, or a source marked attention lists items (node_attention.go)
-	Line          string     `json:"line,omitempty"`    // while it runs: its task's last word of where it is
-	Unasked       bool       `json:"unasked,omitempty"` // a skill or an event opened it, not the user (node_origin.go)
+	TitleExternal bool         `json:"titleExternal,omitempty"`
+	Parent        string       `json:"parent,omitempty"`
+	Links         []string     `json:"links,omitempty"`
+	Lifetime      string       `json:"lifetime"`
+	State         string       `json:"state"`
+	Created       time.Time    `json:"created"`
+	Updated       time.Time    `json:"updated"`
+	Done          *time.Time   `json:"done,omitempty"`
+	External      bool         `json:"external,omitempty"`
+	Version       int          `json:"version"`
+	Waits         bool         `json:"waits,omitempty"`   // one of its cards waits for the user, or a source marked attention lists items (node_attention.go)
+	Line          string       `json:"line,omitempty"`    // while it runs: its task's last word of where it is
+	Unasked       bool         `json:"unasked,omitempty"` // a skill or an event opened it, not the user (node_origin.go)
+	Glance        *graphGlance `json:"glance,omitempty"`  // a figure of one of its sources, shown at a glance when it moved (node_glance.go)
 }
 
 // graphRow is a node's row.
@@ -132,6 +133,7 @@ func (c *core) graphRow(sum nodestore.Summary) graphNode {
 		g.Done = &d
 	}
 	g.Waits = c.nodeCardWaits(sum.ID) || c.nodeAttention(sum.ID)
+	g.Glance = c.nodeGlance(sum.ID)
 	if p, ok := c.progressOf(sum.ID); ok && sum.State == nodestore.Running {
 		g.Line = p.Text
 	}

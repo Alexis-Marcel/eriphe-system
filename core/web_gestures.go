@@ -379,9 +379,12 @@ func (w *web) handleEspaceView(rw http.ResponseWriter, r *http.Request, _ *sessi
 			return
 		}
 	}
+	was := w.c.view().Open
 	raw, _ := json.Marshal(in)
 	if err := w.c.store.set(espaceViewKey, string(raw)); err != nil {
 		log.Printf("espace: view: %v", err)
 	}
+	// A node just opened: its glance past its threshold is seen (node_glance.go).
+	w.c.glanceOpened(slices.DeleteFunc(slices.Clone(in.Open), func(id string) bool { return slices.Contains(was, id) }))
 	rw.WriteHeader(http.StatusNoContent)
 }
