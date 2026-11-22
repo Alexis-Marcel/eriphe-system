@@ -64,7 +64,6 @@ export function galleryFixtures(lang: Lang): Message[] {
   return gallery[lang] as unknown as Message[];
 }
 
-export const gallerySurfaces = (lang: Lang) => galleryFixtures(lang).map((m) => ("createSurface" in m ? m.createSurface.surfaceId : ""));
 
 // Made-up proposals for the gallery: its Proposal's, and a dated one its
 // Day shows as a ghost. Answering one changes nothing but its state on the

@@ -3246,8 +3246,9 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   or resource and how often), the `monitors` that watch for it (those its blocks read and those its
   skills run on, `what` from their spec), the `skills` that work in it (`what`: what starts them, at
   most how often) and when it last changed (`updated`). The workspace shows it in the page's ⋯
-  menu, « Ce qui le fait vivre »; a permanent subject has a small ∞ by its date (« Sujet
-  permanent ») and a satellite slowly orbiting its bubble (still with `prefers-reduced-motion`).
+  menu, « Ce qui le fait vivre »; a permanent subject has one sign, a small ∞ by its title (« Sujet
+  permanent », in its page's head and its row on a phone), a satellite slowly orbiting its bubble
+  (still with `prefers-reduced-motion`), whose core says « Sujet permanent » too.
   Every page says who wanted its node (`origin`, `node_origin.go`): code records it in the node's
   `opened_by` when it makes it ([node format](../docs/node-format.md)), from what it knows: the
   brain in a turn that answers the user (their message), in a turn of events only (an event); the
@@ -3284,8 +3285,8 @@ with no AI to work for it, is told above the bar: the boot's `setup` (`noai`, wi
   title may be someone else's words, written on an external node and not `title_trusted`: the
   workspace shows it as it is, in amber with a ⚠ saying « Titre écrit après une lecture
   extérieure », in the page's header, the list, the archives and a [[link]] to it; on the bubble
-  it is drawn as any other title (one sign per meaning: its page says « extérieur »), the ⚠ in
-  its core's words for a screen reader; never replaced, and code never acts on a title), `unasked` (a skill or an event opened it, not
+  it is drawn as any other title (one sign per meaning: its page's head says it, by one ⚠ for the
+  whole node, its title or its content, never a word), the ⚠ in its core's words for a screen reader; never replaced, and code never acts on a title), `unasked` (a skill or an event opened it, not
   the user: a small « ↯ » after its title on its bubble and in its page's header, its tooltip
   « Tu ne l'as pas demandé : un skill ou un événement l'a ouvert. »; the user's own
   nodes, and those whose origin is not known, have none), `parent`, `links`,
@@ -3333,9 +3334,10 @@ token in `X-CSRF-Token`:
 - `POST /api/nodes/{id}/archive` and `.../reopen`: the user's alone (`archiveNode`: what runs
   below it stops, and the cascade leaves the graph; `reopenNode`: back with what was archived with
   it and the archived parents it needs, in one commit).
-- `PUT /api/espace/view` `{open, talk, shown, theme}`: the pages open, the one the bar talks
+- `PUT /api/espace/view` `{open, talk, shown, theme, orb}`: the pages open, the one the bar talks
   to, the last of Eriphe's shows the page took (a page the user closed does not open again on the
-  next visit), and the theme (`""` follows the system, `light`, `dark`), in the kv `espace_view`. The boot gives
+  next visit), the theme (`""` follows the system, `light`, `dark`), and what the user closed of
+  the orb's (`orb`: `{answer, seen, wait, failed}`, seqs and a card id that only grow), in the kv `espace_view`. The boot gives
   them back (`view`), on any of the user's screens; where the bubbles are is not kept, and the shell carries the theme
   (`data-theme`) before the app draws.
 
@@ -3429,7 +3431,7 @@ token in `X-CSRF-Token`:
   messages that wait**, below). The orb rests in the bar (`.cs-dock`). What it shows comes from the
   stream's `orb` event and what the user just sent (`model.ts`, `orbShow`, pure, in this order).
   It only answers: it leaves the bar in reply to what the user said to it, never unasked (what an
-  event made Eriphe say, a node that began to wait: the graph shows it, by the node's ring).
+  event made Eriphe say, a node that began to wait: the graph shows it, by the node's halo).
   At work on the user's message (`work`, from the moment the user sends: the first line of what
   it writes, or dots); that turn failed (`failed`: Réessayer, the agents' settings); a card that
   turn raised waits for the user's yes (`wait`); the answer to the user's message (`answer`);
@@ -3438,16 +3440,16 @@ token in `X-CSRF-Token`:
   title, no page, not the bar nor the corner's icons, keeping the side it had while it stays free;
   when none is, the free spot nearest around it (`NEAR`, 120 px further at most); at the home, a
   free spot near the screen's middle (`placeHome`). When there is none, it covers nothing: it stays
-  in the bar and its words are a line above it, as on a phone (`setCrowded`). It is no body of the simulation: it reads where the bodies are each frame and
-  follows its subject. Its words show once it is there, open away from the subject, in a few
+  in the bar and its words are a line above it, as on a phone (`setCrowded`). It is no body of the simulation: it reads where the bodies are when they move (the graph tells it after each frame, `onFrame`) and
+  follows its subject; still, it reads nothing. One `OrbProvider` works out what it shows, once, for the orb, the bar and its line. Its words show once it is there, open away from the subject, in a few
   lines (`fewLines` on eriphe-core's side: six lines, 600 characters at most) with « Voir plus »,
   which unfolds the whole answer in place, as Markdown (`full`, scrolling past 40 % of the
   screen); unfolded, it stays until the user moves on. For a waiting card it sits at the card's height and its
   « Voir » scrolls the card into view. Its answer beside a subject stays until something else
   happens: a newer answer replaces it, or the user moves on (writes, opens another subject,
   closes it with ✕); else they go after two minutes of the page being seen (`WORDS_MS`: a hidden tab does
-  not count). What went is remembered (`localStorage`, `eriphe.espace.orb.closed`), so a reload
-  does not replay it. **An answer
+  not count). What went is remembered by eriphe-core with the view (`orb`, sent at once), so a
+  reload, on any of the user's screens, does not replay it. **An answer
   given at the home** (no subject opened) that is more than its lines has no subject to hold it:
   the orb holds it whole (`whole`, Markdown, scrolling past 40 % of the screen) until the user
   writes again, opens a subject, or closes it. Words written after reading external content carry the « extérieur » dot, and a
@@ -3460,7 +3462,7 @@ token in `X-CSRF-Token`:
   `node_show` does (`showTurnCards`, node_turn.go, when the card is attached to the turn's message
   or its end).
 - `hud/`: no bar, the graph takes the whole screen; the bubbles say what waits for the user (a
-  breathing accent halo and ring, its one sign, « t'attend » in its core's words for a screen
+  breathing accent halo, its core ringed in the same violet: one sign, « t'attend » in its core's words for a screen
   reader; out of view, an arrow at the screen's edge that opens it) and what runs. In the top-right corner, three icons: Archives (its
   count as a badge), what the user archived, each to reopen; the light or dark theme; the
   settings. Under them, the notices and a word when the stream is down. A page shows its own
@@ -3743,9 +3745,20 @@ console for violations.
 cd core/web/espace
 npm ci
 npm test            # the layout's, the store's, the pages' and the A2UI components' tests (vitest)
-npm run build       # type checks, then writes ../static/espace/espace.js and espace.css
+npm run build       # type checks, then writes ../static/espace/espace.js, espace.css and the editor's chunk
 npm run dev         # http://localhost:5300, on a made-up graph, no eriphe-core needed
 ```
+
+The built app is what the user's workspace needs, nothing more: the dev server's made-up
+workspace (`dev.tsx`: the samples, `?gallery`) is imported on the dev server only
+(`import.meta.env.DEV`), and CodeMirror (`page/cm.ts`) is a chunk of its own, named by its
+content (`espace-cm-<hash>.js`), loaded with the first .md tab; it imports nothing of the
+entry's, which it would load again without its `?v=`. A Go test (`TestEspaceBundle`) checks both.
+React draws the graph when what it shows changes; each frame of the simulation writes the
+bubbles', pages' and links' places straight on their elements (`Graph.tsx`, `place`), so a
+bubble is not drawn again as the graph moves (a test counts it). The viewport says the graph is
+at rest (`data-still`) once it is asleep, nothing held, the camera still, no page springing open
+and no page being read: the browser tests wait there (`e2e/rest.ts`), never on a fixed sleep.
 
 CI rebuilds and fails when the committed files differ from the build. The words are in
 `web_text_espace.go`, sent by `/espace/boot` in the user's language with the CSRF token;
@@ -3883,9 +3896,10 @@ A proposal shows where it matters (#428), with no code for any tool:
   one way any answer goes: its buttons, a channel, a plain "oui", or a page through
   `answerProposal`, `TestOneWayToSayYes`) or found
   decided when read (`liveCard`) notes its ref (`proposalMoved`, the last 64 kept). The
-  workspace's stream sends them as a `proposals` event, `{"refs": [...]}` (`{"all": true}` for
-  a stream further behind), at once (`watchProposals`); the page reads again each card of
-  those refs, and the cards at a page's foot, and every Day's ghosts. The first `proposals` event of a connection, after the
+  workspace's stream sends them as a `proposals` event, `{"refs": [...], "nodes": [...]}` (`nodes`:
+  the nodes their cards are linked to; `{"all": true}` for a stream further behind), at once
+  (`watchProposals`); the page reads again each card of those refs, a node's page only when one
+  of its node's cards or a proposal it shows moved, and every Day's ghosts. The first `proposals` event of a connection, after the
   snapshot, is `{"all": true}`: what the page shows may have been decided while it was away.
   The limits of a time read from values: an unrelated date argument (a recurrence's end, say)
   stretches the span, and a call with a start and a duration but no end shows a half-hour

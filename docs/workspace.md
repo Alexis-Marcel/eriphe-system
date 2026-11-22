@@ -15,7 +15,7 @@ of the first article », « Style of the articles »). A dashed line joins bubbl
 other.
 
 How a bubble looks says what it is, never chosen by an AI, one sign for each meaning: what waits for
-you is brighter, with a violet halo and a breathing ring (out of view, a small arrow at the edge of
+you is brighter, with a breathing violet halo (out of view, a small arrow at the edge of
 the screen points to it: click it to open it), what is running turns and says where it is under its name (« 3 articles read »), what is
 done or old fades. A subject that watches a figure you asked Eriphe to keep an eye on (« tell me
 if my PEA moves more than 2 % ») becomes a small **tile** when the figure moves past that: its
@@ -50,7 +50,7 @@ screen is too full for that, it stays in the bar and says it in a line above it:
 - **if Eriphe could not answer**, it says so, with **Try again** and a link to Settings → Agents.
 
 Words Eriphe wrote after reading outside content carry a small amber dot. A title that may be
-someone else's words shows as it is, never replaced; on its page it is marked « outside ». Click the orb to open the subject it is
+someone else's words shows as it is, never replaced; on its page it is marked with a small ⚠. Click the orb to open the subject it is
 beside. With reduced motion set on your system, it goes at once instead of gliding; a screen reader
 reads what it says. On a phone it does not move: its words show as a line above the bar, naming
 the subject (« On Plan of the first article »).
@@ -141,7 +141,7 @@ archived with it.
 
 In a block, a button Eriphe wrote sends its words to Eriphe about that page, as if you had typed
 them (that is how you answer its questions: « Do as you propose » takes every default it wrote); it
-does nothing else, and does not work on an older version, nor in a block marked « outside ». No
+does nothing else, and does not work on an older version, nor in a block from outside (its quiet edge). No
 button, box or mark in a page acts: what acts waits for your yes on a card.
 
 ## Ask for something
@@ -245,8 +245,8 @@ forget one. There is no settings page for the workspace and no rule to maintain.
   a read that asks your yes is not opened: ask Eriphe, who proposes it on a card.
 - **Tools to review.** When a server's tools change, « Outils à revoir » lists each change with its
   own card: Yes accepts it, ✕ refuses it.
-- **Content from outside cannot act.** A page that may carry someone else's words says « outside »
-  once, by its title, and its block has a quiet edge: a proposal shown inside it has no Yes / No and
+- **Content from outside cannot act.** A page that may carry someone else's words says it
+  once, by a small ⚠ beside its title (its tooltip says why), and its block has a quiet edge: a proposal shown inside it has no Yes / No and
   its card waits at the foot of the page, but for the Yes on an item's own line, which answers only
   the card Eriphe's code says waits on that very item. A mail that says "click here to approve"
   cannot make anything happen.
