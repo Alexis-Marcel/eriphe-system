@@ -830,6 +830,5 @@ func (c *core) accessDecidedTold(id int64, approve bool) {
 	if approve {
 		word = "accepté"
 	}
-	c.store.addNodeMessage(roleEvent, fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), "", c.taskEventNode(a.TaskID), false)
-	c.ping()
+	c.userActEvent(fmt.Sprintf("%s a %s de débloquer %s pour la tâche %s.", c.conf().User, word, strings.Join(a.Refs, ", "), a.TaskID), c.taskEventNode(a.TaskID), "") // the user's act: what the brain says of it answers them
 }

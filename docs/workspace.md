@@ -32,8 +32,10 @@ and the buttons that answer them are written there.
 ## Eriphe's orb
 
 Eriphe is the small blue orb resting in the bar. It only answers: it leaves the bar in reply to
-what you said to it, never on its own (what starts waiting for you without you asking, a mail a
-monitor found, shows on its bubble). Then it goes **beside the subject** it is about, its bubble or its open page, where it
+what you said to it (a message, or your **Yes** or **No** on a card: what came of it, « Done »
+or a failure, it says like any answer), never on its own (what starts waiting for you without
+you asking, a mail a monitor found, shows on its bubble; what Eriphe says of it unasked is kept
+in that subject's trace). Then it goes **beside the subject** it is about, its bubble or its open page, where it
 covers nothing (no bubble, no title, no page, not the bar), and follows it if it moves. When the
 screen is too full for that, it stays in the bar and says it in a line above it:
 

@@ -1008,7 +1008,9 @@ what happened in it ([Node store](#node-store-nodestore-nodesgo)).
   has something for the user.
 - **Code's safety net** (`node_net.go`, contract 5): at the turn's end, the turn's answer (its
   texts joined), past `netMinRunes` (600), or, said in a node, any answer longer than its first
-  line (`ackLine`, #663; beside a subject the orb says only its first lines), when the brain wrote no node in the turn (`node_open`,
+  line (`ackLine`, #663; beside a subject the orb says only its first lines), or, said in a node, any
+  answer at all of a turn that answers no act of the user's (an event's, a wake's: the orb never says
+  it, so its node's trace keeps it; a line, in its trace only, never as its doc), when the brain wrote no node in the turn (`node_open`,
   `node_write`, `node_edit`) and proposed nothing on a card (`cardProposed`: what it says is then
   about the card, which waits under it), is filed by code: in the node the turn answers in (whole in its
   trace, and as its doc when it has none, never a standing node's), else in a new work node at
@@ -3483,8 +3485,17 @@ A workspace left open in front is activity.
 **The orb** (`web_orb.go`, `orb/`, #663). Not a chat: the subject's document is the
 conversation, the bar under it is only a bar, and Eriphe answers with its orb, beside the subject
 its answer belongs to. The orb only answers: the event carries nothing of a turn that answers no
-message of the user's (an event's, a wake's, a node's task's: its work, its words, its failure,
-its cards), nor any word at all before the user's first message. One stream event for the whole workspace, whichever page the bar talks to,
+act of the user's (an event's, a wake's, a node's task's: its work, its words, its failure,
+its cards), nor any word at all before the user's first message. The user's acts are their
+messages and their Oui or Non on a card: what came of a decision reaches the brain as an event
+marked as the user's (`userActEvent`, kv `user_act:<seq>`: a call run or refused on a card,
+`callToBrain`; a release, `accessDecidedTold`; a task's start declined, `taskStartDeclined`), and
+the turn that reads it answers the user (`deliverConversation`, `brainTurn.answersUser`), its
+taint and context kept: its reply (« C'est fait », or what failed), its work and its failure are
+the orb's as a reply to a message is, and replace what the orb said before (the newest marked
+turn wins). The decision alone replaces nothing: a Non Eriphe says nothing of (`[rien]`) leaves
+the orb as it was, and its work shows only once it writes words, never on thinking alone
+(`lastActed` past `lastAsked`). One stream event for the whole workspace, whichever page the bar talks to,
 so that nothing Eriphe says is lost on a page the user is not looking at: `orb` (JSON,
 `orbEvent`, `orbFor`), sent when the stream opens and whenever it changes:
 
@@ -3495,7 +3506,7 @@ so that nothing Eriphe says is lost on a page the user is not looking at: `orb` 
   (`ackLine`: the first line that says something, as plain text without its Markdown marks, a
   link's words only, at most 140 characters, its first sentence when that fits, else cut at a
   word with « … »);
-- `answer`: Eriphe's words written since that message in a turn that answered it (`markAnswer`,
+- `answer`: Eriphe's words written since that message in a turn that answered it or a card's decision since (`markAnswer`,
   kv `answer_msg:<seq>`), `{seq, node, text, more, whole, external}`: `node` where its messages belong (`placeOf`: the
   node of the message, else the one its answer was filed in, none for the home); `text`, its last
   messages there joined, said in a few lines (`fewLines`: at most 3 lines and 280 characters, no

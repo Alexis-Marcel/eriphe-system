@@ -454,8 +454,8 @@ func (c *core) cardState(ref string) string {
 // yes, or refused), taint being what its words make the turn. A card
 // linked to a node makes it an event of that node: the turn that reads it
 // is about the node (nodesDelivered), and what it raises next is the
-// node's. Written delivered, its marks set, then handed to the brain, as
-// tellBrain does: it is never delivered before its marks.
+// node's. It is the user's act (userActEvent): what the brain says of it
+// answers them.
 func (c *core) callToBrain(a accessQuestion, text, taint string) {
 	node := ""
 	if ids := c.cardNodes(proposalRef(cardAccess, a.ID)); len(ids) > 0 {
@@ -468,15 +468,7 @@ func (c *core) callToBrain(a accessQuestion, text, taint string) {
 			taint += ", " + t
 		}
 	}
-	seq, err := c.store.addNodeMessage(roleEvent, text, "", node, true)
-	if err != nil {
-		return
-	}
-	if taint != "" {
-		c.store.set(taintKey(int(seq)), taint)
-	}
-	c.store.undeliver(int(seq), int(seq))
-	c.ping()
+	c.userActEvent(text, node, taint)
 }
 
 // brainRunTask starts the task the brain asks for, in a node of its own

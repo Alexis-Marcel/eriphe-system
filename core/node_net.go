@@ -16,7 +16,9 @@ import (
 // workspace's orb says only its first lines (fewLines, web_orb.go). At
 // its turn's end, the turn's answer (its texts joined), past netMinRunes,
 // or said in a node any answer longer than its first line (ackLine,
-// #663), when the brain wrote no
+// #663), or any answer at all of a turn that answers no act of the
+// user's (an event's, a wake's: the orb never says it, web_orb.go), when
+// the brain wrote no
 // node in the turn (node_open, node_write, node_edit) and proposed nothing
 // on a card (what it says is then about the card, which waits under it),
 // goes:
@@ -66,14 +68,16 @@ func (c *core) fileTurnAnswer() {
 	}
 	answer := strings.Join(parts, "\n\n")
 	long := runeLen(answer) >= netMinRunes
-	home := c.turn.answersAtHome() // said in a node, about something else (turn_home): as at the home
-	if _, cut := ackLine(answer); !long && (talk == "" || home || !cut) {
+	home := c.turn.answersAtHome()  // said in a node, about something else (turn_home): as at the home
+	unasked := !c.turnAnswersUser() // an event's, a wake's: the orb never says it, its node keeps it
+	_, cut := ackLine(answer)
+	if !long && (talk == "" || home || !cut && !unasked) {
 		return
 	}
 	tainted := len(c.turnTaint()) > 0
 	id := ""
 	if !home {
-		id = c.fileInTalked(talk, answer, tainted)
+		id = c.fileInTalked(talk, answer, tainted, long || cut) // an unasked line: its trace only, never its doc
 	}
 	if id == "" && long {
 		id = c.fileInNew(c.netTitle(from, to), answer, tainted)
@@ -89,9 +93,10 @@ func (c *core) fileTurnAnswer() {
 }
 
 // fileInTalked files an answer into the node the turn answers in: its
-// trace, and its doc when it has none. It gives the node, "" when there
-// is none to file in or it refused.
-func (c *core) fileInTalked(id, answer string, tainted bool) string {
+// trace, and its doc when it has none and doc says so (not for a line
+// said unasked). It gives the node, "" when there is none to file in or
+// it refused.
+func (c *core) fileInTalked(id, answer string, tainted, doc bool) string {
 	if id == "" {
 		return ""
 	}
@@ -109,7 +114,7 @@ func (c *core) fileInTalked(id, answer string, tainted bool) string {
 		c.markNodeExternal(id, byBrain)
 	}
 	d, err := c.nodes.Read(id, 0)
-	if err == nil && strings.TrimSpace(d.Node.Text()) == "" && len(d.Node.Blocks()) == 0 && d.Node.Meta.Lifetime != nodefile.Standing {
+	if doc && err == nil && strings.TrimSpace(d.Node.Text()) == "" && len(d.Node.Blocks()) == 0 && d.Node.Meta.Lifetime != nodefile.Standing {
 		if _, err := c.authorWrite(id, d.Version.Hash, byBrain, tainted, c.viewSourceOK(""), func(n *nodefile.Node) error { return n.AuthorBody(answer) }); err != nil {
 			log.Printf("node %s: the brain's answer kept in its trace, not as its doc: %v", id, err)
 		}
