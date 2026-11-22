@@ -12,6 +12,7 @@ import { close, expires, leaves, loadClosed, orbShow, replaced, saveClosed, type
 // it), it is remembered (Closed), and the next thing shows.
 
 const met = new Map<string, number>();
+const unfolded = new Set<string>(); // the words the user unfolded (« Voir plus »), by key
 let closed: Closed | null = null;
 let last: Show | null = null; // what showed before, to know what replaced it
 const users = new Set<() => void>(); // every component that shows the orb, drawn again when it changes
@@ -52,7 +53,7 @@ export function setCrowded(v: boolean): void {
   bump();
 }
 
-export function useOrb(): { show: Show; dismiss: () => void; crowded: boolean } {
+export function useOrb(): { show: Show; dismiss: () => void; unfold: () => void; crowded: boolean } {
   const feed = useGraph((s) => s.orb);
   const sent = useGraph((s) => s.sent);
   const nodes = useGraph((s) => s.nodes);
@@ -69,9 +70,14 @@ export function useOrb(): { show: Show; dismiss: () => void; crowded: boolean } 
   }, []);
   closed ??= loadClosed();
   const now = clock();
-  const show = orbShow(feed, { now, sent, closed, met: (k) => met.get(k), nodes });
+  const base = orbShow(feed, { now, sent, closed, met: (k) => met.get(k), nodes });
+  const show = base.words?.full && unfolded.has(base.key) ? { ...base, full: true } : base;
   if (show.mode !== "rest" && !met.has(show.key)) met.set(show.key, now);
   const dismiss = () => forget(show);
+  const unfold = () => {
+    unfolded.add(show.key);
+    bump();
+  };
 
   // Newer words, or the user writing, replace the words shown: over.
   useEffect(() => {
@@ -94,7 +100,7 @@ export function useOrb(): { show: Show; dismiss: () => void; crowded: boolean } 
     if (talk !== was.current && (leaves(show, talk) || (was.current === null && show.mode === "answer" && show.pinned))) dismiss();
     was.current = talk;
   }, [talk]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { show, dismiss, crowded };
+  return { show, dismiss, unfold, crowded };
 }
 
 // orbText is what the orb says, as plain words: for the screen reader
@@ -117,6 +123,7 @@ export function orbText(s: Show, t: T, nodes: Record<string, GraphNode>): string
 // resetOrb forgets what was shown, and the clock (tests).
 export function resetOrb(): void {
   met.clear();
+  unfolded.clear();
   closed = null;
   last = null;
   crowded = false;

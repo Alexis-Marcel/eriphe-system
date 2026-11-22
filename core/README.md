@@ -3408,8 +3408,9 @@ token in `X-CSRF-Token`:
   free spot near the screen's middle (`placeHome`). When there is none, it covers nothing: it stays
   in the bar and its words are a line above it, as on a phone (`setCrowded`). It is no body of the simulation: it reads where the bodies are each frame and
   follows its subject. Its words show once it is there, open away from the subject, in a few
-  lines (`fewLines` on eriphe-core's side) with « Voir plus », which opens the subject's page:
-  the orb never says what the page holds. For a waiting card it sits at the card's height and its
+  lines (`fewLines` on eriphe-core's side: six lines, 600 characters at most) with « Voir plus »,
+  which unfolds the whole answer in place, as Markdown (`full`, scrolling past 40 % of the
+  screen); unfolded, it stays until the user moves on. For a waiting card it sits at the card's height and its
   « Voir » scrolls the card into view. Its answer beside a subject stays until something else
   happens: a newer answer replaces it, or the user moves on (writes, opens another subject,
   closes it with ✕); else they go after two minutes of the page being seen (`WORDS_MS`: a hidden tab does

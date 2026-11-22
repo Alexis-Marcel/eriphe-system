@@ -22,7 +22,8 @@ import type { Sent } from "../data/store";
 //   4. answer: its answer to the user's last message: at the home, an
 //      answer of more than a line, whole, held until the user moves on
 //      (writes again, opens a subject, closes it); beside a subject, a few
-//      lines (its page says the rest), until something else happens: newer
+//      lines (« Voir plus » unfolds all of it, which then stays until the
+//      user moves on), until something else happens: newer
 //      words replace them, or the user moves on (opens another subject,
 //      writes, closes them); else they go after WORDS_MS of the page being
 //      seen;
@@ -40,6 +41,7 @@ export type Show = {
   draft?: string; // the first line of what it writes
   card?: number; // the card waiting
   pinned?: boolean; // stays until the user moves on
+  full?: boolean; // its words unfolded whole (« Voir plus »): they stay until the user moves on
 };
 
 // WORDS_MS is how long Eriphe's words stay beside a subject when nothing
@@ -91,7 +93,7 @@ export function orbShow(x: OrbFeed | null, m: Mind): Show {
 // expires is how long the shown thing stays from when it was first shown;
 // null: until the user moves on.
 export function expires(s: Show): number | null {
-  return s.pinned || s.mode === "work" || s.mode === "rest" ? null : WORDS_MS;
+  return s.pinned || s.full || s.mode === "work" || s.mode === "rest" ? null : WORDS_MS;
 }
 
 // words tells whether it shows Eriphe's words beside a subject: those
