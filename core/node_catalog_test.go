@@ -116,9 +116,11 @@ func TestWorkerHasTheCatalog(t *testing.T) {
 		t.Fatalf("catalog_read: %v", got)
 	}
 	mustNodes(t, c.core, task.ID, "sources_read", nil)
+	c.store.registerDevice(task.Device, hashSecret("x"))
+	spec := assignedSpec(t, c.core, task.Device, task.ID)
 	for _, name := range []string{"mcp__eriphe-nodes__catalog_read", "mcp__eriphe-nodes__sources_read"} {
-		if !slices.Contains(taskNodesTools(), name) {
-			t.Errorf("%s not allowed in advance: %v", name, taskNodesTools())
+		if !slices.Contains(spec.AllowedTools, name) {
+			t.Errorf("%s not allowed in advance: %v", name, spec.AllowedTools)
 		}
 	}
 	if _, err := c.runTask(context.Background(), runRequest{Prompt: "x", Resources: []ResourceRef{{Kind: resTool, Ref: "eriphe-workspace"}}}); err == nil {

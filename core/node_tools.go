@@ -161,10 +161,12 @@ func (c *core) brainNode(id string) (nodestore.Summary, error) {
 // The node opens in front of the user, unless aside. A subject opened at
 // the home, in answer to the user, after the turn read external content,
 // is titled by code from the user's request (requestTitle): their words,
-// never what the turn read, so its title is not marked external.
+// never what the turn read, so its title is not marked external. One
+// subject per request: another opened in the same turn keeps its own
+// title, marked. The result says so (title_by), so the brain leaves it.
 func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[string]any, error) {
 	by := nodeOpener{stepOpener: stepOpener{author: byBrain, tainted: c.turnTaint()}, origin: c.turnOrigin(), sourceOK: c.viewSourceOK("")}
-	if len(by.tainted) > 0 && strings.TrimSpace(in.Parent) == "" && !in.Aside && c.turnAnswersUser() && c.turn.talkNode() == "" {
+	if len(by.tainted) > 0 && strings.TrimSpace(in.Parent) == "" && !in.Aside && c.turnAnswersUser() && c.turn.talkNode() == "" && c.turn.requestTitled() {
 		if title, ok := c.requestTitle(c.turn.span()); ok {
 			in.Title, by.titleTrusted = title, true
 		}
@@ -187,6 +189,9 @@ func (c *core) brainNodeOpen(ctx context.Context, in brainNodeOpenIn) (map[strin
 	}
 	if steps != nil {
 		out["steps"] = steps
+	}
+	if by.titleTrusted {
+		out["title_by"] = "the user's request: your turn read outside content, so code titled it in their words; keep it"
 	}
 	return out, err
 }

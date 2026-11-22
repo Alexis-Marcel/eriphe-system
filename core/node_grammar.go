@@ -13,7 +13,7 @@ const nodeGrammar = "# Un bloc d'Eriphe\n\n" +
 	"sinon une carte se montre sur les lignes de ses éléments, ou au pied de la page.\n\n" +
 	"## Sources\n" +
 	"Le code les lit sans modèle et les tient à jour (une lecture qui échoue garde la dernière bonne valeur) ; la valeur d'une source est en `/<nom>`. Une source est :\n" +
-	"- un outil, une de tes lectures libres : `{\"tool\": \"serveur/outil\", \"args\": {…}}` (sources_read les liste, avec leurs arguments) ;\n" +
+	"- un outil, une lecture libre (une tâche : un outil qu'on lui a prêté) : `{\"tool\": \"serveur/outil\", \"args\": {…}}` (sources_read les liste, avec leurs arguments) ;\n" +
 	"- une ressource : `{\"resource\": \"serveur\", \"uri\": \"…\"}` ;\n" +
 	"- une surveillance approuvée, par son nom : `{\"monitor\": \"nom\"}`.\n" +
 	"`every` : les minutes entre deux lectures (1 à 1440 ; le défaut sinon). Après un appel qui change quelque chose sur un serveur, ses sources sont relues aussitôt : rien à rafraîchir.\n\n" +
