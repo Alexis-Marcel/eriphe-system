@@ -77,14 +77,20 @@ type nodeWriteIn struct {
 	Expect string `json:"expect" jsonschema:"the hash of the version you read (node_read gives it)"`
 }
 
-type nodeEditIn struct {
-	ID     string         `json:"id,omitempty" jsonschema:"your node's id; leave it out"`
+// nodeEdits is what node_edit changes, for a worker (nodeEditIn) and the
+// brain (brainNodeEditIn), each naming the node its own way.
+type nodeEdits struct {
 	Expect string         `json:"expect" jsonschema:"the hash of the version you read (node_read gives it)"`
 	Block  string         `json:"block,omitempty" jsonschema:"a block's name, to write it: in place of the one so named, else last (or before the block named in before)"`
 	Value  map[string]any `json:"value,omitempty" jsonschema:"with block: the block, a JSON object (components, data, sources)"`
 	Before string         `json:"before,omitempty" jsonschema:"with block: the block to place it before"`
 	Old    string         `json:"old,omitempty" jsonschema:"a piece of the node's text to replace, found once in it"`
 	New    string         `json:"new,omitempty" jsonschema:"with old: what takes its place (empty removes it)"`
+}
+
+type nodeEditIn struct {
+	ID string `json:"id,omitempty" jsonschema:"your node's id; leave it out"`
+	nodeEdits
 }
 
 type nodeAppendIn struct {
@@ -189,7 +195,7 @@ func (c *core) taskNodesServer(t *TaskRow) *mcp.Server {
 			if err := w.own(in.ID); err != nil {
 				return nil, err
 			}
-			fn, err := nodeEdit(in)
+			fn, err := nodeEdit(in.nodeEdits)
 			if err != nil {
 				return nil, err
 			}
@@ -357,7 +363,7 @@ func (c *core) authorWrite(id, expect, author string, tainted bool, sourceOK fun
 
 // nodeEdit is node_edit's change: one block written, or a piece of the
 // text replaced.
-func nodeEdit(in nodeEditIn) (func(*nodefile.Node) error, error) {
+func nodeEdit(in nodeEdits) (func(*nodefile.Node) error, error) {
 	switch {
 	case in.Block != "" && in.Old == "":
 		return func(n *nodefile.Node) error {

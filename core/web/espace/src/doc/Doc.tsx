@@ -75,7 +75,7 @@ export function Doc({ page, latest, live, onOpen }: { page: NodePage; latest: bo
     return adapter.onAction((m) => {
       const g = toGesture(m.action, id, (name) => blockOf(page, name));
       if (g?.kind === "ask") void ask(id, g.block, g.component).catch(() => undefined);
-      if (g?.kind === "mark") void mark(id, g.block, g.list, g.item, g.mark).catch(() => undefined);
+      if (g?.kind === "mark") void mark(id, page.version, g.block, g.list, g.item, g.mark).catch(() => undefined);
     });
   }, [adapter, latest, live, page]);
 

@@ -74,6 +74,26 @@ describe("the store", () => {
     expect(applyShow(s, { node: "b", seq: 4, at: new Date(now).toISOString() }, now)).toBe(s);
   });
 
+  it("keeps the show of a node the graph does not have yet, and opens it when its row comes", () => {
+    const now = Date.parse("2026-11-18T12:00:00Z");
+    const at = new Date(now).toISOString();
+    let s = openPage(withGraph(), "a");
+    s = applyShow(s, { node: "new", seq: 7, at }, now);
+    expect(s.open).toEqual(["a"]);
+    expect(s.shown).toBe(7);
+    s = applyNodes(s, { nodes: [node("other")] });
+    expect(s.open).toEqual(["a"]);
+    s = applyNodes(s, { nodes: [node("new")] });
+    expect(s.open).toEqual(["a", "new"]);
+    expect(s.talk).toBe("a");
+    expect(s.pending).toBeNull();
+    // asked from the home, it takes the bar with it when it comes
+    let h = applyShow(withGraph(), { node: "subject", seq: 8, at, talk: true }, now);
+    expect(h.open).toEqual([]);
+    h = applyNodes(h, { nodes: [node("subject")] });
+    expect(h).toMatchObject({ open: ["subject"], talk: "subject" });
+  });
+
   it("moves the console into a subject opened from the home, never from a page", () => {
     const now = Date.parse("2026-11-18T12:00:00Z");
     const at = new Date(now).toISOString();

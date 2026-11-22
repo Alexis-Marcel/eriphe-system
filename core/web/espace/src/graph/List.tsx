@@ -56,12 +56,12 @@ export function List({ live }: { live: boolean }) {
           return (
             <li key={x.id} className={`ls-row d${Math.min(d, 3)} ${x.state}${x.external ? " external" : ""}`}>
               <button type="button" onClick={() => step(store, openPage, x.id, false)}>
-                <i className={`dot${yours ? " yours" : x.state === "running" ? " run" : ""}`} />
+                <i className={`dot${yours ? " yours" : x.state === "running" ? " run" : ""}`} role={yours ? "img" : undefined} aria-label={yours ? t("espace.waits") : undefined} />
                 <b>
                   <NodeTitle x={x} fallback={external} />
                 </b>
                 {x.unasked && <UnaskedMark />}
-                {yours ? <em className="yours">{t("espace.waits")}</em> : x.state === "running" && x.line ? <em className="runs">{x.line}</em> : null}
+                {!yours && x.state === "running" && x.line && <em className="runs">{x.line}</em>}
               </button>
             </li>
           );

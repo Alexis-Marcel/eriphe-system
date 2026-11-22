@@ -2,6 +2,7 @@ package nodestore
 
 import (
 	"crypto/sha256"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -151,6 +152,49 @@ func TestBackupKeepsALargeRepositoryWhole(t *testing.T) {
 	}
 }
 
+// Writes go on during a backup: the store's lock is not held while the
+// bundle is made. The bundle is whole, and the index's copy is never ahead
+// of it: the commit it says it indexed is in the bundle.
+func TestBackupLetsWritesGoOn(t *testing.T) {
+	_, s, _ := largeGraph(t)
+	backups := filepath.Join(t.TempDir(), "backups")
+	done := make(chan error, 1)
+	go func() { done <- s.Backup(backups, 3) }()
+	d := mustRead(t, s, "n2")
+	for i := range 5 {
+		var err error
+		if d, err = s.Write("n2", fmt.Sprintf("Note %d.", i), d.Version.Hash, "brain"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(backups, "nodes-2026-11-17.bundle"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := decodeBundle(t, raw)
+	db, err := sql.Open("sqlite", filepath.Join(backups, "nodes-2026-11-17.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var indexed string
+	if err := db.QueryRow(`SELECT value FROM meta WHERE key = 'head'`).Scan(&indexed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := object.GetCommit(got, plumbing.NewHash(indexed)); err != nil {
+		t.Fatalf("the index's copy is ahead of the bundle: %v", err)
+	}
+	if err := checkRepo(s.repo); err != nil {
+		t.Fatal(err)
+	}
+	if matches, _ := filepath.Glob(filepath.Join(backups, "*.tmp")); len(matches) > 0 {
+		t.Errorf("left behind: %v", matches)
+	}
+}
+
 // A backup that fails leaves the repository as it was, and the copies
 // made before it.
 func TestFailedBackupLeavesTheRepository(t *testing.T) {
@@ -184,7 +228,8 @@ func TestFailedBackupLeavesTheRepository(t *testing.T) {
 	}
 
 	// The pack's writing fails midway.
-	if _, _, err := s.bundle(&failingWriter{left: 4096}); err == nil {
+	head, _ := s.repo.Head()
+	if _, err := bundle(s.repo, head.Hash(), &failingWriter{left: 4096}); err == nil {
 		t.Fatal("a bundle written to a failing writer")
 	}
 	sameManifest(t, before, manifest(t, e.dir))
@@ -209,10 +254,12 @@ func (w *failingWriter) Write(p []byte) (int, error) {
 func TestCheckBundleRefusesACorruptOne(t *testing.T) {
 	_, s, _ := largeGraph(t)
 	path := filepath.Join(t.TempDir(), "nodes.bundle")
-	if err := s.writeBundle(path); err != nil {
+	ref, _ := s.repo.Head()
+	head := ref.Hash()
+	if err := writeBundle(s.repo, head, path); err != nil {
 		t.Fatal(err)
 	}
-	head, objs, err := s.bundle(io.Discard)
+	objs, err := bundle(s.repo, head, io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}

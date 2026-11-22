@@ -132,13 +132,18 @@ type nodeMarkIn struct {
 	List  string `json:"list"`
 	Item  string `json:"item"`
 	Mark  string `json:"mark"` // keep, drop, done, or "" to take it away
+	// Version is the version the page showed: the mark is made on it, so
+	// that a mark on an item someone has since written over is refused.
+	Version int `json:"version"`
 }
 
 // handleNodeMark is POST /api/nodes/{id}/mark: code writes the user's mark
-// in the block, on its last version, as a version of its own (not listed
-// on the page), and starts no turn. 204; 400 for a mark the block cannot
-// carry (no such block, a list or item that is not an id, another mark);
-// 404; 410 archived.
+// in the block, on the version the page showed, as a version of its own
+// (not listed on the page), and starts no turn. 204; 400 for a mark the
+// block cannot carry (no such block, a list or item that is not an id,
+// another mark) or no version; 404; 409 when an author wrote the node
+// since the version shown (code's own versions since do not count); 410
+// archived.
 func (w *web) handleNodeMark(rw http.ResponseWriter, r *http.Request, _ *session) {
 	sum, ok := w.gestureNode(rw, r)
 	if !ok {
@@ -148,18 +153,24 @@ func (w *web) handleNodeMark(rw http.ResponseWriter, r *http.Request, _ *session
 	if !gestureBody(rw, r, 4<<10, &in) {
 		return
 	}
+	if in.Version <= 0 {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "version is needed: the one the page showed"})
+		return
+	}
 	c := w.c
-	last, err := c.nodes.Read(sum.ID, 0)
+	shown, err := c.nodes.Read(sum.ID, in.Version)
 	if err != nil {
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": errNoNode.Error()})
 		return
 	}
-	if !blockHas(last.Node.Block(in.Block), "Mark") {
+	if !blockHas(shown.Node.Block(in.Block), "Mark") {
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "no Mark in this block"})
 		return
 	}
-	_, err = c.nodes.Change(sum.ID, last.Version.Hash, nodeByCode, func(n *nodefile.Node) error { return n.SetMark(in.Block, in.List, in.Item, in.Mark) })
+	_, err = c.nodes.Change(sum.ID, shown.Version.Hash, nodeByCode, func(n *nodefile.Node) error { return n.SetMark(in.Block, in.List, in.Item, in.Mark) })
 	switch {
+	case errors.Is(err, nodestore.ErrConflict):
+		writeJSON(rw, http.StatusConflict, map[string]string{"error": "the node changed since the page was read"})
 	case errors.Is(err, nodestore.ErrArchived):
 		writeJSON(rw, http.StatusGone, map[string]string{"error": "archived"})
 	case err != nil:

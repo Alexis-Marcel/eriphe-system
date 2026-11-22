@@ -3266,9 +3266,10 @@ token in `X-CSRF-Token`:
   (`authorWrite` as `user`, the node's guard and the secrets filter as for any author), made on
   the version whose hash is `expect`. A newer version gives `409` with its `version`, `hash` and
   `body`, and writes nothing; an archived node `410`; a body that does not read `400`.
-- `POST /api/nodes/{id}/mark` `{block, list, item, mark}`: the user's mark (`keep`, `drop`, `done`,
-  `""` to take it away) on an item a block shows; the block must hold a Mark. Code writes it
-  (`nodefile.SetMark`), a version of its own: no turn.
+- `POST /api/nodes/{id}/mark` `{block, list, item, mark, version}`: the user's mark (`keep`, `drop`,
+  `done`, `""` to take it away) on an item a block shows; the block must hold a Mark. Code writes it
+  (`nodefile.SetMark`), a version of its own, made on the `version` the page showed: no turn. An
+  author's write since that version gives `409` (code's own versions do not count).
 - `POST /api/nodes/{id}/ask` `{block, component}`: a block's button. Its words are read again in
   the stored block (`a2ui.AskText`), never taken from the page, and become the user's message to
   that node; a block written after reading external content asks nothing (`403`).

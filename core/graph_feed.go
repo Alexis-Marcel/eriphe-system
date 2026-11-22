@@ -75,6 +75,11 @@ func (c *core) useNodes(s *nodestore.Store) {
 			// the page draws it, in each block that reads it.
 			c.graphSaid(graphEvent{Kind: graphEvNode, Node: ch.ID})
 			c.graphSaid(graphEvent{Kind: graphEvSource, Node: ch.ID, Name: ch.Source})
+		case nodestore.ChangedState:
+			// Its work stopped or moved on: the line said while it ran
+			// goes; a new run says its own.
+			c.forgetProgress(ch.ID)
+			c.graphSaid(graphEvent{Kind: graphEvNode, Node: ch.ID})
 		default:
 			c.graphSaid(graphEvent{Kind: graphEvNode, Node: ch.ID})
 		}
@@ -148,6 +153,14 @@ func (c *core) progressOf(id string) (progressLine, bool) {
 	defer f.mu.Unlock()
 	p, ok := f.progress[id]
 	return p, ok
+}
+
+// forgetProgress drops a node's line of work: its state changed.
+func (c *core) forgetProgress(id string) {
+	f := &c.graph
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.progress, id)
 }
 
 // nodeProgress is a task's line of where its node's work is.

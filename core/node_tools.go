@@ -70,6 +70,11 @@ type brainNodeWriteIn struct {
 	Expect string `json:"expect" jsonschema:"the hash of the version you read (node_read gives it)"`
 }
 
+type brainNodeEditIn struct {
+	ID string `json:"id" jsonschema:"the node's id"`
+	nodeEdits
+}
+
 type brainNodeSetIn struct {
 	ID    string `json:"id" jsonschema:"the node's id"`
 	Title string `json:"title,omitempty" jsonschema:"its new title"`
@@ -106,8 +111,8 @@ func registerNodeTools(s *mcp.Server, c *core) {
 			return c.brainNodeWrite(in.ID, in.Expect, func(n *nodefile.Node) error { return n.AuthorBody(in.Body) })
 		})
 	tool(s, "node_edit", "Edit a node, made on the version whose hash is expect: write one block (block and value, before to place it), or replace a piece of its text found once (old, new). A card block places one of the node's cards where it belongs in its text: its value is {\"card\": \"<ref>\"}, the ref a propose tool gave, and nothing else; code draws the card.",
-		func(ctx context.Context, in nodeEditIn) (map[string]any, error) {
-			fn, err := nodeEdit(in)
+		func(ctx context.Context, in brainNodeEditIn) (map[string]any, error) {
+			fn, err := nodeEdit(in.nodeEdits)
 			if err != nil {
 				return nil, err
 			}

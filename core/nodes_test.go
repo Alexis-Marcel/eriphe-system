@@ -95,3 +95,31 @@ func TestNodesNight(t *testing.T) {
 		t.Fatal("backed up twice the same night")
 	}
 }
+
+// A backup that failed is tried again at the next tick, not the next
+// night.
+func TestNodesNightRetriesAFailedBackup(t *testing.T) {
+	backups := filepath.Join(t.TempDir(), "backups")
+	cfg := &Config{DB: filepath.Join(t.TempDir(), "core.db"), Memory: &MemoryConfig{ExtractAt: "03:00", BackupDir: backups}}
+	day := time.Date(2026, 11, 17, 3, 1, 0, 0, time.Local)
+	dir, index := cfg.nodesPaths()
+	s, _, err := nodestore.Open(dir, index, nodestore.Options{Now: func() time.Time { return day }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	c := &core{base: cfg, nodes: s}
+	c.snap.Store(cfg)
+	// The backup folder cannot be made: a file has its name.
+	os.WriteFile(backups, []byte("in the way"), 0o600)
+	if done := c.nodesNight("", day); done != "" {
+		t.Fatalf("a failed backup counted as done: %q", done)
+	}
+	os.Remove(backups)
+	if done := c.nodesNight("", day.Add(time.Minute)); done != "2026-11-17" {
+		t.Fatalf("the next tick: %q", done)
+	}
+	if files, _ := filepath.Glob(filepath.Join(backups, "nodes-*.db")); len(files) != 1 {
+		t.Fatalf("backups: %v", files)
+	}
+}

@@ -104,14 +104,14 @@ func (c *core) fileInTalked(id, answer string, tainted, doc bool) string {
 	if err != nil || !sum.Archived.IsZero() {
 		return ""
 	}
+	if tainted {
+		c.markNodeExternal(id, byBrain) // before the answer: never words without the mark
+	}
 	for _, part := range traceParts(answer, nodestore.MaxTrace) {
 		if err := c.nodes.AppendTrace(id, byBrain, part); err != nil {
 			log.Printf("node %s: the brain's answer not filed in its trace: %v", id, err)
 			return ""
 		}
-	}
-	if tainted {
-		c.markNodeExternal(id, byBrain)
 	}
 	d, err := c.nodes.Read(id, 0)
 	if doc && err == nil && strings.TrimSpace(d.Node.Text()) == "" && len(d.Node.Blocks()) == 0 && d.Node.Meta.Lifetime != nodefile.Standing {

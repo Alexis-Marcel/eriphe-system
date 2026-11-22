@@ -324,6 +324,23 @@ func TestProgressLineTainted(t *testing.T) {
 	}
 }
 
+// A node's line of work is kept while it runs, and goes when its state
+// changes: the feed does not keep a line for every node that ever ran.
+func TestProgressLineGoesWithItsRun(t *testing.T) {
+	c := graphCore(t)
+	c.useNodes(c.nodes)
+	id := mustNode(t, c, nodestore.New{Title: "Recherche"})
+	c.nodes.SetState(id, nodestore.Running)
+	c.nodeProgress(id, "Trois articles lus")
+	if p, ok := c.progressOf(id); !ok || p.Text != "Trois articles lus" {
+		t.Fatalf("while it runs: %+v %v", p, ok)
+	}
+	c.nodes.SetState(id, nodestore.Done)
+	if p, ok := c.progressOf(id); ok {
+		t.Errorf("kept after its run: %+v", p)
+	}
+}
+
 // mediaSig is a media address's signature, new at each run.
 var mediaSig = regexp.MustCompile(`s=[A-Za-z0-9_-]+`)
 

@@ -76,7 +76,8 @@ func (c *core) runNodes(ctx context.Context) {
 
 // nodesNight backs the graph up when the night's hour has passed and the
 // day has not been backed up (done, or its copy is in the backup folder,
-// for a start after the hour); it gives the day backed up.
+// for a start after the hour); it gives the day backed up. A backup that
+// failed gives done as it was: the next tick tries again.
 func (c *core) nodesNight(done string, now time.Time) string {
 	mc := c.conf().memoryConfig()
 	today := now.Format("2006-01-02")
@@ -93,6 +94,7 @@ func (c *core) nodesNight(done string, now time.Time) string {
 	}
 	if err := c.nodes.Backup(mc.BackupDir, mc.BackupKeep); err != nil {
 		log.Printf("nodes: backup: %v", err)
+		return done
 	}
 	return today
 }
