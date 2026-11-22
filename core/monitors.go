@@ -34,7 +34,8 @@ import (
 //   - new: the items of a list whose id was not seen give one monitor.new
 //     each;
 //   - changed: a value that is not the last one gives monitor.changed, once
-//     a second look half a minute later saw the same: a flap gives nothing;
+//     a second look half a minute later found it is still not the last
+//     one: a flap, back as it was, gives nothing;
 //   - cross: a number that goes above (or below) a limit, or back, gives
 //     monitor.crossed, confirmed the same way: a measure becomes a state, so
 //     47 % then 52 % is nothing, and 91 % is something.
@@ -118,19 +119,18 @@ type monitorSpec struct {
 
 // monitorLook is what its looks saw, kept between them.
 type monitorLook struct {
-	Known     bool     `json:"known,omitempty"` // the baseline was taken
-	Value     string   `json:"value,omitempty"` // changed: the hash of the value
-	Shown     string   `json:"shown,omitempty"` // changed: the value, cut, for was
-	Seen      []string `json:"seen,omitempty"`  // new: the ids seen, the latest last
-	Pending   bool     `json:"pending,omitempty"`
-	PendValue string   `json:"pend_value,omitempty"`
-	Hit       bool     `json:"hit,omitempty"` // cross: the limit was crossed at the last confirmed look
-	PendHit   bool     `json:"pend_hit,omitempty"`
-	Fails     int      `json:"fails,omitempty"`
-	Failed    bool     `json:"failed,omitempty"` // monitor.failed was written
-	Error     string   `json:"error,omitempty"`  // the last look's
-	Waiting   string   `json:"waiting,omitempty"`
-	Checked   int64    `json:"checked,omitempty"`
+	Known   bool     `json:"known,omitempty"` // the baseline was taken
+	Value   string   `json:"value,omitempty"` // changed: the hash of the value
+	Shown   string   `json:"shown,omitempty"` // changed: the value, cut, for was
+	Seen    []string `json:"seen,omitempty"`  // new: the ids seen, the latest last
+	Pending bool     `json:"pending,omitempty"`
+	Hit     bool     `json:"hit,omitempty"` // cross: the limit was crossed at the last confirmed look
+	PendHit bool     `json:"pend_hit,omitempty"`
+	Fails   int      `json:"fails,omitempty"`
+	Failed  bool     `json:"failed,omitempty"` // monitor.failed was written
+	Error   string   `json:"error,omitempty"`  // the last look's
+	Waiting string   `json:"waiting,omitempty"`
+	Checked int64    `json:"checked,omitempty"`
 	// The numbers its good looks read, the last ones: a block that reads
 	// it shows them (node_live.go).
 	Points []monitorPoint `json:"points,omitempty"`
@@ -460,7 +460,10 @@ func (c *core) readSource(ctx context.Context, s monitorSpec, timeout time.Durat
 }
 
 // lookChanged compares the value with the last one; true when a change
-// waits for its second look.
+// waits for its second look. The second look confirms if the value is
+// still not the last one, even if it is not the first look's either: a
+// value that keeps moving (a series with its evaluation time) is a
+// change, only a value back as it was is a flap.
 func (c *core) lookChanged(m *monitor, st *monitorLook, got any) bool {
 	text := valueText(got)
 	h := sha256.Sum256([]byte(text))
@@ -472,8 +475,8 @@ func (c *core) lookChanged(m *monitor, st *monitorLook, got any) bool {
 	case value == st.Value:
 		st.Pending = false // back as it was, or never moved: a flap
 		return false
-	case !st.Pending || st.PendValue != value:
-		st.Pending, st.PendValue = true, value // look again before telling
+	case !st.Pending:
+		st.Pending = true // look again before telling
 		return true
 	}
 	shown := truncate(text, monitorValueMax)
@@ -981,7 +984,7 @@ func registerMonitorTools(s *mcp.Server, c *core) {
 			}
 			return c.writeMonitor(in.Name, spec, c.turnTaint())
 		})
-	tool(s, "try_monitor", "Try a monitor once, without keeping or writing anything: call its tool (or read its resource), apply its path and say what it extracts (the value, the list's items and their ids, or the number), or why it cannot (not a free read, a path that finds nothing, not a list, not a number). Give the name of one of the user's monitors to check it works (and whether a look now would find a change since its last look), or a draft (server, tool or resource, args, cond, path, id, above, below, as write_monitor) to try before proposing it. Only a monitor that polls.",
+	tool(s, "try_monitor", "Try a monitor once, without keeping or writing anything: call its tool (or read its resource), apply its path and say what it extracts (the value, the list's items and their ids, or the number), or why it cannot (not a free read, a path that finds nothing, not a list, not a number). For changed, it looks twice and says moves_by_itself when the value moved between (a time or counter in the path: every look would tell a change). Give the name of one of the user's monitors to check it works (and whether a look now would find a change since its last look), or a draft (server, tool or resource, args, cond, path, id, above, below, as write_monitor) to try before proposing it. Only a monitor that polls.",
 		func(ctx context.Context, in tryMonitorIn) (map[string]any, error) {
 			return c.tryMonitorSaid(ctx, strings.TrimSpace(in.Name), monitorSpec{Way: wayPoll, Server: in.Server, Tool: in.Tool, Resource: in.Resource, Args: in.Args,
 				Cond: strings.TrimSpace(in.Cond), Path: in.Path, ID: in.ID, Above: in.Above, Below: in.Below})

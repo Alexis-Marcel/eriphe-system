@@ -169,6 +169,13 @@ func (c *core) tryMonitorSaid(ctx context.Context, name string, s monitorSpec) (
 		return map[string]any{"works": false, "error": err.Error()}, nil
 	}
 	out := map[string]any{"works": true, "extracts": t.Said}
+	if s.Cond != condNew && s.Cond != condCross {
+		// A value that moves by itself (a time, a counter) would be a
+		// change at every look: a second look shows it.
+		if t2, err := c.tryLook(ctx, s); err == nil && valueText(t2.Got) != valueText(t.Got) {
+			out["moves_by_itself"] = "two looks a moment apart extracted different values: every look would tell a change. Narrow the path to what means something (data.*.metric, not data with its timestamps)."
+		}
+	}
 	if m == nil || !m.Look.Known {
 		return out, nil
 	}
