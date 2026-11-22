@@ -143,8 +143,8 @@ func TestBrainWorkingNoteNotShown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if x.Said == nil || x.Said.Text != "The garage can take the car on Tuesday." {
-		t.Fatalf("orb = %+v", x)
+	if x.Answer != nil || x.Work != nil || x.Failed != nil {
+		t.Fatalf("the orb speaks unasked: %+v", x) // an event's turn: not the orb's
 	}
 
 	// A note and its tool call in one report, a turn that ends on a tool
@@ -166,6 +166,7 @@ func TestWebDraftStream(t *testing.T) {
 	tw.setup()
 	tw.c.store.addMessage(roleUser, "before", true)
 	last := tw.c.store.lastMessageSeq()
+	tw.c.turn.start(last, last, 0) // a turn that answers the user's message
 	tw.c.draft.set("stale draft", last-1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -226,8 +227,9 @@ func TestWebDraftStream(t *testing.T) {
 	next(func(x orbEvent) bool { return x.Work != nil && x.Work.Draft == "Writing this" }) // its first line, plain
 	// What brainWrote does when the message lands.
 	seq, _ := tw.c.store.addMessage(roleBrain, "Written.", true)
+	tw.c.markAnswer(int(seq))
 	tw.c.draft.set("", int(seq))
-	x := next(func(x orbEvent) bool { return x.Work == nil && x.Said != nil && x.Said.Text == "Written." })
+	x := next(func(x orbEvent) bool { return x.Work == nil && x.Answer != nil && x.Answer.Text == "Written." })
 	if x.Work != nil {
 		t.Fatalf("a draft beside its message: %+v", x)
 	}

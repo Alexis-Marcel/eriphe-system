@@ -5,8 +5,8 @@ import (
 	"strconv"
 )
 
-// When the brain fails, the workspace's orb says so where the turn
-// belonged (web_orb.go's failed): a message of its own role, which the brain never
+// When the brain fails a turn that answers the user, the workspace's orb
+// says so where the turn belonged (web_orb.go's failed): a message of its own role, which the brain never
 // reads, holding the raw error, never sent to the page. One stands for a
 // run of failures: a new one comes only after a message of mine or a
 // retry. While one is open, the orb does not show the brain as
@@ -26,7 +26,10 @@ func (c *core) brainFailed(raw, via string) {
 	if via == "turn" {
 		node = c.turn.talkNode() // shown where its answer would be (node_turn.go)
 	}
-	c.store.addNodeMessage(roleError, truncate(raw, 4000), via, node, true)
+	seq, err := c.store.addNodeMessage(roleError, truncate(raw, 4000), via, node, true)
+	if err == nil && via == "turn" {
+		c.markAnswer(int(seq)) // the orb says it when the turn answered the user (web_orb.go)
+	}
 }
 
 // brainErrorOpen is the error card the user has not answered yet, by a

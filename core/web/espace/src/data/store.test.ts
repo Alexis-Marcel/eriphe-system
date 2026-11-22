@@ -90,18 +90,11 @@ describe("the store", () => {
     expect(s.orb?.cards).toEqual(["view:1"]);
     expect(s.orb?.wait).toEqual({ card: 4, node: "b" });
     // words that are not words are dropped, never drawn
-    s = applyOrb(s, { said: { seq: "x", text: 1 } as unknown as OrbWords, work: { node: 3 as unknown as string } });
-    expect(s.orb?.said).toBeUndefined();
+    s = applyOrb(s, { answer: { seq: "x", text: 1 } as unknown as OrbWords, work: { node: 3 as unknown as string } });
+    expect(s.orb?.answer).toBeUndefined();
     expect(s.orb?.work).toEqual({ node: undefined, draft: undefined });
     // talking to another page keeps it
     expect(talkTo(openPage(s, "b", true), "b").orb).toBe(s.orb);
-  });
-
-  it("notes the node that began to wait, after the orb's newest words", () => {
-    let s = applyOrb(withGraph(), { asked: 2, answer: { seq: 3, node: "b", text: "Oui." }, said: { seq: 5, text: "Un outil de plus." } });
-    expect(s.call).toBeNull();
-    s = applyNodes(s, { nodes: [node("a1", { parent: "a", waits: true })] });
-    expect(s.call).toEqual({ id: "a1", n: 1, after: 5 });
   });
 
   it("holds the message sent until eriphe-core has it", () => {

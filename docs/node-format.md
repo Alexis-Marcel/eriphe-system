@@ -150,7 +150,7 @@ may say where its items are: `"items": {"path": "messages", "id": "id", "title":
 "detail": "from"}`, and how one is read in full (`open`, [Reading an item](#reading-an-item)). A source's name is lowercase letters, digits, `_` and `-`, 40 at most; it is not
 also a key of `data`, and `marks` is no source's or data key's name, nor `at` a source's (the
 snapshot's time). A source with `items` may say `"attention": true`: while it lists items, its
-node waits for the user (its bubble says « t'attend », as for a card); when it lists none, the
+node waits for the user (its bubble's violet halo and ring say so, as for a card); when it lists none, the
 node rests.
 
 Code reads the sources without a model, as the brain's free reads are: a source new or changed at

@@ -39,7 +39,7 @@ const onVisibility = () => {
 // forget remembers a thing as over: closed, or its while over.
 function forget(s: Show): void {
   closed = close(closed!, s);
-  met.set(s.key, -Infinity); // a call has nothing to keep: its while is over
+  met.set(s.key, -Infinity); // its while is over
   saveClosed(closed);
   bump();
 }
@@ -56,7 +56,6 @@ export function useOrb(): { show: Show; dismiss: () => void; crowded: boolean } 
   const feed = useGraph((s) => s.orb);
   const sent = useGraph((s) => s.sent);
   const nodes = useGraph((s) => s.nodes);
-  const call = useGraph((s) => s.call);
   const talk = useGraph((s) => s.talk);
   const [, tick] = useState(0);
   useEffect(() => {
@@ -70,7 +69,7 @@ export function useOrb(): { show: Show; dismiss: () => void; crowded: boolean } 
   }, []);
   closed ??= loadClosed();
   const now = clock();
-  const show = orbShow(feed, { now, sent, closed, met: (k) => met.get(k), nodes, call });
+  const show = orbShow(feed, { now, sent, closed, met: (k) => met.get(k), nodes });
   if (show.mode !== "rest" && !met.has(show.key)) met.set(show.key, now);
   const dismiss = () => forget(show);
 
@@ -110,8 +109,7 @@ export function orbText(s: Show, t: T, nodes: Record<string, GraphNode>): string
     case "wait":
       return s.words?.text ?? t("espace.orb.wait");
     case "answer":
-    case "said":
-      return s.call ? t("espace.orb.waits", title(s.call)) : (s.words?.text ?? "");
+      return s.words?.text ?? "";
   }
   return "";
 }

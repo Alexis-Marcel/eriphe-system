@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // An answer given at the home, no subject opened, more than a line: the
 // orb holds it whole, out in the space, and it does not go; words an event
-// made Eriphe say later wait behind it, never take its place; a reload
+// made Eriphe say later are never the orb's (it only answers); a reload
 // shows it again; a new message, or its ✕, moves on.
 // Played on the scenario's test core (TestEspaceScenario), after the
 // other files (its name sorts last): the scripted brain answers « mes
@@ -60,8 +60,8 @@ test("an answer given at home stays readable until you move on", async ({ page, 
   await expect(answer).toBeVisible();
   await expect(answer).toContainText("chaque recherche te demande ton accord");
 
-  // An event alone (the catalog changed): its words wait behind the
-  // answer, which stays.
+  // An event alone (the catalog changed): its words are not the orb's,
+  // the answer stays.
   expect((await request.post("/e2e/catalog")).ok()).toBe(true);
   await page.waitForTimeout(3000);
   await expect(answer).toContainText("Réglages → Outils → films.");
@@ -71,12 +71,12 @@ test("an answer given at home stays readable until you move on", async ({ page, 
   await atHome(page);
   await expect(answer).toContainText("Réglages → Outils → films.");
 
-  // Closed: the event's words come, and stay until closed too; the answer
-  // does not come back.
+  // Closed: the orb goes back to the bar, the event's words never come;
+  // the answer does not come back.
   await words.getByRole("button", { name: "Fermer" }).click();
   await expect(answer).toHaveCount(0);
-  await expect(said).toContainText("Un outil de plus : films.");
-  await words.getByRole("button", { name: "Fermer" }).click();
+  await expect(orb).toHaveClass(/docked/);
+  await page.waitForTimeout(1000);
   await expect(said).toHaveCount(0);
   await expect(orb).toHaveClass(/docked/);
   await atHome(page);

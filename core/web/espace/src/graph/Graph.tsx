@@ -8,7 +8,7 @@ import { Page } from "../page/Page";
 import { bigBox, bigRoom, boxAt, edgeMark, frameAll, frameAlone, framePages, pageMax, type Box, type Cam } from "./camera";
 import { edgePush, edgeStep, extent, Sim, type Pos, type Pt } from "./layout";
 import { codeOf, labelBox, plainTitle, radiusOf, titleOf, waits, weight } from "./model";
-import { ExtMark, UnaskedMark } from "./Title";
+import { UnaskedMark } from "./Title";
 
 // The graph (#633): every node a bubble, a subject bigger than its own,
 // their links; an open node is its page, drawn right where its bubble was,
@@ -582,7 +582,11 @@ function Edges({ cam, size, marks, onOpen }: { cam: [MotionValue<number>, Motion
 }
 
 // Bubble is one node: its core (a click opens its page; with ⌘ or shift,
-// beside the others), a ring for what runs or waits, its label.
+// beside the others), a ring for what runs or waits, its label. One sign
+// per meaning: a node that waits for the user says it by its violet halo
+// and ring alone (and to a screen reader, its core's words); its title is
+// drawn as any other, someone else's words or not: the sign that it may
+// be is its page's (« extérieur »), and its core's words (⚠).
 function Bubble(p: {
   x: GraphNode; title: string; said: string; d: number; r: number; at: Pt; open: boolean; focus: boolean; dim: boolean; held: boolean; light: number; waitsWord: string; standingWord: string;
   onGrab: (e: PtrEvent) => void; onOpen: (beside: boolean) => void;
@@ -593,7 +597,7 @@ function Bubble(p: {
   const R = r + (d === 0 ? 12 : 6);
   const opacity = p.open ? 0 : p.dim ? (d === 0 ? 0.42 : 0.28) : x.state === "done" ? Math.max(0.35, p.light * 0.8) : Math.max(0.5, p.light);
   const ring = R + (d === 0 ? 9 : 7);
-  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.state, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.titleExternal && "title-ext", x.unasked && "unasked"]
+  const cls = ["gr-node", `d${Math.min(d, 2)}`, x.state, yours && "yours", p.focus && "focus", p.held && "held", x.lifetime === "standing" && "standing", x.external && "external", x.unasked && "unasked"]
     .filter(Boolean)
     .join(" ");
   return (
@@ -625,18 +629,16 @@ function Bubble(p: {
         onPointerDown={p.onGrab}
         onClick={(e) => p.onOpen(e.metaKey || e.ctrlKey || e.shiftKey)}
         title={x.lifetime === "standing" ? p.standingWord : undefined}
-        aria-label={x.line && run ? `${p.said} : ${x.line}` : p.said}
+        aria-label={[x.line && run ? `${p.said} : ${x.line}` : p.said, yours && p.waitsWord].filter(Boolean).join(", ")}
       >
         {d === 0 ? <span className="gr-code">{codeOf(p.title)}</span> : x.state === "done" ? <span className="gr-glyph">✓</span> : null}
       </button>
       <span className="gr-label" style={{ marginTop: R + (d === 0 ? 14 : 8) }}>
         <b>
           {p.title}
-          {x.titleExternal && <ExtMark />}
           {x.unasked && <UnaskedMark />}
         </b>
         {x.line && run && !p.dim && <em className="runs">{x.line}</em>}
-        {yours && !run && <em className="yours">{p.waitsWord}</em>}
       </span>
     </motion.div>
   );

@@ -78,7 +78,11 @@ test("a call to approve says what it does to which items, on their rows", async 
   await relais.locator(".a2-inline-yes").click();
   await expect.poll(async () => (await (await request.get("/e2e/tools")).json()).trashed).toContain("perso:c2,c4");
   await expect(rows).toHaveCount(2);
-  await expect(page.locator(".orb-say")).toContainText("C'est fait", { timeout: 30_000 });
+  // What Eriphe says of it then answers an event (the yes), not a message
+  // of the user's: never the orb's (it only answers); the rows that left
+  // say it is done.
+  await page.waitForTimeout(4000);
+  await expect(page.locator(".orb-say")).not.toContainText("C'est fait");
   await shots(page, "3-done");
   expect(problems).toEqual([]);
 });

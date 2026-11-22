@@ -93,12 +93,12 @@ describe("the orb", () => {
     expect(orb().classList.contains("docked")).toBe(true);
   });
 
-  it("lets newer words replace its words, for good", async () => {
+  it("lets a newer answer replace its words, for good", async () => {
     await draw();
     await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." } });
     await wait(20_000);
     expect(say()?.textContent).toContain("C'est fait.");
-    await feed({ asked: 4, answer: { seq: 5, node: "sub", text: "C'est fait." }, said: { seq: 6, node: "mail", text: "Un mail est arrivé." } });
+    await feed({ asked: 6, answer: { seq: 7, node: "mail", text: "Un mail est arrivé." } });
     expect(say()?.textContent).toContain("Un mail est arrivé.");
     expect(orb().getAttribute("aria-label")).toBe("Eriphe, à côté de Urgent : la prod ⚠ : l'ouvrir");
     // closed, the words they replaced do not come back
@@ -106,13 +106,12 @@ describe("the orb", () => {
     expect(orb().classList.contains("docked")).toBe(true);
   });
 
-  it("keeps its answer when it was first read as an event's words", async () => {
+  it("stays in the bar when a subject begins to wait for the user, unasked", async () => {
     await draw();
-    // eriphe-core marks a message as the answer just after writing it: a
-    // feed may come in between
-    await feed({ asked: 4, said: { seq: 5, text: "Voici la vue de ton agenda." } });
-    await feed({ asked: 4, answer: { seq: 5, text: "Voici la vue de ton agenda." } });
-    expect(say()?.textContent).toContain("Voici la vue de ton agenda.");
+    await feed({ asked: 4 });
+    await act(async () => store.setState({ nodes: { ...store.getState().nodes, sub: { ...store.getState().nodes.sub, waits: true } } }));
+    expect(orb().classList.contains("docked")).toBe(true);
+    expect(say()?.textContent ?? "").not.toContain("t'attend");
   });
 
   it("moves on from its words when the user opens another subject", async () => {
@@ -158,11 +157,8 @@ describe("the orb", () => {
     expect(say()?.querySelector("strong")?.textContent).toBe("Seerr");
     await act(async () => vi.advanceTimersByTime(60_000));
     expect(say()?.textContent).toContain("Chaque recherche te demande ton accord.");
-    // an event's words wait behind it
-    await feed({ ...home, said: { seq: 43, text: "Un outil de plus : films." } });
-    expect(say()?.textContent).not.toContain("films");
     await act(async () => (say()!.querySelector("button.orb-x") as HTMLButtonElement).click());
-    expect(say()?.textContent).toContain("Un outil de plus : films.");
+    expect(orb().classList.contains("docked")).toBe(true);
     // closed for good: not even a reload brings it back
     act(() => root.unmount());
     resetOrb();

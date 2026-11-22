@@ -14,8 +14,8 @@ day », « Mails »), drawn larger; the work done for it grows around it as smal
 of the first article », « Style of the articles »). A dashed line joins bubbles that relate to each
 other.
 
-How a bubble looks says what it is, never chosen by an AI: what waits for you is brighter, its ring
-breathes and « waiting for you » shows under its name (out of view, a small arrow at the edge of
+How a bubble looks says what it is, never chosen by an AI, one sign for each meaning: what waits for
+you is brighter, with a violet halo and a breathing ring (out of view, a small arrow at the edge of
 the screen points to it: click it to open it), what is running turns and says where it is under its name (« 3 articles read »), what is
 done or old fades. A bubble whose title could be someone else's words (a mail's subject, say) is
 named **Outside content**: its own words are never shown as a title.
@@ -26,8 +26,9 @@ and the buttons that answer them are written there.
 
 ## Eriphe's orb
 
-Eriphe is the small blue orb resting in the bar. When it works or has something to tell you, it
-leaves the bar and goes **beside the subject** it is about, its bubble or its open page, where it
+Eriphe is the small blue orb resting in the bar. It only answers: it leaves the bar in reply to
+what you said to it, never on its own (what starts waiting for you without you asking, a mail a
+monitor found, shows on its bubble). Then it goes **beside the subject** it is about, its bubble or its open page, where it
 covers nothing (no bubble, no title, no page, not the bar), and follows it if it moves. When the
 screen is too full for that, it stays in the bar and says it in a line above it:
 
@@ -35,16 +36,14 @@ screen is too full for that, it stays in the bar and says it in a line above it:
 - **when it is done**, it says in a few lines what it did; **See more** opens the subject's page,
   where the rest is: the orb never repeats the page. After a few seconds it goes back to the bar;
   its ✕ sends it back sooner;
-- **when a card waits for your yes**, it sits beside that page, at the card's height, and **Show**
-  brings the card into view;
-- **when something starts waiting for you** without you asking (a mail a monitor found), it goes to
-  its bubble and says so;
+- **when its answer asks for your yes on a card**, it sits beside that page, at the card's height,
+  and **Show** brings the card into view;
 - **an answer about no subject** (« do you have access to my films? ») shows at the home, whole,
   in a free spot, and stays until you write again, open a subject or close it;
 - **if Eriphe could not answer**, it says so, with **Try again** and a link to Settings → Agents.
 
-Words Eriphe wrote after reading outside content carry a small amber dot, and a title that may be
-someone else's words shows as it is, marked « outside ». Click the orb to open the subject it is
+Words Eriphe wrote after reading outside content carry a small amber dot. A title that may be
+someone else's words shows as it is, never replaced; on its page it is marked « outside ». Click the orb to open the subject it is
 beside. With reduced motion set on your system, it goes at once instead of gliding; a screen reader
 reads what it says. On a phone it does not move: its words show as a line above the bar, naming
 the subject (« On Plan of the first article »).

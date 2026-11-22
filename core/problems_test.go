@@ -61,13 +61,14 @@ func TestExplainErrors(t *testing.T) {
 func TestBrainErrorLine(t *testing.T) {
 	tw := newTestWeb(t)
 	raw := "API Error: Connection refused — a firewall or proxy may be blocking it (ECONNREFUSED)"
-	tw.c.store.addMessage(roleUser, "Bonjour", true)
+	asked, _ := tw.c.store.addMessage(roleUser, "Bonjour", true)
+	tw.c.turn.start(int(asked), int(asked), 0)
 	tw.c.brainFailed(raw, "turn")
 	x, err := tw.w.orbFor("", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if x.Failed == nil || x.Failed.Node != "" || x.Said != nil || strings.Contains(fmtJSON(x), "ECONNREFUSED") {
+	if x.Failed == nil || x.Failed.Node != "" || x.Answer != nil || strings.Contains(fmtJSON(x), "ECONNREFUSED") {
 		t.Fatalf("orb = %+v", x)
 	}
 	for lang, want := range map[string]string{"fr": "n'a pas pu répondre.", "en": "could not answer."} {

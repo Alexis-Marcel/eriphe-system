@@ -5,31 +5,32 @@ import type { Sent } from "../data/store";
 // tested on their own (model.test.ts); Orb.tsx draws it in the graph,
 // Line.tsx on the phone.
 //
+// The orb only answers: it leaves the bar in reply to what the user said
+// to it, never unasked. What Eriphe does or says on its own (an event's
+// words, a subject that began to wait) is the graph's to show (a node's
+// ring), not the orb's; eriphe-core sends it only what answers the user.
+//
 // One orb, one thing at a time, by what matters most:
-//   1. work: Eriphe is at work (or the user just wrote): beside the
-//      subject it works on, else at the home; it shows it works, and the
-//      first line of what it writes;
+//   1. work: Eriphe is at work on the user's message (or the user just
+//      wrote): beside the subject it works on, else at the home; it shows
+//      it works, and the first line of what it writes;
 //   2. failed: it could not answer: where the turn belonged, with « Try
 //      again », until the user writes again or closes it;
-//   3. wait: a card waits for the user's yes in a subject: beside it,
-//      pointing at the card, until it is answered or closed;
+//   3. wait: its answer raised a card that waits for the user's yes in a
+//      subject: beside it, pointing at the card, until it is answered or
+//      closed;
 //   4. answer: its answer to the user's last message: at the home, an
 //      answer of more than a line, whole, held until the user moves on
 //      (writes again, opens a subject, closes it); beside a subject, a few
-//      lines (its page says the rest);
-//   5. said: its later words that answer no message of the user's (an
-//      event's), then a subject that began to wait for the user unasked
-//      (a monitor's mail, tools to review): « X t'attend ». They wait
-//      behind what comes before them, never replace it;
-//   6. rest: in the bar.
-// Words beside a subject (4, 5) stay until something else happens: newer
-// words replace them (the newest of 4 and 5 shows), or the user moves on
-// (opens another subject, writes, closes them); else they go after
-// WORDS_MS of the page being seen.
+//      lines (its page says the rest), until something else happens: newer
+//      words replace them, or the user moves on (opens another subject,
+//      writes, closes them); else they go after WORDS_MS of the page being
+//      seen;
+//   5. rest: in the bar.
 // What the user closed, or saw for its while, is not shown again (Closed,
 // kept in the browser).
 
-export type Mode = "rest" | "work" | "failed" | "wait" | "answer" | "said";
+export type Mode = "rest" | "work" | "failed" | "wait" | "answer";
 
 export type Show = {
   mode: Mode;
@@ -38,7 +39,6 @@ export type Show = {
   words?: OrbWords; // Eriphe's words
   draft?: string; // the first line of what it writes
   card?: number; // the card waiting
-  call?: string; // a node that began to wait: say it
   pinned?: boolean; // stays until the user moves on
 };
 
@@ -51,10 +51,6 @@ export const WORDS_MS = 120_000;
 // failures (their seq). Seqs and ids only grow.
 export type Closed = { answer: number; seen: number; wait: number; failed: number };
 
-// Call is a node that began to wait for the user, unasked, the n-th; after:
-// the newest of Eriphe's words then (their seq), older than it.
-export type Call = { id: string; n: number; after: number };
-
 export type Mind = {
   now: number; // the orb's clock: how long the page was seen
 
@@ -62,13 +58,9 @@ export type Mind = {
   closed: Closed;
   met: (key: string) => number | undefined; // when it was first shown, on that clock
   nodes: Record<string, GraphNode>;
-  call: Call | null;
 };
 
-// wordsKey is the key of Eriphe's words, by their message alone: the same
-// message, first read as an event's words then as the answer (eriphe-core
-// marks it an answer just after writing it), is the same thing shown, not
-// newer words that replace it.
+// wordsKey is the key of Eriphe's words, by their message alone.
 const wordsKey = (seq: number) => `words:${seq}`;
 
 export function orbShow(x: OrbFeed | null, m: Mind): Show {
@@ -91,24 +83,9 @@ export function orbShow(x: OrbFeed | null, m: Mind): Show {
   }
   const home = !!a && !!a.whole && !a.node;
   if (a && home && a.seq > m.closed.answer) return { mode: "answer", node: null, key: answerKey, words: a, pinned: true };
-  // Beside a subject, the newest words: an answer, an event's words (newer
-  // than the answer), a call (newer than the words it came after).
-  let show: Show = { mode: "rest", node: null, key: "rest" };
-  let newest = -1;
-  if (a && !home && answerFresh) {
-    show = { mode: "answer", node: known(a.node), key: answerKey, words: a };
-    newest = a.seq;
-  }
-  const s = x?.said;
-  if (s && s.seq > m.closed.seen && (!a || s.seq > a.seq) && fresh(wordsKey(s.seq))) {
-    show = { mode: "said", node: known(s.node), key: wordsKey(s.seq), words: s };
-    newest = s.seq;
-  }
-  if (m.call && known(m.call.id) && m.call.after >= newest) {
-    const key = `call:${m.call.id}:${m.call.n}`;
-    if (fresh(key)) show = { mode: "said", node: m.call.id, key, call: m.call.id };
-  }
-  return show;
+  // Beside a subject, its answer, a few lines.
+  if (a && !home && answerFresh) return { mode: "answer", node: known(a.node), key: answerKey, words: a };
+  return { mode: "rest", node: null, key: "rest" };
 }
 
 // expires is how long the shown thing stays from when it was first shown;
@@ -119,7 +96,7 @@ export function expires(s: Show): number | null {
 
 // words tells whether it shows Eriphe's words beside a subject: those
 // that stay until something else happens (not the pinned ones).
-export const words = (s: Show) => (s.mode === "answer" || s.mode === "said") && !s.pinned;
+export const words = (s: Show) => s.mode === "answer" && !s.pinned;
 
 // replaced tells whether the words shown (was) are over now that
 // something else shows (now): newer words, or Eriphe at work (the user
@@ -127,10 +104,10 @@ export const words = (s: Show) => (s.mode === "answer" || s.mode === "said") && 
 export const replaced = (was: Show, now: Show) => words(was) && was.key !== now.key && (now.mode === "work" || words(now));
 
 // leaves tells whether the bar talking to another page (talk) moves on
-// from the words shown: words about another subject, or a call to this
-// one. Words about the subject just opened (by the user, or by Eriphe for
-// what was asked at the home) stay beside its page.
-export const leaves = (s: Show, talk: string | null) => words(s) && (s.call ? s.call === talk : s.node !== talk);
+// from the words shown: words about another subject. Words about the
+// subject just opened (by the user, or by Eriphe for what was asked at the
+// home) stay beside its page.
+export const leaves = (s: Show, talk: string | null) => words(s) && s.node !== talk;
 
 // close is what the user closing it (or its while over) remembers.
 export function close(c: Closed, s: Show): Closed {
@@ -141,8 +118,6 @@ export function close(c: Closed, s: Show): Closed {
       return { ...c, wait: Math.max(c.wait, s.card ?? 0) };
     case "answer":
       return s.pinned ? { ...c, answer: Math.max(c.answer, s.words!.seq) } : { ...c, seen: Math.max(c.seen, s.words!.seq) };
-    case "said":
-      return s.words ? { ...c, seen: Math.max(c.seen, s.words.seq) } : c;
   }
   return c;
 }

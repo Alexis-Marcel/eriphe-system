@@ -48,8 +48,11 @@ test("the steps of the scenario", async ({ page, request }) => {
   const bubble = (title: string) => page.locator(`.gr-node:not(.external) .gr-core[aria-label^="${title}"]`);
   const pageOf = (title: string) => page.locator(`article.pg[aria-label="${title}"]`);
 
-  // 1. Home.
-  await expect(said).toContainText("Bonjour. Rien ne t'attend ce matin.");
+  // 1. Home. Eriphe's greeting answers nothing the user said: the orb
+  // stays in the bar, silent (it only answers).
+  await expect(page.locator(".gr-node .gr-core").first()).toBeVisible();
+  await expect(orb).toHaveClass(/docked/);
+  await expect(said).toHaveCount(0);
   await expect(page.locator("article.pg")).toHaveCount(0);
 
   // 2. One call, no node opened; it is logged in « Ma journée »'s trace.
@@ -106,25 +109,30 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(pageOf("Ma journée")).toContainText("Dentiste");
   await expect(page.locator(".gr-node")).toHaveCount(before);
 
-  // 6. A monitor opens a node: an urgent mail. Its bubble says it waits
-  // for the user, and its title, someone else's words, shows as it is,
-  // in amber with its ⚠: never replaced, never passing for a trusted one.
+  // 6. A monitor opens a node: an urgent mail. One sign per meaning: its
+  // bubble says it waits for the user by its violet halo and ring alone,
+  // no word under its title (its core says it to a screen reader); its
+  // title, someone else's words, shows as it is, never replaced, drawn as
+  // any other title (its page says « extérieur »; its core's words, ⚠).
   const mail = (await (await request.post("/e2e/mail")).json()).id as string;
   const waiting = page.locator(`.gr-node.yours[data-node="${mail}"]`);
   await expect(waiting).toHaveCount(1);
-  await expect(waiting.locator(".gr-label em.yours")).toHaveText("t'attend");
-  // Unasked, it began to wait: newer than the last answer, it replaces
-  // it; the orb goes beside it and says so, its title marked as someone
-  // else's words.
-  await expect(words).toHaveClass(/said/);
-  await expect(words).toContainText(`${external} t'attend.`);
-  await orbBeside(page, waiting.locator(".gr-core"), waiting.locator(".gr-label"));
-  await shot(page, "orb-announce");
-  await shot(page, "waiting");
-  await expect(waiting).toHaveClass(/title-ext/);
+  await expect(waiting.locator(".gr-halo")).toHaveCount(1);
+  await expect(waiting.locator(".gr-ring-yours")).toHaveCount(1);
+  await expect(waiting.locator(".gr-label em")).toHaveCount(0);
+  await expect(waiting.locator(".gr-core")).toHaveAttribute("aria-label", `${external}, t'attend`);
   await expect(waiting.locator(".gr-label b")).toContainText(mailTitle);
-  await expect(waiting.locator(".gr-label .ext-mark")).toHaveAttribute("title", "Titre écrit après une lecture extérieure");
-  await expect(waiting.locator(".gr-core")).toHaveAttribute("aria-label", external);
+  await expect(waiting.locator(".gr-label .ext-mark")).toHaveCount(0);
+  const plainColour = await page.locator(".gr-node.d0 .gr-label b").first().evaluate((el) => getComputedStyle(el).color);
+  const mailColour = await waiting.locator(".gr-label b").evaluate((el) => getComputedStyle(el).color);
+  const childColour = await page.locator(".gr-node.d1:not(.external) .gr-label b").first().evaluate((el) => getComputedStyle(el).color);
+  expect([plainColour, childColour]).toContain(mailColour);
+  // Unasked, it began to wait: the orb only answers, it does not go to
+  // it nor say it; its answer beside « Substack » stays.
+  await page.waitForTimeout(1500);
+  await expect(said).toContainText("Deux rendez-vous");
+  await expect(words).not.toContainText("t'attend");
+  await shot(page, "waiting");
   await expect(page.getByText("Contenu extérieur")).toHaveCount(0);
   // A skill opened it, not the user: a small ↯ says so on its bubble.
   await expect(waiting).toHaveClass(/unasked/);
