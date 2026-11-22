@@ -292,6 +292,16 @@ func (t *brainTurn) goOn(from, to, eventSeq int, carried []string) {
 	t.save()
 }
 
+// answersUser makes the turn gone on over events answer the user: one of
+// them tells what came of their Oui or Non on a card (userActKey). It
+// keeps its taint and its context: only who it answers changes.
+func (t *brainTurn) answersUser() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.asked = true
+	t.save()
+}
+
 func (t *brainTurn) taint(why string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

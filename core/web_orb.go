@@ -9,7 +9,9 @@ import (
 
 // Eriphe's orb: the workspace shows Eriphe as a small blue orb that lives
 // in the graph. It rests in the bar, and leaves it only in reply to what
-// the user said to it: while Eriphe works on their message, it goes beside
+// the user said to it (a message, or their Oui or Non on a card: what came
+// of it is told to Eriphe as an event that answers the user, userActKey):
+// while Eriphe works on their message, it goes beside
 // the subject it works on and shows it; when Eriphe has answered, it goes
 // beside the subject its answer belongs to, or to a free spot of the home
 // when it belongs to none, and says it in a few lines; when that turn
@@ -108,7 +110,9 @@ type orbWait struct {
 // orbFor is the orb's event: Eriphe's answer to the user, its work on
 // their message (thinking: the brain is at work; draft: what it is
 // writing), the cards and the messages that wait. Its words and errors in
-// a turn that answers no message of the user's are not the orb's.
+// a turn that answers no act of the user's (a message, or a card's Oui or
+// Non: userActKey) are not the orb's. A card's decision moves nothing by
+// itself: only what Eriphe says of it replaces what the orb says.
 func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 	c, s := w.c, w.c.store
 	from := s.lastAsked()
@@ -122,17 +126,23 @@ func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 		return orbEvent{}, err
 	}
 	var answer []Message
+	turn := 0 // the act the answer collected replies to
 	for _, m := range msgs {
-		switch {
-		case answeredTo(s.get(answerKey(m.Seq))) < from:
+		mark := answeredTo(s.get(answerKey(m.Seq)))
+		if mark < from {
 			// An event's words, a failure of a turn that answered none,
 			// or the answer to an earlier message of the user's (written
 			// after this one was sent, while it waited): not the reply to
-			// the user's last message.
-		case m.Role == roleError:
+			// the user's last message, nor to an act of theirs since.
+			continue
+		}
+		if mark > turn {
+			answer, x.Failed, turn = nil, nil, mark // the reply to a later act (a card's Oui) replaces it
+		}
+		if m.Role == roleError {
 			x.Failed = &orbFailed{Seq: m.Seq, Node: m.Node}
 			answer = nil
-		default:
+		} else {
 			x.Failed = nil
 			answer = append(answer, m)
 		}
@@ -145,7 +155,18 @@ func (w *web) orbFor(draft string, thinking bool) (orbEvent, error) {
 		answer, x.Failed = nil, nil
 	}
 	x.Answer = s.orbWordsOf(answer)
-	if line, _ := ackLine(draft); (thinking || line != "") && c.turnAnswersUser() {
+	// At work on the user's message: as soon as it thinks. On a card's
+	// decision only once it writes words: Eriphe may have nothing to say
+	// of it (quietMark), and what the orb says stays.
+	line, _ := ackLine(draft)
+	working := thinking
+	if s.lastActed() > from {
+		working = false
+		if strings.HasPrefix(quietMark, line) {
+			line = ""
+		}
+	}
+	if (working || line != "") && c.turnAnswersUser() {
 		x.Work = &orbWork{Node: c.workNode(), Draft: line}
 	}
 	x.Wait = c.newestWait(from)
@@ -160,6 +181,50 @@ func (s *Store) lastAsked() int {
 	var from int
 	s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE role = ? AND via != ? AND delivered = 1`, roleUser, firstRunVia).Scan(&from)
 	return from
+}
+
+// userActs are the user's own acts among the messages, as SQL: their
+// messages (not the first run's aside), and the events that tell the
+// brain what came of their Oui or Non on a card (userActKey). Its one
+// parameter is firstRunVia.
+const userActs = `(role = 'user' AND via != ? OR role = 'event' AND 'user_act:' || seq IN (SELECT key FROM kv))`
+
+// lastActed is the seq of the user's last act Eriphe read: their message,
+// or the event of their Oui or Non on a card; 0 if none. Past lastAsked,
+// the last turn answers a card's decision.
+func (s *Store) lastActed() int {
+	var from int
+	s.db.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM messages WHERE delivered = 1 AND `+userActs, firstRunVia).Scan(&from)
+	return from
+}
+
+// userActKey marks an event that tells the brain what came of the user's
+// own act, their Oui or Non on a card (userActEvent): the turn that reads
+// it answers the user (deliverConversation), and what it says, or its
+// failure, is the orb's, as a reply to a message is, and replaces what
+// the orb said before; the decision alone replaces nothing.
+func userActKey(seq int) string { return fmt.Sprintf("user_act:%d", seq) }
+
+// isUserAct tells such an event.
+func (s *Store) isUserAct(m Message) bool {
+	return m.Role == roleEvent && s.get(userActKey(m.Seq)) != ""
+}
+
+// userActEvent tells the brain, as an event of node, what came of the
+// user's Oui or Non on a card; taint is what its words make the turn
+// that reads it. Written delivered, its marks set, then handed to the
+// brain: it is never delivered before its marks.
+func (c *core) userActEvent(text, node, taint string) {
+	seq, err := c.store.addNodeMessage(roleEvent, text, "", node, true)
+	if err != nil {
+		return
+	}
+	c.store.set(userActKey(int(seq)), "1")
+	if taint != "" {
+		c.store.set(taintKey(int(seq)), taint)
+	}
+	c.store.undeliver(int(seq), int(seq))
+	c.ping()
 }
 
 // placeOf is where a message of Eriphe's belongs: its node, else the node

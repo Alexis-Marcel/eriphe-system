@@ -304,6 +304,9 @@ func (c *core) deliverConversation(ctx context.Context, a Assistant, t *TaskRow)
 		c.turn.start(msgs[0].Seq, msgs[len(msgs)-1].Seq, t.LastSeq)
 	} else {
 		c.turn.goOn(msgs[0].Seq, msgs[len(msgs)-1].Seq, t.LastSeq, c.turnTaint())
+		if slices.ContainsFunc(msgs, c.store.isUserAct) {
+			c.turn.answersUser() // what came of my Oui or Non on a card: its reply answers me (web_orb.go)
+		}
 	}
 	for _, m := range msgs {
 		if why := c.store.get(taintKey(m.Seq)); why != "" {

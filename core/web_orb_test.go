@@ -333,3 +333,101 @@ func TestOrbCardAsked(t *testing.T) {
 		t.Error("a call the brain asked a yes for, answering the user, is not the orb's")
 	}
 }
+
+// The user's Oui or Non on a card is the user talking to Eriphe: what
+// came of it reaches the brain as an event, and the turn that reads it
+// answers them. Its words, its work and its failure are the orb's, as a
+// reply to a message is; an event of Eriphe's own (a monitor's) still is
+// not.
+func TestOrbAnswersTheUsersYes(t *testing.T) {
+	c, _ := testMemoryCore(t)
+	setBrain(c, &BrainConfig{Agent: "small"})
+	w := &web{c: c}
+	deliver := func() {
+		t.Helper()
+		c.store.updateTask("t-brain", map[string]any{"state": stateIdle})
+		if err := tendBrain(context.Background(), c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	says := func(text string) int {
+		t.Helper()
+		seq, _ := c.store.addMessage(roleBrain, text, true)
+		c.markAnswer(int(seq))
+		return int(seq)
+	}
+	asked, _ := c.store.addMessage(roleUser, "Mets ces 2 mails à la corbeille.", false)
+	deliver()
+	says("Il me faut ton oui ici.")
+	if x, _ := w.orbFor("", false); x.Answer == nil || x.Answer.Text != "Il me faut ton oui ici." {
+		t.Fatalf("the answer to the message: %+v", x.Answer)
+	}
+
+	// A monitor's event: its words are not the orb's.
+	c.store.addMessage(roleEvent, "Un nouveau mail.", false)
+	deliver()
+	if c.turnAnswersUser() {
+		t.Fatal("an event's turn answers the user")
+	}
+	says("Tu as un nouveau mail.")
+	if x, _ := w.orbFor("", false); x.Answer == nil || x.Answer.Text != "Il me faut ton oui ici." {
+		t.Fatalf("an event's words taken for an answer: %+v", x.Answer)
+	}
+
+	// Oui: the decision alone moves nothing, until Eriphe says what came
+	// of it; Asked still names their last message.
+	c.callToBrain(accessQuestion{ID: 7}, "Sam a dit oui : mail/trash est exécutée.", "")
+	if x, _ := w.orbFor("", false); x.Answer == nil || x.Answer.Text != "Il me faut ton oui ici." || x.Asked != int(asked) {
+		t.Fatalf("after the yes, before Eriphe read it: %+v", x)
+	}
+	deliver()
+	if !c.turnAnswersUser() {
+		t.Fatal("the turn that reads the yes does not answer the user")
+	}
+	// At work on it once it writes, not on thinking alone, nor on « [rien] »
+	// (it may have nothing to say of it).
+	for _, draft := range []string{"", "[ri", "[rien]"} {
+		if x, _ := w.orbFor(draft, true); x.Work != nil || x.Answer == nil {
+			t.Errorf("draft %q: at work on a decision before a word: %+v", draft, x)
+		}
+	}
+	if x, _ := w.orbFor("Je regarde", true); x.Work == nil || x.Work.Draft != "Je regarde" {
+		t.Errorf("not at work on the yes: %+v", x.Work)
+	}
+	done := says("C'est fait : les 2 mails sont à la corbeille.")
+	x, _ := w.orbFor("", false)
+	if x.Answer == nil || x.Answer.Seq != done || x.Answer.Text != "C'est fait : les 2 mails sont à la corbeille." || x.Asked != int(asked) {
+		t.Fatalf("what came of the yes: %+v", x)
+	}
+
+	// A yes whose call failed: Eriphe says so, in the orb as its answer.
+	c.callToBrain(accessQuestion{ID: 8}, "Sam a dit oui, mais mail/trash n'a pas pu être exécutée : cet outil n'est plus là.", "")
+	deliver()
+	says("Je n'ai pas pu : l'outil de mail n'est plus là.")
+	if x, _ = w.orbFor("", false); x.Failed != nil || x.Answer == nil || x.Answer.Text != "Je n'ai pas pu : l'outil de mail n'est plus là." {
+		t.Fatalf("a failed call said: %+v", x)
+	}
+	// And the turn on a yes fails: said as a failure.
+	c.callToBrain(accessQuestion{ID: 10}, "Sam a dit oui : mail/trash est exécutée.", "")
+	deliver()
+	c.brainFailed("turn broke", "turn")
+	if x, _ = w.orbFor("", false); x.Failed == nil || x.Answer != nil {
+		t.Fatalf("the failure of the turn on a yes: %+v", x)
+	}
+
+	// A Non Eriphe answers: its words are the orb's too.
+	c.callToBrain(accessQuestion{ID: 9}, "Sam a refusé sur la carte : mail/trash n'est pas exécutée.", "")
+	deliver()
+	says("D'accord, je les laisse.")
+	if x, _ = w.orbFor("", false); x.Failed != nil || x.Answer == nil || x.Answer.Text != "D'accord, je les laisse." {
+		t.Fatalf("what Eriphe said of the no: %+v", x)
+	}
+
+	// An event after it: its turn answers nobody, the answer stays.
+	c.store.addMessage(roleEvent, "Encore un mail.", false)
+	deliver()
+	says("Encore un.")
+	if x, _ = w.orbFor("", false); x.Answer == nil || x.Answer.Text != "D'accord, je les laisse." || c.turnAnswersUser() {
+		t.Fatalf("an event after the no: %+v", x.Answer)
+	}
+}

@@ -155,6 +155,60 @@ func TestNetFilesWhatTheBarCuts(t *testing.T) {
 	}
 }
 
+// What Eriphe says unasked about a node (an event's turn) the orb never
+// says: its node's trace keeps it, a line as it is, never as its doc. A line of a turn that
+// answers the user (the orb says it), or of the user's Oui on a card, is
+// not filed.
+func TestNetFilesUnaskedWordsInTheirNode(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		body  string
+		event func(x *core, id string) int64
+		filed bool
+	}{
+		{"event", "Ce qu'on suit.\n", func(x *core, id string) int64 {
+			seq, _ := x.store.addNodeMessage(roleEvent, "Un nouveau mail.", "", id, false)
+			return seq
+		}, true},
+		{"event, no doc", "", func(x *core, id string) int64 {
+			seq, _ := x.store.addNodeMessage(roleEvent, "Un nouveau mail.", "", id, false)
+			return seq
+		}, true},
+		{"yes", "Ce qu'on suit.\n", func(x *core, id string) int64 {
+			seq, _ := x.store.addNodeMessage(roleEvent, "Sam a dit oui : mail/trash est exécutée.", "", id, false)
+			x.store.set(userActKey(int(seq)), "1")
+			return seq
+		}, false},
+	} {
+		x, report, _ := brainReports(t)
+		openGraph(t, x)
+		d, err := x.nodes.Create(nodestore.New{Title: "Mes mails", Body: c.body, Author: byBrain})
+		if err != nil {
+			t.Fatal(err)
+		}
+		id := d.Node.Meta.ID
+		seq := c.event(x, id)
+		x.store.markDelivered(int(seq))
+		x.turn.goOn(int(seq), int(seq), 0, nil)
+		if x.store.isUserAct(Message{Seq: int(seq), Role: roleEvent}) {
+			x.turn.answersUser()
+		}
+		x.turn.answersIn(id)
+		line := "La banque t'écrit pour ta carte."
+		report("t-brain", deviceReport{State: stateIdle, Events: []EventRow{
+			{Seq: 1, Time: time.Now(), Type: "text", Data: map[string]any{"text": line}},
+			{Seq: 2, Time: time.Now(), Type: "turn_end", Data: map[string]any{"subtype": "success", "result": line}}}})
+		m := lastBrainMessage(t, x)
+		trace, _ := x.nodes.Trace(id)
+		if (m.Filed == id) != c.filed || strings.Contains(string(trace), "La banque") != c.filed {
+			t.Errorf("%s: filed %q, trace %q", c.name, m.Filed, trace)
+		}
+		if got, _ := x.nodes.Read(id, 0); got.Node.Text() != c.body {
+			t.Errorf("%s: the doc was replaced: %q", c.name, got.Node.Text())
+		}
+	}
+}
+
 // In a tainted turn the node is external, and its title is a neutral one
 // when the request may not be the user's words.
 func TestNetTaintedTurn(t *testing.T) {
