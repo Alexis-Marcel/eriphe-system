@@ -1125,6 +1125,7 @@ func (c *core) launchFinal(ctx context.Context, parent string, r runRequest, n u
 		return
 	}
 	if err != nil {
+		c.setWork(parent, map[string]any{"checks": max(0, w.Checks-1)}) // a check that never ran is not one
 		c.finalNotStarted(w, err)
 		return
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Alexis-Marcel/eriphe-system/core/nodestore"
@@ -66,6 +67,56 @@ func TestOpenStepsNoOrphans(t *testing.T) {
 	// The step made runs: its work is set up for it.
 	if w, ok := c.work(parent); !ok || w.State != workRunning {
 		t.Errorf("no running work for the step made: %+v %v", w, ok)
+	}
+}
+
+// A claimed start refused when it runs blocks the step and wakes the
+// brain once, and leaves no claim; a retry starts a new task through a
+// claim, and runs; a final check refused fails the work and counts no
+// check.
+func TestClaimedStartRefused(t *testing.T) {
+	c := graphCore(t)
+	ctx := context.Background()
+	refuse := map[string]bool{}
+	runStepTask = func(c *core, ctx context.Context, r runRequest) (*TaskRow, error) {
+		if refuse[r.Title] {
+			return nil, errors.New("no device can run it")
+		}
+		return c.runTask(ctx, r)
+	}
+	t.Cleanup(func() { runStepTask = (*core).runTask })
+
+	parent := workNode(t, c, "Le site est en ligne.")
+	refuse["A"] = true
+	ids, err := c.openSteps(ctx, parent, []stepSpec{{Key: "a", Title: "A", Prompt: "Fais A."}}, 0, stepOpener{author: byBrain})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := ids["a"]
+	if st := stepNow(t, c, a); st.Status != stepBlocked || st.Task != "" || !strings.Contains(st.Note, "no device") {
+		t.Fatalf("a refused start: %+v", st)
+	}
+	if len(wakes(c)) != 1 || c.claimed(a) {
+		t.Fatalf("wakes %q, claimed %v", wakes(c), c.claimed(a))
+	}
+
+	refuse["A"] = false
+	if _, err := c.settleStep(ctx, parent, a, settleRetry, "Avec un autre appareil."); err != nil {
+		t.Fatal(err)
+	}
+	st := stepNow(t, c, a)
+	if st.Status != stepRunning || st.Task == "" || st.Tries != 1 {
+		t.Fatalf("retried: %+v", st)
+	}
+
+	refuse[tr(c.userLang(), "step.final.title")] = true
+	endStepTurn(t, c, st.Task, "A fait", "done")
+	w, _ := c.work(parent)
+	if w.State != workFailed || w.Checks != 0 || w.Final != "" || c.claimed(finalKey(parent)) {
+		t.Fatalf("a refused final check: %+v", w)
+	}
+	if all := wakes(c); len(all) != 2 || !strings.Contains(all[1], "contrôle final") {
+		t.Errorf("wakes %q", all)
 	}
 }
 
