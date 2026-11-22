@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { rest, still } from "./rest";
 
 // The epic's acceptance scenario (#625), its steps played in the
 // workspace against the test core of TestEspaceScenario: faked tools, a
@@ -10,6 +11,11 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 // at the home when they belong to none, in a few lines; what Eriphe says
 // at length, its questions and their buttons are in the subject's
 // document.
+//
+// Where things sit (bubbles apart, pages apart, the orb beside its
+// subject) is the layout's, the camera's and the orb's unit tests
+// (src/graph/layout.test.ts, camera.test.ts, src/orb/model.test.ts); here
+// it is checked once or twice, where the real sizes of the page meet them.
 
 const password = "correct horse battery"; // testPassword, core/web_test.go
 // A node someone else's words titled (the urgent mail): its title is shown
@@ -64,7 +70,6 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(said).toContainText("C'est allumé.");
   await expect(orb).not.toHaveClass(/docked/);
   await expect(words).toHaveClass(/answer/);
-  await orbClear(page);
   await shot(page, "orb-home");
   await expect(barButtons).toHaveCount(0);
   await words.getByRole("button", { name: "Fermer" }).click();
@@ -91,7 +96,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await say("Analyse le style des articles qui marchent, puis propose-moi un plan du premier article.");
   // A turn on a subject: the orb beside its page, with what it did.
   await expect(said).toContainText("Je lance l'analyse du style");
-  await orbBeside(page, pageOf("Substack"));
+  await expect(orb).not.toHaveClass(/docked/);
   await shot(page, "orb-subject");
   await expect(bubble("Style des articles")).toBeVisible();
   await expect(bubble("Plan du premier article")).toBeVisible();
@@ -152,7 +157,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(mailPage.locator(".pg-kicker .pg-badge.warn")).toHaveCount(0);
   // Measured once the page has settled; on the title's line means the
   // badge's middle is within the title's height (fonts differ by system).
-  await settledBox(mailPage);
+  await still(mailPage);
   const titleBox = (await head.locator(".title-ext").boundingBox())!;
   const onTitleLine = async (sel: string) => {
     const b = (await head.locator(sel).boundingBox())!;
@@ -189,10 +194,8 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(mailPage).toContainText("Je regarde dans l'heure.");
   await expect(pageOf("Production")).toBeVisible();
   await expect(pageOf("Production")).toContainText("42");
-  // A tall page, a table in it, beside the mail's: neither on the other,
-  // the new one whole on screen, none under the bar.
+  // A tall page, a table in it, beside the mail's.
   await expect(pageOf("Production").locator("table")).toBeVisible();
-  await expectApart(page, [mailPage, pageOf("Production")]);
   await expect(page.locator(".gr-node.running .gr-core[aria-label^=\"Recherche sur l'erreur\"]")).toBeVisible();
   const card = mailPage.locator(".pg-foot");
   await expect(card).toBeVisible();
@@ -314,7 +317,6 @@ test("the steps of the scenario", async ({ page, request }) => {
   // The view's card waits for the user's yes: the orb points at it.
   await expect(said).toContainText("Voici la vue");
   await expect(words).toHaveClass(/wait/);
-  await orbBeside(page, watch);
   // The document says where things stand: the questions and their
   // buttons gone, the choices written, the card placed under them.
   await expect(defaults).toHaveCount(0);
@@ -344,7 +346,7 @@ test("the steps of the scenario", async ({ page, request }) => {
   // Opened beside the subject, the view's page takes free room next to
   // it: the two never overlap, the new one is framed whole, its head on
   // screen, and no page goes under the bar.
-  await settledBox(pageOf("Mes mails"));
+  await still(pageOf("Mes mails"));
   await shot(page, "view-beside", false);
   await expectApart(page, [watch, pageOf("Mes mails")]);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -352,10 +354,9 @@ test("the steps of the scenario", async ({ page, request }) => {
   await expect(viewCard.locator(".a2-proposal-kicker")).toContainText("Validé");
   await expect(viewCard.getByRole("button", { name: "Oui" })).toHaveCount(0);
   // Its pages closed, the view's bubble, made on the subject, sits beside
-  // it: no two bubbles on each other. Dropped right on the view, the
-  // subject stays there and the view gives way.
+  // it. Dropped right on the view, the subject stays there and the view
+  // gives way.
   await home(page);
-  await expectBubblesApart(page);
   const mine = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Mes mails"]') });
   const watching = page.locator(".gr-node:not(.external)", { has: page.locator('.gr-core[aria-label^="Garder un œil sur mes mails"]') });
   await settled(mine);
@@ -365,7 +366,6 @@ test("the steps of the scenario", async ({ page, request }) => {
   expect(Math.hypot(dropped[0] - onView[0], dropped[1] - onView[1])).toBeLessThan(40);
   const aside = await settled(watching);
   expect(Math.hypot(aside[0] - onView[0], aside[1] - onView[1])).toBeGreaterThan(10);
-  await expectBubblesApart(page);
   await shot(page, "graph-apart");
 
   // 14b. The view's skill, woken once per mail, proposed to archive
@@ -424,7 +424,7 @@ test("the steps of the scenario", async ({ page, request }) => {
     await expect.poll(() => bg(non)).toBe(card);
   }
   await page.evaluate(() => (document.documentElement.dataset.theme = "light"));
-  await settledBox(view);
+  await still(view);
   await shot(page, "chosen-calls-pending");
   await ticks.nth(1).uncheck();
   await batch.getByRole("button", { name: "Archiver 2 mails" }).click();
@@ -640,7 +640,7 @@ async function home(page: Page) {
     // once they are at rest (the layout and the camera ease them into
     // place), the page the bar talks to, else one the camera frames:
     // its close button on screen
-    for (let i = 0; i < n; i++) await settledBox(pages.nth(i));
+    for (let i = 0; i < n; i++) await still(pages.nth(i));
     let x: Locator | null = null;
     let left = false; // a page that was fading out when counted is gone
     await expect
@@ -677,38 +677,13 @@ async function openMail(page: Page, id: string) {
   await expect(page.locator(`article.pg[aria-label="${external}"]`)).toBeVisible();
 }
 
-// settledBox waits until a page stopped moving: the graph at rest and the
-// camera still, as the viewport says (data-still); on a phone, where the
-// graph is a list, until its box stops moving. One that left meanwhile (a
-// page still fading out when it was counted) is settled.
-async function settledBox(el: Locator): Promise<void> {
-  if (await rest(el.page())) return;
-  const box = () => el.boundingBox({ timeout: 2_000 }).catch(() => null);
-  let last = await box();
-  for (let i = 0; i < 40; i++) {
-    if (!(await el.count())) return;
-    await el.page().waitForTimeout(150);
-    const now = await box();
-    if (last && now && Math.abs(now.x - last.x) + Math.abs(now.y - last.y) + Math.abs(now.width - last.width) < 0.5) return;
-    last = now;
-  }
-}
-
-// rest waits until the graph is at rest and the camera still; false when
-// no graph is drawn (a phone's list).
-async function rest(page: Page): Promise<boolean> {
-  if (!(await page.locator(".gr-viewport").count())) return false;
-  await expect(page.locator(".gr-viewport[data-still]")).toHaveCount(1, { timeout: 60_000 });
-  return true;
-}
-
 // expectApart checks open pages, once they are at rest (the layout's
 // soft collision and the camera's spring ease them into place): no two
 // overlap, the last one opened is whole on screen, its head in view, and
 // none goes under the bar.
 async function expectApart(page: Page, pages: Locator[]): Promise<void> {
   await expect(async () => {
-    for (const p of pages) await settledBox(p);
+    for (const p of pages) await still(p);
     const view = page.viewportSize()!;
     const bar = (await page.locator(".cs").boundingBox())!;
     const boxes = await Promise.all(pages.map(async (p) => (await p.boundingBox())!));
