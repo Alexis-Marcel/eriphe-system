@@ -255,9 +255,7 @@ func filesCore(t *testing.T, mutate func(*Config)) (*testWeb, *catalogCore, stri
 		}
 		return ct, nil
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	cc.pool.run(ctx)
+	runPool(t, context.Background(), cc.pool)
 	tw := newTestWebFor(t, cc.core)
 	return tw, cc, tw.setup()
 }

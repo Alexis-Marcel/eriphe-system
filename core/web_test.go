@@ -804,9 +804,7 @@ func TestWebConnectPaste(t *testing.T) {
 	cfg := &Config{Servers: map[string]Server{"notion": {URL: f.srv.URL + "/mcp",
 		Auth: &ServerAuth{OAuth: &OAuthConfig{RedirectURI: loopback}}, Use: "notes"}}}
 	c := newCore(cfg, store)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	c.pool.run(ctx)
+	runPool(t, context.Background(), c.pool)
 	waitStatus(t, c.pool.get("notion"), statusNeedsAuth)
 	tw := newTestWebFor(t, c)
 	csrf := tw.setup()

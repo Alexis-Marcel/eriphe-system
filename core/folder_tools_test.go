@@ -107,9 +107,7 @@ func folderFilesCore(t *testing.T, before ...func(*core)) (*core, *fakeShares) {
 	for _, f := range before {
 		f(c)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	c.pool.run(ctx)
+	runPool(t, context.Background(), c.pool)
 	waitStatus(t, c.pool.get(foldersServer), statusReady)
 	setBrain(c, &BrainConfig{})
 	c.store.insertTask(&TaskRow{ID: "b-1", Kind: "brain", Device: "pc", Runtime: "claude-code", State: stateWaitingPermission})

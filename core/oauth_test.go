@@ -238,13 +238,13 @@ func (f *fakeAS) revokeAll() {
 	f.mu.Unlock()
 }
 
-func oauthCore(t *testing.T, store *Store, f *fakeAS) (*core, context.CancelFunc) {
+// oauthCore runs a core with one OAuth server; stop stops its pool, which
+// the end of the test does anyway.
+func oauthCore(t *testing.T, store *Store, f *fakeAS) (c *core, stop func()) {
 	cfg := &Config{Servers: map[string]Server{"notion": {URL: f.srv.URL + "/mcp", Auth: &ServerAuth{OAuth: &OAuthConfig{}},
 		Use: "notes", Access: accessReads}}}
-	c := newCore(cfg, store)
-	ctx, cancel := context.WithCancel(context.Background())
-	c.pool.run(ctx)
-	return c, cancel
+	c = newCore(cfg, store)
+	return c, runPool(t, context.Background(), c.pool)
 }
 
 // connectFlow runs `eriphe connect` against the core's API.

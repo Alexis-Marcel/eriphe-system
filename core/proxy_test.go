@@ -89,9 +89,7 @@ func newCatalogCore(t *testing.T, before ...func(*core)) *core {
 	for _, f := range before {
 		f(c)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	c.pool.run(ctx)
+	runPool(t, context.Background(), c.pool)
 	waitStatus(t, c.pool.get("github"), statusReady)
 	return c
 }

@@ -147,9 +147,7 @@ func ledgerCore(t *testing.T) (*core, *fakeLedger) {
 		}
 		return ct, nil
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	c.pool.run(ctx)
+	runPool(t, context.Background(), c.pool)
 	waitStatus(t, c.pool.get("ledger"), statusReady)
 	waitFor(t, func() bool { return len(c.pool.get("ledger").resourceURIs()) > 0 })
 	setBrain(c, &BrainConfig{Agent: "small", Tools: []string{"ledger"}})

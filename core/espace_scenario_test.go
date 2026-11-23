@@ -179,7 +179,7 @@ func newScenarioWith(t *testing.T, ctx context.Context, live *liveBrain) *scenar
 		}
 		return ct, nil
 	}
-	c.pool.run(ctx)
+	runPool(t, ctx, c.pool)
 	for _, s := range []string{"maison", "agenda", "mail", "prod", "veille"} {
 		waitStatus(t, c.pool.get(s), statusReady)
 	}
