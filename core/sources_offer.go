@@ -42,6 +42,9 @@ type sourcesIn struct {
 // servers' resources, sorted by name: short, or one tool in full.
 func (c *core) readOffers(only string) []readOffer {
 	var out []readOffer
+	if c.nodes != nil && (only == "" || only == nodeFindSource) {
+		out = append(out, nodeFindOffer(only != ""))
+	}
 	grant := c.brainGrant()
 	for _, r := range c.lentTools() {
 		name := claudeToolName(r.server, r.tool)

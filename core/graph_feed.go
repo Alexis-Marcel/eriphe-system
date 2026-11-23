@@ -80,6 +80,9 @@ func (c *core) useNodes(s *nodestore.Store) {
 // graphSaid adds an event and wakes who waits. It never reads the graph:
 // the store calls it with its lock held.
 func (c *core) graphSaid(ev graphEvent) {
+	if ev.Kind == graphEvNode {
+		c.nodesChanged() // the blocks that read node_find, soon (node_find.go)
+	}
 	f := &c.graph
 	f.mu.Lock()
 	defer f.mu.Unlock()

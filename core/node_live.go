@@ -208,6 +208,9 @@ func (c *core) nodeSourcesDue(ctx context.Context, now time.Time) {
 	nodes := map[string]bool{}
 	var ids []string
 	for _, s := range srcs {
+		if s.Source.Tool == nodeFindSource {
+			c.findSources.Store(true) // a node's change reads it again, from the start (node_find.go)
+		}
 		nodes[s.ID] = true
 		if !slices.Contains(ids, s.ID) {
 			ids = append(ids, s.ID)

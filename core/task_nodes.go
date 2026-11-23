@@ -506,6 +506,12 @@ func (c *core) untrustedSources(b *nodefile.Block) bool {
 	}
 	trusted := c.trustedServers()
 	for _, src := range b.Sources {
+		if src.Tool == nodeFindSource {
+			if nodeFindExternal(src) {
+				return true // it quotes what may be someone else's words (node_find.go)
+			}
+			continue
+		}
 		server := src.Resource
 		if src.Tool != "" {
 			server, _, _ = strings.Cut(src.Tool, "/")

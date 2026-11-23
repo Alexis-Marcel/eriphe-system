@@ -76,6 +76,16 @@ The titles proposed for the first article:
 | `title_trusted` | `true` | Written by code only, on an external node: its title is not someone else's words (written before the node was external, or by a writer that vouched for it: the user approving it on a card, an author that read nothing external). Absent otherwise: the title of an external node is then shown marked, in amber with a ⚠ (« Titre écrit après une lecture extérieure »), never replaced; code never acts on a title. |
 | `opened_by` | a mapping | Written by code only, when it makes the node: who wanted it. `by` is `user` (a message of theirs, `msg` its number; or their yes on a card, `card`), `skill` (a skill's run: `skill` its name, `trigger` what started it: `monitor:<name>`, `alert:<hook>` or `schedule`) `event` (a turn of Eriphe's on events only: a wake, an intention, a monitor's event) or `eriphe` (one of Eriphe's own places, made by code: « Outils à revoir »). A node a task or a step opened says who wanted that work, with the `task` and the `node` it was opened for. Absent on a node made before it was recorded: its origin is unknown. The workspace says it in the page's ⋯ menu, and marks a node the user did not ask for (`skill`, `event`) with « ↯ ». |
 
+Any other field is a **property** of the node, as in Obsidian, kept with its value: a text, a
+number, a date (`2026-10-01`, quoted or not, with a time or not), a `"[[link]]"`, or a list of
+them. `tags` is the list of its tags, nested with `/` (`cuisine/recette`), a leading `#` left out. A
+node is classed by its tags and properties only: there is no `type`, and nothing in code knows what
+a property means. Eriphe's `node_set` writes them (`props`: a value, or `null` to remove one); its
+name is matched without case, never a field of the table nor one starting with `_`. The index
+(`node_props`) keeps each value typed, so that `node_find` compares a number as a number and a date
+as a date, and a tag matches its parents (`cuisine` finds `cuisine/recette`). A mapping, or an
+empty field, is kept but not indexed. The workspace shows them under the node's title.
+
 Any other field is kept with its value. While the front matter does not change, it keeps its bytes,
 comments included. When code writes it again (a new title, say), the known fields come first in the
 order of the table, the empty ones left out, then the other fields in their order; YAML comments are
@@ -178,7 +188,13 @@ A source is one of:
 
 - a tool: `{"tool": "<server>/<tool>", "args": {…}, "every": <minutes>}`;
 - a resource: `{"resource": "<server>", "uri": "…", "every": <minutes>}`;
-- a monitor the user approved: `{"monitor": "<name>"}`.
+- a monitor the user approved: `{"monitor": "<name>"}`;
+- nodes of the graph, as Eriphe's `node_find` finds them: `{"tool": "eriphe-core/node_find", "args":
+  {"tags": ["etude"], "where": [{"key": "statut", "value": "en attente"}], "sort": "rendu",
+  "columns": ["rendu"]}}`. Its value is `{"nodes": [{"id", "title", "status", "changed", … and each
+  column}]}`, read again as soon as a node changes. A title written after an external read, and an
+  external node's properties, are left out unless `include_external` is said: its block is then
+  external. A `Table` whose rows read `/<name>/nodes` shows them, each row opening its node.
 
 `every` is 1 to 1440 minutes (code's default when absent). A tool or a resource that lists things
 may say where its items are: `"items": {"path": "messages", "id": "id", "title": "subject",

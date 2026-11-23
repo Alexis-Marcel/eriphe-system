@@ -185,7 +185,13 @@ export type NodePage = {
   alive?: PageAlive;
   // origin: who wanted it, as eriphe-core recorded it
   origin?: PageOrigin;
+  // tags and props: its tags and its other properties, as its version says them
+  tags?: string[];
+  props?: PageProp[];
 };
+// A property of a node (pageProp, web_graph.go): its name, its value or
+// list of them, and its kind (text, number, date).
+export type PageProp = { key: string; value: unknown; kind: "text" | "number" | "date" };
 // What keeps a permanent subject alive (pageAlive, node_alive.go): its
 // sources, monitors and skills, each named, what it does in code's words.
 export type AliveLine = { name: string; what: string };
